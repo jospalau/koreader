@@ -3,11 +3,31 @@ local FFIUtil = require("ffi/util")
 local LuaSettings = require("luasettings")
 local lfs = require("libs/libkoreader-lfs")
 local util = require("util")
-
+local UIManager = require("ui/uimanager")
 local DEFAULT_COLLECTION_NAME = "favorites"
 local collection_file = DataStorage:getSettingsDir() .. "/collection.lua"
 
 local ReadCollection = {}
+
+
+function ReadCollection:OpenRandomFav()
+    local col_fav = self:prepareList("favorites")
+    if not col_fav then return end
+    local i = 1
+    local file_name = nil
+    local random_fav = math.random(1, #col_fav)
+    for _, fav in pairs(col_fav) do
+        if i == random_fav then
+            file_name = fav.file
+            break
+        end
+        i = i + 1
+    end
+    return file_name
+end
+
+
+
 
 function ReadCollection:read(collection_name)
     if not collection_name then collection_name = DEFAULT_COLLECTION_NAME end

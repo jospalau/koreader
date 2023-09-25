@@ -2,6 +2,7 @@ local ConfirmBox = require("ui/widget/confirmbox")
 local DataStorage = require("datastorage")
 local Dispatcher = require("dispatcher")
 local FFIUtil = require("ffi/util")
+local Font = require("ui/font")
 local InfoMessage = require("ui/widget/infomessage")
 local InputDialog = require("ui/widget/inputdialog")
 local LuaSettings = require("luasettings")
@@ -10,7 +11,7 @@ local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local _ = require("gettext")
 local T = FFIUtil.template
 local util = require("util")
-
+local Device = require("device")
 local autostart_done = false
 
 local Profiles = WidgetContainer:extend{
@@ -252,9 +253,28 @@ function Profiles:getSubMenuItems()
     end
     return sub_item_table
 end
-
+function shallow_copy(t)
+    local t2 = {}
+    for k,v in pairs(t) do
+      t2[k] = v
+    end
+    return t2
+end
 function Profiles:onProfileExecute(name, exec_props)
-    Dispatcher:execute(self.data[name], exec_props)
+    local copy_profile = shallow_copy(self.data[name])
+    -- if Device.model == "Kobo_io" or Device.model == "Kobo_cadmus" then -- Libra2 or Sage
+    --     copy_profile.font_size =  self.data[name].font_size + 0.5
+    if Device.model == "Kobo_goldfinch" then -- Clara2E
+        if self.data[name].font_size ~= nil then
+            copy_profile.font_size = self.data[name].font_size + 1
+        end
+    end
+    if Device:isAndroid() then
+        if self.data[name].font_size ~= nil then
+            copy_profile.font_size = self.data[name].font_size + 6
+        end
+    end
+    Dispatcher:execute(copy_profile, exec_props)
 end
 
 function Profiles:editProfileName(editCallback, old_name)
@@ -291,6 +311,42 @@ function Profiles:editProfileName(editCallback, old_name)
     name_input:onShowKeyboard()
 end
 
+function Profiles:onRandomProfile()
+    local count = 0
+    for _ in pairs(self.data) do count = count + 1 end
+    if count then
+        local profile = math.random(1, count)
+        local profile_name = ""
+        local i = 1
+        for k, v in pairs(self.data) do
+            if i == profile then
+                profile_name = k
+                break
+            end
+            i = i + 1
+        end
+        local copy_profile = shallow_copy(self.data[profile_name])
+        -- if Device.model == "Kobo_io" or  Device.model == "Kobo_cadmus" then -- Libra2 or Sage
+        --     copy_profile.font_size =  self.data[profile_name].font_size + 0.5
+        if Device.model == "Kobo_goldfinch" then -- Clara2E
+            if self.data[profile_name].font_size ~= nil then
+                copy_profile.font_size =  self.data[profile_name].font_size + 1
+            end
+        end
+        if Device:isAndroid() then
+            if self.data[profile_name].font_size ~= nil then
+                copy_profile.font_size = self.data[profile_name].font_size + 6
+            end
+        end
+        Dispatcher:execute(copy_profile)
+        -- UIManager:show(InfoMessage:new{
+        --     text = T(_(self.data[profile_name]["set_font"])),
+        --     timeout = 2,
+        --     face = Font:getFace("myfont"),
+        -- })
+      end
+    return true
+end
 function Profiles:getProfileFromCurrentDocument(new_name)
     local document_settings
     if self.ui.rolling then

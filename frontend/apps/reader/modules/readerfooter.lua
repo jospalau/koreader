@@ -26,7 +26,9 @@ local T = require("ffi/util").template
 local _ = require("gettext")
 local C_ = _.pgettext
 local Screen = Device.screen
-
+local SQ3 = require("lua-ljsqlite3/init")
+local util = require("util")
+local InfoMessage = require("ui/widget/infomessage")
 local  MAX_BATTERY_HIDE_THRESHOLD = 1000
 
 local MODE = {
@@ -48,6 +50,14 @@ local MODE = {
     chapter_progress = 15,
     frontlight_warmth = 16,
     custom_text = 17,
+    wpm = 18,
+    next_chapter_time = 19,
+    text_parameters = 20,
+    session_stats = 21,
+    today_stats = 22,
+    week_stats = 23,
+    remaining_to_read_today = 24,
+    progress_pages = 25,
 }
 
 local symbol_prefix = {
@@ -75,6 +85,14 @@ local symbol_prefix = {
         wifi_status = C_("FooterLetterPrefix", "W:"),
         -- no prefix for custom text
         custom_text = "",
+        wpm = "",
+        next_chapter_time = "",
+        text_parameters = "",
+        session_stats = "",
+        today_stats = "",
+        week_stats = "",
+        remaining_to_read_today = "",
+        progress_pages = "",
     },
     icons = {
         time = "⌚",
@@ -91,6 +109,14 @@ local symbol_prefix = {
         wifi_status = "",
         wifi_status_off = "",
         custom_text = "",
+        wpm = "",
+        next_chapter_time = "",
+        text_parameters = "",
+        session_stats = "",
+        today_stats = "",
+        week_stats = "",
+        remaining_to_read_today = "",
+        progress_pages = "",
     },
     compact_items = {
         time = nil,
@@ -108,6 +134,14 @@ local symbol_prefix = {
         wifi_status = "",
         wifi_status_off = "",
         custom_text = "",
+        wpm = "",
+        next_chapter_time = "",
+        text_parameters = "",
+        session_stats = "",
+        today_stats = "",
+        week_stats = "",
+        remaining_to_read_today = "",
+        progress_pages = "",
     }
 }
 if BD.mirroredUILayout() then
@@ -135,6 +169,142 @@ local PROGRESS_BAR_STYLE_THIN_DEFAULT_HEIGHT = 3
 -- android: guidelines for rounded corner margins
 local material_pixels = Screen:scaleByDPI(16)
 
+
+-- Like util.splitWords(), but not capturing space and punctuations
+local splitToWords = function(text)
+    local wlist = {}
+    for word in util.gsplit(text, "[%s%p]+", false) do
+        if util.hasCJKChar(word) then
+            for char in util.gsplit(word, "[\192-\255][\128-\191]+", true) do
+                table.insert(wlist, char)
+            end
+        else
+            table.insert(wlist, word)
+        end
+    end
+    return wlist
+end
+
+getSessionStats = function (footer)
+        local DataStorage = require("datastorage")
+        local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+        if not footer.ui.statistics then
+            return "n/a"
+        end
+        local session_started = footer.ui.statistics.start_current_period
+        local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
+        -- best to e it to letters, to get '2m' ?
+        user_duration_format = "letters"
+
+        -- No necesitamos el id del libro para poder traer las páginas en la sesión actual
+        local id_book = footer.ui.statistics.id_curr_book
+        if id_book == nil then
+            id_book = 0
+        end
+
+        local conn = SQ3.open(db_location)
+        local sql_stmt = [[
+            SELECT count(*)
+            FROM   (
+                        SELECT sum(duration)    AS sum_duration
+                        FROM   page_stat
+                        WHERE  start_time >= %d
+                        GROUP  BY id_book, page
+                   );
+        ]]
+        local pages_read_session = conn:rowexec(string.format(sql_stmt, session_started))
+
+
+        local sql_stmt = [[
+                SELECT pages
+                FROM   book
+                WHERE  id = %d;
+        ]]
+        local total_pages = conn:rowexec(string.format(sql_stmt, id_book))
+
+
+        local flow = footer.ui.document:getPageFlow(footer.pageno)
+
+        conn:close()
+        if pages_read_session == nil then
+            pages_read_session = 0
+        end
+        pages_read_session = tonumber(pages_read_session)
+
+        if total_pages == nil then
+            total_pages = 0
+        end
+        total_pages = tonumber(total_pages)
+        --local percentage_session = footer.pageno/total_pages
+        local percentage_session = pages_read_session/total_pages
+        logger.warn(pages_read_session)
+        logger.warn(percentage_session)
+
+        percentage_session = math.floor(percentage_session*1000)/10
+        local duration = datetime.secondsToClockDuration(user_duration_format, os.time() - session_started, true)
+        return percentage_session, pages_read_session, duration
+    end
+getTodayBookStats = function ()
+    local now_stamp = os.time()
+    local now_t = os.date("*t")
+    local from_begin_day = now_t.hour * 3600 + now_t.min * 60 + now_t.sec
+    local start_today_time = now_stamp - from_begin_day
+    local DataStorage = require("datastorage")
+    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    local conn = SQ3.open(db_location)
+    local sql_stmt = [[
+        SELECT count(*),
+               sum(sum_duration)
+        FROM    (
+                     SELECT sum(duration)    AS sum_duration
+                     FROM   page_stat
+                     WHERE  start_time >= %d
+                     GROUP  BY id_book, page
+                );
+    ]]
+    local today_pages, today_duration =  conn:rowexec(string.format(sql_stmt, start_today_time))
+    conn:close()
+    if today_pages == nil then
+        today_pages = 0
+    end
+    if today_duration == nil then
+        today_duration = 0
+    end
+    today_duration = tonumber(today_duration)
+    today_pages = tonumber(today_pages)
+    return today_duration, today_pages
+end
+
+getThisWeekBookStats = function ()
+    local now_stamp = os.time()
+    local now_t = os.date("*t")
+    local DataStorage = require("datastorage")
+    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    local from_begin_day = now_t.hour * 3600 + now_t.min * 60 + now_t.sec
+    local start_today_time = now_stamp - from_begin_day
+    local conn = SQ3.open(db_location)
+    local sql_stmt = [[
+        SELECT count(*),
+               sum(sum_duration)
+        FROM    (
+                     SELECT sum(duration)    AS sum_duration
+                     FROM   page_stat
+                     WHERE  start_time >= strftime('%s', DATE('now', 'weekday 0','-6 day'))
+                     GROUP  BY id_book, page
+                );
+    ]]
+   local today_pages, today_duration = conn:rowexec(sql_stmt)
+    conn:close()
+    if today_pages == nil then
+        today_pages = 0
+    end
+    if today_duration == nil then
+        today_duration = 0
+    end
+    today_duration = tonumber(today_duration)
+    today_pages = tonumber(today_pages)
+    return today_duration, today_pages
+end
 -- functions that generates footer text for each mode
 local footerTextGeneratorMap = {
     empty = function() return "" end,
@@ -253,10 +423,10 @@ local footerTextGeneratorMap = {
                     return ("[%d / %d]%d"):format(page, pages, flow)
                 end
             else
-                return ("%d / %d"):format(footer.pageno, footer.pages)
+                return ("%d de %d"):format(footer.pageno, footer.pages)
             end
         elseif footer.position then
-            return ("%d / %d"):format(footer.position, footer.doc_height)
+            return ("%d de %d"):format(footer.position, footer.doc_height)
         end
     end,
     pages_left_book = function(footer)
@@ -385,18 +555,18 @@ local footerTextGeneratorMap = {
     end,
     book_title = function(footer)
         local title = footer.ui.doc_props.display_title:gsub(" ", "\u{00A0}") -- replace space with no-break-space
-        local title_widget = TextWidget:new{
-            text = title,
-            max_width = footer._saved_screen_width * footer.settings.book_title_max_width_pct * (1/100),
-            face = Font:getFace(footer.text_font_face, footer.settings.text_font_size),
-            bold = footer.settings.text_font_bold,
-        }
-        local fitted_title_text, add_ellipsis = title_widget:getFittedText()
-        title_widget:free()
-        if add_ellipsis then
-            fitted_title_text = fitted_title_text .. "…"
-        end
-        return BD.auto(fitted_title_text)
+            local title_widget = TextWidget:new{
+                text = title,
+                max_width = footer._saved_screen_width * footer.settings.book_title_max_width_pct * (1/100),
+                face = Font:getFace(footer.text_font_face, footer.settings.text_font_size),
+                bold = footer.settings.text_font_bold,
+            }
+            local fitted_title_text, add_ellipsis = title_widget:getFittedText()
+            title_widget:free()
+            if add_ellipsis then
+                fitted_title_text = fitted_title_text .. "…"
+            end
+            return BD.auto(fitted_title_text)
     end,
     book_chapter = function(footer)
         local chapter_title = footer.ui.toc:getTocTitleByPage(footer.pageno)
@@ -426,6 +596,176 @@ local footerTextGeneratorMap = {
         local merge = footer.custom_text:gsub(" ", ""):len() == 0
         return (prefix .. footer.custom_text:rep(footer.custom_text_repetitions)), merge
     end,
+    wpm = function(footer)
+         -- Necesario, ya sea para recuperar id_curr_book o avg_time
+        --   if footer.ui.statistics.id_curr_book == nil then
+        --     return ""
+        --   end
+
+        if footer.ui.statistics.avg_time == nil then
+            return ""
+        end
+
+        local spp = math.floor(footer.ui.statistics.avg_time)
+        local pages_read = footer.ui.statistics.book_read_pages
+        local time_read = footer.ui.statistics.book_read_time
+        local wpm = 0
+        local wph = 0
+        local wpm_test = 0
+        if pages_read > 0 and time_read > 0 then
+            local title_words = footer.ui.document._document:getDocumentProps().title
+            local title_words_ex = string.match(title_words, "%b()")
+            title_words_ex = title_words_ex:sub(2, title_words_ex:len() - 1)
+            title_words_ex = string.match(title_words_ex, "%- .*")
+            title_words_ex = title_words_ex:sub(2,title_words_ex:len() - 1):gsub(",","")
+            local percentage = footer.progress_bar.percentage * 100
+            wpm_test =  math.floor((title_words_ex * footer.progress_bar.percentage/(time_read/60)))
+
+            wpm = math.floor((pages_read*310)/(time_read/60))
+            wph = math.floor((pages_read*310)/(time_read/60/60))
+        end
+        return wpm .. "wpm, " .. wph .. "wph, " .. spp .. "spp, " .. wpm_test .. "wpmt"
+    end,
+    next_chapter_time = function(footer)
+        -- Algunos libros no tienen toc y da error
+        if not footer.ui.toc then
+            return "n/a"
+        end
+
+        local sigcap = footer.ui.toc:getNextChapter(footer.pageno, footer.toc_level)
+        if sigcap == nil then
+        return "n/a"
+        end
+        local sigcap2 = footer.ui.toc:getNextChapter(sigcap + 1, footer.toc_level)
+        if sigcap2 == nil then
+            return "n/a"
+            end
+        return "Sig: " .. footer:getDataFromStatistics("", sigcap2 - sigcap)
+   end,
+   text_parameters = function(footer)
+        if not footer.ui.rolling then
+            return "n/a"
+        end
+        if not footer.ui.toc then
+            return "n/a"
+        end
+
+        local res = footer.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
+        local nblines = 0
+        if res and res.pos0 and res.pos1 then
+            local segments = footer.ui.document:getScreenBoxesFromPositions(res.pos0, res.pos1, true)
+            -- logger.warn(segments)
+            nblines = #segments
+        end
+        res = footer.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
+        -- logger.warn(res.text)
+        local nbwords = 0
+        if res and res.text then
+            local words = splitToWords(res.text) -- contar palabras
+            local characters = res.text -- contar caracteres
+            -- logger.warn(words)
+            nbwords = #words -- # es equivalente a string.len()
+            nbcharacters = #characters
+        end
+        res = footer.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), 1, false, true)
+        local nbwords2 = 0
+        if res and res.text then
+            local words = res.text
+            nbwords2 = #words
+        end
+        local font_size = footer.ui.document._document:getFontSize()
+        local font_face = footer.ui.document._document:getFontFace()
+        local title_pages = footer.ui.document._document:getDocumentProps().title
+        -- hace crash tras quitar/poner cualquier opción de la barra por la llamada a la función
+        --    local pages = footer.ui.document.getPageCount()
+        --   local pages = footer.ui.document.info.number_of_pages
+        -- lo anterior si funciona pero lo cojo de aquí
+        if not footer.ui.statistics.data.pages then
+            return "n/a"
+        end
+
+        local pages = footer.ui.statistics.data.pages
+        --  title_pages = string.match(title_pages, "%((%w+)")
+        local title_pages_ex = string.match(title_pages, "%b()")
+        title_pages_ex = title_pages_ex:sub(2, title_pages_ex:len() - 1)
+
+        local font_size_pt = nil
+        local font_size_mm = nil
+        if Device:isKobo() then
+            font_size_pt = math.floor((font_size * 72 / 300) * 100) / 100
+            font_size_mm = math.floor((font_size * 25.4 / 300)  * 100) / 100
+        elseif Device:isAndroid() then
+            font_size_pt = math.floor((font_size * 72 / 446) * 100) / 100
+            font_size_mm = math.floor((font_size * 25.4 / 446)  * 100) / 100
+        else
+            font_size_pt = math.floor((font_size * 72 / 160) * 100) / 100
+            font_size_mm = math.floor((font_size * 25.4 / 160)  * 100) / 100
+        end
+        -- local face = Font:getFace(font_face, font_size)
+        -- local face_xheight = face.ftsize:getXHeight()
+
+        --    local wpm_book = 0
+        --    local spp_book = 0
+        -- por si quiero probar, da error devolver un entero. Funciona concatenando un string.. ".  "
+        -- return id_book .. ",,,"
+        --     return "s, Sig:" .. footer:getDataFromStatistics("", sigcap2 - sigcap) .. "/" .. pages .. "_" .. title_pages_ex .. "-" ..  font_face .. "-" ..  "S: " .. font_size .. "px, " .. font_size_pt .. "pt, " .. font_size_mm .. "mm - L: " ..  nblines .. "- W: " .. nbwords .. "- C: " .. nbcharacters .. " (CFL: " .. nbwords2 .. ")"
+        -- return pages .. "p_" .. title_pages_ex .. "-" ..  font_face .. "-" ..  "S: " .. font_size .. "px, " .. font_size_pt .. "pt, " .. font_size_mm .. "mm - L: " ..  nblines .. "- W: " .. nbwords .. "- C: " .. nbcharacters .. " (CFL: " .. nbwords2 .. ")"
+        return font_face .. "-" ..  "S: " .. font_size .. "px, " .. font_size_pt .. "pt, " .. font_size_mm .. "mm - L: " ..  nblines .. "- W: " .. nbwords .. "- C: " .. nbcharacters .. " (CFL: " .. nbwords2 .. ")"
+    end,
+    session_stats = function(footer)
+        local percentage_session, pages_read_session,duration = getSessionStats(footer)
+        logger.warn(percentage_session)
+        return "S: " .. duration .. "(" .. percentage_session .. "%)"  .. "(" .. pages_read_session.. "p)"
+   end,
+   today_stats = function(footer)
+        local today_duration, today_pages = getTodayBookStats()
+        local user_duration_format = "letters"
+        today_duration = datetime.secondsToClockDuration(user_duration_format,today_duration, true)
+        return "T: " .. today_duration  -- .. "(" .. today_pages .. "p)"
+    end,
+    week_stats = function(footer)
+        local this_week_duration, this_week_pages = getThisWeekBookStats()
+        local user_duration_format = "letters"
+        this_week_duration = datetime.secondsToClockDuration(user_duration_format,this_week_duration, true)
+        return "W: " .. this_week_duration -- .. "(" .. this_week_pages .. "p)"
+    end,
+    remaining_to_read_today = function(footer)
+        local today_duration, today_pages = getTodayBookStats()
+        local today_duration_number = 0
+        local icon_goal_pages = ""
+        local icon_goal_time = ""
+        if today_pages > footer._goal_pages or today_duration_number>footer._goal_time then
+            if today_pages > footer._goal_pages then
+                icon_goal_pages = "*"
+            end
+            if today_duration_number>footer._goal_time  then
+                icon_goal_time = "*"
+            end
+        end
+        return icon_goal_pages .. "RTRP: " .. (footer._goal_pages - today_pages) .. "p" .. ", " .. icon_goal_time .. "RTRT: " .. (footer._goal_time - today_duration_number) .. "m"
+    end,
+    progress_pages = function(footer)
+    local title = footer.ui.document._document:getDocumentProps().title
+
+
+
+    local pages = footer.ui.statistics.data.pages
+    local title_pages = footer.ui.document._document:getDocumentProps().title
+    local title_words = title_pages:match("([0-9,]+w)")
+    title_pages = title:match("([0-9,]+p)")
+    title_pages = title_pages:sub(1,title_pages:len() - 1):gsub(",","")
+    title_words = title_words:sub(1,title_words:len() - 1):gsub(",","")
+    local avg_words_cal = math.floor(title_words/pages)
+    -- Estimated 5.7 chars per words
+    local avg_chars_cal = math.floor(avg_words_cal * 5.7)
+    local avg_chars_per_word_cal = math.floor((avg_chars_cal/avg_words_cal) * 100) / 100
+    print("paso " .. avg_words_cal)
+    print("paso " .. avg_chars_cal)
+    local percentage = footer.progress_bar.percentage
+    local words_read = title_words * percentage
+    local current_page = math.floor(((words_read * title_pages)/title_words)*10)/10
+    return "Calibre data: wpp: " .. avg_words_cal .. ", cpp: " .. avg_chars_cal .. ", cpw: " .. avg_chars_per_word_cal .. " / " .. current_page .. " de " .. title_pages
+   end,
 }
 
 local ReaderFooter = WidgetContainer:extend{
@@ -433,7 +773,7 @@ local ReaderFooter = WidgetContainer:extend{
     pageno = nil,
     pages = nil,
     footer_text = nil,
-    text_font_face = "ffont",
+    text_font_face = "myfont",
     height = Screen:scaleBySize(G_defaults:readSetting("DMINIBAR_CONTAINER_HEIGHT")),
     horizontal_margin = Size.span.horizontal_default,
     bottom_padding = Size.padding.tiny,
@@ -615,8 +955,24 @@ function ReaderFooter:init()
     self.visibility_change = nil
 
     self.custom_text = G_reader_settings:readSetting("reader_footer_custom_text", "KOReader")
+
+
+    self.wpm = G_reader_settings:readSetting("reader_footer_wpm", "KOReader")
+    self.next_chapter_time = G_reader_settings:readSetting("reader_footer_next_chapter_time", "KOReader")
+    self.text_parameters = G_reader_settings:readSetting("reader_footer_text_parameters", "KOReader")
+    self.session_stats = G_reader_settings:readSetting("reader_footer_session_stats", "KOReader")
+    self.today_stats = G_reader_settings:readSetting("reader_footer_today_stats", "KOReader")
+    self.week_stats = G_reader_settings:readSetting("reader_footer_week_stats", "KOReader")
+    self.remaining_to_read_today = G_reader_settings:readSetting("reader_footer_remaining_to_read_today", "KOReader")
+    self.progress_pages = G_reader_settings:readSetting("reader_footer_progress_pages", "KOReader")
+
+
     self.custom_text_repetitions =
         tonumber(G_reader_settings:readSetting("reader_footer_custom_text_repetitions", "1"))
+
+    self._goal_time = 120
+    self._goal_pages = 100
+    self._old_mode = 0
 end
 
 function ReaderFooter:set_custom_text(touchmenu_instance)
@@ -828,6 +1184,295 @@ function ReaderFooter:rescheduleFooterAutoRefreshIfNeeded()
     end
 end
 
+function ReaderFooter:onGetStyles()
+    local css_text = self.ui.document:getDocumentFileContent("OPS/styles/stylesheet.css")
+    if css_text == nil then
+        css_text = self.ui.document:getDocumentFileContent("stylesheet.css")
+    end
+
+
+    local first_text = self.ui.document._document:getTextFromPositions(0, 0, 10, Screen:getHeight(), false, false)
+    local html, css_files, css_selectors_offsets =
+    self.ui.document._document:getHTMLFromXPointers(first_text.pos0,first_text.pos1, 0xE830, true)
+    local htmlw=""
+
+    -- No puedo hacerlo con gmatch, iré línea a línea que además viene bien para extraer las clases
+    -- for w in string.gmatch(html, "(<%w* class=\"%w*\">)") do
+    -- for w in string.gmatch(html,"(<%w* class=\"(.-)\">)") do
+    --    htmlw = htmlw .. "," .. w
+    -- end
+    local classes = ""
+    for line in html:gmatch("[^\n]+") do
+        if (line:find("^.*<body") ~= nil or line:find("^.*<p") ~= nil or line:find("^.*<div") ~= nil) and line:find("class=") ~= nil then
+           htmlw = htmlw .. "," .. string.match(line, " %b<>")
+           classes = classes .. "," .. string.match(line, "class=\"(.-)\"")
+        end
+    end
+    -- Algunas clases contienen el caracter -. Tenemos que escaparlo
+    classes = classes:sub(2,classes:len()):gsub("%-", "%%-")
+    local csss = ""
+    local csss_classes = ""
+    for line in classes:gmatch("[^,]+") do
+        local css_class = string.match(css_text, line .. " %b{}")
+        if css_class ~= nil and csss:find(line) == nil then
+            csss = csss .. css_class .. "\n"
+            csss_classes = csss_classes .. line .. ","
+        end
+    end
+    csss_classes = csss_classes:sub(1,csss_classes:len() - 1):gsub("%%", "")
+    htmlw = htmlw:sub(2,htmlw:len())
+
+    local text =  string.char(10) .. htmlw
+    .. string.char(10) .. csss_classes
+    .. string.char(10) .. csss
+    UIManager:show(InfoMessage:new{
+        text = T(_(text)),
+        timeout = 15,
+        face = Font:getFace("myfont"),
+        width = math.floor(Screen:getWidth() * 0.85),
+    })
+    return true
+end
+function ReaderFooter:onShowTextProperties()
+    if not self.ui.rolling then
+        return "n/a"
+    end
+    if not self.ui.toc then
+        return "n/a"
+    end
+
+    local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
+    local nblines = 0
+    if res and res.pos0 and res.pos1 then
+        local segments = self.ui.document:getScreenBoxesFromPositions(res.pos0, res.pos1, true)
+        -- logger.warn(segments)
+        nblines = #segments
+    end
+    res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
+    -- logger.warn(res.text)
+    local nbwords = 0
+    local nbcharacters = 0
+    if res and res.text then
+        local words = splitToWords(res.text) -- contar palabras
+        local characters = res.text -- contar caracteres
+        -- logger.warn(words)
+        nbwords = #words -- # es equivalente a string.len()
+        nbcharacters = #characters
+    end
+    res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), 1, false, true)
+    local nbwords2 = 0
+    if res and res.text then
+        local words = res.text
+        nbwords2 = #words
+    end
+    local font_size = self.ui.document._document:getFontSize()
+    local font_face = self.ui.document._document:getFontFace()
+    local title_pages = self.ui.document._document:getDocumentProps().title
+    local author = self.ui.document._document:getDocumentProps().authors
+    if not self.ui.statistics.data.pages then
+        return "n/a"
+    end
+    local avg_words = 0
+    local avg_chars = 0
+    local avg_chars_per_word = 0
+    if self.ui.statistics._pages_turned > 0 then
+        avg_words = math.floor(self.ui.statistics._total_words/self.ui.statistics._pages_turned)
+        avg_chars = math.floor(self.ui.statistics._total_chars/self.ui.statistics._pages_turned)
+        avg_chars_per_word =  math.floor((avg_chars/avg_words) * 100) / 100
+    end
+    local pages = self.ui.statistics.data.pages
+    --  title_pages = string.match(title_pages, "%((%w+)")
+    local title_pages_ex = string.match(title_pages, "%b()")
+    title_pages_ex = title_pages_ex:sub(2, title_pages_ex:len() - 1)
+    local font_size_pt = nil
+    local font_size_mm = nil
+    if Device:isKobo() then
+        font_size_pt = math.floor((font_size * 72 / 300) * 100) / 100
+        font_size_mm = math.floor((font_size * 25.4 / 300)  * 100) / 100
+    elseif Device:isAndroid() then
+        font_size_pt = math.floor((font_size * 72 / 446) * 100) / 100
+        font_size_mm = math.floor((font_size * 25.4 / 446)  * 100) / 100
+    else
+        font_size_pt = math.floor((font_size * 72 / 160) * 100) / 100
+        font_size_mm = math.floor((font_size * 25.4 / 160)  * 100) / 100
+    end
+    local chapter = self.ui.toc:getTocTitleByPage(self.pageno)
+    local powerd = Device:getPowerDevice()
+    local frontlight = ""
+    local frontlightwarm = ""
+    if powerd:isFrontlightOn() then
+        local warmth = powerd:frontlightWarmth()
+        if warmth then
+            frontlightwarm = (" %d%%"):format(warmth)
+        end
+        frontlight = ("L: %d%%"):format(powerd:frontlightIntensity())
+    end
+
+  -- local css_text_body = string.match(css_text, "body %b{}")
+    -- if css_text_body == nil then
+    --     css_text_body = "No body style"
+    -- end
+
+    -- local css_text_calibre = string.match(css_text, "calibre %b{}")
+    -- if css_text_calibre == nil then
+    --     css_text_calibre = "No calibre style"
+    -- end
+
+    -- local css_text_calibre1 = string.match(css_text, "calibre1 %b{}")
+    -- if css_text_calibre1 == nil then
+    --     css_text_calibre1 = "No calibre1 style"
+    -- end
+
+    -- Mirar el fichero container.xml para verlo
+    -- <rootfiles>
+    --     <rootfile full-path="OEBPS/content.opf"
+    --         media-type="application/oebps-package+xml" />
+    -- </rootfiles>
+    local css_text = self.ui.document:getDocumentFileContent("OPS/styles/stylesheet.css")
+    if css_text == nil then
+        css_text = self.ui.document:getDocumentFileContent("stylesheet.css")
+    end
+    if css_text == nil then
+        css_text = self.ui.document:getDocumentFileContent("OEBPS/css/style.css")
+    end
+
+    local opf_text = self.ui.document:getDocumentFileContent("OPS/Miscellaneous/content.opf")
+    if opf_text == nil then
+        opf_text = self.ui.document:getDocumentFileContent("content.opf")
+    end
+
+    if opf_text == nil then
+        opf_text = self.ui.document:getDocumentFileContent("OPS/volume.opf")
+    end
+    if opf_text == nil then
+        opf_text = self.ui.document:getDocumentFileContent("volume.opf")
+    end
+
+    if opf_text == nil then
+        opf_text = self.ui.document:getDocumentFileContent("OEBPS/Miscellaneous/content.opf")
+    end
+    if opf_text == nil then
+        opf_text = self.ui.document:getDocumentFileContent("OEBPS/content.opf")
+    end
+    if opf_text == nil then
+        opf_text = self.ui.document:getDocumentFileContent("content.opf")
+    end
+
+    local opf_genre = ""
+    for w in string.gmatch(opf_text, "<dc:subject>(.-)</dc:subject>") do
+        opf_genre = opf_genre .. ", " .. w
+    end
+    opf_genre = opf_genre:sub(2,string.len(opf_genre))
+
+    local opf_calibre = string.match(opf_text, "<opf:meta property=\"calibre:user_metadata\">(.-)</opf:meta>")
+    if opf_calibre == nil then
+        opf_calibre = "No property"
+    else
+        opf_calibre = string.match(opf_calibre, "\"#genre\": {(.-)}")
+        opf_calibre = string.match(opf_calibre, " \"#value#\": \".-\"")
+        opf_calibre = string.match(opf_calibre, ": .*")
+        opf_calibre = opf_calibre:sub(4,opf_calibre:len() - 1)
+    end
+
+    local spp = math.floor(self.ui.statistics.avg_time)
+    local pages_read = self.ui.statistics.book_read_pages
+    local time_read = self.ui.statistics.book_read_time
+    local wpm = 0
+    local wph = 0
+    local wpm_test = 0
+    if pages_read > 0 and time_read > 0 then
+        local title_words = self.ui.document._document:getDocumentProps().title
+        local title_words_ex = string.match(title_words, "%b()")
+        title_words_ex = title_words_ex:sub(2, title_words_ex:len() - 1)
+        title_words_ex = string.match(title_words_ex, "%- .*")
+        title_words_ex = title_words_ex:sub(2,title_words_ex:len() - 1):gsub(",","")
+        local percentage = self.progress_bar.percentage * 100
+        wpm_test =  math.floor((title_words_ex * self.progress_bar.percentage/(time_read/60)))
+
+        wpm = math.floor((pages_read*310)/(time_read/60))
+        wph = math.floor((pages_read*310)/(time_read/60/60))
+    end
+
+    -- Extraigo la información más fácil así
+    title_pages = self.ui.document._document:getDocumentProps(). title
+    local title_words = title_pages:match("([0-9,]+w)")
+    local avg_words_cal = math.floor(title_words:sub(1,title_words:len() - 1):gsub(",","")/pages)
+    -- Estimated 5.7 chars per words
+    local avg_chars_cal = math.floor(avg_words_cal * 5.7)
+    local avg_chars_per_word_cal = math.floor((avg_chars_cal/avg_words_cal) * 100) / 100
+
+    local percentage_session, pages_read_session,duration = getSessionStats(self)
+    local progress_book = ("%d de %d"):format(self.pageno, self.pages)
+    local string_percentage  = "%0.f%%"
+    local percentage = string_percentage:format(self.progress_bar.percentage * 100)
+    local today_duration, today_pages = getTodayBookStats()
+    local user_duration_format = "letters"
+    local today_duration_number = math.floor(today_duration/60)
+    local today_duration = datetime.secondsToClockDuration(user_duration_format,today_duration, true)
+
+    local icon_goal_pages = "⚐"
+    local icon_goal_time = "⚐"
+    if today_pages > self._goal_pages or today_duration_number>self._goal_time then
+        if today_pages > self._goal_pages then
+            icon_goal_pages = "⚑"
+        end
+        if today_duration_number>self._goal_time  then
+            icon_goal_time = "⚑"
+        end
+    end
+
+
+    local this_week_duration, this_week_pages = getThisWeekBookStats()
+    local user_duration_format = "letters"
+    local this_week_duration = datetime.secondsToClockDuration(user_duration_format,this_week_duration, true)
+
+
+    local left_chapter = self.ui.toc:getChapterPagesLeft(self.pageno) or self.ui.document:getTotalPagesLeft(self.pageno)
+    if self.settings.pages_left_includes_current_page then
+        left_chapter = left_chapter + 1
+    end
+    local clock ="⌚ " ..  datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
+
+    local line = "﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏"
+    local point = "‣"
+    local important = " \u{261C}"
+    local text = string.char(10) .. clock .. " " .. title_pages .. string.char(10) .. string.char(10)
+    .. point .. " Progress book: " .. progress_book .. " (" .. percentage .. ")" ..  string.char(10)
+    .. point .. " Left chapter " .. chapter .. ": " .. left_chapter  .. important .. string.char(10)
+    .. line .. string.char(10)  .. string.char(10)
+    .. point .. " Author: " ..  author .. string.char(10)
+    .. point .. " Genres: " .. opf_genre .. string.char(10)
+    -- .. opf_calibre .. string.char(10)
+    .. line .. string.char(10)  .. string.char(10)
+    .. point .. " RTRP out of " .. self._goal_pages .. ": " .. (self._goal_pages - today_pages) .. "p " .. icon_goal_pages .. string.char(10)
+    .. point .. " RTRT out of " .. self._goal_time .. ": " .. (self._goal_time - today_duration_number) .. "m " .. icon_goal_time  .. string.char(10)
+    .. point .. " This session: " .. duration .. "(" .. percentage_session .. "%)"  .. "(" .. pages_read_session.. "p)" .. important .. string.char(10)
+    .. point .. " Today: " .. today_duration  .. "(" .. today_pages .. "p)" .. string.char(10)
+    .. point .. " Week: " .. this_week_duration  .. "(" .. this_week_pages .. "p)" .. string.char(10)
+    .. point .. " Stats: wpm: " .. wpm .. ", wph: " .. wph .. ", spp: " .. spp .. ", wpmp: " .. wpm_test .. important .. string.char(10)
+    .. point .. " Static info (from Calibre info): wpp: " .. avg_words_cal .. ", cpp: " .. avg_chars_cal .. ", cpw: " .. avg_chars_per_word_cal .. important .. string.char(10)
+    .. point .. " Dynamic info: p: " .. self.ui.statistics._pages_turned .. ", wpp: " .. avg_words .. ", cpp: " .. avg_chars .. ", cpw: " .. avg_chars_per_word .. string.char(10)
+    .. line .. string.char(10) .. string.char(10)
+    -- .. pages .. "p_" .. title_pages_ex .. string.char(10) ..  font_face .. "-" ..  "S: "
+    .. point .. " Font parameters: " .. font_face .. ", " .. font_size .. "px, " .. font_size_pt .. "pt, " .. font_size_mm .. "mm" .. important ..  string.char(10)
+    .. point .. " L: " ..  nblines .. " - W: " .. nbwords .. " - C: " .. nbcharacters .. " (CFL: " .. nbwords2 .. ")" .. important ..  string.char(10)
+    .. line .. string.char(10) .. string.char(10)
+    .. point .. " Light: " .. frontlight .. " - " .. frontlightwarm .. string.char(10)
+
+    -- .. string.char(10) .. html:sub(100,250)
+
+
+    -- self.ui.statistics._total_chars=self.ui.statistics._total_char + nbcharacters
+    -- local avg_character_pages =  self.ui.statistics._total_chars/ self.ui.statistics._pages_turned
+    UIManager:show(InfoMessage:new{
+        text = T(_(text)),
+        timeout = 20,
+        face = Font:getFace("myfont"),
+        width = math.floor(Screen:getWidth() * 0.85),
+    })
+    return true
+end
+
 function ReaderFooter:setupTouchZones()
     if not Device:isTouchDevice() then return end
     local DTAP_ZONE_MINIBAR = G_defaults:readSetting("DTAP_ZONE_MINIBAR")
@@ -993,6 +1638,15 @@ function ReaderFooter:textOptionTitles(option)
         custom_text = T(_("Custom text: \'%1\'%2"), self.custom_text,
             self.custom_text_repetitions > 1 and
             string.format(" × %d", self.custom_text_repetitions) or ""),
+        wpm = _("Wpm"),
+        next_chapter_time = _("Next chapter time"),
+        text_parameters = _("Text parameters"),
+        session_stats = _("Session stats"),
+        today_stats = _("Today stats"),
+        week_stats = _("Week stats"),
+        remaining_to_read_today = _("Remaining to read today"),
+        progress_pages = _("Progress pages from Calibre"),
+
     }
     return option_titles[option]
 end
@@ -1983,6 +2637,14 @@ With this enabled, the current page is included, so the count goes from n to 1 i
     table.insert(sub_items, getMinibarOption("book_title"))
     table.insert(sub_items, getMinibarOption("book_chapter"))
     table.insert(sub_items, getMinibarOption("custom_text"))
+    table.insert(sub_items, getMinibarOption("wpm"))
+    table.insert(sub_items, getMinibarOption("next_chapter_time"))
+    table.insert(sub_items, getMinibarOption("text_parameters"))
+    table.insert(sub_items, getMinibarOption("session_stats"))
+    table.insert(sub_items, getMinibarOption("today_stats"))
+    table.insert(sub_items, getMinibarOption("week_stats"))
+    table.insert(sub_items, getMinibarOption("remaining_to_read_today"))
+    table.insert(sub_items, getMinibarOption("progress_pages"))
 
     -- Settings menu: keep the same parent page for going up from submenu
     for i = 1, #sub_items[settings_submenu_num].sub_item_table do
@@ -2272,7 +2934,8 @@ function ReaderFooter:onPageUpdate(pageno)
         self:setTocMarkers(true)
     end
     self.ui.doc_settings:saveSetting("doc_pages", self.pages) -- for Book information
-    self:updateFooterPage()
+    -- This is performed in the main source of the plugin of statistics, same event
+    -- self:updateFooterPage()
 end
 
 function ReaderFooter:onPosUpdate(pos, pageno)
@@ -2374,7 +3037,8 @@ function ReaderFooter:TapFooter(ges)
         return true
     end
     if self.settings.lock_tap then return end
-    return self:onToggleFooterMode()
+    return true
+    -- return self:onToggleFooterMode() -- We don't want status bar to change on tap
 end
 
 function ReaderFooter:onToggleFooterMode()
@@ -2398,6 +3062,7 @@ function ReaderFooter:onToggleFooterMode()
             end
         end
     end
+    self._old_mode = self.mode
     self:applyFooterMode()
     G_reader_settings:saveSetting("reader_footer_mode", self.mode)
     self:onUpdateFooter(true)
@@ -2405,6 +3070,60 @@ function ReaderFooter:onToggleFooterMode()
     return true
 end
 
+function ReaderFooter:onToggleStatusBarOnOff()
+    if self.view.footer_visible then
+        self.view.footer_visible = false
+    else
+        if self.mode == 0 then
+            self.mode = (self.mode + 1) % self.mode_nb
+            for i, m in ipairs(self.mode_index) do
+                if self.mode == self.mode_list.off then break end
+                if self.mode == i then
+                    if self.settings[m] then
+                        break
+                    else
+                        self.mode = (self.mode + 1) % self.mode_nb
+                    end
+                end
+            end
+            self:applyFooterMode()
+        end
+        self.view.footer_visible = true
+    end
+
+    self:onUpdateFooter(true)
+    return true
+end
+
+function ReaderFooter:onStatusBarJustProgressBar()
+    self.settings.progress_bar_position = "below"
+    if self.settings.disable_progress_bar and self.view.footer_visible then
+        self.settings.disable_progress_bar = false
+        self._old_mode = self.mode
+        self.mode = 0
+        self:applyFooterMode() -- Importante hacer aquí applyFooterMode
+        self.view.footer_visible = true
+    else
+        self.settings.disable_progress_bar = true
+        self.mode = self._old_mode
+        -- self.mode = (self.mode + 1) % self.mode_nb
+        -- for i, m in ipairs(self.mode_index) do
+        --     if self.mode == self.mode_list.off then break end
+        --     if self.mode == i then
+        --         if self.settings[m] then
+        --             break
+        --         else
+        --             self.mode = (self.mode + 1) % self.mode_nb
+        --         end
+        --     end
+        -- end
+        self.view.footer_visible = false
+        self:applyFooterMode()
+    end
+
+    self:onUpdateFooter(true, true) -- Importante pasar el segundo parámetro a true
+    return true
+end
 function ReaderFooter:onHoldFooter(ges)
     -- We're higher priority than readerhighlight_hold, so, make sure we fall through properly...
     if not self.settings.skim_widget_on_hold then

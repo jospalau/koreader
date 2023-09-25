@@ -10,7 +10,7 @@ local filemanagerutil = require("apps/filemanager/filemanagerutil")
 local _ = require("gettext")
 
 local FileManagerCollection = WidgetContainer:extend{
-    coll_menu_title = _("Favorites"),
+    coll_menu_title = _("Might Be Read List"),
 }
 
 function FileManagerCollection:init()
@@ -138,7 +138,7 @@ function FileManagerCollection:showCollDialog()
     local buttons = {
         {{
             text_func = function()
-                return is_added and _("Remove current book from favorites") or _("Add current book to favorites")
+                return is_added and _("Remove current book from MBR") or _("Add current book to MBR")
             end,
             enabled = self.ui.document and true or false,
             callback = function()
@@ -152,7 +152,7 @@ function FileManagerCollection:showCollDialog()
             end,
         }},
         {{
-            text = _("Add a book to favorites"),
+            text = _("Add a book to MBR"),
             callback = function()
                 UIManager:close(coll_dialog)
                 local PathChooser = require("ui/widget/pathchooser")
@@ -173,7 +173,7 @@ function FileManagerCollection:showCollDialog()
             end,
         }},
         {{
-            text = _("Sort favorites"),
+            text = _("Sort MBR list"),
             callback = function()
                 UIManager:close(coll_dialog)
                 self:sortCollection()

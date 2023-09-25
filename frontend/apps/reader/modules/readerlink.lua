@@ -893,7 +893,7 @@ function ReaderLink:onGoBackLink(show_notification_if_empty)
         return true
     elseif show_notification_if_empty then
         UIManager:show(Notification:new{
-            text = _("Location history is empty."),
+            text = _("Origin location."),
         })
     end
 end
@@ -908,6 +908,10 @@ function ReaderLink:onGoForwardLink()
             table.insert(self.location_stack, saved_location)
             saved_location = table.remove(self.forward_location_stack)
         end
+    else
+        UIManager:show(Notification:new{
+            text = _("No locations to go."),
+        })
     end
 
     if saved_location then

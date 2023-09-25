@@ -200,7 +200,7 @@ function filemanagerutil.genAddRemoveFavoritesButton(file, caller_callback, butt
     local is_added = ReadCollection:checkItemExist(file)
     return {
         text_func = function()
-            return is_added and _("Remove from favorites") or _("Add to favorites")
+            return is_added and _("Remove from MBR") or _("Add to MBR")
         end,
         enabled = not button_disabled,
         callback = function()

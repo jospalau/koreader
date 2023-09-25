@@ -81,6 +81,8 @@ local Font = {
         x_smallinfofont = "NotoSans-Regular.ttf",
         -- extra extra small font for info messages
         xx_smallinfofont = "NotoSans-Regular.ttf",
+
+        myfont = "Capita-Regular.otf",
     },
     sizemap = {
         cfont = 24,
@@ -90,6 +92,7 @@ local Font = {
         ffont = 20,
         smallffont = 15,
         largeffont = 25,
+        myfont = 16,
         pgfont = 20,
         scfont = 20,
         rifont = 16,

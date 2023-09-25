@@ -95,6 +95,10 @@ function ReaderMenu:getPreviousFile()
     return require("readhistory"):getPreviousFile(self.ui.document.file)
 end
 
+function ReaderMenu:getRandomFav()
+    return require("readcollection"):OpenRandomFav()
+end
+
 function ReaderMenu:onReaderReady()
     if not Device:isTouchDevice() then return end
 
@@ -329,6 +333,33 @@ function ReaderMenu:setUpdateItemTable()
             })
         end
     }
+    self.menu_items.open_random_favorite = {
+        text_func = function()
+            local random_file = self:getRandomFav()
+            if not G_reader_settings:isTrue("open_last_menu_show_filename") or not random_file then
+                return _("Open random MBR book")
+            end
+            local path, file_name = util.splitFilePathName(random_file) -- luacheck: no unused
+            return T(_("Previous: %1"), BD.filename(file_name))
+        end,
+        enabled_func = function()
+            return self:getRandomFav() ~= nil
+        end,
+        callback = function()
+            self.ui:onOpenRandomFav()
+        end,
+        hold_callback = function()
+            local previous_file = self:getRandomFav()
+            UIManager:show(ConfirmBox:new{
+                text = T(_("Would you like to open the previous document: %1?"), BD.filepath(previous_file)),
+                ok_text = _("OK"),
+                ok_callback = function()
+                    self.ui:switchDocument(previous_file)
+                end,
+            })
+        end
+    }
+
 
     local order = require("ui/elements/reader_menu_order")
 

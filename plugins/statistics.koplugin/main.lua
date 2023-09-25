@@ -22,13 +22,14 @@ local lfs = require("libs/libkoreader-lfs")
 local logger = require("logger")
 local util = require("util")
 local _ = require("gettext")
+local Screen = Device.screen
 local C_ = _.pgettext
 local N_ = _.ngettext
 local T = FFIUtil.template
 
 local statistics_dir = DataStorage:getDataDir() .. "/statistics/"
 local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
-local MAX_PAGETURNS_BEFORE_FLUSH = 50
+local MAX_PAGETURNS_BEFORE_FLUSH = -1
 local DEFAULT_MIN_READ_SEC = 5
 local DEFAULT_MAX_READ_SEC = 120
 local DEFAULT_CALENDAR_START_DAY_OF_WEEK = 2 -- Monday
@@ -77,6 +78,21 @@ local ReaderStatistics = Widget:extend{
     data = nil, -- table
 }
 
+-- Like util.splitWords(), but not capturing space and punctuations
+local splitToWords = function(text)
+    local wlist = {}
+    for word in util.gsplit(text, "[%s%p]+", false) do
+        if util.hasCJKChar(word) then
+            for char in util.gsplit(word, "[\192-\255][\128-\191]+", true) do
+                table.insert(wlist, char)
+            end
+        else
+            table.insert(wlist, word)
+        end
+    end
+    return wlist
+end
+
 function ReaderStatistics:isDocless()
     return self.ui == nil or self.ui.document == nil or self.ui.document.is_pic == true
 end
@@ -102,6 +118,11 @@ function ReaderStatistics:onDispatcherRegisterActions()
 end
 
 function ReaderStatistics:init()
+    self._pages_turned = 0
+    self._total_chars = 0
+    self._total_words = 0
+    self._last_nbwords = 0
+    self._last_nbchars = 0
     -- Disable in PIC documents (but not the FM, as we want to be registered to the FM's menu).
     if self.ui and self.ui.document and self.ui.document.is_pic then
         return
@@ -170,6 +191,7 @@ function ReaderStatistics:initData()
     if self:isDocless() or not self.settings.is_enabled then
         return
     end
+
     -- first execution
     if not self.data then
         self.data = { performance_in_pages= {} }
@@ -1049,6 +1071,15 @@ function ReaderStatistics:getPageTimeTotalStats(id_book)
     return total_pages, total_time
 end
 
+function ReaderStatistics:getBookProperties()
+    local props = self.view.document:getProps()
+    if props.title == "No document" or props.title == "" then
+        --- @fixme Sometimes crengine returns "No document", try one more time.
+        props = self.view.document:getProps()
+    end
+    return props
+end
+
 function ReaderStatistics:getStatisticEnabledMenuItem()
     return {
         text = _("Enabled"),
@@ -1663,7 +1694,12 @@ function ReaderStatistics:getCurrentStat()
     local avg_page_time_string = datetime.secondsToClockDuration(user_duration_format, self.avg_time, false)
     local avg_day_time_string = datetime.secondsToClockDuration(user_duration_format, book_read_time/tonumber(total_days), false)
     local time_to_read_string = estimates_valid and datetime.secondsToClockDuration(user_duration_format, time_to_read, false) or _("N/A")
-
+    local stats_last_days = getLastDaysStats(5,false)
+    local stats_last_weeks = getLastWeeksStats(5,false)
+    local stats_last_months = getLastMonthsStats(5,false)
+    local time_this_week,pages_this_week = getThisWeekStats()
+    local time_this_month,pages_this_month = getThisMonthStats()
+    local wpm_today = getWpmToday() .. "wpm"
     -- Use more_arrow to indicate that an option shows another view
     -- Use " ⓘ" to indicate that an option will show an info message
     local more_arrow = BD.mirroredUILayout() and "◂" or "▸"
@@ -1677,6 +1713,35 @@ function ReaderStatistics:getCurrentStat()
         })
     end
 
+
+    local last_days_popup = function()
+        UIManager:show(InfoMessage:new{
+            -- text = T(N_("There is 1 page (%2%) left to read.", "There are %1 pages (%2%) left to read.", total_pages - current_page), total_pages - current_page, 100 - percent_read) ..
+            --     "\n\n" .. T(_("At the current rate of %1 per page, that will take %2 of reading time."), avg_page_time_string, time_to_read_string) ..
+            --     "\n\n" .. T(N_("At the current rate of %1 per day, that will take 1 day.", "At the current rate of %1 per day, that will take %2 days.", estimate_days_to_read), avg_day_time_string, estimate_days_to_read),
+            -- icon = "book.opened"
+            text = getLastDaysStats(20, true)
+        })
+    end
+
+    local last_weeks_popup = function()
+        UIManager:show(InfoMessage:new{
+            -- text = T(N_("There is 1 page (%2%) left to read.", "There are %1 pages (%2%) left to read.", total_pages - current_page), total_pages - current_page, 100 - percent_read) ..
+            --     "\n\n" .. T(_("At the current rate of %1 per page, that will take %2 of reading time."), avg_page_time_string, time_to_read_string) ..
+            --     "\n\n" .. T(N_("At the current rate of %1 per day, that will take 1 day.", "At the current rate of %1 per day, that will take %2 days.", estimate_days_to_read), avg_day_time_string, estimate_days_to_read),
+            -- icon = "book.opened"
+            text = getLastWeeksStats(20, true)
+        })
+    end
+    local last_months_popup = function()
+        UIManager:show(InfoMessage:new{
+            -- text = T(N_("There is 1 page (%2%) left to read.", "There are %1 pages (%2%) left to read.", total_pages - current_page), total_pages - current_page, 100 - percent_read) ..
+            --     "\n\n" .. T(_("At the current rate of %1 per page, that will take %2 of reading time."), avg_page_time_string, time_to_read_string) ..
+            --     "\n\n" .. T(N_("At the current rate of %1 per day, that will take 1 day.", "At the current rate of %1 per day, that will take %2 days.", estimate_days_to_read), avg_day_time_string, estimate_days_to_read),
+            -- icon = "book.opened"
+            text = getLastMonthsStats(20, true)
+        })
+    end
     return {
         -- Global statistics (may consider other books than current book)
 
@@ -1695,6 +1760,13 @@ function ReaderStatistics:getCurrentStat()
             end,
         },
         { _("Pages read today"), tonumber(today_pages), separator = true },
+
+        { _("Stats last days  ⓘ"), stats_last_days, callback = last_days_popup, separator = true },
+        { _("Stats last weeks  ⓘ"), stats_last_weeks, callback = last_weeks_popup, separator = true },
+        { _("Stats last months  ⓘ"), stats_last_months, callback = last_months_popup, separator = true },
+        { _("Time spent reading this week from Monday"), time_this_week .. " (" .. pages_this_week .. "p)", separator = true },
+        { _("Time spent reading this month from day 1"), time_this_month.. " (" .. pages_this_month .. "p)", separator = true },
+        { _("WPM today"), wpm_today, separator = true },
 
         -- Current book statistics (includes re-reads)
 
@@ -1738,6 +1810,285 @@ function ReaderStatistics:getCurrentStat()
         { _("Book highlights"), tonumber(highlights) },
         { _("Book notes"), tonumber(notes) },
     }
+end
+
+getLastDaysStats = function (day, include_pages)
+    local now_stamp = os.time()
+    local now_t = os.date("*t")
+    local DataStorage = require("datastorage")
+    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    local from_begin_day = now_t.hour * 3600 + now_t.min * 60 + now_t.sec
+    local start_today_time = now_stamp - from_begin_day
+    local conn = SQ3.open(db_location)
+    local i = 0
+    local stats = ""
+    if (not include_pages) then
+        stats = "["
+    end
+
+    while (i < day )
+    do
+        local sql_stmt = [[
+                        SELECT SUM(sum_duration),
+                        count(*)
+                        FROM    (
+                                        SELECT sum(duration) AS sum_duration
+                                FROM   page_stat
+                                WHERE  DATE(start_time,'unixepoch','localtime')=DATE('now', '%d day','localtime')
+                                GROUP  BY id_book, page
+                        );
+        ]]
+        local dayitime, pages = conn:rowexec(string.format(sql_stmt, -i))
+        if dayitime == nil then
+            dayitime = 0
+        end
+        dayitime = tonumber(dayitime)
+        if pages == nil then
+            pages = 0
+        end
+        pages = tonumber(pages)
+        local user_duration_format = "letters"
+        dayitime = datetime.secondsToClockDuration(user_duration_format,dayitime, true)
+        -- logger.dbg("aaaa",dayitime)
+        if (include_pages) then
+            day_stats = now_t
+            day_stats.day = now_t.day - 1
+            logger.warn(os.date("%Y-%m-%d", os.time(day_stats)) )
+            stats = stats ..  os.date("%d/%m/%Y: ", os.time(day_stats)) .. dayitime .. "(" .. pages .. "p)" .. string.char(10)
+        else
+            stats = stats .. dayitime .. ","
+        end
+        i = i + 1
+    end
+    stats = stats:sub(1, -2)
+    if (not include_pages) then
+        stats = stats .. "]"
+    end
+    conn:close()
+
+    return stats
+end
+
+getLastWeeksStats = function (month, include_pages)
+    local now_stamp = os.time()
+    local now_t = os.date("*t")
+    local DataStorage = require("datastorage")
+    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    local from_begin_day = now_t.hour * 3600 + now_t.min * 60 + now_t.sec
+    local start_today_time = now_stamp - from_begin_day
+    local conn = SQ3.open(db_location)
+    local i = 0
+    local stats = ""
+    if (not include_pages) then
+        stats = "["
+    end
+    while (i < month )
+    do
+        local sql_stmt = [[
+            SELECT SUM(sum_duration),
+            count(*)
+            FROM    (
+                            SELECT sum(duration) AS sum_duration
+                    FROM   page_stat
+                    WHERE  DATE(start_time,'unixepoch','localtime')
+                    BETWEEN
+                    DATE(DATE('now', '%d day','localtime'), 'weekday 0','-6 day','localtime')
+                    AND DATE(DATE('now', '%d day','localtime'), 'weekday 0','localtime')
+                    GROUP  BY id_book, page
+            );
+        ]]
+        local weekitime, pages = conn:rowexec( string.format(sql_stmt, -i*7, -i*7))
+
+        if weekitime == nil then
+            weekitime = 0
+        end
+        weekitime = tonumber(weekitime)
+        if pages == nil then
+            pages = 0
+        end
+        pages = tonumber(pages)
+
+        local user_duration_format = "letters"
+        weekitime = datetime.secondsToClockDuration(user_duration_format,weekitime, true)
+
+        if (include_pages) then
+            sql_stmt = "select DATE(DATE('now', 'weekday 0','-6 day','localtime'),'%d days','localtime');"
+            local start_week_i = conn:rowexec( string.format(sql_stmt, -i * 7))
+            stats = stats ..  "Week starting on " .. start_week_i .. " " ..  weekitime .. "(" .. pages .. "p)" .. string.char(10)
+        else
+            stats = stats .. weekitime .. ","
+        end
+        i = i + 1
+    end
+    stats = stats:sub(1, -2)
+    if (not include_pages) then
+        stats = stats .. "]"
+    end
+    conn:close()
+
+    return stats
+end
+getLastMonthsStats = function (month, include_pages)
+    local now_stamp = os.time()
+    local now_t = os.date("*t")
+    local DataStorage = require("datastorage")
+    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    local from_begin_day = now_t.hour * 3600 + now_t.min * 60 + now_t.sec
+    local start_today_time = now_stamp - from_begin_day
+    local conn = SQ3.open(db_location)
+    local i = 0
+    local stats = ""
+    if (not include_pages) then
+        stats = "["
+    end
+    while (i < month )
+    do
+        local sql_stmt = [[
+            SELECT SUM(sum_duration),
+            count(*)
+            FROM    (
+                            SELECT sum(duration) AS sum_duration
+                    FROM   page_stat
+                    WHERE  DATE(start_time,'unixepoch','localtime')
+                    BETWEEN
+                    DATE(DATE('now', '%d month','localtime'), 'start of month','localtime')
+                    AND DATE(DATE('now', '%d month','localtime'), 'start of month','+1 month','-1 day','localtime')
+                    GROUP  BY id_book, page
+            );
+        ]]
+        local monthitime, pages = conn:rowexec( string.format(sql_stmt, -i, -i))
+
+        if monthitime == nil then
+            monthitime = 0
+        end
+        monthitime = tonumber(monthitime)
+        if pages == nil then
+            pages = 0
+        end
+        pages = tonumber(pages)
+
+        local user_duration_format = "letters"
+        monthitime = datetime.secondsToClockDuration(user_duration_format,monthitime, true)
+
+        if (include_pages) then
+            sql_stmt = "SELECT STRFTIME('%%d/%%m/%%Y',DATE(DATE('now'),'%d month', 'start of month','localtime'));"
+            local start_week_i = conn:rowexec( string.format(sql_stmt, -i))
+            stats = stats ..  start_week_i .. " " ..  monthitime .. "(" .. pages .. "p)" .. string.char(10)
+        else
+            stats = stats .. monthitime .. ","
+        end
+        i = i + 1
+    end
+    stats = stats:sub(1, -2)
+    if (not include_pages) then
+        stats = stats .. "]"
+    end
+    conn:close()
+
+    return stats
+end
+getThisWeekStats = function ()
+    local now_stamp = os.time()
+    local now_t = os.date("*t")
+    local DataStorage = require("datastorage")
+    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    local from_begin_day = now_t.hour * 3600 + now_t.min * 60 + now_t.sec
+    local start_today_time = now_stamp - from_begin_day
+    local conn = SQ3.open(db_location)
+    local sql_stmt = [[
+        SELECT sum(sum_duration),
+               COUNT(*)
+        FROM    (
+                     SELECT sum(duration)    AS sum_duration
+                     FROM   page_stat
+                     WHERE  start_time >= strftime('%s', DATE('now', 'weekday 0','-6 day'))
+                     GROUP  BY id_book, page
+                );
+    ]]
+    local last_week_time,last_week_pages = conn:rowexec(sql_stmt)
+
+    conn:close()
+
+    if last_week_time == nil then
+        last_week_time = 0
+    end
+    last_week_time = tonumber(last_week_time)
+    if last_week_pages == nil then
+        last_week_pages = 0
+    end
+    last_week_pages = tonumber(last_week_pages)
+    local user_duration_format = "letters"
+    last_week_time = datetime.secondsToClockDuration(user_duration_format,last_week_time, true)
+    return last_week_time,last_week_pages
+end
+
+getThisMonthStats = function ()
+    local now_stamp = os.time()
+    local now_t = os.date("*t")
+    local DataStorage = require("datastorage")
+    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    local from_begin_day = now_t.hour * 3600 + now_t.min * 60 + now_t.sec
+    local start_today_time = now_stamp - from_begin_day
+    local conn = SQ3.open(db_location)
+    local sql_stmt = [[
+        SELECT sum(sum_duration),
+        COUNT(*)
+        FROM    (
+                     SELECT sum(duration)    AS sum_duration
+                     FROM   page_stat
+                     WHERE  start_time >= strftime('%s', DATE('now', 'start of month'))
+                     GROUP  BY id_book, page
+                );
+    ]]
+    local last_week_time,last_month_pages = conn:rowexec(sql_stmt)
+
+    conn:close()
+
+    if last_week_time == nil then
+        last_week_time = 0
+    end
+    last_week_time = tonumber(last_week_time)
+    if last_month_pages == nil then
+        last_month_pages = 0
+    end
+    last_month_pages = tonumber(last_month_pages)
+    local user_duration_format = "letters"
+    last_week_time = datetime.secondsToClockDuration(user_duration_format,last_week_time, true)
+    return last_week_time,last_month_pages
+end
+getWpmToday = function ()
+    -- local DataStorage = require("datastorage")
+    -- local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    -- local from_begin_day = now_t.hour * 3600 + now_t.min * 60 + now_t.sec
+    -- local start_today_time = now_stamp - from_begin_day
+    -- local conn = SQ3.open(db_location)
+    -- local sql_stmt = [[
+    --     SELECT count(*),
+    --            sum(sum_duration)
+    --     FROM    (
+    --                  SELECT sum(duration)    AS sum_duration
+    --                  FROM   page_stat
+    --                  WHERE  start_time >= strftime('%s', DATE('now'))
+    --                  GROUP  BY id_book, page
+    --             );
+    -- ]]
+    -- local pages_read_today,time_reading_today = conn:rowexec(sql_stmt)
+
+    -- conn:close()
+
+    -- if pages_read_today == nil then
+    --     pages_read_today = 0
+    -- end
+    -- pages_read_today = tonumber(pages_read_today)
+    -- if time_reading_today == nil then
+    --     time_reading_today = 0
+    -- end
+    local time_reading_today = tonumber(time_reading_today)
+    local today_duration, today_pages = ReaderStatistics:getTodayBookStats()
+    -- datetime.secondsToClockDuration(user_duration_format, today_duration, false)
+
+    local wpm = math.floor((today_pages*310)/(today_duration/60))
+    return wpm
 end
 
 function ReaderStatistics:getBookStat(id_book)
@@ -2640,6 +2991,22 @@ function ReaderStatistics:onPageUpdate(pageno)
     end
 
     self.pageturn_count = self.pageturn_count + 1
+    self._total_words = self._last_nbwords + self._total_words
+    self._total_chars = self._last_nbchars + self._total_chars
+    -- print("\nwords" .. self._total_words/self._pages_turned)
+    local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
+    local nbwords = 0
+    local nbcharacters = 0
+    if res and res.text then
+        local words = splitToWords(res.text) -- contar palabras
+        local characters = res.text -- contar caracteres
+        -- logger.warn(words)
+        nbwords = #words -- # es equivalente a string.len()
+        nbcharacters = #characters
+    end
+    self._last_nbwords = nbwords
+    self._last_nbchars = nbcharacters
+
     local now_ts = os.time()
 
     -- Get the previous page's last timestamp (if there is one)
@@ -2688,6 +3055,8 @@ function ReaderStatistics:onPageUpdate(pageno)
         self.pageturn_count = 0
         UIManager:tickAfterNext(function()
             self:insertDB()
+            self._pages_turned = self._pages_turned + 1
+            self.view.footer:onUpdateFooter(true)
             -- insertDB will call resetVolatileStats for us ;)
         end)
     end

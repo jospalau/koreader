@@ -220,6 +220,7 @@ local order = {
         "open_previous_document",
         "----------------------------",
         "collections",
+        "open_random_favorite",
         "----------------------------",
         "book_status",
         "book_info",

@@ -877,8 +877,13 @@ function ReaderUI:switchDocument(new_file)
     self:showReader(new_file)
 end
 
+
 function ReaderUI:onOpenLastDoc()
     self:switchDocument(self.menu:getPreviousFile())
+end
+
+function ReaderUI:onOpenRandomFav()
+    self:switchDocument(self.menu:getRandomFav())
 end
 
 function ReaderUI:getCurrentPage()

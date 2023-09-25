@@ -53,6 +53,7 @@ local settingsList = {
     open_previous_document = {category="none", event="OpenLastDoc", title=_("Open previous document"), general=true},
     history = {category="none", event="ShowHist", title=_("History"), general=true},
     favorites = {category="none", event="ShowColl", arg="favorites", title=_("Favorites"), general=true},
+    open_random_favorite = {category="none", event="OpenRandomFav", title=_("Open random book MBR"), general=true},
     filemanager = {category="none", event="Home", title=_("File browser"), general=true, separator=true},
 
     dictionary_lookup = {category="none", event="ShowDictionaryLookup", title=_("Dictionary lookup"), general=true},
@@ -63,6 +64,9 @@ local settingsList = {
     show_menu = {category="none", event="ShowMenu", title=_("Show menu"), general=true},
     menu_search = {category="none", event="MenuSearch", title=_("Menu search"), general=true},
     screenshot = {category="none", event="Screenshot", title=_("Screenshot"), general=true, separator=true},
+    text_properties = {category="none", event="ShowTextProperties", title=_("Show text properties"), general=true, separator=true},
+    random_profile = {category="none", event="RandomProfile", title=_("Random profile"), general=true, separator=true},
+    get_styles = {category="none", event="GetStyles", title=_("Get styles"), general=true, separator=true},
 
     -- Device settings
     exit_screensaver = {category="none", event="ExitScreensaver", title=_("Exit screensaver"), device=true},
@@ -124,8 +128,9 @@ local settingsList = {
     open_next_document_in_folder = {category="none", event="OpenNextDocumentInFolder", title=_("Open next document in folder"), reader=true, separator=true},
 
     show_config_menu = {category="none", event="ShowConfigMenu", title=_("Show bottom menu"), reader=true},
-    toggle_status_bar = {category="none", event="ToggleFooterMode", title=_("Toggle status bar"), reader=true, separator=true},
-
+    toggle_status_bar = {category="none", event="ToggleFooterMode", title=_("Toggle status bar cycle"), reader=true},
+    toggle_status_bar_onoff = {category="none", event="ToggleStatusBarOnOff", title=_("Toggle status bar on/off"), reader=true},
+    status_bar_just_progress_bar = {category="none", event="StatusBarJustProgressBar", title=_("Status bar just progress bar"), reader=true, separator=true},
     prev_chapter = {category="none", event="GotoPrevChapter", title=_("Previous chapter"), reader=true},
     next_chapter = {category="none", event="GotoNextChapter", title=_("Next chapter"), reader=true},
     first_page = {category="none", event="GoToBeginning", title=_("First page"), reader=true},
@@ -251,6 +256,7 @@ local dispatcher_menu_order = {
     "open_previous_document",
     "history",
     "favorites",
+    "open_random_favorite",
     "filemanager",
 
     "dictionary_lookup",
@@ -261,7 +267,9 @@ local dispatcher_menu_order = {
     "show_menu",
     "menu_search",
     "screenshot",
-
+    "text_properties",
+    "random_profile",
+    "get_styles",
     "exit_screensaver",
     "suspend",
     "exit",
@@ -323,7 +331,8 @@ local dispatcher_menu_order = {
 
     "show_config_menu",
     "toggle_status_bar",
-
+    "toggle_status_bar_onoff",
+    "status_bar_just_progress_bar",
     "prev_chapter",
     "next_chapter",
     "first_page",
