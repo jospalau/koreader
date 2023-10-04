@@ -29,6 +29,7 @@ local Screen = Device.screen
 local SQ3 = require("lua-ljsqlite3/init")
 local util = require("util")
 local InfoMessage = require("ui/widget/infomessage")
+local Notification = require("ui/widget/notification")
 local  MAX_BATTERY_HIDE_THRESHOLD = 1000
 
 local MODE = {
@@ -759,8 +760,6 @@ local footerTextGeneratorMap = {
     -- Estimated 5.7 chars per words
     local avg_chars_cal = math.floor(avg_words_cal * 5.7)
     local avg_chars_per_word_cal = math.floor((avg_chars_cal/avg_words_cal) * 100) / 100
-    print("paso " .. avg_words_cal)
-    print("paso " .. avg_chars_cal)
     local percentage = footer.progress_bar.percentage
     local words_read = title_words * percentage
     local current_page = math.floor(((words_read * title_pages)/title_words)*10)/10
@@ -973,6 +972,10 @@ function ReaderFooter:init()
     self._goal_time = 120
     self._goal_pages = 100
     self._old_mode = 0
+    self._statusbar_toggled = false
+    self.mode = 0
+    self.settings.disable_progress_bar = true
+    self.view.footer_visible = false
 end
 
 function ReaderFooter:set_custom_text(touchmenu_instance)
@@ -3042,6 +3045,11 @@ function ReaderFooter:TapFooter(ges)
 end
 
 function ReaderFooter:onToggleFooterMode()
+    if not self.view.footer_visible or self.mode == 0 then
+        UIManager:show(Notification:new{
+            text = _("Footer on."),
+        })
+    end
     if self.has_no_mode and self.settings.disable_progress_bar then return end
     if self.settings.all_at_once or self.has_no_mode then
         if self.mode >= 1 then
@@ -3062,6 +3070,12 @@ function ReaderFooter:onToggleFooterMode()
             end
         end
     end
+    if self.mode == 0 then
+        self._statusbar_toggled = true
+        UIManager:show(Notification:new{
+            text = _("Footer off."),
+        })
+    end
     self._old_mode = self.mode
     self:applyFooterMode()
     G_reader_settings:saveSetting("reader_footer_mode", self.mode)
@@ -3070,55 +3084,79 @@ function ReaderFooter:onToggleFooterMode()
     return true
 end
 
-function ReaderFooter:onToggleStatusBarOnOff()
-    if self.view.footer_visible then
-        self.view.footer_visible = false
-    else
-        if self.mode == 0 then
-            self.mode = (self.mode + 1) % self.mode_nb
-            for i, m in ipairs(self.mode_index) do
-                if self.mode == self.mode_list.off then break end
-                if self.mode == i then
-                    if self.settings[m] then
-                        break
-                    else
-                        self.mode = (self.mode + 1) % self.mode_nb
-                    end
-                end
-            end
-            self:applyFooterMode()
-        end
-        self.view.footer_visible = true
-    end
+-- function ReaderFooter:onToggleStatusBarOnOff()
+--     self._statusbar_toggled=true
+--     if self.view.footer_visible and self.mode > 0 then
+--         self.view.footer_visible = false
+--         UIManager:show(Notification:new{
+--             text = _("Footer off."),
+--         })
+--     else
+--         if self.mode == 0 then
+--             self.mode = (self.mode + 1) % self.mode_nb
+--             for i, m in ipairs(self.mode_index) do
+--                 if self.mode == self.mode_list.off then break end
+--                 if self.mode == i then
+--                     if self.settings[m] then
+--                         break
+--                     else
+--                         self.mode = (self.mode + 1) % self.mode_nb
+--                     end
+--                 end
+--             end
+--             self:applyFooterMode()
+--         end
+--         self.view.footer_visible = true
+--         UIManager:show(Notification:new{
+--             text = _("Footer on."),
+--         })
+--     end
 
-    self:onUpdateFooter(true)
-    return true
-end
+--     self:onUpdateFooter(true)
+--     return true
+-- end
 
 function ReaderFooter:onStatusBarJustProgressBar()
     self.settings.progress_bar_position = "below"
-    if self.settings.disable_progress_bar and self.view.footer_visible then
+    if (self.settings.disable_progress_bar) then-- and self.view.footer_visible) or self._statusbar_toggled then
+        local text = "Progress bar on."
+        if self.mode > 0 then
+            text = "Progress bar on and footer off."
+        end
+        UIManager:show(Notification:new{
+            text = _(text),
+        })
         self.settings.disable_progress_bar = false
         self._old_mode = self.mode
         self.mode = 0
         self:applyFooterMode() -- Importante hacer aquí applyFooterMode
         self.view.footer_visible = true
+        if self._statusbar_toggled or self.mode == 0 then
+            -- self:applyFooterMode() -- Importante hacer aquí applyFooterMode
+            -- self.view.footer_visible = true
+            self._statusbar_toggled = false
+            self.mode = 0
+            self:applyFooterMode() -- Importante hacer aquí applyFooterMode
+            self.view.footer_visible = true
+        end
+
     else
+        local text = "Progress bar off."
+        if self.mode > 0 then
+            text = "Progress bar and footer off."
+        end
+        UIManager:show(Notification:new{
+            text = _(text),
+        })
         self.settings.disable_progress_bar = true
-        self.mode = self._old_mode
-        -- self.mode = (self.mode + 1) % self.mode_nb
-        -- for i, m in ipairs(self.mode_index) do
-        --     if self.mode == self.mode_list.off then break end
-        --     if self.mode == i then
-        --         if self.settings[m] then
-        --             break
-        --         else
-        --             self.mode = (self.mode + 1) % self.mode_nb
-        --         end
-        --     end
+        self.mode = 0
+        self:applyFooterMode() -- Importante hacer aquí applyFooterMode
+        self.view.footer_visible = true
+        -- else
+        --     -- self.mode = self._old_mode
+        --     self.view.footer_visible = false
+        --     self:applyFooterMode()
         -- end
-        self.view.footer_visible = false
-        self:applyFooterMode()
     end
 
     self:onUpdateFooter(true, true) -- Importante pasar el segundo parámetro a true
