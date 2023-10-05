@@ -12,6 +12,7 @@ local _ = require("gettext")
 local C_ = _.pgettext
 local T = require("ffi/util").template
 local Screen = Device.screen
+local Notification = require("ui/widget/notification")
 
 local ReaderTypography = WidgetContainer:extend{}
 
@@ -621,6 +622,23 @@ function ReaderTypography:getCurrentDefaultHyphDictLanguage()
         hyph_dict_name = hyph_dict_name:gsub(".pattern$", "")
     end
     return hyph_dict_name
+end
+
+
+function ReaderTypography:onToggleHyphenation()
+    self.hyphenation = not self.hyphenation
+    self.ui.document:setTextHyphenation(self.hyphenation)
+    self.ui:handleEvent(Event:new("UpdatePos"))
+
+    if self.hyphenation then
+        UIManager:show(Notification:new{
+            text = _("Hyphenation toggled on"),
+        })
+    else
+        UIManager:show(Notification:new{
+            text = _("Hyphenation toggled off"),
+        })
+    end
 end
 
 function ReaderTypography:parseLanguageTag(lang_tag)

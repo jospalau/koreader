@@ -3090,6 +3090,55 @@ function ReaderFooter:onToggleFooterMode()
     return true
 end
 
+
+
+function ReaderFooter:onToggleFooterModeBack()
+    if not self.view.footer_visible or self.mode == 0 then
+        UIManager:show(Notification:new{
+            text = _("Footer on."),
+        })
+    end
+    if self.has_no_mode and self.settings.disable_progress_bar then return end
+    if self.settings.all_at_once or self.has_no_mode then
+        if self.mode >= 1 then
+            self.mode = self.mode_list.off
+        else
+            self.mode = self.mode_list.page_progress
+        end
+    else
+        self.mode = (self.mode -1) % self.mode_nb
+        for i = #self.mode_index, 1, -1 do
+            local m = self.mode_index[i]
+            if self.mode == self.mode_list.off then break end
+            if self.mode == i then
+                if self.settings[m] then
+                    break
+                else
+                    self.mode = (self.mode - 1) % self.mode_nb
+                end
+            end
+        end
+    end
+    if self.mode == 0 then
+        self._statusbar_toggled = true
+        local text = "footer off."
+        if not self.settings.disable_progress_bar then
+            self.settings.disable_progress_bar = true
+            text = "Progress bar and footer off."
+            self:onUpdateFooter(true,true)
+        end
+        UIManager:show(Notification:new{
+            text = _(text),
+        })
+    end
+    self._old_mode = self.mode
+    self:applyFooterMode()
+    G_reader_settings:saveSetting("readeddr_footer_mode", self.mode)
+    self:onUpdateFooter(true)
+    self:rescheduleFooterAutoRefreshIfNeeded()
+    return true
+end
+
 -- function ReaderFooter:onToggleStatusBarOnOff()
 --     self._statusbar_toggled=true
 --     if self.view.footer_visible and self.mode > 0 then

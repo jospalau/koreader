@@ -554,6 +554,17 @@ function ReaderUI:showFileManager(file)
     end
 end
 
+function ReaderUI:showFileManagerScripts()
+    local FileManager = require("apps/filemanager/filemanager")
+    local last_file = ""
+    local last_dir = "/mnt/onboard/.adds"
+    if FileManager.instance then
+        FileManager.instance:reinit(last_dir, last_file)
+    else
+        FileManager:showFiles(last_dir, last_file)
+    end
+end
+
 function ReaderUI:onShowingReader()
     -- Allows us to optimize out a few useless refreshes in various CloseWidgets handlers...
     self.tearing_down = true
@@ -834,6 +845,12 @@ end
 function ReaderUI:onHome()
     self:onClose()
     self:showFileManager()
+    return true
+end
+
+function ReaderUI:onScripts()
+    self:onClose()
+    self:showFileManagerScripts()
     return true
 end
 

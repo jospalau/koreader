@@ -9,6 +9,7 @@ local Event = require("ui/event")
 local UIManager = require("ui/uimanager")
 local ffiutil = require("ffi/util")
 local util = require("util")
+local Font = require("ui/font")
 local _ = require("gettext")
 local T = ffiutil.template
 
@@ -290,25 +291,33 @@ function filemanagerutil.genExecuteScriptButton(file, caller_callback)
             UIManager:show(script_is_running_msg)
             UIManager:scheduleIn(0.5, function()
                 local rv
+                local output = ""
                 if Device:isAndroid() then
                     Device:setIgnoreInput(true)
                     rv = os.execute("sh " .. ffiutil.realpath(file)) -- run by sh, because sdcard has no execute permissions
                     Device:setIgnoreInput(false)
                 else
-                    rv = os.execute(ffiutil.realpath(file))
+                    -- rv = os.execute(ffiutil.realpath(file))
+                    local execute = io.popen(ffiutil.realpath(file) .. " && echo $? || echo $?" ) -- run by sh, because sdcard has no execute permissions
+                    output = execute:read('*a')
+                    UIManager:show(InfoMessage:new{
+                        text = T(_(output)),
+                        face = Font:getFace("myfont"),
+                    })
+
                 end
                 UIManager:close(script_is_running_msg)
-                if rv == 0 then
-                    UIManager:show(InfoMessage:new{
-                        text = _("The script exited successfully."),
-                    })
-                else
-                    --- @note: Lua 5.1 returns the raw return value from the os's system call. Counteract this madness.
-                    UIManager:show(InfoMessage:new{
-                        text = T(_("The script returned a non-zero status code: %1!"), bit.rshift(rv, 8)),
-                        icon = "notice-warning",
-                    })
-                end
+                -- if rv == 0 then
+                --     UIManager:show(InfoMessage:new{
+                --         text = _("The script exited successfully."),
+                --     })
+                -- else
+                --     --- @note: Lua 5.1 returns the raw return value from the os's system call. Counteract this madness.
+                --     UIManager:show(InfoMessage:new{
+                --         text = T(_("The script returned a non-zero status code: %1!"), bit.rshift(rv, 8)),
+                --         icon = "notice-warning",
+                --     })
+                -- end
             end)
         end,
     }

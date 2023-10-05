@@ -55,6 +55,7 @@ local settingsList = {
     favorites = {category="none", event="ShowColl", arg="favorites", title=_("Favorites"), general=true},
     open_random_favorite = {category="none", event="OpenRandomFav", title=_("Open random book MBR"), general=true},
     filemanager = {category="none", event="Home", title=_("File browser"), general=true, separator=true},
+    filemanager_scripts = {category="none", event="Scripts", title=_("File browser scripts"), general=true, separator=true},
 
     dictionary_lookup = {category="none", event="ShowDictionaryLookup", title=_("Dictionary lookup"), general=true},
     wikipedia_lookup = {category="none", event="ShowWikipediaLookup", title=_("Wikipedia lookup"), general=true},
@@ -129,8 +130,10 @@ local settingsList = {
 
     show_config_menu = {category="none", event="ShowConfigMenu", title=_("Show bottom menu"), reader=true},
     toggle_status_bar = {category="none", event="ToggleFooterMode", title=_("Toggle status bar cycle"), reader=true},
+    toggle_status_bar_back = {category="none", event="ToggleFooterModeBack", title=_("Toggle status bar cycle back"), reader=true},
     toggle_status_bar_onoff = {category="none", event="ToggleStatusBarOnOff", title=_("Toggle status bar on/off"), reader=true},
     status_bar_just_progress_bar = {category="none", event="StatusBarJustProgressBar", title=_("Status bar just progress bar"), reader=true, separator=true},
+    toggle_hyphenation = {category="none", event="ToggleHyphenation", title=_("Toggle hyphenation"), reader=true, separator=true},
     prev_chapter = {category="none", event="GotoPrevChapter", title=_("Previous chapter"), reader=true},
     next_chapter = {category="none", event="GotoNextChapter", title=_("Next chapter"), reader=true},
     first_page = {category="none", event="GoToBeginning", title=_("First page"), reader=true},
@@ -258,6 +261,7 @@ local dispatcher_menu_order = {
     "favorites",
     "open_random_favorite",
     "filemanager",
+    "filemanager_scripts",
 
     "dictionary_lookup",
     "wikipedia_lookup",
@@ -331,6 +335,8 @@ local dispatcher_menu_order = {
 
     "show_config_menu",
     "toggle_status_bar",
+    "toggle_status_bar_back",
+    "toggle_hyphenation",
     "toggle_status_bar_onoff",
     "status_bar_just_progress_bar",
     "prev_chapter",
