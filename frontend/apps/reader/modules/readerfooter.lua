@@ -3072,13 +3072,19 @@ function ReaderFooter:onToggleFooterMode()
     end
     if self.mode == 0 then
         self._statusbar_toggled = true
+        local text = "footer off."
+        if not self.settings.disable_progress_bar then
+            self.settings.disable_progress_bar = true
+            text = "Progress bar and footer off."
+            self:onUpdateFooter(true,true)
+        end
         UIManager:show(Notification:new{
-            text = _("Footer off."),
+            text = _(text),
         })
     end
     self._old_mode = self.mode
     self:applyFooterMode()
-    G_reader_settings:saveSetting("reader_footer_mode", self.mode)
+    G_reader_settings:saveSetting("readeddr_footer_mode", self.mode)
     self:onUpdateFooter(true)
     self:rescheduleFooterAutoRefreshIfNeeded()
     return true
