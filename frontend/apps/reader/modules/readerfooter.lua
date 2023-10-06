@@ -1397,7 +1397,7 @@ function ReaderFooter:onShowTextProperties()
     end
 
     -- Extraigo la información más fácil así
-    title_pages = self.ui.document._document:getDocumentProps(). title
+    title_pages = self.ui.document._document:getDocumentProps().title
     local title_words = title_pages:match("([0-9,]+w)")
     local avg_words_cal = math.floor(title_words:sub(1,title_words:len() - 1):gsub(",","")/pages)
     -- Estimated 5.7 chars per words
@@ -1454,8 +1454,7 @@ function ReaderFooter:onShowTextProperties()
     .. point .. " Week: " .. this_week_duration  .. "(" .. this_week_pages .. "p)" .. string.char(10)
     .. point .. " Stats: wpm: " .. wpm .. ", wph: " .. wph .. ", spp: " .. spp .. ", wpmp: " .. wpm_test .. important .. string.char(10)
     .. point .. " Static info (from Calibre info): wpp: " .. avg_words_cal .. ", cpp: " .. avg_chars_cal .. ", cpw: " .. avg_chars_per_word_cal .. important .. string.char(10)
-    .. point .. " Dynamic info: p: " .. self.ui.statistics._pages_turned .. ", wpp: " .. avg_words .. ", cpp: " .. avg_chars .. ", cpw: " .. avg_chars_per_word .. string.char(10)
-    .. line .. string.char(10) .. string.char(10)
+    -- .. point .. " Dynamic info: p: " .. self.ui.statistics._pages_turned .. ", wpp: " .. avg_words .. ", cpp: " .. avg_chars .. ", cpw: " .. avg_chars_per_word .. string.char(10) -- Not used   .. line .. string.char(10) .. string.char(10)
     -- .. pages .. "p_" .. title_pages_ex .. string.char(10) ..  font_face .. "-" ..  "S: "
     .. point .. " Font parameters: " .. font_face .. ", " .. font_size .. "px, " .. font_size_pt .. "pt, " .. font_size_mm .. "mm" .. important ..  string.char(10)
     .. point .. " L: " ..  nblines .. " - W: " .. nbwords .. " - C: " .. nbcharacters .. " (CFL: " .. nbwords2 .. ")" .. important ..  string.char(10)

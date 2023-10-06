@@ -2994,7 +2994,8 @@ function ReaderStatistics:onPageUpdate(pageno)
     self._total_words = self._last_nbwords + self._total_words
     self._total_chars = self._last_nbchars + self._total_chars
     -- print("\nwords" .. self._total_words/self._pages_turned)
-    local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
+    -- Not using this anymore, affects when searching text turning pages, highlight is lost
+    -- local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
     local nbwords = 0
     local nbcharacters = 0
     if res and res.text then
