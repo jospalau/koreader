@@ -68,6 +68,8 @@ local settingsList = {
     text_properties = {category="none", event="ShowTextProperties", title=_("Show text properties"), general=true, separator=true},
     random_profile = {category="none", event="RandomProfile", title=_("Random profile"), general=true, separator=true},
     get_styles = {category="none", event="GetStyles", title=_("Get styles"), general=true, separator=true},
+    synchronize_code = {category="none", event="SynchronizeCode", title=_("Synchronize code"), general=true, separator=true},
+    synchronize_statistics = {category="none", event="SynchronizeStatistics", title=_("Synchronize statistics script"), general=true, separator=true},
 
     -- Device settings
     exit_screensaver = {category="none", event="ExitScreensaver", title=_("Exit screensaver"), device=true},
@@ -274,6 +276,8 @@ local dispatcher_menu_order = {
     "text_properties",
     "random_profile",
     "get_styles",
+    "synchronize_code",
+    "synchronize_statistics",
     "exit_screensaver",
     "suspend",
     "exit",
@@ -1035,14 +1039,15 @@ function Dispatcher:_showAsMenu(settings, exec_props)
             end,
         }})
     end
+    local Size = require("ui/size")
     for _, v in ipairs(display_list) do
         table.insert(buttons, {{
             text = v.text,
             enabled = Dispatcher:isActionEnabled(settingsList[v.key]),
             align = "left",
             font_face = "smallinfofont",
-            font_size = 22,
-            font_bold = false,
+            font_size = 17,
+            font_bold = true,
             callback = function()
                 UIManager:close(quickmenu)
                 Dispatcher:execute({[v.key] = settings[v.key]})
@@ -1056,16 +1061,25 @@ function Dispatcher:_showAsMenu(settings, exec_props)
         }})
     end
     local ButtonDialog = require("ui/widget/buttondialog")
+    local title = settings.settings.name -- or _("QuickMenu")
+    local Font = require("ui/font")
+    if not Device:isAndroid() then
+        Device:setScreenDPI(50)
+    end
     quickmenu = ButtonDialog:new{
-        title = settings.settings.name or _("QuickMenu"),
+        title = title,
         title_align = "center",
         shrink_unneeded_width = true,
-        shrink_min_width = math.floor(0.6 * Screen:getWidth()),
+        title_face = Font:getFace("smalltfont"),
+        shrink_min_width = math.floor(0.3 * Screen:getWidth()),
         use_info_style = false,
         buttons = buttons,
         anchor = exec_props and exec_props.qm_anchor,
     }
     UIManager:show(quickmenu)
+    if not Device:isAndroid() then
+        Device:setScreenDPI(nil)
+    end
 end
 
 --[[--

@@ -1187,6 +1187,35 @@ function ReaderFooter:rescheduleFooterAutoRefreshIfNeeded()
     end
 end
 
+
+function ReaderFooter:onSynchronizeCode()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local execute = io.popen("/mnt/onboard/.adds/syncKOReaderCode.sh && echo $? || echo $?" )
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
+function ReaderFooter:onSynchronizeStatistics()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local execute = io.popen("(cd /mnt/onboard/.adds/statsKOReaderDB && /mnt/onboard/.adds/statsKOReaderDB/syncKOReaderDB.sh) && echo $? || echo $?" )
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
 function ReaderFooter:onGetStyles()
     local css_text = self.ui.document:getDocumentFileContent("OPS/styles/stylesheet.css")
     if css_text == nil then
