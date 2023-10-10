@@ -232,12 +232,21 @@ function BookMapRow:init()
                         text_widget = nil
                     end
                 end
+                -- Different style depending on alt_theme
+                local bgcolor = Blitbuffer.COLOR_WHITE
+                if self.alt_theme then
+                    if item.seq_in_level % 2 == 0 then -- alternate background color
+                        bgcolor = Blitbuffer.COLOR_GRAY_E
+                    else
+                        bgcolor = Blitbuffer.COLOR_GRAY_B
+                    end
+                end
                 local span_w = FrameContainer:new{
                     overlap_offset = {offset_x, offset_y},
                     margin = 0,
                     padding = 0,
                     bordersize = self.toc_span_border,
-                    background = Blitbuffer.COLOR_WHITE,
+                    background = bgcolor,
                     CenterContainer:new{
                         dimen = Geom:new{
                             w = width - 2 * self.toc_span_border,
@@ -312,7 +321,9 @@ function BookMapRow:init()
                 table.insert(self.background_fillers, {
                     x = x, y = 0,
                     w = w, h = self.pages_frame_height,
-                    color = Blitbuffer.COLOR_LIGHT_GRAY,
+                    -- Different style depending on alt_theme
+                    color = self.alt_theme and Blitbuffer.COLOR_GRAY or Blitbuffer.COLOR_LIGHT_GRAY,
+                    stripe_width = self.alt_theme and math.ceil(self.span_height / 10) or nil,
                 })
             end
         end
@@ -526,7 +537,11 @@ end
 function BookMapRow:paintTo(bb, x, y)
     -- Paint background fillers (which are not subwidgets) first
     for _, filler in ipairs(self.background_fillers) do
-        bb:paintRect(x + self.pages_frame_offset_x + filler.x, y + filler.y, filler.w, filler.h, filler.color)
+        if filler.stripe_width then
+            bb:hatchRect(x + self.pages_frame_offset_x + filler.x, y + filler.y, filler.w, filler.h, filler.stripe_width, filler.color)
+        else
+            bb:paintRect(x + self.pages_frame_offset_x + filler.x, y + filler.y, filler.w, filler.h, filler.color)
+        end
     end
     -- Paint regular sub widgets the classic way
     InputContainer.paintTo(self, bb, x, y)
@@ -636,6 +651,12 @@ function BookMapWidget:init()
             MultiSwipe = {
                 GestureRange:new{
                     ges = "multiswipe",
+                    range = self.dimen,
+                }
+            },
+            Pan = { -- (for mousewheel scrolling support)
+                GestureRange:new{
+                    ges = "pan",
                     range = self.dimen,
                 }
             },
@@ -754,16 +775,34 @@ function BookMapWidget:init()
     -- on some events (ie. TocUpdated, PageUpdate, AddHhighlight...)
     -- Get some info that shouldn't change across calls to update()
     self.nb_pages = self.ui.document:getPageCount()
-    self.ui.toc:fillToc()
     self.cur_page = self.ui.toc.pageno
-    self.max_toc_depth = self.ui.toc.toc_depth
-    -- Get bookmarks and highlights from ReaderBookmark
-    self.bookmarked_pages = self.ui.bookmark:getBookmarkedPages()
     -- Get read page from the statistics plugin if enabled
     self.statistics_enabled = self.ui.statistics and self.ui.statistics:isEnabled()
     self.read_pages = self.ui.statistics and self.ui.statistics:getCurrentBookReadPages()
     self.current_session_duration = self.ui.statistics and (os.time() - self.ui.statistics.start_current_period)
-    -- Hidden flows, for first page display, and to draw them gray
+    -- Reference page numbers, for first row page display
+    self.page_labels = nil
+    if self.ui.pagemap and self.ui.pagemap:wantsPageLabels() then
+        self.page_labels = self.ui.document:getPageMap()
+    end
+    -- Location stack
+    self.previous_locations = self.ui.link:getPreviousLocationPages()
+
+    -- Update stuff that may be updated by the user while in PageBrowser
+    self:updateEditableStuff()
+    self.editable_stuff_edited = false -- reset this
+
+    -- Compute settings-dependant sizes and options, and build the inner widgets
+    self:update()
+end
+
+function BookMapWidget:updateEditableStuff(update_view)
+    -- Toc, bookmarks and hidden flows may be edited
+    self.ui.toc:fillToc()
+    self.max_toc_depth = self.ui.toc.toc_depth
+    -- Get bookmarks and highlights from ReaderBookmark
+    self.bookmarked_pages = self.ui.bookmark:getBookmarkedPages()
+    self.hidden_flows = nil
     self.has_hidden_flows = self.ui.document:hasHiddenFlows()
     if self.has_hidden_flows and #self.ui.document.flows > 0 then
         self.hidden_flows = {}
@@ -773,16 +812,13 @@ function BookMapWidget:init()
             table.insert(self.hidden_flows, { tab[1], tab[1]+tab[2]-1 })
         end
     end
-    -- Reference page numbers, for first row page display
-    self.page_labels = nil
-    if self.ui.pagemap and self.ui.pagemap:wantsPageLabels() then
-        self.page_labels = self.ui.document:getPageMap()
+    -- Keep a flag so we can propagate the fact that editable stuff
+    -- has been updated to our parent/launcher when we will close,
+    -- so they can update themselves too.
+    self.editable_stuff_edited = true
+    if update_view then
+        self:update()
     end
-    -- Location stack
-    self.previous_locations = self.ui.link:getPreviousLocationPages()
-
-    -- Compute settings-dependant sizes and options, and build the inner widgets
-    self:update()
 end
 
 function BookMapWidget:update()
@@ -807,14 +843,27 @@ function BookMapWidget:update()
     self.vgroup:clear()
     self.cropping_widget:reset()
 
+    self.alt_theme = G_reader_settings:isTrue("book_map_alt_theme")
+
     -- Flat book map has each TOC item on a new line, and pages graph underneath.
     -- Non-flat book map shows a grid with TOC items following each others.
     self.flat_map = self.ui.doc_settings:readSetting("book_map_flat", false)
-    self.toc_depth = self.ui.doc_settings:readSetting("book_map_toc_depth", self.max_toc_depth)
+    if self.ui.handmade:isHandmadeTocEnabled() then
+        -- We can switch from a custom TOC (max depth of 1) to the regular TOC
+        -- (larger depth possible), so we'd rather not replace with 1 the depth
+        -- set and saved for a regular TOC. So, use a dedicated setting for each.
+        self.toc_depth = self.ui.doc_settings:readSetting("book_map_toc_depth_handmade_toc") or self.max_toc_depth
+    else
+        self.toc_depth = self.ui.doc_settings:readSetting("book_map_toc_depth", self.max_toc_depth)
+    end
     if self.overview_mode then
         -- Restricted to grid mode, fitting on the screen. Only toc depth can be adjusted.
         self.flat_map = false
-        self.toc_depth = self.ui.doc_settings:readSetting("book_map_overview_toc_depth", self.max_toc_depth)
+        if self.ui.handmade:isHandmadeTocEnabled() then
+            self.toc_depth = self.ui.doc_settings:readSetting("book_map_overview_toc_depth_handmade_toc") or self.max_toc_depth
+        else
+            self.toc_depth = self.ui.doc_settings:readSetting("book_map_overview_toc_depth", self.max_toc_depth)
+        end
     end
     if self.flat_map then
         self.nb_toc_spans = 0 -- no span shown in grid
@@ -966,6 +1015,7 @@ function BookMapWidget:update()
                         title = item.title,
                         p_start = item.page,
                         p_end = nil,
+                        seq_in_level = item.seq_in_level,
                     }
                 end
             end
@@ -1069,6 +1119,7 @@ function BookMapWidget:update()
             nb_toc_spans = self.nb_toc_spans,
             span_height = self.span_height,
             font_face = self.toc_span_face,
+            alt_theme = self.alt_theme,
             start_page_text = start_page_text,
             start_page = p_start,
             end_page = p_end,
@@ -1174,6 +1225,31 @@ function BookMapWidget:showMenu()
                 local b = button_dialog:getButtonById("tap_to_page_browser")
                 b:setText(b.text_func(true), b.width)
                 b:refresh()
+            end,
+        }},
+        {{
+            text_func = function(no_size_trick)
+                local text = _("Alternative theme")
+                if G_reader_settings:isTrue("book_map_alt_theme") then
+                    text = text .. "  \u{2713}" -- checkmark
+                else
+                    if not no_size_trick then
+                        -- Initial call, make it wide enough so the checkmark text will fit
+                        text = text .. "  \u{2003}" -- wide em space
+                    end
+                    -- Otherwise, keep it small without the checkmark, which will fit
+                end
+                return text
+            end,
+            id = "alt_theme",
+            align = "left",
+            callback = function()
+                G_reader_settings:flipTrue("book_map_alt_theme")
+                local b = button_dialog:getButtonById("alt_theme")
+                b:setText(b.text_func(true), b.width)
+                b:refresh()
+                self.editable_stuff_edited = true -- have this change reflected on any lower bookmap & pagebrowser
+                self:update()
             end,
         }},
         not self.overview_mode and {{
@@ -1356,6 +1432,9 @@ function BookMapWidget:onClose(close_all_parents)
             -- will do the cleanup below.
             self.launcher:onClose(true)
         else
+            if self.editable_stuff_edited then
+                self.launcher:updateEditableStuff(true)
+            end
             UIManager:setDirty(self.launcher, "ui")
         end
     else
@@ -1371,8 +1450,9 @@ function BookMapWidget:onClose(close_all_parents)
             collectgarbage()
             collectgarbage()
         end)
-        -- As we're getting back to Reader, do a full flashing refresh to remove
-        -- any ghost trace of thumbnails or black page slots
+        -- As we're getting back to Reader, update the footer and do a full flashing
+        -- refresh to remove any ghost trace of thumbnails or black page slots
+        UIManager:broadcastEvent(Event:new("UpdateFooter"))
         UIManager:setDirty(self.ui.dialog, "full")
     end
     return true
@@ -1461,11 +1541,19 @@ function BookMapWidget:saveSettings(reset)
         self.pages_per_row = nil
     end
     if self.overview_mode then
-        self.ui.doc_settings:saveSetting("book_map_overview_toc_depth", self.toc_depth)
+        if self.ui.handmade:isHandmadeTocEnabled() then
+            self.ui.doc_settings:saveSetting("book_map_overview_toc_depth_handmade_toc", self.toc_depth)
+        else
+            self.ui.doc_settings:saveSetting("book_map_overview_toc_depth", self.toc_depth)
+        end
         return
     end
+    if self.ui.handmade:isHandmadeTocEnabled() then
+        self.ui.doc_settings:saveSetting("book_map_toc_depth_handmade_toc", self.toc_depth)
+    else
+        self.ui.doc_settings:saveSetting("book_map_toc_depth", self.toc_depth)
+    end
     self.ui.doc_settings:saveSetting("book_map_flat", self.flat_map)
-    self.ui.doc_settings:saveSetting("book_map_toc_depth", self.toc_depth)
     self.ui.doc_settings:saveSetting("book_map_pages_per_row", self.pages_per_row)
 end
 
@@ -1605,6 +1693,16 @@ function BookMapWidget:onSwipe(arg, ges)
         -- a long diagonal swipe may also be used for taking a screenshot,
         -- so let it propagate
         return false
+    end
+end
+
+function BookMapWidget:onPan(arg, ges)
+    if ges.mousewheel_direction then
+        if ges.direction == "north" then
+            return self:onScrollRowDown()
+        elseif ges.direction == "south" then
+            return self:onScrollRowUp()
+        end
     end
 end
 

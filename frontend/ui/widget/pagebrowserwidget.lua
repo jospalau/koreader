@@ -76,6 +76,12 @@ function PageBrowserWidget:init()
                     range = self.dimen,
                 }
             },
+            Pan = { -- (for mousewheel scrolling support)
+                GestureRange:new{
+                    ges = "pan",
+                    range = self.dimen,
+                }
+            },
             Tap = {
                 GestureRange:new{
                     ges = "tap",
@@ -157,16 +163,38 @@ function PageBrowserWidget:init()
     self.max_nb_cols = 6
 
     -- Get some info that shouldn't change across calls to update() and updateLayout()
-    self.ui.toc:fillToc()
-    self.max_toc_depth = self.ui.toc.toc_depth
     self.nb_pages = self.ui.document:getPageCount()
     self.cur_page = self.ui.toc.pageno
-    -- Get bookmarks and highlights from ReaderBookmark
-    self.bookmarked_pages = self.ui.bookmark:getBookmarkedPages()
     -- Get read page from the statistics plugin if enabled
     self.read_pages = self.ui.statistics and self.ui.statistics:getCurrentBookReadPages()
     self.current_session_duration = self.ui.statistics and (os.time() - self.ui.statistics.start_current_period)
+    -- Reference page numbers, for first row page display
+    self.page_labels = nil
+    if self.ui.pagemap and self.ui.pagemap:wantsPageLabels() then
+        self.page_labels = self.ui.document:getPageMap()
+    end
+    -- Location stack
+    self.previous_locations = self.ui.link:getPreviousLocationPages()
+
+    -- Update stuff that may be updated by the user while in PageBrowser
+    self:updateEditableStuff()
+    self.editable_stuff_edited = false -- reset this
+
+    -- Compute settings-dependant sizes and options, and build the inner widgets
+    -- (this will call self:update())
+    self:updateLayout()
+end
+
+function PageBrowserWidget:updateEditableStuff(update_view)
+    -- Toc, bookmarks and hidden flows may be edited
+    -- Note: we update everything to keep things simpler, but we could provide flags to
+    -- let us know what stuff has been updated and only do their related work.
+    self.ui.toc:fillToc()
+    self.max_toc_depth = self.ui.toc.toc_depth
+    -- Get bookmarks and highlights from ReaderBookmark
+    self.bookmarked_pages = self.ui.bookmark:getBookmarkedPages()
     -- Hidden flows, for first page display, and to draw them gray
+    self.hidden_flows = nil
     self.has_hidden_flows = self.ui.document:hasHiddenFlows()
     if self.has_hidden_flows and #self.ui.document.flows > 0 then
         self.hidden_flows = {}
@@ -176,23 +204,25 @@ function PageBrowserWidget:init()
             table.insert(self.hidden_flows, { tab[1], tab[1]+tab[2]-1 })
         end
     end
-    -- Reference page numbers, for first row page display
-    self.page_labels = nil
-    if self.ui.pagemap and self.ui.pagemap:wantsPageLabels() then
-        self.page_labels = self.ui.document:getPageMap()
+    -- Keep a flag so we can propagate the fact that editable stuff
+    -- has been updated to our parent/launcher when we will close,
+    -- so they can update themselves too.
+    self.editable_stuff_edited = true
+    if update_view then
+        self:updateLayout()
     end
-    -- Location stack
-    self.previous_locations = self.ui.link:getPreviousLocationPages()
-
-    -- Compute settings-dependant sizes and options, and build the inner widgets
-    -- (this will call self:update())
-    self:updateLayout()
 end
 
 function PageBrowserWidget:updateLayout()
     -- We start with showing all toc levels (we could use book_map_toc_depth,
     -- but we might want to have it different here).
     self.nb_toc_spans = self.ui.doc_settings:readSetting("page_browser_toc_depth") or self.max_toc_depth
+    if self.ui.handmade:isHandmadeTocEnabled() then
+        -- We can switch from a custom TOC (max depth of 1) to the regular TOC
+        -- (larger depth possible), so we'd rather not replace with 1 the depth
+        -- set and saved for a regular TOC. So, use a dedicated setting for each.
+        self.nb_toc_spans = self.ui.doc_settings:readSetting("page_browser_toc_depth_handmade_toc") or self.max_toc_depth
+    end
 
     -- Row will contain: nb_toc_spans + page slots + spacing (+ some borders)
     local statistics_enabled = self.ui.statistics and self.ui.statistics:isEnabled()
@@ -374,10 +404,14 @@ function PageBrowserWidget:update()
     end
 
     -- Extended separators below the baseline for pages starting thumbnail rows
+    -- No longer needed, as we now use view_finder_row_lines that will extend
+    -- a bit below the baseline.
+    --[[
     local extended_sep_pages = {}
     for p=grid_page_start+self.nb_cols, grid_page_end, self.nb_cols do
         extended_sep_pages[p] = BookMapRow.extended_marker.LARGE
     end
+    ]]--
 
     -- Show the page number or label at the bottom page slot every N slots, with N
     -- the nb of thumbnails so we get at least one page label in our viewport.
@@ -469,7 +503,6 @@ function PageBrowserWidget:update()
 
     -- We need to rebuilt the full set of toc spans that will be shown
     -- Similar (but simplified) to what is done in BookMapWidget.
-    self.toc_depth = self.nb_toc_spans
     local toc = self.ui.toc.toc
     local cur_toc_items = {}
     local row_toc_items = {}
@@ -480,9 +513,9 @@ function PageBrowserWidget:update()
         if item.page > p_end then
             break
         end
-        if item.depth <= self.toc_depth then -- ignore lower levels we won't show
+        if item.depth <= self.nb_toc_spans then -- ignore lower levels we won't show
             -- An item at level N closes all previous items at level >= N
-            for lvl = item.depth, self.toc_depth do
+            for lvl = item.depth, self.nb_toc_spans do
                 local done_toc_item = cur_toc_items[lvl]
                 cur_toc_items[lvl] = nil
                 if done_toc_item then
@@ -505,6 +538,7 @@ function PageBrowserWidget:update()
                 title = item.title,
                 p_start = item.page,
                 p_end = nil,
+                seq_in_level = item.seq_in_level,
             }
         end
         toc_idx = toc_idx + 1
@@ -535,6 +569,7 @@ function PageBrowserWidget:update()
     if blank_page_slots_before_start > 0 then
         left_spacing = BookMapRow:getLeftSpacingForNumberOfPageSlots(blank_page_slots_before_start, self.pages_per_row, self.row_width)
     end
+
     local row = BookMapRow:new{
         height = self.row_height,
         width = self.row_width,
@@ -543,6 +578,7 @@ function PageBrowserWidget:update()
         nb_toc_spans = self.nb_toc_spans,
         span_height = self.span_height,
         font_face = self.toc_span_face,
+        alt_theme = G_reader_settings:isTrue("book_map_alt_theme"),
         start_page_text = "",
         start_page = p_start,
         end_page = p_end,
@@ -556,26 +592,49 @@ function PageBrowserWidget:update()
         read_pages = self.read_pages,
         current_session_duration = self.current_session_duration,
         page_texts = page_texts,
-        extended_sep_pages = extended_sep_pages,
+        -- extended_sep_pages = extended_sep_pages,
     }
     self.row[1] = row
+
+    local bd_mirrored_left_spacing = 0
+    if BD.mirroredUILayout() and blank_page_slots_after_end > 0 then
+        bd_mirrored_left_spacing = BookMapRow:getLeftSpacingForNumberOfPageSlots(blank_page_slots_after_end,
+                                                                        self.pages_per_row, self.row_width)
+                                   + row.pages_frame_border -- (needed, but not sure why it is needed...)
+    end
 
     if BD.mirroredUILayout() then
         self.view_finder_x = row:getPageX(grid_page_end)
         self.view_finder_w = row:getPageX(grid_page_start, true) - self.view_finder_x
-        if blank_page_slots_after_end > 0 then
-            self.view_finder_x = self.view_finder_x
-                + BookMapRow:getLeftSpacingForNumberOfPageSlots(blank_page_slots_after_end, self.pages_per_row, self.row_width)
-                + row.pages_frame_border -- (needed, but not sure why it is needed...)
-        end
+        self.view_finder_x = self.view_finder_x + bd_mirrored_left_spacing
+        -- No need to adjust anything, unlike when not mirrored
     else
         self.view_finder_x = row:getPageX(grid_page_start)
         self.view_finder_w = row:getPageX(grid_page_end, true) - self.view_finder_x
         self.view_finder_x = self.view_finder_x + left_spacing
+        -- we requested with_page_sep, so leave these blank spaces between page slots outside the viewfinder
+        self.view_finder_x = self.view_finder_x + 1
+        self.view_finder_w = self.view_finder_w - 1
     end
-    -- we requested with_page_sep, so leave these blank spaces between page slots outside the viewfinder
-    self.view_finder_x = self.view_finder_x + 1
-    self.view_finder_w = self.view_finder_w - 1
+
+    -- Have a thin gray vertical line in the view finder to separate each thumbnail row
+    self.view_finder_row_lines = {}
+    for i=1, self.nb_rows - 1 do
+        local x
+        if BD.mirroredUILayout() then
+            x = row:getPageX(grid_page_end - i*self.nb_cols) + bd_mirrored_left_spacing - 1
+        else
+            x = row:getPageX(grid_page_start + i*self.nb_cols) + left_spacing
+        end
+        local h = self.row_height - self.span_height -- down to baseline
+        h = h + math.ceil(self.span_height * 1/2) -- have it extend out below the baseline
+        table.insert(self.view_finder_row_lines, {
+            x = x,
+            y = self.view_finder_y,
+            w = 1, -- our with_page_sep makes a 1px space: let's be there
+            h = h,
+        })
+    end
 
     for idx=1, self.nb_grid_items do
         local p = grid_page_start + idx - 1
@@ -605,11 +664,26 @@ function PageBrowserWidget:update()
     UIManager:setDirty(self, function()
         return "ui", self.dimen
     end)
+    if G_reader_settings:isTrue("page_browser_preload_thumbnails") then
+        self:preloadNextPrevScreenThumbnails()
+    end
 end
 
 function PageBrowserWidget:paintTo(bb, x, y)
     -- Paint regular sub widgets the classic way
     InputContainer.paintTo(self, bb, x, y)
+
+    for _, r in ipairs(self.view_finder_row_lines) do
+        -- If we would want them fully solid/opaque:
+        -- bb:paintRect(r.x, r.y, r.w, r.h, Blitbuffer.COLOR_GRAY_5)
+        -- But we prefer them translucent, so we can draw them over chapter spans
+        -- without getting bothered too much by them (alpha=0.3 feels fine).
+        -- Only hatchRect() currently supports paiting with alpha,
+        -- so use it to fill our rectangle by using a larger stripe_width
+        -- so it is fully filled.
+        bb:hatchRect(r.x, r.y, r.w, r.h, r.h, Blitbuffer.COLOR_BLACK, 0.3)
+    end
+
     -- If we would prefer to see the BookMapRow top border always take the full width
     -- so it acts as a separator from the thumbnail grid, add this:
     -- bb:paintRect(0, self.dimen.h - self.row_height, self.dimen.w, BookMapRow.pages_frame_border, Blitbuffer.COLOR_BLACK)
@@ -681,6 +755,19 @@ function PageBrowserWidget:showTile(grid_idx, page, tile, do_refresh)
         -- thumb_frame will overflow its CenterContainer because of the added borders,
         -- but CenterContainer handles that well. We will refresh the outer dimensions.
 
+    if self.has_hidden_flows and self.ui.document:getPageFlow(page) ~= 0 then
+        -- We want to distinguish pages part of hidden flow.
+        -- Using a uniform gray background may not be enough on scanned PDF
+        -- gray pages non-dewatermarked, so we use diagonal gray stripes.
+        -- We use a gray background similar to how it appears on hidden flows
+        -- in the BookMapRow, where they are COLOR_LIGHT_GRAY (0xCC).
+        -- To achieve the same color, we can use COLOR_BLACK with alpha = 0.2.
+        thumb_frame.stripe_width = math.ceil(math.min(self.grid_item_width, self.grid_item_height) / 2)
+        thumb_frame.stripe_color = Blitbuffer.COLOR_BLACK
+        thumb_frame.stripe_over = true
+        thumb_frame.stripe_over_alpha = 0.2
+    end
+
     local page_num_widget
     if item_frame.show_pagenum and self.pagenum_page_texts[page] then
         local page_text = table.concat(util.splitToChars(self.pagenum_page_texts[page]), "\n")
@@ -719,11 +806,67 @@ function PageBrowserWidget:showTile(grid_idx, page, tile, do_refresh)
             UIManager:waitForVSync()
         end
         UIManager:setDirty(self, function()
+            if not thumb_frame.dimen then
+                -- No dimen if not painted, which may happen if we get covered
+                -- by a BookMap launched from the ribbon: don't refresh.
+                return
+            end
             if page_num_widget then
                 return "ui", thumb_frame.dimen:combine(page_num_widget.dimen)
             end
             return "ui", thumb_frame.dimen
         end)
+    end
+end
+
+function PageBrowserWidget:preloadNextPrevScreenThumbnails()
+    -- We're here with the page painted - and possibly some thumbnails
+    -- not yet there and being generated and going to be updated.
+    -- self.ui.thumbnail takes care of serializing tile requests, and
+    -- cancelling scheduled ones when new requests come.
+    -- So, we can just launch many getPageThumbnail() for the next and
+    -- previous PageBrowser views (which will be nearly no-op if the
+    -- thumbnail is already cached).
+    -- We first preload the next and prev rows, before preloading the
+    -- remaining thumbnails of the next and prev pages - so users
+    -- browsing per-row can have them before.
+
+    -- Pre-generate the thumbnails for the next row
+    local next_grid_page_start = self.focus_page - self.focus_page_shift + self.nb_grid_items
+    for idx=1, self.nb_cols do
+        local p = next_grid_page_start + idx - 1
+        if p >= 1 or p < self.nb_pages then
+            logger.dbg("preload next line", p)
+            -- We provide a dummy callback as we don't care about the tile
+            self.ui.thumbnail:getPageThumbnail(p, self.grid_item_width, self.grid_item_height, self.requests_batch_id, function() end)
+        end
+    end
+    -- Pre-generate the thumbnails for the prev row
+    local prev_line_page_start = self.focus_page - self.focus_page_shift - self.nb_cols
+    for idx=1, self.nb_cols do
+        local p = prev_line_page_start + idx - 1
+        if p >= 1 or p < self.nb_pages then
+            logger.dbg("preload prev line", p)
+            self.ui.thumbnail:getPageThumbnail(p, self.grid_item_width, self.grid_item_height, self.requests_batch_id, function() end)
+        end
+    end
+    -- Pre-generate the thumbnails for the next page (minus its top row, already done)
+    for idx=self.nb_cols+1, self.nb_grid_items do
+        local p = next_grid_page_start + idx - 1
+        if p >= 1 or p < self.nb_pages then
+            logger.dbg("preload next page remainings", p)
+            -- We provide a dummy callback as we don't care about the tile
+            self.ui.thumbnail:getPageThumbnail(p, self.grid_item_width, self.grid_item_height, self.requests_batch_id, function() end)
+        end
+    end
+    -- Pre-generate the thumbnails for the prev page (minus its bottom row, already done)
+    local prev_grid_page_start = self.focus_page - self.focus_page_shift - self.nb_grid_items
+    for idx=self.nb_grid_items - self.nb_cols, 1, -1 do
+        local p = prev_grid_page_start + idx - 1
+        if p >= 1 or p < self.nb_pages then
+            logger.dbg("preload prev page remainings", p)
+            self.ui.thumbnail:getPageThumbnail(p, self.grid_item_width, self.grid_item_height, self.requests_batch_id, function() end)
+        end
     end
 end
 
@@ -744,6 +887,36 @@ function PageBrowserWidget:showMenu()
             align = "left",
             callback = function()
                 self:showGestures()
+            end,
+        }},
+        {{
+            text_func = function(no_size_trick)
+                -- A bit tricky to update the text in the callback, as this button,
+                -- being sized by ButtonTable, can't be rebuilt. We will update its
+                -- text, and we want to be sure it will fit in the initial width,
+                -- which may be with the checkmark or not.
+                local text = _("Preload next/prev thumbnails")
+                if G_reader_settings:isTrue("page_browser_preload_thumbnails") then
+                    text = text .. "  \u{2713}" -- checkmark
+                else
+                    if not no_size_trick then
+                        -- Initial call, make it wide enough so the checkmark text will fit
+                        text = text .. "  \u{2003}" -- wide em space
+                    end
+                    -- Otherwise, keep it small without the checkmark, which will fit
+                end
+                return text
+            end,
+            id = "preload_thumbnails",
+            align = "left",
+            callback = function()
+                G_reader_settings:flipTrue("page_browser_preload_thumbnails")
+                local b = button_dialog:getButtonById("preload_thumbnails")
+                b:setText(b.text_func(true), b.width)
+                b:refresh()
+                if G_reader_settings:isTrue("page_browser_preload_thumbnails") then
+                    self:preloadNextPrevScreenThumbnails()
+                end
             end,
         }},
         {
@@ -918,6 +1091,9 @@ function PageBrowserWidget:onClose(close_all_parents)
             -- will do the cleanup below.
             self.launcher:onClose(true)
         else
+            if self.editable_stuff_edited then
+                self.launcher:updateEditableStuff(true)
+            end
             UIManager:setDirty(self.launcher, "ui")
         end
     else
@@ -933,8 +1109,9 @@ function PageBrowserWidget:onClose(close_all_parents)
             collectgarbage()
             collectgarbage()
         end)
-        -- As we're getting back to Reader, do a full flashing refresh to remove
-        -- any ghost trace of thumbnails or black page slots
+        -- As we're getting back to Reader, update the footer and do a full flashing
+        -- refresh to remove any ghost trace of thumbnails or black page slots
+        UIManager:broadcastEvent(Event:new("UpdateFooter"))
         UIManager:setDirty(self.ui.dialog, "full")
     end
     return true
@@ -946,7 +1123,11 @@ function PageBrowserWidget:saveSettings(reset)
         self.nb_rows = nil
         self.nb_cols = nil
     end
-    self.ui.doc_settings:saveSetting("page_browser_toc_depth", self.nb_toc_spans)
+    if self.ui.handmade:isHandmadeTocEnabled() then
+        self.ui.doc_settings:saveSetting("page_browser_toc_depth_handmade_toc", self.nb_toc_spans)
+    else
+        self.ui.doc_settings:saveSetting("page_browser_toc_depth", self.nb_toc_spans)
+    end
     self.ui.doc_settings:saveSetting("page_browser_nb_rows", self.nb_rows)
     self.ui.doc_settings:saveSetting("page_browser_nb_cols", self.nb_cols)
     self.ui.doc_settings:saveSetting("page_browser_thumbnails_pagenums", self.thumbnails_pagenums)
@@ -1176,6 +1357,17 @@ function PageBrowserWidget:onSwipe(arg, ges)
     end
 end
 
+function PageBrowserWidget:onPan(arg, ges)
+    if ges.mousewheel_direction then
+        if ges.direction == "north" then
+            self:onScrollRowDown()
+        elseif ges.direction == "south" then
+            self:onScrollRowUp()
+        end
+    end
+    return true
+end
+
 function PageBrowserWidget:onPinch(arg, ges)
     if ges.direction == "horizontal" then
         if self:updateNbCols(1, true) then
@@ -1244,17 +1436,14 @@ function PageBrowserWidget:onTap(arg, ges)
     for idx=1, self.nb_grid_items do
         if ges.pos:intersectWith(self.grid[idx].dimen) then
             local page = self.grid[idx].page_idx
-            if page and self.grid[idx][1][1].is_page_thumbnail then
-                -- Only allow tap on fully displayed thumbnails.
-                -- Also, a thumbnail might be smaller than the original grid
-                -- item dimension. Be sure the tap is on it (otherwise, it's
-                -- a tap in the inter thumbnail margin, that we'd rather not
-                -- handle)
-                local thumb_frame = self.grid[idx][1][1]
-                if ges.pos:intersectWith(thumb_frame.dimen) then
-                    -- On PDF documents, jumping to a page may block for a few
-                    -- seconds while the page is rendered. So, make the border
-                    -- bigger so the user knows his tap is being processed.
+            if page then
+                if self.grid[idx][1][1].is_page_thumbnail then
+                    -- If the thumbnail for this page is displayed, show some
+                    -- visual feedback for the tap (on PDF documents, jumping
+                    -- to a page may block for a few seconds while the page
+                    -- is rendered): make the border bigger so the user knows
+                    -- his tap is being processed).
+                    local thumb_frame = self.grid[idx][1][1]
                     local orig_bordersize = thumb_frame.bordersize
                     thumb_frame.bordersize = Size.border.thick * 2
                     local b_inc = thumb_frame.bordersize - orig_bordersize
@@ -1263,16 +1452,18 @@ function PageBrowserWidget:onTap(arg, ges)
                         -- (refresh "fast" will make gray drawn black and may make the
                         -- thumbnail a little uglier - but this enhances the effect
                         -- of "being processed"!)
-                    -- Close the BookMapWidget that launched this PageBrowser
-                    -- and all their ancestors up to Reader
-                    self:onClose(true)
-                    self.ui.link:addCurrentLocationToStack()
-                    self.ui:handleEvent(Event:new("GotoPage", page))
-                        -- Note: with ReaderPaging, if we tap on the thumbnail for the current
-                        -- page, nothing would be refreshed. Our :onClose(true) will have the
-                        -- last ancestor issue a full refresh that will ensure it is painted.
-                    return true
                 end
+                -- (If no thumbnail yet displayed, go on directly: the user
+                -- must be in a hurry if he can't wait for the thumbnail!)
+                -- Close the BookMapWidget that launched this PageBrowser
+                -- and all their ancestors up to Reader
+                self:onClose(true)
+                self.ui.link:addCurrentLocationToStack()
+                self.ui:handleEvent(Event:new("GotoPage", page))
+                    -- Note: with ReaderPaging, if we tap on the thumbnail for the current
+                    -- page, nothing would be refreshed. Our :onClose(true) will have the
+                    -- last ancestor issue a full refresh that will ensure it is painted.
+                return true
             end
             break
         end
@@ -1316,25 +1507,80 @@ function PageBrowserWidget:onHold(arg, ges)
     for idx=1, self.nb_grid_items do
         if ges.pos:intersectWith(self.grid[idx].dimen) then
             local page = self.grid[idx].page_idx
-            if page and self.grid[idx][1][1].is_page_thumbnail then
-                -- Only allow hold on fully displayed thumbnails.
-                -- Also, a thumbnail might be smaller than the original grid
-                -- item dimension. Be sure the hold is on it (otherwise, it's
-                -- a hold in the inter thumbnail margin, that we'd rather not
-                -- handle)
-                local thumb_frame = self.grid[idx][1][1]
-                if ges.pos:intersectWith(thumb_frame.dimen) then
-                    self.ui.bookmark:toggleBookmark(page)
-                    -- Update our cached bookmarks info and ensure the bottom ribbon is redrawn
-                    self.bookmarked_pages = self.ui.bookmark:getBookmarkedPages()
-                    self:updateLayout()
-                    return true
-                end
+            if page then
+                -- We allow that even if the thumbnail is not yet displayed.
+                -- Note: there could be some race condition when toggling
+                -- bookmark for a page while its thumbnail is being generated:
+                -- we may get (and cache) a thumbnail showing the wrong
+                -- bookmark state...
+                self:onThumbnailHold(page, ges)
+                return true
             end
             break
         end
     end
     return true
+end
+
+function PageBrowserWidget:onThumbnailHold(page, ges)
+    local handmade_toc_edit_enabled = self.ui.handmade:isHandmadeTocEnabled() and self.ui.handmade:isHandmadeTocEditEnabled()
+    local handmade_hidden_flows_edit_enabled = self.ui.handmade:isHandmadeHiddenFlowsEnabled() and self.ui.handmade:isHandmadeHiddenFlowsEditEnabled()
+    if not handmade_toc_edit_enabled and not handmade_hidden_flows_edit_enabled then
+        -- No other feature enabled: we can toggle bookmark directly
+        self.ui.bookmark:toggleBookmark(page)
+        self:updateEditableStuff(true)
+        return
+    end
+    local button_dialog
+    local buttons = {
+        {{
+            text = _("Toggle page bookmark"),
+            align = "left",
+            callback = function()
+                UIManager:close(button_dialog)
+                self.ui.bookmark:toggleBookmark(page)
+                self:updateEditableStuff(true)
+            end,
+        }},
+    }
+    if handmade_toc_edit_enabled then
+        local has_toc_item = self.ui.handmade:hasPageTocItem(page)
+        table.insert(buttons, {{
+            -- Note: we may have multiple chapters on a same page: we will show the first, which
+            -- would need to be removed to access the second... We may want to show as many
+            -- buttons as there are chapters, with the start of the chapter title as its text.
+            text = (has_toc_item and _("Edit or remove TOC chapter")
+                                  or _("Start TOC chapter here")) .. " " .. self.ui.handmade.custom_toc_symbol,
+            align = "left",
+            callback = function()
+                UIManager:close(button_dialog)
+                self.ui.handmade:addOrEditPageTocItem(page, function()
+                    self:updateEditableStuff(true)
+                end)
+            end,
+        }})
+    end
+    if handmade_hidden_flows_edit_enabled then
+        local is_in_hidden_flow = self.ui.handmade:isInHiddenFlow(page)
+        table.insert(buttons, {{
+            text = is_in_hidden_flow and _("Restart regular flow here")
+                                      or _("Start hidden flow here"),
+            align = "left",
+            callback = function()
+                UIManager:close(button_dialog)
+                self.ui.handmade:toggleHiddenFlow(page)
+                self:updateEditableStuff(true)
+            end,
+        }})
+    end
+    button_dialog = ButtonDialog:new{
+        shrink_unneeded_width = true,
+        buttons = buttons,
+        anchor = function()
+            return ges.pos, true
+        end
+    }
+    UIManager:show(button_dialog)
 end
 
 return PageBrowserWidget
