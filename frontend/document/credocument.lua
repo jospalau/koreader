@@ -989,6 +989,10 @@ function CreDocument:getCurrentPage(internal)
     return self._document:getCurrentPage(internal)
 end
 
+function CreDocument:getTextCurrentPage(internal)
+    return self._document:getTextCurrentPage(internal)
+end
+
 function CreDocument:setFontFace(new_font_face)
     if new_font_face then
         logger.dbg("CreDocument: set font face", new_font_face)
@@ -1812,6 +1816,7 @@ function CreDocument:setupCallCache()
             -- data that we'd rather not cache, are called with many different args,
             -- or we'd rather have up to date crengine state)
             elseif name == "getCurrentPage" then no_wrap = true
+            -- elseif name == "getTextCurrentPage" then no_wrap = true
             elseif name == "getCurrentPos" then no_wrap = true
             elseif name == "getVisiblePageCount" then no_wrap = true
             elseif name == "getVisiblePageNumberCount" then no_wrap = true

@@ -556,8 +556,13 @@ end
 
 function ReaderUI:showFileManagerScripts()
     local FileManager = require("apps/filemanager/filemanager")
-    local last_file = ""
-    local last_dir = "/mnt/onboard/.adds"
+    local last_file, last_dir = ""
+    if Device:isAndroid() then
+        last_dir = "/mnt/sdcard/koreader/scripts"
+    else
+        last_dir = "/mnt/onboard/.adds/scripts"
+    end
+
     if FileManager.instance then
         FileManager.instance:reinit(last_dir, last_file)
     else

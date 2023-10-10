@@ -1193,7 +1193,11 @@ function ReaderFooter:onSynchronizeCode()
     local rv
     local output = ""
     if not Device:isAndroid() then
-        local execute = io.popen("/mnt/onboard/.adds/syncKOReaderCode.sh && echo $? || echo $?" )
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnectionNoMessage()
+        end
+        local execute = io.popen("/mnt/onboard/.adds/scripts/syncKOReaderCode.sh && echo $? || echo $?" )
         output = execute:read('*a')
         UIManager:show(InfoMessage:new{
             text = T(_(output)),
@@ -1207,7 +1211,67 @@ function ReaderFooter:onSynchronizeStatistics()
     local rv
     local output = ""
     if not Device:isAndroid() then
-        local execute = io.popen("(cd /mnt/onboard/.adds/statsKOReaderDB && /mnt/onboard/.adds/statsKOReaderDB/syncKOReaderDB.sh) && echo $? || echo $?" )
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnectionNoMessage()
+        end
+        local execute = io.popen("(cd /mnt/onboard/.adds/scripts/statsKOReaderDB && /mnt/onboard/.adds/scripts/statsKOReaderDB/syncKOReaderDB.sh) && echo $? || echo $?" )
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
+function ReaderFooter:onGetTBR()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnectionNoMessage()
+        end
+        local execute = io.popen("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/tbr.sh)" )
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
+
+function ReaderFooter:onToggleSSH()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnectionNoMessage()
+        end
+        local execute = io.popen("/mnt/onboard/.adds/scripts/launchDropbear.sh && echo $? || echo $?" )
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
+
+function ReaderFooter:onSyncBooks()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnectionNoMessage()
+        end
+        local execute = io.popen("/mnt/onboard/.adds/scripts/syncBooks.sh && echo $? || echo $?" )
         output = execute:read('*a')
         UIManager:show(InfoMessage:new{
             text = T(_(output)),
@@ -1264,6 +1328,51 @@ function ReaderFooter:onGetStyles()
         width = math.floor(Screen:getWidth() * 0.85),
     })
     return true
+end
+
+function ReaderFooter:onGetTextPage()
+    local cur_page = self.ui.document:getCurrentPage()
+    local total_words, total_words2 = self.ui.document:getTextCurrentPage()
+
+    local title_pages = self.ui.document._document:getDocumentProps().title
+    local title_words = title_pages:match("([0-9,]+w)"):gsub("w",""):gsub(",","")
+
+
+
+
+
+    local font_size = self.ui.document._document:getFontSize()
+    local font_face = self.ui.document._document:getFontFace()
+
+    local font_size_pt = nil
+    local font_size_mm = nil
+    if Device:isKobo() then
+        font_size_pt = math.floor((font_size * 72 / 300) * 100) / 100
+        font_size_mm = math.floor((font_size * 25.4 / 300)  * 100) / 100
+    elseif Device:isAndroid() then
+        font_size_pt = math.floor((font_size * 72 / 446) * 100) / 100
+        font_size_mm = math.floor((font_size * 25.4 / 446)  * 100) / 100
+    else
+        font_size_pt = math.floor((font_size * 72 / 160) * 100) / 100
+        font_size_mm = math.floor((font_size * 25.4 / 160)  * 100) / 100
+    end
+
+    local text =
+    "Total pages (screens): " .. self.pages .. string.char(10) ..
+    "Total words (total chars/5.7): " .. total_words .. string.char(10) .. -- Dividing characters between 5.7
+    "Total words (counting words): " .. total_words2 .. string.char(10) .. -- Counting words
+    "Total words Calibre: " .. title_words .. string.char(10) ..
+    "Words per page: " .. tostring(math.floor((total_words2/self.pages * 100) / 100)) .. string.char(10) ..
+    "Words per page Calibre: " .. tostring(math.floor((title_words/self.pages * 100) / 100)) .. string.char(10) ..
+    "Font parameters: " .. font_face .. ", " .. font_size .. "px, " .. font_size_pt .. "pt, " .. font_size_mm .. "mm"
+    UIManager:show(InfoMessage:new{
+        text = T(_(text)),
+        timeout = 15,
+        face = Font:getFace("myfont"),
+        width = math.floor(Screen:getWidth() * 0.7),
+    })
+
+
 end
 function ReaderFooter:onShowTextProperties()
     if not self.ui.rolling then

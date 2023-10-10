@@ -294,17 +294,21 @@ function filemanagerutil.genExecuteScriptButton(file, caller_callback)
                 local output = ""
                 if Device:isAndroid() then
                     Device:setIgnoreInput(true)
-                    rv = os.execute("sh " .. ffiutil.realpath(file)) -- run by sh, because sdcard has no execute permissions
-                    Device:setIgnoreInput(false)
-                else
-                    -- rv = os.execute(ffiutil.realpath(file))
-                    local execute = io.popen(ffiutil.realpath(file) .. " && echo $? || echo $?" ) -- run by sh, because sdcard has no execute permissions
+                    local execute = io.popen("sh " .. ffiutil.realpath(file) .. " && echo $? || echo $?" ) -- run by sh, because sdcard has no execute permissions
                     output = execute:read('*a')
                     UIManager:show(InfoMessage:new{
                         text = T(_(output)),
                         face = Font:getFace("myfont"),
                     })
-
+                    Device:setIgnoreInput(false)
+                else
+                    -- rv = os.execute(ffiutil.realpath(file))
+                    local execute = io.popen(ffiutil.realpath(file) .. " && echo $? || echo $?" )
+                    output = execute:read('*a')
+                    UIManager:show(InfoMessage:new{
+                        text = T(_(output)),
+                        face = Font:getFace("myfont"),
+                    })
                 end
                 UIManager:close(script_is_running_msg)
                 -- if rv == 0 then

@@ -16,7 +16,7 @@ local ScreenSaverWidget = InputContainer:extend{
 
 function ScreenSaverWidget:init()
     local i, timages, popen = 0, {}, io.popen
-    local pfile = popen('find /mnt/onboard/.adds -maxdepth 1 -type f -name "*.jpg" -o -name "*.png"')
+    local pfile = popen('find /mnt/onboard/.adds/wallpapers -maxdepth 1 -type f -name "*.jpg" -o -name "*.png"')
     for filename in pfile:lines() do
         i = i + 1
         timages[i] = filename

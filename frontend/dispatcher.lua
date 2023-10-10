@@ -70,6 +70,10 @@ local settingsList = {
     get_styles = {category="none", event="GetStyles", title=_("Get styles"), general=true, separator=true},
     synchronize_code = {category="none", event="SynchronizeCode", title=_("Synchronize code"), general=true, separator=true},
     synchronize_statistics = {category="none", event="SynchronizeStatistics", title=_("Synchronize statistics script"), general=true, separator=true},
+    toggle_ssh = {category="none", event="ToggleSSH", title=_("Toggle SSH service"), general=true, separator=true},
+    get_tbr = {category="none", event="GetTBR", title=_("Get TBR"), general=true, separator=true},
+    sync_books = {category="none", event="SyncBooks", title=_("Sync Books"), general=true, separator=true},
+    get_text_page = {category="none", event="GetTextPage", title=_("Get text page"), general=true, separator=true},
 
     -- Device settings
     exit_screensaver = {category="none", event="ExitScreensaver", title=_("Exit screensaver"), device=true},
@@ -278,6 +282,9 @@ local dispatcher_menu_order = {
     "get_styles",
     "synchronize_code",
     "synchronize_statistics",
+    "get_tbr",
+    "sync_books",
+    "get_text_page",
     "exit_screensaver",
     "suspend",
     "exit",
@@ -1091,11 +1098,17 @@ arguments are:
                                    { gesture = ges } - a `gestures` object
 --]]--
 function Dispatcher:execute(settings, exec_props)
+
     if ((exec_props == nil or exec_props.qm_show == nil) and settings.settings and settings.settings.show_as_quickmenu)
             or (exec_props and exec_props.qm_show) then
         return Dispatcher:_showAsMenu(settings, exec_props)
     end
     local has_many = Dispatcher:_itemsCount(settings) > 1
+    if settings["set_font"]  then
+        UIManager:show(Notification:new{
+            text = _(settings["set_font"]),
+        })
+    end
     if has_many then
         UIManager:broadcastEvent(Event:new("BatchedUpdate"))
     end
@@ -1104,6 +1117,12 @@ function Dispatcher:execute(settings, exec_props)
         if type(k) == "number" then
             k = v
             v = settings[k]
+        else
+            -- if k:sub(1, 13) == "profile_exec_" then
+            --     UIManager:show(Notification:new{
+            --         text = _(k:gsub(k:sub(1, 13),"")),
+            --     })
+            -- end
         end
         if Dispatcher:isActionEnabled(settingsList[k]) then
             Notification:setNotifySource(Notification.SOURCE_DISPATCHER)
