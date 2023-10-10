@@ -94,10 +94,6 @@ local splitToWords = function(text)
     return wlist
 end
 
-function ReaderStatistics:isDocless()
-    return self.ui == nil or self.ui.document == nil or self.ui.document.is_pic == true
-end
-
 -- NOTE: This is used in a migration script by ui/data/onetime_migration,
 --       which is why it's public.
 ReaderStatistics.default_settings = {
@@ -125,7 +121,6 @@ function ReaderStatistics:init()
     self._total_words = 0
     self._last_nbwords = 0
     self._last_nbchars = 0
-    -- Disable in PIC documents (but not the FM, as we want to be registered to the FM's menu).
 
     if self.document and self.document.is_pic then
         return -- disable in PIC documents
@@ -194,9 +189,6 @@ function ReaderStatistics:init()
 end
 
 function ReaderStatistics:initData()
-    if self:isDocless() or not self.settings.is_enabled then
-        return
-    end
     self.is_doc = true
     self.is_doc_not_finished = self.ui.doc_settings:readSetting("summary").status ~= "complete"
     self.is_doc_not_frozen = self.is_doc_not_finished or not self.settings.freeze_finished_books
@@ -1081,15 +1073,6 @@ function ReaderStatistics:getPageTimeTotalStats(id_book)
         total_time = 0
     end
     return total_pages, total_time
-end
-
-function ReaderStatistics:getBookProperties()
-    local props = self.view.document:getProps()
-    if props.title == "No document" or props.title == "" then
-        --- @fixme Sometimes crengine returns "No document", try one more time.
-        props = self.view.document:getProps()
-    end
-    return props
 end
 
 function ReaderStatistics:getStatisticEnabledMenuItem()
