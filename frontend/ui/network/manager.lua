@@ -118,47 +118,9 @@ function NetworkMgr:connectivityCheck(iter, callback, widget)
     end
 end
 
-function NetworkMgr:connectivityCheckNoMessage(iter, callback, widget)
-    -- Give up after a while (restoreWifiAsync can take over 45s, so, try to cover that)...
-    if iter >= 180 then
-        logger.info("Failed to restore Wi-Fi (after", iter * 0.25, "seconds)!")
-        self:_abortWifiConnection()
-
-        -- Handle the UI warning if it's from a beforeWifiAction...
-        if widget then
-            UIManager:close(widget)
-            UIManager:show(InfoMessage:new{ text = _("Error connecting to the network") })
-        end
-        return
-    end
-
-    self:queryNetworkState()
-    if self.is_wifi_on and self.is_connected then
-        self.wifi_was_on = true
-        G_reader_settings:makeTrue("wifi_was_on")
-        logger.info("Wi-Fi successfully restored (after", iter * 0.25, "seconds)!")
-        UIManager:broadcastEvent(Event:new("NetworkConnected"))
-
-        -- Handle the UI & callback if it's from a beforeWifiAction...
-        if widget then
-            UIManager:close(widget)
-        end
-
-        self.pending_connectivity_check = false
-        -- We're done, so we can stop blocking concurrent connection attempts
-        self.pending_connection = false
-    else
-        UIManager:scheduleIn(0.25, self.connectivityCheck, self, iter + 1, callback, widget)
-    end
-end
-
 function NetworkMgr:scheduleConnectivityCheck(callback, widget)
     self.pending_connectivity_check = true
     UIManager:scheduleIn(0.25, self.connectivityCheck, self, 1, callback, widget)
-end
-function NetworkMgr:scheduleConnectivityCheckNoMessage(callback, widget)
-    self.pending_connectivity_check = true
-    UIManager:scheduleIn(0.25, self.connectivityCheckNoMessage, self, 1, callback, widget)
 end
 
 function NetworkMgr:unscheduleConnectivityCheck()
@@ -494,50 +456,6 @@ function NetworkMgr:turnOnWifiAndWaitForConnection(callback)
     end
 
     self:scheduleConnectivityCheck(callback, info)
-
-    return info
-end
-
-function NetworkMgr:turnOnWifiAndWaitForConnectionNoMessage(callback)
-    -- Just run the callback if WiFi is already up...
-    if self:isWifiOn() and self:isConnected() then
-        --- @note: beforeWifiAction only guarantees isConnected, not isOnline.
-        --         In the rare cases we're isConnected but !isOnline, if we're called via a *runWhenOnline wrapper,
-        --         we don't get a callback at all to avoid infinite recursion, so we need to check it.
-        if callback then
-            callback()
-        end
-        return
-    end
-
-    local info = InfoMessage:new{ text = _("Connecting to Wi-Fi…") }
-    UIManager:show(info)
-    UIManager:forceRePaint()
-
-    -- NOTE: This is a slightly tweaked variant of enableWifi, because of our peculiar connectivityCheck usage...
-    -- Some implementations (usually, hasWifiManager) can report whether they were successfull
-    local status = self:requestToTurnOnWifi()
-    -- If turnOnWifi failed, abort early
-    if status == false then
-        logger.warn("NetworkMgr:turnOnWifiAndWaitForConnection: Connection failed!")
-        self:_abortWifiConnection()
-        UIManager:close(info)
-        return false
-    elseif status == EBUSY then
-        logger.warn("NetworkMgr:turnOnWifiAndWaitForConnection: A previous connection attempt is still ongoing!")
-        -- We might lose a callback in case the previous attempt wasn't from the same action,
-        -- but it's just plain saner to just abort here, as we'd risk calling the same thing over and over...
-        UIManager:close(info)
-        return
-    else
-        -- Some turnOnWifi implementations may fire a connectivity check,
-        -- but we *need* our own, because of the callback & widget passing.
-        if self.pending_connectivity_check then
-            self:unscheduleConnectivityCheck()
-        end
-    end
-
-    self:scheduleConnectivityCheckNoMessage(callback, info)
 
     return info
 end

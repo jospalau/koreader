@@ -1195,7 +1195,7 @@ function ReaderFooter:onSynchronizeCode()
     if not Device:isAndroid() then
         local NetworkMgr = require("ui/network/manager")
         if not NetworkMgr:isWifiOn() then
-            NetworkMgr:turnOnWifiAndWaitForConnectionNoMessage()
+            NetworkMgr:turnOnWifiAndWaitForConnection()
         end
         local execute = io.popen("/mnt/onboard/.adds/scripts/syncKOReaderCode.sh && echo $? || echo $?" )
         output = execute:read('*a')
@@ -1213,7 +1213,7 @@ function ReaderFooter:onSynchronizeStatistics()
     if not Device:isAndroid() then
         local NetworkMgr = require("ui/network/manager")
         if not NetworkMgr:isWifiOn() then
-            NetworkMgr:turnOnWifiAndWaitForConnectionNoMessage()
+            NetworkMgr:turnOnWifiAndWaitForConnection()
         end
         local execute = io.popen("(cd /mnt/onboard/.adds/scripts/statsKOReaderDB && /mnt/onboard/.adds/scripts/statsKOReaderDB/syncKOReaderDB.sh) && echo $? || echo $?" )
         output = execute:read('*a')
@@ -1231,7 +1231,7 @@ function ReaderFooter:onGetTBR()
     if not Device:isAndroid() then
         local NetworkMgr = require("ui/network/manager")
         if not NetworkMgr:isWifiOn() then
-            NetworkMgr:turnOnWifiAndWaitForConnectionNoMessage()
+            NetworkMgr:turnOnWifiAndWaitForConnection()
         end
         local execute = io.popen("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/tbr.sh)" )
         output = execute:read('*a')
@@ -1250,7 +1250,7 @@ function ReaderFooter:onToggleSSH()
     if not Device:isAndroid() then
         local NetworkMgr = require("ui/network/manager")
         if not NetworkMgr:isWifiOn() then
-            NetworkMgr:turnOnWifiAndWaitForConnectionNoMessage()
+            NetworkMgr:turnOnWifiAndWaitForConnection()
         end
         local execute = io.popen("/mnt/onboard/.adds/scripts/launchDropbear.sh && echo $? || echo $?" )
         output = execute:read('*a')
@@ -1269,7 +1269,7 @@ function ReaderFooter:onSyncBooks()
     if not Device:isAndroid() then
         local NetworkMgr = require("ui/network/manager")
         if not NetworkMgr:isWifiOn() then
-            NetworkMgr:turnOnWifiAndWaitForConnectionNoMessage()
+            NetworkMgr:turnOnWifiAndWaitForConnection()
         end
         local execute = io.popen("/mnt/onboard/.adds/scripts/syncBooks.sh && echo $? || echo $?" )
         output = execute:read('*a')
@@ -1281,7 +1281,7 @@ function ReaderFooter:onSyncBooks()
         Device:setIgnoreInput(true)
         local NetworkMgr = require("ui/network/manager")
         if not NetworkMgr:isWifiOn() then
-            NetworkMgr:turnOnWifiAndWaitForConnectionNoMessage()
+            NetworkMgr:turnOnWifiAndWaitForConnection()
         end
         local execute = io.popen("sh /storage/emulated/0/koreader/scripts/syncBooks.sh && echo $? || echo $?" )
         output = execute:read('*a')
