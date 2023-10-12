@@ -1277,7 +1277,19 @@ function ReaderFooter:onSyncBooks()
             text = T(_(output)),
             face = Font:getFace("myfont"),
         })
-
+    else
+        Device:setIgnoreInput(true)
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnectionNoMessage()
+        end
+        local execute = io.popen("sh /storage/emulated/0/koreader/scripts/syncBooks.sh && echo $? || echo $?" )
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+        Device:setIgnoreInput(false)
     end
 end
 function ReaderFooter:onGetStyles()
