@@ -1292,6 +1292,121 @@ function ReaderFooter:onSyncBooks()
         Device:setIgnoreInput(false)
     end
 end
+
+
+function ReaderFooter:onPullConfig()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = io.popen("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/pullConfig.sh)" )
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
+
+function ReaderFooter:onPushConfig()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = io.popen("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/pushConfig.sh)" )
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
+
+function ReaderFooter:onGetLastPushingConfig()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = io.popen("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/getLastPushing.sh)" )
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
+
+function ReaderFooter:onPullSidecarFiles()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = io.popen("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/pullSidecarFiles.sh)" )
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
+
+function ReaderFooter:onPushSidecarFiles()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = io.popen("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/pushSidecarFiles.sh)" )
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
+
+function ReaderFooter:onGetLastPushingSidecars()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = io.popen("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/getLastPushingSidecars.sh)" )
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
 function ReaderFooter:onGetStyles()
     local css_text = self.ui.document:getDocumentFileContent("OPS/styles/stylesheet.css")
     if css_text == nil then

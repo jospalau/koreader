@@ -71,8 +71,14 @@ local settingsList = {
     synchronize_statistics = {category="none", event="SynchronizeStatistics", title=_("Synchronize statistics script"), general=true, separator=true},
     toggle_ssh = {category="none", event="ToggleSSH", title=_("Toggle SSH service"), general=true, separator=true},
     get_tbr = {category="none", event="GetTBR", title=_("Get TBR"), general=true, separator=true},
-    sync_books = {category="none", event="SyncBooks", title=_("Sync Books"), general=true, separator=true},
+    sync_books = {category="none", event="SyncBooks", title=_("Synchronize Books"), general=true, separator=true},
     get_text_page = {category="none", event="GetTextPage", title=_("Get text page"), general=true, separator=true},
+    pull_config = {category="none", event="PullConfig", title=_("Pull configuration"), general=true, separator=true},
+    push_config = {category="none", event="PushConfig", title=_("Push configuration"), general=true, separator=true},
+    get_last_pushing_config = {category="none", event="GetLastPushingConfig", title=_("Who pushed last config"), general=true, separator=true},
+    pull_sidecar_files = {category="none", event="PullSidecarFiles", title=_("Pull sidecar files"), general=true, separator=true},
+    push_sidecar_files = {category="none", event="PushSidecarFiles", title=_("Push sidecar files"), general=true, separator=true},
+    get_last_pushing_sidecars = {category="none", event="GetLastPushingSidecars", title=_("Who pushed last sidecars"), general=true, separator=true},
     ----
 
     -- Device
@@ -302,6 +308,12 @@ local dispatcher_menu_order = {
     "get_tbr",
     "sync_books",
     "get_text_page",
+    "pull_config",
+    "push_config",
+    "get_last_pushing_config",
+    "pull_sidecar_files",
+    "push_sidecar_files",
+    "get_last_pushing_sidecars",
     ----
 
     -- Device
