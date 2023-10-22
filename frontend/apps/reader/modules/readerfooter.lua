@@ -977,6 +977,8 @@ function ReaderFooter:init()
 
     -- Case progress bar is enabled but nothing to show in the status bar. We show just the progress bar
     if not self.settings.disable_progress_bar and self.mode == 0 then
+        self.height = Screen:scaleBySize(0)
+        self:refreshFooter(true, false)
         self:applyFooterMode() -- Importante hacer aquí applyFooterMode
         if self.settings.toc_markers then
             self:setTocMarkers()
@@ -3340,6 +3342,8 @@ function ReaderFooter:TapFooter(ges)
 end
 
 function ReaderFooter:onToggleFooterMode()
+    self.height = Screen:scaleBySize(self.settings.container_height)
+    self:refreshFooter(true, false)
     if not self.view.footer_visible or self.mode == 0 then
         UIManager:show(Notification:new{
             text = _("Footer on."),
@@ -3388,6 +3392,8 @@ end
 
 
 function ReaderFooter:onToggleFooterModeBack()
+    self.height = Screen:scaleBySize(self.settings.container_height)
+    self:refreshFooter(true, false)
     if not self.view.footer_visible or self.mode == 0 then
         UIManager:show(Notification:new{
             text = _("Footer on."),
@@ -3445,8 +3451,10 @@ function ReaderFooter:onToggleReclaimHeight()
             text = _("Reclaim height on in status bar"),
         })
     end
-    self.settings["claim_height"] = not self.settings["claim_height"]
+
     self.reclaim_height = not self.reclaim_height
+    self.settings["claim_height"] = self.reclaim_height
+    self.settings.reclaim_height = self.reclaim_height
     -- refresh margins position
     -- current mode got disabled, redraw footer with other
     -- enabled modes. if all modes are disabled, then only show
@@ -3508,6 +3516,9 @@ function ReaderFooter:onStatusBarJustProgressBar()
         UIManager:show(Notification:new{
             text = _(text),
         })
+        -- self.height = Screen:scaleBySize(self.settings.container_height)ddd
+        self.height = Screen:scaleBySize(0)
+        self:refreshFooter(true, false)
         self.settings.disable_progress_bar = false
         self._old_mode = self.mode
         self.mode = 0
