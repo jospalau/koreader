@@ -154,6 +154,7 @@ local settingsList = {
     toggle_status_bar_back = {category="none", event="ToggleFooterModeBack", title=_("Toggle status bar cycle back"), reader=true},
     toggle_status_bar_onoff = {category="none", event="ToggleStatusBarOnOff", title=_("Toggle status bar on/off"), reader=true},
     status_bar_just_progress_bar = {category="none", event="StatusBarJustProgressBar", title=_("Status bar just progress bar"), reader=true, separator=true},
+    toggle_reclaim_height = {category="none", event="ToggleReclaimHeight", title=_("Toggle reclaim height"), reader=true},
     toggle_hyphenation = {category="none", event="ToggleHyphenation", title=_("Toggle hyphenation"), reader=true, separator=true},
     ----
     prev_chapter = {category="none", event="GotoPrevChapter", title=_("Previous chapter"), reader=true},
@@ -389,6 +390,7 @@ local dispatcher_menu_order = {
     "show_config_menu",
     "toggle_status_bar",
     "toggle_status_bar_back",
+    "toggle_reclaim_height",
     "toggle_hyphenation",
     "toggle_status_bar_onoff",
     "status_bar_just_progress_bar",

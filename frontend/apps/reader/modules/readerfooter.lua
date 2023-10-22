@@ -972,10 +972,22 @@ function ReaderFooter:init()
     self._goal_time = 120
     self._goal_pages = 100
     self._old_mode = 0
+
     self._statusbar_toggled = false
-    self.mode = 0
-    self.settings.disable_progress_bar = true
-    self.view.footer_visible = false
+
+    -- Case progress bar is enabled but nothing to show in the status bar. We show just the progress bar
+    if not self.settings.disable_progress_bar and self.mode == 0 then
+        self:applyFooterMode() -- Importante hacer aquí applyFooterMode
+        if self.settings.toc_markers then
+            self:setTocMarkers()
+        end
+        self.view.footer_visible = true
+    end
+
+    -- self.reclaim_height = true
+    -- self.mode = 0
+    -- self.settings.disable_progress_bar = true
+    -- self.view.footer_visible = false
 end
 
 function ReaderFooter:set_custom_text(touchmenu_instance)
@@ -3367,7 +3379,7 @@ function ReaderFooter:onToggleFooterMode()
     end
     self._old_mode = self.mode
     self:applyFooterMode()
-    G_reader_settings:saveSetting("readeddr_footer_mode", self.mode)
+    G_reader_settings:saveSetting("reader_footer_mode", self.mode)
     self:onUpdateFooter(true)
     self:rescheduleFooterAutoRefreshIfNeeded()
     return true
@@ -3416,8 +3428,40 @@ function ReaderFooter:onToggleFooterModeBack()
     end
     self._old_mode = self.mode
     self:applyFooterMode()
-    G_reader_settings:saveSetting("readeddr_footer_mode", self.mode)
+    G_reader_settings:saveSetting("reader_footer_mode", self.mode)
     self:onUpdateFooter(true)
+    self:rescheduleFooterAutoRefreshIfNeeded()
+    return true
+end
+
+function ReaderFooter:onToggleReclaimHeight()
+
+    if ( self.reclaim_height) then
+        UIManager:show(Notification:new{
+            text = _("Reclaim height off in status bar"),
+        })
+    else
+        UIManager:show(Notification:new{
+            text = _("Reclaim height on in status bar"),
+        })
+    end
+    self.settings["claim_height"] = not self.settings["claim_height"]
+    self.reclaim_height = not self.reclaim_height
+    -- refresh margins position
+    -- current mode got disabled, redraw footer with other
+    -- enabled modes. if all modes are disabled, then only show
+    -- -- progress bar
+    -- if not self.has_no_mode then
+    --     self.mode = first_enabled_mode_num
+    -- else
+    --     -- If we've just disabled our last mode, first_enabled_mode_num is nil
+    --     -- If the progress bar is enabled,
+    --     -- This is exactly what the "Show progress bar" toggle does.
+    --     self.mode = self.settings.disable_progress_bar and self.mode_list.off or self.mode_list.page_progress
+    -- end
+    -- self:applyFooterMode()
+    self:refreshFooter(true, true)
+    -- The absence or presence of some items may change whether auto-refresh should be ensured
     self:rescheduleFooterAutoRefreshIfNeeded()
     return true
 end
@@ -3499,7 +3543,7 @@ function ReaderFooter:onStatusBarJustProgressBar()
         --     self:applyFooterMode()
         -- end
     end
-
+    G_reader_settings:saveSetting("reader_footer_mode", self.mode)
     self:onUpdateFooter(true, true) -- Importante pasar el segundo parámetro a true
     return true
 end
