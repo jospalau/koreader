@@ -1206,6 +1206,25 @@ function ReaderFooter:onSynchronizeCode()
 
     end
 end
+
+function ReaderFooter:onInstallLastVersion()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = io.popen("/mnt/onboard/.adds/scripts/getKOReaderNewVersion.sh && echo $? || echo $?" )
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
 function ReaderFooter:onSynchronizeStatistics()
     local InfoMessage = require("ui/widget/infomessage")
     local rv
@@ -3449,6 +3468,9 @@ function ReaderFooter:onStatusBarJustProgressBar()
         self._old_mode = self.mode
         self.mode = 0
         self:applyFooterMode() -- Importante hacer aquí applyFooterMode
+        if self.settings.toc_markers then
+            self:setTocMarkers()
+        end
         self.view.footer_visible = true
         if self._statusbar_toggled or self.mode == 0 then
             -- self:applyFooterMode() -- Importante hacer aquí applyFooterMode

@@ -269,7 +269,13 @@ function Profiles:onProfileExecute(name, exec_props)
             copy_profile.font_size = self.data[name].font_size + 1
         end
     end
-    if Device:isAndroid() then
+    -- Just for the phone
+    if Device:isAndroid() and Device.screen:getWidth() < 1200  then
+        if self.data[name].font_size ~= nil then
+            copy_profile.font_size = self.data[name].font_size + 6
+        end
+    end
+    if Device:isAndroid() and Device.screen:getWidth() == 1220  then
         if self.data[name].font_size ~= nil then
             copy_profile.font_size = self.data[name].font_size + 6
         end
