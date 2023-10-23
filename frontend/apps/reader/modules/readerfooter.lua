@@ -3508,6 +3508,8 @@ end
 
 function ReaderFooter:onStatusBarJustProgressBar()
     self.settings.progress_bar_position = "below"
+    self.height = Screen:scaleBySize(0)
+    self:refreshFooter(true, false)
     if (self.settings.disable_progress_bar) then-- and self.view.footer_visible) or self._statusbar_toggled then
         local text = "Progress bar on."
         if self.mode > 0 then
@@ -3516,9 +3518,6 @@ function ReaderFooter:onStatusBarJustProgressBar()
         UIManager:show(Notification:new{
             text = _(text),
         })
-        -- self.height = Screen:scaleBySize(self.settings.container_height)ddd
-        self.height = Screen:scaleBySize(0)
-        self:refreshFooter(true, false)
         self.settings.disable_progress_bar = false
         self._old_mode = self.mode
         self.mode = 0
