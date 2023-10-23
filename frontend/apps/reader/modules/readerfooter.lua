@@ -59,6 +59,7 @@ local MODE = {
     week_stats = 23,
     remaining_to_read_today = 24,
     progress_pages = 25,
+    time_and_progress = 26,
 }
 
 local symbol_prefix = {
@@ -94,6 +95,7 @@ local symbol_prefix = {
         week_stats = "",
         remaining_to_read_today = "",
         progress_pages = "",
+        time_and_progress = "",
     },
     icons = {
         time = "⌚",
@@ -118,6 +120,7 @@ local symbol_prefix = {
         week_stats = "",
         remaining_to_read_today = "",
         progress_pages = "",
+        time_and_progress = "",
     },
     compact_items = {
         time = nil,
@@ -143,6 +146,7 @@ local symbol_prefix = {
         week_stats = "",
         remaining_to_read_today = "",
         progress_pages = "",
+        time_and_progress = "",
     }
 }
 if BD.mirroredUILayout() then
@@ -765,6 +769,19 @@ local footerTextGeneratorMap = {
     local current_page = math.floor(((words_read * title_pages)/title_words)*10)/10
     return "Calibre data: wpp: " .. avg_words_cal .. ", cpp: " .. avg_chars_cal .. ", cpw: " .. avg_chars_per_word_cal .. " / " .. current_page .. " de " .. title_pages
    end,
+   time_and_progress = function(footer)
+    local title = footer.ui.document._document:getDocumentProps().title
+
+
+    local clock ="⌚ " ..  datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
+    local left_chapter = footer.ui.toc:getChapterPagesLeft(footer.pageno) or footer.ui.document:getTotalPagesLeft(footer.pageno)
+    if footer.settings.pages_left_includes_current_page then
+        left_chapter = left_chapter + 1
+    end
+    local progress_book = ("%d de %d"):format(footer.pageno, footer.pages)
+
+    return clock .. " " .. progress_book .. " ⇒ " .. left_chapter
+   end,
 }
 
 local ReaderFooter = WidgetContainer:extend{
@@ -964,6 +981,7 @@ function ReaderFooter:init()
     self.week_stats = G_reader_settings:readSetting("reader_footer_week_stats", "KOReader")
     self.remaining_to_read_today = G_reader_settings:readSetting("reader_footer_remaining_to_read_today", "KOReader")
     self.progress_pages = G_reader_settings:readSetting("reader_footer_progress_pages", "KOReader")
+    self.time_and_progress = G_reader_settings:readSetting("reader_footer_time_and_progress", "KOReader")
 
 
     self.custom_text_repetitions =
@@ -1946,6 +1964,7 @@ function ReaderFooter:textOptionTitles(option)
         week_stats = _("Week stats"),
         remaining_to_read_today = _("Remaining to read today"),
         progress_pages = _("Progress pages from Calibre"),
+        time_and_progress = _("Time and progress"),
 
     }
     return option_titles[option]
@@ -2945,6 +2964,7 @@ With this enabled, the current page is included, so the count goes from n to 1 i
     table.insert(sub_items, getMinibarOption("week_stats"))
     table.insert(sub_items, getMinibarOption("remaining_to_read_today"))
     table.insert(sub_items, getMinibarOption("progress_pages"))
+    table.insert(sub_items, getMinibarOption("time_and_progress"))
 
     -- Settings menu: keep the same parent page for going up from submenu
     for i = 1, #sub_items[settings_submenu_num].sub_item_table do

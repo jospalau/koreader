@@ -1160,6 +1160,10 @@ function Dispatcher:execute(settings, exec_props)
         UIManager:show(Notification:new{
             text = _(settings["set_font"]),
         })
+    elseif settings["b_page_margin"]  then
+        UIManager:show(Notification:new{
+            text = _("Margins " .. settings["b_page_margin"]),
+        })
     end
     if has_many then
         UIManager:broadcastEvent(Event:new("BatchedUpdate"))
