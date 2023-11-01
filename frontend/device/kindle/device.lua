@@ -3,6 +3,7 @@ local UIManager
 local time = require("ui/time")
 local lfs = require("libs/libkoreader-lfs")
 local logger = require("logger")
+local util = require("util")
 
 -- We're going to need a few <linux/fb.h> & <linux/input.h> constants...
 local ffi = require("ffi")
@@ -161,7 +162,7 @@ local Kindle = Generic:extend{
     canHWDither = no,
     -- The time the device went into suspend
     suspend_time = 0,
-    framework_lipc_handle = frameworkStopped()
+    framework_lipc_handle = frameworkStopped(),
 }
 
 function Kindle:initNetworkManager(NetworkMgr)
@@ -601,10 +602,10 @@ local KindlePaperWhite5 = Kindle:extend{
     --       and the widget is designed for the Kobo Aura One anyway, so, hahaha, nope.
     hasNaturalLightMixer = yes,
     display_dpi = 300,
-    touch_dev = "/dev/input/by-path/platform-1001e000.i2c-event",
     -- NOTE: While hardware dithering (via MDP) should be a thing, it doesn't appear to do anything right now :/.
     canHWDither = no,
     canDoSwipeAnimation = yes,
+    -- NOTE: Input device path is variable, see KindlePaperWhite5:init
 }
 
 local KindleBasic4 = Kindle:extend{
@@ -615,6 +616,23 @@ local KindleBasic4 = Kindle:extend{
     display_dpi = 300,
     -- TBD
     touch_dev = "/dev/input/by-path/platform-1001e000.i2c-event",
+    canHWDither = no,
+    canDoSwipeAnimation = yes,
+}
+
+local KindleScribe = Kindle:extend{
+    model = "KindleScribe",
+    isMTK = yes,
+    isTouchDevice = yes,
+    hasFrontlight = yes,
+    hasNaturalLight = yes,
+    -- NOTE: We *can* technically control both LEDs independently,
+    --       but the mix is device-specific, we don't have access to the LUT for the mix powerd is using,
+    --       and the widget is designed for the Kobo Aura One anyway, so, hahaha, nope.
+    hasNaturalLightMixer = yes,
+    display_dpi = 300,
+    touch_dev = "/dev/input/by-path/platform-1001e000.i2c-event",
+    -- NOTE: TBC whether dithering actually works on Bellatrix3...
     canHWDither = no,
     canDoSwipeAnimation = yes,
 }
@@ -1216,7 +1234,34 @@ function KindlePaperWhite5:init()
 
     Kindle.init(self)
 
-    self.input.open(self.touch_dev)
+    -- Some HW/FW variants stash their input device without a by-path symlink...
+    if util.pathExists("/dev/input/by-path/platform-1001e000.i2c-event") then
+        self.touch_dev = "/dev/input/by-path/platform-1001e000.i2c-event"
+        self.input.open(self.touch_dev)
+    else
+        -- Walk /sys/class/input and pick up any evdev input device with EV_ABS capabilities
+        -- NOTE: Run self.input.open *outside* of the loop, as the backend code assumes fd numbers are opened in increasing order...
+        local devices = {}
+        for evdev in lfs.dir("/sys/class/input/") do
+            if evdev:match("event.*") then
+                local abs_cap = "/sys/class/input/" .. evdev .. "/device/capabilities/abs"
+                local f = io.open(abs_cap, "r")
+                if f then
+                    local bitmap_str = f:read("l")
+                    f:close()
+                    if bitmap_str ~= "0" then
+                        logger.info("Potential input device found at", evdev, "because of ABS caps:", bitmap_str)
+                        table.insert(devices, "/dev/input/" .. evdev)
+                    end
+                end
+            end
+        end
+        for _, touch in ipairs(devices) do
+            -- There should only be one match on the PW5 anyway...
+            self.touch_dev = touch
+            self.input.open(touch)
+        end
+    end
     self.input.open("fake_events")
 end
 
@@ -1230,6 +1275,27 @@ function KindleBasic4:init()
         batt_capacity_file = "/sys/class/power_supply/bd71827_bat/capacity",
         is_charging_file = "/sys/class/power_supply/bd71827_bat/charging",
         batt_status_file = "/sys/class/power_supply/bd71827_bat/status",
+    }
+
+    -- Enable the so-called "fast" mode, so as to prevent the driver from silently promoting refreshes to REAGL.
+    self.screen:_MTK_ToggleFastMode(true)
+
+    Kindle.init(self)
+
+    self.input.open(self.touch_dev)
+    self.input.open("fake_events")
+end
+
+function KindleScribe:init()
+    self.screen = require("ffi/framebuffer_mxcfb"):new{device = self, debug = logger.dbg}
+    self.powerd = require("device/kindle/powerd"):new{
+        device = self,
+        fl_intensity_file = "/sys/class/backlight/fp9966-bl1/brightness",
+        warmth_intensity_file = "/sys/class/backlight/fp9966-bl0/brightness",
+        batt_capacity_file = "/sys/class/power_supply/bd71827_bat/capacity",
+        is_charging_file = "/sys/class/power_supply/bd71827_bat/charging",
+        batt_status_file = "/sys/class/power_supply/bd71827_bat/status",
+        hall_file = "/sys/devices/platform/eink_hall/hall_enable",
     }
 
     -- Enable the so-called "fast" mode, so as to prevent the driver from silently promoting refreshes to REAGL.
@@ -1283,6 +1349,7 @@ KindleBasic3.exit = KindleTouch.exit
 KindleOasis3.exit = KindleTouch.exit
 KindlePaperWhite5.exit = KindleTouch.exit
 KindleBasic4.exit = KindleTouch.exit
+KindleScribe.exit = KindleTouch.exit
 
 function Kindle3:exit()
     -- send double menu key press events to trigger screen refresh
@@ -1338,6 +1405,7 @@ local kt4_set = Set { "10L", "0WF", "0WG", "0WH", "0WJ", "0VB" }
 local koa3_set = Set { "11L", "0WQ", "0WP", "0WN", "0WM", "0WL" }
 local pw5_set = Set { "1LG", "1Q0", "1PX", "1VD", "219", "21A", "2BH", "2BJ", "2DK" }
 local kt5_set = Set { "22D", "25T", "23A", "2AQ", "2AP", "1XH", "22C" }
+local ks_set = Set { "27J", "2BL", "263", "227", "2BM", "23L", "23M", "270" }
 
 if kindle_sn_lead == "B" or kindle_sn_lead == "9" then
     local kindle_devcode = string.sub(kindle_sn, 3, 4)
@@ -1384,6 +1452,8 @@ else
         return KindlePaperWhite5
     elseif kt5_set[kindle_devcode_v2] then
         return KindleBasic4
+    elseif ks_set[kindle_devcode_v2] then
+        return KindleScribe
     end
 end
 
