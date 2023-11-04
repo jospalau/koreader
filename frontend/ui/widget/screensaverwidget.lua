@@ -15,18 +15,18 @@ local ScreenSaverWidget = InputContainer:extend{
 }
 
 function ScreenSaverWidget:init()
-    local i, timages, popen = 0, {}, io.popen
-    local pfile = popen('find /mnt/onboard/.adds/wallpapers -maxdepth 1 -type f -name "*.jpg" -o -name "*.png"')
-    for filename in pfile:lines() do
-        i = i + 1
-        timages[i] = filename
-    end
-    pfile:close()
+    -- local i, timages, popen = 0, {}, io.popen
+    -- local pfile = popen('find /mnt/onboard/.adds/wallpapers -maxdepth 1 -type f -name "*.jpg" -o -name "*.png"')
+    -- for filename in pfile:lines() do
+    --     i = i + 1
+    --     timages[i] = filename
+    -- end
+    -- pfile:close()
 
-    local random_fav = math.random(1, #timages)
-    local image = timages[random_fav]
+    -- local random_fav = math.random(1, #timages)
+    -- local image = timages[random_fav]
 
-    G_reader_settings:saveSetting("screensaver_image", image)
+    -- G_reader_settings:saveSetting("screensaver_image", image)
     if Device:hasKeys() then
         self.key_events.AnyKeyPressed = { { Device.input.group.Any } }
     end
