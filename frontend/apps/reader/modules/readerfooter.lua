@@ -1229,7 +1229,12 @@ function ReaderFooter:onSynchronizeCode()
         if not NetworkMgr:isWifiOn() then
             NetworkMgr:turnOnWifiAndWaitForConnection()
         end
-        local execute = io.popen("/mnt/onboard/.adds/scripts/syncKOReaderCode.sh && echo $? || echo $?" )
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen("/mnt/onboard/.adds/scripts/syncKOReaderCode.sh && echo $? || echo $?" )
+        else --Kindle
+            execute = io.popen("/mnt/us/scripts/syncKOReaderCode.sh && echo $? || echo $?" )
+        end
         output = execute:read('*a')
         UIManager:show(InfoMessage:new{
             text = T(_(output)),
@@ -1303,7 +1308,13 @@ function ReaderFooter:onToggleSSH()
         if not NetworkMgr:isWifiOn() then
             NetworkMgr:turnOnWifiAndWaitForConnection()
         end
-        local execute = io.popen("/mnt/onboard/.adds/scripts/launchDropbear.sh && echo $? || echo $?" )
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen("/mnt/onboard/.adds/scripts/launchDropbear.sh && echo $? || echo $?" )
+        else --Kindle
+            execute = io.popen("/mnt/us/scripts/launchDropbear.sh && echo $? || echo $?" )
+        end
+
         output = execute:read('*a')
         UIManager:show(InfoMessage:new{
             text = T(_(output)),
@@ -1322,7 +1333,12 @@ function ReaderFooter:onSyncBooks()
         if not NetworkMgr:isWifiOn() then
             NetworkMgr:turnOnWifiAndWaitForConnection()
         end
-        local execute = io.popen("/mnt/onboard/.adds/scripts/syncBooks.sh && echo $? || echo $?" )
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen("/mnt/onboard/.adds/scripts/syncBooks.sh && echo $? || echo $?" )
+        else --Kindle
+            execute = io.popen("/mnt/us/scripts/syncBooks.sh && echo $? || echo $?" )
+        end
         output = execute:read('*a')
         UIManager:show(InfoMessage:new{
             text = T(_(output)),
@@ -1335,7 +1351,7 @@ function ReaderFooter:onSyncBooks()
             NetworkMgr:turnOnWifiAndWaitForConnection()
         end
         local execute = io.popen("sh /storage/emulated/0/koreader/scripts/syncBooks.sh && echo $? || echo $?" )
-        output = execute:read('*a')
+                output = execute:read('*a')
         UIManager:show(InfoMessage:new{
             text = T(_(output)),
             face = Font:getFace("myfont"),
@@ -1354,7 +1370,12 @@ function ReaderFooter:onPullConfig()
         if not NetworkMgr:isWifiOn() then
             NetworkMgr:turnOnWifiAndWaitForConnection()
         end
-        local execute = io.popen("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/pullConfig.sh)" )
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/pullConfig.sh)" )
+        else --Kindle
+            execute = io.popen("/mnt/us/scripts/pullConfig.sh && echo $? || echo $?" )
+        end
         output = execute:read('*a')
         UIManager:show(InfoMessage:new{
             text = T(_(output)),
@@ -1373,7 +1394,12 @@ function ReaderFooter:onPushConfig()
         if not NetworkMgr:isWifiOn() then
             NetworkMgr:turnOnWifiAndWaitForConnection()
         end
-        local execute = io.popen("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/pushConfig.sh)" )
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/pushConfig.sh)" )
+        else --Kindle
+            execute = io.popen("/mnt/us/scripts/pushConfig.sh && echo $? || echo $?" )
+        end
         output = execute:read('*a')
         UIManager:show(InfoMessage:new{
             text = T(_(output)),

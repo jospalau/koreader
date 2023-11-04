@@ -64,7 +64,7 @@ function FileManagerCollection:onMenuHold(item)
     table.insert(buttons, {
         filemanagerutil.genResetSettingsButton(item.file, status_button_callback, is_currently_opened),
         {
-            text = _("Remove from favorites"),
+            text = _("Remove from MBR"),
             callback = function()
                 UIManager:close(self.collfile_dialog)
                 ReadCollection:removeItem(item.file, self._manager.coll_menu.collection)

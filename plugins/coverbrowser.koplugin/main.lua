@@ -147,7 +147,7 @@ function CoverBrowser:addToMainMenu(menu_items)
         sub_item_table = history_sub_item_table,
     })
     table.insert(sub_item_table, {
-        text = _("Favorites display mode"),
+        text = _("MBR display mode"),
         enabled_func = function()
             return not BookInfoManager:getSetting("unified_display_mode")
         end,
