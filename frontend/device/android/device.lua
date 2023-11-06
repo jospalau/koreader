@@ -230,6 +230,16 @@ function Device:init()
         end,
     }
 
+    local adjust_deadzone = function(this, ev)
+		-- We come *after* the stock Kobo hooks (i.e., SwitchXY), so we need to operate on ABS_MT_POSITION_Y
+		if android.prop.flavor == "rocks" and ev.type == C.EV_ABS and ev.code == C.ABS_MT_POSITION_Y and ev.value <= 5 then
+			ev.value = 31
+		end
+        if android.prop.flavor == "rocks" and ev.type == C.EV_ABS and ev.code == C.ABS_MT_POSITION_Y and ev.value >= 1640 then
+			ev.value = 1635
+		end
+	end
+    self.input:registerEventAdjustHook(adjust_deadzone)
     -- check if we have a keyboard
     if android.lib.AConfiguration_getKeyboard(android.app.config)
        == C.ACONFIGURATION_KEYBOARD_QWERTY
