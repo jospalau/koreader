@@ -80,6 +80,7 @@ local settingsList = {
     pull_sidecar_files = {category="none", event="PullSidecarFiles", title=_("Pull sidecar files"), general=true, separator=true},
     push_sidecar_files = {category="none", event="PushSidecarFiles", title=_("Push sidecar files"), general=true, separator=true},
     get_last_pushing_sidecars = {category="none", event="GetLastPushingSidecars", title=_("Who pushed last sidecars"), general=true, separator=true},
+    wifi_on_kindle = {category="none", event="TurnOnWifiKindle", title=_("Turn on Wi-Fi Kindle"), general=true, separator=true},
     ----
 
     -- Device
@@ -317,6 +318,7 @@ local dispatcher_menu_order = {
     "pull_sidecar_files",
     "push_sidecar_files",
     "get_last_pushing_sidecars",
+    "wifi_on_kindle",
     ----
 
     -- Device
@@ -1099,29 +1101,31 @@ function Dispatcher:_showAsMenu(settings, exec_props)
     end
     local Size = require("ui/size")
     for _, v in ipairs(display_list) do
-        table.insert(buttons, {{
-            text = v.text,
-            enabled = Dispatcher:isActionEnabled(settingsList[v.key]),
-            align = "left",
-            font_face = "smallinfofont",
-            font_size = 17,
-            font_bold = true,
-            callback = function()
-                UIManager:close(quickmenu)
-                Dispatcher:execute({[v.key] = settings[v.key]})
-            end,
-            hold_callback = function()
-                if v.key:sub(1, 13) == "profile_exec_" then
+        if v.text ~= "Turn on Wi-Fi Kindle" or Device:isKindle() then
+            table.insert(buttons, {{
+                text = v.text,
+                enabled = Dispatcher:isActionEnabled(settingsList[v.key]),
+                align = "left",
+                font_face = "smallinfofont",
+                font_size = 17,
+                font_bold = true,
+                callback = function()
                     UIManager:close(quickmenu)
-                    UIManager:sendEvent(Event:new(settingsList[v.key].event, settingsList[v.key].arg, { qm_show = true }))
-                end
-            end,
-        }})
+                    Dispatcher:execute({[v.key] = settings[v.key]})
+                end,
+                hold_callback = function()
+                    if v.key:sub(1, 13) == "profile_exec_" then
+                        UIManager:close(quickmenu)
+                        UIManager:sendEvent(Event:new(settingsList[v.key].event, settingsList[v.key].arg, { qm_show = true }))
+                    end
+                end,
+            }})
+        end
     end
     local ButtonDialog = require("ui/widget/buttondialog")
     local title = settings.settings.name -- or _("QuickMenu")
     local Font = require("ui/font")
-    if not Device:isAndroid() then
+    if not Device:isAndroid() and not Device:isKindle() then
         Device:setScreenDPI(50)
     end
     quickmenu = ButtonDialog:new{
@@ -1135,7 +1139,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
         anchor = exec_props and exec_props.qm_anchor,
     }
     UIManager:show(quickmenu)
-    if not Device:isAndroid() then
+    if not Device:isAndroid() and not Device:isKindle() then
         Device:setScreenDPI(nil)
     end
 end

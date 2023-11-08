@@ -779,8 +779,22 @@ local footerTextGeneratorMap = {
         left_chapter = left_chapter + 1
     end
     local progress_book = ("%d de %d"):format(footer.pageno, footer.pages)
+    local percentage_session, pages_read_session, duration = getSessionStats(footer)
 
-    return clock .. " " .. progress_book .. " ⇒ " .. left_chapter
+    if not footer.ui.toc then
+        return "n/a"
+    end
+
+    local sigcap = footer.ui.toc:getNextChapter(footer.pageno, footer.toc_level)
+    if sigcap == nil then
+    return "n/a"
+    end
+    local sigcap2 = footer.ui.toc:getNextChapter(sigcap + 1, footer.toc_level)
+    if sigcap2 == nil then
+        return "n/a"
+        end
+
+    return clock .. " | " .. duration .. " | " .. progress_book .. " | ⇒ " .. left_chapter .. " | Sig: " .. footer:getDataFromStatistics("", sigcap2 - sigcap)
    end,
 }
 
@@ -1483,6 +1497,19 @@ function ReaderFooter:onGetLastPushingSidecars()
         })
 
     end
+end
+
+function ReaderFooter:onTurnOnWifiKindle()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    local NetworkMgr = require("ui/network/manager")
+    local execute = io.popen("/mnt/us/scripts/connectNetwork.sh && echo $? || echo $?" )
+    output = execute:read('*a')
+    UIManager:show(InfoMessage:new{
+        text = T(_(output)),
+        face = Font:getFace("myfont"),
+    })
 end
 function ReaderFooter:onGetStyles()
     local css_text = self.ui.document:getDocumentFileContent("OPS/styles/stylesheet.css")

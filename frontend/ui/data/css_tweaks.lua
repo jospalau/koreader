@@ -536,7 +536,7 @@ body, h1, h2, h3, h4, h5, h6, div, li, td, th { text-indent: 0 !important; }
             title = _("Spacing between paragraphs"),
             {
                 id = "paragraph_whitespace",
-                conflicts_with = { "paragraph_whitespace_half", "paragraph_no_whitespace" },
+                conflicts_with = { "paragraph_whitespace_half", "paragraph_no_whitespace", "paragraph_whitespace_12" },
                 title = _("Spacing between paragraphs"),
                 description = _("Add a line of whitespace between paragraphs."),
                 priority = 5, -- Override "Ignore margins and paddings" above
@@ -544,15 +544,23 @@ body, h1, h2, h3, h4, h5, h6, div, li, td, th { text-indent: 0 !important; }
             },
             {
                 id = "paragraph_whitespace_half",
-                conflicts_with = { "paragraph_whitespace", "paragraph_no_whitespace" },
+                conflicts_with = { "paragraph_whitespace", "paragraph_no_whitespace", "paragraph_whitespace_12" },
                 title = _("Spacing between paragraphs (half)"),
                 description = _("Add half a line of whitespace between paragraphs."),
                 priority = 5,
                 css = [[p + p { margin-top: .5em !important; }]],
             },
             {
+                id = "paragraph_whitespace_12",
+                conflicts_with = { "paragraph_whitespace", "paragraph_whitespace_half", "paragraph_no_whitespace" },
+                title = _("Spacing between paragraphs (1.2em)"),
+                description = _("Add 1.2em of whitespace between paragraphs."),
+                priority = 5, -- Override "Ignore margins and paddings" above
+                css = [[p { line-height: 1.2em !important; }]],
+            },
+            {
                 id = "paragraph_no_whitespace",
-                conflicts_with = { "paragraph_whitespace", "paragraph_whitespace_half" },
+                conflicts_with = { "paragraph_whitespace", "paragraph_whitespace_half", "paragraph_whitespace_12" },
                 title = _("No spacing between paragraphs"),
                 description = _("No whitespace between paragraphs is the default, but it may be overridden by publisher styles. This will re-enable it for paragraphs and list items."),
                 priority = 5,
