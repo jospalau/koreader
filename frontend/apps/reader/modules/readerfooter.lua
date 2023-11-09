@@ -242,12 +242,18 @@ getSessionStats = function (footer)
         total_pages = tonumber(total_pages)
         --local percentage_session = footer.pageno/total_pages
         local percentage_session = pages_read_session/total_pages
+        local wpm_session = 0
+        if pages_read_session > 0 then
+            wpm_session = math.floor(((pages_read_session * 310)/((os.time() - session_started)/60))* 100) / 100
+        end
+
+        local words_session = pages_read_session * 310
         logger.warn(pages_read_session)
         logger.warn(percentage_session)
 
         percentage_session = math.floor(percentage_session*1000)/10
         local duration = datetime.secondsToClockDuration(user_duration_format, os.time() - session_started, true)
-        return percentage_session, pages_read_session, duration
+        return percentage_session, pages_read_session, duration, wpm_session, words_session
     end
 getTodayBookStats = function ()
     local now_stamp = os.time()
@@ -277,7 +283,13 @@ getTodayBookStats = function ()
     end
     today_duration = tonumber(today_duration)
     today_pages = tonumber(today_pages)
-    return today_duration, today_pages
+    local wpm_today = 0
+    if today_pages > 0 then
+        wpm_today = math.floor(((today_pages * 310)/((today_duration)/60))* 100) / 100
+    end
+
+    local words_today = today_pages * 310
+    return today_duration, today_pages, wpm_today, words_today
 end
 
 getThisWeekBookStats = function ()
@@ -298,17 +310,25 @@ getThisWeekBookStats = function ()
                      GROUP  BY id_book, page
                 );
     ]]
-   local today_pages, today_duration = conn:rowexec(sql_stmt)
+   local week_pages, week_duration = conn:rowexec(sql_stmt)
     conn:close()
-    if today_pages == nil then
-        today_pages = 0
+    if week_pages == nil then
+        week_pages = 0
     end
-    if today_duration == nil then
-        today_duration = 0
+    if week_duration == nil then
+        week_duration = 0
     end
-    today_duration = tonumber(today_duration)
-    today_pages = tonumber(today_pages)
-    return today_duration, today_pages
+    week_duration = tonumber(week_duration)
+    week_pages = tonumber(week_pages)
+
+    local wpm_week = 0
+    if week_pages > 0 then
+        wpm_week = math.floor(((week_pages * 310)/((week_duration)/60))* 100) / 100
+    end
+
+    local words_week = week_pages * 310
+
+    return week_duration, week_pages, wpm_week, words_week
 end
 -- functions that generates footer text for each mode
 local footerTextGeneratorMap = {
@@ -718,9 +738,9 @@ local footerTextGeneratorMap = {
         return font_face .. "-" ..  "S: " .. font_size .. "px, " .. font_size_pt .. "pt, " .. font_size_mm .. "mm - L: " ..  nblines .. "- W: " .. nbwords .. "- C: " .. nbcharacters .. " (CFL: " .. nbwords2 .. ")"
     end,
     session_stats = function(footer)
-        local percentage_session, pages_read_session,duration = getSessionStats(footer)
+        local percentage_session, pages_read_session, duration, wpm_session, words_session = getSessionStats(footer)
         logger.warn(percentage_session)
-        return "S: " .. duration .. "(" .. percentage_session .. "%)"  .. "(" .. pages_read_session.. "p)"
+        return "S: " .. duration .. "(" .. percentage_session .. "%, " .. words_session .. ")"  .. "(" .. pages_read_session.. "p) " .. wpm_session .. "wpm"
    end,
    today_stats = function(footer)
         local today_duration, today_pages = getTodayBookStats()
@@ -736,7 +756,7 @@ local footerTextGeneratorMap = {
     end,
     remaining_to_read_today = function(footer)
         local today_duration, today_pages = getTodayBookStats()
-        local today_duration_number = 0
+        local today_duration_number = math.floor(today_duration/60)
         local icon_goal_pages = ""
         local icon_goal_time = ""
         if today_pages > footer._goal_pages or today_duration_number>footer._goal_time then
@@ -1773,11 +1793,11 @@ function ReaderFooter:onShowTextProperties()
     local avg_chars_cal = math.floor(avg_words_cal * 5.7)
     local avg_chars_per_word_cal = math.floor((avg_chars_cal/avg_words_cal) * 100) / 100
 
-    local percentage_session, pages_read_session,duration = getSessionStats(self)
+    local percentage_session, pages_read_session, duration, wpm_session, words_session = getSessionStats(self)
     local progress_book = ("%d de %d"):format(self.pageno, self.pages)
     local string_percentage  = "%0.f%%"
     local percentage = string_percentage:format(self.progress_bar.percentage * 100)
-    local today_duration, today_pages = getTodayBookStats()
+    local today_duration, today_pages, wpm_today, words_today = getTodayBookStats()
     local user_duration_format = "letters"
     local today_duration_number = math.floor(today_duration/60)
     local today_duration = datetime.secondsToClockDuration(user_duration_format,today_duration, true)
@@ -1794,7 +1814,7 @@ function ReaderFooter:onShowTextProperties()
     end
 
 
-    local this_week_duration, this_week_pages = getThisWeekBookStats()
+    local this_week_duration, this_week_pages, wpm_week, words_week = getThisWeekBookStats()
     local user_duration_format = "letters"
     local this_week_duration = datetime.secondsToClockDuration(user_duration_format,this_week_duration, true)
 
@@ -1808,6 +1828,7 @@ function ReaderFooter:onShowTextProperties()
     local line = "﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏"
     local point = "‣"
     local important = " \u{261C}"
+
     local text = string.char(10) .. clock .. " " .. title_pages .. string.char(10) .. string.char(10)
     .. point .. " Progress book: " .. progress_book .. " (" .. percentage .. ")" ..  string.char(10)
     .. point .. " Left chapter " .. chapter .. ": " .. left_chapter  .. important .. string.char(10)
@@ -1818,9 +1839,9 @@ function ReaderFooter:onShowTextProperties()
     .. line .. string.char(10)  .. string.char(10)
     .. point .. " RTRP out of " .. self._goal_pages .. ": " .. (self._goal_pages - today_pages) .. "p " .. icon_goal_pages .. string.char(10)
     .. point .. " RTRT out of " .. self._goal_time .. ": " .. (self._goal_time - today_duration_number) .. "m " .. icon_goal_time  .. string.char(10)
-    .. point .. " This session: " .. duration .. "(" .. percentage_session .. "%)"  .. "(" .. pages_read_session.. "p)" .. important .. string.char(10)
-    .. point .. " Today: " .. today_duration  .. "(" .. today_pages .. "p)" .. string.char(10)
-    .. point .. " Week: " .. this_week_duration  .. "(" .. this_week_pages .. "p)" .. string.char(10)
+    .. point .. " This session: " .. duration .. "(" .. percentage_session .. "%, " .. words_session .. ")"  .. "(" .. pages_read_session.. "p) " .. wpm_session .. "wpm" .. important .. string.char(10)
+    .. point .. " Today: " .. today_duration  .. "(" .. today_pages .. "p, ".. words_today .. "w) " .. wpm_today .. "wpm" .. string.char(10)
+    .. point .. " Week: " .. this_week_duration  .. "(" .. this_week_pages .. "p, ".. words_week .. "w) " .. wpm_week .. "wpm" .. string.char(10)
     .. point .. " Stats: wpm: " .. wpm .. ", wph: " .. wph .. ", spp: " .. spp .. ", wpmp: " .. wpm_test .. important .. string.char(10)
     .. point .. " Static info (from Calibre info): wpp: " .. avg_words_cal .. ", cpp: " .. avg_chars_cal .. ", cpw: " .. avg_chars_per_word_cal .. important .. string.char(10)
     -- .. point .. " Dynamic info: p: " .. self.ui.statistics._pages_turned .. ", wpp: " .. avg_words .. ", cpp: " .. avg_chars .. ", cpw: " .. avg_chars_per_word .. string.char(10) -- Not used   .. line .. string.char(10) .. string.char(10)
