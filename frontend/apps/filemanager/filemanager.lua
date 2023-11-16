@@ -110,6 +110,15 @@ function FileManager:onSetDimensions(dimen)
     end
 end
 
+function FileManager:updateTitleBarPath(path)
+    path = path or self.file_chooser.path
+    local text = BD.directory(filemanagerutil.abbreviate(path))
+    if FileManagerShortcuts:hasFolderShortcut(path) then
+        text = "☆ " .. text
+    end
+    self.title_bar:setSubTitle(text)
+end
+
 function FileManager:setupLayout()
     self.show_parent = self.show_parent or self
     self.title_bar = TitleBar:new{
@@ -117,7 +126,7 @@ function FileManager:setupLayout()
         align = "center",
         title = self.title,
         title_top_padding = Screen:scaleBySize(6),
-        subtitle = BD.directory(filemanagerutil.abbreviate(self.root_path)),
+        subtitle = "",
         subtitle_truncate_left = true,
         subtitle_fullwidth = true,
         button_padding = Screen:scaleBySize(5),
@@ -130,6 +139,7 @@ function FileManager:setupLayout()
         right_icon_tap_callback = function() self:onShowPlusMenu() end,
         right_icon_hold_callback = false, -- propagate long-press to dispatcher
     }
+    self:updateTitleBarPath(self.root_path)
 
     local file_chooser = FileChooser:new{
         -- remember to adjust the height when new item is added to the group
@@ -154,7 +164,7 @@ function FileManager:setupLayout()
     local file_manager = self
 
     function file_chooser:onPathChanged(path)  -- luacheck: ignore
-        file_manager.title_bar:setSubTitle(BD.directory(filemanagerutil.abbreviate(path)))
+        file_manager:updateTitleBarPath(path)
         return true
     end
 
@@ -184,6 +194,18 @@ function FileManager:setupLayout()
         local is_file = lfs.attributes(file, "mode") == "file"
         local is_folder = lfs.attributes(file, "mode") == "directory"
         local is_not_parent_folder = BaseUtil.basename(file) ~= ".."
+
+        local function close_dialog_callback()
+            UIManager:close(self.file_dialog)
+        end
+        local function refresh_callback()
+            self:refreshPath()
+        end
+        local function close_dialog_refresh_callback()
+            UIManager:close(self.file_dialog)
+            self:refreshPath()
+        end
+
         local buttons = {
             {
                 {
@@ -228,10 +250,7 @@ function FileManager:setupLayout()
                     enabled = is_not_parent_folder,
                     callback = function()
                         UIManager:close(self.file_dialog)
-                        local function post_delete_callback()
-                            self:refreshPath()
-                        end
-                        file_manager:showDeleteFileDialog(file, post_delete_callback)
+                        file_manager:showDeleteFileDialog(file, refresh_callback)
                     end,
                 },
                 {
@@ -247,19 +266,12 @@ function FileManager:setupLayout()
         }
 
         if is_file then
-            local function close_dialog_callback()
-                UIManager:close(self.file_dialog)
-            end
-            local function status_button_callback()
-                UIManager:close(self.file_dialog)
-                self:refreshPath() -- sidecar folder may be created/deleted
-            end
             local has_provider = DocumentRegistry:hasProvider(file)
             if has_provider or DocSettings:hasSidecarFile(file) then
-                table.insert(buttons, filemanagerutil.genStatusButtonsRow(file, status_button_callback))
+                table.insert(buttons, filemanagerutil.genStatusButtonsRow(file, close_dialog_refresh_callback))
                 table.insert(buttons, {}) -- separator
                 table.insert(buttons, {
-                    filemanagerutil.genResetSettingsButton(file, status_button_callback),
+                    filemanagerutil.genResetSettingsButton(file, close_dialog_refresh_callback),
                     filemanagerutil.genAddRemoveFavoritesButton(file, close_dialog_callback),
                 })
             end
@@ -298,14 +310,18 @@ function FileManager:setupLayout()
         end
 
         if is_folder then
+            local folder = BaseUtil.realpath(file)
             table.insert(buttons, {
                 {
                     text = _("Set as HOME folder"),
                     callback = function()
                         UIManager:close(self.file_dialog)
-                        file_manager:setHome(BaseUtil.realpath(file))
+                        file_manager:setHome(folder)
                     end
                 },
+            })
+            table.insert(buttons, {
+                file_manager.folder_shortcuts:genAddRemoveShortcutButton(folder, close_dialog_callback, refresh_callback)
             })
         end
 
@@ -472,6 +488,13 @@ function FileManager:onToggleSelectMode(no_refresh)
 end
 
 function FileManager:tapPlus()
+    local function close_dialog_callback()
+        UIManager:close(self.file_dialog)
+    end
+    local function refresh_titlebar_callback()
+        self:updateTitleBarPath()
+    end
+
     local title, buttons
     if self.select_mode then
         local select_count = util.tableSize(self.selected_files)
@@ -590,13 +613,7 @@ function FileManager:tapPlus()
                         self:createFolder()
                     end,
                 },
-                {
-                    text = _("Folder shortcuts"),
-                    callback = function()
-                        UIManager:close(self.file_dialog)
-                        self:handleEvent(Event:new("ShowFolderShortcutsDialog"))
-                    end
-                },
+                self.folder_shortcuts:genShowFolderShortcutsButton(close_dialog_callback),
             },
         }
     else
@@ -637,7 +654,7 @@ function FileManager:tapPlus()
                         UIManager:close(self.file_dialog)
                         self:setHome(self.file_chooser.path)
                     end
-                }
+                },
             },
             {
                 {
@@ -646,7 +663,7 @@ function FileManager:tapPlus()
                         UIManager:close(self.file_dialog)
                         self:goHome()
                     end
-                }
+                },
             },
             {
                 {
@@ -655,17 +672,14 @@ function FileManager:tapPlus()
                         UIManager:close(self.file_dialog)
                         self:openRandomFile(self.file_chooser.path)
                     end
-                }
+                },
             },
             {
-                {
-                    text = _("Folder shortcuts"),
-                    callback = function()
-                        UIManager:close(self.file_dialog)
-                        self:handleEvent(Event:new("ShowFolderShortcutsDialog"))
-                    end
-                }
-            }
+                self.folder_shortcuts:genShowFolderShortcutsButton(close_dialog_callback),
+            },
+            {
+                self.folder_shortcuts:genAddRemoveShortcutButton(self.file_chooser.path, close_dialog_callback, refresh_titlebar_callback),
+            },
         }
 
         if Device:hasExternalSD() then
