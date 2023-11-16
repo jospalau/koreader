@@ -457,6 +457,13 @@ Further small adjustments can be done with 'Line Spacing' in the bottom menu.]])
                 description = _("Prevent inline content like sub- and superscript from changing their paragraph line height."),
                 -- strut-confined is among the few cr-hints that are inherited
                 css = [[body { -cr-hint: strut-confined; }]],
+            },
+            {
+                id = "paragraph_whitespace_12",
+                title = _("Spacing between lines (1.2em)"),
+                description = _("Add 1.2em of whitespace between lines       ."),
+                priority = 5, -- Override "Ignore margins and paddings" above
+                css = [[p { line-height: 1.2em !important; }]],
                 separator = true,
             },
             {
@@ -550,14 +557,7 @@ body, h1, h2, h3, h4, h5, h6, div, li, td, th { text-indent: 0 !important; }
                 priority = 5,
                 css = [[p + p { margin-top: .5em !important; }]],
             },
-            {
-                id = "paragraph_whitespace_12",
-                conflicts_with = { "paragraph_whitespace", "paragraph_whitespace_half", "paragraph_no_whitespace" },
-                title = _("Spacing between paragraphs (1.2em)"),
-                description = _("Add 1.2em of whitespace between paragraphs."),
-                priority = 5, -- Override "Ignore margins and paddings" above
-                css = [[p { line-height: 1.2em !important; }]],
-            },
+
             {
                 id = "paragraph_no_whitespace",
                 conflicts_with = { "paragraph_whitespace", "paragraph_whitespace_half", "paragraph_whitespace_12" },

@@ -39,6 +39,7 @@ local lfs = require("libs/libkoreader-lfs")
 local logger = require("logger")
 local BaseUtil = require("ffi/util")
 local util = require("util")
+local Font = require("ui/font")
 local _ = require("gettext")
 local C_ = _.pgettext
 local N_ = _.ngettext
@@ -1242,6 +1243,194 @@ function FileManager:showSelectedFilesList()
     UIManager:show(menu_container)
 end
 
+function FileManager:onPushConfig()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/pushConfig.sh)" )
+        else --Kindle
+            execute = io.popen("/mnt/us/scripts/pushConfig.sh && echo $? || echo $?" )
+        end
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
+
+function FileManager:onPullConfig()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/pullConfig.sh)" )
+        else --Kindle
+            execute = io.popen("/mnt/us/scripts/pullConfig.sh && echo $? || echo $?" )
+        end
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
+
+function FileManager:onGetLastPushingConfig()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/getLastPushing.sh)" )
+        else --Kindle
+            execute = io.popen("/mnt/us/scripts/getLastPushing.sh && echo $? || echo $?" )
+        end
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
+
+function FileManager:onSynchronizeCode()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen("/mnt/onboard/.adds/scripts/syncKOReaderCode.sh && echo $? || echo $?" )
+        else --Kindle
+            execute = io.popen("/mnt/us/scripts/syncKOReaderCode.sh && echo $? || echo $?" )
+        end
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
+
+function FileManager:onInstallLastVersion()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = io.popen("/mnt/onboard/.adds/scripts/getKOReaderNewVersion.sh && echo $? || echo $?" )
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
+
+function FileManager:onToggleSSH()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen("/mnt/onboard/.adds/scripts/launchDropbear.sh && echo $? || echo $?" )
+        else --Kindle
+            execute = io.popen("/mnt/us/scripts/launchDropbear.sh && echo $? || echo $?" )
+        end
+
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
+
+function FileManager:onSyncBooks()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen("/mnt/onboard/.adds/scripts/syncBooks.sh && echo $? || echo $?" )
+        else --Kindle
+            execute = io.popen("/mnt/us/scripts/syncBooks.sh && echo $? || echo $?" )
+        end
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+    else
+        Device:setIgnoreInput(true)
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = io.popen("sh /storage/emulated/0/koreader/scripts/syncBooks.sh && echo $? || echo $?" )
+                output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+        Device:setIgnoreInput(false)
+    end
+end
+
+function FileManager:onTurnOnWifiKindle()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    local NetworkMgr = require("ui/network/manager")
+    local execute = io.popen("/mnt/us/scripts/connectNetwork.sh && echo $? || echo $?" )
+    output = execute:read('*a')
+    UIManager:show(InfoMessage:new{
+        text = T(_(output)),
+        face = Font:getFace("myfont"),
+    })
+end
 function FileManager:showOpenWithDialog(file)
     local file_associated_provider_key = DocumentRegistry:getAssociatedProviderKey(file, false)
     local type_associated_provider_key = DocumentRegistry:getAssociatedProviderKey(file, true)
