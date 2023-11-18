@@ -82,6 +82,7 @@ local settingsList = {
     push_sidecar_files = {category="none", event="PushSidecarFiles", title=_("Push sidecar files"), general=true, separator=true},
     get_last_pushing_sidecars = {category="none", event="GetLastPushingSidecars", title=_("Who pushed last sidecars"), general=true, separator=true},
     wifi_on_kindle = {category="none", event="TurnOnWifiKindle", title=_("Turn on Wi-Fi Kindle"), general=true, separator=true},
+    print_info_fbink = {category="none", event="PrintInfoFbink", title=_("Print info Fbink"), general=true, separator=true},
     ----
 
     -- Device
@@ -321,6 +322,7 @@ local dispatcher_menu_order = {
     "push_sidecar_files",
     "get_last_pushing_sidecars",
     "wifi_on_kindle",
+    "print_info_fbink",
     ----
 
     -- Device
