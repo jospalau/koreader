@@ -1532,7 +1532,7 @@ function ReaderFooter:onTurnOnWifiKindle()
     })
 end
 
-function ReaderFooter:onPrintInfoFbink()
+function ReaderFooter:onPrintChapterLeftFbink()
     local clock ="⌚ " ..  datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
     local left_chapter = self.ui.toc:getChapterPagesLeft(self.pageno) or self.ui.document:getTotalPagesLeft(self.pageno)
     if self.settings.pages_left_includes_current_page then
@@ -1560,9 +1560,9 @@ function ReaderFooter:onPrintInfoFbink()
     if not Device:isAndroid() then
         local execute = nil
         if Device:isKobo() then
-            execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=25,right=50,format " .. left_chapter)
+            execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format " .. left_chapter)
         else --Kindle
-            execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=25,right=50,format " .. left_chapter)
+            execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format " .. left_chapter)
         end
         output = execute:read('*a')
         -- if Device:isKobo() then
@@ -1583,6 +1583,160 @@ function ReaderFooter:onPrintInfoFbink()
     end
 end
 
+function ReaderFooter:onPrintSessionDurationFbink()
+    local clock ="⌚ " ..  datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
+    local left_chapter = self.ui.toc:getChapterPagesLeft(self.pageno) or self.ui.document:getTotalPagesLeft(self.pageno)
+    if self.settings.pages_left_includes_current_page then
+        left_chapter = left_chapter + 1
+    end
+    local progress_book = ("%d de %d"):format(self.pageno, self.pages)
+    local percentage_session, pages_read_session, duration = getSessionStats(self)
+
+    if not self.ui.toc then
+        return "n/a"
+    end
+
+    local sigcap = self.ui.toc:getNextChapter(self.pageno, self.toc_level)
+    if sigcap == nil then
+    return "n/a"
+    end
+    local sigcap2 = self.ui.toc:getNextChapter(sigcap + 1, self.toc_level)
+    if sigcap2 == nil then
+        return "n/a"
+    end
+
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format " .. duration)
+        else --Kindle
+            execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format " .. duration)
+        end
+        output = execute:read('*a')
+        -- if Device:isKobo() then
+        --     execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=1150,right=50,format " .. duration)
+        -- else --Kindle
+        --     execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=1100,right=50,format " .. duration)
+        -- end
+        -- output = execute:read('*a')
+        -- UIManager:show(InfoMessage:new{
+        --     text = T(_(output)),
+        --     face = Font:getFace("myfont"),
+        -- })
+    else
+        local text = duration
+        UIManager:show(Notification:new{
+            text = _(text),
+        })
+    end
+end
+
+function ReaderFooter:onPrintProgressBookFbink()
+    local clock ="⌚ " ..  datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
+    local left_chapter = self.ui.toc:getChapterPagesLeft(self.pageno) or self.ui.document:getTotalPagesLeft(self.pageno)
+    if self.settings.pages_left_includes_current_page then
+        left_chapter = left_chapter + 1
+    end
+    local progress_book = ("%d de %d"):format(self.pageno, self.pages)
+    local percentage_session, pages_read_session, duration = getSessionStats(self)
+
+    if not self.ui.toc then
+        return "n/a"
+    end
+
+    local sigcap = self.ui.toc:getNextChapter(self.pageno, self.toc_level)
+    if sigcap == nil then
+    return "n/a"
+    end
+    local sigcap2 = self.ui.toc:getNextChapter(sigcap + 1, self.toc_level)
+    if sigcap2 == nil then
+        return "n/a"
+    end
+    local string_percentage  = "%0.f%%"
+    local percentage = string_percentage:format(self.progress_bar.percentage * 100)
+
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format " .. percentage)
+        else --Kindle
+            execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format " .. percentage)
+        end
+        output = execute:read('*a')
+        -- if Device:isKobo() then
+        --     execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=1150,right=50,format " .. duration)
+        -- else --Kindle
+        --     execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=1100,right=50,format " .. duration)
+        -- end
+        -- output = execute:read('*a')
+        -- UIManager:show(InfoMessage:new{
+        --     text = T(_(output)),
+        --     face = Font:getFace("myfont"),
+        -- })
+    else
+        local text = percentage
+        UIManager:show(Notification:new{
+            text = _(text),
+        })
+    end
+end
+
+function ReaderFooter:onPrintClockFbink()
+    local clock =  datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
+    local left_chapter = self.ui.toc:getChapterPagesLeft(self.pageno) or self.ui.document:getTotalPagesLeft(self.pageno)
+    if self.settings.pages_left_includes_current_page then
+        left_chapter = left_chapter + 1
+    end
+    local progress_book = ("%d de %d"):format(self.pageno, self.pages)
+    local percentage_session, pages_read_session, duration = getSessionStats(self)
+
+    if not self.ui.toc then
+        return "n/a"
+    end
+
+    local sigcap = self.ui.toc:getNextChapter(self.pageno, self.toc_level)
+    if sigcap == nil then
+    return "n/a"
+    end
+    local sigcap2 = self.ui.toc:getNextChapter(sigcap + 1, self.toc_level)
+    if sigcap2 == nil then
+        return "n/a"
+    end
+
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format " .. clock)
+        else --Kindle
+            execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format " .. clock)
+        end
+        output = execute:read('*a')
+        -- if Device:isKobo() then
+        --     execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=1150,right=50,format " .. duration)
+        -- else --Kindle
+        --     execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=1100,right=50,format " .. duration)
+        -- end
+        -- output = execute:read('*a')
+        -- UIManager:show(InfoMessage:new{
+        --     text = T(_(output)),
+        --     face = Font:getFace("myfont"),
+        -- })
+    else
+        local text = clock
+        UIManager:show(Notification:new{
+            text = _(text),
+        })
+    end
+end
 function ReaderFooter:onGetStyles()
     local css_text = self.ui.document:getDocumentFileContent("OPS/styles/stylesheet.css")
     if css_text == nil then

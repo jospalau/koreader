@@ -82,7 +82,10 @@ local settingsList = {
     push_sidecar_files = {category="none", event="PushSidecarFiles", title=_("Push sidecar files"), general=true, separator=true},
     get_last_pushing_sidecars = {category="none", event="GetLastPushingSidecars", title=_("Who pushed last sidecars"), general=true, separator=true},
     wifi_on_kindle = {category="none", event="TurnOnWifiKindle", title=_("Turn on Wi-Fi Kindle"), general=true, separator=true},
-    print_info_fbink = {category="none", event="PrintInfoFbink", title=_("Print info Fbink"), general=true, separator=true},
+    print_chapter_left_fbink = {category="none", event="PrintChapterLeftFbink", title=_("Print chapter left Fbink"), general=true, separator=true},
+    print_session_duration_fbink = {category="none", event="PrintSessionDurationFbink", title=_("Print session duration Fbink"), general=true, separator=true},
+    print_progress_book_fbink = {category="none", event="PrintProgressBookFbink", title=_("Print progress book Fbink"), general=true, separator=true},
+    print_clock_fbink = {category="none", event="PrintClockFbink", title=_("Print clock Fbink"), general=true, separator=true},
     ----
 
     -- Device
@@ -322,7 +325,10 @@ local dispatcher_menu_order = {
     "push_sidecar_files",
     "get_last_pushing_sidecars",
     "wifi_on_kindle",
-    "print_info_fbink",
+    "print_chapter_left_fbink",
+    "print_session_duration_fbink",
+    "print_progress_book_fbink",
+    "print_clock_fbink",
     ----
 
     -- Device

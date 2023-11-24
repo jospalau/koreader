@@ -30,6 +30,6 @@ return {
 
     [104] = "LPgBack", -- T68 PageUp
     [109] = "LPgFwd",  -- T68 PageDown
-    [117] = "Back",    -- Boox Palma back
+    [117] = "Right",    -- Boox Palma back
     [139] = "Menu",    -- T68 Menu
 }
