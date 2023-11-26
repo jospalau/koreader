@@ -1006,6 +1006,7 @@ function Dispatcher:addSubMenu(caller, menu, location, settings)
         {"rolling", _("Reflowable documents (epub, fb2, txt…)")},
         {"paging", _("Fixed layout documents (pdf, djvu, pics…)")},
     }
+    menu.max_per_page = 1 + #section_list -- settings in page 2
     for _, section in ipairs(section_list) do
         local submenu = {}
         Dispatcher:_addItem(caller, submenu, location, settings, section[1])
@@ -1081,6 +1082,31 @@ function Dispatcher:addSubMenu(caller, menu, location, settings)
             end
         end,
     })
+    table.insert(menu, {
+        text = _("Keep QuickMenu open"),
+        checked_func = function()
+            return location[settings] ~= nil
+            and location[settings].settings ~= nil
+            and location[settings].settings.keep_open_on_apply
+        end,
+        callback = function()
+            if location[settings] then
+                if location[settings].settings then
+                    if location[settings].settings.keep_open_on_apply then
+                        location[settings].settings.keep_open_on_apply = nil
+                        if next(location[settings].settings) == nil then
+                            location[settings].settings = nil
+                        end
+                    else
+                        location[settings].settings.keep_open_on_apply = true
+                    end
+                else
+                    location[settings].settings = {["keep_open_on_apply"] = true}
+                end
+                caller.updated = true
+            end
+        end,
+    })
 end
 
 function Dispatcher:isActionEnabled(action)
@@ -1100,6 +1126,8 @@ function Dispatcher:isActionEnabled(action)
 end
 
 function Dispatcher:_showAsMenu(settings, exec_props)
+    local title = settings.settings.name or _("QuickMenu")
+    local keep_open_on_apply = settings.settings.keep_open_on_apply
     local display_list = Dispatcher:getDisplayList(settings)
     local quickmenu
     local buttons = {}
@@ -1128,6 +1156,10 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                 callback = function()
                     UIManager:close(quickmenu)
                     Dispatcher:execute({[v.key] = settings[v.key]})
+                    if keep_open_on_apply and not util.stringStartsWith(v.key, "touch_input") then
+                        quickmenu:setTitle(title)
+                        UIManager:show(quickmenu)
+                    end
                 end,
                 hold_callback = function()
                     if v.key:sub(1, 13) == "profile_exec_" then
