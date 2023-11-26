@@ -1538,21 +1538,6 @@ function ReaderFooter:onPrintChapterLeftFbink()
     if self.settings.pages_left_includes_current_page then
         left_chapter = left_chapter + 1
     end
-    local progress_book = ("%d de %d"):format(self.pageno, self.pages)
-    local percentage_session, pages_read_session, duration = getSessionStats(self)
-
-    if not self.ui.toc then
-        return "n/a"
-    end
-
-    local sigcap = self.ui.toc:getNextChapter(self.pageno, self.toc_level)
-    if sigcap == nil then
-    return "n/a"
-    end
-    local sigcap2 = self.ui.toc:getNextChapter(sigcap + 1, self.toc_level)
-    if sigcap2 == nil then
-        return "n/a"
-    end
 
     local InfoMessage = require("ui/widget/infomessage")
     local rv
@@ -1584,26 +1569,8 @@ function ReaderFooter:onPrintChapterLeftFbink()
 end
 
 function ReaderFooter:onPrintSessionDurationFbink()
-    local clock ="⌚ " ..  datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
-    local left_chapter = self.ui.toc:getChapterPagesLeft(self.pageno) or self.ui.document:getTotalPagesLeft(self.pageno)
-    if self.settings.pages_left_includes_current_page then
-        left_chapter = left_chapter + 1
-    end
-    local progress_book = ("%d de %d"):format(self.pageno, self.pages)
     local percentage_session, pages_read_session, duration = getSessionStats(self)
 
-    if not self.ui.toc then
-        return "n/a"
-    end
-
-    local sigcap = self.ui.toc:getNextChapter(self.pageno, self.toc_level)
-    if sigcap == nil then
-    return "n/a"
-    end
-    local sigcap2 = self.ui.toc:getNextChapter(sigcap + 1, self.toc_level)
-    if sigcap2 == nil then
-        return "n/a"
-    end
 
     local InfoMessage = require("ui/widget/infomessage")
     local rv
@@ -1635,26 +1602,6 @@ function ReaderFooter:onPrintSessionDurationFbink()
 end
 
 function ReaderFooter:onPrintProgressBookFbink()
-    local clock ="⌚ " ..  datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
-    local left_chapter = self.ui.toc:getChapterPagesLeft(self.pageno) or self.ui.document:getTotalPagesLeft(self.pageno)
-    if self.settings.pages_left_includes_current_page then
-        left_chapter = left_chapter + 1
-    end
-    local progress_book = ("%d de %d"):format(self.pageno, self.pages)
-    local percentage_session, pages_read_session, duration = getSessionStats(self)
-
-    if not self.ui.toc then
-        return "n/a"
-    end
-
-    local sigcap = self.ui.toc:getNextChapter(self.pageno, self.toc_level)
-    if sigcap == nil then
-    return "n/a"
-    end
-    local sigcap2 = self.ui.toc:getNextChapter(sigcap + 1, self.toc_level)
-    if sigcap2 == nil then
-        return "n/a"
-    end
     local string_percentage  = "%0.f%%"
     local percentage = string_percentage:format(self.progress_bar.percentage * 100)
 
@@ -1689,25 +1636,6 @@ end
 
 function ReaderFooter:onPrintClockFbink()
     local clock =  datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
-    local left_chapter = self.ui.toc:getChapterPagesLeft(self.pageno) or self.ui.document:getTotalPagesLeft(self.pageno)
-    if self.settings.pages_left_includes_current_page then
-        left_chapter = left_chapter + 1
-    end
-    local progress_book = ("%d de %d"):format(self.pageno, self.pages)
-    local percentage_session, pages_read_session, duration = getSessionStats(self)
-
-    if not self.ui.toc then
-        return "n/a"
-    end
-
-    local sigcap = self.ui.toc:getNextChapter(self.pageno, self.toc_level)
-    if sigcap == nil then
-    return "n/a"
-    end
-    local sigcap2 = self.ui.toc:getNextChapter(sigcap + 1, self.toc_level)
-    if sigcap2 == nil then
-        return "n/a"
-    end
 
     local InfoMessage = require("ui/widget/infomessage")
     local rv
@@ -1732,6 +1660,86 @@ function ReaderFooter:onPrintClockFbink()
         -- })
     else
         local text = clock
+        UIManager:show(Notification:new{
+            text = _(text),
+        })
+    end
+end
+
+function ReaderFooter:onPrintDurationChapterFbink()
+    if not self.ui.toc then
+        return "n/a"
+    end
+
+    local left = self.ui.toc:getChapterPagesLeft(self.pageno) or self.ui.document:getTotalPagesLeft(self.pageno)
+    left = self:getDataFromStatistics("Cur: ", left)
+
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. left .. "\"")
+        else --Kindle
+            execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. left .. "\"")
+        end
+        output = execute:read('*a')
+        -- if Device:isKobo() then
+        --     execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=1150,right=50,format " .. duration)
+        -- else --Kindle
+        --     execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=1100,right=50,format " .. duration)
+        -- end
+        -- output = execute:read('*a')
+        -- UIManager:show(InfoMessage:new{
+        --     text = T(_(output)),
+        --     face = Font:getFace("myfont"),
+        -- })
+    else
+        local text = left
+        UIManager:show(Notification:new{
+            text = _(text),
+        })
+    end
+end
+
+function ReaderFooter:onPrintDurationNextChapterFbink()
+    if not self.ui.toc then
+        return "n/a"
+    end
+
+    local sigcap = self.ui.toc:getNextChapter(self.pageno, self.toc_level)
+    if sigcap == nil then
+    return "n/a"
+    end
+    local sigcap2 = self.ui.toc:getNextChapter(sigcap + 1, self.toc_level)
+    if sigcap2 == nil then
+        return "n/a"
+    end
+    sigcap2 = self:getDataFromStatistics("Sig: ", sigcap2 - sigcap)
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. sigcap2 .. "\"")
+        else --Kindle
+            execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. sigcap2 .. "\"")
+        end
+        output = execute:read('*a')
+        -- if Device:isKobo() then
+        --     execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=1150,right=50,format " .. duration)
+        -- else --Kindle
+        --     execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=1100,right=50,format " .. duration)
+        -- end
+        -- output = execute:read('*a')
+        -- UIManager:show(InfoMessage:new{
+        --     text = T(_(output)),
+        --     face = Font:getFace("myfont"),
+        -- })
+    else
+        local text = sigcap2
         UIManager:show(Notification:new{
             text = _(text),
         })

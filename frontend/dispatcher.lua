@@ -86,6 +86,8 @@ local settingsList = {
     print_session_duration_fbink = {category="none", event="PrintSessionDurationFbink", title=_("Print session duration Fbink"), general=true, separator=true},
     print_progress_book_fbink = {category="none", event="PrintProgressBookFbink", title=_("Print progress book Fbink"), general=true, separator=true},
     print_clock_fbink = {category="none", event="PrintClockFbink", title=_("Print clock Fbink"), general=true, separator=true},
+    print_duration_chapter_fbink = {category="none", event="PrintDurationChapterFbink", title=_("Print duration chapter Fbink"), general=true, separator=true},
+    print_duration_next_chapter_fbink = {category="none", event="PrintDurationNextChapterFbink", title=_("Print duration next chapter Fbink"), general=true, separator=true},
     ----
 
     -- Device
@@ -330,6 +332,8 @@ local dispatcher_menu_order = {
     "print_session_duration_fbink",
     "print_progress_book_fbink",
     "print_clock_fbink",
+    "print_duration_chapter_fbink",
+    "print_duration_next_chapter_fbink",
     ----
 
     -- Device
