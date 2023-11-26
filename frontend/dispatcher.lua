@@ -1157,8 +1157,14 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                     UIManager:close(quickmenu)
                     Dispatcher:execute({[v.key] = settings[v.key]})
                     if keep_open_on_apply and not util.stringStartsWith(v.key, "touch_input") then
-                        quickmenu:setTitle(title)
+                        -- quickmenu:setTitle(title)
+                        if not Device:isAndroid() and not Device:isKindle() then
+                            Device:setScreenDPI(50)
+                        end
                         UIManager:show(quickmenu)
+                        if not Device:isAndroid() and not Device:isKindle() then
+                            Device:setScreenDPI(nil)
+                        end
                     end
                 end,
                 hold_callback = function()

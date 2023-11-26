@@ -2067,11 +2067,12 @@ getWpmToday = function ()
     -- if time_reading_today == nil then
     --     time_reading_today = 0
     -- end
+    local WPP = 270
     local time_reading_today = tonumber(time_reading_today)
     local today_duration, today_pages = ReaderStatistics:getTodayBookStats()
     -- datetime.secondsToClockDuration(user_duration_format, today_duration, false)
 
-    local wpm = math.floor((today_pages*310)/(today_duration/60))
+    local wpm = math.floor((today_pages * WPP)/(today_duration/60))
     return wpm
 end
 
