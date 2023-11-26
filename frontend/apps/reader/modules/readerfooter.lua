@@ -32,6 +32,8 @@ local InfoMessage = require("ui/widget/infomessage")
 local Notification = require("ui/widget/notification")
 local  MAX_BATTERY_HIDE_THRESHOLD = 1000
 
+
+local WPP=270
 local MODE = {
     off = 0,
     page_progress = 1,
@@ -244,10 +246,10 @@ getSessionStats = function (footer)
         local percentage_session = pages_read_session/total_pages
         local wpm_session = 0
         if pages_read_session > 0 then
-            wpm_session = math.floor(((pages_read_session * 310)/((os.time() - session_started)/60))* 100) / 100
+            wpm_session = math.floor(((pages_read_session * WPP)/((os.time() - session_started)/60))* 100) / 100
         end
 
-        local words_session = pages_read_session * 310
+        local words_session = pages_read_session * WPP
         logger.warn(pages_read_session)
         logger.warn(percentage_session)
 
@@ -285,10 +287,10 @@ getTodayBookStats = function ()
     today_pages = tonumber(today_pages)
     local wpm_today = 0
     if today_pages > 0 then
-        wpm_today = math.floor(((today_pages * 310)/((today_duration)/60))* 100) / 100
+        wpm_today = math.floor(((today_pages * WPP)/((today_duration)/60))* 100) / 100
     end
 
-    local words_today = today_pages * 310
+    local words_today = today_pages * WPP
     return today_duration, today_pages, wpm_today, words_today
 end
 
@@ -323,10 +325,10 @@ getThisWeekBookStats = function ()
 
     local wpm_week = 0
     if week_pages > 0 then
-        wpm_week = math.floor(((week_pages * 310)/((week_duration)/60))* 100) / 100
+        wpm_week = math.floor(((week_pages * WPP)/((week_duration)/60))* 100) / 100
     end
 
-    local words_week = week_pages * 310
+    local words_week = week_pages * WPP
 
     return week_duration, week_pages, wpm_week, words_week
 end
@@ -646,8 +648,8 @@ local footerTextGeneratorMap = {
             local percentage = footer.progress_bar.percentage * 100
             wpm_test =  math.floor((title_words_ex * footer.progress_bar.percentage/(time_read/60)))
 
-            wpm = math.floor((pages_read*310)/(time_read/60))
-            wph = math.floor((pages_read*310)/(time_read/60/60))
+            wpm = math.floor((pages_read * WPP)/(time_read/60))
+            wph = math.floor((pages_read * WPP)/(time_read/60/60))
         end
         return wpm .. "wpm, " .. wph .. "wph, " .. spp .. "spp, " .. wpm_test .. "wpmt"
     end,
@@ -1995,8 +1997,8 @@ function ReaderFooter:onShowTextProperties()
         local percentage = self.progress_bar.percentage * 100
         wpm_test =  math.floor((title_words_ex * self.progress_bar.percentage/(time_read/60)))
 
-        wpm = math.floor((pages_read*310)/(time_read/60))
-        wph = math.floor((pages_read*310)/(time_read/60/60))
+        wpm = math.floor((pages_read * WPP)/(time_read/60))
+        wph = math.floor((pages_read * WPP)/(time_read/60/60))
     end
 
     -- Extraigo la información más fácil así
