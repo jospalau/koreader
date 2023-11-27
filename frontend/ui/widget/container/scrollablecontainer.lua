@@ -511,8 +511,8 @@ function ScrollableContainer:onScrollableSwipe(_, ges)
     local direction = ges.direction
     if self.swipe_full_view then
         -- Swipe by a full visible area, no matter the swipe distance
-        if     direction == "north"     then self:_scrollBy(0, self._crop_h, true)
-        elseif direction == "south"     then self:_scrollBy(0, -self._crop_h, true)
+        if     direction == "north"     then self:_scrollBy(0, self._crop_h, false)
+        elseif direction == "south"     then self:_scrollBy(0, -self._crop_h, false)
         elseif direction == "east"      then self:_scrollBy(-self._crop_w, 0, true)
         elseif direction == "west"      then self:_scrollBy(self._crop_w, 0, true)
         elseif direction == "northeast" then self:_scrollBy(-self._crop_w, self._crop_h, true)

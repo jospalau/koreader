@@ -83,6 +83,8 @@ local Font = {
         xx_smallinfofont = "NotoSans-Regular.ttf",
 
         myfont = "Capita-Regular.otf",
+
+        myfont2 = "PoorRichard-Regular.ttf",
     },
     sizemap = {
         cfont = 24,
@@ -93,6 +95,7 @@ local Font = {
         smallffont = 15,
         largeffont = 25,
         myfont = 16,
+        myfont2 = 26,
         pgfont = 20,
         scfont = 20,
         rifont = 16,

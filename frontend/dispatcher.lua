@@ -1150,7 +1150,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                 text = v.text,
                 enabled = Dispatcher:isActionEnabled(settingsList[v.key]),
                 align = "left",
-                font_face = "smallinfofont",
+                font_face = "myfont2",
                 font_size = 17,
                 font_bold = true,
                 callback = function()
@@ -1159,7 +1159,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                     if keep_open_on_apply and not util.stringStartsWith(v.key, "touch_input") then
                         -- quickmenu:setTitle(title)
                         if not Device:isAndroid() and not Device:isKindle() then
-                            Device:setScreenDPI(50)
+                            Device:setScreenDPI(200)
                         end
                         UIManager:show(quickmenu)
                         if not Device:isAndroid() and not Device:isKindle() then
@@ -1180,7 +1180,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
     local title = settings.settings.name -- or _("QuickMenu")
     local Font = require("ui/font")
     if not Device:isAndroid() and not Device:isKindle() then
-        Device:setScreenDPI(50)
+        Device:setScreenDPI(200)
     end
     quickmenu = ButtonDialog:new{
         title = title,

@@ -126,13 +126,15 @@ function CoverImage:createCoverImage(doc_settings)
 
             if self.cover_image_background == "none" or scale_factor == 1 then
                 local act_format = self.cover_image_format == "auto" and getExtension(self.cover_image_path) or self.cover_image_format
-                if not cover_image:writeToFile(self.cover_image_path, act_format, self.cover_image_quality, self.cover_image_grayscale) then
+                local myimage = RenderImage:scaleBlitBuffer(cover_image, s_w, s_h)
+                if not myimage:writeToFile(self.cover_image_path, act_format, self.cover_image_quality, self.cover_image_grayscale) then
                     UIManager:show(InfoMessage:new{
                         text = _("Error writing file") .. "\n" .. self.cover_image_path,
                         show_icon = true,
                     })
                 end
                 cover_image:free()
+                myimage:free()
                 ffiutil.copyFile(self.cover_image_path, cache_file)
                 self:cleanCache()
                 return
