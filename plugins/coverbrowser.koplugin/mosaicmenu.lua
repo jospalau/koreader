@@ -861,8 +861,8 @@ function MosaicMenu:_recalculateDimen()
     local portrait_mode = Screen:getWidth() <= Screen:getHeight()
     -- 3 x 3 grid by default if not initially provided (4 x 2 in landscape mode)
     if portrait_mode then
-        self.nb_cols = self.nb_cols_portrait or 3
-        self.nb_rows = self.nb_rows_portrait or 3
+        self.nb_cols = self.nb_cols_portrait or 4
+        self.nb_rows = self.nb_rows_portrait or 4
     else
         self.nb_cols = self.nb_cols_landscape or 4
         self.nb_rows = self.nb_rows_landscape or 2

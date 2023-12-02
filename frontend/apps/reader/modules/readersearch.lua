@@ -102,7 +102,7 @@ function ReaderSearch:searchCallback(reverse)
         end
         UIManager:show(InfoMessage:new{ text = error_message })
     else
-        UIManager:close(self.input_dialog)
+UIManager:close(self.input_dialog)
         self:onShowSearchDialog(search_text, reverse, self.use_regex, self.case_insensitive)
     end
 end
@@ -171,7 +171,12 @@ end
 function ReaderSearch:onShowSearchDialog(text, direction, regex, case_insensitive)
     local neglect_current_location = false
     local current_page
-
+    self.ui.searching = true
+    local UIManager = require("ui/uimanager")
+    local Notification = require("ui/widget/notification")
+    UIManager:show(Notification:new{
+        text = _("searching"),
+    })
     local function isSlowRegex(pattern)
         if pattern:find("%[") or pattern:find("%*") or pattern:find("%?") or pattern:find("%.") then
             return true
@@ -335,6 +340,11 @@ function ReaderSearch:onShowSearchDialog(text, direction, regex, case_insensitiv
             logger.dbg("highlight clear")
             self.ui.highlight:clear()
             UIManager:setDirty(self.dialog, "ui")
+            UIManager:close(self.input_dialog)
+            self.ui.searching = false
+            UIManager:show(Notification:new{
+                text = _("close searching"),
+            })
         end,
     }
     if regex and isSlowRegex(text) then

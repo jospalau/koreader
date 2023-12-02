@@ -245,8 +245,13 @@ getSessionStats = function (footer)
         --local percentage_session = footer.pageno/total_pages
         local percentage_session = pages_read_session/total_pages
         local wpm_session = 0
+
+        -- Just to calculate the sesssion wpm I will assume the WPP to be calculated with the books number of words/syntetic pages for the configuration
+        local title_pages = footer.ui.document._document:getDocumentProps().title
+        local title_words = title_pages:match("([0-9,]+w)"):gsub("w",""):gsub(",","")
+        WPP_SESSION = math.floor((title_words/footer.pages * 100) / 100)
         if pages_read_session > 0 then
-            wpm_session = math.floor(((pages_read_session * WPP)/((os.time() - session_started)/60))* 100) / 100
+            wpm_session = math.floor(((pages_read_session * WPP_SESSION)/((os.time() - session_started)/60))* 100) / 100
         end
 
         local words_session = pages_read_session * WPP

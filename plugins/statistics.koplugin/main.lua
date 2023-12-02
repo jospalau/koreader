@@ -2975,23 +2975,6 @@ function ReaderStatistics:onPageUpdate(pageno)
         pageno = self.curr_page -- avoid issues in following code
     end
 
-    self.pageturn_count = self.pageturn_count + 1
-    self._total_words = self._last_nbwords + self._total_words
-    self._total_chars = self._last_nbchars + self._total_chars
-    -- print("\nwords" .. self._total_words/self._pages_turned)
-    -- Not using this anymore, affects when searching text turning pages, highlight is lost
-    -- local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
-    local nbwords = 0
-    local nbcharacters = 0
-    if res and res.text then
-        local words = splitToWords(res.text) -- contar palabras
-        local characters = res.text -- contar caracteres
-        -- logger.warn(words)
-        nbwords = #words -- # es equivalente a string.len()
-        nbcharacters = #characters
-    end
-    self._last_nbwords = nbwords
-    self._last_nbchars = nbcharacters
 
     local now_ts = os.time()
 
@@ -3022,6 +3005,12 @@ function ReaderStatistics:onPageUpdate(pageno)
         end
         -- Update the tuple with the computed duration
         data_tuple[2] = curr_duration + diff_time
+
+        -- This to be done only when computing a page obviusly
+        self._total_words = self._last_nbwords + self._total_words
+        self._total_chars = self._last_nbchars + self._total_chars
+
+
     elseif diff_time > self.settings.max_sec then
         self.mem_read_time = self.mem_read_time + self.settings.max_sec
         if #page_data == 1 and curr_duration == 0 then
@@ -3029,6 +3018,26 @@ function ReaderStatistics:onPageUpdate(pageno)
         end
         -- Update the tuple with the computed duration
         data_tuple[2] = curr_duration + self.settings.max_sec
+    end
+
+    -- To be done at the end
+    -- print("\nwords" .. self._total_words/self._pages_turned)
+    -- Not using this anymore, affects when searching text turning pages, highlight is lost
+    -- I modified readersearch.lua to set self.ui.searching so if the search windows is open I want count words
+    -- Count always if not searchin
+    if not self.ui.searching then
+        local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
+        local nbwords = 0
+        local nbcharacters = 0
+        if res and res.text then
+            local words = splitToWords(res.text) -- contar palabras
+            local characters = res.text -- contar caracteres
+            -- logger.warn(words)
+            nbwords = #words -- # es equivalente a string.len()
+            nbcharacters = #characters
+        end
+        self._last_nbwords = nbwords
+        self._last_nbchars = nbcharacters
     end
 
     if closing then
