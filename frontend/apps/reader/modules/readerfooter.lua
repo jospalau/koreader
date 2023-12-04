@@ -246,12 +246,13 @@ getSessionStats = function (footer)
         local percentage_session = pages_read_session/total_pages
         local wpm_session = 0
 
-        -- Just to calculate the sesssion wpm I will assume the WPP to be calculated with the books number of words/syntetic pages for the configuration
         local title_pages = footer.ui.document._document:getDocumentProps().title
         local title_words = title_pages:match("([0-9,]+w)"):gsub("w",""):gsub(",","")
+        -- Just to calculate the sesssion wpm I will assume the WPP to be calculated with the books number of words/syntetic pages for the configuration
+        -- Not accurate since pages we turn quick are counted when they should not
         WPP_SESSION = math.floor((title_words/footer.pages * 100) / 100)
         if pages_read_session > 0 then
-            wpm_session = math.floor(((pages_read_session * WPP_SESSION)/((os.time() - session_started)/60))* 100) / 100
+            wpm_session = math.floor(((pages_read_session * WPP)/((os.time() - session_started)/60))* 100) / 100
         end
 
         local words_session = pages_read_session * WPP
@@ -1795,7 +1796,8 @@ function ReaderFooter:onGetStyles()
     .. string.char(10) .. csss
     UIManager:show(InfoMessage:new{
         text = T(_(text)),
-        timeout = 15,
+        timeout = 20,
+        no_refresh_on_close = false,
         face = Font:getFace("myfont"),
         width = math.floor(Screen:getWidth() * 0.85),
     })
@@ -2080,6 +2082,7 @@ function ReaderFooter:onShowTextProperties()
     UIManager:show(InfoMessage:new{
         text = T(_(text)),
         timeout = 20,
+        no_refresh_on_close = false,
         face = Font:getFace("myfont"),
         width = math.floor(Screen:getWidth() * 0.85),
     })
