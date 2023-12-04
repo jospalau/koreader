@@ -71,7 +71,7 @@ local settingsList = {
     synchronize_code = {category="none", event="SynchronizeCode", title=_("Synchronize code"), general=true, separator=true},
     install_last_version = {category="none", event="InstallLastVersion", title=_("Install last KOReader version"), general=true, separator=true},
     synchronize_statistics = {category="none", event="SynchronizeStatistics", title=_("Synchronize statistics script"), general=true, separator=true},
-    toggle_ssh = {category="none", event="ToggleSSH", title=_("Toggle SSH service"), general=true, separator=true},
+    toggle_ssh = {category="none", event="ToggleSSH", title=_("Toggle SSH server"), general=true, separator=true},
     get_tbr = {category="none", event="GetTBR", title=_("Get TBR"), general=true, separator=true},
     sync_books = {category="none", event="SyncBooks", title=_("Synchronize Books"), general=true, separator=true},
     get_text_page = {category="none", event="GetTextPage", title=_("Get text page"), general=true, separator=true},
@@ -88,6 +88,7 @@ local settingsList = {
     print_clock_fbink = {category="none", event="PrintClockFbink", title=_("Print clock Fbink"), general=true, separator=true},
     print_duration_chapter_fbink = {category="none", event="PrintDurationChapterFbink", title=_("Print duration chapter Fbink"), general=true, separator=true},
     print_duration_next_chapter_fbink = {category="none", event="PrintDurationNextChapterFbink", title=_("Print duration next chapter Fbink"), general=true, separator=true},
+    toggle_rsyncd = {category="none", event="ToggleRsyncd", title=_("Toggle Rsyncd server"), general=true, separator=true},
     ----
 
     -- Device
@@ -318,6 +319,7 @@ local dispatcher_menu_order = {
     "synchronize_code",
     "install_last_version",
     "synchronize_statistics",
+    "toggle_ssh",
     "get_tbr",
     "sync_books",
     "get_text_page",
@@ -334,6 +336,7 @@ local dispatcher_menu_order = {
     "print_clock_fbink",
     "print_duration_chapter_fbink",
     "print_duration_next_chapter_fbink",
+    "toggle_rsyncd",
     ----
 
     -- Device

@@ -1366,6 +1366,31 @@ function ReaderFooter:onToggleSSH()
     end
 end
 
+function ReaderFooter:onToggleRsyncd()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen("/mnt/onboard/.adds/scripts/launchRsyncd.sh && echo $? || echo $?" )
+        else --Kindle
+            execute = io.popen("/mnt/us/scripts/launchRsyncd.sh && echo $? || echo $?" )
+        end
+
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
+
 function ReaderFooter:onSyncBooks()
     local InfoMessage = require("ui/widget/infomessage")
     local rv
