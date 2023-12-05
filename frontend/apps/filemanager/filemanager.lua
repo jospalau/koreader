@@ -1382,18 +1382,32 @@ function FileManager:onToggleSSH()
             NetworkMgr:turnOnWifiAndWaitForConnection()
         end
         local execute = nil
+        if not util.pathExists("/tmp/dropbear_koreader.pid") then
+            text = "Starting SSH Server"
+        else
+            text = "Stopping SSH Server"
+        end
         if Device:isKobo() then
-            execute = io.popen("/mnt/onboard/.adds/scripts/launchDropbear.sh && echo $? || echo $?" )
+            execute = "/mnt/onboard/.adds/scripts/launchDropbear.sh && echo $? || echo $?"
         else --Kindle
-            execute = io.popen("/mnt/us/scripts/launchDropbear.sh && echo $? || echo $?" )
+            execute = "/mnt/us/scripts/launchDropbear.sh && echo $? || echo $?"
         end
 
-        output = execute:read('*a')
+        if os.execute(execute) ~= 0 then
+            if not util.pathExists("/tmp/dropbear_koreader.pid") then
+                UIManager:show(InfoMessage:new{
+                    text = "Error starting SSH Server",
+                })
+            else
+                UIManager:show(InfoMessage:new{
+                    text = "Error stopping SSH Server",
+                })
+            end
+        end
         UIManager:show(InfoMessage:new{
-            text = T(_(output)),
+            text = T(_(text)),
             face = Font:getFace("myfont"),
         })
-
     end
 end
 
