@@ -1808,9 +1808,15 @@ function ReaderFooter:onPrintDurationNextChapterFbink()
         })
     end
 end
+function ReaderFooter:onToggleShowWpm()
+    local show_wpm = G_reader_settings:isTrue("show_wpm")
+    G_reader_settings:saveSetting("show_wpm", not show_wpm)
+end
+
 
 function ReaderFooter:onPrintWpmSessionFbink()
-    local percentage_session, pages_read_session, duration, wpm_session, words_session, duration_raw = getSessionStats(self)
+    local duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100
+    local wpm_session,_words_session = duration_raw
     if duration_raw == 0 then
         wpm_session = 0
         words_session = 0
@@ -1831,16 +1837,6 @@ function ReaderFooter:onPrintWpmSessionFbink()
             execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. wpm_session .. "\"")
         end
         output = execute:read('*a')
-        -- if Device:isKobo() then
-        --     execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=1150,right=50,format " .. duration)
-        -- else --Kindle
-        --     execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=1100,right=50,format " .. duration)
-        -- end
-        -- output = execute:read('*a')
-        -- UIManager:show(InfoMessage:new{
-        --     text = T(_(output)),
-        --     face = Font:getFace("myfont"),
-        -- })
     else
         local text = wpm_session
         UIManager:show(Notification:new{

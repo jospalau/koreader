@@ -3077,6 +3077,36 @@ function ReaderStatistics:onPageUpdate(pageno)
     else
         self.page_stat[pageno] = { { now_ts, 0 } }
     end
+
+    local show_wpm = G_reader_settings:isTrue("show_wpm")
+    local duration_raw =  math.floor(((os.time() - self.start_current_period)/60)* 100) / 100
+    if show_wpm  and duration_raw > 0 then
+        local wpm_session = math.floor(self._total_words/duration_raw)
+        local words_session = self._total_words
+        local wpm_session  = wpm_session .. "wpm"
+        local InfoMessage = require("ui/widget/infomessage")
+        local rv
+        local output = ""
+        if not Device:isAndroid() then
+            local execute = nil
+            if Device:isKobo() then
+                execute = os.execute("(sleep 1 && /mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. wpm_session .. "\")&")
+            else --Kindle
+                execute = os.execute("(sleep 1 && /mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. wpm_session .. "\")&")
+            end
+            -- local text = wpm_session
+            -- UIManager:show(Notification:new{
+            --     text = _(text),
+            -- })
+        else
+            local text = wpm_session
+            local UIManager = require("ui/uimanager")
+            local Notification = require("ui/widget/notification")
+            UIManager:show(Notification:new{
+                text = _(text),
+            })
+        end
+    end
 end
 
 -- For backward compatibility
