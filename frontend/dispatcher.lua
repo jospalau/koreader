@@ -88,6 +88,7 @@ local settingsList = {
     print_clock_fbink = {category="none", event="PrintClockFbink", title=_("Print clock Fbink"), general=true, separator=true},
     print_duration_chapter_fbink = {category="none", event="PrintDurationChapterFbink", title=_("Print duration chapter Fbink"), general=true, separator=true},
     print_duration_next_chapter_fbink = {category="none", event="PrintDurationNextChapterFbink", title=_("Print duration next chapter Fbink"), general=true, separator=true},
+    toggle_rsyncd = {category="none", event="ToggleRsyncdService", title=_("Toggle Rsyncd service"), general=true, separator=true},
     print_wpm_session_fbink = {category="none", event="PrintWpmSessionFbink", title=_("Print wpm session Fbink"), general=true, separator=true},
     ----
 

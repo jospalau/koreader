@@ -762,6 +762,8 @@ local footerTextGeneratorMap = {
         end
         pages_read_session =  footer.ui.statistics._total_pages
 
+        percentage_session = pages_read_session/footer.pages
+        percentage_session = math.floor(percentage_session*1000)/10
         return "S: " .. duration .. "(" .. percentage_session .. "%, " .. words_session .. ")"  .. "(" .. pages_read_session.. "p) " .. wpm_session .. "wpm"
    end,
    today_stats = function(footer)
@@ -2151,7 +2153,8 @@ function ReaderFooter:onShowTextProperties()
         wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
         words_session = self.ui.statistics._total_words
     end
-
+    percentage_session = pages_read_session/self.pages
+    percentage_session = math.floor(percentage_session*1000)/10
     pages_read_session =  self.ui.statistics._total_pages
     local line = "﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏"
     local point = "‣"

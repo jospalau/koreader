@@ -3132,11 +3132,8 @@ end
 function ReaderStatistics:onSuspend()
     self:insertDB()
     self:onReadingPaused()
-end
-
--- screensaver off
-function ReaderStatistics:onResume()
-    self.start_current_period = os.time()
+    -- Setting all this on suspend because for some reason Android and Kindle execution in onResume does not updates automatically
+    -- Not important in any case
     self._last_nbwords = 0
     self._total_words = 0
     local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
@@ -3152,6 +3149,11 @@ function ReaderStatistics:onResume()
     self._last_nbwords = nbwords
     self._last_nbchars = nbcharacters
     self._total_pages = 0
+end
+
+-- screensaver off
+function ReaderStatistics:onResume()
+    self.start_current_period = os.time()
     self:onReadingResumed()
 end
 
