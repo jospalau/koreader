@@ -118,10 +118,11 @@ end
 
 function ReaderStatistics:init()
     self._pages_turned = 0
-    self._total_chars = 0
-    self._total_words = 0
-    self._last_nbwords = 0
+    -- self._last_nbwords = 0 -- initialized in readerui.lua
     self._last_nbchars = 0
+    self._total_words = 0
+    self._total_chars = 0
+    self._total_pages = 0
 
     if self.document and self.document.is_pic then
         return -- disable in PIC documents
@@ -3009,6 +3010,7 @@ function ReaderStatistics:onPageUpdate(pageno)
         -- This to be done only when computing a page obviusly
         self._total_words = self._last_nbwords + self._total_words
         self._total_chars = self._last_nbchars + self._total_chars
+        self._total_pages = self._total_pages + 1
 
 
     elseif diff_time > self.settings.max_sec then
@@ -3135,6 +3137,21 @@ end
 -- screensaver off
 function ReaderStatistics:onResume()
     self.start_current_period = os.time()
+    self._last_nbwords = 0
+    self._total_words = 0
+    local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
+    local nbwords = 0
+    local nbcharacters = 0
+    if res and res.text then
+        local words = splitToWords(res.text) -- contar palabras
+        local characters = res.text -- contar caracteres
+        -- logger.warn(words)
+        nbwords = #words -- # es equivalente a string.len()
+        nbcharacters = #characters
+    end
+    self._last_nbwords = nbwords
+    self._last_nbchars = nbcharacters
+    self._total_pages = 0
     self:onReadingResumed()
 end
 

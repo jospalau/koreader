@@ -261,7 +261,13 @@ getSessionStats = function (footer)
 
         percentage_session = math.floor(percentage_session*1000)/10
         local duration = datetime.secondsToClockDuration(user_duration_format, os.time() - session_started, true)
-        return percentage_session, pages_read_session, duration, wpm_session, words_session
+
+
+        local duration_raw =  math.floor(((os.time() - session_started)/60)* 100) / 100
+        if duration_raw == nil then
+            duration_raw = 0
+        end
+        return percentage_session, pages_read_session, duration, wpm_session, words_session, duration_raw
     end
 getTodayBookStats = function ()
     local now_stamp = os.time()
@@ -746,8 +752,16 @@ local footerTextGeneratorMap = {
         return font_face .. "-" ..  "S: " .. font_size .. "px, " .. font_size_pt .. "pt, " .. font_size_mm .. "mm - L: " ..  nblines .. "- W: " .. nbwords .. "- C: " .. nbcharacters .. " (CFL: " .. nbwords2 .. ")"
     end,
     session_stats = function(footer)
-        local percentage_session, pages_read_session, duration, wpm_session, words_session = getSessionStats(footer)
-        logger.warn(percentage_session)
+        local percentage_session, pages_read_session, duration, wpm_session, words_session, duration_raw = getSessionStats(footer)
+        if duration_raw == 0 then
+            wpm_session = 0
+            words_session = 0
+        else
+            wpm_session = math.floor(footer.ui.statistics._total_words/duration_raw)
+            words_session = footer.ui.statistics._total_words
+        end
+        pages_read_session =  footer.ui.statistics._total_pages
+
         return "S: " .. duration .. "(" .. percentage_session .. "%, " .. words_session .. ")"  .. "(" .. pages_read_session.. "p) " .. wpm_session .. "wpm"
    end,
    today_stats = function(footer)
@@ -1792,6 +1806,49 @@ function ReaderFooter:onPrintDurationNextChapterFbink()
         })
     end
 end
+
+function ReaderFooter:onPrintWpmSessionFbink()
+    local percentage_session, pages_read_session, duration, wpm_session, words_session, duration_raw = getSessionStats(self)
+    if duration_raw == 0 then
+        wpm_session = 0
+        words_session = 0
+    else
+        wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
+        words_session = self.ui.statistics._total_words
+    end
+
+    wpm_session  = wpm_session .. "wpm"
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. wpm_session .. "\"")
+        else --Kindle
+            execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. wpm_session .. "\"")
+        end
+        output = execute:read('*a')
+        -- if Device:isKobo() then
+        --     execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=1150,right=50,format " .. duration)
+        -- else --Kindle
+        --     execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=1100,right=50,format " .. duration)
+        -- end
+        -- output = execute:read('*a')
+        -- UIManager:show(InfoMessage:new{
+        --     text = T(_(output)),
+        --     face = Font:getFace("myfont"),
+        -- })
+    else
+        local text = wpm_session
+        UIManager:show(Notification:new{
+            text = _(text),
+        })
+    end
+end
+
+
+
 function ReaderFooter:onGetStyles()
     local css_text = self.ui.document:getDocumentFileContent("OPS/styles/stylesheet.css")
     if css_text == nil then
@@ -2055,7 +2112,7 @@ function ReaderFooter:onShowTextProperties()
     local avg_chars_cal = math.floor(avg_words_cal * 5.7)
     local avg_chars_per_word_cal = math.floor((avg_chars_cal/avg_words_cal) * 100) / 100
 
-    local percentage_session, pages_read_session, duration, wpm_session, words_session = getSessionStats(self)
+    local percentage_session, pages_read_session, duration, wpm_session, words_session, duration_raw = getSessionStats(self)
     local progress_book = ("%d de %d"):format(self.pageno, self.pages)
     local string_percentage  = "%0.f%%"
     local percentage = string_percentage:format(self.progress_bar.percentage * 100)
@@ -2087,6 +2144,15 @@ function ReaderFooter:onShowTextProperties()
     end
     local clock ="⌚ " ..  datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
 
+    if duration_raw == 0 then
+        wpm_session = 0
+        words_session = 0
+    else
+        wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
+        words_session = self.ui.statistics._total_words
+    end
+
+    pages_read_session =  self.ui.statistics._total_pages
     local line = "﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏"
     local point = "‣"
     local important = " \u{261C}"

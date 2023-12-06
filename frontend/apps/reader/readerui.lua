@@ -510,8 +510,34 @@ function ReaderUI:init()
         logger.err("ReaderUI instance mismatch! Opened", tostring(self), "while we still have an existing instance:", tostring(ReaderUI.instance), debug.traceback())
     end
     ReaderUI.instance = self
+    local res = self.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
+    local nbwords = 0
+    local nbcharacters = 0
+    if res and res.text then
+        local words = splitToWords(res.text) -- contar palabras
+        local characters = res.text -- contar caracteres
+        -- logger.warn(words)
+        nbwords = #words -- # es equivalente a string.len()
+        nbcharacters = #characters
+    end
+    self.statistics._last_nbwords = nbwords
 end
 
+
+-- Like util.splitWords(), but not capturing space and punctuations
+function splitToWords(text)
+    local wlist = {}
+    for word in util.gsplit(text, "[%s%p]+", false) do
+        if util.hasCJKChar(word) then
+            for char in util.gsplit(word, "[\192-\255][\128-\191]+", true) do
+                table.insert(wlist, char)
+            end
+        else
+            table.insert(wlist, word)
+        end
+    end
+    return wlist
+end
 function ReaderUI:registerKeyEvents()
     if Device:hasKeys() then
         self.key_events.Home = { { "Home" } }
