@@ -259,13 +259,7 @@ common_settings.night_mode = {
 }
 
 
-common_settings.show_wpm = {
-    text = _("Show wpm"),
-    checked_func = function() return G_reader_settings:isTrue("show_wpm") end,
-    callback = function()
-        UIManager:broadcastEvent(Event:new("ToggleShowWpm"))
-    end
-}
+
 common_settings.network = {
     text = _("Network"),
 }

@@ -2378,7 +2378,13 @@ function ReaderFooter:addToMainMenu(menu_items)
         text = _("Status bar"),
         sub_item_table = sub_items,
     }
-
+    menu_items.show_wpm = {
+        text = _("Show wpm"),
+        checked_func = function() return G_reader_settings:isTrue("show_wpm") end,
+        callback = function()
+            UIManager:broadcastEvent(Event:new("ToggleShowWpm"))
+        end
+    }
     -- menu item to fake footer tapping when touch area is disabled
     local settings_submenu_num = 1
     local DTAP_ZONE_MINIBAR = G_defaults:readSetting("DTAP_ZONE_MINIBAR")
