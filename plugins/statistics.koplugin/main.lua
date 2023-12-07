@@ -500,6 +500,20 @@ local STATISTICS_DB_PAGE_STAT_VIEW_SCHEMA = [[
         );
 ]]
 
+
+local STATISTICS_DB_WPM = [[
+    CREATE TABLE IF NOT EXISTS wpm_stat_data
+        (
+            id_book     integer,
+            start_time  integer NOT NULL DEFAULT 0,
+            duration    integer NOT NULL DEFAULT 0,
+            total_pages integer NOT NULL DEFAULT 0,
+            wpm         integer NOT NULL DEFAULT 0,
+            UNIQUE (id_book, start_time),
+            FOREIGN KEY(id_book) REFERENCES book(id)
+        );
+]]
+
 function ReaderStatistics:createDB(conn)
     -- Make it WAL, if possible
     if Device:canUseWAL() then
@@ -536,6 +550,7 @@ function ReaderStatistics:createDB(conn)
     -- page_stat_data
     conn:exec(STATISTICS_DB_PAGE_STAT_DATA_SCHEMA)
     conn:exec(STATISTICS_DB_PAGE_STAT_DATA_INDEX)
+    conn:exec(STATISTICS_DB_WPM)
 
     -- page_stat view
     conn:exec(STATISTICS_DB_PAGE_STAT_VIEW_SCHEMA)
@@ -938,6 +953,28 @@ function ReaderStatistics:onBookMetadataChanged(prop_updated)
     conn:close()
 end
 
+
+function ReaderStatistics:insertDBSessionStats()
+
+    if not (self.id_curr_book and self.is_doc_not_frozen) then
+        return
+    end
+    local id_book = self.id_curr_book
+
+    local duration_raw =  math.floor(((os.time() - self.start_current_period)/60)* 100) / 100
+    local wpm_session = math.floor(self._total_words/duration_raw)
+    if duration_raw > 0 then
+        local conn = SQ3.open(db_location)
+        conn:exec('BEGIN;')
+        local stmt = conn:prepare("INSERT OR IGNORE INTO wpm_stat_data VALUES(?, ?, ?, ?, ?);")
+        stmt:reset():bind(id_book, self.start_current_period, duration_raw, self._total_pages, wpm_session):step()
+        conn:exec('COMMIT;')
+        stmt:close()
+        conn:close()
+    end
+
+
+end
 function ReaderStatistics:insertDB(updated_pagecount)
     if not (self.id_curr_book and self.is_doc_not_frozen) then
         return
@@ -3127,6 +3164,7 @@ end
 function ReaderStatistics:onCloseDocument()
     self:onPageUpdate(false) -- update current page duration
     self:insertDB()
+    self:insertDBSessionStats()
 end
 
 function ReaderStatistics:onAddHighlight()
@@ -3161,6 +3199,7 @@ end
 -- in case when screensaver starts
 function ReaderStatistics:onSuspend()
     self:insertDB()
+    self:insertDBSessionStats()
     self:onReadingPaused()
 end
 
