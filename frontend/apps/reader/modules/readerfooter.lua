@@ -2188,7 +2188,7 @@ function ReaderFooter:onShowTextProperties()
     local point = "‣"
     local important = " \u{261C}"
 
-    local text = sessions .. string.char(10) .. clock .. " " .. title_pages .. string.char(10) .. string.char(10)
+    local text = "Total sessions in db: " .. sessions .. string.char(10) .. string.char(10) .. clock .. " " .. title_pages .. string.char(10) .. string.char(10)
     .. point .. " Progress book: " .. progress_book .. " (" .. percentage .. ")" ..  string.char(10)
     .. point .. " Left chapter " .. chapter .. ": " .. left_chapter  .. important .. string.char(10)
     .. line .. string.char(10)  .. string.char(10)
