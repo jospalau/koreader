@@ -192,6 +192,36 @@ local splitToWords = function(text)
     return wlist
 end
 
+
+getSessions = function (footer)
+    local DataStorage = require("datastorage")
+    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    if not footer.ui.statistics then
+        return "n/a"
+    end
+    local session_started = footer.ui.statistics.start_current_period
+    local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
+    -- best to e it to letters, to get '2m' ?
+    user_duration_format = "letters"
+
+    -- No necesitamos el id del libro para poder traer las páginas en la sesión actual
+    local id_book = footer.ui.statistics.id_curr_book
+    if id_book == nil then
+        id_book = 0
+    end
+
+    local conn = SQ3.open(db_location)
+    local sql_stmt ="SELECT count(id_book) AS sessions FROM wpm_stat_data"
+    local sessions = conn:rowexec(sql_stmt)
+    conn:close()
+    if sessions == nil then
+        sessions = 0
+    end
+    sessions = tonumber(sessions)
+
+    return sessions
+end
+
 getSessionStats = function (footer)
         local DataStorage = require("datastorage")
         local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
@@ -2152,11 +2182,13 @@ function ReaderFooter:onShowTextProperties()
     percentage_session = pages_read_session/self.pages
     percentage_session = math.floor(percentage_session*1000)/10
     pages_read_session =  self.ui.statistics._total_pages
+
+    local sessions = tostring(getSessions(self))
     local line = "﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏"
     local point = "‣"
     local important = " \u{261C}"
 
-    local text = string.char(10) .. clock .. " " .. title_pages .. string.char(10) .. string.char(10)
+    local text = sessions .. string.char(10) .. clock .. " " .. title_pages .. string.char(10) .. string.char(10)
     .. point .. " Progress book: " .. progress_book .. " (" .. percentage .. ")" ..  string.char(10)
     .. point .. " Left chapter " .. chapter .. ": " .. left_chapter  .. important .. string.char(10)
     .. line .. string.char(10)  .. string.char(10)

@@ -954,6 +954,7 @@ function ReaderStatistics:onBookMetadataChanged(prop_updated)
 end
 
 
+-- Keep track of sessions that have been running for at least 5 minutes
 function ReaderStatistics:insertDBSessionStats()
 
     if not (self.id_curr_book and self.is_doc_not_frozen) then
@@ -961,16 +962,37 @@ function ReaderStatistics:insertDBSessionStats()
     end
     local id_book = self.id_curr_book
 
-    local duration_raw =  math.floor(((os.time() - self.start_current_period)/60)* 100) / 100
-    local wpm_session = math.floor(self._total_words/duration_raw)
-    if duration_raw > 0 then
+    local duration_raw =  math.floor((os.time() - self.start_current_period))
+    local duration_raw_mins =  math.floor(((os.time() - self.start_current_period)/60)* 100) / 100
+    local wpm_session = math.floor(self._total_words/duration_raw_mins)
+    if duration_raw > 300 then
+        local UIManager = require("ui/uimanager")
+        local Notification = require("ui/widget/notification")
+
         local conn = SQ3.open(db_location)
-        conn:exec('BEGIN;')
-        local stmt = conn:prepare("INSERT OR IGNORE INTO wpm_stat_data VALUES(?, ?, ?, ?, ?);")
+        -- conn:exec('BEGIN;')
+        local stmt = conn:prepare("INSERT INTO wpm_stat_data VALUES(?, ?, ?, ?, ?);")
         stmt:reset():bind(id_book, self.start_current_period, duration_raw, self._total_pages, wpm_session):step()
-        conn:exec('COMMIT;')
+        -- conn:exec('COMMIT;')
         stmt:close()
         conn:close()
+        -- local UIManager = require("ui/uimanager")
+        -- local Notification = require("ui/widget/notification")
+        -- UIManager:show(Notification:new{
+        --     text = _(tostring(id_book)),
+        -- })
+        -- UIManager:show(Notification:new{
+        --     text = _(tostring( self.start_current_period)),
+        -- })
+        -- UIManager:show(Notification:new{
+        --     text = _(tostring(duration_raw)),
+        -- })
+        -- UIManager:show(Notification:new{
+        --     text = _(tostring(self._total_pages)),
+        -- })
+        -- UIManager:show(Notification:new{
+        --     text = _(tostring(wpm_session)),
+        -- })
     end
 
 
