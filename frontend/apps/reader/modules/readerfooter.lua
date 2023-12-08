@@ -193,7 +193,7 @@ local splitToWords = function(text)
 end
 
 
-getSessions = function (footer)
+getSessionsInfo = function (footer)
     local DataStorage = require("datastorage")
     local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
     if not footer.ui.statistics then
@@ -213,13 +213,19 @@ getSessions = function (footer)
     local conn = SQ3.open(db_location)
     local sql_stmt ="SELECT count(id_book) AS sessions FROM wpm_stat_data"
     local sessions = conn:rowexec(sql_stmt)
+    local sql_stmt ="SELECT avg(wpm) FROM wpm_stat_data"
+    local avg_wpm = conn:rowexec(sql_stmt)
+
     conn:close()
     if sessions == nil then
         sessions = 0
     end
     sessions = tonumber(sessions)
 
-    return sessions
+    if avg_wpm == nil then
+        avg_wpm = 0
+    end
+    return sessions, avg_wpm
 end
 
 getSessionStats = function (footer)
@@ -2183,12 +2189,16 @@ function ReaderFooter:onShowTextProperties()
     percentage_session = math.floor(percentage_session*1000)/10
     pages_read_session =  self.ui.statistics._total_pages
 
-    local sessions = tostring(getSessions(self))
+    local sessions, avg_wpm = getSessionsInfo(self)
+
+    avg_wpm = math.floor(avg_wpm) .. "wpm" .. ", " .. math.floor(avg_wpm*60) .. "wph"
     local line = "﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏"
     local point = "‣"
     local important = " \u{261C}"
 
-    local text = "Total sessions in db: " .. sessions .. string.char(10) .. string.char(10) .. clock .. " " .. title_pages .. string.char(10) .. string.char(10)
+    local text = "Total sessions in db: " .. tostring(sessions) .. string.char(10)
+    .. "Avg wpm and wph in all sessions: " .. avg_wpm .. string.char(10) .. string.char(10)
+    .. clock .. " " .. title_pages .. string.char(10) .. string.char(10)
     .. point .. " Progress book: " .. progress_book .. " (" .. percentage .. ")" ..  string.char(10)
     .. point .. " Left chapter " .. chapter .. ": " .. left_chapter  .. important .. string.char(10)
     .. line .. string.char(10)  .. string.char(10)
