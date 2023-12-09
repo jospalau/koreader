@@ -30,7 +30,8 @@ local T = FFIUtil.template
 
 local statistics_dir = DataStorage:getDataDir() .. "/statistics/"
 local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
-local MAX_PAGETURNS_BEFORE_FLUSH = -1
+-- local MAX_PAGETURNS_BEFORE_FLUSH = -1
+local MAX_PAGETURNS_BEFORE_FLUSH = 50
 local DEFAULT_MIN_READ_SEC = 5
 local DEFAULT_MAX_READ_SEC = 120
 local DEFAULT_CALENDAR_START_DAY_OF_WEEK = 2 -- Monday
@@ -3116,6 +3117,9 @@ function ReaderStatistics:onPageUpdate(pageno)
             -- insertDB will call resetVolatileStats for us ;)
         end)
     end
+    -- Footer to be updated always. Sesssion info got from memory now
+    -- No need to update db every time
+    self.view.footer:onUpdateFooter(true)
 
     -- Update average time per page (if need be, insertDB will have updated the totals and cleared the volatiles)
     -- NOTE: Until insertDB runs, while book_read_pages only counts *distinct* pages,

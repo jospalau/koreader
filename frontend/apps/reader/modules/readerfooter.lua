@@ -2017,6 +2017,7 @@ function ReaderFooter:onShowTextProperties()
     if not self.ui.statistics.data.pages then
         return "n/a"
     end
+    self.ui.statistics:insertDB()
     local avg_words = 0
     local avg_chars = 0
     local avg_chars_per_word = 0
