@@ -124,6 +124,23 @@ function ReaderStatistics:init()
     self._total_words = 0
     self._total_chars = 0
     self._total_pages = 0
+    self.devices = {
+        ["Kobo_io"] = 1, -- Kobo Libra 2
+        ["Kobo_cadmus"] = 2, -- Kobo Sage
+        ["Kobo_goldfinch"] = 3, -- Kobo Clara 2E
+        ["KindlePaperWhite5"] = 4,
+        ["ditingp_global"] = 5, -- Xiaomi
+        ["boox"] = 6
+    }
+
+    -- local UIManager = require("ui/uimanager")
+    -- local Notification = require("ui/widget/notification")
+    -- UIManager:show(Notification:new{
+    --     text = _(tostring(self.devices["device2"])),
+    -- })
+    -- UIManager:show(Notification:new{
+    --     text = _(Device.model),
+    -- })
 
     if self.document and self.document.is_pic then
         return -- disable in PIC documents
@@ -510,6 +527,7 @@ local STATISTICS_DB_WPM = [[
             duration    integer NOT NULL DEFAULT 0,
             total_pages integer NOT NULL DEFAULT 0,
             wpm         integer NOT NULL DEFAULT 0,
+            id_device   integer NOT NULL DEFAULT 0,
             UNIQUE (id_book, start_time),
             FOREIGN KEY(id_book) REFERENCES book(id)
         );
@@ -972,8 +990,8 @@ function ReaderStatistics:insertDBSessionStats()
 
         local conn = SQ3.open(db_location)
         -- conn:exec('BEGIN;')
-        local stmt = conn:prepare("INSERT INTO wpm_stat_data VALUES(?, ?, ?, ?, ?);")
-        stmt:reset():bind(id_book, self.start_current_period, duration_raw, self._total_pages, wpm_session):step()
+        local stmt = conn:prepare("INSERT INTO wpm_stat_data VALUES(?, ?, ?, ?, ?, ?);")
+        stmt:reset():bind(id_book, self.start_current_period, duration_raw, self._total_pages, wpm_session, self.devices[Device.model]):step()
         -- conn:exec('COMMIT;')
         stmt:close()
         conn:close()
