@@ -1525,7 +1525,7 @@ function FileManager:onShowDbStats()
         if Device:isKobo() then
             execute = io.popen("(cd /mnt/onboard/.adds/scripts/statsKOReaderDB && /mnt/onboard/.adds/scripts/statsKOReaderDB/stats.sh)")
         else --Kindle
-            execute = io.popen("/mnt/us/scripts/statsKOReaderDB/stats.sh && echo $? || echo $?" )
+            execute = io.popen("(cd /mnt/us/scripts/statsKOReaderDB && /mnt/us/scripts/statsKOReaderDB/stats.sh)")
         end
 
         output = execute:read('*a')
