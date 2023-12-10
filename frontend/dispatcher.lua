@@ -54,7 +54,7 @@ local settingsList = {
     history = {category="none", event="ShowHist", title=_("History"), general=true},
     history_search = {category="none", event="SearchHistory", title=_("History search"), general=true},
     favorites = {category="none", event="ShowColl", arg="favorites", title=_("Favorites"), general=true},
-    open_random_favorite = {category="none", event="OpenRandomFav", title=_("Open random book MBR"), general=true},
+    -- open_random_favorite = {category="none", event="OpenRandomFav", title=_("Open random book MBR"), general=true},
     filemanager = {category="none", event="Home", title=_("File browser"), general=true, separator=true},
     filemanager_scripts = {category="none", event="Scripts", title=_("File browser scripts"), general=true, separator=true},
 

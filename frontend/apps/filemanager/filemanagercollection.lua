@@ -71,7 +71,7 @@ function FileManagerCollection:onMenuHold(item)
     table.insert(buttons, {
         filemanagerutil.genResetSettingsButton(file, close_dialog_update_callback, is_currently_opened),
         {
-            text = _("Remove from MBR"),
+            text = _("Remove from favorites"),
             callback = function()
                 UIManager:close(self.collfile_dialog)
                 ReadCollection:removeItem(file, self.collection_name)
@@ -159,7 +159,7 @@ function FileManagerCollection:showCollDialog()
             end,
         }},
         {{
-            text = _("Add a book to MBR"),
+            text = _("Add a book to favorites"),
             callback = function()
                 UIManager:close(coll_dialog)
                 local PathChooser = require("ui/widget/pathchooser")

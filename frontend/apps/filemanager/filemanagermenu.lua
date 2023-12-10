@@ -140,27 +140,27 @@ function FileManagerMenu:onOpenLastDoc()
     ReaderUI:showReader(last_file)
 end
 
-function FileManagerMenu:onOpenRandomFav()
-    local random_file = require("readcollection"):OpenRandomFav()
-    if not random_file or lfs.attributes(random_file, "mode") ~= "file" then
-        local InfoMessage = require("ui/widget/infomessage")
-        UIManager:show(InfoMessage:new{
-            text = _("Cannot open random file"),
-        })
-        return
-    end
+-- function FileManagerMenu:onOpenRandomFav()
+--     local random_file = require("readcollection"):OpenRandomFav()
+--     if not random_file or lfs.attributes(random_file, "mode") ~= "file" then
+--         local InfoMessage = require("ui/widget/infomessage")
+--         UIManager:show(InfoMessage:new{
+--             text = _("Cannot open random file"),
+--         })
+--         return
+--     end
 
-    -- Only close menu if we were called from the menu
-    if self.menu_container then
-        -- Mimic's FileManager's onShowingReader refresh optimizations
-        self.ui.tearing_down = true
-        self.ui.dithered = nil
-        self:onCloseFileManagerMenu()
-    end
+--     -- Only close menu if we were called from the menu
+--     if self.menu_container then
+--         -- Mimic's FileManager's onShowingReader refresh optimizations
+--         self.ui.tearing_down = true
+--         self.ui.dithered = nil
+--         self:onCloseFileManagerMenu()
+--     end
 
-    local ReaderUI = require("apps/reader/readerui")
-    ReaderUI:showReader(random_file)
-end
+--     local ReaderUI = require("apps/reader/readerui")
+--     ReaderUI:showReader(random_file)
+-- end
 
 
 function FileManagerMenu:setUpdateItemTable()
@@ -838,33 +838,33 @@ Tap a book in the search results to open it.]]),
             })
         end
     }
-    self.menu_items.open_random_favorite = {
-        text_func = function()
-            local random_file = require("readcollection"):OpenRandomFav()
-            if not G_reader_settings:isTrue("open_last_menu_show_filename") or not random_file then
-                return _("Open random MBR book")
-            end
-            local path, file_name = util.splitFilePathName(random_file) -- luacheck: no unused
-            return T(_("Previous: %1"), BD.filename(file_name))
-        end,
-        enabled_func = function()
-            return require("readcollection"):OpenRandomFav() ~= nil
-        end,
-        callback = function()
-            self:onOpenRandomFav()
-        end,
-        hold_callback = function()
-            local previous_file = self:getRandomFav()
-            UIManager:show(ConfirmBox:new{
-                text = T(_("Would you like to open the previous document: %1?"), BD.filepath(previous_file)),
-                ok_text = _("OK"),
-                ok_callback = function()
-                    self.ui:switchDocument(previous_file)
-                end,
-            })
-        end
-    }
-    -- insert common info
+    -- self.menu_items.open_random_favorite = {
+    --     text_func = function()
+    --         local random_file = require("readcollection"):OpenRandomFav()
+    --         if not G_reader_settings:isTrue("open_last_menu_show_filename") or not random_file then
+    --             return _("Open random MBR book")
+    --         end
+    --         local path, file_name = util.splitFilePathName(random_file) -- luacheck: no unused
+    --         return T(_("Previous: %1"), BD.filename(file_name))
+    --     end,
+    --     enabled_func = function()
+    --         return require("readcollection"):OpenRandomFav() ~= nil
+    --     end,
+    --     callback = function()
+    --         self:onOpenRandomFav()
+    --     end,
+    --     hold_callback = function()
+    --         local previous_file = self:getRandomFav()
+    --         UIManager:show(ConfirmBox:new{
+    --             text = T(_("Would you like to open the previous document: %1?"), BD.filepath(previous_file)),
+    --             ok_text = _("OK"),
+    --             ok_callback = function()
+    --                 self.ui:switchDocument(previous_file)
+    --             end,
+    --         })
+    --     end
+    -- }
+    -- -- insert common info
     for id, common_setting in pairs(dofile("frontend/ui/elements/common_info_menu_table.lua")) do
         self.menu_items[id] = common_setting
     end

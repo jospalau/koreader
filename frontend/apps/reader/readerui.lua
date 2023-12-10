@@ -938,9 +938,9 @@ function ReaderUI:onOpenLastDoc()
     self:switchDocument(self.menu:getPreviousFile())
 end
 
-function ReaderUI:onOpenRandomFav()
-    self:switchDocument(self.menu:getRandomFav())
-end
+-- function ReaderUI:onOpenRandomFav()
+--     self:switchDocument(self.menu:getRandomFav())
+-- end
 
 function ReaderUI:getCurrentPage()
     return self.paging and self.paging.current_page or self.document:getCurrentPage()
