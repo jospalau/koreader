@@ -225,15 +225,15 @@ end
 
 function filemanagerutil.genAddRemoveFavoritesButton(file, caller_callback, button_disabled)
     local ReadCollection = require("readcollection")
-    local is_added = ReadCollection:checkItemExist(file)
+    local has_file = ReadCollection:hasFile(file)
     return {
         text_func = function()
-            return is_added and _("Remove from MBR") or _("Add to MBR")
+            return has_file and _("Remove from favorites") or _("Add to favorites")
         end,
         enabled = not button_disabled,
         callback = function()
             caller_callback()
-            if is_added then
+            if has_file then
                 ReadCollection:removeItem(file)
             else
                 ReadCollection:addItem(file)
