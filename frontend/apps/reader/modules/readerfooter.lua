@@ -1432,7 +1432,7 @@ function ReaderFooter:onToggleSSH()
     end
 end
 
-function ReaderFooter:onToggleRsyncd()
+function ReaderFooter:onToggleRsyncdService()
     local InfoMessage = require("ui/widget/infomessage")
     local rv
     local output = ""
@@ -1456,6 +1456,7 @@ function ReaderFooter:onToggleRsyncd()
 
     end
 end
+
 
 function ReaderFooter:onSyncBooks()
     local InfoMessage = require("ui/widget/infomessage")

@@ -1490,7 +1490,7 @@ function FileManager:onToggleSSH()
     end
 end
 
-function FileManager:onToggleRsyncd()
+function FileManager:onToggleRsyncdService()
     local InfoMessage = require("ui/widget/infomessage")
     local rv
     local output = ""
@@ -1504,6 +1504,28 @@ function FileManager:onToggleRsyncd()
             execute = io.popen("/mnt/onboard/.adds/scripts/launchRsyncd.sh && echo $? || echo $?" )
         else --Kindle
             execute = io.popen("/mnt/us/scripts/launchRsyncd.sh && echo $? || echo $?" )
+        end
+
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
+
+
+function FileManager:onShowDbStats()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen("(cd /mnt/onboard/.adds/scripts/statsKOReaderDB && /mnt/onboard/.adds/scripts/statsKOReaderDB/stats.sh)")
+        else --Kindle
+            execute = io.popen("/mnt/us/scripts/statsKOReaderDB/stats.sh && echo $? || echo $?" )
         end
 
         output = execute:read('*a')

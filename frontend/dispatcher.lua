@@ -90,6 +90,7 @@ local settingsList = {
     print_duration_next_chapter_fbink = {category="none", event="PrintDurationNextChapterFbink", title=_("Print duration next chapter Fbink"), general=true, separator=true},
     toggle_rsyncd = {category="none", event="ToggleRsyncdService", title=_("Toggle Rsyncd service"), general=true, separator=true},
     print_wpm_session_fbink = {category="none", event="PrintWpmSessionFbink", title=_("Print wpm session Fbink"), general=true, separator=true},
+    show_db_stats = {category="none", event="ShowDbStats", title=_("Show db stats"), general=true, separator=true},
     ----
 
     -- Device
@@ -339,6 +340,7 @@ local dispatcher_menu_order = {
     "print_duration_next_chapter_fbink",
     "toggle_rsyncd",
     "print_wpm_session_fbink",
+    "show_db_stats",
     ----
 
     -- Device
