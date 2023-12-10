@@ -303,7 +303,7 @@ local dispatcher_menu_order = {
     "history",
     "history_search",
     "favorites",
-    "open_random_favorite",
+    -- "open_random_favorite",
     "filemanager",
     "filemanager_scripts",
 
