@@ -66,6 +66,9 @@ local ReaderStatistics = Widget:extend{
     name = "statistics",
     start_current_period = 0,
     preserved_start_current_period = nil, -- should stay a class property
+    preserved_pages_turned = nil,
+    preserved_total_pages = nil,
+    preserved_total_words = nil,
     curr_page = 0,
     id_curr_book = nil,
     is_enabled = nil,
@@ -166,6 +169,20 @@ function ReaderStatistics:init()
     if ReaderStatistics.preserved_start_current_period then
         self.start_current_period = ReaderStatistics.preserved_start_current_period
         ReaderStatistics.preserved_start_current_period = nil
+    end
+    if ReaderStatistics.preserved_pages_turned then
+        self._pages_turned = ReaderStatistics.preserved_pages_turned
+        ReaderStatistics.preserved_pages_turned = nil
+    end
+
+    if ReaderStatistics.preserved_total_pages then
+        self._total_pages = ReaderStatistics.preserved_total_pages
+        ReaderStatistics.preserved_total_pages = nil
+    end
+
+    if ReaderStatistics.preserved_total_words then
+        self._total_words = ReaderStatistics.preserved_total_words
+        ReaderStatistics.preserved_total_words = nil
     end
     self:resetVolatileStats()
 
@@ -302,6 +319,9 @@ end
 function ReaderStatistics:onPreserveCurrentSession()
     -- Can be called before ReaderUI:reloadDocument() to not reset the current session
     ReaderStatistics.preserved_start_current_period = self.start_current_period
+    ReaderStatistics.preserved_pages_turned = self._pages_turned
+    ReaderStatistics.preserved_total_pages = self._total_pages
+    ReaderStatistics.preserved_total_words = self._total_words
 end
 
 function ReaderStatistics:resetVolatileStats(now_ts)
