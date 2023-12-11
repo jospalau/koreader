@@ -65,6 +65,7 @@ local STATISTICS_SQL_BOOK_TOTALS_QUERY = [[
 local ReaderStatistics = Widget:extend{
     name = "statistics",
     start_current_period = 0,
+    preserve = nil,
     preserved_start_current_period = nil, -- should stay a class property
     preserved_pages_turned = nil,
     preserved_total_pages = nil,
@@ -166,6 +167,9 @@ function ReaderStatistics:init()
     }
 
     self.start_current_period = os.time()
+    if ReaderStatistics.preserve then
+        ReaderStatistics.preserve = nil
+    end
     if ReaderStatistics.preserved_start_current_period then
         self.start_current_period = ReaderStatistics.preserved_start_current_period
         ReaderStatistics.preserved_start_current_period = nil
@@ -318,6 +322,7 @@ end
 
 function ReaderStatistics:onPreserveCurrentSession()
     -- Can be called before ReaderUI:reloadDocument() to not reset the current session
+    ReaderStatistics.preserve = true
     ReaderStatistics.preserved_start_current_period = self.start_current_period
     ReaderStatistics.preserved_pages_turned = self._pages_turned
     ReaderStatistics.preserved_total_pages = self._total_pages
@@ -3228,7 +3233,9 @@ end
 function ReaderStatistics:onCloseDocument()
     self:onPageUpdate(false) -- update current page duration
     self:insertDB()
-    self:insertDBSessionStats()
+    if not ReaderStatistics.preserve then -- Not save session when adjusting configuration which forces document reopening
+        self:insertDBSessionStats()
+    end
 end
 
 function ReaderStatistics:onAddHighlight()
