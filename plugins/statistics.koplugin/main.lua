@@ -553,6 +553,7 @@ local STATISTICS_DB_WPM = [[
             total_pages integer NOT NULL DEFAULT 0,
             wpm         integer NOT NULL DEFAULT 0,
             id_device   integer NOT NULL DEFAULT 0,
+            font_name   TEXT    NULL,
             UNIQUE (id_book, start_time),
             FOREIGN KEY(id_book) REFERENCES book(id)
         );
@@ -1015,8 +1016,8 @@ function ReaderStatistics:insertDBSessionStats()
 
         local conn = SQ3.open(db_location)
         -- conn:exec('BEGIN;')
-        local stmt = conn:prepare("INSERT INTO wpm_stat_data VALUES(?, ?, ?, ?, ?, ?);")
-        stmt:reset():bind(id_book, self.start_current_period, duration_raw, self._total_pages, wpm_session, self.devices[Device.model]):step()
+        local stmt = conn:prepare("INSERT INTO wpm_stat_data VALUES(?, ?, ?, ?, ?, ?, ?);")
+        stmt:reset():bind(id_book, self.start_current_period, duration_raw, self._total_pages, wpm_session, self.devices[Device.model], self.ui.document._document:getFontFace()):step()
         -- conn:exec('COMMIT;')
         stmt:close()
         conn:close()
