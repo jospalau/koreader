@@ -1165,12 +1165,13 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                     Dispatcher:execute({[v.key] = settings[v.key]})
                     if keep_open_on_apply and not util.stringStartsWith(v.key, "touch_input") then
                         -- quickmenu:setTitle(title)
+                        local current_dpi = G_reader_settings:readSetting("screen_dpi")
                         if not Device:isAndroid() and not Device:isKindle() then
                             Device:setScreenDPI(200)
                         end
                         UIManager:show(quickmenu)
                         if not Device:isAndroid() and not Device:isKindle() then
-                            Device:setScreenDPI(nil)
+                            Device:setScreenDPI(current_dpi)
                         end
                     end
                 end,
@@ -1186,6 +1187,8 @@ function Dispatcher:_showAsMenu(settings, exec_props)
     local ButtonDialog = require("ui/widget/buttondialog")
     local title = settings.settings.name -- or _("QuickMenu")
     local Font = require("ui/font")
+    local current_dpi = G_reader_settings:readSetting("screen_dpi")
+
     if not Device:isAndroid() and not Device:isKindle() then
         Device:setScreenDPI(200)
     end
@@ -1201,7 +1204,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
     }
     UIManager:show(quickmenu)
     if not Device:isAndroid() and not Device:isKindle() then
-        Device:setScreenDPI(nil)
+        Device:setScreenDPI(current_dpi)
     end
 end
 
