@@ -1010,7 +1010,7 @@ function ReaderStatistics:insertDBSessionStats()
     local duration_raw =  math.floor((os.time() - self.start_current_period))
     local duration_raw_mins =  math.floor(((os.time() - self.start_current_period)/60)* 100) / 100
     local wpm_session = math.floor(self._total_words/duration_raw_mins)
-    if duration_raw > 300 then
+    if duration_raw > 300 or self._total_pages > 5 then
         local UIManager = require("ui/uimanager")
         local Notification = require("ui/widget/notification")
 
@@ -3111,10 +3111,12 @@ function ReaderStatistics:onPageUpdate(pageno)
         -- Update the tuple with the computed duration
         data_tuple[2] = curr_duration + diff_time
 
-        -- This to be done only when computing a page obviusly
-        self._total_words = self._last_nbwords + self._total_words
-        self._total_chars = self._last_nbchars + self._total_chars
-        self._total_pages = self._total_pages + 1
+        -- This to be done only when computing a page obviously
+        if not closing then
+            self._total_words = self._last_nbwords + self._total_words
+            self._total_chars = self._last_nbchars + self._total_chars
+            self._total_pages = self._total_pages + 1
+        end
 
 
     elseif diff_time > self.settings.max_sec then
