@@ -1089,7 +1089,7 @@ function ReaderFooter:init()
 
     -- Case progress bar is enabled but nothing to show in the status bar. We show just the progress bar
     if not self.settings.disable_progress_bar and self.mode == 0 then
-        self.height = Screen:scaleBySize(0)
+        -- self.height = Screen:scaleBySize(0) -- This is when using self.settings.progress_bar_position = "below". Code commented down
         self:refreshFooter(true, false)
         self:applyFooterMode() -- Importante hacer aquí applyFooterMode
         if self.settings.toc_markers then
@@ -3979,8 +3979,8 @@ end
 -- end
 
 function ReaderFooter:onStatusBarJustProgressBar()
-    self.settings.progress_bar_position = "below"
-    self.height = Screen:scaleBySize(0)
+    self.settings.progress_bar_position = "alongside"
+    self.height = Screen:scaleBySize(self.settings.container_height)
     self:refreshFooter(true, false)
     if (self.settings.disable_progress_bar) then-- and self.view.footer_visible) or self._statusbar_toggled then
         local text = "Progress bar on."
@@ -4029,6 +4029,58 @@ function ReaderFooter:onStatusBarJustProgressBar()
     self:onUpdateFooter(true, true) -- Importante pasar el segundo parámetro a true
     return true
 end
+
+-- function ReaderFooter:onStatusBarJustProgressBar()
+--     self.settings.progress_bar_position = "below"
+--     self.height = Screen:scaleBySize(0)
+--     self:refreshFooter(true, false)
+--     if (self.settings.disable_progress_bar) then-- and self.view.footer_visible) or self._statusbar_toggled then
+--         local text = "Progress bar on."
+--         if self.mode > 0 then
+--             text = "Progress bar on and footer off."
+--         end
+--         UIManager:show(Notification:new{
+--             text = _(text),
+--         })
+--         self.settings.disable_progress_bar = false
+--         self._old_mode = self.mode
+--         self.mode = 0
+--         self:applyFooterMode() -- Importante hacer aquí applyFooterMode
+--         if self.settings.toc_markers then
+--             self:setTocMarkers()
+--         end
+--         self.view.footer_visible = true
+--         if self._statusbar_toggled or self.mode == 0 then
+--             -- self:applyFooterMode() -- Importante hacer aquí applyFooterMode
+--             -- self.view.footer_visible = true
+--             self._statusbar_toggled = false
+--             self.mode = 0
+--             self:applyFooterMode() -- Importante hacer aquí applyFooterMode
+--             self.view.footer_visible = true
+--         end
+
+--     else
+--         local text = "Progress bar off."
+--         if self.mode > 0 then
+--             text = "Progress bar and footer off."
+--         end
+--         UIManager:show(Notification:new{
+--             text = _(text),
+--         })
+--         self.settings.disable_progress_bar = true
+--         self.mode = 0
+--         self:applyFooterMode() -- Importante hacer aquí applyFooterMode
+--         self.view.footer_visible = true
+--         -- else
+--         --     -- self.mode = self._old_mode
+--         --     self.view.footer_visible = false
+--         --     self:applyFooterMode()
+--         -- end
+--     end
+--     G_reader_settings:saveSetting("reader_footer_mode", self.mode)
+--     self:onUpdateFooter(true, true) -- Importante pasar el segundo parámetro a true
+--     return true
+-- end
 function ReaderFooter:onHoldFooter(ges)
     -- We're higher priority than readerhighlight_hold, so, make sure we fall through properly...
     if not self.settings.skim_widget_on_hold then
