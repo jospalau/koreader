@@ -1645,9 +1645,9 @@ function ReaderFooter:onPrintChapterLeftFbink()
     if not Device:isAndroid() then
         local execute = nil
         if Device:isKobo() then
-            execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format " .. left_chapter)
+            execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. left_chapter .. "                \"")
         else --Kindle
-            execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format " .. left_chapter)
+            execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. left_chapter .. "                \"")
         end
         output = execute:read('*a')
         -- if Device:isKobo() then
@@ -1678,9 +1678,9 @@ function ReaderFooter:onPrintSessionDurationFbink()
     if not Device:isAndroid() then
         local execute = nil
         if Device:isKobo() then
-            execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format " .. duration)
+            execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. duration .. "                \"")
         else --Kindle
-            execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format " .. duration)
+            execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format  \"" .. duration .. "                \"")
         end
         output = execute:read('*a')
         -- if Device:isKobo() then
@@ -1711,9 +1711,9 @@ function ReaderFooter:onPrintProgressBookFbink()
     if not Device:isAndroid() then
         local execute = nil
         if Device:isKobo() then
-            execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format " .. percentage)
+            execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. percentage .. "                \"")
         else --Kindle
-            execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format " .. percentage)
+            execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. percentage .. "                \"")
         end
         output = execute:read('*a')
         -- if Device:isKobo() then
@@ -1743,9 +1743,9 @@ function ReaderFooter:onPrintClockFbink()
     if not Device:isAndroid() then
         local execute = nil
         if Device:isKobo() then
-            execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format " .. clock)
+            execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. clock .. "                \"")
         else --Kindle
-            execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format " .. clock)
+            execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \""  .. clock .. "                \"")
         end
         output = execute:read('*a')
         -- if Device:isKobo() then
@@ -1780,9 +1780,9 @@ function ReaderFooter:onPrintDurationChapterFbink()
     if not Device:isAndroid() then
         local execute = nil
         if Device:isKobo() then
-            execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. left .. "\"")
+            execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. left .. "                \"")
         else --Kindle
-            execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. left .. "\"")
+            execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. left .. "                \"")
         end
         output = execute:read('*a')
         -- if Device:isKobo() then
@@ -1823,9 +1823,9 @@ function ReaderFooter:onPrintDurationNextChapterFbink()
     if not Device:isAndroid() then
         local execute = nil
         if Device:isKobo() then
-            execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. sigcap2 .. "\"")
+            execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. sigcap2 .. "                \"")
         else --Kindle
-            execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. sigcap2 .. "\"")
+            execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. sigcap2 .. "                \"")
         end
         output = execute:read('*a')
         -- if Device:isKobo() then
@@ -1869,9 +1869,9 @@ function ReaderFooter:onPrintWpmSessionFbink()
     if not Device:isAndroid() then
         local execute = nil
         if Device:isKobo() then
-            execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. wpm_session .. "\"")
+            execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. wpm_session .. "                \"")
         else --Kindle
-            execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. wpm_session .. "\"")
+            execute = io.popen("/mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. wpm_session .. "                \"")
         end
         output = execute:read('*a')
     else
