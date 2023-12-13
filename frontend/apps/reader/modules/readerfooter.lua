@@ -216,7 +216,7 @@ getSessionsInfo = function (footer)
     local sql_stmt ="SELECT avg(wpm) FROM wpm_stat_data where wpm > 0"
     local avg_wpm = conn:rowexec(sql_stmt)
 
-    sql_stmt = [[SELECT AVG(sum_duration)
+    sql_stmt = [[SELECT SUM(sum_duration)
         FROM   (
                     SELECT sum(duration)    AS sum_duration
                     FROM   wpm_stat_data
@@ -226,7 +226,7 @@ getSessionsInfo = function (footer)
     ]]
     local avg_last_seven_days = conn:rowexec(sql_stmt)
 
-    sql_stmt = [[SELECT AVG(sum_duration)
+    sql_stmt = [[SELECT SUM(sum_duration)
     FROM   (
                 SELECT sum(duration)    AS sum_duration
                 FROM   wpm_stat_data
@@ -255,8 +255,8 @@ getSessionsInfo = function (footer)
         avg_last_thirty_days = 0
     end
 
-    avg_last_seven_days = math.floor(tonumber(avg_last_seven_days)/60/60 * 10)/10
-    avg_last_thirty_days = math.floor(tonumber(avg_last_thirty_days)/60/60 * 10)/10
+    avg_last_seven_days = math.floor(tonumber(avg_last_seven_days)/7/60/60 * 100)/100
+    avg_last_thirty_days = math.floor(tonumber(avg_last_thirty_days)/30/60/60 * 100)/100
     return sessions, avg_wpm, avg_last_seven_days, avg_last_thirty_days
 end
 

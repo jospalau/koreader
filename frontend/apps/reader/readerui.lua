@@ -510,6 +510,9 @@ function ReaderUI:init()
         logger.err("ReaderUI instance mismatch! Opened", tostring(self), "while we still have an existing instance:", tostring(ReaderUI.instance), debug.traceback())
     end
     ReaderUI.instance = self
+    -- Some things are broken when opening pdf files. I just read epubs with KOReader, but in any case we can avoid the crashes putting some conditions for epub format
+    -- local file_type = string.lower(string.match(self.document.file, ".+%.([^.]+)") or "")
+    -- if file_type == "epub" then
     local res = self.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
     local nbwords = 0
     local nbcharacters = 0
