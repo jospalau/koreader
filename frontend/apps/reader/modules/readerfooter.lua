@@ -213,8 +213,28 @@ getSessionsInfo = function (footer)
     local conn = SQ3.open(db_location)
     local sql_stmt ="SELECT count(id_book) AS sessions FROM wpm_stat_data"
     local sessions = conn:rowexec(sql_stmt)
-    local sql_stmt ="SELECT avg(wpm) FROM wpm_stat_data"
+    local sql_stmt ="SELECT avg(wpm) FROM wpm_stat_data where wpm > 0"
     local avg_wpm = conn:rowexec(sql_stmt)
+
+    sql_stmt = [[SELECT AVG(sum_duration)
+        FROM   (
+                    SELECT sum(duration)    AS sum_duration
+                    FROM   wpm_stat_data
+                WHERE DATE(start_time,'unixepoch','localtime') > DATE(DATE('now', '-7 day','localtime'),'localtime')
+                GROUP BY DATE(start_time,'unixepoch','localtime'));"
+                );
+    ]]
+    local avg_last_seven_days = conn:rowexec(sql_stmt)
+
+    sql_stmt = [[SELECT AVG(sum_duration)
+    FROM   (
+                SELECT sum(duration)    AS sum_duration
+                FROM   wpm_stat_data
+            WHERE DATE(start_time,'unixepoch','localtime') > DATE(DATE('now', '-30 day','localtime'),'localtime')
+            GROUP BY DATE(start_time,'unixepoch','localtime'));"
+            );
+]]
+    local avg_last_thirty_days = conn:rowexec(sql_stmt)
 
     conn:close()
     if sessions == nil then
@@ -225,7 +245,19 @@ getSessionsInfo = function (footer)
     if avg_wpm == nil then
         avg_wpm = 0
     end
-    return sessions, avg_wpm
+
+    avg_wpm = tonumber(avg_wpm)
+    if avg_last_seven_days == nil then
+        avg_last_seven_days = 0
+    end
+
+    if avg_last_thirty_days == nil then
+        avg_last_thirty_days = 0
+    end
+
+    avg_last_seven_days = math.floor(tonumber(avg_last_seven_days)/60/60 * 10)/10
+    avg_last_thirty_days = math.floor(tonumber(avg_last_thirty_days)/60/60 * 10)/10
+    return sessions, avg_wpm, avg_last_seven_days, avg_last_thirty_days
 end
 
 getSessionStats = function (footer)
@@ -2191,7 +2223,7 @@ function ReaderFooter:onShowTextProperties()
     percentage_session = math.floor(percentage_session*1000)/10
     pages_read_session =  self.ui.statistics._total_pages
 
-    local sessions, avg_wpm = getSessionsInfo(self)
+    local sessions, avg_wpm, avg_last_seven_days, avg_last_thirty_days = getSessionsInfo(self)
 
     avg_wpm = math.floor(avg_wpm) .. "wpm" .. ", " .. math.floor(avg_wpm*60) .. "wph"
     local line = "﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏"
@@ -2199,7 +2231,9 @@ function ReaderFooter:onShowTextProperties()
     local important = " \u{261C}"
 
     local text = "Total sessions in db: " .. tostring(sessions) .. string.char(10)
-    .. "Avg wpm and wph in all sessions: " .. avg_wpm .. string.char(10) .. string.char(10)
+    .. "Avg wpm and wph in all sessions: " .. avg_wpm .. string.char(10)
+    .. "Average time read last 7 days: " .. avg_last_seven_days .. "h" .. string.char(10)
+    .. "Average time read last 30 days: " .. avg_last_thirty_days .. "h" .. string.char(10) .. string.char(10)
     .. clock .. " " .. title_pages .. string.char(10) .. string.char(10)
     .. point .. " Progress book: " .. progress_book .. " (" .. percentage .. ")" ..  string.char(10)
     .. point .. " Left chapter " .. chapter .. ": " .. left_chapter  .. important .. string.char(10)
