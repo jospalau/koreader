@@ -1042,6 +1042,20 @@ function ReaderStatistics:insertDBSessionStats()
 
 
 end
+
+function dump(o)
+    if type(o) == 'table' then
+       local s = '{ '
+       for k,v in pairs(o) do
+          if type(k) ~= 'number' then k = '"'..k..'"' end
+          s = s .. '['..k..'] = ' .. dump(v) .. ','
+       end
+       return s .. '} '
+    else
+       return tostring(o)
+    end
+ end
+
 function ReaderStatistics:insertDB(updated_pagecount)
     if not (self.id_curr_book and self.is_doc_not_frozen) then
         return
@@ -1051,6 +1065,16 @@ function ReaderStatistics:insertDB(updated_pagecount)
     local duration_raw =  math.floor((os.time() - self.start_current_period))
     local duration_raw_mins =  math.floor(((os.time() - self.start_current_period)/60)* 100) / 100
     local wpm_session = math.floor(self._total_words/duration_raw_mins)
+
+
+    -- Con esta restricción, si alcanzamos el número de páginas a leer antes del tiempo de la sesión
+    -- y salimos del libro o suspendemos el dispositivo sin cambiar de página,
+    -- la sesión durará hasta el tiempo en el que se hizo el último cambio de página
+    -- Es un caso muy muy específico que es muy raro que se de
+    -- Aunque no es necesario, podemos incrementar el valor de número de páginas a leer en la condición a 10 páginas para asegurarnos que se alcance primero el tiempo de la sesión
+    -- La información de las páginas está en self.page_stat y tiene este formato:
+    -- { [186] = { [1] = { [1] = 1702567923,[2] = 2,} ,} ,[187] = { [1] = { [1] = 1702567925,[2] = 2,} ,} ,[184] = { [1] = { [1] = 1702567920,[2] = 2,} ,}
+    -- ,[185] = { [1] = { [1] = 1702567922,[2] = 1,} ,} ,[188] = { [1] = { [1] = 1702567927,[2] = 0,} ,} ,}
     if duration_raw > 300 and self._total_pages > 5 then
 
         -- The current page stat, having yet no duration, will be ignored
@@ -1066,6 +1090,9 @@ function ReaderStatistics:insertDB(updated_pagecount)
         local conn = SQ3.open(db_location)
         conn:exec('BEGIN;')
         local stmt = conn:prepare("INSERT OR IGNORE INTO page_stat_data VALUES(?, ?, ?, ?, ?);")
+
+        -- logger.info("aaaa",dump(self.page_stat))
+        -- self.page_stat[self.curr_page][1][1]=now_ts
         for page, data_list in pairs(self.page_stat) do
             for _, data_tuple in ipairs(data_list) do
                 -- See self.page_stat declaration above about the tuple's layout
