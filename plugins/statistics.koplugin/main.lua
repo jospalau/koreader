@@ -3126,6 +3126,13 @@ function ReaderStatistics:onPageUpdate(pageno)
         end
         -- Update the tuple with the computed duration
         data_tuple[2] = curr_duration + self.settings.max_sec
+
+        -- The new table sessions don't take into account the maximum time so I compute all the stats as well
+        if not closing then
+            self._total_words = self._last_nbwords + self._total_words
+            self._total_chars = self._last_nbchars + self._total_chars
+            self._total_pages = self._total_pages + 1
+        end
     end
 
     -- To be done at the end
