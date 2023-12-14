@@ -1048,85 +1048,90 @@ function ReaderStatistics:insertDB(updated_pagecount)
     end
     local id_book = self.id_curr_book
     local now_ts = os.time()
+    local duration_raw =  math.floor((os.time() - self.start_current_period))
+    local duration_raw_mins =  math.floor(((os.time() - self.start_current_period)/60)* 100) / 100
+    local wpm_session = math.floor(self._total_words/duration_raw_mins)
+    if duration_raw > 300 and self._total_pages > 5 then
 
-    -- The current page stat, having yet no duration, will be ignored
-    -- in the insertion, and its start ts would be lost. We'll give it
-    -- to resetVolatileStats() so it can restore it
-    local cur_page_start_ts = now_ts
-    local cur_page_data = self.page_stat[self.curr_page]
-    local cur_page_data_tuple = cur_page_data and cur_page_data[#cur_page_data]
-    if cur_page_data_tuple and cur_page_data_tuple[2] == 0 then -- should always be true
-        cur_page_start_ts = cur_page_data_tuple[1]
-    end
+        -- The current page stat, having yet no duration, will be ignored
+        -- in the insertion, and its start ts would be lost. We'll give it
+        -- to resetVolatileStats() so it can restore it
+        local cur_page_start_ts = now_ts
+        local cur_page_data = self.page_stat[self.curr_page]
+        local cur_page_data_tuple = cur_page_data and cur_page_data[#cur_page_data]
+        if cur_page_data_tuple and cur_page_data_tuple[2] == 0 then -- should always be true
+            cur_page_start_ts = cur_page_data_tuple[1]
+        end
 
-    local conn = SQ3.open(db_location)
-    conn:exec('BEGIN;')
-    local stmt = conn:prepare("INSERT OR IGNORE INTO page_stat_data VALUES(?, ?, ?, ?, ?);")
-    for page, data_list in pairs(self.page_stat) do
-        for _, data_tuple in ipairs(data_list) do
-            -- See self.page_stat declaration above about the tuple's layout
-            local ts = data_tuple[1]
-            local duration = data_tuple[2]
-            -- Skip placeholder durations
-            if duration > 0 then
-                -- NOTE: The fact that we update self.data.pages *after* this call on layout changes
-                --       should ensure that it matches the layout in which said data was collected.
-                --       Said data is used to re-scale page numbers, regardless of the document layout,
-                --       at query time, via a fancy SQL view.
-                --       This allows the progress tracking to be accurate even in the face of wild
-                --       document layout changes (e.g., after font size changes).
-                stmt:reset():bind(id_book, page, ts, duration, self.data.pages):step()
+        local conn = SQ3.open(db_location)
+        conn:exec('BEGIN;')
+        local stmt = conn:prepare("INSERT OR IGNORE INTO page_stat_data VALUES(?, ?, ?, ?, ?);")
+        for page, data_list in pairs(self.page_stat) do
+            for _, data_tuple in ipairs(data_list) do
+                -- See self.page_stat declaration above about the tuple's layout
+                local ts = data_tuple[1]
+                local duration = data_tuple[2]
+                -- Skip placeholder durations
+                if duration > 0 then
+                    -- NOTE: The fact that we update self.data.pages *after* this call on layout changes
+                    --       should ensure that it matches the layout in which said data was collected.
+                    --       Said data is used to re-scale page numbers, regardless of the document layout,
+                    --       at query time, via a fancy SQL view.
+                    --       This allows the progress tracking to be accurate even in the face of wild
+                    --       document layout changes (e.g., after font size changes).
+                    stmt:reset():bind(id_book, page, ts, duration, self.data.pages):step()
+                end
             end
         end
+        conn:exec('COMMIT;')
+
+        -- Update the new pagecount now, so that subsequent queries against the view are accurate
+        local sql_stmt = [[
+            UPDATE book
+            SET    pages = ?
+            WHERE  id = ?;
+        ]]
+        stmt = conn:prepare(sql_stmt)
+        stmt:reset():bind(updated_pagecount and updated_pagecount or self.data.pages, id_book):step()
+
+        -- NOTE: See the tail end of the discussions in #6761 for more context on the choice of this heuristic.
+        --       Basically, we're counting distinct pages,
+        --       while making sure the sum of durations per distinct page is clamped to self.settings.max_sec
+        --       This is expressly tailored to a fairer computation of self.avg_time ;).
+        local book_read_pages, book_read_time = conn:rowexec(string.format(STATISTICS_SQL_BOOK_CAPPED_TOTALS_QUERY, self.settings.max_sec, id_book))
+        -- NOTE: What we cache in the book table is the plain uncapped sum (mainly for deleteBooksByTotalDuration's benefit)...
+        local total_read_pages, total_read_time = conn:rowexec(string.format(STATISTICS_SQL_BOOK_TOTALS_QUERY, id_book))
+
+        -- And now update the rest of the book table...
+        sql_stmt = [[
+            UPDATE book
+            SET    last_open = ?,
+                notes = ?,
+                highlights = ?,
+                total_read_time = ?,
+                total_read_pages = ?
+            WHERE  id = ?;
+        ]]
+        stmt = conn:prepare(sql_stmt)
+        stmt:reset():bind(now_ts, self.data.notes, self.data.highlights, total_read_time, total_read_pages, id_book):step()
+        stmt:close()
+        conn:close()
+
+        -- NOTE: On the other hand, this is used for the average time estimate, so we use the capped variants here!
+        if book_read_pages then
+            self.book_read_pages = tonumber(book_read_pages)
+        else
+            self.book_read_pages = 0
+        end
+        if book_read_time then
+            self.book_read_time = tonumber(book_read_time)
+        else
+            self.book_read_time = 0
+        end
+        self.avg_time = self.book_read_time / self.book_read_pages
+
+        self:resetVolatileStats(cur_page_start_ts)
     end
-    conn:exec('COMMIT;')
-
-    -- Update the new pagecount now, so that subsequent queries against the view are accurate
-    local sql_stmt = [[
-        UPDATE book
-        SET    pages = ?
-        WHERE  id = ?;
-    ]]
-    stmt = conn:prepare(sql_stmt)
-    stmt:reset():bind(updated_pagecount and updated_pagecount or self.data.pages, id_book):step()
-
-    -- NOTE: See the tail end of the discussions in #6761 for more context on the choice of this heuristic.
-    --       Basically, we're counting distinct pages,
-    --       while making sure the sum of durations per distinct page is clamped to self.settings.max_sec
-    --       This is expressly tailored to a fairer computation of self.avg_time ;).
-    local book_read_pages, book_read_time = conn:rowexec(string.format(STATISTICS_SQL_BOOK_CAPPED_TOTALS_QUERY, self.settings.max_sec, id_book))
-    -- NOTE: What we cache in the book table is the plain uncapped sum (mainly for deleteBooksByTotalDuration's benefit)...
-    local total_read_pages, total_read_time = conn:rowexec(string.format(STATISTICS_SQL_BOOK_TOTALS_QUERY, id_book))
-
-    -- And now update the rest of the book table...
-    sql_stmt = [[
-        UPDATE book
-        SET    last_open = ?,
-               notes = ?,
-               highlights = ?,
-               total_read_time = ?,
-               total_read_pages = ?
-        WHERE  id = ?;
-    ]]
-    stmt = conn:prepare(sql_stmt)
-    stmt:reset():bind(now_ts, self.data.notes, self.data.highlights, total_read_time, total_read_pages, id_book):step()
-    stmt:close()
-    conn:close()
-
-    -- NOTE: On the other hand, this is used for the average time estimate, so we use the capped variants here!
-    if book_read_pages then
-        self.book_read_pages = tonumber(book_read_pages)
-    else
-        self.book_read_pages = 0
-    end
-    if book_read_time then
-        self.book_read_time = tonumber(book_read_time)
-    else
-        self.book_read_time = 0
-    end
-    self.avg_time = self.book_read_time / self.book_read_pages
-
-    self:resetVolatileStats(cur_page_start_ts)
 end
 
 function ReaderStatistics:getPageTimeTotalStats(id_book)
