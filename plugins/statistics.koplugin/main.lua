@@ -1067,7 +1067,7 @@ function ReaderStatistics:insertDB(updated_pagecount)
     local wpm_session = math.floor(self._total_words/duration_raw_mins)
 
 
-    -- Con esta restricción, si alcanzamos el número de páginas a leer antes del tiempo de la sesión
+    -- Con esta restricción, si alcanzamos el número de páginas a leer antes del tiempo de sesión y alcanzamos a continuación del tiempo de la sesión
     -- y salimos del libro o suspendemos el dispositivo sin cambiar de página,
     -- la sesión durará hasta el tiempo en el que se hizo el último cambio de página
     -- Es un caso muy muy específico que es muy raro que se de
