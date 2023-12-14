@@ -32,8 +32,8 @@ local statistics_dir = DataStorage:getDataDir() .. "/statistics/"
 local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
 -- local MAX_PAGETURNS_BEFORE_FLUSH = -1
 local MAX_PAGETURNS_BEFORE_FLUSH = 50
-local DEFAULT_MIN_READ_SEC = 5
-local DEFAULT_MAX_READ_SEC = 120
+local DEFAULT_MIN_READ_SEC = 10
+local DEFAULT_MAX_READ_SEC = 7200
 local DEFAULT_CALENDAR_START_DAY_OF_WEEK = 2 -- Monday
 local DEFAULT_CALENDAR_NB_BOOK_SPANS = 3
 
@@ -1010,7 +1010,7 @@ function ReaderStatistics:insertDBSessionStats()
     local duration_raw =  math.floor((os.time() - self.start_current_period))
     local duration_raw_mins =  math.floor(((os.time() - self.start_current_period)/60)* 100) / 100
     local wpm_session = math.floor(self._total_words/duration_raw_mins)
-    if duration_raw > 300 or self._total_pages > 5 then
+    if duration_raw > 300 and self._total_pages > 5 then
         local UIManager = require("ui/uimanager")
         local Notification = require("ui/widget/notification")
 
