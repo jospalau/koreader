@@ -3848,8 +3848,8 @@ function ReaderFooter:TapFooter(ges)
 end
 
 function ReaderFooter:onToggleFooterMode()
-    self.height = Screen:scaleBySize(self.settings.container_height)
-    self:refreshFooter(true, false)
+    -- self.height = Screen:scaleBySize(self.settings.container_height)
+    -- self:refreshFooter(true, false)
     if not self.view.footer_visible or self.mode == 0 then
         UIManager:show(Notification:new{
             text = _("Footer on."),
@@ -3891,15 +3891,14 @@ function ReaderFooter:onToggleFooterMode()
     self:applyFooterMode()
     G_reader_settings:saveSetting("reader_footer_mode", self.mode)
     self:onUpdateFooter(true)
-    self:rescheduleFooterAutoRefreshIfNeeded()
+    -- self:rescheduleFooterAutoRefreshIfNeeded()
     return true
 end
 
 
 
 function ReaderFooter:onToggleFooterModeBack()
-    self.height = Screen:scaleBySize(self.settings.container_height)
-    self:refreshFooter(true, false)
+
     if not self.view.footer_visible or self.mode == 0 then
         UIManager:show(Notification:new{
             text = _("Footer on."),
@@ -3942,7 +3941,7 @@ function ReaderFooter:onToggleFooterModeBack()
     self:applyFooterMode()
     G_reader_settings:saveSetting("reader_footer_mode", self.mode)
     self:onUpdateFooter(true)
-    self:rescheduleFooterAutoRefreshIfNeeded()
+    -- self:rescheduleFooterAutoRefreshIfNeeded()
     return true
 end
 
