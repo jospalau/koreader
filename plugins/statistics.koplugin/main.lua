@@ -3238,9 +3238,9 @@ function ReaderStatistics:onPageUpdate(pageno)
         if not Device:isAndroid() then
             local execute = nil
             if Device:isKobo() then
-                execute = os.execute("(sleep 1 && /mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. wpm_session .. "\")&")
+                execute = os.execute("(sleep 0.2 && /mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. wpm_session .. "\")&")
             else --Kindle
-                execute = os.execute("(sleep 1 && /mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. wpm_session .. "\")&")
+                execute = os.execute("(sleep 0.2 && /mnt/us/koreader/fbink -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. wpm_session .. "\")&")
             end
             -- local text = wpm_session
             -- UIManager:show(Notification:new{
