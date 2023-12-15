@@ -3135,15 +3135,14 @@ function ReaderStatistics:onPageUpdate(pageno)
     -- Compute the difference between now and the previous page's last timestamp
     local diff_time = now_ts - then_ts
     if diff_time >= self.settings.min_sec and diff_time <= self.settings.max_sec then
+        self.mem_read_time = self.mem_read_time + diff_time
+        -- If it's the first time we're computing a duration for this page, count it as read
+        if #page_data == 1 and curr_duration == 0 then
+            self.mem_read_pages = self.mem_read_pages + 1
+        end
+        -- Update the tuple with the computed duration
+        data_tuple[2] = curr_duration + diff_time
         if not closing and not self.ui.searching then -- don't count statistics when closing the book and when searching
-            self.mem_read_time = self.mem_read_time + diff_time
-            -- If it's the first time we're computing a duration for this page, count it as read
-            if #page_data == 1 and curr_duration == 0 then
-                self.mem_read_pages = self.mem_read_pages + 1
-            end
-            -- Update the tuple with the computed duration
-            data_tuple[2] = curr_duration + diff_time
-
             -- This to be done only when computing a page obviously
             self._total_words = self._last_nbwords + self._total_words
             self._total_chars = self._last_nbchars + self._total_chars
