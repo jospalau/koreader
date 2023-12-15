@@ -1675,7 +1675,9 @@ function ReaderFooter:onPrintChapterLeftFbink()
     local rv
     local output = ""
     if not Device:isAndroid() then
-        UIManager:setDirty("all", "full")
+        UIManager:scheduleIn(1.0, function()
+            UIManager:setDirty("all", "full")
+        end)
         local execute = nil
         if Device:isKobo() then
             execute = io.popen("/mnt/onboard/.adds/koreader/fbink -f -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. left_chapter .. "\"")
@@ -1709,7 +1711,9 @@ function ReaderFooter:onPrintSessionDurationFbink()
     local rv
     local output = ""
     if not Device:isAndroid() then
-        UIManager:setDirty("all", "full")
+        UIManager:scheduleIn(1.0, function()
+            UIManager:setDirty("all", "full")
+        end)
         local execute = nil
         if Device:isKobo() then
             execute = io.popen("/mnt/onboard/.adds/koreader/fbink -f -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. duration .. "\"")
@@ -1743,7 +1747,9 @@ function ReaderFooter:onPrintProgressBookFbink()
     local rv
     local output = ""
     if not Device:isAndroid() then
-        UIManager:setDirty("all", "full")
+        UIManager:scheduleIn(1.0, function()
+            UIManager:setDirty("all", "full")
+        end)
         local execute = nil
         if Device:isKobo() then
             execute = io.popen("/mnt/onboard/.adds/koreader/fbink -f -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. percentage .. "\"")
@@ -1776,7 +1782,9 @@ function ReaderFooter:onPrintClockFbink()
     local rv
     local output = ""
     if not Device:isAndroid() then
-        UIManager:setDirty("all", "full")
+        UIManager:scheduleIn(1.0, function()
+            UIManager:setDirty("all", "full")
+        end)
         local execute = nil
         if Device:isKobo() then
             execute = io.popen("/mnt/onboard/.adds/koreader/fbink -f -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. clock .. "\"")
@@ -1814,7 +1822,10 @@ function ReaderFooter:onPrintDurationChapterFbink()
     local rv
     local output = ""
     if not Device:isAndroid() then
-        UIManager:setDirty("all", "full")
+        UIManager:scheduleIn(1.0, function()
+            UIManager:setDirty("all", "full")
+        end)
+
         local execute = nil
         if Device:isKobo() then
             execute = io.popen("/mnt/onboard/.adds/koreader/fbink -f -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. left .. "\"")
@@ -1858,7 +1869,9 @@ function ReaderFooter:onPrintDurationNextChapterFbink()
     local rv
     local output = ""
     if not Device:isAndroid() then
-        UIManager:setDirty("all", "full")
+        UIManager:scheduleIn(1.0, function()
+            UIManager:setDirty("all", "full")
+        end)
         local execute = nil
         if Device:isKobo() then
             execute = io.popen("/mnt/onboard/.adds/koreader/fbink -f -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. sigcap2 .. "\"")
@@ -1905,7 +1918,9 @@ function ReaderFooter:onPrintWpmSessionFbink()
     local rv
     local output = ""
     if not Device:isAndroid() then
-        UIManager:setDirty("all", "full")
+        UIManager:scheduleIn(1.0, function()
+            UIManager:setDirty("all", "full")
+        end)
         local execute = nil
         if Device:isKobo() then
             execute = io.popen("/mnt/onboard/.adds/koreader/fbink -f -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. wpm_session .. "\"")
