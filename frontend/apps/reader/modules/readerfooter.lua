@@ -1675,7 +1675,7 @@ function ReaderFooter:onPrintChapterLeftFbink()
     local rv
     local output = ""
     if not Device:isAndroid() then
-        UIManager:scheduleIn(1.0, function()
+        UIManager:scheduleIn(0.5, function()
             UIManager:setDirty("all", "full")
         end)
         local execute = nil
@@ -1711,7 +1711,7 @@ function ReaderFooter:onPrintSessionDurationFbink()
     local rv
     local output = ""
     if not Device:isAndroid() then
-        UIManager:scheduleIn(1.0, function()
+        UIManager:scheduleIn(0.5, function()
             UIManager:setDirty("all", "full")
         end)
         local execute = nil
@@ -1747,7 +1747,7 @@ function ReaderFooter:onPrintProgressBookFbink()
     local rv
     local output = ""
     if not Device:isAndroid() then
-        UIManager:scheduleIn(1.0, function()
+        UIManager:scheduleIn(0.5, function()
             UIManager:setDirty("all", "full")
         end)
         local execute = nil
@@ -1782,7 +1782,7 @@ function ReaderFooter:onPrintClockFbink()
     local rv
     local output = ""
     if not Device:isAndroid() then
-        UIManager:scheduleIn(1.0, function()
+        UIManager:scheduleIn(0.5, function()
             UIManager:setDirty("all", "full")
         end)
         local execute = nil
@@ -1822,7 +1822,7 @@ function ReaderFooter:onPrintDurationChapterFbink()
     local rv
     local output = ""
     if not Device:isAndroid() then
-        UIManager:scheduleIn(1.0, function()
+        UIManager:scheduleIn(0.5, function()
             UIManager:setDirty("all", "full")
         end)
 
@@ -1869,7 +1869,7 @@ function ReaderFooter:onPrintDurationNextChapterFbink()
     local rv
     local output = ""
     if not Device:isAndroid() then
-        UIManager:scheduleIn(1.0, function()
+        UIManager:scheduleIn(0.5, function()
             UIManager:setDirty("all", "full")
         end)
         local execute = nil
@@ -1918,7 +1918,7 @@ function ReaderFooter:onPrintWpmSessionFbink()
     local rv
     local output = ""
     if not Device:isAndroid() then
-        UIManager:scheduleIn(1.0, function()
+        UIManager:scheduleIn(0.5, function()
             UIManager:setDirty("all", "full")
         end)
         local execute = nil
