@@ -893,6 +893,8 @@ local footerTextGeneratorMap = {
     local progress_book = ("%d de %d"):format(footer.pageno, footer.pages)
     local percentage_session, pages_read_session, duration = getSessionStats(footer)
 
+    local string_percentage  = "%0.f%%"
+    local percentage = string_percentage:format(footer.progress_bar.percentage * 100)
     if not footer.ui.toc then
         return "n/a"
     end
@@ -906,7 +908,7 @@ local footerTextGeneratorMap = {
         return "n/a"
         end
 
-    return clock .. " | " .. duration .. " | " .. progress_book .. " | ⇒ " .. left_chapter .. " | Sig: " .. footer:getDataFromStatistics("", sigcap2 - sigcap)
+    return clock .. " | " .. duration .. " | " .. percentage .. " | ⇒ " .. left_chapter .. " | Sig: " .. footer:getDataFromStatistics("", sigcap2 - sigcap)
    end,
 }
 
