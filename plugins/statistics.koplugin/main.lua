@@ -1763,7 +1763,7 @@ function ReaderStatistics:getCurrentStat()
     local total_pages
     local page_progress_string
     local percent_read
-    if (self.document:hasHiddenFlows()) then
+    if self.document:hasHiddenFlows() and self.view.state.page then
         local flow = self.document:getPageFlow(self.view.state.page)
         current_page = self.document:getPageNumberInFlow(self.view.state.page)
         total_pages = self.document:getTotalPagesInFlow(flow)
@@ -1774,7 +1774,7 @@ function ReaderStatistics:getCurrentStat()
             page_progress_string = ("[%d / %d]%d (%d%%)"):format(current_page, total_pages, flow, percent_read)
         end
     else
-        current_page = self.view.state.page
+        current_page = self.ui:getCurrentPage()
         total_pages = self.data.pages
         percent_read = Math.round(100*current_page/total_pages)
         page_progress_string = ("%d / %d (%d%%)"):format(current_page, total_pages, percent_read)
