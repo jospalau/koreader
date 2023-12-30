@@ -1145,7 +1145,7 @@ function ReaderFooter:init()
     -- Case progress bar is enabled but nothing to show in the status bar. We show just the progress bar
     if not self.settings.disable_progress_bar and self.mode == 0 then
         -- self.height = Screen:scaleBySize(0) -- This is when using self.settings.progress_bar_position = "below". Code commented down
-        self.bottom_padding = Screen:scaleBySize(-2)
+        --self.bottom_padding = Screen:scaleBySize(-2)
         self:refreshFooter(true, false)
         self:applyFooterMode() -- Importante hacer aquí applyFooterMode
         if self.settings.toc_markers then
@@ -4037,7 +4037,7 @@ function ReaderFooter:onToggleReclaimHeight()
 end
 
 function ReaderFooter:onStatusBarJustProgressBar()
-    self.bottom_padding = Screen:scaleBySize(-2)
+    --self.bottom_padding = Screen:scaleBySize(-2)
     self.settings.progress_bar_position = "alongside"
    --  self.height = Screen:scaleBySize(self.settings.container_height + 10)
     self:refreshFooter(true, false)
