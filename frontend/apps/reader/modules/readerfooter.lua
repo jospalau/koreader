@@ -2057,7 +2057,9 @@ function ReaderFooter:onGetTextPage()
     "Total words Calibre: " .. title_words .. string.char(10) ..
     "Words per page: " .. tostring(math.floor((total_words2/self.pages * 100) / 100)) .. string.char(10) ..
     "Words per page Calibre: " .. tostring(math.floor((title_words/self.pages * 100) / 100)) .. string.char(10) ..
-    "Font parameters: " .. font_face .. ", " .. font_size .. "px, " .. font_size_pt .. "pt, " .. font_size_mm .. "mm"
+    "Font parameters: " .. font_face .. ", " .. font_size .. "px, " .. font_size_pt .. "pt, " .. font_size_mm .. "mm" .. string.char(10) ..
+    "Number of tweaks: " .. self.ui.tweaks_no .. string.char(10) ..
+    self.ui.tweaks
     UIManager:show(InfoMessage:new{
         text = T(_(text)),
         timeout = 15,
