@@ -1061,6 +1061,7 @@ function ReaderStatistics:insertDB(updated_pagecount)
     if duration_raw < 360 then -- or self._total_pages < 5 then
         return
     end
+    logger.info("entro2 " .. tostring(duration_raw))
     -- The current page stat, having yet no duration, will be ignored
     -- in the insertion, and its start ts would be lost. We'll give it
     -- to resetVolatileStats() so it can restore 
@@ -3260,7 +3261,7 @@ end
 
 function ReaderStatistics:onCloseDocument()
     -- I don't mind about last page
-    --self:onPageUpdate(false) -- update current page duration
+    self:onPageUpdate(false)
     self:insertDB() --OnSaveSettings() also inserts in db but I commented it
     if not ReaderStatistics.preserve then -- Not save session when adjusting configuration which forces document reopening
         self:insertDBSessionStats()
@@ -3293,7 +3294,7 @@ end
 
 -- Triggered by auto_save_settings_interval_minutes
 function ReaderStatistics:onSaveSettings()
-    --self:insertDB() This is redundant. This is executed when closing a document or suspending the device
+    --self:insertDB() --This is redundant. This is executed when closing a document or suspending the device
     --but the event handlers are also inserting 
 end
 
@@ -3301,13 +3302,13 @@ end
 function ReaderStatistics:onSuspend()
     self:insertDB() --OnSaveSettings() also inserts in db but I commented it
     self:insertDBSessionStats()
-    self:onReadingPaused()
+    --self:onReadingPaused() --Not interested in this
 end
-
 -- screensaver off
 function ReaderStatistics:onResume()
     self.start_current_period = os.time()
-    self:onReadingResumed()
+    self:resetVolatileStats() --Calling this since I don't call onReadingPaused() en onSuspend()
+    --self:onReadingResumed() --Not interested in this, since I don't call onReadingPaused() en onSuspend()
     self._last_nbwords = 0
     self._total_words = 0
     local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
@@ -3325,6 +3326,21 @@ function ReaderStatistics:onResume()
     self._total_pages = 0
     -- Kindle and Android needsrefresh in the footer to show new start_current_period
     -- Android needs full refresh passing true, true. I set this for all the devices
+    --self.view.footer:onUpdateFooter(true,true) --Si configuramos que el screensaver permanezca un tiempo, este refresco lo distorsiona un poco. 
+    local screensaver_delay = G_reader_settings:readSetting("screensaver_delay")
+    if screensaver_delay and screensaver_delay ~= "disable" then
+        self._delayed_screensaver = true
+        return
+    end
+    self.view.footer:onUpdateFooter(true,true)
+end
+
+function ReaderFooter:onOutOfScreenSaver()
+    if not self._delayed_screensaver then
+        return
+    end
+
+    self._delayed_screensaver = nil
     self.view.footer:onUpdateFooter(true,true)
 end
 
