@@ -886,7 +886,7 @@ local footerTextGeneratorMap = {
     local title = footer.ui.document._document:getDocumentProps().title
 
 
-    
+
     local left_chapter = footer.ui.toc:getChapterPagesLeft(footer.pageno) or footer.ui.document:getTotalPagesLeft(footer.pageno)
     if footer.settings.pages_left_includes_current_page then
         left_chapter = left_chapter + 1
@@ -957,6 +957,7 @@ ReaderFooter.default_settings = {
     text_font_bold = false,
     container_height = G_defaults:readSetting("DMINIBAR_CONTAINER_HEIGHT"),
     container_bottom_padding = 1, -- unscaled_size_check: ignore
+    text1_bottom_padding = 60,
     progress_margin_width = Screen:scaleBySize(Device:isAndroid() and material_pixels or 10), -- default margin (like self.horizontal_margin)
     progress_bar_min_width_pct = 20,
     book_title_max_width_pct = 30,
@@ -1032,6 +1033,7 @@ function ReaderFooter:init()
     -- Container settings
     self.height = Screen:scaleBySize(self.settings.container_height)
     self.bottom_padding = Screen:scaleBySize(self.settings.container_bottom_padding)
+    self.text1_bottom_padding = Screen:scaleBySize(self.settings.text1_bottom_padding)
 
     self.mode_list = {}
     for i = 0, #self.mode_index do
@@ -1057,7 +1059,7 @@ function ReaderFooter:init()
         text = '',
         face = Font:getFace(self.text_font_face, self.settings.text_font_size),
         bold = self.settings.text_font_bold,
-        forced_height = 60, --better aligned
+        forced_height = self.text1_bottom_padding, --better aligned
     }
 
 
@@ -1258,7 +1260,7 @@ function ReaderFooter:updateFooterContainer()
         }
     end
     -- This is the place to make another line
-   
+
 
     -- text to be set uo on _updateFooterText
     --local text_up = self.ui.document._document:getDocumentProps().title
@@ -2740,7 +2742,7 @@ function ReaderFooter:addToMainMenu(menu_items)
 			                bold = self.settings.text_font_bold,
 			            }
                                     self.text_container[1] = self.footer_text
-				    self.text_container2[1] = self.footer_text2
+				                    self.text_container2[1] = self.footer_text2
                                     self:refreshFooter(true, true)
                                     if touchmenu_instance then touchmenu_instance:updateItems() end
                                 end,
@@ -2814,6 +2816,33 @@ function ReaderFooter:addToMainMenu(menu_items)
                         callback = function(spin)
                             self.settings.container_bottom_padding = spin.value
                             self.bottom_padding = Screen:scaleBySize(self.settings.container_bottom_padding)
+                            self:refreshFooter(true, true)
+                            if touchmenu_instance then touchmenu_instance:updateItems() end
+                        end,
+                    }
+                    UIManager:show(items_font)
+                end,
+                keep_menu_open = true,
+            },
+            {
+                text_func = function()
+                    return T(_("Text1 bottom margin: %1"), self.settings.text1_bottom_padding)
+                end,
+                callback = function(touchmenu_instance)
+                    local SpinWidget = require("ui/widget/spinwidget")
+                    local text1_bottom_padding = self.settings.text1_bottom_padding
+                    local items_font = SpinWidget:new{
+                        value = text1_bottom_padding,
+                        value_min = 0,
+                        value_max = 100,
+                        default_value = 50,
+                        ok_text = _("Set margin"),
+                        title_text = _("Text1 bottom margin"),
+                        keep_shown_on_apply = true,
+                        callback = function(spin)
+                            self.settings.text1_bottom_padding = spin.value
+                            self.text1_bottom_padding = Screen:scaleBySize(self.settings.text1_bottom_padding)
+                            self.footer_text.forced_height = self.text1_bottom_padding
                             self:refreshFooter(true, true)
                             if touchmenu_instance then touchmenu_instance:updateItems() end
                         end,
@@ -3445,7 +3474,7 @@ With this enabled, the current page is included, so the count goes from n to 1 i
                     if Device:isAndroid() then
                         device_defaults = customMargin(material_pixels)
                     else
-                        device_defaults = customMargin(10) 
+                        device_defaults = customMargin(10)
                     end
                     table.insert(common, 2, device_defaults)
                     return common
@@ -4077,15 +4106,15 @@ function ReaderFooter:onStatusBarJustProgressBar()
         self.settings.disable_progress_bar = true
         self.mode = 0
         self:applyFooterMode() -- Importante hacer aquí applyFooterMode
-      
-        UIManager:show(Notification:new{                  
-            text = _(text),                               
+
+        UIManager:show(Notification:new{
+            text = _(text),
         })
         self.view.footer_visible = false
     end
     G_reader_settings:saveSetting("reader_footer_mode", self.mode)
     self:onUpdateFooter(true,true) -- Importante pasar el segundo parámetro a true
-    self:rescheduleFooterAutoRefreshIfNeeded() 
+    self:rescheduleFooterAutoRefreshIfNeeded()
     return true
 end
 
