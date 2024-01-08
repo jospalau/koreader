@@ -367,6 +367,7 @@ end
 
 -- Build css_text, and request ReaderTypeset to apply it if wanted
 function ReaderStyleTweak:updateCssText(apply)
+    self.ui.tweaks = ""
     if self.enabled then
         local tweaks = {}
         for id, enabled in pairs(self.global_tweaks) do
@@ -390,6 +391,7 @@ function ReaderStyleTweak:updateCssText(apply)
         for _, tweak in ipairs(tweaks) do
             self.nb_enabled_tweaks = self.nb_enabled_tweaks + 1
             local css = tweak.css
+	    self.ui.tweaks = self.ui.tweaks .. " -" .. tweak.title .. "\n"
             if not css and tweak.css_path then
                 css = ""
                 local f = io.open(tweak.css_path, "r")
@@ -417,6 +419,7 @@ function ReaderStyleTweak:updateCssText(apply)
     if apply then
         self.ui:handleEvent(Event:new("ApplyStyleSheet"))
     end
+    self.ui.tweaks_no = self.nb_enabled_tweaks
 end
 
 function ReaderStyleTweak:onReadSettings(config)

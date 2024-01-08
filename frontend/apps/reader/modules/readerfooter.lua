@@ -16,6 +16,7 @@ local ProgressWidget = require("ui/widget/progresswidget")
 local RightContainer = require("ui/widget/container/rightcontainer")
 local Size = require("ui/size")
 local TextWidget = require("ui/widget/textwidget")
+local TextBoxWidget = require("ui/widget/textboxwidget")
 local UIManager = require("ui/uimanager")
 local VerticalGroup = require("ui/widget/verticalgroup")
 local VerticalSpan = require("ui/widget/verticalspan")
@@ -885,7 +886,7 @@ local footerTextGeneratorMap = {
     local title = footer.ui.document._document:getDocumentProps().title
 
 
-    local clock ="⌚ " ..  datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
+    
     local left_chapter = footer.ui.toc:getChapterPagesLeft(footer.pageno) or footer.ui.document:getTotalPagesLeft(footer.pageno)
     if footer.settings.pages_left_includes_current_page then
         left_chapter = left_chapter + 1
@@ -908,7 +909,7 @@ local footerTextGeneratorMap = {
         return "n/a"
         end
 
-    return clock .. " | " .. duration .. " | " .. percentage .. " | ⇒ " .. left_chapter .. " | Sig: " .. footer:getDataFromStatistics("", sigcap2 - sigcap)
+    return duration .. "|" .. percentage .. "|" .. left_chapter .. "|" .. footer:getDataFromStatistics("", sigcap2 - sigcap)
    end,
 }
 
@@ -1056,6 +1057,20 @@ function ReaderFooter:init()
         text = '',
         face = Font:getFace(self.text_font_face, self.settings.text_font_size),
         bold = self.settings.text_font_bold,
+        forced_height = 60, --better aligned
+    }
+
+
+    --self.footer_text.dimen.h = self.footer_text:getSize().h + 20,
+    self.footer_text2 = TextWidget:new{
+        text = '',
+        face = Font:getFace(self.text_font_face, self.settings.text_font_size - 3),
+        bold = self.settings.text_font_bold,
+        -- padding = Size.padding.large,
+	-- forced_height = self.footer_text:getSize().h + 20,
+        -- Not needed. Bigger container heigh set up for status bar to have more space
+        -- height = self.footer_text:getSize().h + 20,
+        -- forced_height = 2,
     }
     -- all width related values will be initialized in self:resetLayout()
     self.text_width = 0
@@ -1077,6 +1092,12 @@ function ReaderFooter:init()
     self.text_container = RightContainer:new{
         dimen = Geom:new{ w = 0, h = self.height },
         self.footer_text,
+    }
+
+
+    self.text_container2 = CenterContainer:new{
+        dimen = Geom:new{ w = 0, h = self.height },
+        self.footer_text2,
     }
     self:updateFooterContainer()
     self.mode = G_reader_settings:readSetting("reader_footer_mode") or self.mode
@@ -1124,6 +1145,7 @@ function ReaderFooter:init()
     -- Case progress bar is enabled but nothing to show in the status bar. We show just the progress bar
     if not self.settings.disable_progress_bar and self.mode == 0 then
         -- self.height = Screen:scaleBySize(0) -- This is when using self.settings.progress_bar_position = "below". Code commented down
+        --self.bottom_padding = Screen:scaleBySize(-2)
         self:refreshFooter(true, false)
         self:applyFooterMode() -- Importante hacer aquí applyFooterMode
         if self.settings.toc_markers then
@@ -1131,6 +1153,7 @@ function ReaderFooter:init()
         end
         self.view.footer_visible = true
     end
+
 
     -- self.reclaim_height = true
     -- self.mode = 0
@@ -1222,6 +1245,7 @@ function ReaderFooter:updateFooterContainer()
         self.horizontal_group = HorizontalGroup:new{
             margin_span,
             self.text_container,
+            --self.text_container2,
             margin_span,
         }
     else
@@ -1229,10 +1253,18 @@ function ReaderFooter:updateFooterContainer()
             margin_span,
             self.progress_bar,
             self.text_container,
+            --self.text_container2,
             margin_span,
         }
     end
+    -- This is the place to make another line
+   
 
+    -- text to be set uo on _updateFooterText
+    --local text_up = self.ui.document._document:getDocumentProps().title
+    --text_up = "anajs"
+    -- self.footer_text2.text = text_up
+    table.insert(self.vertical_frame, self.text_container2)
     if self.settings.align == "left" then
         self.footer_container = LeftContainer:new{
             dimen = Geom:new{ w = 0, h = self.height },
@@ -2025,7 +2057,9 @@ function ReaderFooter:onGetTextPage()
     "Total words Calibre: " .. title_words .. string.char(10) ..
     "Words per page: " .. tostring(math.floor((total_words2/self.pages * 100) / 100)) .. string.char(10) ..
     "Words per page Calibre: " .. tostring(math.floor((title_words/self.pages * 100) / 100)) .. string.char(10) ..
-    "Font parameters: " .. font_face .. ", " .. font_size .. "px, " .. font_size_pt .. "pt, " .. font_size_mm .. "mm"
+    "Font parameters: " .. font_face .. ", " .. font_size .. "px, " .. font_size_pt .. "pt, " .. font_size_mm .. "mm" .. string.char(10) ..
+    "Number of tweaks: " .. self.ui.tweaks_no .. string.char(10) ..
+    self.ui.tweaks
     UIManager:show(InfoMessage:new{
         text = T(_(text)),
         timeout = 15,
@@ -2697,8 +2731,16 @@ function ReaderFooter:addToMainMenu(menu_items)
                                         text = self.footer_text.text,
                                         face = Font:getFace(self.text_font_face, self.settings.text_font_size),
                                         bold = self.settings.text_font_bold,
+					forced_height = 60, --better aligned
                                     }
+				    self.footer_text2:free()
+				    self.footer_text2 = TextWidget:new{
+			                text = self.footer_text2.text,
+			                face = Font:getFace(self.text_font_face, self.settings.text_font_size-3),
+			                bold = self.settings.text_font_bold,
+			            }
                                     self.text_container[1] = self.footer_text
+				    self.text_container2[1] = self.footer_text2
                                     self:refreshFooter(true, true)
                                     if touchmenu_instance then touchmenu_instance:updateItems() end
                                 end,
@@ -3374,7 +3416,7 @@ With this enabled, the current page is included, so the count goes from n to 1 i
                                 return self.settings.progress_margin and not self.ui.document.info.has_pages
                             end,
                             enabled_func = function()
-                                return not self.ui.document.info.has_pages and self.settings.progress_bar_position ~= "alongside"
+                                return not self.ui.document.info.has_pages -- and self.settings.progress_bar_position ~= "alongside"
                             end,
                             callback = function()
                                 self.settings.progress_margin = true
@@ -3403,7 +3445,7 @@ With this enabled, the current page is included, so the count goes from n to 1 i
                     if Device:isAndroid() then
                         device_defaults = customMargin(material_pixels)
                     else
-                        device_defaults = customMargin(10)
+                        device_defaults = customMargin(10) 
                     end
                     table.insert(common, 2, device_defaults)
                     return common
@@ -3646,6 +3688,10 @@ function ReaderFooter:_updateFooterText(force_repaint, full_repaint)
     local text = self:genFooterText()
     if not text then text = "" end
     self.footer_text:setText(text)
+    local symbol_type = self.settings.item_prefix
+    local prefix = symbol_prefix[symbol_type].time
+    local clock = datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
+    self.footer_text2:setText("⌚" .. clock .. "|" .. self.ui.document._document:getDocumentProps().title .. "|" .. ("%d de %d"):format(self.pageno, self.pages))
     if self.settings.disable_progress_bar then
         if self.has_no_mode or text == "" then
             self.text_width = 0
@@ -3872,8 +3918,9 @@ function ReaderFooter:TapFooter(ges)
 end
 
 function ReaderFooter:onToggleFooterMode()
+    self.bottom_padding = Screen:scaleBySize(self.settings.container_bottom_padding)
     -- self.height = Screen:scaleBySize(self.settings.container_height)
-    -- self:refreshFooter(true, false)
+    self:refreshFooter(true, false)
     if not self.view.footer_visible or self.mode == 0 then
         UIManager:show(Notification:new{
             text = _("Footer on."),
@@ -3895,7 +3942,7 @@ function ReaderFooter:onToggleFooterMode()
                     break
                 else
                     self.mode = (self.mode + 1) % self.mode_nb
-                end
+             end
             end
         end
     end
@@ -3915,14 +3962,15 @@ function ReaderFooter:onToggleFooterMode()
     self:applyFooterMode()
     G_reader_settings:saveSetting("reader_footer_mode", self.mode)
     self:onUpdateFooter(true)
-    -- self:rescheduleFooterAutoRefreshIfNeeded()
+    self:rescheduleFooterAutoRefreshIfNeeded()
     return true
 end
 
 
 
 function ReaderFooter:onToggleFooterModeBack()
-
+    self.bottom_padding = Screen:scaleBySize(self.settings.container_bottom_padding)
+    self:refreshFooter(true, false)
     if not self.view.footer_visible or self.mode == 0 then
         UIManager:show(Notification:new{
             text = _("Footer on."),
@@ -3964,8 +4012,8 @@ function ReaderFooter:onToggleFooterModeBack()
     self._old_mode = self.mode
     self:applyFooterMode()
     G_reader_settings:saveSetting("reader_footer_mode", self.mode)
-    self:onUpdateFooter(true)
-    -- self:rescheduleFooterAutoRefreshIfNeeded()
+    self:onUpdateFooter(true, true)
+    self:rescheduleFooterAutoRefreshIfNeeded()
     return true
 end
 
@@ -3984,60 +4032,16 @@ function ReaderFooter:onToggleReclaimHeight()
     self.reclaim_height = not self.reclaim_height
     self.settings["claim_height"] = self.reclaim_height
     self.settings.reclaim_height = self.reclaim_height
-    -- refresh margins position
-    -- current mode got disabled, redraw footer with other
-    -- enabled modes. if all modes are disabled, then only show
-    -- -- progress bar
-    -- if not self.has_no_mode then
-    --     self.mode = first_enabled_mode_num
-    -- else
-    --     -- If we've just disabled our last mode, first_enabled_mode_num is nil
-    --     -- If the progress bar is enabled,
-    --     -- This is exactly what the "Show progress bar" toggle does.
-    --     self.mode = self.settings.disable_progress_bar and self.mode_list.off or self.mode_list.page_progress
-    -- end
-    -- self:applyFooterMode()
     self:refreshFooter(true, true)
     -- The absence or presence of some items may change whether auto-refresh should be ensured
     self:rescheduleFooterAutoRefreshIfNeeded()
     return true
 end
 
--- function ReaderFooter:onToggleStatusBarOnOff()
---     self._statusbar_toggled=true
---     if self.view.footer_visible and self.mode > 0 then
---         self.view.footer_visible = false
---         UIManager:show(Notification:new{
---             text = _("Footer off."),
---         })
---     else
---         if self.mode == 0 then
---             self.mode = (self.mode + 1) % self.mode_nb
---             for i, m in ipairs(self.mode_index) do
---                 if self.mode == self.mode_list.off then break end
---                 if self.mode == i then
---                     if self.settings[m] then
---                         break
---                     else
---                         self.mode = (self.mode + 1) % self.mode_nb
---                     end
---                 end
---             end
---             self:applyFooterMode()
---         end
---         self.view.footer_visible = true
---         UIManager:show(Notification:new{
---             text = _("Footer on."),
---         })
---     end
-
---     self:onUpdateFooter(true)
---     return true
--- end
-
 function ReaderFooter:onStatusBarJustProgressBar()
+    --self.bottom_padding = Screen:scaleBySize(-2)
     self.settings.progress_bar_position = "alongside"
-    self.height = Screen:scaleBySize(self.settings.container_height)
+   --  self.height = Screen:scaleBySize(self.settings.container_height + 10)
     self:refreshFooter(true, false)
     if (self.settings.disable_progress_bar) then-- and self.view.footer_visible) or self._statusbar_toggled then
         local text = "Progress bar on."
@@ -4066,24 +4070,22 @@ function ReaderFooter:onStatusBarJustProgressBar()
 
     else
         local text = "Progress bar off."
+        self.bottom_padding = Screen:scaleBySize(self.settings.container_bottom_padding)
         if self.mode > 0 then
             text = "Progress bar and footer off."
         end
-        UIManager:show(Notification:new{
-            text = _(text),
-        })
         self.settings.disable_progress_bar = true
         self.mode = 0
         self:applyFooterMode() -- Importante hacer aquí applyFooterMode
-        self.view.footer_visible = true
-        -- else
-        --     -- self.mode = self._old_mode
-        --     self.view.footer_visible = false
-        --     self:applyFooterMode()
-        -- end
+      
+        UIManager:show(Notification:new{                  
+            text = _(text),                               
+        })
+        self.view.footer_visible = false
     end
     G_reader_settings:saveSetting("reader_footer_mode", self.mode)
-    self:onUpdateFooter(true, true) -- Importante pasar el segundo parámetro a true
+    self:onUpdateFooter(true,true) -- Importante pasar el segundo parámetro a true
+    self:rescheduleFooterAutoRefreshIfNeeded() 
     return true
 end
 
