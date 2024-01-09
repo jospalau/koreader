@@ -1010,7 +1010,7 @@ function ReaderStatistics:insertDBSessionStats()
     local duration_raw =  math.floor((os.time() - self.start_current_period))
     local duration_raw_mins =  math.floor(((os.time() - self.start_current_period)/60)* 100) / 100
     local wpm_session = math.floor(self._total_words/duration_raw_mins)
-    if duration_raw < 360 then -- or self._total_pages < 5 then
+    if duration_raw < 360 or self._total_pages < 6 then
         return
     end
     local UIManager = require("ui/uimanager")
@@ -1058,13 +1058,13 @@ function ReaderStatistics:insertDB(updated_pagecount)
     -- { [186] = { [1] = { [1] = 1702567923,[2] = 2,} ,} ,[187] = { [1] = { [1] = 1702567925,[2] = 2,} ,} ,[184] = { [1] = { [1] = 1702567920,[2] = 2,} ,}
     -- ,[185] = { [1] = { [1] = 1702567922,[2] = 1,} ,} ,[188] = { [1] = { [1] = 1702567927,[2] = 0,} ,} ,}
     logger.info("entro " .. tostring(duration_raw))
-    if duration_raw < 360 then -- or self._total_pages < 5 then
+    if duration_raw < 360 or self._total_pages < 6 then
         return
     end
     logger.info("entro2 " .. tostring(duration_raw))
     -- The current page stat, having yet no duration, will be ignored
     -- in the insertion, and its start ts would be lost. We'll give it
-    -- to resetVolatileStats() so it can restore 
+    -- to resetVolatileStats() so it can restore
     local cur_page_start_ts = now_ts
     local cur_page_data = self.page_stat[self.curr_page]
     local cur_page_data_tuple = cur_page_data and cur_page_data[#cur_page_data]
@@ -3295,7 +3295,7 @@ end
 -- Triggered by auto_save_settings_interval_minutes
 function ReaderStatistics:onSaveSettings()
     --self:insertDB() --This is redundant. This is executed when closing a document or suspending the device
-    --but the event handlers are also inserting 
+    --but the event handlers are also inserting
 end
 
 -- in case when screensaver starts
@@ -3326,7 +3326,7 @@ function ReaderStatistics:onResume()
     self._total_pages = 0
     -- Kindle and Android needsrefresh in the footer to show new start_current_period
     -- Android needs full refresh passing true, true. I set this for all the devices
-    --self.view.footer:onUpdateFooter(true,true) --Si configuramos que el screensaver permanezca un tiempo, este refresco lo distorsiona un poco. 
+    --self.view.footer:onUpdateFooter(true,true) --Si configuramos que el screensaver permanezca un tiempo, este refresco lo distorsiona un poco.
     local screensaver_delay = G_reader_settings:readSetting("screensaver_delay")
     if screensaver_delay and screensaver_delay ~= "disable" then
         self._delayed_screensaver = true
