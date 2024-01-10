@@ -128,7 +128,7 @@ function ReaderStatistics:init()
     self._total_words = 0
     self._total_chars = 0
     self._total_pages = 0
-    self.devices = {
+        self.devices = {
         ["Kobo_io"] = 1, -- Kobo Libra 2
         ["Kobo_cadmus"] = 2, -- Kobo Sage
         ["Kobo_goldfinch"] = 3, -- Kobo Clara 2E
@@ -3115,7 +3115,7 @@ function ReaderStatistics:onPosUpdate(pos, pageno)
 end
 
 function ReaderStatistics:onPageUpdate(pageno)
-    if not self:isEnabledAndNotFrozen() then
+        if not self:isEnabledAndNotFrozen() then
         return
     end
 
@@ -3290,7 +3290,6 @@ function ReaderStatistics:importFromFile(base_path, item)
 end
 
 function ReaderStatistics:onCloseDocument()
-    -- I don't mind about last page
     self:onPageUpdate(false)
     self:insertDB() --OnSaveSettings() also inserts in db but I commented it
     if not ReaderStatistics.preserve then -- Not save session when adjusting configuration which forces document reopening
@@ -3337,7 +3336,7 @@ end
 -- screensaver off
 function ReaderStatistics:onResume()
     self.start_current_period = os.time()
-    self:resetVolatileStats() --Calling this since I don't call onReadingPaused() en onSuspend()
+    self:resetVolatileStats(os.time()) --Calling this since I don't call onReadingPaused() en onSuspend()
     --self:onReadingResumed() --Not interested in this, since I don't call onReadingPaused() en onSuspend()
     self._last_nbwords = 0
     self._total_words = 0
