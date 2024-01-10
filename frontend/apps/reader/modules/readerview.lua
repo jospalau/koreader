@@ -238,10 +238,6 @@ function ReaderView:paintTo(bb, x, y)
     if self.highlight.indicator then
         self:drawHighlightIndicator(bb, x, y)
     end
-    -- paint dogear
-    if self.dogear_visible then
-        self.dogear:paintTo(bb, x, y)
-    end
     -- paint footer
     if self.footer_visible then
         if not self.footer.settings.bar_top then
@@ -264,6 +260,11 @@ function ReaderView:paintTo(bb, x, y)
             self.footer:paintTo(bb, x, y_coordinate_top)
         end
 
+    end
+
+    -- paint dogear
+    if self.dogear_visible then
+        self.dogear:paintTo(bb, x, y)
     end
     -- paint top left corner indicator
     self.flipping:paintTo(bb, x, y)

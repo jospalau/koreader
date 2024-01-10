@@ -2892,7 +2892,7 @@ function ReaderFooter:addToMainMenu(menu_items)
                         value = top_padding,
                         value_min = 0,
                         value_max = 100,
-                        default_value = 50,
+                        default_value = 5,
                         ok_text = _("Set margin"),
                         title_text = _("Top bar margin"),
                         keep_shown_on_apply = true,
@@ -2901,9 +2901,8 @@ function ReaderFooter:addToMainMenu(menu_items)
                             if not self.settings.top_padding then
                                 self.top_padding = Screen:scaleBySize(self.settings.top_padding)
                             else
-                                self.top_padding = Screen:scaleBySize(0)
+                                self.top_padding = Screen:scaleBySize(5)
                             end
-                            self.footer_text.forced_height = self.top_padding
                             self:refreshFooter(true, true)
                             if touchmenu_instance then touchmenu_instance:updateItems() end
                         end,
@@ -4309,7 +4308,8 @@ function ReaderFooter:maybeUpdateFooter()
 end
 
 function ReaderFooter:onFrontlightStateChanged()
-    self:maybeUpdateFooter()
+    -- self:maybeUpdateFooter() -- the source powerd.lua generic launch the event when changing brigth and warmth and this breaks the top status bar
+    -- this events reflects the change in bright and warmth in the status bar but I don't use it
 end
 ReaderFooter.onCharging    = ReaderFooter.onFrontlightStateChanged
 ReaderFooter.onNotCharging = ReaderFooter.onFrontlightStateChanged
