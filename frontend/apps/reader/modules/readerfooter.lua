@@ -270,7 +270,7 @@ getSessionStats = function (footer)
         local session_started = footer.ui.statistics.start_current_period
         local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
         -- best to e it to letters, to get '2m' ?
-        user_duration_format = "letters"
+        -- user_duration_format = "letters"
 
         -- No necesitamos el id del libro para poder traer las páginas en la sesión actual
         local id_book = footer.ui.statistics.id_curr_book
@@ -329,7 +329,7 @@ getSessionStats = function (footer)
         logger.warn(percentage_session)
 
         percentage_session = math.floor(percentage_session*1000)/10
-        local duration = datetime.secondsToClockDuration(user_duration_format, os.time() - session_started, true)
+        local duration = datetime.secondsToClockDuration(user_duration_format, os.time() - session_started, false)
 
 
         local duration_raw =  math.floor(((os.time() - session_started)/60)* 100) / 100
@@ -2331,6 +2331,26 @@ function ReaderFooter:onShowTextProperties()
     return true
 end
 
+
+function ReaderFooter:onMoveStatusBar()
+    if not self.settings.disable_progress_bar or self.mode > 0 then
+        local text = ""
+        if self.settings.bar_top then
+            text = "status bar set to bottom"
+        else
+            text = "status bar set to top"
+        end
+        self.settings.bar_top = not self.settings.bar_top
+        UIManager:setDirty(self.dialog, "ui")
+        UIManager:close(self.input_dialog)
+        self.ui.searching = false
+        UIManager:show(Notification:new{
+            text = _(text),
+        })
+        self:onUpdateFooter(true,true)
+    end
+end
+
 function ReaderFooter:setupTouchZones()
     if not Device:isTouchDevice() then return end
     local DTAP_ZONE_MINIBAR = G_defaults:readSetting("DTAP_ZONE_MINIBAR")
@@ -2505,6 +2525,7 @@ function ReaderFooter:textOptionTitles(option)
         remaining_to_read_today = _("Remaining to read today"),
         progress_pages = _("Progress pages from Calibre"),
         time_and_progress = _("Time and progress"),
+        bar_top = _("Status bar on top"),
 
     }
     return option_titles[option]
@@ -2703,6 +2724,15 @@ function ReaderFooter:addToMainMenu(menu_items)
                 end,
             },
             {
+                text = _("Status bar on top"),
+                checked_func = function()
+                    return self.settings.bar_top == true
+                end,
+                callback = function()
+                    self.settings.bar_top = not self.settings.bar_top
+                end,
+            },
+            {
                 text_func = function()
                     local font_weight = ""
                     if self.settings.text_font_bold == true then
@@ -2843,6 +2873,37 @@ function ReaderFooter:addToMainMenu(menu_items)
                             self.settings.text1_bottom_padding = spin.value
                             self.text1_bottom_padding = Screen:scaleBySize(self.settings.text1_bottom_padding)
                             self.footer_text.forced_height = self.text1_bottom_padding
+                            self:refreshFooter(true, true)
+                            if touchmenu_instance then touchmenu_instance:updateItems() end
+                        end,
+                    }
+                    UIManager:show(items_font)
+                end,
+                keep_menu_open = true,
+            },
+            {
+                text_func = function()
+                    return T(_("Adjust margin top: %1"), self.settings.top_padding)
+                end,
+                callback = function(touchmenu_instance)
+                    local SpinWidget = require("ui/widget/spinwidget")
+                    local top_padding = self.settings.top_padding
+                    local items_font = SpinWidget:new{
+                        value = top_padding,
+                        value_min = 0,
+                        value_max = 100,
+                        default_value = 50,
+                        ok_text = _("Set margin"),
+                        title_text = _("Top bar margin"),
+                        keep_shown_on_apply = true,
+                        callback = function(spin)
+                            self.settings.top_padding = spin.value
+                            if not self.settings.top_padding then
+                                self.top_padding = Screen:scaleBySize(self.settings.top_padding)
+                            else
+                                self.top_padding = Screen:scaleBySize(0)
+                            end
+                            self.footer_text.forced_height = self.top_padding
                             self:refreshFooter(true, true)
                             if touchmenu_instance then touchmenu_instance:updateItems() end
                         end,
@@ -3990,7 +4051,7 @@ function ReaderFooter:onToggleFooterMode()
     self._old_mode = self.mode
     self:applyFooterMode()
     G_reader_settings:saveSetting("reader_footer_mode", self.mode)
-    self:onUpdateFooter(true)
+    self:onUpdateFooter(true, true) -- Si solo pasamos el primer parametro a true y la barra la queremos arriba, la pintara abajo
     self:rescheduleFooterAutoRefreshIfNeeded()
     return true
 end

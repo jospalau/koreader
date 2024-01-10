@@ -244,7 +244,26 @@ function ReaderView:paintTo(bb, x, y)
     end
     -- paint footer
     if self.footer_visible then
-        self.footer:paintTo(bb, x, y)
+        if not self.footer.settings.bar_top then
+            self.footer:paintTo(bb, x, y)
+        else
+            -- local y_coordinate_top = 0
+            -- if Device.model == "Kobo_goldfinch" then -- Clara2E
+            --     y_coordinate_top = -Screen:getHeight() + Screen:scaleBySize(self.footer.height) + Screen:scaleBySize(self.footer.bottom_padding) + 5
+            -- elseif Device:isAndroid() then
+            --     y_coordinate_top = -Screen:getHeight() + Screen:scaleBySize(self.footer.height) + Screen:scaleBySize(self.footer.bottom_padding) + 15
+            -- else
+            --     y_coordinate_top = -Screen:getHeight() + Screen:scaleBySize(self.footer.height) + Screen:scaleBySize(self.footer.bottom_padding)
+            -- end
+
+            local top_padding = 0
+            if self.footer.settings.top_padding then
+                top_padding = self.footer.settings.top_padding
+            end
+            local y_coordinate_top = -Screen:getHeight() + Screen:scaleBySize(self.footer.height) + Screen:scaleBySize(top_padding)
+            self.footer:paintTo(bb, x, y_coordinate_top)
+        end
+
     end
     -- paint top left corner indicator
     self.flipping:paintTo(bb, x, y)
