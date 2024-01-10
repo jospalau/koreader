@@ -173,6 +173,7 @@ function ReaderStatistics:init()
     if ReaderStatistics.preserved_start_current_period then
         self.start_current_period = ReaderStatistics.preserved_start_current_period
         ReaderStatistics.preserved_start_current_period = nil
+
     end
     if ReaderStatistics.preserved_pages_turned then
         self._pages_turned = ReaderStatistics.preserved_pages_turned
@@ -188,6 +189,30 @@ function ReaderStatistics:init()
         self._total_words = ReaderStatistics.preserved_total_words
         ReaderStatistics.preserved_total_words = nil
     end
+
+    if self.start_current_period then
+
+        local duration_raw =  math.floor((os.time() - self.start_current_period))
+        if duration_raw < 360 or self._total_pages < 6 then
+            self.start_current_period = os.time()
+            self._pages_turned = 0
+            self._total_pages = 0
+            self._total_words = 0
+            local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
+            local nbwords = 0
+            local nbcharacters = 0
+            if res and res.text then
+                local words = splitToWords(res.text) -- contar palabras
+                local characters = res.text -- contar caracteres
+                -- logger.warn(words)
+                nbwords = #words -- # es equivalente a string.len()
+                nbcharacters = #characters
+            end
+            self._last_nbwords = nbwords
+            self._last_nbchars = nbcharacters
+        end
+    end
+
     self:resetVolatileStats()
 
     self.settings = G_reader_settings:readSetting("statistics", self.default_settings)
@@ -1058,6 +1083,11 @@ function ReaderStatistics:insertDB(updated_pagecount)
     -- { [186] = { [1] = { [1] = 1702567923,[2] = 2,} ,} ,[187] = { [1] = { [1] = 1702567925,[2] = 2,} ,} ,[184] = { [1] = { [1] = 1702567920,[2] = 2,} ,}
     -- ,[185] = { [1] = { [1] = 1702567922,[2] = 1,} ,} ,[188] = { [1] = { [1] = 1702567927,[2] = 0,} ,} ,}
     logger.info("entro " .. tostring(duration_raw))
+
+    -- If we change the document properties before reaching the minimium time and minimum number of pages, the time and pages read are lost
+    -- since the info is not stored in db after the document is reopened
+    -- Something could be done in ReaderStatistics:init() so self:resetVolatileStats() is not called
+    -- But it is not that important
     if duration_raw < 360 or self._total_pages < 6 then
         return
     end
