@@ -833,7 +833,8 @@ local footerTextGeneratorMap = {
 
         percentage_session = pages_read_session/footer.pages
         percentage_session = math.floor(percentage_session*1000)/10
-        return "S: " .. duration .. "(" .. percentage_session .. "%, " .. words_session .. ")"  .. "(" .. pages_read_session.. "p) " .. wpm_session .. "wpm"
+        -- return "S: " .. duration .. "(" .. percentage_session .. "%, " .. words_session .. ")"  .. "(" .. pages_read_session.. "p) " .. wpm_session .. "wpm"
+        return "S: " .. percentage_session .. "%|" .. words_session .. "w|" .. pages_read_session.. "p|" .. wpm_session .. "wpm"
    end,
    today_stats = function(footer)
         local today_duration, today_pages = getTodayBookStats()
@@ -909,7 +910,8 @@ local footerTextGeneratorMap = {
         return "n/a"
         end
 
-    return duration .. "|" .. percentage .. "|" .. left_chapter .. "|" .. footer:getDataFromStatistics("", sigcap2 - sigcap)
+    -- return duration .. "|" .. percentage .. "|" .. left_chapter .. "|" .. footer:getDataFromStatistics("", sigcap2 - sigcap)
+    return "I: " .. percentage .. "|" .. left_chapter .. "p|" .. footer:getDataFromStatistics("", sigcap2 - sigcap)
    end,
 }
 
@@ -2052,13 +2054,19 @@ function ReaderFooter:onGetTextPage()
         font_size_mm = math.floor((font_size * 25.4 / 160)  * 100) / 100
     end
 
+    local sessions, avg_wpm, avg_last_seven_days, avg_last_thirty_days = getSessionsInfo(self)
+    avg_wpm = math.floor(avg_wpm) .. "wpm" .. ", " .. math.floor(avg_wpm*60) .. "wph"
     local text =
     "Total pages (screens): " .. self.pages .. string.char(10) ..
     "Total words (total chars/5.7): " .. total_words .. string.char(10) .. -- Dividing characters between 5.7
     "Total words (counting words): " .. total_words2 .. string.char(10) .. -- Counting words
     "Total words Calibre: " .. title_words .. string.char(10) ..
     "Words per page: " .. tostring(math.floor((total_words2/self.pages * 100) / 100)) .. string.char(10) ..
-    "Words per page Calibre: " .. tostring(math.floor((title_words/self.pages * 100) / 100)) .. string.char(10) ..
+    "Words per page Calibre: " .. tostring(math.floor((title_words/self.pages * 100) / 100)) .. string.char(10) .. string.char(10) ..
+    "Total sessions in db: " .. tostring(sessions) .. string.char(10) ..
+    "Average time read last 7 days: " .. avg_last_seven_days .. "h" .. string.char(10) ..
+    "Average time read last 30 days: " .. avg_last_thirty_days .. "h" .. string.char(10) ..
+    "Avg wpm and wph: " .. avg_wpm .. string.char(10) .. string.char(10) ..
     "Font parameters: " .. font_face .. ", " .. font_size .. "px, " .. font_size_pt .. "pt, " .. font_size_mm .. "mm" .. string.char(10) ..
     "Number of tweaks: " .. self.ui.tweaks_no .. string.char(10) ..
     self.ui.tweaks
@@ -2283,18 +2291,18 @@ function ReaderFooter:onShowTextProperties()
     percentage_session = math.floor(percentage_session*1000)/10
     pages_read_session =  self.ui.statistics._total_pages
 
-    local sessions, avg_wpm, avg_last_seven_days, avg_last_thirty_days = getSessionsInfo(self)
+    -- local sessions, avg_wpm, avg_last_seven_days, avg_last_thirty_days = getSessionsInfo(self)
+    -- avg_wpm = math.floor(avg_wpm) .. "wpm" .. ", " .. math.floor(avg_wpm*60) .. "wph"
 
-    avg_wpm = math.floor(avg_wpm) .. "wpm" .. ", " .. math.floor(avg_wpm*60) .. "wph"
     local line = "﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏"
     local point = "‣"
     local important = " \u{261C}"
 
-    local text = "Total sessions in db: " .. tostring(sessions) .. string.char(10)
-    .. "Avg wpm and wph in all sessions: " .. avg_wpm .. string.char(10)
-    .. "Average time read last 7 days: " .. avg_last_seven_days .. "h" .. string.char(10)
-    .. "Average time read last 30 days: " .. avg_last_thirty_days .. "h" .. string.char(10) .. string.char(10)
-    .. clock .. " " .. title_pages .. string.char(10) .. string.char(10)
+
+    -- .. "Avg wpm and wph in all sessions: " .. avg_wpm .. string.char(10)
+    -- .. "Average time read last 7 days: " .. avg_last_seven_days .. "h" .. string.char(10)
+    -- .. "Average time read last 30 days: " .. avg_last_thirty_days .. "h" .. string.char(10) .. string.char(10)
+    local text = clock .. " " .. title_pages .. string.char(10) .. string.char(10)
     .. point .. " Progress book: " .. progress_book .. " (" .. percentage .. ")" ..  string.char(10)
     .. point .. " Left chapter " .. chapter .. ": " .. left_chapter  .. important .. string.char(10)
     .. line .. string.char(10)  .. string.char(10)
@@ -3779,8 +3787,12 @@ function ReaderFooter:_updateFooterText(force_repaint, full_repaint)
     self.footer_text:setText(text)
     local symbol_type = self.settings.item_prefix
     local prefix = symbol_prefix[symbol_type].time
+
+
     local clock = datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
-    self.footer_text2:setText("⌚" .. clock .. "|" .. self.ui.document._document:getDocumentProps().title .. "|" .. ("%d de %d"):format(self.pageno, self.pages))
+    local percentage_session, pages_read_session, duration, wpm_session, words_session, duration_raw = getSessionStats(self)
+
+    self.footer_text2:setText("⌚" .. clock .. "|" .. duration .. "|" .. self.ui.document._document:getDocumentProps().title .. "|" .. ("%d de %d"):format(self.pageno, self.pages))
     if self.settings.disable_progress_bar then
         if self.has_no_mode or text == "" then
             self.text_width = 0
