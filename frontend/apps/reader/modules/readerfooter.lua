@@ -234,7 +234,7 @@ getSessionsInfo = function (footer)
             WHERE DATE(start_time,'unixepoch','localtime') > DATE(DATE('now', '-30 day','localtime'),'localtime')
             GROUP BY DATE(start_time,'unixepoch','localtime'));"
             );
-]]
+    ]]
     local avg_last_thirty_days = conn:rowexec(sql_stmt)
 
     conn:close()
@@ -267,6 +267,9 @@ getSessionStats = function (footer)
         if not footer.ui.statistics then
             return "n/a"
         end
+
+
+
         local session_started = footer.ui.statistics.start_current_period
         local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
         -- best to e it to letters, to get '2m' ?
@@ -296,8 +299,27 @@ getSessionStats = function (footer)
                 FROM   book
                 WHERE  id = %d;
         ]]
+
+
         local total_pages = conn:rowexec(string.format(sql_stmt, id_book))
 
+
+        local sql_stmt = [[
+            SELECT sum(sum_duration)
+            FROM    (
+                         SELECT sum(duration)    AS sum_duration
+                         FROM   page_stat
+                         WHERE  start_time >= %d
+                         GROUP  BY id_book, page
+                    );
+        ]]
+
+        local now_stamp = os.time()
+        local now_t = os.date("*t")
+        local from_begin_day = now_t.hour * 3600 + now_t.min * 60 + now_t.sec
+        local start_today_time = now_stamp - from_begin_day
+
+        local read_today = conn:rowexec(string.format(sql_stmt,start_today_time))
 
         local flow = footer.ui.document:getPageFlow(footer.pageno)
 
@@ -312,6 +334,12 @@ getSessionStats = function (footer)
         end
         total_pages = tonumber(total_pages)
         --local percentage_session = footer.pageno/total_pages
+
+        if read_today == nil then
+            read_today = 0
+        end
+        read_today = tonumber(read_today)
+
         local percentage_session = pages_read_session/total_pages
         local wpm_session = 0
 
@@ -336,7 +364,7 @@ getSessionStats = function (footer)
         if duration_raw == nil then
             duration_raw = 0
         end
-        return percentage_session, pages_read_session, duration, wpm_session, words_session, duration_raw
+        return percentage_session, pages_read_session, duration, wpm_session, words_session, duration_raw, read_today
     end
 getTodayBookStats = function ()
     local now_stamp = os.time()
@@ -3790,9 +3818,38 @@ function ReaderFooter:_updateFooterText(force_repaint, full_repaint)
 
 
     local clock = datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
-    local percentage_session, pages_read_session, duration, wpm_session, words_session, duration_raw = getSessionStats(self)
 
-    self.footer_text2:setText("⌚" .. clock .. "|" .. duration .. "|" .. self.ui.document._document:getDocumentProps().title .. "|" .. ("%d de %d"):format(self.pageno, self.pages))
+    local session_started = self.ui.statistics.start_current_period
+    local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
+    local duration = datetime.secondsToClockDuration(user_duration_format, os.time() - session_started, false)
+
+    -- local percentage_session, pages_read_session, duration, wpm_session, words_session, duration_raw, read_today = getSessionStats(self)
+
+
+    if not initial_read_today then
+        _, _, _, _, _, _, initial_read_today = getSessionStats(self)
+    end
+
+    -- This is to include the current session time in the curren time read
+    local now_t = os.date("*t")
+    local daysfrom = os.difftime(os.time(), session_started) / (24 * 60 * 60) -- seconds in a day
+    local wholedays = math.floor(daysfrom)
+
+    if wholedays == 1 then
+        now_t.hour=0
+        now_t.min=0
+        now_t.sec=0
+        local seconds_since_md = os.time(session_started) - now_t
+        read_today = initial_read_today + seconds_since_md
+    else
+        read_today = initial_read_today + (os.time() - session_started)
+    end
+
+    -- read_today = tostring(math.floor(tonumber(read_today)/60/60)) .. "h"
+    -- read_today = math.floor(tonumber(read_today)/60/60 * 100)/100
+
+    local read_today = datetime.secondsToClockDuration(user_duration_format,read_today, false)
+    self.footer_text2:setText("⌚" .. clock .. "|" .. duration .. "|≃" .. read_today .. "|" .. self.ui.document._document:getDocumentProps().title)-- .. "|" .. ("%d de %d"):format(self.pageno, self.pages))
     if self.settings.disable_progress_bar then
         if self.has_no_mode or text == "" then
             self.text_width = 0

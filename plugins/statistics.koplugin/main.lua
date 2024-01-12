@@ -1082,7 +1082,6 @@ function ReaderStatistics:insertDB(updated_pagecount)
     -- La información de las páginas está en self.page_stat y tiene este formato:
     -- { [186] = { [1] = { [1] = 1702567923,[2] = 2,} ,} ,[187] = { [1] = { [1] = 1702567925,[2] = 2,} ,} ,[184] = { [1] = { [1] = 1702567920,[2] = 2,} ,}
     -- ,[185] = { [1] = { [1] = 1702567922,[2] = 1,} ,} ,[188] = { [1] = { [1] = 1702567927,[2] = 0,} ,} ,}
-    logger.info("entro " .. tostring(duration_raw))
 
     -- If we change the document properties before reaching the minimium time and minimum number of pages, the time and pages read are lost
     -- since the info is not stored in db after the document is reopened
@@ -1091,7 +1090,6 @@ function ReaderStatistics:insertDB(updated_pagecount)
     if duration_raw < 360 or self._total_pages < 6 then
         return
     end
-    logger.info("entro2 " .. tostring(duration_raw))
     -- The current page stat, having yet no duration, will be ignored
     -- in the insertion, and its start ts would be lost. We'll give it
     -- to resetVolatileStats() so it can restore
