@@ -99,7 +99,8 @@ end
 --     return require("readcollection"):OpenRandomFav()
 -- end
 
-function ReaderMenu:onReaderReady()
+-- function ReaderMenu:onReaderReady()
+function ReaderMenu:initGesListener()
     if not Device:isTouchDevice() then return end
 
     local DTAP_ZONE_MENU = G_defaults:readSetting("DTAP_ZONE_MENU")
@@ -182,6 +183,8 @@ function ReaderMenu:onReaderReady()
         },
     })
 end
+
+ReaderMenu.onReaderReady = ReaderMenu.initGesListener
 
 function ReaderMenu:setUpdateItemTable()
     for _, widget in pairs(self.registered_widgets) do
@@ -487,16 +490,24 @@ function ReaderMenu:onShowMenu(tab_index)
 end
 
 function ReaderMenu:onCloseReaderMenu()
-    if self.menu_container then
-        self.last_tab_index = self.menu_container[1].last_index
-        self:onSaveSettings()
-        UIManager:close(self.menu_container)
-    end
+    if not self.menu_container then return true end
+    self.last_tab_index = self.menu_container[1].last_index
+    self:onSaveSettings()
+    UIManager:close(self.menu_container)
+    self.menu_container = nil
     return true
 end
 
 function ReaderMenu:onSetDimensions(dimen)
-    self:onCloseReaderMenu()
+    -- This widget doesn't support in-place layout updates, so, close & reopen
+    if self.menu_container then
+        self:onCloseReaderMenu()
+        self:onShowMenu()
+    end
+
+    -- update gesture zones according to new screen dimen
+    -- (On CRe, this will get called a second time by ReaderReady once the document is reloaded).
+    self:initGesListener()
 end
 
 function ReaderMenu:onCloseDocument()
