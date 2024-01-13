@@ -237,6 +237,37 @@ getSessionsInfo = function (footer)
     ]]
     local avg_last_thirty_days = conn:rowexec(sql_stmt)
 
+
+    sql_stmt = [[SELECT SUM(sum_duration)
+    FROM   (
+                SELECT sum(duration)    AS sum_duration
+                FROM   wpm_stat_data
+            WHERE DATE(start_time,'unixepoch','localtime') > DATE(DATE('now', '-60 day','localtime'),'localtime')
+            GROUP BY DATE(start_time,'unixepoch','localtime'));"
+            );
+    ]]
+    local avg_last_sixty_days = conn:rowexec(sql_stmt)
+
+    sql_stmt = [[SELECT SUM(sum_duration)
+    FROM   (
+                SELECT sum(duration)    AS sum_duration
+                FROM   wpm_stat_data
+            WHERE DATE(start_time,'unixepoch','localtime') > DATE(DATE('now', '-90 day','localtime'),'localtime')
+            GROUP BY DATE(start_time,'unixepoch','localtime'));"
+            );
+    ]]
+    local avg_last_ninety_days = conn:rowexec(sql_stmt)
+
+    sql_stmt = [[SELECT SUM(sum_duration)
+    FROM   (
+                SELECT sum(duration)    AS sum_duration
+                FROM   wpm_stat_data
+            WHERE DATE(start_time,'unixepoch','localtime') > DATE(DATE('now', '-180 day','localtime'),'localtime')
+            GROUP BY DATE(start_time,'unixepoch','localtime'));"
+            );
+    ]]
+    local avg_last_hundred_and_eighty_days = conn:rowexec(sql_stmt)
+
     conn:close()
     if sessions == nil then
         sessions = 0
@@ -256,9 +287,25 @@ getSessionsInfo = function (footer)
         avg_last_thirty_days = 0
     end
 
+    if avg_last_sixty_days == nil then
+        avg_last_sixty_days = 0
+    end
+
+    if avg_last_ninety_days == nil then
+        avg_last_ninety_days = 0
+    end
+
+    if avg_last_hundred_and_eighty_days == nil then
+        avg_last_hundred_and_eighty_days = 0
+    end
+
     avg_last_seven_days = math.floor(tonumber(avg_last_seven_days)/7/60/60 * 100)/100
     avg_last_thirty_days = math.floor(tonumber(avg_last_thirty_days)/30/60/60 * 100)/100
-    return sessions, avg_wpm, avg_last_seven_days, avg_last_thirty_days
+    avg_last_sixty_days = math.floor(tonumber(avg_last_sixty_days)/60/60/60 * 100)/100
+    avg_last_ninety_days = math.floor(tonumber(avg_last_ninety_days)/90/60/60 * 100)/100
+    avg_last_hundred_and_eighty_days = math.floor(tonumber(avg_last_hundred_and_eighty_days)/180/60/60 * 100)/100
+
+    return sessions, avg_wpm, avg_last_seven_days, avg_last_thirty_days, avg_last_sixty_days, avg_last_ninety_days, avg_last_hundred_and_eighty_days
 end
 
 getSessionStats = function (footer)
@@ -1063,7 +1110,12 @@ function ReaderFooter:init()
     -- Container settings
     self.height = Screen:scaleBySize(self.settings.container_height)
     self.bottom_padding = Screen:scaleBySize(self.settings.container_bottom_padding)
-    self.text1_bottom_padding = Screen:scaleBySize(self.settings.text1_bottom_padding)
+    if not self.settings.text1_bottom_padding then
+        self.text1_bottom_padding = Screen:scaleBySize(5)
+    else
+        self.text1_bottom_padding = Screen:scaleBySize(self.settings.text1_bottom_padding)
+    end
+
 
     self.mode_list = {}
     for i = 0, #self.mode_index do
@@ -2082,7 +2134,7 @@ function ReaderFooter:onGetTextPage()
         font_size_mm = math.floor((font_size * 25.4 / 160)  * 100) / 100
     end
 
-    local sessions, avg_wpm, avg_last_seven_days, avg_last_thirty_days = getSessionsInfo(self)
+    local sessions, avg_wpm, avg_last_seven_days, avg_last_thirty_days, avg_last_sixty_days, avg_last_ninety_days, avg_last_hundred_and_eighty_days = getSessionsInfo(self)
     avg_wpm = math.floor(avg_wpm) .. "wpm" .. ", " .. math.floor(avg_wpm*60) .. "wph"
     local text =
     "Total pages (screens): " .. self.pages .. string.char(10) ..
@@ -2094,6 +2146,9 @@ function ReaderFooter:onGetTextPage()
     "Total sessions in db: " .. tostring(sessions) .. string.char(10) ..
     "Average time read last 7 days: " .. avg_last_seven_days .. "h" .. string.char(10) ..
     "Average time read last 30 days: " .. avg_last_thirty_days .. "h" .. string.char(10) ..
+    "Average time read last 60 days: " .. avg_last_sixty_days .. "h" .. string.char(10) ..
+    "Average time read last 90 days: " .. avg_last_ninety_days .. "h" .. string.char(10) ..
+    "Average time read last 180 days: " .. avg_last_hundred_and_eighty_days .. "h" .. string.char(10) ..
     "Avg wpm and wph: " .. avg_wpm .. string.char(10) .. string.char(10) ..
     "Font parameters: " .. font_face .. ", " .. font_size .. "px, " .. font_size_pt .. "pt, " .. font_size_mm .. "mm" .. string.char(10) ..
     "Number of tweaks: " .. self.ui.tweaks_no .. string.char(10) ..
