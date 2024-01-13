@@ -3827,7 +3827,7 @@ function ReaderFooter:_updateFooterText(force_repaint, full_repaint)
 
 
     if not initial_read_today then
-        _, _, _, _, _, _, initial_read_today = getSessionStats(self)
+        percentage_session, pages_read_session, duration, wpm_session, words_session, duration_raw, initial_read_today = getSessionStats(self)
     end
 
     -- This is to include the current session time in the curren time read
