@@ -1348,9 +1348,12 @@ function FileManager:onPushConfig()
         local execute = nil
         if Device:isKobo() then
             execute = io.popen("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/pushConfig.sh)" )
-        else --Kindle
+        elseif Device:isKindle() then
             execute = io.popen("/mnt/us/scripts/pushConfig.sh && echo $? || echo $?" )
+        else -- PocketBook
+            execute = io.popen("/mnt/ext1/scripts/pushConfig.sh && echo $? || echo $?" )
         end
+
         output = execute:read('*a')
         UIManager:show(InfoMessage:new{
             text = T(_(output)),
@@ -1372,8 +1375,10 @@ function FileManager:onPullConfig()
         local execute = nil
         if Device:isKobo() then
             execute = io.popen("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/pullConfig.sh)" )
-        else --Kindle
+        elseif Device:isKindle() then
             execute = io.popen("/mnt/us/scripts/pullConfig.sh && echo $? || echo $?" )
+        else -- PocketBook
+            execute = io.popen("/mnt/ext1/scripts/pullConfig.sh && echo $? || echo $?" )
         end
         output = execute:read('*a')
         UIManager:show(InfoMessage:new{
@@ -1396,8 +1401,10 @@ function FileManager:onGetLastPushingConfig()
         local execute = nil
         if Device:isKobo() then
             execute = io.popen("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/getLastPushing.sh)" )
-        else --Kindle
+        elseif Device:isKindle() then
             execute = io.popen("/mnt/us/scripts/getLastPushing.sh && echo $? || echo $?" )
+        else -- PocketBook
+            execute = io.popen("/mnt/ext1/scripts/getLastPushing.sh && echo $? || echo $?" )
         end
         output = execute:read('*a')
         UIManager:show(InfoMessage:new{
@@ -1420,8 +1427,10 @@ function FileManager:onSynchronizeCode()
         local execute = nil
         if Device:isKobo() then
             execute = io.popen("/mnt/onboard/.adds/scripts/syncKOReaderCode.sh && echo $? || echo $?" )
-        else --Kindle
+        elseif Device:isKindle() then
             execute = io.popen("/mnt/us/scripts/syncKOReaderCode.sh && echo $? || echo $?" )
+        else -- PocketBook
+            execute = io.popen("/mnt/ext1/scripts/syncKOReaderCode.sh && echo $? || echo $?" )
         end
         output = execute:read('*a')
         UIManager:show(InfoMessage:new{
@@ -1549,8 +1558,10 @@ function FileManager:onSyncBooks()
         local execute = nil
         if Device:isKobo() then
             execute = io.popen("/mnt/onboard/.adds/scripts/syncBooks.sh && echo $? || echo $?" )
-        else --Kindle
+        elseif Device:isKindle() then
             execute = io.popen("/mnt/us/scripts/syncBooks.sh && echo $? || echo $?" )
+        else -- PocketBook
+            execute = io.popen("/mnt/ext1/scripts/syncBooks.sh && echo $? || echo $?" )
         end
         output = execute:read('*a')
         UIManager:show(InfoMessage:new{

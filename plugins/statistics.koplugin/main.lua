@@ -134,7 +134,8 @@ function ReaderStatistics:init()
         ["Kobo_goldfinch"] = 3, -- Kobo Clara 2E
         ["KindlePaperWhite5"] = 4,
         ["ditingp_global"] = 5, -- Xiaomi
-        ["boox"] = 6
+        ["boox"] = 6,
+        ["PB700"] = 7 -- PocketBook
     }
 
     -- local UIManager = require("ui/uimanager")

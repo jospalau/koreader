@@ -1799,8 +1799,10 @@ function ReaderFooter:onPrintChapterLeftFbink()
         local execute = nil
         if Device:isKobo() then
             execute = io.popen("/mnt/onboard/.adds/koreader/fbink -f -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. left_chapter .. "\"")
-        else --Kindle
+        elseif Device:isKobo() then
             execute = io.popen("/mnt/us/koreader/fbink -f -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. left_chapter .. "\"")
+        else --PocketBook
+            execute = io.popen("/mnt/ext1/applications/koreader/fbink -f -t regular=/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. left_chapter .. "\"")
         end
         output = execute:read('*a')
         -- if Device:isKobo() then
@@ -1835,8 +1837,10 @@ function ReaderFooter:onPrintSessionDurationFbink()
         local execute = nil
         if Device:isKobo() then
             execute = io.popen("/mnt/onboard/.adds/koreader/fbink -f -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. duration .. "\"")
-        else --Kindle
+        elseif Device:isKobo() then
             execute = io.popen("/mnt/us/koreader/fbink -f -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format  \"" .. duration .. "\"")
+        else --PocketBook
+            execute = io.popen("/mnt/ext1/applications/koreader/fbink -f -t regular=/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. duration .. "\"")
         end
         output = execute:read('*a')
         -- if Device:isKobo() then
@@ -1871,8 +1875,10 @@ function ReaderFooter:onPrintProgressBookFbink()
         local execute = nil
         if Device:isKobo() then
             execute = io.popen("/mnt/onboard/.adds/koreader/fbink -f -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. percentage .. "\"")
-        else --Kindle
+        elseif Device:isKobo() then
             execute = io.popen("/mnt/us/koreader/fbink -f -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. percentage .. "\"")
+        else --PocketBook
+            execute = io.popen("/mnt/ext1/applications/koreader/fbink -f -t regular=/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. percentage .. "\"")
         end
         output = execute:read('*a')
         -- if Device:isKobo() then
@@ -1906,9 +1912,12 @@ function ReaderFooter:onPrintClockFbink()
         local execute = nil
         if Device:isKobo() then
             execute = io.popen("/mnt/onboard/.adds/koreader/fbink -f -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. clock .. "\"")
-        else --Kindle
+        elseif Device:isKobo() then
             execute = io.popen("/mnt/us/koreader/fbink -f -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \""  .. clock .. "\"")
+        else --PocketBook
+            execute = io.popen("/mnt/ext1/applications/koreader/fbink -f -t regular=/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. clock .. "\"")
         end
+
         output = execute:read('*a')
         -- if Device:isKobo() then
         --     execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=1150,right=50,format " .. duration)
@@ -1947,9 +1956,13 @@ function ReaderFooter:onPrintDurationChapterFbink()
         local execute = nil
         if Device:isKobo() then
             execute = io.popen("/mnt/onboard/.adds/koreader/fbink -f -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. left .. "\"")
-        else --Kindle
+        elseif Device:isKobo() then
             execute = io.popen("/mnt/us/koreader/fbink -f -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. left .. "\"")
+        else --PocketBook
+            execute = io.popen("/mnt/ext1/applications/koreader/fbink -f -t regular=/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. left .. "\"")
         end
+
+
         output = execute:read('*a')
         -- if Device:isKobo() then
         --     execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=1150,right=50,format " .. duration)
@@ -1993,9 +2006,12 @@ function ReaderFooter:onPrintDurationNextChapterFbink()
         local execute = nil
         if Device:isKobo() then
             execute = io.popen("/mnt/onboard/.adds/koreader/fbink -f -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. sigcap2 .. "\"")
-        else --Kindle
+        elseif Device:isKobo() then
             execute = io.popen("/mnt/us/koreader/fbink -f -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. sigcap2 .. "\"")
+        else --PocketBook
+            execute = io.popen("/mnt/ext1/applications/koreader/fbink -f -t regular=/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. sigcap2 .. "\"")
         end
+
         output = execute:read('*a')
         -- if Device:isKobo() then
         --     execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=1150,right=50,format " .. duration)
@@ -2042,8 +2058,10 @@ function ReaderFooter:onPrintWpmSessionFbink()
         local execute = nil
         if Device:isKobo() then
             execute = io.popen("/mnt/onboard/.adds/koreader/fbink -f -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. wpm_session .. "\"")
-        else --Kindle
+        elseif Device:isKobo() then
             execute = io.popen("/mnt/us/koreader/fbink -f -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. wpm_session .. "\"")
+        else --PocketBook
+            execute = io.popen("/mnt/ext1/applications/koreader/fbink -f -t regular=/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. wpm_session .. "\"")
         end
         output = execute:read('*a')
     else
@@ -2109,14 +2127,12 @@ end
 
 function ReaderFooter:onGetTextPage()
     local cur_page = self.ui.document:getCurrentPage()
-    local total_words, total_words2 = self.ui.document:getTextCurrentPage()
-
+    local total_words, total_words2 = 0
+    if not Device:isPocketBook() then
+        total_words, total_words2 = self.ui.document:getTextCurrentPage()
+    end
     local title_pages = self.ui.document._document:getDocumentProps().title
     local title_words = title_pages:match("([0-9,]+w)"):gsub("w",""):gsub(",","")
-
-
-
-
 
     local font_size = self.ui.document._document:getFontSize()
     local font_face = self.ui.document._document:getFontFace()
@@ -2136,12 +2152,16 @@ function ReaderFooter:onGetTextPage()
 
     local sessions, avg_wpm, avg_last_seven_days, avg_last_thirty_days, avg_last_sixty_days, avg_last_ninety_days, avg_last_hundred_and_eighty_days = getSessionsInfo(self)
     avg_wpm = math.floor(avg_wpm) .. "wpm" .. ", " .. math.floor(avg_wpm*60) .. "wph"
-    local text =
-    "Total pages (screens): " .. self.pages .. string.char(10) ..
-    "Total words (total chars/5.7): " .. total_words .. string.char(10) .. -- Dividing characters between 5.7
-    "Total words (counting words): " .. total_words2 .. string.char(10) .. -- Counting words
-    "Total words Calibre: " .. title_words .. string.char(10) ..
-    "Words per page: " .. tostring(math.floor((total_words2/self.pages * 100) / 100)) .. string.char(10) ..
+    local text = ""
+
+    if not Device:isPocketBook() then
+        text = text .. "Total pages (screens): " .. self.pages .. string.char(10) ..
+        "Total words (total chars/5.7): " .. total_words .. string.char(10) .. -- Dividing characters between 5.7
+        "Total words (counting words): " .. total_words2 .. string.char(10) .. -- Counting words
+        "Words per page: " .. tostring(math.floor((total_words2/self.pages * 100) / 100)) .. string.char(10)
+    end
+
+    text = text .. "Total words Calibre: " .. title_words .. string.char(10) ..
     "Words per page Calibre: " .. tostring(math.floor((title_words/self.pages * 100) / 100)) .. string.char(10) .. string.char(10) ..
     "Total sessions in db: " .. tostring(sessions) .. string.char(10) ..
     "Average time read last 7 days: " .. avg_last_seven_days .. "h" .. string.char(10) ..

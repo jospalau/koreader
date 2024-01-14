@@ -34,12 +34,23 @@ function SSH:init()
 end
 
 function SSH:start()
-    local cmd = string.format("%s %s %s %s%s %s",
+    local cmd = ""
+    if Device:isPocketBook() then
+        cmd = string.format("%s %s %s %s%s %s",
+        "sudo ./dropbear",
+        "-E",
+        "-R",
+        "-p", self.SSH_port,
+        "-P /tmp/dropbear_koreader.pid")
+    else
+        cmd = string.format("%s %s %s %s%s %s",
         "./dropbear",
         "-E",
         "-R",
         "-p", self.SSH_port,
         "-P /tmp/dropbear_koreader.pid")
+    end
+
      if self.allow_no_password then
         cmd = string.format("%s %s", cmd, "-n")
     end
@@ -89,7 +100,11 @@ function SSH:isRunning()
 end
 
 function SSH:stop()
-    os.execute("cat /tmp/dropbear_koreader.pid | xargs kill")
+    if Device:isPocketBook() then
+        os.execute("cat /tmp/dropbear_koreader.pid | xargs sudo kill")
+    else
+        os.execute("cat /tmp/dropbear_koreader.pid | xargs kill")
+    end
     UIManager:show(InfoMessage:new {
         text = T(_("SSH server stopped.")),
         timeout = 2,
