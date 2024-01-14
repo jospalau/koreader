@@ -218,6 +218,8 @@ local order = {
         "dictionary_settings",
         "wikipedia_settings",
         "translation_settings",
+        "----------------------------",
+        "fulltext_search_settings",
     },
     filemanager = {},
     main = {
