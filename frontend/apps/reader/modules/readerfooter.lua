@@ -391,7 +391,10 @@ getSessionStats = function (footer)
         local wpm_session = 0
 
         local title_pages = footer.ui.document._document:getDocumentProps().title
-        local title_words = title_pages:match("([0-9,]+w)"):gsub("w",""):gsub(",","")
+        local title_words = 0
+        if (title_pages:find("([0-9,]+w)") ~= nil) then
+            title_words = title_pages:match("([0-9,]+w)"):gsub("w",""):gsub(",","")
+        end
         -- Just to calculate the sesssion wpm I will assume the WPP to be calculated with the books number of words/syntetic pages for the configuration
         -- Not accurate since pages we turn quick are counted when they should not
         WPP_SESSION = math.floor((title_words/footer.pages * 100) / 100)
@@ -2075,53 +2078,56 @@ end
 
 
 function ReaderFooter:onGetStyles()
-    local css_text = self.ui.document:getDocumentFileContent("OPS/styles/stylesheet.css")
-    if css_text == nil then
-        css_text = self.ui.document:getDocumentFileContent("stylesheet.css")
-    end
-
-
-    local first_text = self.ui.document._document:getTextFromPositions(0, 0, 10, Screen:getHeight(), false, false)
-    local html, css_files, css_selectors_offsets =
-    self.ui.document._document:getHTMLFromXPointers(first_text.pos0,first_text.pos1, 0xE830, true)
-    local htmlw=""
-
-    -- No puedo hacerlo con gmatch, iré línea a línea que además viene bien para extraer las clases
-    -- for w in string.gmatch(html, "(<%w* class=\"%w*\">)") do
-    -- for w in string.gmatch(html,"(<%w* class=\"(.-)\">)") do
-    --    htmlw = htmlw .. "," .. w
-    -- end
-    local classes = ""
-    for line in html:gmatch("[^\n]+") do
-        if (line:find("^.*<body") ~= nil or line:find("^.*<p") ~= nil or line:find("^.*<div") ~= nil) and line:find("class=") ~= nil then
-           htmlw = htmlw .. "," .. string.match(line, " %b<>")
-           classes = classes .. "," .. string.match(line, "class=\"(.-)\"")
+    local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
+    if file_type == "epub" then
+        local css_text = self.ui.document:getDocumentFileContent("OPS/styles/stylesheet.css")
+        if css_text == nil then
+            css_text = self.ui.document:getDocumentFileContent("stylesheet.css")
         end
-    end
-    -- Algunas clases contienen el caracter -. Tenemos que escaparlo
-    classes = classes:sub(2,classes:len()):gsub("%-", "%%-")
-    local csss = ""
-    local csss_classes = ""
-    for line in classes:gmatch("[^,]+") do
-        local css_class = string.match(css_text, line .. " %b{}")
-        if css_class ~= nil and csss:find(line) == nil then
-            csss = csss .. css_class .. "\n"
-            csss_classes = csss_classes .. line .. ","
-        end
-    end
-    csss_classes = csss_classes:sub(1,csss_classes:len() - 1):gsub("%%", "")
-    htmlw = htmlw:sub(2,htmlw:len())
 
-    local text =  string.char(10) .. htmlw
-    .. string.char(10) .. csss_classes
-    .. string.char(10) .. csss
-    UIManager:show(InfoMessage:new{
-        text = T(_(text)),
-        timeout = 20,
-        no_refresh_on_close = false,
-        face = Font:getFace("myfont"),
-        width = math.floor(Screen:getWidth() * 0.85),
-    })
+
+        local first_text = self.ui.document._document:getTextFromPositions(0, 0, 10, Screen:getHeight(), false, false)
+        local html, css_files, css_selectors_offsets =
+        self.ui.document._document:getHTMLFromXPointers(first_text.pos0,first_text.pos1, 0xE830, true)
+        local htmlw=""
+
+        -- No puedo hacerlo con gmatch, iré línea a línea que además viene bien para extraer las clases
+        -- for w in string.gmatch(html, "(<%w* class=\"%w*\">)") do
+        -- for w in string.gmatch(html,"(<%w* class=\"(.-)\">)") do
+        --    htmlw = htmlw .. "," .. w
+        -- end
+        local classes = ""
+        for line in html:gmatch("[^\n]+") do
+            if (line:find("^.*<body") ~= nil or line:find("^.*<p") ~= nil or line:find("^.*<div") ~= nil) and line:find("class=") ~= nil then
+            htmlw = htmlw .. "," .. string.match(line, " %b<>")
+            classes = classes .. "," .. string.match(line, "class=\"(.-)\"")
+            end
+        end
+        -- Algunas clases contienen el caracter -. Tenemos que escaparlo
+        classes = classes:sub(2,classes:len()):gsub("%-", "%%-")
+        local csss = ""
+        local csss_classes = ""
+        for line in classes:gmatch("[^,]+") do
+            local css_class = string.match(css_text, line .. " %b{}")
+            if css_class ~= nil and csss:find(line) == nil then
+                csss = csss .. css_class .. "\n"
+                csss_classes = csss_classes .. line .. ","
+            end
+        end
+        csss_classes = csss_classes:sub(1,csss_classes:len() - 1):gsub("%%", "")
+        htmlw = htmlw:sub(2,htmlw:len())
+
+        local text =  string.char(10) .. htmlw
+        .. string.char(10) .. csss_classes
+        .. string.char(10) .. csss
+        UIManager:show(InfoMessage:new{
+            text = T(_(text)),
+            timeout = 20,
+            no_refresh_on_close = false,
+            face = Font:getFace("myfont"),
+            width = math.floor(Screen:getWidth() * 0.85),
+        })
+    end
     return true
 end
 
@@ -2132,7 +2138,11 @@ function ReaderFooter:onGetTextPage()
         total_words, total_words2 = self.ui.document:getTextCurrentPage()
     end
     local title_pages = self.ui.document._document:getDocumentProps().title
-    local title_words = title_pages:match("([0-9,]+w)"):gsub("w",""):gsub(",","")
+
+    local title_words = 0
+    if (title_pages:find("([0-9,]+w)") ~= nil) then
+        title_words = title_pages:match("([0-9,]+w)"):gsub("w",""):gsub(",","")
+    end
 
     local font_size = self.ui.document._document:getFontSize()
     local font_face = self.ui.document._document:getFontFace()
@@ -2218,6 +2228,10 @@ function ReaderFooter:onShowTextProperties()
     local font_face = self.ui.document._document:getFontFace()
     local title_pages = self.ui.document._document:getDocumentProps().title
     local author = self.ui.document._document:getDocumentProps().authors
+
+    if author == "" then
+        author = "No metadata"
+    end
     if not self.ui.statistics.data.pages then
         return "n/a"
     end
@@ -2233,7 +2247,15 @@ function ReaderFooter:onShowTextProperties()
     local pages = self.ui.statistics.data.pages
     --  title_pages = string.match(title_pages, "%((%w+)")
     local title_pages_ex = string.match(title_pages, "%b()")
-    title_pages_ex = title_pages_ex:sub(2, title_pages_ex:len() - 1)
+
+
+    if (title_pages_ex) then
+        local title_words = title_pages:match("([0-9,]+w)"):gsub("w",""):gsub(",","")
+        title_pages_ex = title_pages_ex:sub(2, title_pages_ex:len() - 1)
+    else
+        title_pages_ex = 0
+    end
+
     local font_size_pt = nil
     local font_size_mm = nil
     if Device:isKobo() then
@@ -2278,50 +2300,54 @@ function ReaderFooter:onShowTextProperties()
     --     <rootfile full-path="OEBPS/content.opf"
     --         media-type="application/oebps-package+xml" />
     -- </rootfiles>
-    local css_text = self.ui.document:getDocumentFileContent("OPS/styles/stylesheet.css")
-    if css_text == nil then
-        css_text = self.ui.document:getDocumentFileContent("stylesheet.css")
-    end
-    if css_text == nil then
-        css_text = self.ui.document:getDocumentFileContent("OEBPS/css/style.css")
-    end
 
-    local opf_text = self.ui.document:getDocumentFileContent("OPS/Miscellaneous/content.opf")
-    if opf_text == nil then
-        opf_text = self.ui.document:getDocumentFileContent("content.opf")
-    end
+    local opf_genre = "No metadata"
+    local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
+    if file_type == "epub" then
+        local css_text = self.ui.document:getDocumentFileContent("OPS/styles/stylesheet.css")
+        if css_text == nil then
+            css_text = self.ui.document:getDocumentFileContent("stylesheet.css")
+        end
+        if css_text == nil then
+            css_text = self.ui.document:getDocumentFileContent("OEBPS/css/style.css")
+        end
 
-    if opf_text == nil then
-        opf_text = self.ui.document:getDocumentFileContent("OPS/volume.opf")
-    end
-    if opf_text == nil then
-        opf_text = self.ui.document:getDocumentFileContent("volume.opf")
-    end
+        local opf_text = self.ui.document:getDocumentFileContent("OPS/Miscellaneous/content.opf")
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("content.opf")
+        end
 
-    if opf_text == nil then
-        opf_text = self.ui.document:getDocumentFileContent("OEBPS/Miscellaneous/content.opf")
-    end
-    if opf_text == nil then
-        opf_text = self.ui.document:getDocumentFileContent("OEBPS/content.opf")
-    end
-    if opf_text == nil then
-        opf_text = self.ui.document:getDocumentFileContent("content.opf")
-    end
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("OPS/volume.opf")
+        end
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("volume.opf")
+        end
 
-    local opf_genre = ""
-    for w in string.gmatch(opf_text, "<dc:subject>(.-)</dc:subject>") do
-        opf_genre = opf_genre .. ", " .. w
-    end
-    opf_genre = opf_genre:sub(2,string.len(opf_genre))
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("OEBPS/Miscellaneous/content.opf")
+        end
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("OEBPS/content.opf")
+        end
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("content.opf")
+        end
 
-    local opf_calibre = string.match(opf_text, "<opf:meta property=\"calibre:user_metadata\">(.-)</opf:meta>")
-    if opf_calibre == nil then
-        opf_calibre = "No property"
-    else
-        opf_calibre = string.match(opf_calibre, "\"#genre\": {(.-)}")
-        opf_calibre = string.match(opf_calibre, " \"#value#\": \".-\"")
-        opf_calibre = string.match(opf_calibre, ": .*")
-        opf_calibre = opf_calibre:sub(4,opf_calibre:len() - 1)
+        for w in string.gmatch(opf_text, "<dc:subject>(.-)</dc:subject>") do
+            opf_genre = opf_genre .. ", " .. w
+        end
+        opf_genre = opf_genre:sub(2,string.len(opf_genre))
+
+        local opf_calibre = string.match(opf_text, "<opf:meta property=\"calibre:user_metadata\">(.-)</opf:meta>")
+        if opf_calibre == nil then
+            opf_calibre = "No property"
+        else
+            opf_calibre = string.match(opf_calibre, "\"#genre\": {(.-)}")
+            opf_calibre = string.match(opf_calibre, " \"#value#\": \".-\"")
+            opf_calibre = string.match(opf_calibre, ": .*")
+            opf_calibre = opf_calibre:sub(4,opf_calibre:len() - 1)
+        end
     end
 
     local spp = math.floor(self.ui.statistics.avg_time)
@@ -2345,11 +2371,15 @@ function ReaderFooter:onShowTextProperties()
 
     -- Extraigo la información más fácil así
     title_pages = self.ui.document._document:getDocumentProps().title
-    local title_words = title_pages:match("([0-9,]+w)")
-    local avg_words_cal = math.floor(title_words:sub(1,title_words:len() - 1):gsub(",","")/pages)
-    -- Estimated 5.7 chars per words
-    local avg_chars_cal = math.floor(avg_words_cal * 5.7)
-    local avg_chars_per_word_cal = math.floor((avg_chars_cal/avg_words_cal) * 100) / 100
+
+    local title_words, avg_words_cal, avg_chars_cal, avg_chars_per_word_cal = 0, 0, 0 ,0
+    if (title_pages:find("([0-9,]+w)") ~= nil) then
+        title_words = title_pages:match("([0-9,]+w)")
+        avg_words_cal = math.floor(title_words:sub(1,title_words:len() - 1):gsub(",","")/pages)
+        -- Estimated 5.7 chars per words
+        avg_chars_cal = math.floor(avg_words_cal * 5.7)
+        avg_chars_per_word_cal = math.floor((avg_chars_cal/avg_words_cal) * 100) / 100
+    end
 
     local percentage_session, pages_read_session, duration, wpm_session, words_session, duration_raw = getSessionStats(self)
     local progress_book = ("%d de %d"):format(self.pageno, self.pages)

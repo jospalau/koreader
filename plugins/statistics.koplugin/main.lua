@@ -3352,9 +3352,9 @@ function ReaderStatistics:onResume()
     self._last_nbwords = nbwords
     self._last_nbchars = nbcharacters
     self._total_pages = 0
-    -- Kindle and Android needsrefresh in the footer to show new start_current_period
+    -- Kindle, Android and PocketBook need refresh in the footer to show new start_current_period
     -- Android needs full refresh passing true, true. I set this for all the devices
-    --self.view.footer:onUpdateFooter(true,true) --Si configuramos que el screensaver permanezca un tiempo, este refresco lo distorsiona un poco.
+    -- self.view.footer:onUpdateFooter(true,true) --Si configuramos que el screensaver permanezca un tiempo, este refresco lo distorsiona un poco.
     local screensaver_delay = G_reader_settings:readSetting("screensaver_delay")
     if screensaver_delay and screensaver_delay ~= "disable" then
         self._delayed_screensaver = true
