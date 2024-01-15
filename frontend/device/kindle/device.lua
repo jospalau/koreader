@@ -280,7 +280,18 @@ function Kindle:usbPlugIn()
     -- NOTE: If the device is put in USBNet mode before we even start, everything's peachy, though :).
 end
 
-function Kindle:intoScreenSaver()
+-- Hopefully, the event sources are fairly portable...
+-- c.f., https://github.com/koreader/koreader/pull/11174#issuecomment-1830064445
+-- NOTE: There's no distinction between real button presses and powerd_test -p or lipc-set-prop -i com.lab126.powerd powerButton 1
+local POWERD_EVENT_SOURCES = {
+    [1] = "BUTTON_WAKEUP",  -- outOfScreenSaver 1
+    [2] = "BUTTON_SUSPEND", -- goingToScreenSaver 2
+    [4] = "HALL_SUSPEND",   -- goingToScreenSaver 4
+    [6] = "HALL_WAKEUP",    -- outOfScreenSaver 6
+}
+
+function Kindle:intoScreenSaver(source)
+    logger.dbg("Kindle:intoScreenSaver via", POWERD_EVENT_SOURCES[source] or string.format("UNKNOWN_SUSPEND (%d)", source or -1))
     if not self.screen_saver_mode then
         if self:supportsScreensaver() then
             -- NOTE: Meaning this is not a SO device ;)
@@ -304,7 +315,8 @@ function Kindle:intoScreenSaver()
     self.powerd:beforeSuspend()
 end
 
-function Kindle:outofScreenSaver()
+function Kindle:outofScreenSaver(source)
+    logger.dbg("Kindle:outofScreenSaver via", POWERD_EVENT_SOURCES[source] or string.format("UNKNOWN_WAKEUP (%d)", source or -1))
     if self.screen_saver_mode then
         if self:supportsScreensaver() then
             local Screensaver = require("ui/screensaver")
@@ -357,18 +369,23 @@ function Kindle:outofScreenSaver()
     self.powerd:afterResume()
 end
 
+-- On stock, there's a distinction between OutOfSS (which *requests* closing the SS) and ExitingSS, which fires once they're *actually* closed...
+function Kindle:exitingScreenSaver() end
+
 function Kindle:usbPlugOut()
     -- NOTE: See usbPlugIn(), we don't have anything fancy to do here either.
 end
 
-function Kindle:wakeupFromSuspend()
-    self.powerd:wakeupFromSuspend()
+function Kindle:wakeupFromSuspend(ts)
+    logger.dbg("Kindle:wakeupFromSuspend", ts)
+    self.powerd:wakeupFromSuspend(ts)
     self.last_suspend_time = time.boottime_or_realtime_coarse() - self.suspend_time
     self.total_suspend_time = self.total_suspend_time + self.last_suspend_time
 end
 
-function Kindle:readyToSuspend()
-    self.powerd:readyToSuspend()
+function Kindle:readyToSuspend(delay)
+    logger.dbg("Kindle:readyToSuspend", delay)
+    self.powerd:readyToSuspend(delay)
     self.suspend_time = time.boottime_or_realtime_coarse()
 end
 
@@ -382,14 +399,26 @@ function Kindle:UIManagerReady(uimgr)
 end
 
 function Kindle:setEventHandlers(uimgr)
+    -- These custom fake events *will* pass an argument...
+    self.input.fake_event_args.IntoSS = {}
+    self.input.fake_event_args.OutOfSS = {}
+    self.input.fake_event_args.WakeupFromSuspend = {}
+    self.input.fake_event_args.ReadyToSuspend = {}
+
     UIManager.event_handlers.Suspend = function()
         self.powerd:toggleSuspend()
     end
-    UIManager.event_handlers.IntoSS = function()
-        self:intoScreenSaver()
+    UIManager.event_handlers.IntoSS = function(input_event)
+        -- Retrieve the argument set by Input:handleKeyBoardEv
+        local arg = table.remove(self.input.fake_event_args[input_event])
+        self:intoScreenSaver(arg)
     end
-    UIManager.event_handlers.OutOfSS = function()
-        self:outofScreenSaver()
+    UIManager.event_handlers.OutOfSS = function(input_event)
+        local arg = table.remove(self.input.fake_event_args[input_event])
+        self:outofScreenSaver(arg)
+    end
+    UIManager.event_handlers.ExitingSS = function()
+        self:exitingScreenSaver()
     end
     UIManager.event_handlers.Charging = function()
         self:_beforeCharging()
@@ -399,11 +428,13 @@ function Kindle:setEventHandlers(uimgr)
         self:usbPlugOut()
         self:_afterNotCharging()
     end
-    UIManager.event_handlers.WakeupFromSuspend = function()
-        self:wakeupFromSuspend()
+    UIManager.event_handlers.WakeupFromSuspend = function(input_event)
+        local arg = table.remove(self.input.fake_event_args[input_event])
+        self:wakeupFromSuspend(arg)
     end
-    UIManager.event_handlers.ReadyToSuspend = function()
-        self:readyToSuspend()
+    UIManager.event_handlers.ReadyToSuspend = function(input_event)
+        local arg = table.remove(self.input.fake_event_args[input_event])
+        self:readyToSuspend(arg)
     end
 end
 
