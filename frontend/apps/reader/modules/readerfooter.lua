@@ -1240,7 +1240,7 @@ function ReaderFooter:init()
         end
         self.view.footer_visible = true
     end
-
+    self.initial_read_today = nil
 
     -- self.reclaim_height = true
     -- self.mode = 0
@@ -2484,7 +2484,6 @@ function ReaderFooter:onMoveStatusBar()
         self.settings.bar_top = not self.settings.bar_top
         UIManager:setDirty(self.dialog, "ui")
         UIManager:close(self.input_dialog)
-        self.ui.searching = false
         UIManager:show(Notification:new{
             text = _(text),
         })
@@ -3931,8 +3930,8 @@ function ReaderFooter:_updateFooterText(force_repaint, full_repaint)
     -- local percentage_session, pages_read_session, duration, wpm_session, words_session, duration_raw, read_today = getSessionStats(self)
 
 
-    if not initial_read_today then
-        percentage_session, pages_read_session, duration, wpm_session, words_session, duration_raw, initial_read_today = getSessionStats(self)
+    if not self.initial_read_today then
+        percentage_session, pages_read_session, duration, wpm_session, words_session, duration_raw, self.initial_read_today = getSessionStats(self)
     end
 
     -- This is to include the current session time in the curren time read
@@ -3945,16 +3944,34 @@ function ReaderFooter:_updateFooterText(force_repaint, full_repaint)
         now_t.min=0
         now_t.sec=0
         local seconds_since_md = os.time(session_started) - now_t
-        read_today = initial_read_today + seconds_since_md
+        read_today = self.initial_read_today + seconds_since_md
     else
-        read_today = initial_read_today + (os.time() - session_started)
+        read_today = self.initial_read_today + (os.time() - session_started)
     end
 
     -- read_today = tostring(math.floor(tonumber(read_today)/60/60)) .. "h"
     -- read_today = math.floor(tonumber(read_today)/60/60 * 100)/100
 
     local read_today = datetime.secondsToClockDuration(user_duration_format,read_today, false)
-    self.footer_text2:setText("⌚" .. clock .. "|" .. duration .. "|≃" .. read_today .. "|" .. self.ui.document._document:getDocumentProps().title)-- .. "|" .. ("%d de %d"):format(self.pageno, self.pages))
+
+    local title = self.ui.document._document:getDocumentProps().title
+    local words = "?w"
+
+
+    local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
+    if file_type == "epub" then
+        if title:find('%[%d?.%d]') then
+            title = title:sub(title:find('%]')+2, title:len())
+        end
+
+        if (title:find("([0-9,]+w)") ~= nil) then
+            words = title:match("([0-9,]+w)"):gsub("w",""):gsub(",","") .. "w"
+            title = title:sub(1, title:find('%(')-2, title:len())
+        end
+    end
+
+
+    self.footer_text2:setText("⌚" .. clock .. "|" .. duration .. "|≃" .. read_today .. "|" .. title .. " with " .. words)-- .. "|" .. ("%d de %d"):format(self.pageno, self.pages))
     if self.settings.disable_progress_bar then
         if self.has_no_mode or text == "" then
             self.text_width = 0
@@ -4469,6 +4486,7 @@ end
 
 function ReaderFooter:onSuspend()
     self:unscheduleFooterAutoRefresh()
+    self.initial_read_today = nil
 end
 
 function ReaderFooter:onCloseDocument()
