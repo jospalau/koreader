@@ -185,6 +185,10 @@ function ReaderSearch:onShowFulltextSearchInput()
                     id = "close",
                     callback = function()
                         UIManager:close(self.input_dialog)
+                        self.ui.searching = false
+                        UIManager:show(Notification:new{
+                            text = _("close searching"),
+                        })
                     end,
                 },
                 {
@@ -501,6 +505,12 @@ function ReaderSearch:searchNext(pattern, direction, regex, case_insensitive)
 end
 
 function ReaderSearch:findAllText(search_text)
+    self.ui.searching = true
+    local UIManager = require("ui/uimanager")
+    local Notification = require("ui/widget/notification")
+    UIManager:show(Notification:new{
+        text = _("searching"),
+    })
     local last_search_hash = self.last_search_text .. tostring(self.case_insensitive) .. tostring(self.use_regex)
     local not_cached = self.last_search_hash ~= last_search_hash
     if not_cached then
@@ -512,6 +522,12 @@ function ReaderSearch:findAllText(search_text)
             return self.ui.document:findAllText(search_text,
                 self.case_insensitive, self.findall_nb_context_words, self.findall_max_hits, self.use_regex)
         end, info)
+        if not completed then
+            self.ui.searching = false
+            UIManager:show(Notification:new{
+                text = _("close searching"),
+            })
+        end
         if not completed then return end
         UIManager:close(info)
         self.last_search_hash = last_search_hash
@@ -575,6 +591,12 @@ function ReaderSearch:showFindAllResults(not_cached)
         end,
         close_callback = function()
             UIManager:close(menu)
+            UIManager:setDirty(self.dialog, "ui")
+            UIManager:close(self.input_dialog)
+            self.ui.searching = false
+            UIManager:show(Notification:new{
+                text = _("close searching"),
+            })
         end,
     }
     UIManager:show(menu)
