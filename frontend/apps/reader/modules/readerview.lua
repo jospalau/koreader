@@ -120,7 +120,7 @@ function ReaderView:init()
     OverlapGroup.init(self)
 
     if Device:isPocketBook() then
-        os.execute("sudo killall taskmgr.app")
+        os.execute("killall taskmgr.app")
     end
 end
 
