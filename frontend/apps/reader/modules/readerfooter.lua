@@ -3944,7 +3944,7 @@ function ReaderFooter:_updateFooterText(force_repaint, full_repaint)
         now_t.min=0
         now_t.sec=0
         local seconds_since_md = os.time(session_started) - now_t
-        read_today = self.initial_read_today + seconds_since_md
+        read_today = seconds_since_md
     else
         read_today = self.initial_read_today + (os.time() - session_started)
     end
