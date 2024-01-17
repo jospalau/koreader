@@ -899,17 +899,16 @@ local footerTextGeneratorMap = {
         return font_face .. "-" ..  "S: " .. font_size .. "px, " .. font_size_pt .. "pt, " .. font_size_mm .. "mm - L: " ..  nblines .. "- W: " .. nbwords .. "- C: " .. nbcharacters .. " (CFL: " .. nbwords2 .. ")"
     end,
     session_stats = function(footer)
-        local percentage_session, pages_read_session, duration, wpm_session, words_session, duration_raw = getSessionStats(footer)
-        if duration_raw == 0 then
-            wpm_session = 0
-            words_session = 0
-        else
+        local session_started = footer.ui.statistics.start_current_period
+        local duration_raw =  math.floor(((os.time() - session_started)/60)* 100) / 100
+        local wpm_session, words_session = 0, 0
+        if duration_raw > 0 then
             wpm_session = math.floor(footer.ui.statistics._total_words/duration_raw)
             words_session = footer.ui.statistics._total_words
         end
-        pages_read_session =  footer.ui.statistics._total_pages
+        local pages_read_session =  footer.ui.statistics._total_pages
 
-        percentage_session = pages_read_session/footer.pages
+        local percentage_session = pages_read_session/footer.pages
         percentage_session = math.floor(percentage_session*1000)/10
         -- return "S: " .. duration .. "(" .. percentage_session .. "%, " .. words_session .. ")"  .. "(" .. pages_read_session.. "p) " .. wpm_session .. "wpm"
         return "S: " .. percentage_session .. "%|" .. words_session .. "w|" .. pages_read_session.. "p|" .. wpm_session .. "wpm"
@@ -971,7 +970,6 @@ local footerTextGeneratorMap = {
         left_chapter = left_chapter + 1
     end
     local progress_book = ("%d de %d"):format(footer.pageno, footer.pages)
-    local percentage_session, pages_read_session, duration = getSessionStats(footer)
 
     local string_percentage  = "%0.f%%"
     local percentage = string_percentage:format(footer.progress_bar.percentage * 100)
@@ -988,7 +986,6 @@ local footerTextGeneratorMap = {
         return "n/a"
         end
 
-    -- return duration .. "|" .. percentage .. "|" .. left_chapter .. "|" .. footer:getDataFromStatistics("", sigcap2 - sigcap)
     return "I: " .. percentage .. "|" .. left_chapter .. "p|" .. footer:getDataFromStatistics("", sigcap2 - sigcap)
    end,
 }
