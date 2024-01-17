@@ -3936,14 +3936,12 @@ function ReaderFooter:_updateFooterText(force_repaint, full_repaint)
 
     -- This is to include the current session time in the curren time read
     local now_t = os.date("*t")
-    local daysfrom = os.difftime(os.time(), session_started) / (24 * 60 * 60) -- seconds in a day
-    local wholedays = math.floor(daysfrom)
-
-    if wholedays == 1 then
+    local daysdiff = now_t.day - os.date("*t",session_started).day
+    if daysdiff > 0 then
         now_t.hour=0
         now_t.min=0
         now_t.sec=0
-        local seconds_since_md = os.time(session_started) - now_t
+        local seconds_since_md = os.time() - os.time(now_t)
         read_today = seconds_since_md
     else
         read_today = self.initial_read_today + (os.time() - session_started)
