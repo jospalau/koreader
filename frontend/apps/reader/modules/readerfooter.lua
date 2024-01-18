@@ -2483,8 +2483,8 @@ function ReaderFooter:onMoveStatusBar()
         if self.settings.bar_top then
             UIManager:show(Notification:new{
                 text = _(text),
-                my_height = Screen:scaleBySize(30),
-                align = "left",
+                -- my_height = Screen:scaleBySize(30),
+                -- align = "left",
                 timeout = 0.3,
             })
         else
