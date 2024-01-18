@@ -1533,10 +1533,11 @@ function FileManager:onShowDbStats()
         local execute = nil
         if Device:isKobo() then
             execute = io.popen("(cd /mnt/onboard/.adds/scripts/statsKOReaderDB && /mnt/onboard/.adds/scripts/statsKOReaderDB/stats.sh)")
-        else --Kindle
+        elseif Device:isKindle() then
             execute = io.popen("(cd /mnt/us/scripts/statsKOReaderDB && /mnt/us/scripts/statsKOReaderDB/stats.sh)")
+        else -- PocketBook
+            execute = io.popen("(cd /mnt/ext1/scripts/statsKOReaderDB && /mnt/ext1/scripts/statsKOReaderDB/stats.sh)")
         end
-
         output = execute:read('*a')
         UIManager:show(InfoMessage:new{
             text = T(_(output)),
