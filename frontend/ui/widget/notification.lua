@@ -57,6 +57,8 @@ local Notification = InputContainer:extend{
     text = _("N/A"),
     margin = Size.margin.default,
     padding = Size.padding.default,
+    align="center",
+    my_height = 0,
     timeout = 2, -- default to 2 seconds
     _timeout_func = nil,
     toast = true, -- closed on any event, and let the event propagate to next top widget
@@ -128,13 +130,13 @@ function Notification:init()
     self._shown_idx = #Notification._shown_list
 
     self[1] = VerticalGroup:new{
-        align = "center",
+        align = self.align,
         -- We use a span to properly position this notification:
         RectSpan:new{
             -- have this VerticalGroup full width, to ensure centering
             width = Screen:getWidth(),
             -- push this frame at its y=self._shown_idx position
-            height = notif_height * (self._shown_idx - 1) + self.margin,
+            height = notif_height * (self._shown_idx - 1) + self.margin + self.my_height,
                 -- (let's add a leading self.margin to get the same distance
                 -- from top of screen to first notification top border as
                 -- between borders of next notifications)

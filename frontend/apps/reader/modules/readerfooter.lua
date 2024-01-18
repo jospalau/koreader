@@ -2480,10 +2480,18 @@ function ReaderFooter:onMoveStatusBar()
         end
         self.settings.bar_top = not self.settings.bar_top
         UIManager:setDirty(self.dialog, "ui")
-        UIManager:close(self.input_dialog)
-        UIManager:show(Notification:new{
-            text = _(text),
-        })
+        if self.settings.bar_top then
+            UIManager:show(Notification:new{
+                text = _(text),
+                my_height = Screen:scaleBySize(30),
+                align = "left",
+                timeout = 0.3,
+            })
+        else
+            UIManager:show(Notification:new{
+                text = _(text),
+            })
+        end
         self:onUpdateFooter(true,true)
     end
 end
@@ -3965,8 +3973,10 @@ function ReaderFooter:_updateFooterText(force_repaint, full_repaint)
         end
     end
 
+    title = TextWidget.PTF_BOLD_START .. title .. " with " .. words .. TextWidget.PTF_BOLD_END
+    duration = TextWidget.PTF_BOLD_START .. duration  .. TextWidget.PTF_BOLD_END
 
-    self.footer_text2:setText("⌚" .. clock .. "|" .. duration .. "|≃" .. read_today .. "|" .. title .. " with " .. words)-- .. "|" .. ("%d de %d"):format(self.pageno, self.pages))
+    self.footer_text2:setText("⌚" .. clock .. "|" .. duration .. "|≃" .. read_today .. "|" .. title)-- .. "|" .. ("%d de %d"):format(self.pageno, self.pages))
     if self.settings.disable_progress_bar then
         if self.has_no_mode or text == "" then
             self.text_width = 0
@@ -4197,9 +4207,19 @@ function ReaderFooter:onToggleFooterMode()
     -- self.height = Screen:scaleBySize(self.settings.container_height)
     self:refreshFooter(true, false)
     if not self.view.footer_visible or self.mode == 0 then
-        UIManager:show(Notification:new{
-            text = _("Footer on."),
-        })
+        local text = "Footer on."
+        if self.settings.bar_top then
+            UIManager:show(Notification:new{
+                text = _(text),
+                -- my_height = Screen:scaleBySize(30),
+                -- align = "left",
+                timeout = 0.3,
+            })
+        else
+            UIManager:show(Notification:new{
+                text = _(text),
+            })
+        end
     end
     if self.has_no_mode and self.settings.disable_progress_bar then return end
     if self.settings.all_at_once or self.has_no_mode then
@@ -4247,9 +4267,19 @@ function ReaderFooter:onToggleFooterModeBack()
     self.bottom_padding = Screen:scaleBySize(self.settings.container_bottom_padding)
     self:refreshFooter(true, false)
     if not self.view.footer_visible or self.mode == 0 then
-        UIManager:show(Notification:new{
-            text = _("Footer on."),
-        })
+        local text = "Footer on."
+        if self.settings.bar_top then
+            UIManager:show(Notification:new{
+                text = _(text),
+                -- my_height = Screen:scaleBySize(30),
+                -- align = "left",
+                timeout = 0.3,
+            })
+        else
+            UIManager:show(Notification:new{
+                text = _(text),
+            })
+        end
     end
     if self.has_no_mode and self.settings.disable_progress_bar then return end
     if self.settings.all_at_once or self.has_no_mode then
@@ -4280,9 +4310,11 @@ function ReaderFooter:onToggleFooterModeBack()
             text = "Progress bar and footer off."
             self:onUpdateFooter(true,true)
         end
-        UIManager:show(Notification:new{
-            text = _(text),
-        })
+        if not self.view.footer_visible or self.mode == 0 then
+            UIManager:show(Notification:new{
+                text = _(text),
+            })
+        end
     end
     self._old_mode = self.mode
     self:applyFooterMode()
@@ -4323,9 +4355,18 @@ function ReaderFooter:onStatusBarJustProgressBar()
         if self.mode > 0 then
             text = "Progress bar on and footer off."
         end
-        UIManager:show(Notification:new{
-            text = _(text),
-        })
+        if self.settings.bar_top then
+            UIManager:show(Notification:new{
+                text = _(text),
+                -- my_height = Screen:scaleBySize(30),
+                -- align = "left",
+                timeout = 0.3,
+            })
+        else
+            UIManager:show(Notification:new{
+                text = _(text),
+            })
+        end
         self.settings.disable_progress_bar = false
         self._old_mode = self.mode
         self.mode = 0

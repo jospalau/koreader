@@ -62,6 +62,9 @@ local TextWidget = Widget:extend{
                                  -- used as a weak hint about direction)
     _xtext = nil, -- for internal use
     _xshaping = nil,
+    PTF_BOLD_START = "\u{FFF2}", -- start a sequence of bold chars
+    PTF_BOLD_END = "\u{FFF3}",   -- end a sequence of bold chars
+    _ptf_char_is_bold = nil,
 }
 
 -- Helper function to be used before instantiating a TextWidget instance
@@ -186,6 +189,40 @@ function TextWidget:_measureWithXText()
     if not self._xtext_loaded then
         xtext = require("libs/libkoreader-xtext")
         TextWidget._xtext_loaded = true
+    end
+
+    if not self.charlist and self.text and type(self.text) == "string"
+             and self.text:match(TextWidget.PTF_BOLD_START) then
+        -- Support for very simple text styling (bold only for now)
+        self._ptf_char_is_bold = {}
+
+        -- Alas, we can't let any of our flag characters be fed to xtext (even with ASCII control
+        -- chars, it would give them a width, which would result at best in spurious added spacing).
+        -- So, split text into a table of chars, filter our flags out keeping track of where they
+        -- start and end bold, and rebuild self.text without them.
+        local charlist = util.splitToChars(self.text)
+        local is_bold = false
+        local len = #charlist
+        local i = 1
+        while i <= len do
+            local ch = charlist[i]
+            if ch == TextWidget.PTF_BOLD_START then
+                is_bold = true
+                table.remove(charlist, i)
+                len = len - 1
+            elseif ch == TextWidget.PTF_BOLD_END then
+                is_bold = false
+                table.remove(charlist, i)
+                len = len - 1
+            else
+                if is_bold then
+                    self._ptf_char_is_bold[i] = true
+                end
+                i = i + 1
+            end
+        end
+        self.text = table.concat(charlist, "")
+        charlist = nil -- luacheck: no unused
     end
     self._xtext = xtext.new(self.text, self.face, self.auto_para_direction,
                                             self.para_direction_rtl, self.lang)
@@ -365,7 +402,8 @@ function TextWidget:paintTo(bb, x, y)
             break
         end
         local face = self.face.getFallbackFont(xglyph.font_num) -- callback (not a method)
-        local glyph = RenderText:getGlyphByIndex(face, xglyph.glyph, self.bold)
+        local bolder = self._ptf_char_is_bold and self._ptf_char_is_bold[xglyph.text_index] or false
+        local glyph = RenderText:getGlyphByIndex(face, xglyph.glyph, self.bold, bolder)
         bb:colorblitFrom(
             glyph.bb,
             x + pen_x + glyph.l + xglyph.x_offset,
