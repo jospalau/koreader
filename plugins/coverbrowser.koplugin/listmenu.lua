@@ -53,7 +53,7 @@ local scale_by_size = Screen:scaleBySize(1000000) * (1/1000000)
 -- ItemShortCutIcon (for keyboard navigation) is private to menu.lua and can't be accessed,
 -- so we need to redefine it
 local ItemShortCutIcon = WidgetContainer:extend{
-    dimen = Geom:new{ w = Screen:scaleBySize(22), h = Screen:scaleBySize(22) },
+    dimen = Geom:new{ x = 0, y = 0, w = Screen:scaleBySize(22), h = Screen:scaleBySize(22) },
     key = nil,
     bordersize = Size.border.default,
     radius = 0,
@@ -82,7 +82,7 @@ function ItemShortCutIcon:init()
         bordersize = self.bordersize,
         radius = radius,
         background = background,
-        dimen = self.dimen,
+        dimen = self.dimen:copy(),
         CenterContainer:new{
             dimen = self.dimen,
             TextWidget:new{
@@ -122,9 +122,13 @@ function ListMenuItem:init()
     -- As done in MenuItem
     -- Squared letter for keyboard navigation
     if self.shortcut then
-        local shortcut_icon_dimen = Geom:new()
-        shortcut_icon_dimen.w = math.floor(self.dimen.h*2/5)
-        shortcut_icon_dimen.h = shortcut_icon_dimen.w
+        local icon_width = math.floor(self.dimen.h*2/5)
+        local shortcut_icon_dimen = Geom:new{
+            x = 0,
+            y = 0,
+            w = icon_width,
+            h = icon_width,
+        }
         -- To keep a simpler widget structure, this shortcut icon will not
         -- be part of it, but will be painted over the widget in our paintTo
         self.shortcut_icon = ItemShortCutIcon:new{
@@ -955,6 +959,7 @@ function ListMenu:_recalculateDimen()
     self.item_height = math.floor(available_height / self.perpage) - Size.line.thin
     self.item_width = self.inner_dimen.w
     self.item_dimen = Geom:new{
+        x = 0, y = 0,
         w = self.item_width,
         h = self.item_height
     }
@@ -1015,7 +1020,7 @@ function ListMenu:_updateItemsBuildUI()
                 text = getMenuText(entry),
                 show_parent = self.show_parent,
                 mandatory = entry.mandatory,
-                dimen = self.item_dimen:new(),
+                dimen = self.item_dimen:copy(),
                 shortcut = item_shortcut,
                 shortcut_style = shortcut_style,
                 menu = self,

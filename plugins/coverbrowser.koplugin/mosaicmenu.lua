@@ -52,7 +52,7 @@ local progress_widget
 -- ItemShortCutIcon (for keyboard navigation) is private to menu.lua and can't be accessed,
 -- so we need to redefine it
 local ItemShortCutIcon = WidgetContainer:extend{
-    dimen = Geom:new{ w = Screen:scaleBySize(22), h = Screen:scaleBySize(22) },
+    dimen = Geom:new{ x = 0, y = 0, w = Screen:scaleBySize(22), h = Screen:scaleBySize(22) },
     key = nil,
     bordersize = Size.border.default,
     radius = 0,
@@ -81,7 +81,7 @@ function ItemShortCutIcon:init()
         bordersize = self.bordersize,
         radius = radius,
         background = background,
-        dimen = self.dimen,
+        dimen = self.dimen:copy(),
         CenterContainer:new{
             dimen = self.dimen,
             TextWidget:new{
@@ -373,9 +373,12 @@ function MosaicMenuItem:init()
     -- As done in MenuItem
     -- Squared letter for keyboard navigation
     if self.shortcut then
-        local shortcut_icon_dimen = Geom:new()
-        shortcut_icon_dimen.w = math.floor(self.dimen.h*1/5)
-        shortcut_icon_dimen.h = shortcut_icon_dimen.w
+        local icon_width = math.floor(self.dimen.h*1/5)
+        local shortcut_icon_dimen = Geom:new{
+            x = 0, y = 0,
+            w = icon_width,
+            h = icon_width,
+        }
         -- To keep a simpler widget structure, this shortcut icon will not
         -- be part of it, but will be painted over the widget in our paintTo
         self.shortcut_icon = ItemShortCutIcon:new{
@@ -416,6 +419,7 @@ function MosaicMenuItem:init()
         vertical_align = "top",
         padding = 0,
         dimen = Geom:new{
+            x = 0, y = 0,
             w = self.width,
             h = self.height
         },
@@ -520,8 +524,8 @@ function MosaicMenuItem:update()
             radius = Screen:scaleBySize(10),
             OverlapGroup:new{
                 dimen = dimen_in,
-                CenterContainer:new{ dimen=dimen_in, directory},
-                BottomContainer:new{ dimen=dimen_in, nbitems},
+                CenterContainer:new{ dimen = dimen_in, directory},
+                BottomContainer:new{ dimen = dimen_in, nbitems},
             },
         }
     else
@@ -887,6 +891,7 @@ function MosaicMenu:_recalculateDimen()
     self.item_height = math.floor((self.inner_dimen.h - self.others_height - (1+self.nb_rows)*self.item_margin) / self.nb_rows)
     self.item_width = math.floor((self.inner_dimen.w - (1+self.nb_cols)*self.item_margin) / self.nb_cols)
     self.item_dimen = Geom:new{
+        x = 0, y = 0,
         w = self.item_width,
         h = self.item_height
     }
@@ -979,7 +984,7 @@ function MosaicMenu:_updateItemsBuildUI()
                 text = getMenuText(entry),
                 show_parent = self.show_parent,
                 mandatory = entry.mandatory,
-                dimen = self.item_dimen:new(),
+                dimen = self.item_dimen:copy(),
                 shortcut = item_shortcut,
                 shortcut_style = shortcut_style,
                 menu = self,
