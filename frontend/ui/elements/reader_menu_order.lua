@@ -212,6 +212,7 @@ local order = {
         "----------------------------",
         "find_book_in_calibre_catalog",
         "fulltext_search",
+        "fulltext_search_findall_results",
         "bookmark_search",
     },
     search_settings = {
