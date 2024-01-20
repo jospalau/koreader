@@ -119,9 +119,6 @@ function ReaderView:init()
     -- We've subclassed OverlapGroup, go through its init, because it does some funky stuff with self.dimen...
     OverlapGroup.init(self)
 
-    if Device:isPocketBook() then
-        os.execute("killall taskmgr.app")
-    end
 end
 
 function ReaderView:addWidgets()

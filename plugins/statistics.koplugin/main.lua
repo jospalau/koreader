@@ -128,7 +128,7 @@ function ReaderStatistics:init()
     self._total_words = 0
     self._total_chars = 0
     self._total_pages = 0
-        self.devices = {
+    self.devices = {
         ["Kobo_io"] = 1, -- Kobo Libra 2
         ["Kobo_cadmus"] = 2, -- Kobo Sage
         ["Kobo_goldfinch"] = 3, -- Kobo Clara 2E
@@ -138,6 +138,9 @@ function ReaderStatistics:init()
         ["PB700"] = 7 -- PocketBook
     }
 
+    if Device:isPocketBook() and not ReaderStatistics.preserve then
+        os.execute("killall taskmgr.app")
+    end
     -- local UIManager = require("ui/uimanager")
     -- local Notification = require("ui/widget/notification")
     -- UIManager:show(Notification:new{
