@@ -70,6 +70,8 @@ local ReaderStatistics = Widget:extend{
     preserved_pages_turned = nil,
     preserved_total_pages = nil,
     preserved_total_words = nil,
+    preserved_start_current_period = nil,
+    preserved_initial_read_today = nil,
     curr_page = 0,
     id_curr_book = nil,
     is_enabled = nil,
@@ -128,6 +130,7 @@ function ReaderStatistics:init()
     self._total_words = 0
     self._total_chars = 0
     self._total_pages = 0
+    self._initial_read_today = nil
     self.devices = {
         ["Kobo_io"] = 1, -- Kobo Libra 2
         ["Kobo_cadmus"] = 2, -- Kobo Sage
@@ -192,6 +195,11 @@ function ReaderStatistics:init()
     if ReaderStatistics.preserved_total_words then
         self._total_words = ReaderStatistics.preserved_total_words
         ReaderStatistics.preserved_total_words = nil
+    end
+
+    if ReaderStatistics.preserved_initial_read_today then
+        self._initial_read_today = ReaderStatistics.preserved_initial_read_today
+        ReaderStatistics.preserved_initial_read_todays= nil
     end
 
     if self.start_current_period then
@@ -3331,6 +3339,7 @@ end
 
 -- in case when screensaver starts
 function ReaderStatistics:onSuspend()
+    self._initial_read_today = nil
     self:insertDB() --OnSaveSettings() also inserts in db but I commented it
     self:insertDBSessionStats()
     --self:onReadingPaused() --Not interested in this

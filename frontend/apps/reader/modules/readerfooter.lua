@@ -1237,7 +1237,6 @@ function ReaderFooter:init()
         end
         self.view.footer_visible = true
     end
-    self.initial_read_today = nil
 
     -- self.reclaim_height = true
     -- self.mode = 0
@@ -3935,8 +3934,8 @@ function ReaderFooter:_updateFooterText(force_repaint, full_repaint)
     -- local percentage_session, pages_read_session, duration, wpm_session, words_session, duration_raw, read_today = getSessionStats(self)
 
 
-    if not self.initial_read_today then
-        percentage_session, pages_read_session, duration, wpm_session, words_session, duration_raw, self.initial_read_today = getSessionStats(self)
+    if not self.ui.statistics._initial_read_today then
+        percentage_session, pages_read_session, duration, wpm_session, words_session, duration_raw, self.ui.statistics._initial_read_today = getSessionStats(self)
     end
 
     -- This is to include the current session time in the curren time read
@@ -3949,7 +3948,7 @@ function ReaderFooter:_updateFooterText(force_repaint, full_repaint)
         local seconds_since_md = os.time() - os.time(now_t)
         read_today = seconds_since_md
     else
-        read_today = self.initial_read_today + (os.time() - session_started)
+        read_today = self.ui.statistics._initial_read_today + (os.time() - session_started)
     end
 
     -- read_today = tostring(math.floor(tonumber(read_today)/60/60)) .. "h"
@@ -4522,7 +4521,6 @@ end
 
 function ReaderFooter:onSuspend()
     self:unscheduleFooterAutoRefresh()
-    self.initial_read_today = nil
 end
 
 function ReaderFooter:onCloseDocument()
