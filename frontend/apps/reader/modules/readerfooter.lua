@@ -3975,7 +3975,7 @@ function ReaderFooter:_updateFooterText(force_repaint, full_repaint)
     title = TextWidget.PTF_BOLD_START .. title .. " with " .. words .. TextWidget.PTF_BOLD_END
     duration = TextWidget.PTF_BOLD_START .. duration  .. TextWidget.PTF_BOLD_END
 
-    self.footer_text2:setText("⌚" .. clock .. "|" .. duration .. "|≃" .. read_today .. "|" .. title)-- .. "|" .. ("%d de %d"):format(self.pageno, self.pages))
+    self.footer_text2:setText("⌚" .. clock .. "|" .. duration .. "|≃" .. read_today .. "|" .. title .. "|" .. ("%d de %d"):format(self.pageno, self.pages))
     if self.settings.disable_progress_bar then
         if self.has_no_mode or text == "" then
             self.text_width = 0
