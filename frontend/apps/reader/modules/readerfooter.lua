@@ -3954,6 +3954,7 @@ function ReaderFooter:_updateFooterText(force_repaint, full_repaint)
         self.ui.statistics._pages_turned = 0
         self.ui.statistics._total_pages = 0
         self.ui.statistics._total_words  = 0
+        duration = "00:00:00"
         self:onUpdateFooter(true, true)
     else
         read_today = self.ui.statistics._initial_read_today + (os.time() - session_started)
