@@ -3942,11 +3942,19 @@ function ReaderFooter:_updateFooterText(force_repaint, full_repaint)
     local now_t = os.date("*t")
     local daysdiff = now_t.day - os.date("*t",session_started).day
     if daysdiff > 0 then
-        now_t.hour=0
-        now_t.min=0
-        now_t.sec=0
-        local seconds_since_md = os.time() - os.time(now_t)
-        read_today = seconds_since_md
+        -- now_t.hour=0
+        -- now_t.min=0
+        -- now_t.sec=0
+        -- local seconds_since_md = os.time() - os.time(now_t)
+        -- read_today = seconds_since_md
+        read_today = 0
+        self.ui.statistics:insertDBSessionStats()
+        self.ui.statistics._initial_read_today = nil
+        self.ui.statistics.start_current_period = os.time()
+        self.ui.statistics._pages_turned = 0
+        self.ui.statistics._total_pages = 0
+        self.ui.statistics._total_words  = 0
+        self:onUpdateFooter(true, true)
     else
         read_today = self.ui.statistics._initial_read_today + (os.time() - session_started)
     end
