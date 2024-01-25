@@ -1177,6 +1177,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                         if not Device:isAndroid() and not Device:isKindle() then
                             Device:setScreenDPI(current_dpi)
                         end
+                        UIManager:nextTick(function() UIManager:setDirty("all", "full") end)
                     end
                 end,
                 hold_callback = function()
