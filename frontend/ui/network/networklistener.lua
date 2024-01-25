@@ -202,17 +202,19 @@ end
 
 -- Also unschedule on suspend (and we happen to also kill Wi-Fi to do so, so resetting the stats is also relevant here)
 function NetworkListener:onSuspend()
-    logger.dbg("NetworkListener: onSuspend")
+    if Device:isPocketBook() then
+        NetworkMgr:disableWifi(nil, true)
+    else
+        -- If we haven't already (e.g., via Generic's onPowerEvent), kill Wi-Fi.
+        -- Do so only on devices where we have explicit management of Wi-Fi: assume the host system does things properly elsewhere.
+        if Device:hasWifiManager() and NetworkMgr:isWifiOn() then
+            NetworkMgr:disableWifi()
+        end
 
-    -- If we haven't already (e.g., via Generic's onPowerEvent), kill Wi-Fi.
-    -- Do so only on devices where we have explicit management of Wi-Fi: assume the host system does things properly elsewhere.
-    if Device:hasWifiManager() and NetworkMgr:isWifiOn() then
-        NetworkMgr:disableWifi()
+        -- Wi-Fi will be down, unschedule unconditionally
+        NetworkListener:_unscheduleActivityCheck()
+        NetworkMgr:clearBeforeActionFlag()
     end
-
-    -- Wi-Fi will be down, unschedule unconditionally
-    NetworkListener:_unscheduleActivityCheck()
-    NetworkMgr:clearBeforeActionFlag()
 end
 
 -- If the platform implements NetworkMgr:restoreWifiAsync, run it as needed
