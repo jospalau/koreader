@@ -1168,10 +1168,8 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                     UIManager:close(quickmenu)
                     Dispatcher:execute({[v.key] = settings[v.key]})
                     if keep_open_on_apply and not util.stringStartsWith(v.key, "touch_input") then
-
                         UIManager:nextTick(function()
                             UIManager:setDirty("all", "full")
-
                         end)
                         -- quickmenu:setTitle(title)
                         local current_dpi = G_reader_settings:readSetting("screen_dpi")
