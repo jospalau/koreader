@@ -454,6 +454,12 @@ function Button:onTapSelectButton()
                     UIManager:yieldToEPDC()
                 end
 
+
+
+                -- Callback
+                --
+                self.callback()
+
                 -- Unhighlight
                 --
                 -- We'll *paint* the unhighlight now, because at this point we can still be sure that our widget exists,
@@ -466,10 +472,6 @@ function Button:onTapSelectButton()
                 if not self.vsync then
                     self:_undoFeedbackHighlight(is_translucent)
                 end
-
-                -- Callback
-                --
-                self.callback()
 
                 -- Check if the callback reset transparency...
                 is_translucent = is_translucent and self.show_parent.movable.alpha
