@@ -1208,6 +1208,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
         use_info_style = false,
         buttons = buttons,
         anchor = exec_props and exec_props.qm_anchor,
+        tap_close_callback = function() if keep_open_on_apply then UIManager:setDirty("all", "full") end end,
     }
     UIManager:show(quickmenu)
     if not Device:isAndroid() and not Device:isKindle() then

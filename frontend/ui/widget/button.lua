@@ -474,7 +474,9 @@ function Button:onTapSelectButton()
                 -- Check if the callback reset transparency...
                 is_translucent = is_translucent and self.show_parent.movable.alpha
 
-                -- UIManager:forceRePaint() -- Ensures whatever the callback wanted to paint will be shown *now*...
+                if Device:isAndroid() then
+                    UIManager:forceRePaint() -- Ensures whatever the callback wanted to paint will be shown *now*...
+                end
                 if self.vsync then
                     -- NOTE: This is mainly useful when the callback caused a REAGL update that we do not explicitly fence via MXCFB_WAIT_FOR_UPDATE_COMPLETE already, (i.e., Kobo Mk. 7).
                     UIManager:waitForVSync() -- ...and that the EPDC will not wait to coalesce it with the *next* update,
