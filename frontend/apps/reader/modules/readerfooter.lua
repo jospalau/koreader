@@ -1224,7 +1224,7 @@ function ReaderFooter:init()
     self._goal_pages = 100
     self._old_mode = 0
 
-    self._show_just_toptextcontainer = false
+    self._show_just_toptextcontainer = true -- True to show by default always top bar. It could be and option
     self._statusbar_toggled = false
     self._saved_height = nil
     -- Case progress bar is enabled but nothing to show in the status bar. We show just the progress bar
@@ -2511,11 +2511,7 @@ function ReaderFooter:onMoveStatusBar()
         end
         self.settings.bar_top = not self.settings.bar_top
         if self._show_just_toptextcontainer then
-            if self.settings.bar_top then
-                self.height = Screen:scaleBySize(self.settings.container_height)/1.9
-            else
-                self.height = Screen:scaleBySize(0)
-            end
+            self.height = Screen:scaleBySize(0)
             self:refreshFooter(true, false)
         end
         UIManager:setDirty(self.dialog, "ui")
@@ -2550,12 +2546,7 @@ function ReaderFooter:onSwitchStatusBarText()
 
     if self._show_just_toptextcontainer then
         text = "Show just top text container. Toggle again to restore"
-        if self.settings.bar_top then
-            self.height = Screen:scaleBySize(self.settings.container_height/1.9)
-
-        else
-            self.height = Screen:scaleBySize(0)
-        end
+        self.height = Screen:scaleBySize(0)
     else
         text = "Status bar restored"
         self.height = Screen:scaleBySize(self.settings.container_height)
@@ -4057,6 +4048,9 @@ function ReaderFooter:_updateFooterText(force_repaint, full_repaint)
             title = title:sub(1, title:find('%(')-2, title:len())
         end
     end
+
+    -- local duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100
+    -- local wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
 
     title = TextWidget.PTF_BOLD_START .. title .. " with " .. words .. TextWidget.PTF_BOLD_END
     duration = TextWidget.PTF_BOLD_START .. duration  .. TextWidget.PTF_BOLD_END
