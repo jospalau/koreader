@@ -258,6 +258,11 @@ function ReaderView:paintTo(bb, x, y)
             -- In the gesture action in onSwitchStatusBarText, we set self.height = Screen:scaleBySize(0)
             local y_coordinate_top = -1640 -- Kobo Libra2, PocketBook y Kobo Palma
 
+
+            if Device.model == "Kobo_cadmus" then -- Clara2E
+                y_coordinate_top = -1870
+            end
+
             if Device.model == "KindlePaperWhite5" then -- Clara2E
                 y_coordinate_top = -1615
             end
@@ -266,10 +271,10 @@ function ReaderView:paintTo(bb, x, y)
             end
 
 
-            -- If we want to put the real container on top with the rest of stuff, we need to substract the container height
-            if not self.footer._show_just_toptextcontainer then
-                y_coordinate_top = -Screen:getHeight() + Screen:scaleBySize(self.footer.height)
-            end
+            -- -- If we want to put the real container on top with the rest of stuff, we need to substract the container height
+            -- if not self.footer._show_just_toptextcontainer then
+            --     y_coordinate_top = -Screen:getHeight() + Screen:scaleBySize(self.footer.height)
+            -- end
 
             local top_padding = 0
             if self.footer.settings.top_padding then

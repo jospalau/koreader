@@ -1148,7 +1148,7 @@ function ReaderFooter:init()
     --self.footer_text.dimen.h = self.footer_text:getSize().h + 20,
     self.footer_text2 = TextWidget:new{
         text = '',
-        face = Font:getFace(self.text_font_face, self.settings.text_font_size - 3),
+        face = Font:getFace(self.text_font_face, self.settings.text_font_size),
         bold = self.settings.text_font_bold,
         -- padding = Size.padding.large,
 	-- forced_height = self.footer_text:getSize().h + 20,
@@ -1224,7 +1224,7 @@ function ReaderFooter:init()
     self._goal_pages = 100
     self._old_mode = 0
 
-    self._show_just_toptextcontainer = true -- True to show by default always top bar. It could be and option
+    self._show_just_toptextcontainer = false -- true to show by default always top bar. It could be and option
     self._statusbar_toggled = false
     self._saved_height = nil
     -- Case progress bar is enabled but nothing to show in the status bar. We show just the progress bar
@@ -1364,10 +1364,10 @@ function ReaderFooter:updateFooterContainer()
     -- end
 
     -- In case we want the container previous to the text
-    -- if not self._show_just_toptextcontainer then
-    --     table.insert(self.vertical_frame, self.text_container2)
-    -- end
-    table.insert(self.vertical_frame, self.text_container2)
+    if self._show_just_toptextcontainer then
+        table.insert(self.vertical_frame, self.text_container2)
+    end
+    -- table.insert(self.vertical_frame, self.text_container2)
     if self.settings.align == "left" then
         self.footer_container = LeftContainer:new{
             dimen = Geom:new{ w = 0, h = self.height },
