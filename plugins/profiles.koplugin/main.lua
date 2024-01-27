@@ -277,11 +277,11 @@ function Profiles:onProfileExecute(name, exec_props)
             copy_profile.font_size = self.data[name].font_size + 6
         end
     end
-    if Device:isKindle() then
-        if self.data[name].font_size ~= nil then
-            copy_profile.font_size = self.data[name].font_size + 5
-        end
-    end
+    -- if Device:isKindle() then
+    --     if self.data[name].font_size ~= nil then
+    --         copy_profile.font_size = self.data[name].font_size + 5
+    --     end
+    -- end
     Dispatcher:execute(copy_profile, exec_props)
 end
 
@@ -351,11 +351,11 @@ function Profiles:onRandomProfile()
                 copy_profile.font_size = self.data[profile_name].font_size + 6
             end
         end
-        if Device:isKindle() then
-            if self.data[profile_name].font_size ~= nil then
-                copy_profile.font_size = self.data[profile_name].font_size + 5
-            end
-        end
+        -- if Device:isKindle() then
+        --     if self.data[profile_name].font_size ~= nil then
+        --         copy_profile.font_size = self.data[profile_name].font_size + 5
+        --     end
+        -- end
         Dispatcher:execute(copy_profile)
         -- UIManager:show(InfoMessage:new{
         --     text = T(_(self.data[profile_name]["set_font"])),
