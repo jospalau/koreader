@@ -1224,8 +1224,9 @@ function ReaderFooter:init()
     self._goal_pages = 100
     self._old_mode = 0
 
+    self._show_just_toptextcontainer = false
     self._statusbar_toggled = false
-
+    self._saved_height = nil
     -- Case progress bar is enabled but nothing to show in the status bar. We show just the progress bar
     if not self.settings.disable_progress_bar and self.mode == 0 then
         -- self.height = Screen:scaleBySize(0) -- This is when using self.settings.progress_bar_position = "below". Code commented down
@@ -1325,28 +1326,47 @@ function ReaderFooter:updateFooterContainer()
         table.insert(self.vertical_frame, vertical_span)
     end
     if self.settings.progress_bar_position ~= "alongside" and not self.settings.disable_progress_bar then
-        self.horizontal_group = HorizontalGroup:new{
-            margin_span,
-            self.text_container,
-            --self.text_container2,
-            margin_span,
-        }
+        if self._show_just_toptextcontainer then
+            -- In this case we don't want the space taken by the regular text container
+            self.horizontal_group = HorizontalGroup:new{
+                -- self.text_container2,
+            }
+        else
+            self.horizontal_group = HorizontalGroup:new{
+                margin_span,
+                self.text_container,
+                --self.text_container2,
+                margin_span,
+            }
+        end
     else
-        self.horizontal_group = HorizontalGroup:new{
-            margin_span,
-            self.progress_bar,
-            self.text_container,
-            --self.text_container2,
-            margin_span,
-        }
+        if  self._show_just_toptextcontainer then
+            self.horizontal_group = HorizontalGroup:new{
+                -- self.text_container2,
+            }
+        else
+            self.horizontal_group = HorizontalGroup:new{
+                margin_span,
+                self.progress_bar,
+                self.text_container,
+                --self.text_container2,
+                margin_span,
+            }
+        end
     end
     -- This is the place to make another line
-
-
     -- text to be set uo on _updateFooterText
     --local text_up = self.ui.document._document:getDocumentProps().title
     --text_up = "anajs"
     -- self.footer_text2.text = text_up
+    -- if self._show_topbar then
+    --     table.insert(self.vertical_frame, self.text_container2)
+    -- end
+
+    -- In case we want the container previous to the text
+    -- if not self._show_just_toptextcontainer then
+    --     table.insert(self.vertical_frame, self.text_container2)
+    -- end
     table.insert(self.vertical_frame, self.text_container2)
     if self.settings.align == "left" then
         self.footer_container = LeftContainer:new{
@@ -1376,7 +1396,19 @@ function ReaderFooter:updateFooterContainer()
         table.insert(self.vertical_frame, vertical_span)
         table.insert(self.vertical_frame, self.progress_bar)
     else
-        table.insert(self.vertical_frame, self.footer_container)
+        -- In this case we don't want the space taken by the progress bar
+        if not self._show_just_toptextcontainer then
+            table.insert(self.vertical_frame, self.footer_container)
+        end
+
+        -- In case we want the container previous to the text
+
+        -- if not self._show_just_toptextcontainer then
+        --     table.insert(self.vertical_frame, self.footer_container)
+        -- else
+        --     table.insert(self.vertical_frame, self.footer_container)
+        --     table.insert(self.vertical_frame, self.text_container2)
+        -- end
     end
     self.footer_content = FrameContainer:new{
         self.vertical_frame,
@@ -2478,6 +2510,14 @@ function ReaderFooter:onMoveStatusBar()
             text = "status bar set to top"
         end
         self.settings.bar_top = not self.settings.bar_top
+        if self._show_just_toptextcontainer then
+            if self.settings.bar_top then
+                self.height = Screen:scaleBySize(self.settings.container_height)/2
+            else
+                self.height = Screen:scaleBySize(0)
+            end
+            self:refreshFooter(true, false)
+        end
         UIManager:setDirty(self.dialog, "ui")
         if self.settings.bar_top then
             UIManager:show(Notification:new{
@@ -2493,6 +2533,34 @@ function ReaderFooter:onMoveStatusBar()
         end
         self:onUpdateFooter(true,true)
     end
+end
+
+
+function ReaderFooter:onSwitchStatusBarText()
+    self._show_just_toptextcontainer = not self._show_just_toptextcontainer
+    local text = ""
+    if self._show_just_toptextcontainer then
+        text = "Show just top text container. Toggle again to restore"
+        if self.settings.bar_top then
+            self.height = Screen:scaleBySize(self.settings.container_height)/2
+
+        else
+            self.height = Screen:scaleBySize(0)
+        end
+    else
+        text = "Status bar restored"
+        self.height = Screen:scaleBySize(self.settings.container_height)
+    end
+    UIManager:show(Notification:new{
+        text = _(text),
+        my_height = Screen:scaleBySize(20),
+        -- align = "left",
+        -- timeout = 0.3,
+    })
+    UIManager:setDirty(self.dialog, "ui")
+    self:refreshFooter(true, false) -- This uses _show_just_toptextcontainer
+    self:onUpdateFooter(true, true) -- Importante pasar el segundo parámetro a true
+    return true
 end
 
 function ReaderFooter:setupTouchZones()

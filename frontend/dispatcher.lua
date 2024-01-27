@@ -92,6 +92,7 @@ local settingsList = {
     print_wpm_session_fbink = {category="none", event="PrintWpmSessionFbink", title=_("Print wpm session Fbink"), general=true, separator=true},
     show_db_stats = {category="none", event="ShowDbStats", title=_("Show db stats"), general=true, separator=true},
     move_status_bar = {category="none", event="MoveStatusBar", title=_("Move status bar"), general=true, separator=true},
+    switch_status_bar_text = {category="none", event="SwitchStatusBarText", title=_("Switch status bar text"), general=true, separator=true},
     ----
 
     -- Device
@@ -344,6 +345,7 @@ local dispatcher_menu_order = {
     "print_wpm_session_fbink",
     "show_db_stats",
     "move_status_bar",
+"switch_status_bar_text",
     ----
 
     -- Device
