@@ -2512,7 +2512,7 @@ function ReaderFooter:onMoveStatusBar()
         self.settings.bar_top = not self.settings.bar_top
         if self._show_just_toptextcontainer then
             if self.settings.bar_top then
-                self.height = Screen:scaleBySize(self.settings.container_height)/2
+                self.height = Screen:scaleBySize(self.settings.container_height)/1.9
             else
                 self.height = Screen:scaleBySize(0)
             end
@@ -2537,12 +2537,21 @@ end
 
 
 function ReaderFooter:onSwitchStatusBarText()
-    self._show_just_toptextcontainer = not self._show_just_toptextcontainer
     local text = ""
+    if self.settings.disable_progress_bar and self.mode == 0 then
+        text = "Status bar not on"
+        UIManager:show(Notification:new{
+            text = _(text),
+        })
+        return true
+    end
+
+    self._show_just_toptextcontainer = not self._show_just_toptextcontainer
+
     if self._show_just_toptextcontainer then
         text = "Show just top text container. Toggle again to restore"
         if self.settings.bar_top then
-            self.height = Screen:scaleBySize(self.settings.container_height)/2
+            self.height = Screen:scaleBySize(self.settings.container_height/1.9)
 
         else
             self.height = Screen:scaleBySize(0)
