@@ -254,10 +254,9 @@ function ReaderView:paintTo(bb, x, y)
             -- end
 
 
-            -- This is just for when we want the top bar is on top. The hardcoded values are to put a single line top bar in top of the screen
-            -- In the gesture action in onSwitchStatusBarText, we set self.height = Screen:scaleBySize(0)
+            -- This is just for when we want the top bar be on top. The hardcoded values are to put a single line top bar in top of the screen
+            -- In the gesture action in onSwitchStatusBarText, we set self.height = Screen:scaleBySize(0). But there is no need to set Screen:scaleBySize(0). It was for any container (readerfooter.lua)
             local y_coordinate_top = -1640 -- Kobo Libra2, PocketBook y Kobo Palma
-
 
             if Device.model == "Kobo_cadmus" then -- Clara2E
                 y_coordinate_top = -1870
@@ -270,7 +269,10 @@ function ReaderView:paintTo(bb, x, y)
                 y_coordinate_top = -1420
             end
 
+            -- Hardcode previous code is more accurate and it works independently of the Screen DPI configured
+            -- It has been test and changed for every device with Auto DPI and it may varied a little bit, but that's why there is a top_padding variable configurable in the Status Bar section
 
+            -- This is the previous code that has been discarded. It also works though....adjusting the top_padding variable if we have to
             -- -- If we want to put the real container on top with the rest of stuff, we need to substract the container height
             -- if not self.footer._show_just_toptextcontainer then
             --     y_coordinate_top = -Screen:getHeight() + Screen:scaleBySize(self.footer.height)

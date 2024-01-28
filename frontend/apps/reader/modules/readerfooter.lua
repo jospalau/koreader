@@ -2509,7 +2509,7 @@ function ReaderFooter:onMoveStatusBar()
         end
         self.settings.bar_top = not self.settings.bar_top
         if self._show_just_toptextcontainer then
-            -- self.height = Screen:scaleBySize(0)
+            -- self.height = Screen:scaleBySize(0) -- It was needed previously since we we were adding the text container instead of the footer container in updateFooterContainer()
             self:refreshFooter(true, false)
         end
         UIManager:setDirty(self.dialog, "ui")
@@ -2544,7 +2544,7 @@ function ReaderFooter:onSwitchStatusBarText()
 
     if self._show_just_toptextcontainer then
         text = "Show just top text container. Toggle again to restore"
-        -- self.height = Screen:scaleBySize(0)
+        -- self.height = Screen:scaleBySize(0) -- It was needed previously since we we were adding the text container instead of the footer container in updateFooterContainer()
     else
         text = "Status bar restored"
         self.height = Screen:scaleBySize(self.settings.container_height)
