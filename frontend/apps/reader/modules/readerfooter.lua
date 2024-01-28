@@ -1327,29 +1327,30 @@ function ReaderFooter:updateFooterContainer()
     end
     if self.settings.progress_bar_position ~= "alongside" and not self.settings.disable_progress_bar then
         if self._show_just_toptextcontainer then
-            -- In this case we don't want the space taken by the regular text container
             self.horizontal_group = HorizontalGroup:new{
-                -- self.text_container2,
+                margin_span,
+                self.text_container2,
+                margin_span,
             }
         else
             self.horizontal_group = HorizontalGroup:new{
                 margin_span,
                 self.text_container,
-                --self.text_container2,
                 margin_span,
             }
         end
     else
         if  self._show_just_toptextcontainer then
             self.horizontal_group = HorizontalGroup:new{
-                -- self.text_container2,
+                margin_span,
+                self.text_container2,
+                margin_span,
             }
         else
             self.horizontal_group = HorizontalGroup:new{
                 margin_span,
                 self.progress_bar,
                 self.text_container,
-                --self.text_container2,
                 margin_span,
             }
         end
@@ -1364,9 +1365,9 @@ function ReaderFooter:updateFooterContainer()
     -- end
 
     -- In case we want the container previous to the text
-    if self._show_just_toptextcontainer then
-        table.insert(self.vertical_frame, self.text_container2)
-    end
+    -- if self._show_just_toptextcontainer then
+    --     table.insert(self.vertical_frame, self.text_container2)
+    -- end
     -- table.insert(self.vertical_frame, self.text_container2)
     if self.settings.align == "left" then
         self.footer_container = LeftContainer:new{
@@ -1396,24 +1397,21 @@ function ReaderFooter:updateFooterContainer()
         table.insert(self.vertical_frame, vertical_span)
         table.insert(self.vertical_frame, self.progress_bar)
     else
-        -- In this case we don't want the space taken by the progress bar
-        if not self._show_just_toptextcontainer then
-            table.insert(self.vertical_frame, self.footer_container)
-        end
-
-        -- In case we want the container previous to the text
-
-        -- if not self._show_just_toptextcontainer then
-        --     table.insert(self.vertical_frame, self.footer_container)
+        -- Code hardcoded to alongside. Always coming in here
+        -- if self._show_just_toptextcontainer then
+        --     table.insert(self.vertical_frame, self.text_container2) -- In this case we don't want the footer_container restriction and we bypass it adding the the text_container. For this to work we set self.height = Screen:scaleBySize(0)
         -- else
         --     table.insert(self.vertical_frame, self.footer_container)
-        --     table.insert(self.vertical_frame, self.text_container2)
         -- end
+
+        -- I have commented the previous code to add the footer_container always for consistency. self.height = Screen:scaleBySize(0) has been commented in onMoveStatusBar() and onSwitchStatusBarText() so the container height remains the same
+        table.insert(self.vertical_frame, self.footer_container)
+
     end
     self.footer_content = FrameContainer:new{
         self.vertical_frame,
-        background = Blitbuffer.COLOR_WHITE,
-        bordersize = 0,
+        -- background = Blitbuffer.COLOR_WHITE,
+        bordersize = 1,
         padding = 0,
         padding_bottom = self.bottom_padding,
     }
@@ -2511,7 +2509,7 @@ function ReaderFooter:onMoveStatusBar()
         end
         self.settings.bar_top = not self.settings.bar_top
         if self._show_just_toptextcontainer then
-            self.height = Screen:scaleBySize(0)
+            -- self.height = Screen:scaleBySize(0)
             self:refreshFooter(true, false)
         end
         UIManager:setDirty(self.dialog, "ui")
@@ -2546,7 +2544,7 @@ function ReaderFooter:onSwitchStatusBarText()
 
     if self._show_just_toptextcontainer then
         text = "Show just top text container. Toggle again to restore"
-        self.height = Screen:scaleBySize(0)
+        -- self.height = Screen:scaleBySize(0)
     else
         text = "Status bar restored"
         self.height = Screen:scaleBySize(self.settings.container_height)
