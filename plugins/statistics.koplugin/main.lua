@@ -364,6 +364,7 @@ function ReaderStatistics:onPreserveCurrentSession()
     ReaderStatistics.preserved_pages_turned = self._pages_turned
     ReaderStatistics.preserved_total_pages = self._total_pages
     ReaderStatistics.preserved_total_words = self._total_words
+    ReaderStatistics.preserved_initial_read_today = self._initial_read_today
 end
 
 function ReaderStatistics:resetVolatileStats(now_ts)
