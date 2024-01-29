@@ -993,6 +993,11 @@ function CreDocument:getTextCurrentPage(internal)
     return self._document:getTextCurrentPage(internal)
 end
 
+function CreDocument:getHeight(internal)
+    return self._document:getHeight(internal)
+end
+
+
 function CreDocument:setFontFace(new_font_face)
     if new_font_face then
         logger.dbg("CreDocument: set font face", new_font_face)

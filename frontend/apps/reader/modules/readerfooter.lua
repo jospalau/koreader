@@ -2163,6 +2163,17 @@ function ReaderFooter:onGetTextPage()
     if not Device:isPocketBook() then
         total_words, total_words2 = self.ui.document:getTextCurrentPage()
     end
+    local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
+    local name, name2, height, height2 = "","","",""
+    if res.pos0 ~= ".0" then
+        name, name2, height, height2  = self.ui.document:getHeight(res.pos0)
+        if name ~= "" then
+            local Math = require("optmath")
+            height = Math.round(height*10)/10
+            height2 = Math.round(height2*10)/10
+        end
+    end
+
     local title_pages = self.ui.document._document:getDocumentProps().title
 
     local title_words = 0
@@ -2208,7 +2219,9 @@ function ReaderFooter:onGetTextPage()
     "Avg wpm and wph: " .. avg_wpm .. string.char(10) .. string.char(10) ..
     "Font parameters: " .. font_face .. ", " .. font_size .. "px, " .. font_size_pt .. "pt, " .. font_size_mm .. "mm" .. string.char(10) ..
     "Number of tweaks: " .. self.ui.tweaks_no .. string.char(10) ..
-    self.ui.tweaks
+    self.ui.tweaks .. string.char(10) ..
+    name .. "    " .. name2 .. string.char(10) ..
+    height .. "    " .. height2
     UIManager:show(InfoMessage:new{
         text = T(_(text)),
         timeout = 15,
