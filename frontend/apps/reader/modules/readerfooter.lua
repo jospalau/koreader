@@ -2169,8 +2169,17 @@ function ReaderFooter:onGetTextPage()
         name, name2, height, height2  = self.ui.document:getHeight(res.pos0)
         if name ~= "" then
             local Math = require("optmath")
-            height = Math.round(height*10)/10
-            height2 = Math.round(height2*10)/10
+            -- If p doesnt have a class with line-height and body does, it inherits a pixels value and CREngine gives us this value with a much greater value
+            if height < 2 then
+                height = Math.round(height*10)/10
+            else
+                height = tostring(height) .. "px"
+            end
+            if height2 < 2 then
+                height2 = Math.round(height2*10)/10
+            else
+                height2 = tostring(height2) .. "px"
+            end
         end
     end
 
