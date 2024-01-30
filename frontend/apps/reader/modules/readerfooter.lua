@@ -2165,7 +2165,7 @@ function ReaderFooter:onGetTextPage()
     end
     local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
     local name, name2, height, height2 = "","","",""
-    if res.pos0 ~= ".0" then
+    if res and res.pos0 ~= ".0" then
         name, name2, height, height2  = self.ui.document:getHeight(res.pos0)
         if name ~= "" then
             local Math = require("optmath")
