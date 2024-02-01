@@ -135,6 +135,11 @@ function CoverImage:createCoverImage(doc_settings)
                 end
                 if Device:isPocketBook() then
                     local poweroff_image_path = "/mnt/ext1/system/logo/offlogo/pb_shutdownlogo.bmp"
+                    -- local poweroff_image_path = "/mnt/ext1/system/resources/Line/taskmgr_lock_background.bmp" To test
+                    local RenderText = require("ui/rendertext")
+                    local Font = require("ui/font")
+                    myimage:paintRect(0,0,myimage:getWidth(),60, Blitbuffer.COLOR_WHITE)
+                    RenderText:renderUtf8Text(myimage,500,50,Font:getFace("ffont", 24), "Powered off", 1,1, Blitbuffer.COLOR_BLACK)
                     if not myimage:writeToFile(poweroff_image_path, act_format, self.cover_image_quality, self.cover_image_grayscale) then
                         UIManager:show(InfoMessage:new{
                             text = _("Error writing file") .. "\n" .. self.cover_image_path,
