@@ -133,6 +133,16 @@ function CoverImage:createCoverImage(doc_settings)
                         show_icon = true,
                     })
                 end
+                if Device:isPocketBook() then
+                    local poweroff_image_path = "/mnt/ext1/system/logo/offlogo/pb_shutdownlogo.bmp"
+                    if not myimage:writeToFile(poweroff_image_path, act_format, self.cover_image_quality, self.cover_image_grayscale) then
+                        UIManager:show(InfoMessage:new{
+                            text = _("Error writing file") .. "\n" .. self.cover_image_path,
+                            show_icon = true,
+                        })
+                    end
+                end
+
                 cover_image:free()
                 myimage:free()
                 ffiutil.copyFile(self.cover_image_path, cache_file)
