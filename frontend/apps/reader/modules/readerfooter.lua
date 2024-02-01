@@ -2160,9 +2160,9 @@ end
 function ReaderFooter:onGetTextPage()
     local cur_page = self.ui.document:getCurrentPage()
     local total_words, total_words2 = 0
-    if not Device:isPocketBook() then
-        total_words, total_words2 = self.ui.document:getTextCurrentPage()
-    end
+    -- if not Device:isPocketBook() then
+    total_words, total_words2 = self.ui.document:getTextCurrentPage()
+    -- end
     local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
     local name, name2, height, height2 = "","","",""
     if res and res.pos0 ~= ".0" then
@@ -2210,12 +2210,12 @@ function ReaderFooter:onGetTextPage()
     avg_wpm = math.floor(avg_wpm) .. "wpm" .. ", " .. math.floor(avg_wpm*60) .. "wph"
     local text = ""
 
-    if not Device:isPocketBook() then
-        text = text .. "Total pages (screens): " .. self.pages .. string.char(10) ..
-        "Total words (total chars/5.7): " .. total_words .. string.char(10) .. -- Dividing characters between 5.7
-        "Total words (counting words): " .. total_words2 .. string.char(10) .. -- Counting words
-        "Words per page: " .. tostring(math.floor((total_words2/self.pages * 100) / 100)) .. string.char(10)
-    end
+    -- if not Device:isPocketBook() then
+    text = text .. "Total pages (screens): " .. self.pages .. string.char(10) ..
+    "Total words (total chars/5.7): " .. total_words .. string.char(10) .. -- Dividing characters between 5.7
+    "Total words (counting words): " .. total_words2 .. string.char(10) .. -- Counting words
+    "Words per page: " .. tostring(math.floor((total_words2/self.pages * 100) / 100)) .. string.char(10)
+    -- end
 
     text = text .. "Total words Calibre: " .. title_words .. string.char(10) ..
     "Words per page Calibre: " .. tostring(math.floor((title_words/self.pages * 100) / 100)) .. string.char(10) .. string.char(10) ..
