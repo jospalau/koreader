@@ -2164,9 +2164,9 @@ function ReaderFooter:onGetTextPage()
     total_words, total_words2 = self.ui.document:getTextCurrentPage()
     -- end
     local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
-    local name, name2, height, height2 = "","","",""
+    local name, name2, height, height2, indent, indent2 = "","","","","",""
     if res and res.pos0 ~= ".0" then
-        name, name2, height, height2  = self.ui.document:getHeight(res.pos0)
+        name, name2, height, height2, indent, indent2  = self.ui.document:getHeight(res.pos0)
         if name ~= "" then
             local Math = require("optmath")
             -- If p doesnt have a class with line-height and body does, it inherits a pixels value and CREngine gives us this value with a much greater value
@@ -2230,7 +2230,8 @@ function ReaderFooter:onGetTextPage()
     "Number of tweaks: " .. self.ui.tweaks_no .. string.char(10) ..
     self.ui.tweaks .. string.char(10) ..
     name .. "    " .. name2 .. string.char(10) ..
-    height .. "    " .. height2
+    height .. "    " .. height2 .. string.char(10) ..
+    indent .. "    " .. indent2
     UIManager:show(InfoMessage:new{
         text = T(_(text)),
         timeout = 15,
