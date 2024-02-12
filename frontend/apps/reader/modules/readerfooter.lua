@@ -2180,6 +2180,17 @@ function ReaderFooter:onGetTextPage()
             else
                 height2 = tostring(height2) .. "px"
             end
+
+            if indent < 2 then
+                indent = Math.round(indent*10)/10
+            else
+                indent = tostring(indent) .. "px"
+            end
+            if indent2 < 2 then
+                indent2 = Math.round(indent2*10)/10
+            else
+                indent2 = tostring(indent2) .. "px"
+            end
         end
     end
 
@@ -2229,9 +2240,9 @@ function ReaderFooter:onGetTextPage()
     "Font parameters: " .. font_face .. ", " .. font_size .. "px, " .. font_size_pt .. "pt, " .. font_size_mm .. "mm" .. string.char(10) ..
     "Number of tweaks: " .. self.ui.tweaks_no .. string.char(10) ..
     self.ui.tweaks .. string.char(10) ..
-    name .. "    " .. name2 .. string.char(10) ..
-    height .. "    " .. height2 .. string.char(10) ..
-    indent .. "    " .. indent2
+    " Tag                    " .. name .. "    " .. name2 .. string.char(10) ..
+    " Line height   " .. height .. "    " .. height2 .. string.char(10) ..
+    " Text indent   " .. indent .. "    " .. indent2
     UIManager:show(InfoMessage:new{
         text = T(_(text)),
         timeout = 15,
@@ -4303,9 +4314,9 @@ function ReaderFooter:TapFooter(ges)
 end
 
 function ReaderFooter:onToggleFooterMode()
-    self.bottom_padding = Screen:scaleBySize(self.settings.container_bottom_padding)
     -- self.height = Screen:scaleBySize(self.settings.container_height)
-    self:refreshFooter(true, false)
+    -- self.bottom_padding = Screen:scaleBySize(self.settings.container_bottom_padding) -- No needed?
+    self:refreshFooter(true, true) -- Needs to be true to remove some parts that main remain
     if not self.view.footer_visible or self.mode == 0 then
         local text = "Footer on."
         if self.settings.bar_top then
@@ -4364,8 +4375,8 @@ end
 
 
 function ReaderFooter:onToggleFooterModeBack()
-    self.bottom_padding = Screen:scaleBySize(self.settings.container_bottom_padding)
-    self:refreshFooter(true, false)
+    -- self.bottom_padding = Screen:scaleBySize(self.settings.container_bottom_padding) -- No needed?
+    self:refreshFooter(true, true) -- Needs to be true to remove some parts that main remain
     if not self.view.footer_visible or self.mode == 0 then
         local text = "Footer on."
         if self.settings.bar_top then

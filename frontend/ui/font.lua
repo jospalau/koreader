@@ -82,7 +82,8 @@ local Font = {
         -- extra extra small font for info messages
         xx_smallinfofont = "NotoSans-Regular.ttf",
 
-        myfont = "Capita-Regular.otf",
+        -- myfont = "Capita-Regular.otf",
+        myfont = "BitterPro-Medium.ttf",
 
         myfont2 = "PoorRichard-Regular.ttf",
     },
