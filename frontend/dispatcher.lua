@@ -156,6 +156,7 @@ local settingsList = {
     refresh_content = {category="none", event="RefreshContent", title=_("Refresh content"), filemanager=true},
     folder_shortcuts = {category="none", event="ShowFolderShortcutsDialog", title=_("Folder shortcuts"), filemanager=true},
     file_search = {category="none", event="ShowFileSearch", title=_("File search"), filemanager=true, separator=true},
+    file_search_all_recent = {category="none", event="ShowFileSearchAll", title=_("File search all recent"), filemanager=true, separator=true},
     ----
     -- go_to
     -- back
@@ -345,7 +346,7 @@ local dispatcher_menu_order = {
     "print_wpm_session_fbink",
     "show_db_stats",
     "move_status_bar",
-"switch_status_bar_text",
+    "switch_status_bar_text",
     ----
 
     -- Device
@@ -410,6 +411,7 @@ local dispatcher_menu_order = {
     "refresh_content",
     "folder_shortcuts",
     "file_search",
+    "file_search_all_recent",
     ----
     -- "go_to"
     -- "back"

@@ -96,6 +96,15 @@ function FileSearcher:onShowFileSearch(search_string)
     search_dialog:onShowKeyboard()
 end
 
+
+function FileSearcher:onShowFileSearchAllRecent()
+    local search_dialog
+    local check_button_case, check_button_subfolders, check_button_metadata
+    self.path = G_reader_settings:readSetting("home_dir")
+    self.search_string = "*.epub"
+    self:doSearchSort()
+end
+
 function FileSearcher:doSearch()
     local results
     local dirs, files = self:getList()
@@ -112,6 +121,28 @@ function FileSearcher:doSearch()
     end
 end
 
+
+function FileSearcher:doSearchSort()
+    local results
+    local dirs, files = self:getList()
+
+
+    -- If we have a FileChooser instance, use it, to be able to make use of its natsort cache
+    if self.ui.file_chooser then
+        results = self.ui.file_chooser:genItemTable(dirs, files)
+    else
+        results = FileChooser:genItemTable(dirs, files)
+    end
+
+    -- local tab = {table.unpack(results)}
+    table.sort(results,function(a,b) return a.attr.modification>b.attr.modification end)
+
+    if #results > 0 then
+        self:showSearchResults(results)
+    else
+        self:showSearchResultsMessage(true)
+    end
+end
 function FileSearcher:getList()
     self.no_metadata_count = 0
     local sys_folders = { -- do not search in sys_folders

@@ -804,6 +804,22 @@ Tap a book in the search results to open it.]]),
         end
     }
 
+    self.menu_items.find_file_all = {
+        -- @translators Search for files by name.
+        text = _("File search all recent"),
+        help_text = _([[Search a book by filename in the current or home folder and its subfolders.
+
+Wildcards for one '?' or more '*' characters can be used.
+A search for '*' will show all files.
+
+The sorting order is the same as in filemanager.
+
+Tap a book in the search results to open it.]]),
+        callback = function()
+            self.ui.filesearcher:onShowFileSearchAllRecent()
+        end
+    }
+
     -- main menu tab
     self.menu_items.open_last_document = {
         text_func = function()
