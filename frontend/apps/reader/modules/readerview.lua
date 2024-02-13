@@ -258,15 +258,20 @@ function ReaderView:paintTo(bb, x, y)
             -- In the gesture action in onSwitchStatusBarText, we set self.height = Screen:scaleBySize(0). But there is no need to set Screen:scaleBySize(0). It was for any container (readerfooter.lua)
             local y_coordinate_top = -1640 -- Kobo Libra2, PocketBook y Kobo Palma
 
-            if Device.model == "Kobo_cadmus" then -- Clara2E
+            if Device.model == "Kobo_cadmus" then -- Kobo Sage
                 y_coordinate_top = -1870
             end
 
-            if Device.model == "KindlePaperWhite5" then -- Clara2E
+            if Device.model == "KindlePaperWhite5" then -- Kindle PW5
                 y_coordinate_top = -1615
             end
-            if Device.model == "Kobo_goldfinch" then -- Clara2E
+
+            if Device.model == "Kobo_goldfinch" then -- Kobo Clara 2E
                 y_coordinate_top = -1420
+            end
+
+            if Device.model == "ditingp_global" then -- Xiaomi
+                y_coordinate_top = -2660
             end
 
             -- Hardcode previous code is more accurate and it works independently of the Screen DPI configured
