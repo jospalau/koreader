@@ -255,6 +255,18 @@ function PocketBook:init()
     self.powerd = require("device/pocketbook/powerd"):new{device = self}
     self:setAutoStandby(false)
     Generic.init(self)
+
+    local adjust_deadzone = function(this, ev)
+        -- Mismo problema que el Palma, misma solución
+        -- tail -f crash.log | grep -i abs_mt_position_y
+		if ev.type == C.EV_ABS and ev.code == C.ABS_MT_POSITION_Y and ev.value <= 5 then
+			ev.value = 31
+		end
+        if ev.type == C.EV_ABS and ev.code == C.ABS_MT_POSITION_Y and ev.value >= 1640 then
+			ev.value = 1635
+		end
+	end
+    self.input:registerEventAdjustHook(adjust_deadzone)
 end
 
 function PocketBook:exit()
