@@ -257,7 +257,7 @@ function ReaderView:paintTo(bb, x, y)
             -- This is just for when we want the top bar be on top. The hardcoded values are to put a single line top bar in top of the screen
             -- In the gesture action in onSwitchStatusBarText, we set self.height = Screen:scaleBySize(0). But there is no need to set Screen:scaleBySize(0). It was for any container (readerfooter.lua)
             local rotation = Screen:getRotationMode()
-            if rotation == 0 then -- PORTRATT
+            if rotation == 0 or rotation == 2 then -- PORTRATT
                 self.y_coordinate_top = -1640 -- Kobo Libra2, PocketBook y Kobo Palma
 
                 if Device.model == "Kobo_cadmus" then -- Kobo Sage
@@ -275,7 +275,7 @@ function ReaderView:paintTo(bb, x, y)
                 if Device.model == "ditingp_global" then -- Xiaomi
                     self.y_coordinate_top = -2660
                 end
-            elseif rotation == 1 then -- LANDSCAPE
+            elseif rotation == 1 or rotation == 3 then -- LANDSCAPE
                 self.y_coordinate_top = -1220 -- Kobo Libra2, PocketBook y Kobo PalmaD
 
                 if Device.model == "Kobo_cadmus" then -- Kobo Sage
