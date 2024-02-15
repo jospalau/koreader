@@ -2240,7 +2240,7 @@ function ReaderFooter:onGetTextPage()
     "Font parameters: " .. font_face .. ", " .. font_size .. "px, " .. font_size_pt .. "pt, " .. font_size_mm .. "mm" .. string.char(10) ..
     "Number of tweaks: " .. self.ui.tweaks_no .. string.char(10) ..
     self.ui.tweaks .. string.char(10) ..
-    " Tag                    " .. name .. "    " .. name2 .. string.char(10) ..
+    " Tag                     " .. name .. "   " .. name2 .. string.char(10) ..
     " Line height   " .. height .. "    " .. height2 .. string.char(10) ..
     " Text indent   " .. indent .. "    " .. indent2
     UIManager:show(InfoMessage:new{
