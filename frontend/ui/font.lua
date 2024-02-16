@@ -84,8 +84,8 @@ local Font = {
 
         -- myfont = "Capita-Regular.otf",
         myfont = "BitterPro-Medium.ttf",
-
         myfont2 = "PoorRichard-Regular.ttf",
+        myfont3 = "Consolas.ttf",
     },
     sizemap = {
         cfont = 24,
@@ -97,6 +97,7 @@ local Font = {
         largeffont = 25,
         myfont = 16,
         myfont2 = 26,
+        myfont3 = 16,
         pgfont = 20,
         scfont = 20,
         rifont = 16,
