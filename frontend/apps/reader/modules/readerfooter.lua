@@ -2208,11 +2208,11 @@ function ReaderFooter:onGetTextPage()
                 margin2 = tostring(margin2)
             end
             margin2 = margin2 .. unitmargin2
+            text_properties = string.format("%-15s%-10s%-5s","Tag",name2,name) .. string.char(10)
+            text_properties = text_properties .. string.format("%-15s%-10s%-5s","Line height",height2,height) .. string.char(10)
+            text_properties = text_properties .. string.format("%-15s%-10s%-5s","Text indent",indent2,indent) .. string.char(10)
+            text_properties = text_properties .. string.format("%-15s%-10s%-5s","Margin",margin2,margin)
         end
-        text_properties = string.format("%-15s%-10s%-5s","Tag",name2,name) .. string.char(10)
-        text_properties = text_properties .. string.format("%-15s%-10s%-5s","Line height",height2,height) .. string.char(10)
-        text_properties = text_properties .. string.format("%-15s%-10s%-5s","Text indent",indent2,indent) .. string.char(10)
-        text_properties = text_properties .. string.format("%-15s%-10s%-5s","Margin",margin2,margin)
     end
 
     local title_pages = self.ui.document._document:getDocumentProps().title
