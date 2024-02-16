@@ -2164,45 +2164,50 @@ function ReaderFooter:onGetTextPage()
     total_words, total_words2 = self.ui.document:getTextCurrentPage()
     -- end
     local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
-    local name, name2, height, height2, indent, indent2, margin, margin2 = "","","","","","","",""
+    local name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2 = "","","","","","","","","","","","","",""
     local text_properties=""
     if res and res.pos0 ~= ".0" then
-        name, name2, height, height2, indent, indent2, margin, margin2  = self.ui.document:getHeight(res.pos0)
+        name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2  = self.ui.document:getHeight(res.pos0)
         if name ~= "" then
             local Math = require("optmath")
             -- If p doesnt have a class with line-height and body does, it inherits a pixels value and CREngine gives us this value with a much greater value
             if height < 2 then
                 height = Math.round(height*10)/10
             else
-                height = tostring(height) .. "px"
+                height = tostring(height)
             end
+            height = height .. unitheight
             if height2 < 2 then
                 height2 = Math.round(height2*10)/10
             else
-                height2 = tostring(height2) .. "px"
+                height2 = tostring(height2)
             end
+            height = height2 .. unitheight2
 
             if indent < 2 then
                 indent = Math.round(indent*10)/10
             else
-                indent = tostring(indent) .. "px"
+                indent = tostring(indent)
             end
+            indent = indent.. unitindent
             if indent2 < 2 then
                 indent2 = Math.round(indent2*10)/10
             else
-                indent2 = tostring(indent2) .. "px"
+                indent2 = tostring(indent2) .. unitindent2
             end
-
+            indent2 = indent2.. unitindent2
             if margin < 2 then
                 margin = Math.round(margin*10)/10
             else
-                margin = tostring(margin) .. "px"
+                margin = tostring(margin)
             end
+            margin = margin .. unitmargin
             if margin2 < 2 then
                 margin2 = Math.round(margin2*10)/10
             else
-                margin2 = tostring(margin2) .. "px"
+                margin2 = tostring(margin2)
             end
+            margin2 = margin2 .. unitmargin2
         end
         text_properties = string.format("%-15s%-10s%-5s","Tag",name2,name) .. string.char(10)
         text_properties = text_properties .. string.format("%-15s%-10s%-5s","Line height",height2,height) .. string.char(10)
