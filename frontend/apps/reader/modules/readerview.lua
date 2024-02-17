@@ -287,7 +287,7 @@ function ReaderView:paintTo(bb, x, y)
                 end
 
                 if Device.model == "Kobo_goldfinch" then -- Kobo Clara 2E
-                    self.y_coordinate_top = -1420
+                    self.y_coordinate_top = -1040
                 end
 
                 if Device.model == "ditingp_global" then -- Xiaomi
