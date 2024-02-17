@@ -2150,7 +2150,7 @@ function ReaderFooter:onGetStyles()
             text = T(_(text)),
             timeout = 20,
             no_refresh_on_close = false,
-            face = Font:getFace("myfont"),
+            face = Font:getFace("myfont3"),
             width = math.floor(Screen:getWidth() * 0.85),
         })
     end
