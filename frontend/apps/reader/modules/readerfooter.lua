@@ -2171,43 +2171,12 @@ function ReaderFooter:onGetTextPage()
         if name ~= "" then
             local Math = require("optmath")
             -- If p doesnt have a class with line-height and body does, it inherits a pixels value and CREngine gives us this value with a much greater value
-            if height < 2 then
-                height = Math.round(height*100)/100
-            else
-                height = tostring(height)
-            end
-            height = height .. unitheight
-            if height2 < 2 then
-                height2 = Math.round(height2*100)/100
-            else
-                height2 = tostring(height2)
-            end
-            height2 = height2 .. unitheight2
-
-            if indent < 2 then
-                indent = Math.round(indent*100)/100
-            else
-                indent = tostring(indent)
-            end
-            indent = indent.. unitindent
-            if indent2 < 2 then
-                indent2 = Math.round(indent2*100)/100
-            else
-                indent2 = tostring(indent2) .. unitindent2
-            end
-            indent2 = indent2.. unitindent2
-            if margin < 2 then
-                margin = Math.round(margin*100)/100
-            else
-                margin = tostring(margin)
-            end
-            margin = margin .. unitmargin
-            if margin2 < 2 then
-                margin2 = Math.round(margin2*100)/100
-            else
-                margin2 = tostring(margin2)
-            end
-            margin2 = margin2 .. unitmargin2
+            height = Math.round(height*100)/100 .. unitheight
+            height2 = Math.round(height2*100)/100 .. unitheight2
+            indent = Math.round(indent*100)/100 .. unitindent
+            indent2 = Math.round(indent2*100)/100 .. unitindent2
+            margin =  Math.round(margin*100)/100 .. unitmargin
+            margin2 = Math.round(margin2*100)/100 .. unitmargin2
             text_properties = string.format("%-15s%-10s%-5s","Tag",name2,name) .. string.char(10)
             text_properties = text_properties .. string.format("%-15s%-10s%-5s","Line height",height2,height) .. string.char(10)
             text_properties = text_properties .. string.format("%-15s%-10s%-5s","Text indent",indent2,indent) .. string.char(10)
