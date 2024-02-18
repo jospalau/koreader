@@ -1393,11 +1393,33 @@ function FileManager:onPullConfig()
             execute = io.popen("/mnt/ext1/scripts/pullConfig.sh && echo $? || echo $?" )
         end
         output = execute:read('*a')
+        local save_text = _("Quit")
+        if Device:canRestart() then
+            save_text = _("Restart")
+        end
+        local Size = require("ui/size")
+        UIManager:show(ConfirmBox:new{
+            dismissable = false,
+            text = _("KOReader needs to be restarted to apply the new default settings."),
+            ok_text = save_text,
+            margin = Size.margin.tiny,
+            padding = Size.padding.tiny,
+            ok_callback = function()
+                if Device:canRestart() then
+                    UIManager:restartKOReader()
+                else
+                    UIManager:quit()
+                end
+            end,
+            cancel_text = _("No need to restart"),
+            cancel_callback = function()
+                logger.info("discard defaults")
+            end,
+        })
         UIManager:show(InfoMessage:new{
             text = T(_(output)),
             face = Font:getFace("myfont"),
         })
-
     end
 end
 
@@ -1445,11 +1467,34 @@ function FileManager:onSynchronizeCode()
             execute = io.popen("/mnt/ext1/scripts/syncKOReaderCode.sh && echo $? || echo $?" )
         end
         output = execute:read('*a')
+
+        local save_text = _("Quit")
+        if Device:canRestart() then
+            save_text = _("Restart")
+        end
+        local Size = require("ui/size")
+        UIManager:show(ConfirmBox:new{
+            dismissable = false,
+            text = _("KOReader needs to be restarted to apply the new default settings."),
+            ok_text = save_text,
+            margin = Size.margin.tiny,
+            padding = Size.padding.tiny,
+            ok_callback = function()
+                if Device:canRestart() then
+                    UIManager:restartKOReader()
+                else
+                    UIManager:quit()
+                end
+            end,
+            cancel_text = _("No need to restart"),
+            cancel_callback = function()
+                logger.info("discard defaults")
+            end,
+        })
         UIManager:show(InfoMessage:new{
             text = T(_(output)),
             face = Font:getFace("myfont"),
         })
-
     end
 end
 

@@ -26,7 +26,7 @@ local filter_text = {
     abandoned = C_("Book status filter", "On hold"),
     complete  = C_("Book status filter", "Finished"),
     deleted   = C_("Book status filter", "Deleted"),
-    new       = C_("Book status filter", "New"),
+    new       = C_("Book status filter", "MBR"),
 }
 
 function FileManagerHistory:init()
