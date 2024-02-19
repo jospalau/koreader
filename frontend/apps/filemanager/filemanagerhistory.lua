@@ -277,6 +277,63 @@ function FileManagerHistory:onShowHist(search_info)
     return true
 end
 
+
+function FileManagerHistory:fetchStatusesOut(count)
+    for _, v in ipairs(require("readhistory").hist) do
+        local status
+        status = filemanagerutil.getStatus(v.file)
+        if not filter_text[status] then
+            status = "reading"
+        end
+        if count then
+            self.count[status] = self.count[status] + 1
+        end
+        v.status = status
+    end
+    self.statuses_fetched = true
+end
+
+function FileManagerHistory:onMenuSelect(item)
+    local FileManager = require("apps/filemanager/filemanager")
+
+    FileManager:openFile(item.file)
+    return true
+end
+
+function FileManagerHistory:onShowHistMBR()
+    local ReadHistory = require("readhistory")
+    -- ReadHistory.hist = {}
+    -- ReadHistory:reload(true)
+    self.hist_menu = Menu:new{
+        ui = self.ui,
+        covers_fullscreen = true, -- hint for UIManager:_repaint()
+        is_borderless = true,
+        is_popout = false,
+        title = "MBR",
+        -- item and book cover thumbnail dimensions in Mosaic and Detailed list display modes
+        -- must be equal in File manager, History and Collection windows to avoid image scaling
+        onMenuChoice = self.onMenuSelect,
+        _manager = self,
+    }
+
+    self.filter = "new"
+    self:fetchStatusesOut(false)
+    self:updateItemTable()
+    self.hist_menu.close_callback = function()
+        if self.files_updated then -- refresh Filemanager list of files
+            if self.ui.file_chooser then
+                self.ui.file_chooser:refreshPath()
+            end
+            self.files_updated = nil
+        end
+        self.statuses_fetched = nil
+        UIManager:close(self.hist_menu)
+        self.hist_menu = nil
+    end
+    UIManager:show(self.hist_menu)
+    return true
+end
+
 function FileManagerHistory:showHistDialog()
     if not self.statuses_fetched then
         self:fetchStatuses(true)

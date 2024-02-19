@@ -158,6 +158,7 @@ local order = {
         "find_book_in_calibre_catalog",
         "find_file",
         "find_file_all",
+        "mbr",
         "----------------------------",
         "opds",
     },
