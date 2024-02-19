@@ -2554,33 +2554,69 @@ end
 
 function ReaderFooter:onSwitchStatusBarText()
     local text = ""
-    if self.settings.disable_progress_bar and self.mode == 0 then
-        text = "Status bar not on"
-        UIManager:show(Notification:new{
-            text = _(text),
-        })
+    if not self._show_just_toptextcontainer and self.settings.disable_progress_bar and self.mode == 0 then
+        self.settings.progress_bar_position = "alongside"
+        self:refreshFooter(true, false)
+        local text = "Progress bar on."
+        self.view.footer_visible = true
+        self.settings.disable_progress_bar = false
+        if self.settings.toc_markers then
+            self:setTocMarkers()
+        end
+        if self.settings.bar_top then
+            UIManager:show(Notification:new{
+                text = _(text),
+                -- my_height = Screen:scaleBySize(30),
+                -- align = "left",
+                timeout = 0.3,
+            })
+        else
+            UIManager:show(Notification:new{
+                text = _(text),
+            })
+        end
+        self.mode = 0
+        UIManager:setDirty(self.dialog, "ui")
+        self:refreshFooter(true, false) -- This uses _show_just_toptextcontainer
+        self:onUpdateFooter(true,true) -- Importante pasar el segundo parámetro a true
         return true
     end
 
-    self._show_just_toptextcontainer = not self._show_just_toptextcontainer
-
-    if self._show_just_toptextcontainer then
-        text = "Show just top text container. Toggle again to restore"
-        -- self.height = Screen:scaleBySize(0) -- It was needed previously since we we were adding the text container instead of the footer container in updateFooterContainer()
-    else
-        text = "Status bar restored"
-        self.height = Screen:scaleBySize(self.settings.container_height)
+    if  self._show_just_toptextcontainer then
+        self._show_just_toptextcontainer = not self._show_just_toptextcontainer
+        self.settings.disable_progress_bar = true
+        self.mode = 0
+        self:applyFooterMode()
+        G_reader_settings:saveSetting("reader_footer_mode", self.mode)
+        UIManager:setDirty(self.dialog, "ui")
+        self:refreshFooter(true, false) -- This uses _show_just_toptextcontainer
+        self:onUpdateFooter(true,true) -- Importante pasar el segundo parámetro a true
+        return true
     end
-    UIManager:show(Notification:new{
-        text = _(text),
-        my_height = Screen:scaleBySize(20),
-        -- align = "left",
-        -- timeout = 0.3,
-    })
-    UIManager:setDirty(self.dialog, "ui")
-    self:refreshFooter(true, false) -- This uses _show_just_toptextcontainer
-    self:onUpdateFooter(true, true) -- Importante pasar el segundo parámetro a true
-    return true
+    if not self.settings.disable_progress_bar or self.mode > 0 then
+        self.settings.disable_progress_bar = true
+        self._show_just_toptextcontainer = not self._show_just_toptextcontainer
+
+        if self._show_just_toptextcontainer then
+            text = "Show just top text container. Toggle again to restore"
+            -- self.height = Screen:scaleBySize(0) -- It was needed previously since we we were adding the text container instead of the footer container in updateFooterContainer()
+        else
+            text = "Status bar restored"
+            self.height = Screen:scaleBySize(self.settings.container_height)
+        end
+        UIManager:show(Notification:new{
+            text = _(text),
+            my_height = Screen:scaleBySize(20),
+            -- align = "left",
+            -- timeout = 0.3,
+        })
+        UIManager:setDirty(self.dialog, "ui")
+        self:refreshFooter(true, false) -- This uses _show_just_toptextcontainer
+        self:onUpdateFooter(true, true) -- Importante pasar el segundo parámetro a true
+        return true
+    end
+
+
 end
 
 function ReaderFooter:setupTouchZones()
