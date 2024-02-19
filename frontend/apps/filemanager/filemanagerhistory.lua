@@ -229,6 +229,9 @@ function FileManagerHistory:MenuSetRotationModeHandler(rotation)
 end
 
 function FileManagerHistory:onShowHist(search_info)
+    local ReadHistory = require("readhistory")
+    ReadHistory.hist = {}
+    ReadHistory:reload(true)
     self.hist_menu = Menu:new{
         ui = self.ui,
         covers_fullscreen = true, -- hint for UIManager:_repaint()
