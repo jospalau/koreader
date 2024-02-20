@@ -210,7 +210,10 @@ function ReaderStatistics:init()
             self._pages_turned = 0
             self._total_pages = 0
             self._total_words = 0
-            local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
+            local res = nil
+            if self.ui.document then
+                res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
+            end
             local nbwords = 0
             local nbcharacters = 0
             if res and res.text then
