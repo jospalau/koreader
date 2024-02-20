@@ -253,7 +253,7 @@ function PocketBook:init()
         self.canSuspend = yes
     end
     self.powerd = require("device/pocketbook/powerd"):new{device = self}
-    self:setAutoStandby(false)
+    self:setAutoStandby(true)
     Generic.init(self)
 
     local adjust_deadzone = function(this, ev)
@@ -424,7 +424,7 @@ function PocketBook:setEventHandlers(uimgr)
     end
     UIManager.event_handlers.Resume = function()
         self.powerd:afterResume()
-        self:setAutoStandby(false)
+        -- self:setAutoStandby(false)
     end
     UIManager.event_handlers.Exit = function()
         local Event = require("ui/event")
