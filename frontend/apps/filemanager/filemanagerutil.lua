@@ -180,15 +180,19 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
     local has_custom_cover_file = custom_cover_file and true or false
     local custom_metadata_file = DocSettings:findCustomMetadataFile(file)
     local has_custom_metadata_file = custom_metadata_file and true or false
-    local text = "Reset"
-    local text2 = "Reset this document?"
-    if debug.getinfo(2).name == "onMenuHold_orig" then
-        text = "Add to MBR"
-        text2 = "Add this document to the MBR?"
-    end
+    local text = "Add to MBR"
+    local text2 = "Add this document to the MBR?"
+    local in_history =  require("readhistory"):getIndexByFile(file)
+
+    -- local text = "Reset"
+    -- local text2 = "Reset this document?"
+    -- if debug.getinfo(2).name == "onMenuHold_orig" then
+    --     text = "Add to MBR"
+    --     text2 = "Add this document to the MBR?"
+    -- end
     return {
         text = _(text),
-        enabled = not button_disabled and (has_sidecar_file or has_custom_metadata_file or has_custom_cover_file),
+        enabled = (not button_disabled and (has_sidecar_file or has_custom_metadata_file or has_custom_cover_file)) or not in_history,
         callback = function()
             local CheckButton = require("ui/widget/checkbutton")
             local ConfirmBox = require("ui/widget/confirmbox")
@@ -205,6 +209,8 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
                         custom_metadata_file = check_button_metadata.checked and custom_metadata_file,
                     }
                     (doc_settings or DocSettings:open(file)):purge(nil, data_to_purge)
+                    require("readhistory"):addItem(file, os.time())
+
                     if data_to_purge.custom_cover_file or data_to_purge.custom_metadata_file then
                         UIManager:broadcastEvent(Event:new("InvalidateMetadataCache", file))
                     end
