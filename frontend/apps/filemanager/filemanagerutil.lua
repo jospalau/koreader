@@ -180,18 +180,24 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
     local has_custom_cover_file = custom_cover_file and true or false
     local custom_metadata_file = DocSettings:findCustomMetadataFile(file)
     local has_custom_metadata_file = custom_metadata_file and true or false
+    local text = "Reset"
+    local text2 = "Reset this document?"
+    if debug.getinfo(2).name == "onMenuHold_orig" then
+        text = "Add to MBR"
+        text2 = "Add this document to the MBR?"
+    end
     return {
-        text = _("Add to MBR"),
+        text = _(text),
         enabled = not button_disabled and (has_sidecar_file or has_custom_metadata_file or has_custom_cover_file),
         callback = function()
             local CheckButton = require("ui/widget/checkbutton")
             local ConfirmBox = require("ui/widget/confirmbox")
             local check_button_settings, check_button_cover, check_button_metadata
             local confirmbox = ConfirmBox:new{
-                text = T(_("Add this document to the MBR?") .. "\n\n%1\n\n" ..
+                text = T(_(text2) .. "\n\n%1\n\n" ..
                          _("Information will be permanently lost."),
                     BD.filepath(file)),
-                ok_text = _("Add to MBR"),
+                ok_text = _(text),
                 ok_callback = function()
                     local data_to_purge = {
                         doc_settings         = check_button_settings.checked,
