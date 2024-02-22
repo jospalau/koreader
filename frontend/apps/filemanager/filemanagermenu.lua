@@ -819,6 +819,21 @@ Tap a book in the search results to open it.]]),
             self.ui.filesearcher:onShowFileSearchAllRecent()
         end
     }
+    self.menu_items.find_file_all_completed = {
+        -- @translators Search for files by name.
+        text = _("File search all completed"),
+        help_text = _([[Search a book by filename in the current or home folder and its subfolders.
+
+Wildcards for one '?' or more '*' characters can be used.
+A search for '*' will show all files.
+
+The sorting order is the same as in filemanager.
+
+Tap a book in the search results to open it.]]),
+        callback = function()
+            self.ui.filesearcher:onShowFileSearchAllCompleted()
+        end
+    }
 
     self.menu_items.mbr = {
         -- @translators Search for files by name.

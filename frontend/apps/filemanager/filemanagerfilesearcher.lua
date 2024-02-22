@@ -102,7 +102,15 @@ function FileSearcher:onShowFileSearchAllRecent()
     local check_button_case, check_button_subfolders, check_button_metadata
     self.path = G_reader_settings:readSetting("home_dir")
     self.search_string = "*.epub"
-    self:doSearchSort()
+    self:doSearchSort(false)
+end
+
+function FileSearcher:onShowFileSearchAllCompleted()
+    local search_dialog
+    local check_button_case, check_button_subfolders, check_button_metadata
+    self.path = G_reader_settings:readSetting("home_dir")
+    self.search_string = "*.epub"
+    self:doSearchSort(true)
 end
 
 function FileSearcher:doSearch()
@@ -122,7 +130,7 @@ function FileSearcher:doSearch()
 end
 
 
-function FileSearcher:doSearchSort()
+function FileSearcher:doSearchSort(show_complete)
     local results
     local dirs, files = self:getList()
 
@@ -134,8 +142,25 @@ function FileSearcher:doSearchSort()
         results = FileChooser:genItemTable(dirs, files)
     end
 
-    -- local tab = {table.unpack(results)}
-    table.sort(results,function(a,b) return a.attr.modification>b.attr.modification end)
+    if (show_complete) then
+        local table_complete = {}
+        for key,value in ipairs(results) do
+            if DocSettings:hasSidecarFile(value.path) then
+                -- local stats = doc_settings:readSetting("stats")
+                -- local book_props = require("apps/filemanager/filemanagerbookinfo").getDocProps(value.path).description
+                local doc_settings = DocSettings:open(value.path)
+                local status = doc_settings:readSetting("summary").status
+
+                table.remove(results,key)
+                if status == "complete" then
+                    table_complete[#table_complete+1] = value
+                end
+            end
+        end
+        results = table_complete
+    else
+        table.sort(results,function(a,b) return a.attr.modification>b.attr.modification end)
+    end
 
     if #results > 0 then
         self:showSearchResults(results)
@@ -143,6 +168,8 @@ function FileSearcher:doSearchSort()
         self:showSearchResultsMessage(true)
     end
 end
+
+
 function FileSearcher:getList()
     self.no_metadata_count = 0
     local sys_folders = { -- do not search in sys_folders
