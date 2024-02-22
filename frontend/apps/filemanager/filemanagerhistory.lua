@@ -362,7 +362,7 @@ function FileManagerHistory:showHistDialog()
     table.insert(buttons, {
         genFilterButton("reading"),
         genFilterButton("abandoned"),
-        genFilterButton("complete"),
+        -- genFilterButton("complete"),
     })
     table.insert(buttons, {
         {
