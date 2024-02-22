@@ -2522,7 +2522,7 @@ end
 
 
 function ReaderFooter:onMoveStatusBar()
-    if not self.settings.disable_progress_bar or self.mode > 0 then
+    if not self.settings.disable_progress_bar or self.mode > 0 or self._show_just_toptextcontainer then
         local text = ""
         if self.settings.bar_top then
             text = "status bar set to bottom"
