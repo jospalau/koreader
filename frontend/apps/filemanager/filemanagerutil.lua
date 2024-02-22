@@ -151,6 +151,9 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
             text = filemanagerutil.statusToString(to_status) .. (status == to_status and "  ✓" or ""),
             enabled = status ~= to_status,
             callback = function()
+                if to_status == "complete" then
+                    require("readhistory"):removeItemByPath(file)
+                end
                 summary.status = to_status
                 filemanagerutil.setStatus(doc_settings_or_file, to_status)
                 UIManager:broadcastEvent(Event:new("DocSettingsItemsChanged", file, { summary = summary })) -- for CoverBrowser
