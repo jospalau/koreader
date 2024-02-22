@@ -132,7 +132,7 @@ end
 
 function FileSearcher:showSearchResultsComplete(results)
     self.search_menu = Menu:new{
-        title = T(_("Completed books"), #results),
+        title = T(_("Completed books (%1)"), #results),
         item_table = results,
         ui = self.ui,
         covers_fullscreen = true, -- hint for UIManager:_repaint()
