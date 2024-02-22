@@ -96,13 +96,20 @@ function FileSearcher:onShowFileSearch(search_string)
     search_dialog:onShowKeyboard()
 end
 
+function FileSearcher:onShowFileSearchAll()
+    local search_dialog
+    local check_button_case, check_button_subfolders, check_button_metadata
+    self.path = G_reader_settings:readSetting("home_dir")
+    self.search_string = "*.epub"
+    self:doSearchSortCompleted(false, false)
+end
 
 function FileSearcher:onShowFileSearchAllRecent()
     local search_dialog
     local check_button_case, check_button_subfolders, check_button_metadata
     self.path = G_reader_settings:readSetting("home_dir")
     self.search_string = "*.epub"
-    self:doSearchSortCompleted(false)
+    self:doSearchSortCompleted(false, true)
 end
 
 function FileSearcher:onShowFileSearchAllCompleted()
@@ -110,7 +117,7 @@ function FileSearcher:onShowFileSearchAllCompleted()
     local check_button_case, check_button_subfolders, check_button_metadata
     self.path = G_reader_settings:readSetting("home_dir")
     self.search_string = "*.epub"
-    self:doSearchSortCompleted(true)
+    self:doSearchSortCompleted(true, false)
 end
 
 function FileSearcher:doSearch()
@@ -153,7 +160,7 @@ function FileSearcher:showSearchResultsComplete(results)
     end
 end
 
-function FileSearcher:doSearchSortCompleted(show_complete)
+function FileSearcher:doSearchSortCompleted(show_complete, show_recent)
     local results
     local dirs, files = self:getList()
 
@@ -165,6 +172,9 @@ function FileSearcher:doSearchSortCompleted(show_complete)
         results = FileChooser:genItemTable(dirs, files)
     end
 
+    if show_complete and show_recent then
+        table.sort(results,function(a,b) return b.text>a.text end)
+    end
     if (show_complete) then
         local table_complete = {}
         for key,value in ipairs(results) do
@@ -173,16 +183,18 @@ function FileSearcher:doSearchSortCompleted(show_complete)
                 -- local book_props = require("apps/filemanager/filemanagerbookinfo").getDocProps(value.path).description
                 local doc_settings = DocSettings:open(value.path)
                 local status = doc_settings:readSetting("summary").status
-
-                table.remove(results,key)
                 if status == "complete" then
                     table_complete[#table_complete+1] = value
                 end
+
+
             end
         end
         results = table_complete
     else
-        table.sort(results,function(a,b) return a.attr.modification>b.attr.modification end)
+        if show_recent then
+            table.sort(results,function(a,b) return a.attr.modification>b.attr.modification end)
+        end
     end
 
     if #results > 0 then

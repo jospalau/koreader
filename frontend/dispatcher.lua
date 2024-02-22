@@ -156,7 +156,8 @@ local settingsList = {
     refresh_content = {category="none", event="RefreshContent", title=_("Refresh content"), filemanager=true},
     folder_shortcuts = {category="none", event="ShowFolderShortcutsDialog", title=_("Folder shortcuts"), filemanager=true},
     file_search = {category="none", event="ShowFileSearch", title=_("File search"), filemanager=true, separator=true},
-    file_search_all_recent = {category="none", event="ShowFileSearchAll", title=_("File search all recent"), filemanager=true, separator=true},
+    file_search_all = {category="none", event="ShowFileSearchAll", title=_("File search all"), filemanager=true, separator=true},
+    file_search_all_recent = {category="none", event="ShowFileSearchAllRecent", title=_("File search all recent"), filemanager=true, separator=true},
     find_file_all_completed = {category="none", event="ShowFileSearchAllCompleted", title=_("File search all recent"), filemanager=true, separator=true},
     mbr = {category="none", event="ShowHistMBR", title=_("MBR"), general=true},
     ----
@@ -413,8 +414,9 @@ local dispatcher_menu_order = {
     "refresh_content",
     "folder_shortcuts",
     "file_search",
+    "file_search_all",
     "file_search_all_recent",
-    "find_file_all_completed",
+    "file_search_all_completed",
     "mbr",
     ----
     -- "go_to"
