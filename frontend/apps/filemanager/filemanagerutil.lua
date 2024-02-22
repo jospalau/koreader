@@ -183,12 +183,12 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
     local has_custom_cover_file = custom_cover_file and true or false
     local custom_metadata_file = DocSettings:findCustomMetadataFile(file)
     local has_custom_metadata_file = custom_metadata_file and true or false
-    local text = "Add to MBR"
-    local text2 = "Add this document to the MBR?"
-    local in_history =  require("readhistory"):getIndexByFile(file)
+    -- local text = "Add to MBR"
+    -- local text2 = "Add this document to the MBR?"
 
-    -- local text = "Reset"
-    -- local text2 = "Reset this document?"
+    local in_history =  require("readhistory"):getIndexByFile(file)
+    local text = "Reset/Add to MBR"
+    local text2 = "Reset this document?"
     -- if debug.getinfo(2).name == "onMenuHold_orig" then
     --     text = "Add to MBR"
     --     text2 = "Add this document to the MBR?"
@@ -199,7 +199,7 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
         callback = function()
             local CheckButton = require("ui/widget/checkbutton")
             local ConfirmBox = require("ui/widget/confirmbox")
-            local check_button_settings, check_button_cover, check_button_metadata
+            local check_button_mbr, check_button_settings, check_button_cover, check_button_metadata
             local confirmbox = ConfirmBox:new{
                 text = T(_(text2) .. "\n\n%1\n\n" ..
                          _("Information will be permanently lost."),
@@ -212,7 +212,13 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
                         custom_metadata_file = check_button_metadata.checked and custom_metadata_file,
                     }
                     (doc_settings or DocSettings:open(file)):purge(nil, data_to_purge)
-                    require("readhistory"):addItem(file, os.time())
+
+                    -- If Add to the history as MBR is not checked, it will be removed from the history always
+                    if check_button_mbr.checked then
+                        require("readhistory"):addItem(file, os.time())
+                    else
+                        require("readhistory"):removeItemByPath(file)
+                    end
 
                     if data_to_purge.custom_cover_file or data_to_purge.custom_metadata_file then
                         UIManager:broadcastEvent(Event:new("InvalidateMetadataCache", file))
@@ -224,6 +230,14 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
                     caller_callback()
                 end,
             }
+            check_button_mbr = CheckButton:new{
+                text = _("Add to the history as MBR"),
+                checked = false,
+                enabled = not in_history or (in_history and has_sidecar_file),
+                parent = confirmbox,
+            }
+
+            confirmbox:addWidget(check_button_mbr)
             check_button_settings = CheckButton:new{
                 text = _("document settings, progress, bookmarks, highlights, notes"),
                 checked = has_sidecar_file,
