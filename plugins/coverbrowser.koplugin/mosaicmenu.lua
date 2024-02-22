@@ -46,6 +46,7 @@ local corner_mark
 local reading_mark
 local abandoned_mark
 local complete_mark
+local mbr_mark
 local progress_widget
 
 -- ItemShortCutIcon (for keyboard navigation) is private to menu.lua and can't be accessed,
@@ -741,7 +742,9 @@ function MosaicMenuItem:paintTo(bb, x, y)
         self.shortcut_icon:paintTo(bb, x+ix, y+iy)
     end
 
-    if self.do_hint_opened and self.been_opened then
+    local in_history =  require("readhistory"):getIndexByFile(self.filepath)
+    local has_sidecar_file = DocSettings:hasSidecarFile(self.filepath)
+    if self.do_hint_opened and self.been_opened or in_history then
         -- align it on bottom right corner of sub-widget
         local target =  self[1][1][1]
         local ix
@@ -759,6 +762,10 @@ function MosaicMenuItem:paintTo(bb, x, y)
         else
             corner_mark = reading_mark
         end
+
+         if in_history and not has_sidecar_file then
+            corner_mark = mbr_mark
+         end
         corner_mark:paintTo(bb, x+ix, y+iy)
     end
 
@@ -898,6 +905,7 @@ function MosaicMenu:_recalculateDimen()
             reading_mark:free()
             abandoned_mark:free()
             complete_mark:free()
+            mbr_mark:free()
         end
         reading_mark = IconWidget:new{
             icon = "dogear.reading",
@@ -913,6 +921,11 @@ function MosaicMenu:_recalculateDimen()
         complete_mark = IconWidget:new{
             icon = BD.mirroredUILayout() and "dogear.complete.rtl" or "dogear.complete",
             alpha = true,
+            width = corner_mark_size,
+            height = corner_mark_size,
+        }
+        mbr_mark = IconWidget:new{
+            icon = BD.mirroredUILayout() and "dogear.mbr.rtl" or "dogear.mbr",
             width = corner_mark_size,
             height = corner_mark_size,
         }
