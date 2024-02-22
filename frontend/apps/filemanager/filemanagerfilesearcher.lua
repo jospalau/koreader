@@ -102,7 +102,7 @@ function FileSearcher:onShowFileSearchAllRecent()
     local check_button_case, check_button_subfolders, check_button_metadata
     self.path = G_reader_settings:readSetting("home_dir")
     self.search_string = "*.epub"
-    self:doSearchSort(false)
+    self:doSearchSortCompleted(false)
 end
 
 function FileSearcher:onShowFileSearchAllCompleted()
@@ -110,7 +110,7 @@ function FileSearcher:onShowFileSearchAllCompleted()
     local check_button_case, check_button_subfolders, check_button_metadata
     self.path = G_reader_settings:readSetting("home_dir")
     self.search_string = "*.epub"
-    self:doSearchSort(true)
+    self:doSearchSortCompleted(true)
 end
 
 function FileSearcher:doSearch()
@@ -130,7 +130,30 @@ function FileSearcher:doSearch()
 end
 
 
-function FileSearcher:doSearchSort(show_complete)
+function FileSearcher:showSearchResultsComplete(results)
+    self.search_menu = Menu:new{
+        title = T(_("Completed books"), #results),
+        item_table = results,
+        ui = self.ui,
+        covers_fullscreen = true, -- hint for UIManager:_repaint()
+        is_borderless = true,
+        is_popout = false,
+        title_bar_fm_style = true,
+        handle_hold_on_hold_release = true,
+    }
+    self.search_menu.close_callback = function()
+        UIManager:close(self.search_menu)
+        if self.ui.file_chooser then
+            self.ui.file_chooser:refreshPath()
+        end
+    end
+    UIManager:show(self.search_menu)
+    if self.no_metadata_count ~= 0 then
+        self:showSearchResultsMessage()
+    end
+end
+
+function FileSearcher:doSearchSortCompleted(show_complete)
     local results
     local dirs, files = self:getList()
 
@@ -163,7 +186,11 @@ function FileSearcher:doSearchSort(show_complete)
     end
 
     if #results > 0 then
-        self:showSearchResults(results)
+        if (show_complete) then
+            self:showSearchResultsComplete(results)
+        else
+            self:showSearchResults(results)
+        end
     else
         self:showSearchResultsMessage(true)
     end
