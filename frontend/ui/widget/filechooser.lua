@@ -340,6 +340,11 @@ function FileChooser:getListItem(dirpath, f, fullpath, attributes, collate)
                 item.bold = not item.bold
             end
         end
+
+        if require("readhistory"):getIndexByFile(fullpath) then
+            item.in_history = true
+        end
+
         item.dim = self.filemanager and self.filemanager.selected_files
                    and self.filemanager.selected_files[item.path]
         if collate.item_func ~= nil then

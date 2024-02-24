@@ -224,6 +224,10 @@ function MenuItem:init()
     local dots_right_padding = Size.padding.small
     if self.single_line then  -- items only in single line
         -- No font size change: text will be truncated if it overflows
+        if self.in_history and self.bold then
+            text = "(MBR) " .. text
+        end
+
         item_name = TextWidget:new{
             text = text,
             face = self.face,
@@ -1099,6 +1103,7 @@ function Menu:updateItems(select_number)
                 line_color = self.line_color,
                 items_padding = self.items_padding,
                 handle_hold_on_hold_release = self.handle_hold_on_hold_release,
+                in_history = self.item_table[i].in_history == true,
             }
             table.insert(self.item_group, item_tmp)
             -- this is for focus manager
