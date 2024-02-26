@@ -67,6 +67,10 @@ function MassStorage:start(with_confirmation)
             text = _("Share storage via USB?"),
             ok_text = _("Share"),
             ok_callback = function()
+                if Device:isKobo() then
+                    os.execute("killall dropbear")
+                    os.execute("rm /tmp/dropbear_koreader.pid")
+                end
                 -- save settings before activating USBMS:
                 UIManager:flushSettings()
                 logger.info("Exiting KOReader to enter USBMS mode...")
