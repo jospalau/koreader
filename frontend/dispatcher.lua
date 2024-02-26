@@ -158,7 +158,7 @@ local settingsList = {
     file_search = {category="none", event="ShowFileSearch", title=_("File search"), filemanager=true, separator=true},
     file_search_all = {category="none", event="ShowFileSearchAll", title=_("File search all"), filemanager=true, separator=true},
     file_search_all_recent = {category="none", event="ShowFileSearchAllRecent", title=_("File search all recent"), filemanager=true, separator=true},
-    find_file_all_completed = {category="none", event="ShowFileSearchAllCompleted", title=_("File search all recent"), filemanager=true, separator=true},
+    file_search_all_completed = {category="none", event="ShowFileSearchAllCompleted", title=_("File search all recent"), filemanager=true, separator=true},
     mbr = {category="none", event="ShowHistMBR", title=_("MBR"), general=true},
     ----
     -- go_to
