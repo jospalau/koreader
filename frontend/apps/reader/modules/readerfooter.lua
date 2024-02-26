@@ -877,7 +877,7 @@ local footerTextGeneratorMap = {
 
         local font_size_pt = nil
         local font_size_mm = nil
-        if Device:isKobo() then
+        if Device:isKobo() or Device:isPocketBook() or Device.model == "boox" then
             font_size_pt = math.floor((font_size * 72 / 300) * 100) / 100
             font_size_mm = math.floor((font_size * 25.4 / 300)  * 100) / 100
         elseif Device:isAndroid() then
@@ -2196,7 +2196,7 @@ function ReaderFooter:onGetTextPage()
 
     local font_size_pt = nil
     local font_size_mm = nil
-    if Device:isKobo() then
+    if Device:isKobo() or Device:isPocketBook() or Device.model == "boox" then
         font_size_pt = math.floor((font_size * 72 / 300) * 100) / 100
         font_size_mm = math.floor((font_size * 25.4 / 300)  * 100) / 100
     elseif Device:isAndroid() then
@@ -2206,6 +2206,7 @@ function ReaderFooter:onGetTextPage()
         font_size_pt = math.floor((font_size * 72 / 160) * 100) / 100
         font_size_mm = math.floor((font_size * 25.4 / 160)  * 100) / 100
     end
+
 
     local sessions, avg_wpm, avg_last_seven_days, avg_last_thirty_days, avg_last_sixty_days, avg_last_ninety_days, avg_last_hundred_and_eighty_days = getSessionsInfo(self)
     avg_wpm = math.floor(avg_wpm) .. "wpm" .. ", " .. math.floor(avg_wpm*60) .. "wph"
@@ -2306,7 +2307,7 @@ function ReaderFooter:onShowTextProperties()
 
     local font_size_pt = nil
     local font_size_mm = nil
-    if Device:isKobo() then
+    if Device:isKobo() or Device:isPocketBook() or Device.model == "boox" then
         font_size_pt = math.floor((font_size * 72 / 300) * 100) / 100
         font_size_mm = math.floor((font_size * 25.4 / 300)  * 100) / 100
     elseif Device:isAndroid() then
@@ -2500,7 +2501,7 @@ function ReaderFooter:onShowTextProperties()
     .. point .. " Static info (from Calibre info): wpp: " .. avg_words_cal .. ", cpp: " .. avg_chars_cal .. ", cpw: " .. avg_chars_per_word_cal .. important .. string.char(10)
     -- .. point .. " Dynamic info: p: " .. self.ui.statistics._pages_turned .. ", wpp: " .. avg_words .. ", cpp: " .. avg_chars .. ", cpw: " .. avg_chars_per_word .. string.char(10) -- Not used   .. line .. string.char(10) .. string.char(10)
     -- .. pages .. "p_" .. title_pages_ex .. string.char(10) ..  font_face .. "-" ..  "S: "
-    .. point .. " Font parameters: " .. font_face .. ", " .. font_size .. "px, " .. font_size_pt .. "pt, " .. font_size_mm .. "mm" .. important ..  string.char(10)
+    -- .. point .. " Font parameters: " .. font_face .. ", " .. font_size .. "px, " .. font_size_pt .. "pt, " .. font_size_mm .. "mm" .. important ..  string.char(10)
     .. point .. " L: " ..  nblines .. " - W: " .. nbwords .. " - C: " .. nbcharacters .. " (CFL: " .. nbwords2 .. ")" .. important ..  string.char(10)
     .. line .. string.char(10) .. string.char(10)
     .. point .. " Light: " .. frontlight .. " - " .. frontlightwarm .. string.char(10)
