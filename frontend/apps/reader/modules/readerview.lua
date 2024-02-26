@@ -277,7 +277,7 @@ function ReaderView:paintTo(bb, x, y)
                 end
 
                 if Device.model == "ares" then -- LikeBook Ares
-                    self.y_coordinate_top = -1870
+                    self.y_coordinate_top = -1850
                 end
             elseif rotation == 1 or rotation == 3 then -- LANDSCAPE
                 self.y_coordinate_top = -1220 -- Kobo Libra2, PocketBook y Kobo Palma
@@ -299,7 +299,7 @@ function ReaderView:paintTo(bb, x, y)
                 end
 
                 if Device.model == "ares" then -- LikeBook Ares
-                    self.y_coordinate_top = -1400
+                    self.y_coordinate_top = -1380
                 end
             -- elseif rotation == 2 then key = "REVERSE_PORTRAIT"
             -- elseif rotation == 3 then key = "REVERSE_LANDSCAPE"
