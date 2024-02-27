@@ -4038,6 +4038,11 @@ function ReaderFooter:_updateFooterText(force_repaint, full_repaint)
         -- read_today = seconds_since_md
         read_today = 0
         self.ui.statistics:insertDBSessionStats()
+
+        -- Este evento ocurre antes que el evento onUpdateFooter de del plugin de estadísticas
+        -- Lo que quiere decir que al inicializar las siguientes variables, tendremos que esperar a completar esta nueva sesión de lectura
+        -- del siguiente día para que la información se guarde en la base de datos, ya que si no se pierde. También podemos hacer la llamada directamente
+        self.ui.statistics:insertDB()
         self.ui.statistics._initial_read_today = nil
         self.ui.statistics.start_current_period = os.time()
         self.ui.statistics._pages_turned = 0
