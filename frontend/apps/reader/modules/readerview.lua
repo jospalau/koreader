@@ -261,7 +261,7 @@ function ReaderView:paintTo(bb, x, y)
                 self.y_coordinate_top = -1640 -- Kobo Libra2, PocketBook y Kobo Palma
 
                 if Device.model == "Kobo_cadmus" then -- Kobo Sage
-                    self.y_coordinate_top = -1870
+                    self.y_coordinate_top = -1880
                 end
 
                 if Device.model == "KindlePaperWhite5" then -- Kindle PW5
@@ -283,7 +283,7 @@ function ReaderView:paintTo(bb, x, y)
                 self.y_coordinate_top = -1220 -- Kobo Libra2, PocketBook y Kobo Palma
 
                 if Device.model == "Kobo_cadmus" then -- Kobo Sage
-                    self.y_coordinate_top = -1390
+                    self.y_coordinate_top = -1400
                 end
 
                 if Device.model == "KindlePaperWhite5" then -- Kindle PW5
