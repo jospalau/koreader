@@ -1567,10 +1567,11 @@ function FileManager:onToggleRsyncdService()
         local execute = nil
         if Device:isKobo() then
             execute = io.popen("/mnt/onboard/.adds/scripts/launchRsyncd.sh && echo $? || echo $?" )
-        else --Kindle
+        elseif Device:isKindle() then
             execute = io.popen("/mnt/us/scripts/launchRsyncd.sh && echo $? || echo $?" )
+        else -- PocketBook
+            execute = io.popen("/mnt/ext1/scripts/launchRsyncd.sh && echo $? || echo $?" )
         end
-
         output = execute:read('*a')
         UIManager:show(InfoMessage:new{
             text = T(_(output)),
