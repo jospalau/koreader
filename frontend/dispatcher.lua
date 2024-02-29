@@ -160,6 +160,7 @@ local settingsList = {
     file_search_all_recent = {category="none", event="ShowFileSearchAllRecent", title=_("File search all recent"), filemanager=true, separator=true},
     file_search_all_completed = {category="none", event="ShowFileSearchAllCompleted", title=_("File search all recent"), filemanager=true, separator=true},
     mbr = {category="none", event="ShowHistMBR", title=_("MBR"), general=true},
+    tbr = {category="none", event="ShowHistTBR", title=_("TBR"), general=true},
     ----
     -- go_to
     -- back
@@ -418,6 +419,7 @@ local dispatcher_menu_order = {
     "file_search_all_recent",
     "file_search_all_completed",
     "mbr",
+    "tbr",
     ----
     -- "go_to"
     -- "back"

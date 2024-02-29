@@ -129,6 +129,7 @@ function filemanagerutil.statusToString(status)
         reading   = _("Reading"),
         abandoned = _("On hold"),
         complete  = _("Finished"),
+        tbr  = _("TBR"),
     }
 
     return status_to_text[status]
@@ -154,6 +155,11 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                 if to_status == "complete" then
                     require("readhistory"):removeItemByPath(file)
                 end
+
+                if to_status == "tbr" and not require("readhistory"):getIndexByFile(file) then
+                    require("readhistory"):addItem(file, os.time())
+                end
+
                 summary.status = to_status
                 filemanagerutil.setStatus(doc_settings_or_file, to_status)
                 UIManager:broadcastEvent(Event:new("DocSettingsItemsChanged", file, { summary = summary })) -- for CoverBrowser
@@ -164,6 +170,7 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
     return {
         genStatusButton("reading"),
         genStatusButton("abandoned"),
+        genStatusButton("tbr"),
         genStatusButton("complete"),
     }
 end

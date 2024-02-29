@@ -47,6 +47,7 @@ local reading_mark
 local abandoned_mark
 local complete_mark
 local mbr_mark
+local tbr_mark
 local progress_widget
 
 -- ItemShortCutIcon (for keyboard navigation) is private to menu.lua and can't be accessed,
@@ -757,6 +758,8 @@ function MosaicMenuItem:paintTo(bb, x, y)
         -- math.ceil() makes it looks better than math.floor()
         if self.status == "abandoned" then
             corner_mark = abandoned_mark
+        elseif self.status == "tbr" then
+            corner_mark = tbr_mark
         elseif self.status == "complete" then
             corner_mark = complete_mark
         else
@@ -781,7 +784,7 @@ function MosaicMenuItem:paintTo(bb, x, y)
             end
         end
         local pos_y = y + self.height - math.ceil((self.height - cover_item.height) / 2) - corner_mark_size + progress_widget_margin
-        if self.status == "abandoned" then
+        if self.status == "" or self.status == "mbr" then
             progress_widget.fillcolor = Blitbuffer.COLOR_GRAY_6
         else
             progress_widget.fillcolor = Blitbuffer.COLOR_BLACK
@@ -906,6 +909,7 @@ function MosaicMenu:_recalculateDimen()
             abandoned_mark:free()
             complete_mark:free()
             mbr_mark:free()
+            tbr_mark:free()
         end
         reading_mark = IconWidget:new{
             icon = "dogear.reading",
@@ -926,6 +930,11 @@ function MosaicMenu:_recalculateDimen()
         }
         mbr_mark = IconWidget:new{
             icon = BD.mirroredUILayout() and "dogear.mbr.rtl" or "dogear.mbr",
+            width = corner_mark_size,
+            height = corner_mark_size,
+        }
+        tbr_mark = IconWidget:new{
+            icon = BD.mirroredUILayout() and "dogear.tbr.rtl" or "dogear.tbr",
             width = corner_mark_size,
             height = corner_mark_size,
         }

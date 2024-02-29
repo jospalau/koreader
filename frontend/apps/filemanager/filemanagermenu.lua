@@ -850,6 +850,24 @@ Tap a book in the search results to open it.]]),
         end
     }
 
+
+    self.menu_items.tbr = {
+        -- @translators Search for files by name.
+        text = _("TBR"),
+        help_text = _([[Search a book by filename in the current or home folder and its subfolders.
+
+Wildcards for one '?' or more '*' characters can be used.
+A search for '*' will show all files.
+
+The sorting order is the same as in filemanager.
+
+Tap a book in the search results to open it.]]),
+        callback = function()
+            local FileManagerHistory = require("apps/filemanager/filemanagerhistory")
+            FileManagerHistory:onShowHistTBR()
+        end
+    }
+
     self.menu_items.mbr = {
         -- @translators Search for files by name.
         text = _("MBR"),

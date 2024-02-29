@@ -27,6 +27,7 @@ local filter_text = {
     complete  = C_("Book status filter", "Finished"),
     deleted   = C_("Book status filter", "Deleted"),
     new       = C_("Book status filter", "MBR"),
+    tbr       = C_("Book status filter", "TBR"),
 }
 
 function FileManagerHistory:init()
@@ -65,7 +66,7 @@ end
 
 function FileManagerHistory:updateItemTable()
     self.count = { all = #require("readhistory").hist,
-        reading = 0, abandoned = 0, complete = 0, deleted = 0, new = 0, }
+        reading = 0, abandoned = 0, complete = 0, deleted = 0, new = 0, tbr = 0,}
     local item_table = {}
     for _, v in ipairs(require("readhistory").hist) do
         if self:isItemMatch(v) then
@@ -334,6 +335,39 @@ function FileManagerHistory:onShowHistMBR()
     return true
 end
 
+function FileManagerHistory:onShowHistTBR()
+    local ReadHistory = require("readhistory")
+    -- ReadHistory.hist = {}
+    -- ReadHistory:reload(true)
+    self.hist_menu = Menu:new{
+        ui = self.ui,
+        covers_fullscreen = true, -- hint for UIManager:_repaint()
+        is_borderless = true,
+        is_popout = false,
+        title = "TBR",
+        -- item and book cover thumbnail dimensions in Mosaic and Detailed list display modes
+        -- must be equal in File manager, History and Collection windows to avoid image scaling
+        onMenuChoice = self.onMenuSelect,
+        _manager = self,
+    }
+
+    self.filter = "tbr"
+    self:fetchStatusesOut(false)
+    self:updateItemTable()
+    self.hist_menu.close_callback = function()
+        if self.files_updated then -- refresh Filemanager list of files
+            if self.ui.file_chooser then
+                self.ui.file_chooser:refreshPath()
+            end
+            self.files_updated = nil
+        end
+        self.statuses_fetched = nil
+        UIManager:close(self.hist_menu)
+        self.hist_menu = nil
+    end
+    UIManager:show(self.hist_menu)
+    return true
+end
 function FileManagerHistory:showHistDialog()
     if not self.statuses_fetched then
         self:fetchStatuses(true)
@@ -362,6 +396,7 @@ function FileManagerHistory:showHistDialog()
     table.insert(buttons, {
         genFilterButton("reading"),
         genFilterButton("abandoned"),
+        genFilterButton("tbr"),
         -- genFilterButton("complete"),
     })
     table.insert(buttons, {

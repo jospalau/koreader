@@ -228,6 +228,10 @@ function MenuItem:init()
             text = "(MBR) " .. text
         end
 
+        if self.in_tbr then
+            text = "(TBR) " .. text
+        end
+
         item_name = TextWidget:new{
             text = text,
             face = self.face,
@@ -1104,6 +1108,7 @@ function Menu:updateItems(select_number)
                 items_padding = self.items_padding,
                 handle_hold_on_hold_release = self.handle_hold_on_hold_release,
                 in_history = self.item_table[i].in_history == true,
+                in_tbr = self.item_table[i].in_tbr == true,
             }
             table.insert(self.item_group, item_tmp)
             -- this is for focus manager

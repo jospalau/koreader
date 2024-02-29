@@ -161,6 +161,7 @@ local order = {
         "find_file_all_recent",
         "find_file_all_completed",
         "mbr",
+        "tbr",
         "----------------------------",
         "opds",
     },
