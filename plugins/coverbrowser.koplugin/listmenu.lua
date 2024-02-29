@@ -388,16 +388,24 @@ function ListMenuItem:update()
                 fileinfo_str = mark .. BD.wrap(filetype) .. "  " .. BD.wrap(self.mandatory)
             end
             -- right widget, second line
-            if status == "complete" or status == "abandoned" then
+            if status == "complete" or status == "abandoned" or status == "tbr" then
                 -- Display these instead of the read %
                 if pages then
                     if status == "complete" then
                         pages_str = T(N_("Finished – 1 page", "Finished – %1 pages", pages), pages)
+                    elseif status == "abandoned" then
+                        pages_str = T(N_("Ona hold – 1 page", "On hold – %1 pages", pages), pages)
                     else
-                        pages_str = T(N_("On hold – 1 page", "On hold – %1 pages", pages), pages)
+                        pages_str = T(N_("TBR – 1 page", "TBR – %1 pages", pages), pages)
                     end
                 else
-                    pages_str = status == "complete" and _("Finished") or _("On hold")
+                    if status == "complete" then
+                        pages_str = _("Finished")
+                    elseif status == "abandoned" then
+                        pages_str =  _("On hold")
+                    else
+                        pages_str = _("TBR")
+                    end
                 end
             elseif percent_finished then
                 if pages then

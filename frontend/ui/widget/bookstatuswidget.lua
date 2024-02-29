@@ -508,7 +508,7 @@ function BookStatusWidget:generateSwitchGroup(width)
         height = Screen:scaleBySize(105)
     end
 
-    local args = { "reading", "abandoned", "complete", }
+    local args = { "reading", "abandoned", "complete", "tbr", }
 
     local position = 1
     for k, v in ipairs(args) do
@@ -522,10 +522,10 @@ function BookStatusWidget:generateSwitchGroup(width)
         width = math.floor(width * 0.6),
         name = "book_status",
         event = "ChangeBookStatus",
-        toggle = { _("Reading"), _("On hold"), _("Finished"), },
+        toggle = { _("Reading"), _("On hold"), _("Finished"), _("TBR"), },
         args = args,
         alternate = false,
-        values = { 1, 2, 3, },
+        values = { 1, 2, 3, 4,},
         enabled = not self.readonly,
         config = self,
         readonly = self.readonly,
