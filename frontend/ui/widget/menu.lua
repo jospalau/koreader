@@ -222,15 +222,19 @@ function MenuItem:init()
     local dots_widget
     local dots_left_padding = Size.padding.small
     local dots_right_padding = Size.padding.small
+
+
+    if self.in_history and self.bold then
+        text = "(MBR) " .. text
+    end
+
+    if self.in_tbr then
+        text = "(TBR) " .. text
+    end
+
+    -- For some reason, Android app does not go inside this condition
     if self.single_line then  -- items only in single line
         -- No font size change: text will be truncated if it overflows
-        if self.in_history and self.bold then
-            text = "(MBR) " .. text
-        end
-
-        if self.in_tbr then
-            text = "(TBR) " .. text
-        end
 
         item_name = TextWidget:new{
             text = text,
