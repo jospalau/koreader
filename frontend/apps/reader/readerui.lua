@@ -486,6 +486,10 @@ function ReaderUI:init()
         require("readhistory"):addItem(self.document.file) -- (will update "lastfile")
     end
 
+    if summary.status == "tbr" then
+        summary.status = "reading"
+    end
+
     -- After initialisation notify that document is loaded and rendered
     -- CREngine only reports correct page count after rendering is done
     -- Need the same event for PDF document
