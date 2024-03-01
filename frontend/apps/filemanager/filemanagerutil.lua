@@ -117,6 +117,19 @@ function filemanagerutil.setStatus(doc_settings_or_file, status)
     else
         doc_settings = DocSettings:open(doc_settings_or_file)
     end
+
+    -- This code is not used but we could use it if needed
+    -- The idea was removing the sidecar dir when putting the book to the tbr
+    -- The dev has been made down when to_status == "tbr"
+    -- if status == "tbr" and doc_settings_or_file.doc_sidecar_dir and util.pathExists(doc_settings_or_file.doc_sidecar_dir) then
+    --     -- local purgeDir = require("ffi/util").purgeDir
+    --     -- purgeDir(doc_settings_or_file.doc_sidecar_dir)
+    --     -- doc_settings_or_file:purge()
+    --     -- require("bookinfomanager"):deleteBookInfo(doc_settings_or_file.data.doc_path)
+    --     -- local new = DocSettings:extend{}
+    --     -- new:getSidecarDir(doc_settings_or_file.doc_sidecar_dir, "dir")
+    -- end
+
     local summary = doc_settings:readSetting("summary", {})
     summary.status = status
     summary.modified = os.date("%Y-%m-%d", os.time())
@@ -156,7 +169,16 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                     require("readhistory"):removeItemByPath(file)
                 end
 
-                if to_status == "tbr" and not require("readhistory"):getIndexByFile(file) then
+                if to_status == "tbr" then
+                    -- local doc_settings = DocSettings:open(file)
+                    -- doc_settings.data.stats={}
+                    -- doc_settings:flush()
+                    -- If we put a book to the tbr, we want to remove all the info in the sidecar but the summary with the status
+                    -- This is just in case it was in the TBR and previously opened
+                    -- We also want to readd it to the history so that way we can reorder easily the tbr list if we want putting them on hold and back to tbr
+                    doc_settings_or_file.data = {}
+                    doc_settings_or_file:flush()
+                    require("readhistory"):removeItemByPath(file)
                     require("readhistory"):addItem(file, os.time())
                 end
 

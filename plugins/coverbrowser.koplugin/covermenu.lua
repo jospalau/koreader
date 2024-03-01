@@ -42,7 +42,8 @@ local CoverMenu = {}
 
 function CoverMenu:updateCache(file, status, do_create, pages)
     if do_create then -- create new cache entry if absent
-        if self.cover_info_cache[file] then return end
+        -- Recreate always the cover even if the book has been opened having an entry in cr3cache
+        -- if self.cover_info_cache[file] then return end
         local doc_settings = DocSettings:open(file)
         -- We can get nb of page in the new 'doc_pages' setting, or from the old 'stats.page'
         local doc_pages = doc_settings:readSetting("doc_pages")
