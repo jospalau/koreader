@@ -169,25 +169,27 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                     require("readhistory"):removeItemByPath(file)
                 end
                 local has_sidecar_file = DocSettings:hasSidecarFile(file)
-                if to_status == "tbr" and has_sidecar_file then
-                    -- If we put a book to the tbr, we want to remove all the info in the sidecar but the summary with the status
-                    -- This is just in case it was in the TBR and previously opened
-                    -- We also want to readd it to the history so that way we can reorder easily the tbr list if we want putting them on hold and back to tbr
+                if to_status == "tbr" then
+                    if has_sidecar_file then
+                        -- If we put a book to the tbr, we want to remove all the info in the sidecar but the summary with the status
+                        -- This is just in case it was in the TBR and previously opened
+                        -- We also want to readd it to the history so that way we can reorder easily the tbr list if we want putting them on hold and back to tbr
 
 
-                    -- Not using doc_settings_or_file since doc_settings_or_file is a file when coming from the search list
-                    -- doc_settings_or_file.data = {}
-                    -- doc_settings_or_file:flush()
+                        -- Not using doc_settings_or_file since doc_settings_or_file is a file when coming from the search list
+                        -- doc_settings_or_file.data = {}
+                        -- doc_settings_or_file:flush()
 
-                    local doc_settings = DocSettings:open(file)
-                    doc_settings.data.stats = {}
+                        local doc_settings = DocSettings:open(file)
+                        doc_settings.data.stats = {}
 
-                    -- When coming from the search list because we set a book to be in tbr from there
-                    -- The event DocSettingsItemsChanged won't change the cover cache because there are no covers in that view
-                    -- Since we have to remove some stuff from here, we set percent_finished = nil and flush it the sidecar
-                    -- Then when we go back to the FM view, we will have the cover without percentage if it was with percentage
-                    doc_settings.data.percent_finished = nil
-                    doc_settings:flush()
+                        -- When coming from the search list because we set a book to be in tbr from there
+                        -- The event DocSettingsItemsChanged won't change the cover cache because there are no covers in that view
+                        -- Since we have to remove some stuff from here, we set percent_finished = nil and flush it the sidecar
+                        -- Then when we go back to the FM view, we will have the cover without percentage if it was with percentage
+                        doc_settings.data.percent_finished = nil
+                        doc_settings:flush()
+                    end
                     require("readhistory"):removeItemByPath(file)
                     require("readhistory"):addItem(file, os.time())
                 end
