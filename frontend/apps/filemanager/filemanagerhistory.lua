@@ -169,7 +169,17 @@ function FileManagerHistory:onMenuHold(item)
     end
     table.insert(buttons, {
         filemanagerutil.genResetSettingsButton(doc_settings_or_file, close_dialog_update_callback, is_currently_opened),
-        filemanagerutil.genAddRemoveFavoritesButton(file, close_dialog_callback, item.dim),
+        -- filemanagerutil.genAddRemoveFavoritesButton(file, close_dialog_callback, item.dim),
+        {
+            text = _("Readd to history"),
+            callback = function()
+                UIManager:close(self.histfile_dialog)
+                require("readhistory"):removeItem(item)
+                require("readhistory"):addItem(item.file,os.time())
+                self._manager:fetchStatuses(false)
+                self._manager:updateItemTable()
+            end,
+        },
     })
     table.insert(buttons, {
         {
