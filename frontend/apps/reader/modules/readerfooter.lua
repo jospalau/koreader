@@ -1232,10 +1232,13 @@ function ReaderFooter:init()
         self.view.footer_visible = true
     end
 
-    -- self.reclaim_height = true
-    -- self.mode = 0
-    -- self.settings.disable_progress_bar = true
-    -- self.view.footer_visible = false
+    -- We don't want footer nor status bar when opening the document for the first time or when document is opened without stats (tbr)
+    if not require("docsettings"):hasSidecarFile(self.ui.document.file) or not self.ui.doc_settings.data.stats then
+            self.reclaim_height = true
+            self.mode = 0
+            self.settings.disable_progress_bar = true
+            self.view.footer_visible = false
+    end
 end
 
 function ReaderFooter:set_custom_text(touchmenu_instance)
