@@ -3438,6 +3438,7 @@ function ReaderStatistics:onShowCalendarDayView()
     self.kv = nil -- clean left over stack link
     local CalendarView = require("calendarview")
     CalendarView:showCalendarDayView(self)
+    UIManager:setDirty("all", "full")
 end
 
 -- Used by calendarview.lua CalendarView

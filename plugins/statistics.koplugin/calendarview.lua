@@ -1050,7 +1050,7 @@ end
 
 function CalendarDayView:onClose()
     UIManager:close(self)
-    UIManager:setDirty(nil, "ui")
+    UIManager:setDirty("all", "full")
     if self.close_callback then
         self:close_callback()
     end
