@@ -261,11 +261,11 @@ function Profiles:onProfileExecute(name, exec_props)
     local copy_profile = shallow_copy(self.data[name])
     -- if Device.model == "Kobo_io" or Device.model == "Kobo_cadmus" then -- Libra2 or Sage
     --     copy_profile.font_size =  self.data[name].font_size + 0.5
-    if Device.model == "Kobo_goldfinch" then -- Clara2E
-        if self.data[name].font_size ~= nil then
-            copy_profile.font_size = self.data[name].font_size + 1
-        end
-    end
+    -- if Device.model == "Kobo_goldfinch" then -- Clara2E
+    --     if self.data[name].font_size ~= nil then
+    --         copy_profile.font_size = self.data[name].font_size + 1
+    --     end
+    -- end
     -- Just for the phone
     if Device:isAndroid() and Device.screen:getWidth() < 1200  then
         if self.data[name].font_size ~= nil then
@@ -336,11 +336,11 @@ function Profiles:onRandomProfile()
         local copy_profile = shallow_copy(self.data[profile_name])
         -- if Device.model == "Kobo_io" or  Device.model == "Kobo_cadmus" then -- Libra2 or Sage
         --     copy_profile.font_size =  self.data[profile_name].font_size + 0.5
-        if Device.model == "Kobo_goldfinch" then -- Clara2E
-            if self.data[profile_name].font_size ~= nil then
-                copy_profile.font_size =  self.data[profile_name].font_size + 1
-            end
-        end
+        -- if Device.model == "Kobo_goldfinch" then -- Clara2E
+        --     if self.data[profile_name].font_size ~= nil then
+        --         copy_profile.font_size =  self.data[profile_name].font_size + 1
+        --     end
+        -- end
         if Device:isAndroid() and Device.screen:getWidth() < 1200  then
             if self.data[profile_name].font_size ~= nil then
                 copy_profile.font_size = self.data[profile_name].font_size + 6
