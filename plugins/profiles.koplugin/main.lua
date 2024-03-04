@@ -279,6 +279,12 @@ function Profiles:onProfileExecute(name, exec_props)
             copy_profile.font_size = self.data[name].font_size + 7.5
         end
     end
+
+    if Device.model == "ares" then -- LikeBook Ares
+        if self.data[name].font_size ~= nil then
+            copy_profile.font_size = self.data[name].font_size + 9
+        end
+    end
     -- if Device:isKindle() then
     --     if self.data[name].font_size ~= nil then
     --         copy_profile.font_size = self.data[name].font_size + 5
@@ -357,6 +363,13 @@ function Profiles:onRandomProfile()
                 copy_profile.font_size = self.data[profile_name].font_size + 7.5
             end
         end
+
+        if Device.model == "ares" then -- LikeBook Ares
+            if self.data[profile_name].font_size ~= nil then
+                copy_profile.font_size = self.data[profile_name].font_size + 9
+            end
+        end
+
         -- if Device:isKindle() then
         --     if self.data[profile_name].font_size ~= nil then
         --         copy_profile.font_size = self.data[profile_name].font_size + 5
