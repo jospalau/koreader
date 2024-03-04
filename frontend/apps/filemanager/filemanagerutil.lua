@@ -175,20 +175,20 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                         -- This is just in case it was in the TBR and previously opened
                         -- We also want to readd it to the history so that way we can reorder easily the tbr list if we want putting them on hold and back to tbr
 
-
-                        -- Not using doc_settings_or_file since doc_settings_or_file is a file when coming from the search list
-                        -- doc_settings_or_file.data = {}
-                        -- doc_settings_or_file:flush()
-
-                        local doc_settings = DocSettings:open(file)
-                        doc_settings.data.stats = {}
-
-                        -- When coming from the search list because we set a book to be in tbr from there
-                        -- The event DocSettingsItemsChanged won't change the cover cache because there are no covers in that view
-                        -- Since we have to remove some stuff from here, we set percent_finished = nil and flush it the sidecar
-                        -- Then when we go back to the FM view, we will have the cover without percentage if it was with percentage
-                        doc_settings.data.percent_finished = nil
-                        doc_settings:flush()
+                        -- A table will be coming from the fm and history and a file will be coming from the search list
+                        if (type(doc_settings_or_file) == "table") then
+                            doc_settings_or_file.data = {}
+                            doc_settings_or_file:flush()
+                          else
+                            local doc_settings = DocSettings:open(file)
+                            doc_settings.data.stats = {}
+                            -- When coming from the search list because we set a book to be in tbr from there
+                            -- The event DocSettingsItemsChanged won't change the cover cache because there are no covers in that view
+                            -- Since we have to remove some stuff from here, we set percent_finished = nil and flush it the sidecar
+                            -- Then when we go back to the FM view, we will have the cover without percentage if it was with percentage
+                            doc_settings.data.percent_finished = nil
+                            doc_settings:flush()
+                          end
                     end
                     require("readhistory"):removeItemByPath(file)
                     require("readhistory"):addItem(file, os.time())
