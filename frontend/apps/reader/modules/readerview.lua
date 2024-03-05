@@ -333,13 +333,21 @@ function ReaderView:paintTo(bb, x, y)
 
     if G_reader_settings:isTrue("show_wpm") then
         local duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100
-        local wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
 
+        local wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
         local wpm_session  = wpm_session .. "wpm"
+
+
+
         local left_container = require("ui/widget/container/leftcontainer")
+        local datetime = require("datetime")
+
+        local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
+        local session_time =   datetime.secondsToClockDuration(user_duration_format, os.time() - self.ui.statistics.start_current_period, false)
+
         local text = TextWidget:new{
-            text = wpm_session,
-            face = Font:getFace("myfont");
+            text = datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")) .. "|" .. session_time,
+            face = Font:getFace("myfont"),
             fgcolor = Blitbuffer.COLOR_GRAY,
         }
 
@@ -349,6 +357,21 @@ function ReaderView:paintTo(bb, x, y)
         }
 
         text_container:paintTo(bb, x + 20, y + 20)
+
+
+        local text2 = TextWidget:new{
+            text = wpm_session,
+            face = Font:getFace("myfont"),
+            fgcolor = Blitbuffer.COLOR_GRAY,
+        }
+
+        local text_container2 = left_container:new{
+            dimen = Geom:new{ w = text2:getSize().w, text2:getSize().h },
+            text2,
+        }
+
+        text_container2:paintTo(bb, x + Screen:getWidth() - text_container2:getSize().w - 20, y + 20)
+        -- text_container2:paintTo(bb, x + Screen:getWidth()/2 - text_container2:getSize().w/2, y + 20)
     end
 
     -- paint top left corner indicator
