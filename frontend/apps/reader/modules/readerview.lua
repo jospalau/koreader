@@ -336,19 +336,19 @@ function ReaderView:paintTo(bb, x, y)
         local wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
 
         local wpm_session  = wpm_session .. "wpm"
-        local LeftContainer = require("ui/widget/container/leftcontainer")
-        local footer_text = TextWidget:new{
+        local left_container = require("ui/widget/container/leftcontainer")
+        local text = TextWidget:new{
             text = wpm_session,
             face = Font:getFace("myfont");
             fgcolor = Blitbuffer.COLOR_GRAY,
         }
 
-        local text_container = LeftContainer:new{
-            dimen = Geom:new{ w = footer_text:getSize().w, footer_text:getSize().h },
-            footer_text,
+        local text_container = left_container:new{
+            dimen = Geom:new{ w = text:getSize().w, text:getSize().h },
+            text,
         }
 
-        text_container:paintTo(bb, x + 10, y + 20)
+        text_container:paintTo(bb, x + 20, y + 20)
     end
 
     -- paint top left corner indicator
