@@ -330,6 +330,27 @@ function ReaderView:paintTo(bb, x, y)
     if self.dogear_visible then
         self.dogear:paintTo(bb, x, y)
     end
+
+    if G_reader_settings:isTrue("show_wpm") then
+        local duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100
+        local wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
+
+        local wpm_session  = wpm_session .. "wpm"
+        local LeftContainer = require("ui/widget/container/rightcontainer")
+        local footer_text = TextWidget:new{
+            text = wpm_session,
+            face = Font:getFace("myfont");
+            fgcolor = Blitbuffer.COLOR_GRAY,
+        }
+
+        local text_container = LeftContainer:new{
+            dimen = Geom:new{ w = footer_text:getSize().w, 0 },
+            footer_text,
+        }
+
+        text_container:paintTo(bb, 10, 20)
+    end
+
     -- paint top left corner indicator
     self.flipping:paintTo(bb, x, y)
     -- paint view modules
