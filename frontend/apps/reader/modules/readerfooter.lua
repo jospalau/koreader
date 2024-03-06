@@ -2059,7 +2059,10 @@ function ReaderFooter:onToggleShowWpm()
     local show_wpm = G_reader_settings:isTrue("show_wpm")
     G_reader_settings:saveSetting("show_wpm", not show_wpm)
 end
-
+function ReaderFooter:onToggleShowTime()
+    local show_time = G_reader_settings:isTrue("show_time")
+    G_reader_settings:saveSetting("show_time", not show_time)
+end
 
 function ReaderFooter:onPrintWpmSessionFbink()
     local duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100
@@ -2771,6 +2774,14 @@ function ReaderFooter:addToMainMenu(menu_items)
         checked_func = function() return G_reader_settings:isTrue("show_wpm") end,
         callback = function()
             UIManager:broadcastEvent(Event:new("ToggleShowWpm"))
+        end
+    }
+
+    menu_items.show_time = {
+        text = _("Show time"),
+        checked_func = function() return G_reader_settings:isTrue("show_time") end,
+        callback = function()
+            UIManager:broadcastEvent(Event:new("ToggleShowTime"))
         end
     }
     -- menu item to fake footer tapping when touch area is disabled

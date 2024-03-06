@@ -71,6 +71,7 @@ local order = {
         "frontlight", -- if Device:hasFrontlight()
         "night_mode",
         "show_wpm",
+        "show_time",
         "----------------------------",
         "network",
         "screen",
