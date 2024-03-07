@@ -88,6 +88,7 @@ local Font = {
 
         -- myfont3 = "Consolas.ttf",
         myfont3 = "DankMono-Bold.ttf",
+        myfont4 = "BitterPro-Medium.ttf",
     },
     sizemap = {
         cfont = 24,
@@ -100,6 +101,7 @@ local Font = {
         myfont = 16,
         myfont2 = 26,
         myfont3 = 14,
+        myfont4 = 12,
         pgfont = 20,
         scfont = 20,
         rifont = 16,

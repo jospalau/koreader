@@ -2059,10 +2059,7 @@ function ReaderFooter:onToggleShowWpm()
     local show_wpm = G_reader_settings:isTrue("show_wpm")
     G_reader_settings:saveSetting("show_wpm", not show_wpm)
 end
-function ReaderFooter:onToggleShowTime()
-    local show_time = G_reader_settings:isTrue("show_time")
-    G_reader_settings:saveSetting("show_time", not show_time)
-end
+
 
 function ReaderFooter:onPrintWpmSessionFbink()
     local duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100

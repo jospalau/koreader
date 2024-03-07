@@ -93,6 +93,7 @@ local settingsList = {
     show_db_stats = {category="none", event="ShowDbStats", title=_("Show db stats"), general=true, separator=true},
     move_status_bar = {category="none", event="MoveStatusBar", title=_("Move status bar"), general=true, separator=true},
     switch_status_bar_text = {category="none", event="SwitchStatusBarText", title=_("Switch status bar text"), general=true, separator=true},
+    switch_top_bar = {category="none", event="SwitchTopBar", title=_("Switch top bar"), general=true, separator=true},
     ----
 
     -- Device
@@ -352,6 +353,7 @@ local dispatcher_menu_order = {
     "show_db_stats",
     "move_status_bar",
     "switch_status_bar_text",
+    "switch_top_bar",
     ----
 
     -- Device
