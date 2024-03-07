@@ -18,17 +18,13 @@ local TextWidget = require("ui/widget/textwidget")
 local datetime = require("datetime")
 
 
-
+-- self[4] = self.topbar in readerview.lua
 local TopBar = WidgetContainer:extend{
     name = "Topbar",
     is_enabled = G_reader_settings:isTrue("show_time"),
 }
 
 function TopBar:init()
-    self:createUI()
-end
-
-function TopBar:createUI()
     return
 end
 
@@ -86,9 +82,8 @@ function TopBar:onToggleShowTime()
     self:toggleBar()
 end
 
--- Executed after setting self[4] = self.topbar in readerview.lua
 function TopBar:resetLayout()
-    self:createUI()
+    return
 end
 
 function TopBar:onSwitchTopBar()
@@ -101,7 +96,6 @@ end
 
 
 function TopBar:toggleBar()
-
     if self.is_enabled then
         local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
         local session_time =   datetime.secondsToClockDuration(user_duration_format, os.time() - self.ui.statistics.start_current_period, false)
@@ -117,21 +111,10 @@ function TopBar:toggleBar()
         self.progress_text:setText("")
     end
 end
+
 function TopBar:onPageUpdate()
-
-    local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
-    local session_time =   datetime.secondsToClockDuration(user_duration_format, os.time() - self.ui.statistics.start_current_period, false)
-
-    self.duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100
-    self.wpm_session = math.floor(self.ui.statistics._total_words/self.duration_raw)
-    self.wpm_text:setText(self.wpm_session .. "wpm")
-
-    self.session_time_text:setText(datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")) .. "|" .. session_time)
-    self.progress_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
-
+    self:toggleBar()
 end
-
-
 
 function TopBar:paintTo(bb, x, y)
         self[1]:paintTo(bb, x + 20, y + 20)
