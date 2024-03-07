@@ -1396,25 +1396,28 @@ function FileManager:onPullConfig()
         if Device:canRestart() then
             save_text = _("Restart")
         end
-        local Size = require("ui/size")
-        UIManager:show(ConfirmBox:new{
-            dismissable = false,
-            text = _("KOReader needs to be restarted to apply the new default settings."),
-            ok_text = save_text,
-            margin = Size.margin.tiny,
-            padding = Size.padding.tiny,
-            ok_callback = function()
-                if Device:canRestart() then
-                    UIManager:restartKOReader()
-                else
-                    UIManager:quit()
-                end
-            end,
-            cancel_text = _("No need to restart"),
-            cancel_callback = function()
-                logger.info("discard defaults")
-            end,
-        })
+
+        if not string.match(output, "Problem") and not string.match(output, "Not connected") then
+            local Size = require("ui/size")
+            UIManager:show(ConfirmBox:new{
+                dismissable = false,
+                text = _("KOReader needs to be restarted to apply the new default settings."),
+                ok_text = save_text,
+                margin = Size.margin.tiny,
+                padding = Size.padding.tiny,
+                ok_callback = function()
+                    if Device:canRestart() then
+                        UIManager:restartKOReader()
+                    else
+                        UIManager:quit()
+                    end
+                end,
+                cancel_text = _("No need to restart"),
+                cancel_callback = function()
+                    logger.info("discard defaults")
+                end,
+            })
+        end
         UIManager:show(InfoMessage:new{
             text = T(_(output)),
             face = Font:getFace("myfont"),
@@ -1471,25 +1474,27 @@ function FileManager:onSynchronizeCode()
         if Device:canRestart() then
             save_text = _("Restart")
         end
-        local Size = require("ui/size")
-        UIManager:show(ConfirmBox:new{
-            dismissable = false,
-            text = _("KOReader needs to be restarted to apply the new default settings."),
-            ok_text = save_text,
-            margin = Size.margin.tiny,
-            padding = Size.padding.tiny,
-            ok_callback = function()
-                if Device:canRestart() then
-                    UIManager:restartKOReader()
-                else
-                    UIManager:quit()
-                end
-            end,
-            cancel_text = _("No need to restart"),
-            cancel_callback = function()
-                logger.info("discard defaults")
-            end,
-        })
+        if not string.match(output, "Problem") and not string.match(output, "Not connected") then
+            local Size = require("ui/size")
+            UIManager:show(ConfirmBox:new{
+                dismissable = false,
+                text = _("KOReader needs to be restarted to apply the new default settings."),
+                ok_text = save_text,
+                margin = Size.margin.tiny,
+                padding = Size.padding.tiny,
+                ok_callback = function()
+                    if Device:canRestart() then
+                        UIManager:restartKOReader()
+                    else
+                        UIManager:quit()
+                    end
+                end,
+                cancel_text = _("No need to restart"),
+                cancel_callback = function()
+                    logger.info("discard defaults")
+                end,
+            })
+        end
         UIManager:show(InfoMessage:new{
             text = T(_(output)),
             face = Font:getFace("myfont"),
