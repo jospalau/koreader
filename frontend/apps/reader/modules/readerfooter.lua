@@ -1144,7 +1144,7 @@ function ReaderFooter:init()
         face = Font:getFace(self.text_font_face, self.settings.text_font_size),
         bold = self.settings.text_font_bold,
         -- padding = Size.padding.large,
-	-- forced_height = self.footer_text:getSize().h + 20,
+	    -- forced_height = self.footer_text:getSize().h + 20,
         -- Not needed. Bigger container heigh set up for status bar to have more space
         -- height = self.footer_text:getSize().h + 20,
         -- forced_height = 2,

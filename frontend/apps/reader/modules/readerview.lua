@@ -26,6 +26,8 @@ local util = require("util")
 local _ = require("gettext")
 local Screen = Device.screen
 local T = require("ffi/util").template
+local Topbar = require("apps/reader/modules/topbar")
+
 
 local ReaderView = OverlapGroup:extend{
     document = nil,
@@ -130,6 +132,11 @@ function ReaderView:addWidgets()
         view = self,
         ui = self.ui,
     }
+    self.topbar = Topbar:new{
+        view = self,
+        ui = self.ui,
+    }
+
     self.flipping = ReaderFlipping:new{
         view = self,
         ui = self.ui,
@@ -145,6 +152,7 @@ function ReaderView:addWidgets()
     self[1] = self.dogear
     self[2] = self.footer
     self[3] = self.flipping
+    self[4] = self.topbar
 end
 
 --[[--
@@ -331,73 +339,71 @@ function ReaderView:paintTo(bb, x, y)
         self.dogear:paintTo(bb, x, y)
     end
 
-    if G_reader_settings:isTrue("show_wpm") and not G_reader_settings:isTrue("show_time") then
-        local duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100
-
-        local wpm_session = 0
-        if duration_raw > 0 and self.ui.statistics._total_words then
-            wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
-        end
-
-        local left_container = require("ui/widget/container/leftcontainer")
-
-        local text = TextWidget:new{
-            text = wpm_session .. "wpm",
-            face = Font:getFace("myfont"),
-            fgcolor = Blitbuffer.COLOR_GRAY,
-        }
-
-        local text_container = left_container:new{
-            dimen = Geom:new{ w = text:getSize().w, text:getSize().h },
-            text,
-        }
-
-        text_container:paintTo(bb, x + 20, y + 20)
-    end
-
-
     if G_reader_settings:isTrue("show_time") then
-        local duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100
-
-        local wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
-        local wpm_session  = wpm_session .. "wpm"
-
-
-
-        local left_container = require("ui/widget/container/leftcontainer")
-        local datetime = require("datetime")
-
-        local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
-        local session_time =   datetime.secondsToClockDuration(user_duration_format, os.time() - self.ui.statistics.start_current_period, false)
-
-        local text = TextWidget:new{
-            text = datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")) .. "|" .. session_time,
-            face = Font:getFace("myfont"),
-            fgcolor = Blitbuffer.COLOR_GRAY,
-        }
-
-        local text_container = left_container:new{
-            dimen = Geom:new{ w = text:getSize().w, text:getSize().h },
-            text,
-        }
-
-        text_container:paintTo(bb, x + 20, y + 20)
-
-
-        local text2 = TextWidget:new{
-            text =  ("%d de %d"):format(self.footer.pageno, self.footer.pages),
-            face = Font:getFace("myfont"),
-            fgcolor = Blitbuffer.COLOR_GRAY,
-        }
-
-        local text_container2 = left_container:new{
-            dimen = Geom:new{ w = text2:getSize().w, text2:getSize().h },
-            text2,
-        }
-
-        text_container2:paintTo(bb, x + Screen:getWidth() - text_container2:getSize().w - 20, y + 20)
-        -- text_container2:paintTo(bb, x + Screen:getWidth()/2 - text_container2:getSize().w/2, y + 20)
+        self.topbar:paintTo(bb, x, y)
     end
+
+    -- if G_reader_settings:isTrue("show_wpm") and not G_reader_settings:isTrue("show_time") then
+    --     local left_container = require("ui/widget/container/leftcontainer")
+
+    --     local wpm_session = self.footer.ui.statistics.wpm_session
+    --     local text = TextWidget:new{
+    --         text =  wpm_session .. "wpm",
+    --         face = Font:getFace("myfont"),
+    --         fgcolor = Blitbuffer.COLOR_GRAY,
+    --     }
+
+    --     local text_container = left_container:new{
+    --         dimen = Geom:new{ w = text:getSize().w, text:getSize().h },
+    --         text,
+    --     }
+
+    --     text_container:paintTo(bb, x + 20, y + 20)
+    -- end
+
+
+    -- if G_reader_settings:isTrue("show_time") then
+    --     local duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100
+
+    --     local wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
+    --     local wpm_session  = wpm_session .. "wpm"
+
+
+
+    --     local left_container = require("ui/widget/container/leftcontainer")
+    --     local datetime = require("datetime")
+
+    --     local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
+    --     local session_time =   datetime.secondsToClockDuration(user_duration_format, os.time() - self.ui.statistics.start_current_period, false)
+
+    --     local text = TextWidget:new{
+    --         text = datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")) .. "|" .. session_time,
+    --         face = Font:getFace("myfont"),
+    --         fgcolor = Blitbuffer.COLOR_GRAY,
+    --     }
+
+    --     local text_container = left_container:new{
+    --         dimen = Geom:new{ w = text:getSize().w, text:getSize().h },
+    --         text,
+    --     }
+
+    --     text_container:paintTo(bb, x + 20, y + 20)
+
+
+    --     local text2 = TextWidget:new{
+    --         text =  ("%d de %d"):format(self.footer.pageno, self.footer.pages),
+    --         face = Font:getFace("myfont"),
+    --         fgcolor = Blitbuffer.COLOR_GRAY,
+    --     }
+
+    --     local text_container2 = left_container:new{
+    --         dimen = Geom:new{ w = text2:getSize().w, text2:getSize().h },
+    --         text2,
+    --     }
+
+    --     text_container2:paintTo(bb, x + Screen:getWidth() - text_container2:getSize().w - 20, y + 20)
+    --     -- text_container2:paintTo(bb, x + Screen:getWidth()/2 - text_container2:getSize().w/2, y + 20)
+    -- end
 
     -- paint top left corner indicator
     self.flipping:paintTo(bb, x, y)
