@@ -26,10 +26,11 @@ local SQ3 = require("lua-ljsqlite3/init")
 local TopBar = WidgetContainer:extend{
     name = "Topbar",
     is_enabled = G_reader_settings:isTrue("show_time"),
+    start_session_time = os.time(),
 }
 
 function TopBar:init()
-    return
+    self._initial_read_today  = self:getReadToday()
 end
 
 function TopBar:onReaderReady()
@@ -48,10 +49,9 @@ function TopBar:onReaderReady()
     }
 
     local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
-    local session_time =   datetime.secondsToClockDuration(user_duration_format, os.time() - self.ui.statistics.start_current_period, false)
 
     self.session_time_text = TextWidget:new{
-        text = datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")) .. "|" .. session_time,
+        text = "",
         face = Font:getFace("myfont4"),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
@@ -113,6 +113,12 @@ function TopBar:resetLayout()
     -- end
 end
 
+function TopBar:onResume()
+    self.start_session_time = os.time()
+    self._initial_read_today = self:getReadToday()
+    self:toggleBar()
+end
+
 function TopBar:onSwitchTopBar()
     if G_reader_settings:isTrue("show_time") then
         self.is_enabled = not self.is_enabled
@@ -164,14 +170,17 @@ end
 function TopBar:toggleBar()
     if self.is_enabled then
         local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
-        local session_time =   datetime.secondsToClockDuration(user_duration_format, os.time() - self.ui.statistics.start_current_period, false)
+        local session_time = datetime.secondsToClockDuration(user_duration_format, os.time() - self.start_session_time, false)
 
         self.duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100
         self.wpm_session = math.floor(self.ui.statistics._total_words/self.duration_raw)
         self.wpm_text:setText(self.wpm_session .. "wpm")
 
-        local session_started = self.ui.statistics.start_current_period
-        if not self._initial_read_today then
+        local session_started = self.start_session_time
+
+        local now_t = os.date("*t")
+        local daysdiff = now_t.day - os.date("*t",session_started).day
+        if daysdiff > 0 then
             self._initial_read_today = self:getReadToday()
         end
 
@@ -197,7 +206,7 @@ end
 
 function TopBar:paintTo(bb, x, y)
         self[1]:paintTo(bb, x + 20, y + 20)
-        self[2].dimen = Geom:new{ w = self[2][1]:getSize().w, self[2][1]:getSize().h }
+        self[2].dimen = Geom:new{ w = self[2][1]:getSize().w, self[2][1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
         self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - 20, y + 20)
 
 
