@@ -66,7 +66,7 @@ local TopBar = WidgetContainer:extend{
     name = "Topbar",
     is_enabled = G_reader_settings:isTrue("show_time"),
     start_session_time = os.time(),
-    initial_read_today  = getReadToday(),
+    initial_read_today = getReadToday(),
 }
 
 function TopBar:init()
@@ -77,7 +77,7 @@ function TopBar:init()
     end
 
     if TopBar.preserved_initial_read_today then
-        self._initial_read_today = TopBar.preserved_initial_read_today
+        self.initial_read_today = TopBar.preserved_initial_read_today
         TopBar.preserved_initial_read_todays= nil
     end
 
@@ -170,7 +170,7 @@ end
 
 function TopBar:onResume()
     self.start_session_time = os.time()
-    self._initial_read_today = getReadToday()
+    self.initial_read_today = getReadToday()
     self:toggleBar()
 end
 
@@ -178,7 +178,7 @@ end
 function TopBar:onPreserveCurrentSession()
     -- Can be called before ReaderUI:reloadDocument() to not reset the current session
     TopBar.preserved_start_session_time = self.start_session_time
-    TopBar.preserved_initial_read_today = self._initial_read_today
+    TopBar.preserved_initial_read_today = self.initial_read_today
 end
 
 
