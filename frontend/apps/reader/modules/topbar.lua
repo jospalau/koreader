@@ -71,14 +71,14 @@ local TopBar = WidgetContainer:extend{
 
 function TopBar:init()
     if TopBar.preserved_start_session_time then
-        self.start_session_time = TopBar.start_session_time
-        TopBar.preserved_start_start_session_time = nil
+        self.start_session_time = TopBar.preserved_start_session_time
+        TopBar.preserved_start_session_time = nil
 
     end
 
     if TopBar.preserved_initial_read_today then
         self.initial_read_today = TopBar.preserved_initial_read_today
-        TopBar.preserved_initial_read_todays= nil
+        TopBar.preserved_initial_read_today = nil
     end
 
 end
