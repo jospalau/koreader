@@ -22,16 +22,54 @@ local VerticalGroup = require("ui/widget/verticalgroup")
 local SQ3 = require("lua-ljsqlite3/init")
 
 
+
+getReadToday = function ()
+    local DataStorage = require("datastorage")
+    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
+    -- best to e it to letters, to get '2m' ?
+    -- user_duration_format = "letters"
+
+    local conn = SQ3.open(db_location)
+
+
+
+    local sql_stmt = [[
+        SELECT sum(sum_duration)
+        FROM    (
+                     SELECT sum(duration)    AS sum_duration
+                     FROM   page_stat
+                     WHERE  start_time >= %d
+                     GROUP  BY id_book, page
+                );
+    ]]
+
+    local now_stamp = os.time()
+    local now_t = os.date("*t")
+    local from_begin_day = now_t.hour * 3600 + now_t.min * 60 + now_t.sec
+    local start_today_time = now_stamp - from_begin_day
+    local read_today = conn:rowexec(string.format(sql_stmt,start_today_time))
+
+    conn:close()
+
+    if read_today == nil then
+        read_today = 0
+    end
+    read_today = tonumber(read_today)
+
+
+    return read_today
+end
+
 -- self[4] = self.topbar in readerview.lua
 local TopBar = WidgetContainer:extend{
     name = "Topbar",
     is_enabled = G_reader_settings:isTrue("show_time"),
     start_session_time = os.time(),
+    initial_read_today  = getReadToday(),
 }
 
 function TopBar:init()
-    self._initial_read_today  = self:getReadToday()
-
     if TopBar.preserved_start_session_time then
         self.start_session_time = TopBar.start_session_time
         TopBar.preserved_start_start_session_time = nil
@@ -132,7 +170,7 @@ end
 
 function TopBar:onResume()
     self.start_session_time = os.time()
-    self._initial_read_today = self:getReadToday()
+    self._initial_read_today = getReadToday()
     self:toggleBar()
 end
 
@@ -144,7 +182,6 @@ function TopBar:onPreserveCurrentSession()
 end
 
 
-
 function TopBar:onSwitchTopBar()
     if G_reader_settings:isTrue("show_time") then
         self.is_enabled = not self.is_enabled
@@ -154,51 +191,12 @@ function TopBar:onSwitchTopBar()
 end
 
 
-
-function TopBar:getReadToday()
-    local DataStorage = require("datastorage")
-    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
-    local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
-    -- best to e it to letters, to get '2m' ?
-    -- user_duration_format = "letters"
-
-    local conn = SQ3.open(db_location)
-
-
-
-    local sql_stmt = [[
-        SELECT sum(sum_duration)
-        FROM    (
-                     SELECT sum(duration)    AS sum_duration
-                     FROM   page_stat
-                     WHERE  start_time >= %d
-                     GROUP  BY id_book, page
-                );
-    ]]
-
-    local now_stamp = os.time()
-    local now_t = os.date("*t")
-    local from_begin_day = now_t.hour * 3600 + now_t.min * 60 + now_t.sec
-    local start_today_time = now_stamp - from_begin_day
-    local read_today = conn:rowexec(string.format(sql_stmt,start_today_time))
-
-    conn:close()
-
-    if read_today == nil then
-        read_today = 0
-    end
-    read_today = tonumber(read_today)
-
-
-    return read_today
-end
-
 function TopBar:toggleBar()
     if self.is_enabled then
         local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
         local session_time = datetime.secondsToClockDuration(user_duration_format, os.time() - self.start_session_time, false)
 
-        duration_raw =  math.floor((os.time() - self.start_session_time))
+        local duration_raw =  math.floor((os.time() - self.start_session_time))
         self.wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
         self.wpm_text:setText(self.wpm_session .. "wpm")
 
@@ -207,10 +205,10 @@ function TopBar:toggleBar()
         local now_t = os.date("*t")
         local daysdiff = now_t.day - os.date("*t",session_started).day
         if daysdiff > 0 then
-            self._initial_read_today = self:getReadToday()
+            self.initial_read_today = getReadToday()
         end
 
-        local read_today = self._initial_read_today + (os.time() - session_started)
+        local read_today = self.initial_read_today + (os.time() - session_started)
         read_today = datetime.secondsToClockDuration(user_duration_format, read_today, false)
         self.session_time_text:setText(datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")) .. "|" .. session_time .. "|≃" .. read_today)
         self.progress_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
