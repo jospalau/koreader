@@ -193,6 +193,14 @@ end
 
 function TopBar:toggleBar()
     if self.is_enabled then
+        local now_t = os.date("*t")
+        local daysdiff = now_t.day - os.date("*t",self.start_session_time).day
+        if daysdiff > 0 then
+            self.initial_read_today = getReadToday()
+            self.start_session_time = os.time()
+        end
+
+
         local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
         local session_time = datetime.secondsToClockDuration(user_duration_format, os.time() - self.start_session_time, false)
 
@@ -200,15 +208,7 @@ function TopBar:toggleBar()
         self.wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
         self.wpm_text:setText(self.wpm_session .. "wpm")
 
-        local session_started = self.start_session_time
-
-        local now_t = os.date("*t")
-        local daysdiff = now_t.day - os.date("*t",session_started).day
-        if daysdiff > 0 then
-            self.initial_read_today = getReadToday()
-        end
-
-        local read_today = self.initial_read_today + (os.time() - session_started)
+        local read_today = self.initial_read_today + (os.time() - self.start_session_time)
         read_today = datetime.secondsToClockDuration(user_duration_format, read_today, false)
         self.session_time_text:setText(datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")) .. "|" .. session_time .. "|≃" .. read_today)
         self.progress_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
