@@ -39,16 +39,12 @@ getReadToday = function ()
         FROM    (
                      SELECT sum(duration)    AS sum_duration
                      FROM   page_stat
-                     WHERE  start_time >= %d
+                     WHERE  DATE(start_time,'unixepoch','localtime')=DATE('now', '0 day','localtime')
                      GROUP  BY id_book, page
                 );
     ]]
 
-    local now_stamp = os.time()
-    local now_t = os.date("*t")
-    local from_begin_day = now_t.hour * 3600 + now_t.min * 60 + now_t.sec
-    local start_today_time = now_stamp - from_begin_day
-    local read_today = conn:rowexec(string.format(sql_stmt,start_today_time))
+    local read_today = conn:rowexec(string.format(sql_stmt))
 
     conn:close()
 
