@@ -31,14 +31,31 @@ local TopBar = WidgetContainer:extend{
 
 function TopBar:init()
     self._initial_read_today  = self:getReadToday()
+
+    if TopBar.preserved_start_session_time then
+        self.start_session_time = TopBar.start_session_time
+        TopBar.preserved_start_start_session_time = nil
+
+    end
+
+    if TopBar.preserved_initial_read_today then
+        self._initial_read_today = TopBar.preserved_initial_read_today
+        TopBar.preserved_initial_read_todays= nil
+    end
+
 end
 
 function TopBar:onReaderReady()
-    self.duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100
+
+    local duration_raw =  math.floor((os.time() - self.start_session_time))
+
+    if duration_raw < 360 or self.ui.statistics._total_pages < 6 then
+        self.start_session_time = os.time()
+    end
 
     self.wpm_session = 0
-    if self.duration_raw > 0 and self.ui.statistics._total_words then
-        self.wpm_session = math.floor(self.ui.statistics._total_words/self.duration_raw)
+    if duration_raw > 0 and self.ui.statistics._total_words then
+        self.wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
     end
 
 
@@ -119,6 +136,15 @@ function TopBar:onResume()
     self:toggleBar()
 end
 
+
+function TopBar:onPreserveCurrentSession()
+    -- Can be called before ReaderUI:reloadDocument() to not reset the current session
+    TopBar.preserved_start_session_time = self.start_session_time
+    TopBar.preserved_initial_read_today = self._initial_read_today
+end
+
+
+
 function TopBar:onSwitchTopBar()
     if G_reader_settings:isTrue("show_time") then
         self.is_enabled = not self.is_enabled
@@ -172,8 +198,8 @@ function TopBar:toggleBar()
         local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
         local session_time = datetime.secondsToClockDuration(user_duration_format, os.time() - self.start_session_time, false)
 
-        self.duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100
-        self.wpm_session = math.floor(self.ui.statistics._total_words/self.duration_raw)
+        duration_raw =  math.floor((os.time() - self.start_session_time))
+        self.wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
         self.wpm_text:setText(self.wpm_session .. "wpm")
 
         local session_started = self.start_session_time
