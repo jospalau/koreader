@@ -57,12 +57,47 @@ getReadToday = function ()
     return read_today
 end
 
+getReadThisMonth = function ()
+    local DataStorage = require("datastorage")
+    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
+    -- best to e it to letters, to get '2m' ?
+    -- user_duration_format = "letters"
+
+    local conn = SQ3.open(db_location)
+
+
+
+    local sql_stmt = [[
+        SELECT sum(sum_duration)
+        FROM    (
+                     SELECT sum(duration)    AS sum_duration
+                     FROM   page_stat
+                     WHERE  start_time >= strftime('%s', DATE('now', 'start of month'))
+                     GROUP  BY id_book, page
+                );
+    ]]
+
+    local read_month = conn:rowexec(sql_stmt)
+
+    conn:close()
+
+    if read_month == nil then
+        read_month = 0
+    end
+    read_month = tonumber(read_month)
+
+
+    return read_month
+end
+
 -- self[4] = self.topbar in readerview.lua
 local TopBar = WidgetContainer:extend{
     name = "Topbar",
     is_enabled = G_reader_settings:isTrue("show_time"),
     start_session_time = os.time(),
     initial_read_today = getReadToday(),
+    initial_read_month = getReadThisMonth(),
 }
 
 function TopBar:init()
@@ -77,6 +112,10 @@ function TopBar:init()
         TopBar.preserved_initial_read_today = nil
     end
 
+    if TopBar.preserved_initial_read_month then
+        self.initial_read_month = TopBar.preserved_initial_read_month
+        TopBar.preserved_initial_read_month = nil
+    end
 end
 
 function TopBar:onReaderReady()
@@ -175,6 +214,7 @@ function TopBar:onPreserveCurrentSession()
     -- Can be called before ReaderUI:reloadDocument() to not reset the current session
     TopBar.preserved_start_session_time = self.start_session_time
     TopBar.preserved_initial_read_today = self.initial_read_today
+    TopBar.preserved_initial_read_month = self.initial_read_month
 end
 
 
@@ -206,7 +246,11 @@ function TopBar:toggleBar()
 
         local read_today = self.initial_read_today + (os.time() - self.start_session_time)
         read_today = datetime.secondsToClockDuration(user_duration_format, read_today, false)
-        self.session_time_text:setText(datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")) .. "|" .. session_time .. "|≃" .. read_today)
+
+        local read_month = self.initial_read_month + (os.time() - self.start_session_time)
+        read_month = datetime.secondsToClockDuration(user_duration_format, read_month, false)
+
+        self.session_time_text:setText(datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")) .. "|" .. session_time .. "|≃" .. read_today .. "|≃" .. read_month)
         self.progress_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
 
 
