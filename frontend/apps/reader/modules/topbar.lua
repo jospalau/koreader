@@ -159,6 +159,13 @@ function TopBar:onReaderReady()
     }
 
 
+    self.title_text = TextWidget:new{
+        text =  "",
+        face = Font:getFace("myfont4"),
+        fgcolor = Blitbuffer.COLOR_BLACK,
+    }
+
+
     -- self[1] = left_container:new{
     --     dimen = Geom:new{ w = self.wpm_text:getSize().w, self.wpm_text:getSize().h },
     --     self.wpm_text,
@@ -174,7 +181,13 @@ function TopBar:onReaderReady()
         self.progress_chapter_text,
     }
 
-    self.dialog_frame = FrameContainer:new{
+
+    self[3] = left_container:new{
+        dimen = Geom:new{ w = self.title_text:getSize().w, self.title_text:getSize().h },
+        self.title_text,
+    }
+
+    self.bottom_frame = FrameContainer:new{
         -- background = Blitbuffer.COLOR_WHITE,
         padding_bottom = 20,
         bordersize = 0,
@@ -184,10 +197,12 @@ function TopBar:onReaderReady()
         },
     }
 
-    self[3] = BottomContainer:new{
+    self[4] = BottomContainer:new{
         dimen = Screen:getSize(),
-        self.dialog_frame,
+        self.bottom_frame,
     }
+
+
 
 end
 function TopBar:onToggleShowTime()
@@ -257,10 +272,27 @@ function TopBar:toggleBar()
         self.progress_chapter_text:setText(self.view.footer:getChapterProgress(false))
 
 
+        local title = self.ui.document._document:getDocumentProps().title
+        local words = "?w"
+        local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
+        if file_type == "epub" then
+            if title:find('%[%d?.%d]') then
+                title = title:sub(title:find('%]')+2, title:len())
+            end
+
+            if (title:find("([0-9,]+w)") ~= nil) then
+                words = title:match("([0-9,]+w)"):gsub("w",""):gsub(",","") .. "w"
+                title = title:sub(1, title:find('%(')-2, title:len())
+            end
+        end
+        title = TextWidget.PTF_BOLD_START .. title .. " with " .. words .. TextWidget.PTF_BOLD_END
+
+        self.title_text:setText(title)
     else
         self.session_time_text:setText("")
         self.progress_text:setText("")
         self.progress_chapter_text:setText("")
+        self.title_text:setText("")
     end
 end
 
@@ -273,8 +305,10 @@ function TopBar:paintTo(bb, x, y)
         self[2].dimen = Geom:new{ w = self[2][1]:getSize().w, self[2][1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
         self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - 20, y + 20)
 
+        -- self[3]:paintTo(bb, x + Screen:getWidth()/2 - self[3]:getSize().w/2, y + 20)
+        self[3]:paintTo(bb, x + Screen:getWidth()/2, y + 20)
 
-        self[3]:paintTo(bb, x + 20, y + 20)
+        self[4]:paintTo(bb, x + 20, y + 20)
         -- text_container2:paintTo(bb, x + Screen:getWidth() - text_container2:getSize().w - 20, y + 20)
         -- text_container2:paintTo(bb, x + Screen:getWidth()/2 - text_container2:getSize().w/2, y + 20)
 end
