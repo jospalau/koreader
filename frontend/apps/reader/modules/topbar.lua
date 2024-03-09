@@ -13,6 +13,7 @@ local LuaSettings = require("luasettings")
 local DataStorage = require("datastorage")
 local Blitbuffer = require("ffi/blitbuffer")
 local left_container = require("ui/widget/container/leftcontainer")
+local right_container = require("ui/widget/container/rightcontainer")
 local Font = require("ui/font")
 local TextWidget = require("ui/widget/textwidget")
 local datetime = require("datetime")
@@ -166,6 +167,12 @@ function TopBar:onReaderReady()
     }
 
 
+    self.chapter_text = TextWidget:new{
+        text =  "",
+        face = Font:getFace("myfont4"),
+        fgcolor = Blitbuffer.COLOR_BLACK,
+    }
+
     -- self[1] = left_container:new{
     --     dimen = Geom:new{ w = self.wpm_text:getSize().w, self.wpm_text:getSize().h },
     --     self.wpm_text,
@@ -178,7 +185,7 @@ function TopBar:onReaderReady()
 
     self[2] = left_container:new{
         dimen = Geom:new{ w = self.progress_text:getSize().w, self.progress_text:getSize().h },
-        self.progress_chapter_text,
+        self.progress_text,
     }
 
 
@@ -187,20 +194,32 @@ function TopBar:onReaderReady()
         self.title_text,
     }
 
-    self.bottom_frame = FrameContainer:new{
-        -- background = Blitbuffer.COLOR_WHITE,
-        padding_bottom = 20,
-        bordersize = 0,
-        VerticalGroup:new{
-            -- self.progress_text,
-            self.progress_text,
-        },
+    self[4] = BottomContainer:new{
+        dimen = Geom:new{ w = self.progress_text:getSize().w, h = Screen:getSize().h - 20},
+        self.progress_chapter_text,
     }
 
-    self[4] = BottomContainer:new{
-        dimen = Screen:getSize(),
-        self.bottom_frame,
+    self[5] = BottomContainer:new{
+        dimen = Geom:new{ w = self.chapter_text:getSize().w, h = Screen:getSize().h - 20},
+        self.chapter_text,
     }
+
+
+
+    -- self.bottom_frame = FrameContainer:new{
+    --     -- background = Blitbuffer.COLOR_WHITE,
+    --     padding_bottom = 20,
+    --     bordersize = 0,
+    --     VerticalGroup:new{
+    --         -- self.progress_text,
+    --         self.progress_text,
+    --     },
+    -- }
+
+    -- self[4] = BottomContainer:new{
+    --     dimen = Screen:getSize(),
+    --     self.bottom_frame,
+    -- }
 
 
 
@@ -288,11 +307,16 @@ function TopBar:toggleBar()
         title = TextWidget.PTF_BOLD_START .. title .. " with " .. words .. TextWidget.PTF_BOLD_END
 
         self.title_text:setText(title)
+
+
+        self.chapter_text:setText(self.ui.toc:getTocTitleByPage(self.view.footer.pageno))
+
     else
         self.session_time_text:setText("")
         self.progress_text:setText("")
         self.progress_chapter_text:setText("")
         self.title_text:setText("")
+        self.chapter_text:setText("")
     end
 end
 
@@ -308,7 +332,12 @@ function TopBar:paintTo(bb, x, y)
         -- self[3]:paintTo(bb, x + Screen:getWidth()/2 - self[3]:getSize().w/2, y + 20)
         self[3]:paintTo(bb, x + Screen:getWidth()/2, y + 20)
 
+
+        -- This is being drawn to bottom, so we don't change the height
+        self[4].dimen.w = self[4][1]:getSize().w
         self[4]:paintTo(bb, x + 20, y + 20)
+
+        self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5]:getSize().w/2, y + 20)
         -- text_container2:paintTo(bb, x + Screen:getWidth() - text_container2:getSize().w - 20, y + 20)
         -- text_container2:paintTo(bb, x + Screen:getWidth()/2 - text_container2:getSize().w/2, y + 20)
 end
