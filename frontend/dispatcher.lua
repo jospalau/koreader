@@ -176,6 +176,7 @@ local settingsList = {
     status_bar_just_progress_bar = {category="none", event="StatusBarJustProgressBar", title=_("Status bar just progress bar"), reader=true, separator=true},
     toggle_reclaim_height = {category="none", event="ToggleReclaimHeight", title=_("Toggle reclaim height"), reader=true},
     toggle_hyphenation = {category="none", event="ToggleHyphenation", title=_("Toggle hyphenation"), reader=true, separator=true},
+    toggle_status_bar = {category="none", event="ToggleFooterMode", title=_("Toggle status bar"), reader=true},
     toggle_chapter_progress_bar = {category="none", event="ToggleChapterProgressBar", title=_("Toggle chapter progress bar"), reader=true, separator=true},
     ----
     prev_chapter = {category="none", event="GotoPrevChapter", title=_("Previous chapter"), reader=true},
