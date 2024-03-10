@@ -14,6 +14,7 @@ local DataStorage = require("datastorage")
 local Blitbuffer = require("ffi/blitbuffer")
 local left_container = require("ui/widget/container/leftcontainer")
 local right_container = require("ui/widget/container/rightcontainer")
+local center_container = require("ui/widget/container/centercontainer")
 local Font = require("ui/font")
 local TextWidget = require("ui/widget/textwidget")
 local datetime = require("datetime")
@@ -202,18 +203,19 @@ function TopBar:onReaderReady()
         self.title_text,
     }
 
-    self[4] = BottomContainer:new{
-        dimen = Geom:new{ w = self.progress_text:getSize().w, h = Screen:getSize().h - 20},
+    self[4] = left_container:new{
+        dimen = Geom:new{ w = self.progress_text:getSize().w, h = Screen:getSize().h* 2},
         self.times_text,
     }
 
-    self[5] = BottomContainer:new{
-        dimen = Geom:new{ w = self.chapter_text:getSize().w, h = Screen:getSize().h - 20},
+    self[5] = left_container:new{
+        dimen = Geom:new{ w = self.chapter_text:getSize().w, h = Screen:getSize().h* 2},
         self.chapter_text,
+
     }
 
-    self[6] = BottomContainer:new{
-        dimen = Geom:new{ w = self.chapter_text:getSize().w, h = Screen:getSize().h - 20},
+    self[6] = left_container:new{
+        dimen = Geom:new{ w = self.chapter_text:getSize().w, h = Screen:getSize().h * 2 },
         self.progress_chapter_text,
     }
 
@@ -243,8 +245,8 @@ function TopBar:onReaderReady()
     }
 
 
-    self[8] = BottomContainer:new{
-        dimen = Geom:new{ w = self.chapter_text:getSize().w, h = Screen:getSize().h - 20},
+    self[8] = left_container:new{
+        dimen = Geom:new{ w = self.chapter_text:getSize().w, h = Screen:getSize().h * 2},
         self.progress_chapter_bar,
     }
 
@@ -369,9 +371,9 @@ function TopBar:toggleBar()
         self.progress_bar.width = 250
         self.progress_bar2.width = Screen:getSize().w
         self.progress_chapter_bar.width = 250
-        self.progress_bar.height = 20
-        self.progress_bar2.height = 20
-        self.progress_chapter_bar.height = 20
+        self.progress_bar.height = 15
+        self.progress_bar2.height = 15
+        self.progress_chapter_bar.height = 15
 
         self.chapter_text:setText(chapter)
         self.progress_chapter_text:setText(self.view.footer:getChapterProgress(false))
@@ -421,17 +423,12 @@ function TopBar:paintTo(bb, x, y)
         self[7]:paintTo(bb, x + Screen:getWidth() - self[7][1]:getSize().w - TopBar.MARGIN, y + TopBar.MARGIN)
 
 
-
-
         -- Bottom left
-        -- This is being drawn to bottom, so we don't change the height
         self[4].dimen.w = self[4][1]:getSize().w
-        self[4]:paintTo(bb, x + TopBar.MARGIN, y + TopBar.MARGIN)
+        self[4]:paintTo(bb, x + TopBar.MARGIN, y - TopBar.MARGIN + 5)
 
         -- Bottom center
-        -- self[5] is a bottom container, it behaves different to position the height, we need it to be 0 and the container size is 0
-        -- That's why we don't use the height of the TextWidget in self[2][1]
-        self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5]:getSize().w/2, y + TopBar.MARGIN)
+        self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5][1]:getSize().w/2,  y - TopBar.MARGIN + 5)
 
         -- Bottom right
         -- Commented the text, using progress bar
@@ -441,11 +438,7 @@ function TopBar:paintTo(bb, x, y)
         self[8].dimen.w = self[8][1]:getSize().w
         -- self[8]:paintTo(bb,  x + Screen:getWidth()/2 + self[5][1]:getSize().w, y + 5)
         -- self[8]:paintTo(bb, x + Screen:getWidth() - self[8][1]:getSize().w - self[6].dimen.w - TopBar.MARGIN - TopBar.MARGIN, y + 5)
-        self[8]:paintTo(bb, x + Screen:getWidth() - self[8][1]:getSize().w - TopBar.MARGIN, y + self[8][1].height/2)
-
-
-
-
+        self[8]:paintTo(bb, x + Screen:getWidth() - self[8][1]:getSize().w - TopBar.MARGIN,  y - TopBar.MARGIN + 5)
 
 
         -- text_container2:paintTo(bb, x + Screen:getWidth() - text_container2:getSize().w - 20, y + 20)
