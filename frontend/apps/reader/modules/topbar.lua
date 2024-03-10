@@ -371,9 +371,9 @@ function TopBar:toggleBar()
         self.progress_bar.width = 250
         self.progress_bar2.width = Screen:getSize().w
         self.progress_chapter_bar.width = 250
-        self.progress_bar.height = 15
+        self.progress_bar.height = 20
         self.progress_bar2.height = 15
-        self.progress_chapter_bar.height = 15
+        self.progress_chapter_bar.height = 20
 
         self.chapter_text:setText(chapter)
         self.progress_chapter_text:setText(self.view.footer:getChapterProgress(false))
@@ -425,20 +425,17 @@ function TopBar:paintTo(bb, x, y)
 
         -- Bottom left
         self[4].dimen.w = self[4][1]:getSize().w
-        self[4]:paintTo(bb, x + TopBar.MARGIN, y - TopBar.MARGIN + 5)
+        self[4]:paintTo(bb, x + TopBar.MARGIN, y - TopBar.MARGIN)
 
         -- Bottom center
-        self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5][1]:getSize().w/2,  y - TopBar.MARGIN + 5)
+        self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5][1]:getSize().w/2,  y - TopBar.MARGIN)
 
         -- Bottom right
-        -- Commented the text, using progress bar
-        -- self[6].dimen.w = self[6][1]:getSize().w
-        -- self[6]:paintTo(bb, x + Screen:getWidth() - self[6]:getSize().w - TopBar.MARGIN, y + TopBar.MARGIN)
+        self[6].dimen.w = self[6][1]:getSize().w
+        self[6]:paintTo(bb, x + Screen:getWidth() - self[6]:getSize().w - TopBar.MARGIN, y - TopBar.MARGIN)
 
-        self[8].dimen.w = self[8][1]:getSize().w
-        -- self[8]:paintTo(bb,  x + Screen:getWidth()/2 + self[5][1]:getSize().w, y + 5)
-        -- self[8]:paintTo(bb, x + Screen:getWidth() - self[8][1]:getSize().w - self[6].dimen.w - TopBar.MARGIN - TopBar.MARGIN, y + 5)
-        self[8]:paintTo(bb, x + Screen:getWidth() - self[8][1]:getSize().w - TopBar.MARGIN,  y - TopBar.MARGIN + 5)
+        -- Use progress bar
+        -- self[8]:paintTo(bb, x + Screen:getWidth() - self[8][1]:getSize().w - TopBar.MARGIN,  y - TopBar.MARGIN)
 
 
         -- text_container2:paintTo(bb, x + Screen:getWidth() - text_container2:getSize().w - 20, y + 20)
