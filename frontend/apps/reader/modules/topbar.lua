@@ -99,6 +99,7 @@ local TopBar = WidgetContainer:extend{
     start_session_time = os.time(),
     initial_read_today = getReadToday(),
     initial_read_month = getReadThisMonth(),
+    MARGIN = 20,
 }
 
 function TopBar:init()
@@ -153,7 +154,7 @@ function TopBar:onReaderReady()
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
-    self.progress_chapter_text = TextWidget:new{
+    self.times_text = TextWidget:new{
         text =  "",
         face = Font:getFace("myfont4"),
         fgcolor = Blitbuffer.COLOR_BLACK,
@@ -168,6 +169,13 @@ function TopBar:onReaderReady()
 
 
     self.chapter_text = TextWidget:new{
+        text =  "",
+        face = Font:getFace("myfont4"),
+        fgcolor = Blitbuffer.COLOR_BLACK,
+    }
+
+
+    self.progress_chapter_text = TextWidget:new{
         text =  "",
         face = Font:getFace("myfont4"),
         fgcolor = Blitbuffer.COLOR_BLACK,
@@ -196,7 +204,7 @@ function TopBar:onReaderReady()
 
     self[4] = BottomContainer:new{
         dimen = Geom:new{ w = self.progress_text:getSize().w, h = Screen:getSize().h - 20},
-        self.progress_chapter_text,
+        self.times_text,
     }
 
     self[5] = BottomContainer:new{
@@ -204,7 +212,10 @@ function TopBar:onReaderReady()
         self.chapter_text,
     }
 
-
+    self[6] = BottomContainer:new{
+        dimen = Geom:new{ w = self.chapter_text:getSize().w, h = Screen:getSize().h - 20},
+        self.progress_chapter_text,
+    }
 
     -- self.bottom_frame = FrameContainer:new{
     --     -- background = Blitbuffer.COLOR_WHITE,
@@ -284,11 +295,11 @@ function TopBar:toggleBar()
         local read_month = self.initial_read_month + (os.time() - self.start_session_time)
         read_month = datetime.secondsToClockDuration(user_duration_format, read_month, false)
 
-        self.session_time_text:setText(datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")) .. "|" .. session_time .. "|≃" .. read_today .. "|≃" .. read_month)
+        self.session_time_text:setText(datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")))
         self.progress_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
 
 
-        self.progress_chapter_text:setText(self.view.footer:getChapterProgress(false))
+        self.times_text:setText(session_time .. "|≃" .. read_today .. "|≃" .. read_month)
 
 
         local title = self.ui.document._document:getDocumentProps().title
@@ -305,18 +316,19 @@ function TopBar:toggleBar()
             end
         end
         title = TextWidget.PTF_BOLD_START .. title .. " with " .. words .. TextWidget.PTF_BOLD_END
-
         self.title_text:setText(title)
 
-
-        self.chapter_text:setText(self.ui.toc:getTocTitleByPage(self.view.footer.pageno))
+        local chapter = TextWidget.PTF_BOLD_START .. self.ui.toc:getTocTitleByPage(self.view.footer.pageno) .. TextWidget.PTF_BOLD_END
+        self.chapter_text:setText(chapter)
+        self.progress_chapter_text:setText(self.view.footer:getChapterProgress(false))
 
     else
         self.session_time_text:setText("")
         self.progress_text:setText("")
-        self.progress_chapter_text:setText("")
+        self.times_text:setText("")
         self.title_text:setText("")
         self.chapter_text:setText("")
+        self.progress_chapter_text:setText("")
     end
 end
 
@@ -325,19 +337,32 @@ function TopBar:onPageUpdate()
 end
 
 function TopBar:paintTo(bb, x, y)
-        self[1]:paintTo(bb, x + 20, y + 20)
+        -- Top left
+        self[1]:paintTo(bb, x + TopBar.MARGIN, y + TopBar.MARGIN)
+
+        -- Top center
         self[2].dimen = Geom:new{ w = self[2][1]:getSize().w, self[2][1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
-        self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - 20, y + 20)
+        self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN, y + TopBar.MARGIN)
 
-        -- self[3]:paintTo(bb, x + Screen:getWidth()/2 - self[3]:getSize().w/2, y + 20)
-        self[3]:paintTo(bb, x + Screen:getWidth()/2, y + 20)
+        -- Top right
+        self[3]:paintTo(bb, x + Screen:getWidth()/2 - self[3][1]:getSize().w/2, y + TopBar.MARGIN)
+        -- self[3]:paintTo(bb, x + Screen:getWidth()/2, y + 20)
 
 
+        -- Bottom left
         -- This is being drawn to bottom, so we don't change the height
         self[4].dimen.w = self[4][1]:getSize().w
-        self[4]:paintTo(bb, x + 20, y + 20)
+        self[4]:paintTo(bb, x + TopBar.MARGIN, y + TopBar.MARGIN)
 
-        self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5]:getSize().w/2, y + 20)
+        -- Bottom center
+        -- self[5] is a bottom container, it behaves different to position the height, we need it to be 0 and the container size is 0
+        -- That's why we don't use the height of the TextWidget in self[2][1]
+        self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5]:getSize().w/2, y + TopBar.MARGIN)
+
+        -- Bottom right
+        self[6].dimen.w = self[6][1]:getSize().w
+        self[6]:paintTo(bb, x + Screen:getWidth() - self[6]:getSize().w - TopBar.MARGIN, y + TopBar.MARGIN)
+
         -- text_container2:paintTo(bb, x + Screen:getWidth() - text_container2:getSize().w - 20, y + 20)
         -- text_container2:paintTo(bb, x + Screen:getWidth()/2 - text_container2:getSize().w/2, y + 20)
 end
