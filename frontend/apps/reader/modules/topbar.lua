@@ -248,6 +248,22 @@ function TopBar:onReaderReady()
         self.progress_chapter_bar,
     }
 
+    self.progress_bar2  = ProgressWidget:new{
+        width = Screen:getSize().w,
+        height = 5,
+        percentage = 0,
+        tick_width = Screen:scaleBySize(1),
+        ticks = nil, -- ticks will be populated in self:updateFooterText
+        last = nil, -- last will be initialized in self:updateFooterText
+    }
+
+
+    self[9] = left_container:new{
+        dimen = Geom:new{ w = self.title_text:getSize().w, self.title_text:getSize().h },
+        self.progress_bar2,
+    }
+
+
     -- self.bottom_frame = FrameContainer:new{
     --     -- background = Blitbuffer.COLOR_WHITE,
     --     padding_bottom = 20,
@@ -351,8 +367,10 @@ function TopBar:toggleBar()
 
         local chapter = TextWidget.PTF_BOLD_START .. self.ui.toc:getTocTitleByPage(self.view.footer.pageno) .. TextWidget.PTF_BOLD_END
         self.progress_bar.width = 250
+        self.progress_bar2.width = Screen:getSize().w
         self.progress_chapter_bar.width = 250
-        self.progress_bar.height = 20--
+        self.progress_bar.height = 20
+        self.progress_bar2.height = 20
         self.progress_chapter_bar.height = 20
 
         self.chapter_text:setText(chapter)
@@ -361,6 +379,8 @@ function TopBar:toggleBar()
         self.progress_chapter_bar:updateStyle(false, nil)
         self.progress_bar.last = self.pages or self.ui.document:getPageCount()
         -- self.progress_bar.ticks = self.ui.toc:getTocTicksFlattened()
+        self.progress_bar2.last = self.pages or self.ui.document:getPageCount()
+        self.progress_bar2.ticks = self.ui.toc:getTocTicksFlattened()
     else
         self.session_time_text:setText("")
         self.progress_text:setText("")
@@ -369,6 +389,7 @@ function TopBar:toggleBar()
         self.chapter_text:setText("")
         self.progress_chapter_text:setText("")
         self.progress_bar.width = 0
+        self.progress_bar2.width = 0
         self.progress_chapter_bar.width = 0
     end
 end
@@ -376,11 +397,13 @@ end
 function TopBar:onPageUpdate()
     self:toggleBar()
     self.progress_bar:setPercentage(self.view.footer.pageno / self.view.footer.pages)
+    self.progress_bar2:setPercentage(self.view.footer.pageno / self.view.footer.pages)
     self.progress_chapter_bar:setPercentage(self.view.footer:getChapterProgress(true))
 end
 
 function TopBar:paintTo(bb, x, y)
         -- Top left
+        -- self[9]:paintTo(bb, x , y + 15)
         self[1]:paintTo(bb, x + TopBar.MARGIN, y + TopBar.MARGIN)
 
         -- Top center
