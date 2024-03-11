@@ -27,6 +27,7 @@ local _ = require("gettext")
 local Screen = Device.screen
 local T = require("ffi/util").template
 local Topbar = require("apps/reader/modules/topbar")
+local Doublebar = require("apps/reader/modules/doublebar")
 
 
 local ReaderView = OverlapGroup:extend{
@@ -136,7 +137,10 @@ function ReaderView:addWidgets()
         view = self,
         ui = self.ui,
     }
-
+    self.doublebar = Doublebar:new{
+        view = self,
+        ui = self.ui,
+    }
     self.flipping = ReaderFlipping:new{
         view = self,
         ui = self.ui,
@@ -153,6 +157,7 @@ function ReaderView:addWidgets()
     self[2] = self.footer
     self[3] = self.flipping
     self[4] = self.topbar
+    self[5] = self.doublebar
 end
 
 --[[--
@@ -334,10 +339,13 @@ function ReaderView:paintTo(bb, x, y)
 
     end
 
-    if G_reader_settings:isTrue("show_time") then
+    if G_reader_settings:isTrue("show_top_bar") then
         self.topbar:paintTo(bb, x, y)
     end
 
+    if G_reader_settings:isTrue("show_double_bar") then
+        self.doublebar:paintTo(bb, x, y)
+    end
 
     -- paint dogear
     if self.dogear_visible then

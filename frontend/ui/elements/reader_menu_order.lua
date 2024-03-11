@@ -70,8 +70,8 @@ local order = {
         -- those that don't exist will simply be skipped during menu gen
         "frontlight", -- if Device:hasFrontlight()
         "night_mode",
-        "show_wpm",
-        "show_time",
+        "show_double_bar",
+        "show_top_bar",
         "----------------------------",
         "network",
         "screen",

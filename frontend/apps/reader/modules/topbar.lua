@@ -97,7 +97,7 @@ end
 
 local TopBar = WidgetContainer:extend{
     name = "Topbar",
-    is_enabled = G_reader_settings:isTrue("show_time"),
+    is_enabled = G_reader_settings:isTrue("show_top_bar"),
     start_session_time = os.time(),
     initial_read_today = getReadToday(),
     initial_read_month = getReadThisMonth(),
@@ -349,10 +349,10 @@ function TopBar:onReaderReady()
 
 
 end
-function TopBar:onToggleShowTime()
-    local show_time = G_reader_settings:isTrue("show_time")
-    G_reader_settings:saveSetting("show_time", not show_time)
-    self.is_enabled = not show_time
+function TopBar:onToggleShowTopBar()
+    local show_top_bar = G_reader_settings:isTrue("show_top_bar")
+    G_reader_settings:saveSetting("show_top_bar", not show_top_bar)
+    self.is_enabled = not show_top_bar
     self:toggleBar()
 end
 
@@ -378,7 +378,7 @@ end
 
 
 function TopBar:onSwitchTopBar()
-    if G_reader_settings:isTrue("show_time") then
+    if G_reader_settings:isTrue("show_top_bar") then
         if self.show_top_bar then
             self.show_top_bar = false
             TopBar.MARGIN_TOP = Screen:scaleBySize(11)
