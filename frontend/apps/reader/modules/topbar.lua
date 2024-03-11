@@ -482,7 +482,8 @@ end
 function TopBar:paintTo(bb, x, y)
         -- Top left
         if self.show_top_bar then
-            self[9]:paintTo(bb, x , y + 15)
+            self[9]:paintTo(bb, x, y + 15)
+            -- self[9]:paintTo(bb, x, Screen:getHeight() - 15)
         end
         self[1]:paintTo(bb, x + TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOPBOTTOM)
 
@@ -521,7 +522,7 @@ function TopBar:paintTo(bb, x, y)
         -- self[6]:paintTo(bb, x + Screen:getWidth() - self[6][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_TOPBOTTOM)
 
         -- Use progress bar
-        self[8]:paintTo(bb, x + Screen:getWidth() - self[8][1][1]:getSize().w - TopBar.MARGIN_SIDES,  Screen:getHeight() - TopBar.MARGIN_TOPBOTTOM)
+        self[8]:paintTo(bb, x + Screen:getWidth() - self[8][1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_TOPBOTTOM)
 
 
         -- text_container2:paintTo(bb, x + Screen:getWidth() - text_container2:getSize().w - 20, y + 20)
