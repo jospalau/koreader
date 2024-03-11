@@ -334,14 +334,16 @@ function ReaderView:paintTo(bb, x, y)
 
     end
 
+    if G_reader_settings:isTrue("show_time") then
+        self.topbar:paintTo(bb, x, y)
+    end
+
+
     -- paint dogear
     if self.dogear_visible then
         self.dogear:paintTo(bb, x, y)
     end
 
-    if G_reader_settings:isTrue("show_time") then
-        self.topbar:paintTo(bb, x, y)
-    end
 
     -- if G_reader_settings:isTrue("show_wpm") and not G_reader_settings:isTrue("show_time") then
     --     local left_container = require("ui/widget/container/leftcontainer")

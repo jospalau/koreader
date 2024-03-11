@@ -23,7 +23,7 @@ local FrameContainer = require("ui/widget/container/framecontainer")
 local VerticalGroup = require("ui/widget/verticalgroup")
 local SQ3 = require("lua-ljsqlite3/init")
 local ProgressWidget = require("ui/widget/progresswidget")
-
+local Device = require("device")
 
 getReadToday = function ()
     local DataStorage = require("datastorage")
@@ -94,16 +94,21 @@ getReadThisMonth = function ()
 end
 
 -- self[4] = self.topbar in readerview.lua
+
 local TopBar = WidgetContainer:extend{
     name = "Topbar",
     is_enabled = G_reader_settings:isTrue("show_time"),
     start_session_time = os.time(),
     initial_read_today = getReadToday(),
     initial_read_month = getReadThisMonth(),
-    MARGIN =  Screen:scaleBySize(9),
+    MARGIN_SIDES =  Screen:scaleBySize(10),
+    MARGIN_TOPBOTTOM =  Screen:scaleBySize(14),
 }
 
 function TopBar:init()
+    if Device:isAndroid() then
+        self.MARGIN_SIDES =  Screen:scaleBySize(25)
+    end
     if TopBar.preserved_start_session_time then
         self.start_session_time = TopBar.preserved_start_session_time
         TopBar.preserved_start_session_time = nil
@@ -187,9 +192,16 @@ function TopBar:onReaderReady()
     --     self.wpm_text,
     -- }
 
-    self[1] = left_container:new{
-        dimen = Geom:new{ w = self.session_time_text:getSize().w, self.session_time_text:getSize().h },
-        self.session_time_text,
+
+    self[1] = FrameContainer:new{
+        left_container:new{
+            dimen = Geom:new(),
+            self.session_time_text,
+        },
+        -- background = Blitbuffer.COLOR_WHITE,
+        bordersize = 0,
+        padding = 0,
+        padding_bottom = self.bottom_padding,
     }
 
     self[2] = left_container:new{
@@ -203,21 +215,41 @@ function TopBar:onReaderReady()
         self.title_text,
     }
 
-    self[4] = left_container:new{
-        dimen = Geom:new{ w = self.progress_text:getSize().w, h = Screen:getSize().h * 2},
-        self.times_text,
+
+    self[4] = FrameContainer:new{
+        left_container:new{
+            dimen = Geom:new(),
+            self.times_text,
+        },
+        -- background = Blitbuffer.COLOR_WHITE,
+        bordersize = 0,
+        padding = 0,
+        padding_bottom = self.bottom_padding,
     }
 
-    self[5] = left_container:new{
-        dimen = Geom:new{ w = self.chapter_text:getSize().w, h = Screen:getSize().h * 2},
-        self.chapter_text,
 
+    self[5] = FrameContainer:new{
+        left_container:new{
+            dimen = Geom:new(),
+            self.chapter_text,
+        },
+        -- background = Blitbuffer.COLOR_WHITE,
+        bordersize = 0,
+        padding = 0,
+        padding_bottom = self.bottom_padding,
+    }
+    self[6] = FrameContainer:new{
+        left_container:new{
+            dimen = Geom:new(),
+            self.progress_chapter_text,
+        },
+        -- background = Blitbuffer.COLOR_WHITE,
+        bordersize = 0,
+        padding = 0,
+        padding_bottom = self.bottom_padding,
     }
 
-    self[6] = left_container:new{
-        dimen = Geom:new{ w = self.chapter_text:getSize().w, h = Screen:getSize().h * 2 },
-        self.progress_chapter_text,
-    }
+
 
 
     self.progress_bar  = ProgressWidget:new{
@@ -229,10 +261,15 @@ function TopBar:onReaderReady()
         last = nil, -- last will be initialized in self:updateFooterText
     }
 
-
-    self[7] = left_container:new{
-        dimen = Geom:new{ w = self.title_text:getSize().w, self.title_text:getSize().h },
-        self.progress_bar,
+    self[7] = FrameContainer:new{
+        left_container:new{
+            dimen = Geom:new(),
+            self.progress_bar,
+        },
+        -- background = Blitbuffer.COLOR_WHITE,
+        bordersize = 0,
+        padding = 0,
+        padding_bottom = self.bottom_padding,
     }
 
     self.progress_chapter_bar = ProgressWidget:new{
@@ -245,10 +282,17 @@ function TopBar:onReaderReady()
     }
 
 
-    self[8] = left_container:new{
-        dimen = Geom:new{ w = self.chapter_text:getSize().w, h = Screen:getSize().h * 2},
-        self.progress_chapter_bar,
+    self[8] = FrameContainer:new{
+        left_container:new{
+            dimen = Geom:new(),
+            self.progress_chapter_bar,
+        },
+        -- background = Blitbuffer.COLOR_WHITE,
+        bordersize = 0,
+        padding = 0,
+        padding_bottom = self.bottom_padding,
     }
+
 
     self.progress_bar2  = ProgressWidget:new{
         width = Screen:getSize().w,
@@ -257,14 +301,23 @@ function TopBar:onReaderReady()
         tick_width = Screen:scaleBySize(1),
         ticks = nil, -- ticks will be populated in self:updateFooterText
         last = nil, -- last will be initialized in self:updateFooterText
+        altbar = true,
+        bordersize = 0,
+        radius = 0,
     }
 
 
-    self[9] = left_container:new{
-        dimen = Geom:new{ w = self.title_text:getSize().w, self.title_text:getSize().h },
-        self.progress_bar2,
-    }
 
+    self[9] = FrameContainer:new{
+        left_container:new{
+            dimen = Geom:new(),
+            self.progress_bar2,
+        },
+        -- background = Blitbuffer.COLOR_WHITE,
+        bordersize = 0,
+        padding = 0,
+        padding_bottom = self.bottom_padding,
+    }
 
     -- self.bottom_frame = FrameContainer:new{
     --     -- background = Blitbuffer.COLOR_WHITE,
@@ -368,13 +421,23 @@ function TopBar:toggleBar()
         self.title_text:setText(title)
 
         local chapter = TextWidget.PTF_BOLD_START .. self.ui.toc:getTocTitleByPage(self.view.footer.pageno) .. TextWidget.PTF_BOLD_END
-        self.progress_bar.width = 250
         self.progress_bar2.width = Screen:getSize().w
-        self.progress_chapter_bar.width = 250
-        self.progress_bar.height = 15
-        self.progress_bar2.height = 15
-        self.progress_chapter_bar.height = 15
+        if Device:isAndroid() then
+            self.progress_bar.width = 150
+            self.progress_chapter_bar.width = 150
+            self.progress_bar.height = 20
+            self.progress_bar2.height = 20
+            self.progress_chapter_bar.height = 20
+        else
+            self.progress_bar.width = 250
+            self.progress_chapter_bar.width = 250
+            self.progress_bar.height = 30
+            self.progress_bar2.height = 1
+            self.progress_chapter_bar.height = 30
+        end
 
+
+--
         self.chapter_text:setText(chapter)
         self.progress_chapter_text:setText(self.view.footer:getChapterProgress(false))
         self.progress_bar:updateStyle(false, nil)
@@ -405,37 +468,40 @@ end
 
 function TopBar:paintTo(bb, x, y)
         -- Top left
-        -- self[9]:paintTo(bb, x , y + 15)
-        self[1]:paintTo(bb, x + TopBar.MARGIN, y + TopBar.MARGIN)
+        self[9]:paintTo(bb, x , y + 15)
+        self[1]:paintTo(bb, x + TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOPBOTTOM)
 
         -- Top center
 
-        self[3]:paintTo(bb, x + Screen:getWidth()/2 - self[3][1]:getSize().w/2, y + TopBar.MARGIN)
+        self[3]:paintTo(bb, x + Screen:getWidth()/2 - self[3][1]:getSize().w/2, y + TopBar.MARGIN_TOPBOTTOM)
         -- self[3]:paintTo(bb, x + Screen:getWidth()/2, y + 20)
 
 
         -- Top right
         -- Commented the text, using progress bar
-        -- self[2].dimen = Geom:new{ w = self[2][1]:getSize().w, self[2][1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
-        -- self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN, y + TopBar.MARGIN)
+        self[2].dimen = Geom:new{ w = self[2][1]:getSize().w, self[2][1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
+        self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOPBOTTOM)
 
-        -- self[7]:paintTo(bb,  x + Screen:getWidth()/2 - self[3][1]:getSize().w/2 + self[3][1]:getSize().w + 20, y + 10)
-        self[7]:paintTo(bb, x + Screen:getWidth() - self[7][1]:getSize().w - TopBar.MARGIN, y + TopBar.MARGIN)
+        -- self[7]:paintTo(bb,  x + Screen:getWidth()/2 - self[3][1][1]:getSize().w/2 + self[3][1]:getSize().w + 20, y + TopBar.MARGIN_TOPBOTTOM)
+        -- self[7]:paintTo(bb, x + Screen:getWidth() - self[7][1][1]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOPBOTTOM)
 
 
+
+        -- For the bottom components it is better to use frame containers.
+        -- It is better to position them without the dimensions simply passing x and y to the paintTo method
         -- Bottom left
-        self[4].dimen.w = self[4][1]:getSize().w
-        self[4]:paintTo(bb, x + TopBar.MARGIN, y - TopBar.MARGIN)
+        self[4][1].dimen.w = self[4][1][1]:getSize().w
+        self[4]:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_TOPBOTTOM)
 
         -- Bottom center
-        self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5][1]:getSize().w/2,  y - TopBar.MARGIN)
+        self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5][1][1]:getSize().w/2, Screen:getHeight() - TopBar.MARGIN_TOPBOTTOM)
 
         -- Bottom right
-        -- self[6].dimen.w = self[6][1]:getSize().w
-        -- self[6]:paintTo(bb, x + Screen:getWidth() - self[6]:getSize().w - TopBar.MARGIN, y - TopBar.MARGIN)
+        -- self[6][1].dimen.w = self[6][1][1]:getSize().w
+        -- self[6]:paintTo(bb, x + Screen:getWidth() - self[6][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_TOPBOTTOM)
 
         -- Use progress bar
-        self[8]:paintTo(bb, x + Screen:getWidth() - self[8][1]:getSize().w - TopBar.MARGIN,  y - TopBar.MARGIN)
+        self[8]:paintTo(bb, x + Screen:getWidth() - self[8][1][1]:getSize().w - TopBar.MARGIN_SIDES,  Screen:getHeight() - TopBar.MARGIN_TOPBOTTOM)
 
 
         -- text_container2:paintTo(bb, x + Screen:getWidth() - text_container2:getSize().w - 20, y + 20)

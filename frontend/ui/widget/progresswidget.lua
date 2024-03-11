@@ -61,6 +61,7 @@ local ProgressWidget = Widget:extend{
     _orig_bordersize = nil,
     initial_pos_marker = false, -- overlay a marker at the initial percentage position
     initial_percentage = nil,
+    altbar = nil,
 }
 
 function ProgressWidget:init()
@@ -125,7 +126,11 @@ function ProgressWidget:paintTo(bb, x, y)
 
     if self.radius == 0 then
         -- If we don't have rounded borders, we can start with a simple border colored rectangle.
-        bb:paintRect(x, y, my_size.w, my_size.h, self.bordercolor)
+        if self.altbar then -- Just for Android devices
+            bb:paintRect(x, y, my_size.w, 1, self.bordercolor)
+        else
+            bb:paintRect(x, y, my_size.w, my_size.h, self.bordercolor)
+        end
         -- And a full background bar inside (i.e., on top) of that.
         bb:paintRect(x + self.margin_h + self.bordersize,
                      fill_y,
@@ -170,11 +175,19 @@ function ProgressWidget:paintTo(bb, x, y)
             fill_x = math.floor(fill_x)
         end
 
-        bb:paintRect(fill_x,
-                     fill_y,
-                     math.ceil(fill_width * self.percentage),
-                     math.ceil(fill_height),
-                     self.fillcolor)
+        if self.altbar then
+            bb:paintRect(fill_x,
+                        fill_y - 3, -- position line
+                        math.ceil(fill_width * self.percentage),
+                        4,  --30, -- size line
+                        self.bordercolor)
+        else
+            bb:paintRect(fill_x,
+                        fill_y,
+                        math.ceil(fill_width * self.percentage),
+                        math.ceil(fill_height),
+                        self.fillcolor)
+        end
 
         -- Overlay the initial position marker on top of that
         if self.initial_pos_marker and self.initial_percentage >= 0 then
@@ -195,11 +208,20 @@ function ProgressWidget:paintTo(bb, x, y)
             end
             tick_x = math.floor(tick_x)
 
-            bb:paintRect(x + self.margin_h + self.bordersize + tick_x,
-                         fill_y,
-                         self.tick_width,
-                         math.ceil(fill_height),
-                         self.bordercolor)
+            if self.altbar then
+                bb:paintRect(x + self.margin_h + self.bordersize + tick_x,
+                            fill_y - 8, -- position ticks
+                            self.tick_width,
+                            15,-- size ticks
+                            self.bordercolor) --self.bordercolor With Blitbuffer.COLOR_WHITE is other effect.
+            else
+                bb:paintRect(x + self.margin_h + self.bordersize + tick_x,
+                            fill_y,
+                            self.tick_width,
+                            math.ceil(fill_height),
+                            self.bordercolor)
+
+            end
         end
     end
 end
