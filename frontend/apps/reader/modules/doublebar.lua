@@ -106,8 +106,8 @@ local DoubleBar = WidgetContainer:extend{
     -- Al menos los Kobos y el Boox Palma
     -- Podemos cambiar los márgenes
     -- Para verlo en detalle, es mejor no poner ningún estilo en las barras de progreso
-    MARGIN_TOP = Screen:scaleBySize(11),
-    MARGIN_BOTTOM = Screen:scaleBySize(11),
+    MARGIN_TOP = Screen:scaleBySize(9),
+    MARGIN_BOTTOM = Screen:scaleBySize(9),
     show_top_bar = true,
 }
 
@@ -401,8 +401,8 @@ function DoubleBar:toggleBar()
 
         self.chapter_text:setText(chapter)
         self.progress_chapter_text:setText(self.view.footer:getChapterProgress(false))
-        -- self.progress_bar:updateStyle(false, nil)
-        -- self.progress_bar_chapters:updateStyle(false, nil)
+        self.progress_bar:updateStyle(false, nil)
+        self.progress_bar_chapters:updateStyle(false, nil)
         -- self.progress_bar.last = self.pages or self.ui.document:getPageCount()
         -- self.progress_bar.ticks = self.ui.toc:getTocTicksFlattened()
         self.progress_bar:setPercentage(self.view.footer.pageno / self.view.footer.pages)

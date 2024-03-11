@@ -106,8 +106,8 @@ local TopBar = WidgetContainer:extend{
     -- Al menos los Kobos y el Boox Palma
     -- Podemos cambiar los márgenes
     -- Para verlo en detalle, es mejor no poner ningún estilo en las barras de progreso
-    MARGIN_TOP = Screen:scaleBySize(11),
-    MARGIN_BOTTOM = Screen:scaleBySize(11),
+    MARGIN_TOP = Screen:scaleBySize(9),
+    MARGIN_BOTTOM = Screen:scaleBySize(9),
     show_top_bar = true,
 }
 
@@ -262,11 +262,9 @@ function TopBar:onReaderReady()
     }
 
 
-
-
     self.progress_bar  = ProgressWidget:new{
         width = 200,
-        height = 20,
+        height = 5,
         percentage = 0,
         tick_width = Screen:scaleBySize(4),
         ticks = nil, -- ticks will be populated in self:updateFooterText
@@ -286,7 +284,7 @@ function TopBar:onReaderReady()
 
     self.progress_chapter_bar = ProgressWidget:new{
         width = 200,
-        height = 20,
+        height = 5,
         percentage = 0,
         tick_width = Screen:scaleBySize(4),
         ticks = nil, -- ticks will be populated in self:updateFooterText
@@ -383,7 +381,7 @@ function TopBar:onSwitchTopBar()
     if G_reader_settings:isTrue("show_top_bar") then
         if self.show_top_bar then
             self.show_top_bar = false
-            TopBar.MARGIN_TOP = Screen:scaleBySize(11)
+            TopBar.MARGIN_TOP = Screen:scaleBySize(9)
         elseif self.is_enabled then
             self.is_enabled = false
         else
@@ -467,8 +465,8 @@ function TopBar:toggleBar()
 --
         self.chapter_text:setText(chapter)
         self.progress_chapter_text:setText(self.view.footer:getChapterProgress(false))
-        -- self.progress_bar:updateStyle(false, nil)
-        -- self.progress_chapter_bar:updateStyle(false, nil)
+        self.progress_bar:updateStyle(false, nil)
+        self.progress_chapter_bar:updateStyle(false, nil)
         self.progress_bar.last = self.pages or self.ui.document:getPageCount()
         -- self.progress_bar.ticks = self.ui.toc:getTocTicksFlattened()
         self.progress_bar2.last = self.pages or self.ui.document:getPageCount()
