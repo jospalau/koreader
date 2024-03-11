@@ -103,9 +103,11 @@ local TopBar = WidgetContainer:extend{
     initial_read_month = getReadThisMonth(),
     MARGIN_SIDES = Screen:scaleBySize(10),
     -- El margen de las pantallas, flushed o recessed no es perfecto. La pantalla suele empezar un poco más arriba en casi todos los dispositivos estando un poco por debajo del bezel
-    -- Lo corregimos así
+    -- Al menos los Kobos y el Boox Palma
+    -- Podemos cambiar los márgenes
+    -- Para verlo en detalle, es mejor no poner ningún estilo en las barras de progreso
     MARGIN_TOP = Screen:scaleBySize(11),
-    MARGIN_BOTTOM = Screen:scaleBySize(10),
+    MARGIN_BOTTOM = Screen:scaleBySize(11),
     show_top_bar = true,
 }
 
@@ -447,10 +449,12 @@ function TopBar:toggleBar()
         local chapter = TextWidget.PTF_BOLD_START .. self.ui.toc:getTocTitleByPage(self.view.footer.pageno) .. TextWidget.PTF_BOLD_END
         self.progress_bar2.width = Screen:getSize().w
         self.progress_bar2.height = 1
-        -- progress bars size slightly bigger than the font size
-        self.progress_bar.height = Font:getFace("myfont4").size + 10
-        self.progress_chapter_bar.height = Font:getFace("myfont4").size + 10
+        -- -- progress bars size slightly bigger than the font size
+        -- self.progress_bar.height = Font:getFace("myfont4").size + 10
+        -- self.progress_chapter_bar.height = Font:getFace("myfont4").size + 10
 
+        self.progress_bar.height = self.title_text:getSize().h
+        self.progress_chapter_bar.height = self.title_text:getSize().h
         if Device:isAndroid() then
             self.progress_bar.width = 150
             self.progress_chapter_bar.width = 150
@@ -463,8 +467,8 @@ function TopBar:toggleBar()
 --
         self.chapter_text:setText(chapter)
         self.progress_chapter_text:setText(self.view.footer:getChapterProgress(false))
-        self.progress_bar:updateStyle(false, nil)
-        self.progress_chapter_bar:updateStyle(false, nil)
+        -- self.progress_bar:updateStyle(false, nil)
+        -- self.progress_chapter_bar:updateStyle(false, nil)
         self.progress_bar.last = self.pages or self.ui.document:getPageCount()
         -- self.progress_bar.ticks = self.ui.toc:getTocTicksFlattened()
         self.progress_bar2.last = self.pages or self.ui.document:getPageCount()

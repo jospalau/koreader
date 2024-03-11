@@ -103,10 +103,11 @@ local DoubleBar = WidgetContainer:extend{
     initial_read_month = getReadThisMonth(),
     MARGIN_SIDES = Screen:scaleBySize(10),
     -- El margen de las pantallas, flushed o recessed no es perfecto. La pantalla suele empezar un poco más arriba en casi todos los dispositivos estando un poco por debajo del bezel
-    -- Lo corregimos así
+    -- Al menos los Kobos y el Boox Palma
+    -- Podemos cambiar los márgenes
     -- Para verlo en detalle, es mejor no poner ningún estilo en las barras de progreso
     MARGIN_TOP = Screen:scaleBySize(11),
-    MARGIN_BOTTOM = Screen:scaleBySize(11), --
+    MARGIN_BOTTOM = Screen:scaleBySize(11),
     show_top_bar = true,
 }
 
