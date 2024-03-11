@@ -103,11 +103,12 @@ local TopBar = WidgetContainer:extend{
     initial_read_month = getReadThisMonth(),
     MARGIN_SIDES =  Screen:scaleBySize(10),
     MARGIN_TOPBOTTOM =  Screen:scaleBySize(14),
+    show_top_bar = true,
 }
 
 function TopBar:init()
     if Device:isAndroid() then
-        self.MARGIN_SIDES =  Screen:scaleBySize(25)
+        self.MARGIN_SIDES =  Screen:scaleBySize(30)
     end
     if TopBar.preserved_start_session_time then
         self.start_session_time = TopBar.preserved_start_session_time
@@ -367,8 +368,18 @@ end
 
 function TopBar:onSwitchTopBar()
     if G_reader_settings:isTrue("show_time") then
-        self.is_enabled = not self.is_enabled
+        if self.show_top_bar then
+            self.show_top_bar = false
+        elseif self.is_enabled then
+            self.is_enabled = false
+        else
+            self.is_enabled = true
+            self.show_top_bar = true
+        end
         self:toggleBar()
+
+        -- self.is_enabled = not self.is_enabled
+        -- self:toggleBar()
         UIManager:setDirty("all", "partial")
     end
 end
@@ -468,7 +479,9 @@ end
 
 function TopBar:paintTo(bb, x, y)
         -- Top left
-        self[9]:paintTo(bb, x , y + 15)
+        if self.show_top_bar then
+            self[9]:paintTo(bb, x , y + 15)
+        end
         self[1]:paintTo(bb, x + TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOPBOTTOM)
 
         -- Top center
@@ -479,11 +492,16 @@ function TopBar:paintTo(bb, x, y)
 
         -- Top right
         -- Commented the text, using progress bar
-        self[2].dimen = Geom:new{ w = self[2][1]:getSize().w, self[2][1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
-        self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOPBOTTOM)
 
-        -- self[7]:paintTo(bb,  x + Screen:getWidth()/2 - self[3][1][1]:getSize().w/2 + self[3][1]:getSize().w + 20, y + TopBar.MARGIN_TOPBOTTOM)
-        -- self[7]:paintTo(bb, x + Screen:getWidth() - self[7][1][1]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOPBOTTOM)
+        if self.show_top_bar then
+            self[2].dimen = Geom:new{ w = self[2][1]:getSize().w, self[2][1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
+            self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOPBOTTOM)
+        end
+
+        if not self.show_top_bar then
+            -- self[7]:paintTo(bb,  x + Screen:getWidth()/2 - self[7][1][1]:getSize().w/2 + self[3][1]:getSize().w + 20, y + TopBar.MARGIN_TOPBOTTOM)
+            self[7]:paintTo(bb, x + Screen:getWidth() - self[7][1][1]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOPBOTTOM)
+        end
 
 
 

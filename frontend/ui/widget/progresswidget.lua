@@ -177,7 +177,7 @@ function ProgressWidget:paintTo(bb, x, y)
 
         if self.altbar then
             bb:paintRect(fill_x,
-                        fill_y - 3, -- position line
+                        fill_y - 4, -- position line
                         math.ceil(fill_width * self.percentage),
                         4,  --30, -- size line
                         self.bordercolor)
@@ -210,9 +210,9 @@ function ProgressWidget:paintTo(bb, x, y)
 
             if self.altbar then
                 bb:paintRect(x + self.margin_h + self.bordersize + tick_x,
-                            fill_y - 8, -- position ticks
+                            fill_y - 6, -- position ticks
                             self.tick_width,
-                            15,-- size ticks
+                            8,-- size ticks
                             self.bordercolor) --self.bordercolor With Blitbuffer.COLOR_WHITE is other effect.
             else
                 bb:paintRect(x + self.margin_h + self.bordersize + tick_x,
