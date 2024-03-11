@@ -446,18 +446,17 @@ function TopBar:toggleBar()
 
         local chapter = TextWidget.PTF_BOLD_START .. self.ui.toc:getTocTitleByPage(self.view.footer.pageno) .. TextWidget.PTF_BOLD_END
         self.progress_bar2.width = Screen:getSize().w
+        self.progress_bar2.height = 1
+        -- progress bars size slightly bigger than the font size
+        self.progress_bar.height = Font:getFace("myfont4").size + 10
+        self.progress_chapter_bar.height = Font:getFace("myfont4").size + 10
+
         if Device:isAndroid() then
             self.progress_bar.width = 150
             self.progress_chapter_bar.width = 150
-            self.progress_bar.height = 20
-            self.progress_bar2.height = 20
-            self.progress_chapter_bar.height = 20
         else
             self.progress_bar.width = 250
             self.progress_chapter_bar.width = 250
-            self.progress_bar.height = 30
-            self.progress_bar2.height = 1
-            self.progress_chapter_bar.height = 30
         end
 
 
@@ -470,6 +469,11 @@ function TopBar:toggleBar()
         -- self.progress_bar.ticks = self.ui.toc:getTocTicksFlattened()
         self.progress_bar2.last = self.pages or self.ui.document:getPageCount()
         self.progress_bar2.ticks = self.ui.toc:getTocTicksFlattened()
+        self.progress_bar:setPercentage(self.view.footer.pageno / self.view.footer.pages)
+        self.progress_bar2:setPercentage(self.view.footer.pageno / self.view.footer.pages)
+        self.progress_chapter_bar:setPercentage(self.view.footer:getChapterProgress(true))
+        -- self.progress_bar.height = self.title_text:getSize().h
+        -- self.progress_chapter_bar.height = self.title_text:getSize().h
     else
         self.session_time_text:setText("")
         self.progress_text:setText("")
@@ -485,9 +489,6 @@ end
 
 function TopBar:onPageUpdate()
     self:toggleBar()
-    self.progress_bar:setPercentage(self.view.footer.pageno / self.view.footer.pages)
-    self.progress_bar2:setPercentage(self.view.footer.pageno / self.view.footer.pages)
-    self.progress_chapter_bar:setPercentage(self.view.footer:getChapterProgress(true))
 end
 
 function TopBar:paintTo(bb, x, y)
@@ -506,15 +507,18 @@ function TopBar:paintTo(bb, x, y)
 
         -- Top right
         -- Commented the text, using progress bar
-
-        if self.show_top_bar then
-            self[2].dimen = Geom:new{ w = self[2][1]:getSize().w, self[2][1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
-            self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
+        if not self.show_top_bar then
+            self[7]:paintTo(bb, x + Screen:getWidth() - self[7][1][1]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
         end
 
+        self[2].dimen = Geom:new{ w = self[2][1]:getSize().w, self[2][1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
+
+        -- Si no se muestra la barra de progreso de arriba, se muestra la de arriba a la derecha
+        -- Y si se muestra la de arriba a la derecha, queremos mover el texto unos pocos píxeles a la izquierda
         if not self.show_top_bar then
-            -- self[7]:paintTo(bb,  x + Screen:getWidth()/2 - self[7][1][1]:getSize().w/2 + self[3][1]:getSize().w + 20, y + TopBar.MARGIN_TOP)
-            self[7]:paintTo(bb, x + Screen:getWidth() - self[7][1][1]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
+            self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN_SIDES - 20, y + TopBar.MARGIN_TOP)
+        else
+            self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
         end
 
 
@@ -529,11 +533,14 @@ function TopBar:paintTo(bb, x, y)
         self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5][1][1]:getSize().w/2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
         -- Bottom right
-        -- self[6][1].dimen.w = self[6][1][1]:getSize().w
-        -- self[6]:paintTo(bb, x + Screen:getWidth() - self[6][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
-
         -- Use progress bar
         self[8]:paintTo(bb, x + Screen:getWidth() - self[8][1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+        self[6][1].dimen.w = self[6][1][1]:getSize().w
+
+        -- La barra de progreso de abajo a la derecha se muestra siempre y queremos mover el texto unos pocos píxeles a la izquierda
+        self[6]:paintTo(bb, x + Screen:getWidth() - self[6][1]:getSize().w - TopBar.MARGIN_SIDES - 20, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+
+
 
 
         -- text_container2:paintTo(bb, x + Screen:getWidth() - text_container2:getSize().w - 20, y + 20)
