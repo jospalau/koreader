@@ -352,7 +352,7 @@ end
 function TopBar:onToggleShowTopBar()
     local show_top_bar = G_reader_settings:isTrue("show_top_bar")
     G_reader_settings:saveSetting("show_top_bar", not show_top_bar)
-    self.is_enabled = not show_top_bar
+    TopBar.is_enabled = not show_top_bar
     self:toggleBar()
 end
 
@@ -382,16 +382,16 @@ function TopBar:onSwitchTopBar()
         if self.show_top_bar then
             self.show_top_bar = false
             TopBar.MARGIN_TOP = Screen:scaleBySize(9)
-        elseif self.is_enabled then
-            self.is_enabled = false
+        elseif TopBar.is_enabled then
+            TopBar.is_enabled = false
         else
-            self.is_enabled = true
+            TopBar.is_enabled = true
             self.show_top_bar = true
             TopBar.MARGIN_TOP = Screen:scaleBySize(14)
         end
         self:toggleBar()
 
-        -- self.is_enabled = not self.is_enabled
+        -- TopBar.is_enabled = not TopBar.is_enabled
         -- self:toggleBar()
         UIManager:setDirty("all", "partial")
     end
@@ -399,7 +399,7 @@ end
 
 
 function TopBar:toggleBar()
-    if self.is_enabled then
+    if TopBar.is_enabled then
         local now_t = os.date("*t")
         local daysdiff = now_t.day - os.date("*t",self.start_session_time).day
         if daysdiff > 0 then
@@ -451,8 +451,12 @@ function TopBar:toggleBar()
         -- self.progress_bar.height = Font:getFace("myfont4").size + 10
         -- self.progress_chapter_bar.height = Font:getFace("myfont4").size + 10
 
-        self.progress_bar.height = self.title_text:getSize().h
-        self.progress_chapter_bar.height = self.title_text:getSize().h
+        -- self.progress_bar.height = self.title_text:getSize().h
+        -- self.progress_chapter_bar.height = self.title_text:getSize().h
+
+        self.progress_bar.height = 20
+        self.progress_chapter_bar.height = 20
+
         if Device:isAndroid() then
             self.progress_bar.width = 150
             self.progress_chapter_bar.width = 150
@@ -515,13 +519,17 @@ function TopBar:paintTo(bb, x, y)
 
         self[2].dimen = Geom:new{ w = self[2][1]:getSize().w, self[2][1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
 
-        -- Si no se muestra la barra de progreso de arriba, se muestra la de arriba a la derecha
-        -- Y si se muestra la de arriba a la derecha, queremos mover el texto unos pocos píxeles a la izquierda
-        if not self.show_top_bar then
-            self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN_SIDES - 20, y + TopBar.MARGIN_TOP)
-        else
+        if self.show_top_bar then
             self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
         end
+
+        -- Si no se muestra la barra de progreso de arriba, se muestra la de arriba a la derecha
+        -- Y si se muestra la de arriba a la derecha, queremos mover el texto unos pocos píxeles a la izquierda
+        -- if not self.show_top_bar then
+        --     self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN_SIDES - 20, y + TopBar.MARGIN_TOP)
+        -- else
+        --     self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
+        -- end
 
 
 
@@ -537,13 +545,10 @@ function TopBar:paintTo(bb, x, y)
         -- Bottom right
         -- Use progress bar
         self[8]:paintTo(bb, x + Screen:getWidth() - self[8][1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
-        self[6][1].dimen.w = self[6][1][1]:getSize().w
 
-        -- La barra de progreso de abajo a la derecha se muestra siempre y queremos mover el texto unos pocos píxeles a la izquierda
-        self[6]:paintTo(bb, x + Screen:getWidth() - self[6][1]:getSize().w - TopBar.MARGIN_SIDES - 20, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
-
-
-
+        -- self[6][1].dimen.w = self[6][1][1]:getSize().w
+        -- -- La barra de progreso de abajo a la derecha se muestra siempre y queremos mover el texto unos pocos píxeles a la izquierda
+        -- self[6]:paintTo(bb, x + Screen:getWidth() - self[6][1]:getSize().w - TopBar.MARGIN_SIDES - 20, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
         -- text_container2:paintTo(bb, x + Screen:getWidth() - text_container2:getSize().w - 20, y + 20)
         -- text_container2:paintTo(bb, x + Screen:getWidth()/2 - text_container2:getSize().w/2, y + 20)

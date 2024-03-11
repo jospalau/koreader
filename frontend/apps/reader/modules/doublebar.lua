@@ -403,6 +403,7 @@ function DoubleBar:toggleBar()
         self.progress_chapter_text:setText(self.view.footer:getChapterProgress(false))
         self.progress_bar:updateStyle(false, nil)
         self.progress_bar_chapters:updateStyle(false, nil)
+
         -- self.progress_bar.last = self.pages or self.ui.document:getPageCount()
         -- self.progress_bar.ticks = self.ui.toc:getTocTicksFlattened()
         self.progress_bar:setPercentage(self.view.footer.pageno / self.view.footer.pages)
@@ -426,26 +427,26 @@ end
 function DoubleBar:paintTo(bb, x, y)
         -- Top left with bar first
         self[9]:paintTo(bb, x, y + DoubleBar.MARGIN_TOP)
-        self[1]:paintTo(bb, x + DoubleBar.MARGIN_SIDES, y + DoubleBar.MARGIN_TOP)
+        -- self[1]:paintTo(bb, x + DoubleBar.MARGIN_SIDES, y + DoubleBar.MARGIN_TOP)
 
         -- Top center
         self[3]:paintTo(bb, x + Screen:getWidth()/2 - self[3][1]:getSize().w/2, y + DoubleBar.MARGIN_TOP)
 
         -- Top right
-        self[2].dimen = Geom:new{ w = self[2][1]:getSize().w, self[2][1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
-        self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - DoubleBar.MARGIN_SIDES, y + DoubleBar.MARGIN_TOP)
+        -- self[2].dimen = Geom:new{ w = self[2][1]:getSize().w, self[2][1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
+        -- self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - DoubleBar.MARGIN_SIDES, y + DoubleBar.MARGIN_TOP)
 
         -- Bottom left with bar first
         self[10]:paintTo(bb, x, Screen:getHeight() - DoubleBar.MARGIN_TOP)
-        self[4][1].dimen.w = self[4][1][1]:getSize().w
-        self[4]:paintTo(bb, x + DoubleBar.MARGIN_SIDES, Screen:getHeight() - DoubleBar.MARGIN_BOTTOM)
+        -- self[4][1].dimen.w = self[4][1][1]:getSize().w
+        -- self[4]:paintTo(bb, x + DoubleBar.MARGIN_SIDES, Screen:getHeight() - DoubleBar.MARGIN_BOTTOM)
 
         -- Bottom center
         self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5][1][1]:getSize().w/2, Screen:getHeight() - DoubleBar.MARGIN_BOTTOM)
 
         -- Bottom right
-        self[6][1].dimen.w = self[6][1][1]:getSize().w
-        self[6]:paintTo(bb, x + Screen:getWidth() - self[6][1]:getSize().w - DoubleBar.MARGIN_SIDES, Screen:getHeight() - DoubleBar.MARGIN_BOTTOM)
+        -- self[6][1].dimen.w = self[6][1][1]:getSize().w
+        -- self[6]:paintTo(bb, x + Screen:getWidth() - self[6][1]:getSize().w - DoubleBar.MARGIN_SIDES, Screen:getHeight() - DoubleBar.MARGIN_BOTTOM)
 
 end
 
