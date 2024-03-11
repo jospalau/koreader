@@ -112,6 +112,9 @@ local TopBar = WidgetContainer:extend{
 }
 
 function TopBar:init()
+    -- La inicialización del objeto ocurre una única vez pero el método init ocurre cada vez que abrimos el documento
+    TopBar.is_enabled = G_reader_settings:isTrue("show_top_bar")
+    TopBar.show_top_bar = true
     if TopBar.preserved_start_session_time then
         self.start_session_time = TopBar.preserved_start_session_time
         TopBar.preserved_start_session_time = nil
@@ -136,8 +139,8 @@ function TopBar:onReaderReady()
         TopBar.MARGIN_SIDES =  Screen:scaleBySize(30)
     end
 
-    if self.show_top_bar == true then
-        TopBar.MARGIN_TOP = Screen:scaleBySize(14)
+    if TopBar.show_top_bar == true then
+        TopBar.MARGIN_TOP = Screen:scaleBySize(18)
     end
 
     local duration_raw =  math.floor((os.time() - self.start_session_time))
@@ -379,15 +382,15 @@ end
 
 function TopBar:onSwitchTopBar()
     if G_reader_settings:isTrue("show_top_bar") then
-        if self.show_top_bar then
-            self.show_top_bar = false
+        if TopBar.show_top_bar then
+            TopBar.show_top_bar = false
             TopBar.MARGIN_TOP = Screen:scaleBySize(9)
         elseif TopBar.is_enabled then
             TopBar.is_enabled = false
         else
             TopBar.is_enabled = true
-            self.show_top_bar = true
-            TopBar.MARGIN_TOP = Screen:scaleBySize(14)
+            TopBar.show_top_bar = true
+            TopBar.MARGIN_TOP = Screen:scaleBySize(18)
         end
         self:toggleBar()
 
@@ -499,7 +502,7 @@ end
 
 function TopBar:paintTo(bb, x, y)
         -- Top left
-        if self.show_top_bar then
+        if TopBar.show_top_bar then
             self[9]:paintTo(bb, x, y + 15)
             -- self[9]:paintTo(bb, x, Screen:getHeight() - 15)
         end
@@ -513,19 +516,19 @@ function TopBar:paintTo(bb, x, y)
 
         -- Top right
         -- Commented the text, using progress bar
-        if not self.show_top_bar then
+        if not TopBar.show_top_bar then
             self[7]:paintTo(bb, x + Screen:getWidth() - self[7][1][1]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
         end
 
         self[2].dimen = Geom:new{ w = self[2][1]:getSize().w, self[2][1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
 
-        if self.show_top_bar then
+        if TopBar.show_top_bar then
             self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
         end
 
         -- Si no se muestra la barra de progreso de arriba, se muestra la de arriba a la derecha
         -- Y si se muestra la de arriba a la derecha, queremos mover el texto unos pocos píxeles a la izquierda
-        -- if not self.show_top_bar then
+        -- if not TopBar.show_top_bar then
         --     self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN_SIDES - 20, y + TopBar.MARGIN_TOP)
         -- else
         --     self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)

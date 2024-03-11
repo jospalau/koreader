@@ -112,6 +112,7 @@ local DoubleBar = WidgetContainer:extend{
 }
 
 function DoubleBar:init()
+    DoubleBar.is_enabled = G_reader_settings:isTrue("show_double_bar")
     if DoubleBar.preserved_start_session_time then
         self.start_session_time = DoubleBar.preserved_start_session_time
         DoubleBar.preserved_start_session_time = nil
@@ -307,7 +308,7 @@ end
 function DoubleBar:onToggleShowDoubleBar()
     local show_double_bar = G_reader_settings:isTrue("show_double_bar")
     G_reader_settings:saveSetting("show_double_bar", not show_double_bar)
-    self.is_enabled = not show_double_bar
+    DoubleBar.is_enabled = not show_double_bar
     self:toggleBar()
 end
 
@@ -334,7 +335,7 @@ end
 
 function DoubleBar:onSwitchTopBar()
     if G_reader_settings:isTrue("show_double_bar") then
-        self.is_enabled = not self.is_enabled
+        DoubleBar.is_enabled = not DoubleBar.is_enabled
         self:toggleBar()
         UIManager:setDirty("all", "partial")
     end
@@ -342,7 +343,7 @@ end
 
 
 function DoubleBar:toggleBar()
-    if self.is_enabled then
+    if DoubleBar.is_enabled then
         local now_t = os.date("*t")
         local daysdiff = now_t.day - os.date("*t",self.start_session_time).day
         if daysdiff > 0 then
