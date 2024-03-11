@@ -101,15 +101,15 @@ local TopBar = WidgetContainer:extend{
     start_session_time = os.time(),
     initial_read_today = getReadToday(),
     initial_read_month = getReadThisMonth(),
-    MARGIN_SIDES =  Screen:scaleBySize(10),
-    MARGIN_TOPBOTTOM =  Screen:scaleBySize(14),
+    MARGIN_SIDES = Screen:scaleBySize(10),
+    -- El margen de las pantallas, flushed o recessed no es perfecto. La pantalla suele empezar un poco más arriba en casi todos los dispositivos estando un poco por debajo del bezel
+    -- Lo corregimos así
+    MARGIN_TOP = Screen:scaleBySize(11),
+    MARGIN_BOTTOM = Screen:scaleBySize(10),
     show_top_bar = true,
 }
 
 function TopBar:init()
-    if Device:isAndroid() then
-        self.MARGIN_SIDES =  Screen:scaleBySize(30)
-    end
     if TopBar.preserved_start_session_time then
         self.start_session_time = TopBar.preserved_start_session_time
         TopBar.preserved_start_session_time = nil
@@ -128,6 +128,15 @@ function TopBar:init()
 end
 
 function TopBar:onReaderReady()
+
+
+    if Device:isAndroid() then
+        TopBar.MARGIN_SIDES =  Screen:scaleBySize(30)
+    end
+
+    if self.show_top_bar == true then
+        TopBar.MARGIN_TOP = Screen:scaleBySize(14)
+    end
 
     local duration_raw =  math.floor((os.time() - self.start_session_time))
 
@@ -372,11 +381,13 @@ function TopBar:onSwitchTopBar()
     if G_reader_settings:isTrue("show_time") then
         if self.show_top_bar then
             self.show_top_bar = false
+            TopBar.MARGIN_TOP = Screen:scaleBySize(11)
         elseif self.is_enabled then
             self.is_enabled = false
         else
             self.is_enabled = true
             self.show_top_bar = true
+            TopBar.MARGIN_TOP = Screen:scaleBySize(14)
         end
         self:toggleBar()
 
@@ -485,11 +496,11 @@ function TopBar:paintTo(bb, x, y)
             self[9]:paintTo(bb, x, y + 15)
             -- self[9]:paintTo(bb, x, Screen:getHeight() - 15)
         end
-        self[1]:paintTo(bb, x + TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOPBOTTOM)
+        self[1]:paintTo(bb, x + TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
 
         -- Top center
 
-        self[3]:paintTo(bb, x + Screen:getWidth()/2 - self[3][1]:getSize().w/2, y + TopBar.MARGIN_TOPBOTTOM)
+        self[3]:paintTo(bb, x + Screen:getWidth()/2 - self[3][1]:getSize().w/2, y + TopBar.MARGIN_TOP)
         -- self[3]:paintTo(bb, x + Screen:getWidth()/2, y + 20)
 
 
@@ -498,12 +509,12 @@ function TopBar:paintTo(bb, x, y)
 
         if self.show_top_bar then
             self[2].dimen = Geom:new{ w = self[2][1]:getSize().w, self[2][1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
-            self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOPBOTTOM)
+            self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
         end
 
         if not self.show_top_bar then
-            -- self[7]:paintTo(bb,  x + Screen:getWidth()/2 - self[7][1][1]:getSize().w/2 + self[3][1]:getSize().w + 20, y + TopBar.MARGIN_TOPBOTTOM)
-            self[7]:paintTo(bb, x + Screen:getWidth() - self[7][1][1]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOPBOTTOM)
+            -- self[7]:paintTo(bb,  x + Screen:getWidth()/2 - self[7][1][1]:getSize().w/2 + self[3][1]:getSize().w + 20, y + TopBar.MARGIN_TOP)
+            self[7]:paintTo(bb, x + Screen:getWidth() - self[7][1][1]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
         end
 
 
@@ -512,17 +523,17 @@ function TopBar:paintTo(bb, x, y)
         -- It is better to position them without the dimensions simply passing x and y to the paintTo method
         -- Bottom left
         self[4][1].dimen.w = self[4][1][1]:getSize().w
-        self[4]:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_TOPBOTTOM)
+        self[4]:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
         -- Bottom center
-        self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5][1][1]:getSize().w/2, Screen:getHeight() - TopBar.MARGIN_TOPBOTTOM)
+        self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5][1][1]:getSize().w/2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
         -- Bottom right
         -- self[6][1].dimen.w = self[6][1][1]:getSize().w
-        -- self[6]:paintTo(bb, x + Screen:getWidth() - self[6][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_TOPBOTTOM)
+        -- self[6]:paintTo(bb, x + Screen:getWidth() - self[6][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
         -- Use progress bar
-        self[8]:paintTo(bb, x + Screen:getWidth() - self[8][1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_TOPBOTTOM)
+        self[8]:paintTo(bb, x + Screen:getWidth() - self[8][1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
 
         -- text_container2:paintTo(bb, x + Screen:getWidth() - text_container2:getSize().w - 20, y + 20)
