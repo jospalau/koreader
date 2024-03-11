@@ -62,6 +62,8 @@ local ProgressWidget = Widget:extend{
     initial_pos_marker = false, -- overlay a marker at the initial percentage position
     initial_percentage = nil,
     altbar = nil,
+    altbar_position = nil,
+    altbar_ticks_height = nil,
 }
 
 function ProgressWidget:init()
@@ -177,7 +179,7 @@ function ProgressWidget:paintTo(bb, x, y)
 
         if self.altbar then
             bb:paintRect(fill_x,
-                        fill_y - 4, -- position line
+                        fill_y - self.altbar_position, -- position line
                         math.ceil(fill_width * self.percentage),
                         4,  --30, -- size line
                         self.bordercolor)
@@ -210,9 +212,9 @@ function ProgressWidget:paintTo(bb, x, y)
 
             if self.altbar then
                 bb:paintRect(x + self.margin_h + self.bordersize + tick_x,
-                            fill_y - 6, -- position ticks
+                            fill_y - (self.altbar_ticks_height/2 + self.altbar_position/2), -- position ticks
                             self.tick_width,
-                            8,-- size ticks
+                            self.altbar_ticks_height,-- size ticks
                             self.bordercolor) --self.bordercolor With Blitbuffer.COLOR_WHITE is other effect.
             else
                 bb:paintRect(x + self.margin_h + self.bordersize + tick_x,

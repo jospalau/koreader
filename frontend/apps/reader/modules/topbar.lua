@@ -303,6 +303,8 @@ function TopBar:onReaderReady()
         ticks = nil, -- ticks will be populated in self:updateFooterText
         last = nil, -- last will be initialized in self:updateFooterText
         altbar = true,
+        altbar_position = 4,
+        altbar_ticks_height = 12,
         bordersize = 0,
         radius = 0,
     }
