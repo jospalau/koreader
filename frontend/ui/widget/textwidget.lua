@@ -404,13 +404,29 @@ function TextWidget:paintTo(bb, x, y)
         local face = self.face.getFallbackFont(xglyph.font_num) -- callback (not a method)
         local bolder = self._ptf_char_is_bold and self._ptf_char_is_bold[xglyph.text_index] or false
         local glyph = RenderText:getGlyphByIndex(face, xglyph.glyph, self.bold, bolder)
-        bb:colorblitFrom(
-            glyph.bb,
-            x + pen_x + glyph.l + xglyph.x_offset,
-            y + baseline - glyph.t - xglyph.y_offset,
-            0, 0,
-            glyph.bb:getWidth(), glyph.bb:getHeight(),
-            self.fgcolor)
+        if self.invert then
+            -- It works like this but text needs to be reversed so it can be oriented
+            -- local alt_bb = glyph.bb:rotatedCopy(90):rotatedCopy(180)
+            local alt_bb = glyph.bb:rotatedCopy(90)
+            -- if xglyph == "" then
+            --     local alt_bb = glyph.bb:rotatedCopy(90)
+            -- end
+            bb:colorblitFrom(
+                alt_bb,
+                y + baseline - glyph.t - xglyph.y_offset,
+                x + pen_x + glyph.l + xglyph.x_offset,
+                0, 0,
+                glyph.bb:getHeight(), glyph.bb:getWidth(),
+                self.fgcolor)
+        else
+            bb:colorblitFrom(
+                glyph.bb,
+                x + pen_x + glyph.l + xglyph.x_offset,
+                y + baseline - glyph.t - xglyph.y_offset,
+                0, 0,
+                glyph.bb:getWidth(), glyph.bb:getHeight(),
+                self.fgcolor)
+        end
         pen_x = pen_x + xglyph.x_advance -- use Harfbuzz advance
     end
 end
