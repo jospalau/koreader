@@ -62,7 +62,7 @@ local ProgressWidget = Widget:extend{
     initial_pos_marker = false, -- overlay a marker at the initial percentage position
     initial_percentage = nil,
     altbar = nil,
-    altbar_line_thickness = nil,
+    altbar_position = nil,
     altbar_ticks_height = nil,
 }
 
@@ -128,8 +128,8 @@ function ProgressWidget:paintTo(bb, x, y)
 
     if self.radius == 0 then
         -- If we don't have rounded borders, we can start with a simple border colored rectangle.
-        if self.altbar then -- Just for Android devices, thick to be 1
-            bb:paintRect(x, y, my_size.w, 1, self.bordercolor) -- For all devices, thick to be 0
+        if self.altbar then -- Just for Android devices
+            bb:paintRect(x, y, my_size.w, 1, self.bordercolor)
         else
             bb:paintRect(x, y, my_size.w, my_size.h, self.bordercolor)
         end
@@ -179,9 +179,9 @@ function ProgressWidget:paintTo(bb, x, y)
 
         if self.altbar then
             bb:paintRect(fill_x,
-                        y - self.tick_width, -- position line
+                        fill_y - self.altbar_position, -- position line
                         math.ceil(fill_width * self.percentage),
-                        self.altbar_line_thickness,  --30, -- size line
+                        4,  --30, -- size line
                         self.bordercolor)
         else
             bb:paintRect(fill_x,
@@ -212,10 +212,10 @@ function ProgressWidget:paintTo(bb, x, y)
 
             if self.altbar then
                 bb:paintRect(x + self.margin_h + self.bordersize + tick_x,
-                            y - self.altbar_ticks_height/2, -- position ticks
+                            fill_y - (self.altbar_ticks_height/2 + self.altbar_position/2), -- position ticks
                             self.tick_width,
                             self.altbar_ticks_height,-- size ticks
-                            self.bordercolor ) -- Blitbuffer.COLOR_WHITE en lugar de self.bordercolor is other effect.
+                            self.bordercolor) --self.bordercolor With Blitbuffer.COLOR_WHITE is other effect.
             else
                 bb:paintRect(x + self.margin_h + self.bordersize + tick_x,
                             fill_y,
