@@ -24,7 +24,6 @@ local VerticalGroup = require("ui/widget/verticalgroup")
 local SQ3 = require("lua-ljsqlite3/init")
 local ProgressWidget = require("ui/widget/progresswidget")
 local Device = require("device")
-local LineWidget = require("ui/widget/linewidget")
 local Size = require("ui/size")
 
 getReadToday = function ()
@@ -170,7 +169,7 @@ function TopBar:onReaderReady()
 
     self.times_text = TextWidget:new{
         text =  "",
-        face = Font:getFace("myfont4", 8),
+        face = Font:getFace("myfont4", 10),
         fgcolor = Blitbuffer.COLOR_BLACK,
         invert = true,
     }
