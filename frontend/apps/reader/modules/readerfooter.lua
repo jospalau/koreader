@@ -2152,7 +2152,11 @@ end
 
 -- In the United States and Great Britain, the point is approximately one-seventy-second of an inch (.351 mm), or one-twelfth of a pica and is called a pica point
 -- In Europe, the point is a little bigger (.376 mm) and is called a Didot point
--- Esto calcula didot points, 1pt = 0.93575 didot point
+--  1pt = 0.93575 Didot point
+
+-- The official size is 1 Didot point = 0.3759mm.
+-- Convierte a  mm y multiplica por 0.3759mm (1000/2660) para pasar a Didot points
+
 local function convertSizeTo(px, format)
     local format_factor = 1 -- we are defaulting on mm
     -- If we remove (2660 / 1000) the result are in mm
