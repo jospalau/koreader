@@ -461,7 +461,7 @@ function TopBar:toggleBar()
         self.title_text:setText(title)
 
         local chapter = TextWidget.PTF_BOLD_START .. self.ui.toc:getTocTitleByPage(self.view.footer.pageno) .. TextWidget.PTF_BOLD_END
-        self.progress_bar2.width = Screen:getSize().w
+        self.progress_bar2.width = Screen:getSize().w - 2 * TopBar.MARGIN_SIDES
         self.progress_bar2.height = 20
         -- -- progress bars size slightly bigger than the font size
         -- self.progress_bar.height = Font:getFace("myfont4").size + 10
@@ -498,9 +498,12 @@ function TopBar:toggleBar()
 
 
         -- self.progress_bar2:updateStyle(false, 5)
+        self.progress_bar2.bgcolor = Blitbuffer.COLOR_DARK_GRAY
+        -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_WHITE
+        self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
 
-        -- self.progress_bar2.bgcolor = Blitbuffer.COLOR_DARK_GRAY
-        -- self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
+
+
 
 
         -- -- This profile to go with the line widget
@@ -511,10 +514,7 @@ function TopBar:toggleBar()
 
 
 
-        self.progress_bar2:updateStyle(false, 5)
-        self.progress_bar2.bgcolor = Blitbuffer.COLOR_DARK_GRAY
-        self.progress_bar2.bordercolor = Blitbuffer.COLOR_WHITE
-        self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
+
 
 
 
@@ -577,7 +577,7 @@ end
 function TopBar:paintTo(bb, x, y)
         -- Top left
         if TopBar.show_top_bar then
-            self[9]:paintTo(bb, x, y + 15)
+            self[9]:paintTo(bb, x + TopBar.MARGIN_SIDES, y + 15)
             -- self.separator_line:paintTo(bb, x, y + 15)
             -- self[9]:paintTo(bb, x, Screen:getHeight() - 15)
         end
