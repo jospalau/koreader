@@ -2149,22 +2149,28 @@ function ReaderFooter:onGetStyles()
 end
 
 
+
+-- In the United States and Great Britain, the point is approximately one-seventy-second of an inch (.351 mm), or one-twelfth of a pica and is called a pica point
+-- In Europe, the point is a little bigger (.376 mm) and is called a Didot point
+-- Esto calcula didot points, 1pt = 0.93575 didot point
 local function convertSizeTo(px, format)
     local format_factor = 1 -- we are defaulting on mm
-
+    -- If we remove (2660 / 1000) the result are in mm
     if format == "pt" then
         format_factor =  format_factor * (2660 / 1000) -- see https://www.wikiwand.com/en/Metric_typographic_units
     elseif format == "in" then
         format_factor = 1 / 25.4
     end
 
+    --  Screen:scaleBySize(px) returns real pixels from the number used in KOReader after scalating it taking into account device resolution and software dpi if set
     local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI() -- use device hardcoded dpi if available
     return Screen:scaleBySize(px) / display_dpi * 25.4 * format_factor
+
 end
 
 function ReaderFooter:onGetTextPage()
     local cur_page = self.ui.document:getCurrentPage()
-    local total_words, total_words2 = 0
+    local total_words, total_words2 = 0, 0
     -- if not Device:isPocketBook() then
     total_words, total_words2 = self.ui.document:getTextCurrentPage()
     -- end
@@ -2200,7 +2206,7 @@ function ReaderFooter:onGetTextPage()
     local font_face = self.ui.document._document:getFontFace()
 
 
-    local font_size_pt_koreader = string.format(" (%.2fpt)", convertSizeTo(self.ui.document.configurable.font_size, "pt"))
+    local font_size_pt_koreader = string.format(" (%.2fp)", convertSizeTo(self.ui.document.configurable.font_size, "pt"))
 
     local font_size_pt = nil
     local font_size_mm = nil
