@@ -2148,6 +2148,20 @@ function ReaderFooter:onGetStyles()
     return true
 end
 
+
+local function convertSizeTo(px, format)
+    local format_factor = 1 -- we are defaulting on mm
+
+    if format == "pt" then
+        format_factor =  format_factor * (2660 / 1000) -- see https://www.wikiwand.com/en/Metric_typographic_units
+    elseif format == "in" then
+        format_factor = 1 / 25.4
+    end
+
+    local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI() -- use device hardcoded dpi if available
+    return Screen:scaleBySize(px) / display_dpi * 25.4 * format_factor
+end
+
 function ReaderFooter:onGetTextPage()
     local cur_page = self.ui.document:getCurrentPage()
     local total_words, total_words2 = 0
@@ -2185,23 +2199,34 @@ function ReaderFooter:onGetTextPage()
     local font_size = self.ui.document._document:getFontSize()
     local font_face = self.ui.document._document:getFontFace()
 
+
+    local font_size_pt_koreader = string.format(" (%.2fpt)", convertSizeTo(self.ui.document.configurable.font_size, "pt"))
+
     local font_size_pt = nil
     local font_size_mm = nil
-    if Device:isKobo() or Device:isPocketBook() or Device.model == "boox" then
-        font_size_pt = math.floor((font_size * 72 / 300) * 100) / 100
-        font_size_mm = math.floor((font_size * 25.4 / 300)  * 100) / 100
-    elseif Device:isAndroid() then
-        font_size_pt = math.floor((font_size * 72 / 446) * 100) / 100
-        font_size_mm = math.floor((font_size * 25.4 / 446)  * 100) / 100
-    else
-        font_size_pt = math.floor((font_size * 72 / 160) * 100) / 100
-        font_size_mm = math.floor((font_size * 25.4 / 160)  * 100) / 100
-    end
+
+    local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+    font_size_pt = math.floor((font_size * 72 / display_dpi) * 100) / 100
+    font_size_mm = math.floor((font_size * 25.4 / display_dpi)  * 100) / 100
+
+    -- if Device:isKobo() or Device:isPocketBook() or Device.model == "boox" then
+    --     font_size_pt = math.floor((font_size * 72 / 300) * 100) / 100
+    --     font_size_mm = math.floor((font_size * 25.4 / 300)  * 100) / 100
+    -- elseif Device:isAndroid() then
+    --     font_size_pt = math.floor((font_size * 72 / 446) * 100) / 100
+    --     font_size_mm = math.floor((font_size * 25.4 / 446)  * 100) / 100
+    -- else
+    --     font_size_pt = math.floor((font_size * 72 / 160) * 100) / 100
+    --     font_size_mm = math.floor((font_size * 25.4 / 160)  * 100) / 100
+    -- end
 
 
     local sessions, avg_wpm, avg_last_seven_days, avg_last_thirty_days, avg_last_sixty_days, avg_last_ninety_days, avg_last_hundred_and_eighty_days = getSessionsInfo(self)
     avg_wpm = math.floor(avg_wpm) .. "wpm" .. ", " .. math.floor(avg_wpm*60) .. "wph"
     local text = ""
+
+
+
 
     -- if not Device:isPocketBook() then
     text = text .. "Total pages (screens): " .. self.pages .. string.char(10) ..
@@ -2219,7 +2244,7 @@ function ReaderFooter:onGetTextPage()
     "Average time read last 90 days: " .. avg_last_ninety_days .. "h" .. string.char(10) ..
     "Average time read last 180 days: " .. avg_last_hundred_and_eighty_days .. "h" .. string.char(10) ..
     "Avg wpm and wph: " .. avg_wpm .. string.char(10) .. string.char(10) ..
-    "Font parameters: " .. font_face .. ", " .. font_size .. "px, " .. font_size_pt .. "pt, " .. font_size_mm .. "mm" .. string.char(10) ..
+    "Font: " .. font_face .. ", " .. font_size .. "px, " .. font_size_pt .. "pt" .. font_size_pt_koreader .. ", " .. font_size_mm .. "mm" .. string.char(10) ..
     "Number of tweaks: " .. self.ui.tweaks_no .. string.char(10) ..
     self.ui.tweaks .. string.char(10) ..
     text_properties
