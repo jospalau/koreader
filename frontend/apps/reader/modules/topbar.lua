@@ -170,8 +170,9 @@ function TopBar:onReaderReady()
 
     self.times_text = TextWidget:new{
         text =  "",
-        face = Font:getFace("myfont4"),
+        face = Font:getFace("myfont4", 8),
         fgcolor = Blitbuffer.COLOR_BLACK,
+        invert = true,
     }
 
 
@@ -187,7 +188,6 @@ function TopBar:onReaderReady()
         face = Font:getFace("myfont4"),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
-
 
     self.progress_chapter_text = TextWidget:new{
         text =  "",
@@ -442,7 +442,7 @@ function TopBar:toggleBar()
         self.progress_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
 
 
-        self.times_text:setText(session_time .. "|≃" .. read_today .. "|≃" .. read_month)
+        self.times_text:setText(session_time .. "|" .. read_today .. "|" .. read_month)
 
 
         local title = self.ui.document._document:getDocumentProps().title
@@ -615,8 +615,13 @@ function TopBar:paintTo(bb, x, y)
         -- For the bottom components it is better to use frame containers.
         -- It is better to position them without the dimensions simply passing x and y to the paintTo method
         -- Bottom left
-        self[4][1].dimen.w = self[4][1][1]:getSize().w
-        self[4]:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+        -- self[4][1].dimen.w = self[4][1][1]:getSize().w
+        -- self[4]:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+
+
+        -- This is inverted to be shown in left margin
+        self[4][1][1]:setText(self[4][1][1].text:reverse())
+        self[4]:paintTo(bb, x + Screen:getHeight()/2 - self[4][1][1]:getSize().w/2, y + TopBar.MARGIN_SIDES/2 + 3)
 
         -- Bottom center
         self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5][1][1]:getSize().w/2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
