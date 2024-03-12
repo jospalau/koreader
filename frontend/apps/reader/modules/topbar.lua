@@ -24,6 +24,8 @@ local VerticalGroup = require("ui/widget/verticalgroup")
 local SQ3 = require("lua-ljsqlite3/init")
 local ProgressWidget = require("ui/widget/progresswidget")
 local Device = require("device")
+local LineWidget = require("ui/widget/linewidget")
+local Size = require("ui/size")
 
 getReadToday = function ()
     local DataStorage = require("datastorage")
@@ -133,15 +135,6 @@ function TopBar:init()
 end
 
 function TopBar:onReaderReady()
-
-
-    if Device:isAndroid() then
-        TopBar.MARGIN_SIDES =  Screen:scaleBySize(30)
-    end
-
-    if TopBar.show_top_bar == true then
-        TopBar.MARGIN_TOP = Screen:scaleBySize(18)
-    end
 
     local duration_raw =  math.floor((os.time() - self.start_session_time))
 
@@ -269,7 +262,7 @@ function TopBar:onReaderReady()
         width = 200,
         height = 5,
         percentage = 0,
-        tick_width = Screen:scaleBySize(4),
+        tick_width = Screen:scaleBySize(1),
         ticks = nil, -- ticks will be populated in self:updateFooterText
         last = nil, -- last will be initialized in self:updateFooterText
     }
@@ -289,7 +282,7 @@ function TopBar:onReaderReady()
         width = 200,
         height = 5,
         percentage = 0,
-        tick_width = Screen:scaleBySize(4),
+        tick_width = Screen:scaleBySize(1),
         ticks = nil, -- ticks will be populated in self:updateFooterText
         last = nil, -- last will be initialized in self:updateFooterText
     }
@@ -330,7 +323,7 @@ function TopBar:onReaderReady()
         tick_width = Screen:scaleBySize(1),
         ticks = nil, -- ticks will be populated in self:updateFooterText
         last = nil, -- last will be initialized in self:updateFooterText
-        bordercolor = Blitbuffer.COLOR_WHITE,
+        -- bordercolor = Blitbuffer.COLOR_WHITE,
     }
 
     self[9] = FrameContainer:new{
@@ -360,7 +353,18 @@ function TopBar:onReaderReady()
     -- }
 
 
+    self.separator_line = LineWidget:new{
+        background = Blitbuffer.COLOR_BLACK,
+        style = "solid",
+        dimen = Geom:new{
+            w = Screen:getSize().w,
+            h = Size.line.medium,
+        }
+    }
 
+    if Device:isAndroid() then
+        TopBar.MARGIN_SIDES =  Screen:scaleBySize(30)
+    end
 end
 function TopBar:onToggleShowTopBar()
     local show_top_bar = G_reader_settings:isTrue("show_top_bar")
@@ -400,7 +404,7 @@ function TopBar:onSwitchTopBar()
         else
             TopBar.is_enabled = true
             TopBar.show_top_bar = true
-            TopBar.MARGIN_TOP = Screen:scaleBySize(18)
+            TopBar.MARGIN_TOP = Screen:scaleBySize(9) + self.progress_bar2.height + Screen:scaleBySize(3)
         end
         self:toggleBar()
 
@@ -459,7 +463,7 @@ function TopBar:toggleBar()
 
         local chapter = TextWidget.PTF_BOLD_START .. self.ui.toc:getTocTitleByPage(self.view.footer.pageno) .. TextWidget.PTF_BOLD_END
         self.progress_bar2.width = Screen:getSize().w
-        self.progress_bar2.height = 10
+        self.progress_bar2.height = 20
         -- -- progress bars size slightly bigger than the font size
         -- self.progress_bar.height = Font:getFace("myfont4").size + 10
         -- self.progress_chapter_bar.height = Font:getFace("myfont4").size + 10
@@ -482,9 +486,66 @@ function TopBar:toggleBar()
 --
         self.chapter_text:setText(chapter)
         self.progress_chapter_text:setText(self.view.footer:getChapterProgress(false))
-        self.progress_bar:updateStyle(false, nil)
-        self.progress_bar2:updateStyle(false, nil)
-        self.progress_chapter_bar:updateStyle(false, nil)
+
+
+        -- self.progress_bar:updateStyle(false, nil)
+        self.progress_bar.bgcolor = Blitbuffer.COLOR_DARK_GRAY
+        self.progress_bar.fillcolor = Blitbuffer.COLOR_BLACK
+
+        -- self.progress_chapter_bar:updateStyle(false, nil)
+        self.progress_chapter_bar.bgcolor = Blitbuffer.COLOR_DARK_GRAY
+        self.progress_chapter_bar.fillcolor = Blitbuffer.COLOR_BLACK
+
+
+
+        -- self.progress_bar2:updateStyle(false, 5)
+
+        -- self.progress_bar2.bgcolor = Blitbuffer.COLOR_DARK_GRAY
+        -- self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
+
+
+        -- -- This profile to go with the line widget
+        -- self.progress_bar2:updateStyle(false, 5)
+        -- self.progress_bar2.bgcolor = Blitbuffer.COLOR_WHITE
+        -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
+        -- self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
+
+
+
+        self.progress_bar2:updateStyle(false, 5)
+        self.progress_bar2.bgcolor = Blitbuffer.COLOR_DARK_GRAY
+        self.progress_bar2.bordercolor = Blitbuffer.COLOR_WHITE
+        self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
+
+
+
+        -- self.progress_bar2:updateStyle(false, 5)
+        -- self.progress_bar2.bgcolor = Blitbuffer.COLOR_BLACK
+        -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_WHITE
+        -- self.progress_bar2.fillcolor = Blitbuffer.COLOR_DARK_GRAY
+
+
+        -- self.progress_bar2:updateStyle(false, 5)
+        -- self.progress_bar2.bgcolor = Blitbuffer.COLOR_DARK_GRAY
+        -- self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
+        -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_WHITE
+
+        -- self.progress_bar2:updateStyle(false, 10)
+        -- self.progress_bar2.bgcolor = Blitbuffer.COLOR_DARK_GRAY
+        -- self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
+
+
+        -- self.progress_bar2:updateStyle(false, 1)
+        -- self.progress_bar2.bgcolor = Blitbuffer.COLOR_WHITE
+        -- self.progress_bar2.fillcolor = Blitbuffer.COLOR_DARK_GRAY
+        -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
+
+        -- self.progress_bar2:updateStyle(false, 1)
+        -- self.progress_bar2.bgcolor = Blitbuffer.COLOR_WHITE
+        -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
+        -- self.progress_bar2.fillcolor = Blitbuffer.COLOR_DARK_GRAY
+
+
         self.progress_bar.last = self.pages or self.ui.document:getPageCount()
         -- self.progress_bar.ticks = self.ui.toc:getTocTicksFlattened()
         self.progress_bar2.last = self.pages or self.ui.document:getPageCount()
@@ -494,6 +555,9 @@ function TopBar:toggleBar()
         self.progress_chapter_bar:setPercentage(self.view.footer:getChapterProgress(true))
         -- self.progress_bar.height = self.title_text:getSize().h
         -- self.progress_chapter_bar.height = self.title_text:getSize().h
+        if TopBar.show_top_bar == true then
+            TopBar.MARGIN_TOP = Screen:scaleBySize(9) + self.progress_bar2.height + Screen:scaleBySize(3)
+        end
     else
         self.session_time_text:setText("")
         self.progress_text:setText("")
@@ -515,6 +579,7 @@ function TopBar:paintTo(bb, x, y)
         -- Top left
         if TopBar.show_top_bar then
             self[9]:paintTo(bb, x, y + 15)
+            -- self.separator_line:paintTo(bb, x, y + 15)
             -- self[9]:paintTo(bb, x, Screen:getHeight() - 15)
         end
         self[1]:paintTo(bb, x + TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
@@ -559,6 +624,10 @@ function TopBar:paintTo(bb, x, y)
         -- Bottom right
         -- Use progress bar
         self[8]:paintTo(bb, x + Screen:getWidth() - self[8][1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+
+
+
+
 
         -- self[6][1].dimen.w = self[6][1][1]:getSize().w
         -- -- La barra de progreso de abajo a la derecha se muestra siempre y queremos mover el texto unos pocos píxeles a la izquierda
