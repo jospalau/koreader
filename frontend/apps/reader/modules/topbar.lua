@@ -307,21 +307,31 @@ function TopBar:onReaderReady()
     }
 
 
+    -- self.progress_bar2  = ProgressWidget:new{
+    --     width = Screen:getSize().w,
+    --     height = 5,
+    --     percentage = 0,
+    --     tick_width = Screen:scaleBySize(1),
+    --     ticks = nil, -- ticks will be populated in self:updateFooterText
+    --     last = nil, -- last will be initialized in self:updateFooterText
+    --     altbar = true,
+    --     altbar_position = 4,
+    --     altbar_ticks_height = 12,
+    --     altbar_line_thickness = 4,
+    --     bordersize = 0,
+    --     radius = 0,
+    -- }
+
     self.progress_bar2  = ProgressWidget:new{
         width = Screen:getSize().w,
         height = 5,
         percentage = 0,
+        -- bordercolor = Blitbuffer.COLOR_GRAY,
         tick_width = Screen:scaleBySize(1),
         ticks = nil, -- ticks will be populated in self:updateFooterText
         last = nil, -- last will be initialized in self:updateFooterText
-        altbar = true,
-        altbar_position = 4,
-        altbar_ticks_height = 12,
-        bordersize = 0,
-        radius = 0,
+        bordercolor = Blitbuffer.COLOR_WHITE,
     }
-
-
 
     self[9] = FrameContainer:new{
         left_container:new{
@@ -449,7 +459,7 @@ function TopBar:toggleBar()
 
         local chapter = TextWidget.PTF_BOLD_START .. self.ui.toc:getTocTitleByPage(self.view.footer.pageno) .. TextWidget.PTF_BOLD_END
         self.progress_bar2.width = Screen:getSize().w
-        self.progress_bar2.height = 1
+        self.progress_bar2.height = 10
         -- -- progress bars size slightly bigger than the font size
         -- self.progress_bar.height = Font:getFace("myfont4").size + 10
         -- self.progress_chapter_bar.height = Font:getFace("myfont4").size + 10
@@ -473,6 +483,7 @@ function TopBar:toggleBar()
         self.chapter_text:setText(chapter)
         self.progress_chapter_text:setText(self.view.footer:getChapterProgress(false))
         self.progress_bar:updateStyle(false, nil)
+        self.progress_bar2:updateStyle(false, nil)
         self.progress_chapter_bar:updateStyle(false, nil)
         self.progress_bar.last = self.pages or self.ui.document:getPageCount()
         -- self.progress_bar.ticks = self.ui.toc:getTocTicksFlattened()
