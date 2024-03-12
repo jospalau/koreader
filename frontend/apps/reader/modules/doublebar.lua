@@ -392,8 +392,6 @@ function DoubleBar:toggleBar()
         self.progress_bar.width = Screen:getSize().w
         self.progress_bar_chapters.width = Screen:getSize().w
 
-        self.progress_bar.height = self.title_text:getSize().h
-        self.progress_bar_chapters.height = self.title_text:getSize().h
 
         if Device:isAndroid() then
             self.progress_bar.height = 20
@@ -402,6 +400,9 @@ function DoubleBar:toggleBar()
 
         self.chapter_text:setText(chapter)
         self.progress_chapter_text:setText(self.view.footer:getChapterProgress(false))
+
+        self.progress_bar.height = self.title_text._height
+        self.progress_bar_chapters.height = self.title_text._height
         self.progress_bar:updateStyle(false, nil)
         self.progress_bar_chapters:updateStyle(false, nil)
 
