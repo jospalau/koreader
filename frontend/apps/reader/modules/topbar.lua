@@ -169,7 +169,7 @@ function TopBar:onReaderReady()
 
     self.times_text = TextWidget:new{
         text =  "",
-        face = Font:getFace("myfont4", 10),
+        face = Font:getFace("myfont4", 12),
         fgcolor = Blitbuffer.COLOR_BLACK,
         invert = true,
     }
@@ -362,7 +362,7 @@ function TopBar:onReaderReady()
     }
 
     if Device:isAndroid() then
-        TopBar.MARGIN_SIDES =  Screen:scaleBySize(30)
+        TopBar.MARGIN_SIDES =  Screen:scaleBySize(20)
     end
 end
 function TopBar:onToggleShowTopBar()
@@ -618,9 +618,18 @@ function TopBar:paintTo(bb, x, y)
         -- self[4]:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
 
+
         -- This is inverted to be shown in left margin
         self[4][1][1]:setText(self[4][1][1].text:reverse())
-        self[4]:paintTo(bb, x + Screen:getHeight()/2 - self[4][1][1]:getSize().w/2, y + TopBar.MARGIN_SIDES/2 + 3)
+
+        -- When inverted, the text is positioned in the middle of the screen so we take that position as a reference to position
+        -- Inverted align to side left center
+        -- self[4]:paintTo(bb, x - self[4][1][1]:getSize().w/2, y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
+
+        -- Inverted lign to side left top
+        self[4]:paintTo(bb, x - Screen:getHeight()/2 + TopBar.MARGIN_TOP + Screen:scaleBySize(3), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
+
+
 
         -- Bottom center
         self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5][1][1]:getSize().w/2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)

@@ -414,7 +414,7 @@ function TextWidget:paintTo(bb, x, y)
             bb:colorblitFrom(
                 alt_bb,
                 y + baseline - glyph.t - xglyph.y_offset,
-                x + pen_x + glyph.l + xglyph.x_offset,
+                x + pen_x + glyph.l + xglyph.x_offset + Screen:getSize().h/2, -- x and y have been switched. We add here the screen position we want the glyph to be shown
                 0, 0,
                 glyph.bb:getHeight(), glyph.bb:getWidth(),
                 self.fgcolor)
