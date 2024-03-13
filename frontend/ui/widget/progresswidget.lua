@@ -179,9 +179,9 @@ function ProgressWidget:paintTo(bb, x, y)
 
         if self.altbar then
             bb:paintRect(fill_x,
-                        fill_y - self.altbar_position, -- position line
+                        y - self.altbar_position, -- position line
                         math.ceil(fill_width * self.percentage),
-                        4,  --30, -- size line
+                        self.altbar_line_thickness,  --30, -- size line
                         self.bordercolor)
         else
             bb:paintRect(fill_x,
