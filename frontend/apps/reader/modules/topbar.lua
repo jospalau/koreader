@@ -445,8 +445,8 @@ function TopBar:toggleBar()
         self.progress_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
 
 
-        self.times_text:setText(session_time .. "|" .. read_today .. "|" .. read_month)
-
+        -- self.times_text:setText(session_time .. "|" .. read_today .. "|" .. read_month)
+        self.times_text_text = session_time .. "|" .. read_today .. "|" .. read_month
 
         local title = self.ui.document._document:getDocumentProps().title
         local words = "?w"
@@ -634,7 +634,7 @@ function TopBar:paintTo(bb, x, y)
 
 
         -- This is inverted to be shown in left margin
-        self[4][1][1]:setText(self[4][1][1].text:reverse())
+        self[4][1][1]:setText(self.times_text_text:reverse())
 
         -- When inverted, the text is positioned to the end of the screen
         -- So, we take that position as a reference to position it later
