@@ -214,11 +214,23 @@ function ProgressWidget:paintTo(bb, x, y)
             tick_x = math.floor(tick_x)
 
             if self.altbar then
-                bb:paintRect(x + self.margin_h + self.bordersize + tick_x,
-                            y - self.altbar_ticks_height/2, -- position ticks
-                            self.tick_width,
-                            self.altbar_ticks_height,-- size ticks
-                            self.bordercolor) --self.bordercolor With Blitbuffer.COLOR_WHITE is other effect.
+                print(tick_x .. "   " .. self.percentage * 100)
+                local width = self.dimen.w - 2*self.margin_h
+                local position =  tick_x / width
+                if position  * 100 < self.percentage * 100 then
+                    print("paso")
+                    bb:paintRect(x + self.margin_h + self.bordersize + tick_x,
+                                y - self.altbar_ticks_height/2, -- position ticks
+                                self.tick_width,
+                                self.altbar_ticks_height,-- size ticks
+                                Blitbuffer.COLOR_WHITE) --self.bordercolor With Blitbuffer.COLOR_WHITE is other effect.
+                else
+                    bb:paintRect(x + self.margin_h + self.bordersize + tick_x,
+                                y - self.altbar_ticks_height/2,
+                                self.tick_width,
+                                self.altbar_ticks_height,
+                                self.bordercolor)
+                end
             else
                 bb:paintRect(x + self.margin_h + self.bordersize + tick_x,
                             fill_y,
