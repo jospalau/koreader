@@ -352,14 +352,14 @@ function TopBar:onReaderReady()
     -- }
 
 
-    self.separator_line = LineWidget:new{
-        background = Blitbuffer.COLOR_BLACK,
-        style = "solid",
-        dimen = Geom:new{
-            w = Screen:getSize().w,
-            h = Size.line.medium,
-        }
-    }
+    -- self.separator_line = LineWidget:new{
+    --     background = Blitbuffer.COLOR_BLACK,
+    --     style = "solid",
+    --     dimen = Geom:new{
+    --         w = Screen:getSize().w,
+    --         h = Size.line.medium,
+    --     }
+    -- }
 
     if Device:isAndroid() then
         TopBar.MARGIN_SIDES =  Screen:scaleBySize(20)
@@ -462,6 +462,7 @@ function TopBar:toggleBar()
 
         local chapter = TextWidget.PTF_BOLD_START .. self.ui.toc:getTocTitleByPage(self.view.footer.pageno) .. TextWidget.PTF_BOLD_END
         self.progress_bar2.width = Screen:getSize().w - 2 * TopBar.MARGIN_SIDES
+        -- self.separator_line.dimen.w = self.progress_bar2.width
         self.progress_bar2.height = 20
         -- -- progress bars size slightly bigger than the font size
         -- self.progress_bar.height = Font:getFace("myfont4").size + 10
@@ -487,62 +488,62 @@ function TopBar:toggleBar()
         self.progress_chapter_text:setText(self.view.footer:getChapterProgress(false))
 
 
+        -- -- Option 1 for the three bars
         -- self.progress_bar:updateStyle(false, nil)
-        self.progress_bar.bgcolor = Blitbuffer.COLOR_DARK_GRAY
-        self.progress_bar.fillcolor = Blitbuffer.COLOR_BLACK
+
 
         -- self.progress_chapter_bar:updateStyle(false, nil)
-        self.progress_chapter_bar.bgcolor = Blitbuffer.COLOR_DARK_GRAY
-        self.progress_chapter_bar.fillcolor = Blitbuffer.COLOR_BLACK
 
-
-
-        -- self.progress_bar2:updateStyle(false, 5)
-        self.progress_bar2.bgcolor = Blitbuffer.COLOR_DARK_GRAY
+        -- With or without white bordercolor
+        -- self.progress_bar2:updateStyle(false, nil)
         -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_WHITE
-        self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
 
 
+        -- -- Option 2 for the three bars
+        -- self.progress_bar2:updateStyle(false, 10) -- Optionally the size
+        -- self.progress_bar.bgcolor = Blitbuffer.COLOR_DARK_GRAY
+        -- self.progress_bar.fillcolor = Blitbuffer.COLOR_BLACK
 
 
+        -- self.progress_chapter_bar.bgcolor = Blitbuffer.COLOR_DARK_GRAY
+        -- self.progress_chapter_bar.fillcolor = Blitbuffer.COLOR_BLACK
 
-        -- -- This profile to go with the line widget
-        -- self.progress_bar2:updateStyle(false, 5)
-        -- self.progress_bar2.bgcolor = Blitbuffer.COLOR_WHITE
-        -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
+        -- -- With or without white bordercolor
+        -- self.progress_bar2.bgcolor = Blitbuffer.COLOR_DARK_GRAY
         -- self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
+        -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_WHITE
 
 
-
-
-
-
-
+        -- -- Other options just for top bar
         -- self.progress_bar2:updateStyle(false, 5)
         -- self.progress_bar2.bgcolor = Blitbuffer.COLOR_BLACK
         -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_WHITE
         -- self.progress_bar2.fillcolor = Blitbuffer.COLOR_DARK_GRAY
 
-
+        -- Same inverted
         -- self.progress_bar2:updateStyle(false, 5)
         -- self.progress_bar2.bgcolor = Blitbuffer.COLOR_DARK_GRAY
         -- self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
         -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_WHITE
 
-        -- self.progress_bar2:updateStyle(false, 10)
-        -- self.progress_bar2.bgcolor = Blitbuffer.COLOR_DARK_GRAY
-        -- self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
-
 
         -- self.progress_bar2:updateStyle(false, 1)
         -- self.progress_bar2.bgcolor = Blitbuffer.COLOR_WHITE
         -- self.progress_bar2.fillcolor = Blitbuffer.COLOR_DARK_GRAY
         -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
 
-        -- self.progress_bar2:updateStyle(false, 1)
-        -- self.progress_bar2.bgcolor = Blitbuffer.COLOR_WHITE
-        -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
-        -- self.progress_bar2.fillcolor = Blitbuffer.COLOR_DARK_GRAY
+
+        -- This last confugration goes with the separation line. Everything is hardcoded because it is difficult to make it proportional
+        self.progress_bar2:updateStyle(false, 1)
+        self.progress_bar2.bgcolor = Blitbuffer.COLOR_WHITE
+        self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
+        self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
+        self.progress_bar2.altbar = true
+        self.progress_bar2.altbar_position = -4
+        self.progress_bar2.altbar_ticks_height = 21
+        self.progress_bar2.altbar_line_thickness = 7--
+
+
 
 
         self.progress_bar.last = self.pages or self.ui.document:getPageCount()
@@ -555,7 +556,7 @@ function TopBar:toggleBar()
         -- self.progress_bar.height = self.title_text:getSize().h
         -- self.progress_chapter_bar.height = self.title_text:getSize().h
         if TopBar.show_top_bar == true then
-            TopBar.MARGIN_TOP = Screen:scaleBySize(9) + self.progress_bar2.height + Screen:scaleBySize(3)
+            TopBar.MARGIN_TOP = Screen:scaleBySize(9) + self.progress_bar2.height/2 + self.title_text._height/2
         end
     else
         self.session_time_text:setText("")
@@ -577,9 +578,12 @@ end
 function TopBar:paintTo(bb, x, y)
         -- Top left
         if TopBar.show_top_bar then
-            self[9]:paintTo(bb, x + TopBar.MARGIN_SIDES, y + 15)
-            -- self.separator_line:paintTo(bb, x, y + 15)
-            -- self[9]:paintTo(bb, x, Screen:getHeight() - 15)
+            if self.progress_bar2.altbar then
+                self[9]:paintTo(bb, x + TopBar.MARGIN_SIDES, y + 20)
+            else
+                self[9]:paintTo(bb, x + TopBar.MARGIN_SIDES, y + Screen:scaleBySize(11))
+                -- self[9]:paintTo(bb, x, Screen:getHeight() - Screen:scaleBySize(12))
+            end
         end
         self[1]:paintTo(bb, x + TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
 

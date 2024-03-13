@@ -128,11 +128,7 @@ function ProgressWidget:paintTo(bb, x, y)
 
     if self.radius == 0 then
         -- If we don't have rounded borders, we can start with a simple border colored rectangle.
-        if self.altbar then -- Just for Android devices
-            bb:paintRect(x, y, my_size.w, 1, self.bordercolor)
-        else
-            bb:paintRect(x, y, my_size.w, my_size.h, self.bordercolor)
-        end
+        bb:paintRect(x, y, my_size.w, my_size.h, self.bordercolor)
         -- And a full background bar inside (i.e., on top) of that.
         bb:paintRect(x + self.margin_h + self.bordersize,
                      fill_y,
@@ -179,9 +175,15 @@ function ProgressWidget:paintTo(bb, x, y)
 
         if self.altbar then
             bb:paintRect(fill_x,
-                        y - self.altbar_position, -- position line
+                        y + self.altbar_position, -- position line
                         math.ceil(fill_width * self.percentage),
                         self.altbar_line_thickness,  --30, -- size line
+                        self.bordercolor)
+
+            bb:paintRect(fill_x,
+                        y + self.altbar_position + self.altbar_line_thickness/3,
+                        self.width,
+                        self.altbar_line_thickness/3,
                         self.bordercolor)
         else
             bb:paintRect(fill_x,
@@ -212,7 +214,7 @@ function ProgressWidget:paintTo(bb, x, y)
 
             if self.altbar then
                 bb:paintRect(x + self.margin_h + self.bordersize + tick_x,
-                            fill_y - (self.altbar_ticks_height/2 + self.altbar_position/2), -- position ticks
+                            y - self.altbar_ticks_height/2, -- position ticks
                             self.tick_width,
                             self.altbar_ticks_height,-- size ticks
                             self.bordercolor) --self.bordercolor With Blitbuffer.COLOR_WHITE is other effect.
