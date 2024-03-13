@@ -403,7 +403,11 @@ function TopBar:onSwitchTopBar()
         else
             TopBar.is_enabled = true
             TopBar.show_top_bar = true
-            TopBar.MARGIN_TOP = Screen:scaleBySize(9) + self.progress_bar2.height + Screen:scaleBySize(3)
+            if self.progress_bar2.altbar then
+                TopBar.MARGIN_TOP = Screen:scaleBySize(12) + self.progress_bar2.altbar_ticks_height + Screen:scaleBySize(2)
+            else
+                TopBar.MARGIN_TOP = Screen:scaleBySize(9) + self.progress_bar2.height + Screen:scaleBySize(2)
+            end
         end
         self:toggleBar()
 
@@ -533,17 +537,17 @@ function TopBar:toggleBar()
         -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
 
 
-        -- This last confugration goes with the separation line. Everything is hardcoded because it is difficult to make it proportional
+        -- -- This last confugration goes with the separation line. Everything is hardcoded because it is difficult to make it proportional
         self.progress_bar2:updateStyle(false, 1)
         self.progress_bar2.bgcolor = Blitbuffer.COLOR_WHITE
         self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
         self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
         self.progress_bar2.altbar = true
-        self.progress_bar2.altbar_position = -4
-        self.progress_bar2.altbar_ticks_height = 21
-        self.progress_bar2.altbar_line_thickness = 7--
+        self.progress_bar2.altbar_position = -3
+        self.progress_bar2.altbar_line_thickness = 6
 
-
+        -- This is fixed value
+        self.progress_bar2.altbar_ticks_height = self.progress_bar2.altbar_line_thickness * 3
 
 
         self.progress_bar.last = self.pages or self.ui.document:getPageCount()
@@ -556,7 +560,11 @@ function TopBar:toggleBar()
         -- self.progress_bar.height = self.title_text:getSize().h
         -- self.progress_chapter_bar.height = self.title_text:getSize().h
         if TopBar.show_top_bar == true then
-            TopBar.MARGIN_TOP = Screen:scaleBySize(9) + self.progress_bar2.height/2 + self.title_text._height/2
+            if self.progress_bar2.altbar then
+                TopBar.MARGIN_TOP = Screen:scaleBySize(12) + self.progress_bar2.altbar_ticks_height + Screen:scaleBySize(2)
+            else
+                TopBar.MARGIN_TOP = Screen:scaleBySize(9) + self.progress_bar2.height + Screen:scaleBySize(2)
+            end
         end
     else
         self.session_time_text:setText("")
@@ -579,9 +587,9 @@ function TopBar:paintTo(bb, x, y)
         -- Top left
         if TopBar.show_top_bar then
             if self.progress_bar2.altbar then
-                self[9]:paintTo(bb, x + TopBar.MARGIN_SIDES, y + 20)
+                self[9]:paintTo(bb, x + TopBar.MARGIN_SIDES, y +  Screen:scaleBySize(12))
             else
-                self[9]:paintTo(bb, x + TopBar.MARGIN_SIDES, y + Screen:scaleBySize(11))
+                self[9]:paintTo(bb, x + TopBar.MARGIN_SIDES, y +  Screen:scaleBySize(9))
                 -- self[9]:paintTo(bb, x, Screen:getHeight() - Screen:scaleBySize(12))
             end
         end

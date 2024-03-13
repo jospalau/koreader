@@ -62,8 +62,9 @@ local ProgressWidget = Widget:extend{
     initial_pos_marker = false, -- overlay a marker at the initial percentage position
     initial_percentage = nil,
     altbar = nil,
-    altbar_position = nil,
-    altbar_ticks_height = nil,
+    altbar_position = 0,
+    altbar_ticks_height = 0,
+    altbar_line_thickness = 0,
 }
 
 function ProgressWidget:init()
