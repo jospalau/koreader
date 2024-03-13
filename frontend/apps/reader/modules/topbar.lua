@@ -622,12 +622,13 @@ function TopBar:paintTo(bb, x, y)
         -- This is inverted to be shown in left margin
         self[4][1][1]:setText(self[4][1][1].text:reverse())
 
-        -- When inverted, the text is positioned in the middle of the screen so we take that position as a reference to position
-        -- Inverted align to side left center
-        -- self[4]:paintTo(bb, x - self[4][1][1]:getSize().w/2, y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
+        -- When inverted, the text is positioned to the end of the screen
+        -- So, we take that position as a reference to position it later
+        -- Inverted aligned to side left center
+        -- self[4]:paintTo(bb, x - Screen:getHeight()/2 - self[4][1][1]:getSize().w/2, y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
 
-        -- Inverted lign to side left top
-        self[4]:paintTo(bb, x - Screen:getHeight()/2 + TopBar.MARGIN_TOP + Screen:scaleBySize(3), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
+        -- Inverted aligned to side left top
+        self[4]:paintTo(bb, x - Screen:getHeight() + TopBar.MARGIN_TOP + Screen:scaleBySize(3), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
 
 
 
