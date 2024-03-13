@@ -214,11 +214,10 @@ function ProgressWidget:paintTo(bb, x, y)
             tick_x = math.floor(tick_x)
 
             if self.altbar then
-                print(tick_x .. "   " .. self.percentage * 100)
-                local width = self.dimen.w - 2*self.margin_h
+                local width = self.dimen.w
                 local position =  tick_x / width
-                if position  * 100 < self.percentage * 100 then
-                    print("paso")
+                -- if position < self.percentage then
+                if tick <= self.ui.view.footer.pageno then
                     bb:paintRect(x + self.margin_h + self.bordersize + tick_x,
                                 y - self.altbar_ticks_height/2, -- position ticks
                                 self.tick_width,

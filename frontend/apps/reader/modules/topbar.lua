@@ -546,6 +546,7 @@ function TopBar:toggleBar()
         self.progress_bar2.altbar = true
         self.progress_bar2.altbar_position = -3
         self.progress_bar2.altbar_line_thickness = 6
+        self.progress_bar2.ui = self.ui
 
         -- This is fixed value
         self.progress_bar2.altbar_ticks_height = self.progress_bar2.altbar_line_thickness * 3
