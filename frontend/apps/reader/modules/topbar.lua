@@ -406,7 +406,7 @@ function TopBar:onSwitchTopBar()
             if self.progress_bar2.altbar then
                 TopBar.MARGIN_TOP = Screen:scaleBySize(12) + self.progress_bar2.altbar_ticks_height + Screen:scaleBySize(2)
             else
-                TopBar.MARGIN_TOP = Screen:scaleBySize(9) + self.progress_bar2.height + Screen:scaleBySize(2)
+                TopBar.MARGIN_TOP = Screen:scaleBySize(9) + self.progress_bar2.height + Screen:scaleBySize(3)
             end
         end
         self:toggleBar()
@@ -524,7 +524,7 @@ function TopBar:toggleBar()
         -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_WHITE
         -- self.progress_bar2.fillcolor = Blitbuffer.COLOR_DARK_GRAY
 
-        -- Same inverted
+        -- Same inverted. I like this one
         -- self.progress_bar2:updateStyle(false, 5)
         -- self.progress_bar2.bgcolor = Blitbuffer.COLOR_DARK_GRAY
         -- self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
@@ -537,7 +537,8 @@ function TopBar:toggleBar()
         -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
 
 
-        -- -- This last confugration goes with the separation line. Everything is hardcoded because it is difficult to make it proportional
+        -- Begin alternative progress bar
+        -- This last configuration goes with the separation line. Everything is hardcoded because it is difficult to make it proportional
         self.progress_bar2:updateStyle(false, 1)
         self.progress_bar2.bgcolor = Blitbuffer.COLOR_WHITE
         self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
@@ -548,7 +549,7 @@ function TopBar:toggleBar()
 
         -- This is fixed value
         self.progress_bar2.altbar_ticks_height = self.progress_bar2.altbar_line_thickness * 3
-
+        -- End alternative progress bar
 
         self.progress_bar.last = self.pages or self.ui.document:getPageCount()
         -- self.progress_bar.ticks = self.ui.toc:getTocTicksFlattened()
@@ -563,7 +564,7 @@ function TopBar:toggleBar()
             if self.progress_bar2.altbar then
                 TopBar.MARGIN_TOP = Screen:scaleBySize(12) + self.progress_bar2.altbar_ticks_height + Screen:scaleBySize(2)
             else
-                TopBar.MARGIN_TOP = Screen:scaleBySize(9) + self.progress_bar2.height + Screen:scaleBySize(2)
+                TopBar.MARGIN_TOP = Screen:scaleBySize(9) + self.progress_bar2.height + Screen:scaleBySize(3)
             end
         end
     else
