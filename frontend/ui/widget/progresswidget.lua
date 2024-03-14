@@ -62,7 +62,6 @@ local ProgressWidget = Widget:extend{
     initial_pos_marker = false, -- overlay a marker at the initial percentage position
     initial_percentage = nil,
     altbar = nil,
-    altbar_position = 0,
     altbar_ticks_height = 0,
     altbar_line_thickness = 0,
 }
@@ -175,14 +174,16 @@ function ProgressWidget:paintTo(bb, x, y)
         end
 
         if self.altbar then
+            -- Progress line
             bb:paintRect(fill_x,
-                        y + self.altbar_position, -- position line
+                        y - self.altbar_line_thickness/2, -- position line
                         math.ceil(fill_width * self.percentage),
                         self.altbar_line_thickness,  --30, -- size line
                         self.bordercolor)
-
+            -- Fixed line
+            -- We want the line to be a third in the middle of the progress thick line
             bb:paintRect(fill_x,
-                        y + self.altbar_position + self.altbar_line_thickness/3,
+                        y - self.altbar_line_thickness/2 + self.altbar_line_thickness/3,
                         self.width,
                         self.altbar_line_thickness/3,
                         self.bordercolor)

@@ -537,21 +537,20 @@ function TopBar:toggleBar()
         -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
 
 
-        -- Begin alternative progress bar
+        -- Begin alternative progress bar --
         -- This last configuration goes with the separation line. Everything is hardcoded because it is difficult to make it proportional
         self.progress_bar2:updateStyle(false, 1)
         self.progress_bar2.bgcolor = Blitbuffer.COLOR_WHITE
         self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
         self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
         self.progress_bar2.altbar = true
-        self.progress_bar2.altbar_position = -3
-        self.progress_bar2.altbar_line_thickness = 6
         self.progress_bar2.ui = self.ui
-
-        -- This is fixed value
+        -- Multiple of 3 onwards because we want the line to be a third in the middle of the progress thick line
+        self.progress_bar2.altbar_line_thickness = 6
+        --It plays well with any value which final product is even (3, 9, 15, 21). So even values. More size, higher ticks
         self.progress_bar2.altbar_ticks_height = self.progress_bar2.altbar_line_thickness * 3
-        -- End alternative progress bar
 
+        -- End alternative progress bar --
         self.progress_bar.last = self.pages or self.ui.document:getPageCount()
         -- self.progress_bar.ticks = self.ui.toc:getTocTicksFlattened()
         self.progress_bar2.last = self.pages or self.ui.document:getPageCount()
