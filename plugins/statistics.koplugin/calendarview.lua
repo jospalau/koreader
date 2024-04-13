@@ -678,6 +678,22 @@ function CalendarDayView:init()
     }
 end
 
+
+
+function dump(o)
+    if type(o) == 'table' then
+       local s = '{ '
+       for k,v in pairs(o) do
+          if type(k) ~= 'number' then k = '"'..k..'"' end
+          s = s .. '['..k..'] = ' .. dump(v) .. ','
+       end
+       return s .. '} '
+    else
+       return tostring(o)
+    end
+ end
+
+
 function CalendarDayView:setupView()
     local now = os.time()
     self.is_current_day = now >= self.day_ts and now < self.day_ts + 86400
@@ -703,6 +719,11 @@ function CalendarDayView:setupView()
         end
         kv.checked = true
     end
+
+    -- local InfoMessage = require("ui/widget/infomessage")
+    -- UIManager:show(InfoMessage:new{
+    --   text = _(dump(self.kv_pairs))
+    -- })
     table.sort(self.kv_pairs, function(a,b) return a.duration > b.duration end) --sort by value
     self.title = self:getTitle()
 

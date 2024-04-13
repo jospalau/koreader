@@ -745,7 +745,7 @@ function MosaicMenuItem:paintTo(bb, x, y)
 
     local in_history =  require("readhistory"):getIndexByFile(self.filepath)
     local has_sidecar_file = DocSettings:hasSidecarFile(self.filepath)
-    if self.do_hint_opened and self.been_opened or in_history then
+    if self.do_hint_opened and (self.been_opened or in_history) then
         -- align it on bottom right corner of sub-widget
         local target =  self[1][1][1]
         local ix

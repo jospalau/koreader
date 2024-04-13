@@ -26,7 +26,30 @@ local ProgressWidget = require("ui/widget/progresswidget")
 local Device = require("device")
 local Size = require("ui/size")
 
-getReadToday = function ()
+
+-- self[4] = self.topbar in readerview.lua
+
+local TopBar = WidgetContainer:extend{
+    name = "Topbar",
+    is_enabled = G_reader_settings:isTrue("show_top_bar"),
+    start_session_time = os.time(),
+    -- initial_read_today = getReadToday(),
+    -- initial_read_month = getReadThisMonth(),
+
+    MARGIN_SIDES = Screen:scaleBySize(10),
+    -- El margen de las pantallas, flushed o recessed no es perfecto. La pantalla suele empezar un poco más arriba en casi todos los dispositivos estando un poco por debajo del bezel
+    -- Al menos los Kobos y el Boox Palma
+    -- Podemos cambiar los márgenes
+    -- Para verlo en detalle, es mejor no poner ningún estilo en las barras de progreso
+    MARGIN_TOP = Screen:scaleBySize(9),
+    MARGIN_BOTTOM = Screen:scaleBySize(9),
+    show_top_bar = true,
+}
+
+
+
+
+function TopBar:getReadToday()
     local DataStorage = require("datastorage")
     local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
     local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
@@ -42,7 +65,7 @@ getReadToday = function ()
         FROM    (
                      SELECT sum(duration)    AS sum_duration
                      FROM   page_stat
-                     WHERE  DATE(start_time,'unixepoch','localtime')=DATE('now', '0 day','localtime')
+                     WHERE  DATE(start_time,'unixepoch','localtime') = DATE('now', '0 day', 'localtime')
                      GROUP  BY id_book, page
                 );
     ]]
@@ -60,7 +83,7 @@ getReadToday = function ()
     return read_today
 end
 
-getReadThisMonth = function ()
+function TopBar:getReadThisMonth()
     local DataStorage = require("datastorage")
     local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
     local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
@@ -76,7 +99,7 @@ getReadThisMonth = function ()
         FROM    (
                      SELECT sum(duration)    AS sum_duration
                      FROM   page_stat
-                     WHERE  start_time >= strftime('%s', DATE('now', 'start of month'))
+                     WHERE  DATE(start_time, 'unixepoch', 'localtime') >= DATE('now', 'localtime', 'start of month')
                      GROUP  BY id_book, page
                 );
     ]]
@@ -94,23 +117,6 @@ getReadThisMonth = function ()
     return read_month
 end
 
--- self[4] = self.topbar in readerview.lua
-
-local TopBar = WidgetContainer:extend{
-    name = "Topbar",
-    is_enabled = G_reader_settings:isTrue("show_top_bar"),
-    start_session_time = os.time(),
-    initial_read_today = getReadToday(),
-    initial_read_month = getReadThisMonth(),
-    MARGIN_SIDES = Screen:scaleBySize(10),
-    -- El margen de las pantallas, flushed o recessed no es perfecto. La pantalla suele empezar un poco más arriba en casi todos los dispositivos estando un poco por debajo del bezel
-    -- Al menos los Kobos y el Boox Palma
-    -- Podemos cambiar los márgenes
-    -- Para verlo en detalle, es mejor no poner ningún estilo en las barras de progreso
-    MARGIN_TOP = Screen:scaleBySize(9),
-    MARGIN_BOTTOM = Screen:scaleBySize(9),
-    show_top_bar = true,
-}
 
 function TopBar:init()
     -- La inicialización del objeto ocurre una única vez pero el método init ocurre cada vez que abrimos el documento
@@ -364,10 +370,13 @@ function TopBar:onReaderReady()
     if Device:isAndroid() then
         TopBar.MARGIN_SIDES =  Screen:scaleBySize(20)
     end
+    self.start_session_time = os.time()
+    self.initial_read_today = self.getReadToday()     
+    self.initial_read_month = self.getReadThisMonth()
 end
 function TopBar:onToggleShowTopBar()
     local show_top_bar = G_reader_settings:isTrue("show_top_bar")
-    G_reader_settings:saveSetting("show_top_bar", not show_top_bar)
+    G_reader_settings	:saveSetting("show_top_bar", not show_top_bar)
     TopBar.is_enabled = not show_top_bar
     self:toggleBar()
 end
@@ -380,7 +389,8 @@ end
 
 function TopBar:onResume()
     self.start_session_time = os.time()
-    self.initial_read_today = getReadToday()
+    self.initial_read_today = self.getReadToday()
+    self.initial_read_month = self.getReadThisMonth()
     self:toggleBar()
 end
 
@@ -423,7 +433,8 @@ function TopBar:toggleBar()
         local now_t = os.date("*t")
         local daysdiff = now_t.day - os.date("*t",self.start_session_time).day
         if daysdiff > 0 then
-            self.initial_read_today = getReadToday()
+            self.initial_read_today = self.getReadToday()
+            self.initial_read_month = self.getReadThisMonth()
             self.start_session_time = os.time()
         end
 
@@ -577,6 +588,7 @@ function TopBar:toggleBar()
         self.progress_bar.width = 0
         self.progress_bar2.width = 0
         self.progress_chapter_bar.width = 0
+        self.times_text_text = ""
     end
 end
 
@@ -641,7 +653,7 @@ function TopBar:paintTo(bb, x, y)
         -- self[4]:paintTo(bb, x - Screen:getHeight()/2 - self[4][1][1]:getSize().w/2, y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
 
         -- Inverted aligned to side left top
-        self[4]:paintTo(bb, x - Screen:getHeight() + TopBar.MARGIN_TOP + Screen:scaleBySize(3), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
+        self[4]:paintTo(bb, x - Screen:getHeight() + TopBar.MARGIN_TOP + Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
 
 
 
