@@ -161,9 +161,21 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
         status = filemanagerutil.getStatus(file)
     end
     local function genStatusButton(to_status)
+
+        local enabled = false
+
+        local ui = require("apps/filemanager/filemanager").instance
+        -- If we are not in the File Manager (we are in an opened book)
+        -- don't allow to change books to tbr
+        -- because opened tbr books status is moved to reading when opening them (readerui.lua)
+        if to_status == "tbr" and not ui then
+            enabled = false
+        else
+            enabled = status ~= to_status
+        end
         return {
             text = filemanagerutil.statusToString(to_status) .. (status == to_status and "  ✓" or ""),
-            enabled = status ~= to_status,
+            enabled = enabled,
             callback = function()
                 if to_status == "complete" then
                     require("readhistory"):removeItemByPath(file)
