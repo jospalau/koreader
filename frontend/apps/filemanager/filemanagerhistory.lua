@@ -240,51 +240,59 @@ function FileManagerHistory:MenuSetRotationModeHandler(rotation)
 end
 
 function FileManagerHistory:onShowHist(search_info)
-    local ReadHistory = require("readhistory")
-    ReadHistory.hist = {}
-    ReadHistory:reload(true)
-    self.hist_menu = Menu:new{
-        ui = self.ui,
-        covers_fullscreen = true, -- hint for UIManager:_repaint()
-        is_borderless = true,
-        is_popout = false,
-        title = self.hist_menu_title,
-        -- item and book cover thumbnail dimensions in Mosaic and Detailed list display modes
-        -- must be equal in File manager, History and Collection windows to avoid image scaling
-        title_bar_fm_style = true,
-        title_bar_left_icon = "appbar.menu",
-        onLeftButtonTap = function() self:showHistDialog() end,
-        onMenuChoice = self.onMenuChoice,
-        onMenuHold = self.onMenuHold,
-        onSetRotationMode = self.MenuSetRotationModeHandler,
-        _manager = self,
-    }
-
-    if search_info then
-        self.search_string = search_info.search_string
-        self.case_sensitive = search_info.case_sensitive
+    if self.ui.document and self.ui.document.file then
+        local Notification = require("ui/widget/notification")
+        local Size = require("ui/size")
+        UIManager:show(Notification:new{
+            margin = Size.margin.tiny,
+            text = _("Currently reading a book"),
+        })
     else
-        self.search_string = nil
-    end
-    self.filter = G_reader_settings:readSetting("history_filter", "all")
-    self.is_frozen = G_reader_settings:isTrue("history_freeze_finished_books")
-    if self.filter ~= "all" or self.is_frozen then
-        self:fetchStatuses(false)
-    end
-    self:updateItemTable()
-    self.hist_menu.close_callback = function()
-        if self.files_updated then -- refresh Filemanager list of files
-            if self.ui.file_chooser then
-                self.ui.file_chooser:refreshPath()
-            end
-            self.files_updated = nil
+        local ReadHistory = require("readhistory")
+        ReadHistory.hist = {}
+        ReadHistory:reload(true)
+        self.hist_menu = Menu:new{
+            ui = self.ui,
+            covers_fullscreen = true, -- hint for UIManager:_repaint()
+            is_borderless = true,
+            is_popout = false,
+            title = self.hist_menu_title,
+            -- item and book cover thumbnail dimensions in Mosaic and Detailed list display modes
+            -- must be equal in File manager, History and Collection windows to avoid image scaling
+            title_bar_fm_style = true,
+            title_bar_left_icon = "appbar.menu",
+            onLeftButtonTap = function() self:showHistDialog() end,
+            onMenuChoice = self.onMenuChoice,
+            onMenuHold = self.onMenuHold,
+            onSetRotationMode = self.MenuSetRotationModeHandler,
+            _manager = self,
+        }
+        if search_info then
+            self.search_string = search_info.search_string
+            self.case_sensitive = search_info.case_sensitive
+        else
+            self.search_string = nil
         end
-        self.statuses_fetched = nil
-        UIManager:close(self.hist_menu)
-        self.hist_menu = nil
-        G_reader_settings:saveSetting("history_filter", self.filter)
+        self.filter = G_reader_settings:readSetting("history_filter", "all")
+        self.is_frozen = G_reader_settings:isTrue("history_freeze_finished_books")
+        if self.filter ~= "all" or self.is_frozen then
+            self:fetchStatuses(false)
+        end
+        self:updateItemTable()
+        self.hist_menu.close_callback = function()
+            if self.files_updated then -- refresh Filemanager list of files
+                if self.ui.file_chooser then
+                    self.ui.file_chooser:refreshPath()
+                end
+                self.files_updated = nil
+            end
+            self.statuses_fetched = nil
+            UIManager:close(self.hist_menu)
+            self.hist_menu = nil
+            G_reader_settings:saveSetting("history_filter", self.filter)
+        end
+        UIManager:show(self.hist_menu, "flashui")
     end
-    UIManager:show(self.hist_menu, "flashui")
     return true
 end
 
