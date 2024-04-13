@@ -195,7 +195,8 @@ function FileManagerMenu:setUpdateItemTable()
                 sub_item_table = {
                     {
                         text_func = function()
-                            return T(_("Items per page: %1"), G_reader_settings:readSetting("items_per_page"))
+                            return T(_("Items per page: %1"),
+                                G_reader_settings:readSetting("items_per_page") or FileChooser.items_per_page_default)
                         end,
                         help_text = _([[This sets the number of items per page in:
 - File browser, history and favorites in 'classic' display mode
@@ -203,8 +204,8 @@ function FileManagerMenu:setUpdateItemTable()
 - File and folder selection
 - Calibre and OPDS browsers/search results]]),
                         callback = function(touchmenu_instance)
-                            local current_value = G_reader_settings:readSetting("items_per_page")
                             local default_value = FileChooser.items_per_page_default
+                            local current_value = G_reader_settings:readSetting("items_per_page") or default_value
                             local widget = SpinWidget:new{
                                 title_text =  _("Items per page"),
                                 value = current_value,
@@ -227,7 +228,8 @@ function FileManagerMenu:setUpdateItemTable()
                         end,
                         callback = function(touchmenu_instance)
                             local current_value = FileChooser.font_size
-                            local default_value = FileChooser.getItemFontSize(G_reader_settings:readSetting("items_per_page"))
+                            local default_value = FileChooser.getItemFontSize(G_reader_settings:readSetting("items_per_page")
+                                or FileChooser.items_per_page_default)
                             local widget = SpinWidget:new{
                                 title_text =  _("Item font size"),
                                 value = current_value,
@@ -475,7 +477,7 @@ To:
 
     if Device:supportsScreensaver() then
         self.menu_items.screensaver = {
-            text = _("Screensaver"),
+            text = _("Sleep screen"),
             sub_item_table = require("ui/elements/screensaver_menu"),
         }
     end

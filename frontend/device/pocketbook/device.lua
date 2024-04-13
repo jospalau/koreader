@@ -399,6 +399,14 @@ function PocketBook:initNetworkManager(NetworkMgr)
         return band(inkview.QueryNetwork(), C.NET_CONNECTED) ~= 0
     end
     NetworkMgr.isWifiOn = NetworkMgr.isConnected
+
+    function NetworkMgr:isOnline()
+        -- Fail early if we don't even have a default route, otherwise we're
+        -- unlikely to be online and canResolveHostnames would never succeed
+        -- again because PocketBook's glibc parses /etc/resolv.conf on first
+        -- use only. See https://sourceware.org/bugzilla/show_bug.cgi?id=984
+        return NetworkMgr:hasDefaultRoute() and NetworkMgr:canResolveHostnames()
+    end
 end
 
 function PocketBook:getSoftwareVersion()
@@ -611,7 +619,6 @@ local PocketBook632 = PocketBook:extend{
 local PocketBook633 = PocketBook:extend{
     model = "PBColor",
     display_dpi = 300,
-    color_saturation = 1.5,
     hasColorScreen = yes,
     canHWDither = yes, -- Adjust color saturation with inkview
     canUseCBB = no, -- 24bpp
@@ -685,7 +692,6 @@ local PocketBook740_2 = PocketBook:extend{
 local PocketBook741 = PocketBook:extend{
     model = "PBInkPadColor",
     display_dpi = 300,
-    color_saturation = 1.5,
     hasColorScreen = yes,
     canHWDither = yes, -- Adjust color saturation with inkview
     canUseCBB = no, -- 24bpp
@@ -702,7 +708,6 @@ end
 local PocketBook743C = PocketBook:extend{
     model = "PBInkPadColor2",
     display_dpi = 300,
-    color_saturation = 1.5,
     hasColorScreen = yes,
     canHWDither = yes, -- Adjust color saturation with inkview
     canUseCBB = no, -- 24bpp
@@ -721,7 +726,6 @@ local PocketBook743K3 = PocketBook:extend{
     model = "PBInkPadColor3",
     display_dpi = 300,
     viewport = Geom:new{x=3, y=2, w=1395, h=1864},
-    color_saturation = 1.5,
     hasColorScreen = yes,
     canHWDither = yes, -- Adjust color saturation with inkview
     canUseCBB = no, -- 24bpp
@@ -748,7 +752,6 @@ local PocketBook743G = PocketBook:extend{
 local PocketBookColorLux = PocketBook:extend{
     model = "PBColorLux",
     display_dpi = 125,
-    color_saturation = 1.5,
     hasColorScreen = yes,
     canHWDither = yes, -- Adjust color saturation with inkview
     canUseCBB = no, -- 24bpp

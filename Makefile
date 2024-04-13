@@ -68,10 +68,7 @@ WIN32_DIR=$(PLATFORM_DIR)/win32
 
 # appimage setup
 APPIMAGETOOL=appimagetool-x86_64.AppImage
-APPIMAGETOOL_URL=https://github.com/AppImage/AppImageKit/releases/download/12/appimagetool-x86_64.AppImage
-
-# set to 1 if in Docker
-DOCKER:=$(shell grep -q docker /proc/1/cgroup 2>/dev/null && echo 1)
+APPIMAGETOOL_URL=https://github.com/AppImage/AppImageKit/releases/download/13/appimagetool-x86_64.AppImage
 
 # files to link from main directory
 INSTALL_FILES=reader.lua setupkoenv.lua frontend resources defaults.lua datastorage.lua \
@@ -143,10 +140,7 @@ $(INSTALL_DIR)/koreader/.luacov:
 testfront: $(INSTALL_DIR)/koreader/.busted
 	# sdr files may have unexpected impact on unit testing
 	-rm -rf spec/unit/data/*.sdr
-	cd $(INSTALL_DIR)/koreader && ./luajit $(shell which busted) \
-		--sort-files \
-		--output=gtest \
-		--exclude-tags=notest $(BUSTED_OVERRIDES) $(BUSTED_SPEC_FILE)
+	cd $(INSTALL_DIR)/koreader && $(BUSTED_LUAJIT) $(BUSTED_OVERRIDES) $(BUSTED_SPEC_FILE)
 
 test: $(INSTALL_DIR)/koreader/.busted
 	$(MAKE) -C $(KOR_BASE) test
@@ -336,19 +330,14 @@ appimageupdate: all
 	# TODO at best this is DebUbuntu specific
 	ln -sf /usr/lib/x86_64-linux-gnu/libSDL2-2.0.so.0 $(INSTALL_DIR)/koreader/libs/libSDL2.so
 	# required for our stock Ubuntu SDL even though we don't use sound
-	# the readlink is a half-hearted attempt at being generic; the echo libsndio.so.6.1 is specific to the nightly builds
-	ln -sf /usr/lib/x86_64-linux-gnu/$(shell readlink /usr/lib/x86_64-linux-gnu/libsndio.so || echo libsndio.so.6.1) $(INSTALL_DIR)/koreader/libs/
+	# the readlink is a half-hearted attempt at being generic; the echo libsndio.so.7.0 is specific to the nightly builds
+	ln -sf /usr/lib/x86_64-linux-gnu/$(shell readlink /usr/lib/x86_64-linux-gnu/libsndio.so || echo libsndio.so.7.0) $(INSTALL_DIR)/koreader/libs/
 	# also copy libbsd.so.0, cf. https://github.com/koreader/koreader/issues/4627
 	ln -sf /lib/x86_64-linux-gnu/libbsd.so.0 $(INSTALL_DIR)/koreader/libs/
 ifeq ("$(wildcard $(APPIMAGETOOL))","")
 	# download appimagetool
 	wget "$(APPIMAGETOOL_URL)"
 	chmod a+x "$(APPIMAGETOOL)"
-endif
-ifeq ($(DOCKER), 1)
-	# remove previously extracted appimagetool, if any
-	rm -rf squashfs-root
-	./$(APPIMAGETOOL) --appimage-extract
 endif
 	cd $(INSTALL_DIR) && pwd && \
 		rm -rf tmp && mkdir -p tmp && \
@@ -359,7 +348,7 @@ endif
 
 	# generate AppImage
 	cd $(INSTALL_DIR)/tmp && \
-		ARCH=x86_64 ../../$(if $(DOCKER),squashfs-root/AppRun,$(APPIMAGETOOL)) koreader && \
+		ARCH=x86_64 "$$OLDPWD/$(APPIMAGETOOL)" --appimage-extract-and-run koreader && \
 		mv *.AppImage ../../koreader-$(DIST)-$(MACHINE)-$(VERSION).AppImage
 
 androidupdate: all
