@@ -25,73 +25,6 @@ local SQ3 = require("lua-ljsqlite3/init")
 local ProgressWidget = require("ui/widget/progresswidget")
 local Device = require("device")
 
-getReadToday = function ()
-    local DataStorage = require("datastorage")
-    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
-    local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
-    -- best to e it to letters, to get '2m' ?
-    -- user_duration_format = "letters"
-
-    local conn = SQ3.open(db_location)
-
-
-
-    local sql_stmt = [[
-        SELECT sum(sum_duration)
-        FROM    (
-                     SELECT sum(duration)    AS sum_duration
-                     FROM   page_stat
-                     WHERE  DATE(start_time,'unixepoch','localtime')=DATE('now', '0 day','localtime')
-                     GROUP  BY id_book, page
-                );
-    ]]
-
-    local read_today = conn:rowexec(string.format(sql_stmt))
-
-    conn:close()
-
-    if read_today == nil then
-        read_today = 0
-    end
-    read_today = tonumber(read_today)
-
-
-    return read_today
-end
-
-getReadThisMonth = function ()
-    local DataStorage = require("datastorage")
-    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
-    local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
-    -- best to e it to letters, to get '2m' ?
-    -- user_duration_format = "letters"
-
-    local conn = SQ3.open(db_location)
-
-
-
-    local sql_stmt = [[
-        SELECT sum(sum_duration)
-        FROM    (
-                     SELECT sum(duration)    AS sum_duration
-                     FROM   page_stat
-                     WHERE  start_time >= strftime('%s', DATE('now', 'start of month'))
-                     GROUP  BY id_book, page
-                );
-    ]]
-
-    local read_month = conn:rowexec(sql_stmt)
-
-    conn:close()
-
-    if read_month == nil then
-        read_month = 0
-    end
-    read_month = tonumber(read_month)
-
-
-    return read_month
-end
 
 -- self[4] = self.topbar in readerview.lua
 
@@ -99,8 +32,6 @@ local DoubleBar = WidgetContainer:extend{
     name = "DoubleBar",
     is_enabled = G_reader_settings:isTrue("show_double_bar"),
     start_session_time = os.time(),
-    initial_read_today = getReadToday(),
-    initial_read_month = getReadThisMonth(),
     MARGIN_SIDES = Screen:scaleBySize(10),
     -- El margen de las pantallas, flushed o recessed no es perfecto. La pantalla suele empezar un poco más arriba en casi todos los dispositivos estando un poco por debajo del bezel
     -- Al menos los Kobos y el Boox Palma
@@ -117,21 +48,9 @@ function DoubleBar:init()
         self.start_session_time = DoubleBar.preserved_start_session_time
         DoubleBar.preserved_start_session_time = nil
     end
-
-    if DoubleBar.preserved_initial_read_today then
-        self.initial_read_today = DoubleBar.preserved_initial_read_today
-        DoubleBar.preserved_initial_read_today = nil
-    end
-
-    if DoubleBar.preserved_initial_read_month then
-        self.initial_read_month = DoubleBar.preserved_initial_read_month
-        DoubleBar.preserved_initial_read_month = nil
-    end
 end
 
 function DoubleBar:onReaderReady()
-
-
     if Device:isAndroid() then
         DoubleBar.MARGIN_SIDES =  Screen:scaleBySize(30)
     end
@@ -166,13 +85,6 @@ function DoubleBar:onReaderReady()
         face = Font:getFace("myfont4"),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
-
-    self.times_text = TextWidget:new{
-        text =  "",
-        face = Font:getFace("myfont4"),
-        fgcolor = Blitbuffer.COLOR_BLACK,
-    }
-
 
     self.title_text = TextWidget:new{
         text =  "",
@@ -222,17 +134,6 @@ function DoubleBar:onReaderReady()
         self.title_text,
     }
 
-
-    self[4] = FrameContainer:new{
-        left_container:new{
-            dimen = Geom:new(),
-            self.times_text,
-        },
-        -- background = Blitbuffer.COLOR_WHITE,
-        bordersize = 0,
-        padding = 0,
-        padding_bottom = self.bottom_padding,
-    }
 
 
     self[5] = FrameContainer:new{
@@ -320,7 +221,6 @@ end
 
 function DoubleBar:onResume()
     self.start_session_time = os.time()
-    self.initial_read_today = getReadToday()
     self:toggleBar()
 end
 
@@ -328,8 +228,6 @@ end
 function DoubleBar:onPreserveCurrentSession()
     -- Can be called before ReaderUI:reloadDocument() to not reset the current session
     DoubleBar.preserved_start_session_time = self.start_session_time
-    DoubleBar.preserved_initial_read_today = self.initial_read_today
-    DoubleBar.preserved_initial_read_month = self.initial_read_month
 end
 
 
@@ -347,7 +245,6 @@ function DoubleBar:toggleBar()
         local now_t = os.date("*t")
         local daysdiff = now_t.day - os.date("*t",self.start_session_time).day
         if daysdiff > 0 then
-            self.initial_read_today = getReadToday()
             self.start_session_time = os.time()
         end
 
@@ -359,17 +256,9 @@ function DoubleBar:toggleBar()
         self.wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
         self.wpm_text:setText(self.wpm_session .. "wpm")
 
-        local read_today = self.initial_read_today + (os.time() - self.start_session_time)
-        read_today = datetime.secondsToClockDuration(user_duration_format, read_today, false)
-
-        local read_month = self.initial_read_month + (os.time() - self.start_session_time)
-        read_month = datetime.secondsToClockDuration(user_duration_format, read_month, false)
-
         self.session_time_text:setText(datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")))
         self.progress_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
 
-
-        self.times_text:setText(session_time .. "|≃" .. read_today .. "|≃" .. read_month)
 
 
         local title = self.ui.document._document:getDocumentProps().title
@@ -413,7 +302,6 @@ function DoubleBar:toggleBar()
     else
         self.session_time_text:setText("")
         self.progress_text:setText("")
-        self.times_text:setText("")
         self.title_text:setText("")
         self.chapter_text:setText("")
         self.progress_chapter_text:setText("")
