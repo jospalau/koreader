@@ -245,18 +245,18 @@ function FileManagerHistory:onShowHist(search_info)
     ReadHistory:reload(true)
 
     local title = ""
-    if self.ui.document and self.ui.document.file then
-        title = self.hist_menu_title .. " " .. self.ui.document._document:getDocumentProps().title
-    else
-        title = self.hist_menu_title
-    end
+    -- if self.ui.document and self.ui.document.file then
+    --     title = self.hist_menu_title .. " " .. self.ui.document._document:getDocumentProps().title
+    -- else
+    --     title = self.hist_menu_title
+    -- end
 
     self.hist_menu = Menu:new{
         ui = self.ui,
         covers_fullscreen = true, -- hint for UIManager:_repaint()
         is_borderless = true,
         is_popout = false,
-        title = title,
+        title = self.hist_menu_title,
         -- item and book cover thumbnail dimensions in Mosaic and Detailed list display modes
         -- must be equal in File manager, History and Collection windows to avoid image scaling
         title_bar_fm_style = true,
