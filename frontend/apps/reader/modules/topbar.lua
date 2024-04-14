@@ -181,6 +181,14 @@ function TopBar:onReaderReady()
     }
 
 
+    self.time_battery_text = TextWidget:new{
+        text =  "",
+        face = Font:getFace("myfont4", 12),
+        fgcolor = Blitbuffer.COLOR_BLACK,
+        invert = true,
+    }
+
+
     self.title_text = TextWidget:new{
         text =  "",
         face = Font:getFace("myfont4"),
@@ -367,11 +375,24 @@ function TopBar:onReaderReady()
     --     }
     -- }
 
+
+    self[10] = FrameContainer:new{
+        left_container:new{
+            dimen = Geom:new(),
+            self.time_battery_text,
+        },
+        -- background = Blitbuffer.COLOR_WHITE,
+        bordersize = 0,
+        padding = 0,
+        padding_bottom = self.bottom_padding,
+    }
+
+
     if Device:isAndroid() then
         TopBar.MARGIN_SIDES =  Screen:scaleBySize(20)
     end
     self.start_session_time = os.time()
-    self.initial_read_today = self.getReadToday()     
+    self.initial_read_today = self.getReadToday()
     self.initial_read_month = self.getReadThisMonth()
 end
 function TopBar:onToggleShowTopBar()
@@ -458,6 +479,14 @@ function TopBar:toggleBar()
 
         -- self.times_text:setText(session_time .. "|" .. read_today .. "|" .. read_month)
         self.times_text_text = session_time .. "|" .. read_today .. "|" .. read_month
+
+
+        local powerd = Device:getPowerDevice()
+        local batt_lvl = tostring(powerd:getCapacity())
+
+
+        local time = datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
+        self.time_battery_text_text = time .. "|" .. batt_lvl .. "%"
 
         local title = self.ui.document._document:getDocumentProps().title
         local words = "?w"
@@ -582,6 +611,7 @@ function TopBar:toggleBar()
         self.session_time_text:setText("")
         self.progress_text:setText("")
         self.times_text:setText("")
+        self.time_battery_text:setText("")
         self.title_text:setText("")
         self.chapter_text:setText("")
         self.progress_chapter_text:setText("")
@@ -589,6 +619,7 @@ function TopBar:toggleBar()
         self.progress_bar2.width = 0
         self.progress_chapter_bar.width = 0
         self.times_text_text = ""
+        self.time_battery_text_text = ""
     end
 end
 
@@ -646,7 +677,6 @@ function TopBar:paintTo(bb, x, y)
 
         -- This is inverted to be shown in left margin
         self[4][1][1]:setText(self.times_text_text:reverse())
-
         -- When inverted, the text is positioned to the end of the screen
         -- So, we take that position as a reference to position it later
         -- Inverted aligned to side left center
@@ -665,7 +695,8 @@ function TopBar:paintTo(bb, x, y)
         self[8]:paintTo(bb, x + Screen:getWidth() - self[8][1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
 
-
+        self[10][1][1]:setText(self.time_battery_text_text:reverse())
+        self[10]:paintTo(bb, x - self[10][1][1]:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
 
 
         -- self[6][1].dimen.w = self[6][1][1]:getSize().w
