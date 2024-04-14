@@ -637,7 +637,7 @@ function TopBar:paintTo(bb, x, y)
                 -- self[9]:paintTo(bb, x, Screen:getHeight() - Screen:scaleBySize(12))
             end
         end
-        self[1]:paintTo(bb, x + TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
+        -- self[1]:paintTo(bb, x + TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
 
         -- Top center
 
@@ -683,7 +683,7 @@ function TopBar:paintTo(bb, x, y)
         -- self[4]:paintTo(bb, x - Screen:getHeight()/2 - self[4][1][1]:getSize().w/2, y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
 
         -- Inverted aligned to side left top
-        self[4]:paintTo(bb, x - Screen:getHeight() + TopBar.MARGIN_TOP + Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
+        self[4]:paintTo(bb, x - Screen:getHeight() + TopBar.MARGIN_TOP, y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
 
 
 
