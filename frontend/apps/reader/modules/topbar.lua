@@ -683,7 +683,7 @@ function TopBar:paintTo(bb, x, y)
         -- self[4]:paintTo(bb, x - Screen:getHeight()/2 - self[4][1][1]:getSize().w/2, y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
 
         -- Inverted aligned to side left top
-        self[4]:paintTo(bb, x - Screen:getHeight() + TopBar.MARGIN_TOP, y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
+        self[4]:paintTo(bb, x - Screen:getHeight() + TopBar.MARGIN_BOTTOM + Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
 
 
 
@@ -697,8 +697,10 @@ function TopBar:paintTo(bb, x, y)
 
         self[10][1][1]:setText(self.time_battery_text_text:reverse())
 
+
+        -- Inverted aligned to side left bottom
         -- self[10]:paintTo(bb, x - self[10][1][1]:getSize().w, y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
-        self[10]:paintTo(bb, x -  self[10][1][1]:getSize().w - TopBar.MARGIN_TOP, y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
+        self[10]:paintTo(bb, x - self[10][1][1]:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
 
 
         -- self[6][1].dimen.w = self[6][1][1]:getSize().w
