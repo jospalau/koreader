@@ -139,7 +139,8 @@ function ReaderStatistics:init()
         ["ditingp_global"] = 5, -- Xiaomi
         ["boox"] = 6,
         ["PB700"] = 7, -- PocketBook
-        ["ares"] = 8 -- Likebook Ares
+        ["ares"] = 8, -- Likebook Ares
+        ["rk3566_eink"] = 9 -- Meebook M6
     }
 
     if Device:isPocketBook() and not ReaderStatistics.preserve then
