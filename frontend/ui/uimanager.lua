@@ -1163,6 +1163,8 @@ function UIManager:_refresh(mode, region, dither)
     -- It looks like flashui implementation in both cases doesn't flash and doesn't avoid ghosting
     -- at least in PocketBook devices (refreshFlashUIImp in framebuffer_pocketbook.lua)
     -- We better sort it out here
+    -- For PocketBook devices, a change has been nade un framebuffer_pocketbook.lua for PocketBook devices so it works
+    -- For Android devices, Onyx devices don't have support, we see in OnyxEPDController.kt how the getMode() function returns "full-only"
 
 
     -- We can see where flashui occurs searching in code or logging
@@ -1170,9 +1172,8 @@ function UIManager:_refresh(mode, region, dither)
     -- local android = require("android")
     -- android.LOGW("paso " .. tostring(mode))
 
-    -- We can modify the function onCloseWidget() in configdialog.lua setting "flashui" instead of "partial" as well
-    -- so a full refresh will be made when closing the bottom configuration dialog
-    if not G_reader_settings:isTrue("avoid_flashing_ui") and mode == "flashui" and (Device:isAndroid() or Device:isPocketBook()) then
+    -- We can modify the function onCloseWidget() in configdialog.lua setting "flashui" instead of "partial" as well so a full refresh will be made when closing the bottom configuration dialog
+    if not G_reader_settings:isTrue("avoid_flashing_ui") and mode == "flashui" and Device:isAndroid() then
         mode = "full"
     end
     if mode == "partial" and self.FULL_REFRESH_COUNT > 0 and not self.refresh_counted then
