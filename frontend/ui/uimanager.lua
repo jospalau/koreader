@@ -1155,6 +1155,26 @@ function UIManager:_refresh(mode, region, dither)
     --       (Putting "ui" in that list is problematic with a number of UI elements, most notably, ReaderHighlight,
     --       because it is implemented as "ui" over the full viewport, since we can't devise a proper bounding box).
     --       So we settle for only "partial", but treating full-screen ones slightly differently.
+
+
+
+
+    -- PocketBook and Android devices not flashing even though Avoid mandatory black flashes in UI is unchecked
+    -- It looks like flashui implementation in both cases doesn't flash and doesn't avoid ghosting
+    -- at least in PocketBook devices (refreshFlashUIImp in framebuffer_pocketbook.lua)
+    -- We better sort it out here
+
+
+    -- We can see where flashui occurs searching in code or logging
+    -- ./kodev log android
+    -- local android = require("android")
+    -- android.LOGW("paso " .. tostring(mode))
+
+    -- We can modify the function onCloseWidget() in configdialog.lua setting "flashui" instead of "partial" as well
+    -- so a full refresh will be made when closing the bottom configuration dialog
+    if not G_reader_settings:isTrue("avoid_flashing_ui") and mode == "flashui" and (Device:isAndroid() or Device:isPocketBook()) then
+        mode = "full"
+    end
     if mode == "partial" and self.FULL_REFRESH_COUNT > 0 and not self.refresh_counted then
         self.refresh_count = (self.refresh_count + 1) % self.FULL_REFRESH_COUNT
         if self.refresh_count == self.FULL_REFRESH_COUNT - 1 then

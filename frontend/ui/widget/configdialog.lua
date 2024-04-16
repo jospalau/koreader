@@ -942,7 +942,7 @@ end
 function ConfigDialog:onCloseWidget()
     -- NOTE: As much as we would like to flash here, don't, because of adverse interactions with touchmenu that might lead to a double flash...
     UIManager:setDirty(nil, function()
-        return "partial", self.dialog_frame.dimen
+        return "flashui", self.dialog_frame.dimen
     end)
 end
 
