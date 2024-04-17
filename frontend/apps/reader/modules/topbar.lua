@@ -391,9 +391,14 @@ function TopBar:onReaderReady()
     if Device:isAndroid() then
         TopBar.MARGIN_SIDES =  Screen:scaleBySize(20)
     end
-    self.start_session_time = os.time()
-    self.initial_read_today = self.getReadToday()
-    self.initial_read_month = self.getReadThisMonth()
+    if self.initial_read_today == nil then
+        self.initial_read_today = self.getReadToday()
+    end
+
+    if self.initial_read_month == nil then
+        self.initial_read_month = self.getReadThisMonth()
+    end
+
 end
 function TopBar:onToggleShowTopBar()
     local show_top_bar = G_reader_settings:isTrue("show_top_bar")
