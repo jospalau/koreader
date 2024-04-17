@@ -1611,13 +1611,15 @@ function ReaderHighlight:onTranslateCurrentPage()
 end
 
 function ReaderHighlight:onHoldRelease()
-    if self.clear_id then
-        -- Something has requested a clear id and is about to clear
-        -- the highlight: it may be a onHoldClose() that handled
-        -- "hold" and was closed, and can't handle "hold_release":
-        -- ignore this "hold_release" event.
-        return true
-    end
+    -- Comment this bit since the Clara2E doesn't show sometimes the popup window after selecting the text
+    -- Commented for all devices
+    -- if self.clear_id then
+    --     -- Something has requested a clear id and is about to clear
+    --     -- the highlight: it may be a onHoldClose() that handled
+    --     -- "hold" and was closed, and can't handle "hold_release":
+    --     -- ignore this "hold_release" event.
+    --     return true
+    -- end
 
     local long_final_hold = self.long_hold_reached
     self:_resetHoldTimer(true) -- clear state
