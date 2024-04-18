@@ -558,9 +558,15 @@ function TopBar:toggleBar()
         end
 
 
---
+
+
         self.chapter_text:setText(chapter)
-        self.progress_chapter_text:setText(self.view.footer:getChapterProgress(false))
+        local left = self.ui.toc:getChapterPagesLeft(self.view.footer.pageno) or self.ui.document:getTotalPagesLeft(self.view.footer.pageno)
+
+        local left_time = self.ui.toc:getChapterPagesLeft(self.view.footer.pageno) or self.ui.document:getTotalPagesLeft(self.view.footer.pageno)
+        left_time = self.view.footer:getDataFromStatistics("", left)
+
+        self.progress_chapter_text:setText(self.view.footer:getChapterProgress(false) .. " " .. left_time)
 
 
         -- -- Option 1 for the three bars
@@ -659,7 +665,9 @@ function TopBar:onPageUpdate()
 end
 
 function TopBar:paintTo(bb, x, y)
-        -- Top left
+        -- The alighment is good but there are things to take into account
+        -- - Any screen side in any screen type, flushed or recessed are not aligned with the frame, they can be a little bit hidden. It depends on the devices
+        -- - There are some fonts that are bigger than its em square so the aligment may be not right. For instance Bitter Pro descender overpass its bottom limits
         if TopBar.show_top_bar then
             if self.progress_bar2.altbar then
                 self[9]:paintTo(bb, x + TopBar.MARGIN_SIDES, y +  Screen:scaleBySize(12))
