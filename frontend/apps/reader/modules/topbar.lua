@@ -155,7 +155,7 @@ function TopBar:onReaderReady()
 
     self.wpm_text = TextWidget:new{
         text = self.wpm_session .. "wpm",
-        face = Font:getFace("myfont4"),
+        face = Font:getFace("myfont3"),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
@@ -163,19 +163,19 @@ function TopBar:onReaderReady()
 
     self.session_time_text = TextWidget:new{
         text = "",
-        face = Font:getFace("myfont4"),
+        face = Font:getFace("myfont3"),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
     self.progress_text = TextWidget:new{
         text =  "",
-        face = Font:getFace("myfont4"),
+        face = Font:getFace("myfont3"),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
     self.times_text = TextWidget:new{
         text =  "",
-        face = Font:getFace("myfont4", 12),
+        face = Font:getFace("myfont3", 12),
         fgcolor = Blitbuffer.COLOR_BLACK,
         invert = true,
     }
@@ -183,7 +183,7 @@ function TopBar:onReaderReady()
 
     self.time_battery_text = TextWidget:new{
         text =  "",
-        face = Font:getFace("myfont4", 12),
+        face = Font:getFace("myfont3", 12),
         fgcolor = Blitbuffer.COLOR_BLACK,
         invert = true,
     }
@@ -191,20 +191,20 @@ function TopBar:onReaderReady()
 
     self.title_text = TextWidget:new{
         text =  "",
-        face = Font:getFace("myfont4"),
+        face = Font:getFace("myfont3",14),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
 
     self.chapter_text = TextWidget:new{
         text =  "",
-        face = Font:getFace("myfont4"),
+        face = Font:getFace("myfont3",14),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
     self.progress_chapter_text = TextWidget:new{
         text =  "",
-        face = Font:getFace("myfont4"),
+        face = Font:getFace("myfont3"),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
@@ -290,6 +290,28 @@ function TopBar:onReaderReady()
         padding = 0,
         padding_bottom = self.bottom_padding,
     }
+
+
+    self.progress_barr  = ProgressWidget:new{
+        width = 200,
+        height = 5,
+        percentage = 0,
+        tick_width = Screen:scaleBySize(1),
+        ticks = nil, -- ticks will be populated in self:updateFooterText
+        last = nil, -- last will be initialized in self:updateFooterText
+    }
+
+    self[20] = FrameContainer:new{
+        left_container:new{
+            dimen = Geom:new(),
+            self.progress_barr,
+        },
+        -- background = Blitbuffer.COLOR_WHITE,
+        bordersize = 0,
+        padding = 0,
+        padding_bottom = self.bottom_padding,
+    }
+
 
     self.progress_chapter_bar = ProgressWidget:new{
         width = 200,
@@ -520,14 +542,18 @@ function TopBar:toggleBar()
         -- self.progress_bar.height = self.title_text:getSize().h
         -- self.progress_chapter_bar.height = self.title_text:getSize().h
 
-        self.progress_bar.height = 20
-        self.progress_chapter_bar.height = 20
+        self.progress_bar.height = self.chapter_text.face.size
+        self.progress_barr.height = 1
+
+        self.progress_chapter_bar.height = self.title_text.face.size
 
         if Device:isAndroid() then
             self.progress_bar.width = 150
+            self.progress_barr.width = 150
             self.progress_chapter_bar.width = 150
         else
             self.progress_bar.width = 250
+            self.progress_barr.width = 250
             self.progress_chapter_bar.width = 250
         end
 
@@ -652,15 +678,16 @@ function TopBar:paintTo(bb, x, y)
 
         -- Top right
         -- Commented the text, using progress bar
-        if not TopBar.show_top_bar then
-            self[7]:paintTo(bb, x + Screen:getWidth() - self[7][1][1]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
-        end
+        -- if not TopBar.show_top_bar then
+        --     self[7]:paintTo(bb, x + Screen:getWidth() - self[7][1][1]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
+        --     -- self[20]:paintTo(bb, x + Screen:getWidth() - self[20][1][1]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
+        -- end
 
         self[2].dimen = Geom:new{ w = self[2][1]:getSize().w, self[2][1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
-
-        if TopBar.show_top_bar then
-            self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
-        end
+        self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
+        -- if TopBar.show_top_bar then
+        --     self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
+        -- end
 
         -- Si no se muestra la barra de progreso de arriba, se muestra la de arriba a la derecha
         -- Y si se muestra la de arriba a la derecha, queremos mover el texto unos pocos píxeles a la izquierda
@@ -697,7 +724,10 @@ function TopBar:paintTo(bb, x, y)
 
         -- Bottom right
         -- Use progress bar
-        self[8]:paintTo(bb, x + Screen:getWidth() - self[8][1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+        -- self[8]:paintTo(bb, x + Screen:getWidth() - self[8][1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+        -- self[20]:paintTo(bb, x + Screen:getWidth() - self[20][1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+
+        self[6]:paintTo(bb, x + Screen:getWidth() - self[6][1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
 
         self[10][1][1]:setText(self.time_battery_text_text:reverse())
