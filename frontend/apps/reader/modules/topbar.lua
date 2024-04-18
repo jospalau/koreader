@@ -191,14 +191,14 @@ function TopBar:onReaderReady()
 
     self.title_text = TextWidget:new{
         text =  "",
-        face = Font:getFace("myfont3",14),
+        face = Font:getFace("myfont3"),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
 
     self.chapter_text = TextWidget:new{
         text =  "",
-        face = Font:getFace("myfont3",14),
+        face = Font:getFace("myfont3"),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
@@ -220,7 +220,7 @@ function TopBar:onReaderReady()
             self.session_time_text,
         },
         -- background = Blitbuffer.COLOR_WHITE,
-        bordersize = 0,
+        bordersize = 1,
         padding = 0,
         padding_bottom = self.bottom_padding,
     }
