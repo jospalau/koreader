@@ -621,6 +621,19 @@ function TopBar:toggleBar()
         self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
         self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
         self.progress_bar2.altbar = true
+        self.progress_bar2.show_percentage = true
+        local time_spent_book = self.ui.statistics:getBookStat(self.ui.statistics.id_curr_book)
+
+        if time_spent_book == nil then
+            self.progress_bar2.time_spent_book = ""
+        else
+            -- self.progress_bar2.time_spent_book = time_spent_book[4][2]
+            self.progress_bar2.time_spent_book =  math.floor(self.view.footer.pageno / self.view.footer.pages*1000)/10 .. "%"
+        end
+
+
+
+
         self.progress_bar2.ui = self.ui
         -- Multiple of 3 onwards because we want the line to be a third in the middle of the progress thick line
         self.progress_bar2.altbar_line_thickness = 6

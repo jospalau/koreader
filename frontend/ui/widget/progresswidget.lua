@@ -62,6 +62,8 @@ local ProgressWidget = Widget:extend{
     initial_pos_marker = false, -- overlay a marker at the initial percentage position
     initial_percentage = nil,
     altbar = nil,
+    show_percentage = nil,
+    time_spent_book = nil,
     altbar_ticks_height = 0,
     altbar_line_thickness = 0,
 }
@@ -180,6 +182,11 @@ function ProgressWidget:paintTo(bb, x, y)
                         math.ceil(fill_width * self.percentage),
                         self.altbar_line_thickness,  --30, -- size line
                         self.bordercolor)
+            if self.show_percentage then
+                local RenderText = require("ui/rendertext")
+                local Font = require("ui/font")
+                RenderText:renderUtf8Text(bb, math.ceil(fill_width * self.percentage), y + 20, Font:getFace("myfont3", 10), self.time_spent_book, true)
+            end
             -- Fixed line
             -- We want the line to be a third in the middle of the progress thick line
             bb:paintRect(fill_x,
