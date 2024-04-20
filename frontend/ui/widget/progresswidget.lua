@@ -182,13 +182,6 @@ function ProgressWidget:paintTo(bb, x, y)
                         math.ceil(fill_width * self.percentage),
                         self.altbar_line_thickness,  --30, -- size line
                         self.bordercolor)
-            if self.show_percentage then
-                local RenderText = require("ui/rendertext")
-                local Font = require("ui/font")
-                local BB = require("ffi/blitbuffer")
-                local width_text = RenderText:renderUtf8TextM(Font:getFace("myfont3", 10), self.time_spent_book, true)
-                RenderText:renderUtf8Text(bb, x + math.ceil(fill_width * self.percentage) - width_text/2, y - 4, Font:getFace("myfont3", 8), self.time_spent_book, true)
-            end
             -- Fixed line
             -- We want the line to be a third in the middle of the progress thick line
             bb:paintRect(fill_x,
@@ -249,6 +242,13 @@ function ProgressWidget:paintTo(bb, x, y)
 
             end
         end
+    end
+
+    if self.percentage >= 0 and self.percentage <= 1 and self.altbar and self.show_percentage then
+            local RenderText = require("ui/rendertext")
+            local Font = require("ui/font")
+            local width_text = RenderText:renderUtf8TextM(Font:getFace("myfont3", 10), self.time_spent_book, true)
+            RenderText:renderUtf8Text(bb, x + math.ceil(fill_width * self.percentage) - width_text/2, y - 4, Font:getFace("myfont3", 8), self.time_spent_book, true)
     end
 end
 
