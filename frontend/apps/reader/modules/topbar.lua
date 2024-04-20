@@ -631,9 +631,6 @@ function TopBar:toggleBar()
             self.progress_bar2.time_spent_book =  math.floor(self.view.footer.pageno / self.view.footer.pages*1000)/10 .. "%"
         end
 
-
-
-
         self.progress_bar2.ui = self.ui
         -- Multiple of 3 onwards because we want the line to be a third in the middle of the progress thick line
         self.progress_bar2.altbar_line_thickness = 6

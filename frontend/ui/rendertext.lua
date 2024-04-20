@@ -258,6 +258,24 @@ function RenderText:renderUtf8Text(dest_bb, x, baseline, face, text, kerning, bo
     return pen_x
 end
 
+
+function RenderText:renderUtf8TextM(face, text, kerning, bold, fgcolor, width, char_pads)
+    local pen_x = 0
+    local prevcharcode = 0
+    local text_width = text:len()
+    local char_idx = 0
+    for _, charcode, uchar in utf8Chars(text) do
+        local glyph = self:getGlyph(face, charcode, bold)
+        if kerning and (prevcharcode ~= 0) then
+            pen_x = pen_x + face.ftsize:getKerning(prevcharcode, charcode)
+        end
+        pen_x = pen_x + glyph.ax
+        prevcharcode = charcode
+    end
+    return pen_x
+end
+
+
 local ellipsis = "…"
 
 function RenderText:getEllipsisWidth(face, bold)
