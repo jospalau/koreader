@@ -3541,7 +3541,7 @@ end
 
 function ReaderStatistics:getReadingDurationBySecond(ts)
     -- Two read spans, separated by a duration smaller than this, will be merged and appear as one span
-    local ignorable_gap = math.max(30, self.settings.min_sec)
+    local ignorable_gap = math.max(40, self.settings.min_sec)
     local sql_stmt = [[
         SELECT
             start_time - ? as start,
