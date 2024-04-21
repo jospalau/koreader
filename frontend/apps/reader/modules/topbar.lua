@@ -141,16 +141,17 @@ end
 
 function TopBar:onReaderReady()
 
-    if self.start_session_time == nil then
-        self.start_session_time = os.time()
-    end
-
     if self.initial_read_today == nil then
         self.initial_read_today = self.getReadToday()
     end
 
     if self.initial_read_month == nil then
         self.initial_read_month = self.getReadThisMonth()
+    end
+
+
+    if self.start_session_time == nil then
+        self.start_session_time = os.time()
     end
 
     local duration_raw =  math.floor((os.time() - self.start_session_time))
@@ -441,9 +442,9 @@ function TopBar:resetLayout()
 end
 
 function TopBar:onResume()
-    self.start_session_time = os.time()
     self.initial_read_today = self.getReadToday()
     self.initial_read_month = self.getReadThisMonth()
+    self.start_session_time = os.time()
     self:toggleBar()
 end
 
@@ -493,17 +494,17 @@ function TopBar:toggleBar()
 
 
         local user_duration_format = "modern"
-        local session_time = datetime.secondsToClockDuration(user_duration_format, os.time() - self.start_session_time, true)
+        local session_time = datetime.secondsToClockDuration(user_duration_format, os.time() - self.start_session_time, false)
 
         local duration_raw =  math.floor((os.time() - self.start_session_time))
         self.wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
         self.wpm_text:setText(self.wpm_session .. "wpm")
 
         local read_today = self.initial_read_today + (os.time() - self.start_session_time)
-        read_today = datetime.secondsToClockDuration(user_duration_format, read_today, true)
+        read_today = datetime.secondsToClockDuration(user_duration_format, read_today, false)
 
         local read_month = self.initial_read_month + (os.time() - self.start_session_time)
-        read_month = datetime.secondsToClockDuration(user_duration_format, read_month, true)
+        read_month = datetime.secondsToClockDuration(user_duration_format, read_month, false)
 
         self.session_time_text:setText(datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")))
         self.progress_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
