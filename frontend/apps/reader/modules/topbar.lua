@@ -32,7 +32,7 @@ local Size = require("ui/size")
 local TopBar = WidgetContainer:extend{
     name = "Topbar",
     is_enabled = G_reader_settings:isTrue("show_top_bar"),
-    start_session_time = os.time(),
+    -- start_session_time = os.time(),
     -- initial_read_today = getReadToday(),
     -- initial_read_month = getReadThisMonth(),
 
@@ -140,6 +140,18 @@ function TopBar:init()
 end
 
 function TopBar:onReaderReady()
+
+    if self.start_session_time == nil then
+        self.start_session_time = os.time()
+    end
+
+    if self.initial_read_today == nil then
+        self.initial_read_today = self.getReadToday()
+    end
+
+    if self.initial_read_month == nil then
+        self.initial_read_month = self.getReadThisMonth()
+    end
 
     local duration_raw =  math.floor((os.time() - self.start_session_time))
 
@@ -413,13 +425,6 @@ function TopBar:onReaderReady()
     if Device:isAndroid() then
         TopBar.MARGIN_SIDES =  Screen:scaleBySize(20)
     end
-    if self.initial_read_today == nil then
-        self.initial_read_today = self.getReadToday()
-    end
-
-    if self.initial_read_month == nil then
-        self.initial_read_month = self.getReadThisMonth()
-    end
 
 end
 function TopBar:onToggleShowTopBar()
@@ -487,18 +492,18 @@ function TopBar:toggleBar()
         end
 
 
-        local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
-        local session_time = datetime.secondsToClockDuration(user_duration_format, os.time() - self.start_session_time, false)
+        local user_duration_format = "modern"
+        local session_time = datetime.secondsToClockDuration(user_duration_format, os.time() - self.start_session_time, true)
 
         local duration_raw =  math.floor((os.time() - self.start_session_time))
         self.wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
         self.wpm_text:setText(self.wpm_session .. "wpm")
 
         local read_today = self.initial_read_today + (os.time() - self.start_session_time)
-        read_today = datetime.secondsToClockDuration(user_duration_format, read_today, false)
+        read_today = datetime.secondsToClockDuration(user_duration_format, read_today, true)
 
         local read_month = self.initial_read_month + (os.time() - self.start_session_time)
-        read_month = datetime.secondsToClockDuration(user_duration_format, read_month, false)
+        read_month = datetime.secondsToClockDuration(user_duration_format, read_month, true)
 
         self.session_time_text:setText(datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")))
         self.progress_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
@@ -556,9 +561,6 @@ function TopBar:toggleBar()
             self.progress_barr.width = 250
             self.progress_chapter_bar.width = 250
         end
-
-
-
 
         self.chapter_text:setText(chapter)
         local left = self.ui.toc:getChapterPagesLeft(self.view.footer.pageno) or self.ui.document:getTotalPagesLeft(self.view.footer.pageno)
