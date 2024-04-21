@@ -140,7 +140,6 @@ function TopBar:init()
 end
 
 function TopBar:onReaderReady()
-
     if self.initial_read_today == nil then
         self.initial_read_today = self.getReadToday()
     end
@@ -564,10 +563,9 @@ function TopBar:toggleBar()
         end
 
         self.chapter_text:setText(chapter)
-        local left = self.ui.toc:getChapterPagesLeft(self.view.footer.pageno) or self.ui.document:getTotalPagesLeft(self.view.footer.pageno)
 
-        local left_time = self.ui.toc:getChapterPagesLeft(self.view.footer.pageno) or self.ui.document:getTotalPagesLeft(self.view.footer.pageno)
-        left_time = self.view.footer:getDataFromStatistics("", left)
+        local left = self.ui.toc:getChapterPagesLeft(self.view.footer.pageno) or self.ui.document:getTotalPagesLeft(self.view.footer.pageno)
+        local left_time = self.view.footer:getDataFromStatistics("", left)
 
         self.progress_chapter_text:setText(self.view.footer:getChapterProgress(false) .. " " .. left_time)
 
@@ -675,6 +673,7 @@ end
 
 function TopBar:onPageUpdate()
     self:toggleBar()
+
 end
 
 function TopBar:paintTo(bb, x, y)
