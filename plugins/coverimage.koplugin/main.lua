@@ -152,6 +152,7 @@ function CoverImage:createCoverImage(doc_settings)
                 myimage:free()
                 ffiutil.copyFile(self.cover_image_path, cache_file)
                 self:cleanCache()
+                self.view.topbar.start_session_time = os.time()
                 return
             end
 
