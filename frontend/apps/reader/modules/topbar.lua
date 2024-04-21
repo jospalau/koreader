@@ -140,20 +140,11 @@ function TopBar:init()
 end
 
 function TopBar:onReaderReady()
-    if self.initial_read_today == nil then
-        self.initial_read_today = self.getReadToday()
-    end
-
-    if self.initial_read_month == nil then
-        self.initial_read_month = self.getReadThisMonth()
-    end
-
-
     if self.start_session_time == nil then
         self.start_session_time = os.time()
     end
 
-    local duration_raw =  math.floor((os.time() - self.start_session_time))
+    local duration_raw = math.floor((os.time() - self.start_session_time))
 
     if duration_raw < 360 or self.ui.statistics._total_pages < 6 then
         self.start_session_time = os.time()
@@ -421,11 +412,17 @@ function TopBar:onReaderReady()
         padding_bottom = self.bottom_padding,
     }
 
-
     if Device:isAndroid() then
         TopBar.MARGIN_SIDES =  Screen:scaleBySize(20)
     end
 
+    if self.initial_read_today == nil then
+        self.initial_read_today = self.getReadToday()
+    end
+
+    if self.initial_read_month == nil then
+        self.initial_read_month = self.getReadThisMonth()
+    end
 end
 function TopBar:onToggleShowTopBar()
     local show_top_bar = G_reader_settings:isTrue("show_top_bar")
