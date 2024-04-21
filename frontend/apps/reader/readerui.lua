@@ -444,6 +444,7 @@ function ReaderUI:init()
         end
     end
 
+
     if Device:hasWifiToggle() then
         local NetworkListener = require("ui/network/networklistener")
         self:registerModule("networklistener", NetworkListener:new {
@@ -494,6 +495,16 @@ function ReaderUI:init()
     -- CREngine only reports correct page count after rendering is done
     -- Need the same event for PDF document
     self:handleEvent(Event:new("ReaderReady", self.doc_settings))
+
+
+    -- There is a small delay when manipulating the cover in the coverimage plugin
+    -- so the start_session_time in the topbar may be shown a bit delayed when opening the document
+    -- This happens for devices using the coverimage plugin like PocketBook or Android devices
+    -- but we do it here for all devices after having executed all the ReaderReady event handlers for all the objects
+    -- self.view[4] is the topbar object created in readerview.lua
+    if os.time() - self.view[4].start_session_time < 5 then
+        self.view[4].start_session_time = os.time()
+    end
 
     for _,v in ipairs(self.postReaderCallback) do
         v()
