@@ -140,6 +140,13 @@ function TopBar:init()
 end
 
 function TopBar:onReaderReady()
+    if self.initial_read_today == nil then
+        self.initial_read_today = self.getReadToday()
+    end
+
+    if self.initial_read_month == nil then
+        self.initial_read_month = self.getReadThisMonth()
+    end
     if self.start_session_time == nil then
         self.start_session_time = os.time()
     end
@@ -414,14 +421,6 @@ function TopBar:onReaderReady()
 
     if Device:isAndroid() then
         TopBar.MARGIN_SIDES =  Screen:scaleBySize(20)
-    end
-
-    if self.initial_read_today == nil then
-        self.initial_read_today = self.getReadToday()
-    end
-
-    if self.initial_read_month == nil then
-        self.initial_read_month = self.getReadThisMonth()
     end
 end
 function TopBar:onToggleShowTopBar()

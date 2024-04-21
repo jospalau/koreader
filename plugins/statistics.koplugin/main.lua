@@ -3419,6 +3419,14 @@ function ReaderStatistics:onReaderReady(config)
     -- we have correct page count now, do the actual initialization work
     self:initData()
     self.view.footer:onUpdateFooter()
+
+    -- There is a small delay when manipulating the cover
+    -- so the start_session_time may be shown a bit delayed in the topbar when opening the document
+    -- for devices using the coverimage plugin like PocketBook or Android devices
+    -- Reset it here if there is a delay of 5 seconds
+    if os.time() - self.view.topbar.start_session_time < 5 then
+        self.view.topbar.start_session_time = os.time()
+    end
 end
 
 function ReaderStatistics:onShowCalendarView()
