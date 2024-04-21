@@ -528,7 +528,9 @@ function ReaderUI:init()
         nbwords = #words -- # es equivalente a string.len()
         nbcharacters = #characters
     end
-    self.statistics._last_nbwords = nbwords
+    if not self.statistics == nil then
+        self.statistics._last_nbwords = nbwords
+    end
 end
 
 
