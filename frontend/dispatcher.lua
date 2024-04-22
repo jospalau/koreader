@@ -1195,7 +1195,13 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                     v.text = v.text .. " ✔"
                 end
 
+                if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.line_spacing and profo.line_spacing == ui.document.configurable.line_spacing and v.text ~= "Profile Reset defaults" then
+                    v.text = v.text .. " ✔"
+                end
 
+                if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.b_page_margin  and profo.b_page_margin  == ui.document.configurable.b_page_margin  and v.text ~= "Profile Reset defaults" then
+                    v.text = v.text .. " ✔"
+                end
                 if string.match(v.text, "tweak") and ui and ui.tweakst then
                     for _,tweak in pairs(ui.tweakst) do
                         if tweak == v.text:gsub("Toggle style tweak: ", "") then
@@ -1249,6 +1255,15 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                                 if ui and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.font_size and profo.font_size == ui.document.configurable.font_size and buttonqm[1].text ~= "Profile Reset defaults" then
                                     buttonqm[1].text = buttonqm[1].text .. " ✔"
                                 end
+
+                                if ui and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.line_spacing and profo.line_spacing == ui.document.configurable.line_spacing and buttonqm[1].text ~= "Profile Reset defaults" then
+                                    buttonqm[1].text = buttonqm[1].text .. " ✔"
+                                end
+
+                                if ui and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.b_page_margin and profo.b_page_margin == ui.document.configurable.b_page_margin and buttonqm[1].text ~= "Profile Reset defaults" then
+                                    buttonqm[1].text = buttonqm[1].text .. " ✔"
+                                end
+
 
                                 if string.match(buttonqm[1].text, "tweak") and ui and ui.tweakst then
                                     for _,tweak in pairs(ui.tweakst) do
