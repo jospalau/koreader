@@ -1229,8 +1229,6 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                         if not Device:isAndroid() then
                             Device:setScreenDPI(current_dpi)
                         end
-                        UIManager:show(quickmenu)
-                        UIManager:close(quickmenu)
 
                         -- UIManager:nextTick(function()
                         for prof, buttonqm in ipairs(quickmenu.buttons) do
