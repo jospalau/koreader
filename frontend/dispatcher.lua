@@ -1173,6 +1173,10 @@ function Dispatcher:_showAsMenu(settings, exec_props)
     local Size = require("ui/size")
     for _, v in ipairs(display_list) do
         if v.text ~= "Turn on Wi-Fi Kindle" or Device:isKindle() then
+            local ui = require("apps/reader/readerui").instance
+            if util.stringStartsWith(v.text, "Profile " .. ui.document._document:getFontFace()) then
+                v.text = v.text .. " ✔"
+            end
             table.insert(buttons, {{
                 text = v.text,
                 enabled = Dispatcher:isActionEnabled(settingsList[v.key]),
@@ -1184,18 +1188,65 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                     UIManager:close(quickmenu)
                     Dispatcher:execute({[v.key] = settings[v.key]})
                     if keep_open_on_apply and not util.stringStartsWith(v.key, "touch_input") then
+                        if ui and util.stringStartsWith(v.text, "Profile " .. ui.document._document:getFontFace()) then
+                            v.text = v.text .. " ✔"
+                        end
                         UIManager:nextTick(function()
-                            UIManager:setDirty("all", "full")
+                            UIManager:setDirty(nil, "full")
                         end)
                         -- quickmenu:setTitle(title)
                         local current_dpi = G_reader_settings:readSetting("screen_dpi")
                         if not Device:isAndroid() then
                             Device:setScreenDPI(150)
                         end
-                        UIManager:show(quickmenu)
                         if not Device:isAndroid() then
                             Device:setScreenDPI(current_dpi)
                         end
+                        UIManager:show(quickmenu)
+                        UIManager:close(quickmenu)
+
+                        UIManager:scheduleIn(0.25, function()
+                            for prof, buttonqm in ipairs(quickmenu.buttons) do
+                                if string.match(buttonqm[1].text, " ✔") then
+                                    buttonqm[1].text = buttonqm[1].text:gsub(" ✔", "")
+                                end
+                                if ui and util.stringStartsWith(buttonqm[1].text, "Profile " .. ui.document._document:getFontFace()) then
+                                    buttonqm[1].text = buttonqm[1].text .. " ✔"
+                                end
+
+                                local DataStorage = require("datastorage")
+                                local LuaSettings = require("luasettings")
+                                local profiles_file = DataStorage:getSettingsDir() .. "/profiles.lua"
+                                local profiles = LuaSettings:open(profiles_file)
+                                local data = profiles.data
+                                -- settings.settings.order[[prof]
+                                if ui and buttonqm[1].font_size == ui.document.configurable.font_size then
+                                    buttonqm[1].text = buttonqm[1].text .. " ✔"
+                                end
+
+                            end
+                            -- UIManager:setDirty("all", "full")
+                            local ButtonDialog = require("ui/widget/buttondialog")
+                            local title = settings.settings.name -- or _("QuickMenu")
+                            local Font = require("ui/font")
+                            local current_dpi = G_reader_settings:readSetting("screen_dpi")
+
+                            if not Device:isAndroid() then
+                                Device:setScreenDPI(150)
+                            end
+                            quickmenu = ButtonDialog:new{
+                                title = title,
+                                title_align = "center",
+                                shrink_unneeded_width = true,
+                                title_face = Font:getFace("smalltfont"),
+                                shrink_min_width = math.floor(0.3 * Screen:getWidth()),
+                                use_info_style = false,
+                                buttons =  quickmenu.buttons,
+                                anchor = exec_props and exec_props.qm_anchor,
+                                tap_close_callback = function() if keep_open_on_apply then UIManager:setDirty("all", "full") end end,
+                            }
+                            UIManager:show(quickmenu)
+                        end)
                     end
                 end,
                 hold_callback = function()
