@@ -1194,6 +1194,16 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                 if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.font_size and profo.font_size == ui.document.configurable.font_size and v.text ~= "Profile Reset defaults" then
                     v.text = v.text .. " ✔"
                 end
+
+
+                if string.match(v.text, "tweak") and ui and ui.tweakst then
+                    for _,tweak in pairs(ui.tweakst) do
+                        if tweak == v.text:gsub("Toggle style tweak: ", "") then
+                            v.text = v.text .. " ✔"
+                        end
+                    end
+                end
+
             end
             table.insert(buttons, {{
                 text = v.text,
@@ -1206,6 +1216,9 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                     UIManager:close(quickmenu)
                     Dispatcher:execute({[v.key] = settings[v.key]})
                     if keep_open_on_apply and not util.stringStartsWith(v.key, "touch_input") then
+                        UIManager:nextTick(function()
+                            UIManager:setDirty("all", "full")
+                        end)
                         if ui and util.stringStartsWith(v.text, "Profile " .. ui.document._document:getFontFace()) then
                             v.text = v.text .. " ✔"
                         end
@@ -1235,6 +1248,8 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                                 local data = profiles.data
                                 -- settings.settings.order[[prof]]
 
+
+
                                 for _,profo in pairs(data) do
                                     if ui and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.set_font and profo.set_font == ui.document._document:getFontFace() and buttonqm[1].text ~= "Profile Reset defaults" then
                                         buttonqm[1].text = buttonqm[1].text .. " ✔"
@@ -1244,13 +1259,15 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                                         buttonqm[1].text = buttonqm[1].text .. " ✔"
                                     end
 
+                                    if string.match(buttonqm[1].text, "tweak") and ui and ui.tweakst then
+                                        for _,tweak in pairs(ui.tweakst) do
+                                            if tweak == buttonqm[1].text:gsub("Toggle style tweak: ", "") then
+                                                buttonqm[1].text = buttonqm[1].text .. " ✔"
+                                            end
+                                        end
+                                    end
                                 end
-                                -- UIManager:nextTick(function()
-                                --     UIManager:setDirty(nil, "full")
-                                -- end)
-
                             end
-                            -- UIManager:setDirty("all", "full")
                             local ButtonDialog = require("ui/widget/buttondialog")
                             local title = settings.settings.name -- or _("QuickMenu")
                             local Font = require("ui/font")
