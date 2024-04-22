@@ -1266,6 +1266,10 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                         local current_dpi = G_reader_settings:readSetting("screen_dpi")
 
 
+                        if not Device:isAndroid() then
+                            Device:setScreenDPI(150)
+                        end
+
                         local so = quickmenu:getScrolledOffset()
 
                         quickmenu = ButtonDialog:new{
@@ -1283,13 +1287,11 @@ function Dispatcher:_showAsMenu(settings, exec_props)
 
                         quickmenu:setScrolledOffset(so)
                         local current_dpi = G_reader_settings:readSetting("screen_dpi")
-                        -- if not Device:isAndroid() then
-                        --     Device:setScreenDPI(150)
-                        -- end
+
                         UIManager:show(quickmenu)
-                        -- if not Device:isAndroid() then
-                        --     Device:setScreenDPI(current_dpi)
-                        -- end
+                        if not Device:isAndroid() then
+                            Device:setScreenDPI(current_dpi)
+                        end
                     end
                 end,
                 hold_callback = function()
@@ -1306,7 +1308,9 @@ function Dispatcher:_showAsMenu(settings, exec_props)
     local Font = require("ui/font")
     local current_dpi = G_reader_settings:readSetting("screen_dpi")
 
-
+    if not Device:isAndroid() then
+        Device:setScreenDPI(150)
+    end
     quickmenu = ButtonDialog:new{
         title = title,
         title_align = "center",
@@ -1318,15 +1322,10 @@ function Dispatcher:_showAsMenu(settings, exec_props)
         anchor = exec_props and exec_props.qm_anchor,
         tap_close_callback = function() if keep_open_on_apply then UIManager:setDirty("all", "full") end end,
     }
-
-    -- if not Device:isAndroid() then
-    --     Device:setScreenDPI(150)
-    -- end
-
     UIManager:show(quickmenu)
-    -- if not Device:isAndroid() then
-    --     Device:setScreenDPI(current_dpi)
-    -- end
+    if not Device:isAndroid() then
+        Device:setScreenDPI(current_dpi)
+    end
 end
 
 --[[--
