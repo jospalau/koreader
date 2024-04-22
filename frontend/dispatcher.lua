@@ -1174,8 +1174,26 @@ function Dispatcher:_showAsMenu(settings, exec_props)
     for _, v in ipairs(display_list) do
         if v.text ~= "Turn on Wi-Fi Kindle" or Device:isKindle() then
             local ui = require("apps/reader/readerui").instance
-            if util.stringStartsWith(v.text, "Profile " .. ui.document._document:getFontFace()) then
-                v.text = v.text .. " ✔"
+            -- if ui and util.stringStartsWith(v.text, "Profile " .. ui.document._document:getFontFace()) then
+            --     v.text = v.text .. " ✔"
+            -- end
+
+
+            local DataStorage = require("datastorage")
+            local LuaSettings = require("luasettings")
+            local profiles_file = DataStorage:getSettingsDir() .. "/profiles.lua"
+            local profiles = LuaSettings:open(profiles_file)
+            local data = profiles.data
+
+            for _,profo in pairs(data) do
+
+                if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.set_font and profo.set_font == ui.document._document:getFontFace() and v.text ~= "Profile Reset defaults" then
+                    v.text = v.text .. " ✔"
+                end
+
+                if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.font_size and profo.font_size == ui.document.configurable.font_size and v.text ~= "Profile Reset defaults" then
+                    v.text = v.text .. " ✔"
+                end
             end
             table.insert(buttons, {{
                 text = v.text,
@@ -1191,10 +1209,6 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                         if ui and util.stringStartsWith(v.text, "Profile " .. ui.document._document:getFontFace()) then
                             v.text = v.text .. " ✔"
                         end
-                        UIManager:nextTick(function()
-                            UIManager:setDirty(nil, "full")
-                        end)
-                        -- quickmenu:setTitle(title)
                         local current_dpi = G_reader_settings:readSetting("screen_dpi")
                         if not Device:isAndroid() then
                             Device:setScreenDPI(150)
@@ -1205,24 +1219,35 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                         UIManager:show(quickmenu)
                         UIManager:close(quickmenu)
 
-                        UIManager:scheduleIn(0.25, function()
+                        UIManager:nextTick(function()
                             for prof, buttonqm in ipairs(quickmenu.buttons) do
                                 if string.match(buttonqm[1].text, " ✔") then
                                     buttonqm[1].text = buttonqm[1].text:gsub(" ✔", "")
                                 end
-                                if ui and util.stringStartsWith(buttonqm[1].text, "Profile " .. ui.document._document:getFontFace()) then
-                                    buttonqm[1].text = buttonqm[1].text .. " ✔"
-                                end
+                                -- if ui and util.stringStartsWith(buttonqm[1].text, "Profile " .. ui.document._document:getFontFace()) then
+                                --     buttonqm[1].text = buttonqm[1].text .. " ✔"
+                                -- end
 
                                 local DataStorage = require("datastorage")
                                 local LuaSettings = require("luasettings")
                                 local profiles_file = DataStorage:getSettingsDir() .. "/profiles.lua"
                                 local profiles = LuaSettings:open(profiles_file)
                                 local data = profiles.data
-                                -- settings.settings.order[[prof]
-                                if ui and buttonqm[1].font_size == ui.document.configurable.font_size then
-                                    buttonqm[1].text = buttonqm[1].text .. " ✔"
+                                -- settings.settings.order[[prof]]
+
+                                for _,profo in pairs(data) do
+                                    if ui and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.set_font and profo.set_font == ui.document._document:getFontFace() and buttonqm[1].text ~= "Profile Reset defaults" then
+                                        buttonqm[1].text = buttonqm[1].text .. " ✔"
+                                    end
+
+                                    if ui and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.font_size and profo.font_size == ui.document.configurable.font_size and buttonqm[1].text ~= "Profile Reset defaults" then
+                                        buttonqm[1].text = buttonqm[1].text .. " ✔"
+                                    end
+
                                 end
+                                -- UIManager:nextTick(function()
+                                --     UIManager:setDirty(nil, "full")
+                                -- end)
 
                             end
                             -- UIManager:setDirty("all", "full")
