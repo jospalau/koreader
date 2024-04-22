@@ -1222,15 +1222,8 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                         if ui and util.stringStartsWith(v.text, "Profile " .. ui.document._document:getFontFace()) then
                             v.text = v.text .. " ✔"
                         end
-                        local current_dpi = G_reader_settings:readSetting("screen_dpi")
-                        if not Device:isAndroid() then
-                            Device:setScreenDPI(150)
-                        end
-                        if not Device:isAndroid() then
-                            Device:setScreenDPI(current_dpi)
-                        end
 
-                        -- UIManager:nextTick(function()
+
                         for prof, buttonqm in ipairs(quickmenu.buttons) do
                             if string.match(buttonqm[1].text, " ✔") then
                                 buttonqm[1].text = buttonqm[1].text:gsub(" ✔", "")
@@ -1267,13 +1260,14 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                             end
                         end
                         local ButtonDialog = require("ui/widget/buttondialog")
+                        local ButtonTable = require("ui/widget/buttontable")
                         local title = settings.settings.name -- or _("QuickMenu")
                         local Font = require("ui/font")
                         local current_dpi = G_reader_settings:readSetting("screen_dpi")
 
-                        if not Device:isAndroid() then
-                            Device:setScreenDPI(150)
-                        end
+
+                        local so = quickmenu:getScrolledOffset()
+
                         quickmenu = ButtonDialog:new{
                             title = title,
                             title_align = "center",
@@ -1285,8 +1279,17 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                             anchor = exec_props and exec_props.qm_anchor,
                             tap_close_callback = function() if keep_open_on_apply then UIManager:setDirty("all", "full") end end,
                         }
+
+
+                        quickmenu:setScrolledOffset(so)
+                        local current_dpi = G_reader_settings:readSetting("screen_dpi")
+                        -- if not Device:isAndroid() then
+                        --     Device:setScreenDPI(150)
+                        -- end
                         UIManager:show(quickmenu)
-                        -- end)
+                        -- if not Device:isAndroid() then
+                        --     Device:setScreenDPI(current_dpi)
+                        -- end
                     end
                 end,
                 hold_callback = function()
@@ -1303,9 +1306,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
     local Font = require("ui/font")
     local current_dpi = G_reader_settings:readSetting("screen_dpi")
 
-    if not Device:isAndroid() then
-        Device:setScreenDPI(150)
-    end
+
     quickmenu = ButtonDialog:new{
         title = title,
         title_align = "center",
@@ -1317,10 +1318,15 @@ function Dispatcher:_showAsMenu(settings, exec_props)
         anchor = exec_props and exec_props.qm_anchor,
         tap_close_callback = function() if keep_open_on_apply then UIManager:setDirty("all", "full") end end,
     }
+
+    -- if not Device:isAndroid() then
+    --     Device:setScreenDPI(150)
+    -- end
+
     UIManager:show(quickmenu)
-    if not Device:isAndroid() then
-        Device:setScreenDPI(current_dpi)
-    end
+    -- if not Device:isAndroid() then
+    --     Device:setScreenDPI(current_dpi)
+    -- end
 end
 
 --[[--
