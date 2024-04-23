@@ -270,6 +270,17 @@ function Profiles:onProfileExecute(name, exec_props)
             end
         end
     end
+
+    if Device.model == "Kobo_cadmus" then -- Sage
+        if self.data[name].font_size ~= nil then
+            if copy_profile.font_size == 16.5 then
+                copy_profile.font_size = self.data[name].font_size - 2
+            elseif copy_profile.font_size == 18.5 or copy_profile.font_size == 20.5 then
+                copy_profile.font_size = self.data[name].font_size - 2.5
+            end
+        end
+    end
+
     -- Boox Palma
     -- Sizes have been calculated for KOReader app having been configured to 300dpi in Android (Press briefly the app - Optimize)
     if Device:isAndroid() and Device.screen:getWidth() < 1200  then
@@ -361,6 +372,17 @@ function Profiles:onRandomProfile()
                     copy_profile.font_size = self.data[profile_name].font_size + 4
                 end
             end
+        end
+
+        if Device.model == "Kobo_cadmus" then -- Sage
+            if self.data[profile_name].font_size ~= nil then
+                if copy_profile.font_size == 16.5 then
+                    copy_profile.font_size = self.data[profile_name].font_size - 2
+                elseif self.data[profile_name].font_size == 18.5 or self.data[profile_name].font_size == 20.5 then
+                    copy_profile.font_size = self.data[profile_name].font_size - 2.5
+                end
+            end
+
         end
 
         -- Boox Palma

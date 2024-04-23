@@ -1193,6 +1193,16 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                 end
             end
 
+            if Device.model == "Kobo_cadmus" then -- Sage
+
+                if font_size == 14.5 then
+                    font_size = font_size + 2
+                elseif font_size == 16 or font_size == 18 then
+                    font_size = font_size + 2.5
+                end
+            end
+
+
             if Device:isAndroid() and Device.screen:getWidth() < 1200  then -- Boox Palma
                 if font_size == 25  then
                     font_size = font_size - 8.5
@@ -1277,6 +1287,13 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                                 font_size = font_size - 3
                             elseif font_size == 24.5 then
                                 font_size = font_size - 4
+                            end
+                        end
+                        if Device.model == "Kobo_cadmus" then -- Sage
+                            if font_size == 14.5 then
+                                font_size = font_size + 2
+                            elseif font_size == 16 or font_size == 18 then
+                                font_size = font_size + 2.5
                             end
                         end
 
