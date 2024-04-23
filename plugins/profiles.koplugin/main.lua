@@ -263,13 +263,22 @@ function Profiles:onProfileExecute(name, exec_props)
     --     copy_profile.font_size =  self.data[name].font_size + 0.5
     if Device.model == "Kobo_goldfinch" then -- Clara2E
         if self.data[name].font_size ~= nil then
-            copy_profile.font_size = self.data[name].font_size + 1.5
+            if copy_profile.font_size == 16.5 or copy_profile.font_size == 18.5 then
+                copy_profile.font_size = self.data[name].font_size + 3
+            elseif copy_profile.font_size == 20.5 then
+                copy_profile.font_size = self.data[name].font_size + 4
+            end
         end
     end
     -- Boox Palma
+    -- Sizes have been calculated for KOReader app having been configured to 300dpi in Android (Press briefly the app - Optimize)
     if Device:isAndroid() and Device.screen:getWidth() < 1200  then
-        if self.data[name].font_size ~= nil then
-            copy_profile.font_size = self.data[name].font_size + 7.5
+        if copy_profile.font_size == 16.5 then
+            copy_profile.font_size = self.data[name].font_size + 8.5
+        elseif copy_profile.font_size == 18.5 then
+            copy_profile.font_size = self.data[name].font_size + 9.5
+        elseif copy_profile.font_size == 20.5 then
+            copy_profile.font_size = self.data[name].font_size + 11
         end
     end
 
@@ -346,14 +355,24 @@ function Profiles:onRandomProfile()
         --     copy_profile.font_size =  self.data[profile_name].font_size + 0.5
         if Device.model == "Kobo_goldfinch" then -- Clara2E
             if self.data[profile_name].font_size ~= nil then
-                copy_profile.font_size =  self.data[profile_name].font_size + 1.5
+                if copy_profile.font_size == 16.5 or copy_profile.font_size == 18.5 then
+                    copy_profile.font_size = self.data[profile_name].font_size + 3
+                elseif self.data[profile_name].font_size == 20.5 then
+                    copy_profile.font_size = self.data[profile_name].font_size + 4
+                end
             end
         end
 
         -- Boox Palma
         if Device:isAndroid() and Device.screen:getWidth() < 1200  then
             if self.data[profile_name].font_size ~= nil then
-                copy_profile.font_size = self.data[profile_name].font_size + 7.5
+                if copy_profile.font_size == 16.5 then
+                    copy_profile.font_size = self.data[profile_name].font_size + 8.5
+                elseif self.data[profile_name].font_size == 18.5 then
+                    copy_profile.font_size = self.data[profile_name].font_size + 9.5
+                elseif self.data[profile_name].font_size == 20.5 then
+                    copy_profile.font_size = self.data[profile_name].font_size + 11
+                end
             end
         end
 
