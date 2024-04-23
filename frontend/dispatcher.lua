@@ -1185,7 +1185,11 @@ function Dispatcher:_showAsMenu(settings, exec_props)
             end
 
             if Device.model == "Kobo_goldfinch" then -- Clara2E
-                font_size = font_size - 1.5
+                if font_size == 19.5 or font_size == 21.5 then
+                    font_size = font_size - 3
+                elseif font_size == 24.5 then
+                    font_size = font_size - 4
+                end
             end
 
             if Device:isAndroid() and Device.screen:getWidth() < 1200  then -- Boox Palma
@@ -1262,7 +1266,11 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                         end
 
                         if Device.model == "Kobo_goldfinch" then -- Clara2E
-                            font_size = font_size - 1.5
+                            if font_size == 19.5 or font_size == 21.5 then
+                                font_size = font_size - 3
+                            elseif font_size == 24.5 then
+                                font_size = font_size - 4
+                            end
                         end
 
                         if Device:isAndroid() and Device.screen:getWidth() < 1200  then -- Boox Palma
