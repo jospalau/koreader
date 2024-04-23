@@ -1173,11 +1173,32 @@ function Dispatcher:_showAsMenu(settings, exec_props)
     local Size = require("ui/size")
     for _, v in ipairs(display_list) do
         if v.text ~= "Turn on Wi-Fi Kindle" or Device:isKindle() then
-            local ui = require("apps/reader/readerui").instance
             -- if ui and util.stringStartsWith(v.text, "Profile " .. ui.document._document:getFontFace()) then
             --     v.text = v.text .. " ✔"
             -- end
 
+
+            local ui = require("apps/reader/readerui").instance
+            local font_size = 0
+            if ui and ui.document.configurable.font_size then
+                font_size = ui.document.configurable.font_size
+            end
+
+            if Device.model == "Kobo_goldfinch" then -- Clara2E
+                font_size = font_size - 1.5
+            end
+
+            if Device:isAndroid() and Device.screen:getWidth() < 1200  then -- Boox Palma
+                font_size = font_size - 7.5
+            end
+
+            if Device:isAndroid() and Device.screen:getWidth() == 1220  then -- Xiaomi 12TPro
+                font_size = font_size - 7.5
+            end
+
+            if Device.model == "ares" then -- LikeBook Ares
+                font_size = font_size - 9
+            end
 
             local DataStorage = require("datastorage")
             local LuaSettings = require("luasettings")
@@ -1185,23 +1206,30 @@ function Dispatcher:_showAsMenu(settings, exec_props)
             local profiles = LuaSettings:open(profiles_file)
             local data = profiles.data
 
+
             for _,profo in pairs(data) do
 
-                if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.set_font and profo.set_font == ui.document._document:getFontFace() and v.text ~= "Profile Reset defaults" then
-                    v.text = v.text .. " ✔"
-                end
+                -- My font configuration profiles in a gesture marked as Show as QuickMenu and Keep QuickMenu open,
+                -- the only one marked as Keep QuickMenu open
+                -- We do this just for this gesture
+                if keep_open_on_apply then
+                    if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.set_font and profo.set_font == ui.document._document:getFontFace() and v.text ~= "Profile Reset defaults" then
+                        v.text = v.text .. " ✔"
+                    end
 
-                if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.font_size and profo.font_size == ui.document.configurable.font_size and v.text ~= "Profile Reset defaults" then
-                    v.text = v.text .. " ✔"
-                end
+                    if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.font_size and profo.font_size == font_size and v.text ~= "Profile Reset defaults" then
+                        v.text = v.text .. " ✔"
+                    end
 
-                if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.line_spacing and profo.line_spacing == ui.document.configurable.line_spacing and v.text ~= "Profile Reset defaults" then
-                    v.text = v.text .. " ✔"
-                end
+                    if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.line_spacing and profo.line_spacing == ui.document.configurable.line_spacing and v.text ~= "Profile Reset defaults" then
+                        v.text = v.text .. " ✔"
+                    end
 
-                if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.b_page_margin  and profo.b_page_margin  == ui.document.configurable.b_page_margin  and v.text ~= "Profile Reset defaults" then
-                    v.text = v.text .. " ✔"
+                    if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.b_page_margin  and profo.b_page_margin  == ui.document.configurable.b_page_margin  and v.text ~= "Profile Reset defaults" then
+                        v.text = v.text .. " ✔"
+                    end
                 end
+                -- Tweaks are in a different gesture marked as well as Show as QuickMenu but not Keep QuickMenu open
                 if string.match(v.text, "tweak") and ui and ui.tweakst then
                     for _,tweak in pairs(ui.tweakst) do
                         if tweak == v.text:gsub("Toggle style tweak: ", "") then
@@ -1228,7 +1256,26 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                         if ui and util.stringStartsWith(v.text, "Profile " .. ui.document._document:getFontFace()) then
                             v.text = v.text .. " ✔"
                         end
+                        local font_size = 0
+                        if ui and ui.document.configurable.font_size then
+                            font_size = ui.document.configurable.font_size
+                        end
 
+                        if Device.model == "Kobo_goldfinch" then -- Clara2E
+                            font_size = font_size - 1.5
+                        end
+
+                        if Device:isAndroid() and Device.screen:getWidth() < 1200  then -- Boox Palma
+                            font_size = font_size - 7.5
+                        end
+
+                        if Device:isAndroid() and Device.screen:getWidth() == 1220  then -- Xiaomi 12TPro
+                            font_size = font_size - 7.5
+                        end
+
+                        if Device.model == "ares" then -- LikeBook Ares
+                            font_size = font_size - 9
+                        end
 
                         for prof, buttonqm in ipairs(quickmenu.buttons) do
                             if string.match(buttonqm[1].text, " ✔") then
@@ -1252,7 +1299,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                                     buttonqm[1].text = buttonqm[1].text .. " ✔"
                                 end
 
-                                if ui and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.font_size and profo.font_size == ui.document.configurable.font_size and buttonqm[1].text ~= "Profile Reset defaults" then
+                                if ui and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.font_size and profo.font_size == font_size and buttonqm[1].text ~= "Profile Reset defaults" then
                                     buttonqm[1].text = buttonqm[1].text .. " ✔"
                                 end
 
