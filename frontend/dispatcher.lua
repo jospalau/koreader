@@ -1184,6 +1184,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                 font_size = ui.document.configurable.font_size
             end
 
+            -- See the source main.lua in the profiles plugin to see the tweaked sizes for different devices
             if Device.model == "Kobo_goldfinch" then -- Clara2E
                 if font_size == 19.5 or font_size == 21.5 then
                     font_size = font_size - 3
@@ -1193,7 +1194,13 @@ function Dispatcher:_showAsMenu(settings, exec_props)
             end
 
             if Device:isAndroid() and Device.screen:getWidth() < 1200  then -- Boox Palma
-                font_size = font_size - 7.5
+                if font_size == 25  then
+                    font_size = font_size - 8.5
+                elseif font_size == 28 then
+                    font_size = font_size - 9.5
+                elseif font_size == 31.5 then
+                    font_size = font_size - 11
+                end
             end
 
             if Device:isAndroid() and Device.screen:getWidth() == 1220  then -- Xiaomi 12TPro
@@ -1274,7 +1281,13 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                         end
 
                         if Device:isAndroid() and Device.screen:getWidth() < 1200  then -- Boox Palma
-                            font_size = font_size - 7.5
+                            if font_size == 25  then
+                                font_size = font_size - 8.5
+                            elseif font_size == 28 then
+                                font_size = font_size - 9.5
+                            elseif font_size == 31.5 then
+                                font_size = font_size - 11
+                            end
                         end
 
                         if Device:isAndroid() and Device.screen:getWidth() == 1220  then -- Xiaomi 12TPro
