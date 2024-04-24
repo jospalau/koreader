@@ -416,6 +416,24 @@ function ReaderFont:onDecreaseFontSize(ges)
     return true
 end
 
+
+function ReaderFont:onIncreaseWeightSize()
+    if self.configurable.font_base_weight < 5.50 then
+        self.configurable.font_base_weight = self.configurable.font_base_weight+ 0.5
+    end
+    self.ui.document:setFontBaseWeight(self.configurable.font_base_weight)
+    return true
+end
+
+function ReaderFont:onDecreaseWeightSize()
+    if self.configurable.font_base_weight > -3 then
+        self.configurable.font_base_weight = self.configurable.font_base_weight - 0.5
+    end
+    self.ui.document:setFontBaseWeight(self.configurable.font_base_weight)
+    return true
+end
+
+
 local font_family_info_text = _([[
 In HTML/CSS based documents like EPUBs, stylesheets can specify to use fonts by family instead of a specific font name.
 Except for monospace and math, KOReader uses your default font for any family name.
