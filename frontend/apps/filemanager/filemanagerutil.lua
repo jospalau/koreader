@@ -105,7 +105,8 @@ function filemanagerutil.getStatus(file)
         end
         return "reading"
     end
-    return "new"
+    -- Default status was new, now is call mbr
+    return "mbr"
 end
 
 -- Set a document status ("reading", "complete", or "abandoned")

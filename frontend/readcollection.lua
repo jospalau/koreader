@@ -12,6 +12,22 @@ local ReadCollection = {
     default_collection_name = "favorites",
 }
 
+-- function ReadCollection:OpenRandomFav()
+--     local col_fav = self:prepareList("favorites")
+--     if not col_fav then return end
+--     local i = 1
+--     local file_name = nil
+--     local random_fav = math.random(1, #col_fav)
+--     for _, fav in pairs(col_fav) do
+--         if i == random_fav then
+--             file_name = fav.file
+--             break
+--         end
+--         i = i + 1
+--     end
+--     return file_name
+-- end
+
 local function buildEntry(file, order, mandatory)
     file = FFIUtil.realpath(file)
     if not file then return end

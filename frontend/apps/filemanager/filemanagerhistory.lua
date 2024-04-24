@@ -26,7 +26,7 @@ local filter_text = {
     abandoned = C_("Book status filter", "On hold"),
     complete  = C_("Book status filter", "Finished"),
     deleted   = C_("Book status filter", "Deleted"),
-    new       = C_("Book status filter", "MBR"),
+    mbr       = C_("Book status filter", "MBR"),
     tbr       = C_("Book status filter", "TBR"),
 }
 
@@ -66,7 +66,7 @@ end
 
 function FileManagerHistory:updateItemTable()
     self.count = { all = #require("readhistory").hist,
-        reading = 0, abandoned = 0, complete = 0, deleted = 0, new = 0, tbr = 0,}
+        reading = 0, abandoned = 0, complete = 0, deleted = 0, mbr = 0, tbr = 0,}
     local item_table = {}
     for _, v in ipairs(require("readhistory").hist) do
         if self:isItemMatch(v) then
@@ -275,6 +275,13 @@ function FileManagerHistory:onShowHist(search_info)
         self.search_string = nil
     end
     self.filter = G_reader_settings:readSetting("history_filter", "all")
+
+    -- The original filter for books in tbr was new but I have change it to mbr.
+    -- Books in the history that are not being read or marked in other status are in tbr
+    -- Basically they are in the history and don't have sidecar directory
+    if self.filter == "new" then
+        self.filter = "mbr"
+    end
     self.is_frozen = G_reader_settings:isTrue("history_freeze_finished_books")
     if self.filter ~= "all" or self.is_frozen then
         self:fetchStatuses(false)
@@ -335,7 +342,7 @@ function FileManagerHistory:onShowHistMBR()
         _manager = self,
     }
 
-    self.filter = "new"
+    self.filter = "mbr"
     self:fetchStatusesOut(false)
     self:updateItemTable()
     self.hist_menu.close_callback = function()
@@ -408,7 +415,7 @@ function FileManagerHistory:showHistDialog()
     end
     table.insert(buttons, {
         genFilterButton("all"),
-        genFilterButton("new"),
+        genFilterButton("mbr"),
         genFilterButton("deleted"),
     })
     table.insert(buttons, {
@@ -423,6 +430,14 @@ function FileManagerHistory:showHistDialog()
             callback = function()
                 UIManager:close(hist_dialog)
                 self:onSearchHistory()
+            end,
+        },
+    })
+    table.insert(buttons, {
+        {
+            text = _("Open random MBR file"),
+            callback = function()
+                self:onOpenRandomFav(hist_dialog)
             end,
         },
     })
@@ -452,6 +467,61 @@ function FileManagerHistory:showHistDialog()
         buttons = buttons,
     }
     UIManager:show(hist_dialog)
+end
+
+function FileManagerHistory:onOpenRandomFav(hist_dialog)
+
+    local UIManager = require("ui/uimanager")
+    local Notification = require("ui/widget/notification")
+    if self.filter ~= "mbr" then
+        UIManager:show(Notification:new{
+            text = _("Only allowed in MBR view"),
+        })
+        return
+    end
+    if require("apps/reader/readerui").instance then
+        UIManager:show(Notification:new{
+            text = _("Only allowed in File Mananager mode"),
+        })
+        return
+    end
+
+
+    local ReadHistory = require("readhistory")
+    local mbr_list = {}
+    -- ReadHistory.hist = {}
+    -- ReadHistory:reload(true)
+    for _, v in ipairs(require("readhistory").hist) do
+        -- MBR books are in the history file but dont;t have sidecard directory
+        -- local status = filemanagerutil.getStatus(v.file)
+        if not DocSettings:hasSidecarFile(v.file) then
+            table.insert(mbr_list, v)
+        end
+    end
+
+
+    if #mbr_list == 0 then
+        UIManager:show(Notification:new{
+            text = _("No books in the mbr list"),
+        })
+        return
+    end
+    local i = 1
+    local file_name = nil
+    local random_fav = math.random(1, #mbr_list)
+    for _, v in ipairs(mbr_list) do
+        if i == random_fav then
+            file_name = v.file
+            break
+        end
+        i = i + 1
+    end
+    UIManager:close(hist_dialog)
+    UIManager:show(Notification:new{
+        text = _(file_name),
+    })
+    local ReaderUI = require("apps/reader/readerui")
+    ReaderUI:showReader(file_name)
 end
 
 function FileManagerHistory:onSearchHistory()
