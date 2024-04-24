@@ -234,10 +234,15 @@ end
 
 function ReaderFont:onSetFontSize(size)
     size = math.max(12, math.min(size, 255))
+    local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+    local size_pt = math.floor((Screen:scaleBySize(size) * 72 / display_dpi) * 100) / 100
+
+
     self.configurable.font_size = size
     self.ui.document:setFontSize(Screen:scaleBySize(size))
     self.ui:handleEvent(Event:new("UpdatePos"))
     Notification:notify(T(_("Font size set to: %1."), size))
+    Notification:notify(T(_("%1pt"), size_pt))
     return true
 end
 
