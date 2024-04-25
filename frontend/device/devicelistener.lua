@@ -350,10 +350,11 @@ end
 -- It's also helpful when the IgnoreTouchInput event is emitted by Dispatcher through other means than Gestures.
 -- onOutOfScreenSaver() won't work in other devices than the Kobos since they don't use the screensaver widget which is the one firing it up the event OutOfScreenSaver
 -- In this case we can catch the Resume event to full refresh the screen
+-- I have tweaked the code for the PocketBook to use the screensaver
 function DeviceListener:onResume()
     UIManager:setIgnoreTouchInput(false)
 
-    if Device:isPocketBook() or Device:isAndroid() then
+    if Device:isAndroid() then
         UIManager:tickAfterNext(function()
             UIManager:setDirty(nil, "full")
         end)

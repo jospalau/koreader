@@ -1095,6 +1095,18 @@ end
 
 -- The common operations that should be performed before suspending the device.
 function Device:_beforeSuspend(inhibit)
+    if self.isPocketBook() then
+        -- os.execute("killall -STOP taskmgr.app")
+        -- self.screen:clear()
+        -- self.screen:refreshFull(0, 0, self.screen:getWidth(), self.screen:getHeight())
+
+        local Screensaver = require("ui/screensaver")
+        Screensaver:setup()
+        Screensaver:show()
+        -- UIManager:scheduleIn(1, function()
+        --     os.execute("killall -CONT taskmgr.app")
+        -- end)
+    end
     UIManager:flushSettings()
     UIManager:broadcastEvent(Event:new("Suspend"))
 
@@ -1109,6 +1121,13 @@ end
 
 -- The common operations that should be performed after resuming the device.
 function Device:_afterResume(inhibit)
+    if self.isPocketBook() then
+        local Screensaver = require("ui/screensaver")
+        UIManager:scheduleIn(1, function()
+            Screensaver:close()
+        end)
+    end
+
     if inhibit ~= false then
         -- Restore key repeat if it's not disabled
         if G_reader_settings:nilOrFalse("input_no_key_repeat") then

@@ -70,6 +70,7 @@ local PocketBook = Generic:extend{
     -- Private per-model kludges
     _fb_init = function() end,
     _model_init = function() end,
+    -- supportsScreensaver = yes,
 }
 
 -- Helper to try load externally signalled book whenever we're brought to foreground
