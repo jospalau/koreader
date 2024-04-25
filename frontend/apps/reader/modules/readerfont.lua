@@ -228,11 +228,16 @@ end
     UpdatePos event is used to tell ReaderRolling to update pos.
 --]]
 function ReaderFont:onChangeSize(delta)
-    self:onSetFontSize(self.configurable.font_size + delta)
+    if Screen:scaleBySize(self.configurable.font_size) == Screen:scaleBySize(self.configurable.font_size + delta) then
+        Notification:notify("Same px size, no effect")
+        self:onSetFontSize(self.configurable.font_size + delta, true)
+    else
+        self:onSetFontSize(self.configurable.font_size + delta)
+    end
     return true
 end
 
-function ReaderFont:onSetFontSize(size)
+function ReaderFont:onSetFontSize(size, nomessage)
     size = math.max(12, math.min(size, 255))
     local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
     local size_pt = math.floor((Screen:scaleBySize(size) * 72 / display_dpi) * 100) / 100
@@ -241,8 +246,10 @@ function ReaderFont:onSetFontSize(size)
     self.configurable.font_size = size
     self.ui.document:setFontSize(Screen:scaleBySize(size))
     self.ui:handleEvent(Event:new("UpdatePos"))
-    Notification:notify(T(_("Font size set to: %1."), size))
-    Notification:notify(T(_("%1pt"), size_pt))
+    if not nomessage then
+        Notification:notify(T(_("Font size set to: %1."), size))
+        Notification:notify(T(_("%1pt"), size_pt))
+    end
     return true
 end
 
