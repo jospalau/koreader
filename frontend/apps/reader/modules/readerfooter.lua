@@ -1489,6 +1489,76 @@ function ReaderFooter:rescheduleFooterAutoRefreshIfNeeded()
 end
 
 
+
+function ReaderFooter:onTest()
+    Screen:clear()
+    Screen:refreshFull(0, 0, Screen:getWidth(), Screen:getHeight())
+
+
+
+
+    local ScreenSaverWidget = require("ui/widget/screensaverwidget")
+    local OverlapGroup = require("ui/widget/overlapgroup")
+    local ImageWidget = require("ui/widget/imagewidget")
+    local BookStatusWidget = require("ui/widget/bookstatuswidget")
+    local FileManagerBookInfo = require("apps/filemanager/filemanagerbookinfo")
+    local widget_settings = {
+        width = Screen:getWidth(),
+        height = Screen:getHeight(),
+        scale_factor = G_reader_settings:isFalse("screensaver_stretch_images") and 0 or nil,
+        stretch_limit_percentage = G_reader_settings:readSetting("screensaver_stretch_limit_percentage"),
+    }
+    local ReaderUI = require("apps/reader/readerui")
+    local ui = ReaderUI.instance
+    local lastfile = G_reader_settings:readSetting("screensaver_document_cover")
+    -- local image = FileManagerBookInfo:getCoverImage(ui and ui.document, lastfile)
+    -- widget_settings.image = image
+    -- widget_settings.image_disposable = true
+
+    widget_settings.file = "/mnt/onboard/.adds/colores.png"
+    widget_settings.file_do_cache = false
+    widget_settings.alpha = true
+
+
+    local widget = ImageWidget:new(widget_settings)
+
+    -- local doc = ui.document
+    -- local doc_settings = ui.doc_settings
+    -- widget = BookStatusWidget:new{
+    --     thumbnail = FileManagerBookInfo:getCoverImage(doc),
+    --     props = ui.doc_props,
+    --     document = doc,
+    --     settings = doc_settings,
+    --     ui = ui,
+    --     readonly = true,
+    -- }
+
+    local widget = OverlapGroup:new{
+        dimen = {
+            w = Screen:getWidth(),
+            h = Screen:getHeight(),
+        },
+        widget,
+        nil,
+    }
+    local screensaver_widget = ScreenSaverWidget:new{
+        widget = widget,
+        background = Blitbuffer.COLOR_WHITE,
+        covers_fullscreen = true,
+    }
+    screensaver_widget.modal = true
+    screensaver_widget.dithered = true
+
+    UIManager:show(screensaver_widget, "full")
+
+
+    UIManager:scheduleIn(0.5, function()
+        -- Screen:refreshFullImp(0, 0, Screen:getWidth(), Screen:getHeight()) --
+        UIManager:setDirty("all", "full")
+    end)
+end
+
+
 function ReaderFooter:onSynchronizeCode()
     local InfoMessage = require("ui/widget/infomessage")
     local rv

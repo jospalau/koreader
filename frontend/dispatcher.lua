@@ -94,6 +94,7 @@ local settingsList = {
     move_status_bar = {category="none", event="MoveStatusBar", title=_("Move status bar"), general=true, separator=true},
     switch_status_bar_text = {category="none", event="SwitchStatusBarText", title=_("Switch status bar text"), general=true, separator=true},
     switch_top_bar = {category="none", event="SwitchTopBar", title=_("Switch top bar"), general=true, separator=true},
+    test = {category="none", event="Test", title=_("Test"), general=true, separator=true},
     ----
 
     -- Device
@@ -357,6 +358,7 @@ local dispatcher_menu_order = {
     "move_status_bar",
     "switch_status_bar_text",
     "switch_top_bar",
+    "test",
     ----
 
     -- Device
