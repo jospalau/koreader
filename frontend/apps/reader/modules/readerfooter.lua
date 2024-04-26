@@ -1515,7 +1515,12 @@ function ReaderFooter:onTest()
     -- widget_settings.image = image
     -- widget_settings.image_disposable = true
 
-    widget_settings.file = "/mnt/onboard/.adds/colores.png"
+
+    if Device:isKobo() then
+        widget_settings.file = "/mnt/onboard/.adds/colores.png"
+    elseif Device:isPocketBook() then
+        widget_settings.file = "/mnt/ext1/colores.png"
+    end
     widget_settings.file_do_cache = false
     widget_settings.alpha = true
 
@@ -1552,10 +1557,10 @@ function ReaderFooter:onTest()
     UIManager:show(screensaver_widget, "full")
 
 
-    UIManager:scheduleIn(0.5, function()
-        -- Screen:refreshFullImp(0, 0, Screen:getWidth(), Screen:getHeight()) --
-        UIManager:setDirty("all", "full")
-    end)
+    -- UIManager:scheduleIn(0.5, function()
+    --     -- Screen:refreshFullImp(0, 0, Screen:getWidth(), Screen:getHeight()) --
+    --     UIManager:setDirty("all", "full")
+    -- end)
 end
 
 
