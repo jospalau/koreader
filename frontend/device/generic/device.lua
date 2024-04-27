@@ -1121,13 +1121,13 @@ end
 
 -- The common operations that should be performed after resuming the device.
 function Device:_afterResume(inhibit)
-    if self.isPocketBook() then
-        -- local Screensaver = require("ui/screensaver")
-        -- UIManager:scheduleIn(1, function()
-        --     Screensaver:close()
-        -- end)
-        UIManager:scheduleIn(0, function() self.screen:refreshFull(0, 0, self.screen:getWidth(), self.screen:getHeight()) end)
-    end
+    -- if self.isPocketBook() then
+    --     -- local Screensaver = require("ui/screensaver")
+    --     -- UIManager:scheduleIn(1, function()
+    --     --     Screensaver:close()
+    --     -- end)
+    --     UIManager:scheduleIn(0, function() self.screen:refreshFull(0, 0, self.screen:getWidth(), self.screen:getHeight()) end)
+    -- end
 
     if inhibit ~= false then
         -- Restore key repeat if it's not disabled
