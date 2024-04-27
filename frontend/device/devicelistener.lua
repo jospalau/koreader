@@ -354,11 +354,11 @@ end
 function DeviceListener:onResume()
     UIManager:setIgnoreTouchInput(false)
 
-    if Device:isAndroid() then
-        UIManager:tickAfterNext(function()
-            UIManager:setDirty(nil, "full")
-        end)
-    end
+    -- if Device:isAndroid() then
+    --     UIManager:tickAfterNext(function()
+    --         UIManager:setDirty(nil, "full")
+    --     end)
+    -- end
 end
 
 
@@ -366,9 +366,9 @@ function DeviceListener:onOutOfScreenSaver()
     -- UIManager:scheduleIn(1, function()
     --   UIManager:setDirty(nil, "flashui")
     -- end)
-    UIManager:tickAfterNext(function()
-        UIManager:setDirty(nil, "full")
-    end)
+    -- UIManager:tickAfterNext(function()
+    --     UIManager:setDirty(nil, "full")
+    -- end)
 end
 
 return DeviceListener

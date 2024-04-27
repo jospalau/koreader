@@ -1494,7 +1494,8 @@ function ReaderFooter:onTest()
     Screen:clear()
     Screen:refreshFull(0, 0, Screen:getWidth(), Screen:getHeight())
 
-
+    local util = require("ffi/util")
+    util.usleep(20000000)
 
 
     local ScreenSaverWidget = require("ui/widget/screensaverwidget")

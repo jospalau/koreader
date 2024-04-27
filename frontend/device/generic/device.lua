@@ -371,7 +371,7 @@ function Device:onPowerEvent(ev)
         --       and on platforms where we defer to a system tool, it'd probably suspend too early!
         --       c.f., #6676
         if self:needsScreenRefreshAfterResume() then
-            self.screen:refreshFull(0, 0, self.screen:getWidth(), self.screen:getHeight())
+            self.screen:refreshFullImp(0, 0, self.screen:getWidth(), self.screen:getHeight())
         end
         -- NOTE: In the same vein as above, make sure we update the screen *now*, before dealing with Wi-Fi.
         UIManager:forceRePaint()
@@ -1095,18 +1095,18 @@ end
 
 -- The common operations that should be performed before suspending the device.
 function Device:_beforeSuspend(inhibit)
-    if self.isPocketBook() then
-        -- os.execute("killall -STOP taskmgr.app")
-        -- self.screen:clear()
-        -- self.screen:refreshFull(0, 0, self.screen:getWidth(), self.screen:getHeight())
-
-        local Screensaver = require("ui/screensaver")
-        Screensaver:setup()
-        Screensaver:show()
-        -- UIManager:scheduleIn(1, function()
-        --     os.execute("killall -CONT taskmgr.app")
-        -- end)
-    end
+    -- if self.isPocketBook() then
+    --     -- os.execute("killall -STOP taskmgr.app")
+    --     -- self.screen:clear()
+    --     -- self.screen:refreshFull(0, 0, self.screen:getWidth(), self.screen:getHeight())
+    --     G_reader_settings:saveSetting("screensaver_type", "cover")
+    --     local Screensaver = require("ui/screensaver")
+    --     Screensaver:setup()
+    --     Screensaver:show()
+    --     -- UIManager:scheduleIn(1, function()
+    --     --     os.execute("killall -CONT taskmgr.app")
+    --     -- end)
+    -- end
     UIManager:flushSettings()
     UIManager:broadcastEvent(Event:new("Suspend"))
 
@@ -1122,10 +1122,11 @@ end
 -- The common operations that should be performed after resuming the device.
 function Device:_afterResume(inhibit)
     if self.isPocketBook() then
-        local Screensaver = require("ui/screensaver")
-        UIManager:scheduleIn(1, function()
-            Screensaver:close()
-        end)
+        -- local Screensaver = require("ui/screensaver")
+        -- UIManager:scheduleIn(1, function()
+        --     Screensaver:close()
+        -- end)
+        UIManager:scheduleIn(0, function() self.screen:refreshFull(0, 0, self.screen:getWidth(), self.screen:getHeight()) end)
     end
 
     if inhibit ~= false then

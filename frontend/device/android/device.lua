@@ -163,6 +163,7 @@ function Device:init()
                 -- to-do: keyboard connected, disconnected
             elseif ev.code == C.APP_CMD_RESUME then
                 if not android.prop.brokenLifecycle then
+                    UIManager:scheduleIn(0.5, function() self.screen:refreshFullImp(0, 0, self.screen:getWidth(), self.screen:getHeight()) end)
                     UIManager:broadcastEvent(Event:new("Resume"))
                 end
                 if external.when_back_callback then

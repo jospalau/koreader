@@ -31,7 +31,7 @@ local PocketBook = Generic:extend{
     canSuspend = no,
     canReboot = yes,
     canPowerOff = yes,
-    needsScreenRefreshAfterResume = no,
+    needsScreenRefreshAfterResume = yes,
     home_dir = "/mnt/ext1",
     canAssociateFileExtensions = yes,
 
