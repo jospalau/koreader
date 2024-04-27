@@ -1126,7 +1126,7 @@ function Device:_afterResume(inhibit)
         -- UIManager:scheduleIn(1, function()
         --     Screensaver:close()
         -- end)
-        UIManager:scheduleIn(0, function() self.screen:refreshFullImp(0, 0, self.screen:getWidth(), self.screen:getHeight()) end)
+        UIManager:scheduleIn(0, function() self.screen:refreshFull(0, 0, self.screen:getWidth(), self.screen:getHeight()) end)
     end
 
     if inhibit ~= false then
