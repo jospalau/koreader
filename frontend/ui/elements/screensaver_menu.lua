@@ -71,6 +71,7 @@ return {
                 sub_item_table = {
                     genMenuItem(_("No delay"), "screensaver_delay", "disable"),
                     genMenuItem(_("1 second"), "screensaver_delay", "1"),
+                    genMenuItem(_("2 second"), "screensaver_delay", "2"),
                     genMenuItem(_("3 seconds"), "screensaver_delay", "3"),
                     genMenuItem(_("5 seconds"), "screensaver_delay", "5"),
                     genMenuItem(_("Until a tap"), "screensaver_delay", "tap"),
