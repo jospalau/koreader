@@ -163,6 +163,10 @@ function Device:init()
                 -- to-do: keyboard connected, disconnected
             elseif ev.code == C.APP_CMD_RESUME then
                 if not android.prop.brokenLifecycle then
+                    local Screensaver = require("ui/screensaver")
+                    UIManager:scheduleIn(2, function()
+                        Screensaver:close()
+                    end)
                     -- UIManager:scheduleIn(0.5, function() self.screen:refreshFull(0, 0, self.screen:getWidth(), self.screen:getHeight()) end)
                     UIManager:broadcastEvent(Event:new("Resume"))
                 end
