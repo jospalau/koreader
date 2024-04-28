@@ -99,7 +99,14 @@ function ScreenSaverWidget:onCloseWidget()
     end
 
     -- Make it full-screen (self.main_frame.dimen might be in a different orientation, and it's already full-screen anyway...)
-    UIManager:setDirty(nil, "full")
+    -- This does not have any effect in Kobo or PocketBook because it seems to be instantaneous while picture disappears
+    -- The refresh can be done in a OutOfScreenSaver() event handler like the one in devicelistener.lua
+    -- However, it wors in Android in which I think the refreshes are a bit delayed and it works perfectly flashing
+    -- If it is commented and a full refresh is done in a OutOfScreenSaver(), there are artifacts of the image in Kobo
+    -- Ommited then just for Android
+    if not Device:isAndroid() then
+        UIManager:setDirty(nil, "full")
+    end
 
     -- Will come after the Resume event, iff screensaver_delay is set.
     -- Comes *before* it otherwise.

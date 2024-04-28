@@ -366,11 +366,9 @@ function DeviceListener:onOutOfScreenSaver()
     -- UIManager:scheduleIn(1, function()
     --   UIManager:setDirty(nil, "flashui")
     -- end)
-    if not Device:isAndroid() then
-        UIManager:tickAfterNext(function()
-            UIManager:setDirty(nil, "full")
-        end)
-    end
+    UIManager:tickAfterNext(function()
+        UIManager:setDirty(nil, "full")
+    end)
 end
 
 return DeviceListener
