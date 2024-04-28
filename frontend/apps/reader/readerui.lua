@@ -708,7 +708,7 @@ function ReaderUI:doShowReader(file, provider, seamless)
     local document = DocumentRegistry:openDocument(file, provider)
     if not document then
         UIManager:show(InfoMessage:new{
-            text = _("No reader engine for this file or invalid file.")
+            text = _(debug.traceback(co, err, 1))
         })
         self:showFileManager()
         return
