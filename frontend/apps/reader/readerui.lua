@@ -743,6 +743,9 @@ function ReaderUI:doShowReader(file, provider, seamless)
         FileManager.instance:onClose()
     end
 
+
+    -- Onyx Boox devices has a delay in the full refreshes, so
+    -- we start the document without a full refresh to avoid the refresh that occurs after the document has been opened
     if Device:isAndroid() then
         UIManager:show(reader, seamless and "ui" or "ui")
     else
