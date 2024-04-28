@@ -441,6 +441,7 @@ function TopBar:onResume()
     self.initial_read_month = self.getReadThisMonth()
     self.start_session_time = os.time()
     self:toggleBar()
+    -- UIManager:scheduleIn(0, function() Screen:refreshFull(0, 0, Screen:getWidth(), Screen:getHeight()) end)
 end
 
 

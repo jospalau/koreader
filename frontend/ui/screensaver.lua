@@ -720,14 +720,14 @@ function Screensaver:close()
     local screensaver_delay = G_reader_settings:readSetting("screensaver_delay")
     local screensaver_delay_number = tonumber(screensaver_delay)
     if screensaver_delay_number then
-        if Device:isKobo() then -- This refresh is done by stock program in other platforms that could call here like Pocketbook and Android
-            -- UIManager:scheduleIn(0.2, function()
-            --     UIManager:setDirty("all", "full")
-            -- end)
-            UIManager:tickAfterNext(function()
-                UIManager:setDirty(nil, "full")
-            end)
-        end
+        -- if Device:isKobo() then -- This refresh is done by stock program in other platforms that could call here like Pocketbook and Android
+        --     -- UIManager:scheduleIn(0.2, function()
+        --     --     UIManager:setDirty("all", "full")
+        --     -- end)
+        --     UIManager:tickAfterNext(function()
+        --         UIManager:setDirty(nil, "full")
+        --     end)
+        -- end
         UIManager:scheduleIn(screensaver_delay_number, self.close_widget, self)
         self.delayed_close = true
     elseif screensaver_delay == "disable" then
