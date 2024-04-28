@@ -2215,7 +2215,6 @@ function ReaderFooter:onGetStyles()
         .. string.char(10) .. csss
         UIManager:show(InfoMessage:new{
             text = T(_(text)),
-            timeout = 20,
             no_refresh_on_close = false,
             face = Font:getFace("myfont3"),
             width = math.floor(Screen:getWidth() * 0.85),
@@ -2336,7 +2335,6 @@ function ReaderFooter:onGetTextPage()
     text_properties
     UIManager:show(InfoMessage:new{
         text = T(_(text)),
-        timeout = 15,
         face = Font:getFace("myfont3"),
         width = math.floor(Screen:getWidth() * 0.7),
     })
@@ -2615,7 +2613,6 @@ function ReaderFooter:onShowTextProperties()
     -- local avg_character_pages =  self.ui.statistics._total_chars/ self.ui.statistics._pages_turned
     UIManager:show(InfoMessage:new{
         text = T(_(text)),
-        timeout = 20,
         no_refresh_on_close = false,
         face = Font:getFace("myfont"),
         width = math.floor(Screen:getWidth() * 0.85),
