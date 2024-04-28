@@ -688,7 +688,7 @@ function ReaderUI:showReaderCoroutine(file, provider, seamless)
             Device:setIgnoreInput(false)
             Input:inhibitInputUntil(0.2)
             UIManager:show(InfoMessage:new{
-                text = _("No reader engine for this file or invalid file.")
+                text = _(debug.traceback(co, err, 1))
             })
             self:showFileManager()
         end

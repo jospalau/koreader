@@ -167,8 +167,11 @@ function Device:init()
                     -- UIManager:scheduleIn(2, function()
                     --     Screensaver:close()
                     -- end)
-                    UIManager:scheduleIn(0.750, function() self.screen:refreshFull(0, 0, self.screen:getWidth(), self.screen:getHeight()) end)
+                    -- UIManager:nextTick(function()
+                    --     self.screen:refreshFull(0, 0, self.screen:getWidth(), self.screen:getHeight())
+                    -- end)
                     UIManager:broadcastEvent(Event:new("Resume"))
+                    UIManager:setDirty("all", "full")
                 end
                 if external.when_back_callback then
                     external.when_back_callback()

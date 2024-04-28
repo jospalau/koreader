@@ -83,7 +83,7 @@ function TopBar:getReadToday()
     return read_today
 end
 
-function TopBar:getReadThisMonth()
+function TopBar:getReadTodayThisMonth()
     local DataStorage = require("datastorage")
     local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
     local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
@@ -92,29 +92,38 @@ function TopBar:getReadThisMonth()
 
     local conn = SQ3.open(db_location)
 
+    local sql_stmt = [[
+        SELECT sum(duration)
+        FROM wpm_stat_data
+            WHERE DATE(start_time,'unixepoch','localtime') = DATE('now', '0 day', 'localtime')
+    ]]
 
+    local read_today = conn:rowexec(string.format(sql_stmt))
 
     local sql_stmt = [[
-        SELECT sum(sum_duration)
-        FROM    (
-                     SELECT sum(duration)    AS sum_duration
-                     FROM   page_stat
-                     WHERE  DATE(start_time, 'unixepoch', 'localtime') >= DATE('now', 'localtime', 'start of month')
-                     GROUP  BY id_book, page
-                );
+        SELECT sum(duration)
+        FROM wpm_stat_data
+            WHERE DATE(start_time, 'unixepoch', 'localtime') >= DATE('now', 'localtime', 'start of month')
     ]]
+
+
 
     local read_month = conn:rowexec(sql_stmt)
 
+
+
     conn:close()
+    if read_today == nil then
+        read_today = 0
+    end
+    read_today = tonumber(read_today)
 
     if read_month == nil then
         read_month = 0
     end
     read_month = tonumber(read_month)
 
-
-    return read_month
+    return read_today, read_month
 end
 
 
@@ -140,13 +149,10 @@ function TopBar:init()
 end
 
 function TopBar:onReaderReady()
-    if self.initial_read_today == nil then
-        self.initial_read_today = self.getReadToday()
+    if self.initial_read_today == nil and self.initial_read_month == nil then
+        self.initial_read_today, self.initial_read_month  = self.getReadTodayThisMonth()
     end
 
-    if self.initial_read_month == nil then
-        self.initial_read_month = self.getReadThisMonth()
-    end
     if self.start_session_time == nil then
         self.start_session_time = os.time()
     end
@@ -437,11 +443,9 @@ function TopBar:resetLayout()
 end
 
 function TopBar:onResume()
-    self.initial_read_today = self.getReadToday()
-    self.initial_read_month = self.getReadThisMonth()
+    self.initial_read_today, self.initial_read_month = self.getReadTodayThisMonth()
     self.start_session_time = os.time()
     self:toggleBar()
-    -- UIManager:scheduleIn(0, function() Screen:refreshFull(0, 0, Screen:getWidth(), Screen:getHeight()) end)
 end
 
 
@@ -483,8 +487,7 @@ function TopBar:toggleBar()
         local now_t = os.date("*t")
         local daysdiff = now_t.day - os.date("*t",self.start_session_time).day
         if daysdiff > 0 then
-            self.initial_read_today = self.getReadToday()
-            self.initial_read_month = self.getReadThisMonth()
+            self.initial_read_today, self.initial_read_month  = self.getReadTodayThisMonth()
             self.start_session_time = os.time()
         end
 
