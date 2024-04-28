@@ -234,8 +234,8 @@ function InfoMessage:onCloseWidget()
     end
 
     UIManager:setDirty(nil, function()
-        UIManager:setDirty(nil, "full")
-        -- return "ui", self.movable.dimen
+        -- UIManager:setDirty(nil, "full")
+        return "ui", self.movable.dimen
     end)
 end
 

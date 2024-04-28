@@ -743,7 +743,11 @@ function ReaderUI:doShowReader(file, provider, seamless)
         FileManager.instance:onClose()
     end
 
-    UIManager:show(reader, seamless and "ui" or "full")
+    if Device:isAndroid() then
+        UIManager:show(reader, seamless and "ui" or "ui")
+    else
+        UIManager:show(reader, seamless and "ui" or "full")
+    end
 end
 
 function ReaderUI:unlockDocumentWithPassword(document, try_again)
