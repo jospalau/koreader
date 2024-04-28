@@ -3378,7 +3378,7 @@ function ReaderStatistics:onResume()
         self._delayed_screensaver = true
         return
     end
-    self.view.footer:onUpdateFooter(true,true)
+    -- self.view.footer:onUpdateFooter(true,true)
 end
 
 function ReaderFooter:onOutOfScreenSaver()
@@ -3387,7 +3387,7 @@ function ReaderFooter:onOutOfScreenSaver()
     end
 
     self._delayed_screensaver = nil
-    self.view.footer:onUpdateFooter(true,true)
+    -- self.view.footer:onUpdateFooter(true,true)
 end
 
 function ReaderStatistics:onReadingPaused()
