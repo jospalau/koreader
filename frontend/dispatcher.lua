@@ -1280,7 +1280,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                 font_bold = true,
                 callback = function()
                     UIManager:close(quickmenu)
-                    if util.stringStartsWith(v.key, "profile_exec_Toggle screen layout") then
+                    if util.stringStartsWith(v.key, "toggle_horizontal_vertical") then
                         keep_open_on_apply = false
                         UIManager:setDirty("all", "full")
                         UIManager:nextTick(function()
