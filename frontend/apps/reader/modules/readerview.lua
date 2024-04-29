@@ -1003,7 +1003,9 @@ function ReaderView:onSetRotationMode(rotation)
             -- No layout change, just rotate & repaint with a flash
             Screen:setRotationMode(rotation)
             UIManager:setDirty(self.dialog, "full")
-            Notification:notify(T(_("Rotation mode set to: %1"), optionsutil:getOptionText("SetRotationMode", rotation)))
+            if not Device:isAndroid() then
+                Notification:notify(T(_("Rotation mode set to: %1"), optionsutil:getOptionText("SetRotationMode", rotation)))
+            end
             return true
         end
 
@@ -1015,7 +1017,9 @@ function ReaderView:onSetRotationMode(rotation)
     self.ui:handleEvent(Event:new("SetDimensions", new_screen_size))
     self.ui:onScreenResize(new_screen_size)
     self.ui:handleEvent(Event:new("InitScrollPageStates"))
-    Notification:notify(T(_("Rotation mode set to: %1"), optionsutil:getOptionText("SetRotationMode", rotation)))
+    if not Device:isAndroid() then
+        Notification:notify(T(_("Rotation mode set to: %1"), optionsutil:getOptionText("SetRotationMode", rotation)))
+    end
     return true
 end
 
@@ -1024,13 +1028,13 @@ end
 function ReaderView:onToggleHorizontalVertical()
     local rotation = Screen:getRotationMode()
     if rotation == 0 then -- PORTRAIT
+        self.ui:handleEvent(Event:new("SetRotationMode", 1))
         self.ui.rolling:onSetVisiblePages(2)
-        self:onSetRotationMode(1)
     elseif rotation == 1 then -- LANDSCAPE
+        self.ui:handleEvent(Event:new("SetRotationMode", 0))
         self.ui.rolling:onSetVisiblePages(1)
-        self:onSetRotationMode(0)
     end
-    -- UIManager:setDirty(nil, "full")
+    UIManager:setDirty(nil, "full")
     return true
 end
 

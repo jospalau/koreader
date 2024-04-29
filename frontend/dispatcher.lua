@@ -1282,10 +1282,8 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                     UIManager:close(quickmenu)
                     if util.stringStartsWith(v.key, "toggle_horizontal_vertical") then
                         keep_open_on_apply = false
-                        Dispatcher:execute({[v.key] = settings[v.key]})
-                    else
-                        Dispatcher:execute({[v.key] = settings[v.key]})
                     end
+                    Dispatcher:execute({[v.key] = settings[v.key]})
 
 
                     if keep_open_on_apply and not util.stringStartsWith(v.key, "touch_input")  then
