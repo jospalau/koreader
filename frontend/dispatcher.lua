@@ -1283,9 +1283,35 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                     if util.stringStartsWith(v.key, "toggle_horizontal_vertical") then
                         keep_open_on_apply = false
                         UIManager:setDirty("all", "full")
-                        UIManager:nextTick(function()
                             Dispatcher:execute({[v.key] = settings[v.key]})
-                        end)
+                            if not Device:isAndroid() then
+                                Device:setScreenDPI(150)
+                            end
+
+                            local ButtonDialog = require("ui/widget/buttondialog")
+                            local ButtonTable = require("ui/widget/buttontable")
+                            local title = settings.settings.name -- or _("QuickMenu")
+                            local Font = require("ui/font")
+
+                            quickmenu = ButtonDialog:new{
+                                title = title,
+                                title_align = "center",
+                                shrink_unneeded_width = true,
+                                title_face = Font:getFace("smalltfont"),
+                                shrink_min_width = math.floor(0.3 * Screen:getWidth()),
+                                use_info_style = false,
+                                buttons =  quickmenu.buttons,
+                                anchor = {h = 0, w = 0, x = Screen:getWidth(), y = Screen:getHeight() - 50},--
+                                tap_close_callback = function() if keep_open_on_apply then UIManager:setDirty("all", "full") end end,
+                            }
+
+
+                            local current_dpi = G_reader_settings:readSetting("screen_dpi")
+
+                            UIManager:show(quickmenu)
+                            if not Device:isAndroid() then
+                                Device:setScreenDPI(current_dpi)
+                            end
                     else
                         Dispatcher:execute({[v.key] = settings[v.key]})
                     end
@@ -1401,7 +1427,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                             shrink_min_width = math.floor(0.3 * Screen:getWidth()),
                             use_info_style = false,
                             buttons =  quickmenu.buttons,
-                            anchor = exec_props and exec_props.qm_anchor,
+                            anchor = {h = 0, w = 0, x = Screen:getWidth(), y = Screen:getHeight() - 50},
                             tap_close_callback = function() if keep_open_on_apply then UIManager:setDirty("all", "full") end end,
                         }
 
@@ -1413,6 +1439,9 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                         if not Device:isAndroid() then
                             Device:setScreenDPI(current_dpi)
                         end
+                    end
+                    if util.stringStartsWith(v.key, "toggle_horizontal_vertical") then
+                        keep_open_on_apply = true
                     end
                 end,
                 hold_callback = function()
