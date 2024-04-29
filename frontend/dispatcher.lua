@@ -95,6 +95,7 @@ local settingsList = {
     switch_status_bar_text = {category="none", event="SwitchStatusBarText", title=_("Switch status bar text"), general=true, separator=true},
     switch_top_bar = {category="none", event="SwitchTopBar", title=_("Switch top bar"), general=true, separator=true},
     test = {category="none", event="Test", title=_("Test"), general=true, separator=true},
+    toggle_horizontal_vertical = {category="none", event="ToggleHorizontalVertical", title=_("Toggle screen layout"), general=true, separator=true},
     ----
 
     -- Device
@@ -360,6 +361,7 @@ local dispatcher_menu_order = {
     "switch_status_bar_text",
     "switch_top_bar",
     "test",
+    "toggle_horizontal_vertical",
     ----
 
     -- Device
@@ -1278,8 +1280,18 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                 font_bold = true,
                 callback = function()
                     UIManager:close(quickmenu)
-                    Dispatcher:execute({[v.key] = settings[v.key]})
-                    if keep_open_on_apply and not util.stringStartsWith(v.key, "touch_input") then
+                    if util.stringStartsWith(v.key, "profile_exec_Toggle screen layout") then
+                        keep_open_on_apply = false
+                        UIManager:setDirty("all", "full")
+                        UIManager:nextTick(function()
+                            Dispatcher:execute({[v.key] = settings[v.key]})
+                        end)
+                    else
+                        Dispatcher:execute({[v.key] = settings[v.key]})
+                    end
+
+
+                    if keep_open_on_apply and not util.stringStartsWith(v.key, "touch_input")  then
                         UIManager:nextTick(function()
                             UIManager:setDirty("all", "full")
                         end)

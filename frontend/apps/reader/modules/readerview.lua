@@ -1019,6 +1019,21 @@ function ReaderView:onSetRotationMode(rotation)
     return true
 end
 
+
+
+function ReaderView:onToggleHorizontalVertical()
+    local rotation = Screen:getRotationMode()
+    if rotation == 0 then -- PORTRAIT
+        self.ui.rolling:onSetVisiblePages(2)
+        self:onSetRotationMode(1)
+    elseif rotation == 1 then -- LANDSCAPE
+        self.ui.rolling:onSetVisiblePages(1)
+        self:onSetRotationMode(0)
+    end
+    -- UIManager:setDirty(nil, "full")
+    return true
+end
+
 function ReaderView:onSetDimensions(dimensions)
     self:resetLayout()
     self.dimen = dimensions
