@@ -1028,10 +1028,12 @@ end
 function ReaderView:onToggleHorizontalVertical()
     local rotation = Screen:getRotationMode()
     if rotation == 0 then -- PORTRAIT
-        self.ui:handleEvent(Event:new("SetRotationMode", 1))
+        UIManager:broadcastEvent(Event:new("SetRotationMode", 1))
+        UIManager:broadcastEvent(Event:new("GenerateCover", 1))
         self.ui.rolling:onSetVisiblePages(2)
     elseif rotation == 1 then -- LANDSCAPE
-        self.ui:handleEvent(Event:new("SetRotationMode", 0))
+        UIManager:broadcastEvent(Event:new("SetRotationMode", 0))
+        UIManager:broadcastEvent(Event:new("GenerateCover", 0))
         self.ui.rolling:onSetVisiblePages(1)
     end
     UIManager:setDirty(nil, "full")
