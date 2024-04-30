@@ -109,7 +109,7 @@ function CoverImage:cleanUpImage()
     end
 end
 
-function CoverImage:createCoverImage(doc_settings)
+function CoverImage:createCoverImage(doc_settings, rotation)
     if self:coverEnabled() and doc_settings:nilOrFalse("exclude_cover_image") then
         local cover_image, custom_cover = FileManagerBookInfo:getCoverImage(self.ui.document)
         if cover_image then
@@ -127,6 +127,10 @@ function CoverImage:createCoverImage(doc_settings)
             if self.cover_image_background == "none" or scale_factor == 1 then
                 local act_format = self.cover_image_format == "auto" and getExtension(self.cover_image_path) or self.cover_image_format
                 local myimage = RenderImage:scaleBlitBuffer(cover_image, s_w, s_h)
+
+                if Device:isPocketBook() and rotation == 1 then
+                    myimage = myimage:rotatedCopy(90)
+                end
                 if not myimage:writeToFile(self.cover_image_path, act_format, self.cover_image_quality, self.cover_image_grayscale) then
                     UIManager:show(InfoMessage:new{
                         text = _("Error writing file") .. "\n" .. self.cover_image_path,
@@ -204,6 +208,14 @@ function CoverImage:createCoverImage(doc_settings)
     end
 end
 
+function CoverImage:onGenerateCover(rotation)
+    if Device:isPocketBook() then
+        self:createCoverImage(self.ui.doc_settings, rotation)
+        os.execute("killall taskmgr.app")
+    end
+    return true
+end
+
 function CoverImage:onCloseDocument()
     logger.dbg("CoverImage: onCloseDocument")
     if self:fallbackEnabled() then
@@ -213,7 +225,7 @@ end
 
 function CoverImage:onReaderReady(doc_settings)
     logger.dbg("CoverImage: onReaderReady")
-    self:createCoverImage(doc_settings)
+    self:createCoverImage(doc_settings, Screen:getRotationMode())
 end
 
 function CoverImage:fallbackEnabled()
