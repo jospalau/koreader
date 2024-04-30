@@ -365,16 +365,9 @@ function BookInfo:getCoverImage(doc, file, force_orig)
     end
     if doc then
         cover_bb = doc:getCoverPageImage()
-        local cover_bb2 = cover_bb
-        local Screen = Device.screen
-        local rotation = Screen:getRotationMode()
-        if rotation == 1 then
-            cover_bb2 = cover_bb:rotatedCopy(90)
-        end
         if not is_doc then
             doc:close()
         end
-        return cover_bb2
     end
     return cover_bb
 end
