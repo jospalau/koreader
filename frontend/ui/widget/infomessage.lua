@@ -234,8 +234,15 @@ function InfoMessage:onCloseWidget()
     end
 
     UIManager:setDirty(nil, function()
-        -- UIManager:setDirty(nil, "full")
-        return "ui", self.movable.dimen
+        -- Omit the refresh for Android devices
+        -- because at least Onyx device's refreshes are slightly delayed
+        -- and there is a weird flick when the document is open
+        -- because there are a few messages being shown and being closed
+        -- nothing bad anyway
+        if not Device:isAndroid() then
+            UIManager:setDirty(nil, "full")
+        end
+        -- return "ui", self.movable.dimen
     end)
 end
 
