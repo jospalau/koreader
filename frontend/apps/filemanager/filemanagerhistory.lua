@@ -6,6 +6,7 @@ local DocSettings = require("docsettings")
 local FileManagerBookInfo = require("apps/filemanager/filemanagerbookinfo")
 local InputDialog = require("ui/widget/inputdialog")
 local Menu = require("ui/widget/menu")
+local ReadCollection = require("readcollection")
 local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local Screen = require("device").screen
@@ -80,6 +81,8 @@ function FileManagerHistory:updateItemTable()
     local subtitle = ""
     if self.search_string then
         subtitle = T(_("Search results (%1)"), #item_table)
+    elseif self.selected_colections then
+        subtitle = T(_("Filtered by collections (%1)"), #item_table)
     elseif self.filter ~= "all" then
         subtitle = T(_("Status: %1 (%2)"), filter_text[self.filter]:lower(), #item_table)
     end
@@ -98,6 +101,13 @@ function FileManagerHistory:isItemMatch(item)
                 book_props = self.ui.bookinfo.getDocProps(item.file, nil, true) -- do not open the document
             end
             if not self.ui.bookinfo:findInProps(book_props, self.search_string, self.case_sensitive) then
+                return false
+            end
+        end
+    end
+    if self.selected_colections then
+        for name in pairs(self.selected_colections) do
+            if not ReadCollection:isFileInCollection(item.file, name) then
                 return false
             end
         end
@@ -169,7 +179,7 @@ function FileManagerHistory:onMenuHold(item)
     end
     table.insert(buttons, {
         filemanagerutil.genResetSettingsButton(doc_settings_or_file, close_dialog_update_callback, is_currently_opened),
-        -- filemanagerutil.genAddRemoveFavoritesButton(file, close_dialog_callback, item.dim),
+        self._manager.ui.collections:genAddToCollectionButton(file, close_dialog_callback, nil, item.dim),
         {
             text = _("Readd to history"),
             callback = function()
@@ -273,6 +283,7 @@ function FileManagerHistory:onShowHist(search_info)
         self.case_sensitive = search_info.case_sensitive
     else
         self.search_string = nil
+        self.selected_colections = nil
     end
     self.filter = G_reader_settings:readSetting("history_filter", "all")
 
@@ -408,6 +419,7 @@ function FileManagerHistory:showHistDialog()
                 self.filter = filter
                 if filter == "all" then -- reset all filters
                     self.search_string = nil
+                    self.selected_colections = nil
                 end
                 self:updateItemTable()
             end,
@@ -423,6 +435,19 @@ function FileManagerHistory:showHistDialog()
         genFilterButton("abandoned"),
         genFilterButton("tbr"),
         -- genFilterButton("complete"),
+    })
+    table.insert(buttons, {
+        {
+            text = _("Filter by collections"),
+            callback = function()
+                UIManager:close(hist_dialog)
+                local caller_callback = function()
+                    self.selected_colections = self.ui.collections.selected_colections
+                    self:updateItemTable()
+                end
+                self.ui.collections:onShowCollList({}, caller_callback, true) -- do not select any, no dialog to apply
+            end,
+        },
     })
     table.insert(buttons, {
         {

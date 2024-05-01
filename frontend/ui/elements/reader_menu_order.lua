@@ -229,6 +229,7 @@ local order = {
         "history",
         "open_previous_document",
         "----------------------------",
+        "favorites",
         "collections",
         "open_random_favorite",
         "----------------------------",

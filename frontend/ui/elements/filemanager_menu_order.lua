@@ -173,6 +173,7 @@ local order = {
         "history",
         "open_last_document",
         "----------------------------",
+        "favorites",
         "collections",
         "open_random_favorite",
         "----------------------------",
