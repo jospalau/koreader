@@ -2258,9 +2258,28 @@ function ReaderFooter:onGetTextPage()
     local text_properties=""
     if res and res.pos0 ~= ".0" then
         name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2  = self.ui.document:getHeight(res.pos0)
+
+
+        -- If there is not css property line-height in any style, the CREngine return a value of -2
+        -- And line-height is calculated using the font metrics
+        -- I explicit calculated the value in cre.cpp
+        -- lua_pushnumber(L, (float) sourceNodeParent->getFont()->getHeight()/sourceNodeParent->getFont()->getSize());
+
+        -- The tweak does not seem to work and we won't to know which em value it is being applied considering the value of the line-height
+        -- coming with the font metrics
+        -- and that's why the following
+        -- uniheight == "Font" means no line-height.
+        -- if unitheight == "Font" and self.ui.tweaks:find("Spacing between lines %(1.2em%)") then
+
+        -- I will leaving but, the tweak for line-height works since I modified to affect div tagas as well
+        if unitheight == "Font" then
+            height = height * self.ui.document.configurable.line_spacing/100
+            height2 = height2 * self.ui.document.configurable.line_spacing/100
+        end
         if name ~= "" then
             local Math = require("optmath")
-            -- If p doesnt have a class with line-height and body does, it inherits a pixels value and CREngine gives us this value with a much greater value
+            -- If p doesnt have a class with line-height and body or the container tag does,
+            -- it inherits the value
             height = Math.round(height*100)/100 .. unitheight
             height2 = Math.round(height2*100)/100 .. unitheight2
             indent = Math.round(indent*100)/100 .. unitindent

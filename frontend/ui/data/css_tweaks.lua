@@ -470,7 +470,10 @@ Further small adjustments can be done with 'Line Spacing' in the bottom menu.]])
                 title = _("Spacing between lines (1.2em)"),
                 description = _("Add 1.2em of whitespace between lines       ."),
                 priority = 5, -- Override "Ignore margins and paddings" above
-                css = [[p { line-height: 1.2em !important; }]],
+                css = [[
+                    body > div { line-height: 1.2em; }
+                    body > p { line-height: 1.2em; }
+                    ]],
                 separator = true,
             },
             {
