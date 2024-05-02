@@ -12,6 +12,7 @@ local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local Screen = require("device").screen
 local Utf8Proc = require("ffi/utf8proc")
 local filemanagerutil = require("apps/filemanager/filemanagerutil")
+local Topbar = require("apps/reader/modules/topbar")
 local util = require("util")
 local _ = require("gettext")
 local C_ = _.pgettext
@@ -276,6 +277,13 @@ function FileManagerHistory:onShowHist(search_info)
         onMenuHold = self.onMenuHold,
         onSetRotationMode = self.MenuSetRotationModeHandler,
         _manager = self,
+    }
+
+
+    self.hist_menu.topbar = Topbar:new{
+        view = nil,
+        ui = nil,
+        fm = true,
     }
 
     if search_info then

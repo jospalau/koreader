@@ -86,8 +86,10 @@ function InputContainer:paintTo(bb, x, y)
     else
         self[1]:paintTo(bb, x, y)
     end
-
-    if self.topbar then
+    -- if self.topbar then
+    --     self.topbar:paintTo(bb, x, y)
+    -- end
+    if self.title == "KOReader" or self.title == "History" then
         self.topbar:paintTo(bb, x, y)
     end
 end
