@@ -2276,6 +2276,11 @@ function ReaderFooter:onGetTextPage()
             height = height * self.ui.document.configurable.line_spacing/100
             height2 = height2 * self.ui.document.configurable.line_spacing/100
         end
+
+        if self.ui.tweaks:find("Spacing between lines %(1.2em%)") then
+            unitheight = unitheight .. "*"
+            unitheight2 = unitheight2 .. "*"
+        end
         if name ~= "" then
             local Math = require("optmath")
             -- If p doesnt have a class with line-height and body or the container tag does,
