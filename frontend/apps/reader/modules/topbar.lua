@@ -677,6 +677,7 @@ function TopBar:onPageUpdate()
 end
 
 function TopBar:paintTo(bb, x, y)
+    if not self.fm then
         -- The alighment is good but there are things to take into account
         -- - Any screen side in any screen type, flushed or recessed are not aligned with the frame, they can be a little bit hidden. It depends on the devices
         -- - There are some fonts that are bigger than its em square so the aligment may be not right. For instance Bitter Pro descender overpass its bottom limits
@@ -764,6 +765,25 @@ function TopBar:paintTo(bb, x, y)
 
         -- text_container2:paintTo(bb, x + Screen:getWidth() - text_container2:getSize().w - 20, y + 20)
         -- text_container2:paintTo(bb, x + Screen:getWidth()/2 - text_container2:getSize().w/2, y + 20)
+    else
+
+        local times_text = TextWidget:new{
+            text =  "",
+            face = Font:getFace("myfont3", 12),
+            fgcolor = Blitbuffer.COLOR_BLACK,
+            invert = true,
+        }
+
+        local powerd = Device:getPowerDevice()
+        local batt_lvl = tostring(powerd:getCapacity())
+
+
+        local time = datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
+        local time_battery_text_text = time .. "|" .. batt_lvl .. "%|" ..  G_reader_settings:readSetting("lastfile")
+
+        times_text:setText(time_battery_text_text:reverse())
+        times_text:paintTo(bb, x - times_text:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y)
+    end
 end
 
 return TopBar

@@ -34,6 +34,7 @@ local TitleBar = require("ui/widget/titlebar")
 local VerticalGroup = require("ui/widget/verticalgroup")
 local UIManager = require("ui/uimanager")
 local filemanagerutil = require("apps/filemanager/filemanagerutil")
+local Topbar = require("apps/reader/modules/topbar")
 local lfs = require("libs/libkoreader-lfs")
 local logger = require("logger")
 local BaseUtil = require("ffi/util")
@@ -57,6 +58,17 @@ local FileManager = InputContainer:extend{
     cp_bin = Device:isAndroid() and "/system/bin/cp" or "/bin/cp",
 }
 
+
+-- function FileManager:paintTo(bb, x, y)
+--     -- local UIManager = require("ui/uimanager")
+--     -- local Notification = require("ui/widget/notification")
+--     -- UIManager:show(Notification:new{
+--     --     text = _("entro fm"),
+--     -- })
+--     -- if G_reader_settings:isTrue("show_top_bar") then
+--     --     -- self.topbar:paintTo(bb, x, y)
+--     -- end
+-- end
 local function isFile(file)
     return lfs.attributes(file, "mode") == "file"
 end
@@ -1217,6 +1229,11 @@ function FileManager:showFiles(path, focused_file)
         covers_fullscreen = true, -- hint for UIManager:_repaint()
         root_path = path,
         focused_file = focused_file,
+    }
+    self.topbar = Topbar:new{
+        view = nil,
+        ui = nil,
+        fm = true,
     }
     UIManager:show(file_manager)
 end
