@@ -151,9 +151,11 @@ function optionsutil.showValues(configurable, option, prefix, document, unit)
         if unit and unit ~= "pt" then
             unit = G_reader_settings:nilOrTrue("metric_length") and "mm" or "in"
         end
-        text = T(_("%1\n%2\nCurrent value: %3%4\nDefault value: %5%6"), name_text, help_text,
-                                            current, real_size_string(current, unit),
-                                            default, real_size_string(default, unit))
+        text = T(_("%1\n%2\nCurrent value: %3 (%4)\nDefault value: %5 (%6)"), name_text, help_text,
+                                            string.format("%.1fpt", current),
+                                            string.format("%.1fp", current * 1.07),
+                                            string.format("%.1fpt", default),
+                                            string.format("%.1fp", default * 1.07))
     end
     UIManager:show(InfoMessage:new{ text=text })
 end

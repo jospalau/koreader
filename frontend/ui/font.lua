@@ -278,14 +278,21 @@ end
 -- @int size optional size
 -- @int faceindex optional index of font face in font file
 -- @treturn table @{FontFaceObj}
-function Font:getFace(font, size, faceindex)
+function Font:getFace(font, size, faceindex, noscale)
     -- default to content font
     if not font then font = self.cfont end
 
     if not size then size = self.sizemap[font] end
     -- original size before scaling by screen DPI
     local orig_size = size
-    size = Screen:scaleBySize(size)
+    if noscale then
+        local Device = require("device")
+        local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+        size = (display_dpi * size)/72
+    else
+        size = Screen:scaleBySize(size)
+    end
+
 
     local realname = self.fontmap[font]
     if not realname then

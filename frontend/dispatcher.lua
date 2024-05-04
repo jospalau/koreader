@@ -1198,42 +1198,42 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                 font_size = ui.document.configurable.font_size
             end
 
-            -- See the source main.lua in the profiles plugin to see the tweaked sizes for different devices
-            if Device.model == "Kobo_goldfinch" then -- Clara2E
-                if font_size == 19.5 or font_size == 21.5 then
-                    font_size = font_size - 3
-                elseif font_size == 24.5 then
-                    font_size = font_size - 4
-                end
-            end
+            -- -- See the source main.lua in the profiles plugin to see the tweaked sizes for different devices
+            -- if Device.model == "Kobo_goldfinch" then -- Clara2E
+            --     if font_size == 19.5 or font_size == 21.5 then
+            --         font_size = font_size - 3
+            --     elseif font_size == 24.5 then
+            --         font_size = font_size - 4
+            --     end
+            -- end
 
-            if Device.model == "Kobo_cadmus" then -- Sage
+            -- if Device.model == "Kobo_cadmus" then -- Sage
 
-                if font_size == 14.5 then
-                    font_size = font_size + 2
-                elseif font_size == 16 or font_size == 18 then
-                    font_size = font_size + 2.5
-                end
-            end
+            --     if font_size == 14.5 then
+            --         font_size = font_size + 2
+            --     elseif font_size == 16 or font_size == 18 then
+            --         font_size = font_size + 2.5
+            --     end
+            -- end
 
 
-            if Device:isAndroid() and Device.screen:getWidth() < 1200  then -- Boox Palma
-                if font_size == 25  then
-                    font_size = font_size - 8.5
-                elseif font_size == 28 then
-                    font_size = font_size - 9.5
-                elseif font_size == 31.5 then
-                    font_size = font_size - 11
-                end
-            end
+            -- if Device:isAndroid() and Device.screen:getWidth() < 1200  then -- Boox Palma
+            --     if font_size == 25  then
+            --         font_size = font_size - 8.5
+            --     elseif font_size == 28 then
+            --         font_size = font_size - 9.5
+            --     elseif font_size == 31.5 then
+            --         font_size = font_size - 11
+            --     end
+            -- end
 
-            if Device:isAndroid() and Device.screen:getWidth() == 1220  then -- Xiaomi 12TPro
-                font_size = font_size - 7.5
-            end
+            -- if Device:isAndroid() and Device.screen:getWidth() == 1220  then -- Xiaomi 12TPro
+            --     font_size = font_size - 7.5
+            -- end
 
-            if Device.model == "ares" then -- LikeBook Ares
-                font_size = font_size - 9
-            end
+            -- if Device.model == "ares" then -- LikeBook Ares
+            --     font_size = font_size - 9
+            -- end
 
             local DataStorage = require("datastorage")
             local LuaSettings = require("luasettings")
@@ -1301,38 +1301,38 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                             font_size = ui.document.configurable.font_size
                         end
 
-                        if Device.model == "Kobo_goldfinch" then -- Clara2E
-                            if font_size == 19.5 or font_size == 21.5 then
-                                font_size = font_size - 3
-                            elseif font_size == 24.5 then
-                                font_size = font_size - 4
-                            end
-                        end
-                        if Device.model == "Kobo_cadmus" then -- Sage
-                            if font_size == 14.5 then
-                                font_size = font_size + 2
-                            elseif font_size == 16 or font_size == 18 then
-                                font_size = font_size + 2.5
-                            end
-                        end
+                        -- if Device.model == "Kobo_goldfinch" then -- Clara2E
+                        --     if font_size == 19.5 or font_size == 21.5 then
+                        --         font_size = font_size - 3
+                        --     elseif font_size == 24.5 then
+                        --         font_size = font_size - 4
+                        --     end
+                        -- end
+                        -- if Device.model == "Kobo_cadmus" then -- Sage
+                        --     if font_size == 14.5 then
+                        --         font_size = font_size + 2
+                        --     elseif font_size == 16 or font_size == 18 then
+                        --         font_size = font_size + 2.5
+                        --     end
+                        -- end
 
-                        if Device:isAndroid() and Device.screen:getWidth() < 1200  then -- Boox Palma
-                            if font_size == 25  then
-                                font_size = font_size - 8.5
-                            elseif font_size == 28 then
-                                font_size = font_size - 9.5
-                            elseif font_size == 31.5 then
-                                font_size = font_size - 11
-                            end
-                        end
+                        -- if Device:isAndroid() and Device.screen:getWidth() < 1200  then -- Boox Palma
+                        --     if font_size == 25  then
+                        --         font_size = font_size - 8.5
+                        --     elseif font_size == 28 then
+                        --         font_size = font_size - 9.5
+                        --     elseif font_size == 31.5 then
+                        --         font_size = font_size - 11
+                        --     end
+                        -- end
 
-                        if Device:isAndroid() and Device.screen:getWidth() == 1220  then -- Xiaomi 12TPro
-                            font_size = font_size - 7.5
-                        end
+                        -- if Device:isAndroid() and Device.screen:getWidth() == 1220  then -- Xiaomi 12TPro
+                        --     font_size = font_size - 7.5
+                        -- end
 
-                        if Device.model == "ares" then -- LikeBook Ares
-                            font_size = font_size - 9
-                        end
+                        -- if Device.model == "ares" then -- LikeBook Ares
+                        --     font_size = font_size - 9
+                        -- end
 
                         for prof, buttonqm in ipairs(quickmenu.buttons) do
                             if string.match(buttonqm[1].text, " ✔") then

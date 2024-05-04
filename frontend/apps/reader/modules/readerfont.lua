@@ -174,7 +174,13 @@ function ReaderFont:onReadSettings(config)
     local header_font = G_reader_settings:readSetting("header_font") or self.ui.document.header_font
     self.ui.document:setHeaderFont(header_font)
 
-    self.ui.document:setFontSize(Screen:scaleBySize(self.configurable.font_size))
+    local Device = require("device")
+    local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+    local size_px = (display_dpi * self.configurable.font_size)/72
+
+    self.ui.document:setFontSize(size_px)
+    -- self.ui.document:setFontSize(Screen:scaleBySize(self.configurable.font_size))
+
     self.ui.document:setFontBaseWeight(self.configurable.font_base_weight)
     self.ui.document:setFontHinting(self.configurable.font_hinting)
     self.ui.document:setFontKerning(self.configurable.font_kerning)
@@ -228,27 +234,32 @@ end
     UpdatePos event is used to tell ReaderRolling to update pos.
 --]]
 function ReaderFont:onChangeSize(delta)
-    if Screen:scaleBySize(self.configurable.font_size) == Screen:scaleBySize(self.configurable.font_size + delta) then
-        Notification:notify("Same px size, no effect")
-        self:onSetFontSize(self.configurable.font_size + delta, true)
-    else
-        self:onSetFontSize(self.configurable.font_size + delta)
-    end
+    -- if Screen:scaleBySize(self.configurable.font_size) == Screen:scaleBySize(self.configurable.font_size + delta) then
+    --     Notification:notify("Same px size, no effect")
+    --     self:onSetFontSize(self.configurable.font_size + delta, true)
+    -- else
+    --     self:onSetFontSize(self.configurable.font_size + delta)
+    -- end
+    self:onSetFontSize(self.configurable.font_size + delta)
     return true
 end
 
 function ReaderFont:onSetFontSize(size, nomessage)
-    size = math.max(12, math.min(size, 255))
+    size = math.max(4, math.min(size, 255))
     local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
-    local size_pt = math.floor((Screen:scaleBySize(size) * 72 / display_dpi) * 100) / 100
+    -- local size_pt = math.floor((Screen:scaleBySize(size) * 72 / display_dpi) * 100) / 100
+
+
+    local size_px = (display_dpi * size)/72
 
 
     self.configurable.font_size = size
-    self.ui.document:setFontSize(Screen:scaleBySize(size))
+    self.ui.document:setFontSize(size_px)
     self.ui:handleEvent(Event:new("UpdatePos"))
+
     if not nomessage then
-        Notification:notify(T(_("Font size set to: %1."), size))
-        Notification:notify(T(_("%1pt"), size_pt))
+        Notification:notify(T(_("Font size set to: %1pt."), size))
+        -- Notification:notify(T(_("%1pt"), size_pt))
     end
     return true
 end
