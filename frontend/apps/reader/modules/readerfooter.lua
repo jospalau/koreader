@@ -2309,12 +2309,15 @@ function ReaderFooter:onGetTextPage()
     local font_face = self.ui.document._document:getFontFace()
 
 
-    local font_size_pt = nil
-    local font_size_mm = nil
-
     local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
-    font_size_pt = math.floor((font_size * 72 / display_dpi) * 100) / 100
-    font_size_mm = math.floor((font_size * 25.4 / display_dpi)  * 100) / 100
+
+
+    -- local font_size_pt = math.floor((font_size * 72 / display_dpi) * 100) / 100
+    -- local font_size_mm = math.floor((font_size * 25.4 / display_dpi)  * 100) / 100
+
+    -- We have now points in the font size
+    local font_size_pt =  self.ui.document.configurable.font_size
+    local font_size_mm =  self.ui.document.configurable.font_size * 0.35
 
     -- We have now points in the font size, didot points are easy to convert 1 didot point = 1.0686614173228 points
     -- local font_size_pt_koreader = string.format(" (%.2fp)", convertSizeTo(self.ui.document.configurable.font_size, "pt"))
@@ -2354,7 +2357,7 @@ function ReaderFooter:onGetTextPage()
     "Average time read last 90 days: " .. avg_last_ninety_days .. "h" .. string.char(10) ..
     "Average time read last 180 days: " .. avg_last_hundred_and_eighty_days .. "h" .. string.char(10) ..
     "Avg wpm and wph: " .. avg_wpm .. string.char(10) .. string.char(10) ..
-    "Font: " .. font_face .. ", " .. font_size .. "px, " .. font_size_pt .. "pt" .. font_size_pt_koreader .. ", " .. font_size_mm .. "mm" .. string.char(10) ..
+    "Font: " .. font_face .. ", " .. font_size_pt .. "pt" .. font_size_pt_koreader .. ", " .. font_size_mm .. "mm" .. string.char(10) ..
     "Number of tweaks: " .. self.ui.tweaks_no .. string.char(10) ..
     self.ui.tweaks .. string.char(10) ..
     text_properties
