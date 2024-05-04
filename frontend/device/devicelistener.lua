@@ -351,6 +351,7 @@ end
 function DeviceListener:onFullRefresh()
     if self.ui and self.ui.view then
         self.ui:handleEvent(Event:new("UpdateFooter", self.ui.view.footer_visible))
+        self.ui.view[4]:toggleBar()
     end
     UIManager:setDirty("all", "full")
 end
