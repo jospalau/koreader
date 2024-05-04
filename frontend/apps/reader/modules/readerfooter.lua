@@ -2319,9 +2319,9 @@ function ReaderFooter:onGetTextPage()
     local font_size_pt =  self.ui.document.configurable.font_size
     local font_size_mm =  self.ui.document.configurable.font_size * 0.35
 
-    -- We have now points in the font size, didot points are easy to convert 1 didot point = 1.0686614173228 points
+    -- We have now points in the font size, converting to didot points is simple, 1 points = 0.93575007368111 didot points
     -- local font_size_pt_koreader = string.format(" (%.2fp)", convertSizeTo(self.ui.document.configurable.font_size, "pt"))
-    local font_size_pt_koreader = string.format(" (%.2fp)", self.ui.document.configurable.font_size * 1.07)
+    local font_size_pt_koreader = string.format(" (%.2fp)", self.ui.document.configurable.font_size * 0.94)
     -- if Device:isKobo() or Device:isPocketBook() or Device.model == "boox" then
     --     font_size_pt = math.floor((font_size * 72 / 300) * 100) / 100
     --     font_size_mm = math.floor((font_size * 25.4 / 300)  * 100) / 100
