@@ -132,14 +132,7 @@ function ReaderView:addWidgets()
         view = self,
         ui = self.ui,
     }
-    self.topbar = Topbar:new{
-        view = self,
-        ui = self.ui,
-    }
-    self.doublebar = Doublebar:new{
-        view = self,
-        ui = self.ui,
-    }
+
     self.flipping = ReaderFlipping:new{
         view = self,
         ui = self.ui,
@@ -155,8 +148,19 @@ function ReaderView:addWidgets()
     self[1] = self.dogear
     self[2] = self.footer
     self[3] = self.flipping
-    self[4] = self.topbar
-    self[5] = self.doublebar
+
+    if util.getFileNameSuffix(self.document.file) == "epub" then
+        self.topbar = Topbar:new{
+            view = self,
+            ui = self.ui,
+        }
+        self.doublebar = Doublebar:new{
+            view = self,
+            ui = self.ui,
+        }
+        self[4] = self.topbar
+        self[5] = self.doublebar
+    end
 end
 
 --[[--
@@ -338,7 +342,7 @@ function ReaderView:paintTo(bb, x, y)
 
     end
 
-    if G_reader_settings:isTrue("show_top_bar") then
+    if util.getFileNameSuffix(self.document.file) == "epub" and G_reader_settings:isTrue("show_top_bar") then
         self.topbar:paintTo(bb, x, y)
     end
 

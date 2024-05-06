@@ -503,16 +503,6 @@ function ReaderUI:init()
     -- Need the same event for PDF document
     self:handleEvent(Event:new("ReaderReady", self.doc_settings))
 
-
-    -- There is a small delay when manipulating the cover in the coverimage plugin
-    -- so the start_session_time in the topbar may be shown a bit delayed when opening the document
-    -- This happens for devices using the coverimage plugin like PocketBook or Android devices
-    -- but we do it here for all devices after having executed all the ReaderReady event handlers for all the objects
-    -- self.view[4] is the topbar object created in readerview.lua
-    if os.time() - self.view[4].start_session_time < 5 then
-        self.view[4].start_session_time = os.time()
-    end
-
     for _,v in ipairs(self.postReaderReadyCallback) do
         v()
     end
@@ -532,21 +522,35 @@ function ReaderUI:init()
         -- Should never happen, given what we did in (do)showReader...
         logger.err("ReaderUI instance mismatch! Opened", tostring(self), "while we still have an existing instance:", tostring(ReaderUI.instance), debug.traceback())
     end
-    ReaderUI.instance = self
-    -- Some things are broken when opening pdf files. I just read epubs with KOReader, but in any case we can avoid the crashes putting some conditions for epub format
-    -- local file_type = string.lower(string.match(self.document.file, ".+%.([^.]+)") or "")
-    -- if file_type == "epub" then
-    local res = self.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
-    local nbwords = 0
-    local nbcharacters = 0
-    if res and res.text then
-        local words = splitToWords(res.text) -- contar palabras
-        local characters = res.text -- contar caracteres
-        -- logger.warn(words)
-        nbwords = #words -- # es equivalente a string.len()
-        nbcharacters = #characters
+
+    if util.getFileNameSuffix(self.document.file) == "epub" then
+        -- We can remove this sin the query was changed and it does not take time
+        -- There is a small delay when manipulating the cover in the coverimage plugin
+        -- so the start_session_time in the topbar may be shown a bit delayed when opening the document
+        -- This happens for devices using the coverimage plugin like PocketBook or Android devices
+        -- but we do it here for all devices after having executed all the ReaderReady event handlers for all the objects
+        -- self.view[4] is the topbar object created in readerview.lua
+        if os.time() - self.view[4].start_session_time < 5 then
+            self.view[4].start_session_time = os.time()
+        end
+        -- Some things are broken when opening pdf files. I just read epubs with KOReader, but in any case we can avoid the crashes putting some conditions for epub format
+        -- local file_type = string.lower(string.match(self.document.file, ".+%.([^.]+)") or "")
+        -- if file_type == "epub" then
+        local res = self.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
+        local nbwords = 0
+        local nbcharacters = 0
+        if res and res.text then
+            local words = splitToWords(res.text) -- contar palabras
+            local characters = res.text -- contar caracteres
+            -- logger.warn(words)
+            nbwords = #words -- # es equivalente a string.len()
+            nbcharacters = #characters
+        end
+        self.statistics._last_nbwords = nbwords
     end
-    self.statistics._last_nbwords = nbwords
+
+
+    ReaderUI.instance = self
 end
 
 
