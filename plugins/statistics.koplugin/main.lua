@@ -3442,8 +3442,12 @@ end
 
 function ReaderStatistics:onShowHeatmapView()
     self:insertDB()
-    self.kv = nil -- clean left over stack link
+    self.kv = nil -- clean left over stack lin
+    local Event = require("ui/event")
+    UIManager:broadcastEvent(Event:new("SetRotationMode", 1))
+    UIManager:broadcastEvent(Event:new("GenerateCover", 1))
     local HeatmapView = require("heatmapview")
+
     UIManager:show(HeatmapView:new{
         reader_statistics = self,
         start_day_of_week = self.settings.calendar_start_day_of_week,
