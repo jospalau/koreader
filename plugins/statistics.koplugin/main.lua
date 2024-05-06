@@ -1543,6 +1543,13 @@ Time is in hours and minutes.]]),
                 end,
             },
             {
+                text = _("Heatmap view"),
+                keep_menu_open = true,
+                callback = function()
+                    self:onShowHeatmapView()
+                end,
+            },
+            {
                 text = _("Today's timeline"),
                 keep_menu_open = true,
                 callback = function()
@@ -3425,6 +3432,19 @@ function ReaderStatistics:onShowCalendarView()
     self.kv = nil -- clean left over stack link
     local CalendarView = require("calendarview")
     UIManager:show(CalendarView:new{
+        reader_statistics = self,
+        start_day_of_week = self.settings.calendar_start_day_of_week,
+        nb_book_spans = self.settings.calendar_nb_book_spans,
+        show_hourly_histogram = self.settings.calendar_show_histogram,
+        browse_future_months = self.settings.calendar_browse_future_months,
+    })
+end
+
+function ReaderStatistics:onShowHeatmapView()
+    self:insertDB()
+    self.kv = nil -- clean left over stack link
+    local HeatmapView = require("heatmapview")
+    UIManager:show(HeatmapView:new{
         reader_statistics = self,
         start_day_of_week = self.settings.calendar_start_day_of_week,
         nb_book_spans = self.settings.calendar_nb_book_spans,
