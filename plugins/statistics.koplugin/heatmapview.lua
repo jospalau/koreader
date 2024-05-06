@@ -512,7 +512,7 @@ function HeatmapView:init()
                 self.day_names,
                 main_content2023,
             },
-            VerticalSpan:new{ width = 50 }, -- We need the main_content to go a little bit down
+            VerticalSpan:new{ width = 80 }, -- We need the main_content to go a little bit downss
             self.title_bar_2024,
             HorizontalGroup:new{
                 HorizontalSpan:new{ width = self.outer_padding },
@@ -567,12 +567,8 @@ function HeatmapView:_populateItems(main_content)
         -- if dayc % 8 == 0 then
         if i == 1 and weekx == 52 then
             cur_week = CalendarWeek:new{
-                height = 20,
-                width = 20,
-                day_width = 10,
-                day_padding = 10,
-                day_border = 10,
-                nb_book_spans = 0,
+                height = 30,
+                width = 30,
                 span_height = self.span_height,
                 font_face = self.font_face,
                 font_size = self.span_font_size,
@@ -595,8 +591,6 @@ function HeatmapView:_populateItems(main_content)
                 end
 
                 local calendar_day = CalendarDay:new{
-                    show_histo = self.show_hourly_histogram,
-                    histo_height = 0,
                     is_different_year = j < weekday and true or false,
                     day = j < weekday and "" or i,
                     font_face = self.font_face,
@@ -605,8 +599,8 @@ function HeatmapView:_populateItems(main_content)
                     daynum = cur_date.day,
                     paint_down = paint_down,
                     paint_left = paint_left,
-                    height = 20,
-                    width = 20,
+                    height = 30,
+                    width = 30,
                     show_parent = self,
                     duration = 0,
                 }
@@ -616,8 +610,8 @@ function HeatmapView:_populateItems(main_content)
         else
             if weekday == 1 then
                 cur_week = CalendarWeek:new{
-                    height = 20,
-                    width = 20,
+                    height = 30,
+                    width = 30,
                     font_face = self.font_face,
                     font_size = self.span_font_size,
                     show_parent = self,
@@ -640,21 +634,17 @@ function HeatmapView:_populateItems(main_content)
             local is_today = os.date("%Y-%m-%d") == self.dates[i][1][1]
             local is_future = day_s > today_s
             local calendar_day = CalendarDay:new{
-                show_histo = self.show_hourly_histogram,
-                histo_height = 0,
                 font_face = self.font_face,
                 font_size = self.span_font_size,
-                is_today = is_today,
                 -- border = is_future and 0 or 1,
                 is_different_year = false,
                 paint_down = (monthx == 1 and true or false),
                 paint_left = ((rday == 1 or rday == 2 or rday == 3 or rday == 4 or rday == 5 or rday == 6 or rday == 7) and true or false),
                 day = i,
-                is_future = is_future,
                 is_today = is_today,
                 daynum = cur_date.day,
-                height = 20,
-                width = 20,
+                height = 30,
+                width = 30,
                 show_parent = self,
                 duration = self.dates[i][1][2],
             }
@@ -666,8 +656,6 @@ function HeatmapView:_populateItems(main_content)
     if last_weekday > 1 then
         for j = last_weekday, 6 do
             local calendar_day = CalendarDay:new{
-                show_histo = self.show_hourly_histogram,
-                histo_height = 0,
                 is_different_year = true,
                 day = "",
                 font_face = self.font_face,
@@ -694,48 +682,7 @@ end
 
 
 
-function HeatmapView:nextMonth()
-    local t = os.time({
-        year = self.cur_month:sub(1,4),
-        month = self.cur_month:sub(6),
-        day = 15,
-    })
-    t = t + 86400 * 30 -- 30 days later
-    local next_month = os.date("%Y-%m", t)
-    if self.browse_future_months or next_month <= self.max_month then
-        self.cur_month = next_month
-        self:_populateItems()
-    end
-end
 
-function HeatmapView:prevMonth()
-    local t = os.time({
-        year = self.cur_month:sub(1,4),
-        month = self.cur_month:sub(6),
-        day = 15,
-    })
-    t = t - 86400 * 30 -- 30 days before
-    local prev_month = os.date("%Y-%m", t)
-    if prev_month >= self.min_month then
-        self.cur_month = prev_month
-        self:_populateItems()
-    end
-end
-
-function HeatmapView:goToMonth(month)
-    self.cur_month = month
-    self:_populateItems()
-end
-
-function HeatmapView:onNextMonth()
-    self:nextMonth()
-    return true
-end
-
-function HeatmapView:onPrevMonth()
-    self:prevMonth()
-    return true
-end
 
 function HeatmapView:onSwipe(arg, ges_ev)
     local direction = BD.flipDirectionIfMirroredUILayout(ges_ev.direction)
@@ -770,6 +717,9 @@ end
 
 function HeatmapView:onClose()
     UIManager:close(self)
+    local Event = require("ui/event")
+    UIManager:broadcastEvent(Event:new("SetRotationMode", 0))
+    UIManager:broadcastEvent(Event:new("GenerateCover", 0))
     -- Remove ghosting
     UIManager:setDirty(nil, "full")
     return true
