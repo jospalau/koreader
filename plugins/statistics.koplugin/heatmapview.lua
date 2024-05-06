@@ -1209,102 +1209,6 @@ function HeatmapView:init()
 
     self.content_width = self.dimen.w - 2*self.outer_padding
 
-    local now_ts = os.time()
-    if not MIN_MONTH then
-        local min_ts = self.reader_statistics:getFirstTimestamp()
-        if not min_ts then min_ts = now_ts end
-        MIN_MONTH = os.date("%Y-%m", min_ts)
-    end
-    self.min_month = MIN_MONTH
-    self.max_month = os.date("%Y-%m", now_ts)
-    if not self.cur_month then
-        self.cur_month = self.max_month
-    end
-
-    -- group for page info
-    local chevron_left = "chevron.left"
-    local chevron_right = "chevron.right"
-    local chevron_first = "chevron.first"
-    local chevron_last = "chevron.last"
-    if BD.mirroredUILayout() then
-        chevron_left, chevron_right = chevron_right, chevron_left
-        chevron_first, chevron_last = chevron_last, chevron_first
-    end
-    self.page_info_left_chev = Button:new{
-        icon = chevron_left,
-        callback = function() self:prevMonth() end,
-        bordersize = 0,
-        show_parent = self,
-    }
-    self.page_info_right_chev = Button:new{
-        icon = chevron_right,
-        callback = function() self:nextMonth() end,
-        bordersize = 0,
-        show_parent = self,
-    }
-    self.page_info_first_chev = Button:new{
-        icon = chevron_first,
-        callback = function() self:goToMonth(self.min_month) end,
-        bordersize = 0,
-        show_parent = self,
-    }
-    self.page_info_last_chev = Button:new{
-        icon = chevron_last,
-        callback = function() self:goToMonth(self.max_month) end,
-        bordersize = 0,
-        show_parent = self,
-    }
-    self.page_info_spacer = HorizontalSpan:new{
-        width = Screen:scaleBySize(32),
-    }
-
-    self.page_info_text = Button:new{
-        text = "",
-        hold_input = {
-            title = _("Enter month"),
-            input_func = function() return self.cur_month end,
-            callback = function(input)
-                local year, month = input:match("^(%d%d%d%d)-(%d%d)$")
-                if year and month then
-                    if tonumber(month) >= 1 and tonumber(month) <= 12 and tonumber(year) >= 1000 then
-                        -- Allow seeing arbitrary year-month in the past or future by
-                        -- not constraining to self.min_month/max_month.
-                        -- (year >= 1000 to ensure %Y keeps returning 4 digits)
-                        self:goToMonth(input)
-                        return
-                    end
-                end
-                local InfoMessage = require("ui/widget/infomessage")
-                UIManager:show(InfoMessage:new{
-                    text = _("Invalid year-month string (YYYY-MM)"),
-                })
-            end,
-        },
-        call_hold_input_on_tap = true,
-        bordersize = 0,
-        text_font_face = "pgfont",
-        text_font_bold = false,
-    }
-    self.page_info = HorizontalGroup:new{
-        self.page_info_first_chev,
-        self.page_info_spacer,
-        self.page_info_left_chev,
-        self.page_info_spacer,
-        self.page_info_text,
-        self.page_info_spacer,
-        self.page_info_right_chev,
-        self.page_info_spacer,
-        self.page_info_last_chev,
-    }
-
-    local footer = BottomContainer:new{
-        -- (BottomContainer does horizontal centering)
-        dimen = Geom:new{
-            w = self.dimen.w,
-            h = self.dimen.h,
-        },
-        self.page_info,
-    }
 
     self.title_bar = TitleBar:new{
         fullscreen = self.covers_fullscreen,
@@ -1322,14 +1226,14 @@ function HeatmapView:init()
     for i = 0, 6 do
         local dayname = TextWidget:new{
             text = datetime.shortDayOfWeekTranslation[self.weekdays[(self.start_day_of_week-1+i)%7 + 1]],
-            face = Font:getFace("xx_smallinfofont", Screen:scaleBySize(4)),
+            face = Font:getFace("xx_smallinfofont", Screen:scaleBySize(2)),
             -- bold = true,
         }
         table.insert(self.day_names, FrameContainer:new{
             padding = 0,
             bordersize = 0,
             CenterContainer:new{
-                dimen = Geom:new{ w = 100, h = 20 },
+                dimen = Geom:new{ w = 25, h = 20 },
                 dayname,
             }
         })
@@ -1339,8 +1243,7 @@ function HeatmapView:init()
     end
 
     -- At most 6 weeks in a month
-    local available_height = self.dimen.h - self.title_bar:getHeight()
-                            - self.page_info:getSize().h - self.day_names:getSize().h
+    local available_height = self.dimen.h - self.title_bar:getHeight() - self.day_names:getSize().h
     self.week_height = math.floor((available_height - 7*self.inner_padding) * (1/6))
     self.day_border = Size.border.default
     if self.show_hourly_histogram then
@@ -1422,7 +1325,6 @@ function HeatmapView:init()
                 main_content2024,
             },
         },
-        footer,
     }
     -- assemble page
     self[1] = FrameContainer:new{
@@ -1438,27 +1340,8 @@ end
 
 function HeatmapView:_populateItems(main_content)
     self.layout = {}
-    self.page_info:resetLayout()
     main_content:clear()
 
-    -- See https://www.lua.org/pil/22.1.html for info about os.time() and os.date()
-    local month_start_ts = os.time({
-        year = self.cur_month:sub(1,4),
-        month = self.cur_month:sub(6),
-        day = 1,
-        -- When hour is unspecified, Lua defaults to noon 12h00
-    })
-    -- Update title
-    local month_text = datetime.longMonthTranslation[os.date("%B", month_start_ts)] .. os.date(" %Y", month_start_ts)
-    -- Update footer
-    self.page_info_text:setText(self.cur_month)
-    self.page_info_left_chev:enableDisable(self.cur_month > self.min_month)
-    self.page_info_right_chev:enableDisable(self.cur_month < self.max_month or self.browse_future_months)
-    self.page_info_first_chev:enableDisable(self.cur_month > self.min_month)
-    self.page_info_last_chev:enableDisable(self.cur_month < self.max_month or self.browse_future_months)
-
-    local ratio_per_hour_by_day = self.reader_statistics:getReadingRatioPerHourByDay(self.cur_month)
-    local books_by_day = self.reader_statistics:getReadBookByDay(self.cur_month)
 
     table.insert(main_content, VerticalSpan:new{ width = self.inner_padding })
     self.weeks = {}
@@ -1577,8 +1460,6 @@ function HeatmapView:_populateItems(main_content)
                 daynum = cur_date.day,
                 height = 20,
                 width = 20,
-                ratio_per_hour = ratio_per_hour_by_day[day_s],
-                read_books = books_by_day[day_s],
                 show_parent = self,
                 duration = self.dates[i][1][2],
                 callback = not is_future and function()
@@ -1604,7 +1485,6 @@ function HeatmapView:_populateItems(main_content)
 
             cur_week:addDay(calendar_day)
             table.insert(layout_week, calendar_day)
-            cur_ts = cur_ts + 86400 -- add one day
         end
     end
     if last_weekday > 1 then
