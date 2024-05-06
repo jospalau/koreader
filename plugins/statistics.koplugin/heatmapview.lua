@@ -86,6 +86,7 @@ local CalendarDay = InputContainer:extend{
     height = nil,
     border = 0,
     is_future = false,
+    is_different_year = false,
     font_face = "xx_smallinfofont",
     font_size = nil,
     show_histo = true,
@@ -111,14 +112,14 @@ function CalendarDay:init()
     }
 
     self.daynum_w = TextWidget:new{
-        text = " " .. tostring(self.daynum),
+        text = "" .. tostring(self.daynum),
         face = Font:getFace(self.font_face, self.font_size),
         fgcolor = self.is_future and Blitbuffer.COLOR_GRAY or Blitbuffer.COLOR_BLACK,
         padding = 0,
         bold = true,
     }
     self.nb_not_shown_w = TextWidget:new{
-        text = "",
+        text = " ",-- self.day, -- Show day
         face = Font:getFace(self.font_face, self.font_size - 1),
         fgcolor = Blitbuffer.COLOR_DARK_GRAY,
         overlap_align = "right",
@@ -150,8 +151,13 @@ function CalendarDay:init()
     self[1] = FrameContainer:new{
         padding = 0,
         -- color = self.is_future and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE, -- And border color
-        color = Blitbuffer.COLOR_BLACK,
-        bordersize = self.border,
+        -- color = Blitbuffer.COLOR_BLACK,
+        -- bordersize = self.border,
+        -- bordersize = self.is_different_year and 0 or 1,
+        color = Blitbuffer.COLOR_WHITE,
+        bordersize = 1,
+        paint_down = self.paint_down,
+        paint_left = self.paint_left,
         width = self.width,
         height = self.height,
         background = bg_color,
@@ -1458,22 +1464,30 @@ function HeatmapView:_populateItems(main_content)
     local cur_date = os.date("*t", cur_ts)
     local this_month = cur_date.month
     local cur_week
-    local layout_row
-    local dayc = 0
+    local layout_week
+    local last_weekday = ""
     for i = 1, #self.dates do
         print(self.dates[i][1][1])
 
         local pattern = "(%d+)-(%d+)-(%d+)"
         local ryear, rmonth, rday = self.dates[i][1][1]:match(pattern)
         local date = os.time({year=ryear, month=rmonth, day=rday})
-        local dayx
-        dayx = os.date("*t", date)
-        print(dayx.wday)
+        local weekday = os.date("*t", date).wday - 1
+
+        last_weekday = weekday
+        if weekday == 0 then
+            weekday = 7
+        end
+        local weekx = tonumber(os.date("%V", date))
+        local yearx = tonumber(os.date("%Y", date))
+        local monthx = tonumber(os.date("%d", date))
+        print(weekday)
+        rday = tonumber(rday)
         -- if dayc % 8 == 0 then
-        if dayc == 0 and dayx.wday ~= 2 then
+        if i == 1 and weekx == 52 then
             cur_week = CalendarWeek:new{
-                height = 5,
-                width = 5,
+                height = 20,
+                width = 20,
                 day_width = 10,
                 day_padding = 10,
                 day_border = 10,
@@ -1483,89 +1497,116 @@ function HeatmapView:_populateItems(main_content)
                 font_size = self.span_font_size,
                 show_parent = self,
             }
-            layout_row = {}
-            table.insert(self.layout, layout_row)
+            layout_week = {}
+            table.insert(self.layout, layout_week)
             table.insert(self.weeks, cur_week)
             table.insert(main_content, cur_week)
-            for j = 1, 7 do
+            for j = 1, weekday do
                 local calendar_day = CalendarDay:new{
                     show_histo = self.show_hourly_histogram,
                     histo_height = 0,
+                    is_different_year = j < weekday and true or false,
+                    day = j < weekday and "" or i,
                     font_face = self.font_face,
                     font_size = self.span_font_size,
                     border = self.day_border,
                     daynum = cur_date.day,
-                    height = 5,
-                    width = 5,
+                    height = 20,
+                    width = 20,
                     show_parent = self,
                     duration = 0,
                 }
                 cur_week:addDay(calendar_day)
-                table.insert(layout_row, calendar_day)
+                table.insert(layout_week, calendar_day)
             end
-        end
-        if dayx.wday == 2 then
-            cur_week = CalendarWeek:new{
-                height = 20,
-                width = 20,
+        else
+            if weekday == 1 then
+                cur_week = CalendarWeek:new{
+                    height = 20,
+                    width = 20,
+                    font_face = self.font_face,
+                    font_size = self.span_font_size,
+                    show_parent = self,
+                }
+                layout_week = {}
+                table.insert(self.layout, layout_week)
+                table.insert(self.weeks, cur_week)
+                table.insert(main_content, cur_week)
+            end
+
+
+            local day_s = os.date("%Y-%m-%d", cur_ts)
+            local day_ts = os.time({
+                year = cur_date.year,
+                month = cur_date.month,
+                day = cur_date.day,
+                hour = 0,
+            })
+            local is_future = day_s > today_s
+            local calendar_day = CalendarDay:new{
+                show_histo = self.show_hourly_histogram,
+                histo_height = 0,
                 font_face = self.font_face,
                 font_size = self.span_font_size,
+                border = self.day_border,
+                -- border = is_future and 0 or 1,
+                is_different_year = false,
+                paint_down = (monthx == 1 and true or false),
+                paint_left = ((rday == 1 or rday == 2 or rday == 3 or rday == 4 or rday == 5 or rday == 6 or rday == 7) and true or false),
+                day = i,
+                is_future = is_future,
+                daynum = cur_date.day,
+                height = 20,
+                width = 20,
+                ratio_per_hour = ratio_per_hour_by_day[day_s],
+                read_books = books_by_day[day_s],
                 show_parent = self,
+                duration = self.dates[i][1][2],
+                callback = not is_future and function()
+                    UIManager:show(CalendarDayView:new{
+                        day_ts = day_ts + (self.reader_statistics.settings.calendar_day_start_hour or 0) * 3600
+                                        + (self.reader_statistics.settings.calendar_day_start_minute or 0) * 60,
+                        reader_statistics = self.reader_statistics,
+                        close_callback = function(this)
+                            -- Refresh calendar in case some day stats were reset for some books
+                            -- (we don't know if some reset were done... so we refresh the current
+                            -- display always - at tickAfterNext so there is no noticable slowness
+                            -- when closing, and the re-painting happening after is not noticable;
+                            -- but if some stat reset were done, this will make a nice noticable
+                            -- repainting showing dynamically reset books disappearing :)
+                            UIManager:tickAfterNext(function()
+                                self:goToMonth(os.date("%Y-%m", this.day_ts + 10800))
+                            end)
+                        end,
+                        min_month = self.min_month
+                    })
+                end
             }
-            layout_row = {}
-            table.insert(self.layout, layout_row)
-            table.insert(self.weeks, cur_week)
-            table.insert(main_content, cur_week)
+
+            cur_week:addDay(calendar_day)
+            table.insert(layout_week, calendar_day)
+            cur_ts = cur_ts + 86400 -- add one day
         end
-
-
-        local day_s = os.date("%Y-%m-%d", cur_ts)
-        local day_ts = os.time({
-            year = cur_date.year,
-            month = cur_date.month,
-            day = cur_date.day,
-            hour = 0,
-        })
-        local is_future = day_s > today_s
-        local calendar_day = CalendarDay:new{
-            show_histo = self.show_hourly_histogram,
-            histo_height = 0,
-            font_face = self.font_face,
-            font_size = self.span_font_size,
-            border = self.day_border,
-            -- border = is_future and 0 or 1,
-            is_future = is_future,
-            daynum = cur_date.day,
-            height = 20,
-            width = 20,
-            ratio_per_hour = ratio_per_hour_by_day[day_s],
-            read_books = books_by_day[day_s],
-            show_parent = self,
-            duration = self.dates[i][1][2],
-            callback = not is_future and function()
-                UIManager:show(CalendarDayView:new{
-                    day_ts = day_ts + (self.reader_statistics.settings.calendar_day_start_hour or 0) * 3600
-                                    + (self.reader_statistics.settings.calendar_day_start_minute or 0) * 60,
-                    reader_statistics = self.reader_statistics,
-                    close_callback = function(this)
-                        -- Refresh calendar in case some day stats were reset for some books
-                        -- (we don't know if some reset were done... so we refresh the current
-                        -- display always - at tickAfterNext so there is no noticable slowness
-                        -- when closing, and the re-painting happening after is not noticable;
-                        -- but if some stat reset were done, this will make a nice noticable
-                        -- repainting showing dynamically reset books disappearing :)
-                        UIManager:tickAfterNext(function()
-                            self:goToMonth(os.date("%Y-%m", this.day_ts + 10800))
-                        end)
-                    end,
-                    min_month = self.min_month
-                })
-            end
-        }
-        cur_week:addDay(calendar_day)
-        table.insert(layout_row, calendar_day)
-        cur_ts = cur_ts + 86400 -- add one day
-        dayc = dayc + 1
+    end
+    if last_weekday > 1 then
+        for j = last_weekday, 6 do
+            local calendar_day = CalendarDay:new{
+                show_histo = self.show_hourly_histogram,
+                histo_height = 0,
+                is_different_year = true,
+                day = "",
+                font_face = self.font_face,
+                font_size = self.span_font_size,
+                border = self.day_border,
+                daynum = cur_date.day,
+                height = 20,
+                width = 20,
+                show_parent = self,
+                duration = 0,
+            }
+            cur_week:addDay(calendar_day)
+            table.insert(layout_week, calendar_day)
+        end
     end
     for _, week in ipairs(self.weeks) do
         week:update()
@@ -1672,3 +1713,4 @@ function HeatmapView:onClose()
 end
 
 return HeatmapView
+

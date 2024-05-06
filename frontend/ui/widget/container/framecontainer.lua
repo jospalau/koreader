@@ -48,6 +48,8 @@ local FrameContainer = WidgetContainer:extend{
     stripe_width = nil,
     stripe_over = nil, -- draw stripes *after* content is drawn
     stripe_over_alpha = 1,
+    paint_left = nil,
+    paint_down = nil,
 }
 
 function FrameContainer:getSize()
@@ -140,6 +142,16 @@ function FrameContainer:paintTo(bb, x, y)
             container_width - self.margin * 2,
             container_height - self.margin * 2,
             self.bordersize, self.color, self.radius, anti_alias)
+    end
+    if self.paint_down then
+        local anti_alias = G_reader_settings:nilOrTrue("anti_alias_ui")
+        bb:paintBorder(x + self.margin, y + self.margin,
+            container_width - self.margin * 2,
+            0,
+            1, Blitbuffer.COLOR_BLACK, self.radius, anti_alias)
+    end
+    if self.paint_left then
+        bb:paintRect(x + self.margin, y + self.margin, 1, container_height, Blitbuffer.COLOR_BLACK)
     end
     if self[1] then
         self[1]:paintTo(bb,
