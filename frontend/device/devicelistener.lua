@@ -29,15 +29,6 @@ function DeviceListener:onSetNightMode(night_mode_on)
     end
 end
 
-function DeviceListener:onSetRotationMode(rotation)
-    local UIManager = require("ui/uimanager")
-    local Notification = require("ui/widget/notification")
-    UIManager:show(Notification:new{
-        text = _("scoveraaaa"),
-    })
-
-    return true
-end
 function DeviceListener:onShowIntensity()
     if not Device:hasFrontlight() then return true end
     local powerd = Device:getPowerDevice()
