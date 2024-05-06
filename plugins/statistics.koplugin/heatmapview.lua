@@ -1301,26 +1301,26 @@ function HeatmapView:init()
         fullscreen = self.covers_fullscreen,
         width = self.dimen.w,
         align = "left",
-        title = self.title,
+        title = "2023",
         title_h_padding = self.outer_padding, -- have month name aligned with calendar left edge
         close_callback = function() self:onClose() end,
         show_parent = self,
     }
 
     -- week days names header
-    self.day_names = HorizontalGroup:new{}
+    self.day_names = VerticalGroup:new{}
     table.insert(self.day_names, HorizontalSpan:new{ width = self.outer_padding })
     for i = 0, 6 do
         local dayname = TextWidget:new{
             text = datetime.shortDayOfWeekTranslation[self.weekdays[(self.start_day_of_week-1+i)%7 + 1]],
-            face = Font:getFace("xx_smallinfofont"),
+            face = Font:getFace("xx_smallinfofont", 12),
             bold = true,
         }
         table.insert(self.day_names, FrameContainer:new{
             padding = 0,
-            bordersize = 1,
+            bordersize = 0,
             CenterContainer:new{
-                dimen = Geom:new{ w = self.day_width, h = dayname:getSize().h },
+                dimen = Geom:new{ w = 30, h = 20 },
                 dayname,
             }
         })
@@ -1370,6 +1370,27 @@ function HeatmapView:init()
     local main_content2024 = HorizontalGroup:new{}
     self:_populateItems(main_content2024)
 
+
+    self.title_bar_2023 = TitleBar:new{
+        fullscreen = self.covers_fullscreen,
+        width = self.dimen.w,
+        align = "left",
+        title = "2023",
+        title_h_padding = self.outer_padding, -- have month name aligned with calendar left edge
+        close_callback = function() self:onClose() end,
+        show_parent = self,
+    }
+
+    self.title_bar_2024 = TitleBar:new{
+        fullscreen = self.covers_fullscreen,
+        width = self.dimen.w,
+        align = "left",
+        title = "2024",
+        title_h_padding = self.outer_padding, -- have month name aligned with calendar left edge
+        close_callback = function() self:onClose() end,
+        show_parent = self,
+    }
+
     local content = OverlapGroup:new{
         dimen = Geom:new{
             w = self.dimen.w,
@@ -1378,16 +1399,17 @@ function HeatmapView:init()
         allow_mirroring = false,
         VerticalGroup:new{
             align = "left",
-            self.title_bar,
-            self.day_names,
-            VerticalSpan:new{ width = 100 }, -- We need the main_content to go a little bit down
+            self.title_bar_2023,
             HorizontalGroup:new{
                 HorizontalSpan:new{ width = self.outer_padding },
+                self.day_names,
                 main_content2023,
             },
-            VerticalSpan:new{ width = 150 }, -- We need the main_content to go a little bit down
+            VerticalSpan:new{ width = 50 }, -- We need the main_content to go a little bit down
+            self.title_bar_2024,
             HorizontalGroup:new{
                 HorizontalSpan:new{ width = self.outer_padding },
+                self.day_names,
                 main_content2024,
             },
         },
@@ -1419,7 +1441,6 @@ function HeatmapView:_populateItems(main_content)
     })
     -- Update title
     local month_text = datetime.longMonthTranslation[os.date("%B", month_start_ts)] .. os.date(" %Y", month_start_ts)
-    self.title_bar:setTitle(month_text)
     -- Update footer
     self.page_info_text:setText(self.cur_month)
     self.page_info_left_chev:enableDisable(self.cur_month > self.min_month)
