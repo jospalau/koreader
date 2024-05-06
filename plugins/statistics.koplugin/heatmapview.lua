@@ -421,14 +421,14 @@ function HeatmapView:init()
     for i = 0, 6 do
         local dayname = TextWidget:new{
             text = datetime.shortDayOfWeekTranslation[self.weekdays[(self.start_day_of_week-1+i)%7 + 1]],
-            face = Font:getFace("xx_smallinfofont", Screen:scaleBySize(2)),
+            face = Font:getFace("xx_smallinfofont", Screen:scaleBySize(3)),
             -- bold = true,
         }
         table.insert(self.day_names, FrameContainer:new{
             padding = 0,
             bordersize = 0,
             CenterContainer:new{
-                dimen = Geom:new{ w = 25, h = 20 },
+                dimen = Geom:new{ w = 25, h = 25 },
                 dayname,
             }
         })
@@ -512,7 +512,7 @@ function HeatmapView:init()
                 self.day_names,
                 main_content2023,
             },
-            VerticalSpan:new{ width = 80 }, -- We need the main_content to go a little bit downss
+            -- VerticalSpan:new{ width = 60 }, -- We need the main_content to go a little bit down
             self.title_bar_2024,
             HorizontalGroup:new{
                 HorizontalSpan:new{ width = self.outer_padding },
@@ -567,8 +567,8 @@ function HeatmapView:_populateItems(main_content)
         -- if dayc % 8 == 0 then
         if i == 1 and weekx == 52 then
             cur_week = CalendarWeek:new{
-                height = 30,
-                width = 30,
+                height = 25,
+                width = 25,
                 span_height = self.span_height,
                 font_face = self.font_face,
                 font_size = self.span_font_size,
@@ -599,8 +599,8 @@ function HeatmapView:_populateItems(main_content)
                     daynum = cur_date.day,
                     paint_down = paint_down,
                     paint_left = paint_left,
-                    height = 30,
-                    width = 30,
+                    height = 25,
+                    width = 25,
                     show_parent = self,
                     duration = 0,
                 }
@@ -610,8 +610,8 @@ function HeatmapView:_populateItems(main_content)
         else
             if weekday == 1 then
                 cur_week = CalendarWeek:new{
-                    height = 30,
-                    width = 30,
+                    height = 25,
+                    width = 25,
                     font_face = self.font_face,
                     font_size = self.span_font_size,
                     show_parent = self,
@@ -643,8 +643,8 @@ function HeatmapView:_populateItems(main_content)
                 day = i,
                 is_today = is_today,
                 daynum = cur_date.day,
-                height = 30,
-                width = 30,
+                height = 25,
+                width = 25,
                 show_parent = self,
                 duration = self.dates[i][1][2],
             }
