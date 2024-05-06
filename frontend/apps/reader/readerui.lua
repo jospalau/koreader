@@ -503,28 +503,7 @@ function ReaderUI:init()
     -- Need the same event for PDF document
     self:handleEvent(Event:new("ReaderReady", self.doc_settings))
 
-    for _,v in ipairs(self.postReaderReadyCallback) do
-        v()
-    end
-    self.postReaderReadyCallback = nil
-
-    Device:setIgnoreInput(false) -- Allow processing of events (on Android).
-    Input:inhibitInputUntil(0.2)
-
-    -- print("Ordered registered gestures:")
-    -- for _, tzone in ipairs(self._ordered_touch_zones) do
-    --     print("  "..tzone.def.id)
-    -- end
-
-    if ReaderUI.instance == nil then
-        logger.dbg("Spinning up new ReaderUI instance", tostring(self))
-    else
-        -- Should never happen, given what we did in (do)showReader...
-        logger.err("ReaderUI instance mismatch! Opened", tostring(self), "while we still have an existing instance:", tostring(ReaderUI.instance), debug.traceback())
-    end
-
     if util.getFileNameSuffix(self.document.file) == "epub" then
-        -- We can remove this sin the query was changed and it does not take time
         -- There is a small delay when manipulating the cover in the coverimage plugin
         -- so the start_session_time in the topbar may be shown a bit delayed when opening the document
         -- This happens for devices using the coverimage plugin like PocketBook or Android devices
@@ -547,6 +526,25 @@ function ReaderUI:init()
             nbcharacters = #characters
         end
         self.statistics._last_nbwords = nbwords
+    end
+    for _,v in ipairs(self.postReaderReadyCallback) do
+        v()
+    end
+    self.postReaderReadyCallback = nil
+
+    Device:setIgnoreInput(false) -- Allow processing of events (on Android).
+    Input:inhibitInputUntil(0.2)
+
+    -- print("Ordered registered gestures:")
+    -- for _, tzone in ipairs(self._ordered_touch_zones) do
+    --     print("  "..tzone.def.id)
+    -- end
+
+    if ReaderUI.instance == nil then
+        logger.dbg("Spinning up new ReaderUI instance", tostring(self))
+    else
+        -- Should never happen, given what we did in (do)showReader...
+        logger.err("ReaderUI instance mismatch! Opened", tostring(self), "while we still have an existing instance:", tostring(ReaderUI.instance), debug.traceback())
     end
 
 
