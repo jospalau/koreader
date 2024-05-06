@@ -30,52 +30,7 @@ local Screen = Device.screen
 local _ = require("gettext")
 local T = require("ffi/util").template
 
-local HistogramWidget = Widget:extend{
-    width = nil,
-    height = nil,
-    color = Blitbuffer.COLOR_BLACK,
-    nb_items = nil,
-    ratios = nil, -- table of 1...nb_items items, each with (0 <= value <= 1)
-}
 
-function HistogramWidget:init()
-    self.dimen = Geom:new{w = self.width, h = self.height}
-    local item_width = math.floor(self.width / self.nb_items)
-    local nb_item_width_add1 = self.width - self.nb_items * item_width
-    local nb_item_width_add1_mod = math.floor(self.nb_items/nb_item_width_add1)
-    self.item_widths = {}
-    for n = 1, self.nb_items do
-        local w = item_width
-        if nb_item_width_add1 > 0 and n % nb_item_width_add1_mod == 0 then
-            w = w + 1
-            nb_item_width_add1 = nb_item_width_add1 - 1
-        end
-        table.insert(self.item_widths, w)
-    end
-    if BD.mirroredUILayout() then
-        self.do_mirror = true
-    end
-end
-
-function HistogramWidget:paintTo(bb, x, y)
-    local i_x = 0
-    for n = 1, self.nb_items do
-        if self.do_mirror then
-            n = self.nb_items - n + 1
-        end
-        local i_w = self.item_widths[n]
-        local ratio = self.ratios and self.ratios[n] or 0
-        local i_h = Math.round(ratio * self.height)
-        if i_h == 0 and ratio > 0 then -- show at least 1px
-            i_h = 1
-        end
-        local i_y = self.height - i_h
-        if i_h > 0 then
-            bb:paintRect(x + i_x, y + i_y, i_w, i_h, self.color)
-        end
-        i_x = i_x + i_w
-    end
-end
 
 
 local CalendarDay = InputContainer:extend{
@@ -129,20 +84,7 @@ function CalendarDay:init()
     }
     local inner_w = self.width - 2*self.border
     local inner_h = self.height - 2*self.border
-    if self.show_histo then
-        if not self.histo_height then
-            self.histo_height = inner_h * (1/3)
-        end
-        self.histo_w = BottomContainer:new{
-            dimen = Geom:new{w = inner_w, h = inner_h},
-            HistogramWidget:new{
-                width = inner_w,
-                height = self.histo_height,
-                nb_items = 24,
-                ratios = self.ratio_per_hour,
-            }
-        }
-    end
+
 
     local bg_color = Blitbuffer.COLOR_WHITE
 
@@ -421,12 +363,13 @@ function HeatmapView:init()
     for i = 0, 6 do
         local dayname = TextWidget:new{
             text = datetime.shortDayOfWeekTranslation[self.weekdays[(self.start_day_of_week-1+i)%7 + 1]],
-            face = Font:getFace("xx_smallinfofont", Screen:scaleBySize(3)),
+            face = Font:getFace("xx_smallinfofont", Screen:scaleBySize(4)),
             -- bold = true,
         }
         table.insert(self.day_names, FrameContainer:new{
             padding = 0,
             bordersize = 0,
+            padding_right = 20,
             CenterContainer:new{
                 dimen = Geom:new{ w = 25, h = 25 },
                 dayname,
@@ -454,19 +397,6 @@ function HeatmapView:init()
     local text_height = math.min(self.span_height, self.week_height/3)
     self.span_font_size = TextBoxWidget:getFontSizeToFitHeight(text_height, 1, 0.3)
     local day_inner_width = self.day_width - 2*self.day_border -2*self.inner_padding
-    while true do
-        local test_w = TextWidget:new{
-            text = " 30 + 99 ", -- we want this to be displayed in the available width
-            face = Font:getFace(self.font_face, self.span_font_size),
-            bold = true,
-        }
-        if test_w:getWidth() <= day_inner_width then
-            test_w:free()
-            break
-        end
-        self.span_font_size = self.span_font_size - 1
-        test_w:free()
-    end
 
     local main_content2023 = HorizontalGroup:new{} -- With a vertical group, draws everything down
     self.dates = self:getDates('2023')
@@ -481,6 +411,7 @@ function HeatmapView:init()
     self.title_bar_2023 = TitleBar:new{
         fullscreen = self.covers_fullscreen,
         width = self.dimen.w,
+        bottom_v_padding = 20,
         align = "left",
         title = "2023",
         title_h_padding = self.outer_padding, -- have month name aligned with calendar left edge
@@ -490,6 +421,7 @@ function HeatmapView:init()
 
     self.title_bar_2024 = TitleBar:new{
         fullscreen = self.covers_fullscreen,
+        bottom_v_padding = 20,
         width = self.dimen.w,
         align = "left",
         title = "2024",
@@ -511,6 +443,12 @@ function HeatmapView:init()
                 HorizontalSpan:new{ width = self.outer_padding },
                 self.day_names,
                 main_content2023,
+            },
+            FrameContainer:new{
+                padding = 0,
+                bordersize = 0,
+                padding_bottom = 60,
+                HorizontalSpan:new{ width = self.outer_padding },
             },
             -- VerticalSpan:new{ width = 60 }, -- We need the main_content to go a little bit down
             self.title_bar_2024,
@@ -681,30 +619,12 @@ function HeatmapView:_populateItems(main_content)
 end
 
 
-
-
-
 function HeatmapView:onSwipe(arg, ges_ev)
-    local direction = BD.flipDirectionIfMirroredUILayout(ges_ev.direction)
-    if direction == "west" then
-        self:nextMonth()
-        return true
-    elseif direction == "east" then
-        self:prevMonth()
-        return true
-    elseif direction == "south" then
-        -- Allow easier closing with swipe down
-        self:onClose()
-    elseif direction == "north" then
-        -- no use for now
-        do end -- luacheck: ignore 541
-    else -- diagonal swipe
-        -- trigger full refresh
-        UIManager:setDirty(nil, "full")
-        -- a long diagonal swipe may also be used for taking a screenshot,
-        -- so let it propagate
-        return false
-    end
+    -- trigger full refresh
+    UIManager:setDirty(nil, "full")
+    -- a long diagonal swipe may also be used for taking a screenshot,
+    -- so let it propagate
+    return false
 end
 
 function HeatmapView:onMultiSwipe(arg, ges_ev)
