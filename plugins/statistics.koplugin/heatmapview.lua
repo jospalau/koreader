@@ -86,6 +86,9 @@ local CalendarDay = InputContainer:extend{
     height = nil,
     border = 0,
     is_future = false,
+    is_today = false,
+    paint_down = false,
+    paint_left = false,
     is_different_year = false,
     font_face = "xx_smallinfofont",
     font_size = nil,
@@ -154,8 +157,8 @@ function CalendarDay:init()
         -- color = Blitbuffer.COLOR_BLACK,
         -- bordersize = self.border,
         -- bordersize = self.is_different_year and 0 or 1,
-        color = Blitbuffer.COLOR_WHITE,
-        bordersize = 1,
+        color = self.is_today and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE,
+        -- bordersize = 1,
         paint_down = self.paint_down,
         paint_left = self.paint_left,
         width = self.width,
@@ -1309,8 +1312,8 @@ function HeatmapView:init()
         align = "left",
         title = "2023",
         title_h_padding = self.outer_padding, -- have month name aligned with calendar left edge
-        close_callback = function() self:onClose() end,
-        show_parent = self,
+        -- close_callback = function() self:onClose() end,
+        -- show_parent = self,
     }
 
     -- week days names header
@@ -1319,14 +1322,14 @@ function HeatmapView:init()
     for i = 0, 6 do
         local dayname = TextWidget:new{
             text = datetime.shortDayOfWeekTranslation[self.weekdays[(self.start_day_of_week-1+i)%7 + 1]],
-            face = Font:getFace("xx_smallinfofont", 12),
-            bold = true,
+            face = Font:getFace("xx_smallinfofont", Screen:scaleBySize(4)),
+            -- bold = true,
         }
         table.insert(self.day_names, FrameContainer:new{
             padding = 0,
             bordersize = 0,
             CenterContainer:new{
-                dimen = Geom:new{ w = 30, h = 20 },
+                dimen = Geom:new{ w = 100, h = 20 },
                 dayname,
             }
         })
@@ -1383,8 +1386,8 @@ function HeatmapView:init()
         align = "left",
         title = "2023",
         title_h_padding = self.outer_padding, -- have month name aligned with calendar left edge
-        close_callback = function() self:onClose() end,
-        show_parent = self,
+        -- close_callback = function() self:onClose() end,
+        -- show_parent = self,
     }
 
     self.title_bar_2024 = TitleBar:new{
@@ -1393,8 +1396,8 @@ function HeatmapView:init()
         align = "left",
         title = "2024",
         title_h_padding = self.outer_padding, -- have month name aligned with calendar left edge
-        close_callback = function() self:onClose() end,
-        show_parent = self,
+        -- close_callback = function() self:onClose() end,
+        -- show_parent = self,
     }
 
     local content = OverlapGroup:new{
@@ -1501,7 +1504,18 @@ function HeatmapView:_populateItems(main_content)
             table.insert(self.layout, layout_week)
             table.insert(self.weeks, cur_week)
             table.insert(main_content, cur_week)
+
             for j = 1, weekday do
+                local paint_down = false
+                local paint_left = false
+                if j >= weekday then
+                    paint_down = true
+                end
+
+                if j >= weekday and (rday == 1 or rday == 2 or rday == 3 or rday == 4 or rday == 5 or rday == 6 or rday == 7) then
+                    paint_left = true
+                end
+
                 local calendar_day = CalendarDay:new{
                     show_histo = self.show_hourly_histogram,
                     histo_height = 0,
@@ -1511,6 +1525,8 @@ function HeatmapView:_populateItems(main_content)
                     font_size = self.span_font_size,
                     border = self.day_border,
                     daynum = cur_date.day,
+                    paint_down = paint_down,
+                    paint_left = paint_left,
                     height = 20,
                     width = 20,
                     show_parent = self,
@@ -1542,19 +1558,22 @@ function HeatmapView:_populateItems(main_content)
                 day = cur_date.day,
                 hour = 0,
             })
+
+            local is_today = os.date("%Y-%m-%d") == self.dates[i][1][1]
             local is_future = day_s > today_s
             local calendar_day = CalendarDay:new{
                 show_histo = self.show_hourly_histogram,
                 histo_height = 0,
                 font_face = self.font_face,
                 font_size = self.span_font_size,
-                border = self.day_border,
+                is_today = is_today,
                 -- border = is_future and 0 or 1,
                 is_different_year = false,
                 paint_down = (monthx == 1 and true or false),
                 paint_left = ((rday == 1 or rday == 2 or rday == 3 or rday == 4 or rday == 5 or rday == 6 or rday == 7) and true or false),
                 day = i,
                 is_future = is_future,
+                is_today = is_today,
                 daynum = cur_date.day,
                 height = 20,
                 width = 20,
