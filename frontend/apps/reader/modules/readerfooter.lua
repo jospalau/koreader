@@ -1491,11 +1491,11 @@ end
 
 
 function ReaderFooter:onTest()
-    Screen:clear()
-    Screen:refreshFull(0, 0, Screen:getWidth(), Screen:getHeight())
+    -- Screen:clear()
+    -- Screen:refreshFull(0, 0, Screen:getWidth(), Screen:getHeight())
 
     local util = require("ffi/util")
-    util.usleep(20000000)
+    -- util.usleep(20000000)
 
 
     local ScreenSaverWidget = require("ui/widget/screensaverwidget")
@@ -1512,16 +1512,18 @@ function ReaderFooter:onTest()
     local ReaderUI = require("apps/reader/readerui")
     local ui = ReaderUI.instance
     local lastfile = G_reader_settings:readSetting("screensaver_document_cover")
-    -- local image = FileManagerBookInfo:getCoverImage(ui and ui.document, lastfile)
-    -- widget_settings.image = image
-    -- widget_settings.image_disposable = true
+    local image = FileManagerBookInfo:getCoverImage(ui and ui.document, lastfile)
+    widget_settings.image = image
+    widget_settings.image_disposable = true
 
 
-    if Device:isKobo() then
-        widget_settings.file = "/mnt/onboard/.adds/colores.png"
-    elseif Device:isPocketBook() then
-        widget_settings.file = "/mnt/ext1/colores.png"
-    end
+    -- if Device:isKobo() then
+    --     widget_settings.file = "/mnt/onboard/.adds/colores.png"
+    -- elseif Device:isPocketBook() then
+    --     widget_settings.file = "/mnt/ext1/colores.png"
+    -- end
+
+
     widget_settings.file_do_cache = false
     widget_settings.alpha = true
 
