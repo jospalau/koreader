@@ -1420,7 +1420,7 @@ function FileManager:onPullConfig()
             save_text = _("Restart")
         end
 
-        if not string.match(output, "Problem") and not string.match(output, "Not connected") then
+        if not string.match(output, "Problem") and not string.match(output, "not connected") then
             local Size = require("ui/size")
             UIManager:show(ConfirmBox:new{
                 dismissable = false,
@@ -1497,7 +1497,7 @@ function FileManager:onSynchronizeCode()
         if Device:canRestart() then
             save_text = _("Restart")
         end
-        if not string.match(output, "Problem") and not string.match(output, "Not connected") then
+        if not string.match(output, "Problem") and not string.match(output, "not connected") then
             local Size = require("ui/size")
             UIManager:show(ConfirmBox:new{
                 dismissable = false,
