@@ -436,6 +436,7 @@ function ReaderUI:init()
     })
     -- koreader plugins
     for _, plugin_module in ipairs(PluginLoader:loadPlugins()) do
+        if plugin_module.name == "statistics" and util.getFileNameSuffix(self.document.file) == "pdf" then goto continue end
         local ok, plugin_or_err = PluginLoader:createPluginInstance(
             plugin_module,
             {
@@ -449,6 +450,7 @@ function ReaderUI:init()
             logger.dbg("RD loaded plugin", plugin_module.name,
                         "at", plugin_module.path)
         end
+        ::continue::
     end
 
 

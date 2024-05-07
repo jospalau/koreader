@@ -178,8 +178,11 @@ function ReaderFont:onReadSettings(config)
     local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
     local size_px = (display_dpi * self.configurable.font_size)/72
 
-    self.ui.document:setFontSize(size_px)
-    -- self.ui.document:setFontSize(Screen:scaleBySize(self.configurable.font_size))
+    if util.getFileNameSuffix(self.file) == "epub" then
+        self.ui.document:setFontSize(size_px)
+    else
+        self.ui.document:setFontSize(Screen:scaleBySize(self.configurable.font_size))
+    end
 
     self.ui.document:setFontBaseWeight(self.configurable.font_base_weight)
     self.ui.document:setFontHinting(self.configurable.font_hinting)

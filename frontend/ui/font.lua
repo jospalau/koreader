@@ -285,10 +285,10 @@ function Font:getFace(font, size, faceindex, noscale)
     if not size then size = self.sizemap[font] end
     -- original size before scaling by screen DPI
     local orig_size = size
-    if noscale then
+    if noscale and require("apps/reader/readerui").instance and require("apps/reader/readerui").instance.document and util.getFileNameSuffix(require("apps/reader/readerui").instance.document.file) == "epub" then
         local Device = require("device")
         local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
-        size = (display_dpi * size)/72
+        size = (display_dpi * size) / 72
     else
         size = Screen:scaleBySize(size)
     end
