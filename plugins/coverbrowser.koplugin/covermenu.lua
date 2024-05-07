@@ -275,43 +275,45 @@ function CoverMenu:updateItems(select_number, no_recalculate_dimen)
                 -- And clear the rendering stack to avoid inheriting its dirty/refresh queue
                 UIManager:clearRenderStack()
 
-                -- Add some new buttons to original buttons set
-                table.insert(orig_buttons, {
-                    { -- Allow user to ignore some offending cover image
-                        text = bookinfo.ignore_cover and _("Unignore cover") or _("Ignore cover"),
-                        enabled = bookinfo.has_cover and true or false,
-                        callback = function()
-                            BookInfoManager:setBookInfoProperties(file, {
-                                ["ignore_cover"] = not bookinfo.ignore_cover and 'Y' or false,
-                            })
-                            UIManager:close(self.file_dialog)
-                            self:updateItems(1, true)
-                        end,
-                    },
-                    { -- Allow user to ignore some bad metadata (filename will be used instead)
-                        text = bookinfo.ignore_meta and _("Unignore metadata") or _("Ignore metadata"),
-                        enabled = bookinfo.has_meta and true or false,
-                        callback = function()
-                            BookInfoManager:setBookInfoProperties(file, {
-                                ["ignore_meta"] = not bookinfo.ignore_meta and 'Y' or false,
-                            })
-                            UIManager:close(self.file_dialog)
-                            self:updateItems(1, true)
-                        end,
-                    },
-                })
-                table.insert(orig_buttons, {
-                    { -- Allow a new extraction (multiple interruptions, book replaced)...
-                        text = _("Refresh cached book information"),
-                        callback = function()
-                            -- Wipe the cache
-                            self:updateCache(file)
-                            BookInfoManager:deleteBookInfo(file)
-                            UIManager:close(self.file_dialog)
-                            self:updateItems(1, true)
-                        end,
-                    },
-                })
+                if item.is_file then
+                    -- Add some new buttons to original buttons set
+                    table.insert(orig_buttons, {
+                        { -- Allow user to ignore some offending cover image
+                            text = bookinfo.ignore_cover and _("Unignore cover") or _("Ignore cover"),
+                            enabled = bookinfo.has_cover and true or false,
+                            callback = function()
+                                BookInfoManager:setBookInfoProperties(file, {
+                                    ["ignore_cover"] = not bookinfo.ignore_cover and 'Y' or false,
+                                })
+                                UIManager:close(self.file_dialog)
+                                self:updateItems(1, true)
+                            end,
+                        },
+                        { -- Allow user to ignore some bad metadata (filename will be used instead)
+                            text = bookinfo.ignore_meta and _("Unignore metadata") or _("Ignore metadata"),
+                            enabled = bookinfo.has_meta and true or false,
+                            callback = function()
+                                BookInfoManager:setBookInfoProperties(file, {
+                                    ["ignore_meta"] = not bookinfo.ignore_meta and 'Y' or false,
+                                })
+                                UIManager:close(self.file_dialog)
+                                self:updateItems(1, true)
+                            end,
+                        },
+                    })
+                    table.insert(orig_buttons, {
+                        { -- Allow a new extraction (multiple interruptions, book replaced)...
+                            text = _("Refresh cached book information"),
+                            callback = function()
+                                -- Wipe the cache
+                                self:updateCache(file)
+                                BookInfoManager:deleteBookInfo(file)
+                                UIManager:close(self.file_dialog)
+                                self:updateItems(1, true)
+                            end,
+                        },
+                    })
+                end
 
                 -- Create the new ButtonDialog, and let UIManager show it
                 self.file_dialog = ButtonDialog:new{
