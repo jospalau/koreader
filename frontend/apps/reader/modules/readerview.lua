@@ -954,7 +954,7 @@ function ReaderView:onSetRotationMode(rotation)
     if rotation ~= nil then
         local old_rotation = Screen:getRotationMode()
         if rotation == old_rotation then
-            return true
+            return
         end
 
         -- NOTE: We cannot rely on getScreenMode, as it actually checks the screen dimensions, instead of the rotation mode.
@@ -973,7 +973,7 @@ function ReaderView:onSetRotationMode(rotation)
             if not Device:isAndroid() then
                 Notification:notify(T(_("Rotation mode set to: %1"), optionsutil:getOptionText("SetRotationMode", rotation)))
             end
-            return true
+            return
         end
 
         Screen:setRotationMode(rotation)
@@ -1004,7 +1004,7 @@ function ReaderView:onToggleHorizontalVertical()
         self.ui.rolling:onSetVisiblePages(1)
     end
     UIManager:setDirty(nil, "full")
-    return true
+    return
 end
 
 function ReaderView:onSetDimensions(dimensions)

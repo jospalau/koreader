@@ -1,10 +1,8 @@
-local BD = require("ui/bidi")
 local ButtonDialog = require("ui/widget/buttondialog")
 local DocSettings = require("docsettings")
 local InfoMessage = require("ui/widget/infomessage")
 local Menu = require("ui/widget/menu")
 local UIManager = require("ui/uimanager")
-local filemanagerutil = require("apps/filemanager/filemanagerutil")
 local logger = require("logger")
 local _ = require("gettext")
 
@@ -83,7 +81,7 @@ function CoverMenu:updateCache(file, status, do_create, pages)
     end
 end
 
-function CoverMenu:updateItems(select_number)
+function CoverMenu:updateItems(select_number, no_recalculate_dimen)
     -- As done in Menu:updateItems()
     local old_dimen = self.dimen and self.dimen:copy()
     -- self.layout must be updated for focusmanager
@@ -93,7 +91,9 @@ function CoverMenu:updateItems(select_number)
     --       on the rest of the widget elements being properly laid-out,
     --       so we have to run it *first*, unlike in Menu.
     --       Otherwise, various layout issues arise (e.g., MosaicMenu's page_info is misaligned).
-    self:_recalculateDimen()
+    if not no_recalculate_dimen then
+        self:_recalculateDimen()
+    end
     self.page_info:resetLayout()
     self.return_button:resetLayout()
     self.content_group:resetLayout()
@@ -151,9 +151,6 @@ function CoverMenu:updateItems(select_number)
     -- As done in Menu:updateItems()
     self:updatePageInfo(select_number)
 
-    if self.show_path then
-        self.title_bar:setSubTitle(BD.directory(filemanagerutil.abbreviate(self.path)))
-    end
     self.show_parent.dithered = self._has_cover_images
     UIManager:setDirty(self.show_parent, function()
         local refresh_dimen =
@@ -257,76 +254,86 @@ function CoverMenu:updateItems(select_number)
             -- This causes luacheck warning: "shadowing upvalue argument 'self' on line 34".
             -- Ignoring it (as done in filemanager.lua for the same showFileDialog)
             self.showFileDialog = function(self, item) -- luacheck: ignore
-                local file = item.path
-                -- Call original function: it will create a ButtonDialog
-                -- and store it as self.file_dialog, and UIManager:show() it.
-                self.showFileDialog_orig(self, item)
+            local file = item.path
+            -- Call original function: it will create a ButtonDialog
+            -- and store it as self.file_dialog, and UIManager:show() it.
+            self.showFileDialog_orig(self, item)
 
-                local bookinfo = self.book_props -- getBookInfo(file) called by FileManager
-                if not bookinfo or bookinfo._is_directory then
-                    -- If no bookinfo (yet) about this file, or it's a directory, let the original dialog be
-                    return true
-                end
-
-                -- Remember some of this original ButtonDialog properties
-                local orig_title = self.file_dialog.title
-                local orig_title_align = self.file_dialog.title_align
-                local orig_buttons = self.file_dialog.buttons
-                -- Close original ButtonDialog (it has not yet been painted
-                -- on screen, so we won't see it)
-                UIManager:close(self.file_dialog)
-                -- And clear the rendering stack to avoid inheriting its dirty/refresh queue
-                UIManager:clearRenderStack()
-
-                if item.is_file then
-                    -- Add some new buttons to original buttons set
-                    table.insert(orig_buttons, {
-                        { -- Allow user to ignore some offending cover image
-                            text = bookinfo.ignore_cover and _("Unignore cover") or _("Ignore cover"),
-                            enabled = bookinfo.has_cover and true or false,
-                            callback = function()
-                                BookInfoManager:setBookInfoProperties(file, {
-                                    ["ignore_cover"] = not bookinfo.ignore_cover and 'Y' or false,
-                                })
-                                UIManager:close(self.file_dialog)
-                                self:updateItems()
-                            end,
-                        },
-                        { -- Allow user to ignore some bad metadata (filename will be used instead)
-                            text = bookinfo.ignore_meta and _("Unignore metadata") or _("Ignore metadata"),
-                            enabled = bookinfo.has_meta and true or false,
-                            callback = function()
-                                BookInfoManager:setBookInfoProperties(file, {
-                                    ["ignore_meta"] = not bookinfo.ignore_meta and 'Y' or false,
-                                })
-                                UIManager:close(self.file_dialog)
-                                self:updateItems()
-                            end,
-                        },
-                    })
-                    table.insert(orig_buttons, {
-                        { -- Allow a new extraction (multiple interruptions, book replaced)...
-                            text = _("Refresh cached book information"),
-                            callback = function()
-                                -- Wipe the cache
-                                self:updateCache(file)
-                                BookInfoManager:deleteBookInfo(file)
-                                UIManager:close(self.file_dialog)
-                                self:updateItems()
-                            end,
-                        },
-                    })
-
-                    -- Create the new ButtonDialog, and let UIManager show it
-                    self.file_dialog = ButtonDialog:new{
-                        title = orig_title,
-                        title_align = orig_title_align,
-                        buttons = orig_buttons,
-                    }
-                end
-                UIManager:show(self.file_dialog)
+            local bookinfo = self.book_props -- getBookInfo(file) called by FileManager
+            if not bookinfo or bookinfo._is_directory then
+                -- If no bookinfo (yet) about this file, or it's a directory, let the original dialog be
                 return true
             end
+
+            -- Remember some of this original ButtonDialog properties
+            local orig_title = self.file_dialog.title
+            local orig_title_align = self.file_dialog.title_align
+            local orig_buttons = self.file_dialog.buttons
+            -- Close original ButtonDialog (it has not yet been painted
+            -- on screen, so we won't see it)
+            UIManager:close(self.file_dialog)
+            -- And clear the rendering stack to avoid inheriting its dirty/refresh queue
+            UIManager:clearRenderStack()
+
+                table.insert(orig_buttons, {
+                    { -- Allow a new extraction (multiple interruptions, book replaced)...
+                        text = _("Refresh cached book information"),
+                        callback = function()
+                            -- Wipe the cache
+                            self:updateCache(file)
+                            BookInfoManager:deleteBookInfo(file)
+                            UIManager:close(self.file_dialog)
+                            self:updateItems()
+                        end,
+                    },
+                })
+            -- Add some new buttons to original buttons set
+            table.insert(orig_buttons, {
+                { -- Allow user to ignore some offending cover image
+                    text = bookinfo.ignore_cover and _("Unignore cover") or _("Ignore cover"),
+                    enabled = bookinfo.has_cover and true or false,
+                    callback = function()
+                        BookInfoManager:setBookInfoProperties(file, {
+                            ["ignore_cover"] = not bookinfo.ignore_cover and 'Y' or false,
+                        })
+                        UIManager:close(self.file_dialog)
+                        self:updateItems(1, true)
+                    end,
+                },
+                { -- Allow user to ignore some bad metadata (filename will be used instead)
+                    text = bookinfo.ignore_meta and _("Unignore metadata") or _("Ignore metadata"),
+                    enabled = bookinfo.has_meta and true or false,
+                    callback = function()
+                        BookInfoManager:setBookInfoProperties(file, {
+                            ["ignore_meta"] = not bookinfo.ignore_meta and 'Y' or false,
+                        })
+                        UIManager:close(self.file_dialog)
+                        self:updateItems(1, true)
+                    end,
+                },
+            })
+            table.insert(orig_buttons, {
+                { -- Allow a new extraction (multiple interruptions, book replaced)...
+                    text = _("Refresh cached book information"),
+                    callback = function()
+                        -- Wipe the cache
+                        self:updateCache(file)
+                        BookInfoManager:deleteBookInfo(file)
+                        UIManager:close(self.file_dialog)
+                        self:updateItems(1, true)
+                    end,
+                },
+            })
+
+                -- Create the new ButtonDialog, and let UIManager show it
+                self.file_dialog = ButtonDialog:new{
+                    title = orig_title,
+                    title_align = orig_title_align,
+                    buttons = orig_buttons,
+                }
+            end
+            UIManager:show(self.file_dialog)
+            return true
 
             -- Remember our function
             self.showFileDialog_ours = self.showFileDialog
@@ -368,7 +375,7 @@ function CoverMenu:onHistoryMenuHold(item)
                     ["ignore_cover"] = not bookinfo.ignore_cover and 'Y' or false,
                 })
                 UIManager:close(self.histfile_dialog)
-                self:updateItems()
+                self:updateItems(1, true)
             end,
         },
         { -- Allow user to ignore some bad metadata (filename will be used instead)
@@ -379,7 +386,7 @@ function CoverMenu:onHistoryMenuHold(item)
                     ["ignore_meta"] = not bookinfo.ignore_meta and 'Y' or false,
                 })
                 UIManager:close(self.histfile_dialog)
-                self:updateItems()
+                self:updateItems(1, true)
             end,
         },
     })
@@ -391,7 +398,7 @@ function CoverMenu:onHistoryMenuHold(item)
                 self:updateCache(file)
                 BookInfoManager:deleteBookInfo(file)
                 UIManager:close(self.histfile_dialog)
-                self:updateItems()
+                self:updateItems(1, true)
             end,
         },
     })
@@ -439,7 +446,7 @@ function CoverMenu:onCollectionsMenuHold(item)
                     ["ignore_cover"] = not bookinfo.ignore_cover and 'Y' or false,
                 })
                 UIManager:close(self.collfile_dialog)
-                self:updateItems()
+                self:updateItems(1, true)
             end,
         },
         { -- Allow user to ignore some bad metadata (filename will be used instead)
@@ -450,7 +457,7 @@ function CoverMenu:onCollectionsMenuHold(item)
                     ["ignore_meta"] = not bookinfo.ignore_meta and 'Y' or false,
                 })
                 UIManager:close(self.collfile_dialog)
-                self:updateItems()
+                self:updateItems(1, true)
             end,
         },
     })
@@ -462,7 +469,7 @@ function CoverMenu:onCollectionsMenuHold(item)
                 self:updateCache(file)
                 BookInfoManager:deleteBookInfo(file)
                 UIManager:close(self.collfile_dialog)
-                self:updateItems()
+                self:updateItems(1, true)
             end,
         },
     })

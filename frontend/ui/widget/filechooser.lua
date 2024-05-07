@@ -286,8 +286,8 @@ function FileChooser:init()
     if lfs.attributes(self.path, "mode") ~= "directory" then
         self.path = G_reader_settings:readSetting("home_dir") or filemanagerutil.getDefaultDir()
     end
-    self.item_table = self:genItemTableFromPath(self.path)
     Menu.init(self) -- call parent's init()
+    self:refreshPath()
 end
 
 function FileChooser:getList(path, collate)
@@ -496,18 +496,17 @@ function FileChooser:getMenuItemMandatory(item, collate)
     return text
 end
 
-function FileChooser:updateItems(select_number)
-    Menu.updateItems(self, select_number) -- call parent's updateItems()
+function FileChooser:updateItems(select_number, no_recalculate_dimen)
+    Menu.updateItems(self, select_number, no_recalculate_dimen) -- call parent's updateItems()
     self:mergeTitleBarIntoLayout()
     self.path_items[self.path] = (self.page - 1) * self.perpage + (select_number or 1)
 end
 
 function FileChooser:refreshPath()
-    local itemmatch = nil
-
     local _, folder_name = util.splitFilePathName(self.path)
     Screen:setWindowTitle(folder_name)
 
+    local itemmatch
     if self.focused_path then
         itemmatch = {path = self.focused_path}
         -- We use focused_path only once, but remember it
@@ -515,8 +514,8 @@ function FileChooser:refreshPath()
         self.prev_focused_path = self.focused_path
         self.focused_path = nil
     end
-
-    self:switchItemTable(nil, self:genItemTableFromPath(self.path), self.path_items[self.path], itemmatch)
+    local subtitle = BD.directory(filemanagerutil.abbreviate(self.path))
+    self:switchItemTable(nil, self:genItemTableFromPath(self.path), self.path_items[self.path], itemmatch, subtitle)
 end
 
 function FileChooser:changeToPath(path, focused_path)
@@ -654,7 +653,7 @@ function FileChooser:selectAllFilesInFolder(do_select)
             end
         end
     end
-    self:updateItems()
+    self:updateItems(1, true)
 end
 
 return FileChooser
