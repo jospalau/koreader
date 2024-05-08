@@ -98,6 +98,7 @@ local settingsList = {
     switch_top_bar = {category="none", event="SwitchTopBar", title=_("Switch top bar"), general=true, separator=true},
     test = {category="none", event="Test", title=_("Test"), general=true, separator=true},
     toggle_horizontal_vertical = {category="none", event="ToggleHorizontalVertical", title=_("Toggle screen layout"), general=true, separator=true},
+    search_dictionary = {category="none", event="SearchDictionary", title=_("Search dictionary"), general=true, separator=true},
     ----
 
     -- Device
@@ -365,6 +366,7 @@ local dispatcher_menu_order = {
     "switch_top_bar",
     "test",
     "toggle_horizontal_vertical",
+    "search_dictionary",
     ----
 
     -- Device
@@ -1456,7 +1458,7 @@ arguments are:
                                    { gesture = ges } - a `gestures` object
 --]]--
 function Dispatcher:execute(settings, exec_props)
-
+    if require("apps/reader/readerui").instance then require("apps/reader/readerui").instance.lastevent = exec_props end
     if ((exec_props == nil or exec_props.qm_show == nil) and settings.settings and settings.settings.show_as_quickmenu)
             or (exec_props and exec_props.qm_show) then
         return Dispatcher:_showAsMenu(settings, exec_props)

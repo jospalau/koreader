@@ -976,6 +976,34 @@ function ReaderUI:onOpenLastDoc()
     self:switchDocument(self.menu:getPreviousFile())
 end
 
+
+function ReaderUI:onSearchDictionary()
+    if self.lastevent  then
+        local res = self.document._document:getTextFromPositions(self.lastevent.gesture.pos.x, self.lastevent.gesture.pos.y,
+        self.lastevent.gesture.pos.x, self.lastevent.gesture.pos.y, false, false)
+        if res and res.text then
+            _, n = res.text:gsub("%S+","")
+            if n == 1 then
+                self.highlight.selected_text = res
+                self.highlight:onHighlightDictLookup()
+            end
+        end
+        -- if self.lastevent.gesture.pos.x < Screen:scaleBySize(30) then
+        --     self.rolling:onGotoViewRel(-10)
+        -- elseif self.lastevent.gesture.pos.x > Screen:getWidth() - Screen:scaleBySize(30) then
+        --     self.rolling:onGotoViewRel(10)
+        -- else
+        --     if res and res.text then
+        --         _, n = res.text:gsub("%S+","")
+        --         if n == 1 then
+        --             self.highlight.selected_text = res
+        --             self.highlight:onHighlightDictLookup()
+        --         end
+        --     end
+        -- end
+    end
+end
+
 -- function ReaderUI:onOpenRandomFav()
 --     self:switchDocument(self.menu:getRandomFav())
 -- end
