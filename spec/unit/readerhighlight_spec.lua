@@ -1,15 +1,20 @@
 describe("Readerhighlight module", function()
-    local DocumentRegistry, ReaderUI, UIManager, Screen, Geom, Event
+    local DataStorage, DocumentRegistry, ReaderUI, UIManager, Screen, Geom, Event
+    local sample_pdf
+
     setup(function()
         require("commonrequire")
         package.unloadAll()
         require("document/canvascontext"):init(require("device"))
+        DataStorage = require("datastorage")
         DocumentRegistry = require("document/documentregistry")
         Event = require("ui/event")
         Geom = require("ui/geometry")
         ReaderUI = require("apps/reader/readerui")
         Screen = require("device").screen
         UIManager = require("ui/uimanager")
+        sample_pdf = DataStorage:getDataDir() .. "/readerhighlight.pdf"
+        require("ffi/util").copyFile("spec/front/unit/data/sample.pdf", sample_pdf)
     end)
 
     local function highlight_single_word(readerui, pos0)
@@ -25,14 +30,11 @@ describe("Readerhighlight module", function()
         -- Reset in case we're called more than once.
         readerui.languagesupport.improveWordSelection:revert()
 
-        UIManager:scheduleIn(1, function()
-            UIManager:close(readerui.dictionary.dict_window)
-            UIManager:close(readerui)
-            -- We haven't torn it down yet
-            ReaderUI.instance = readerui
-            UIManager:quit()
-        end)
-        UIManager:run()
+        UIManager:close(readerui.dictionary.dict_window)
+        UIManager:close(readerui)
+        -- We haven't torn it down yet
+        ReaderUI.instance = readerui
+        UIManager:quit()
     end
     local function highlight_text(readerui, pos0, pos1)
         readerui.highlight:onHold(nil, { pos = pos0 })
@@ -51,14 +53,11 @@ describe("Readerhighlight module", function()
         assert.truthy(UIManager._window_stack[next_slot].widget
                       == readerui.highlight.highlight_dialog)
         readerui.highlight:saveHighlight()
-        UIManager:scheduleIn(1, function()
-            UIManager:close(readerui.highlight.highlight_dialog)
-            UIManager:close(readerui)
-            -- We haven't torn it down yet
-            ReaderUI.instance = readerui
-            UIManager:quit()
-        end)
-        UIManager:run()
+        UIManager:close(readerui.highlight.highlight_dialog)
+        UIManager:close(readerui)
+        -- We haven't torn it down yet
+        ReaderUI.instance = readerui
+        UIManager:quit()
     end
     local function tap_highlight_text(readerui, pos0, pos1, pos2)
         readerui.highlight:onHold(nil, { pos = pos0 })
@@ -69,14 +68,11 @@ describe("Readerhighlight module", function()
         UIManager:close(readerui.highlight.highlight_dialog)
         readerui.highlight:onTap(nil, { pos = pos2 })
         assert.truthy(readerui.highlight.edit_highlight_dialog)
-        UIManager:nextTick(function()
-            UIManager:close(readerui.highlight.edit_highlight_dialog)
-            UIManager:close(readerui)
-            -- We haven't torn it down yet
-            ReaderUI.instance = readerui
-            UIManager:quit()
-        end)
-        UIManager:run()
+        UIManager:close(readerui.highlight.edit_highlight_dialog)
+        UIManager:close(readerui)
+        -- We haven't torn it down yet
+        ReaderUI.instance = readerui
+        UIManager:quit()
     end
 
     describe("highlight for EPUB documents", function()
@@ -135,7 +131,6 @@ describe("Readerhighlight module", function()
     describe("highlight for PDF documents in page mode", function()
         local readerui
         setup(function()
-            local sample_pdf = "spec/front/unit/data/sample.pdf"
             readerui = ReaderUI:new{
                 dimen = Screen:getSize(),
                 document = DocumentRegistry:openDocument(sample_pdf),
@@ -235,7 +230,6 @@ describe("Readerhighlight module", function()
     describe("highlight for PDF documents in scroll mode", function()
         local readerui
         setup(function()
-            local sample_pdf = "spec/front/unit/data/sample.pdf"
             readerui = ReaderUI:new{
                 dimen = Screen:getSize(),
                 document = DocumentRegistry:openDocument(sample_pdf),
