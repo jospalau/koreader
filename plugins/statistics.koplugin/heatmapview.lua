@@ -69,19 +69,6 @@ function CalendarDay:init()
         }
     }
 
-    self.daynum_w = TextWidget:new{
-        text = "" .. tostring(self.daynum),
-        face = Font:getFace(self.font_face, self.font_size),
-        fgcolor = self.is_future and Blitbuffer.COLOR_GRAY or Blitbuffer.COLOR_BLACK,
-        padding = 0,
-        bold = true,
-    }
-    self.nb_not_shown_w = TextWidget:new{
-        text = " ",-- self.day, -- Show day
-        face = Font:getFace(self.font_face, self.font_size - 1),
-        fgcolor = Blitbuffer.COLOR_DARK_GRAY,
-        overlap_align = "right",
-    }
     local inner_w = self.width - 2*self.border
     local inner_h = self.height - 2*self.border
 
@@ -112,15 +99,15 @@ function CalendarDay:init()
         focus_border_color = Blitbuffer.COLOR_GRAY, -- And border color
         OverlapGroup:new{
             dimen = { w = inner_w },
-            -- self.daynum_w, -- Kust write a text
-            self.nb_not_shown_w,
-            self.histo_w, -- nil if not show_histo
+            TextWidget:new{
+                text = "", -- tostring(self.duration),
+                face = Font:getFace("myfont3", Screen:scaleBySize(4)),
+                fgcolor = self.is_future and Blitbuffer.COLOR_GRAY or Blitbuffer.COLOR_BLACK,
+                padding = 0,
+                bold = true,
+            }, -- Just write a text
         }
     }
-end
-
-function CalendarDay:updateNbNotShown(nb)
-    self.nb_not_shown_w:setText(string.format("+ %d ", nb))
 end
 
 function CalendarDay:onTap()
@@ -404,7 +391,7 @@ function HeatmapView:init()
     for i = 0, 6 do
         local dayname = TextWidget:new{
             text = datetime.shortDayOfWeekTranslation[self.weekdays[(self.start_day_of_week-1+i)%7 + 1]],
-            face = Font:getFace("xx_smallinfofont", Screen:scaleBySize(4)),
+            face = Font:getFace("myfont3", Screen:scaleBySize(4)),
             -- bold = true,
         }
         table.insert(self.day_names, FrameContainer:new{
@@ -412,7 +399,7 @@ function HeatmapView:init()
             bordersize = 0,
             padding_right = 20,
             CenterContainer:new{
-                dimen = Geom:new{ w = 25, h = 25 },
+                dimen = Geom:new{ w = Screen:scaleBySize(12), h = Screen:scaleBySize(12) },
                 dayname,
             }
         })
@@ -445,7 +432,16 @@ function HeatmapView:init()
 
     self.months = HorizontalGroup:new{}
     table.insert(self.months, VerticalSpan:new{ width = Screen:scaleBySize(20) })
+
     table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(40) })
+    -- local dateFirstDayYear = os.time({year=2023, month=1, day=1})
+
+    -- if tonumber(os.date("%V", dateFirstDayYear)) == 52 then
+    --     table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(40) })
+    -- else
+    --     table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(30) })
+    -- end
+
 
 
 
@@ -453,12 +449,26 @@ function HeatmapView:init()
     self.dates, self.hours = self:getDates('2023')
     self:_populateItems(main_content2023, '2023')
     self.months_2023 = deep_copy(self.months)
-    self.months:clear()
+    self.months = HorizontalGroup:new{}
     table.insert(self.months, VerticalSpan:new{ width = Screen:scaleBySize(20) })
+
+
+
     table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(40) })
+
+    -- local dateFirstDayYear = os.time({year=2024, month=1, day=1})
+
+    -- if tonumber(os.date("%V", dateFirstDayYear)) == 52 then
+    --     table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(40) })
+    -- else
+    --     table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(30) })
+    -- end
+
+
 
     self.title_bar_2023 = TitleBar:new{
         fullscreen = self.covers_fullscreen,
+        title_face_fullscreen = Font:getFace("myfont3", Screen:scaleBySize(8)),
         width = self.dimen.w,
         bottom_v_padding = 20,
         align = "left",
@@ -476,6 +486,7 @@ function HeatmapView:init()
 
     self.title_bar_2024 = TitleBar:new{
         fullscreen = self.covers_fullscreen,
+        title_face_fullscreen = Font:getFace("myfont3", Screen:scaleBySize(8)),
         bottom_v_padding = 20,
         width = self.dimen.w,
         align = "left",
@@ -545,25 +556,26 @@ function HeatmapView:_populateItems(main_content, year)
     local last_month = nil
 
 
-
     for i = 0, 11 do
         local hours = self:getReadMonth(year, i + 1)
         local month_name = TextWidget:new{
             text = self.months_names[(i)%12 + 1] .. " " .. hours,
-            face = Font:getFace("xx_smallinfofont", Screen:scaleBySize(4)),
+            face = Font:getFace("myfont3", Screen:scaleBySize(4)),
             -- bold = true,
         }
-        table.insert(self.months, FrameContainer:new{
+        local fc =  FrameContainer:new{
             padding = 0,
             bordersize = 0,
             padding_right = 0,
             LeftContainer:new{
-                dimen = Geom:new{ w = 0, h = 0 },
+                dimen = Geom:new(),
                 month_name,
             }
-        })
+        }
+        table.insert(self.months, fc)
         if i < 11 then
-            table.insert(self.months, HorizontalSpan:new{ width = 25 * self:getMonthMaxDays(i + 1, year) / 7 })
+            table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(12) * self:getMonthMaxDays(i + 1, year) / 7})--  Screen:scaleBySize(fc[1][1]:getSize().w) })
+            -- table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(48)})
         end
     end
     table.insert(self.months, VerticalSpan:new{ width = Screen:scaleBySize(20) })
@@ -597,8 +609,8 @@ function HeatmapView:_populateItems(main_content, year)
         -- if dayc % 8 == 0 then
         if i == 1 and weekx == 52 then
             cur_week = CalendarWeek:new{
-                height = 25,
-                width = 25,
+                height = Screen:scaleBySize(12),
+                width = Screen:scaleBySize(12),
                 span_height = self.span_height,
                 font_face = self.font_face,
                 font_size = self.span_font_size,
@@ -629,8 +641,8 @@ function HeatmapView:_populateItems(main_content, year)
                     daynum = cur_date.day,
                     paint_down = paint_down,
                     paint_left = paint_left,
-                    height = 25,
-                    width = 25,
+                    height = Screen:scaleBySize(12),
+                    width = Screen:scaleBySize(12),
                     show_parent = self,
                     duration = 0,
                 }
@@ -640,8 +652,8 @@ function HeatmapView:_populateItems(main_content, year)
         else
             if weekday == 1 then
                 cur_week = CalendarWeek:new{
-                    height = 25,
-                    width = 25,
+                    height = Screen:scaleBySize(12),
+                    width = Screen:scaleBySize(12),
                     font_face = self.font_face,
                     font_size = self.span_font_size,
                     show_parent = self,
@@ -673,8 +685,8 @@ function HeatmapView:_populateItems(main_content, year)
                 day = i,
                 is_today = is_today,
                 daynum = cur_date.day,
-                height = 25,
-                width = 25,
+                height = Screen:scaleBySize(12),
+                width = Screen:scaleBySize(12),
                 show_parent = self,
                 duration = self.dates[i][1][2],
             }
@@ -692,8 +704,8 @@ function HeatmapView:_populateItems(main_content, year)
                 font_size = self.span_font_size,
                 border = self.day_border,
                 daynum = cur_date.day,
-                height = 20,
-                width = 20,
+                height = Screen:scaleBySize(12),
+                width = Screen:scaleBySize(12),
                 show_parent = self,
                 duration = 0,
             }
@@ -730,7 +742,7 @@ end
 function HeatmapView:onClose()
     UIManager:close(self)
     local Event = require("ui/event")
-    UIManager:broadcastEvent(Event:new("SetRotationMode", 0))
+    UIManager:broadcastEvent(Event:new("SetRotationMode", 0, true))
     UIManager:broadcastEvent(Event:new("GenerateCover", 0))
     -- Remove ghosting
     UIManager:setDirty(nil, "full")
