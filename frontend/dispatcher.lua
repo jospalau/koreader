@@ -99,6 +99,7 @@ local settingsList = {
     test = {category="none", event="Test", title=_("Test"), general=true, separator=true},
     toggle_horizontal_vertical = {category="none", event="ToggleHorizontalVertical", title=_("Toggle screen layout"), general=true, separator=true},
     search_dictionary = {category="none", event="SearchDictionary", title=_("Search dictionary"), general=true, separator=true},
+    show_heatmap = {category="none", event="ShowHeatmapView", title=_("Show heatmap"), general=true, separator=true}, --
     ----
 
     -- Device
@@ -367,6 +368,7 @@ local dispatcher_menu_order = {
     "test",
     "toggle_horizontal_vertical",
     "search_dictionary",
+    "show_heatmap",
     ----
 
     -- Device

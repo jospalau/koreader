@@ -3457,6 +3457,9 @@ function ReaderStatistics:onShowHeatmapView()
     })
 end
 
+
+
+
 function ReaderStatistics:onShowCalendarDayView()
     self:insertDB()
     self.kv = nil -- clean left over stack link
