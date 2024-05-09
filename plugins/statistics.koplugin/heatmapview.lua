@@ -259,12 +259,43 @@ local HeatmapView = FocusManager:extend{
     height = nil,
     cur_month = nil,
     weekdays = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" }, -- in Lua wday order
-    months_names = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}
-        -- (These do not need translations: they are the keys into the datetime module translations)
+    months_names = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"},
+    months_days = {
+        [1] = 31,
+        [2] = 28,
+        [3] = 31,
+        [4] = 30,
+        [5] = 31,
+        [6] = 30,
+        [7] = 31,
+        [8] = 31,
+        [9] = 30,
+        [10] = 31,
+        [11] = 30,
+        [12] = 31,
+        }
 }
 
 
+function HeatmapView:isLeapYear(year)
+    if ((year % 4 == 0) and (year % 100 ~= 0)) or (year % 400 == 0) then
+        return true
+    end
+    return false
+end
 
+
+
+function HeatmapView:getMonthMaxDays(month, year)
+    if (self.months_days[month]) then
+        if (month ~= 2 and not self:isLeapYear(year)) then
+            return self.months_days[month]
+        else
+            return 29
+        end
+    end
+    return false
+end
 function HeatmapView:getDates(year)
     local SQ3 = require("lua-ljsqlite3/init")
     local DataStorage = require("datastorage")
@@ -330,8 +361,8 @@ function HeatmapView:getReadMonth(year, month)
         strftime('%%Y',DATE(datetime(start_time,'unixepoch'))),
         strftime('%%m',DATE(datetime(start_time,'unixepoch')))
         FROM wpm_stat_data GROUP BY strftime('%%Y',DATE(datetime(start_time,'unixepoch'))), strftime('%%m',DATE(datetime(start_time,'unixepoch')))
-        HAVING strftime('%%Y',DATE(datetime(start_time,'unixepoch')))='%d'
-        AND strftime('%%m',DATE(datetime(start_time,'unixepoch')))='%s';
+        HAVING CAST(strftime('%%Y',DATE(datetime(start_time,'unixepoch'))) as decimal) ='%d'
+        AND CAST(strftime('%%m',DATE(datetime(start_time,'unixepoch'))) as decimal) ='%d';
         ]]
 
         local hours = conn:rowexec(string.format(sql_stmt, year, month))
@@ -343,6 +374,21 @@ function HeatmapView:getReadMonth(year, month)
 
     return hours
 end
+
+
+function deep_copy(obj, seen)
+	-- Handle non-tables and previously-seen tables.
+	if type(obj) ~= 'table' then return obj end
+	if seen and seen[obj] then return seen[obj] end
+
+	-- New table; mark it as seen an copy recursively.
+	local s = seen or {}
+	local res = {}
+	s[obj] = res
+	for k, v in next, obj do res[deep_copy(k, s)] = deep_copy(v, s) end
+	return setmetatable(res, getmetatable(obj))
+end
+
 function HeatmapView:init()
     self.dimen = Geom:new{
         w = self.width or Screen:getWidth(),
@@ -419,33 +465,6 @@ function HeatmapView:init()
     end
 
 
-    self.months = HorizontalGroup:new{}
-    table.insert(self.months, VerticalSpan:new{ width = Screen:scaleBySize(10) })
-    table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(40) })
-
-    for i = 0, 11 do
-        local month_name = TextWidget:new{
-            text = self.months_names[(i)%12 + 1],
-            face = Font:getFace("xx_smallinfofont", Screen:scaleBySize(8)),
-            -- bold = true,
-        }
-        print(self.months_names[(i)%12 + 1])
-        print("\n")
-        table.insert(self.months, FrameContainer:new{
-            padding = 0,
-            bordersize = 0,
-            padding_right = 20,
-            CenterContainer:new{
-                dimen = Geom:new{ w = 50, h = 25 },
-                month_name,
-            }
-        })
-        if i < 11 then
-            table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(20) })
-        end
-    end
-    table.insert(self.months, VerticalSpan:new{ width = Screen:scaleBySize(20) })
-
 
     -- At most 6 weeks in a month
     local available_height = self.dimen.h - self.title_bar:getHeight() - self.day_names:getSize().h
@@ -465,9 +484,21 @@ function HeatmapView:init()
     self.span_font_size = TextBoxWidget:getFontSizeToFitHeight(text_height, 1, 0.3)
     local day_inner_width = self.day_width - 2*self.day_border -2*self.inner_padding
 
+
+
+    self.months = HorizontalGroup:new{}
+    table.insert(self.months, VerticalSpan:new{ width = Screen:scaleBySize(20) })
+    table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(40) })
+
+
+
     local main_content2023 = HorizontalGroup:new{} -- With a vertical group, draws everything down
     self.dates, self.hours = self:getDates('2023')
-    self:_populateItems(main_content2023)
+    self:_populateItems(main_content2023, '2023')
+    self.months_2023 = deep_copy(self.months)
+    self.months:clear()
+    table.insert(self.months, VerticalSpan:new{ width = Screen:scaleBySize(20) })
+    table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(40) })
 
     self.title_bar_2023 = TitleBar:new{
         fullscreen = self.covers_fullscreen,
@@ -483,8 +514,8 @@ function HeatmapView:init()
 
     self.dates, self.hours = self:getDates('2024')
     local main_content2024 = HorizontalGroup:new{}
-    self:_populateItems(main_content2024)
-
+    self:_populateItems(main_content2024, '2024')
+    self.months_2024 = self.months
 
     self.title_bar_2024 = TitleBar:new{
         fullscreen = self.covers_fullscreen,
@@ -506,7 +537,7 @@ function HeatmapView:init()
         VerticalGroup:new{
             align = "left",
             self.title_bar_2023,
-            -- self.months,
+            self.months_2023,
             HorizontalGroup:new{
                 HorizontalSpan:new{ width = self.outer_padding },
                 self.day_names,
@@ -520,7 +551,7 @@ function HeatmapView:init()
             },
             -- VerticalSpan:new{ width = 60 }, -- We need the main_content to go a little bit down
             self.title_bar_2024,
-            -- self.months,
+            self.months_2024,
             HorizontalGroup:new{
                 HorizontalSpan:new{ width = self.outer_padding },
                 self.day_names,
@@ -540,7 +571,7 @@ function HeatmapView:init()
     }
 end
 
-function HeatmapView:_populateItems(main_content)
+function HeatmapView:_populateItems(main_content, year)
     self.layout = {}
     main_content:clear()
 
@@ -555,6 +586,32 @@ function HeatmapView:_populateItems(main_content)
     local layout_week
     local last_weekday = ""
     local last_month = nil
+
+
+
+    for i = 0, 11 do
+        local hours = self:getReadMonth(year, i + 1)
+        local month_name = TextWidget:new{
+            text = self.months_names[(i)%12 + 1] .. " " .. hours,
+            face = Font:getFace("xx_smallinfofont", Screen:scaleBySize(2)),
+            -- bold = true,
+        }
+        table.insert(self.months, FrameContainer:new{
+            padding = 0,
+            bordersize = 0,
+            padding_right = 20,
+            LeftContainer:new{
+                dimen = Geom:new{ w = 0, h = 25 },
+                month_name,
+            }
+        })
+        if i < 11 then
+            table.insert(self.months, HorizontalSpan:new{ width = 25 * self:getMonthMaxDays(i + 1, year) / 7 })
+        end
+    end
+    table.insert(self.months, VerticalSpan:new{ width = Screen:scaleBySize(20) })
+
+
     for i = 1, #self.dates do
         -- print(self.dates[i][1][1])
 
