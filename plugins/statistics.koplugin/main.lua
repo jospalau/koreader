@@ -3444,7 +3444,7 @@ function ReaderStatistics:onShowHeatmapView()
     self:insertDB()
     self.kv = nil -- clean left over stack lin
     local Event = require("ui/event")
-    UIManager:broadcastEvent(Event:new("SetRotationMode", 1))
+    UIManager:broadcastEvent(Event:new("SetRotationMode", 1, true))
     UIManager:broadcastEvent(Event:new("GenerateCover", 1))
     local HeatmapView = require("heatmapview")
 

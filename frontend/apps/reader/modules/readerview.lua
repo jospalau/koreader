@@ -958,7 +958,7 @@ function ReaderView:restoreViewContext(ctx)
     return false
 end
 
-function ReaderView:onSetRotationMode(rotation)
+function ReaderView:onSetRotationMode(rotation, nodimensions)
     if rotation ~= nil then
         local old_rotation = Screen:getRotationMode()
         if rotation == old_rotation then
@@ -989,7 +989,9 @@ function ReaderView:onSetRotationMode(rotation)
 
     UIManager:setDirty(nil, "full") -- SetDimensions will only request a partial, we want a flash
     local new_screen_size = Screen:getSize()
-    self.ui:handleEvent(Event:new("SetDimensions", new_screen_size))
+    if not nodimensions then
+        self.ui:handleEvent(Event:new("SetDimensions", new_screen_size))
+    end
     self.ui:onScreenResize(new_screen_size)
     self.ui:handleEvent(Event:new("InitScrollPageStates"))
     if not Device:isAndroid() then
