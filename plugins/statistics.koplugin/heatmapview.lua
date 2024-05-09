@@ -217,7 +217,35 @@ local HeatmapView = FocusManager:extend{
         [10] = 31,
         [11] = 30,
         [12] = 31,
-        }
+        },
+    months_weeks_2023 = {
+        [1] = 6,
+        [2] = 5,
+        [3] = 5,
+        [4] = 5,
+        [5] = 5,
+        [6] = 5,
+        [7] = 6,
+        [8] = 5,
+        [9] = 5,
+        [10] = 6,
+        [11] = 5,
+        [12] = 5,
+        },
+    months_weeks_2024 = {
+        [1] = 5,
+        [2] = 5,
+        [3] = 5,
+        [4] = 5,
+        [5] = 5,
+        [6] = 5,
+        [7] = 5,
+        [8] = 5,
+        [9] = 6,
+        [10] = 5,
+        [11] = 5,
+        [12] = 6,
+        },
 }
 
 
@@ -576,6 +604,11 @@ function HeatmapView:_populateItems(main_content, year)
         if i < 11 then
             table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(12) * self:getMonthMaxDays(i + 1, year) / 7})--  Screen:scaleBySize(fc[1][1]:getSize().w) })
             -- table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(48)})
+            -- if year == 2023 then
+            --     table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(12) * self.months_weeks_2023[i + 1]})
+            -- else
+            --     table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(12) * self.months_weeks_2024[i + 1]})
+            -- end
         end
     end
     table.insert(self.months, VerticalSpan:new{ width = Screen:scaleBySize(20) })
