@@ -164,49 +164,6 @@ function CalendarWeek:addDay(calday_widget)
     local this_day_num = prev_day_num + 1
     local this_day_books = {}
     table.insert(self.days_books, this_day_books)
-
-    -- if not calday_widget.read_books then
-    --     calday_widget.read_books = {}
-    -- end
-    -- local nb_books_read = #calday_widget.read_books
-    -- if nb_books_read > self.nb_book_spans then
-    --     calday_widget:updateNbNotShown(nb_books_read - self.nb_book_spans)
-    -- end
-    -- for i=1, self.nb_book_spans do
-    --     if calday_widget.read_books[i] then
-    --         this_day_books[i] = calday_widget.read_books[i] -- brings id & title keys
-    --         this_day_books[i].span_days = 1
-    --         this_day_books[i].start_day = this_day_num
-    --         this_day_books[i].fixed = false
-    --     else
-    --         this_day_books[i] = false
-    --     end
-    -- end
-
-    -- if prev_day_books then
-    --     -- See if continuation from previous day, and re-order them if needed
-    --     for pn=1, #prev_day_books do
-    --         local prev_book = prev_day_books[pn]
-    --         if prev_book then
-    --             for tn=1, #this_day_books do
-    --                 local this_book = this_day_books[tn]
-    --                 if this_book and this_book.id == prev_book.id then
-    --                     this_book.start_day = prev_book.start_day
-    --                     this_book.fixed = true
-    --                     this_book.span_days = prev_book.span_days + 1
-    --                     -- Update span_days in all previous books
-    --                     for bk = 1, prev_book.span_days do
-    --                         self.days_books[this_day_num-bk][pn].span_days = this_book.span_days
-    --                     end
-    --                     if tn ~= pn then -- swap it with the one at previous day position
-    --                         this_day_books[tn], this_day_books[pn] = this_day_books[pn], this_day_books[tn]
-    --                     end
-    --                     break
-    --                 end
-    --             end
-    --         end
-    --     end
-    -- end
 end
 
 -- Set of { Font color, background color }
@@ -505,7 +462,7 @@ function HeatmapView:init()
         width = self.dimen.w,
         bottom_v_padding = 20,
         align = "left",
-        title = "2023 (" ..  string.format("%.2fh)",self.hours / 24),
+        title = "2023 (" ..  string.format("%.2fd)",self.hours / 24),
         title_h_padding = self.outer_padding, -- have month name aligned with calendar left edge
         -- close_callback = function() self:onClose() end,
         -- show_parent = self,
@@ -522,7 +479,7 @@ function HeatmapView:init()
         bottom_v_padding = 20,
         width = self.dimen.w,
         align = "left",
-        title = "2024 (" .. string.format("%.2fh)",self.hours / 24),
+        title = "2024 (" .. string.format("%.2fd)",self.hours / 24),
         title_h_padding = self.outer_padding, -- have month name aligned with calendar left edge
         -- close_callback = function() self:onClose() end,
         -- show_parent = self,
@@ -593,15 +550,15 @@ function HeatmapView:_populateItems(main_content, year)
         local hours = self:getReadMonth(year, i + 1)
         local month_name = TextWidget:new{
             text = self.months_names[(i)%12 + 1] .. " " .. hours,
-            face = Font:getFace("xx_smallinfofont", Screen:scaleBySize(2)),
+            face = Font:getFace("xx_smallinfofont", Screen:scaleBySize(4)),
             -- bold = true,
         }
         table.insert(self.months, FrameContainer:new{
             padding = 0,
             bordersize = 0,
-            padding_right = 20,
+            padding_right = 0,
             LeftContainer:new{
-                dimen = Geom:new{ w = 0, h = 25 },
+                dimen = Geom:new{ w = 0, h = 0 },
                 month_name,
             }
         })
