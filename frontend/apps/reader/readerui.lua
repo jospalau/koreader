@@ -1003,6 +1003,7 @@ local splitToWords = function(text)
 end
 
 function ReaderUI:onSearchDictionary()
+    if util.getFileNameSuffix(self.document.file) ~= "epub"  then return end
     if self.lastevent  then
         local res = self.document._document:getTextFromPositions(self.lastevent.gesture.pos.x, self.lastevent.gesture.pos.y,
                     self.lastevent.gesture.pos.x, self.lastevent.gesture.pos.y, false, false)
