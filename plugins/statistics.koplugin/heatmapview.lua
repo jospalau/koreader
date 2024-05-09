@@ -258,7 +258,8 @@ local HeatmapView = FocusManager:extend{
     width = nil,
     height = nil,
     cur_month = nil,
-    weekdays = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" } -- in Lua wday order
+    weekdays = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" }, -- in Lua wday order
+    months_names = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}
         -- (These do not need translations: they are the keys into the datetime module translations)
 }
 
@@ -268,6 +269,8 @@ function HeatmapView:getDates(year)
     local SQ3 = require("lua-ljsqlite3/init")
     local DataStorage = require("datastorage")
     local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    local conn = SQ3.open(db_location)
+
     local sql_stmt = [[
         WITH RECURSIVE dates(date) AS (
             VALUES('year-01-01')
@@ -282,7 +285,7 @@ function HeatmapView:getDates(year)
         WHERE strftime('%Y',DATE(datetime(start_time,'unixepoch'))) = ? group by(DATE(datetime(start_time,'unixepoch')))
         ORDER BY DATE(datetime(start_time,'unixepoch'));
         ]]
-    local conn = SQ3.open(db_location)
+
     local stmt = conn:prepare(sql_stmt:gsub("year",year))
     local res, nb = stmt:reset():bind(year):resultset()
     stmt:close()
@@ -317,7 +320,29 @@ function HeatmapView:getDates(year)
 end
 
 
+function HeatmapView:getReadMonth(year, month)
+    local SQ3 = require("lua-ljsqlite3/init")
+    local DataStorage = require("datastorage")
+    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    local conn = SQ3.open(db_location)
+    local sql_stmt = [[
+        SELECT ROUND(CAST(SUM(duration)/60 as real)/60,2),
+        strftime('%%Y',DATE(datetime(start_time,'unixepoch'))),
+        strftime('%%m',DATE(datetime(start_time,'unixepoch')))
+        FROM wpm_stat_data GROUP BY strftime('%%Y',DATE(datetime(start_time,'unixepoch'))), strftime('%%m',DATE(datetime(start_time,'unixepoch')))
+        HAVING strftime('%%Y',DATE(datetime(start_time,'unixepoch')))='%d'
+        AND strftime('%%m',DATE(datetime(start_time,'unixepoch')))='%s';
+        ]]
 
+        local hours = conn:rowexec(string.format(sql_stmt, year, month))
+        conn:close()
+        if hours == nil then
+            hours = 0
+        end
+        hours = tonumber(hours)
+
+    return hours
+end
 function HeatmapView:init()
     self.dimen = Geom:new{
         w = self.width or Screen:getWidth(),
@@ -393,6 +418,35 @@ function HeatmapView:init()
         end
     end
 
+
+    self.months = HorizontalGroup:new{}
+    table.insert(self.months, VerticalSpan:new{ width = Screen:scaleBySize(10) })
+    table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(40) })
+
+    for i = 0, 11 do
+        local month_name = TextWidget:new{
+            text = self.months_names[(i)%12 + 1],
+            face = Font:getFace("xx_smallinfofont", Screen:scaleBySize(8)),
+            -- bold = true,
+        }
+        print(self.months_names[(i)%12 + 1])
+        print("\n")
+        table.insert(self.months, FrameContainer:new{
+            padding = 0,
+            bordersize = 0,
+            padding_right = 20,
+            CenterContainer:new{
+                dimen = Geom:new{ w = 50, h = 25 },
+                month_name,
+            }
+        })
+        if i < 11 then
+            table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(20) })
+        end
+    end
+    table.insert(self.months, VerticalSpan:new{ width = Screen:scaleBySize(20) })
+
+
     -- At most 6 weeks in a month
     local available_height = self.dimen.h - self.title_bar:getHeight() - self.day_names:getSize().h
     self.week_height = math.floor((available_height - 7*self.inner_padding) * (1/6))
@@ -420,7 +474,7 @@ function HeatmapView:init()
         width = self.dimen.w,
         bottom_v_padding = 20,
         align = "left",
-        title = "2023 (" .. self.hours .. "h )",
+        title = "2023 (" ..  string.format("%.2fh)",self.hours / 24),
         title_h_padding = self.outer_padding, -- have month name aligned with calendar left edge
         -- close_callback = function() self:onClose() end,
         -- show_parent = self,
@@ -437,7 +491,7 @@ function HeatmapView:init()
         bottom_v_padding = 20,
         width = self.dimen.w,
         align = "left",
-        title = "2024 (" .. self.hours .. "h )",
+        title = "2024 (" .. string.format("%.2fh)",self.hours / 24),
         title_h_padding = self.outer_padding, -- have month name aligned with calendar left edge
         -- close_callback = function() self:onClose() end,
         -- show_parent = self,
@@ -452,6 +506,7 @@ function HeatmapView:init()
         VerticalGroup:new{
             align = "left",
             self.title_bar_2023,
+            -- self.months,
             HorizontalGroup:new{
                 HorizontalSpan:new{ width = self.outer_padding },
                 self.day_names,
@@ -465,6 +520,7 @@ function HeatmapView:init()
             },
             -- VerticalSpan:new{ width = 60 }, -- We need the main_content to go a little bit down
             self.title_bar_2024,
+            -- self.months,
             HorizontalGroup:new{
                 HorizontalSpan:new{ width = self.outer_padding },
                 self.day_names,
@@ -498,13 +554,22 @@ function HeatmapView:_populateItems(main_content)
     local cur_week
     local layout_week
     local last_weekday = ""
+    local last_month = nil
     for i = 1, #self.dates do
-        print(self.dates[i][1][1])
+        -- print(self.dates[i][1][1])
 
         local pattern = "(%d+)-(%d+)-(%d+)"
         local ryear, rmonth, rday = self.dates[i][1][1]:match(pattern)
         local date = os.time({year=ryear, month=rmonth, day=rday})
         local weekday = os.date("*t", date).wday - 1
+
+
+        local hours = 0
+        if rmonth ~= last_month then
+            hours = self:getReadMonth(ryear, rmonth)
+            print(hours)
+        end
+        last_month = rmonth
 
         last_weekday = weekday
         if weekday == 0 then
@@ -513,7 +578,7 @@ function HeatmapView:_populateItems(main_content)
         local weekx = tonumber(os.date("%V", date))
         local yearx = tonumber(os.date("%Y", date))
         local monthx = tonumber(os.date("%d", date))
-        print(weekday)
+        -- print(weekday)
         rday = tonumber(rday)
         -- if dayc % 8 == 0 then
         if i == 1 and weekx == 52 then
