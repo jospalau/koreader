@@ -264,8 +264,6 @@ local HeatmapView = FocusManager:extend{
 
 
 
-
-
 function HeatmapView:getDates(year)
     local SQ3 = require("lua-ljsqlite3/init")
     local DataStorage = require("datastorage")
@@ -288,7 +286,6 @@ function HeatmapView:getDates(year)
     local stmt = conn:prepare(sql_stmt:gsub("year",year))
     local res, nb = stmt:reset():bind(year):resultset()
     stmt:close()
-    conn:close()
     local dates = {}
     for i=1, nb do
         -- (We don't care about the duration, we just needed it
@@ -300,7 +297,23 @@ function HeatmapView:getDates(year)
         table.insert(dates[i], { day, tonumber(duration) })
         -- table.insert(dates[day], { date_day = tonumber(day), time = tonumber(duration) })
     end
-    return dates
+
+
+    local sql_stmt = [[
+        SELECT ROUND(CAST(SUM(duration)/60 as real)/60,2) from wpm_stat_data
+        GROUP BY strftime('%%Y',DATE(datetime(start_time,'unixepoch')))
+        HAVING strftime('%%Y',DATE(datetime(start_time,'unixepoch')))='%d';
+        ]]
+
+        local hours = conn:rowexec(string.format(sql_stmt, year))
+
+        conn:close()
+        if hours == nil then
+            hours = 0
+        end
+        hours = tonumber(hours)
+
+    return dates, hours
 end
 
 
@@ -399,32 +412,32 @@ function HeatmapView:init()
     local day_inner_width = self.day_width - 2*self.day_border -2*self.inner_padding
 
     local main_content2023 = HorizontalGroup:new{} -- With a vertical group, draws everything down
-    self.dates = self:getDates('2023')
+    self.dates, self.hours = self:getDates('2023')
     self:_populateItems(main_content2023)
-
-
-    self.dates = self:getDates('2024')
-    local main_content2024 = HorizontalGroup:new{}
-    self:_populateItems(main_content2024)
-
 
     self.title_bar_2023 = TitleBar:new{
         fullscreen = self.covers_fullscreen,
         width = self.dimen.w,
         bottom_v_padding = 20,
         align = "left",
-        title = "2023",
+        title = "2023 (" .. self.hours .. "h )",
         title_h_padding = self.outer_padding, -- have month name aligned with calendar left edge
         -- close_callback = function() self:onClose() end,
         -- show_parent = self,
     }
+
+
+    self.dates, self.hours = self:getDates('2024')
+    local main_content2024 = HorizontalGroup:new{}
+    self:_populateItems(main_content2024)
+
 
     self.title_bar_2024 = TitleBar:new{
         fullscreen = self.covers_fullscreen,
         bottom_v_padding = 20,
         width = self.dimen.w,
         align = "left",
-        title = "2024",
+        title = "2024 (" .. self.hours .. "h )",
         title_h_padding = self.outer_padding, -- have month name aligned with calendar left edge
         -- close_callback = function() self:onClose() end,
         -- show_parent = self,
