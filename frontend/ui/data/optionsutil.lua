@@ -152,11 +152,17 @@ function optionsutil.showValues(configurable, option, prefix, document, unit)
             unit = G_reader_settings:nilOrTrue("metric_length") and "mm" or "in"
         end
         -- We have now points in the font size, converting to didot points is simple, 1 points = 0.93575007368111 didot points
-        text = T(_("%1\n%2\nCurrent value: %3 (%4)\nDefault value: %5 (%6)"), name_text, help_text,
-                                            string.format("%.1fpt", current),
-                                            string.format("%.1fp", current * 0.94),
-                                            string.format("%.1fpt", default),
-                                            string.format("%.1fp", default * 0.94))
+        if unit == "pt" then
+            text = T(_("%1\n%2\nCurrent value: %3 (%4)\nDefault value: %5 (%6)"), name_text, help_text,
+            string.format("%.1fpt", current),
+            string.format("%.1fp", current * 0.94),
+            string.format("%.1fpt", default),
+            string.format("%.1fp", default * 0.94))
+        else
+            text = T(_("%1\n%2\nCurrent value: %3%4\nDefault value: %5%6"), name_text, help_text,
+                                            current, real_size_string(current, unit),
+                                            default, real_size_string(default, unit))
+        end
     end
     UIManager:show(InfoMessage:new{ text=text })
 end
