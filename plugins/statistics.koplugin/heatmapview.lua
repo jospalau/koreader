@@ -775,10 +775,10 @@ end
 function HeatmapView:onClose()
     UIManager:close(self)
     local Event = require("ui/event")
-    if not Device:isAndroid() then
-        UIManager:broadcastEvent(Event:new("SetRotationMode", 0, true))
-        UIManager:broadcastEvent(Event:new("GenerateCover", 0))
-    end
+    -- if not Device:isAndroid() then
+    --     UIManager:broadcastEvent(Event:new("SetRotationMode", 0, true))
+    --     UIManager:broadcastEvent(Event:new("GenerateCover", 0))
+    -- end
 
     -- Remove ghosting
     UIManager:setDirty(nil, "full")
