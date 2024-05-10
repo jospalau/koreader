@@ -452,7 +452,7 @@ function ConfigOption:init()
                         option_item = OptionTextItem:new{
                             FixedTextWidget:new{
                                 text = self.options[c].item_text[d],
-                                face = Font:getFace("myfont2", item_font_size[d], nil, true),
+                                face = not Device:isAndroid() and Font:getFace("myfont3", item_font_size[d], nil, true) or Font:getFace("myfont3", item_font_size[d] - 4, nil, true),
                                 fgcolor = enabled and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_DARK_GRAY,
                             },
                             underline_padding = padding_button,
