@@ -410,7 +410,7 @@ function HeatmapView:init()
         -- close_callback = function() self:onClose() end,
         -- show_parent = self,
     }
-
+    self.size_tile = 10
     -- week days names header
     self.day_names = VerticalGroup:new{}
     table.insert(self.day_names, HorizontalSpan:new{ width = self.outer_padding })
@@ -425,7 +425,7 @@ function HeatmapView:init()
             bordersize = 0,
             padding_right = 20,
             CenterContainer:new{
-                dimen = Geom:new{ w = Screen:scaleBySize(12), h = Screen:scaleBySize(12) },
+                dimen = Geom:new{ w = Screen:scaleBySize(self.size_tile), h = Screen:scaleBySize(self.size_tile) },
                 dayname,
             }
         })
@@ -586,7 +586,7 @@ function HeatmapView:_populateItems(main_content, year)
         local hours = self:getReadMonth(year, i + 1)
         local month_name = TextWidget:new{
             text = self.months_names[(i)%12 + 1] .. " " .. hours,
-            face = Font:getFace("myfont3", Screen:scaleBySize(4)),
+            face = Font:getFace("myfont3", Screen:scaleBySize(3)),
             bold = true,
         }
         local fc =  FrameContainer:new{
@@ -604,9 +604,9 @@ function HeatmapView:_populateItems(main_content, year)
             -- table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(12) * self:getMonthMaxDays(i + 1, year) / 7 - month_name:getSize().w}) -- Number of whole weeks in a month times the square size
             -- table.insert(self.months, HorizontalSpan:new{ width = (Screen:scaleBySize(12) * self.months_weeks_2023[i + 1] ) - month_name:getSize().w })--  Screen:scaleBySize(fc[1][1]:getSize().w) })
             if year == '2023' then
-                table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(12) * self.mondays_months_2023[i + 1] - month_name:getSize().w})
+                table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(self.size_tile) * self.mondays_months_2023[i + 1] - month_name:getSize().w})
             else
-                table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(12) * self.mondays_months_2024[i + 1] - month_name:getSize().w})
+                table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(self.size_tile) * self.mondays_months_2024[i + 1] - month_name:getSize().w})
             end
 
         end
@@ -642,8 +642,8 @@ function HeatmapView:_populateItems(main_content, year)
         -- if dayc % 8 == 0 then
         if i == 1 and weekx == 52 then
             cur_week = CalendarWeek:new{
-                height = Screen:scaleBySize(12),
-                width = Screen:scaleBySize(12),
+                height = Screen:scaleBySize(self.size_tile),
+                width = Screen:scaleBySize(self.size_tile),
                 span_height = self.span_height,
                 font_face = self.font_face,
                 font_size = self.span_font_size,
@@ -674,8 +674,8 @@ function HeatmapView:_populateItems(main_content, year)
                     daynum = cur_date.day,
                     paint_down = paint_down,
                     paint_left = paint_left,
-                    height = Screen:scaleBySize(12),
-                    width = Screen:scaleBySize(12),
+                    height = Screen:scaleBySize(self.size_tile),
+                    width = Screen:scaleBySize(self.size_tile),
                     show_parent = self,
                     duration = 0,
                 }
@@ -685,8 +685,8 @@ function HeatmapView:_populateItems(main_content, year)
         else
             if weekday == 1 then
                 cur_week = CalendarWeek:new{
-                    height = Screen:scaleBySize(12),
-                    width = Screen:scaleBySize(12),
+                    height = Screen:scaleBySize(self.size_tile),
+                    width = Screen:scaleBySize(self.size_tile),
                     font_face = self.font_face,
                     font_size = self.span_font_size,
                     show_parent = self,
@@ -718,8 +718,8 @@ function HeatmapView:_populateItems(main_content, year)
                 day = i,
                 is_today = is_today,
                 daynum = cur_date.day,
-                height = Screen:scaleBySize(12),
-                width = Screen:scaleBySize(12),
+                height = Screen:scaleBySize(self.size_tile),
+                width = Screen:scaleBySize(self.size_tile),
                 show_parent = self,
                 duration = self.dates[i][1][2],
             }
@@ -737,8 +737,8 @@ function HeatmapView:_populateItems(main_content, year)
                 font_size = self.span_font_size,
                 border = self.day_border,
                 daynum = cur_date.day,
-                height = Screen:scaleBySize(12),
-                width = Screen:scaleBySize(12),
+                height = Screen:scaleBySize(self.size_tile),
+                width = Screen:scaleBySize(self.size_tile),
                 show_parent = self,
                 duration = 0,
             }
