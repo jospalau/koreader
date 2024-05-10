@@ -626,7 +626,7 @@ function HeatmapView:_populateItems(main_content, year)
         local hours = 0
         if rmonth ~= last_month then
             hours = self:getReadMonth(ryear, rmonth)
-            print(hours)
+            -- print(hours)
         end
         last_month = rmonth
 
