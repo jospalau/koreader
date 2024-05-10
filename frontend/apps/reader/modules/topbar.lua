@@ -536,7 +536,10 @@ function TopBar:toggleBar()
         title = TextWidget.PTF_BOLD_START .. title .. " with " .. words .. TextWidget.PTF_BOLD_END
         self.title_text:setText(title)
 
-        local chapter = TextWidget.PTF_BOLD_START .. self.ui.toc:getTocTitleByPage(self.view.footer.pageno) .. TextWidget.PTF_BOLD_END
+
+        local chapter = self.ui.toc:getTocTitleByPage(self.view.footer.pageno) ~= ""
+        and TextWidget.PTF_BOLD_START .. self.ui.toc:getTocTitleByPage(self.view.footer.pageno) .. TextWidget.PTF_BOLD_END or ""
+
         self.progress_bar2.width = Screen:getSize().w - 2 * TopBar.MARGIN_SIDES
         -- self.separator_line.dimen.w = self.progress_bar2.width
         self.progress_bar2.height = 20
@@ -740,8 +743,11 @@ function TopBar:paintTo(bb, x, y)
 
 
 
+        -- print(string.byte(self[5][1][1].text, 1,-1))
         -- Bottom center
-        self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5][1][1]:getSize().w/2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+         if self[5][1][1].text ~= "" then
+            self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5][1][1]:getSize().w/2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+        end
 
         -- Bottom right
         -- Use progress bar
