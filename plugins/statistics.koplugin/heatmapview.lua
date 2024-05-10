@@ -281,10 +281,10 @@ function HeatmapView:getDates(year)
             WHERE date < 'year-12-31'
         )
         SELECT date, 0 FROM dates
-        WHERE date NOT IN (select DATE(datetime(start_time,'unixepoch')) from wpm_stat_data)
-        UNION SELECT DATE(datetime(start_time,'unixepoch')), ROUND(CAST(SUM(duration)/60 as real)/60,2) from wpm_stat_data
-        WHERE strftime('%Y',DATE(datetime(start_time,'unixepoch'))) = ? group by(DATE(datetime(start_time,'unixepoch')))
-        ORDER BY DATE(datetime(start_time,'unixepoch'));
+        WHERE date NOT IN (select DATE(datetime(start_time,'unixepoch','localtime')) from wpm_stat_data)
+        UNION SELECT DATE(datetime(start_time,'unixepoch','localtime')), ROUND(CAST(SUM(duration)/60 as real)/60,2) from wpm_stat_data
+        WHERE strftime('%Y',DATE(datetime(start_time,'unixepoch','localtime'))) = ? group by(DATE(datetime(start_time,'unixepoch','localtime')))
+        ORDER BY DATE(datetime(start_time,'unixepoch','localtime'));
         ]]
 
     local stmt = conn:prepare(sql_stmt:gsub("year",year))
@@ -305,8 +305,8 @@ function HeatmapView:getDates(year)
 
     local sql_stmt = [[
         SELECT ROUND(CAST(SUM(duration)/60 as real)/60,2) from wpm_stat_data
-        GROUP BY strftime('%%Y',DATE(datetime(start_time,'unixepoch')))
-        HAVING strftime('%%Y',DATE(datetime(start_time,'unixepoch')))='%d';
+        GROUP BY strftime('%%Y',DATE(datetime(start_time,'unixepoch','localtime')))
+        HAVING strftime('%%Y',DATE(datetime(start_time,'unixepoch','localtime')))='%d';
         ]]
 
         local hours = conn:rowexec(string.format(sql_stmt, year))
@@ -328,11 +328,11 @@ function HeatmapView:getReadMonth(year, month)
     local conn = SQ3.open(db_location)
     local sql_stmt = [[
         SELECT ROUND(CAST(SUM(duration)/60 as real)/60,2),
-        strftime('%%Y',DATE(datetime(start_time,'unixepoch'))),
-        strftime('%%m',DATE(datetime(start_time,'unixepoch')))
-        FROM wpm_stat_data GROUP BY strftime('%%Y',DATE(datetime(start_time,'unixepoch'))), strftime('%%m',DATE(datetime(start_time,'unixepoch')))
-        HAVING CAST(strftime('%%Y',DATE(datetime(start_time,'unixepoch'))) as decimal) ='%d'
-        AND CAST(strftime('%%m',DATE(datetime(start_time,'unixepoch'))) as decimal) ='%d';
+        strftime('%%Y',DATE(datetime(start_time,'unixepoch','localtime'))),
+        strftime('%%m',DATE(datetime(start_time,'unixepoch','localtime')))
+        FROM wpm_stat_data GROUP BY strftime('%%Y',DATE(datetime(start_time,'unixepoch','localtime'))), strftime('%%m',DATE(datetime(start_time,'unixepoch','localtime')))
+        HAVING CAST(strftime('%%Y',DATE(datetime(start_time,'unixepoch','localtime'))) as decimal) ='%d'
+        AND CAST(strftime('%%m',DATE(datetime(start_time,'unixepoch','localtime'))) as decimal) ='%d';
         ]]
 
         local hours = conn:rowexec(string.format(sql_stmt, year, month))
