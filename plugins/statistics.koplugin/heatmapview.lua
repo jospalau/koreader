@@ -218,33 +218,31 @@ local HeatmapView = FocusManager:extend{
         [11] = 30,
         [12] = 31,
         },
-    months_weeks_2023 = {
-        [1] = 6,
-        [2] = 5,
-        [3] = 5,
-        [4] = 5,
-        [5] = 5,
-        [6] = 5,
-        [7] = 6,
-        [8] = 5,
-        [9] = 5,
-        [10] = 6,
-        [11] = 5,
-        [12] = 5,
-        },
-    months_weeks_2024 = {
+    mondays_months_2023 = {
         [1] = 5,
-        [2] = 5,
-        [3] = 5,
-        [4] = 5,
+        [2] = 4,
+        [3] = 4,
+        [4] = 4,
         [5] = 5,
-        [6] = 5,
+        [6] = 4,
         [7] = 5,
-        [8] = 5,
-        [9] = 6,
+        [8] = 4,
+        [9] = 4,
         [10] = 5,
-        [11] = 5,
-        [12] = 6,
+        [11] = 4,
+        },
+    mondays_months_2024 = {
+        [1] = 5,
+        [2] = 4,
+        [3] = 4,
+        [4] = 5,
+        [5] = 4,
+        [6] = 4,
+        [7] = 5,
+        [8] = 4,
+        [9] = 5,
+        [10] = 4,
+        [11] = 4,
         },
 }
 
@@ -461,14 +459,14 @@ function HeatmapView:init()
     self.months = HorizontalGroup:new{}
     table.insert(self.months, VerticalSpan:new{ width = Screen:scaleBySize(20) })
 
-    table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(40) })
-    -- local dateFirstDayYear = os.time({year=2023, month=1, day=1})
+    -- table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(40) })
+    local dateFirstDayYear = os.time({year=2023, month=1, day=1})
 
-    -- if tonumber(os.date("%V", dateFirstDayYear)) == 52 then
-    --     table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(40) })
-    -- else
-    --     table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(30) })
-    -- end
+    if tonumber(os.date("%V", dateFirstDayYear)) == 52 then
+        table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(40) })
+    else
+        table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(28) })
+    end
 
 
 
@@ -482,15 +480,15 @@ function HeatmapView:init()
 
 
 
-    table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(40) })
+    -- table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(40) })
 
-    -- local dateFirstDayYear = os.time({year=2024, month=1, day=1})
+    local dateFirstDayYear = os.time({year=2024, month=1, day=1})
 
-    -- if tonumber(os.date("%V", dateFirstDayYear)) == 52 then
-    --     table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(40) })
-    -- else
-    --     table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(30) })
-    -- end
+    if tonumber(os.date("%V", dateFirstDayYear)) == 52 then
+        table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(40) })
+    else
+        table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(30) })
+    end
 
 
 
@@ -589,26 +587,28 @@ function HeatmapView:_populateItems(main_content, year)
         local month_name = TextWidget:new{
             text = self.months_names[(i)%12 + 1] .. " " .. hours,
             face = Font:getFace("myfont3", Screen:scaleBySize(4)),
-            -- bold = true,
+            bold = true,
         }
         local fc =  FrameContainer:new{
             padding = 0,
             bordersize = 0,
             padding_right = 0,
             LeftContainer:new{
-                dimen = Geom:new(),
+                dimen = Geom:new{w = month_name:getSize().w, h = month_name:getSize().h },
                 month_name,
             }
         }
         table.insert(self.months, fc)
         if i < 11 then
-            table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(12) * self:getMonthMaxDays(i + 1, year) / 7})--  Screen:scaleBySize(fc[1][1]:getSize().w) })
-            -- table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(48)})
-            -- if year == 2023 then
-            --     table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(12) * self.months_weeks_2023[i + 1]})
-            -- else
-            --     table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(12) * self.months_weeks_2024[i + 1]})
-            -- end
+            -- table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(12) * self.mondays_months_2024[i + 1] - month_name:getSize().w})
+            -- table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(12) * self:getMonthMaxDays(i + 1, year) / 7 - month_name:getSize().w}) -- Number of whole weeks in a month times the square size
+            -- table.insert(self.months, HorizontalSpan:new{ width = (Screen:scaleBySize(12) * self.months_weeks_2023[i + 1] ) - month_name:getSize().w })--  Screen:scaleBySize(fc[1][1]:getSize().w) })
+            if year == '2023' then
+                table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(12) * self.mondays_months_2023[i + 1] - month_name:getSize().w})
+            else
+                table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(12) * self.mondays_months_2024[i + 1] - month_name:getSize().w})
+            end
+
         end
     end
     table.insert(self.months, VerticalSpan:new{ width = Screen:scaleBySize(20) })
