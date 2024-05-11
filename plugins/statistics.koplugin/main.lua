@@ -85,7 +85,6 @@ local ReaderStatistics = Widget:extend{
     page_stat = nil, -- Dictionary, indexed by page (hash), contains a list (array) of { timestamp, duration } tuples.
     data = nil, -- table
     doc_md5 = nil,
-    is_doc_only = true,
 }
 
 -- Like util.splitWords(), but not capturing space and punctuations
@@ -3347,40 +3346,44 @@ end
 
 -- in case when screensaver starts
 function ReaderStatistics:onSuspend()
-    self._initial_read_today = nil
-    self:insertDB() --OnSaveSettings() also inserts in db but I commented it
-    self:insertDBSessionStats()
-    --self:onReadingPaused() --Not interested in this
+    if self.is_doc then
+        self._initial_read_today = nil
+        self:insertDB() --OnSaveSettings() also inserts in db but I commented it
+        self:insertDBSessionStats()
+        --self:onReadingPaused() --Not interested in this
+    end
 end
 -- screensaver off
 function ReaderStatistics:onResume()
-    self.start_current_period = os.time()
-    self:resetVolatileStats(os.time()) --Calling this since I don't call onReadingPaused() en onSuspend()
-    --self:onReadingResumed() --Not interested in this, since I don't call onReadingPaused() en onSuspend()
-    self._last_nbwords = 0
-    self._total_words = 0
-    local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
-    local nbwords = 0
-    local nbcharacters = 0
-    if res and res.text then
-        local words = splitToWords(res.text) -- contar palabras
-        local characters = res.text -- contar caracteres
-        -- logger.warn(words)
-        nbwords = #words -- # es equivalente a string.len()
-        nbcharacters = #characters
+    if self.is_doc then
+        self.start_current_period = os.time()
+        self:resetVolatileStats(os.time()) --Calling this since I don't call onReadingPaused() en onSuspend()
+        --self:onReadingResumed() --Not interested in this, since I don't call onReadingPaused() en onSuspend()
+        self._last_nbwords = 0
+        self._total_words = 0
+        local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
+        local nbwords = 0
+        local nbcharacters = 0
+        if res and res.text then
+            local words = splitToWords(res.text) -- contar palabras
+            local characters = res.text -- contar caracteres
+            -- logger.warn(words)
+            nbwords = #words -- # es equivalente a string.len()
+            nbcharacters = #characters
+        end
+        self._last_nbwords = nbwords
+        self._last_nbchars = nbcharacters
+        self._total_pages = 0
+        -- Kindle, Android and PocketBook need refresh in the footer to show new start_current_period
+        -- Android needs full refresh passing true, true. I set this for all the devices
+        -- self.view.footer:onUpdateFooter(true,true) --Si configuramos que el screensaver permanezca un tiempo, este refresco lo distorsiona un poco.
+        local screensaver_delay = G_reader_settings:readSetting("screensaver_delay")
+        if screensaver_delay and screensaver_delay ~= "disable" then
+            self._delayed_screensaver = true
+            return
+        end
+        -- self.view.footer:onUpdateFooter(true,true)
     end
-    self._last_nbwords = nbwords
-    self._last_nbchars = nbcharacters
-    self._total_pages = 0
-    -- Kindle, Android and PocketBook need refresh in the footer to show new start_current_period
-    -- Android needs full refresh passing true, true. I set this for all the devices
-    -- self.view.footer:onUpdateFooter(true,true) --Si configuramos que el screensaver permanezca un tiempo, este refresco lo distorsiona un poco.
-    local screensaver_delay = G_reader_settings:readSetting("screensaver_delay")
-    if screensaver_delay and screensaver_delay ~= "disable" then
-        self._delayed_screensaver = true
-        return
-    end
-    -- self.view.footer:onUpdateFooter(true,true)
 end
 
 function ReaderFooter:onOutOfScreenSaver()
