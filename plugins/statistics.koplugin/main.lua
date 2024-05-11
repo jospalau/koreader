@@ -85,6 +85,7 @@ local ReaderStatistics = Widget:extend{
     page_stat = nil, -- Dictionary, indexed by page (hash), contains a list (array) of { timestamp, duration } tuples.
     data = nil, -- table
     doc_md5 = nil,
+    is_doc_only = true,
 }
 
 -- Like util.splitWords(), but not capturing space and punctuations
