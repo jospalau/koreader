@@ -444,7 +444,7 @@ function FileSearcher:onMenuSelect(item, callback)
     dialog = ButtonDialog:new{
         title = title .. "\n",
         buttons = buttons,
-        tap_close_callback = callback,
+        -- tap_close_callback = callback,
     }
     UIManager:show(dialog)
 end
