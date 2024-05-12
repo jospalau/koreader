@@ -221,6 +221,9 @@ function MenuItem:init()
     local dots_left_padding = Size.padding.small
     local dots_right_padding = Size.padding.small
 
+    -- For the fm settings
+    -- Show opened files in bold to be unchecked
+    -- Show new (not yet opened) files in bold to be checked
 
     if self.in_history and self.bold and not self.is_finished then
         text = "(MBR) " .. text
