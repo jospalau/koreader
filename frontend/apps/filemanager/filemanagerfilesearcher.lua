@@ -113,6 +113,19 @@ function FileSearcher:onShowFileSearchAllRecent(callback)
     self:onSearchSortCompleted(false, true, callback)
 end
 
+function FileSearcher:oncloseSearchMenu(callback)
+    local callback_func = function(close)
+        self.ui.history:fetchStatuses(false)
+        self.ui.history:updateItemTable()
+        if close then
+            local Event = require("ui/event")
+            UIManager:broadcastEvent(Event:new("closeSearchMenu"))
+        end
+    end
+    UIManager:close(self.search_menu)
+    self:onShowFileSearchAllRecent(callback_func)
+end
+
 function FileSearcher:onShowFileSearchAllCompleted()
     local search_dialog
     local check_button_case, check_button_subfolders, check_button_metadata
@@ -361,8 +374,12 @@ function FileSearcher:onMenuSelect(item, callback)
     local bookinfo, dialog
     local function close_dialog_callback()
         UIManager:close(dialog)
-        local Event = require("ui/event")
-        UIManager:broadcastEvent(Event:new("ShowFileSearchAllRecent"))
+        local FileManager = require("apps/filemanager/filemanager")
+        -- FileManager.instance.history:onShowHist()
+        self.close_callback(true)
+
+        -- local Event = require("ui/event")
+        -- UIManager:broadcastEvent(Event:new("ShowFileSearchAllRecent"))
     end
     local function close_dialog_menu_callback()
         UIManager:close(dialog)
