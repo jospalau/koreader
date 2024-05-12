@@ -328,7 +328,11 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
     if string.find("east north", ges_ev.multiswipe_directions) then
         UIManager:broadcastEvent(Event:new("ShowFileSearch"))
     elseif string.find("west north", ges_ev.multiswipe_directions) then
-        UIManager:broadcastEvent(Event:new("ShowFileSearchAllRecent"))
+        -- We pass this anonymous function as a callback so the history can be refreshed in case any status has been updated
+        UIManager:broadcastEvent(Event:new("ShowFileSearchAllRecent", function()
+            self._manager:fetchStatuses(false)
+            self._manager:updateItemTable()
+        end))
     else
         self:onClose()
     end

@@ -104,12 +104,12 @@ function FileSearcher:onShowFileSearchAll()
     self:onSearchSortCompleted(false, false)
 end
 
-function FileSearcher:onShowFileSearchAllRecent()
+function FileSearcher:onShowFileSearchAllRecent(callback)
     local search_dialog
     local check_button_case, check_button_subfolders, check_button_metadata
     self.path = G_reader_settings:readSetting("home_dir")
     self.search_string = "*.epub"
-    self:onSearchSortCompleted(false, true)
+    self:onSearchSortCompleted(false, true, callback)
 end
 
 function FileSearcher:onShowFileSearchAllCompleted()
@@ -137,7 +137,7 @@ function FileSearcher:doSearch()
 end
 
 
-function FileSearcher:showSearchResultsComplete(results)
+function FileSearcher:showSearchResultsComplete(results, callback)
     self.search_menu = Menu:new{
         title = T(_("Completed books (%1)"), #results),
         item_table = results,
@@ -148,19 +148,25 @@ function FileSearcher:showSearchResultsComplete(results)
         title_bar_fm_style = true,
         handle_hold_on_hold_release = true,
     }
-    self.search_menu.close_callback = function()
-        UIManager:close(self.search_menu)
-        if self.ui.file_chooser then
-            self.ui.file_chooser:refreshPath()
+
+    if callback then
+        self.search_menu.close_callback = callback
+    else
+        self.search_menu.close_callback = function()
+            UIManager:close(self.search_menu)
+            if self.ui.file_chooser then
+                self.ui.file_chooser:refreshPath()
+            end
         end
     end
+
     UIManager:show(self.search_menu)
     if self.no_metadata_count ~= 0 then
         self:showSearchResultsMessage()
     end
 end
 
-function FileSearcher:onSearchSortCompleted(show_complete, show_recent)
+function FileSearcher:onSearchSortCompleted(show_complete, show_recent, callback)
     local results
     local dirs, files = self:getList()
 
@@ -199,9 +205,9 @@ function FileSearcher:onSearchSortCompleted(show_complete, show_recent)
 
     if #results > 0 then
         if (show_complete) then
-            self:showSearchResultsComplete(results)
+            self:showSearchResultsComplete(results, callback)
         else
-            self:showSearchResults(results)
+            self:showSearchResults(results, callback)
         end
     else
         self:showSearchResultsMessage(true)
@@ -316,7 +322,7 @@ function FileSearcher:showSearchResultsMessage(no_results)
     end
 end
 
-function FileSearcher:showSearchResults(results)
+function FileSearcher:showSearchResults(results, callback)
     self.search_menu = Menu:new{
         title = T(_("Search results (%1)"), #results),
         subtitle = T(_("Query: %1"), self.search_string),
@@ -330,12 +336,19 @@ function FileSearcher:showSearchResults(results)
         onMenuHold = self.onMenuHold,
         handle_hold_on_hold_release = true,
     }
-    self.search_menu.close_callback = function()
+
+    if callback then
         UIManager:close(self.search_menu)
-        if self.ui.file_chooser then
-            self.ui.file_chooser:refreshPath()
+        self.search_menu.close_callback = callback
+    else
+        self.search_menu.close_callback = function()
+            UIManager:close(self.search_menu)
+            if self.ui.file_chooser then
+                self.ui.file_chooser:refreshPath()
+            end
         end
     end
+
     UIManager:show(self.search_menu)
     if self.no_metadata_count ~= 0 then
         self:showSearchResultsMessage()
