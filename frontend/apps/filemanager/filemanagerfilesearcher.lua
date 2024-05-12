@@ -101,7 +101,7 @@ function FileSearcher:onShowFileSearchAll()
     local check_button_case, check_button_subfolders, check_button_metadata
     self.path = G_reader_settings:readSetting("home_dir")
     self.search_string = "*.epub"
-    self:doSearchSortCompleted(false, false)
+    self:onSearchSortCompleted(false, false)
 end
 
 function FileSearcher:onShowFileSearchAllRecent()
@@ -109,7 +109,7 @@ function FileSearcher:onShowFileSearchAllRecent()
     local check_button_case, check_button_subfolders, check_button_metadata
     self.path = G_reader_settings:readSetting("home_dir")
     self.search_string = "*.epub"
-    self:doSearchSortCompleted(false, true)
+    self:onSearchSortCompleted(false, true)
 end
 
 function FileSearcher:onShowFileSearchAllCompleted()
@@ -117,7 +117,7 @@ function FileSearcher:onShowFileSearchAllCompleted()
     local check_button_case, check_button_subfolders, check_button_metadata
     self.path = G_reader_settings:readSetting("home_dir")
     self.search_string = "*.epub"
-    self:doSearchSortCompleted(true, false)
+    self:onSearchSortCompleted(true, false)
 end
 
 function FileSearcher:doSearch()
@@ -160,7 +160,7 @@ function FileSearcher:showSearchResultsComplete(results)
     end
 end
 
-function FileSearcher:doSearchSortCompleted(show_complete, show_recent)
+function FileSearcher:onSearchSortCompleted(show_complete, show_recent)
     local results
     local dirs, files = self:getList()
 
