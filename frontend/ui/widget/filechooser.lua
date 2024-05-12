@@ -358,9 +358,11 @@ function FileChooser:getListItem(dirpath, f, fullpath, attributes, collate)
 
         if require("readhistory"):getIndexByFile(fullpath) then
             item.in_history = true
-            if filemanagerutil.getStatus(fullpath) == "tbr" then
-                item.in_tbr = true
-            end
+        end
+        if filemanagerutil.getStatus(fullpath) == "tbr" then
+            item.in_tbr = true
+        elseif filemanagerutil.getStatus(fullpath) == "complete" then
+            item.is_finished = true
         end
 
         item.dim = self.filemanager and self.filemanager.selected_files

@@ -222,12 +222,16 @@ function MenuItem:init()
     local dots_right_padding = Size.padding.small
 
 
-    if self.in_history and self.bold then
+    if self.in_history and self.bold and not self.is_finished then
         text = "(MBR) " .. text
     end
 
     if self.in_tbr then
         text = "(TBR) " .. text
+    end
+
+    if self.is_finished then
+        text = "✔ " .. text
     end
 
     -- For some reason, Android app does not go inside this condition
@@ -1070,8 +1074,9 @@ function Menu:updateItems(select_number, no_recalculate_dimen)
             mandatory_func = item.mandatory_func,
             mandatory_dim = item.mandatory_dim or item.dim,
             bold = self.item_table.current == index or item.bold == true,
-            in_tbr = item.in_tbr == true,
-            in_history = item.in_history == true,
+            in_tbr = self.item_table.current == index or item.in_tbr == true,
+            in_history = self.item_table.current == index or item.in_history == true,
+            is_finished = self.item_table.current == index or item.is_finished == true,
             dim = item.dim,
             font_size = self.font_size,
             infont_size = infont_size,
