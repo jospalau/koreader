@@ -356,11 +356,13 @@ function FileSearcher:showSearchResults(results, callback)
     end
 end
 
-function FileSearcher:onMenuSelect(item)
+function FileSearcher:onMenuSelect(item, callback)
     local file = item.path
     local bookinfo, dialog
     local function close_dialog_callback()
         UIManager:close(dialog)
+        local Event = require("ui/event")
+        UIManager:broadcastEvent(Event:new("ShowFileSearchAllRecent"))
     end
     local function close_dialog_menu_callback()
         UIManager:close(dialog)
@@ -425,6 +427,7 @@ function FileSearcher:onMenuSelect(item)
     dialog = ButtonDialog:new{
         title = title .. "\n",
         buttons = buttons,
+        tap_close_callback = callback,
     }
     UIManager:show(dialog)
 end
