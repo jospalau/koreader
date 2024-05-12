@@ -23,9 +23,10 @@ local FileSearcher = WidgetContainer:extend{
     include_metadata = false,
 }
 
-function FileSearcher:onShowFileSearch(search_string)
+function FileSearcher:onShowFileSearch(search_string, callbackfunc)
     local search_dialog
     local check_button_case, check_button_subfolders, check_button_metadata
+    local callback_func = false
     search_dialog = InputDialog:new{
         title = _("Enter text to search for in filename"),
         input = search_string or self.search_string,
@@ -46,7 +47,7 @@ function FileSearcher:onShowFileSearch(search_string)
                         if self.search_string == "" then return end
                         UIManager:close(search_dialog)
                         self.path = G_reader_settings:readSetting("home_dir")
-                        self:doSearch()
+                        self:doSearch(callbackfunc)
                     end,
                 },
                 {
@@ -120,7 +121,7 @@ function FileSearcher:onShowFileSearchAllCompleted()
     self:onSearchSortCompleted(true, false)
 end
 
-function FileSearcher:doSearch()
+function FileSearcher:doSearch(callbackfunc)
     local results
     local dirs, files = self:getList()
     -- If we have a FileChooser instance, use it, to be able to make use of its natsort cache
@@ -130,7 +131,7 @@ function FileSearcher:doSearch()
         results = FileChooser:genItemTable(dirs, files)
     end
     if #results > 0 then
-        self:showSearchResults(results)
+        self:showSearchResults(results, callbackfunc)
     else
         self:showSearchResultsMessage(true)
     end
