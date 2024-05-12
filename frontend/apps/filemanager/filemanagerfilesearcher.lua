@@ -339,8 +339,8 @@ function FileSearcher:showSearchResults(results, callback)
     }
 
     if callback then
-        UIManager:close(self.search_menu)
         self.search_menu.close_callback = callback
+        -- UIManager:close(self.search_menu)
     else
         self.search_menu.close_callback = function()
             UIManager:close(self.search_menu)
