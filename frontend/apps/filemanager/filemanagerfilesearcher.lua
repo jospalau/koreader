@@ -148,7 +148,7 @@ function FileSearcher:doSearch(callbackfunc)
         results = FileChooser:genItemTable(dirs, files)
     end
     if #results > 0 then
-        self:showSearchResults(results, callbackfunc)
+        self:showSearchResults(results, nil, nil, callbackfunc)
     else
         self:showSearchResultsMessage(true)
     end
@@ -355,17 +355,39 @@ function FileSearcher:showSearchResults(results, show_recent, page, callback)
         handle_hold_on_hold_release = true,
     }
 
+
     if callback then
         self.search_menu.close_callback = callback
         -- UIManager:close(self.search_menu)
     else
+        -- self.search_menu.close_callback = function()
+        --     UIManager:close(self.search_menu)
+        --     local Event = require("ui/event")
+        --     UIManager:broadcastEvent(Event:new("ShowFileSearchAll", show_recent))
+        --     if self.ui.file_chooser then
+        --         self.ui.file_chooser:refreshPath()
+        --     end
+        -- end
         self.search_menu.close_callback = function()
-        UIManager:close(self.search_menu)
-            local Event = require("ui/event")
-            UIManager:broadcastEvent(Event:new("ShowFileSearchAll", show_recent))
-            if self.ui.file_chooser then
-                self.ui.file_chooser:refreshPath()
+            if self.search_menu.ui.history.hist_menu then
+                -- self.search_menu.ui.history.hist_menu.close_callback()
+                self.ui.history:fetchStatuses(false)
+                self.ui.history:updateItemTable()
             end
+
+            if require("apps/reader/readerui").instance and require("apps/reader/readerui").instance.history then
+                -- UIManager:close(require("apps/reader/readerui").instance.history)
+                self.ui.history:fetchStatuses(false)
+                self.ui.history:updateItemTable()
+            end
+
+
+            if not self.search_menu.ui.history.hist_menu and not require("apps/reader/readerui").instance then
+                local FileManager = require("apps/filemanager/filemanager")
+                FileManager.instance.history:onShowHist()
+            end
+
+            UIManager:close(self.search_menu)
         end
     end
 

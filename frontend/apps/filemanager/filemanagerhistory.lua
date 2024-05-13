@@ -326,10 +326,11 @@ end
 function FileManagerHistory:onMultiSwipe(arg, ges_ev)
     local Event = require("ui/event")
     if string.find("east north", ges_ev.multiswipe_directions) then
-        UIManager:broadcastEvent(Event:new("ShowFileSearch", "", function()
-            self._manager:fetchStatuses(false)
-            self._manager:updateItemTable()
-        end))
+        -- UIManager:broadcastEvent(Event:new("ShowFileSearch", "", function()
+        --     self._manager:fetchStatuses(false)
+        --     self._manager:updateItemTable()
+        -- end))
+        UIManager:broadcastEvent(Event:new("ShowFileSearch", ""))
     elseif string.find("west north", ges_ev.multiswipe_directions) then
         -- local callback_func = function(close)
         --     self._manager:fetchStatuses(false)
