@@ -97,7 +97,7 @@ function FileSearcher:onShowFileSearch(search_string, callbackfunc)
     search_dialog:onShowKeyboard()
 end
 
-function FileSearcher:onShowFileSearchAll(from_history, recent)
+function FileSearcher:onShowFileSearchAll(from_history, recent, page)
 
     local callback_func = nil
     if from_history then
@@ -122,12 +122,12 @@ function FileSearcher:onShowFileSearchAll(from_history, recent)
     local check_button_case, check_button_subfolders, check_button_metadata
     self.path = G_reader_settings:readSetting("home_dir")
     self.search_string = "*.epub"
-    self:onSearchSortCompleted(false, recent, callback_func)
+    self:onSearchSortCompleted(false, recent, page, callback_func)
 end
 
 function FileSearcher:onCloseSearchMenu(from_history, recent)
     UIManager:close(self.search_menu)
-    self:onShowFileSearchAll(from_history, recent)
+    self:onShowFileSearchAll(from_history, recent, self.search_menu.page)
 end
 
 function FileSearcher:onShowFileSearchAllCompleted()
@@ -184,7 +184,7 @@ function FileSearcher:showSearchResultsComplete(results, callback)
     end
 end
 
-function FileSearcher:onSearchSortCompleted(show_complete, show_recent, callback)
+function FileSearcher:onSearchSortCompleted(show_complete, show_recent, page, callback)
     local results
     local dirs, files = self:getList()
 
@@ -225,7 +225,7 @@ function FileSearcher:onSearchSortCompleted(show_complete, show_recent, callback
         if (show_complete) then
             self:showSearchResultsComplete(results, callback)
         else
-            self:showSearchResults(results, show_recent, callback)
+            self:showSearchResults(results, show_recent, page, callback)
         end
     else
         self:showSearchResultsMessage(true)
@@ -340,7 +340,7 @@ function FileSearcher:showSearchResultsMessage(no_results)
     end
 end
 
-function FileSearcher:showSearchResults(results, show_recent, callback)
+function FileSearcher:showSearchResults(results, show_recent, page, callback)
     self.search_menu = Menu:new{
         title = T(_("Search results (%1)"), #results),
         subtitle = T(_("Query: %1"), self.search_string),
@@ -369,6 +369,9 @@ function FileSearcher:showSearchResults(results, show_recent, callback)
         end
     end
 
+    if page then
+        self.search_menu:onGotoPage(page)
+    end
     UIManager:show(self.search_menu)
     if self.no_metadata_count ~= 0 then
         self:showSearchResultsMessage()
