@@ -105,15 +105,7 @@ function FileSearcher:onShowFileSearchAll()
     self:onSearchSortCompleted(false, false)
 end
 
-function FileSearcher:onShowFileSearchAllRecent(callback)
-    local search_dialog
-    local check_button_case, check_button_subfolders, check_button_metadata
-    self.path = G_reader_settings:readSetting("home_dir")
-    self.search_string = "*.epub"
-    self:onSearchSortCompleted(false, true, callback)
-end
-
-function FileSearcher:onCloseSearchMenu(callback)
+function FileSearcher:onShowFileSearchAllRecent(from_history)
     local callback_func = function(close)
         self.ui.history:fetchStatuses(false)
         self.ui.history:updateItemTable()
@@ -122,8 +114,20 @@ function FileSearcher:onCloseSearchMenu(callback)
             UIManager:broadcastEvent(Event:new("CloseSearchMenu"))
         end
     end
+    local search_dialog
+    local check_button_case, check_button_subfolders, check_button_metadata
+    self.path = G_reader_settings:readSetting("home_dir")
+    self.search_string = "*.epub"
+    if from_history then
+        self:onSearchSortCompleted(false, true, callback_func)
+    else
+        self:onSearchSortCompleted(false, true)
+    end
+end
+
+function FileSearcher:onCloseSearchMenu()
     UIManager:close(self.search_menu)
-    self:onShowFileSearchAllRecent(callback_func)
+    self:onShowFileSearchAllRecent(true)
 end
 
 function FileSearcher:onShowFileSearchAllCompleted()

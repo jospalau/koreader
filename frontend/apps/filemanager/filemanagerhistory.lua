@@ -331,15 +331,15 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
             self._manager:updateItemTable()
         end))
     elseif string.find("west north", ges_ev.multiswipe_directions) then
-        local callback_func = function(close)
-            self._manager:fetchStatuses(false)
-            self._manager:updateItemTable()
-            if close then
-                UIManager:broadcastEvent(Event:new("CloseSearchMenu"))
-            end
-        end
+        -- local callback_func = function(close)
+        --     self._manager:fetchStatuses(false)
+        --     self._manager:updateItemTable()
+        --     if close then
+        --         UIManager:broadcastEvent(Event:new("CloseSearchMenu"))
+        --     end
+        -- end
         -- We pass this anonymous function as a callback so the history can be refreshed in case any status has been updated
-        UIManager:broadcastEvent(Event:new("ShowFileSearchAllRecent", callback_func))
+        UIManager:broadcastEvent(Event:new("ShowFileSearchAllRecent", true))
     else
         self:onClose()
     end
