@@ -97,15 +97,7 @@ function FileSearcher:onShowFileSearch(search_string, callbackfunc)
     search_dialog:onShowKeyboard()
 end
 
-function FileSearcher:onShowFileSearchAll()
-    local search_dialog
-    local check_button_case, check_button_subfolders, check_button_metadata
-    self.path = G_reader_settings:readSetting("home_dir")
-    self.search_string = "*.epub"
-    self:onSearchSortCompleted(false, false)
-end
-
-function FileSearcher:onShowFileSearchAllRecent(from_history)
+function FileSearcher:onShowFileSearchAll(from_history, recent)
 
     local callback_func = nil
     if from_history then
@@ -114,14 +106,14 @@ function FileSearcher:onShowFileSearchAllRecent(from_history)
             self.ui.history:updateItemTable()
             if close then
                 local Event = require("ui/event")
-                UIManager:broadcastEvent(Event:new("CloseSearchMenu", from_history))
+                UIManager:broadcastEvent(Event:new("CloseSearchMenu", from_history, recent))
             end
         end
     else
         callback_func = function(close)
             if close then
                 local Event = require("ui/event")
-                UIManager:broadcastEvent(Event:new("CloseSearchMenu", from_history))
+                UIManager:broadcastEvent(Event:new("CloseSearchMenu", from_history, recent))
             end
         end
     end
@@ -130,12 +122,12 @@ function FileSearcher:onShowFileSearchAllRecent(from_history)
     local check_button_case, check_button_subfolders, check_button_metadata
     self.path = G_reader_settings:readSetting("home_dir")
     self.search_string = "*.epub"
-    self:onSearchSortCompleted(false, true, callback_func)
+    self:onSearchSortCompleted(false, recent, callback_func)
 end
 
-function FileSearcher:onCloseSearchMenu(from_history)
+function FileSearcher:onCloseSearchMenu(from_history, recent)
     UIManager:close(self.search_menu)
-    self:onShowFileSearchAllRecent(from_history)
+    self:onShowFileSearchAll(from_history, recent)
 end
 
 function FileSearcher:onShowFileSearchAllCompleted()
@@ -368,14 +360,9 @@ function FileSearcher:showSearchResults(results, show_recent, callback)
         -- UIManager:close(self.search_menu)
     else
         self.search_menu.close_callback = function()
-            UIManager:close(self.search_menu)
-            if show_recent then
-                local Event = require("ui/event")
-                UIManager:broadcastEvent(Event:new("ShowFileSearchAllRecent"))
-            -- else
-            --     local Event = require("ui/event")
-            --     UIManager:broadcastEvent(Event:new("ShowFileSearchAll"))
-            end
+        UIManager:close(self.search_menu)
+            local Event = require("ui/event")
+            UIManager:broadcastEvent(Event:new("ShowFileSearchAll", show_recent))
             if self.ui.file_chooser then
                 self.ui.file_chooser:refreshPath()
             end
@@ -398,7 +385,7 @@ function FileSearcher:onMenuSelect(item, callback)
         self.close_callback(true)
 
         -- local Event = require("ui/event")
-        -- UIManager:broadcastEvent(Event:new("ShowFileSearchAllRecent"))
+        -- UIManager:broadcastEvent(Event:new("ShowFileSearchAll"))
     end
     local function close_dialog_menu_callback()
         UIManager:close(dialog)

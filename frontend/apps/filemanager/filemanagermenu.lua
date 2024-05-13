@@ -827,7 +827,7 @@ The sorting order is the same as in filemanager.
 
 Tap a book in the search results to open it.]]),
         callback = function()
-            self.ui.filesearcher:onShowFileSearchAll()
+            self.ui.filesearcher:onShowFileSearchAll(false, false)
         end
     }
     self.menu_items.find_file_all_recent = {
@@ -842,7 +842,7 @@ The sorting order is the same as in filemanager.
 
 Tap a book in the search results to open it.]]),
         callback = function()
-            self.ui.filesearcher:onShowFileSearchAllRecent()
+            self.ui.filesearcher:onShowFileSearchAll(false, true)
         end
     }
     self.menu_items.find_file_all_completed = {
