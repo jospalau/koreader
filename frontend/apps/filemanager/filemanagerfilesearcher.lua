@@ -113,13 +113,13 @@ function FileSearcher:onShowFileSearchAllRecent(callback)
     self:onSearchSortCompleted(false, true, callback)
 end
 
-function FileSearcher:oncloseSearchMenu(callback)
+function FileSearcher:onCloseSearchMenu(callback)
     local callback_func = function(close)
         self.ui.history:fetchStatuses(false)
         self.ui.history:updateItemTable()
         if close then
             local Event = require("ui/event")
-            UIManager:broadcastEvent(Event:new("closeSearchMenu"))
+            UIManager:broadcastEvent(Event:new("CloseSearchMenu"))
         end
     end
     UIManager:close(self.search_menu)
@@ -356,7 +356,7 @@ function FileSearcher:showSearchResults(results, callback)
         -- UIManager:close(self.search_menu)
     else
         self.search_menu.close_callback = function()
-            UIManager:close(self.search_menu)
+            -- UIManager:close(self.search_menu)
             if self.ui.file_chooser then
                 self.ui.file_chooser:refreshPath()
             end
@@ -374,7 +374,7 @@ function FileSearcher:onMenuSelect(item, callback)
     local bookinfo, dialog
     local function close_dialog_callback()
         UIManager:close(dialog)
-        local FileManager = require("apps/filemanager/filemanager")
+        -- local FileManager = require("apps/filemanager/filemanager")
         -- FileManager.instance.history:onShowHist()
         self.close_callback(true)
 

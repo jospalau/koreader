@@ -335,7 +335,7 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
             self._manager:fetchStatuses(false)
             self._manager:updateItemTable()
             if close then
-                UIManager:broadcastEvent(Event:new("closeSearchMenu"))
+                UIManager:broadcastEvent(Event:new("CloseSearchMenu"))
             end
         end
         -- We pass this anonymous function as a callback so the history can be refreshed in case any status has been updated
