@@ -101,7 +101,17 @@ function FileSearcher:onShowFileSearchAll(from_history, recent, page)
     local callback_func = nil
     if from_history then
         callback_func = function(restart)
-            if not restart then return end
+            if restart == nil then
+                UIManager:close(self.search_menu)
+                return
+            end
+            if type(restart)== "string" and lfs.attributes(restart, "mode") == "file"  then
+                if  self.search_menu.ui.history.hist_menu then
+                    self.search_menu.ui.history.hist_menu.close_callback()
+                end
+                UIManager:close(self.search_menu)
+                return
+            end
             self.ui.history:fetchStatuses(false)
             self.ui.history:updateItemTable()
             local Event = require("ui/event")
@@ -109,7 +119,17 @@ function FileSearcher:onShowFileSearchAll(from_history, recent, page)
         end
     else
         callback_func = function(restart)
-            if not restart then return end
+            if restart == nil then
+                UIManager:close(self.search_menu)
+                return
+            end
+            if type(restart)== "string" and lfs.attributes(restart, "mode") == "file"  then
+                if  self.search_menu.ui.history.hist_menu then
+                    self.search_menu.ui.history.hist_menu.close_callback()
+                end
+                UIManager:close(self.search_menu)
+                return
+            end
             local Event = require("ui/event")
             UIManager:broadcastEvent(Event:new("CloseSearchMenu", from_history, recent))
         end
@@ -380,10 +400,16 @@ function FileSearcher:showSearchResults(results, show_recent, page, callback)
         -- If we are in history and in reader we want to go to a folder if a folder is selected and remain in history if a file is manipulated
         self.search_menu.close_callback = function(file)
 
-            -- If history open in previos search menu, refresh it
+            if file == nil then
+                UIManager:close(self.search_menu)
+                return
+            end
+
+            -- If history open in previous search menu, refresh it
             if self.search_menu.ui.history.hist_menu then
                 self.ui.history:fetchStatuses(false)
                 self.ui.history:updateItemTable()
+
 
                 -- self.search_menu.ui.history.hist_menu.close_callback()
                 -- local Event = require("ui/event")
@@ -398,14 +424,19 @@ function FileSearcher:showSearchResults(results, show_recent, page, callback)
             -- end
 
             -- If we have a directory coming and history open in previous search menu, close history
-            if lfs.attributes(file, "mode") == "directory" and self.search_menu.ui.history.hist_menu then
+            if file ~= false and lfs.attributes(file, "mode") == "directory" and self.search_menu.ui.history.hist_menu then
                 self.search_menu.ui.history.hist_menu.close_callback()
             end
 
             -- If it is a file actioned and not history open in previos search menu or in reader, open history
-            if lfs.attributes(file, "mode") == "file" and not self.search_menu.ui.history.hist_menu then
+            if file == false and not self.search_menu.ui.history.hist_menu then
                 local FileManager = require("apps/filemanager/filemanager")
                 FileManager.instance.history:onShowHist()
+            end
+
+
+            if file ~= false and lfs.attributes(file, "mode") == "file" and self.search_menu.ui.history.hist_menu then
+                self.search_menu.ui.history.hist_menu.close_callback()
             end
 
             UIManager:close(self.search_menu)
@@ -428,11 +459,13 @@ function FileSearcher:onMenuSelect(item, callback)
         UIManager:close(dialog)
         -- local FileManager = require("apps/filemanager/filemanager")
         -- FileManager.instance.history:onShowHist()
-        self.close_callback(file)
+        -- Pass false instead of the file
+        self.close_callback(false)
 
         -- local Event = require("ui/event")
         -- UIManager:broadcastEvent(Event:new("ShowFileSearchAll"))
     end
+    -- When Show folder in file to the callback in onShowFileSearchAll()
     local function close_dialog_menu_callback(file)
         UIManager:close(dialog)
         self.close_callback(file)
