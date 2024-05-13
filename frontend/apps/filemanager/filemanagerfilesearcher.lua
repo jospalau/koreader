@@ -367,11 +367,12 @@ function FileSearcher:showSearchResults(results, show_recent, page, callback)
         -- end
 
         -- A directory is coming when closing when selecting "Show folder" in the search results list
-        -- This is coming from in filemanagerutil.lua caller_callback(file)
+        -- This is coming from filemanagerutil.lua caller_callback(file)
         -- Otherwise, a file comes from self.close_callback(file) from FileSearcher:onMenuSelect()
 
-        -- The callback function in onShowFileSearchAll(), receives the call from here as well receiving the file
+        -- The callback function in onShowFileSearchAll(), is called here self.close_callback(file) as well receiving the file
         -- And also from onCloseAllMenus() in menu.lua in case we don't select any action when the widget is closed after clicking outside
+        -- It uses the file to know if a file has been manipulated and has to refresh the list
 
         -- If we are not in history and not in reader we want to go to a folder if a folder is selected and open history if a file is manipulated
         -- If we are in history and in fm we want to go to a folder is a folder is selected and remain in history if a file manipulated
