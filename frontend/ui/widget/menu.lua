@@ -237,6 +237,14 @@ function MenuItem:init()
         text = "✔ " .. text
     end
 
+    if self.is_paused then
+        text = "⏸︎ " .. text
+    end
+
+    if self.is_being_read then
+        text = "▶ " .. " " .. text
+    end
+
     -- For some reason, Android app does not go inside this condition
     if self.single_line then
         -- Items only in single line
@@ -1102,6 +1110,8 @@ function Menu:updateItems(select_number, no_recalculate_dimen)
             in_tbr = self.item_table.current == index or item.in_tbr == true,
             in_history = self.item_table.current == index or item.in_history == true,
             is_finished = self.item_table.current == index or item.is_finished == true,
+            is_paused = self.item_table.current == index or item.is_paused == true,
+            is_being_read = self.item_table.current == index or item.is_being_read == true,
             dim = item.dim,
             font_size = self.font_size,
             infont_size = infont_size,

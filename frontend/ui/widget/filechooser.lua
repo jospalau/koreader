@@ -363,6 +363,12 @@ function FileChooser:getListItem(dirpath, f, fullpath, attributes, collate)
             item.in_tbr = true
         elseif filemanagerutil.getStatus(fullpath) == "complete" then
             item.is_finished = true
+
+        elseif filemanagerutil.getStatus(fullpath) == "abandoned" then
+            item.is_paused = true
+
+        elseif filemanagerutil.getStatus(fullpath) == "reading" then
+            item.is_being_read = true
         end
 
         item.dim = self.filemanager and self.filemanager.selected_files
