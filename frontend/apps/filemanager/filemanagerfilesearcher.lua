@@ -402,7 +402,7 @@ function FileSearcher:showSearchResults(results, show_recent, page, callback)
             end
 
             -- If it is a file actioned and not history open in previos search menu or in reader, open history
-            if not file and not self.search_menu.ui.history.hist_menu and not require("apps/reader/readerui").instance then
+            if lfs.attributes(file, "mode") == "file" and not self.search_menu.ui.history.hist_menu then
                 local FileManager = require("apps/filemanager/filemanager")
                 FileManager.instance.history:onShowHist()
             end
