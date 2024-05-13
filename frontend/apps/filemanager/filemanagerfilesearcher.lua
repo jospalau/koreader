@@ -419,10 +419,15 @@ function FileSearcher:showSearchResults(results, show_recent, page, callback)
             -- self.close_callback(false) in FileSearcher:onMenuSelect(item, callback)
             -- We want to go to the history in this case if no history to show what we changed
             if file == false then
-                if not self.search_menu.ui.history.hist_menu then
+                if not self.search_menu.ui.history.hist_menu and not require("apps/reader/readerui").instance then
                     local FileManager = require("apps/filemanager/filemanager")
                     FileManager.instance.history:onShowHist()
                 end
+                if not self.search_menu.ui.history.hist_menu and require("apps/reader/readerui").instance then
+                    local FileManager = require("apps/filemanager/filemanager")
+                    require("apps/reader/readerui").instance.history:onShowHist()
+                end
+
             else
                 -- Coming a directory when we select a directory and we action Show folder. Closing history if open to go to the folder
                 if file ~= false and lfs.attributes(file, "mode") == "directory" and self.search_menu.ui.history.hist_menu then
