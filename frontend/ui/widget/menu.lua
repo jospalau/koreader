@@ -1347,7 +1347,7 @@ end
 function Menu:onCloseAllMenus()
     UIManager:close(self)
     if self.close_callback then
-        self.close_callback()
+        self.close_callback(false) -- We pass falsed. This will be used in the callaback in onShowFileSearchAll() in filemanagerfilesearcher.lua
     end
     return true
 end
