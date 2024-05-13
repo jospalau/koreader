@@ -340,7 +340,8 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
         --     end
         -- end
         -- We pass this anonymous function as a callback so the history can be refreshed in case any status has been updated
-        UIManager:broadcastEvent(Event:new("ShowFileSearchAll", true, true))
+        -- We don't need to pass a history variable since we refresh in the event handler the history if it is opened
+        UIManager:broadcastEvent(Event:new("ShowFileSearchAll", true))
     else
         self:onClose()
     end
