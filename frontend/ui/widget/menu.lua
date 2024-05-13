@@ -529,7 +529,7 @@ function MenuItem:onTapSelect(arg, ges)
 
     local pos = self:getGesPosition(ges)
     if G_reader_settings:isFalse("flash_ui") then
-        -- self.menu:onMenuSelect(self.entry, pos)
+        self.menu:onMenuSelect(self.entry, pos)
         -- self.menu:onMenuSelect(self.entry, function()
         --     local UIManager = require("ui/uimanager")
         --     local Notification = require("ui/widget/notification")
@@ -540,7 +540,6 @@ function MenuItem:onTapSelect(arg, ges)
         --      UIManager:scheduleIn(3, function()
         --         UIManager:broadcastEvent(Event:new("ShowFileSearchAllRecent"))
         --     end)
-
         -- end)
     else
         -- c.f., ui/widget/iconbutton for the canonical documentation about the flash_ui code flow
@@ -573,7 +572,6 @@ function MenuItem:onTapSelect(arg, ges)
         --      UIManager:scheduleIn(3, function()
         --         UIManager:broadcastEvent(Event:new("ShowFileSearchAllRecent"))
         --     end)
-
         -- end)
 
         UIManager:forceRePaint()
