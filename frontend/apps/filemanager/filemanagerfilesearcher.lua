@@ -368,34 +368,39 @@ function FileSearcher:showSearchResults(results, show_recent, page, callback)
         --     end
         -- end
 
-        -- Directory is coming when closing from Show folder in the search results list in filemanagerutil.lua caller_callback(file)
-        -- Otherwise, it cames true from self.close_callback(true) from FileSearcher:onMenuSelect()
+        -- A directory is coming when closing from Show folder in the search results list in filemanagerutil.lua caller_callback(file)
+        -- Otherwise, it comes false from self.close_callback(true) from FileSearcher:onMenuSelect()
 
-        -- It comes false, because the callback function in onShowFileSearchAll() needs a boolean
-        -- to know when the callback comes from here or from onCloseAllMenus() in menu.lua
+        -- It comes a false value, because the callback function in onShowFileSearchAll() needs a boolean
+        -- to know when the callback comes from  self.close_callback(true) or from onCloseAllMenus() in menu.lua in case we don't select any action
+        -- and the widget is closed after clicking outside
 
-        -- If we are not in history and not in reader we want to go to folder is folder selected and open history if file manipulated
-        -- If we are in history and in fm we want to go to folder is folder selected and remain in history if file manipulated
-        -- If we are in reader there is no menu for File Search
-        -- If we are in history and in reader we want to go to folder is folder selected and remain in history if file manipulated
+        -- If we are not in history and not in reader we want to go to a folder if a folder is selected and open history if a file is manipulated
+        -- If we are in history and in fm we want to go to a folder is a folder is selected and remain in history if a file manipulated
+        -- If we are in reader there is no menu for File Search so nothing to be done
+        -- If we are in history and in reader we want to go to a folder if a folder is selected and remain in history if a file is manipulated
         self.search_menu.close_callback = function(directory)
+
+            -- If history open in previos search menu, refresh it
             if self.search_menu.ui.history.hist_menu then
                 -- self.search_menu.ui.history.hist_menu.close_callback()
                 self.ui.history:fetchStatuses(false)
                 self.ui.history:updateItemTable()
             end
 
-            if require("apps/reader/readerui").instance and require("apps/reader/readerui").instance.history then
-                -- UIManager:close(require("apps/reader/readerui").instance.history)
-                self.ui.history:fetchStatuses(false)
-                self.ui.history:updateItemTable()
-            end
+            -- -- If in reader and in history refresh it
+            -- if require("apps/reader/readerui").instance and require("apps/reader/readerui").instance.history then
+            --     -- UIManager:close(require("apps/reader/readerui").instance.history)
+            --     self.ui.history:fetchStatuses(false)
+            --     self.ui.history:updateItemTable()
+            -- end
 
-            -- lfs.attributes(file, "mode") == "directory"
-
+            -- If we have a directory coming and history open in previous search menu, close history
             if type(directory) == "string" and lfs.attributes(directory, "mode") == "directory" and self.search_menu.ui.history.hist_menu then
                 self.search_menu.ui.history.hist_menu.close_callback()
             end
+
+            -- If it is a file actioned a not history open in previos search menu or in reader, open history
             if not directory and not self.search_menu.ui.history.hist_menu and not require("apps/reader/readerui").instance then
                 local FileManager = require("apps/filemanager/filemanager")
                 FileManager.instance.history:onShowHist()
