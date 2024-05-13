@@ -103,14 +103,14 @@ function FileSearcher:onShowFileSearchAll(from_history, recent, page)
         callback_func = function(restart)
             self.ui.history:fetchStatuses(false)
             self.ui.history:updateItemTable()
-            if restart == nil then
+            if restart ~= nil then
                 local Event = require("ui/event")
                 UIManager:broadcastEvent(Event:new("CloseSearchMenu", from_history, recent))
             end
         end
     else
         callback_func = function(restart)
-            if restart == nil then
+            if restart ~= nil then
                 local Event = require("ui/event")
                 UIManager:broadcastEvent(Event:new("CloseSearchMenu", from_history, recent))
             end
@@ -369,7 +369,11 @@ function FileSearcher:showSearchResults(results, show_recent, page, callback)
         -- end
 
         -- Directory is coming when closing from Show folder in the search results list in filemanagerutil.lua caller_callback(file)
-        -- Otherwise, it cames nil from self.close_callback() from FileSearcher:onMenuSelect()
+        -- Otherwise, it cames true from self.close_callback(true) from FileSearcher:onMenuSelect()
+
+        -- It comes false, because the callback function in onShowFileSearchAll() needs a boolean
+        -- to know when the callback comes from here or from onCloseAllMenus() in menu.lua
+
         -- If we are not in history and not in reader we want to go to folder is folder selected and open history if file manipulated
         -- If we are in history and in fm we want to go to folder is folder selected and remain in history if file manipulated
         -- If we are in reader there is no menu for File Search
@@ -389,7 +393,7 @@ function FileSearcher:showSearchResults(results, show_recent, page, callback)
 
             -- lfs.attributes(file, "mode") == "directory"
 
-            if directory and self.search_menu.ui.history.hist_menu then
+            if type(directory) == "string" and lfs.attributes(directory, "mode") == "directory" and self.search_menu.ui.history.hist_menu then
                 self.search_menu.ui.history.hist_menu.close_callback()
             end
             if not directory and not self.search_menu.ui.history.hist_menu and not require("apps/reader/readerui").instance then
@@ -417,7 +421,7 @@ function FileSearcher:onMenuSelect(item, callback)
         UIManager:close(dialog)
         -- local FileManager = require("apps/filemanager/filemanager")
         -- FileManager.instance.history:onShowHist()
-        self.close_callback() --
+        self.close_callback(false)
 
         -- local Event = require("ui/event")
         -- UIManager:broadcastEvent(Event:new("ShowFileSearchAll"))
