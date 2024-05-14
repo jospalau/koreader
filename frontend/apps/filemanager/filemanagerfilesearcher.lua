@@ -97,7 +97,7 @@ function FileSearcher:onShowFileSearch(search_string, callbackfunc)
     search_dialog:onShowKeyboard()
 end
 
-function FileSearcher:onShowFileSearchAll(recent, page, search_string)
+function FileSearcher:onShowFileSearchLists(recent, page, search_string)
     local callback_func = function(file, restart)
             -- Coming nil when closing the search results list window with esc or clicking on X, Menu:onCloseAllMenus() in menu.lua
             if file == nil then
@@ -142,7 +142,7 @@ end
 
 function FileSearcher:onCloseSearchMenu(recent, search_string)
     UIManager:close(self.search_menu)
-    self:onShowFileSearchAll(recent, self.search_menu.page, search_string)
+    self:onShowFileSearchLists(recent, self.search_menu.page, search_string)
 end
 
 function FileSearcher:onShowFileSearchAllCompleted()
