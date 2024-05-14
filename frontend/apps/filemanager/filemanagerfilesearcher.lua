@@ -367,11 +367,11 @@ function FileSearcher:showSearchResults(results, show_recent, page, callback)
         handle_hold_on_hold_release = true,
     }
 
-
+    -- Coming from the event declared in onShowFileSearchAll() to get a list, callback function coming from onShowFileSearchAll()
     if callback then
         self.search_menu.close_callback = callback
         -- UIManager:close(self.search_menu)
-    else
+    else -- Coming from onShowFileSearch(), we create the callback function here
         -- self.search_menu.close_callback = function()
         --     UIManager:close(self.search_menu)
         --     local Event = require("ui/event")
