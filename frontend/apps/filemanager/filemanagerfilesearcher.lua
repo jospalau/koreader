@@ -101,6 +101,10 @@ function FileSearcher:onShowFileSearchAll(recent, page)
     local callback_func = function(restart)
             -- Coming nil when closing the search results list window with esc or clicking on X, Menu:onCloseAllMenus() in menu.lua
             if restart == nil then
+                if not self.search_menu.ui.history.hist_menu and not require("apps/reader/readerui").instance then
+                    local FileManager = require("apps/filemanager/filemanager")
+                    FileManager.instance.history:onShowHist()
+                end
                 UIManager:close(self.search_menu)
                 return
             end
@@ -108,7 +112,7 @@ function FileSearcher:onShowFileSearchAll(recent, page)
             -- caller_callback(file) in filemanagerutil.genShowFolderButton(file, caller_callback, button_disabled)
 
             if type(restart)== "string" and lfs.attributes(restart, "mode") == "file"  then
-                if  self.search_menu.ui.history.hist_menu then
+                if self.search_menu.ui.history.hist_menu then
                     self.search_menu.ui.history.hist_menu.close_callback()
                 end
                 UIManager:close(self.search_menu)
