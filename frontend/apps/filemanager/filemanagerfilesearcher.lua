@@ -27,6 +27,7 @@ function FileSearcher:onShowFileSearch(search_string, callbackfunc)
     local search_dialog
     local check_button_case, check_button_subfolders, check_button_metadata
     local callback_func = false
+    self.recent = false
     search_dialog = InputDialog:new{
         title = _("Enter text to search for in filename"),
         input = search_string or self.search_string,
@@ -98,37 +99,36 @@ function FileSearcher:onShowFileSearch(search_string, callbackfunc)
 end
 
 function FileSearcher:onShowFileSearchLists(recent, page, search_string)
-    local callback_func = function(file, restart)
-            -- Coming nil when closing the search results list window with esc or clicking on X, Menu:onCloseAllMenus() in menu.lua
-            if file == nil then
-                -- if not self.search_menu.ui.history.hist_menu and not require("apps/reader/readerui").instance then
-                --     local FileManager = require("apps/filemanager/filemanager")
-                --     FileManager.instance.history:onShowHist()
-                -- end
-                UIManager:close(self.search_menu)
-                return
-            end
+    -- local callback_func = function(file, restart)
+    --         -- Coming nil when closing the search results list window with esc or clicking on X, Menu:onCloseAllMenus() in menu.lua
+    --         if file == nil then
+    --             -- if not self.search_menu.ui.history.hist_menu and not require("apps/reader/readerui").instance then
+    --             --     local FileManager = require("apps/filemanager/filemanager")
+    --             --     FileManager.instance.history:onShowHist()
+    --             -- end
+    --             UIManager:close(self.search_menu)
+    --             return
+    --         end
 
-            -- Coming restart = false when clicking on Show folder for a file in the search results list window
-            --  self.close_callback(file, false) in filemanagerutil.genShowFolderButton(file, caller_callback, button_disabled)
-            if lfs.attributes(file, "mode") == "file" and not restart then
-                if self.search_menu.ui.history.hist_menu then
-                    self.search_menu.ui.history.hist_menu.close_callback()
-                end
-                UIManager:close(self.search_menu)
-                return
-            end
+    --         -- Coming restart = false when clicking on Show folder for a file in the search results list window
+    --         --  self.close_callback(file, false) in filemanagerutil.genShowFolderButton(file, caller_callback, button_disabled)
+    --         if lfs.attributes(file, "mode") == "file" and not restart then
+    --             if self.search_menu.ui.history.hist_menu then
+    --                 self.search_menu.ui.history.hist_menu.close_callback()
+    --             end
+    --             UIManager:close(self.search_menu)
+    --             return
+    --         end
 
-            -- Otherwise, restart = true when clicking in any other option for a file in the search results list window
-            -- self.close_callback(file, true) in FileSearcher:onMenuSelect(item, callback)
-            if self.search_menu.ui.history.hist_menu then
-                self.ui.history:fetchStatuses(false)
-                self.ui.history:updateItemTable()
-            end
-            local Event = require("ui/event")
-            UIManager:broadcastEvent(Event:new("CloseSearchMenu", recent, self.search_string))
-        end
-
+    --         -- Otherwise, restart = true when clicking in any other option for a file in the search results list window
+    --         -- self.close_callback(file, true) in FileSearcher:onMenuSelect(item, callback)
+    --         if self.search_menu.ui.history.hist_menu then
+    --             self.ui.history:fetchStatuses(false)
+    --             self.ui.history:updateItemTable()
+    --         end
+    --         local Event = require("ui/event")
+    --         UIManager:broadcastEvent(Event:new("CloseSearchMenu", recent, self.search_string))
+    --     end
     local search_dialog
     local check_button_case, check_button_subfolders, check_button_metadata
     self.path = G_reader_settings:readSetting("home_dir")
@@ -136,8 +136,9 @@ function FileSearcher:onShowFileSearchLists(recent, page, search_string)
     if self.search_string == nil then
         self.search_string = "*.epub"
     end
+    self.recent = recent
 
-    self:onSearchSortCompleted(false, recent, page, callback_func)
+    self:onSearchSortCompleted(false, recent, page, nil)
 end
 
 function FileSearcher:onCloseSearchMenu(recent, search_string)
@@ -369,11 +370,11 @@ function FileSearcher:showSearchResults(results, show_recent, page, callback)
         handle_hold_on_hold_release = true,
     }
 
-    -- Coming from the event declared in onShowFileSearchAll() to get a list, callback function coming from onShowFileSearchAll()
-    if callback then
-        self.search_menu.close_callback = callback
-        -- UIManager:close(self.search_menu)
-    else -- Coming from onShowFileSearch(), we create the callback function here
+    -- -- Coming from the event declared in onShowFileSearchAll() to get a list, callback function coming from onShowFileSearchAll()
+    -- if callback then
+    --     self.search_menu.close_callback = callback
+    --     -- UIManager:close(self.search_menu)
+    -- else -- Coming from onShowFileSearch(), we create the callback function here
         -- self.search_menu.close_callback = function()
         --     UIManager:close(self.search_menu)
         --     local Event = require("ui/event")
@@ -436,7 +437,7 @@ function FileSearcher:showSearchResults(results, show_recent, page, callback)
                     --     self.search_menu.ui.history.hist_menu.close_callback()
                     -- end
                     local Event = require("ui/event")
-                    UIManager:broadcastEvent(Event:new("CloseSearchMenu", false, self.search_string))
+                    UIManager:broadcastEvent(Event:new("CloseSearchMenu", self.recent, self.search_string))
                     return
                 else
                     -- When we select a file and we action Show folder. Closing history if it is open, to go to the folder containing the file
@@ -455,7 +456,7 @@ function FileSearcher:showSearchResults(results, show_recent, page, callback)
 
             UIManager:close(self.search_menu)
         end
-    end
+    -- end
 
     if page then
         self.search_menu:onGotoPage(page)
