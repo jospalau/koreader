@@ -12,7 +12,7 @@ endif
 
 # releases do not contain tests and misc data
 IS_RELEASE := $(if $(or $(EMULATE_READER),$(WIN32)),,1)
-IS_RELEASE := $(if $(or $(IS_RELEASE),$(APPIMAGE),$(DEBIAN),$(MACOS)),1,)
+IS_RELEASE := $(if $(or $(IS_RELEASE),$(APPIMAGE),$(LINUX),$(MACOS)),1,)
 
 ifeq ($(ANDROID_ARCH), arm64)
 	ANDROID_ABI?=arm64-v8a
@@ -28,6 +28,17 @@ endif
 # Use the git commit count as the (integer) Android version code
 ANDROID_VERSION?=$(shell git rev-list --count HEAD)
 ANDROID_NAME?=$(VERSION)
+
+LINUX_ARCH?=native
+ifeq ($(LINUX_ARCH), native)
+	LINUX_ARCH_NAME:=$(shell uname -m)
+else ifeq ($(LINUX_ARCH), arm64)
+	LINUX_ARCH_NAME:=aarch64
+else ifeq ($(LINUX_ARCH), arm)
+	LINUX_ARCH_NAME:=armv7l
+endif
+LINUX_ARCH_NAME?=$(LINUX_ARCH)
+
 
 MACHINE=$(TARGET_MACHINE)
 ifdef KODEBUG
@@ -169,6 +180,12 @@ ifneq (,$(wildcard make/$(TARGET).mk))
   include make/$(TARGET).mk
 endif
 
+android-ndk:
+	$(MAKE) -C $(KOR_BASE)/toolchain $(ANDROID_NDK_HOME)
+
+android-sdk:
+	$(MAKE) -C $(KOR_BASE)/toolchain $(ANDROID_HOME)
+
 # for gettext
 DOMAIN=koreader
 TEMPLATE_DIR=l10n/templates
@@ -199,4 +216,4 @@ static-check:
 doc:
 	make -C doc
 
-.PHONY: all base clean doc test
+.PHONY: all android-ndk android-sdk base clean doc test
