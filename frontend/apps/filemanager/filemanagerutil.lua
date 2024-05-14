@@ -332,7 +332,7 @@ function filemanagerutil.genShowFolderButton(file, caller_callback, button_disab
         text = _("Show folder"),
         enabled = not button_disabled,
         callback = function()
-            caller_callback(file)
+            caller_callback(file, false)
             local ui = require("apps/filemanager/filemanager").instance
             if ui then
                 local pathname = util.splitFilePathName(file)

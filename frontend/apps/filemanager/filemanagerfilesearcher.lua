@@ -98,9 +98,9 @@ function FileSearcher:onShowFileSearch(search_string, callbackfunc)
 end
 
 function FileSearcher:onShowFileSearchAll(recent, page)
-    local callback_func = function(restart)
+    local callback_func = function(file, restart)
             -- Coming nil when closing the search results list window with esc or clicking on X, Menu:onCloseAllMenus() in menu.lua
-            if restart == nil then
+            if file == nil then
                 if not self.search_menu.ui.history.hist_menu and not require("apps/reader/readerui").instance then
                     local FileManager = require("apps/filemanager/filemanager")
                     FileManager.instance.history:onShowHist()
@@ -108,10 +108,10 @@ function FileSearcher:onShowFileSearchAll(recent, page)
                 UIManager:close(self.search_menu)
                 return
             end
-            -- Coming when clicking on Show folder for a file in the search results list window
-            -- caller_callback(file) in filemanagerutil.genShowFolderButton(file, caller_callback, button_disabled)
 
-            if type(restart)== "string" and lfs.attributes(restart, "mode") == "file"  then
+            -- Coming restart = false when clicking on Show folder for a file in the search results list window
+            --  self.close_callback(file, false) in filemanagerutil.genShowFolderButton(file, caller_callback, button_disabled)
+            if lfs.attributes(file, "mode") == "file" and not restart then
                 if self.search_menu.ui.history.hist_menu then
                     self.search_menu.ui.history.hist_menu.close_callback()
                 end
@@ -119,9 +119,8 @@ function FileSearcher:onShowFileSearchAll(recent, page)
                 return
             end
 
-            -- Otherwise, comes false when clicking in any other option for a file in the search results list window
-            -- self.close_callback(false) in FileSearcher:onMenuSelect(item, callback)
-
+            -- Otherwise, restart = true when clicking in any other option for a file in the search results list window
+            -- self.close_callback(file, true) in FileSearcher:onMenuSelect(item, callback)
             if self.search_menu.ui.history.hist_menu then
                 self.ui.history:fetchStatuses(false)
                 self.ui.history:updateItemTable()
@@ -381,18 +380,12 @@ function FileSearcher:showSearchResults(results, show_recent, page, callback)
         --     end
         -- end
 
-        -- A directory is coming when closing when selecting "Show folder" in the search results list
-        -- This is coming from filemanagerutil.lua caller_callback(file)
-        -- Otherwise, a false comes from self.close_callback(false) from FileSearcher:onMenuSelect()
-
-        -- The callback function in onShowFileSearchAll(), is called here self.close_callback(false) receiving false explicitly
-        -- And also from onCloseAllMenus() in menu.lua in case we don't select any action when the widget is closed after clicking outside
 
         -- If we are not in history and not in reader we want to go to a folder if a folder is selected and open history if a file is manipulated
         -- If we are in history and in fm we want to go to a folder is a folder is selected and remain in history if a file manipulated
         -- If we are in reader there is no menu for File Search so nothing to be done
         -- If we are in history and in reader we want to go to a folder if a folder is selected and remain in history if a file is manipulated
-        self.search_menu.close_callback = function(file)
+        self.search_menu.close_callback = function(file, actioned)
 
             -- Coming nil when closing the search results list window with esc or clicking on X, Menu:onCloseAllMenus() in menu.lua
             if file == nil then
@@ -419,29 +412,33 @@ function FileSearcher:showSearchResults(results, show_recent, page, callback)
             -- end
 
 
-            -- Coming false when we select a file and we action anything different to Show folder
-            -- self.close_callback(false) in FileSearcher:onMenuSelect(item, callback)
-            -- We want to go to the history in this case if no history to show what we changed
-            if file == false then
-                if not self.search_menu.ui.history.hist_menu and not require("apps/reader/readerui").instance then
-                    local FileManager = require("apps/filemanager/filemanager")
-                    FileManager.instance.history:onShowHist()
+            -- If file is not false, it is a file or a directory
+            if lfs.attributes(file, "mode") == "file" then
+                -- Coming actioned = true when we select a file and we action anything different to Show folder
+                -- self.close_callback(file, true) in FileSearcher:onMenuSelect(item, callback)
+                if actioned then
+                    -- We want to go to the history in this case if no history to show what we changed
+                    if not self.search_menu.ui.history.hist_menu and not require("apps/reader/readerui").instance then
+                        local FileManager = require("apps/filemanager/filemanager")
+                        FileManager.instance.history:onShowHist()
+                    end
+                    -- If no history we open it
+                    if not self.search_menu.ui.history.hist_menu and require("apps/reader/readerui").instance then
+                        local FileManager = require("apps/filemanager/filemanager")
+                        require("apps/reader/readerui").instance.history:onShowHist()
+                    end
+                else
+                    -- When we select a file and we action Show folder. Closing history if it is open, to go to the folder containing the file
+                    if self.search_menu.ui.history.hist_menu then
+                        self.search_menu.ui.history.hist_menu.close_callback()
+                    end
                 end
-                if not self.search_menu.ui.history.hist_menu and require("apps/reader/readerui").instance then
-                    local FileManager = require("apps/filemanager/filemanager")
-                    require("apps/reader/readerui").instance.history:onShowHist()
-                end
-
-            else
+            else -- Directory
                 -- Coming a directory when we select a directory and we action Show folder. Closing history if open to go to the folder
-                if file ~= false and lfs.attributes(file, "mode") == "directory" and self.search_menu.ui.history.hist_menu then
+                if self.search_menu.ui.history.hist_menu then
                     self.search_menu.ui.history.hist_menu.close_callback()
                 end
 
-                -- Coming a file when we select a file and we action Show folder. Closing history if open to go to the folder containing the file
-                if file ~= false and lfs.attributes(file, "mode") == "file" and self.search_menu.ui.history.hist_menu then
-                    self.search_menu.ui.history.hist_menu.close_callback()
-                end
             end
 
 
@@ -466,7 +463,7 @@ function FileSearcher:onMenuSelect(item, callback)
         -- local FileManager = require("apps/filemanager/filemanager")
         -- FileManager.instance.history:onShowHist()
         -- Pass false instead of the file
-        self.close_callback(false)
+        self.close_callback(file, true)
 
         -- local Event = require("ui/event")
         -- UIManager:broadcastEvent(Event:new("ShowFileSearchAll"))
@@ -474,7 +471,7 @@ function FileSearcher:onMenuSelect(item, callback)
     -- When Show folder in file to the callback in onShowFileSearchAll()
     local function close_dialog_menu_callback(file)
         UIManager:close(dialog)
-        self.close_callback(file)
+        self.close_callback(file, false)
     end
     local buttons = {}
     if item.is_file then
