@@ -12,6 +12,7 @@ local KeyValuePage = require("ui/widget/keyvaluepage")
 local Math = require("optmath")
 local ReaderFooter = require("apps/reader/modules/readerfooter")
 local ReaderProgress = require("readerprogress")
+local TopReadingSessions = require("topreadingsessions")
 local ReadHistory = require("readhistory")
 local Screensaver = require("ui/screensaver")
 local SQ3 = require("lua-ljsqlite3/init")
@@ -1548,6 +1549,13 @@ Time is in hours and minutes.]]),
                 callback = function()
                     self:onShowHeatmapView()
                 end,
+            },
+            {
+                text = _("Top reading sessions"),
+                keep_menu_open = true,
+                callback = function()
+                    UIManager:show(TopReadingSessions:new{})
+                end
             },
             {
                 text = _("Today's timeline"),
