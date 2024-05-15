@@ -83,7 +83,7 @@ function TopBar:getReadToday()
     return read_today
 end
 
-function TopBar:getReadTodayThisMonth()
+function TopBar:getReadTodayThisMonth(title)
     local DataStorage = require("datastorage")
     local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
     local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
@@ -110,6 +110,35 @@ function TopBar:getReadTodayThisMonth()
 
     local read_month = conn:rowexec(sql_stmt)
 
+    local sql_stmt ="SELECT avg(wpm) FROM wpm_stat_data where wpm > 0"
+    local avg_wpm = conn:rowexec(sql_stmt)
+
+    if avg_wpm == nil then
+        avg_wpm = 0
+    end
+
+
+
+    local conn = SQ3.open(db_location)
+    local sql_stmt = "SELECT id FROM book where title like '%tp%'"
+
+    local id_book = conn:rowexec(sql_stmt:gsub("tp",title))
+
+    if id_book == nil then
+        id_book = 0
+    end
+    id_book = tonumber(id_book)
+
+
+    local conn = SQ3.open(db_location)
+    local sql_stmt ="SELECT SUM(duration) FROM wpm_stat_data where id_book = ibp"
+
+
+    local total_time_book = conn:rowexec(sql_stmt:gsub("ibp",id_book))
+
+    if total_time_book == nil then
+        total_time_book = 0
+    end
 
 
     conn:close()
@@ -123,7 +152,7 @@ function TopBar:getReadTodayThisMonth()
     end
     read_month = tonumber(read_month)
 
-    return read_today, read_month
+    return read_today, read_month, total_time_book, avg_wpm
 end
 
 
@@ -146,11 +175,22 @@ function TopBar:init()
         self.initial_read_month = TopBar.preserved_initial_read_month
         TopBar.preserved_initial_read_month = nil
     end
+
+    if TopBar.preserved_initial_total_time_book then
+        self.initial_total_time_book = TopBar.preserved_initial_total_time_book
+        TopBar.preserved_initial_total_time_book = nil
+    end
+
 end
 
 function TopBar:onReaderReady()
-    if self.initial_read_today == nil and self.initial_read_month == nil then
-        self.initial_read_today, self.initial_read_month  = self.getReadTodayThisMonth()
+
+    self.title = self.ui.document._document:getDocumentProps().title
+    if self.title:find('%[%d?.%d]') then
+        self.title = self.title:sub(self.title:find('%]') + 2, self.title:len())
+    end
+    if self.initial_read_today == nil and self.initial_read_month == nil and self.initial_total_time_book == nil then
+        self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm = self:getReadTodayThisMonth(self.title)
     end
 
     if self.start_session_time == nil then
@@ -196,6 +236,12 @@ function TopBar:onReaderReady()
         invert = true,
     }
 
+
+    self.book_progress = TextWidget:new{
+        text =  "",
+        face = Font:getFace("myfont3", 12),
+        fgcolor = Blitbuffer.COLOR_BLACK,
+    }
 
     self.time_battery_text = TextWidget:new{
         text =  "",
@@ -263,6 +309,18 @@ function TopBar:onReaderReady()
         padding = 0,
         padding_bottom = self.bottom_padding,
     }
+
+    self[11] = FrameContainer:new{
+        left_container:new{
+            dimen = Geom:new{ w = self.book_progress:getSize().w, self.book_progress:getSize().h },
+            self.book_progress,
+        },
+        -- background = Blitbuffer.COLOR_WHITE,
+        bordersize = 0,
+        padding = 0,
+        padding_bottom = self.bottom_padding,
+    }
+
 
 
     self[5] = FrameContainer:new{
@@ -443,7 +501,7 @@ function TopBar:resetLayout()
 end
 
 function TopBar:onResume()
-    self.initial_read_today, self.initial_read_month = self.getReadTodayThisMonth()
+    self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm = self:getReadTodayThisMonth(self.title)
     self.start_session_time = os.time()
     self:toggleBar()
 end
@@ -454,6 +512,7 @@ function TopBar:onPreserveCurrentSession()
     TopBar.preserved_start_session_time = self.start_session_time
     TopBar.preserved_initial_read_today = self.initial_read_today
     TopBar.preserved_initial_read_month = self.initial_read_month
+    TopBar.preserved_initial_total_time_book = self.initial_total_time_book
 end
 
 
@@ -487,7 +546,7 @@ function TopBar:toggleBar()
         local now_t = os.date("*t")
         local daysdiff = now_t.day - os.date("*t",self.start_session_time).day
         if daysdiff > 0 then
-            self.initial_read_today, self.initial_read_month  = self.getReadTodayThisMonth()
+            self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm  = self:getReadTodayThisMonth(self.title)
             self.start_session_time = os.time()
         end
 
@@ -505,12 +564,17 @@ function TopBar:toggleBar()
         local read_month = self.initial_read_month + (os.time() - self.start_session_time)
         read_month = datetime.secondsToClockDuration(user_duration_format, read_month, false)
 
+        local read_book = self.initial_total_time_book + (os.time() - self.start_session_time)
+        read_book = datetime.secondsToClockDuration(user_duration_format, read_book, false)
+
+
         self.session_time_text:setText(datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")))
         self.progress_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
 
 
         -- self.times_text:setText(session_time .. "|" .. read_today .. "|" .. read_month)
         self.times_text_text = session_time .. "|" .. read_today .. "|" .. read_month
+
 
 
         local powerd = Device:getPowerDevice()
@@ -520,18 +584,17 @@ function TopBar:toggleBar()
         local time = datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
         self.time_battery_text_text = time .. "|" .. batt_lvl .. "%"
 
-        local title = self.ui.document._document:getDocumentProps().title
         local words = "?w"
         local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
-        if file_type == "epub" then
-            if title:find('%[%d?.%d]') then
-                title = title:sub(title:find('%]')+2, title:len())
-            end
 
-            if (title:find("([0-9,]+w)") ~= nil) then
-                words = title:match("([0-9,]+w)"):gsub("w",""):gsub(",","") .. "w"
-                title = title:sub(1, title:find('%(')-2, title:len())
-            end
+        local title = "self.ui.document._document:getDocumentProps().title"
+        if (self.title:find("([0-9,]+w)") ~= nil) then
+            words = self.title:match("([0-9,]+w)"):gsub("w",""):gsub(",","")
+            local hours_to_read = tonumber(words)/(self.avg_wpm * 60)
+            local progress =  math.floor(100/hours_to_read * 10)/10
+            self.book_progress:setText(tostring(progress) .. "%|" .. read_book)
+            words = self.title:match("([0-9,]+w)"):gsub("w",""):gsub(",","") .. "w"
+            title = title:sub(1, title:find('%(')-2, title:len())
         end
         title = TextWidget.PTF_BOLD_START .. title .. " with " .. words .. TextWidget.PTF_BOLD_END
         self.title_text:setText(title)
@@ -729,7 +792,8 @@ function TopBar:paintTo(bb, x, y)
         -- self[4][1].dimen.w = self[4][1][1]:getSize().w
         -- self[4]:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
-
+        self[11][1].dimen.w = self[11][1][1]:getSize().w
+        self[11]:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
         -- This is inverted to be shown in left margin
         self[4][1][1]:setText(self.times_text_text:reverse())
