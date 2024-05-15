@@ -150,6 +150,7 @@ function FileSearcher:onShowFileSearchAllCompleted()
     local search_dialog
     local check_button_case, check_button_subfolders, check_button_metadata
     self.path = G_reader_settings:readSetting("home_dir")
+    self.search_string = "*.epub"
     self:onSearchSortCompleted(true, false)
 end
 
