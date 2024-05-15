@@ -1217,6 +1217,7 @@ function ReaderHighlight:onHold(arg, ges)
         end
     end
 
+    self.t1 = os.time()
     self:clear() -- clear previous highlight (delayed clear may not have done it yet)
     self.hold_pos = self.view:screenToPageTransform(ges.pos)
     logger.dbg("hold position in page", self.hold_pos)
@@ -1301,6 +1302,7 @@ function ReaderHighlight:onHold(arg, ges)
         end
         return true
     end
+
     return false
 end
 
@@ -1594,62 +1596,72 @@ function ReaderHighlight:onHoldRelease()
         -- ignore this "hold_release" event.
         return true
     end
+    self.t2 = os.time()
+    if (self.t2 - self.t1 < 1) then
 
-    local long_final_hold = self.long_hold_reached
-    self:_resetHoldTimer(true) -- clear state
+        local long_final_hold = self.long_hold_reached
+        self:_resetHoldTimer(true) -- clear state
 
-    local default_highlight_action = G_reader_settings:readSetting("default_highlight_action", "ask")
+        local default_highlight_action = G_reader_settings:readSetting("default_highlight_action", "ask")
 
-    if self.select_mode then -- extended highlighting, ending fragment
+        if self.select_mode then -- extended highlighting, ending fragment
+            if self.selected_text then
+                self.select_mode = false
+                self:extendSelection()
+                if default_highlight_action == "select" then
+                    self:saveHighlight(true)
+                    self:clear()
+                else
+                    self:onShowHighlightMenu()
+                end
+            end
+            return true
+        end
+
+        if self.is_word_selection then -- single-word selection
+            if long_final_hold or G_reader_settings:isTrue("highlight_action_on_single_word") then
+                self.is_word_selection = false
+            end
+        end
+
         if self.selected_text then
-            self.select_mode = false
-            self:extendSelection()
-            if default_highlight_action == "select" then
-                self:saveHighlight(true)
-                self:clear()
+            if self.is_word_selection then
+                self:lookup(self.selected_text, self.selected_link)
             else
-                self:onShowHighlightMenu()
+                if long_final_hold or default_highlight_action == "ask" then
+                    -- bypass default action and show popup if long final hold
+                    self:onShowHighlightMenu()
+                elseif default_highlight_action == "highlight" then
+                    self:saveHighlight(true)
+                    self:onClose()
+                elseif default_highlight_action == "select" then
+                    self:startSelection()
+                    self:onClose()
+                elseif default_highlight_action == "note" then
+                    self:addNote()
+                    self:onClose()
+                elseif default_highlight_action == "translate" then
+                    self:translate()
+                elseif default_highlight_action == "wikipedia" then
+                    self:lookupWikipedia()
+                    self:onClose()
+                elseif default_highlight_action == "dictionary" then
+                    self:onHighlightDictLookup()
+                    self:onClose()
+                elseif default_highlight_action == "search" then
+                    self:onHighlightSearch()
+                    -- No self:onClose() to not remove the selected text
+                    -- which will have been the first search result
+                end
             end
         end
-        return true
-    end
-
-    if self.is_word_selection then -- single-word selection
-        if long_final_hold or G_reader_settings:isTrue("highlight_action_on_single_word") then
-            self.is_word_selection = false
-        end
-    end
-
-    if self.selected_text then
-        if self.is_word_selection then
-            self:lookup(self.selected_text, self.selected_link)
-        else
-            if long_final_hold or default_highlight_action == "ask" then
-                -- bypass default action and show popup if long final hold
-                self:onShowHighlightMenu()
-            elseif default_highlight_action == "highlight" then
-                self:saveHighlight(true)
-                self:onClose()
-            elseif default_highlight_action == "select" then
-                self:startSelection()
-                self:onClose()
-            elseif default_highlight_action == "note" then
-                self:addNote()
-                self:onClose()
-            elseif default_highlight_action == "translate" then
-                self:translate()
-            elseif default_highlight_action == "wikipedia" then
-                self:lookupWikipedia()
-                self:onClose()
-            elseif default_highlight_action == "dictionary" then
-                self:onHighlightDictLookup()
-                self:onClose()
-            elseif default_highlight_action == "search" then
-                self:onHighlightSearch()
-                -- No self:onClose() to not remove the selected text
-                -- which will have been the first search result
-            end
-        end
+    else
+        -- local UIManager = require("ui/uimanager")
+        -- local Notification = require("ui/widget/notification")
+        -- UIManager:show(Notification:new{
+        --     text = (tostring(self.t2 - self.t1)),
+        -- })
+        self:onHighlightSearch()
     end
     return true
 end
