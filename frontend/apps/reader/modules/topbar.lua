@@ -163,7 +163,6 @@ function TopBar:init()
     if TopBar.preserved_start_session_time then
         self.start_session_time = TopBar.preserved_start_session_time
         TopBar.preserved_start_session_time = nil
-
     end
 
     if TopBar.preserved_initial_read_today then
@@ -180,6 +179,12 @@ function TopBar:init()
         self.initial_total_time_book = TopBar.preserved_initial_total_time_book
         TopBar.preserved_initial_total_time_book = nil
     end
+
+    if TopBar.preserved_avg_wpm then
+        self.avg_wpm = TopBar.preserved_avg_wpm
+        TopBar.preserved_avg_wpm = nil
+    end
+
 
 end
 
@@ -513,6 +518,7 @@ function TopBar:onPreserveCurrentSession()
     TopBar.preserved_initial_read_today = self.initial_read_today
     TopBar.preserved_initial_read_month = self.initial_read_month
     TopBar.preserved_initial_total_time_book = self.initial_total_time_book
+    TopBar.preserved_avg_wpm = self.avg_wpm
 end
 
 
@@ -587,13 +593,13 @@ function TopBar:toggleBar()
         local words = "?w"
         local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
 
-        local title = "self.ui.document._document:getDocumentProps().title"
-        if (self.title:find("([0-9,]+w)") ~= nil) then
+        local title = self.title
+        if (title:find("([0-9,]+w)") ~= nil) then
             words = self.title:match("([0-9,]+w)"):gsub("w",""):gsub(",","")
             local hours_to_read = tonumber(words)/(self.avg_wpm * 60)
             local progress =  math.floor(100/hours_to_read * 10)/10
             self.book_progress:setText(tostring(progress) .. "%|" .. read_book)
-            words = self.title:match("([0-9,]+w)"):gsub("w",""):gsub(",","") .. "w"
+            words = title:match("([0-9,]+w)"):gsub("w",""):gsub(",","") .. "w"
             title = title:sub(1, title:find('%(')-2, title:len())
         end
         title = TextWidget.PTF_BOLD_START .. title .. " with " .. words .. TextWidget.PTF_BOLD_END
