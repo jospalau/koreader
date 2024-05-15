@@ -508,6 +508,9 @@ function FileSearcher:onMenuSelect(item, callback)
                         for i, menu_item in ipairs(self.item_table) do
                             if menu_item.path == file then
                                 table.remove(self.item_table, i)
+                                -- local Event = require("ui/event")
+                                -- UIManager:broadcastEvent(Event:new("CloseSearchMenu", self.recent, self.search_string))
+                                UIManager:close(self)
                                 break
                             end
                             self:switchItemTable(T(_("Search results (%1)"), #self.item_table), self.item_table)
