@@ -531,7 +531,7 @@ function FileSearcher:onMenuSelect(item, callback)
             text = _("Open"),
             enabled = DocumentRegistry:hasProvider(file, nil, true), -- allow auxiliary providers
             callback = function()
-                close_dialog_callback()
+                -- close_dialog_callback()
                 local FileManager = require("apps/filemanager/filemanager")
                 FileManager.openFile(self.ui, file, nil, self.close_callback)
             end,
