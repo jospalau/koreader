@@ -1558,6 +1558,15 @@ Time is in hours and minutes.]]),
                 end
             },
             {
+                text = _("Past reading"),
+                keep_menu_open = true,
+                callback = function()
+                    UIManager:show(TopReadingSessions:new{
+                        past_reading = true,
+                    })
+                end
+            },
+            {
                 text = _("Today's timeline"),
                 keep_menu_open = true,
                 callback = function()

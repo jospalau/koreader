@@ -129,9 +129,124 @@ function TopReadingSessions:getStats(sessions)
 
 	  print("\n")
     conn:close()
+    return
+end
+
+function TopReadingSessions:getReadingPast()
+    local DataStorage = require("datastorage")
+    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
+    -- best to e it to letters, to get '2m' ?
+    user_duration_format = "letters"
+
+
+    local SQ3 = require("lua-ljsqlite3/init")
+    local DataStorage = require("datastorage")
+    local conn = SQ3.open(db_location)
+    local sql_stmt ="SELECT count(id_book) AS sessions FROM wpm_stat_data"
+    local sessions = conn:rowexec(sql_stmt)
+    local sql_stmt ="SELECT avg(wpm) FROM wpm_stat_data where wpm > 0"
+    local avg_wpm = conn:rowexec(sql_stmt)
+
+    sql_stmt = [[SELECT SUM(sum_duration)
+        FROM   (
+                    SELECT sum(duration)    AS sum_duration
+                    FROM   wpm_stat_data
+                WHERE DATE(start_time,'unixepoch','localtime') > DATE(DATE('now', '-7 day','localtime'),'localtime')
+                GROUP BY DATE(start_time,'unixepoch','localtime'));"
+                );
+    ]]
+    local avg_last_seven_days = conn:rowexec(sql_stmt)
+
+    sql_stmt = [[SELECT SUM(sum_duration)
+    FROM   (
+                SELECT sum(duration)    AS sum_duration
+                FROM   wpm_stat_data
+            WHERE DATE(start_time,'unixepoch','localtime') > DATE(DATE('now', '-30 day','localtime'),'localtime')
+            GROUP BY DATE(start_time,'unixepoch','localtime'));"
+            );
+    ]]
+    local avg_last_thirty_days = conn:rowexec(sql_stmt)
+
+
+    sql_stmt = [[SELECT SUM(sum_duration)
+    FROM   (
+                SELECT sum(duration)    AS sum_duration
+                FROM   wpm_stat_data
+            WHERE DATE(start_time,'unixepoch','localtime') > DATE(DATE('now', '-60 day','localtime'),'localtime')
+            GROUP BY DATE(start_time,'unixepoch','localtime'));"
+            );
+    ]]
+    local avg_last_sixty_days = conn:rowexec(sql_stmt)
+
+    sql_stmt = [[SELECT SUM(sum_duration)
+    FROM   (
+                SELECT sum(duration)    AS sum_duration
+                FROM   wpm_stat_data
+            WHERE DATE(start_time,'unixepoch','localtime') > DATE(DATE('now', '-90 day','localtime'),'localtime')
+            GROUP BY DATE(start_time,'unixepoch','localtime'));"
+            );
+    ]]
+    local avg_last_ninety_days = conn:rowexec(sql_stmt)
+
+    sql_stmt = [[SELECT SUM(sum_duration)
+    FROM   (
+                SELECT sum(duration)    AS sum_duration
+                FROM   wpm_stat_data
+            WHERE DATE(start_time,'unixepoch','localtime') > DATE(DATE('now', '-180 day','localtime'),'localtime')
+            GROUP BY DATE(start_time,'unixepoch','localtime'));"
+            );
+    ]]
+    local avg_last_hundred_and_eighty_days = conn:rowexec(sql_stmt)
+
+    conn:close()
+    if sessions == nil then
+        sessions = 0
+    end
+    sessions = tonumber(sessions)
+
+    if avg_wpm == nil then
+        avg_wpm = 0
+    end
+
+    avg_wpm = tonumber(avg_wpm)
+    if avg_last_seven_days == nil then
+        avg_last_seven_days = 0
+    end
+
+    if avg_last_thirty_days == nil then
+        avg_last_thirty_days = 0
+    end
+
+    if avg_last_sixty_days == nil then
+        avg_last_sixty_days = 0
+    end
+
+    if avg_last_ninety_days == nil then
+        avg_last_ninety_days = 0
+    end
+
+    if avg_last_hundred_and_eighty_days == nil then
+        avg_last_hundred_and_eighty_days = 0
+    end
+
+    avg_last_seven_days = math.floor(tonumber(avg_last_seven_days)/7/60/60 * 100)/100
+    avg_last_thirty_days = math.floor(tonumber(avg_last_thirty_days)/30/60/60 * 100)/100
+    avg_last_sixty_days = math.floor(tonumber(avg_last_sixty_days)/60/60/60 * 100)/100
+    avg_last_ninety_days = math.floor(tonumber(avg_last_ninety_days)/90/60/60 * 100)/100
+    avg_last_hundred_and_eighty_days = math.floor(tonumber(avg_last_hundred_and_eighty_days)/180/60/60 * 100)/100
+
+    table.insert(self.sessions,{7, avg_last_seven_days})
+    table.insert(self.sessions,{30, avg_last_thirty_days})
+    table.insert(self.sessions,{60, avg_last_sixty_days})
+    table.insert(self.sessions,{90, avg_last_ninety_days})
+    table.insert(self.sessions,{180, avg_last_hundred_and_eighty_days})
+    return
+
 end
 
 function TopReadingSessions:init()
+    -- self.past_reading = self.past_reading
     self.small_font_face = Font:getFace("smallffont")
     self.medium_font_face = Font:getFace("ffont")
     self.large_font_face = Font:getFace("largeffont")
@@ -222,7 +337,7 @@ function TopReadingSessions:getStatusContent(width)
         -- title_bar,
         -- self:genSingleHeader(_("Top session books")),
         -- self:genSingleHeader(_(tostring(number_sessions) .. " Sessions")),
-        self:genTopSessions(number_sessions),
+        self.past_reading and self:genLastReading() or self:genTopSessions(number_sessions) ,
     }
 end
 
@@ -310,6 +425,85 @@ function TopReadingSessions:genTopSessions(number_books)
                 TextWidget:new{
                     padding = Size.padding.small,
                     text = self.sessions[i][1]  .. " — " .. self.sessions[i][3]  .. " — " ..  datetime.secondsToClockDuration(user_duration_format, select_day_time, true, true),
+                    face = Font:getFace("smallffont",Screen:scaleBySize(6)),
+                },
+            },
+        }
+        local titles_group = HorizontalGroup:new{
+            align = "center",
+            LeftContainer:new{
+                dimen = Geom:new{ w = inner_width , h = self.height_session * (1/3) },
+                ProgressWidget:new{
+                    width = math.floor(inner_width * select_day_time / max_session_time),
+                    height = Screen:scaleBySize(8),
+                    percentage = 1.0,
+                    ticks = nil,
+                    last = nil,
+                    margin_h = 0,
+                    margin_v = 0,
+                }
+            },
+        }
+        table.insert(statistics_group, total_group)
+        table.insert(statistics_group, titles_group)
+        -- table.insert(statistics_group, span_group)
+
+        table.insert(statistics_group, VerticalSpan:new{ width = self.stats_span })
+    end  --for i=1
+    table.insert(statistics_container, statistics_group)
+    return CenterContainer:new{
+        dimen = Geom:new{ w = self.screen_width, h = self.screen_height  },
+        statistics_container,
+    }
+end
+
+
+function TopReadingSessions:genLastReading()
+    local select_day_time
+    local user_duration_format = G_reader_settings:readSetting("duration_format")
+
+    self:getReadingPast()
+
+    local statistics_container = CenterContainer:new{
+        dimen = Geom:new{ w = self.screen_width , h = self.height_session },
+    }
+    local statistics_group = VerticalGroup:new{ align = "left" }
+    local max_session_time = -1
+    local session_time
+    for i=1, #self.sessions do
+        session_time = self.sessions[i][2]
+        if session_time > max_session_time then max_session_time = session_time end
+    end
+    -- local top_padding_span = HorizontalSpan:new{ width = Screen:scaleBySize(15) }
+    -- local top_span_group = HorizontalGroup:new{
+    --     align = "center",
+    --     LeftContainer:new{
+    --         dimen = Geom:new{ h = Screen:scaleBySize(30) },
+    --         top_padding_span
+    --     },
+    -- }
+    -- table.insert(statistics_group, top_span_group)
+
+    -- local padding_span = HorizontalSpan:new{ width = Screen:scaleBySize(15) }
+    -- local span_group = HorizontalGroup:new{
+    --     align = "center",
+    --     LeftContainer:new{
+    --         dimen = Geom:new{ h = Screen:scaleBySize(self.stats_span) },
+    --         padding_span
+    --     },
+    -- }
+
+    -- Lines have L/R self.padding. Make this section even more indented/padded inside the lines
+    local inner_width = self.screen_width - 4*self.padding
+    for i = 1, #self.sessions do
+        select_day_time = self.sessions[i][2]
+        local total_group = HorizontalGroup:new{
+            align = "center",
+            LeftContainer:new{
+                dimen = Geom:new{ w = inner_width , h = self.height_session * (1/3) },
+                TextWidget:new{
+                    padding = Size.padding.small,
+                    text = self.sessions[i][1]  .. " days" .. " — " .. tonumber(self.sessions[i][2]) .. "h",
                     face = Font:getFace("smallffont",Screen:scaleBySize(6)),
                 },
             },
