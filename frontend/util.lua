@@ -1545,57 +1545,6 @@ function util.round_decimal(num, points)
     return math.floor(num * op) / op
 end
 
-
-
-
-function util.isFileMatch(filename, fullpath, search_string, is_file, search_finished, search_tbr, search_mbr)
-    local FileChooser = require("ui/widget/filechooser")
-    local Utf8Proc = require("ffi/utf8proc")
-    local DocumentRegistry = require("document/documentregistry")
-    local lfs = require("libs/libkoreader-lfs")
-    if search_string == "*" then
-        return true
-    end
-
-    if string.find(filename, search_string) then
-        if search_finished then
-            local filemanagerutil = require("apps/filemanager/filemanagerutil")
-            if filemanagerutil.getStatus(fullpath) == "complete" then
-                return true
-            end
-        elseif search_tbr then
-            local filemanagerutil = require("apps/filemanager/filemanagerutil")
-            if filemanagerutil.getStatus(fullpath) == "tbr" then
-                return true
-            end
-        elseif search_mbr then
-            local in_history =  require("readhistory"):getIndexByFile(fullpath)
-            local DocSettings = require("docsettings")
-            local has_sidecar_file = DocSettings:hasSidecarFile(fullpath)
-            if in_history and not has_sidecar_file then
-                return true
-            end
-        else
-            return true
-        end
-    end
-
-
-
-
-    -- if self.include_metadata and is_file and DocumentRegistry:hasProvider(fullpath) then
-    --     local book_props = self.ui.coverbrowser:getBookInfo(fullpath) or
-    --                        self.ui.bookinfo.getDocProps(fullpath, nil, true) -- do not open the document
-    --     if next(book_props) ~= nil then
-    --         if self.ui.bookinfo:findInProps(book_props, search_string, self.case_sensitive) then
-    --             return true
-    --         end
-    --     else
-    --         self.no_metadata_count = self.no_metadata_count + 1
-    --     end
-    -- end
-end
-
 function util.getList(search_string, search_finished, search_tbr, search_mbr)
     local FileChooser = require("ui/widget/filechooser")
     local Utf8Proc = require("ffi/utf8proc")
@@ -1619,7 +1568,7 @@ function util.getList(search_string, search_finished, search_tbr, search_mbr)
         search_string = search_string:gsub("%?","%.")
     end
 
-    local dirs, files = {}, {}
+    local dirs, files, files_finished, files_tbr, files_mbr = {}, {}, {}, {}, {}
     local scan_dirs = {G_reader_settings:readSetting("home_dir")}
     while #scan_dirs ~= 0 do
         local new_dirs = {}
@@ -1641,8 +1590,22 @@ function util.getList(search_string, search_finished, search_tbr, search_mbr)
                     elseif attributes.mode == "file" and not util.stringStartsWith(f, "._")
                         and (FileChooser.show_unsupported or DocumentRegistry:hasProvider(fullpath))
                         and FileChooser:show_file(f) then
-                            if util.isFileMatch(f, fullpath, search_string, true, search_finished, search_tbr, search_mbr) then
+                            if string.find(f, search_string) then
                                 table.insert(files, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
+                                local filemanagerutil = require("apps/filemanager/filemanagerutil")
+                                if filemanagerutil.getStatus(fullpath) == "complete" then
+                                    table.insert(files_finished, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
+                                end
+                                local filemanagerutil = require("apps/filemanager/filemanagerutil")
+                                if filemanagerutil.getStatus(fullpath) == "tbr" then
+                                    table.insert(files_tbr, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
+                                end
+                                local in_history =  require("readhistory"):getIndexByFile(fullpath)
+                                local DocSettings = require("docsettings")
+                                local has_sidecar_file = DocSettings:hasSidecarFile(fullpath)
+                                if in_history and not has_sidecar_file then
+                                    table.insert(files_mbr, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
+                                end
                             end
                     end
                 end
@@ -1650,15 +1613,12 @@ function util.getList(search_string, search_finished, search_tbr, search_mbr)
         end
         scan_dirs = new_dirs
     end
-    return dirs, files
+    return dirs, files, files_finished, files_tbr, files_mbr
 end
 
 function util.generateStats()
     local dump = require("dump")
-    local _, files = util.getList("*.epub")
-    local _, files_finished = util.getList("*.epub", true)
-    local _, files_tbr = util.getList("*.epub", false, true)
-    local _, files_mbr = util.getList("*.epub", false, false, true)
+    local _, files, files_finished, files_tbr, files_mbr = util.getList("*.epub")
 
     local stats = {["total_books"] = #files,
                 ["total_books_finished"] = #files_finished,
