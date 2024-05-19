@@ -356,7 +356,7 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
         -- end
 
         local FileManager = require("apps/filemanager/filemanager")
-        FileManager.instance:onRefresh()
+        -- FileManager.instance:onRefresh()
     end
     return true
 end
