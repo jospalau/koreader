@@ -1,6 +1,7 @@
 --[[--
 Widget that shows a message and cancel/choice1/choice2 buttons
 
+
 Example:
 
     UIManager:show(MultiConfirmBox:new{
@@ -94,13 +95,6 @@ function MultiConfirmBox:init()
         buttons = {
             {
                 {
-                    text = self.cancel_text,
-                    callback = function()
-                        self.cancel_callback()
-                        UIManager:close(self)
-                    end,
-                },
-                {
                     text = self.choice1_text,
                     text_func = self.choice1_text_func,
                     enabled = self.choice1_enabled,
@@ -115,6 +109,13 @@ function MultiConfirmBox:init()
                     enabled = self.choice2_enabled,
                     callback = function()
                         self.choice2_callback()
+                        UIManager:close(self)
+                    end,
+                },
+                {
+                    text = self.cancel_text,
+                    callback = function()
+                        self.cancel_callback()
                         UIManager:close(self)
                     end,
                 },

@@ -347,6 +347,14 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
     --     FileManager:openFile(G_reader_settings:readSetting("home_dir") .. "/Shakespeare, William/Romeo and Juliet - William Shakespeare.epub")
     else
         self:onClose()
+        if self._manager.ui.history.send then
+            local FileManager = require("apps/filemanager/filemanager")
+            local dir = util.splitFilePathName(self._manager.ui.history.file)
+            FileManager:showFiles(dir, self._manager.ui.history.send)
+            self._manager.ui.history.send = nil
+            self._manager.ui.history.file = nil
+        end
+
     end
     return true
 end

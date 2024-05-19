@@ -919,8 +919,53 @@ function ReaderUI:dealWithLoadDocumentFailure()
 end
 
 function ReaderUI:onHome()
-    self:onClose()
-    self:showFileManager()
+    local MultiConfirmBox = require("ui/widget/multiconfirmbox")
+    local multi_box= MultiConfirmBox:new{
+        text = "Do you want to put the book to the MBR?",
+        choice1_text = _("Yes"),
+        choice1_callback = function()
+            UIManager:close(multi_box)
+
+            local file = self.document.file
+            self:onClose()
+
+            local in_history =  require("readhistory"):getIndexByFile(file)
+
+
+            if not in_history then
+                require("readhistory"):addItem(file, os.time())
+            end
+
+            local doc_settings = DocSettings:open(file)
+            doc_settings:purge()
+
+            UIManager:broadcastEvent(Event:new("InvalidateMetadataCache", file))
+            UIManager:broadcastEvent(Event:new("DocSettingsItemsChanged", file))
+            require("bookinfomanager"):deleteBookInfo(file)
+            local FileManager = require("apps/filemanager/filemanager")
+            -- self:showFileManager()
+            local dir = util.splitFilePathName(file)
+            FileManager:showFiles(dir, file)
+
+            -- If we go to the history straight away, the cover won't be refreshed in the fm after existing
+            -- When the history is closed in filemanagerhistory.lua, it will reopen the fm
+            FileManager.instance.history.send = true
+            FileManager.instance.history.file = file
+            FileManager.instance.history:onShowHist()
+
+            return true
+        end,
+        choice2_text = _("No"),
+        choice2_callback = function()
+            self:onClose()
+            self:showFileManager()
+            return true
+        end,
+        cancel_callback = function()
+            return true
+        end,
+    }
+    UIManager:show(multi_box)
     return true
 end
 
