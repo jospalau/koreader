@@ -943,7 +943,7 @@ function ReaderUI:onHome()
             -- UIManager:broadcastEvent(Event:new("InvalidateMetadataCache", file))
             -- UIManager:broadcastEvent(Event:new("DocSettingsItemsChanged", file))
             -- require("bookinfomanager"):deleteBookInfo(file)
-            local FileManager = require("apps/filemanager/filemanager")
+            -- local FileManager = require("apps/filemanager/filemanager")
             self:showFileManager()
             -- local dir = util.splitFilePathName(file)
             -- FileManager:showFiles(dir, file)
@@ -952,7 +952,8 @@ function ReaderUI:onHome()
             -- When the history is closed in filemanagerhistory.lua, it will reopen the fm
             -- FileManager.instance.history.send = true
             -- FileManager.instance.history.file = file
-            FileManager.instance.history:onShowHist()
+            -- FileManager.instance.history:onShowHist()
+            self.history:onShowHist()
 
             return true
         end,
