@@ -342,6 +342,9 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
         -- We pass this anonymous function as a callback so the history can be refreshed in case any status has been updated
         -- We don't need to pass a history variable since we refresh in the event handler the history if it is opened
         UIManager:broadcastEvent(Event:new("ShowFileSearchLists", true, nil, "*.epub"))
+    -- elseif string.find("east south", ges_ev.multiswipe_directions) then --
+    --     local FileManager = require("apps/filemanager/filemanager")
+    --     FileManager:openFile(G_reader_settings:readSetting("home_dir") .. "/Shakespeare, William/Romeo and Juliet - William Shakespeare.epub")
     else
         self:onClose()
     end
