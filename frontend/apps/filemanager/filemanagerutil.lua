@@ -295,6 +295,10 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
                         require("readhistory"):fileSettingsPurged(file)
                     end
                     caller_callback()
+                    if check_button_mbr.checked then
+                        local util = require("util")
+                        util.generateStats()
+                    end
                 end,
             }
             check_button_mbr = CheckButton:new{

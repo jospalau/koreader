@@ -1548,7 +1548,7 @@ end
 
 
 
-function util.isFileMatch(filename, fullpath, search_string, is_file, search_finished, search_tbr)
+function util.isFileMatch(filename, fullpath, search_string, is_file, search_finished, search_tbr, search_mbr)
     local FileChooser = require("ui/widget/filechooser")
     local Utf8Proc = require("ffi/utf8proc")
     local DocumentRegistry = require("document/documentregistry")
@@ -1566,6 +1566,13 @@ function util.isFileMatch(filename, fullpath, search_string, is_file, search_fin
         elseif search_tbr then
             local filemanagerutil = require("apps/filemanager/filemanagerutil")
             if filemanagerutil.getStatus(fullpath) == "tbr" then
+                return true
+            end
+        elseif search_mbr then
+            local in_history =  require("readhistory"):getIndexByFile(fullpath)
+            local DocSettings = require("docsettings")
+            local has_sidecar_file = DocSettings:hasSidecarFile(fullpath)
+            if in_history and not has_sidecar_file then
                 return true
             end
         else
@@ -1589,7 +1596,7 @@ function util.isFileMatch(filename, fullpath, search_string, is_file, search_fin
     -- end
 end
 
-function util.getList(search_string, search_finished, search_tbr)
+function util.getList(search_string, search_finished, search_tbr, search_mbr)
     local FileChooser = require("ui/widget/filechooser")
     local Utf8Proc = require("ffi/utf8proc")
     local DocumentRegistry = require("document/documentregistry")
@@ -1634,7 +1641,7 @@ function util.getList(search_string, search_finished, search_tbr)
                     elseif attributes.mode == "file" and not util.stringStartsWith(f, "._")
                         and (FileChooser.show_unsupported or DocumentRegistry:hasProvider(fullpath))
                         and FileChooser:show_file(f) then
-                            if util.isFileMatch(f, fullpath, search_string, true, search_finished, search_tbr) then
+                            if util.isFileMatch(f, fullpath, search_string, true, search_finished, search_tbr, search_mbr) then
                                 table.insert(files, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
                             end
                     end
@@ -1651,10 +1658,12 @@ function util.generateStats()
     local _, files = util.getList("*.epub")
     local _, files_finished = util.getList("*.epub", true)
     local _, files_tbr = util.getList("*.epub", false, true)
+    local _, files_mbr = util.getList("*.epub", false, false, true)
 
     local stats = {["total_books"] = #files,
                 ["total_books_finished"] = #files_finished,
-                ["total_books_tbr"] = #files_tbr}
+                ["total_books_tbr"] = #files_tbr,
+                ["total_books_mbr"] = #files_mbr}
 
     util.writeToFile(dump(stats), G_reader_settings:readSetting("home_dir") .. "/stats.lua", true, true)
 end
