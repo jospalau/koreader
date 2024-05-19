@@ -950,8 +950,8 @@ function ReaderUI:onHome()
 
             -- If we go to the history straight away, the cover won't be refreshed in the fm after existing
             -- When the history is closed in filemanagerhistory.lua, it will reopen the fm
-            FileManager.instance.history.send = true
-            FileManager.instance.history.file = file
+            -- FileManager.instance.history.send = true
+            -- FileManager.instance.history.file = file
             FileManager.instance.history:onShowHist()
 
             return true
