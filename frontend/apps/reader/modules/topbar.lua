@@ -879,7 +879,12 @@ function TopBar:paintTo(bb, x, y)
         -- local FileManagerFileSearcher = require("apps/filemanager/filemanagerfilesearcher")
         -- local _, files = self:getList("*.epub")
         -- books_information[1][1]:setText("TF: " .. tostring(#files))
-        -- books_information:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM )
+
+
+        local execute = nil
+        execute = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub' | wc -l" )
+        books_information[1][1]:setText("TF: " .. execute:read('*a'))
+        books_information:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM )
 
     end
 end
