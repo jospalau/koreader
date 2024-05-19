@@ -132,6 +132,14 @@ function FileManagerMenu:onOpenLastDoc()
         return
     end
 
+    if filemanagerutil.getStatus(last_file) ~= "reading" then
+        local InfoMessage = require("ui/widget/infomessage")
+        UIManager:show(InfoMessage:new{
+            text = _("This book is not currently being read"),
+        })
+        return
+    end
+
     -- Only close menu if we were called from the menu
     if self.menu_container then
         -- Mimic's FileManager's onShowingReader refresh optimizations
