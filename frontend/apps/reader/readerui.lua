@@ -941,12 +941,12 @@ function ReaderUI:onHome()
             doc_settings:purge()
 
             -- UIManager:broadcastEvent(Event:new("InvalidateMetadataCache", file))
-            UIManager:broadcastEvent(Event:new("DocSettingsItemsChanged", file))
+            -- UIManager:broadcastEvent(Event:new("DocSettingsItemsChanged", file))
             -- require("bookinfomanager"):deleteBookInfo(file)
             local FileManager = require("apps/filemanager/filemanager")
-            -- self:showFileManager()
-            local dir = util.splitFilePathName(file)
-            FileManager:showFiles(dir, file)
+            self:showFileManager()
+            -- local dir = util.splitFilePathName(file)
+            -- FileManager:showFiles(dir, file)
 
             -- If we go to the history straight away, the cover won't be refreshed in the fm after existing
             -- When the history is closed in filemanagerhistory.lua, it will reopen the fm
