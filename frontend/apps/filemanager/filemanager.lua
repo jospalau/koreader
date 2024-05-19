@@ -1446,6 +1446,8 @@ function FileManager:onPullConfig()
             face = Font:getFace("myfont"),
         })
     end
+    local util = require("util")
+    util.generateStats()
 end
 
 function FileManager:onGetLastPushingConfig()
@@ -1668,6 +1670,8 @@ function FileManager:onSyncBooks()
         })
         Device:setIgnoreInput(false)
     end
+    local util = require("util")
+    util.generateStats()
 end
 
 function FileManager:onTurnOnWifiKindle()

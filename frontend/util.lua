@@ -1641,4 +1641,14 @@ function util.getList(search_string, search_finished)
     return dirs, files
 end
 
+function util.generateStats()
+    local dump = require("dump")
+    local _, files = util.getList("*.epub")
+    local _, files_finished = util.getList("*.epub", true)
+
+    local stats = {["total_books"] = #files,
+                ["total_books_finished"] = #files_finished}
+
+    util.writeToFile(dump(stats), G_reader_settings:readSetting("home_dir") .. "/stats.lua", true, true)
+end
 return util
