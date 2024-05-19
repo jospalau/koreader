@@ -856,7 +856,11 @@ function TopBar:paintTo(bb, x, y)
 
 
         local time = datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
-        local last_file = G_reader_settings:readSetting("lastfile") and G_reader_settings:readSetting("lastfile") or ""
+
+        local last_file = "None"
+        if G_reader_settings:readSetting("lastfile") ~= nil then
+            last_file = G_reader_settings:readSetting("lastfile")
+        end
 
         local time_battery_text_text = time .. "|" .. batt_lvl .. "%|" ..  last_file
 
