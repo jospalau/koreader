@@ -880,104 +880,17 @@ function TopBar:paintTo(bb, x, y)
         -- local _, files = self:getList("*.epub")
         -- books_information[1][1]:setText("TF: " .. tostring(#files))
 
-        local execute = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub' | wc -l" )
+        local ok, stats = pcall(dofile, G_reader_settings:readSetting("home_dir") .. "/stats.lua")
+
+        -- local execute = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub' | wc -l" )
         -- local execute2 = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub.lua' -exec ls {} + | wc -l")
         -- books_information[1][1]:setText("TB: " .. execute:read('*a') .. "TBC: " .. execute2:read('*a'))
-        books_information[1][1]:setText("TB: " .. execute:read('*a'))
+        books_information[1][1]:setText("TB: " .. stats["total_books"] .. ", TBF: " .. stats["total_books_finished"])
         books_information:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM )
 
 
 
     end
-end
-
-
-function TopBar:isFileMatch(filename, fullpath, search_string, is_file)
-    local FileChooser = require("ui/widget/filechooser")
-    local Utf8Proc = require("ffi/utf8proc")
-    local util = require("util")
-    local DocumentRegistry = require("document/documentregistry")
-    local lfs = require("libs/libkoreader-lfs")
-    if search_string == "*" then
-        return true
-    end
-    if not self.case_sensitive then
-        filename = Utf8Proc.lowercase(util.fixUtf8(filename, "?"))
-    end
-    if string.find(filename, search_string) then
-        return true
-    end
-    if self.include_metadata and is_file and DocumentRegistry:hasProvider(fullpath) then
-        local book_props = self.ui.coverbrowser:getBookInfo(fullpath) or
-                           self.ui.bookinfo.getDocProps(fullpath, nil, true) -- do not open the document
-        if next(book_props) ~= nil then
-            if self.ui.bookinfo:findInProps(book_props, search_string, self.case_sensitive) then
-                return true
-            end
-        else
-            self.no_metadata_count = self.no_metadata_count + 1
-        end
-    end
-end
-
-function TopBar:getList(search_string)
-    local FileChooser = require("ui/widget/filechooser")
-    local Utf8Proc = require("ffi/utf8proc")
-    local util = require("util")
-    local DocumentRegistry = require("document/documentregistry")
-    local lfs = require("libs/libkoreader-lfs")
-    self.no_metadata_count = 0
-    local sys_folders = { -- do not search in sys_folders
-        ["/dev"] = true,
-        ["/proc"] = true,
-        ["/sys"] = true,
-    }
-    local collate = FileChooser:getCollate()
-
-    if search_string ~= "*" then -- one * to show all files
-        if not self.case_sensitive then
-            search_string = Utf8Proc.lowercase(util.fixUtf8(search_string, "?"))
-        end
-        -- replace '.' with '%.'
-        search_string = search_string:gsub("%.","%%%.")
-        -- replace '*' with '.*'
-        search_string = search_string:gsub("%*","%.%*")
-        -- replace '?' with '.'
-        search_string = search_string:gsub("%?","%.")
-    end
-
-    local dirs, files = {}, {}
-    local scan_dirs = {G_reader_settings:readSetting("home_dir")}
-    while #scan_dirs ~= 0 do
-        local new_dirs = {}
-        -- handle each dir
-        for _, d in ipairs(scan_dirs) do
-            -- handle files in d
-            local ok, iter, dir_obj = pcall(lfs.dir, d)
-            if ok then
-                for f in iter, dir_obj do
-                    local fullpath = "/" .. f
-                    if d ~= "/" then
-                        fullpath = d .. fullpath
-                    end
-                    local attributes = lfs.attributes(fullpath) or {}
-                    if attributes.mode == "directory"  and f ~= "." and f ~= ".."
-                        and (FileChooser.show_hidden or not util.stringStartsWith(f, "."))
-                        and FileChooser:show_dir(f) then
-                            table.insert(new_dirs, fullpath)
-                    elseif attributes.mode == "file" and not util.stringStartsWith(f, "._")
-                        and (FileChooser.show_unsupported or DocumentRegistry:hasProvider(fullpath))
-                        and FileChooser:show_file(f) then
-                            if self:isFileMatch(f, fullpath, search_string, true) then
-                                table.insert(files, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
-                            end
-                    end
-                end
-            end
-        end
-        scan_dirs = new_dirs
-    end
-    return dirs, files
 end
 
 return TopBar

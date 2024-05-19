@@ -234,6 +234,17 @@ local function retryLastFile()
     }
 end
 
+
+local util = require("util")
+local dump = require("dump")
+local _, files = util.getList("*.epub")
+local _, files_finished = util.getList("*.epub", true)
+
+local stats = {["total_books"] = #files,
+               ["total_books_finished"] = #files_finished}
+
+util.writeToFile(dump(stats), G_reader_settings:readSetting("home_dir") .. "/stats.lua", true, true)
+
 -- Start app
 local exit_code
 if file then

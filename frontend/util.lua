@@ -1545,4 +1545,100 @@ function util.round_decimal(num, points)
     return math.floor(num * op) / op
 end
 
+
+
+
+function util.isFileMatch(filename, fullpath, search_string, is_file, search_finished)
+    local FileChooser = require("ui/widget/filechooser")
+    local Utf8Proc = require("ffi/utf8proc")
+    local DocumentRegistry = require("document/documentregistry")
+    local lfs = require("libs/libkoreader-lfs")
+    if search_string == "*" then
+        return true
+    end
+
+    if string.find(filename, search_string) then
+        if search_finished then
+            local filemanagerutil = require("apps/filemanager/filemanagerutil")
+            if filemanagerutil.getStatus(fullpath) == "complete" then
+                return true
+            end
+        else
+            return true
+        end
+    end
+
+
+
+
+    -- if self.include_metadata and is_file and DocumentRegistry:hasProvider(fullpath) then
+    --     local book_props = self.ui.coverbrowser:getBookInfo(fullpath) or
+    --                        self.ui.bookinfo.getDocProps(fullpath, nil, true) -- do not open the document
+    --     if next(book_props) ~= nil then
+    --         if self.ui.bookinfo:findInProps(book_props, search_string, self.case_sensitive) then
+    --             return true
+    --         end
+    --     else
+    --         self.no_metadata_count = self.no_metadata_count + 1
+    --     end
+    -- end
+end
+
+function util.getList(search_string, search_finished)
+    local FileChooser = require("ui/widget/filechooser")
+    local Utf8Proc = require("ffi/utf8proc")
+    local DocumentRegistry = require("document/documentregistry")
+    local lfs = require("libs/libkoreader-lfs")
+    local no_metadata_count = 0
+    local sys_folders = { -- do not search in sys_folders
+        ["/dev"] = true,
+        ["/proc"] = true,
+        ["/sys"] = true,
+    }
+    local collate = FileChooser:getCollate()
+
+    if search_string ~= "*" then -- one * to show all files
+
+        -- replace '.' with '%.'
+        search_string = search_string:gsub("%.","%%%.")
+        -- replace '*' with '.*'
+        search_string = search_string:gsub("%*","%.%*")
+        -- replace '?' with '.'
+        search_string = search_string:gsub("%?","%.")
+    end
+
+    local dirs, files = {}, {}
+    local scan_dirs = {G_reader_settings:readSetting("home_dir")}
+    while #scan_dirs ~= 0 do
+        local new_dirs = {}
+        -- handle each dir
+        for _, d in ipairs(scan_dirs) do
+            -- handle files in d
+            local ok, iter, dir_obj = pcall(lfs.dir, d)
+            if ok then
+                for f in iter, dir_obj do
+                    local fullpath = "/" .. f
+                    if d ~= "/" then
+                        fullpath = d .. fullpath
+                    end
+                    local attributes = lfs.attributes(fullpath) or {}
+                    if attributes.mode == "directory"  and f ~= "." and f ~= ".."
+                        and (FileChooser.show_hidden or not util.stringStartsWith(f, "."))
+                        and FileChooser:show_dir(f) then
+                            table.insert(new_dirs, fullpath)
+                    elseif attributes.mode == "file" and not util.stringStartsWith(f, "._")
+                        and (FileChooser.show_unsupported or DocumentRegistry:hasProvider(fullpath))
+                        and FileChooser:show_file(f) then
+                            if util.isFileMatch(f, fullpath, search_string, true, search_finished) then
+                                table.insert(files, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
+                            end
+                    end
+                end
+            end
+        end
+        scan_dirs = new_dirs
+    end
+    return dirs, files
+end
+
 return util
