@@ -854,8 +854,11 @@ function TopBar:paintTo(bb, x, y)
         local batt_lvl = tostring(powerd:getCapacity())
 
 
+
         local time = datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
-        local time_battery_text_text = time .. "|" .. batt_lvl .. "%|" ..  G_reader_settings:readSetting("lastfile")
+        local last_file = G_reader_settings:readSetting("lastfile") and G_reader_settings:readSetting("lastfile") or ""
+
+        local time_battery_text_text = time .. "|" .. batt_lvl .. "%|" ..  last_file
 
         times_text:setText(time_battery_text_text:reverse())
         times_text:paintTo(bb, x - times_text:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y)
@@ -885,7 +888,7 @@ function TopBar:paintTo(bb, x, y)
         -- local execute = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub' | wc -l" )
         -- local execute2 = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub.lua' -exec ls {} + | wc -l")
         -- books_information[1][1]:setText("TB: " .. execute:read('*a') .. "TBC: " .. execute2:read('*a'))
-        books_information[1][1]:setText("TB: " .. stats["total_books"] .. ", TBF: " .. stats["total_books_finished"])
+        books_information[1][1]:setText("B: " .. stats["total_books"] .. ", BF: " .. stats["total_books_finished"] .. ", BTBR: " .. stats["total_books_tbr"])
         books_information:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM )
 
 

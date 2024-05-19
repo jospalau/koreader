@@ -189,8 +189,6 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
             callback = function()
                 if to_status == "complete" then
                     require("readhistory"):removeItemByPath(file)
-                    local util = require("util")
-                    util.generateStats()
                 end
                 local has_sidecar_file = DocSettings:hasSidecarFile(file)
                 if to_status == "tbr" then
@@ -222,6 +220,10 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                 filemanagerutil.setStatus(doc_settings_or_file, to_status)
                 UIManager:broadcastEvent(Event:new("DocSettingsItemsChanged", file, { summary = summary })) -- for CoverBrowser
                 caller_callback()
+                if to_status == "complete" or to_status == "tbr" then
+                    local util = require("util")
+                    util.generateStats()
+                end
             end,
         }
     end

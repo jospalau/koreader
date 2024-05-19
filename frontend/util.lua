@@ -1548,7 +1548,7 @@ end
 
 
 
-function util.isFileMatch(filename, fullpath, search_string, is_file, search_finished)
+function util.isFileMatch(filename, fullpath, search_string, is_file, search_finished, search_tbr)
     local FileChooser = require("ui/widget/filechooser")
     local Utf8Proc = require("ffi/utf8proc")
     local DocumentRegistry = require("document/documentregistry")
@@ -1561,6 +1561,11 @@ function util.isFileMatch(filename, fullpath, search_string, is_file, search_fin
         if search_finished then
             local filemanagerutil = require("apps/filemanager/filemanagerutil")
             if filemanagerutil.getStatus(fullpath) == "complete" then
+                return true
+            end
+        elseif search_tbr then
+            local filemanagerutil = require("apps/filemanager/filemanagerutil")
+            if filemanagerutil.getStatus(fullpath) == "tbr" then
                 return true
             end
         else
@@ -1584,7 +1589,7 @@ function util.isFileMatch(filename, fullpath, search_string, is_file, search_fin
     -- end
 end
 
-function util.getList(search_string, search_finished)
+function util.getList(search_string, search_finished, search_tbr)
     local FileChooser = require("ui/widget/filechooser")
     local Utf8Proc = require("ffi/utf8proc")
     local DocumentRegistry = require("document/documentregistry")
@@ -1629,7 +1634,7 @@ function util.getList(search_string, search_finished)
                     elseif attributes.mode == "file" and not util.stringStartsWith(f, "._")
                         and (FileChooser.show_unsupported or DocumentRegistry:hasProvider(fullpath))
                         and FileChooser:show_file(f) then
-                            if util.isFileMatch(f, fullpath, search_string, true, search_finished) then
+                            if util.isFileMatch(f, fullpath, search_string, true, search_finished, search_tbr) then
                                 table.insert(files, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
                             end
                     end
@@ -1645,9 +1650,11 @@ function util.generateStats()
     local dump = require("dump")
     local _, files = util.getList("*.epub")
     local _, files_finished = util.getList("*.epub", true)
+    local _, files_tbr = util.getList("*.epub", false, true)
 
     local stats = {["total_books"] = #files,
-                ["total_books_finished"] = #files_finished}
+                ["total_books_finished"] = #files_finished,
+                ["total_books_tbr"] = #files_tbr}
 
     util.writeToFile(dump(stats), G_reader_settings:readSetting("home_dir") .. "/stats.lua", true, true)
 end
