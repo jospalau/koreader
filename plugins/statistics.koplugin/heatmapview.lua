@@ -32,7 +32,7 @@ local T = require("ffi/util").template
 
 
 
-local CalendarWeek = InputContainer:extend{
+local CalendarWeek = FocusManager:extend{
     width = nil,
     height = nil,
     day_width = 0,
@@ -48,18 +48,7 @@ local CalendarWeek = InputContainer:extend{
 function CalendarWeek:init()
     self.calday_widgets = {}
     self.days_books = {}
-    self.ges_events.Tap = {
-        GestureRange:new{
-            ges = "tap",
-            range = self.dimen,
-        }
-    }
-    self.ges_events.Hold = {
-        GestureRange:new{
-            ges = "hold",
-            range = self.dimen,
-        }
-    }
+    self.focusable = true
 end
 
 function CalendarWeek:addDay(calday_widget)
@@ -164,18 +153,16 @@ function CalendarDay:init()
     }
 end
 
--- function CalendarDay:onTap()
---     if self.callback then
---         self.callback()
---     end
---     return true
--- end
+function CalendarDay:onTap()
+    if self.callback then
+        self.callback()
+    end
+    return true
+end
 
--- function CalendarDay:onHold()
---     return self:onTap()
--- end
-
-
+function CalendarDay:onHold()
+    return self:onTap()
+end
 
 
 
@@ -217,7 +204,7 @@ end
 -- Fetched from db, cached as local as it might be expensive
 local MIN_MONTH = nil
 
-local HeatmapView = InputContainer:extend{
+local HeatmapView = FocusManager:extend{
     reader_statistics = nil,
     start_day_of_week = 2, -- 2 = Monday, 1-7 = Sunday-Saturday
     show_hourly_histogram = true,
@@ -415,19 +402,6 @@ function HeatmapView:init()
             }
         }
     end
-
-    self.ges_events.Tap = {
-        GestureRange:new{
-            ges = "tap",
-            range = self.dimen,
-        }
-    }
-    self.ges_events.Hold = {
-        GestureRange:new{
-            ges = "hold",
-            range = self.dimen,
-        }
-    }
     self.outer_padding = Size.padding.large
     self.inner_padding = Size.padding.small
 
@@ -709,7 +683,8 @@ function HeatmapView:_populateItems(main_content, year)
                     font_face = self.font_face,
                     font_size = self.span_font_size,
                     border = self.day_border,
-                    daynum = cur_date.day,
+                    daynum = rday,
+                    monthnum = rmonth,
                     paint_down = paint_down,
                     paint_left = paint_left,
                     height = self.size_tile,
@@ -755,7 +730,8 @@ function HeatmapView:_populateItems(main_content, year)
                 paint_left = ((rday == 1 or rday == 2 or rday == 3 or rday == 4 or rday == 5 or rday == 6 or rday == 7) and true or false),
                 day = i,
                 is_today = is_today,
-                daynum = cur_date.day,
+                daynum = rday,
+                monthnum = rmonth,
                 height = self.size_tile,
                 width = self.size_tile,
                 show_parent = self,
@@ -774,7 +750,8 @@ function HeatmapView:_populateItems(main_content, year)
                 font_face = self.font_face,
                 font_size = self.span_font_size,
                 border = self.day_border,
-                daynum = cur_date.day,
+                daynum = rday,
+                monthnum = rmonth,
                 height = self.size_tile,
                 width = self.size_tile,
                 show_parent = self,
@@ -787,7 +764,7 @@ function HeatmapView:_populateItems(main_content, year)
     for _, week in ipairs(self.weeks) do
         week:update()
     end
-    -- self:moveFocusTo(1, 1, FocusManager.NOT_UNFOCUS)
+    self:moveFocusTo(1, 1, FocusManager.NOT_UNFOCUS)
     UIManager:setDirty(self, function()
         return "ui", self.dimen
     end)
@@ -811,16 +788,16 @@ function HeatmapView:onMultiSwipe(arg, ges_ev)
 end
 
 
-function HeatmapView:onTap()
-    if self.callback then
-        self.callback()
-    end
-    return true
-end
+-- function HeatmapView:onTap()
+--     if self.callback then
+--         self.callback()
+--     end
+--     return true
+-- end
 
-function HeatmapView:onHold()
-    return self:onTap()
-end
+-- function HeatmapView:onHold()
+--     return self:onTap()
+-- end
 
 function HeatmapView:onClose()
     UIManager:close(self)
