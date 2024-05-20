@@ -32,6 +32,60 @@ local T = require("ffi/util").template
 
 
 
+local CalendarWeek = InputContainer:extend{
+    width = nil,
+    height = nil,
+    day_width = 0,
+    day_padding = 0,
+    day_border = 0,
+    nb_book_spans = 0,
+    histo_shown = nil,
+    span_height = nil,
+    font_size = 0,
+    font_face = "xx_smallinfofont",
+}
+
+function CalendarWeek:init()
+    self.calday_widgets = {}
+    self.days_books = {}
+    self.ges_events.Tap = {
+        GestureRange:new{
+            ges = "tap",
+            range = self.dimen,
+        }
+    }
+    self.ges_events.Hold = {
+        GestureRange:new{
+            ges = "hold",
+            range = self.dimen,
+        }
+    }
+end
+
+function CalendarWeek:addDay(calday_widget)
+    -- Add day widget to this week widget, and update the
+    -- list of books read this week for later showing book
+    -- spans, that may span multiple days.
+    table.insert(self.calday_widgets, calday_widget)
+
+    local prev_day_num = #self.days_books
+    local prev_day_books = prev_day_num > 0 and self.days_books[#self.days_books]
+    local this_day_num = prev_day_num + 1
+    local this_day_books = {}
+    table.insert(self.days_books, this_day_books)
+end
+
+
+-- function CalendarWeek:onTap()
+--     if self.callback then
+--         self.callback()
+--     end
+--     return true
+-- end
+
+-- function CalendarWeek:onHold()
+--     return self:onTap()
+-- end
 
 local CalendarDay = InputContainer:extend{
     daynum = nil,
@@ -110,48 +164,20 @@ function CalendarDay:init()
     }
 end
 
-function CalendarDay:onTap()
-    if self.callback then
-        self.callback()
-    end
-    return true
-end
+-- function CalendarDay:onTap()
+--     if self.callback then
+--         self.callback()
+--     end
+--     return true
+-- end
 
-function CalendarDay:onHold()
-    return self:onTap()
-end
+-- function CalendarDay:onHold()
+--     return self:onTap()
+-- end
 
 
-local CalendarWeek = InputContainer:extend{
-    width = nil,
-    height = nil,
-    day_width = 0,
-    day_padding = 0,
-    day_border = 0,
-    nb_book_spans = 0,
-    histo_shown = nil,
-    span_height = nil,
-    font_size = 0,
-    font_face = "xx_smallinfofont",
-}
 
-function CalendarWeek:init()
-    self.calday_widgets = {}
-    self.days_books = {}
-end
 
-function CalendarWeek:addDay(calday_widget)
-    -- Add day widget to this week widget, and update the
-    -- list of books read this week for later showing book
-    -- spans, that may span multiple days.
-    table.insert(self.calday_widgets, calday_widget)
-
-    local prev_day_num = #self.days_books
-    local prev_day_books = prev_day_num > 0 and self.days_books[#self.days_books]
-    local this_day_num = prev_day_num + 1
-    local this_day_books = {}
-    table.insert(self.days_books, this_day_books)
-end
 
 -- Set of { Font color, background color }
 local SPAN_COLORS = {
@@ -191,7 +217,7 @@ end
 -- Fetched from db, cached as local as it might be expensive
 local MIN_MONTH = nil
 
-local HeatmapView = FocusManager:extend{
+local HeatmapView = InputContainer:extend{
     reader_statistics = nil,
     start_day_of_week = 2, -- 2 = Monday, 1-7 = Sunday-Saturday
     show_hourly_histogram = true,
@@ -390,6 +416,18 @@ function HeatmapView:init()
         }
     end
 
+    self.ges_events.Tap = {
+        GestureRange:new{
+            ges = "tap",
+            range = self.dimen,
+        }
+    }
+    self.ges_events.Hold = {
+        GestureRange:new{
+            ges = "hold",
+            range = self.dimen,
+        }
+    }
     self.outer_padding = Size.padding.large
     self.inner_padding = Size.padding.small
 
@@ -410,7 +448,7 @@ function HeatmapView:init()
         -- close_callback = function() self:onClose() end,
         -- show_parent = self,
     }
-    self.size_tile = Screen:scaleBySize(10)
+    self.size_tile = Screen:getWidth()/(12 * 5)
     -- week days names header
     self.day_names = VerticalGroup:new{}
     table.insert(self.day_names, HorizontalSpan:new{ width = self.outer_padding })
@@ -749,7 +787,7 @@ function HeatmapView:_populateItems(main_content, year)
     for _, week in ipairs(self.weeks) do
         week:update()
     end
-    self:moveFocusTo(1, 1, FocusManager.NOT_UNFOCUS)
+    -- self:moveFocusTo(1, 1, FocusManager.NOT_UNFOCUS)
     UIManager:setDirty(self, function()
         return "ui", self.dimen
     end)
@@ -770,6 +808,18 @@ function HeatmapView:onMultiSwipe(arg, ges_ev)
     -- multiswipe to close this widget too.
     self:onClose()
     return true
+end
+
+
+function HeatmapView:onTap()
+    if self.callback then
+        self.callback()
+    end
+    return true
+end
+
+function HeatmapView:onHold()
+    return self:onTap()
 end
 
 function HeatmapView:onClose()
