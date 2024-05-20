@@ -21,6 +21,7 @@ local InfoMessage = require("ui/widget/infomessage")
 local InputContainer = require("ui/widget/container/inputcontainer")
 local InputDialog = require("ui/widget/inputdialog")
 local LanguageSupport = require("languagesupport")
+local NetworkListener = require("ui/network/networklistener")
 local Notification = require("ui/widget/notification")
 local PluginLoader = require("pluginloader")
 local ReaderActivityIndicator = require("apps/reader/modules/readeractivityindicator")
@@ -435,6 +436,12 @@ function ReaderUI:init()
         view = self.view,
         ui = self,
     })
+    self:registerModule("networklistener", NetworkListener:new {
+        document = self.document,
+        view = self.view,
+        ui = self,
+    })
+
     -- koreader plugins
     for _, plugin_module in ipairs(PluginLoader:loadPlugins()) do
         if plugin_module.name == "statistics" and util.getFileNameSuffix(self.document.file) == "pdf" then goto continue end
@@ -452,16 +459,6 @@ function ReaderUI:init()
                         "at", plugin_module.path)
         end
         ::continue::
-    end
-
-
-    if Device:hasWifiToggle() then
-        local NetworkListener = require("ui/network/networklistener")
-        self:registerModule("networklistener", NetworkListener:new {
-            document = self.document,
-            view = self.view,
-            ui = self,
-        })
     end
 
     -- Allow others to change settings based on external factors
