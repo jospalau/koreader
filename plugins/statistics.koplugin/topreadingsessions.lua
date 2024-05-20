@@ -193,11 +193,23 @@ function TopReadingSessions:getReadingPast()
     FROM   (
                 SELECT sum(duration)    AS sum_duration
                 FROM   wpm_stat_data
-            WHERE DATE(start_time,'unixepoch','localtime') > DATE(DATE('now', '-180 day','localtime'),'localtime')
+            WHERE DATE(start_time,'unixepoch','localtime') > DATE(DATE('now', '-6 month','localtime'),'localtime')
             GROUP BY DATE(start_time,'unixepoch','localtime'));"
             );
     ]]
-    local avg_last_hundred_and_eighty_days = conn:rowexec(sql_stmt)
+    local avg_last_six_months = conn:rowexec(sql_stmt)
+
+
+    sql_stmt = [[SELECT SUM(sum_duration)
+    FROM   (
+                SELECT sum(duration)    AS sum_duration
+                FROM   wpm_stat_data
+            WHERE DATE(start_time,'unixepoch','localtime') > DATE(DATE('now', '-1 year','localtime'),'localtime')
+            GROUP BY DATE(start_time,'unixepoch','localtime'));"
+            );
+    ]]
+    local avg_last_year = conn:rowexec(sql_stmt)
+
 
     conn:close()
     if sessions == nil then
@@ -226,21 +238,27 @@ function TopReadingSessions:getReadingPast()
         avg_last_ninety_days = 0
     end
 
-    if avg_last_hundred_and_eighty_days == nil then
-        avg_last_hundred_and_eighty_days = 0
+    if avg_last_six_months == nil then
+        avg_last_six_months = 0
+    end
+
+    if avg_last_year == nil then
+        avg_last_year = 0
     end
 
     avg_last_seven_days = math.floor(tonumber(avg_last_seven_days)/7/60/60 * 100)/100
     avg_last_thirty_days = math.floor(tonumber(avg_last_thirty_days)/30/60/60 * 100)/100
     avg_last_sixty_days = math.floor(tonumber(avg_last_sixty_days)/60/60/60 * 100)/100
     avg_last_ninety_days = math.floor(tonumber(avg_last_ninety_days)/90/60/60 * 100)/100
-    avg_last_hundred_and_eighty_days = math.floor(tonumber(avg_last_hundred_and_eighty_days)/180/60/60 * 100)/100
+    avg_last_six_months = math.floor(tonumber(avg_last_six_months)/180/60/60 * 100)/100
+    avg_last_year = math.floor(tonumber(avg_last_year)/365/60/60 * 100)/100
 
     table.insert(self.sessions,{7, avg_last_seven_days})
     table.insert(self.sessions,{30, avg_last_thirty_days})
     table.insert(self.sessions,{60, avg_last_sixty_days})
     table.insert(self.sessions,{90, avg_last_ninety_days})
-    table.insert(self.sessions,{180, avg_last_hundred_and_eighty_days})
+    table.insert(self.sessions,{180, avg_last_six_months})
+    table.insert(self.sessions,{365, avg_last_year})
     return
 
 end
@@ -337,6 +355,7 @@ function TopReadingSessions:getStatusContent(width)
         -- title_bar,
         -- self:genSingleHeader(_("Top session books")),
         -- self:genSingleHeader(_(tostring(number_sessions) .. " Sessions")),
+        -- self.past_reading and self:genSingleHeader(_("Stats over the last year")),
         self.past_reading and self:genLastReading() or self:genTopSessions(number_sessions) ,
     }
 end
@@ -531,7 +550,7 @@ function TopReadingSessions:genLastReading()
     end  --for i=1
     table.insert(statistics_container, statistics_group)
     return CenterContainer:new{
-        dimen = Geom:new{ w = self.screen_width, h = self.screen_height  },
+        dimen = Geom:new{ w = self.screen_width, h = self.height_session * 6  },
         statistics_container,
     }
 end
