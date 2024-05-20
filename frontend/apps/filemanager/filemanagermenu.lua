@@ -137,6 +137,8 @@ function FileManagerMenu:onOpenLastDoc()
         UIManager:show(InfoMessage:new{
             text = _("This book is not currently being read"),
         })
+        local FileManager = require("apps/filemanager/filemanager")
+        FileManager.instance.history:onShowHist()
         return
     end
 
