@@ -1422,6 +1422,12 @@ function CalendarView:_populateItems()
             hour = 0,
         })
         local is_future = day_s > today_s
+        local total_read_day = 0
+        if ratio_per_hour_by_day[day_s] ~= nil then
+            for i ,v in pairs(ratio_per_hour_by_day[day_s]) do
+                total_read_day = total_read_day + v
+            end
+        end
         local calendar_day = CalendarDay:new{
             show_histo = self.show_hourly_histogram,
             histo_height = self.span_height,
@@ -1429,7 +1435,7 @@ function CalendarView:_populateItems()
             font_size = self.span_font_size,
             border = self.day_border,
             is_future = is_future,
-            daynum = cur_date.day,
+            daynum = cur_date.day .. (total_read_day > 0 and " (" .. tostring(Math.round(total_read_day*100)/100) .. "h)" or ""),
             height = self.week_height,
             width = self.day_width,
             ratio_per_hour = ratio_per_hour_by_day[day_s],
