@@ -77,7 +77,6 @@ end
 -- end
 
 local CalendarDay = InputContainer:extend{
-    daynum = nil,
     ratio_per_hour = nil,
     filler = false,
     width = nil,
@@ -683,8 +682,6 @@ function HeatmapView:_populateItems(main_content, year)
                     font_face = self.font_face,
                     font_size = self.span_font_size,
                     border = self.day_border,
-                    daynum = rday,
-                    monthnum = rmonth,
                     paint_down = paint_down,
                     paint_left = paint_left,
                     height = self.size_tile,
@@ -761,8 +758,6 @@ function HeatmapView:_populateItems(main_content, year)
                 font_face = self.font_face,
                 font_size = self.span_font_size,
                 border = self.day_border,
-                daynum = rday,
-                monthnum = rmonth,
                 height = self.size_tile,
                 width = self.size_tile,
                 show_parent = self,
