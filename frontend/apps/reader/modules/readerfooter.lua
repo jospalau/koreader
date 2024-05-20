@@ -2480,7 +2480,7 @@ function ReaderFooter:onShowTextProperties()
     --         media-type="application/oebps-package+xml" />
     -- </rootfiles>
 
-    local opf_genre = "No metadata"
+    local opf_genre = ""
     local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
     if file_type == "epub" then
         local css_text = self.ui.document:getDocumentFileContent("OPS/styles/stylesheet.css")
@@ -2516,8 +2516,12 @@ function ReaderFooter:onShowTextProperties()
         for w in string.gmatch(opf_text, "<dc:subject>(.-)</dc:subject>") do
             opf_genre = opf_genre .. ", " .. w
         end
-        opf_genre = opf_genre:sub(2,string.len(opf_genre))
+        opf_genre = opf_genre:sub(3,string.len(opf_genre))
 
+
+        if opf_genre == "" then
+            opf_genre = "No metadata"
+        end
         local opf_calibre = string.match(opf_text, "<opf:meta property=\"calibre:user_metadata\">(.-)</opf:meta>")
         if opf_calibre == nil then
             opf_calibre = "No property"
