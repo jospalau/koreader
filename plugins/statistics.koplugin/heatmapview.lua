@@ -155,7 +155,7 @@ end
 
 function CalendarDay:onTap()
     if self.callback then
-        self.callback()
+        self.callback(self.show_parent, self.cur_month)
     end
     return true
 end
@@ -730,12 +730,23 @@ function HeatmapView:_populateItems(main_content, year)
                 paint_left = ((rday == 1 or rday == 2 or rday == 3 or rday == 4 or rday == 5 or rday == 6 or rday == 7) and true or false),
                 day = i,
                 is_today = is_today,
-                daynum = rday,
-                monthnum = rmonth,
+                cur_month = ryear .. "-" .. rmonth,
                 height = self.size_tile,
                 width = self.size_tile,
                 show_parent = self,
                 duration = self.dates[i][1][2],
+                callback = function(parent, cur_month)
+                    local HeatmapView = require("calendarview")
+
+                    UIManager:show(HeatmapView:new{
+                        cur_month = cur_month,
+                        reader_statistics = parent.reader_statistics,
+                        start_day_of_week = parent.reader_statistics.settings.calendar_start_day_of_week,
+                        nb_book_spans = parent.reader_statistics.settings.calendar_nb_book_spans,
+                        show_hourly_histogram = parent.reader_statistics.settings.calendar_show_histogram,
+                        browse_future_months = parent.reader_statistics.settings.calendar_browse_future_months,
+                    })
+                end
             }
 
             cur_week:addDay(calendar_day)
