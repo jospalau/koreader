@@ -116,6 +116,17 @@ function filemanagerutil.getStatus(file)
     return "mbr"
 end
 
+function filemanagerutil.getLastModified(file)
+    if DocSettings:hasSidecarFile(file) then
+        local summary = DocSettings:open(file):readSetting("summary")
+        if summary and summary.modified and summary.modified ~= "" then
+            return summary.modified
+        end
+        return nil
+    end
+    return nil
+end
+
 -- Set a document status ("reading", "complete", or "abandoned")
 function filemanagerutil.setStatus(doc_settings_or_file, status)
     -- In case the book doesn't have a sidecar file, this'll create it

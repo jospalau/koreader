@@ -1568,8 +1568,9 @@ function util.getList(search_string, search_finished, search_tbr, search_mbr)
         search_string = search_string:gsub("%?","%.")
     end
 
-    local dirs, files, files_finished, files_tbr, files_mbr = {}, {}, {}, {}, {}
+    local dirs, files, files_finished, files_tbr, files_mbr, files_finished_this_month = {}, {}, {}, {}, {}, {}
     local scan_dirs = {G_reader_settings:readSetting("home_dir")}
+    local cur_month = os.date("%m")
     while #scan_dirs ~= 0 do
         local new_dirs = {}
         -- handle each dir
@@ -1595,6 +1596,14 @@ function util.getList(search_string, search_finished, search_tbr, search_mbr)
                                 local filemanagerutil = require("apps/filemanager/filemanagerutil")
                                 if filemanagerutil.getStatus(fullpath) == "complete" then
                                     table.insert(files_finished, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
+                                    local last_modified_date = filemanagerutil.getLastModified(fullpath)
+                                    if last_modified_date then
+                                        local pattern = "(%d+)-(%d+)-(%d+)"
+                                        local ryear, rmonth, rday = last_modified_date:match(pattern)
+                                        if cur_month == rmonth then
+                                            table.insert(files_finished_this_month, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
+                                        end
+                                    end
                                 end
                                 local filemanagerutil = require("apps/filemanager/filemanagerutil")
                                 if filemanagerutil.getStatus(fullpath) == "tbr" then
@@ -1613,15 +1622,16 @@ function util.getList(search_string, search_finished, search_tbr, search_mbr)
         end
         scan_dirs = new_dirs
     end
-    return dirs, files, files_finished, files_tbr, files_mbr
+    return dirs, files, files_finished, files_tbr, files_mbr, files_finished_this_month
 end
 
 function util.generateStats()
     local dump = require("dump")
-    local _, files, files_finished, files_tbr, files_mbr = util.getList("*.epub")
+    local _, files, files_finished, files_tbr, files_mbr, files_finished_this_month = util.getList("*.epub")
 
     local stats = {["total_books"] = #files,
                 ["total_books_finished"] = #files_finished,
+                ["total_books_finished_this_month"] = #files_finished_this_month,
                 ["total_books_tbr"] = #files_tbr,
                 ["total_books_mbr"] = #files_mbr}
 
