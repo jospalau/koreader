@@ -139,7 +139,7 @@ local Input = {
             "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M",
             "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
             "Up", "Down", "Left", "Right", "Press", "Backspace", "End",
-            "Back", "Sym", "AA", "Menu", "Home", "Del",
+            "Back", "Sym", "AA", "Menu", "Home", "Del", "ScreenKB",
             "LPgBack", "RPgBack", "LPgFwd", "RPgFwd"
         },
     },
@@ -171,6 +171,7 @@ local Input = {
         Shift = false,
         Sym = false,
         Meta = false,
+        ScreenKB = false,
     },
 
     -- repeat state:
@@ -817,6 +818,16 @@ function Input:handlePowerManagementOnlyEv(ev)
         elseif ev.value == KEY_RELEASE then
             return "PowerRelease"
         end
+    end
+
+    -- Make sure we don't leave modifiers in an inconsistent state
+    if self.modifiers[keycode] ~= nil then
+        if ev.value == KEY_PRESS then
+            self.modifiers[keycode] = true
+        elseif ev.value == KEY_RELEASE then
+            self.modifiers[keycode] = false
+        end
+        return
     end
 
     -- Nothing to see, move along!
