@@ -1560,10 +1560,11 @@ function ReaderFooter:onTest()
     UIManager:show(screensaver_widget, "full")
 
 
-    -- UIManager:scheduleIn(0.5, function()
-    --     -- Screen:refreshFullImp(0, 0, Screen:getWidth(), Screen:getHeight()) --
-    --     UIManager:setDirty("all", "full")
-    -- end)
+    UIManager:scheduleIn(1, function()
+        -- Screen:refreshFullImp(0, 0, Screen:getWidth(), Screen:getHeight()) --
+        -- UIManager:setDirty("all", "full")
+        UIManager:close(screensaver_widget)
+    end)
 end
 
 

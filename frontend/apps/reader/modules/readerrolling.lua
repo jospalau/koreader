@@ -1940,6 +1940,8 @@ function ReaderRolling:setupRerenderingAutomation()
                             shared_state[2] = 1
                             -- And wait for it to end (successfully or not)
                             self:_waitOrKillCurrentRerenderingSubprocess(true)
+                            local Event = require("ui/event")
+                            UIManager:broadcastEvent(Event:new("Test"))
                         end
                         -- Otherwise, no background rerendering needed, or the subprocess died: go on with the reload.
                         -- We're done with background stuff and icon animations: reallow standby
