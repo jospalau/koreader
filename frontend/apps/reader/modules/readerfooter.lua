@@ -1995,7 +1995,7 @@ function ReaderFooter:onPrintChapterLeftFbink()
     else
         local text = left_chapter
         UIManager:show(Notification:new{
-            text = _(text),
+            text = _(tostring(text)),
         })
     end
 end
