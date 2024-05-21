@@ -478,6 +478,9 @@ function FileSearcher:onMenuSelect(item, callback)
         -- Pass false instead of the file
         self.close_callback(file, true)
 
+        if self.ui.history.hist_menu then
+            self.ui.history.hist_menu.close_callback()
+        end
         -- local Event = require("ui/event")
         -- UIManager:broadcastEvent(Event:new("ShowFileSearchAll"))
     end
@@ -531,7 +534,7 @@ function FileSearcher:onMenuSelect(item, callback)
             text = _("Open"),
             enabled = DocumentRegistry:hasProvider(file, nil, true), -- allow auxiliary providers
             callback = function()
-                -- close_dialog_callback()
+                close_dialog_callback()
                 local FileManager = require("apps/filemanager/filemanager")
                 FileManager.openFile(self.ui, file, nil, self.close_callback)
             end,
