@@ -3931,6 +3931,63 @@ With this feature enabled, the current page is factored in, resulting in the cou
                 end,
                 keep_menu_open = true,
             },
+            {
+                text_func = function()
+                    return T(_("Text1 bottom margin: %1"), self.settings.text1_bottom_padding)
+                end,
+                callback = function(touchmenu_instance)
+                    local SpinWidget = require("ui/widget/spinwidget")
+                    local text1_bottom_padding = self.settings.text1_bottom_padding
+                    local items_font = SpinWidget:new{
+                        value = text1_bottom_padding,
+                        value_min = 0,
+                        value_max = 100,
+                        default_value = 50,
+                        ok_text = _("Set margin"),
+                        title_text = _("Text1 bottom margin"),
+                        keep_shown_on_apply = true,
+                        callback = function(spin)
+                            self.settings.text1_bottom_padding = spin.value
+                            self.text1_bottom_padding = Screen:scaleBySize(self.settings.text1_bottom_padding)
+                            self.footer_text.forced_height = self.text1_bottom_padding
+                            self:refreshFooter(true, true)
+                            if touchmenu_instance then touchmenu_instance:updateItems() end
+                        end,
+                    }
+                    UIManager:show(items_font)
+                end,
+                keep_menu_open = true,
+            },
+            {
+                text_func = function()
+                    return T(_("Adjust margin top: %1"), self.settings.top_padding)
+                end,
+                callback = function(touchmenu_instance)
+                    local SpinWidget = require("ui/widget/spinwidget")
+                    local top_padding = self.settings.top_padding
+                    local items_font = SpinWidget:new{
+                        value = top_padding,
+                        value_min = 0,
+                        value_max = 100,
+                        default_value = 5,
+                        ok_text = _("Set margin"),
+                        title_text = _("Top bar margin"),
+                        keep_shown_on_apply = true,
+                        callback = function(spin)
+                            self.settings.top_padding = spin.value
+                            if not self.settings.top_padding then
+                                self.top_padding = Screen:scaleBySize(self.settings.top_padding)
+                            else
+                                self.top_padding = Screen:scaleBySize(5)
+                            end
+                            self:refreshFooter(true, true)
+                            if touchmenu_instance then touchmenu_instance:updateItems() end
+                        end,
+                    }
+                    UIManager:show(items_font)
+                end,
+                keep_menu_open = true,
+            },
         }
     })
     local configure_items_sub_table = sub_items[#sub_items].sub_item_table -- will pick the last item of sub_items
