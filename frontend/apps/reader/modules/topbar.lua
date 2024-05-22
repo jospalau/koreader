@@ -446,6 +446,7 @@ function TopBar:onReaderReady()
         -- bordercolor = Blitbuffer.COLOR_WHITE,
     }
 
+    self.progress_bar2.altbar_line_thickness = 3
     self[9] = FrameContainer:new{
         left_container:new{
             dimen = Geom:new(),
@@ -532,8 +533,13 @@ end
 function TopBar:onSwitchTopBar()
     if G_reader_settings:isTrue("show_top_bar") then
         if TopBar.show_top_bar then
-            TopBar.show_top_bar = false
             TopBar.MARGIN_TOP = Screen:scaleBySize(9)
+            if self.progress_bar2.altbar_line_thickness == 3 then
+                self.progress_bar2.altbar_line_thickness = 6
+            else
+                self.progress_bar2.altbar_line_thickness = 3
+                TopBar.show_top_bar = false
+            end
         elseif TopBar.is_enabled then
             TopBar.is_enabled = false
         else
@@ -714,20 +720,15 @@ function TopBar:toggleBar()
 
         self.progress_bar2.ui = self.ui
         -- Multiple of 3 onwards because we want the line to be a third in the middle of the progress thick line
-        self.progress_bar2.altbar_line_thickness = 3
+        -- Value initialized to 3 when init, possible to toggle
+        -- self.progress_bar2.altbar_line_thickness = 3
         -- self.progress_bar2.altbar_line_thickness = 6
         --It plays well with any value which final product is even (3, 9, 15, 21). So even values. More size, higher ticks
         self.progress_bar2.altbar_ticks_height = self.progress_bar2.altbar_line_thickness * 3
 
 
-
-        -- I just contemplate the values 3 and 6 and these are the values that play well to have the caption properly spatiated
-        self.space_after_alt_bar = 0
-        if self.progress_bar2.altbar_line_thickness == 3 then
-            self.space_after_alt_bar = self.progress_bar2.altbar_line_thickness * 4.5
-        else
-            self.space_after_alt_bar = self.progress_bar2.altbar_line_thickness * 2.5
-        end
+        -- Fixed value so text is always in the same place. It works for altbar_line_thickness = 3 and altbar_line_thickness = 6 which are the 2 values I use
+        self.space_after_alt_bar = 15
 
         -- End alternative progress bar --
         self.progress_bar.last = self.pages or self.ui.document:getPageCount()
@@ -933,7 +934,7 @@ function TopBar:onAdjustMarginsTopbar()
     -- Adjust margin values to the topbar. Values are in pixels
     -- We add a little bit more, 12 pixels hardcoded since side margins are 10 and bottom margin 9, always. Top margin value is 9 if not alternative status bar)
     -- Exceptions are Android in which side margins are set to 20
-    -- And top margin when alternative status bar is on. Value is set to self.progress_bar2.altbar_ticks_height + 9, like TopBar.MARGIN_TOP = Screen:scaleBySize(9) + Screen:scaleBySize(self.progress_bar2.altbar_ticks_height), adding a little bit more too, 3
+    -- And top margin when alternative status bar is on. Value is set to self.space_after_alt_bar (fixed to 15) + 9, adding a little bit more too, 3
 
     self.ui.document.configurable.b_page_margin = 12
     if Device:isAndroid() then
