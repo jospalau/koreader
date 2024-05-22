@@ -695,7 +695,7 @@ function TopBar:toggleBar()
         -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
 
 
-        -- Begin alternative progress bar --
+        -- Begin alternative progress bar
         -- This last configuration goes with the separation line. Everything is hardcoded because it is difficult to make it proportional
         self.progress_bar2:updateStyle(false, 1)
         self.progress_bar2.bgcolor = Blitbuffer.COLOR_WHITE
@@ -764,9 +764,9 @@ function TopBar:paintTo(bb, x, y)
         -- - There are some fonts that are bigger than its em square so the aligment may be not right. For instance Bitter Pro descender overpass its bottom limits
         if TopBar.show_top_bar then
             if self.progress_bar2.altbar then
-                self[9]:paintTo(bb, x + TopBar.MARGIN_SIDES, y +  Screen:scaleBySize(12))
+                self[9]:paintTo(bb, x + TopBar.MARGIN_SIDES, y + Screen:scaleBySize(12))
             else
-                self[9]:paintTo(bb, x + TopBar.MARGIN_SIDES, y +  Screen:scaleBySize(9))
+                self[9]:paintTo(bb, x + TopBar.MARGIN_SIDES, y + Screen:scaleBySize(9))
                 -- self[9]:paintTo(bb, x, Screen:getHeight() - Screen:scaleBySize(12))
             end
         end
@@ -921,7 +921,10 @@ function TopBar:onAdjustMarginsTopbar()
 
 
     -- Adjust margin values to the topbar. Values are in pixels
-    self.ui.document.configurable.b_page_margin = 9
+    -- Slightly more, hardcoded. Margins are all 12 pixels (sides are 10 and bottom 9, both always. Top is 9 if not alternative status bar)
+    -- Exceptions are android margin sides which are set to 20 and top when alternative status bar, which is set to 28
+
+    self.ui.document.configurable.b_page_margin = 12
     if Device:isAndroid() then
         self.ui.document.configurable.h_page_margins[1] = 20
         self.ui.document.configurable.h_page_margins[1] = 20
@@ -933,18 +936,18 @@ function TopBar:onAdjustMarginsTopbar()
     local margins = {}
     if self.show_top_bar then
         if Device:isAndroid() then
-            margins = { 20, self.progress_bar2.altbar_ticks_height, 20, 9}
+            margins = { 20, 28, 20, 12}
         else
-            margins = { 10, self.progress_bar2.altbar_ticks_height, 10, 9}
+            margins = { 12, 28, 12, 12}
         end
-        self.ui.document.configurable.t_page_margin = self.progress_bar2.altbar_ticks_height
+        self.ui.document.configurable.t_page_margin = 28
     else
         if Device:isAndroid() then
-            margins = { 20, 9, 20, 9}
+            margins = { 20, 12, 20, 12}
         else
-            margins = { 10, 9, 10, 9}
+            margins = { 12, 12, 12, 12}
         end
-        self.ui.document.configurable.t_page_margin = 9
+        self.ui.document.configurable.t_page_margin = 12
     end
 
     self.ui:handleEvent(Event:new("SetPageMargins", margins))
