@@ -552,6 +552,7 @@ function TopBar:toggleBar()
         local now_t = os.date("*t")
         local daysdiff = now_t.day - os.date("*t",self.start_session_time).day
         if daysdiff > 0 then
+            self.ui.statistics:insertDBSessionStats()
             self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm  = self:getReadTodayThisMonth(self.title)
             self.start_session_time = os.time()
         end
