@@ -715,12 +715,13 @@ function TopBar:toggleBar()
         self.progress_bar2.ui = self.ui
         -- Multiple of 3 onwards because we want the line to be a third in the middle of the progress thick line
         self.progress_bar2.altbar_line_thickness = 3
+        -- self.progress_bar2.altbar_line_thickness = 6
         --It plays well with any value which final product is even (3, 9, 15, 21). So even values. More size, higher ticks
         self.progress_bar2.altbar_ticks_height = self.progress_bar2.altbar_line_thickness * 3
 
 
 
-        -- I just contemplate the values 3 and 6 and these are the values that play well
+        -- I just contemplate the values 3 and 6 and these are the values that play well to have the caption properly spatiated
         self.space_after_alt_bar = 0
         if self.progress_bar2.altbar_line_thickness == 3 then
             self.space_after_alt_bar = self.progress_bar2.altbar_line_thickness * 4.5
