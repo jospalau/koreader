@@ -736,6 +736,7 @@ function TopBar:toggleBar()
         self.title_text:setText("")
         self.chapter_text:setText("")
         self.progress_chapter_text:setText("")
+        self.book_progress:setText("")
         self.progress_bar.width = 0
         self.progress_bar2.width = 0
         self.progress_chapter_bar.width = 0
