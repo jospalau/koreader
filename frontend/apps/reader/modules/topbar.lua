@@ -913,7 +913,6 @@ function TopBar:onAdjustMarginsTopbar()
     local Event = require("ui/event")
     -- local configurable = self.ui.document.configurable
     -- local margins = { TopBar.MARGIN_SIDES, TopBar.MARGIN_TOP, TopBar.MARGIN_SIDES, TopBar.MARGIN_BOTTOM}
-    local margins = { 10, 12 + self.progress_bar2.altbar_ticks_height, 10, 9}
     -- local margins_lr = { TopBar.MARGIN_SIDES, TopBar.MARGIN_SIDES}
     -- self.ui.document:onSetPageTopAndBottomMargin(margins_tb)
     -- self.ui:handleEvent(Event:new("SetPageTopMargin",  TopBar.MARGIN_TOP))
@@ -921,8 +920,9 @@ function TopBar:onAdjustMarginsTopbar()
 
 
     -- Adjust margin values to the topbar. Values are in pixels
-    -- Slightly more, hardcoded. Margins are all 12 pixels (sides are 10 and bottom 9, both always. Top is 9 if not alternative status bar)
-    -- Exceptions are android margin sides which are set to 20 and top when alternative status bar, which is set to 28
+    -- We add a little bit more, 12 pixels hardcoded since side margins are 10 and bottom margin 9, always. Top margin value is 9 if not alternative status bar)
+    -- Exceptions are Android in which side margins are set to 20
+    -- And top margin when alternative status bar is on. Value is set to self.progress_bar2.altbar_ticks_height + 9, like TopBar.MARGIN_TOP = Screen:scaleBySize(9) + Screen:scaleBySize(self.progress_bar2.altbar_ticks_height), adding a little bit more too, 3
 
     self.ui.document.configurable.b_page_margin = 12
     if Device:isAndroid() then
