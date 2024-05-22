@@ -1678,7 +1678,7 @@ function ReaderHighlight:onHoldRelease()
         return true
     end
     self.t2 = os.time()
-    if (self.t1 and self.t2 and self.t2 - self.t1 < 1) then
+    if (self.t1 and self.t2 and self.t2 - self.t1 < 2) then
 
         local long_final_hold = self.long_hold_reached
         self:_resetHoldTimer(true) -- clear state
