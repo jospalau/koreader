@@ -972,8 +972,8 @@ function TopBar:onAdjustMarginsTopbar()
         self.ui.document.configurable.h_page_margins[1] = 20
         self.ui.document.configurable.h_page_margins[1] = 20
     else
-        self.ui.document.configurable.h_page_margins[1] = 10
-        self.ui.document.configurable.h_page_margins[2] = 10
+        self.ui.document.configurable.h_page_margins[1] = 12
+        self.ui.document.configurable.h_page_margins[2] = 12
     end
 
     local margins = {}
