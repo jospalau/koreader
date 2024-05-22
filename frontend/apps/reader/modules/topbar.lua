@@ -160,6 +160,7 @@ function TopBar:init()
     -- La inicialización del objeto ocurre una única vez pero el método init ocurre cada vez que abrimos el documento
     TopBar.is_enabled = G_reader_settings:isTrue("show_top_bar")
     -- TopBar.show_top_bar = true
+    -- TopBar.alt_bar = true
     if TopBar.preserved_start_session_time then
         self.start_session_time = TopBar.preserved_start_session_time
         TopBar.preserved_start_session_time = nil
@@ -191,6 +192,20 @@ function TopBar:init()
     else
         TopBar.show_top_bar = true
     end
+
+    if TopBar.preserved_show_alt_bar ~= nil then
+        TopBar.alt_bar = TopBar.preserved_show_alt_bar
+        TopBar.preserved_show_alt_bar = nil
+    else
+        TopBar.alt_bar = true
+    end
+
+    if TopBar.preserved_altbar_line_thickness ~= nil then
+        TopBar.alt_bar = TopBar.preserved_altbar_line_thickness
+        TopBar.preserved_altbar_line_thickness = nil
+    end
+
+
 
 end
 
@@ -443,10 +458,10 @@ function TopBar:onReaderReady()
         tick_width = Screen:scaleBySize(1),
         ticks = nil, -- ticks will be populated in self:updateFooterText
         last = nil, -- last will be initialized in self:updateFooterText
+        altbar_line_thickness = 3,
         -- bordercolor = Blitbuffer.COLOR_WHITE,
     }
 
-    self.progress_bar2.altbar_line_thickness = 3
     self[9] = FrameContainer:new{
         left_container:new{
             dimen = Geom:new(),
@@ -527,6 +542,8 @@ function TopBar:onPreserveCurrentSession()
     TopBar.preserved_initial_total_time_book = self.initial_total_time_book
     TopBar.preserved_avg_wpm = self.avg_wpm
     TopBar.preserved_alt_bar = self.show_top_bar
+    TopBar.preserved_show_alt_bar = self.alt_bar
+    TopBar.preserved_altbar_line_thickness= self.altbar_line_thickness
 end
 
 
@@ -536,6 +553,9 @@ function TopBar:onSwitchTopBar()
             TopBar.MARGIN_TOP = Screen:scaleBySize(9)
             if self.progress_bar2.altbar_line_thickness == 3 then
                 self.progress_bar2.altbar_line_thickness = 6
+            elseif self.progress_bar2.altbar_line_thickness == 6 then
+                self.progress_bar2.altbar_line_thickness = -1
+                TopBar.alt_bar = false
             else
                 self.progress_bar2.altbar_line_thickness = 3
                 TopBar.show_top_bar = false
@@ -545,7 +565,8 @@ function TopBar:onSwitchTopBar()
         else
             TopBar.is_enabled = true
             TopBar.show_top_bar = true
-            if self.progress_bar2.altbar then
+            TopBar.alt_bar = true
+            if self.alt_bar then
                 TopBar.MARGIN_TOP = Screen:scaleBySize(9) + Screen:scaleBySize(self.space_after_alt_bar)
             else
                 TopBar.MARGIN_TOP = Screen:scaleBySize(9) + self.progress_bar2.height + Screen:scaleBySize(3)
@@ -623,9 +644,8 @@ function TopBar:toggleBar()
         local chapter = self.ui.toc:getTocTitleByPage(self.view.footer.pageno) ~= ""
         and TextWidget.PTF_BOLD_START .. self.ui.toc:getTocTitleByPage(self.view.footer.pageno) .. TextWidget.PTF_BOLD_END or ""
 
-        self.progress_bar2.width = Screen:getSize().w - 2 * TopBar.MARGIN_SIDES
+
         -- self.separator_line.dimen.w = self.progress_bar2.width
-        self.progress_bar2.height = 20
         -- -- progress bars size slightly bigger than the font size
         -- self.progress_bar.height = Font:getFace("myfont4").size + 10
         -- self.progress_chapter_bar.height = Font:getFace("myfont4").size + 10
@@ -701,14 +721,41 @@ function TopBar:toggleBar()
         -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
 
 
-        -- Begin alternative progress bar
-        -- This last configuration goes with the separation line. Everything is hardcoded because it is difficult to make it proportional
-        self.progress_bar2:updateStyle(false, 1)
-        self.progress_bar2.bgcolor = Blitbuffer.COLOR_WHITE
-        self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
-        self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
-        self.progress_bar2.altbar = true
-        self.progress_bar2.show_percentage = true
+        self.progress_bar2.width = Screen:getSize().w - 2 * TopBar.MARGIN_SIDES
+        self.space_after_alt_bar = 15
+        if self.alt_bar then
+            -- Begin alternative progress bar
+            -- This last configuration goes with the separation line. Everything is hardcoded because it is difficult to make it proportional
+            self.progress_bar2:updateStyle(false, 1)
+            self.progress_bar2.bgcolor = Blitbuffer.COLOR_WHITE
+            self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
+            self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
+            self.progress_bar2.altbar = true
+            self.progress_bar2.show_percentage = true
+            self.progress_bar2.ui = self.ui
+            -- Multiple of 3 onwards because we want the line to be a third in the middle of the progress thick line
+            -- Value initialized to 3 when init, possible to toggle
+            -- self.progress_bar2.altbar_line_thickness = 3
+            -- self.progress_bar2.altbar_line_thickness = 6
+            --It plays well with any value which final product is even (3, 9, 15, 21). So even values. More size, higher ticks
+            self.progress_bar2.altbar_ticks_height = self.progress_bar2.altbar_line_thickness * 3
+
+
+            -- Fixed value so text is always in the same place. It works for altbar_line_thickness = 3 and altbar_line_thickness = 6 which are the 2 values I use
+
+            -- End alternative progress bar
+        else
+            self.progress_bar2.altbar = false
+            self.progress_bar2.height = 20
+            -- self.progress_bar2:updateStyle(false, 10)
+            -- self.progress_bar2.bgcolor = Blitbuffer.COLOR_DARK_GRAY
+            -- self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
+            -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_WHITE
+            self.progress_bar2.bgcolor = Blitbuffer.COLOR_WHITE
+            self.progress_bar2.fillcolor = Blitbuffer.COLOR_DARK_GRAY
+            self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
+            self.progress_bar2.bordersize = Screen:scaleBySize(1)
+        end
         local time_spent_book = self.ui.statistics:getBookStat(self.ui.statistics.id_curr_book)
 
         if time_spent_book == nil then
@@ -718,19 +765,7 @@ function TopBar:toggleBar()
             self.progress_bar2.time_spent_book =  math.floor(self.view.footer.pageno / self.view.footer.pages*1000)/10 .. "%"
         end
 
-        self.progress_bar2.ui = self.ui
-        -- Multiple of 3 onwards because we want the line to be a third in the middle of the progress thick line
-        -- Value initialized to 3 when init, possible to toggle
-        -- self.progress_bar2.altbar_line_thickness = 3
-        -- self.progress_bar2.altbar_line_thickness = 6
-        --It plays well with any value which final product is even (3, 9, 15, 21). So even values. More size, higher ticks
-        self.progress_bar2.altbar_ticks_height = self.progress_bar2.altbar_line_thickness * 3
 
-
-        -- Fixed value so text is always in the same place. It works for altbar_line_thickness = 3 and altbar_line_thickness = 6 which are the 2 values I use
-        self.space_after_alt_bar = 15
-
-        -- End alternative progress bar --
         self.progress_bar.last = self.pages or self.ui.document:getPageCount()
         -- self.progress_bar.ticks = self.ui.toc:getTocTicksFlattened()
         self.progress_bar2.last = self.pages or self.ui.document:getPageCount()
@@ -740,12 +775,8 @@ function TopBar:toggleBar()
         self.progress_chapter_bar:setPercentage(self.view.footer:getChapterProgress(true))
         -- self.progress_bar.height = self.title_text:getSize().h
         -- self.progress_chapter_bar.height = self.title_text:getSize().h
-        if TopBar.show_top_bar == true then
-            if self.progress_bar2.altbar then
-                TopBar.MARGIN_TOP = Screen:scaleBySize(9) + Screen:scaleBySize(self.space_after_alt_bar)
-            else
-                TopBar.MARGIN_TOP = Screen:scaleBySize(9) + self.progress_bar2.height + Screen:scaleBySize(3)
-            end
+        if TopBar.show_top_bar then
+            TopBar.MARGIN_TOP = Screen:scaleBySize(9) + Screen:scaleBySize(self.space_after_alt_bar)
         end
     else
         self.session_time_text:setText("")
@@ -934,7 +965,7 @@ function TopBar:onAdjustMarginsTopbar()
     -- Adjust margin values to the topbar. Values are in pixels
     -- We add a little bit more, 12 pixels hardcoded since side margins are 10 and bottom margin 9, always. Top margin value is 9 if not alternative status bar)
     -- Exceptions are Android in which side margins are set to 20
-    -- And top margin when alternative status bar is on. Value is set to self.space_after_alt_bar (fixed to 15) + 9, adding a little bit more too, 3
+    -- And top margin when alternative status bar is on. Value is set to self.space_after_alt_bar (fixed to 15) + 9, adding a little bit more too, 3 (6 on top margin)
 
     self.ui.document.configurable.b_page_margin = 12
     if Device:isAndroid() then
@@ -948,18 +979,18 @@ function TopBar:onAdjustMarginsTopbar()
     local margins = {}
     if self.show_top_bar then
         if Device:isAndroid() then
-            margins = { 20, self.space_after_alt_bar  + 9 + 3, 20, 12}
+            margins = { 20, self.space_after_alt_bar + 9 + 6, 20, 12}
         else
-            margins = { 12, self.space_after_alt_bar  + 9 + 3, 12, 12}
+            margins = { 12, self.space_after_alt_bar + 9 + 6, 12, 12}
         end
-        self.ui.document.configurable.t_page_margin = self.space_after_alt_bar + 9 + 3
+        self.ui.document.configurable.t_page_margin = self.space_after_alt_bar + 9 + 6
     else
         if Device:isAndroid() then
-            margins = { 20, 12, 20, 12}
+            margins = { 20, 9 + 6, 20, 12}
         else
-            margins = { 12, 12, 12, 12}
+            margins = { 12, 9 + 6, 12, 12}
         end
-        self.ui.document.configurable.t_page_margin = 12
+        self.ui.document.configurable.t_page_margin = 9 + 6
     end
 
     self.ui:handleEvent(Event:new("SetPageMargins", margins))
