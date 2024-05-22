@@ -1079,6 +1079,22 @@ end
 --     self:switchDocument(self.menu:getRandomFav())
 -- end
 
+function ReaderUI:onAdjustMarginsTopbar()
+
+    if not G_reader_settings:isTrue("show_top_bar") then
+        local Event = require("ui/event")
+        -- Adjust margin values to the topbar. Values are in pixels
+        local margins = { 12, 12, 12, 12}
+
+        self.document.configurable.t_page_margin = 12
+        self.document.configurable.b_page_margin = 12
+        self.document.configurable.h_page_margins[1] = 12
+        self.document.configurable.h_page_margins[2] = 12
+
+        self:handleEvent(Event:new("SetPageMargins", margins))
+    end
+end
+
 function ReaderUI:getCurrentPage()
     return self.paging and self.paging.current_page or self.document:getCurrentPage()
 end

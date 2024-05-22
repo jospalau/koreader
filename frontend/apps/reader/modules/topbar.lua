@@ -43,7 +43,7 @@ local TopBar = WidgetContainer:extend{
     -- Para verlo en detalle, es mejor no poner ningún estilo en las barras de progreso
     MARGIN_TOP = Screen:scaleBySize(9),
     MARGIN_BOTTOM = Screen:scaleBySize(9),
-    show_top_bar = true,
+    -- show_top_bar = true,
 }
 
 
@@ -159,7 +159,7 @@ end
 function TopBar:init()
     -- La inicialización del objeto ocurre una única vez pero el método init ocurre cada vez que abrimos el documento
     TopBar.is_enabled = G_reader_settings:isTrue("show_top_bar")
-    TopBar.show_top_bar = true
+    -- TopBar.show_top_bar = true
     if TopBar.preserved_start_session_time then
         self.start_session_time = TopBar.preserved_start_session_time
         TopBar.preserved_start_session_time = nil
@@ -180,11 +180,17 @@ function TopBar:init()
         TopBar.preserved_initial_total_time_book = nil
     end
 
-    if TopBar.preserved_avg_wpm then
+    if TopBar.preserved_avg_wpm ~= nil then
         self.avg_wpm = TopBar.preserved_avg_wpm
         TopBar.preserved_avg_wpm = nil
     end
 
+    if TopBar.preserved_alt_bar ~= nil then
+        TopBar.show_top_bar = TopBar.preserved_alt_bar
+        TopBar.preserved_alt_bar = nil
+    else
+        TopBar.show_top_bar = true
+    end
 
 end
 
@@ -519,6 +525,7 @@ function TopBar:onPreserveCurrentSession()
     TopBar.preserved_initial_read_month = self.initial_read_month
     TopBar.preserved_initial_total_time_book = self.initial_total_time_book
     TopBar.preserved_avg_wpm = self.avg_wpm
+    TopBar.preserved_alt_bar = self.show_top_bar
 end
 
 
@@ -901,5 +908,50 @@ function TopBar:paintTo(bb, x, y)
 
     end
 end
+
+function TopBar:onAdjustMarginsTopbar()
+    local Event = require("ui/event")
+    -- local configurable = self.ui.document.configurable
+    -- local margins = { TopBar.MARGIN_SIDES, TopBar.MARGIN_TOP, TopBar.MARGIN_SIDES, TopBar.MARGIN_BOTTOM}
+    local margins = { 10, 12 + self.progress_bar2.altbar_ticks_height, 10, 9}
+    -- local margins_lr = { TopBar.MARGIN_SIDES, TopBar.MARGIN_SIDES}
+    -- self.ui.document:onSetPageTopAndBottomMargin(margins_tb)
+    -- self.ui:handleEvent(Event:new("SetPageTopMargin",  TopBar.MARGIN_TOP))
+    -- self.ui:handleEvent(Event:new("SetPageBottomMargin",  TopBar.MARGIN_BOTTOM))
+
+
+    -- Adjust margin values to the topbar. Values are in pixels
+    self.ui.document.configurable.b_page_margin = 9
+    if Device:isAndroid() then
+        self.ui.document.configurable.h_page_margins[1] = 20
+        self.ui.document.configurable.h_page_margins[1] = 20
+    else
+        self.ui.document.configurable.h_page_margins[1] = 10
+        self.ui.document.configurable.h_page_margins[2] = 10
+    end
+
+    local margins = {}
+    if self.show_top_bar then
+        if Device:isAndroid() then
+            margins = { 20, self.progress_bar2.altbar_ticks_height, 20, 9}
+        else
+            margins = { 10, self.progress_bar2.altbar_ticks_height, 10, 9}
+        end
+        self.ui.document.configurable.t_page_margin = self.progress_bar2.altbar_ticks_height
+    else
+        if Device:isAndroid() then
+            margins = { 20, 9, 20, 9}
+        else
+            margins = { 10, 9, 10, 9}
+        end
+        self.ui.document.configurable.t_page_margin = 9
+    end
+
+    self.ui:handleEvent(Event:new("SetPageMargins", margins))
+
+    --self.ui:saveSettings()
+
+end
+
 
 return TopBar
