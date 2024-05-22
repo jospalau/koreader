@@ -730,7 +730,7 @@ function TopBar:toggleBar()
         -- self.progress_chapter_bar.height = self.title_text:getSize().h
         if TopBar.show_top_bar == true then
             if self.progress_bar2.altbar then
-                TopBar.MARGIN_TOP = Screen:scaleBySize(12) + self.progress_bar2.altbar_ticks_height + Screen:scaleBySize(2)
+                TopBar.MARGIN_TOP = Screen:scaleBySize(7) + Screen:scaleBySize(self.progress_bar2.altbar_ticks_height)
             else
                 TopBar.MARGIN_TOP = Screen:scaleBySize(9) + self.progress_bar2.height + Screen:scaleBySize(3)
             end
@@ -936,11 +936,11 @@ function TopBar:onAdjustMarginsTopbar()
     local margins = {}
     if self.show_top_bar then
         if Device:isAndroid() then
-            margins = { 20, 28, 20, 12}
+            margins = { 20, self.progress_bar2.altbar_ticks_height + 12, 20, 12}
         else
-            margins = { 12, 28, 12, 12}
+            margins = { 12, self.progress_bar2.altbar_ticks_height + 12, 12, 12}
         end
-        self.ui.document.configurable.t_page_margin = 28
+        self.ui.document.configurable.t_page_margin = self.progress_bar2.altbar_ticks_height + 12
     else
         if Device:isAndroid() then
             margins = { 20, 12, 20, 12}
