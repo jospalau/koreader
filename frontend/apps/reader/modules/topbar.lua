@@ -552,7 +552,6 @@ end
 function TopBar:onSwitchTopBar()
     if G_reader_settings:isTrue("show_top_bar") then
         if TopBar.show_top_bar then
-            TopBar.MARGIN_TOP = Screen:scaleBySize(9)
             if self.progress_bar2.altbar_ticks_height == 7 then
                 self.progress_bar2.altbar_ticks_height = 16
                 self.progress_bar2.altbar_line_thickness = 6
@@ -574,11 +573,6 @@ function TopBar:onSwitchTopBar()
             TopBar.is_enabled = true
             TopBar.show_top_bar = true
             TopBar.alt_bar = true
-            if self.alt_bar then
-                TopBar.MARGIN_TOP = Screen:scaleBySize(9) + Screen:scaleBySize(self.space_after_alt_bar)
-            else
-                TopBar.MARGIN_TOP = Screen:scaleBySize(9) + self.progress_bar2.height + Screen:scaleBySize(3)
-            end
         end
         self:toggleBar()
 
@@ -790,6 +784,8 @@ function TopBar:toggleBar()
         -- self.progress_chapter_bar.height = self.title_text:getSize().h
         if TopBar.show_top_bar then
             TopBar.MARGIN_TOP = Screen:scaleBySize(9) + Screen:scaleBySize(self.space_after_alt_bar)
+        else
+            TopBar.MARGIN_TOP = Screen:scaleBySize(9)
         end
     else
         self.session_time_text:setText("")
