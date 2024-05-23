@@ -930,7 +930,12 @@ function ReaderBookmark:getBookmarkItemText(item)
         text = self.display_prefix["highlight"]
     end
     if self.items_text == "all" or self.items_text == "note" then
-        text = text .. item.text_orig
+        if item.type == "bookmark" then
+            text = text .. item.text_orig .. " @" .. item.datetime
+        else
+            text = text .. item.text_orig
+        end
+
     end
     if item.note then
         text = text .. "\u{2002}" .. self.display_prefix["note"] .. item.note
