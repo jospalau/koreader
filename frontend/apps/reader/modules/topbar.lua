@@ -459,7 +459,8 @@ function TopBar:onReaderReady()
         ticks = nil, -- ticks will be populated in self:updateFooterText
         last = nil, -- last will be initialized in self:updateFooterText
         altbar_line_thickness = 3, -- Initial value, it is used in alternative
-        factor = 3,
+        -- factor = 1,
+        altbar_ticks_height = 7,
         -- bordercolor = Blitbuffer.COLOR_WHITE,
     }
 
@@ -549,17 +550,20 @@ end
 
 
 function TopBar:onSwitchTopBar()
-    if G_reader_settings:isTrue("show_top_bar") then--
+    if G_reader_settings:isTrue("show_top_bar") then
         if TopBar.show_top_bar then
             TopBar.MARGIN_TOP = Screen:scaleBySize(9)
-            if self.progress_bar2.altbar_line_thickness == 3 then
+            if self.progress_bar2.altbar_ticks_height == 7 then
+                self.progress_bar2.altbar_ticks_height = 16
                 self.progress_bar2.altbar_line_thickness = 6
                 -- self.progress_bar2.factor = 3
-            elseif self.progress_bar2.altbar_line_thickness == 6 then
+            elseif self.progress_bar2.altbar_ticks_height == 16 then
+                self.progress_bar2.altbar_ticks_height = -1
                 self.progress_bar2.altbar_line_thickness = -1
                 -- self.progress_bar2.factor = -1
                 TopBar.alt_bar = false
             else
+                self.progress_bar2.altbar_ticks_height = 7
                 self.progress_bar2.altbar_line_thickness = 3
                 -- self.progress_bar2.factor = 1
                 TopBar.show_top_bar = false
@@ -746,9 +750,9 @@ function TopBar:toggleBar()
             -- A factor of 1 also works and we can alternate it
             -- factor 1 with altbar_line_thickness 3 and factor 3 with altbar_line_thickness 6
             -- Both parameteres initialized when creating progress_bar2 and onSwitchTopBar() changes
+            -- self.progress_bar2.altbar_ticks_height = self.progress_bar2.altbar_line_thickness * self.progress_bar2.factor
 
-            self.progress_bar2.altbar_ticks_height = self.progress_bar2.altbar_line_thickness * self.progress_bar2.factor
-
+            -- Factor is not used, I finally hardcode the value of altbar_ticks_height and altbar_line_thickness for the 2 configurations I like
             self.progress_bar2.tick_width = 2
             -- End alternative progress bar
 
