@@ -452,7 +452,7 @@ function TopBar:onReaderReady()
 
     self.progress_bar2  = ProgressWidget:new{
         width = Screen:getSize().w,
-        height = 5,
+        height = 0,
         percentage = 0,
         -- bordercolor = Blitbuffer.COLOR_GRAY,
         tick_width = Screen:scaleBySize(1),
@@ -743,14 +743,10 @@ function TopBar:toggleBar()
             -- The factor plays well with any value which final product is even (3, 9, 15, 21). So even values. More size, higher ticks. I am using a value of 3 with altbar_line_thickness 3 and 6
             -- A factor of 1 also works and we can alternate it
             -- factor 1 with altbar_line_thickness 3 and factor 3 with altbar_line_thickness 6
+            -- Factor is not used, I finally hardcoded the value of altbar_ticks_height and altbar_line_thickness for the only two configurations I like
             -- Both parameteres initialized when creating progress_bar2 and onSwitchTopBar() changes
-            -- self.progress_bar2.altbar_ticks_height = self.progress_bar2.altbar_line_thickness * self.progress_bar2.factor
-
-            -- Factor is not used, I finally hardcode the value of altbar_ticks_height and altbar_line_thickness for the 2 configurations I like
             self.progress_bar2.tick_width = 2
             -- End alternative progress bar
-
-
         else
             self.progress_bar2.altbar = false
             self.progress_bar2.height = 20
@@ -954,10 +950,7 @@ function TopBar:paintTo(bb, x, y)
         -- local execute2 = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub.lua' -exec ls {} + | wc -l")
         -- books_information[1][1]:setText("TB: " .. execute:read('*a') .. "TBC: " .. execute2:read('*a'))
         books_information[1][1]:setText("B: " .. stats["total_books"] .. ", BF: " .. stats["total_books_finished"] .. ", BFTM: " .. stats["total_books_finished_this_month"] .. ", BMBR: " .. stats["total_books_mbr"] .. ", BTBR: " .. stats["total_books_tbr"])
-        books_information:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM )
-
-
-
+        books_information:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
     end
 end
 
@@ -972,9 +965,9 @@ function TopBar:onAdjustMarginsTopbar()
 
 
     -- Adjust margin values to the topbar. Values are in pixels
-    -- We add a little bit more, 12 pixels hardcoded since side margins are 10 and bottom margin 9, always. Top margin value is 9 if not alternative status bar)
+    -- We add a little bit more, 12 pixels hardcoded since side margins are 10 and bottom margin 9, always. Top margin value is 9 if not alternative status bar
     -- Exceptions are Android in which side margins are set to 20
-    -- And top margin when alternative status bar is on. Value is set to self.space_after_alt_bar (fixed to 15) + 9, adding a little bit more too, 3 (6 on top margin)
+    -- And top margin when alternative status bar is on. Value is set to self.space_after_alt_bar (fixed to 15) + 9, adding a little bit more too, 6 more pixels
 
     self.ui.document.configurable.b_page_margin = 12
     if Device:isAndroid() then
