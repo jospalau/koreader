@@ -459,7 +459,7 @@ function TopBar:onReaderReady()
         ticks = nil, -- ticks will be populated in self:updateFooterText
         last = nil, -- last will be initialized in self:updateFooterText
         altbar_line_thickness = 3, -- Initial value, it is used in alternative
-        factor = 1,
+        factor = 3,
         -- bordercolor = Blitbuffer.COLOR_WHITE,
     }
 
@@ -552,16 +552,16 @@ function TopBar:onSwitchTopBar()
     if G_reader_settings:isTrue("show_top_bar") then--
         if TopBar.show_top_bar then
             TopBar.MARGIN_TOP = Screen:scaleBySize(9)
-            if self.progress_bar2.factor == 1 then
+            if self.progress_bar2.altbar_line_thickness == 3 then
                 self.progress_bar2.altbar_line_thickness = 6
-                self.progress_bar2.factor = 3
-            elseif self.progress_bar2.factor == 3 then
-                self.progress_bar2.factor = -1
+                -- self.progress_bar2.factor = 3
+            elseif self.progress_bar2.altbar_line_thickness == 6 then
                 self.progress_bar2.altbar_line_thickness = -1
+                -- self.progress_bar2.factor = -1
                 TopBar.alt_bar = false
             else
-                self.progress_bar2.factor = 1
                 self.progress_bar2.altbar_line_thickness = 3
+                -- self.progress_bar2.factor = 1
                 TopBar.show_top_bar = false
             end
         elseif TopBar.is_enabled then
@@ -740,11 +740,12 @@ function TopBar:toggleBar()
             -- Multiple of 3 onwards because we want the line to be a third in the middle of the progress thick line
             -- Value initialized to 3 when init, possible to toggle
             -- self.progress_bar2.altbar_line_thickness = 3
+            -- self.progress_bar2.altbar_line_thickness = 6
             -- self.progress_bar2.factor = 3
-            -- The factor plays well with any value which final product is even (3, 9, 15, 21). So even values. More size, higher ticks. I have been using a value of 3 with altbar_line_thickness 3 and 6
-            -- A value of 1 also works and I finally have alternate
+            -- The factor plays well with any value which final product is even (3, 9, 15, 21). So even values. More size, higher ticks. I am using a value of 3 with altbar_line_thickness 3 and 6
+            -- A factor of 1 also works and we can alternate it
             -- factor 1 with altbar_line_thickness 3 and factor 3 with altbar_line_thickness 6
-
+            -- Both parameteres initialized when creating progress_bar2 and onSwitchTopBar() changes
 
             self.progress_bar2.altbar_ticks_height = self.progress_bar2.altbar_line_thickness * self.progress_bar2.factor
 
