@@ -593,6 +593,7 @@ function TopBar:onSwitchTopBar()
             TopBar.is_enabled = true
             TopBar.show_top_bar = true
             TopBar.alt_bar = true
+            self.option = 1
         end
         self:toggleBar()
 
