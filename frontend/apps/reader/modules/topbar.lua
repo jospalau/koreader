@@ -205,6 +205,13 @@ function TopBar:init()
         TopBar.preserved_altbar_line_thickness = nil
     end
 
+    if TopBar.preserved_option ~= nil then
+        TopBar.option = TopBar.preserved_option
+        TopBar.preserved_option = nil
+    else
+        TopBar.option = 1
+    end
+
 
 
 end
@@ -244,6 +251,13 @@ function TopBar:onReaderReady()
     local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
 
     self.session_time_text = TextWidget:new{
+        text = "",
+        face = Font:getFace("myfont3"),
+        fgcolor = Blitbuffer.COLOR_BLACK,
+    }
+
+
+    self.test_light = TextWidget:new{
         text = "",
         face = Font:getFace("myfont3"),
         fgcolor = Blitbuffer.COLOR_BLACK,
@@ -305,7 +319,7 @@ function TopBar:onReaderReady()
     self[1] = FrameContainer:new{
         left_container:new{
             dimen = Geom:new(),
-            self.session_time_text,
+            self.test_light,
         },
         -- background = Blitbuffer.COLOR_WHITE,
         bordersize = 1,
@@ -515,6 +529,7 @@ function TopBar:onReaderReady()
     if Device:isAndroid() then
         TopBar.MARGIN_SIDES =  Screen:scaleBySize(20)
     end
+
 end
 function TopBar:onToggleShowTopBar()
     local show_top_bar = G_reader_settings:isTrue("show_top_bar")
@@ -546,6 +561,8 @@ function TopBar:onPreserveCurrentSession()
     TopBar.preserved_alt_bar = self.show_top_bar
     TopBar.preserved_show_alt_bar = self.alt_bar
     TopBar.preserved_altbar_line_thickness= self.altbar_line_thickness
+    TopBar.preserved_option= self.option
+
 end
 
 
@@ -555,17 +572,20 @@ function TopBar:onSwitchTopBar()
             if self.progress_bar2.altbar_ticks_height == 7 then
                 self.progress_bar2.altbar_ticks_height = 16
                 self.progress_bar2.altbar_line_thickness = 6
+                self.option = 2
                 -- self.progress_bar2.factor = 3
             elseif self.progress_bar2.altbar_ticks_height == 16 then
                 self.progress_bar2.altbar_ticks_height = -1
                 self.progress_bar2.altbar_line_thickness = -1
                 -- self.progress_bar2.factor = -1
                 TopBar.alt_bar = false
+                self.option = 3
             else
                 self.progress_bar2.altbar_ticks_height = 7
                 self.progress_bar2.altbar_line_thickness = 3
                 -- self.progress_bar2.factor = 1
                 TopBar.show_top_bar = false
+                self.option = 4
             end
         elseif TopBar.is_enabled then
             TopBar.is_enabled = false
@@ -612,6 +632,9 @@ function TopBar:toggleBar()
 
 
         self.session_time_text:setText(datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")))
+
+
+
         self.progress_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
 
 
@@ -778,6 +801,40 @@ function TopBar:toggleBar()
         self.progress_chapter_bar:setPercentage(self.view.footer:getChapterProgress(true))
         -- self.progress_bar.height = self.title_text:getSize().h
         -- self.progress_chapter_bar.height = self.title_text:getSize().h
+
+        -- ○ ◎ ● ◐ ◑ ◒ ◓
+
+        local configurable = self.ui.document.configurable
+
+        if self.option == 1 or self.option == 2 or self.option == 3 then
+            if Device:isAndroid() then
+                if configurable.h_page_margins[1] == 20 and configurable.t_page_margin == self.space_after_alt_bar + 9 + 6 and configurable.h_page_margins[2] == 20 and configurable.b_page_margin == 12 then
+                    self.test_light:setText(" ●")
+                else
+                    self.test_light:setText(" ○")
+                end
+            else
+                if configurable.h_page_margins[1] == 12 and configurable.t_page_margin == self.space_after_alt_bar + 9 + 6 and configurable.h_page_margins[2] == 12 and configurable.b_page_margin == 12 then
+                    self.test_light:setText(" ●")
+                else
+                    self.test_light:setText(" ○")
+                end
+            end
+        elseif self.option == 4 then
+            if Device:isAndroid() then
+                if configurable.h_page_margins[1] == 20 and configurable.t_page_margin == 9 + 6 and configurable.h_page_margins[2] == 20 and configurable.b_page_margin == 12 then
+                    self.test_light:setText(" ●")
+                else
+                    self.test_light:setText(" ○")
+                end
+            else
+                if configurable.h_page_margins[1] == 12 and configurable.t_page_margin == 9 + 6 and configurable.h_page_margins[2] == 12 and configurable.b_page_margin == 12 then
+                    self.test_light:setText(" ●")
+                else
+                    self.test_light:setText(" ○")
+                end
+            end
+        end
         if TopBar.show_top_bar then
             TopBar.MARGIN_TOP = Screen:scaleBySize(9) + Screen:scaleBySize(self.space_after_alt_bar)
         else
@@ -818,7 +875,7 @@ function TopBar:paintTo(bb, x, y)
                 -- self[9]:paintTo(bb, x, Screen:getHeight() - Screen:scaleBySize(12))
             end
         end
-        -- self[1]:paintTo(bb, x + TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
+        self[1]:paintTo(bb, x + TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
 
         -- Top center
 
@@ -972,7 +1029,7 @@ function TopBar:onAdjustMarginsTopbar()
     self.ui.document.configurable.b_page_margin = 12
     if Device:isAndroid() then
         self.ui.document.configurable.h_page_margins[1] = 20
-        self.ui.document.configurable.h_page_margins[1] = 20
+        self.ui.document.configurable.h_page_margins[2] = 20
     else
         self.ui.document.configurable.h_page_margins[1] = 12
         self.ui.document.configurable.h_page_margins[2] = 12
