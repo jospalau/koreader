@@ -216,6 +216,7 @@ function FileSearcher:onSearchSortCompleted(show_complete, show_recent, page, ca
         table.sort(results,function(a,b) return b.text>a.text end)
     end
     if (show_complete) then
+        table.sort(results,function(a,b) return a.attr.modification>b.attr.modification end)
         local table_complete = {}
         for key,value in ipairs(results) do
             if DocSettings:hasSidecarFile(value.path) then
