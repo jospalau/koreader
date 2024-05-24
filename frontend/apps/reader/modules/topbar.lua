@@ -545,13 +545,14 @@ function TopBar:resetLayout()
 end
 
 function TopBar:onSuspend()
-    local powerd = Device:getPowerDevice()
-    if powerd:isFrontlightOn() then
-        self.frontlight = " ☼"
-    else
-        self.frontlight = ""
-    end
-    self.afterSuspend = true
+    -- local powerd = Device:getPowerDevice()
+    -- if powerd:isFrontlightOn() then
+    --     self.frontlight = " ☼"
+    -- else
+    --     self.frontlight = ""
+    -- end
+    -- self.afterSuspend = true
+    self.last_frontlight = self.frontlight
 end
 
 
@@ -819,8 +820,9 @@ function TopBar:toggleBar()
         local configurable = self.ui.document.configurable
         local powerd = Device:getPowerDevice()
 
-        if self.afterSuspend then
-            self.afterSuspend = nil
+        if self.last_frontlight ~= nil then
+            self.frontlight = self.last_frontlight
+            self.last_frontlight = nil
         else
             if powerd:isFrontlightOn() then
                 self.frontlight = " ☼"
