@@ -544,6 +544,17 @@ function TopBar:resetLayout()
     -- end
 end
 
+function TopBar:onSuspend()
+    local powerd = Device:getPowerDevice()
+    if powerd:isFrontlightOn() then
+        self.frontlight = " ☼"
+    else
+        self.frontlight = ""
+    end
+    self.afterSuspend = true
+end
+
+
 function TopBar:onResume()
     self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm = self:getReadTodayThisMonth(self.title)
     self.start_session_time = os.time()
@@ -806,33 +817,43 @@ function TopBar:toggleBar()
         -- ○ ◎ ● ◐ ◑ ◒ ◓
 
         local configurable = self.ui.document.configurable
+        local powerd = Device:getPowerDevice()
 
+        if self.afterSuspend then
+            self.afterSuspend = nil
+        else
+            if powerd:isFrontlightOn() then
+                self.frontlight = " ☼"
+            else
+                self.frontlight = ""
+            end
+        end
         if self.option == 1 or self.option == 2 or self.option == 3 then
             if Device:isAndroid() then
                 if configurable.h_page_margins[1] == 20 and configurable.t_page_margin == self.space_after_alt_bar + 9 + 6 and configurable.h_page_margins[2] == 20 and configurable.b_page_margin == 12 then
-                    self.test_light:setText(" ●")
+                    self.test_light:setText(" ● " .. self.frontlight)
                 else
-                    self.test_light:setText(" ○")
+                    self.test_light:setText(" ○ " .. self.frontlight)
                 end
             else
                 if configurable.h_page_margins[1] == 12 and configurable.t_page_margin == self.space_after_alt_bar + 9 + 6 and configurable.h_page_margins[2] == 12 and configurable.b_page_margin == 12 then
-                    self.test_light:setText(" ●")
+                    self.test_light:setText(" ● " .. self.frontlight)
                 else
-                    self.test_light:setText(" ○")
+                    self.test_light:setText(" ○ " .. self.frontlight)
                 end
             end
         elseif self.option == 4 then
             if Device:isAndroid() then
                 if configurable.h_page_margins[1] == 20 and configurable.t_page_margin == 9 + 6 and configurable.h_page_margins[2] == 20 and configurable.b_page_margin == 12 then
-                    self.test_light:setText(" ●")
+                    self.test_light:setText(" ● " .. self.frontlight)
                 else
-                    self.test_light:setText(" ○")
+                    self.test_light:setText(" ○ " .. self.frontlight)
                 end
             else
                 if configurable.h_page_margins[1] == 12 and configurable.t_page_margin == 9 + 6 and configurable.h_page_margins[2] == 12 and configurable.b_page_margin == 12 then
-                    self.test_light:setText(" ●")
+                    self.test_light:setText(" ● " .. self.frontlight)
                 else
-                    self.test_light:setText(" ○")
+                    self.test_light:setText(" ○ " .. self.frontlight)
                 end
             end
         end
@@ -1058,6 +1079,14 @@ function TopBar:onAdjustMarginsTopbar()
     --self.ui:saveSettings()
 
 end
+
+-- In devicelistener.lua
+-- function TopBar:onToggleFrontlight()
+--     UIManager:scheduleIn(0.5, function()
+--         self:toggleBar()
+--         UIManager:setDirty("all", "full")
+--     end)
+-- end
 
 
 return TopBar

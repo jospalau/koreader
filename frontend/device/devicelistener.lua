@@ -183,10 +183,16 @@ if Device:hasFrontlight() then
         if not powerd:toggleFrontlight(notif_cb) then
             Notification:notify(_("Frontlight unchanged."), notif_source)
         end
+
+
+        local topbar = self.ui.view[4]
+        if topbar then
+            topbar:toggleBar()
+            UIManager:setDirty("all", "full")
+        end
     end
 
     function DeviceListener:onShowFlDialog()
-        Device:showLightDialog()
     end
 
 end
