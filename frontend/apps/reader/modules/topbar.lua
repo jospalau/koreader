@@ -1030,8 +1030,9 @@ function TopBar:paintTo(bb, x, y)
         -- local execute = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub' | wc -l" )
         -- local execute2 = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub.lua' -exec ls {} + | wc -l")
         -- books_information[1][1]:setText("TB: " .. execute:read('*a') .. "TBC: " .. execute2:read('*a'))
-        books_information[1][1]:setText("B: " .. stats["total_books"] .. ", BF: " .. stats["total_books_finished"] .. ", BFTM: " .. stats["total_books_finished_this_month"] .. ", BFTY: " .. stats["total_books_finished_this_year"]
-        .. ", BMBR: " .. stats["total_books_mbr"] .. ", BTBR: " .. stats["total_books_tbr"])
+        books_information[1][1]:setText("B: " .. stats["total_books"] .. ", BF: " .. stats["total_books_finished"] .. ", BFTM: "
+        .. stats["total_books_finished_this_month"] .. ", BFTY: " .. stats["total_books_finished_this_year"]
+        .. ", BFLY: " .. stats["total_books_finished_last_year"] .. ", BMBR: " .. stats["total_books_mbr"] .. ", BTBR: " .. stats["total_books_tbr"])
         books_information:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
     end
 end

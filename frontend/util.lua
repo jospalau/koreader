@@ -1568,7 +1568,7 @@ function util.getList(search_string, search_finished, search_tbr, search_mbr)
         search_string = search_string:gsub("%?","%.")
     end
 
-    local dirs, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year = {}, {}, {}, {}, {}, {}, {}
+    local dirs, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year, files_finished_last_year = {}, {}, {}, {}, {}, {}, {}, {}
     local scan_dirs = {G_reader_settings:readSetting("home_dir")}
     local cur_month = os.date("%m")
     local cur_year = os.date("%Y")
@@ -1607,6 +1607,9 @@ function util.getList(search_string, search_finished, search_tbr, search_mbr)
                                         if cur_year == ryear then
                                             table.insert(files_finished_this_year, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
                                         end
+                                        if tostring(tonumber(cur_year) - 1) == ryear then
+                                            table.insert(files_finished_last_year, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
+                                        end
                                     end
                                 end
                                 local filemanagerutil = require("apps/filemanager/filemanagerutil")
@@ -1626,17 +1629,18 @@ function util.getList(search_string, search_finished, search_tbr, search_mbr)
         end
         scan_dirs = new_dirs
     end
-    return dirs, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year
+    return dirs, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year, files_finished_last_year
 end
 
 function util.generateStats()
     local dump = require("dump")
-    local _, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year = util.getList("*.epub")
+    local _, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year, files_finished_last_year = util.getList("*.epub")
 
     local stats = {["total_books"] = #files,
                 ["total_books_finished"] = #files_finished,
                 ["total_books_finished_this_month"] = #files_finished_this_month,
                 ["total_books_finished_this_year"] = #files_finished_this_year,
+                ["total_books_finished_last_year"] = #files_finished_last_year,
                 ["total_books_tbr"] = #files_tbr,
                 ["total_books_mbr"] = #files_mbr}
 
