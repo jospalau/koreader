@@ -342,7 +342,7 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
         -- We pass this anonymous function as a callback so the history can be refreshed in case any status has been updated
         -- We don't need to pass a history variable since we refresh in the event handler the history if it is opened
         UIManager:broadcastEvent(Event:new("ShowFileSearchLists", true, nil, "*.epub"))
-    elseif string.find("west south", ges_ev.multiswipe_directions) then
+    elseif string.find("west north east", ges_ev.multiswipe_directions) then
         self._manager.filter = "all"UIManager:broadcastEvent(Event:new("ShowFileSearchAllCompleted"))
     -- elseif string.find("east south", ges_ev.multiswipe_directions) then
     --     local FileManager = require("apps/filemanager/filemanager")
