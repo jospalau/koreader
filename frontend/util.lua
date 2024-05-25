@@ -1601,11 +1601,11 @@ function util.getList(search_string, search_finished, search_tbr, search_mbr)
                                     if last_modified_date then
                                         local pattern = "(%d+)-(%d+)-(%d+)"
                                         local ryear, rmonth, rday = last_modified_date:match(pattern)
-                                        if cur_month == rmonth then
-                                            table.insert(files_finished_this_month, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
-                                        end
                                         if cur_year == ryear then
                                             table.insert(files_finished_this_year, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
+                                            if cur_month == rmonth then
+                                                table.insert(files_finished_this_month, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
+                                            end
                                         end
                                         if tostring(tonumber(cur_year) - 1) == ryear then
                                             table.insert(files_finished_last_year, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
