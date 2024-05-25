@@ -216,25 +216,26 @@ function FileSearcher:onSearchSortCompleted(show_complete, show_recent, page, ca
         table.sort(results,function(a,b) return b.text>a.text end)
     end
     if (show_complete) then
-        table.sort(results,function(a,b) return a.attr.modification>b.attr.modification end)
         local table_complete = {}
-        for key,value in ipairs(results) do
+        for key, value in ipairs(results) do
             if DocSettings:hasSidecarFile(value.path) then
                 -- local stats = doc_settings:readSetting("stats")
                 -- local book_props = require("apps/filemanager/filemanagerbookinfo").getDocProps(value.path).description
                 local doc_settings = DocSettings:open(value.path)
                 local status = doc_settings:readSetting("summary").status
+                local modified_date = doc_settings:readSetting("summary").modified
                 if status == "complete" then
+                    value.modified_date = modified_date
+                    value.text = modified_date .. " " .. value.text:gsub(string.match(value.text , "^.+(%..+)$"), "")
                     table_complete[#table_complete+1] = value
                 end
-
-
             end
         end
         results = table_complete
+        table.sort(results, function(a, b) return a.modified_date > b.modified_date end)
     else
         if show_recent then
-            table.sort(results,function(a,b) return a.attr.modification>b.attr.modification end)
+            table.sort(results, function(a, b) return a.attr.modification > b.attr.modification end)
         end
     end
 
