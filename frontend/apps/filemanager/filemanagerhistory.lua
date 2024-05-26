@@ -251,7 +251,7 @@ function FileManagerHistory:MenuSetRotationModeHandler(rotation)
 end
 
 function FileManagerHistory:onShowHist(search_info)
-    if self.ui and self.ui.document and (self.ui.document.file:find("resources/arthur%-conan%-doyle%_the%-hound%-of%-the%-baskervilles.epub") or self.ui.document.file:find("resources/Forthcoming_Books.pdf")) then return end
+    if self.ui and self.ui.document and self.ui.document.file:find("resources/arthur%-conan%-doyle%_the%-hound%-of%-the%-baskervilles.epub") then return end
     local ReadHistory = require("readhistory")
     ReadHistory.hist = {}
     ReadHistory:reload(true)
@@ -354,9 +354,9 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
         self._manager.search_string = nil
         self._manager.selected_colections = nil
         self._manager:updateItemTable()
-    elseif string.find("east south west", ges_ev.multiswipe_directions) and require("apps/reader/readerui").instance == nil then
-        local FileManager = require("apps/filemanager/filemanager")
-        FileManager:openFile("resources/Forthcoming_Books.pdf")
+    -- elseif string.find("east south west", ges_ev.multiswipe_directions) and require("apps/reader/readerui").instance == nil then
+    --     local FileManager = require("apps/filemanager/filemanager")
+    --     FileManager:openFile("resources/Forthcoming_Books.pdf")
     else
         self:onClose()
         -- if self._manager.ui.history.send then
