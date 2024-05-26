@@ -1424,13 +1424,17 @@ function FileManager:onPullConfig()
             local Size = require("ui/size")
             UIManager:show(ConfirmBox:new{
                 dismissable = false,
-                text = _("KOReader needs to be restarted to apply the new default settings."),
+                text = _("KOReader needs to be restarted."),
                 ok_text = save_text,
                 margin = Size.margin.tiny,
                 padding = Size.padding.tiny,
                 ok_callback = function()
                     if Device:canRestart() then
                         UIManager:restartKOReader()
+                        -- The new Clara B&W is so quick closing that when presing on Restart it doesn't flash
+                        -- Set a little delay for all devices
+                        local util = require("ffi/util")
+                        util.usleep(100000)
                     else
                         UIManager:quit()
                     end
@@ -1503,13 +1507,17 @@ function FileManager:onSynchronizeCode()
             local Size = require("ui/size")
             UIManager:show(ConfirmBox:new{
                 dismissable = false,
-                text = _("KOReader needs to be restarted to apply the new default settings."),
+                text = _("KOReader needs to be restarted."),
                 ok_text = save_text,
                 margin = Size.margin.tiny,
                 padding = Size.padding.tiny,
                 ok_callback = function()
                     if Device:canRestart() then
                         UIManager:restartKOReader()
+                        -- The new Clara B&W is so quick closing that when presing on Restart it doesn't flash
+                        -- Set a little delay for all devices
+                        local util = require("ffi/util")
+                        util.usleep(100000)
                     else
                         UIManager:quit()
                     end
