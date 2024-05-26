@@ -2252,59 +2252,58 @@ end
 
 function ReaderFooter:onGetStyles()
     local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
-    if file_type == "epub" then
-        local css_text = self.ui.document:getDocumentFileContent("OPS/styles/stylesheet.css")
-        if css_text == nil then
-            css_text = self.ui.document:getDocumentFileContent("stylesheet.css")
-        end
-
-        -- Special case for resources/arthur-conan-doyle_the-hound-of-the-baskervilles.epub but no important, since div and p tags don't use classes in this document
-        if css_text == nil then
-            css_text = self.ui.document:getDocumentFileContent("epub/css/core.css")
-        end
-
-
-        local first_text = self.ui.document._document:getTextFromPositions(0, 0, 10, Screen:getHeight(), false, false)
-        local html, css_files, css_selectors_offsets =
-        self.ui.document._document:getHTMLFromXPointers(first_text.pos0,first_text.pos1, 0xE830, true)
-        local htmlw=""
-
-        -- No puedo hacerlo con gmatch, iré línea a línea que además viene bien para extraer las clases
-        -- for w in string.gmatch(html, "(<%w* class=\"%w*\">)") do
-        -- for w in string.gmatch(html,"(<%w* class=\"(.-)\">)") do
-        --    htmlw = htmlw .. "," .. w
-        -- end
-        local classes = ""
-        for line in html:gmatch("[^\n]+") do
-            if (line:find("^.*<body") ~= nil or line:find("^.*<p") ~= nil or line:find("^.*<div") ~= nil) and line:find("class=") ~= nil then
-            htmlw = htmlw .. "," .. string.match(line, " %b<>")
-            classes = classes .. "," .. string.match(line, "class=\"(.-)\"")
-            end
-        end
-        -- Algunas clases contienen el caracter -. Tenemos que escaparlo
-        classes = classes:sub(2,classes:len()):gsub("%-", "%%-")
-        local csss = ""
-        local csss_classes = ""
-        for line in classes:gmatch("[^,]+") do
-            local css_class = string.match(css_text, line .. " %b{}")
-            if css_class ~= nil and csss:find(line) == nil then
-                csss = csss .. css_class .. "\n"
-                csss_classes = csss_classes .. line .. ","
-            end
-        end
-        csss_classes = csss_classes:sub(1,csss_classes:len() - 1):gsub("%%", "")
-        htmlw = htmlw:sub(2,htmlw:len())
-
-        local text =  string.char(10) .. htmlw
-        .. string.char(10) .. csss_classes
-        .. string.char(10) .. csss
-        UIManager:show(InfoMessage:new{
-            text = T(_(text)),
-            no_refresh_on_close = false,
-            face = Font:getFace("myfont3"),
-            width = math.floor(Screen:getWidth() * 0.85),
-        })
+    if file_type == "pdf" then return end
+    local css_text = self.ui.document:getDocumentFileContent("OPS/styles/stylesheet.css")
+    if css_text == nil then
+        css_text = self.ui.document:getDocumentFileContent("stylesheet.css")
     end
+
+    -- Special case for resources/arthur-conan-doyle_the-hound-of-the-baskervilles.epub but no important, since div and p tags don't use classes in this document
+    if css_text == nil then
+        css_text = self.ui.document:getDocumentFileContent("epub/css/core.css")
+    end
+
+
+    local first_text = self.ui.document._document:getTextFromPositions(0, 0, 10, Screen:getHeight(), false, false)
+    local html, css_files, css_selectors_offsets =
+    self.ui.document._document:getHTMLFromXPointers(first_text.pos0,first_text.pos1, 0xE830, true)
+    local htmlw=""
+
+    -- No puedo hacerlo con gmatch, iré línea a línea que además viene bien para extraer las clases
+    -- for w in string.gmatch(html, "(<%w* class=\"%w*\">)") do
+    -- for w in string.gmatch(html,"(<%w* class=\"(.-)\">)") do
+    --    htmlw = htmlw .. "," .. w
+    -- end
+    local classes = ""
+    for line in html:gmatch("[^\n]+") do
+        if (line:find("^.*<body") ~= nil or line:find("^.*<p") ~= nil or line:find("^.*<div") ~= nil) and line:find("class=") ~= nil then
+        htmlw = htmlw .. "," .. string.match(line, " %b<>")
+        classes = classes .. "," .. string.match(line, "class=\"(.-)\"")
+        end
+    end
+    -- Algunas clases contienen el caracter -. Tenemos que escaparlo
+    classes = classes:sub(2,classes:len()):gsub("%-", "%%-")
+    local csss = ""
+    local csss_classes = ""
+    for line in classes:gmatch("[^,]+") do
+        local css_class = string.match(css_text, line .. " %b{}")
+        if css_class ~= nil and csss:find(line) == nil then
+            csss = csss .. css_class .. "\n"
+            csss_classes = csss_classes .. line .. ","
+        end
+    end
+    csss_classes = csss_classes:sub(1,csss_classes:len() - 1):gsub("%%", "")
+    htmlw = htmlw:sub(2,htmlw:len())
+
+    local text =  string.char(10) .. htmlw
+    .. string.char(10) .. csss_classes
+    .. string.char(10) .. csss
+    UIManager:show(InfoMessage:new{
+        text = T(_(text)),
+        no_refresh_on_close = false,
+        face = Font:getFace("myfont3"),
+        width = math.floor(Screen:getWidth() * 0.85),
+    })
     return true
 end
 
@@ -2334,126 +2333,126 @@ end
 
 function ReaderFooter:onGetTextPage()
     local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
-    if file_type == "epub" then
-        local cur_page = self.ui.document:getCurrentPage()
-        local total_words, total_words2 = 0, 0
-        -- if not Device:isPocketBook() then
-        total_words, total_words2 = self.ui.document:getTextCurrentPage()
-        -- end
-        local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
-        local name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2 = "","","","","","","","","","","","","",""
-        local text_properties=""
-        if res and res.pos0 ~= ".0" then
-            name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2  = self.ui.document:getHeight(res.pos0)
+    if file_type == "pdf" then return end
+    local cur_page = self.ui.document:getCurrentPage()
+    local total_words, total_words2 = 0, 0
+    -- if not Device:isPocketBook() then
+    total_words, total_words2 = self.ui.document:getTextCurrentPage()
+    -- end
+    local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
+    local name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2 = "","","","","","","","","","","","","",""
+    local text_properties=""
+    if res and res.pos0 ~= ".0" then
+        name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2  = self.ui.document:getHeight(res.pos0)
 
 
-            -- If there is not css property line-height in any style, the CREngine return a value of -2
-            -- And line-height is calculated using the font metrics
-            -- I explicit calculated the value in cre.cpp
-            -- lua_pushnumber(L, (float) sourceNodeParent->getFont()->getHeight()/sourceNodeParent->getFont()->getSize());
+        -- If there is not css property line-height in any style, the CREngine return a value of -2
+        -- And line-height is calculated using the font metrics
+        -- I explicit calculated the value in cre.cpp
+        -- lua_pushnumber(L, (float) sourceNodeParent->getFont()->getHeight()/sourceNodeParent->getFont()->getSize());
 
-            -- The tweak does not seem to work and we won't to know which em value it is being applied considering the value of the line-height
-            -- coming with the font metrics
-            -- and that's why the following
-            -- uniheight == "Font" means no line-height.
-            -- if unitheight == "Font" and self.ui.tweaks:find("Spacing between lines %(1.2em%)") then
+        -- The tweak does not seem to work and we won't to know which em value it is being applied considering the value of the line-height
+        -- coming with the font metrics
+        -- and that's why the following
+        -- uniheight == "Font" means no line-height.
+        -- if unitheight == "Font" and self.ui.tweaks:find("Spacing between lines %(1.2em%)") then
 
-            -- I will leaving but, the tweak for line-height works since I modified to affect div tagas as well
-            if unitheight == "Font" then
-                height = height * self.ui.document.configurable.line_spacing/100
-                height2 = height2 * self.ui.document.configurable.line_spacing/100
-            end
-
-            if self.ui.tweaks:find("Spacing between lines %(1.2em%)") then
-                unitheight = unitheight .. "*"
-                unitheight2 = unitheight2 .. "*"
-            end
-            if name ~= "" then
-                local Math = require("optmath")
-                -- If p doesnt have a class with line-height and body or the container tag does,
-                -- it inherits the value
-                height = Math.round(height*100)/100 .. unitheight
-                height2 = Math.round(height2*100)/100 .. unitheight2
-                indent = Math.round(indent*100)/100 .. unitindent
-                indent2 = Math.round(indent2*100)/100 .. unitindent2
-                margin =  Math.round(margin*100)/100 .. unitmargin
-                margin2 = Math.round(margin2*100)/100 .. unitmargin2
-                text_properties = string.format("%-15s%-10s%-5s","Tag",name2,name) .. string.char(10)
-                text_properties = text_properties .. string.format("%-15s%-10s%-5s","Line height",height2,height) .. string.char(10)
-                text_properties = text_properties .. string.format("%-15s%-10s%-5s","Text indent",indent2,indent) .. string.char(10)
-                text_properties = text_properties .. string.format("%-15s%-10s%-5s","Margin",margin2,margin)
-            end
+        -- I will leaving but, the tweak for line-height works since I modified to affect div tagas as well
+        if unitheight == "Font" then
+            height = height * self.ui.document.configurable.line_spacing/100
+            height2 = height2 * self.ui.document.configurable.line_spacing/100
         end
 
-        local title_pages = self.ui.document._document:getDocumentProps().title
-
-        local title_words = 0
-        if (title_pages:find("([0-9,]+w)") ~= nil) then
-            title_words = title_pages:match("([0-9,]+w)"):gsub("w",""):gsub(",","")
+        if self.ui.tweaks:find("Spacing between lines %(1.2em%)") then
+            unitheight = unitheight .. "*"
+            unitheight2 = unitheight2 .. "*"
         end
-
-        local font_size = self.ui.document._document:getFontSize()
-        local font_face = self.ui.document._document:getFontFace()
-
-
-        local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
-
-
-        -- local font_size_pt = math.floor((font_size * 72 / display_dpi) * 100) / 100
-        -- local font_size_mm = math.floor((font_size * 25.4 / display_dpi)  * 100) / 100
-
-        -- We have now points in the font size
-        local font_size_pt =  self.ui.document.configurable.font_size
-        local font_size_mm =  self.ui.document.configurable.font_size * 0.35
-
-        -- We have now points in the font size, converting to didot points is simple, 1 points = 0.93575007368111 didot points
-        -- local font_size_pt_koreader = string.format(" (%.2fp)", convertSizeTo(self.ui.document.configurable.font_size, "pt"))
-        local font_size_pt_koreader = string.format(" (%.2fp)", self.ui.document.configurable.font_size * 0.94)
-        -- if Device:isKobo() or Device:isPocketBook() or Device.model == "boox" then
-        --     font_size_pt = math.floor((font_size * 72 / 300) * 100) / 100
-        --     font_size_mm = math.floor((font_size * 25.4 / 300)  * 100) / 100
-        -- elseif Device:isAndroid() then
-        --     font_size_pt = math.floor((font_size * 72 / 446) * 100) / 100
-        --     font_size_mm = math.floor((font_size * 25.4 / 446)  * 100) / 100
-        -- else
-        --     font_size_pt = math.floor((font_size * 72 / 160) * 100) / 100
-        --     font_size_mm = math.floor((font_size * 25.4 / 160)  * 100) / 100
-        -- end
-
-
-        local sessions, avg_wpm, avg_last_seven_days, avg_last_thirty_days, avg_last_sixty_days, avg_last_ninety_days, avg_last_hundred_and_eighty_days = getSessionsInfo(self)
-        avg_wpm = math.floor(avg_wpm) .. "wpm" .. ", " .. math.floor(avg_wpm*60) .. "wph"
-        local text = ""
-
-
-
-
-        -- if not Device:isPocketBook() then
-        text = text .. "Total pages (screens): " .. self.pages .. string.char(10) ..
-        "Total words (total chars/5.7): " .. total_words .. string.char(10) .. -- Dividing characters between 5.7
-        "Total words (counting words): " .. total_words2 .. string.char(10) .. -- Counting words
-        "Words per page: " .. tostring(math.floor((total_words2/self.pages * 100) / 100)) .. string.char(10)
-        -- end
-
-        text = text .. "Total words Calibre: " .. title_words .. string.char(10) ..
-        "Words per page Calibre: " .. tostring(math.floor((title_words/self.pages * 100) / 100)) .. string.char(10) .. string.char(10) ..
-        "Total sessions in db: " .. tostring(sessions) .. string.char(10) ..
-        "Average time read last 7 days: " .. avg_last_seven_days .. "h" .. string.char(10) ..
-        "Average time read last 30 days: " .. avg_last_thirty_days .. "h" .. string.char(10) ..
-        "Average time read last 60 days: " .. avg_last_sixty_days .. "h" .. string.char(10) ..
-        "Average time read last 90 days: " .. avg_last_ninety_days .. "h" .. string.char(10) ..
-        "Average time read last 180 days: " .. avg_last_hundred_and_eighty_days .. "h" .. string.char(10) ..
-        "Avg wpm and wph: " .. avg_wpm .. string.char(10) .. string.char(10) ..
-        "Font: " .. font_face .. ", " .. font_size_pt .. "pt" .. font_size_pt_koreader .. ", " .. font_size_mm .. "mm" .. string.char(10) ..
-        "Number of tweaks: " .. self.ui.tweaks_no .. string.char(10) ..
-        self.ui.tweaks .. string.char(10) ..
-        text_properties
-        UIManager:show(InfoMessage:new{
-            text = T(_(text)),
-            face = Font:getFace("myfont3"),
-            width = math.floor(Screen:getWidth() * 0.7),
-        })
+        if name ~= "" then
+            local Math = require("optmath")
+            -- If p doesnt have a class with line-height and body or the container tag does,
+            -- it inherits the value
+            height = Math.round(height*100)/100 .. unitheight
+            height2 = Math.round(height2*100)/100 .. unitheight2
+            indent = Math.round(indent*100)/100 .. unitindent
+            indent2 = Math.round(indent2*100)/100 .. unitindent2
+            margin =  Math.round(margin*100)/100 .. unitmargin
+            margin2 = Math.round(margin2*100)/100 .. unitmargin2
+            text_properties = string.format("%-15s%-10s%-5s","Tag",name2,name) .. string.char(10)
+            text_properties = text_properties .. string.format("%-15s%-10s%-5s","Line height",height2,height) .. string.char(10)
+            text_properties = text_properties .. string.format("%-15s%-10s%-5s","Text indent",indent2,indent) .. string.char(10)
+            text_properties = text_properties .. string.format("%-15s%-10s%-5s","Margin",margin2,margin)
+        end
     end
+
+    local title_pages = self.ui.document._document:getDocumentProps().title
+
+    local title_words = 0
+    if (title_pages:find("([0-9,]+w)") ~= nil) then
+        title_words = title_pages:match("([0-9,]+w)"):gsub("w",""):gsub(",","")
+    end
+
+    local font_size = self.ui.document._document:getFontSize()
+    local font_face = self.ui.document._document:getFontFace()
+
+
+    local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+
+
+    -- local font_size_pt = math.floor((font_size * 72 / display_dpi) * 100) / 100
+    -- local font_size_mm = math.floor((font_size * 25.4 / display_dpi)  * 100) / 100
+
+    -- We have now points in the font size
+    local font_size_pt =  self.ui.document.configurable.font_size
+    local font_size_mm =  self.ui.document.configurable.font_size * 0.35
+
+    -- We have now points in the font size, converting to didot points is simple, 1 points = 0.93575007368111 didot points
+    -- local font_size_pt_koreader = string.format(" (%.2fp)", convertSizeTo(self.ui.document.configurable.font_size, "pt"))
+    local font_size_pt_koreader = string.format(" (%.2fp)", self.ui.document.configurable.font_size * 0.94)
+    -- if Device:isKobo() or Device:isPocketBook() or Device.model == "boox" then
+    --     font_size_pt = math.floor((font_size * 72 / 300) * 100) / 100
+    --     font_size_mm = math.floor((font_size * 25.4 / 300)  * 100) / 100
+    -- elseif Device:isAndroid() then
+    --     font_size_pt = math.floor((font_size * 72 / 446) * 100) / 100
+    --     font_size_mm = math.floor((font_size * 25.4 / 446)  * 100) / 100
+    -- else
+    --     font_size_pt = math.floor((font_size * 72 / 160) * 100) / 100
+    --     font_size_mm = math.floor((font_size * 25.4 / 160)  * 100) / 100
+    -- end
+
+
+    local sessions, avg_wpm, avg_last_seven_days, avg_last_thirty_days, avg_last_sixty_days, avg_last_ninety_days, avg_last_hundred_and_eighty_days = getSessionsInfo(self)
+    avg_wpm = math.floor(avg_wpm) .. "wpm" .. ", " .. math.floor(avg_wpm*60) .. "wph"
+    local text = ""
+
+
+
+
+    -- if not Device:isPocketBook() then
+    text = text .. "Total pages (screens): " .. self.pages .. string.char(10) ..
+    "Total words (total chars/5.7): " .. total_words .. string.char(10) .. -- Dividing characters between 5.7
+    "Total words (counting words): " .. total_words2 .. string.char(10) .. -- Counting words
+    "Words per page: " .. tostring(math.floor((total_words2/self.pages * 100) / 100)) .. string.char(10)
+    -- end
+
+    text = text .. "Total words Calibre: " .. title_words .. string.char(10) ..
+    "Words per page Calibre: " .. tostring(math.floor((title_words/self.pages * 100) / 100)) .. string.char(10) .. string.char(10) ..
+    "Total sessions in db: " .. tostring(sessions) .. string.char(10) ..
+    "Average time read last 7 days: " .. avg_last_seven_days .. "h" .. string.char(10) ..
+    "Average time read last 30 days: " .. avg_last_thirty_days .. "h" .. string.char(10) ..
+    "Average time read last 60 days: " .. avg_last_sixty_days .. "h" .. string.char(10) ..
+    "Average time read last 90 days: " .. avg_last_ninety_days .. "h" .. string.char(10) ..
+    "Average time read last 180 days: " .. avg_last_hundred_and_eighty_days .. "h" .. string.char(10) ..
+    "Avg wpm and wph: " .. avg_wpm .. string.char(10) .. string.char(10) ..
+    "Font: " .. font_face .. ", " .. font_size_pt .. "pt" .. font_size_pt_koreader .. ", " .. font_size_mm .. "mm" .. string.char(10) ..
+    "Number of tweaks: " .. self.ui.tweaks_no .. string.char(10) ..
+    self.ui.tweaks .. string.char(10) ..
+    text_properties
+    UIManager:show(InfoMessage:new{
+        text = T(_(text)),
+        face = Font:getFace("myfont3"),
+        width = math.floor(Screen:getWidth() * 0.7),
+    })
+    return true
 end
 function ReaderFooter:onShowTextProperties()
     if not self.ui.rolling then
@@ -4268,6 +4267,8 @@ end
 
 -- only call this function after document is fully loaded
 function ReaderFooter:_updateFooterText(force_repaint, full_repaint)
+    local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
+    if file_type == "pdf" then return end
     -- footer is invisible, we need neither a repaint nor a recompute, go away.
     if not self.view.footer_visible and not force_repaint and not full_repaint then
         return
@@ -4328,16 +4329,13 @@ function ReaderFooter:_updateFooterText(force_repaint, full_repaint)
     local words = "?w"
 
 
-    local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
-    if file_type == "epub" then
-        if title:find('%[%d?.%d]') then
-            title = title:sub(title:find('%]')+2, title:len())
-        end
+    if title:find('%[%d?.%d]') then
+        title = title:sub(title:find('%]')+2, title:len())
+    end
 
-        if (title:find("([0-9,]+w)") ~= nil) then
-            words = title:match("([0-9,]+w)"):gsub("w",""):gsub(",","") .. "w"
-            title = title:sub(1, title:find('%(')-2, title:len())
-        end
+    if (title:find("([0-9,]+w)") ~= nil) then
+        words = title:match("([0-9,]+w)"):gsub("w",""):gsub(",","") .. "w"
+        title = title:sub(1, title:find('%(')-2, title:len())
     end
 
     -- local duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100
@@ -4580,64 +4578,63 @@ end
 
 function ReaderFooter:onToggleFooterMode()
     local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
-    if file_type == "epub" then
-        self._show_just_toptextcontainer = false
-        -- self.height = Screen:scaleBySize(self.settings.container_height)
-        -- self.bottom_padding = Screen:scaleBySize(self.settings.container_bottom_padding) -- No needed?
-        self:refreshFooter(true, true) -- Needs to be true to remove some parts that main remain
-        if not self.view.footer_visible or self.mode == 0 then
-            local text = "Footer on."
-            if self.settings.bar_top then
-                UIManager:show(Notification:new{
-                    text = _(text),
-                    -- my_height = Screen:scaleBySize(30),
-                    -- align = "left",
-                    timeout = 0.3,
-                })
-            else
-                UIManager:show(Notification:new{
-                    text = _(text),
-                })
-            end
-        end
-        if self.has_no_mode and self.settings.disable_progress_bar then return end
-        if self.settings.all_at_once or self.has_no_mode then
-            if self.mode >= 1 then
-                self.mode = self.mode_list.off
-            else
-                self.mode = self.mode_list.page_progress
-            end
+    if file_type == "pdf" then return end
+    self._show_just_toptextcontainer = false
+    -- self.height = Screen:scaleBySize(self.settings.container_height)
+    -- self.bottom_padding = Screen:scaleBySize(self.settings.container_bottom_padding) -- No needed?
+    self:refreshFooter(true, true) -- Needs to be true to remove some parts that main remain
+    if not self.view.footer_visible or self.mode == 0 then
+        local text = "Footer on."
+        if self.settings.bar_top then
+            UIManager:show(Notification:new{
+                text = _(text),
+                -- my_height = Screen:scaleBySize(30),
+                -- align = "left",
+                timeout = 0.3,
+            })
         else
-            self.mode = (self.mode + 1) % self.mode_nb
-            for i, m in ipairs(self.mode_index) do
-                if self.mode == self.mode_list.off then break end
-                if self.mode == i then
-                    if self.settings[m] then
-                        break
-                    else
-                        self.mode = (self.mode + 1) % self.mode_nb
-                end
-                end
-            end
-        end
-        if self.mode == 0 then
-            self._statusbar_toggled = true
-            local text = "footer off."
-            if not self.settings.disable_progress_bar then
-                self.settings.disable_progress_bar = true
-                text = "Progress bar and footer off."
-                self:onUpdateFooter(true,true)
-            end
             UIManager:show(Notification:new{
                 text = _(text),
             })
         end
-        self._old_mode = self.mode
-        self:applyFooterMode()
-        G_reader_settings:saveSetting("reader_footer_mode", self.mode)
-        self:onUpdateFooter(true, true) -- Si solo pasamos el primer parametro a true y la barra la queremos arriba, la pintara abajo
-        self:rescheduleFooterAutoRefreshIfNeeded()
     end
+    if self.has_no_mode and self.settings.disable_progress_bar then return end
+    if self.settings.all_at_once or self.has_no_mode then
+        if self.mode >= 1 then
+            self.mode = self.mode_list.off
+        else
+            self.mode = self.mode_list.page_progress
+        end
+    else
+        self.mode = (self.mode + 1) % self.mode_nb
+        for i, m in ipairs(self.mode_index) do
+            if self.mode == self.mode_list.off then break end
+            if self.mode == i then
+                if self.settings[m] then
+                    break
+                else
+                    self.mode = (self.mode + 1) % self.mode_nb
+            end
+            end
+        end
+    end
+    if self.mode == 0 then
+        self._statusbar_toggled = true
+        local text = "footer off."
+        if not self.settings.disable_progress_bar then
+            self.settings.disable_progress_bar = true
+            text = "Progress bar and footer off."
+            self:onUpdateFooter(true,true)
+        end
+        UIManager:show(Notification:new{
+            text = _(text),
+        })
+    end
+    self._old_mode = self.mode
+    self:applyFooterMode()
+    G_reader_settings:saveSetting("reader_footer_mode", self.mode)
+    self:onUpdateFooter(true, true) -- Si solo pasamos el primer parametro a true y la barra la queremos arriba, la pintara abajo
+    self:rescheduleFooterAutoRefreshIfNeeded()
     return true
 end
 
@@ -4645,66 +4642,65 @@ end
 
 function ReaderFooter:onToggleFooterModeBack()
     local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
-    if file_type == "epub" then
-        self._show_just_toptextcontainer = false
-        -- self.bottom_padding = Screen:scaleBySize(self.settings.container_bottom_padding) -- No needed?
-        self:refreshFooter(true, true) -- Needs to be true to remove some parts that main remain
-        if not self.view.footer_visible or self.mode == 0 then
-            local text = "Footer on."
-            if self.settings.bar_top then
-                UIManager:show(Notification:new{
-                    text = _(text),
-                    -- my_height = Screen:scaleBySize(30),
-                    -- align = "left",
-                    timeout = 0.3,
-                })
-            else
-                UIManager:show(Notification:new{
-                    text = _(text),
-                })
-            end
-        end
-        if self.has_no_mode and self.settings.disable_progress_bar then return end
-        if self.settings.all_at_once or self.has_no_mode then
-            if self.mode >= 1 then
-                self.mode = self.mode_list.off
-            else
-                self.mode = self.mode_list.page_progress
-            end
+    if file_type == "pdf" then return end
+    self._show_just_toptextcontainer = false
+    -- self.bottom_padding = Screen:scaleBySize(self.settings.container_bottom_padding) -- No needed?
+    self:refreshFooter(true, true) -- Needs to be true to remove some parts that main remain
+    if not self.view.footer_visible or self.mode == 0 then
+        local text = "Footer on."
+        if self.settings.bar_top then
+            UIManager:show(Notification:new{
+                text = _(text),
+                -- my_height = Screen:scaleBySize(30),
+                -- align = "left",
+                timeout = 0.3,
+            })
         else
-            self.mode = (self.mode -1) % self.mode_nb
-            for i = #self.mode_index, 1, -1 do
-                local m = self.mode_index[i]
-                if self.mode == self.mode_list.off then break end
-                if self.mode == i then
-                    if self.settings[m] then
-                        break
-                    else
-                        self.mode = (self.mode - 1) % self.mode_nb
-                    end
+            UIManager:show(Notification:new{
+                text = _(text),
+            })
+        end
+    end
+    if self.has_no_mode and self.settings.disable_progress_bar then return end
+    if self.settings.all_at_once or self.has_no_mode then
+        if self.mode >= 1 then
+            self.mode = self.mode_list.off
+        else
+            self.mode = self.mode_list.page_progress
+        end
+    else
+        self.mode = (self.mode -1) % self.mode_nb
+        for i = #self.mode_index, 1, -1 do
+            local m = self.mode_index[i]
+            if self.mode == self.mode_list.off then break end
+            if self.mode == i then
+                if self.settings[m] then
+                    break
+                else
+                    self.mode = (self.mode - 1) % self.mode_nb
                 end
             end
         end
-        if self.mode == 0 then
-            self._statusbar_toggled = true
-            local text = "footer off."
-            if not self.settings.disable_progress_bar then
-                self.settings.disable_progress_bar = true
-                text = "Progress bar and footer off."
-                self:onUpdateFooter(true,true)
-            end
-            if not self.view.footer_visible or self.mode == 0 then
-                UIManager:show(Notification:new{
-                    text = _(text),
-                })
-            end
-        end
-        self._old_mode = self.mode
-        self:applyFooterMode()
-        G_reader_settings:saveSetting("reader_footer_mode", self.mode)
-        self:onUpdateFooter(true, true)
-        self:rescheduleFooterAutoRefreshIfNeeded()
     end
+    if self.mode == 0 then
+        self._statusbar_toggled = true
+        local text = "footer off."
+        if not self.settings.disable_progress_bar then
+            self.settings.disable_progress_bar = true
+            text = "Progress bar and footer off."
+            self:onUpdateFooter(true,true)
+        end
+        if not self.view.footer_visible or self.mode == 0 then
+            UIManager:show(Notification:new{
+                text = _(text),
+            })
+        end
+    end
+    self._old_mode = self.mode
+    self:applyFooterMode()
+    G_reader_settings:saveSetting("reader_footer_mode", self.mode)
+    self:onUpdateFooter(true, true)
+    self:rescheduleFooterAutoRefreshIfNeeded()
     return true
 end
 
@@ -4731,65 +4727,65 @@ end
 
 function ReaderFooter:onStatusBarJustProgressBar()
     local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
-    if file_type == "epub" then
-        self._show_just_toptextcontainer = false
-        --self.bottom_padding = Screen:scaleBySize(-2)
-        self.settings.progress_bar_position = "alongside"
-    --  self.height = Screen:scaleBySize(self.settings.container_height + 10)
-        self:refreshFooter(true, false)
-        if (self.settings.disable_progress_bar) then-- and self.view.footer_visible) or self._statusbar_toggled then
-            local text = "Progress bar on."
-            if self.mode > 0 then
-                text = "Progress bar on and footer off."
-            end
-            if self.settings.bar_top then
-                UIManager:show(Notification:new{
-                    text = _(text),
-                    -- my_height = Screen:scaleBySize(30),
-                    -- align = "left",
-                    timeout = 0.3,
-                })
-            else
-                UIManager:show(Notification:new{
-                    text = _(text),
-                })
-            end
-            self.settings.disable_progress_bar = false
-            self._old_mode = self.mode
-            self.mode = 0
-            self:applyFooterMode() -- Importante hacer aquí applyFooterMode
-            if self.settings.toc_markers then
-                self:setTocMarkers()
-            end
-            self.view.footer_visible = true
-            if self._statusbar_toggled or self.mode == 0 then
-                -- self:applyFooterMode() -- Importante hacer aquí applyFooterMode
-                -- self.view.footer_visible = true
-                self._statusbar_toggled = false
-                self.mode = 0
-                self:applyFooterMode() -- Importante hacer aquí applyFooterMode
-                self.view.footer_visible = true
-            end
-
+    local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
+    if file_type == "pdf" then return end
+    self._show_just_toptextcontainer = false
+    --self.bottom_padding = Screen:scaleBySize(-2)
+    self.settings.progress_bar_position = "alongside"
+--  self.height = Screen:scaleBySize(self.settings.container_height + 10)
+    self:refreshFooter(true, false)
+    if (self.settings.disable_progress_bar) then-- and self.view.footer_visible) or self._statusbar_toggled then
+        local text = "Progress bar on."
+        if self.mode > 0 then
+            text = "Progress bar on and footer off."
+        end
+        if self.settings.bar_top then
+            UIManager:show(Notification:new{
+                text = _(text),
+                -- my_height = Screen:scaleBySize(30),
+                -- align = "left",
+                timeout = 0.3,
+            })
         else
-            local text = "Progress bar off."
-            self.bottom_padding = Screen:scaleBySize(self.settings.container_bottom_padding)
-            if self.mode > 0 then
-                text = "Progress bar and footer off."
-            end
-            self.settings.disable_progress_bar = true
-            self.mode = 0
-            self:applyFooterMode() -- Importante hacer aquí applyFooterMode
-
             UIManager:show(Notification:new{
                 text = _(text),
             })
-            self.view.footer_visible = false
         end
-        G_reader_settings:saveSetting("reader_footer_mode", self.mode)
-        self:onUpdateFooter(true,true) -- Importante pasar el segundo parámetro a true
-        self:rescheduleFooterAutoRefreshIfNeeded()
+        self.settings.disable_progress_bar = false
+        self._old_mode = self.mode
+        self.mode = 0
+        self:applyFooterMode() -- Importante hacer aquí applyFooterMode
+        if self.settings.toc_markers then
+            self:setTocMarkers()
+        end
+        self.view.footer_visible = true
+        if self._statusbar_toggled or self.mode == 0 then
+            -- self:applyFooterMode() -- Importante hacer aquí applyFooterMode
+            -- self.view.footer_visible = true
+            self._statusbar_toggled = false
+            self.mode = 0
+            self:applyFooterMode() -- Importante hacer aquí applyFooterMode
+            self.view.footer_visible = true
+        end
+
+    else
+        local text = "Progress bar off."
+        self.bottom_padding = Screen:scaleBySize(self.settings.container_bottom_padding)
+        if self.mode > 0 then
+            text = "Progress bar and footer off."
+        end
+        self.settings.disable_progress_bar = true
+        self.mode = 0
+        self:applyFooterMode() -- Importante hacer aquí applyFooterMode
+
+        UIManager:show(Notification:new{
+            text = _(text),
+        })
+        self.view.footer_visible = false
     end
+    G_reader_settings:saveSetting("reader_footer_mode", self.mode)
+    self:onUpdateFooter(true,true) -- Importante pasar el segundo parámetro a true
+    self:rescheduleFooterAutoRefreshIfNeeded()
     return true
 end
 
