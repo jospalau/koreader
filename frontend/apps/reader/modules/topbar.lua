@@ -1030,15 +1030,24 @@ function TopBar:paintTo(bb, x, y)
         -- local _, files = self:getList("*.epub")
         -- books_information[1][1]:setText("TF: " .. tostring(#files))
 
-        local ok, stats = pcall(dofile, G_reader_settings:readSetting("home_dir") .. "/stats.lua")
+        local ffiutil = require("ffi/util")
+        if ffiutil.realpath(G_reader_settings:readSetting("home_dir") .. "/stats.lua") then
+            local ok, stats = pcall(dofile, G_reader_settings:readSetting("home_dir") .. "/stats.lua")
 
-        -- local execute = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub' | wc -l" )
-        -- local execute2 = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub.lua' -exec ls {} + | wc -l")
-        -- books_information[1][1]:setText("TB: " .. execute:read('*a') .. "TBC: " .. execute2:read('*a'))
-        books_information[1][1]:setText("B: " .. stats["total_books"] .. ", BF: " .. stats["total_books_finished"] .. ", BFTM: "
-        .. stats["total_books_finished_this_month"] .. ", BFTY: " .. stats["total_books_finished_this_year"]
-        .. ", BFLY: " .. stats["total_books_finished_last_year"] .. ", BMBR: " .. stats["total_books_mbr"] .. ", BTBR: " .. stats["total_books_tbr"])
-        books_information:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+            -- local execute = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub' | wc -l" )
+            -- local execute2 = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub.lua' -exec ls {} + | wc -l")
+            -- books_information[1][1]:setText("TB: " .. execute:read('*a') .. "TBC: " .. execute2:read('*a'))
+            books_information[1][1]:setText("B: " .. stats["total_books"]
+            .. ", BF: " .. stats["total_books_finished"]
+            .. ", BFTM: " .. stats["total_books_finished_this_month"]
+            .. ", BFTY: " .. stats["total_books_finished_this_year"]
+            .. ", BFLY: " .. stats["total_books_finished_last_year"]
+            .. ", BMBR: " .. stats["total_books_mbr"]
+            .. ", BTBR: " .. stats["total_books_tbr"])
+        else
+            books_information[1][1]:setText("No stats.lua file in home dir")
+            books_information:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+        end
     end
 end
 
