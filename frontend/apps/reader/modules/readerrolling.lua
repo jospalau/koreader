@@ -491,6 +491,14 @@ function ReaderRolling:setupTouchZones()
             },
             handler = function(ges) return self:onPanRelease(nil, ges) end,
         },
+        {
+            id = "double_tap_all",
+            ges = "double_tap",
+            screen_zone = {
+                ratio_x = 0, ratio_y = 0, ratio_w = 1, ratio_h = 1,
+            },
+            handler = function(ges) return self:onDoubleTap(nil, ges) end,
+        },
     })
 end
 
@@ -754,6 +762,52 @@ function ReaderRolling:onPanRelease(_, ges)
             UIManager:setDirty(self.view.dialog, "partial")
         end
     end
+end
+
+local function cleanupSelectedText(text)
+    -- Trim spaces and new lines at start and end
+    text = text:gsub("^[\n%s]*", "")
+    text = text:gsub("[\n%s]*$", "")
+    -- Trim spaces around newlines
+    text = text:gsub("%s*\n%s*", "\n")
+    -- Trim consecutive spaces (that would probably have collapsed
+    -- in rendered CreDocuments)
+    text = text:gsub("%s%s+", " ")
+    return text
+end
+
+local splitToWords = function(text)
+    local util = require("util")
+    local wlist = {}
+    for word in util.gsplit(text, "[%s%p]+", false) do
+        if util.hasCJKChar(word) then
+            for char in util.gsplit(word, "[\192-\255][\128-\191]+", true) do
+                table.insert(wlist, char)
+            end
+        else
+            table.insert(wlist, word)
+        end
+    end
+    return wlist
+end
+
+function ReaderRolling:onDoubleTap(_, ges)
+        local util = require("util")
+        if util.getFileNameSuffix(self.ui.document.file) ~= "epub"  then return end
+        local res = self.ui.document._document:getTextFromPositions(ges.pos.x, ges.pos.y,
+                    ges.pos.x, ges.pos.y, false, false)
+        if ges.pos.x < Screen:scaleBySize(40) then
+            self:onGotoViewRel(-10)
+        elseif ges.pos.x > Screen:getWidth() - Screen:scaleBySize(40) then
+            self:onGotoViewRel(10)
+        else
+            if res and res.text then
+                local words = splitToWords(res.text)
+                if #words == 1 then
+                    self.ui:handleEvent(Event:new("LookupWord", cleanupSelectedText(res.text)))
+                end
+            end
+        end
 end
 
 function ReaderRolling:onHandledAsSwipe()
