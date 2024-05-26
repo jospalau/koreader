@@ -288,7 +288,7 @@ function ReaderView:paintTo(bb, x, y)
                     self.y_coordinate_top = -1615
                 end
 
-                if Device.model == "Kobo_goldfinch" then -- Kobo Clara 2E
+                if Device.model == "Kobo_goldfinch" or Device.model == "Kobo_spaBW" then -- Kobo Clara 2E and Kobo Clara B&W
                     self.y_coordinate_top = -1420
                 end
 
@@ -310,7 +310,7 @@ function ReaderView:paintTo(bb, x, y)
                     self.y_coordinate_top = -1615
                 end
 
-                if Device.model == "Kobo_goldfinch" then -- Kobo Clara 2E
+                if Device.model == "Kobo_goldfinch" or Device.model == "Kobo_spaBW" then -- Kobo Clara 2E and Kobo Clara B&W
                     self.y_coordinate_top = -1040
                 end
 

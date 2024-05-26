@@ -141,7 +141,8 @@ function ReaderStatistics:init()
         ["boox"] = 6,
         ["PB700"] = 7, -- PocketBook
         ["ares"] = 8, -- Likebook Ares
-        ["rk3566_eink"] = 9 -- Meebook M6
+        ["rk3566_eink"] = 9, -- Meebook M6
+        ["Kobo_spaBW"] = 10 -- Clara B&W
     }
 
     if Device:isPocketBook() and not ReaderStatistics.preserve then
