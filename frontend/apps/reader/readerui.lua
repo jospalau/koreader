@@ -926,54 +926,75 @@ function ReaderUI:dealWithLoadDocumentFailure()
 end
 
 function ReaderUI:onHome()
-    local MultiConfirmBox = require("ui/widget/multiconfirmbox")
-    local multi_box= MultiConfirmBox:new{
-        text = "Do you want to put the book to the MBR?",
-        choice1_text = _("Yes"),
-        choice1_callback = function()
-            UIManager:close(multi_box)
 
-            local file = self.document.file
+    local file = self.document.file
+    if file:find("resources/arthur%-conan%-doyle%_the%-hound%-of%-the%-baskervilles.epub") then
+        if require("readhistory"):getIndexByFile(file) then
+            require("readhistory"):removeItemByPath(file)
             self:onClose()
-
-            local in_history =  require("readhistory"):getIndexByFile(file)
-
-
-            if not in_history then
-                require("readhistory"):addItem(file, os.time())
-            end
 
             local doc_settings = DocSettings:open(file)
             doc_settings:purge()
-
-            -- UIManager:broadcastEvent(Event:new("InvalidateMetadataCache", file))
-            -- UIManager:broadcastEvent(Event:new("DocSettingsItemsChanged", file))
-            -- require("bookinfomanager"):deleteBookInfo(file)
             local FileManager = require("apps/filemanager/filemanager")
             self:showFileManager()
-            -- local dir = util.splitFilePathName(file)
-            -- FileManager:showFiles(dir, file)
-
-            -- If we go to the history straight away, the cover won't be refreshed in the fm after existing
-            -- When the history is closed in filemanagerhistory.lua, it will reopen the fm
-            -- FileManager.instance.history.send = true
-            -- FileManager.instance.history.file = file
             FileManager.instance.history:onShowHist()
-            -- self.history:onShowHist()
 
-            return true
-        end,
-        choice2_text = _("No"),
-        choice2_callback = function()
-            self:onClose()
-            self:showFileManager()
-            return true
-        end,
-        cancel_callback = function()
-            return true
-        end,
-    }
-    UIManager:show(multi_box)
+            -- local DocSettings = require("docsettings")
+            -- local has_sidecar_file = DocSettings:hasSidecarFile(fullpath)
+            -- if in_history and not has_sidecar_file then
+            --     table.insert(files_mbr, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
+            -- end
+        end
+    else
+
+        local MultiConfirmBox = require("ui/widget/multiconfirmbox")
+
+        local multi_box= MultiConfirmBox:new{
+            text = "Do you want to put the book to the MBR?",
+            choice1_text = _("Yes"),
+            choice1_callback = function()
+                UIManager:close(multi_box)
+
+                self:onClose()
+
+                local in_history =  require("readhistory"):getIndexByFile(file)
+
+                if not in_history then
+                    require("readhistory"):addItem(file, os.time())
+                end
+
+                local doc_settings = DocSettings:open(file)
+                doc_settings:purge()
+
+                -- UIManager:broadcastEvent(Event:new("InvalidateMetadataCache", file))
+                -- UIManager:broadcastEvent(Event:new("DocSettingsItemsChanged", file))
+                -- require("bookinfomanager"):deleteBookInfo(file)
+                local FileManager = require("apps/filemanager/filemanager")
+                self:showFileManager()
+                -- local dir = util.splitFilePathName(file)
+                -- FileManager:showFiles(dir, file)
+
+                -- If we go to the history straight away, the cover won't be refreshed in the fm after existing
+                -- When the history is closed in filemanagerhistory.lua, it will reopen the fm
+                -- FileManager.instance.history.send = true
+                -- FileManager.instance.history.file = file
+                FileManager.instance.history:onShowHist()
+                -- self.history:onShowHist()
+
+                return true
+            end,
+            choice2_text = _("No"),
+            choice2_callback = function()
+                self:onClose()
+                self:showFileManager()
+                return true
+            end,
+            cancel_callback = function()
+                return true
+            end,
+        }
+        UIManager:show(multi_box)
+    end
     return true
 end
 

@@ -2258,6 +2258,10 @@ function ReaderFooter:onGetStyles()
             css_text = self.ui.document:getDocumentFileContent("stylesheet.css")
         end
 
+        if css_text == nil then
+            css_text = self.ui.document:getDocumentFileContent("epub/css/core.css")
+        end
+
 
         local first_text = self.ui.document._document:getTextFromPositions(0, 0, 10, Screen:getHeight(), false, false)
         local html, css_files, css_selectors_offsets =
@@ -2569,6 +2573,15 @@ function ReaderFooter:onShowTextProperties()
             css_text = self.ui.document:getDocumentFileContent("OEBPS/css/style.css")
         end
 
+        -- $ bsdtar tf arthur-conan-doyle_the-hound-of-the-baskervilles.epub | grep -i css
+        -- epub/css/
+        -- epub/css/core.css
+        -- epub/css/se.css
+        -- epub/css/local.css
+        if css_text == nil then
+            css_text = self.ui.document:getDocumentFileContent("epub/css/core.css")
+        end
+
         local opf_text = self.ui.document:getDocumentFileContent("OPS/Miscellaneous/content.opf")
         if opf_text == nil then
             opf_text = self.ui.document:getDocumentFileContent("content.opf")
@@ -2591,23 +2604,33 @@ function ReaderFooter:onShowTextProperties()
             opf_text = self.ui.document:getDocumentFileContent("content.opf")
         end
 
-        for w in string.gmatch(opf_text, "<dc:subject>(.-)</dc:subject>") do
-            opf_genre = opf_genre .. ", " .. w
+        -- $ bsdtar tf arthur-conan-doyle_the-hound-of-the-baskervilles.epub | grep -i content
+        -- epub/content.opf
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("epub/content.opf")
         end
-        opf_genre = opf_genre:sub(3,string.len(opf_genre))
 
-
-        if opf_genre == "" then
-            opf_genre = "No metadata"
-        end
-        local opf_calibre = string.match(opf_text, "<opf:meta property=\"calibre:user_metadata\">(.-)</opf:meta>")
-        if opf_calibre == nil then
-            opf_calibre = "No property"
+        if opf_text == nil then
+            opf_genre = "No opf found"
         else
-            opf_calibre = string.match(opf_calibre, "\"#genre\": {(.-)}")
-            opf_calibre = string.match(opf_calibre, " \"#value#\": \".-\"")
-            opf_calibre = string.match(opf_calibre, ": .*")
-            opf_calibre = opf_calibre:sub(4,opf_calibre:len() - 1)
+            for w in string.gmatch(opf_text, "<dc:subject>(.-)</dc:subject>") do
+                opf_genre = opf_genre .. ", " .. w
+            end
+            opf_genre = opf_genre:sub(3,string.len(opf_genre))
+
+            if opf_genre == "" then
+                opf_genre = "No metadata"
+            end
+            -- local opf_calibre = string.match(opf_text, "<opf:meta property=\"calibre:user_metadata\">(.-)</opf:meta>")
+            -- if opf_calibre == nil then
+            --     opf_calibre = "No property"
+            -- else
+
+            --     opf_calibre = string.match(opf_calibre, "\"#genre\": {(.-)}")
+            --     opf_calibre = string.match(opf_calibre, " \"#value#\": \".-\"")
+            --     opf_calibre = string.match(opf_calibre, ": .*")
+            --     opf_calibre = opf_calibre:sub(4,opf_calibre:len() - 1)
+            -- end
         end
     end
 

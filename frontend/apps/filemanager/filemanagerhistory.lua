@@ -344,9 +344,10 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
         UIManager:broadcastEvent(Event:new("ShowFileSearchLists", true, nil, "*.epub"))
     elseif string.find("west north east", ges_ev.multiswipe_directions) then
         self._manager.filter = "all"UIManager:broadcastEvent(Event:new("ShowFileSearchAllCompleted"))
-    -- elseif string.find("east south", ges_ev.multiswipe_directions) then
-    --     local FileManager = require("apps/filemanager/filemanager")
-    --     FileManager:openFile(G_reader_settings:readSetting("home_dir") .. "/Shakespeare, William/Romeo and Juliet - William Shakespeare.epub")
+    elseif string.find("east north west", ges_ev.multiswipe_directions) then
+        local FileManager = require("apps/filemanager/filemanager")
+        -- FileManager:openFile(G_reader_settings:readSetting("home_dir") .. "/Shakespeare, William/Romeo and Juliet - William Shakespeare.epub")
+        FileManager:openFile("resources/arthur-conan-doyle_the-hound-of-the-baskervilles.epub")
     elseif string.find("east south", ges_ev.multiswipe_directions) then
         self._manager.filter = "all"
         self._manager.search_string = nil
