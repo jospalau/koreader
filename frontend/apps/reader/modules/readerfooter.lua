@@ -3009,6 +3009,10 @@ function ReaderFooter:addToMainMenu(menu_items)
     menu_items.show_double_bar = {
         text = _("Show double bar"),
         checked_func = function() return G_reader_settings:isTrue("show_double_bar") end,
+        enabled_func = function()
+            local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
+            return file_type == "epub"
+        end,
         callback = function()
             UIManager:broadcastEvent(Event:new("ToggleShowDoubleBar"))
         end
@@ -3017,6 +3021,10 @@ function ReaderFooter:addToMainMenu(menu_items)
     menu_items.show_top_bar = {
         text = _("Show top bar"),
         checked_func = function() return G_reader_settings:isTrue("show_top_bar") end,
+        enabled_func = function()
+            local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
+            return file_type == "epub"
+        end,
         callback = function()
             UIManager:broadcastEvent(Event:new("ToggleShowTopBar"))
         end
