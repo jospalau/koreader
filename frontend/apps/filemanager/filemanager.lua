@@ -1431,7 +1431,7 @@ function FileManager:onPullConfig()
                 ok_callback = function()
                     if Device:canRestart() then
                         UIManager:restartKOReader()
-                        -- The new Clara B&W is so quick closing that when presing on Restart it doesn't flash
+                        -- The new Clara BW is so quick closing that when presing on Restart it doesn't flash
                         -- Set a little delay for all devices
                         local util = require("ffi/util")
                         util.usleep(100000)
@@ -1514,7 +1514,7 @@ function FileManager:onSynchronizeCode()
                 ok_callback = function()
                     if Device:canRestart() then
                         UIManager:restartKOReader()
-                        -- The new Clara B&W is so quick closing that when presing on Restart it doesn't flash
+                        -- The new Clara BW is so quick closing that when presing on Restart it doesn't flash
                         -- Set a little delay for all devices
                         local util = require("ffi/util")
                         util.usleep(100000)
