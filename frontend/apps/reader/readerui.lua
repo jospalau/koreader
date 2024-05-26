@@ -521,7 +521,7 @@ function ReaderUI:init()
         local nbwords = 0
         local nbcharacters = 0
         if res and res.text then
-            local words = splitToWords(res.text) -- contar palabras
+            local words = util.splitToWords2(res.text) -- contar palabras
             local characters = res.text -- contar caracteres
             -- logger.warn(words)
             nbwords = #words -- # es equivalente a string.len()
@@ -554,20 +554,6 @@ function ReaderUI:init()
 end
 
 
--- Like util.splitWords(), but not capturing space and punctuations
-function splitToWords(text)
-    local wlist = {}
-    for word in util.gsplit(text, "[%s%p]+", false) do
-        if util.hasCJKChar(word) then
-            for char in util.gsplit(word, "[\192-\255][\128-\191]+", true) do
-                table.insert(wlist, char)
-            end
-        else
-            table.insert(wlist, word)
-        end
-    end
-    return wlist
-end
 function ReaderUI:registerKeyEvents()
     if Device:hasKeys() then
         self.key_events.Home = { { "Home" } }
@@ -1051,52 +1037,26 @@ function ReaderUI:onOpenLastDoc()
     self:switchDocument(self.menu:getPreviousFile())
 end
 
--- local function cleanupSelectedText(text)
---     -- Trim spaces and new lines at start and end
---     text = text:gsub("^[\n%s]*", "")
---     text = text:gsub("[\n%s]*$", "")
---     -- Trim spaces around newlines
---     text = text:gsub("%s*\n%s*", "\n")
---     -- Trim consecutive spaces (that would probably have collapsed
---     -- in rendered CreDocuments)
---     text = text:gsub("%s%s+", " ")
---     return text
--- end
+function ReaderUI:onSearchDictionary()
+    if util.getFileNameSuffix(self.document.file) ~= "epub"  then return end
+    if self.lastevent  then
+        local res = self.document._document:getTextFromPositions(self.lastevent.gesture.pos.x, self.lastevent.gesture.pos.y,
+                    self.lastevent.gesture.pos.x, self.lastevent.gesture.pos.y, false, false)
 
--- local splitToWords = function(text)
---     local wlist = {}
---     for word in util.gsplit(text, "[%s%p]+", false) do
---         if util.hasCJKChar(word) then
---             for char in util.gsplit(word, "[\192-\255][\128-\191]+", true) do
---                 table.insert(wlist, char)
---             end
---         else
---             table.insert(wlist, word)
---         end
---     end
---     return wlist
--- end
-
--- function ReaderUI:onSearchDictionary()
---     if util.getFileNameSuffix(self.document.file) ~= "epub"  then return end
---     if self.lastevent  then
---         local res = self.document._document:getTextFromPositions(self.lastevent.gesture.pos.x, self.lastevent.gesture.pos.y,
---                     self.lastevent.gesture.pos.x, self.lastevent.gesture.pos.y, false, false)
-
---         if self.lastevent.gesture.pos.x < Screen:scaleBySize(40) then
---             self.rolling:onGotoViewRel(-10)
---         elseif self.lastevent.gesture.pos.x > Screen:getWidth() - Screen:scaleBySize(40) then
---             self.rolling:onGotoViewRel(10)
---         else
---             if res and res.text then
---                 local words = splitToWords(res.text)
---                 if #words == 1 then
---                     self:handleEvent(Event:new("LookupWord", cleanupSelectedText(res.text)))
---                 end
---             end
---         end
---     end
--- end
+        if self.lastevent.gesture.pos.x < Screen:scaleBySize(40) then
+            self.rolling:onGotoViewRel(-10)
+        elseif self.lastevent.gesture.pos.x > Screen:getWidth() - Screen:scaleBySize(40) then
+            self.rolling:onGotoViewRel(10)
+        else
+            if res and res.text then
+                local words = util.splitToWords2(res.text)
+                if #words == 1 then
+                    self:handleEvent(Event:new("LookupWord", util.cleanupSelectedText(res.text)))
+                end
+            end
+        end
+    end
+end
 
 -- function ReaderUI:onOpenRandomFav()
 --     self:switchDocument(self.menu:getRandomFav())

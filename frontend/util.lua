@@ -1646,4 +1646,33 @@ function util.generateStats()
 
     util.writeToFile(dump(stats), G_reader_settings:readSetting("home_dir") .. "/stats.lua", true, true)
 end
+
+
+-- Like util.splitWords(), but not capturing space and punctuations
+function util.splitToWords2(text)
+    local wlist = {}
+    for word in util.gsplit(text, "[%s%p]+", false) do
+        if util.hasCJKChar(word) then
+            for char in util.gsplit(word, "[\192-\255][\128-\191]+", true) do
+                table.insert(wlist, char)
+            end
+        else
+            table.insert(wlist, word)
+        end
+    end
+    return wlist
+end
+
+function util.cleanupSelectedText(text)
+    -- Trim spaces and new lines at start and end
+    local text = text:gsub("^[\n%s]*", "")
+    text = text:gsub("[\n%s]*$", "")
+    -- Trim spaces around newlines
+    text = text:gsub("%s*\n%s*", "\n")
+    -- Trim consecutive spaces (that would probably have collapsed
+    -- in rendered CreDocuments)
+    text = text:gsub("%s%s+", " ")
+    return text
+end
+
 return util

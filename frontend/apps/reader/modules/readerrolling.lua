@@ -764,33 +764,6 @@ function ReaderRolling:onPanRelease(_, ges)
     end
 end
 
-local function cleanupSelectedText(text)
-    -- Trim spaces and new lines at start and end
-    text = text:gsub("^[\n%s]*", "")
-    text = text:gsub("[\n%s]*$", "")
-    -- Trim spaces around newlines
-    text = text:gsub("%s*\n%s*", "\n")
-    -- Trim consecutive spaces (that would probably have collapsed
-    -- in rendered CreDocuments)
-    text = text:gsub("%s%s+", " ")
-    return text
-end
-
-local splitToWords = function(text)
-    local util = require("util")
-    local wlist = {}
-    for word in util.gsplit(text, "[%s%p]+", false) do
-        if util.hasCJKChar(word) then
-            for char in util.gsplit(word, "[\192-\255][\128-\191]+", true) do
-                table.insert(wlist, char)
-            end
-        else
-            table.insert(wlist, word)
-        end
-    end
-    return wlist
-end
-
 function ReaderRolling:onDoubleTap(_, ges)
         local util = require("util")
         if util.getFileNameSuffix(self.ui.document.file) ~= "epub"  then return end
@@ -802,9 +775,9 @@ function ReaderRolling:onDoubleTap(_, ges)
             self:onGotoViewRel(10)
         else
             if res and res.text then
-                local words = splitToWords(res.text)
+                local words = util.splitToWords2(res.text)
                 if #words == 1 then
-                    self.ui:handleEvent(Event:new("LookupWord", cleanupSelectedText(res.text)))
+                    self.ui:handleEvent(Event:new("LookupWord", util.cleanupSelectedText(res.text)))
                 end
             end
         end
