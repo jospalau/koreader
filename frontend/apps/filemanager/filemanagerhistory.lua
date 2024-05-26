@@ -348,6 +348,9 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
         local FileManager = require("apps/filemanager/filemanager")
         -- FileManager:openFile(G_reader_settings:readSetting("home_dir") .. "/Shakespeare, William/Romeo and Juliet - William Shakespeare.epub")
         FileManager:openFile("resources/arthur-conan-doyle_the-hound-of-the-baskervilles.epub")
+    elseif string.find("east south west", ges_ev.multiswipe_directions) then
+        local FileManager = require("apps/filemanager/filemanager")
+        FileManager:openFile("resources/Forthcoming_Books.pdf")
     elseif string.find("east south", ges_ev.multiswipe_directions) then
         self._manager.filter = "all"
         self._manager.search_string = nil

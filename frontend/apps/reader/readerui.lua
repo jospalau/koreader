@@ -928,7 +928,7 @@ end
 function ReaderUI:onHome()
 
     local file = self.document.file
-    if file:find("resources/arthur%-conan%-doyle%_the%-hound%-of%-the%-baskervilles.epub") then
+    if file:find("resources/arthur%-conan%-doyle%_the%-hound%-of%-the%-baskervilles.epub") or file:find("resources/Forthcoming_Books.pdf") then
         if require("readhistory"):getIndexByFile(file) then
             require("readhistory"):removeItemByPath(file)
             self:onClose()
