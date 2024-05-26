@@ -251,6 +251,7 @@ function FileManagerHistory:MenuSetRotationModeHandler(rotation)
 end
 
 function FileManagerHistory:onShowHist(search_info)
+    if self.ui and self.ui.document and (self.ui.document.file:find("resources/arthur%-conan%-doyle%_the%-hound%-of%-the%-baskervilles.epub") or self.ui.document.file:find("resources/Forthcoming_Books.pdf")) then return end
     local ReadHistory = require("readhistory")
     ReadHistory.hist = {}
     ReadHistory:reload(true)
@@ -344,18 +345,18 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
         UIManager:broadcastEvent(Event:new("ShowFileSearchLists", true, nil, "*.epub"))
     elseif string.find("west north east", ges_ev.multiswipe_directions) then
         self._manager.filter = "all"UIManager:broadcastEvent(Event:new("ShowFileSearchAllCompleted"))
-    elseif string.find("east north west", ges_ev.multiswipe_directions) then
+    elseif string.find("east north west", ges_ev.multiswipe_directions) and require("apps/reader/readerui").instance == nil then
         local FileManager = require("apps/filemanager/filemanager")
         -- FileManager:openFile(G_reader_settings:readSetting("home_dir") .. "/Shakespeare, William/Romeo and Juliet - William Shakespeare.epub")
         FileManager:openFile("resources/arthur-conan-doyle_the-hound-of-the-baskervilles.epub")
-    elseif string.find("east south west", ges_ev.multiswipe_directions) then
-        local FileManager = require("apps/filemanager/filemanager")
-        FileManager:openFile("resources/Forthcoming_Books.pdf")
     elseif string.find("east south", ges_ev.multiswipe_directions) then
         self._manager.filter = "all"
         self._manager.search_string = nil
         self._manager.selected_colections = nil
         self._manager:updateItemTable()
+    elseif string.find("east south west", ges_ev.multiswipe_directions) and require("apps/reader/readerui").instance == nil then
+        local FileManager = require("apps/filemanager/filemanager")
+        FileManager:openFile("resources/Forthcoming_Books.pdf")
     else
         self:onClose()
         -- if self._manager.ui.history.send then
