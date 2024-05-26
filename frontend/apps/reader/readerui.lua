@@ -509,6 +509,8 @@ function ReaderUI:init()
         -- This happens for devices using the coverimage plugin like PocketBook or Android devices
         -- but we do it here for all devices after having executed all the ReaderReady event handlers for all the objects
         -- self.view[4] is the topbar object created in readerview.lua
+        self.menu:registerToMainMenu(self.view[4])
+        self.menu:registerToMainMenu(self.view[5])
         if os.time() - self.view[4].start_session_time < 5 then
             self.view[4].start_session_time = os.time()
         end

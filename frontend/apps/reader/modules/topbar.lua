@@ -157,6 +157,11 @@ end
 
 
 function TopBar:init()
+
+    -- This is done in readerui.lua because the topbar is started in ReaderView when the menu has not yet been started by ReaderUI
+    -- if not self.fm then
+    --     self.ui.menu:registerToMainMenu(self)
+    -- end
     -- La inicialización del objeto ocurre una única vez pero el método init ocurre cada vez que abrimos el documento
     TopBar.is_enabled = G_reader_settings:isTrue("show_top_bar")
     -- TopBar.show_top_bar = true
@@ -1091,6 +1096,36 @@ end
 --         UIManager:setDirty("all", "full")
 --     end)
 -- end
+
+
+-- This is called after self.ui.menu:registerToMainMenu(self) in the init method
+-- But in this case registerToMainMenu() needs to be called in readerui.lua because the menu is still not available
+function TopBar:addToMainMenu(menu_items)
+    local Event = require("ui/event")
+    -- menu_items.show_double_bar = {
+    --     text = _("Show double bar"),
+    --     checked_func = function() return G_reader_settings:isTrue("show_double_bar") end,
+    --     enabled_func = function()
+    --         local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
+    --         return file_type == "epub"
+    --     end,
+    --     callback = function()
+    --         UIManager:broadcastEvent(Event:new("ToggleShowDoubleBar"))
+    --     end
+    -- }
+
+    menu_items.show_top_bar = {
+        text = _("Show top bar"),
+        checked_func = function() return G_reader_settings:isTrue("show_top_bar") end,
+        enabled_func = function()
+            local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
+            return file_type == "epub"
+        end,
+        callback = function()
+            UIManager:broadcastEvent(Event:new("ToggleShowTopBar"))
+        end
+    }
+end
 
 
 return TopBar

@@ -337,7 +337,23 @@ function DoubleBar:paintTo(bb, x, y)
         -- Bottom right
         -- self[6][1].dimen.w = self[6][1][1]:getSize().w
         -- self[6]:paintTo(bb, x + Screen:getWidth() - self[6][1]:getSize().w - DoubleBar.MARGIN_SIDES, Screen:getHeight() - DoubleBar.MARGIN_BOTTOM)
+end
 
+-- This is called after self.ui.menu:registerToMainMenu(self) in the init method
+-- But in this case registerToMainMenu() needs to be called in readerui.lua because the menu is still not available
+function DoubleBar:addToMainMenu(menu_items)
+    local Event = require("ui/event")
+    menu_items.show_double_bar = {
+        text = _("Show double bar"),
+        checked_func = function() return G_reader_settings:isTrue("show_double_bar") end,
+        enabled_func = function()
+            local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
+            return file_type == "epub"
+        end,
+        callback = function()
+            UIManager:broadcastEvent(Event:new("ToggleShowDoubleBar"))
+        end
+    }
 end
 
 return DoubleBar

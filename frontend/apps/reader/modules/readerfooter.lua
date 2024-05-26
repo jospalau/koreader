@@ -3006,29 +3006,6 @@ function ReaderFooter:addToMainMenu(menu_items)
         text = _("Status bar"),
         sub_item_table = sub_items,
     }
-    menu_items.show_double_bar = {
-        text = _("Show double bar"),
-        checked_func = function() return G_reader_settings:isTrue("show_double_bar") end,
-        enabled_func = function()
-            local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
-            return file_type == "epub"
-        end,
-        callback = function()
-            UIManager:broadcastEvent(Event:new("ToggleShowDoubleBar"))
-        end
-    }
-
-    menu_items.show_top_bar = {
-        text = _("Show top bar"),
-        checked_func = function() return G_reader_settings:isTrue("show_top_bar") end,
-        enabled_func = function()
-            local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
-            return file_type == "epub"
-        end,
-        callback = function()
-            UIManager:broadcastEvent(Event:new("ToggleShowTopBar"))
-        end
-    }
     -- menu item to fake footer tapping when touch area is disabled
     local DTAP_ZONE_MINIBAR = G_defaults:readSetting("DTAP_ZONE_MINIBAR")
     if DTAP_ZONE_MINIBAR.h == 0 or DTAP_ZONE_MINIBAR.w == 0 then
