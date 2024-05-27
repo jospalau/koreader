@@ -676,11 +676,12 @@ function TopBar:toggleBar()
             words = self.title:match("([0-9,]+w)"):gsub("w",""):gsub(",","")
             local hours_to_read = tonumber(words)/(self.avg_wpm * 60)
             local progress =  math.floor(100/hours_to_read * 10)/10
-            self.book_progress:setText(tostring(progress) .. "%|" .. read_book)
             words = title:match("([0-9,]+w)"):gsub("w",""):gsub(",","") .. "w"
+            self.book_progress:setText(words .. "|" .. tostring(progress) .. "%|" .. read_book)
             title = title:sub(1, title:find('%(')-2, title:len())
         end
-        title = TextWidget.PTF_BOLD_START .. title .. " with " .. words .. TextWidget.PTF_BOLD_END
+        -- title = TextWidget.PTF_BOLD_START .. title .. " with " .. words .. TextWidget.PTF_BOLD_END
+        title = TextWidget.PTF_BOLD_START .. title .. TextWidget.PTF_BOLD_END
         self.title_text:setText(title)
 
 
