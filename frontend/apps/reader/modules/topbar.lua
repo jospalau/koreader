@@ -1047,8 +1047,8 @@ function TopBar:paintTo(bb, x, y)
             .. ", BTBR: " .. stats["total_books_tbr"])
         else
             books_information[1][1]:setText("No stats.lua file in home dir")
-            books_information:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
         end
+        books_information:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
     end
 end
 
