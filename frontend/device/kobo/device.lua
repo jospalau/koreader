@@ -1136,6 +1136,12 @@ function Kobo:initEventAdjustHooks()
     if koboInputMangling then
         self.input:registerEventAdjustHook(koboInputMangling)
     end
+    -- local koboInputMangling2 = function(this, ev)
+    --     if ev.type == C.EV_SYN and ev.code == C.SYN_MT_REPORT then
+    --         ev.code = C.SYN_REPORT
+    --     end
+    -- end
+    -- self.input:registerEventAdjustHook(koboInputMangling2)
 end
 
 local function getCodeName()

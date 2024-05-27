@@ -922,9 +922,9 @@ function Input:handleTouchEv(ev)
         elseif ev.code == C.ABS_MT_TOOL_TYPE then
             -- NOTE: On the Elipsa: Finger == 0; Pen == 1
             self:setCurrentMtSlot("tool", ev.value)
-        elseif ev.code == C.ABS_MT_POSITION_X or ev.code == C.ABS_X then
+        elseif ev.code == C.ABS_MT_POSITION_X then
             self:setCurrentMtSlotChecked("x", ev.value)
-        elseif ev.code == C.ABS_MT_POSITION_Y or ev.code == C.ABS_Y then
+        elseif ev.code == C.ABS_MT_POSITION_Y then
             self:setCurrentMtSlotChecked("y", ev.value)
         elseif ev.code == self.pressure_event and ev.value == 0 then
             -- Drop hovering *pen* events
