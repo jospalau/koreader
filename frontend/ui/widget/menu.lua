@@ -914,12 +914,12 @@ function Menu:init()
         },
         self.page_return_arrow,
     }
-
+--
     local header = self.no_title and VerticalSpan:new{ width = 0 } or self.title_bar
     local body = self.item_group
     local footer = BottomContainer:new{
         dimen = self.inner_dimen:copy(),
-        margin_bottom = 15,
+        margin_bottom = 25,
         self.page_info,
     }
     local page_return = BottomContainer:new{
