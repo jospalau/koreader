@@ -919,6 +919,7 @@ function Menu:init()
     local body = self.item_group
     local footer = BottomContainer:new{
         dimen = self.inner_dimen:copy(),
+        margin_bottom = 15,
         self.page_info,
     }
     local page_return = BottomContainer:new{
