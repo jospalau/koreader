@@ -1632,19 +1632,78 @@ function util.getList(search_string, search_finished, search_tbr, search_mbr)
     return dirs, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year, files_finished_last_year
 end
 
+
+
+function util.getLastDaysStats(day, include_pages)
+    local SQ3 = require("lua-ljsqlite3/init")
+    local datetime = require("datetime")
+    local now_stamp = os.time()
+    local now_t = os.date("*t")
+    local DataStorage = require("datastorage")
+    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    local from_begin_day = now_t.hour * 3600 + now_t.min * 60 + now_t.sec
+    local start_today_time = now_stamp - from_begin_day
+    local conn = SQ3.open(db_location)
+    local i = 0
+    local stats = ""
+    local stats_table = {}
+    if (not include_pages) then
+        stats = "["
+    end
+
+    while (i < day )
+    do
+        local sql_stmt = [[
+            SELECT sum(duration), sum(total_pages) AS sum_duration
+            FROM   wpm_stat_data
+            WHERE  DATE(start_time,'unixepoch','localtime') = DATE('now', '%d day','localtime');
+        ]]
+        local dayitime, pages = conn:rowexec(string.format(sql_stmt, -i))
+        if dayitime == nil then
+            dayitime = 0
+        end
+        dayitime = tonumber(dayitime)
+        table.insert(stats_table, dayitime > 0 and 1 or 0)
+        if pages == nil then
+            pages = 0
+        end
+        pages = tonumber(pages)
+        local user_duration_format = "letters"
+        dayitime = datetime.secondsToClockDuration(user_duration_format,dayitime, true)
+        -- logger.dbg("aaaa",dayitime)
+        if (include_pages) then
+            day_stats = now_t
+            day_stats.day = now_t.day - 1
+            stats = stats ..  os.date("%d/%m/%Y: ", os.time(day_stats)) .. dayitime .. "(" .. pages .. "p)" .. string.char(10)
+        else
+            stats = stats .. dayitime .. ","
+        end
+        i = i + 1
+    end
+    stats = stats:sub(1, -2)
+    if (not include_pages) then
+        stats = stats .. "]"
+    end
+    conn:close()
+
+    return stats, stats_table
+end
+
 function util.generateStats()
     local dump = require("dump")
     local _, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year, files_finished_last_year = util.getList("*.epub")
-
+    local _, stats_last_days = util.getLastDaysStats(5, true)
     local stats = {["total_books"] = #files,
                 ["total_books_finished"] = #files_finished,
                 ["total_books_finished_this_month"] = #files_finished_this_month,
                 ["total_books_finished_this_year"] = #files_finished_this_year,
                 ["total_books_finished_last_year"] = #files_finished_last_year,
                 ["total_books_tbr"] = #files_tbr,
-                ["total_books_mbr"] = #files_mbr}
+                ["total_books_mbr"] = #files_mbr,
+                ["stats_last_days"] = stats_last_days}
 
     util.writeToFile(dump(stats), G_reader_settings:readSetting("home_dir") .. "/stats.lua", true, true)
+
 end
 
 

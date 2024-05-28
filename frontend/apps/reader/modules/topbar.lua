@@ -1034,7 +1034,10 @@ function TopBar:paintTo(bb, x, y)
         local ffiutil = require("ffi/util")
         if ffiutil.realpath(G_reader_settings:readSetting("home_dir") .. "/stats.lua") then
             local ok, stats = pcall(dofile, G_reader_settings:readSetting("home_dir") .. "/stats.lua")
-
+            local last_days = ""
+            for k, v in pairs(stats["stats_last_days"]) do
+                last_days = v > 0 and last_days .. " ● " or last_days .. " ○ "
+            end
             -- local execute = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub' | wc -l" )
             -- local execute2 = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub.lua' -exec ls {} + | wc -l")
             -- books_information[1][1]:setText("TB: " .. execute:read('*a') .. "TBC: " .. execute2:read('*a'))
@@ -1044,7 +1047,8 @@ function TopBar:paintTo(bb, x, y)
             .. ", BFTY: " .. stats["total_books_finished_this_year"]
             .. ", BFLY: " .. stats["total_books_finished_last_year"]
             .. ", BMBR: " .. stats["total_books_mbr"]
-            .. ", BTBR: " .. stats["total_books_tbr"])
+            .. ", BTBR: " .. stats["total_books_tbr"]
+            .. ", LD: " .. last_days)
         else
             books_information[1][1]:setText("No stats.lua file in home dir")
         end
