@@ -769,30 +769,44 @@ function Menu:init()
     local chevron_right = "chevron.right"
     local chevron_first = "chevron.first"
     local chevron_last = "chevron.last"
+    local DGENERIC_ICON_SIZE = G_defaults:readSetting("DGENERIC_ICON_SIZE")
+
+    if not Device:isAndroid() then
+        DGENERIC_ICON_SIZE = DGENERIC_ICON_SIZE / 2
+    end
+
     if BD.mirroredUILayout() then
         chevron_left, chevron_right = chevron_right, chevron_left
         chevron_first, chevron_last = chevron_last, chevron_first
     end
     self.page_info_left_chev = self.page_info_left_chev or Button:new{
         icon = chevron_left,
+        icon_width = Screen:scaleBySize(DGENERIC_ICON_SIZE),
+        icon_height = Screen:scaleBySize(DGENERIC_ICON_SIZE),
         callback = function() self:onPrevPage() end,
         bordersize = 0,
         show_parent = self.show_parent,
     }
     self.page_info_right_chev = self.page_info_right_chev or Button:new{
         icon = chevron_right,
+        icon_width = Screen:scaleBySize(DGENERIC_ICON_SIZE),
+        icon_height = Screen:scaleBySize(DGENERIC_ICON_SIZE),
         callback = function() self:onNextPage() end,
         bordersize = 0,
         show_parent = self.show_parent,
     }
     self.page_info_first_chev = self.page_info_first_chev or Button:new{
         icon = chevron_first,
+        icon_width = Screen:scaleBySize(DGENERIC_ICON_SIZE),
+        icon_height = Screen:scaleBySize(DGENERIC_ICON_SIZE),
         callback = function() self:onFirstPage() end,
         bordersize = 0,
         show_parent = self.show_parent,
     }
     self.page_info_last_chev = self.page_info_last_chev or Button:new{
         icon = chevron_last,
+        icon_width = Screen:scaleBySize(DGENERIC_ICON_SIZE),
+        icon_height = Screen:scaleBySize(DGENERIC_ICON_SIZE),
         callback = function() self:onLastPage() end,
         bordersize = 0,
         show_parent = self.show_parent,
@@ -917,9 +931,15 @@ function Menu:init()
 --
     local header = self.no_title and VerticalSpan:new{ width = 0 } or self.title_bar
     local body = self.item_group
+    local margin_bottom = nil
+    if Device:isAndroid() then
+        margin_bottom = 20
+    else
+        margin_bottom = 25
+    end
     local footer = BottomContainer:new{
         dimen = self.inner_dimen:copy(),
-        margin_bottom = 25,
+        margin_bottom = margin_bottom,
         self.page_info,
     }
     local page_return = BottomContainer:new{
