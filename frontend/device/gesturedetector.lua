@@ -225,6 +225,9 @@ Every slot in the input frame is consumed, and that in FIFO order (slot order ba
 --]]
 function GestureDetector:feedEvent(tevs)
     local gestures = {}
+    -- logger.dbg("feed enter ")
+    -- print("feed tevs " .. util.dump(tevs))
+
     for _, tev in ipairs(tevs) do
         local slot = tev.slot
         local contact = self:getContact(slot)
