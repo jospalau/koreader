@@ -227,6 +227,7 @@ function TopBar:onReaderReady()
     self.series = ""
     if self.title:find('%[%d?.%d]') then
         self.series = self.title:sub(1, self.title:find('%[') - 2)
+        self.series = "(" .. TextWidget.PTF_BOLD_START .. self.series .. TextWidget.PTF_BOLD_END .. ")"
         self.title = self.title:sub(self.title:find('%]') + 2, self.title:len())
     end
     if self.initial_read_today == nil and self.initial_read_month == nil and self.initial_total_time_book == nil then
@@ -305,6 +306,13 @@ function TopBar:onReaderReady()
     }
 
 
+    self.series_text = TextWidget:new{
+        text =  "",
+        face = Font:getFace("myfont3", 10),
+        fgcolor = Blitbuffer.COLOR_BLACK,
+    }
+
+
     self.chapter_text = TextWidget:new{
         text =  "",
         face = Font:getFace("myfont3"),
@@ -340,11 +348,21 @@ function TopBar:onReaderReady()
     }
 
 
-    self[3] = left_container:new{
-        dimen = Geom:new{ w = self.title_text:getSize().w, self.title_text:getSize().h },
-        self.title_text,
+    self[3] = HorizontalGroup:new{
+        background = Blitbuffer.COLOR_WHITE,
+        bordersize = self.border_size,
+        padding = 0,
+        margin = 0,
+        radius = self.is_popout and math.floor(self.dimen.w * (1/20)) or 0,
+        right_container:new{
+            dimen = Geom:new{ w = self.title_text:getSize().w, self.title_text:getSize().h },
+            self.title_text,
+        },
+        left_container:new{
+            dimen = Geom:new{ w = self.series_text:getSize().w, self.series_text:getSize().h },
+            self.series_text,
+        }
     }
-
 
     self[4] = FrameContainer:new{
         left_container:new{
@@ -684,12 +702,14 @@ function TopBar:toggleBar()
             title = title:sub(1, title:find('%(')-2, title:len())
         end
         -- title = TextWidget.PTF_BOLD_START .. title .. " with " .. words .. TextWidget.PTF_BOLD_END
-        if self.series == "" then
-            title = TextWidget.PTF_BOLD_START .. title .. TextWidget.PTF_BOLD_END
-        else
-            title = TextWidget.PTF_BOLD_START .. title .. " (" .. self.series .. ")" .. TextWidget.PTF_BOLD_END
-        end
+        -- if self.series == "" then
+        --     title = TextWidget.PTF_BOLD_START .. title .. TextWidget.PTF_BOLD_END
+        -- else
+        --     title = TextWidget.PTF_BOLD_START .. title .. " (" .. self.series .. ")" .. TextWidget.PTF_BOLD_END
+        -- end
+        title = TextWidget.PTF_BOLD_START .. title .. TextWidget.PTF_BOLD_END
         self.title_text:setText(title)
+        self.series_text:setText(self.series)
 
 
         local chapter = self.ui.toc:getTocTitleByPage(self.view.footer.pageno) ~= ""
@@ -883,6 +903,7 @@ function TopBar:toggleBar()
         self.times_text:setText("")
         self.time_battery_text:setText("")
         self.title_text:setText("")
+        self.series_text:setText("")
         self.chapter_text:setText("")
         self.progress_chapter_text:setText("")
         self.book_progress:setText("")
@@ -916,7 +937,7 @@ function TopBar:paintTo(bb, x, y)
 
         -- Top center
 
-        self[3]:paintTo(bb, x + Screen:getWidth()/2 - self[3][1]:getSize().w/2, y + TopBar.MARGIN_TOP)
+        self[3]:paintTo(bb, x + Screen:getWidth()/2, y + TopBar.MARGIN_TOP)
         -- self[3]:paintTo(bb, x + Screen:getWidth()/2, y + 20)
 
 
