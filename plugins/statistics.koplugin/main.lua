@@ -2678,10 +2678,10 @@ function ReaderStatistics:getBooksFromPeriod(period_begin, period_end, callback_
     local results = {}
     local sql_stmt_res_book = [[
         SELECT  book_tbl.title AS title,
-                count(distinct page_stat_tbl.page),
+                count(distinct page_stat_tbl.total_pages),
                 sum(page_stat_tbl.duration),
                 book_tbl.id
-        FROM    page_stat AS page_stat_tbl, book AS book_tbl
+        FROM    wpm_stat_data AS page_stat_tbl, book AS book_tbl
         WHERE   page_stat_tbl.id_book=book_tbl.id AND page_stat_tbl.start_time BETWEEN %d AND %d
         GROUP   BY book_tbl.id
         ORDER   BY book_tbl.last_open DESC;
