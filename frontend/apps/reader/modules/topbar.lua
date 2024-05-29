@@ -224,7 +224,9 @@ end
 function TopBar:onReaderReady()
 
     self.title = self.ui.document._document:getDocumentProps().title
+    self.series = ""
     if self.title:find('%[%d?.%d]') then
+        self.series = self.title:sub(1, self.title:find('%[') - 2)
         self.title = self.title:sub(self.title:find('%]') + 2, self.title:len())
     end
     if self.initial_read_today == nil and self.initial_read_month == nil and self.initial_total_time_book == nil then
@@ -682,7 +684,11 @@ function TopBar:toggleBar()
             title = title:sub(1, title:find('%(')-2, title:len())
         end
         -- title = TextWidget.PTF_BOLD_START .. title .. " with " .. words .. TextWidget.PTF_BOLD_END
-        title = TextWidget.PTF_BOLD_START .. title .. TextWidget.PTF_BOLD_END
+        if self.series == "" then
+            title = TextWidget.PTF_BOLD_START .. title .. TextWidget.PTF_BOLD_END
+        else
+            title = TextWidget.PTF_BOLD_START .. title .. " (" .. self.series .. ")" .. TextWidget.PTF_BOLD_END
+        end
         self.title_text:setText(title)
 
 
