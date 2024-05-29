@@ -189,7 +189,7 @@ function FileManagerHistory:onMenuHold(item)
     end
     table.insert(buttons, {
         filemanagerutil.genResetSettingsButton(doc_settings_or_file, close_dialog_update_callback, is_currently_opened),
-        self._manager.ui.collections:genAddToCollectionButton(file, close_dialog_callback, nil, item.dim),
+        self._manager.ui.collections:genAddToCollectionButton(file, close_dialog_callback, update_callback, item.dim),
         {
             text = _("Readd to history"),
             callback = function()
@@ -200,7 +200,6 @@ function FileManagerHistory:onMenuHold(item)
                 self._manager:updateItemTable()
             end,
         },
-        self._manager.ui.collections:genAddToCollectionButton(file, close_dialog_callback, update_callback, item.dim),
     })
     table.insert(buttons, {
         {
