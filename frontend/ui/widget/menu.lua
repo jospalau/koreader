@@ -771,7 +771,8 @@ function Menu:init()
     local chevron_last = "chevron.last"
     local DGENERIC_ICON_SIZE = G_defaults:readSetting("DGENERIC_ICON_SIZE")
 
-    if not Device:isAndroid() then
+    -- Only make icons smaller for non Android devices and when in fm or history
+    if not Device:isAndroid() and (self.title == "History" or self.title == "") then
         DGENERIC_ICON_SIZE = DGENERIC_ICON_SIZE / 2
     end
 
@@ -932,10 +933,13 @@ function Menu:init()
     local header = self.no_title and VerticalSpan:new{ width = 0 } or self.title_bar
     local body = self.item_group
     local margin_bottom = nil
-    if Device:isAndroid() then
-        margin_bottom = 20
-    else
-        margin_bottom = 25
+    -- Only change margins when in fm or history
+    if self.title == "History" or self.title == "" then
+        if Device:isAndroid() then
+            margin_bottom = 20
+        else
+            margin_bottom = 25
+        end
     end
     local footer = BottomContainer:new{
         dimen = self.inner_dimen:copy(),
