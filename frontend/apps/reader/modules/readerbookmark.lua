@@ -66,7 +66,8 @@ function ReaderBookmark:onGesture() end
 function ReaderBookmark:registerKeyEvents()
     if Device:hasKeyboard() then
         self.key_events.ShowBookmark = { { "B" } }
-    elseif Device:hasFiveWay() then
+        self.key_events.ToggleBookmark = { { "Shift", "Right" } }
+    elseif Device:hasScreenKB() then
         self.key_events.ShowBookmark = { { "ScreenKB", "Left" } }
         self.key_events.ToggleBookmark = { { "ScreenKB", "Right" } }
     end
@@ -102,7 +103,7 @@ function ReaderBookmark:addToMainMenu(menu_items)
             self:onShowBookmark()
         end,
     }
-    if not Device:isTouchDevice() then
+    if not Device:isTouchDevice() and not ( Device:hasScreenKB() or Device:hasSymKey() ) then
         menu_items.toggle_bookmark = {
             text_func = function()
                 return self:isPageBookmarked() and _("Remove bookmark for current page") or _("Bookmark current page")
@@ -888,7 +889,7 @@ function ReaderBookmark:updateBookmarkList(item_table, item_number)
         if self.show_edited_only then
             subtitle = _("Filter: edited highlighted text")
         elseif self.show_drawer_only then
-            subtitle = _("Highlight style: ") .. self.ui.highlight:getHighlightStyleString(self.show_drawer_only):lower()
+            subtitle = _("Highlight style:") .. " " .. self.ui.highlight:getHighlightStyleString(self.show_drawer_only):lower()
         elseif self.match_table then
             if self.match_table.search_str then
                 subtitle = T(_("Query: %1"), self.match_table.search_str)
@@ -900,7 +901,7 @@ function ReaderBookmark:updateBookmarkList(item_table, item_number)
                     end
                 end
                 table.sort(types)
-                subtitle = #types > 0 and _("Bookmark type: ") .. table.concat(types, ", ")
+                subtitle = #types > 0 and _("Bookmark type:") .. " " .. table.concat(types, ", ")
             end
         else
             subtitle = ""

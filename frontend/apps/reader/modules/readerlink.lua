@@ -67,6 +67,7 @@ local ReaderLink = InputContainer:extend{
     location_stack = nil, -- table, per-instance
     forward_location_stack = nil, -- table, per-instance
     _external_link_buttons = nil,
+    handledSchemes = {"http", "https"},
 }
 
 function ReaderLink:init()
@@ -225,10 +226,25 @@ function ReaderLink:init()
     end
 end
 
+function ReaderLink:registerScheme(scheme)
+    table.insert(self.handledSchemes, scheme)
+end
+
 function ReaderLink:onGesture() end
 
 function ReaderLink:registerKeyEvents()
-    if Device:hasKeys() and not Device:hasFiveWay() then
+    if Device:hasScreenKB() or Device:hasSymKey() then
+        self.key_events.GotoSelectedPageLink = { { "Press" }, event = "GotoSelectedPageLink" }
+        if Device:hasKeyboard() then
+            self.key_events.AddCurrentLocationToStack = { { "Shift", "Press" } }
+            self.key_events.SelectNextPageLink = { { "Shift", "LPgFwd" }, event = "SelectNextPageLink" }
+            self.key_events.SelectPrevPageLink = { { "Shift", "LPgBack" }, event = "SelectPrevPageLink" }
+        else
+            self.key_events.AddCurrentLocationToStack = { { "ScreenKB", "Press" } }
+            self.key_events.SelectNextPageLink = { { "ScreenKB", "LPgFwd" }, event = "SelectNextPageLink" }
+            self.key_events.SelectPrevPageLink = { { "ScreenKB", "LPgBack" }, event = "SelectPrevPageLink" }
+        end
+    elseif Device:hasKeys() then
         self.key_events = {
             SelectNextPageLink = {
                 { "Tab" },
@@ -236,7 +252,6 @@ function ReaderLink:registerKeyEvents()
             },
             SelectPrevPageLink = {
                 { "Shift", "Tab" },
-                { "Sym", "Tab" }, -- Shift or Sym + Tab
                 event = "SelectPrevPageLink",
             },
             GotoSelectedPageLink = {
@@ -246,18 +261,6 @@ function ReaderLink:registerKeyEvents()
             -- "Back" is handled by ReaderBack, which will call our onGoBackLink()
             -- when G_reader_settings:readSetting("back_in_reader") == "previous_location"
         }
-    end
-    if Device:hasFiveWay() then
-        self.key_events.GotoSelectedPageLink = { { "Press" }, event = "GotoSelectedPageLink" }
-        if Device:hasKeyboard() then
-            self.key_events.AddCurrentLocationToStack = { { "Shift", "Down" } }
-            self.key_events.SelectNextPageLink = { { "Shift", "LPgFwd" }, event = "SelectNextPageLink" }
-            self.key_events.SelectPrevPageLink = { { "Shift", "LPgBack" }, event = "SelectPrevPageLink" }
-        else
-            self.key_events.AddCurrentLocationToStack = { { "ScreenKB", "Down" } }
-            self.key_events.SelectNextPageLink = { { "ScreenKB", "LPgFwd" }, event = "SelectNextPageLink" }
-            self.key_events.SelectPrevPageLink = { { "ScreenKB", "LPgBack" }, event = "SelectPrevPageLink" }
-        end
     end
 end
 
@@ -824,8 +827,9 @@ function ReaderLink:onGotoLink(link, neglect_current_location, allow_footnote_po
     end
     logger.dbg("ReaderLink:onGotoLink: External link:", link_url)
 
-    local is_http_link = link_url:find("^https?://") ~= nil
-    if is_http_link and self:onGoToExternalLink(link_url) then
+    local scheme = link_url:match("^(%w+)://")
+    local is_handled_external_link = scheme and util.arrayContains(self.handledSchemes, scheme)
+    if is_handled_external_link and self:onGoToExternalLink(link_url) then
         return true
     end
 

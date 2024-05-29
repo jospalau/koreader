@@ -1034,16 +1034,17 @@ function Menu:init()
         self.key_events.PrevPage = { { Input.group.PgBack } }
     end
 
-    if Device:hasFiveWay() and not Device:hasKeyboard() then
-        self.key_events.Hold = { { "ScreenKB", "Press" }, event = "Hold" }
-    elseif Device:hasDPad() then
-        -- we won't catch presses to "Right", leave that to MenuItem.
-        self.key_events.FocusRight = nil
+    if Device:hasDPad() then
+        if Device:hasFewKeys() then
+            -- we won't catch presses to "Right", leave that to MenuItem.
+            self.key_events.FocusRight = nil
+            -- add long press on "Right" key
+            self.key_events.Right = { { "Right" } }
+        end
         -- shortcut icon is not needed for touch device
         if self.is_enable_shortcut then
             self.key_events.SelectByShortCut = { { self.item_shortcuts } }
         end
-        self.key_events.Right = { { "Right" } }
     end
 
     if self.item_table.current then
