@@ -3602,8 +3602,8 @@ function ReaderStatistics:getReadingDurationBySecond(ts)
             start_time - ? + duration as finish,
             id_book book_id,
             book.title book_title
-        FROM   page_stat_data
-        JOIN   book ON book.id = page_stat_data.id_book
+        FROM   wpm_stat_data
+        JOIN   book ON book.id = wpm_stat_data.id_book
         WHERE  start_time BETWEEN ? AND ?
         ORDER BY start;
     ]]
