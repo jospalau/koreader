@@ -3256,6 +3256,7 @@ function ReaderStatistics:onPageUpdate(pageno)
         return -- current page data updated, nothing more needed
     end
 
+    -- Session info is maintained in memory now. No need to update db every time
     -- We want a flush to db every 50 page turns
     if self.pageturn_count >= MAX_PAGETURNS_BEFORE_FLUSH then
         -- I/O, delay until after the pageturn, but reset the count now, to avoid potentially scheduling multiple inserts...
@@ -3267,8 +3268,9 @@ function ReaderStatistics:onPageUpdate(pageno)
             -- insertDB will call resetVolatileStats for us ;)
         end)
     end
-    -- Footer to be updated always. Sesssion info got from memory now
-    -- No need to update db every time
+
+    -- Footer to be updated always.
+    -- We call the footer onUpdateFooter() event handler function here instead of being called in the footer onPageUpdate() event handler function
     self.view.footer:onUpdateFooter(true)
 
     -- Update average time per page (if need be, insertDB will have updated the totals and cleared the volatiles)
@@ -3364,6 +3366,7 @@ end
 
 -- in case when screensaver starts
 function ReaderStatistics:onSuspend()
+    -- The self.is_doc means we are with a document open. We don't was this code to be executed while in the fm
     if self.is_doc then
         self._initial_read_today = nil
         self:insertDB() --OnSaveSettings() also inserts in db but I commented it
@@ -3373,6 +3376,7 @@ function ReaderStatistics:onSuspend()
 end
 -- screensaver off
 function ReaderStatistics:onResume()
+    -- The self.is_doc means we are with a document open. We don't was this code to be executed while in the fm
     if self.is_doc then
         self.start_current_period = os.time()
         self:resetVolatileStats(os.time()) --Calling this since I don't call onReadingPaused() en onSuspend()

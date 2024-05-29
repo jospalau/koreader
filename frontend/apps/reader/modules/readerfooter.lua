@@ -4293,7 +4293,7 @@ function ReaderFooter:_updateFooterText(force_repaint, full_repaint)
         percentage_session, pages_read_session, duration, wpm_session, words_session, duration_raw, self.ui.statistics._initial_read_today = getSessionStats(self)
     end
 
-    -- This is to include the current session time in the curren time read
+    -- This is to include the current session time in the current time read
     local now_t = os.date("*t")
     local daysdiff = now_t.day - os.date("*t",session_started).day
     if daysdiff > 0 then
@@ -4466,7 +4466,7 @@ function ReaderFooter:onPageUpdate(pageno)
         self:setTocMarkers(true)
     end
     self.ui.doc_settings:saveSetting("doc_pages", self.pages) -- for Book information
-    -- This is performed in the main source of the plugin of statistics, same event
+    -- This is called now in the onPageUpdate() event handler function of the statistic plugins main.lua source
     -- self:updateFooterPage()
 end
 

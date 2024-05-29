@@ -626,7 +626,8 @@ function TopBar:toggleBar()
         local now_t = os.date("*t")
         local daysdiff = now_t.day - os.date("*t",self.start_session_time).day
         if daysdiff > 0 then
-            self.ui.statistics:insertDBSessionStats()
+            -- This is to be done in the source readerfooter.lua
+            -- In the onPageUpdate() event handler function of the statistic plugins main.lua source there is always a self.ui.statistics:insertDBSessionStats() call
             self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm  = self:getReadTodayThisMonth(self.title)
             self.start_session_time = os.time()
         end
