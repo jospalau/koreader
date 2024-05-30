@@ -200,6 +200,8 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
             callback = function()
                 if to_status == "complete" then
                     require("readhistory"):removeItemByPath(file)
+                    local util = require("util")
+                    util.generateStats()
                 end
                 local has_sidecar_file = DocSettings:hasSidecarFile(file)
                 if to_status == "tbr" then
