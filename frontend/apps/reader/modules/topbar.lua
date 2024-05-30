@@ -807,6 +807,7 @@ function TopBar:toggleBar()
 
 
         self.progress_bar2.width = Screen:getSize().w - 2 * TopBar.MARGIN_SIDES
+        self.progress_bar2.show_percentage = true
         self.space_after_alt_bar = 15
         if self.alt_bar then
             -- Begin alternative progress bar
@@ -848,7 +849,8 @@ function TopBar:toggleBar()
             self.progress_bar2.time_spent_book = ""
         else
             -- self.progress_bar2.time_spent_book = time_spent_book[4][2]
-            self.progress_bar2.time_spent_book =  math.floor(self.view.footer.pageno / self.view.footer.pages*1000)/10 .. "%"
+            -- self.progress_bar2.time_spent_book =  math.floor(self.view.footer.pageno / self.view.footer.pages*1000)/10 .. "%"
+            self.progress_bar2.time_spent_book =  tostring(left)
         end
 
 
