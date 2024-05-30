@@ -245,8 +245,7 @@ function MenuItem:init()
         text = "▶ " .. " " .. text
     end
 
-
-    if self.in_collection then
+    if self.is_being_read then
         text = "☆ " .. " " .. text
     end
 
