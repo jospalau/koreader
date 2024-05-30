@@ -807,7 +807,6 @@ function TopBar:toggleBar()
 
 
         self.progress_bar2.width = Screen:getSize().w - 2 * TopBar.MARGIN_SIDES
-        self.progress_bar2.show_percentage = true
         self.space_after_alt_bar = 15
         if self.alt_bar then
             -- Begin alternative progress bar
