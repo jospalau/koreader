@@ -367,9 +367,12 @@ function FileChooser:getListItem(dirpath, f, fullpath, attributes, collate)
 
         elseif filemanagerutil.getStatus(fullpath) == "abandoned" then
             item.is_paused = true
-
         elseif filemanagerutil.getStatus(fullpath) == "reading" then
             item.is_being_read = true
+        end
+
+        if ReadCollection:isFileInCollections(item.path) then
+            item.in_collection = true
         end
 
         item.dim = self.filemanager and self.filemanager.selected_files
