@@ -92,11 +92,25 @@ function TopBar:getReadTodayThisMonth(title)
 
     local conn = SQ3.open(db_location)
 
-    local sql_stmt = [[
-        SELECT sum(duration)
-        FROM wpm_stat_data
-            WHERE DATE(start_time,'unixepoch','localtime') = DATE('now', '0 day', 'localtime')
-    ]]
+    local sql_stmt = ""
+
+    -- For some reason, in the PocketBook platform when date is transformed to localtime, the time is 27 seconds behind
+    -- $ date -d @1717016400
+    -- Wed May 29 23:59:33 +03 2024
+    -- It is not big deal, but it has been fixed for time read today to have accurate time
+    if Device:isPocketBook() then
+        sql_stmt = [[
+            SELECT sum(duration)
+            FROM wpm_stat_data
+                WHERE DATE(start_time + 27, 'unixepoch', 'localtime') = DATE('now', '0 day', 'localtime')
+        ]]
+    else
+        sql_stmt = [[
+            SELECT sum(duration)
+            FROM wpm_stat_data
+                WHERE DATE(start_time, 'unixepoch', 'localtime') = DATE('now', '0 day', 'localtime')
+        ]]
+    end
 
     local read_today = conn:rowexec(string.format(sql_stmt))
 
