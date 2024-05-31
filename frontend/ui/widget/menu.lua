@@ -1022,6 +1022,13 @@ function Menu:init()
         self.ges_events.Tap = {
             GestureRange:new{
                 ges = "tap",
+                -- range = Geom:new{ x = 0, y = Screen:getSize().h - 100, w = 100, h = 100}, -- Boton left corner
+                range = Geom:new{ x = Screen:getSize().w - 100, y = Screen:getSize().h - 100, w = 100, h = 100}, -- Botton right corner
+            }
+        }
+        self.ges_events.DoubleTap = {
+            GestureRange:new{
+                ges = "double_tap",
                 range = Geom:new{ x = 0, y = Screen:getSize().h - 100, w = 100, h = 100}, -- Boton left corner
                 -- range = Geom:new{ x = Screen:getSize().w - 100, y = Screen:getSize().h - 100, w = 100, h = 100}, -- Botton right corner
             }
@@ -1414,13 +1421,22 @@ function Menu:onCloseAllMenus()
     return true
 end
 
+-- function Menu:onDoubleTap(arg, ges_ev)
+--     local UIManager = require("ui/uimanager")
+--     local Notification = require("ui/widget/notification")
+--     UIManager:show(Notification:new{
+--         text = _("searching"),
+--     })
+--     return true
+-- end
+
+
 function Menu:onTapCloseAllMenus(arg, ges_ev)
     if ges_ev.pos:notIntersectWith(self.dimen) then
         self:onCloseAllMenus()
         return true
     end
 end
-
 function Menu:onSwipe(arg, ges_ev)
     local direction = BD.flipDirectionIfMirroredUILayout(ges_ev.direction)
     if direction == "west" then

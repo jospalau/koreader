@@ -287,10 +287,12 @@ function FileManagerHistory:onShowHist(search_info)
         onMenuHold = self.onMenuHold,
         onMultiSwipe = self.onMultiSwipe,
         onTap = self.onTap,
+        onDoubleTap = self.onTap,
         onSetRotationMode = self.MenuSetRotationModeHandler,
         _manager = self,
     }
 
+    self.hist_menu.disable_double_tap = false
 
     self.hist_menu.topbar = Topbar:new{
         view = nil,
