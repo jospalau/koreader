@@ -1019,6 +1019,12 @@ function Menu:init()
                 range = self.dimen,
             }
         }
+        self.ges_events.Tap = {
+            GestureRange:new{
+                ges = "tap",
+                range = Geom:new{ x = Screen:getSize().w - 100, y = Screen:getSize().h - 100, w = 100, h = 100},
+            }
+        }
     end
     self.ges_events.Pan = { -- (for mousewheel scrolling support)
         GestureRange:new{
@@ -1026,6 +1032,7 @@ function Menu:init()
             range = self.dimen,
         }
     }
+
     self.ges_events.Close = self.on_close_ges
 
     if not Device:hasKeyboard() then
@@ -1444,6 +1451,10 @@ function Menu:onPan(arg, ges_ev)
             self:onPrevPage()
         end
     end
+    return true
+end
+
+function Menu:onTap(arg, ges_ev)
     return true
 end
 

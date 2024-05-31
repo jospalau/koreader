@@ -286,6 +286,7 @@ function FileManagerHistory:onShowHist(search_info)
         onMenuChoice = self.onMenuChoice,
         onMenuHold = self.onMenuHold,
         onMultiSwipe = self.onMultiSwipe,
+        onTap = self.onTap,
         onSetRotationMode = self.MenuSetRotationModeHandler,
         _manager = self,
     }
@@ -355,9 +356,9 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
     elseif string.find("west north east", ges_ev.multiswipe_directions) then
         self._manager.filter = "all"UIManager:broadcastEvent(Event:new("ShowFileSearchAllCompleted"))
     elseif string.find("east north west", ges_ev.multiswipe_directions) and require("apps/reader/readerui").instance == nil then
-        local FileManager = require("apps/filemanager/filemanager")
-        -- FileManager:openFile(G_reader_settings:readSetting("home_dir") .. "/Shakespeare, William/Romeo and Juliet - William Shakespeare.epub")
-        FileManager:openFile("resources/arthur-conan-doyle_the-hound-of-the-baskervilles.epub")
+        -- local FileManager = require("apps/filemanager/filemanager")
+        -- -- FileManager:openFile(G_reader_settings:readSetting("home_dir") .. "/Shakespeare, William/Romeo and Juliet - William Shakespeare.epub")
+        -- FileManager:openFile("resources/arthur-conan-doyle_the-hound-of-the-baskervilles.epub")
     elseif string.find("east south", ges_ev.multiswipe_directions) then
         self._manager.filter = "all"
         self._manager.search_string = nil
@@ -379,6 +380,12 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
         local FileManager = require("apps/filemanager/filemanager")
         -- FileManager.instance:onRefresh()
     end
+    return true
+end
+
+function FileManagerHistory:onTap(arg, ges_ev)
+    local FileManager = require("apps/filemanager/filemanager")
+    FileManager:openFile("resources/arthur-conan-doyle_the-hound-of-the-baskervilles.epub")
     return true
 end
 
