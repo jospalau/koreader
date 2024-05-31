@@ -959,7 +959,7 @@ function Menu:init()
                 w = self.screen_w,
                 h = self.page_return_arrow:getSize().h,
             },
-            self.return_button,
+            self.title ~= "History" and self.return_button or nil,
         }
     }
 
@@ -1022,7 +1022,8 @@ function Menu:init()
         self.ges_events.Tap = {
             GestureRange:new{
                 ges = "tap",
-                range = Geom:new{ x = Screen:getSize().w - 100, y = Screen:getSize().h - 100, w = 100, h = 100},
+                range = Geom:new{ x = 0, y = Screen:getSize().h - 100, w = 100, h = 100}, -- Boton left corner
+                -- range = Geom:new{ x = Screen:getSize().w - 100, y = Screen:getSize().h - 100, w = 100, h = 100}, -- Botton right corner
             }
         }
     end
