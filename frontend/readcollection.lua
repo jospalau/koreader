@@ -227,6 +227,16 @@ function ReadCollection:removeItemsByPath(path) -- FM: delete folder
     end
 end
 
+-- Remove all items in a given collection
+function ReadCollection:RemoveAllFavoritesAll()
+    for file in pairs(self.coll["favorites"]) do
+        self.coll["favorites"][file] = nil
+    end
+    self:write()
+    return true
+end
+
+
 function ReadCollection:_updateItem(coll_name, file_name, new_filepath, new_path)
     local coll = self.coll[coll_name]
     local item_old = coll[file_name]

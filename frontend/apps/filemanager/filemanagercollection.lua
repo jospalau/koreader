@@ -19,7 +19,7 @@ local util = require("util")
 
 local FileManagerCollection = WidgetContainer:extend{
     title = _("Collections"),
-    default_collection_title = _("Favorites"),
+    default_collection_title = _("All"),
     checkmark = "\u{2713}",
 }
 
@@ -311,6 +311,23 @@ function FileManagerCollection:onShowCollList(file_or_files, caller_callback, no
     end
     self:updateCollListItemTable(true) -- init
     UIManager:show(self.coll_list)
+    return true
+end
+
+
+function FileManagerCollection:onGenerateFavorites()
+    local files = util.getListAll()
+    local ReadCollection = require("readcollection")
+    ReadCollection:RemoveAllFavoritesAll()
+    local collections = {}
+    collections["favorites"] = true
+    ReadCollection:addItemsMultiple(files, collections)
+    local UIManager = require("ui/uimanager")
+    local Notification = require("ui/widget/notification")
+    UIManager:show(Notification:new{
+        text = _("All books added to the All collection."),
+    })
+    self.ui.collections:onShowColl()
     return true
 end
 

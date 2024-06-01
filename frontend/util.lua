@@ -1545,6 +1545,65 @@ function util.round_decimal(num, points)
     return math.floor(num * op) / op
 end
 
+function util.getListAll()
+    local FileChooser = require("ui/widget/filechooser")
+    local Utf8Proc = require("ffi/utf8proc")
+    local DocumentRegistry = require("document/documentregistry")
+    local lfs = require("libs/libkoreader-lfs")
+    local no_metadata_count = 0
+    local sys_folders = { -- do not search in sys_folders
+        ["/dev"] = true,
+        ["/proc"] = true,
+        ["/sys"] = true,
+    }
+    local collate = FileChooser:getCollate()
+
+    local search_string = ".*.epub"
+
+    local files = {}
+    local scan_dirs = {G_reader_settings:readSetting("home_dir")}
+    local cur_month = os.date("%m")
+    local cur_year = os.date("%Y")
+    while #scan_dirs ~= 0 do
+        local new_dirs = {}
+        -- handle each dir
+        for _, d in ipairs(scan_dirs) do
+            -- handle files in d
+            local ok, iter, dir_obj = pcall(lfs.dir, d)
+            if ok then
+                for f in iter, dir_obj do
+                    local fullpath = "/" .. f
+                    if d ~= "/" then
+                        fullpath = d .. fullpath
+                    end
+                    local attributes = lfs.attributes(fullpath) or {}
+                    if attributes.mode == "directory"  and f ~= "." and f ~= ".."
+                        and (FileChooser.show_hidden or not util.stringStartsWith(f, "."))
+                        and FileChooser:show_dir(f) then
+                            table.insert(new_dirs, fullpath)
+                    elseif attributes.mode == "file" and not util.stringStartsWith(f, "._")
+                        and (FileChooser.show_unsupported or DocumentRegistry:hasProvider(fullpath))
+                        and FileChooser:show_file(f) then
+                            if string.find(f, search_string) then
+                                table.insert(files, FileChooser:getListItem(nil, f, fullpath, attributes, collate).path)
+                                -- files[#files + 1] = FileChooser:getListItem(nil, f, fullpath, attributes, collate).path
+                            end
+                    end
+                end
+            end
+        end
+        scan_dirs = new_dirs
+    end
+
+    local t = {}
+    for i=1, #files do
+        local szKey = files[i];
+        t[szKey] = true
+    end
+    return t
+end
+
+
 function util.getList(search_string, search_finished, search_tbr, search_mbr)
     local FileChooser = require("ui/widget/filechooser")
     local Utf8Proc = require("ffi/utf8proc")

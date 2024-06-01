@@ -405,7 +405,8 @@ end
 
 
 function FileManagerHistory:onDoubleTapBottomRight(arg, ges_ev)
-    self._manager.ui.collections:onShowCollList()
+    -- self._manager.ui.collections:onShowCollList()
+    self._manager.ui.collections:onShowColl()
     return true
 end
 

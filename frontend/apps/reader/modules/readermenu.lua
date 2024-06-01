@@ -336,6 +336,29 @@ function ReaderMenu:setUpdateItemTable()
             })
         end
     }
+    self.menu_items.generate_favorites = {
+        text_func = function()
+            return _("Generate Favorites")
+        end,
+        enabled_func = function()
+        end,
+        callback = function()
+            local files = util.getListAll()
+            local ReadCollection = require("readcollection")
+            ReadCollection:RemoveAllFavoritesAll()
+            local collections = {}
+            collections["favorites"] = true
+            ReadCollection:addItemsMultiple(files, collections)
+            local UIManager = require("ui/uimanager")
+            local Notification = require("ui/widget/notification")
+            UIManager:show(Notification:new{
+                text = _("All books added to the All collection."),
+            })
+            self.ui.collections:onShowColl()
+        end,
+        hold_callback = function()
+        end
+    }
     -- self.menu_items.open_random_favorite = {
     --     text_func = function()
     --         local random_file = self:getRandomFav()

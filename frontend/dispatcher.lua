@@ -58,6 +58,7 @@ local settingsList = {
 
     favorites = {category="none", event="ShowColl", title=_("Favorites"), general=true},
     collections = {category="none", event="ShowCollList", title=_("Collections"), general=true},
+    generate_favorites = {category="none", event="GenerateFavorites", title=_("Generate favorites"), general=true},
     filemanager = {category="none", event="Home", title=_("File browser"), general=true, separator=true},
     filemanager_scripts = {category="none", event="Scripts", title=_("File browser scripts"), general=true, separator=true},
 
@@ -332,8 +333,9 @@ local dispatcher_menu_order = {
     "history",
     "history_search",
     "favorites",
-    -- "open_random_favorite",
     "collections",
+    "generate_favorites",
+    -- "open_random_favorite",
     "filemanager",
     "filemanager_scripts",
 

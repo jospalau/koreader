@@ -175,7 +175,8 @@ local order = {
         "----------------------------",
         "favorites",
         "collections",
-        "open_random_favorite",
+        "generate_favorites",
+        -- "open_random_favorite",
         "----------------------------",
         "mass_storage_actions", -- if Device:canToggleMassStorage()
         "----------------------------",
