@@ -742,7 +742,7 @@ function MosaicMenuItem:paintTo(bb, x, y)
     local target =  self[1][1][1]
 
     if self.entry.order == nil -- File manager, History
-            and ReadCollection:isFileInCollections(self.filepath) then
+            and ReadCollection:isFileInCollectionsNotAll(self.filepath) then
         -- top right corner
         local ix, rect_ix
         if BD.mirroredUILayout() then
