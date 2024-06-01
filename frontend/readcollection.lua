@@ -303,7 +303,7 @@ function ReadCollection:getOrderedCollection(collection_name)
 end
 
 
-function ReadCollection:getOrderedCollection2(collection_name)
+function ReadCollection:getOrderedCollectionName(collection_name)
     local ordered_coll = {}
     for _, item in pairs(self.coll[collection_name]) do
         table.insert(ordered_coll, item)
