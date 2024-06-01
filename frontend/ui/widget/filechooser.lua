@@ -371,7 +371,7 @@ function FileChooser:getListItem(dirpath, f, fullpath, attributes, collate)
             item.is_being_read = true
         end
 
-        if ReadCollection:isFileInCollections(item.path) then
+        if ReadCollection:isFileInCollectionsNotAll(item.path) then
             item.in_collection = true
         end
 
@@ -495,7 +495,7 @@ function FileChooser:getMenuItemMandatory(item, collate)
         else
             text = util.getFriendlySize(item.attr.size or 0)
         end
-        if ReadCollection:isFileInCollections(item.path) then
+        if ReadCollection:isFileInCollectionsNotAll(item.path) then
             text = "☆ " .. text
         end
     else -- folder, count number of folders and files inside it

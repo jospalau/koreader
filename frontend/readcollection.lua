@@ -112,6 +112,19 @@ function ReadCollection:isFileInCollections(file)
     return false
 end
 
+function ReadCollection:isFileInCollectionsNotAll(file)
+    file = FFIUtil.realpath(file) or file
+    for collection, coll in pairs(self.coll) do
+        if collection == "favorites" then goto continue end
+        if coll[file] then
+            return true
+        end
+        ::continue::
+
+    end
+    return false
+end
+
 function ReadCollection:getCollectionsWithFile(file)
     file = FFIUtil.realpath(file) or file
     local collections = {}
