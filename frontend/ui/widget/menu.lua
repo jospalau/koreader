@@ -245,7 +245,7 @@ function MenuItem:init()
         text = "▶ " .. " " .. text
     end
 
-    if self.is_being_read then
+    if self.in_collection then
         text = "☆ " .. " " .. text
     end
 
@@ -1036,11 +1036,18 @@ function Menu:init()
                 range = Geom:new{ x = Screen:getSize().w - 100, y = Screen:getSize().h - 100, w = 100, h = 100}, -- Botton right corner
             }
         }
-        self.ges_events.DoubleTap = {
+        self.ges_events.DoubleTapBottomLeft = {
             GestureRange:new{
                 ges = "double_tap",
                 range = Geom:new{ x = 0, y = Screen:getSize().h - 100, w = 100, h = 100}, -- Boton left corner
                 -- range = Geom:new{ x = Screen:getSize().w - 100, y = Screen:getSize().h - 100, w = 100, h = 100}, -- Botton right corner
+            }
+        }
+        self.ges_events.DoubleTapBottomRight = {
+            GestureRange:new{
+                ges = "double_tap",
+                -- range = Geom:new{ x = 0, y = Screen:getSize().h - 100, w = 100, h = 100}, -- Boton left corner
+                range = Geom:new{ x = Screen:getSize().w - 100, y = Screen:getSize().h - 100, w = 100, h = 100}, -- Botton right corner
             }
         }
     end
