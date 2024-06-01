@@ -366,6 +366,11 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
         self._manager.search_string = nil
         self._manager.selected_colections = nil
         self._manager:updateItemTable()
+        local UIManager = require("ui/uimanager")
+        local Notification = require("ui/widget/notification")
+        UIManager:show(Notification:new{
+            text = _("Showing all books in history."),
+        })
     -- elseif string.find("east south west", ges_ev.multiswipe_directions) and require("apps/reader/readerui").instance == nil then
     --     local FileManager = require("apps/filemanager/filemanager")
     --     FileManager:openFile("resources/Forthcoming_Books.pdf")
