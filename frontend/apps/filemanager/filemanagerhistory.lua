@@ -287,7 +287,8 @@ function FileManagerHistory:onShowHist(search_info)
         onMenuHold = self.onMenuHold,
         onMultiSwipe = self.onMultiSwipe,
         onTap = self.onTap,
-        onDoubleTap = self.onDoubleTap,
+        onDoubleTapBottomLeft = self.onDoubleTapBottomLeft,
+        onDoubleTapBottomRight = self.onDoubleTapBottomRight,
         onSetRotationMode = self.MenuSetRotationModeHandler,
         _manager = self,
     }
@@ -396,14 +397,17 @@ function FileManagerHistory:onTap(arg, ges_ev)
 end
 
 
-function FileManagerHistory:onDoubleTap(arg, ges_ev)
+function FileManagerHistory:onDoubleTapBottomLeft(arg, ges_ev)
     local FileManager = require("apps/filemanager/filemanager")
     FileManager:openFile("resources/arthur-conan-doyle_the-hound-of-the-baskervilles.epub")
     return true
 end
 
 
-
+function FileManagerHistory:onDoubleTapBottomRight(arg, ges_ev)
+    self._manager.ui.collections:onShowCollList()
+    return true
+end
 
 function FileManagerHistory:fetchStatusesOut(count)
     for _, v in ipairs(require("readhistory").hist) do
