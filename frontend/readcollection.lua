@@ -302,6 +302,16 @@ function ReadCollection:getOrderedCollection(collection_name)
     return ordered_coll
 end
 
+
+function ReadCollection:getOrderedCollection2(collection_name)
+    local ordered_coll = {}
+    for _, item in pairs(self.coll[collection_name]) do
+        table.insert(ordered_coll, item)
+    end
+    table.sort(ordered_coll, function(v1, v2) return v1.text < v2.text end)
+    return ordered_coll
+end
+
 function ReadCollection:updateCollectionOrder(collection_name, ordered_coll)
     local coll = self.coll[collection_name]
     for i, item in ipairs(ordered_coll) do

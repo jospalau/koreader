@@ -964,6 +964,10 @@ Tap a book in the search results to open it.]]),
             local collections = {}
             collections["favorites"] = true
             ReadCollection:addItemsMultiple(files, collections)
+            local ordered_files = ReadCollection:getOrderedCollectionName("favorites")
+            ReadCollection:updateCollectionOrder("favorites", ordered_files)
+
+
             local UIManager = require("ui/uimanager")
             local Notification = require("ui/widget/notification")
             UIManager:show(Notification:new{

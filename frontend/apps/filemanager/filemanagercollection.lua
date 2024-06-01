@@ -322,6 +322,9 @@ function FileManagerCollection:onGenerateFavorites()
     local collections = {}
     collections["favorites"] = true
     ReadCollection:addItemsMultiple(files, collections)
+    local ordered_files = ReadCollection:getOrderedCollectionName("favorites")
+    ReadCollection:updateCollectionOrder("favorites", ordered_files)
+
     local UIManager = require("ui/uimanager")
     local Notification = require("ui/widget/notification")
     UIManager:show(Notification:new{
