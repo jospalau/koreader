@@ -136,7 +136,11 @@ function TopBar:getReadTodayThisMonth(title)
     local conn = SQ3.open(db_location)
     local stmt = conn:prepare("SELECT id FROM book where title like ?;")
     local result = stmt:reset():bind("%" .. title .. "%"):step()
-    local id_book = result[1]
+    local id_book = nil
+    if result then
+        id_book = result[1]
+    end
+
 
 
 
