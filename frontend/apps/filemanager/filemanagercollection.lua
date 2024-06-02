@@ -306,6 +306,7 @@ function FileManagerCollection:onShowCollList(file_or_files, caller_callback, no
         onMenuHold = self.onCollListHold,
         onSetRotationMode = self.MenuSetRotationModeHandler,
         _manager = self,
+        collection_name = "listall",
     }
     self.coll_list.close_callback = function(force_close)
         if force_close or self.selected_colections == nil then
