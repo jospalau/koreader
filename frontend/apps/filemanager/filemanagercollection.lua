@@ -75,8 +75,10 @@ function FileManagerCollection:onShowColl(collection_name)
             end
             self.files_updated = nil
         end
-        self.ui.history:fetchStatuses(false)
-        self.ui.history:updateItemTable()
+        if self.ui.history.hist_menu then
+            self.ui.history:fetchStatuses(false)
+            self.ui.history:updateItemTable()
+        end
         UIManager:close(self.coll_menu)
         self.coll_menu = nil
     end
