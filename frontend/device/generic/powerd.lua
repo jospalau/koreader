@@ -148,7 +148,8 @@ end
 
 function BasePowerD:turnOnFrontlight(done_callback)
     if not self.device:hasFrontlight() then return end
-    if self:isFrontlightOn() then return false end
+    -- If we suspend and resume very quick the Kobo Clara BW and the light was on it will be off
+    if self:isFrontlightOn() and not self.device.model == "Kobo_spaBW" then return false end
     if self.fl_intensity == self.fl_min then return false end  --- @fixme what the hell?
     local cb_handled = self:turnOnFrontlightHW(done_callback)
     self.is_fl_on = true
