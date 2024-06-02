@@ -277,7 +277,8 @@ function DoubleBar:toggleBar()
         title = TextWidget.PTF_BOLD_START .. title .. " with " .. words .. TextWidget.PTF_BOLD_END
         self.title_text:setText(title)
 
-        local chapter = TextWidget.PTF_BOLD_START .. self.ui.toc:getTocTitleByPage(self.view.footer.pageno) .. TextWidget.PTF_BOLD_END
+        local chapter = self.ui.toc:getTocTitleByPage(self.view.footer.pageno) ~= ""
+        and TextWidget.PTF_BOLD_START .. self.ui.toc:getTocTitleByPage(self.view.footer.pageno) .. TextWidget.PTF_BOLD_END or ""
         self.progress_bar.width = Screen:getSize().w
         self.progress_bar_chapters.width = Screen:getSize().w
 
