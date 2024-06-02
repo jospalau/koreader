@@ -193,6 +193,7 @@ if Device:hasFrontlight() then
     end
 
     function DeviceListener:onShowFlDialog()
+        Device:showLightDialog()
     end
 
 end
