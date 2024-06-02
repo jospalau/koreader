@@ -358,6 +358,10 @@ function filemanagerutil.genShowFolderButton(file, caller_callback, button_disab
             if ui then
                 local pathname = util.splitFilePathName(file)
                 ui.file_chooser:changeToPath(pathname, file)
+                -- Since recently is possible to open the default collection from the history with a quick gesture. We close the history when in fm if opened. No needed if in ui
+                if ui.history.hist_menu then
+                    ui.history.hist_menu.close_callback()
+                end
             else
                 ui = require("apps/reader/readerui").instance
                 ui:onClose()
