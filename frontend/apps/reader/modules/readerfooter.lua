@@ -2345,8 +2345,8 @@ function ReaderFooter:onGetTextPage()
     local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
     local name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2 = "","","","","","","","","","","","","",""
     local text_properties=""
-    if res and res.pos0 ~= ".0" then
-        name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2  = self.ui.document:getHeight(res.pos0)
+    if res and res.pos1 ~= ".0" then
+        name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2  = self.ui.document:getHeight(res.pos1)
 
 
         -- If there is not css property line-height in any style, the CREngine return a value of -2
