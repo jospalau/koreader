@@ -1116,32 +1116,32 @@ function TopBar:onAdjustMarginsTopbar()
 
 
     -- Adjust margin values to the topbar. Values are in pixels
-    -- We add a little bit more, 12 pixels hardcoded since side margins are 10 and bottom margin 9, always. Top margin value is 9 if not alternative status bar
+    -- We add a little bit more, 12 (15, after revision) pixels hardcoded since side margins are 10 and bottom margin 9, always. Top margin value is 9 if not alternative status bar
     -- Exceptions are Android in which side margins are set to 20
     -- And top margin when alternative status bar is on. Value is set to self.space_after_alt_bar (fixed to 15) + 9, adding a little bit more too, 6 more pixels
 
-    self.ui.document.configurable.b_page_margin = 12
+    self.ui.document.configurable.b_page_margin = 15
     if Device:isAndroid() then
         self.ui.document.configurable.h_page_margins[1] = 20
         self.ui.document.configurable.h_page_margins[2] = 20
     else
-        self.ui.document.configurable.h_page_margins[1] = 12
-        self.ui.document.configurable.h_page_margins[2] = 12
+        self.ui.document.configurable.h_page_margins[1] = 15
+        self.ui.document.configurable.h_page_margins[2] = 15
     end
 
     local margins = {}
     if self.show_top_bar then
         if Device:isAndroid() then
-            margins = { 20, self.space_after_alt_bar + 9 + 6, 20, 12}
+            margins = { 20, self.space_after_alt_bar + 9 + 6, 20, 15}
         else
-            margins = { 12, self.space_after_alt_bar + 9 + 6, 12, 12}
+            margins = { 15, self.space_after_alt_bar + 9 + 6, 15, 15}
         end
         self.ui.document.configurable.t_page_margin = self.space_after_alt_bar + 9 + 6
     else
         if Device:isAndroid() then
-            margins = { 20, 9 + 6, 20, 12}
+            margins = { 20, 9 + 6, 20, 15}
         else
-            margins = { 12, 9 + 6, 12, 12}
+            margins = { 15, 9 + 6, 15, 15}
         end
         self.ui.document.configurable.t_page_margin = 9 + 6
     end
