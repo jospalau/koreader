@@ -900,13 +900,13 @@ function TopBar:toggleBar()
             end
         elseif self.option == 4 then
             if Device:isAndroid() then
-                if configurable.h_page_margins[1] == 20 and configurable.t_page_margin == 9 + 6 and configurable.h_page_margins[2] == 20 and configurable.b_page_margin == 12 then
+                if configurable.h_page_margins[1] == 20 and configurable.t_page_margin == 9 + 6 and configurable.h_page_margins[2] == 20 and configurable.b_page_margin == 15 then
                     self.test_light:setText(" ● " .. self.frontlight)
                 else
                     self.test_light:setText(" ○ " .. self.frontlight)
                 end
             else
-                if configurable.h_page_margins[1] == 12 and configurable.t_page_margin == 9 + 6 and configurable.h_page_margins[2] == 12 and configurable.b_page_margin == 12 then
+                if configurable.h_page_margins[1] == 15 and configurable.t_page_margin == 9 + 6 and configurable.h_page_margins[2] == 15 and configurable.b_page_margin == 15 then
                     self.test_light:setText(" ● " .. self.frontlight)
                 else
                     self.test_light:setText(" ○ " .. self.frontlight)
