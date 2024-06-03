@@ -1086,10 +1086,10 @@ function TopBar:paintTo(bb, x, y)
         end
 
 
-        local time_battery_text_text = time .. "|" .. batt_lvl .. "%|" ..  last_file
+        -- local time_battery_text_text = time .. "|" .. batt_lvl .. "%|" ..  last_file
 
-        times_text:setText(time_battery_text_text:reverse())
-        times_text:paintTo(bb, x - times_text:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y)
+        -- times_text:setText(time_battery_text_text:reverse())
+        -- times_text:paintTo(bb, x - times_text:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y)
 
 
         local books_information = FrameContainer:new{
@@ -1139,6 +1139,25 @@ function TopBar:paintTo(bb, x, y)
             books_information[1][1]:setText("No stats.lua file in home dir")
         end
         books_information:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+
+
+        local times = FrameContainer:new{
+            left_container:new{
+                dimen = Geom:new(),
+                TextWidget:new{
+                    text =  "",
+                    face = Font:getFace("myfont3", 12),
+                    fgcolor = Blitbuffer.COLOR_BLACK,
+                },
+            },
+            -- background = Blitbuffer.COLOR_WHITE,
+            bordersize = 0,
+            padding = 0,
+            padding_bottom = self.bottom_padding,
+        }
+
+        times[1][1]:setText(time .. "|" .. batt_lvl .. "%")
+        times:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM - times[1][1]:getSize().h )
     end
 end
 
