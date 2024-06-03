@@ -175,6 +175,36 @@ function TopBar:getReadTodayThisMonth(title)
     return read_today, read_month, total_time_book, avg_wpm
 end
 
+function TopBar:getReadThisYearSoFar()
+    local DataStorage = require("datastorage")
+    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
+    -- best to e it to letters, to get '2m' ?
+    -- user_duration_format = "letters"
+
+    local conn = SQ3.open(db_location)
+
+
+    local sql_stmt = [[
+        SELECT sum(duration) AS sum_duration
+        FROM   wpm_stat_data
+        WHERE  DATE(start_time,'unixepoch','localtime') >= DATE('now', '-%d day','localtime');
+    ]]
+
+    local read_this_year = conn:rowexec(string.format(sql_stmt, os.date("*t").yday))
+
+    if read_this_year == nil then
+        read_this_year = 0
+    end
+    read_this_year = tonumber(read_this_year)
+
+
+    conn:close()
+    local Math = require("optmath")
+    return math.ceil((read_this_year / 60 / 60) - (os.date("*t").yday * 2))
+
+end
+
 
 function TopBar:init()
 
@@ -1055,6 +1085,7 @@ function TopBar:paintTo(bb, x, y)
             last_file = G_reader_settings:readSetting("lastfile")
         end
 
+
         local time_battery_text_text = time .. "|" .. batt_lvl .. "%|" ..  last_file
 
         times_text:setText(time_battery_text_text:reverse())
@@ -1090,6 +1121,11 @@ function TopBar:paintTo(bb, x, y)
             -- local execute = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub' | wc -l" )
             -- local execute2 = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub.lua' -exec ls {} + | wc -l")
             -- books_information[1][1]:setText("TB: " .. execute:read('*a') .. "TBC: " .. execute2:read('*a'))
+
+            local stats_year = TopBar:getReadThisYearSoFar()
+            if stats_year > 0 then
+                stats_year = "+" .. stats_year
+            end
             books_information[1][1]:setText("B: " .. stats["total_books"]
             .. ", BF: " .. stats["total_books_finished"]
             .. ", BFTM: " .. stats["total_books_finished_this_month"]
@@ -1097,7 +1133,8 @@ function TopBar:paintTo(bb, x, y)
             .. ", BFLY: " .. stats["total_books_finished_last_year"]
             .. ", BMBR: " .. stats["total_books_mbr"]
             .. ", BTBR: " .. stats["total_books_tbr"]
-            .. ", LD: " .. last_days)
+            .. ", LD: " .. last_days
+            .. " " .. stats_year)
         else
             books_information[1][1]:setText("No stats.lua file in home dir")
         end
