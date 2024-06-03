@@ -958,7 +958,7 @@ function TopBar:paintTo(bb, x, y)
 
         -- Top center
 
-        self[3]:paintTo(bb, x + Screen:getWidth()/2, y + TopBar.MARGIN_TOP)
+        self[3]:paintTo(bb, x + Screen:getWidth()/2 + self[3][1][1]:getSize().w/2 - self[3][2][1]:getSize().w/2, y + TopBar.MARGIN_TOP)
         -- self[3]:paintTo(bb, x + Screen:getWidth()/2, y + 20)
 
 
