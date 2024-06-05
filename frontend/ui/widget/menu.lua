@@ -950,11 +950,7 @@ function Menu:init()
     local margin_bottom = nil
     -- Only change margins when in fm or history
     if self.title == "History" or (self.title == "" and not self.collection_name) then
-        if Device:isAndroid() then
-            margin_bottom = 20
-        else
-            margin_bottom = 25
-        end
+        margin_bottom = 20
     end
     local footer = BottomContainer:new{
         dimen = self.inner_dimen:copy(),
