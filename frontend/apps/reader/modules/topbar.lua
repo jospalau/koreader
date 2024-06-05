@@ -142,9 +142,6 @@ function TopBar:getReadTodayThisMonth(title)
     end
 
 
-
-
-
     if id_book == nil then
         id_book = 0
     end
@@ -154,14 +151,15 @@ function TopBar:getReadTodayThisMonth(title)
     local sql_stmt ="SELECT SUM(duration) FROM wpm_stat_data where id_book = ibp"
 
 
-    local total_time_book = conn:rowexec(sql_stmt:gsub("ibp",id_book))
+    local total_time_book = conn:rowexec(sql_stmt:gsub("ibp", id_book))
 
     if total_time_book == nil then
         total_time_book = 0
     end
 
-
+    stmt:close()
     conn:close()
+
     if read_today == nil then
         read_today = 0
     end
