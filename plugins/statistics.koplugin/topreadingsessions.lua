@@ -52,8 +52,8 @@ function TopReadingSessions:getStats(sessions)
 		local execution = stmt:step()
 		local avg_wpm = math.floor(execution[1])
 		local sum_time = datetime.secondsToClockDuration("letters", tonumber(execution[2]))
-		print("Total time reading since new stats table: " .. tostring(sum_time))
-		print("Avg Wpm: " .. tostring(avg_wpm) .. "wpm")
+		-- print("Total time reading since new stats table: " .. tostring(sum_time))
+		-- print("Avg Wpm: " .. tostring(avg_wpm) .. "wpm")
 
     sql_stmt = [[SELECT sum(sum_duration)
         FROM   (
@@ -65,7 +65,12 @@ function TopReadingSessions:getStats(sessions)
     ]]
 
 	local avg_last_seven_days = conn:rowexec(sql_stmt)
-	local avg_last_seven_days = math.floor(tonumber(avg_last_seven_days)/7/60/60 * 100)/100
+
+    if avg_last_seven_days == nil then
+        avg_last_seven_days = 0
+    end
+
+	avg_last_seven_days = math.floor(tonumber(avg_last_seven_days)/7/60/60 * 100)/100
 
     sql_stmt = [[SELECT sum((sum_duration))
         FROM   (
@@ -75,12 +80,16 @@ function TopReadingSessions:getStats(sessions)
                 GROUP BY DATE(start_time,'unixepoch','localtime'));"
                 );
     ]]
+
     local avg_last_thirty_days = conn:rowexec(sql_stmt)
-	local avg_last_thirty_days = math.floor(tonumber(avg_last_thirty_days)/30/60/60 * 100)/100
+    if avg_last_thirty_days == nil then
+        avg_last_thirty_days = 0
+    end
+	avg_last_thirty_days = math.floor(tonumber(avg_last_thirty_days)/30/60/60 * 100)/100
 
 
-    print("Average time read last 7 days: " .. avg_last_seven_days .. "h")
-    print("Average time read last 30 days: " .. avg_last_thirty_days .. "h")
+    -- print("Average time read last 7 days: " .. avg_last_seven_days .. "h")
+    -- print("Average time read last 30 days: " .. avg_last_thirty_days .. "h")
 
     sql_stmt = [[
 				SELECT book.title,wpm_stat_data.*,avg(wpm),sum(duration)
@@ -90,14 +99,14 @@ function TopReadingSessions:getStats(sessions)
 				GROUP BY id_device
 				ORDER by start_time
     ]]
-		print("\nInfo per device: ")
+	-- print("\nInfo per device: ")
     stmt = conn:prepare(sql_stmt)
 	  --local row, names = stmt:step({}, {})
 		local row = {}
 		while stmt:step(row) do
 			local duration = datetime.secondsToClockDuration("letters", tonumber(row[10]), true)
-			print(self.devices[tonumber(row[7])] .. ": " .. duration .. ", " .. tostring(math.floor(tonumber(row[9]))) .. "wpm")
-			--print(unpack(row))
+			-- print(self.devices[tonumber(row[7])] .. ": " .. duration .. ", " .. tostring(math.floor(tonumber(row[9]))) .. "wpm")
+			-- print(unpack(row))
 		end
 
      sql_stmt = [[
@@ -109,7 +118,7 @@ function TopReadingSessions:getStats(sessions)
     ]]
 
 
-    print("\nTop 5 duration sessions: ")
+    -- print("\nTop 5 duration sessions: ")
     stmt = conn:prepare(sql_stmt:gsub("sessions",sessions))
     --local row, names = stmt:step({}, {})
     row = {}
@@ -123,11 +132,10 @@ function TopReadingSessions:getStats(sessions)
 			end
             -- table.insert(self.sessions,{i, {row[1], tonumber(row[2]), row[3]}})
             table.insert(self.sessions,{row[1], tonumber(row[2]), row[3]})
-			print(row[1] .. " " .. duration .. " " .. row[3] .. " " .. font_name)
-      --print(unpack(row))
+			-- print(row[1] .. " " .. duration .. " " .. row[3] .. " " .. font_name)
+            -- print(unpack(row))
     end
 
-	  print("\n")
     conn:close()
     return
 end
