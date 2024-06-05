@@ -899,8 +899,8 @@ function MosaicMenu:_recalculateDimen()
     end
 
     -- Set our items target size
-    self.item_margin = Screen:scaleBySize(10)
-    self.item_height = math.floor((self.inner_dimen.h - self.others_height - (1+self.nb_rows)*self.item_margin) / self.nb_rows) - 2
+    self.item_margin = Screen:scaleBySize(12)
+    self.item_height = math.floor((self.inner_dimen.h - self.others_height - (1+self.nb_rows)*self.item_margin) / self.nb_rows)
     self.item_width = math.floor((self.inner_dimen.w - (1+self.nb_cols)*self.item_margin) / self.nb_cols)
     self.item_dimen = Geom:new{
         x = 0, y = 0,
