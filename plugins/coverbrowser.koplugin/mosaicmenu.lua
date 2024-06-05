@@ -754,8 +754,8 @@ function MosaicMenuItem:paintTo(bb, x, y)
         end
         local iy = 0
         local rect_size = corner_mark_size - target.bordersize
-        bb:paintRect(x+ix+rect_ix, y+target.bordersize, rect_size, rect_size, Blitbuffer.COLOR_GRAY)
-        collection_mark:paintTo(bb, x+ix, y+iy)
+        bb:paintRect(x+ix+rect_ix, target.dimen.y+target.bordersize, rect_size, rect_size, Blitbuffer.COLOR_GRAY)
+        collection_mark:paintTo(bb, x+ix, target.dimen.y+iy)
     end
 
     local in_history =  require("readhistory"):getIndexByFile(self.filepath)
