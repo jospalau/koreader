@@ -941,7 +941,7 @@ function ReaderUI:onHome()
         local MultiConfirmBox = require("ui/widget/multiconfirmbox")
 
         local multi_box= MultiConfirmBox:new{
-            text = "Do you want to put the book to the MBR?",
+            text = "Do you want to put the book to history without configuration?",
             choice1_text = _("Yes"),
             choice1_callback = function()
                 UIManager:close(multi_box)
@@ -974,7 +974,7 @@ function ReaderUI:onHome()
 
                 return true
             end,
-            choice2_text = _("No"),
+            choice2_text = _("No, just exit"),
             choice2_callback = function()
                 self:onClose()
                 self:showFileManager()
