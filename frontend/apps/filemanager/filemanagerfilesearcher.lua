@@ -468,7 +468,10 @@ function FileSearcher:showSearchResults(results, show_recent, page, callback)
     end
 end
 
-
+function FileSearcher:updateMenu(item_table)
+    item_table = item_table or self.search_menu.item_table
+    self.search_menu:switchItemTable(T(_("Search results (%1)"), #item_table), item_table, -1)
+end
 
 function FileSearcher:onMenuSelect(item, callback)
     if self._manager.selected_files then
@@ -491,7 +494,7 @@ function FileSearcher:showFileDialog(item, callback)
         -- local FileManager = require("apps/filemanager/filemanager")
         -- FileManager.instance.history:onShowHist()
         -- Pass false instead of the file
-        self.close_callback(file, true)
+        self.search_menu.close_callback(file, true)
 
         if self.ui.history.hist_menu then
             self.ui.history.hist_menu.close_callback()
@@ -502,7 +505,11 @@ function FileSearcher:showFileDialog(item, callback)
     -- When Show folder in file to the callback in onShowFileSearchAll()
     local function close_dialog_menu_callback(file)
         UIManager:close(dialog)
-        self.close_callback(file, false)
+        self.search_menu.close_callback(file, false)
+    end
+    local function update_item_callback()
+        item.mandatory = FileChooser:getMenuItemMandatory(item, FileChooser:getCollate())
+        self:updateMenu()
     end
     local buttons = {}
     if item.is_file then
@@ -514,7 +521,8 @@ function FileSearcher:showFileDialog(item, callback)
             table.insert(buttons, {}) -- separator
             table.insert(buttons, {
                 filemanagerutil.genResetSettingsButton(file, close_dialog_callback, is_currently_opened),
-                self.ui.collections:genAddToCollectionButton(file, close_dialog_callback, update_item_callback),
+                -- The last change calls update_item_callback(). I continue calling close_dialog_callback() and it will be reopened after closing
+                self.ui.collections:genAddToCollectionButton(file, close_dialog_callback, close_dialog_callback),
             })
         end
         table.insert(buttons, {
