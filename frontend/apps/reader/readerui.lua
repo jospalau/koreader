@@ -598,7 +598,7 @@ function ReaderUI:getLastDirFile(to_file_browser)
     return last_dir, last_file
 end
 
-function ReaderUI:showFileManager(file)
+function ReaderUI:showFileManager(file, selected_files)
     local FileManager = require("apps/filemanager/filemanager")
 
     local last_dir, last_file
@@ -611,7 +611,7 @@ function ReaderUI:showFileManager(file)
     if FileManager.instance then
         FileManager.instance:reinit(last_dir, last_file)
     else
-        FileManager:showFiles(last_dir, last_file)
+        FileManager:showFiles(last_dir, last_file, selected_files)
     end
 end
 
