@@ -521,7 +521,8 @@ function FileSearcher:showFileDialog(item, callback)
             table.insert(buttons, {}) -- separator
             table.insert(buttons, {
                 filemanagerutil.genResetSettingsButton(file, close_dialog_callback, is_currently_opened),
-                -- The last change calls update_item_callback(). I continue calling close_dialog_callback() and it will be reopened after closing
+                -- The last change calls update_item_callback() but I will continue calling close_dialog_callback() and the search it will be reopened
+                -- Basically because I close the dialog always there is an action in close_dialog_callback()
                 self.ui.collections:genAddToCollectionButton(file, close_dialog_callback, close_dialog_callback),
             })
         end
@@ -532,16 +533,8 @@ function FileSearcher:showFileDialog(item, callback)
                 callback = function()
                     local function post_delete_callback()
                         UIManager:close(dialog)
-                        for i, menu_item in ipairs(self.item_table) do
-                            if menu_item.path == file then
-                                table.remove(self.item_table, i)
-                                -- local Event = require("ui/event")
-                                -- UIManager:broadcastEvent(Event:new("CloseSearchMenu", self.recent, self.search_string))
-                                UIManager:close(self)
-                                break
-                            end
-                            self:switchItemTable(T(_("Search results (%1)"), #self.item_table), self.item_table)
-                        end
+                        table.remove(self.search_menu.item_table, item.idx)
+                        self:updateMenu()
                     end
                     local FileManager = require("apps/filemanager/filemanager")
                     FileManager:showDeleteFileDialog(file, post_delete_callback)
@@ -670,6 +663,9 @@ function FileSearcher:showSelectModeDialog()
                     local selected_files = self.selected_files
                     self.search_menu.close_callback()
                     if self.ui.file_chooser then
+                        if self.search_menu.ui.history.hist_menu then
+                            self.search_menu.ui.history.hist_menu.close_callback()
+                        end
                         self.ui.selected_files = selected_files
                         self.ui.title_bar:setRightIcon("check")
                         self.ui.file_chooser:refreshPath()
