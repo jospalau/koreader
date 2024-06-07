@@ -249,9 +249,9 @@ function MenuItem:init()
         text = "☆ " .. " " .. text
     end
 
-    if self.words ~= "" then
-        text = text .. ", " .. self.words .. "w"
-    end
+    -- if self.words ~= "" then
+    --     text = text .. ", " .. self.words .. "w"
+    -- end
 
     -- For some reason, Android app does not go inside this condition
     if self.single_line then
@@ -1175,13 +1175,19 @@ function Menu:updateItems(select_number, no_recalculate_dimen)
         if self.items_max_lines then
             self.item_dimen.h = item.height
         end
+
+        local mandatory = item.mandatory
+        if mandatory and self.calibre_data[Menu.getMenuText(item)] then
+            mandatory = mandatory .. " " .. string.format("%+7s", self.calibre_data[Menu.getMenuText(item)]["words"] .. "w")
+        end
+
         local item_tmp = MenuItem:new{
             show_parent = self.show_parent,
             state_w = self.state_w,
             text = Menu.getMenuText(item),
             bidi_wrap_func = item.bidi_wrap_func,
             post_text = item.post_text,
-            mandatory = item.mandatory,
+            mandatory = mandatory,
             mandatory_func = item.mandatory_func,
             mandatory_dim = item.mandatory_dim or item.dim,
             bold = self.item_table.current == index or item.bold == true,
