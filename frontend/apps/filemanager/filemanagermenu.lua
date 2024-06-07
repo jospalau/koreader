@@ -858,6 +858,21 @@ Tap a book in the search results to open it.]]),
             self.ui.filesearcher:onShowFileSearchLists(false)
         end
     }
+--     self.menu_items.find_file_all_sorted = {
+--         -- @translators Search for files by name.
+--         text = _("File search all sorted by size"),
+--         help_text = _([[Search a book by filename in the current or home folder and its subfolders.
+
+-- Wildcards for one '?' or more '*' characters can be used.
+-- A search for '*' will show all files.
+
+-- The sorting order is the same as in filemanager.
+
+-- Tap a book in the search results to open it.]]),
+--         callback = function()
+--             self.ui.filesearcher:onShowFileSearchLists(false, nil, nil, true)
+--         end
+--     }
     self.menu_items.find_file_all_recent = {
         -- @translators Search for files by name.
         text = _("File search all recent"),

@@ -98,6 +98,7 @@ function FileSearcher:onShowFileSearch(search_string, callbackfunc)
     search_dialog:onShowKeyboard()
 end
 
+-- function FileSearcher:onShowFileSearchLists(recent, page, search_string, sorted_size)
 function FileSearcher:onShowFileSearchLists(recent, page, search_string)
     -- local callback_func = function(file, restart)
     --         -- Coming nil when closing the search results list window with esc or clicking on X, Menu:onCloseAllMenus() in menu.lua
@@ -138,6 +139,7 @@ function FileSearcher:onShowFileSearchLists(recent, page, search_string)
     end
     self.recent = recent
 
+    -- self:onSearchSortCompleted(false, recent, page, nil, sorted_size)
     self:onSearchSortCompleted(false, recent, page, nil)
 end
 
@@ -196,6 +198,7 @@ function FileSearcher:showSearchResultsComplete(results, callback)
     end
 end
 
+-- function FileSearcher:onSearchSortCompleted(show_complete, show_recent, page, callback, sorted_size)
 function FileSearcher:onSearchSortCompleted(show_complete, show_recent, page, callback)
     local results
     local dirs, files = self:getList()
@@ -211,6 +214,9 @@ function FileSearcher:onSearchSortCompleted(show_complete, show_recent, page, ca
     if show_complete and show_recent then
         table.sort(results,function(a,b) return b.text>a.text end)
     end
+    -- if sorted_size then
+    --     table.sort(results,function(a,b) return b.words<a.words end)
+    -- end
     if (show_complete) then
         local table_complete = {}
         for key, value in ipairs(results) do
@@ -256,6 +262,7 @@ function FileSearcher:getList()
     }
     local collate = FileChooser:getCollate()
     local search_string = self.search_string
+    -- local calibre_data = util.loadCalibreData()
     if search_string ~= "*" then -- one * to show all files
         if not self.case_sensitive then
             search_string = Utf8Proc.lowercase(util.fixUtf8(search_string, "?"))
@@ -299,6 +306,10 @@ function FileSearcher:getList()
                             and FileChooser:show_file(f) then
                         if self:isFileMatch(f, fullpath, search_string, true) then
                             table.insert(files, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
+                            -- local file = FileChooser:getListItem(nil, f, fullpath, attributes, collate)
+                            -- file.pages = calibre_data[file.text] and calibre_data[file.text].pages or 0
+                            -- file.words = calibre_data[file.text] and calibre_data[file.text].words or 0
+                            -- table.insert(files, file)
                         end
                     end
                 end
