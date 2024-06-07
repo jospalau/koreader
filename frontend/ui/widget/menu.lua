@@ -249,6 +249,9 @@ function MenuItem:init()
         text = "☆ " .. " " .. text
     end
 
+    if self.words ~= "" then
+        text = text .. ", " .. self.words .. "w"
+    end
 
     -- For some reason, Android app does not go inside this condition
     if self.single_line then
@@ -743,7 +746,8 @@ function Menu:init()
     }
 
     self.paths = {}  -- per instance table to trace navigation path
-
+    local util = require("util")
+    self.calibre_data = util.loadCalibreData()
     -----------------------------------
     -- start to set up widget layout --
     -----------------------------------
@@ -1187,6 +1191,8 @@ function Menu:updateItems(select_number, no_recalculate_dimen)
             is_finished = self.item_table.current == index or item.is_finished == true,
             is_paused = self.item_table.current == index or item.is_paused == true,
             is_being_read = self.item_table.current == index or item.is_being_read == true,
+            pages = self.calibre_data[Menu.getMenuText(item)] and self.calibre_data[Menu.getMenuText(item)]["pages"] or "",
+            words = self.calibre_data[Menu.getMenuText(item)] and self.calibre_data[Menu.getMenuText(item)]["words"] or "",
             dim = item.dim,
             font_size = self.font_size,
             infont_size = self.items_mandatory_font_size or (self.font_size - 4),
