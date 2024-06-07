@@ -183,6 +183,7 @@ function PageBrowserWidget:init()
     -- Compute settings-dependant sizes and options, and build the inner widgets
     -- (this will call self:update())
     self:updateLayout()
+    UIManager:broadcastEvent(Event:new("ToggleShowTopBar"))
 end
 
 function PageBrowserWidget:updateEditableStuff(update_view)
@@ -1098,6 +1099,8 @@ function PageBrowserWidget:onClose(close_all_parents)
         UIManager:broadcastEvent(Event:new("UpdateFooter"))
         UIManager:setDirty(self.ui.dialog, "full")
     end
+    UIManager:broadcastEvent(Event:new("ToggleShowTopBar"))
+
     return true
 end
 
