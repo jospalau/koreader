@@ -4193,7 +4193,9 @@ function ReaderFooter:_updateFooterText(force_repaint, full_repaint)
         -- local seconds_since_md = os.time() - os.time(now_t)
         -- read_today = seconds_since_md
         read_today = 0
-        self.ui.statistics:insertDBSessionStats()
+
+        -- We do this in topbar.lua because we need it there to get there the updated times
+        -- self.ui.statistics:insertDBSessionStats()
 
         -- Este evento ocurre antes que el evento onUpdateFooter de del plugin de estadísticas
         -- Lo que quiere decir que al inicializar las siguientes variables, tendremos que esperar a completar esta nueva sesión de lectura
