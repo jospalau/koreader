@@ -791,7 +791,7 @@ function Menu:init()
     local DGENERIC_ICON_SIZE = G_defaults:readSetting("DGENERIC_ICON_SIZE")
 
     -- Only make icons smaller for non Android devices and when in fm or history
-    if not Device:isAndroid() and (self.title == "History" or (self.title == "" and not self.collection_name)) then
+    if not Device:isAndroid() and (self.title == "History" or (self.title == "" and not (self.collection_name or self.search))) then
         DGENERIC_ICON_SIZE = DGENERIC_ICON_SIZE / 2
     end
 
@@ -953,14 +953,12 @@ function Menu:init()
     local body = self.item_group
     local margin_bottom = nil
     -- Only change margins when in fm or history
-    if self.title == "History" or (self.title == "" and not self.collection_name) then
-        if self.title == "History" or (self.title == "" and not self.collection_name) then
+    if self.title == "History" or (self.title == "" and not (self.collection_name or self.search)) then
             if Device:isAndroid() then
                 margin_bottom = 20
             else
                 margin_bottom = 25
             end
-        end
     end
     local footer = BottomContainer:new{
         dimen = self.inner_dimen:copy(),

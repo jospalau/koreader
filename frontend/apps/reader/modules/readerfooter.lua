@@ -2346,6 +2346,7 @@ function ReaderFooter:onGetTextPage()
     local name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2 = "","","","","","","","","","","","","",""
     local text_properties=""
 
+    -- We look first in the last element in page to retrieve styles and if we don't get information we check then the first element
     if res and res.pos1 ~= ".0" then
         name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2  = self.ui.document:getHeight(res.pos1)
 

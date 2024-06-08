@@ -379,6 +379,7 @@ function FileSearcher:showSearchResults(results, show_recent, page, callback)
         handle_hold_on_hold_release = true,
         ui = self.ui,
         _manager = self,
+        search = true,
     }
 
     -- -- Coming from the event declared in onShowFileSearchAll() to get a list, callback function coming from onShowFileSearchAll()
