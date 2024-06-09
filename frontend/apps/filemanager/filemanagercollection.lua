@@ -78,12 +78,6 @@ function FileManagerCollection:onShowColl(collection_name)
         collection_name = collection_name,
     }
     self.coll_menu.close_callback = function()
-        if self.files_updated then
-            if self.ui.file_chooser then
-                self.ui.file_chooser:refreshPath()
-            end
-            self.files_updated = nil
-        end
         if self.ui.history.hist_menu then
             self.ui.history:fetchStatuses(false)
             self.ui.history:updateItemTable()
