@@ -223,6 +223,8 @@ function ReaderStatus:onMarkBook(mark_read)
     -- If History is called over Reader, it will read the file to get the book status, so save and flush
     self.settings:saveSetting("summary", self.summary)
     self.settings:flush()
+    local util = require("util")
+    util.generateStats()
 end
 
 function ReaderStatus:onReadSettings(config)

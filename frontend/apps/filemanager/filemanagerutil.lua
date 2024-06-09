@@ -160,8 +160,7 @@ function filemanagerutil.statusToString(status)
         new       = _("Unread"),
         reading   = _("Reading"),
         abandoned = _("On hold"),
-
-     complete  = _("Finished"),
+        complete  = _("Finished"),
         tbr  = _("TBR"),
     }
 
