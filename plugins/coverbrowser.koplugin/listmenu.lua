@@ -421,7 +421,8 @@ function ListMenuItem:update()
                     pages_str = T(N_("1 page", "%1 pages", pages), pages)
                 end
             end
-            if not DocSettings:hasSidecarFile(self.filepath) then
+
+            if require("readhistory"):getIndexByFile(self.filepath) and not DocSettings:hasSidecarFile(self.filepath) then
                 pages_str = _("MBR")
             end
             -- Build the right widget
