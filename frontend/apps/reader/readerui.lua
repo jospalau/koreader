@@ -1046,9 +1046,9 @@ function ReaderUI:onSearchDictionary()
         local res = self.document._document:getTextFromPositions(self.lastevent.gesture.pos.x, self.lastevent.gesture.pos.y,
                     self.lastevent.gesture.pos.x, self.lastevent.gesture.pos.y, false, false)
 
-        if self.lastevent.gesture.pos.x < Screen:scaleBySize(40) then
+        if self.lastevent.gesture.pos.x < Screen:scaleBySize(self.document.configurable.h_page_margins[1]) then
             self.rolling:onGotoViewRel(-10)
-        elseif self.lastevent.gesture.pos.x > Screen:getWidth() - Screen:scaleBySize(40) then
+        elseif self.lastevent.gesture.pos.x > Screen:getWidth() - Screen:scaleBySize(self.document.configurable.h_page_margins[1]) then
             self.rolling:onGotoViewRel(10)
         else
             if res and res.text then
