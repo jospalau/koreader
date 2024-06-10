@@ -197,7 +197,11 @@ function TouchMenuItem:onTapSelect(arg, ges)
         --
         self.item_frame.invert = true
         UIManager:widgetInvert(self.item_frame, highlight_dimen.x, highlight_dimen.y, highlight_dimen.w)
-        UIManager:setDirty(nil, "fast", highlight_dimen)
+        if Device.model == "Kobo_spaBW" then -- fast is a bit glitchy in Kobo BW
+            UIManager:setDirty(nil, "partial", highlight_dimen)
+        else
+            UIManager:setDirty(nil, "fast", highlight_dimen)
+        end
 
         UIManager:forceRePaint()
         UIManager:yieldToEPDC()
