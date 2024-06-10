@@ -1579,9 +1579,6 @@ function Menu:onMultiSwipe(arg, ges_ev)
         -- If there is a titlebar with a close button displayed (so, this Menu can be
         -- closed), allow easier closing with swipe south.
         self:onClose()
-        if self.ui.file_chooser then
-            self.ui.file_chooser:refreshPath()
-        end
     end
     return true
 end

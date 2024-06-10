@@ -414,7 +414,9 @@ function FileSearcher:showSearchResults(results, show_recent, page, callback)
                 self.ui.history:fetchStatuses(false)
                 self.ui.history:updateItemTable()
 
-
+                if self.ui.file_chooser then
+                    self.ui.file_chooser:refreshPath()
+                end
                 -- self.search_menu.ui.history.hist_menu.close_callback()
                 -- local Event = require("ui/event")
                 -- UIManager:broadcastEvent(Event:new("CloseSearchMenu", false, self.search_string))
