@@ -508,9 +508,9 @@ function FileSearcher:showFileDialog(item, callback)
         -- Pass false instead of the file
         self.search_menu.close_callback(file, true)
 
-        if self.ui.history.hist_menu then
-            self.ui.history.hist_menu.close_callback()
-        end
+        -- if self.ui.history.hist_menu then
+        --     self.ui.history.hist_menu.close_callback()
+        -- end
         -- local Event = require("ui/event")
         -- UIManager:broadcastEvent(Event:new("ShowFileSearchAll"))
     end
