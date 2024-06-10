@@ -143,7 +143,12 @@ function CheckButton:onTapCheckButton()
             --
             self[1].invert = true
             UIManager:widgetInvert(self[1], highlight_dimen.x, highlight_dimen.y, highlight_dimen.w)
-            UIManager:setDirty(nil, "fast", highlight_dimen)
+            local Device = require("device")
+            if Device.model == "Kobo_spaBW" then -- fast is a bit glitchy in Kobo BW
+                UIManager:setDirty(nil, "partial", self[1].dimen)
+            else
+                UIManager:setDirty(nil, "fast", highlight_dimen)
+            end
 
             UIManager:forceRePaint()
             UIManager:yieldToEPDC()
