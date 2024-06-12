@@ -2282,7 +2282,7 @@ function ReaderFooter:onGetStyles()
         if (line:find("^.*<body") ~= nil or line:find("^.*<p") ~= nil or line:find("^.*<div") ~= nil) and line:find("class=") ~= nil then
             htmlw = htmlw .. "," .. string.match(line, " %b<>")
             classes = classes .. "," .. string.match(line, "class=\"(.-)\"")
-            if line:find("^.*<span") ~= nil then
+            if line:find("^.*<span") ~= nil and string.match(line, "<span.*>$"):match("%b<>"):find("class") ~= nil then
                 htmlw = htmlw .. "," .. string.match(line, "<span.*>$"):match("%b<>")
                 classes = classes .. "," .. string.match(line, "<span.*>$"):match("%b<>"):match("class=\"(.-)\"")
             end
