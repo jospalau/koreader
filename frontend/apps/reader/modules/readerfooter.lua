@@ -2280,8 +2280,12 @@ function ReaderFooter:onGetStyles()
     local classes = ""
     for line in html:gmatch("[^\n]+") do
         if (line:find("^.*<body") ~= nil or line:find("^.*<p") ~= nil or line:find("^.*<div") ~= nil) and line:find("class=") ~= nil then
-        htmlw = htmlw .. "," .. string.match(line, " %b<>")
-        classes = classes .. "," .. string.match(line, "class=\"(.-)\"")
+            htmlw = htmlw .. "," .. string.match(line, " %b<>")
+            classes = classes .. "," .. string.match(line, "class=\"(.-)\"")
+            if line:find("^.*<span") ~= nil then
+                htmlw = htmlw .. "," .. string.match(line, "<span.*>$"):match("%b<>")
+                classes = classes .. "," .. string.match(line, "<span.*>$"):match("%b<>"):match("class=\"(.-)\"")
+            end
         end
     end
     -- Algunas clases contienen el caracter -. Tenemos que escaparlo
