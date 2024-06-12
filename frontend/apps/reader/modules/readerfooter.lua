@@ -2364,7 +2364,7 @@ function ReaderFooter:onGetTextPage()
     if res and res.pos1 ~= ".0" then
         name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2  = self.ui.document:getHeight(res.pos1)
 
-        if name == "" then
+        if name == "" and res.pos0 ~= ".0"  then
             name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2  = self.ui.document:getHeight(res.pos0)
         end
 
