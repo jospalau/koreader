@@ -2289,10 +2289,20 @@ function ReaderFooter:onGetStyles()
     local csss = ""
     local csss_classes = ""
     for line in classes:gmatch("[^,]+") do
-        local css_class = string.match(css_text, line .. " %b{}")
-        if css_class ~= nil and csss:match(line .. " {") == nil then
-            csss = csss .. css_class .. "\n"
-            csss_classes = csss_classes .. line .. ","
+        if string.find(line, " ") then
+            for line2 in classes:gmatch("[^ ]+") do
+                local css_class = string.match(css_text, line2 .. " %b{}")
+                if css_class ~= nil and csss:match(line2 .. " {") == nil then
+                    csss = csss .. css_class .. "\n"
+                    csss_classes = csss_classes .. line2 .. ","
+                end
+            end
+        else
+            local css_class = string.match(css_text, line .. " %b{}")
+            if css_class ~= nil and csss:match(line .. " {") == nil then
+                csss = csss .. css_class .. "\n"
+                csss_classes = csss_classes .. line .. ","
+            end
         end
     end
     csss_classes = csss_classes:sub(1,csss_classes:len() - 1):gsub("%%", "")
