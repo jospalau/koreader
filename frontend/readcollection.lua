@@ -115,7 +115,7 @@ end
 function ReadCollection:isFileInCollectionsNotAll(file)
     file = FFIUtil.realpath(file) or file
     for collection, coll in pairs(self.coll) do
-        if collection == "favorites" then goto continue end
+        if collection == "favorites" or  collection == "All sorted by words" then goto continue end
         if coll[file] then
             return true
         end
