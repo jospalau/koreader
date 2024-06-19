@@ -725,11 +725,12 @@ function TopBar:toggleBar()
         self.session_time_text:setText(datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")))
 
 
-
-        self.progress_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
-
-
-        -- self.times_text:setText(session_time .. "|" .. read_today .. "|" .. read_month)
+        if self.ui.pagemap:wantsPageLabels() then
+           self.progress_text:setText(("%d de %d"):format(self.ui.pagemap:getCurrentPageLabel(true), self.ui.pagemap:getLastPageLabel(true)))
+        else
+           self.progress_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
+        end
+        self.times_text:setText(session_time .. "|" .. read_today .. "|" .. read_month)
         self.times_text_text = session_time .. "|" .. read_today .. "|" .. read_month
 
 

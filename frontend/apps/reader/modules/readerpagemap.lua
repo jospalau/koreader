@@ -45,6 +45,7 @@ function ReaderPageMap:_postInit()
     if self.ui.document.info.has_pages then
         return
     end
+    self.ui.document:buildSyntheticPageMapIfNoneDocumentProvided(1767)
     if not self.ui.document:hasPageMap() then
         return
     end
@@ -322,7 +323,11 @@ function ReaderPageMap:addToMainMenu(menu_items)
         sub_item_table ={
             {
                 -- @translators This shows the <dc:source> in the EPUB that usually tells which hardcopy edition the reference page numbers refers to.
-                text = _("Reference source info"),
+                -- text = _("Reference source info"),
+                text_func = function()
+                  if self.ui.document:isPageMapSynthetic() then return _("Synthetic pages") end
+		  return _("Reference pages")
+                end,
                 enabled_func = function() return self.ui.document:getPageMapSource() ~= nil end,
                 callback = function()
                     local text = T(_("Source (book hardcopy edition) of reference page numbers:\n\n%1"),
@@ -350,6 +355,7 @@ function ReaderPageMap:addToMainMenu(menu_items)
                     -- Reset a few stuff that may use page labels
                     self.ui.toc:resetToc()
                     self.ui.view.footer:onUpdateFooter()
+                    self.ui.view.topbar:toggleBar()
                     UIManager:setDirty(self.view.dialog, "partial")
                 end,
                 hold_callback = function(touchmenu_instance)
