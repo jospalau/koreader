@@ -1544,6 +1544,59 @@ function FileManager:onSynchronizeCode()
     end
 end
 
+function FileManager:onSynchronizeCodePhone()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen("/mnt/onboard/.adds/scripts/syncKOReaderCodePhone.sh && echo $? || echo $?" )
+        elseif Device:isKindle() then
+            execute = io.popen("/mnt/us/scripts/syncKOReaderCodePhone.sh && echo $? || echo $?" )
+        else -- PocketBook
+            execute = io.popen("/mnt/ext1/scripts/syncKOReaderCodePhone.sh && echo $? || echo $?" )
+        end
+        output = execute:read('*a')
+
+        local save_text = _("Quit")
+        if Device:canRestart() then
+            save_text = _("Restart")
+        end
+        if not string.match(output, "Problem") and not string.match(output, "not connected") then
+            local Size = require("ui/size")
+            UIManager:show(ConfirmBox:new{
+                dismissable = false,
+                text = _("KOReader needs to be restarted."),
+                ok_text = save_text,
+                margin = Size.margin.tiny,
+                padding = Size.padding.tiny,
+                ok_callback = function()
+                    if Device:canRestart() then
+                        UIManager:restartKOReader()
+                        -- The new Clara BW is so quick closing that when presing on Restart it doesn't flash
+                        -- Set a little delay for all devices
+                        local util = require("ffi/util")
+                        util.usleep(100000)
+                    else
+                        UIManager:quit()                                                                                                                                  end
+                end,                                                                                                                                                  cancel_text = _("No need to restart"),
+                cancel_callback = function()
+                    logger.info("discard defaults")
+                end,
+            })
+        end
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+    end
+end
+
 function FileManager:onInstallLastVersion()
     local InfoMessage = require("ui/widget/infomessage")
     local rv
