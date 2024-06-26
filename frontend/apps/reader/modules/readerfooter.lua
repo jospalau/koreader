@@ -2375,16 +2375,19 @@ function ReaderFooter:onGetTextPage()
     local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
     if file_type == "pdf" then return end
     local cur_page = self.ui.document:getCurrentPage()
-    local total_words, total_words2 = 0, 0
+    local total_characters = 0
     -- if not Device:isPocketBook() then
-    total_words, total_words2 = self.ui.document:getTextCurrentPage()
+    total_characters = self.ui.document:getBookCharactersCount()
+    total_words = math.ceil(total_characters/5.7)
+    total_pages = math.ceil(total_characters/1767)
     -- end
     local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
-    local name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2 = "","","","","","","","","","","","","",""
+    -- local name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2 = "","","","","","","","","","","","","",""
     local text_properties=""
 
     -- We look first in the last element in page to retrieve styles and if we don't get information we check then the first element
-    if res and res.pos1 ~= ".0" then
+    -- if res and res.pos1 ~= ".0" then
+     if 1 == 0 then
         name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2  = self.ui.document:getHeight(res.pos1)
 
         if name == "" and res.pos0 ~= ".0"  then
@@ -2475,9 +2478,11 @@ function ReaderFooter:onGetTextPage()
 
     -- if not Device:isPocketBook() then
     text = text .. "Total pages (screens): " .. self.pages .. string.char(10) ..
-    "Total words (total chars/5.7): " .. total_words .. string.char(10) .. -- Dividing characters between 5.7
-    "Total words (counting words): " .. total_words2 .. string.char(10) .. -- Counting words
-    "Words per page: " .. tostring(math.floor((total_words2/self.pages * 100) / 100)) .. string.char(10)
+    "Total pages assuming 1767 cpp: " .. tostring(total_pages) .. string.char(10) ..
+    "Total characters: " .. tostring(total_characters) .. string.char(10) ..
+    -- Dividing characters between 5.7
+    "Total words (total chars/5.7): " .. tostring(total_words) .. string.char(10) .. -- Dividing characters between 5.7
+    "Words per screen page: " .. tostring(math.floor((total_words/self.pages * 100) / 100)) .. string.char(10)
     -- end
 
     text = text .. "Total words Calibre: " .. title_words .. string.char(10) ..
