@@ -143,7 +143,8 @@ function ReaderStatistics:init()
         ["ares"] = 8, -- Likebook Ares
         ["rk3566_eink"] = 9, -- Meebook M6
         ["Kobo_spaBW"] = 10, -- Clara BW
-        ["Kobo_monza"] = 11 -- Clara Libra Colour
+        ["Kobo_spaColour"] = 11, -- Clara Colour
+        ["Kobo_monza"] = 12 -- Libra Colour
     }
 
     if Device:isPocketBook() and not ReaderStatistics.preserve then
