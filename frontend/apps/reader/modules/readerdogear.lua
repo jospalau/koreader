@@ -18,7 +18,7 @@ function ReaderDogear:init()
     -- For other documents, there is no easy way to know if valuable content
     -- may be hidden by the icon (kopt's page_margin is quite obscure).
     self.dogear_min_size = math.ceil(math.min(Screen:getWidth(), Screen:getHeight()) * (1/40))
-    self.dogear_max_size = math.ceil(math.min(Screen:getWidth(), Screen:getHeight()) * (1/32))
+    self.dogear_max_size = 2.5 * math.ceil(math.min(Screen:getWidth(), Screen:getHeight()) * (1/32))
     self.dogear_size = nil
     self.dogear_y_offset = 0
     self.top_pad = nil
@@ -41,8 +41,8 @@ function ReaderDogear:setupDogear(new_dogear_size)
             IconWidget:new{
                 icon = "dogear.alpha",
                 rotation_angle = BD.mirroredUILayout() and 90 or 0,
-                width = self.dogear_size,
-                height = self.dogear_size,
+                width = self.dogear_max_size,
+                height = self.dogear_max_size,
                 alpha = true, -- Keep the alpha layer intact
             }
         }
@@ -53,7 +53,8 @@ function ReaderDogear:setupDogear(new_dogear_size)
     end
 end
 
-function ReaderDogear:onReadSettings(config)
+-- Append t to the event handler function name so it is not used
+function ReaderDogear:onReadSettingst(config)
     if self.ui.rolling then
         -- Adjust to CreDocument margins (as done in ReaderTypeset)
         local configurable = self.ui.document.configurable
@@ -63,7 +64,8 @@ function ReaderDogear:onReadSettings(config)
     end
 end
 
-function ReaderDogear:onSetPageMargins(margins)
+-- Append t to the event handler function name so it is not used
+function ReaderDogear:onSetPageMarginst(margins)
     if not self.ui.rolling then
         -- we may get called by readerfooter (when hiding the footer)
         -- on pdf documents and get margins=nil
