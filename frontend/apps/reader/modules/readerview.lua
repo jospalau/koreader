@@ -346,6 +346,10 @@ function ReaderView:paintTo(bb, x, y)
 
     end
 
+    for _, m in pairs(self.view_modules) do
+        m:paintTo(bb, x, y)
+    end
+
     if util.getFileNameSuffix(self.document.file) == "epub" and G_reader_settings:isTrue("show_top_bar") then
         self.topbar:paintTo(bb, x, y)
     end
@@ -425,9 +429,7 @@ function ReaderView:paintTo(bb, x, y)
     -- paint top left corner indicator
     self.flipping:paintTo(bb, x, y)
     -- paint view modules
-    for _, m in pairs(self.view_modules) do
-        m:paintTo(bb, x, y)
-    end
+
     -- stop activity indicator
     self.ui:handleEvent(Event:new("StopActivityIndicator"))
 
