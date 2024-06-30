@@ -699,7 +699,7 @@ function ReaderUI:showReaderCoroutine(file, provider, seamless)
             UIManager:show(InfoMessage:new{
                 text = _(debug.traceback(co, err, 1))
             })
-            self:showFileManager()
+            self:showFileManager(file)
         end
     end)
 end
@@ -719,7 +719,7 @@ function ReaderUI:doShowReader(file, provider, seamless)
         UIManager:show(InfoMessage:new{
             text = _(debug.traceback(co, err, 1))
         })
-        self:showFileManager()
+        self:showFileManager(file)
         return
     end
     if document.is_locked then
@@ -729,7 +729,7 @@ function ReaderUI:doShowReader(file, provider, seamless)
         if coroutine.running() then
             local unlock_success = coroutine.yield()
             if not unlock_success then
-                self:showFileManager()
+                self:showFileManager(file)
                 return
             end
         end
@@ -917,7 +917,6 @@ function ReaderUI:dealWithLoadDocumentFailure()
 end
 
 function ReaderUI:onHome()
-
     local file = self.document.file
     if file:find("resources/arthur%-conan%-doyle%_the%-hound%-of%-the%-baskervilles.epub") then
         if require("readhistory"):getIndexByFile(file) then
@@ -961,7 +960,7 @@ function ReaderUI:onHome()
                 -- UIManager:broadcastEvent(Event:new("DocSettingsItemsChanged", file))
                 -- require("bookinfomanager"):deleteBookInfo(file)
                 local FileManager = require("apps/filemanager/filemanager")
-                self:showFileManager()
+                self:showFileManager(file)
                 -- local dir = util.splitFilePathName(file)
                 -- FileManager:showFiles(dir, file)
 
@@ -977,7 +976,7 @@ function ReaderUI:onHome()
             choice2_text = _("No, just exit"),
             choice2_callback = function()
                 self:onClose()
-                self:showFileManager()
+                self:showFileManager(file)
                 return true
             end,
             cancel_callback = function()
