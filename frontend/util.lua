@@ -1720,6 +1720,14 @@ function util.getLastDaysStats(day, include_pages)
     local from_begin_day = now_t.hour * 3600 + now_t.min * 60 + now_t.sec
     local start_today_time = now_stamp - from_begin_day
     local conn = SQ3.open(db_location)
+
+
+    local sql_stmt = "SELECT name FROM sqlite_master WHERE type='table' AND name='wpm_stat_data'"
+    local exists_table = conn:rowexec(sql_stmt)
+    if exists_table == nil then
+        return 0, 0
+    end
+
     local i = 0
     local stats = ""
     local stats_table = {}
@@ -1777,9 +1785,9 @@ function util.generateStats()
                 ["total_books_tbr"] = #files_tbr,
                 ["total_books_mbr"] = #files_mbr,
                 ["stats_last_days"] = stats_last_days}
-
-    util.writeToFile(dump(stats), G_reader_settings:readSetting("home_dir") .. "/stats.lua", true, true)
-
+    if G_reader_settings:readSetting("home_dir") then
+        util.writeToFile(dump(stats), G_reader_settings:readSetting("home_dir") .. "/stats.lua", true, true)
+    end
 end
 
 

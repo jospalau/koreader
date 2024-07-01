@@ -1115,7 +1115,7 @@ function TopBar:paintTo(bb, x, y)
         -- books_information[1][1]:setText("TF: " .. tostring(#files))
 
         local ffiutil = require("ffi/util")
-        if ffiutil.realpath(G_reader_settings:readSetting("home_dir") .. "/stats.lua") then
+        if G_reader_settings:readSetting("home_dir") and ffiutil.realpath(G_reader_settings:readSetting("home_dir") .. "/stats.lua") then
             local ok, stats = pcall(dofile, G_reader_settings:readSetting("home_dir") .. "/stats.lua")
             local last_days = ""
             for k, v in pairs(stats["stats_last_days"]) do
