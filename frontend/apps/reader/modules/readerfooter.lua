@@ -1597,7 +1597,7 @@ function ReaderFooter:onTest()
     end)
 end
 
-function ReaderFooter:onTest2()
+function ReaderFooter:onShowReadingMotive()
     -- Screen:clear()
     -- Screen:refreshFull(0, 0, Screen:getWidth(), Screen:getHeight())
 
