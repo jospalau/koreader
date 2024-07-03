@@ -469,7 +469,10 @@ function KoboPowerD:beforeSuspend()
         -- Turn off the frontlight
         -- NOTE: Funky delay mainly to yield to the EPDC's refresh on UP systems.
         --       (Neither yieldToEPDC nor nextTick & friends quite cut it here)...
-        UIManager:scheduleIn(0.001, self.turnOffFrontlight, self)
+        -- In new Kobo color models, the light is switched off after a few quick suspend/resumes
+        -- This fixes it. Left for all model
+        self:turnOffFrontlight()
+        -- UIManager:scheduleIn(0.001, self.turnOffFrontlight, self)
     end
 end
 
