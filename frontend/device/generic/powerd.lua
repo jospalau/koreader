@@ -143,10 +143,23 @@ function BasePowerD:turnOffFrontlight(done_callback)
     if not cb_handled and done_callback then
         done_callback()
     end
+
+    if self:isFrontlightOff() then
+        local ui = require("apps/reader/readerui").instance
+        if ui and ui.view[4] then
+            ui.view[4]:toggleBar()
+            UIManager:setDirty("all", "full")
+        end
+    end
     return true
 end
 
 function BasePowerD:turnOnFrontlight(done_callback)
+    local ui = require("apps/reader/readerui").instance
+         if ui and ui.view[4] then
+             ui.view[4]:toggleBar()
+             UIManager:setDirty("all", "full")
+         end
     if not self.device:hasFrontlight() then return end
     -- If we suspend and resume very quick the Kobo Clara BW and the light was on it will be off
     if self:isFrontlightOn() and not self.device.model == "Kobo_spaBW" then return false end

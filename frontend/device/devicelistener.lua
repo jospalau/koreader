@@ -105,6 +105,8 @@ if Device:hasFrontlight() then
         local new_intensity = powerd:frontlightIntensity() + delta
         -- when new_intensity <= 0, toggle light off
         self:onSetFlIntensity(new_intensity)
+
+
         self:onShowIntensity()
         return true
     end
@@ -114,7 +116,15 @@ if Device:hasFrontlight() then
         if new_intensity <= 0 then
             powerd:turnOffFrontlight()
         else
+            local was_off = powerd:isFrontlightOff()
             powerd:setIntensity(new_intensity)
+            if was_off and new_intensity > 0 then
+               local ui = require("apps/reader/readerui").instance
+               if ui and ui.view[4] then
+                   ui.view[4]:toggleBar()
+                   UIManager:setDirty("all", "full")
+               end
+            end
         end
         return true
     end
@@ -170,6 +180,7 @@ if Device:hasFrontlight() then
     function DeviceListener:onToggleFrontlight()
         local powerd = Device:getPowerDevice()
         local new_text
+        local topbar = self.ui.view[4]
         if powerd:isFrontlightOn() then
             new_text = _("Frontlight disabled.")
         else
@@ -177,15 +188,19 @@ if Device:hasFrontlight() then
         end
         -- We defer displaying the Notification to PowerD, as the toggle may be a ramp, and we both want to make sure the refresh fencing won't affect it, and that we only display the Notification at the end...
         local notif_source = Notification.notify_source
-        local notif_cb = function()
-            Notification:notify(new_text, notif_source)
+
+        if topbar then
+            local notif_cb = function()
+            end
+        else
+            local notif_cb = function()
+                Notification:notify(new_text, notif_source)
+            end
         end
         if not powerd:toggleFrontlight(notif_cb) then
             Notification:notify(_("Frontlight unchanged."), notif_source)
         end
 
-
-        local topbar = self.ui.view[4]
         if topbar then
             topbar:toggleBar()
             UIManager:setDirty("all", "full")
