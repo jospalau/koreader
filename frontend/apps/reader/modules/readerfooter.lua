@@ -2325,7 +2325,9 @@ function ReaderFooter:onGetStyles()
                 end
             end
         else
-            local css_class = string.match(css_text, line .. " %b{}")
+            -- The regex was not matching properly thr classes, matching for instance fmtx when tx
+            -- We match first the initial class dot scaping it in the regex
+            local css_class = string.match(css_text, "%." .. line .. " %b{}")
             if css_class ~= nil and csss:match(line .. " {") == nil then
                 csss = csss .. css_class .. "\n"
                 csss_classes = csss_classes .. line .. ","
