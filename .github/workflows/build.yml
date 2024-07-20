@@ -29,8 +29,45 @@ jobs:
       MAKEFLAGS: 'OUTPUT_DIR=build INSTALL_DIR=install TARGET=macos'
 
     steps:
+
+      # Install dependencies. {{{
+
       - name: XCode version
         run: xcode-select -p
+
+      - name: Install dependencies
+        run: |
+          wget -O ninjatracing.zip https://github.com/nico/ninjatracing/archive/a669e3644cf22b29cbece31dbed2cfbf34e5f48e.zip
+          unzip -j ninjatracing.zip '*/ninjatracing'
+          install -m755 ninjatracing /usr/local/bin/
+          rm ninjatracing*
+          packages=(
+            autoconf
+            automake
+            binutils
+            cmake
+            coreutils
+            findutils
+            libtool
+            make
+            nasm
+            ninja
+            p7zip
+            pkg-config
+            sdl2
+            util-linux
+          )
+          brew install --formula --quiet "${packages[@]}"
+
+      - name: Update PATH
+        run: >
+          printf '%s\n'
+          "$(brew --prefix)/opt/findutils/libexec/gnubin"
+          "$(brew --prefix)/opt/make/libexec/gnubin"
+          "$(brew --prefix)/opt/util-linux/bin"
+          | tee "${GITHUB_PATH}"
+
+      # }}}
 
       # Checkout / fetch. {{{
 
@@ -66,7 +103,7 @@ jobs:
         with:
           path: /Users/runner/Library/Caches/ccache
           key: ${{ env.CACHE_EPOCH }}-${{ runner.os }}-${{ runner.arch }}-ccache-${{ hashFiles('base/cache-key') }}
-          restore-keys: ${{ env.CACHE_EPOCH }}-${{ runner.os }}-ccache-
+          restore-keys: ${{ env.CACHE_EPOCH }}-${{ runner.os }}-${{ runner.arch }}-ccache-
 
       - name: Install ccache
         if: steps.build-restore.outputs.cache-hit != 'true'
@@ -87,40 +124,16 @@ jobs:
 
       # }}}
 
-      # Install dependencies. {{{
-
-      - name: Setup Python
-        if: steps.build-restore.outputs.cache-hit != 'true'
-        uses: actions/setup-python@v5
-        with:
-          # Note: Python 3.12 removal of `distutils` breaks GLib's build.
-          python-version: '3.11'
-
-      - name: Install homebrew dependencies
-        # Compared to the README, adds p7zip.
-        run: |
-          packages=(
-            nasm binutils coreutils libtool autoconf automake cmake make
-            sdl2 gettext pkg-config wget gnu-getopt grep p7zip ninja
-          )
-          brew install --formula --quiet "${packages[@]}"
-
-      - name: Update PATH
-        run: >
-          printf '%s\n'
-          "$(brew --prefix)/opt/gettext/bin"
-          "$(brew --prefix)/opt/gnu-getopt/bin"
-          "$(brew --prefix)/opt/grep/libexec/gnubin"
-          "$(brew --prefix)/opt/make/libexec/gnubin"
-          | tee "${GITHUB_PATH}"
-
-      # }}}
-
       # Build. {{{
 
       - name: Build
+        id: build
         if: steps.build-restore.outputs.cache-hit != 'true'
         run: make base
+
+      - name: Dump build timings
+        if: contains('failure success', steps.build.conclusion) && !cancelled()
+        run: make buildstats
 
       - name: Dump binaries runtime path & dependencies
         run: make bindeps
@@ -130,7 +143,7 @@ jobs:
       # Clean / save caches. {{{
 
       - name: Clean caches
-        if: steps.build-restore.outputs.cache-hit != 'true' && always()
+        if: contains('failure success', steps.build.conclusion) && !cancelled()
         run: |
           set -x
           # Trim the build directory.

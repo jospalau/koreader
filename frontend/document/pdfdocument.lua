@@ -21,12 +21,6 @@ local PdfDocument = Document:extend{
 
 function PdfDocument:init()
     if not pdf then pdf = require("ffi/mupdf") end
-    -- mupdf.color has to stay false for kopt to work correctly
-    -- and be accurate (including its job about showing highlight
-    -- boxes). We will turn it on and off in PdfDocument:preRenderPage()
-    -- and :postRenderPage() when mupdf is called without kopt involved.
-    pdf.color = false
-    self:updateColorRendering()
     self.koptinterface = require("document/koptinterface")
     self.koptinterface:setDefaultConfigurable(self.configurable)
     local ok
@@ -34,6 +28,7 @@ function PdfDocument:init()
     if not ok then
         error(self._document)  -- will contain error message
     end
+    self:updateColorRendering()
     self.is_reflowable = self._document:isDocumentReflowable()
     self.reflowable_font_size = self:convertKoptToReflowableFontSize()
     -- no-op on PDF
@@ -41,10 +36,18 @@ function PdfDocument:init()
     self.is_open = true
     self.info.has_pages = true
     self.info.configurable = true
+    self.render_mode = 0
     if self._document:needsPassword() then
         self.is_locked = true
     else
         self:_readMetadata()
+    end
+end
+
+function PdfDocument:updateColorRendering()
+    Document.updateColorRendering(self) -- will set self.render_color
+    if self._document then
+        self._document:setColorRendering(self.render_color)
     end
 end
 
@@ -79,14 +82,6 @@ function PdfDocument:convertKoptToReflowableFontSize(font_size)
     else
         return default_font_size
     end
-end
-
-function PdfDocument:preRenderPage()
-    pdf.color = self.render_color
-end
-
-function PdfDocument:postRenderPage()
-    pdf.color = false
 end
 
 function PdfDocument:unlock(password)
@@ -345,16 +340,16 @@ function PdfDocument:findAllText(pattern, case_insensitive, nb_context_words, ma
     return self.koptinterface:findAllText(self, pattern, case_insensitive, nb_context_words, max_hits)
 end
 
-function PdfDocument:renderPage(pageno, rect, zoom, rotation, gamma, render_mode, hinting)
-    return self.koptinterface:renderPage(self, pageno, rect, zoom, rotation, gamma, render_mode, hinting)
+function PdfDocument:renderPage(pageno, rect, zoom, rotation, gamma, hinting)
+    return self.koptinterface:renderPage(self, pageno, rect, zoom, rotation, gamma, hinting)
 end
 
-function PdfDocument:hintPage(pageno, zoom, rotation, gamma, render_mode)
-    return self.koptinterface:hintPage(self, pageno, zoom, rotation, gamma, render_mode)
+function PdfDocument:hintPage(pageno, zoom, rotation, gamma)
+    return self.koptinterface:hintPage(self, pageno, zoom, rotation, gamma)
 end
 
-function PdfDocument:drawPage(target, x, y, rect, pageno, zoom, rotation, gamma, render_mode)
-    return self.koptinterface:drawPage(self, target, x, y, rect, pageno, zoom, rotation, gamma, render_mode)
+function PdfDocument:drawPage(target, x, y, rect, pageno, zoom, rotation, gamma)
+    return self.koptinterface:drawPage(self, target, x, y, rect, pageno, zoom, rotation, gamma)
 end
 
 function PdfDocument:register(registry)

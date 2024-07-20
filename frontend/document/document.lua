@@ -387,14 +387,6 @@ function Document:updateColorRendering()
     end
 end
 
-function Document:preRenderPage()
-    return nil
-end
-
-function Document:postRenderPage()
-    return nil
-end
-
 function Document:getTileCacheValidity()
     return self.tile_cache_validity_ts
 end
@@ -407,15 +399,15 @@ function Document:resetTileCacheValidity()
     self.tile_cache_validity_ts = os.time()
 end
 
-function Document:getFullPageHash(pageno, zoom, rotation, gamma, render_mode, color)
+function Document:getFullPageHash(pageno, zoom, rotation, gamma)
     return "renderpg|"..self.file.."|"..self.mod_time.."|"..pageno.."|"
-                    ..zoom.."|"..rotation.."|"..gamma.."|"..render_mode..(color and "|color" or "")
+                    ..zoom.."|"..rotation.."|"..gamma.."|"..self.render_mode..(self.render_color and "|color" or "|bw")
                     ..(self.reflowable_font_size and "|"..self.reflowable_font_size or "")
 end
 
-function Document:renderPage(pageno, rect, zoom, rotation, gamma, render_mode, hinting)
+function Document:renderPage(pageno, rect, zoom, rotation, gamma, hinting)
     local hash_excerpt
-    local hash = self:getFullPageHash(pageno, zoom, rotation, gamma, render_mode, self.render_color)
+    local hash = self:getFullPageHash(pageno, zoom, rotation, gamma)
     local tile = DocCache:check(hash, TileCacheItem)
     if not tile then
         hash_excerpt = hash.."|"..tostring(rect)
@@ -435,7 +427,6 @@ function Document:renderPage(pageno, rect, zoom, rotation, gamma, render_mode, h
     if hinting then
         CanvasContext:enableCPUCores(2)
     end
-    self:preRenderPage()
 
     local page_size = self:getPageDimensions(pageno, zoom, rotation)
     -- this will be the size we actually render
@@ -489,11 +480,10 @@ function Document:renderPage(pageno, rect, zoom, rotation, gamma, render_mode, h
 
     -- render
     local page = self._document:openPage(pageno)
-    page:draw(dc, tile.bb, size.x, size.y, render_mode)
+    page:draw(dc, tile.bb, size.x, size.y, self.render_mode)
     page:close()
     DocCache:insert(hash, tile)
 
-    self:postRenderPage()
     if hinting then
         CanvasContext:enableCPUCores(1)
     end
@@ -502,9 +492,9 @@ end
 
 -- a hint for the cache engine to paint a full page to the cache
 --- @todo this should trigger a background operation
-function Document:hintPage(pageno, zoom, rotation, gamma, render_mode)
+function Document:hintPage(pageno, zoom, rotation, gamma)
     logger.dbg("hinting page", pageno)
-    self:renderPage(pageno, nil, zoom, rotation, gamma, render_mode, true)
+    self:renderPage(pageno, nil, zoom, rotation, gamma, true)
 end
 
 --[[
@@ -515,8 +505,8 @@ Draw page content to blitbuffer.
 @target: target blitbuffer
 @rect: visible_area inside document page
 --]]
-function Document:drawPage(target, x, y, rect, pageno, zoom, rotation, gamma, render_mode)
-    local tile = self:renderPage(pageno, rect, zoom, rotation, gamma, render_mode)
+function Document:drawPage(target, x, y, rect, pageno, zoom, rotation, gamma)
+    local tile = self:renderPage(pageno, rect, zoom, rotation, gamma)
     -- Enable SW dithering if requested (only available in koptoptions)
     if self.sw_dithering then
         target:ditherblitFrom(tile.bb,
@@ -549,7 +539,7 @@ function Document:getPagePart(pageno, rect, rotation)
         w = math.floor(rect.w * zoom),
         h = math.floor(rect.h * zoom),
     }
-    local tile = self:renderPage(pageno, scaled_rect, zoom, rotation, 1, 0)
+    local tile = self:renderPage(pageno, scaled_rect, zoom, rotation, 1.0)
     local target = Blitbuffer.new(scaled_rect.w, scaled_rect.h, self.render_color and self.color_bb_type or nil)
     target:blitFrom(tile.bb, 0, 0, scaled_rect.x, scaled_rect.y, scaled_rect.w, scaled_rect.h)
     return target

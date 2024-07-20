@@ -557,8 +557,7 @@ function ReaderView:drawScrollPages(bb, x, y)
             state.page,
             state.zoom,
             state.rotation,
-            state.gamma,
-            self.render_mode)
+            state.gamma)
         pos.y = pos.y + state.visible_area.h
         -- draw page gap if not the last part
         if page ~= #self.page_states then
@@ -632,8 +631,7 @@ function ReaderView:drawSinglePage(bb, x, y)
         self.state.page,
         self.state.zoom,
         self.state.rotation,
-        self.state.gamma,
-        self.render_mode)
+        self.state.gamma)
     UIManager:nextTick(self.emitHintPageEvent)
 end
 
@@ -1068,6 +1066,7 @@ function ReaderView:onReadSettings(config)
     if self.ui.paging then
         self.document:setTileCacheValidity(config:readSetting("tile_cache_validity_ts"))
         self.render_mode = config:readSetting("render_mode") or G_defaults:readSetting("DRENDER_MODE")
+        self.document.render_mode = self.render_mode
         if config:has("gamma") then -- old doc contrast setting
             config:saveSetting("kopt_contrast", config:readSetting("gamma"))
             config:delSetting("gamma")
@@ -1258,7 +1257,12 @@ function ReaderView:getRenderModeMenuTable()
         return {
             text = text,
             checked_func = function() return view.render_mode == mode end,
-            callback = function() view.render_mode = mode end,
+            callback = function()
+                view.render_mode = mode
+                view.document.render_mode = mode
+                view:recalculate()
+                UIManager:broadcastEvent(Event:new("RenderingModeUpdate"))
+            end,
         }
     end
     return  {
