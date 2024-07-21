@@ -2481,17 +2481,17 @@ function ReaderFooter:onGetTextPage()
 
 
     -- if not Device:isPocketBook() then
-    text = text .. "Total pages (screens): " .. self.pages .. string.char(10) ..
-    "Total pages assuming 1767 cpp: " .. tostring(total_pages) .. string.char(10) ..
-    "Total characters: " .. tostring(total_characters) .. string.char(10) ..
+    --text = text .. "Total pages (screens): " .. self.pages .. string.char(10) ..
+    --"Total pages assuming 1767 cpp: " .. tostring(total_pages) .. string.char(10) ..
+    --"Total characters: " .. tostring(total_characters) .. string.char(10) ..
     -- Dividing characters between 5.7
-    "Total words (total chars/5.7): " .. tostring(total_words) .. string.char(10) .. -- Dividing characters between 5.7
-    "Words per screen page: " .. tostring(math.floor((total_words/self.pages * 100) / 100)) .. string.char(10)
+    --"Total words (total chars/5.7): " .. tostring(total_words) .. string.char(10) .. -- Dividing characters between 5.7
+    --"Words per screen page: " .. tostring(math.floor((total_words/self.pages * 100) / 100)) .. string.char(10)
     -- end
 
-    text = text .. "Total words Calibre: " .. title_words .. string.char(10) ..
-    "Words per page Calibre: " .. tostring(math.floor((title_words/self.pages * 100) / 100)) .. string.char(10) .. string.char(10) ..
-    "Total sessions in db: " .. tostring(sessions) .. string.char(10) ..
+    --text = text .. "Total words Calibre: " .. title_words .. string.char(10) ..
+    --"Words per page Calibre: " .. tostring(math.floor((title_words/self.pages * 100) / 100)) .. string.char(10) .. string.char(10) ..
+    text = text .. "Total sessions in db: " .. tostring(sessions) .. string.char(10) ..
     "Average time read last 7 days: " .. avg_last_seven_days .. "h" .. string.char(10) ..
     "Average time read last 30 days: " .. avg_last_thirty_days .. "h" .. string.char(10) ..
     "Average time read last 60 days: " .. avg_last_sixty_days .. "h" .. string.char(10) ..
