@@ -2320,8 +2320,8 @@ function ReaderFooter:onGetStyles()
     for line in classes:gmatch("[^,]+") do
         if string.find(line, " ") then
             for line2 in classes:gmatch("[^ ]+") do
-                local css_class = string.match(css_text, line2 .. " %b{}")
-                if css_class ~= nil and csss:match(line2 .. " {") == nil then
+                local css_class = string.match(css_text, "%." .. line2 .. " %b{}")
+                if css_class ~= nil and csss:match("%." .. line2 .. " {") == nil then
                     csss = csss .. css_class .. "\n"
                     csss_classes = csss_classes .. line2 .. ","
                 end
@@ -2330,7 +2330,7 @@ function ReaderFooter:onGetStyles()
             -- The regex was not matching properly thr classes, matching for instance fmtx when tx
             -- We match first the initial class dot scaping it in the regex
             local css_class = string.match(css_text, "%." .. line .. " %b{}")
-            if css_class ~= nil and csss:match(line .. " {") == nil then
+            if css_class ~= nil and csss:match("%." .. line .. " {") == nil then
                 csss = csss .. css_class .. "\n"
                 csss_classes = csss_classes .. line .. ","
             end
