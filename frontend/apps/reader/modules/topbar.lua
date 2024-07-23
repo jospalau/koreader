@@ -385,7 +385,7 @@ function TopBar:onReaderReady()
             self.test_light,
         },
         -- background = Blitbuffer.COLOR_WHITE,
-        bordersize = 1,
+        bordersize = 0,
         padding = 0,
         padding_bottom = self.bottom_padding,
     }
