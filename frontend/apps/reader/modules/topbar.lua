@@ -124,7 +124,7 @@ function TopBar:getReadTodayThisMonth(title)
 
     local read_month = conn:rowexec(sql_stmt)
 
-    local sql_stmt ="SELECT avg(wpm) FROM wpm_stat_data where wpm > 0"
+    sql_stmt ="SELECT avg(wpm) FROM wpm_stat_data where wpm > 0"
     local avg_wpm = conn:rowexec(sql_stmt)
 
     if avg_wpm == nil then
@@ -133,13 +133,10 @@ function TopBar:getReadTodayThisMonth(title)
 
     if title:match("'") then title = title:gsub("'", "''") end
 
-    local conn = SQ3.open(db_location)
-    local stmt = conn:prepare("SELECT id FROM book where title like ?;")
-    local result = stmt:reset():bind("%" .. title .. "%"):step()
-    local id_book = nil
-    if result then
-        id_book = result[1]
-    end
+    print(title)
+    conn = SQ3.open(db_location)
+    sql_stmt = "SELECT id FROM book where title like 'titles';"
+    local id_book = conn:rowexec(sql_stmt:gsub("titles", title))
 
 
     if id_book == nil then
@@ -147,8 +144,9 @@ function TopBar:getReadTodayThisMonth(title)
     end
     id_book = tonumber(id_book)
 
-    local conn = SQ3.open(db_location)
-    local sql_stmt ="SELECT SUM(duration) FROM wpm_stat_data where id_book = ibp"
+    print(id_book .. "         aaaaaaa")
+
+    sql_stmt ="SELECT SUM(duration) FROM wpm_stat_data where id_book = ibp"
 
 
     local total_time_book = conn:rowexec(sql_stmt:gsub("ibp", id_book))
@@ -157,7 +155,6 @@ function TopBar:getReadTodayThisMonth(title)
         total_time_book = 0
     end
 
-    stmt:close()
     conn:close()
 
     if read_today == nil then
