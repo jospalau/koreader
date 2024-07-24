@@ -141,7 +141,7 @@ function ReaderStatistics:init()
         ["boox"] = 6,
         ["PB700"] = 7, -- PocketBook
         ["ares"] = 8, -- Likebook Ares
-        ["rk3566_eink"] = 9, -- Meebook M6
+        ["Kobo_kondor"] = 9, -- Kobo Elipsa 2E
         ["Kobo_spaBW"] = 10, -- Clara BW
         ["Kobo_spaColour"] = 11, -- Clara Colour
         ["Kobo_monza"] = 12 -- Libra Colour
