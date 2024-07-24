@@ -133,7 +133,6 @@ function TopBar:getReadTodayThisMonth(title)
 
     if title:match("'") then title = title:gsub("'", "''") end
 
-    print(title)
     conn = SQ3.open(db_location)
     sql_stmt = "SELECT id FROM book where title like 'titles';"
     local id_book = conn:rowexec(sql_stmt:gsub("titles", title))
@@ -143,8 +142,6 @@ function TopBar:getReadTodayThisMonth(title)
         id_book = 0
     end
     id_book = tonumber(id_book)
-
-    print(id_book .. "         aaaaaaa")
 
     sql_stmt ="SELECT SUM(duration) FROM wpm_stat_data where id_book = ibp"
 
