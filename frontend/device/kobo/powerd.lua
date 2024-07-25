@@ -494,15 +494,16 @@ function KoboPowerD:afterResume()
             -- Turn the frontlight back on
             -- NOTE: There's quite likely *more* resource contention than on suspend here :/.
             UIManager:scheduleIn(0.001, self.turnOnFrontlight, self)
-            local ui = require("apps/reader/readerui").instance
-            if ui and ui.view[4] then
-                UIManager:scheduleIn(1, function()
-                    ui.view[4]:toggleBar()
-                    UIManager:setDirty("all", "full")
-                end)
-            end
         end
     end
+    -- For the topbar to show the light indicator after resume. Done on OutOfScreenSaver event in devicelistener.lua
+    --local ui = require("apps/reader/readerui").instance
+    --if ui and ui.view[4] then
+    --    UIManager:scheduleIn(0.002, function()
+    --        ui.view[4]:toggleBar()
+    --        UIManager:setDirty("all", "full")
+    --    end)
+    --end
 end
 
 function KoboPowerD:UIManagerReadyHW(uimgr)
