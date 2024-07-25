@@ -356,6 +356,7 @@ function ReaderPageMap:addToMainMenu(menu_items)
                     self.ui.toc:resetToc()
                     self.ui.view.footer:onUpdateFooter()
                     self.ui.view.topbar:toggleBar()
+                    self.ui.annotation:updatePageNumbers(true)
                     UIManager:setDirty(self.view.dialog, "partial")
                 end,
                 hold_callback = function(touchmenu_instance)
