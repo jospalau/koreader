@@ -496,6 +496,7 @@ function KoboPowerD:afterResume()
             UIManager:scheduleIn(0.001, self.turnOnFrontlight, self)
         end
     end
+    -- We do this in the generic power source when switching on light
     -- For the topbar to show the light indicator after resume. Done on OutOfScreenSaver event in devicelistener.lua
     --local ui = require("apps/reader/readerui").instance
     --if ui and ui.view[4] then

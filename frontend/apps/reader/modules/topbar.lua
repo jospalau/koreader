@@ -683,7 +683,7 @@ function TopBar:onSwitchTopBar()
 end
 
 
-function TopBar:toggleBar()
+function TopBar:toggleBar(light_on)
     if TopBar.is_enabled then
         local now_t = os.date("*t")
         local daysdiff = now_t.day - os.date("*t",self.start_session_time).day
@@ -905,7 +905,7 @@ function TopBar:toggleBar()
             self.frontlight = self.last_frontlight
             self.last_frontlight = nil
         else
-            if powerd:isFrontlightOn() then
+            if light_on or powerd:isFrontlightOn() then
                 self.frontlight = " ☼"
             else
                 self.frontlight = ""
@@ -966,7 +966,7 @@ function TopBar:toggleBar()
             self.frontlight = self.last_frontlight
             self.last_frontlight = nil
         else
-            if powerd:isFrontlightOn() then
+            if light_on or powerd:isFrontlightOn() then
                 self.frontlight = " ☼"
             else
                 self.frontlight = ""

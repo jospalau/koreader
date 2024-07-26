@@ -402,14 +402,19 @@ function DeviceListener:onOutOfScreenSaver()
     -- UIManager:scheduleIn(1, function()
     --   UIManager:setDirty(nil, "flashui")
     -- end)
-    -- If light was switched on on suspending, it will be switched on after resuming. Wait a little bit before refreshing
-    UIManager:scheduleIn(0.5, function() --For new devices 0.05 should be enough
-        local ui = require("apps/reader/readerui").instance
-        if ui and ui.view[4] then
-            ui.view[4]:toggleBar()
-        end
+    UIManager:tickAfterNext(function()
         UIManager:setDirty("all", "full")
     end)
+
+    -- We do this in the generic power source when switching on light
+    -- If light was switched on on suspending, it will be switched on after resuming. Wait a little bit before refreshing
+    --UIManager:scheduleIn(0.5, function() --For new devices 0.05 should be enough
+    --    local ui = require("apps/reader/readerui").instance
+    --    if ui and ui.view[4] then
+    --        ui.view[4]:toggleBar()
+    --    end
+    --    UIManager:setDirty("all", "full")
+    --end)
 end
 
 return DeviceListener

@@ -157,7 +157,8 @@ end
 function BasePowerD:turnOnFrontlight(done_callback)
     local ui = require("apps/reader/readerui").instance
          if ui and ui.view[4] then
-             ui.view[4]:toggleBar()
+             -- We pass true to show the light on indicator in the topbar so it works after suspend too
+             ui.view[4]:toggleBar(true)
              UIManager:setDirty("all", "full")
          end
     if not self.device:hasFrontlight() then return end
