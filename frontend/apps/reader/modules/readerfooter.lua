@@ -2611,6 +2611,7 @@ function ReaderFooter:onToggleFooterMode()
     self:applyFooterMode()
     G_reader_settings:saveSetting("reader_footer_mode", self.mode)
     self:onUpdateFooter(true)
+    self:refreshFooter(true, true)
     self:rescheduleFooterAutoRefreshIfNeeded()
     return true
 end
