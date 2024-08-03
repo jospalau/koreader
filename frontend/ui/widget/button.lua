@@ -476,7 +476,9 @@ function Button:onTapSelectButton()
                 -- Check if the callback reset transparency...
                 is_translucent = is_translucent and self.show_parent.movable.alpha
 
-                if Device:isAndroid() then
+                -- The spin widget is closed if we tap on the buttons quickly when using the Kobo Libra Colour
+                -- Force repaint
+                if Device:isAndroid() or Device.model == "Kobo_monza" then
                     UIManager:forceRePaint() -- Ensures whatever the callback wanted to paint will be shown *now*...
                 end
                 if self.vsync then
