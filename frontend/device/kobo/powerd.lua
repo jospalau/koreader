@@ -476,6 +476,8 @@ end
 
 -- Until fixed in the official repo, the following functions are slightly different
 -- So new Kobo models can work when a few quick suspend/resumes occur
+-- There is also a little change in the turnOnFrontlight() function of the generic source
+-- To see the differences
 -- git diff upstream/master -- frontend/device/kobo/powerd.lua
 -- Turn off front light before suspend.
 function KoboPowerD:beforeSuspend()
