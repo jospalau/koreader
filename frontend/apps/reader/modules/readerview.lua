@@ -261,7 +261,9 @@ function ReaderView:paintTo(bb, x, y)
     end
     -- paint footer
     if self.footer_visible then
-        if not self.footer.settings.bar_top then
+        -- The status bar not to be moved to the top anymore but leave the code
+        -- if not self.footer.settings.bar_top then
+        if 1 then
             self.footer:paintTo(bb, x, y)
         else
             -- local y_coordinate_top = 0
