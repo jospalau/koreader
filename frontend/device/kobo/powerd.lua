@@ -487,15 +487,28 @@ function KoboPowerD:beforeSuspend()
     -- Handle the frontlight last,
     -- to prevent as many things as we can from interfering with the smoothness of the ramp
     if self.fl then
-        -- Remember the current frontlight state
-        self.fl_was_on = self.is_fl_on
+        -- NOTE: We *cannot* cancel any pending frontlight tasks,
+        --       because it risks breaking self.fl_was_on tracking...
+        --[[
+        UIManager:unschedule(self._resumeFrontlight)
+        self:_stopFrontlightRamp()
+        --]]
         -- Turn off the frontlight
         -- NOTE: Funky delay mainly to yield to the EPDC's refresh on UP systems.
         --       (Neither yieldToEPDC nor nextTick & friends quite cut it here)...
         -- In new Kobo color models, the light is switched off after a few quick suspend/resumes
         -- This fixes it. Left for all model
-        self:turnOffFrontlight()
-        -- UIManager:scheduleIn(0.001, self.turnOffFrontlight, self)
+        -- UIManager:scheduleIn(0.001, self._suspendFrontlight, self)
+        self:_suspendFrontlight() -- Do not schedule
+    end
+end
+
+function KoboPowerD:_resumeFrontlight()
+    -- Don't bother if the light was already off on suspend
+    if self.fl_was_on then
+        -- Turn the frontlight back on
+        -- self:turnOnFrontlight()
+        UIManager:scheduleIn(0.001, self.turnOnFrontlight, self) --The scheduleIn here makes the trick
     end
 end
 
@@ -512,12 +525,16 @@ function KoboPowerD:afterResume()
     -- There's a whole bunch of stuff happening before us in Generic:onPowerEvent,
     -- so we'll delay this ever so slightly so as to appear as smooth as possible...
     if self.fl then
-        -- Don't bother if the light was already off on suspend
-        if self.fl_was_on then
-            -- Turn the frontlight back on
-            -- NOTE: There's quite likely *more* resource contention than on suspend here :/.
-            UIManager:scheduleIn(0.001, self.turnOnFrontlight, self)
-        end
+        -- NOTE: Same as above, can't cancel any pending fl tasks.
+        --[[
+        UIManager:unschedule(self._suspendFrontlight)
+        self:_stopFrontlightRamp()
+        --]]
+
+        -- Turn the frontlight back on
+        -- NOTE: There's quite likely *more* resource contention than on suspend here :/.
+        -- UIManager:scheduleIn(0.001, self._resumeFrontlight, self)
+        self:_resumeFrontlight() -- Do not schedule
     end
     -- We do this in the generic power source when switching on light
     -- For the topbar to show the light indicator after resume. Done on OutOfScreenSaver event in devicelistener.lua
