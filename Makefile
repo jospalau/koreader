@@ -1,7 +1,8 @@
-PHONY = all android-ndk android-sdk base clean coverage doc fetchthirdparty po pot static-check test testfront
+PHONY = all android-ndk android-sdk base clean coverage distclean doc fetchthirdparty po pot re static-check test testbase testfront
+SOUND = $(INSTALL_DIR)/%
 
 # koreader-base directory
-KOR_BASE?=base
+KOR_BASE ?= base
 
 include $(KOR_BASE)/Makefile.defs
 
@@ -16,21 +17,6 @@ endif
 # releases do not contain tests and misc data
 IS_RELEASE := $(if $(or $(EMULATE_READER),$(WIN32)),,1)
 IS_RELEASE := $(if $(or $(IS_RELEASE),$(APPIMAGE),$(LINUX),$(MACOS)),1,)
-
-ifeq ($(ANDROID_ARCH), arm64)
-	ANDROID_ABI?=arm64-v8a
-else ifeq ($(ANDROID_ARCH), x86)
-	ANDROID_ABI?=$(ANDROID_ARCH)
-else ifeq ($(ANDROID_ARCH), x86_64)
-	ANDROID_ABI?=$(ANDROID_ARCH)
-else
-	ANDROID_ARCH?=arm
-	ANDROID_ABI?=armeabi-v7a
-endif
-
-# Use the git commit count as the (integer) Android version code
-ANDROID_VERSION?=$(shell git rev-list --count HEAD)
-ANDROID_NAME?=$(VERSION)
 
 LINUX_ARCH?=native
 ifeq ($(LINUX_ARCH), native)
@@ -62,16 +48,28 @@ PLATFORM_DIR=platform
 COMMON_DIR=$(PLATFORM_DIR)/common
 WIN32_DIR=$(PLATFORM_DIR)/win32
 
+define CR3GUI_DATADIR_EXCLUDES
+%/KoboUSBMS.tar.gz
+%/cr3.ini
+%/cr3skin-format.txt
+%/desktop
+%/devices
+%/manual
+endef
+CR3GUI_DATADIR_FILES = $(filter-out $(CR3GUI_DATADIR_EXCLUDES),$(wildcard $(CR3GUI_DATADIR)/*))
+
+define DATADIR_FILES
+$(CR3GUI_DATADIR_FILES)
+$(OUTPUT_DIR_DATAFILES)
+$(THIRDPARTY_DIR)/kpvcrlib/cr3.css
+endef
+
 # files to link from main directory
 INSTALL_FILES=reader.lua setupkoenv.lua frontend resources defaults.lua datastorage.lua \
 		l10n tools README.md COPYING
 
-ifeq ($(abspath $(OUTPUT_DIR)),$(OUTPUT_DIR))
-  ABSOLUTE_OUTPUT_DIR = $(OUTPUT_DIR)
-else
-  ABSOLUTE_OUTPUT_DIR = $(KOR_BASE)/$(OUTPUT_DIR)
-endif
-OUTPUT_DIR_ARTIFACTS = $(ABSOLUTE_OUTPUT_DIR)/!(cache|cmake|history|staging|thirdparty)
+OUTPUT_DIR_ARTIFACTS = $(abspath $(OUTPUT_DIR))/!(cache|cmake|data|history|staging|thirdparty)
+OUTPUT_DIR_DATAFILES = $(wildcard $(OUTPUT_DIR)/data/*)
 
 all: base
 	install -d $(INSTALL_DIR)/koreader
@@ -79,27 +77,24 @@ all: base
 ifdef ANDROID
 	rm -f android-fdroid-version; echo -e "$(ANDROID_NAME)\n$(ANDROID_VERSION)" > koreader-android-fdroid-latest
 endif
-ifeq ($(IS_RELEASE),1)
-	bash -O extglob -c '$(RCP) -fL $(OUTPUT_DIR_ARTIFACTS) $(INSTALL_DIR)/koreader/'
-else
-	cp -f $(KOR_BASE)/ev_replay.py $(INSTALL_DIR)/koreader/
-	@echo "[*] create symlink instead of copying files in development mode"
-	bash -O extglob -c '$(SYMLINK) $(OUTPUT_DIR_ARTIFACTS) $(INSTALL_DIR)/koreader/'
-  ifneq (,$(EMULATE_READER))
-	@echo "[*] install front spec only for the emulator"
-	$(SYMLINK) $(abspath spec) $(INSTALL_DIR)/koreader/spec/front
-	$(SYMLINK) $(abspath test) $(INSTALL_DIR)/koreader/spec/front/unit/data
-  endif
+ifeq (,$(IS_RELEASE))
+	$(SYMLINK) $(KOR_BASE)/ev_replay.py $(INSTALL_DIR)/koreader/
 endif
-	$(SYMLINK) $(abspath $(INSTALL_FILES)) $(INSTALL_DIR)/koreader/
+	bash -O extglob -c '$(SYMLINK) $(OUTPUT_DIR_ARTIFACTS) $(INSTALL_DIR)/koreader/'
+ifneq (,$(EMULATE_READER))
+	@echo "[*] install front spec only for the emulator"
+	$(SYMLINK) spec $(INSTALL_DIR)/koreader/spec/front
+	$(SYMLINK) test $(INSTALL_DIR)/koreader/spec/front/unit/data
+endif
+	$(SYMLINK) $(INSTALL_FILES) $(INSTALL_DIR)/koreader/
 ifdef ANDROID
-	$(SYMLINK) $(abspath $(ANDROID_DIR)/*.lua) $(INSTALL_DIR)/koreader/
+	$(SYMLINK) $(ANDROID_DIR)/*.lua $(INSTALL_DIR)/koreader/
 endif
 	@echo "[*] Install update once marker"
 	@echo "# This file indicates that update once patches have not been applied yet." > $(INSTALL_DIR)/koreader/update_once.marker
 ifdef WIN32
 	@echo "[*] Install runtime libraries for win32..."
-	$(SYMLINK) $(abspath $(WIN32_DIR)/*.dll) $(INSTALL_DIR)/koreader/
+	$(SYMLINK) $(WIN32_DIR)/*.dll $(INSTALL_DIR)/koreader/
 endif
 ifdef SHIP_SHARED_STL
 	@echo "[*] Install C++ runtime..."
@@ -108,32 +103,36 @@ ifdef SHIP_SHARED_STL
 	$(STRIP) --strip-unneeded $(INSTALL_DIR)/koreader/libs/$(notdir $(SHARED_STL_LIB))
 endif
 	@echo "[*] Install plugins"
-	$(SYMLINK) $(abspath plugins) $(INSTALL_DIR)/koreader/
+	$(SYMLINK) plugins $(INSTALL_DIR)/koreader/
 	@echo "[*] Install resources"
-	$(SYMLINK) $(abspath resources/fonts/*) $(INSTALL_DIR)/koreader/fonts/
-	install -d $(INSTALL_DIR)/koreader/{screenshots,data/{dict,tessdata},fonts/host,ota}
-ifeq ($(IS_RELEASE),1)
+	$(SYMLINK) resources/fonts/* $(INSTALL_DIR)/koreader/fonts/
+	install -d $(INSTALL_DIR)/koreader/{screenshots,fonts/host,ota}
+	# Note: the data dir is distinct from the one in base/build/…!
+	@echo "[*] Install data files"
+	! test -L $(INSTALL_DIR)/koreader/data || rm $(INSTALL_DIR)/koreader/data
+	install -d $(INSTALL_DIR)/koreader/data
+	$(SYMLINK) $(strip $(DATADIR_FILES)) $(INSTALL_DIR)/koreader/data/
+ifneq (,$(IS_RELEASE))
 	@echo "[*] Clean up, remove unused files for releases"
-	rm -rf $(INSTALL_DIR)/koreader/data/{cr3.ini,cr3skin-format.txt,desktop,devices,manual}
+	rm -rf $(INSTALL_DIR)/koreader/data/{cr3.ini,desktop,devices,dict,manual,tessdata}
 endif
 
-base:
-	$(MAKE) -C $(KOR_BASE)
+base: base-all
 
 $(INSTALL_DIR)/koreader/.busted: .busted
-	$(SYMLINK) $(abspath .busted) $@
+	$(SYMLINK) .busted $@
 
 $(INSTALL_DIR)/koreader/.luacov:
-	$(SYMLINK) $(abspath .luacov) $@
+	$(SYMLINK) .luacov $@
 
-testfront: $(INSTALL_DIR)/koreader/.busted
+testbase: base-test
+
+testfront: all test-data $(INSTALL_DIR)/koreader/.busted
 	# sdr files may have unexpected impact on unit testing
 	-rm -rf spec/unit/data/*.sdr
 	cd $(INSTALL_DIR)/koreader && $(BUSTED_LUAJIT) $(BUSTED_OVERRIDES) $(BUSTED_SPEC_FILE)
 
-test: $(INSTALL_DIR)/koreader/.busted
-	$(MAKE) -C $(KOR_BASE) test
-	$(MAKE) testfront
+test: testbase testfront
 
 coverage: $(INSTALL_DIR)/koreader/.luacov
 	-rm -rf $(INSTALL_DIR)/koreader/luacov.*.out
@@ -146,7 +145,14 @@ coverage: $(INSTALL_DIR)/koreader/.luacov
 		+$$(($$(grep -nm1 -e "^Summary$$" luacov.report.out|cut -d: -f1)-1)) \
 		luacov.report.out
 
-$(KOR_BASE)/Makefile.defs fetchthirdparty:
+ifeq (,$(wildcard $(KOR_BASE)/Makefile))
+$(KOR_BASE)/Makefile: fetchthirdparty
+endif
+ifeq (,$(wildcard $(KOR_BASE)/Makefile.defs))
+$(KOR_BASE)/Makefile.defs: fetchthirdparty
+endif
+
+fetchthirdparty:
 	git submodule init
 	git submodule sync
 ifneq (,$(CI))
@@ -163,20 +169,17 @@ else
 endif
 	$(MAKE) -C $(KOR_BASE) fetchthirdparty
 
-VERBOSE ?= @
-Q = $(VERBOSE:1=)
-clean:
+clean: base-clean
 	rm -rf $(INSTALL_DIR)
-	$(Q:@=@echo 'MAKE -C base clean'; &> /dev/null) \
-		$(MAKE) -C $(KOR_BASE) clean
 ifeq ($(TARGET), android)
 	$(MAKE) -C $(CURDIR)/platform/android/luajit-launcher clean
 endif
 
-dist-clean: clean
-	rm -rf $(INSTALL_DIR)
-	$(MAKE) -C $(KOR_BASE) dist-clean
+distclean: clean base-distclean
 	$(MAKE) -C doc clean
+
+re: clean
+	$(MAKE) all
 
 # Include target specific rules.
 ifneq (,$(wildcard make/$(TARGET).mk))
@@ -222,7 +225,4 @@ doc:
 .NOTPARALLEL:
 .PHONY: $(PHONY)
 
-LEFTOVERS = $(filter-out $(PHONY) $(INSTALL_DIR)/%,$(MAKECMDGOALS))
-.PHONY: $(LEFTOVERS)
-$(LEFTOVERS):
-	$(MAKE) -C $(KOR_BASE) $@
+include $(KOR_BASE)/Makefile
