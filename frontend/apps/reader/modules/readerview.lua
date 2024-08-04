@@ -261,9 +261,7 @@ function ReaderView:paintTo(bb, x, y)
     end
     -- paint footer
     if self.footer_visible then
-        -- The status bar not to be moved to the top anymore but leave the code
-        -- if not self.footer.settings.bar_top then
-        if 1 then
+        if not self.footer.settings.bar_top then
             self.footer:paintTo(bb, x, y)
         else
             -- local y_coordinate_top = 0
@@ -341,6 +339,9 @@ function ReaderView:paintTo(bb, x, y)
                 top_padding = self.footer.settings.top_padding
             end
 
+            --if self.footer.settings.container_height then
+            --    top_padding = self.footer.settings.container_height
+            --end
             -- In both cases we add top_padding to fix it if we have to move it slightly down
             self.y_coordinate_top = self.y_coordinate_top + Screen:scaleBySize(top_padding)
             self.footer:paintTo(bb, x, self.y_coordinate_top)

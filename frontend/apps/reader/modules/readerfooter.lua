@@ -1900,6 +1900,36 @@ With this feature enabled, the current page is factored in, resulting in the cou
                 end,
                 keep_menu_open = true,
             },
+           {
+                text_func = function()
+                    return T(_("Adjust margin top: %1"), self.settings.top_padding)
+                end,
+                callback = function(touchmenu_instance)
+                    local SpinWidget = require("ui/widget/spinwidget")
+                    local top_padding = self.settings.top_padding
+                    local items_font = SpinWidget:new{
+                        value = top_padding,
+                        value_min = 0,
+                        value_max = 100,
+                        default_value = 5,
+                        ok_text = _("Set margin"),
+                        title_text = _("Top bar margin"),
+                        keep_shown_on_apply = true,
+                        callback = function(spin)
+                            self.settings.top_padding = spin.value
+                            if not self.settings.top_padding then
+                                self.top_padding = Screen:scaleBySize(self.settings.top_padding)
+                            else
+                                self.top_padding = Screen:scaleBySize(5)
+                            end
+                            self:refreshFooter(true, true)
+                            if touchmenu_instance then touchmenu_instance:updateItems() end
+                        end,
+                    }
+                    UIManager:show(items_font)
+                end,
+                keep_menu_open = true,
+            },
         }
     })
     local configure_items_sub_table = sub_items[#sub_items].sub_item_table -- will pick the last item of sub_items
@@ -3625,5 +3655,34 @@ function ReaderFooter:onSwitchStatusBarText()
     return true
 end
 
+function ReaderFooter:onMoveStatusBar()
+    local text = ""
+    if self.settings.bar_top then
+        text = "status bar set to bottom"
+        self.settings.progress_bar_position = "below"
+    else
+        text = "status bar set to top"
+        self.settings.progress_bar_position = "above"
+    end
+
+    self.settings.bar_top = not self.settings.bar_top
+    UIManager:setDirty(self.dialog, "ui")
+    if self.settings.bar_top then
+        UIManager:show(Notification:new{
+            text = _(text),
+            -- my_height = Screen:scaleBySize(30),
+            -- align = "left",
+            timeout = 0.3,
+        })
+    else
+        UIManager:show(Notification:new{
+            text = _(text),
+        })
+    end
+    self:onUpdateFooter(true)
+    self:refreshFooter(true, true)
+    self:rescheduleFooterAutoRefreshIfNeeded()
+    return true
+end
 
 return ReaderFooter
