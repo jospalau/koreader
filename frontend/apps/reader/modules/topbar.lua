@@ -605,6 +605,17 @@ function TopBar:onToggleShowTopBar()
     self:toggleBar()
 end
 
+function TopBar:showTopBar()
+    G_reader_settings:saveSetting("show_top_bar", true)
+    TopBar.is_enabled = true
+    self:toggleBar()
+end
+
+function TopBar:hideTopBar()
+    G_reader_settings:saveSetting("show_top_bar", false)
+    TopBar.is_enabled = false
+end
+
 function TopBar:resetLayout()
     -- if self.wpm_text then
     --     self:toggleBar()

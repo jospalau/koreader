@@ -2621,8 +2621,10 @@ function ReaderFooter:onToggleFooterMode()
     if self.has_no_mode and self.settings.disable_progress_bar then return end
     if self.settings.all_at_once or self.has_no_mode then
         if self.mode >= 1 then
+            self.ui.view[4]:showTopBar()
             self.mode = self.mode_list.off
         else
+            self.ui.view[4]:hideTopBar()--
             self.mode = self.mode_list.page_progress
         end
     else
