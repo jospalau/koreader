@@ -2624,7 +2624,7 @@ function ReaderFooter:onToggleFooterMode()
             self.ui.view[4]:showTopBar()
             self.mode = self.mode_list.off
         else
-            self.ui.view[4]:hideTopBar()--
+            self.ui.view[4]:hideTopBar()
             self.mode = self.mode_list.page_progress
         end
     else
