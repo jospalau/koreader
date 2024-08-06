@@ -125,7 +125,9 @@ if Device:hasFrontlight() then
                    UIManager:setDirty("all", "full")
                end
             end
+
         end
+        powerd:updateResumeFrontlightState()
         return true
     end
 
@@ -205,6 +207,7 @@ if Device:hasFrontlight() then
             topbar:toggleBar()
             UIManager:setDirty("all", "full")
         end
+        powerd:updateResumeFrontlightState()
     end
 
     function DeviceListener:onShowFlDialog()
@@ -396,7 +399,6 @@ function DeviceListener:onResume()
     --     end)
     -- end
 end
-
 
 function DeviceListener:onOutOfScreenSaver()
     -- UIManager:scheduleIn(1, function()
