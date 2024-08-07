@@ -1288,7 +1288,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                 font_bold = true,
                 is_quickmenu_button = true,
                 callback = function()
-                    UIManager:nextTick(function()
+                    --UIManager:nextTick(function()
                         UIManager:close(quickmenu)
                         if util.stringStartsWith(v.key, "toggle_horizontal_vertical") then
                             keep_open_on_apply = false
@@ -1297,11 +1297,13 @@ function Dispatcher:_showAsMenu(settings, exec_props)
 
 
                         if keep_open_on_apply and not util.stringStartsWith(v.key, "touch_input")  then
-                            -- Flash en la funcion onClose() del fuente buttondialog.lua tipo flashui
-                            -- deshabilitado. We schedule it here
-                            UIManager:scheduleIn(2, function()
-                                UIManager:setDirty("all", "full")
-                            end)
+                            -- Flash flashui type occurs in the onClose() function of the buttondialog.lua source
+                            -- when closing the quick menu.
+                            -- We can omit that flash for the quick menus and do it here
+                            -- and it will work with nextTick(), but we leave nexTick() commented
+                            --UIManager:scheduleIn(2, function()
+                            --    UIManager:setDirty("all", "full")
+                            --end)
                             if ui and util.stringStartsWith(v.text, "Profile " .. ui.document._document:getFontFace()) then
                                 v.text = v.text .. " ✔"
                             end
@@ -1422,7 +1424,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                                 Device:setScreenDPI(current_dpi)
                             end
                         end
-                    end)
+                    --end)
                 end,
                 hold_callback = function()
                     if v.key:sub(1, 13) == "profile_exec_" then
