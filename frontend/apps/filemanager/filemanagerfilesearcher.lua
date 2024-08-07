@@ -579,7 +579,9 @@ function FileSearcher:showFileDialog(item, callback)
             callback = function()
                 local FileManager = require("apps/filemanager/filemanager")
                 FileManager.openFile(self.ui, file)
-                close_dialog_menu_callback()
+                -- No need to close the dialog menu when tapping to Open a book
+                -- No artifact since the button code is as it was refreshing again if it is not a quick menu button
+                --close_dialog_menu_callback()
             end,
         },
     })
