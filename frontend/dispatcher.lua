@@ -1286,12 +1286,15 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                 font_face = "myfont2",
                 font_size = 17,
                 font_bold = true,
+                is_quickmenu_button = true,
                 callback = function()
                     UIManager:close(quickmenu)
                     if util.stringStartsWith(v.key, "toggle_horizontal_vertical") then
                         keep_open_on_apply = false
                     end
-                    UIManager:nextTick(function()
+                    -- Last change in the official repo brought a few nextTick() function calls
+                    -- We don't want this one to avoid the double refresh in the profile quick menu
+                    --UIManager:nextTick(function()
                         Dispatcher:execute({[v.key] = settings[v.key]})
 
 
@@ -1418,7 +1421,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                                 Device:setScreenDPI(current_dpi)
                             end
                         end
-                    end)
+                    --end)
                 end,
                 hold_callback = function()
                     if v.key:sub(1, 13) == "profile_exec_" then

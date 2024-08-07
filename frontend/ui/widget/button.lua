@@ -435,6 +435,12 @@ function Button:onTapSelectButton()
                 -- NOTE: We have a few tricks up our sleeve in case our parent is inside a translucent MovableContainer...
                 local is_translucent = self.show_parent and self.show_parent.movable and self.show_parent.movable.alpha
 
+
+                -- Callback
+                --
+               if self.is_quickmenu_button == true then
+                  self.callback()
+               end
                 -- Highlight
                 --
                 self:_doFeedbackHighlight()
@@ -453,13 +459,6 @@ function Button:onTapSelectButton()
                     --       and that could take upwards of 300ms, which is also way too much ;).
                     UIManager:yieldToEPDC()
                 end
-
-
-
-                -- Callback
-                --
-                self.callback()
-
                 -- Unhighlight
                 --
                 -- We'll *paint* the unhighlight now, because at this point we can still be sure that our widget exists,
@@ -473,6 +472,10 @@ function Button:onTapSelectButton()
                     self:_undoFeedbackHighlight(is_translucent)
                 end
 
+                 -- Callback
+                if self.is_quickmenu_button == nil then
+                    self.callback()
+                end
                 -- Check if the callback reset transparency...
                 is_translucent = is_translucent and self.show_parent.movable.alpha
 
@@ -495,6 +498,8 @@ function Button:onTapSelectButton()
                     self:_undoFeedbackHighlight(is_translucent)
                     UIManager:forceRePaint()
                 end
+
+
             end
             if self.checked_func then
                 local text = self:getDisplayText()
