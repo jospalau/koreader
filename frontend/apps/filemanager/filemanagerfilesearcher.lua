@@ -577,6 +577,9 @@ function FileSearcher:showFileDialog(item, callback)
             text = _("Open"),
             enabled = DocumentRegistry:hasProvider(file, nil, true), -- allow auxiliary providers
             callback = function()
+            if self.search_menu.ui.history.hist_menu then
+                self.search_menu.ui.history.hist_menu.close_callback()
+            end
                 close_dialog_menu_callback()
                 local FileManager = require("apps/filemanager/filemanager")
                 FileManager.openFile(self.ui, file)
