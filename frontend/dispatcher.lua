@@ -1299,9 +1299,9 @@ function Dispatcher:_showAsMenu(settings, exec_props)
 
 
                         if keep_open_on_apply and not util.stringStartsWith(v.key, "touch_input")  then
-                            UIManager:nextTick(function()
-                                UIManager:setDirty("all", "full")
-                            end)
+                            --UIManager:nextTick(function()
+                                --UIManager:setDirty("all", "full")
+                            --end)
                             if ui and util.stringStartsWith(v.text, "Profile " .. ui.document._document:getFontFace()) then
                                 v.text = v.text .. " ✔"
                             end
