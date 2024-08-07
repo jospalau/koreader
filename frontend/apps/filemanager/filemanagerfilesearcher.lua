@@ -577,11 +577,9 @@ function FileSearcher:showFileDialog(item, callback)
             text = _("Open"),
             enabled = DocumentRegistry:hasProvider(file, nil, true), -- allow auxiliary providers
             callback = function()
+                close_dialog_menu_callback()
                 local FileManager = require("apps/filemanager/filemanager")
                 FileManager.openFile(self.ui, file)
-                -- No need to close the dialog menu when tapping to Open a book
-                -- No artifact since the button code is as it was refreshing again if it is not a quick menu button
-                --close_dialog_menu_callback()
             end,
         },
     })
