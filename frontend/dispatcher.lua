@@ -1299,6 +1299,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
 
 
                         if keep_open_on_apply and not util.stringStartsWith(v.key, "touch_input")  then
+                            -- Flash en la funcion onClose() del fuente buttondialog.lua tipo flashui
                             --UIManager:nextTick(function()
                                 --UIManager:setDirty("all", "full")
                             --end)
