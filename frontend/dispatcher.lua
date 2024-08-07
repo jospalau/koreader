@@ -1288,21 +1288,20 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                 font_bold = true,
                 is_quickmenu_button = true,
                 callback = function()
-                    UIManager:close(quickmenu)
-                    if util.stringStartsWith(v.key, "toggle_horizontal_vertical") then
-                        keep_open_on_apply = false
-                    end
-                    -- Last change in the official repo brought a few nextTick() function calls
-                    -- We don't want this one to avoid the double refresh in the profile quick menu
-                    --UIManager:nextTick(function()
+                    UIManager:nextTick(function()
+                        UIManager:close(quickmenu)
+                        if util.stringStartsWith(v.key, "toggle_horizontal_vertical") then
+                            keep_open_on_apply = false
+                        end
                         Dispatcher:execute({[v.key] = settings[v.key]})
 
 
                         if keep_open_on_apply and not util.stringStartsWith(v.key, "touch_input")  then
                             -- Flash en la funcion onClose() del fuente buttondialog.lua tipo flashui
-                            --UIManager:nextTick(function()
-                                --UIManager:setDirty("all", "full")
-                            --end)
+                            -- deshabilitado. We schedule it here
+                            UIManager:scheduleIn(2, function()
+                                UIManager:setDirty("all", "full")
+                            end)
                             if ui and util.stringStartsWith(v.text, "Profile " .. ui.document._document:getFontFace()) then
                                 v.text = v.text .. " ✔"
                             end
@@ -1411,6 +1410,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                                 buttons =  quickmenu.buttons,
                                 anchor = exec_props and exec_props.qm_anchor,
                                 tap_close_callback = function() if keep_open_on_apply then UIManager:setDirty("all", "full") end end,
+                                quickmenu = true,
                             }
 
 
@@ -1422,7 +1422,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                                 Device:setScreenDPI(current_dpi)
                             end
                         end
-                    --end)
+                    end)
                 end,
                 hold_callback = function()
                     if v.key:sub(1, 13) == "profile_exec_" then
@@ -1454,6 +1454,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
         buttons = buttons,
         anchor = exec_props and exec_props.qm_anchor,
         tap_close_callback = function() if keep_open_on_apply then UIManager:setDirty("all", "full") end end,
+        quickmenu = true,
     }
     UIManager:show(quickmenu)
     if not Device:isAndroid() then

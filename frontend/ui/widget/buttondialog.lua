@@ -273,9 +273,11 @@ function ButtonDialog:onShow()
 end
 
 function ButtonDialog:onCloseWidget()
-    UIManager:setDirty(nil, function()
-        return "flashui", self.movable.dimen
-    end)
+    if not self.quickmenu then
+        UIManager:setDirty(nil, function()
+            return "flashui", self.movable.dimen
+        end)
+    end
 end
 
 function ButtonDialog:onClose()
