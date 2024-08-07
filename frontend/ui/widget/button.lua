@@ -66,6 +66,7 @@ local Button = InputContainer:extend{
     text_font_size = 20,
     text_font_bold = true,
     vsync = nil, -- when "flash_ui" is enabled, allow bundling the highlight with the callback, and fence that batch away from the unhighlight. Avoid delays when callback requires a "partial" on Kobo Mk. 7, c.f., ffi/framebuffer_mxcfb for more details.
+    is_quickmenu_button = false,
 }
 
 function Button:init()
@@ -435,12 +436,6 @@ function Button:onTapSelectButton()
                 -- NOTE: We have a few tricks up our sleeve in case our parent is inside a translucent MovableContainer...
                 local is_translucent = self.show_parent and self.show_parent.movable and self.show_parent.movable.alpha
 
-
-                -- Callback
-                --
-               if self.is_quickmenu_button == true then
-                  self.callback()
-               end
                 -- Highlight
                 --
                 self:_doFeedbackHighlight()
@@ -472,16 +467,15 @@ function Button:onTapSelectButton()
                     self:_undoFeedbackHighlight(is_translucent)
                 end
 
-                 -- Callback
-                if self.is_quickmenu_button == nil then
-                    self.callback()
-                end
+                -- Callback
+                --
+                self.callback()
+
                 -- Check if the callback reset transparency...
                 is_translucent = is_translucent and self.show_parent.movable.alpha
-
                 -- The spin widget is closed if we tap on the buttons quickly when using the Kobo Libra Colour
-                -- Force repaint
-                if Device:isAndroid() or Device.model == "Kobo_monza" then
+                -- Force repaint but no for quick menu buttons
+                if not self.is_quickmenu_button then
                     UIManager:forceRePaint() -- Ensures whatever the callback wanted to paint will be shown *now*...
                 end
                 if self.vsync then
@@ -498,8 +492,6 @@ function Button:onTapSelectButton()
                     self:_undoFeedbackHighlight(is_translucent)
                     UIManager:forceRePaint()
                 end
-
-
             end
             if self.checked_func then
                 local text = self:getDisplayText()

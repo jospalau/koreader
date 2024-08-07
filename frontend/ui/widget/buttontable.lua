@@ -83,6 +83,7 @@ function ButtonTable:init()
                 hold_callback = btn_entry.hold_callback,
                 allow_hold_when_disabled = btn_entry.allow_hold_when_disabled,
                 vsync = btn_entry.vsync,
+                is_quickmenu_button = btn_entry.is_quickmenu_button,
                 width = btn_entry.width or default_button_width,
                 bordersize = 0,
                 margin = 0,
