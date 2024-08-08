@@ -1288,7 +1288,13 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                 font_bold = true,
                 is_quickmenu_button = true,
                 callback = function()
-                    --UIManager:nextTick(function()
+                    -- Last update in the official repo introduces nextTick() calls like this one
+                    -- The problem with this call in this case is that partial refreshes
+                    -- get mixed when an option of a quick menu with keep_open_on_apply checked is selected
+                    -- and there are residues in the screen because these refreshes
+                    -- We can use ui instead of partial refreshes in the updatePos() and handleRenderingDelayed()
+                    -- functions of the readerrolling.lua source
+                    UIManager:nextTick(function()
                         UIManager:close(quickmenu)
                         if util.stringStartsWith(v.key, "toggle_horizontal_vertical") then
                             keep_open_on_apply = false
@@ -1297,13 +1303,15 @@ function Dispatcher:_showAsMenu(settings, exec_props)
 
 
                         if keep_open_on_apply and not util.stringStartsWith(v.key, "touch_input")  then
-                            -- Flash flashui type occurs in the onClose() function of the buttondialog.lua source
-                            -- when closing the quick menu.
-                            -- We can omit that flash for the quick menus and do it here
-                            -- and it will work with nextTick(), but we leave nexTick() commented
+                            -- A refresh flashui type occurs in the onClose() function of the buttondialog.lua source
+                            -- when closing the quick menu. We can omit that flash for the quick menu and do it here with a delay
+                            -- and it will work with nextTick() as well, but we leave this commented
+                            -- it is easy to comment the nextTick() call or use ui instead of partial refreshes in the updatePos() and handleRenderingDelayed()
+                            -- functions of the readerrolling.lua source
                             --UIManager:scheduleIn(2, function()
                             --    UIManager:setDirty("all", "full")
                             --end)
+
                             if ui and util.stringStartsWith(v.text, "Profile " .. ui.document._document:getFontFace()) then
                                 v.text = v.text .. " ✔"
                             end
@@ -1424,7 +1432,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                                 Device:setScreenDPI(current_dpi)
                             end
                         end
-                    --end)
+                    end)
                 end,
                 hold_callback = function()
                     if v.key:sub(1, 13) == "profile_exec_" then
@@ -1478,9 +1486,8 @@ function Dispatcher:execute(settings, exec_props)
             or (exec_props and exec_props.qm_show) then
         return Dispatcher:_showAsMenu(settings, exec_props)
     end
-    local has_many = Dispatcher:_itemsCount(settings) > 1
     if settings["set_font"]  then
-        UIManager:show(Notification:new{
+       UIManager:show(Notification:new{
             text = _(settings["set_font"]),
         })
     elseif settings["b_page_margin"]  then
@@ -1488,6 +1495,7 @@ function Dispatcher:execute(settings, exec_props)
             text = _("Margins " .. settings["b_page_margin"]),
         })
     end
+    local has_many = Dispatcher:_itemsCount(settings) > 1
     if has_many then
         UIManager:broadcastEvent(Event:new("BatchedUpdate"))
     end
