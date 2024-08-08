@@ -2355,7 +2355,14 @@ function ReaderFooter:updateFooterPage(force_repaint, full_repaint)
     else
         self.progress_bar:setPercentage(self:getBookProgress())
     end
-    self:updateFooterText(force_repaint, full_repaint)
+
+    -- If the footer is on top we want to repaint it always, otherwise it will be double-painted
+    -- in certain circumstances like when changing bright or selecting a new typography configuration
+    if self.settings.bar_top then
+        self:updateFooterText(true, true)
+    else
+        self:updateFooterText(force_repaint, full_repaint)
+    end
 end
 
 function ReaderFooter:updateFooterPos(force_repaint, full_repaint)
