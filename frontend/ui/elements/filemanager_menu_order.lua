@@ -178,6 +178,7 @@ local order = {
         "favorites",
         "collections",
         "generate_favorites",
+        "generate_font_profiles",
         -- "open_random_favorite",
         "----------------------------",
         "mass_storage_actions", -- if Device:canToggleMassStorage()

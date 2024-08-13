@@ -1019,6 +1019,188 @@ Tap a book in the search results to open it.]]),
     --         })
     --     end
     -- }
+
+   self.menu_items.generate_font_profiles = {
+        text_func = function()
+            return _("Generate Font Profiles")
+        end,
+        enabled_func = function()
+        end,
+        callback = function()
+            local profiles_file = require("datastorage"):getSettingsDir() .. "/profiles.lua"
+            local profiles = require("luasettings"):open(profiles_file)
+            data = profiles.data
+            local cre = require("document/credocument"):engineInit()
+            local face_list = cre.getFontFaces()
+            local gestures_path = FFIUtil.joinPath(require("datastorage"):getSettingsDir(), "gestures.lua")
+            settings_data = require("luasettings"):open(gestures_path)
+            gestures = settings_data.data["gesture_reader"]
+            for _, font_name in ipairs(face_list) do
+                --print(font_name)
+                local encuentra = false
+                for k, v in pairs(data) do
+                    if data[k] and data[k].settings then
+                        if data[k].settings.name == font_name then
+                            encuentra=true
+                            break
+                        end
+                    end
+                end
+                if not encuentra then
+                    data[font_name] =  {
+                        ["font_base_weight"] = 0,
+                        ["set_font"] = font_name,
+                        ["settings"] = {
+                            ["name"] = font_name,
+                            ["registered"] = true,
+                            ["order"] = {
+                                [2] = "font_base_weight",
+                                [1] = "set_font",
+                            },
+                        }
+                    }
+                end
+            end
+
+            local dump = require("dump")
+            --print(dump(gestures))
+            local UIManager = require("ui/uimanager")
+            local Notification = require("ui/widget/notification")
+            if not gestures["multiswipe_north_east"] then
+                UIManager:show(Notification:new{
+                 text = _("Not exits"),
+                })
+
+                gestures["multiswipe_north_east"] = {
+                ["profile_exec_Reset defaults"] = true,
+                ["decrease_weight"] = true,
+                ["profile_exec_Spectral"] = true,                                                                                       ["profile_exec_Vollkorn"] = true,
+                ["toggle_horizontal_vertical"] = true,
+                ["settings"] = {
+                    ["show_as_quickmenu"] = true,
+                    ["anchor_quickmenu"] = true,
+                    ["keep_open_on_apply"] = true,
+                    ["order"] = {
+                        [1] = "profile_exec_Reset defaults",
+                        [2] = "toggle_horizontal_vertical",
+                        [3] = "profile_exec_Font size small",
+                        [4] = "profile_exec_Font size default (normal)",
+                        [5] = "profile_exec_Font size big",
+                        [6] = "increase_font",
+                        [7] = "decrease_font",
+                        [8] = "profile_exec_Line spacing 1.1em",
+                        [9] = "profile_exec_Line spacing 1.2em (normal)",
+                        [10] = "profile_exec_Line spacing 1.3em",
+                        [11] = "profile_exec_Line spacing 1.4em",
+                        [12] = "profile_exec_Margins default (small)",
+                        [13] = "profile_exec_Margins slightly bigger",
+                        [14] = "profile_exec_Margins big",
+                        [15] = "profile_exec_Margins bigger",
+                        [16] = "increase_weight",
+                        [17] = "decrease_weight",
+                        [18] = "profile_exec_Alegreya",
+                        [19] = "profile_exec_Amasis",
+                        [20] = "profile_exec_Andada Pro",
+                        [21] = "profile_exec_Average",
+                        [22] = "profile_exec_Bitter Pro",
+                        [23] = "profile_exec_Bookerly",
+                        [24] = "profile_exec_Caecilia",
+                        [25] = "profile_exec_Canela Text",
+                        [26] = "profile_exec_Capita",
+                        [27] = "profile_exec_ChareInk",
+                        [28] = "profile_exec_Constantia",
+                        [29] = "profile_exec_Crimson Pro",
+                        [30] = "profile_exec_EB Garamond",
+                        [31] = "profile_exec_Gentium Book Plus",
+                        [32] = "profile_exec_Georgia",
+                        [33] = "profile_exec_Goudy Old Style",
+                        [34] = "profile_exec_IBM Plex Serif",
+                        [35] = "profile_exec_Iowan Old Style",
+                        [36] = "profile_exec_Lexia DaMa",
+                        [37] = "profile_exec_Liberation Serif",
+                        [38] = "profile_exec_Libre Baskerville",                                                                                [39] = "profile_exec_Literata",
+                        [40] = "profile_exec_Luciole",
+                        [41] = "profile_exec_Mearriweather",                                                                                    [42] = "profile_exec_Palatino",
+                        [43] = "profile_exec_Souvenir",
+                        [44] = "profile_exec_Spectral",
+                        [45] = "profile_exec_Vollkorn",                                                                                     },
+                },
+                ["profile_exec_Souvenir"] = true,                                                                                       ["profile_exec_Literata"] = true,
+                ["profile_exec_Mearriweather"] = true,
+                ["profile_exec_Margins bigger"] = true,                                                                                 ["profile_exec_Alegreya"] = true,
+                ["profile_exec_Amasis"] = true,
+                ["profile_exec_Andada Pro"] = true,                                                                                     ["profile_exec_Average"] = true,
+                ["profile_exec_Bitter Pro"] = true,
+                ["profile_exec_Bookerly"] = true,                                                                                       ["profile_exec_Caecilia"] = true,
+                ["profile_exec_Canela Text"] = true,
+                ["profile_exec_Capita"] = true,                                                                                         ["profile_exec_ChareInk"] = true,
+                ["profile_exec_Constantia"] = true,
+                ["profile_exec_Crimson Pro"] = true,
+                ["profile_exec_EB Garamond"] = true,
+                ["profile_exec_Font size big"] = true,
+                ["profile_exec_Font size default (normal)"] = true,
+                ["profile_exec_Font size small"] = true,
+                ["profile_exec_Gentium Book Plus"] = true,
+                ["profile_exec_Georgia"] = true,
+                ["profile_exec_Goudy Old Style"] = true,
+                ["profile_exec_IBM Plex Serif"] = true,
+                ["profile_exec_Iowan Old Style"] = true,
+                ["profile_exec_Lexia DaMa"] = true,
+                ["profile_exec_Liberation Serif"] = true,
+                ["profile_exec_Libre Baskerville"] = true,
+                ["profile_exec_Line spacing 1.1em"] = true,                                                                             ["profile_exec_Line spacing 1.2em (normal)"] = true,
+                ["profile_exec_Line spacing 1.3em"] = true,
+                ["profile_exec_Line spacing 1.4em"] = true,
+                ["increase_font"] = 0.5,                                                                                                ["profile_exec_Luciole"] = true,
+                ["profile_exec_Margins big"] = true,
+                ["decrease_font"] = 0.5,
+                ["profile_exec_Margins default (small)"] = true,
+                ["profile_exec_Margins slightly bigger"] = true,
+                ["increase_weight"] = true,
+                ["profile_exec_Palatino"] = true,
+            }
+            else
+
+                local all_fonts = {}
+                -- print(dump(all_fonts))
+                for _, font_name in ipairs(face_list) do
+                    table.insert(all_fonts, "profile_exec_" .. font_name)
+                    gestures["multiswipe_north_east"]["profile_exec_" .. font_name] = true
+                end
+                --print(dump(all_fonts))
+                gestures["multiswipe_north_east"]["settings"]["order"] = all_fonts
+            end
+            data_ordered = {}
+            for k, v in FFIUtil.orderedPairs(data) do
+                data_ordered[k] = v
+            end
+
+
+            --bag = {}
+            --for k,v in pairs(data) do
+            --    table.insert(bag,{key=k,v})
+            --end
+
+            --table.sort(bag,function(a,b) return string.upper(a.key)<string.upper(b.key)end)
+
+            --data = {}
+            --for k,v in pairs(bag) do
+                --print(v[1].settings.name)
+            --    data[v[1].settings.name]=v[1]
+            --end
+            --local dump = require("dump")
+            --print(dump(data_ordered))
+            --util.writeToFile(dump(data_ordered),require("datastorage"):getSettingsDir() .. "/profiles.lua")
+
+            profiles.data = data_ordered
+            profiles:flush()
+            settings_data:flush()
+
+        end,
+        hold_callback = function()
+        end
+    }
+    -- self.menu_items.open_random_favorite = {
     -- -- insert common info
     for id, common_setting in pairs(dofile("frontend/ui/elements/common_info_menu_table.lua")) do
         self.menu_items[id] = common_setting
