@@ -1195,7 +1195,29 @@ Tap a book in the search results to open it.]]),
             profiles.data = data_ordered
             profiles:flush()
             settings_data:flush()
-
+            local Size = require("ui/size")
+            UIManager:show(ConfirmBox:new{
+                dismissable = false,
+                text = _("KOReader needs to be restarted."),
+                ok_text = save_text,
+                margin = Size.margin.tiny,
+                padding = Size.padding.tiny,
+                ok_callback = function()
+                    if Device:canRestart() then
+                        UIManager:restartKOReader()
+                        -- The new Clara BW is so quick closing that when presing on Restart it doesn't flash
+                        -- Set a little delay for all devices
+                        local util = require("ffi/util")
+                        util.usleep(100000)
+                    else
+                        UIManager:quit()
+                    end
+                end,
+                cancel_text = _("No need to restart"),
+                cancel_callback = function()
+                    logger.info("discard defaults")
+                end,
+            })
         end,
         hold_callback = function()
         end
