@@ -1073,19 +1073,19 @@ function ReaderUI:onAdjustMarginsTopbar()
         if self.view.footer_visible then
             local footer_height = self.view.footer.height
             if self.view.footer.settings.bar_top == true then
-                local margins = { 12, footer_height + 4, 12, 0}
+                local margins = { 15, footer_height + 4, 15, 0}
                 self.document.configurable.t_page_margin = footer_height + 4
                 self.document.configurable.b_page_margin = 0
-                self.document.configurable.h_page_margins[1] = 12
-                self.document.configurable.h_page_margins[2] = 12
+                self.document.configurable.h_page_margins[1] = 15
+                self.document.configurable.h_page_margins[2] = 15
                 self:handleEvent(Event:new("SetPageMargins", margins))
             else
-                local margins = { 12, 12, 12, footer_height}
+                local margins = { 15, 12, 15, footer_height}
 
                 self.document.configurable.t_page_margin = 12
                 self.document.configurable.b_page_margin = footer_height
-                self.document.configurable.h_page_margins[1] = 12
-                self.document.configurable.h_page_margins[2] = 12
+                self.document.configurable.h_page_margins[1] = 15
+                self.document.configurable.h_page_margins[2] = 15
                 self:handleEvent(Event:new("SetPageMargins", margins))
             end
         else
