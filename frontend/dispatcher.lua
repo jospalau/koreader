@@ -1175,6 +1175,12 @@ function Dispatcher:_showAsMenu(settings, exec_props)
     local display_list = Dispatcher:getDisplayList(settings)
     local quickmenu
     local buttons = {}
+    --local dump = require("dump")
+    --print(dump(exec_props))
+    local font_face = "myfont2"
+    if exec_props["gesture"]["multiswipe_directions"] and exec_props["gesture"]["multiswipe_directions"] == "north east" then
+        font_face = "myfont"
+    end
     if exec_props and exec_props.qm_show then
         table.insert(buttons, {{
             text = _("Execute all"),
@@ -1283,7 +1289,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                 text = v.text,
                 enabled = Dispatcher:isActionEnabled(settingsList[v.key]),
                 align = "left",
-                font_face = "myfont2",
+                font_face = font_face,
                 font_size = 17,
                 font_bold = true,
                 is_quickmenu_button = true,
