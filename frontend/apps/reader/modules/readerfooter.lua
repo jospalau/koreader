@@ -740,7 +740,7 @@ local ReaderFooter = WidgetContainer:extend{
     pageno = nil,
     pages = nil,
     footer_text = nil,
-    text_font_face = "ffont",
+    text_font_face = "myfont",
     height = Screen:scaleBySize(G_defaults:readSetting("DMINIBAR_CONTAINER_HEIGHT")),
     horizontal_margin = Size.span.horizontal_default,
     bottom_padding = Size.padding.tiny,
@@ -1065,9 +1065,13 @@ function ReaderFooter:updateFooterContainer()
     else
         table.insert(self.vertical_frame, self.footer_container)
     end
+    -- If we don't use background, it will be transparent
+    -- Bear in mind autorefresh won't refresh properly
+    -- The self.autoRefreshFooter() function will need a second parameter true:
+    -- self:onUpdateFooter(self:shouldBeRepainted(), true)
     self.footer_content = FrameContainer:new{
         self.vertical_frame,
-        --background = Blitbuffer.COLOR_WHITE,
+        background = Blitbuffer.COLOR_WHITE,
         bordersize = 0,
         padding = 0,
         padding_bottom = self.bottom_padding,
