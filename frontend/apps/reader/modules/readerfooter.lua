@@ -1067,7 +1067,7 @@ function ReaderFooter:updateFooterContainer()
     end
     self.footer_content = FrameContainer:new{
         self.vertical_frame,
-        background = Blitbuffer.COLOR_WHITE,
+        --background = Blitbuffer.COLOR_WHITE,
         bordersize = 0,
         padding = 0,
         padding_bottom = self.bottom_padding,
@@ -2658,10 +2658,12 @@ function ReaderFooter:onToggleFooterMode()
     if self.has_no_mode and self.settings.disable_progress_bar then return end
     if self.settings.all_at_once or self.has_no_mode then
         if self.mode >= 1 then
-            self.ui.view[4]:showTopBar()
+            --self.ui.view[4]:showTopBar()
+            self.ui.view[4].status_bar = false
             self.mode = self.mode_list.off
         else
-            self.ui.view[4]:hideTopBar()
+            --self.ui.view[4]:hideTopBar()
+            self.ui.view[4].status_bar = true
             self.mode = self.mode_list.page_progress
         end
     else

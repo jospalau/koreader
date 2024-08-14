@@ -1069,7 +1069,7 @@ end
 
 function ReaderUI:onAdjustMarginsTopbar()
     local Event = require("ui/event")
-    if not G_reader_settings:isTrue("show_top_bar") then
+    if not G_reader_settings:isTrue("show_top_bar") or self.view[4].status_bar == true then
         if self.view.footer_visible then
             local footer_height = self.view.footer.height
             if self.view.footer.settings.bar_top == true then
