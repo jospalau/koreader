@@ -433,7 +433,7 @@ Note that your selected font size is not affected by this setting.]]),
                 item_text = not Device:isTouchDevice() and {_("decrease"), _("increase")} or nil,
                 more_options = true,
                 more_options_param = {
-                    value_min = 12,
+                    value_min = 6,
                     value_max = 255,
                     value_step = 0.5,
                     precision = "%.1f",
