@@ -1073,9 +1073,8 @@ function ReaderUI:onAdjustMarginsTopbar()
         if self.view.footer_visible then
             local footer_height = self.view.footer.settings.container_height
             + self.view.footer.settings.progress_style_thick_height
-            + self.view.footer.settings.container_bottom_padding
             if self.view.footer.settings.bar_top == true then
-                footer_height = footer_height + self.view.footer.settings.top_padding + 4
+                footer_height = footer_height + self.view.footer.settings.top_padding
                 local margins = { 15, footer_height, 15, 0}
                 self.document.configurable.t_page_margin = footer_height
                 self.document.configurable.b_page_margin = 0
@@ -1083,8 +1082,8 @@ function ReaderUI:onAdjustMarginsTopbar()
                 self.document.configurable.h_page_margins[2] = 15
                 self:handleEvent(Event:new("SetPageMargins", margins))
             else
+                footer_height = footer_height + self.view.footer.settings.container_bottom_padding
                 local margins = { 15, 12, 15, footer_height}
-
                 self.document.configurable.t_page_margin = 12
                 self.document.configurable.b_page_margin = footer_height
                 self.document.configurable.h_page_margins[1] = 15
