@@ -1071,10 +1071,13 @@ function ReaderUI:onAdjustMarginsTopbar()
     local Event = require("ui/event")
     if not G_reader_settings:isTrue("show_top_bar") or self.view[4].status_bar == true then
         if self.view.footer_visible then
-            local footer_height = self.view.footer.height
+            local footer_height = self.view.footer.settings.container_height
+            + self.view.footer.settings.progress_style_thick_height
+            + self.view.footer.settings.container_bottom_padding
             if self.view.footer.settings.bar_top == true then
-                local margins = { 15, footer_height + 4, 15, 0}
-                self.document.configurable.t_page_margin = footer_height + 4
+                footer_height = footer_height + self.view.footer.settings.top_padding + 4
+                local margins = { 15, footer_height, 15, 0}
+                self.document.configurable.t_page_margin = footer_height
                 self.document.configurable.b_page_margin = 0
                 self.document.configurable.h_page_margins[1] = 15
                 self.document.configurable.h_page_margins[2] = 15
