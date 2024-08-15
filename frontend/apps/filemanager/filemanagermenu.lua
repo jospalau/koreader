@@ -1078,7 +1078,6 @@ Tap a book in the search results to open it.]]),
                 ["toggle_horizontal_vertical"] = true,
                 ["settings"] = {
                     ["show_as_quickmenu"] = true,
-                    ["anchor_quickmenu"] = true,
                     ["keep_open_on_apply"] = true,
                     ["order"] = {
                         [1] = "profile_exec_Reset defaults",
