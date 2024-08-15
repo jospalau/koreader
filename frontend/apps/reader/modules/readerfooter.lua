@@ -2392,11 +2392,15 @@ function ReaderFooter:updateFooterPage(force_repaint, full_repaint)
 
     -- If the footer is on top we want to repaint it always, otherwise it will be double-painted
     -- in certain circumstances like when changing bright or selecting a new typography configuration
-    if self.settings.bar_top then
-        self:updateFooterText(true, true)
-    else
-        self:updateFooterText(force_repaint, full_repaint)
-    end
+    --if self.settings.bar_top then
+    --    self:updateFooterText(true, true)
+    --else
+    --    self:updateFooterText(force_repaint, full_repaint)
+    --end
+
+    -- Full repaint always, otherwise, the status bar always covers the topbar side text which
+    -- was made visible recently
+    self:updateFooterText(force_repaint, true)
 end
 
 function ReaderFooter:updateFooterPos(force_repaint, full_repaint)
