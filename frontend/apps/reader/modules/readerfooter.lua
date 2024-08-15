@@ -557,7 +557,7 @@ local footerTextGeneratorMap = {
         if footer.pageno then
             if footer.ui.pagemap and footer.ui.pagemap:wantsPageLabels() then
                 -- (Page labels might not be numbers)
-                return ("%s / %s"):format(footer.ui.pagemap:getCurrentPageLabel(true),
+                return ("%s de %s"):format(footer.ui.pagemap:getCurrentPageLabel(true),
                                           footer.ui.pagemap:getLastPageLabel(true))
             end
             if footer.ui.document:hasHiddenFlows() then
@@ -571,7 +571,7 @@ local footerTextGeneratorMap = {
                     return ("[%d / %d]%d"):format(page, pages, flow)
                 end
             else
-                return ("%d / %d"):format(footer.pageno, footer.pages)
+                return ("%d de %d"):format(footer.pageno, footer.pages)
             end
         elseif footer.position then
             return ("%d / %d"):format(footer.position, footer.doc_height)
@@ -622,7 +622,7 @@ local footerTextGeneratorMap = {
         if footer.settings.pages_left_includes_current_page then
             left = left + 1
         end
-        return prefix .. " " .. left
+        return prefix .. " " .. ("%02d"):format(left)
     end,
     chapter_progress = function(footer)
         return footer:getChapterProgress()
@@ -740,7 +740,7 @@ local ReaderFooter = WidgetContainer:extend{
     pageno = nil,
     pages = nil,
     footer_text = nil,
-    text_font_face = "myfont",
+    text_font_face = "myfont3",
     height = Screen:scaleBySize(G_defaults:readSetting("DMINIBAR_CONTAINER_HEIGHT")),
     horizontal_margin = Size.span.horizontal_default,
     bottom_padding = Size.padding.tiny,
@@ -2730,7 +2730,7 @@ function ReaderFooter:getChapterProgress(get_percentage, pageno)
     if get_percentage then
         return current / total
     end
-    return current .. " ⁄⁄ " .. total
+    return ("%d"):format(current) .. " de " .. ("%d"):format(total)
 end
 
 function ReaderFooter:onHoldFooter(ges)
