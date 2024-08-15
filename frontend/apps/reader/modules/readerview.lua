@@ -276,57 +276,57 @@ function ReaderView:paintTo(bb, x, y)
 
             -- This is just for when we want the top bar be on top. The hardcoded values are to put a single line top bar in top of the screen
             -- In the gesture action in onSwitchStatusBarText, we set self.height = Screen:scaleBySize(0). But there is no need to set Screen:scaleBySize(0). It was for any container (readerfooter.lua)
-            local rotation = Screen:getRotationMode()
-            if rotation == 0 or rotation == 2 then -- PORTRAIT
-                self.y_coordinate_top = -1640 -- Kobo Libra2, PocketBook y Kobo Palma
-
-                if Device.model == "Kobo_cadmus" then -- Kobo Sage
-                    self.y_coordinate_top = -1880
-                end
-
-                if Device.model == "KindlePaperWhite5" then -- Kindle PW5
-                    self.y_coordinate_top = -1615
-                end
-
-                if Device.model == "Kobo_goldfinch" or Device.model == "Kobo_spaBW" then -- Kobo Clara 2E and Kobo Clara BW
-                    self.y_coordinate_top = -1420
-                end
-
-                if Device.model == "ditingp_global" then -- Xiaomi
-                    self.y_coordinate_top = -2660
-                end
-
-                if Device.model == "ares" then -- LikeBook Ares
-                    self.y_coordinate_top = -1850
-                end
-            elseif rotation == 1 or rotation == 3 then -- LANDSCAPE
-                self.y_coordinate_top = -1220 -- Kobo Libra2, PocketBook y Kobo Palma
-
-                if Device.model == "Kobo_cadmus" then -- Kobo Sage
-                    self.y_coordinate_top = -1400
-                end
-
-                if Device.model == "KindlePaperWhite5" then -- Kindle PW5
-                    self.y_coordinate_top = -1615
-                end
-
-                if Device.model == "Kobo_goldfinch" or Device.model == "Kobo_spaBW" then -- Kobo Clara 2E and Kobo Clara BW
-                    self.y_coordinate_top = -1040
-                end
-
-                if Device.model == "ditingp_global" then -- Xiaomi
-                    self.y_coordinate_top = -2660
-                end
-
-                if Device.model == "ares" then -- LikeBook Ares
-                    self.y_coordinate_top = -1380
-                end
-            -- elseif rotation == 2 then key = "REVERSE_PORTRAIT"
-            -- elseif rotation == 3 then key = "REVERSE_LANDSCAPE"
-            end
+--            local rotation = Screen:getRotationMode()
+--            if rotation == 0 or rotation == 2 then -- PORTRAIT
+--                self.y_coordinate_top = -1640 -- Kobo Libra2, PocketBook y Kobo Palma
+--
+--                if Device.model == "Kobo_cadmus" then -- Kobo Sage
+--                    self.y_coordinate_top = -1880
+--                end
+--
+--                if Device.model == "KindlePaperWhite5" then -- Kindle PW5
+--                    self.y_coordinate_top = -1615
+--                end
+--
+--                if Device.model == "Kobo_goldfinch" or Device.model == "Kobo_spaBW" then -- Kobo Clara 2E and Kobo Clara BW
+--                    self.y_coordinate_top = -1420
+--                end
+--
+--                if Device.model == "ditingp_global" then -- Xiaomi
+--                    self.y_coordinate_top = -2660
+--                end
+--
+--                if Device.model == "ares" then -- LikeBook Ares
+--                    self.y_coordinate_top = -1850
+--                end
+--            elseif rotation == 1 or rotation == 3 then -- LANDSCAPE
+--                self.y_coordinate_top = -1220 -- Kobo Libra2, PocketBook y Kobo Palma
+--
+--                if Device.model == "Kobo_cadmus" then -- Kobo Sage
+--                    self.y_coordinate_top = -1400
+--                end
+--
+--                if Device.model == "KindlePaperWhite5" then -- Kindle PW5
+--                    self.y_coordinate_top = -1615
+--                end
+--
+--                if Device.model == "Kobo_goldfinch" or Device.model == "Kobo_spaBW" then -- Kobo Clara 2E and Kobo Clara BW
+--                    self.y_coordinate_top = -1040
+--                end
+--
+--                if Device.model == "ditingp_global" then -- Xiaomi
+--                    self.y_coordinate_top = -2660
+--                end
+--
+--                if Device.model == "ares" then -- LikeBook Ares
+--                    self.y_coordinate_top = -1380
+--                end
+--            -- elseif rotation == 2 then key = "REVERSE_PORTRAIT"
+--            -- elseif rotation == 3 then key = "REVERSE_LANDSCAPE"
+--            end
 
             -- Hardcode previous code is more accurate and it works independently of the Screen DPI configured
-            -- It has been test and changed for every device with Auto DPI and it may varied a little bit, but that's why there is a top_padding variable configurable in the Status Bar section
+            -- It has been tested and changed for every device with Auto DPI and it may varied a little bit, but that's why there is a top_padding variable configurable in the Status Bar section
 
             -- This is the previous code that has been discarded. It also works though....adjusting the top_padding variable if we have to
             -- -- If we want to put the real container on top with the rest of stuff, we need to substract the container height
@@ -343,7 +343,9 @@ function ReaderView:paintTo(bb, x, y)
             --    top_padding = self.footer.settings.container_height
             --end
             -- In both cases we add top_padding to fix it if we have to move it slightly down
-            self.y_coordinate_top = self.y_coordinate_top + Screen:scaleBySize(top_padding)
+            -- Using the screen size again. It seems to be better (no hardcoding) if we don't use scaleBySize() for height
+            --self.y_coordinate_top = self.y_coordinate_top + Screen:scaleBySize(top_padding)
+            self.y_coordinate_top = -Screen:getHeight() + self.footer.height + Screen:scaleBySize(top_padding)
             self.footer:paintTo(bb, x, self.y_coordinate_top)
         end
 
