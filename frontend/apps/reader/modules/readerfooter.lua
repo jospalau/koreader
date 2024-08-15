@@ -622,7 +622,7 @@ local footerTextGeneratorMap = {
         if footer.settings.pages_left_includes_current_page then
             left = left + 1
         end
-        return prefix .. " " .. ("%02d"):format(left)
+        return prefix .. " " .. ("%d"):format(left)
     end,
     chapter_progress = function(footer)
         return footer:getChapterProgress()
@@ -1069,6 +1069,9 @@ function ReaderFooter:updateFooterContainer()
     -- Bear in mind autorefresh won't refresh properly
     -- The self.autoRefreshFooter() function will need a second parameter true:
     -- self:onUpdateFooter(self:shouldBeRepainted(), true)
+
+    -- In any case, the function updateFooterPage() returns now and always true:
+    -- self:updateFooterText(force_repaint, true)
     self.footer_content = FrameContainer:new{
         self.vertical_frame,
         background = Blitbuffer.COLOR_WHITE,
