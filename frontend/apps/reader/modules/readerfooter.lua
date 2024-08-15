@@ -1074,7 +1074,7 @@ function ReaderFooter:updateFooterContainer()
     -- self:updateFooterText(force_repaint, true)
     self.footer_content = FrameContainer:new{
         self.vertical_frame,
-        background = Blitbuffer.COLOR_WHITE,
+        background = Blitbuffer.COLOR_GRAY,
         bordersize = 0,
         padding = 0,
         padding_bottom = self.bottom_padding,
@@ -3711,9 +3711,14 @@ end
 function ReaderFooter:onMoveStatusBar()
     local text = ""
     if self.settings.bar_top then
+        --self.bottom_padding = self.old_bottom_padding
+        --self.settings.container_bottom_padding = self.old_bottom_padding
         text = "status bar set to bottom"
         self.settings.progress_bar_position = "below"
     else
+        --self.old_bottom_padding = self.bottom_padding
+        --self.bottom_padding = 0
+        --self.settings.container_bottom_padding = 0
         text = "status bar set to top"
         self.settings.progress_bar_position = "above"
     end
