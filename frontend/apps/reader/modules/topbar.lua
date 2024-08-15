@@ -1203,13 +1203,7 @@ end
 
 function TopBar:onAdjustMarginsTopbar()
     local Event = require("ui/event")
-    if self.status_bar then
-        -- This source receives the event first and it looks like that if we return the event dies here
-        -- We call it manually then
-        self.ui:onAdjustMarginsTopbar()
-        return 1
-    end
-    if G_reader_settings:isTrue("show_top_bar") then
+    if G_reader_settings:isTrue("show_top_bar") and not self.status_bar then
 
         -- local configurable = self.ui.document.configurable
         -- local margins = { TopBar.MARGIN_SIDES, TopBar.MARGIN_TOP, TopBar.MARGIN_SIDES, TopBar.MARGIN_BOTTOM}
