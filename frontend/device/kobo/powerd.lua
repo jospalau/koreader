@@ -475,7 +475,7 @@ end
 -- To see the differences
 -- git diff upstream/master -- frontend/device/kobo/powerd.lua
 -- After more official changes, the Kobo Libra Colour works fine, but not the Kobo Clara 2E
--- A few changes have been made for the Kobo Clara 2E which are my original changes
+-- A few changes have been made for the Kobo Clara 2E
 -- And also, no change is necessary in the generic powerd source:
 -- git diff upstream/master -- frontend/device/generic/powerd.lua
 -- Turn off front light before suspend.
@@ -497,11 +497,7 @@ function KoboPowerD:beforeSuspend()
         --       (Neither yieldToEPDC nor nextTick & friends quite cut it here)...
         -- In new Kobo color models, the light is switched off after a few quick suspend/resumes
         -- This fixes it. Left for all model
-        if self.device:info() ~= "Kobo_goldfinch" then -- ~- Clara2E
-            UIManager:scheduleIn(0.001, self._suspendFrontlight, self)
-        else
-            self:_suspendFrontlight() -- Do not schedule
-        end
+        UIManager:scheduleIn(0.001, self._suspendFrontlight, self)
     end
 end
 
@@ -521,11 +517,7 @@ function KoboPowerD:_resumeFrontlight()
             self:setIntensityHW(self.fl_min)
         end
         -- Turn the frontlight back on
-        if self.device:info() ~= "Kobo_goldfinch" then -- ~- Clara2E
-            self:turnOnFrontlight()
-        else
-            UIManager:scheduleIn(0.001, self.turnOnFrontlight, self) --The scheduleIn here makes the trick
-        end
+        self:turnOnFrontlight()
     end
 end
 
@@ -554,11 +546,7 @@ function KoboPowerD:afterResume()
         --
         -- Turn the frontlight back on
         -- NOTE: There's quite likely *more* resource contention than on suspend here :/.
-        if self.device:info() ~= "Kobo_goldfinch" then -- ~- Clara2E
-            UIManager:scheduleIn(0.001, self._resumeFrontlight, self)
-        else
-            self:_resumeFrontlight() -- Do not schedule
-        end
+        UIManager:scheduleIn(0.001, self._resumeFrontlight, self)
     end
     -- We do this in the generic power source when switching on light
     -- For the topbar to show the light indicator after resume. Done on OutOfScreenSaver event in devicelistener.lua
