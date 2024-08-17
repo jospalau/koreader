@@ -1076,7 +1076,9 @@ function ReaderRolling:updatePos(force)
         self.ui:handleEvent(Event:new("DocumentRerendered"))
     end
     self:onUpdateTopStatusBarMarkers()
-    -- ui to test dispatcher
+    -- Change from partial to ui to test dispatcher
+    -- Actioned when applying a profile with the current typography being used
+    -- No impact for the moment
     UIManager:setDirty(self.view.dialog, "ui")
     self.current_header_height = self.view.view_mode == "page" and self.ui.document:getHeaderHeight() or 0
     -- Allow for the new rendering to be shown before possibly showing
@@ -1664,7 +1666,9 @@ function ReaderRolling:handleRenderingDelayed()
     self._stepRerenderingAutomation(self.RENDERING_STATE.PARTIALLY_RERENDERED)
     -- Have ReaderView draw the current page, which will provoke the partial rerendering
     -- of the DocFragement the current page is from.
-    -- ui to test dispatcher
+    -- Change from partial to ui to test dispatcher
+    -- Actioned when changing typography from a profile at least
+    -- No impact for the moment
     UIManager:setDirty(self.view.dialog, "ui")
 end
 
