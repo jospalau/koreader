@@ -412,11 +412,19 @@ function SortWidget:_populateItems()
             show_parent = self,
         }
         table.insert(self.layout, #self.layout, {item})
-        table.insert(
-            self.main_content,
-            item
-        )
+        table.insert(self.main_content, item)
     end
+    if self.marked == 0 then
+        -- Reset the focus to the top of the page when we're not moving an item (#12342)
+        self:moveFocusTo(1, 1)
+    else
+        -- When we're moving an item, move the focus to the footer (last row),
+        -- while keeping the focus on the current button (or cancel for the initial move,
+        -- as there's only one column of items, so x == 1, which points to the first button, which is cancel).
+        -- even when we change pages and the amount of rows may have changed
+        self:moveFocusTo(self.selected.x, #self.layout)
+    end
+
     -- NOTE: We forgo our usual "Page x of y" wording because of space constraints given the way the widget is currently built
     self.footer_page:setText(T(C_("Pagination", "%1 / %2"), self.show_page, self.pages), self.footer_center_width)
     if self.pages > 1 then
@@ -430,11 +438,14 @@ function SortWidget:_populateItems()
         chevron_first, chevron_last = chevron_last, chevron_first
     end
     if self.marked > 0 then
+        -- setIcon will recreate the frame, but we want to preserve the focus inversion
+        self.footer_cancel.preselect = self.footer_cancel.frame.invert
         self.footer_cancel:setIcon("cancel", self.footer_button_width)
         self.footer_cancel.callback = function() self:onCancel() end
         self.footer_first_up:setIcon("move.up", self.footer_button_width)
         self.footer_last_down:setIcon("move.down", self.footer_button_width)
     else
+        self.footer_cancel.preselect = self.footer_cancel.frame.invert
         self.footer_cancel:setIcon("exit", self.footer_button_width)
         self.footer_cancel.callback = function() self:onClose() end
         self.footer_first_up:setIcon(chevron_first, self.footer_button_width)
