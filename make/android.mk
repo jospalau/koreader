@@ -1,7 +1,7 @@
 # Use the git commit count as the (integer) Android version code
 ANDROID_VERSION ?= $(shell git rev-list --count HEAD)
 ANDROID_NAME ?= $(VERSION)
-ANDROID_APK = koreader-android-$(ANDROID_ARCH)$(KODEDUG_SUFFIX)-$(VERSION).apk
+ANDROID_APK = koreader-android-$(ANDROID_ARCH)$(KODEDUG_SUFFIX)-$(ANDROID_NAME).apk
 
 # Run. {{{
 
@@ -67,7 +67,9 @@ androiddev: update
 update: all
 	# Note: do not remove the module directory so there's no need
 	# for `mk7z.sh` to always recreate `assets.7z` from scratch.
-	rm -rfv $(ANDROID_LIBS)
+	rm -rf $(ANDROID_LIBS)
+	# Remove old in-tree build artifacts that could conflict.
+	rm -rf $(ANDROID_LAUNCHER_DIR)/assets/{libs,module}
 	# APK version
 	mkdir -p $(ANDROID_ASSETS)/module $(ANDROID_LIBS)
 	echo $(VERSION) >$(ANDROID_ASSETS)/module/version.txt
