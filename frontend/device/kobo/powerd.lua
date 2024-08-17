@@ -489,7 +489,8 @@ function KoboPowerD:beforeSuspend()
         -- We only want the *last* scheduled suspend/resume frontlight task to run to avoid ramps running amok...
         UIManager:unschedule(self._suspendFrontlight)
         UIManager:unschedule(self._resumeFrontlight)
-        if self.device:info() ~= "Kobo_goldfinch" then -- ~- Clara2E
+        if self.device:info() ~= "Kobo_goldfinch" and -- ~- Clara2E
+           self.device:info() ~= "Kobo_condor" then -- ~- Elipsa2E
             self:_stopFrontlightRamp()
         end
         -- Turn off the frontlight
@@ -540,7 +541,8 @@ function KoboPowerD:afterResume()
         -- At least in Clara 2E if we open the sleep cover and put it back on in less than a second but not too quick
         -- light does not switch on if it was switched on before suspend
         -- and light switches on if it was switched off before suspend
-        if self.device:info() ~= "Kobo_goldfinch" then -- ~- Clara2E
+        if self.device:info() ~= "Kobo_goldfinch" and -- ~- Clara2E
+           self.device:info() ~= "Kobo_condor" then -- ~- Elipsa2E
             self:_stopFrontlightRamp()
         end
         --
