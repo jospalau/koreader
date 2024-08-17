@@ -1071,6 +1071,9 @@ function ReaderUI:onAdjustMarginsTopbar()
     local Event = require("ui/event")
     if not G_reader_settings:isTrue("show_top_bar") or self.view[4].status_bar == true then
         if self.view.footer_visible then
+            -- We want physical pixels because margins are set up like this
+            -- so, we can't use self.view.footer:getHeight()
+            -- and that's why we get the size of the different components of the status bar separately
             local footer_height = self.view.footer.settings.container_height
             + self.view.footer.settings.progress_style_thick_height
             --local dump = require("dump")

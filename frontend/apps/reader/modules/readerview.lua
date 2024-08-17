@@ -345,6 +345,7 @@ function ReaderView:paintTo(bb, x, y)
             -- In both cases we add top_padding to fix it if we have to move it slightly down
             -- Using the screen size again. It seems to be better (no hardcoding) if we don't use scaleBySize() for height
             --self.y_coordinate_top = self.y_coordinate_top + Screen:scaleBySize(top_padding)
+            -- We need scaled pixels and that's what we get with self.footer:getHeight()
             self.y_coordinate_top = -Screen:getHeight() + self.footer:getHeight() + Screen:scaleBySize(top_padding)
             self.footer:paintTo(bb, x, self.y_coordinate_top)
         end
