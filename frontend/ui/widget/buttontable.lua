@@ -85,6 +85,7 @@ function ButtonTable:init()
                 vsync = btn_entry.vsync,
                 is_quickmenu_button = btn_entry.is_quickmenu_button,
                 width = btn_entry.width or default_button_width,
+                height = btn_entry.height,
                 bordersize = 0,
                 margin = 0,
                 padding = Size.padding.buttontable, -- a bit taller than standalone buttons, for easier tap
