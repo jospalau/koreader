@@ -765,7 +765,7 @@ function MosaicMenuItem:paintTo(bb, x, y)
 
     local in_history =  require("readhistory"):getIndexByFile(self.filepath)
     local has_sidecar_file = DocSettings:hasSidecarFile(self.filepath)
-
+    local current_reading = false
     if self.do_hint_opened and (self.been_opened or in_history) then
         -- bottom right corner
         local ix
@@ -793,14 +793,23 @@ function MosaicMenuItem:paintTo(bb, x, y)
         local ui = require("apps/reader/readerui").instance
         if ui and ui.document then
             if ui.document.file == self.filepath then
-                corner_mark = reading_mark
+                --corner_mark = reading_mark
+                current_reading = true
+                ix = math.floor((self.width - target.dimen.w)/2)
+                rect_ix = target.bordersize
+                local rect_size = corner_mark_size - target.bordersize
+                --bb:paintRect(x+ix+rect_ix, target.dimen.y+target.bordersize, rect_size, rect_size, Blitbuffer.COLOR_GRAY)
+                --collection_mark:paintTo(bb, x+ix+rect_ix, target.dimen.y+iy)
+                collection_mark:paintTo(bb, x+ix+rect_ix, target.dimen.y+target.bordersize)
             end
         end
 
-        corner_mark:paintTo(bb, x+ix, y+iy)
+        if not current_reading then
+            corner_mark:paintTo(bb, x+ix, y+iy)
+        end
     end
 
-    if self.show_progress_bar then
+    if self.show_progress_bar and not current_reading then
         local progress_widget_margin = math.floor((corner_mark_size - progress_widget.height) / 2)
         progress_widget.width = target.width - 2*progress_widget_margin
         local pos_x = x + math.ceil((self.width - progress_widget.width) / 2)
