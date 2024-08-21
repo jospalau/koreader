@@ -786,9 +786,17 @@ function MosaicMenuItem:paintTo(bb, x, y)
             corner_mark = reading_mark
         end
 
-         if in_history and not has_sidecar_file then
+        if in_history and not has_sidecar_file then
             corner_mark = mbr_mark
-         end
+        end
+
+        local ui = require("apps/reader/readerui").instance
+        if ui and ui.document then
+            if ui.document.file == self.filepath then
+                corner_mark = reading_mark
+            end
+        end
+
         corner_mark:paintTo(bb, x+ix, y+iy)
     end
 
