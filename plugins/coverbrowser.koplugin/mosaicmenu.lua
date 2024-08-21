@@ -48,6 +48,7 @@ local complete_mark
 local mbr_mark
 local tbr_mark
 local collection_mark
+local target_mark
 local progress_widget
 
 -- ItemShortCutIcon (for keyboard navigation) is private to menu.lua and can't be accessed,
@@ -800,7 +801,7 @@ function MosaicMenuItem:paintTo(bb, x, y)
                 local rect_size = corner_mark_size - target.bordersize
                 --bb:paintRect(x+ix+rect_ix, target.dimen.y+target.bordersize, rect_size, rect_size, Blitbuffer.COLOR_GRAY)
                 --collection_mark:paintTo(bb, x+ix+rect_ix, target.dimen.y+iy)
-                collection_mark:paintTo(bb, x+ix+rect_ix, target.dimen.y+target.bordersize)
+                target_mark:paintTo(bb, x+ix+rect_ix, target.dimen.y+target.bordersize)
             end
         end
 
@@ -979,6 +980,15 @@ function MosaicMenu:_recalculateDimen()
             height = corner_mark_size,
             alpha = true,
         }
+        target_mark = IconWidget:new{
+            icon = "koreader",
+            width = corner_mark_size,
+            height = corner_mark_size,
+            alpha = true,
+        }
+        if target_mark then
+            target_mark:free()
+        end
     end
 
     -- Create or replace progress_widget if needed
