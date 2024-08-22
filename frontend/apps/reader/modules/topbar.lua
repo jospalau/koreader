@@ -696,20 +696,6 @@ end
 
 function TopBar:toggleBar(light_on)
     if TopBar.is_enabled then
-        local now_t = os.date("*t")
-        local daysdiff = now_t.day - os.date("*t",self.start_session_time).day
-        if daysdiff > 0 then
-            -- We insert here instead of in then footer
-            self.ui.statistics:insertDBSessionStats()
-
-            -- We do this in the footer
-            -- self.ui.statistics:insertDB()
-
-            self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm  = self:getReadTodayThisMonth(self.title)
-            self.start_session_time = os.time()
-        end
-
-
         local user_duration_format = "modern"
         local session_time = datetime.secondsToClockDuration(user_duration_format, os.time() - self.start_session_time, false)
 

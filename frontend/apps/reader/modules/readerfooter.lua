@@ -2445,47 +2445,6 @@ function ReaderFooter:_updateFooterText(force_repaint, full_repaint)
     end
     self.footer_text:setText(text)
 
-
-    local session_started = self.ui.statistics.start_current_period
-    local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
-    local duration = datetime.secondsToClockDuration(user_duration_format, os.time() - session_started, false)
-
-    -- local percentage_session, pages_read_session, duration, wpm_session, words_session, duration_raw, read_today = getSessionStats(self)
-
-
-    if not self.ui.statistics._initial_read_today then
-        percentage_session, pages_read_session, duration, wpm_session, words_session, duration_raw, self.ui.statistics._initial_read_today = getSessionStats(self)
-    end
-
-    -- This is to include the current session time in the current time read
-    local now_t = os.date("*t")
-    local daysdiff = now_t.day - os.date("*t",session_started).day
-    if daysdiff > 0 then
-        -- now_t.hour=0
-        -- now_t.min=0
-        -- now_t.sec=0
-        -- local seconds_since_md = os.time() - os.time(now_t)
-        -- read_today = seconds_since_md
-        -- read_today = 0
-
-        -- We do this in topbar.lua because we need it there to get there the updated times
-        -- self.ui.statistics:insertDBSessionStats()
-
-        -- Este evento ocurre antes que el evento onUpdateFooter de del plugin de estadísticas
-        -- Lo que quiere decir que al inicializar las siguientes variables, tendremos que esperar a completar esta nueva sesión de lectura
-        -- del siguiente día para que la información se guarde en la base de datos, ya que si no se pierde. También podemos hacer la llamada directamente
-        self.ui.statistics:insertDB()
-        self.ui.statistics._initial_read_today = nil
-        self.ui.statistics.start_current_period = os.time()
-        self.ui.statistics._pages_turned = 0
-        self.ui.statistics._total_pages = 0
-        self.ui.statistics._total_words  = 0
-        -- duration = "00:00:00"
-        -- self:onUpdateFooter(true, true)
-        -- else
-        -- read_today = self.ui.statistics._initial_read_today + (os.time() - session_started)
-    end
-
     if self.settings.disable_progress_bar then
         if self.has_no_mode or text == "" then
             self.text_width = 0

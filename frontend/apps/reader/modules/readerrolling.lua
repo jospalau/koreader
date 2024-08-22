@@ -716,6 +716,26 @@ end
 function ReaderRolling:onPageUpdate(new_page)
     self.current_page = new_page
     self:updateBatteryState()
+    local now_t = os.date("*t")
+    local session_started = self.ui.statistics.start_current_period
+    local daysdiff = now_t.day - os.date("*t", session_started).day
+    if daysdiff > 0 then
+        self.ui.statistics:insertDBSessionStats()
+
+        -- We do this in the footer
+        -- self.ui.statistics:insertDB()
+        self.ui.statistics:insertDB()
+        self.ui.statistics._initial_read_today = nil
+        self.ui.statistics.start_current_period = os.time()
+        self.ui.statistics._pages_turned = 0
+        self.ui.statistics._total_pages = 0
+        self.ui.statistics._total_words  = 0
+        local topbar = self.ui.view[4]
+        if topbar then
+            topbar.initial_read_today, topbar.initial_read_month, topbar.initial_total_time_book, topbar.avg_wpm  = topbar:getReadTodayThisMonth(topbar.title)
+            topbar.start_session_time = os.time()
+        end
+    end
 end
 
 function ReaderRolling:onResume()
