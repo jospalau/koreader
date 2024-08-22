@@ -1062,9 +1062,8 @@ function ReaderStatistics:insertDBSessionStats()
     if duration_raw < 360 or self._total_pages < 6 then
         return
     end
-    local UIManager = require("ui/uimanager")
-    local Notification = require("ui/widget/notification")
-
+    --date -s "2024-08-22 23:59:33"
+    --print(string.format("%d, %d, %d", self.start_current_period, duration_raw, self._total_pages))
     local conn = SQ3.open(db_location)
     -- conn:exec('BEGIN;')
     local stmt = conn:prepare("INSERT INTO wpm_stat_data VALUES(?, ?, ?, ?, ?, ?, ?);")
