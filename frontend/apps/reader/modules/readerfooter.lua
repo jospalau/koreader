@@ -1131,6 +1131,7 @@ function ReaderFooter:rescheduleFooterAutoRefreshIfNeeded()
             -- be fine refreshing it if the widget is not covering it, but this is hard to
             -- guess from here.)
             if self.ui.view[4] then
+                self:checkNewDay()
                 self.ui.view[4]:toggleBar()
                 UIManager:setDirty(self.ui.view[4], "ui")
             end
@@ -2555,8 +2556,7 @@ function ReaderFooter:onTocReset()
     end
 end
 
-function ReaderFooter:onPageUpdate(pageno)
-    local toc_markers_update = false
+function ReaderFooter:checkNewDay()
     -- Put this code here, before topbar event and works even footer off
     local now_t = os.date("*t")
     local session_started = self.ui.statistics.start_current_period
@@ -2578,7 +2578,11 @@ function ReaderFooter:onPageUpdate(pageno)
             topbar.start_session_time = os.time()
         end
     end
+end
 
+function ReaderFooter:onPageUpdate(pageno)
+    local toc_markers_update = false
+    self:checkNewDay()
     if self.ui.document:hasHiddenFlows() then
         local flow = self.pageno and self.ui.document:getPageFlow(self.pageno)
         local new_flow = pageno and self.ui.document:getPageFlow(pageno)
