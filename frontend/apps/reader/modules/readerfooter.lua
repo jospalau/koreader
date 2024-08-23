@@ -1100,6 +1100,8 @@ function ReaderFooter:unscheduleFooterAutoRefresh()
 end
 
 function ReaderFooter:shouldBeRepainted()
+    -- Since self.autoRefreshFooter() repaints also the topbar
+    -- Repaint also when topbar is active even if footer is not visible
     if not self.view.footer_visible and not G_reader_settings:isTrue("show_top_bar") then
         return false
     end
@@ -2719,7 +2721,7 @@ function ReaderFooter:onToggleFooterMode()
     end
     self:applyFooterMode()
     G_reader_settings:saveSetting("reader_footer_mode", self.mode)
-    self:onUpdateFooter(true)
+    --self:onUpdateFooter(true)
     self:refreshFooter(true, true)
     self:rescheduleFooterAutoRefreshIfNeeded()
     return true
