@@ -1128,6 +1128,10 @@ function ReaderFooter:rescheduleFooterAutoRefreshIfNeeded()
             -- (We want to avoid the footer to be painted over a widget covering it - we would
             -- be fine refreshing it if the widget is not covering it, but this is hard to
             -- guess from here.)
+            if self.ui.view[4] then
+                self.ui.view[4]:toggleBar()
+                UIManager:setDirty("all", "ui")
+            end
             self:onUpdateFooter(self:shouldBeRepainted())
 
             self:rescheduleFooterAutoRefreshIfNeeded() -- schedule (or not) next refresh
