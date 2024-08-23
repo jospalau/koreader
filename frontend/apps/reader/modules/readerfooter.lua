@@ -1130,7 +1130,7 @@ function ReaderFooter:rescheduleFooterAutoRefreshIfNeeded()
             -- guess from here.)
             if self.ui.view[4] then
                 self.ui.view[4]:toggleBar()
-                UIManager:setDirty("all", "ui")
+                UIManager:setDirty(self.ui.view[4], "ui")
             end
             self:onUpdateFooter(self:shouldBeRepainted())
 
