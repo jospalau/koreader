@@ -993,7 +993,7 @@ end
 function TopBar:paintTo(bb, x, y)
     if self.status_bar and self.status_bar == true then
         self[10][1][1]:setText(self.time_battery_text_text:reverse())
-        self[10]:paintTo(bb, x - self[10][1][1]:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))        self[10]:paintTo(bb, x - self[10][1][1]:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))        self[10]:paintTo(bb, x - self[10][1][1]:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
+        self[10]:paintTo(bb, x - self[10][1][1]:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
         self[4][1][1]:setText(self.times_text_text:reverse())
         self[4]:paintTo(bb, x - Screen:getHeight() + TopBar.MARGIN_BOTTOM + Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
         return
