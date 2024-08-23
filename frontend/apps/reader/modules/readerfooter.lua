@@ -2563,9 +2563,6 @@ function ReaderFooter:checkNewDay()
     local daysdiff = now_t.day - os.date("*t", session_started).day
     if daysdiff > 0 then
         self.ui.statistics:insertDBSessionStats()
-
-        -- We do this in the footer
-        -- self.ui.statistics:insertDB()
         self.ui.statistics:insertDB()
         self.ui.statistics._initial_read_today = nil
         self.ui.statistics.start_current_period = os.time()
