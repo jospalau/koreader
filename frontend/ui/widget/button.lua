@@ -398,7 +398,11 @@ function Button:_doFeedbackHighlight()
         self[1].invert = true
         UIManager:widgetInvert(self[1], self[1].dimen.x, self[1].dimen.y)
     end
-    UIManager:setDirty(nil, "fast", self[1].dimen)
+    if Device.model == "Kobo_spaBW" then -- fast is a bit glitchy in Kobo BW
+        UIManager:setDirty(nil, "ui", self[1].dimen)
+    else
+        UIManager:setDirty(nil, "fast", self[1].dimen)
+    end
 end
 
 function Button:_undoFeedbackHighlight(is_translucent)
