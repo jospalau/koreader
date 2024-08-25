@@ -3275,9 +3275,9 @@ function ReaderFooter:onGetTextPage()
     local cur_page = self.ui.document:getCurrentPage()
     local total_characters = 0
     -- if not Device:isPocketBook() then
-    total_characters = self.ui.document:getBookCharactersCount()
-    total_words = math.ceil(total_characters/5.7)
-    total_pages = math.ceil(total_characters/1767)
+    -- total_characters = self.ui.document:getBookCharactersCount()
+    -- total_words = math.ceil(total_characters/5.7)
+    -- total_pages = math.ceil(total_characters/1767)
     -- end
     local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
     -- local name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2 = "","","","","","","","","","","","","",""
