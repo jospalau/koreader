@@ -141,7 +141,7 @@ function BasePowerD:toggleFrontlight(done_callback)
     end
     if self:isFrontlightOff() then
         local ui = require("apps/reader/readerui").instance
-        if ui and ui.view[4] then
+        if ui and ui.view[4] and G_reader_settings:isTrue("show_top_bar") then
             ui.view[4]:toggleBar()
             UIManager:setDirty("all", "full")
         end
@@ -159,7 +159,7 @@ function BasePowerD:turnOffFrontlight(done_callback)
     end
     if self:isFrontlightOff() then
         local ui = require("apps/reader/readerui").instance
-        if ui and ui.view[4] then
+        if ui and ui.view[4] and G_reader_settings:isTrue("show_top_bar") then
             ui.view[4]:toggleBar()
             UIManager:setDirty("all", "full")
         end

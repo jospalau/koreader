@@ -1130,7 +1130,7 @@ function ReaderFooter:rescheduleFooterAutoRefreshIfNeeded()
             -- (We want to avoid the footer to be painted over a widget covering it - we would
             -- be fine refreshing it if the widget is not covering it, but this is hard to
             -- guess from here.)
-            if self.ui.view[4] then
+            if self.ui.view[4] and G_reader_settings:isTrue("show_top_bar") then
                 self:checkNewDay()
                 self.ui.view[4]:toggleBar()
                 UIManager:setDirty(self.ui.view[4], "ui")
