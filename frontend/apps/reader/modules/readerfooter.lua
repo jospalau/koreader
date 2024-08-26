@@ -3188,7 +3188,17 @@ function ReaderFooter:onGetStyles()
 
     local first_text = self.ui.document._document:getTextFromPositions(0, 0, 10, Screen:getHeight(), false, false)
     local html, css_files, css_selectors_offsets =
-    self.ui.document._document:getHTMLFromXPointers(first_text.pos0,first_text.pos1, 0xE830, true)
+    self.ui.document._document:getHTMLFromXPointers(first_text.pos0, first_text.pos1, 0xE830, true)
+    if html == nil then
+        local text =  "Could not retrieve styles"
+        UIManager:show(InfoMessage:new{
+            text = T(_(text)),
+            no_refresh_on_close = false,
+            face = Font:getFace("myfont3"),
+            width = math.floor(Screen:getWidth() * 0.85),
+        })
+        return true
+    end
     local htmlw=""
 
     -- No puedo hacerlo con gmatch, iré línea a línea que además viene bien para extraer las clases
