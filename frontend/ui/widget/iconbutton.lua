@@ -140,7 +140,11 @@ function IconButton:onTapIconButton()
         --       so we need to enqueue the actual refresh request for the unhighlight post-callback,
         --       otherwise, it's lost.
         --       This changes nothing in practice, since we follow by explicitly requesting to drain the refresh queue ;).
-        UIManager:setDirty(nil, "fast", self.dimen)
+        if Device.model == "Kobo_spaBW" then -- fast is a bit glitchy in Kobo BW
+            UIManager:setDirty(nil, "ui", self.dimen)
+        else
+            UIManager:setDirty(nil, "fast", self.dimen)
+        end
 
         UIManager:forceRePaint()
     end
