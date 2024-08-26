@@ -203,10 +203,10 @@ end
 -- Also unschedule on suspend (and we happen to also kill Wi-Fi to do so, so resetting the stats is also relevant here)
 function NetworkListener:onSuspend()
     logger.dbg("NetworkListener: onSuspend")
-    if Device:isPocketBook() then
-        os.execute("killall dropbear")
-        os.execute("rm /tmp/dropbear_koreader.pid")
-    end
+    -- if Device:isPocketBook() then
+    --     os.execute("killall dropbear")
+    --     os.execute("rm /tmp/dropbear_koreader.pid")
+    -- end
     -- If we haven't already (e.g., via Generic's onPowerEvent), kill Wi-Fi.
     -- Do so only on devices where we have explicit management of Wi-Fi: assume the host system does things properly elsewhere.
     if Device:hasWifiManager() and NetworkMgr:isWifiOn() then
