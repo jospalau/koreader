@@ -567,6 +567,13 @@ UIManager:setDirty(self.widget, function() return "ui", self.someelement.dimen e
 @bool refreshdither `true` if widget requires dithering (optional)
 ]]
 function UIManager:setDirty(widget, refreshtype, refreshregion, refreshdither)
+    -- if refreshtype ~= nil and type(refreshtype) ~= "function" then
+    --     print("paso " .. refreshtype .. " " ..  debug.getinfo(1).name .. " " .. debug.getinfo(2).name .. " " .. debug.getinfo(3).name)
+    --     local dump = require("dump")
+    --     print(dump(debug.getinfo(2)))
+    --     print("----")
+    -- end
+    --
     local widget_name
     if widget then
         widget_name = widget.name or widget.id or tostring(widget)
@@ -1117,6 +1124,7 @@ UIManager that a certain part of the screen is to be refreshed.
 @local Not to be used outside of UIManager!
 ]]
 function UIManager:_refresh(mode, region, dither)
+    -- print(debug.traceback())
     if not mode then
         -- This is most likely from a `show` or `close` that wasn't passed specific refresh details,
         -- (which is the vast majority of them), in which case we drop it to avoid enqueuing a useless full-screen refresh.
@@ -1294,6 +1302,8 @@ function UIManager:_repaint()
     end
 
     -- execute pending refresh functions
+    -- local dump = require("dump")
+    -- print(dump(self._refresh_func_stack))
     for _, refreshfunc in ipairs(self._refresh_func_stack) do
         local refreshtype, region, dither = refreshfunc()
         -- honor dithering hints from *anywhere* in the dirty stack
@@ -1547,6 +1557,8 @@ function UIManager:handleInput()
     -- wait for next batch of events
     local input_events = Input:waitEvent(now, deadline)
 
+    -- local dump = require("dump")
+    -- print(dump(input_events))
     -- delegate each input event to handler
     if input_events then
         -- Dispatch event hooks first, as some plugins (*cough* AutoSuspend *cough*)
