@@ -3323,6 +3323,17 @@ function ReaderFooter:onGetTextPage()
             unitheight = unitheight .. "*"
             unitheight2 = unitheight2 .. "*"
         end
+
+        if self.ui.tweaks:find("Indentation on first paragraph line") then
+            unitindent = unitindent .. "*"
+            unitindent2 = unitindent2 .. "*"
+        end
+
+        if self.ui.tweaks:find("Ignore publisher page margins") then
+            unitmargin = unitmargin .. "*"
+            unitmargin2 = unitmargin2 .. "*"
+        end
+
         if name ~= "" then
             local Math = require("optmath")
             -- If p doesnt have a class with line-height and body or the container tag does,
@@ -3334,9 +3345,9 @@ function ReaderFooter:onGetTextPage()
             margin =  Math.round(margin*100)/100 .. unitmargin
             margin2 = Math.round(margin2*100)/100 .. unitmargin2
             text_properties = string.format("%-15s%-10s%-5s","Tag",name2,name) .. string.char(10)
-            text_properties = text_properties .. string.format("%-15s%-10s%-5s","Line height",height2,height) .. string.char(10)
-            text_properties = text_properties .. string.format("%-15s%-10s%-5s","Text indent",indent2,indent) .. string.char(10)
-            text_properties = text_properties .. string.format("%-15s%-10s%-5s","Margin",margin2,margin)
+            text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Line height", height2,height) .. string.char(10)
+            text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Text indent", indent2,indent) .. string.char(10)
+            text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Margin", margin2,margin)
         end
     end
 
