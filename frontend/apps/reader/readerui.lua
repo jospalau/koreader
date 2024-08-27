@@ -1079,29 +1079,57 @@ function ReaderUI:onAdjustMarginsTopbar()
             --print(dump(self.document.configurable))
             if self.view.footer.settings.bar_top == true then
                 footer_height = footer_height + self.view.footer.settings.top_padding
-                if self.document.configurable.t_page_margin ~= footer_height or
-                   self.document.configurable.b_page_margin ~= 0 or
-                   self.document.configurable.h_page_margins[1] ~= 15 or
-                   self.document.configurable.h_page_margins[2] ~= 15 then
+                if Device:isAndroid() then
+                    if self.document.configurable.t_page_margin ~= footer_height or
+                    self.document.configurable.b_page_margin ~= 0 or
+                    self.document.configurable.h_page_margins[1] ~= 20 or
+                    self.document.configurable.h_page_margins[2] ~= 20 then
+                        local margins = { 20, footer_height, 20, 0}
+                        self.document.configurable.t_page_margin = footer_height
+                        self.document.configurable.b_page_margin = 0
+                        self.document.configurable.h_page_margins[1] = 20
+                        self.document.configurable.h_page_margins[2] = 20
+                        self:handleEvent(Event:new("SetPageMargins", margins))
+                    end
+                else
+                    if self.document.configurable.t_page_margin ~= footer_height or
+                    self.document.configurable.b_page_margin ~= 0 or
+                    self.document.configurable.h_page_margins[1] ~= 15 or
+                    self.document.configurable.h_page_margins[2] ~= 15 then
                         local margins = { 15, footer_height, 15, 0}
                         self.document.configurable.t_page_margin = footer_height
                         self.document.configurable.b_page_margin = 0
                         self.document.configurable.h_page_margins[1] = 15
                         self.document.configurable.h_page_margins[2] = 15
                         self:handleEvent(Event:new("SetPageMargins", margins))
+                    end
                 end
             else
                 footer_height = footer_height + self.view.footer.settings.container_bottom_padding
-                if self.document.configurable.t_page_margin ~= 12 or
-                   self.document.configurable.b_page_margin ~= footer_height or
-                   self.document.configurable.h_page_margins[1] ~= 15 or
-                   self.document.configurable.h_page_margins[2] ~= 15 then
+                if Device:isAndroid() then
+                    if self.document.configurable.t_page_margin ~= 12 or
+                    self.document.configurable.b_page_margin ~= footer_height or
+                    self.document.configurable.h_page_margins[1] ~= 20 or
+                    self.document.configurable.h_page_margins[2] ~= 20 then
+                        local margins = { 20, 12, 20, footer_height}
+                        self.document.configurable.t_page_margin = 12
+                        self.document.configurable.b_page_margin = footer_height
+                        self.document.configurable.h_page_margins[1] = 20
+                        self.document.configurable.h_page_margins[2] = 20
+                        self:handleEvent(Event:new("SetPageMargins", margins))
+                    end
+                else
+                    if self.document.configurable.t_page_margin ~= 12 or
+                    self.document.configurable.b_page_margin ~= footer_height or
+                    self.document.configurable.h_page_margins[1] ~= 15 or
+                    self.document.configurable.h_page_margins[2] ~= 15 then
                         local margins = { 15, 12, 15, footer_height}
                         self.document.configurable.t_page_margin = 12
                         self.document.configurable.b_page_margin = footer_height
                         self.document.configurable.h_page_margins[1] = 15
                         self.document.configurable.h_page_margins[2] = 15
-                    self:handleEvent(Event:new("SetPageMargins", margins))
+                        self:handleEvent(Event:new("SetPageMargins", margins))
+                    end
                 end
             end
         else
