@@ -3293,6 +3293,8 @@ function ReaderFooter:onGetTextPage()
     -- local name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2 = "","","","","","","","","","","","","",""
     local text_properties=""
 
+    -- print(require("dump")(res))
+
     -- We look first in the last element in page to retrieve styles and if we don't get information we check then the first element
     if res and res.pos1 ~= ".0" then
         name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2  = self.ui.document:getHeight(res.pos1)
@@ -3348,6 +3350,10 @@ function ReaderFooter:onGetTextPage()
             text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Line height", height2,height) .. string.char(10)
             text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Text indent", indent2,indent) .. string.char(10)
             text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Margin", margin2,margin)
+        else
+            text_properties = "Can't find positions to retrieve styles:" .. string.char(10)
+            text_properties = text_properties .. "Pos 0: " ..  res.pos0 .. string.char(10)
+            text_properties = text_properties .. "Pos 1: " .. res.pos1
         end
     end
 
