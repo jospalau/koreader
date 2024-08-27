@@ -3285,7 +3285,7 @@ function ReaderFooter:onGetTextPage()
     local cur_page = self.ui.document:getCurrentPage()
     local total_characters = 0
     -- if not Device:isPocketBook() then
-    -- total_characters = self.ui.document:getBookCharactersCount()
+    total_characters, total_words = self.ui.document:getBookCharactersCount()
     -- total_words = math.ceil(total_characters/5.7)
     -- total_pages = math.ceil(total_characters/1767)
     -- end
@@ -3401,11 +3401,12 @@ function ReaderFooter:onGetTextPage()
 
 
     -- if not Device:isPocketBook() then
-    --text = text .. "Total pages (screens): " .. self.pages .. string.char(10) ..
+    text = text .. "Total pages (screens): " .. self.pages .. string.char(10) ..
     --"Total pages assuming 1767 cpp: " .. tostring(total_pages) .. string.char(10) ..
-    --"Total characters: " .. tostring(total_characters) .. string.char(10) ..
+    "Total characters: " .. tostring(total_characters) .. string.char(10) ..
+    "Total words: " .. tostring(total_words) .. string.char(10) ..
     -- Dividing characters between 5.7
-    --"Total words (total chars/5.7): " .. tostring(total_words) .. string.char(10) .. -- Dividing characters between 5.7
+    "Total words (total chars/5.7): " .. tostring(math.ceil(total_characters/5.7)) .. string.char(10) -- Dividing characters between 5.7
     --"Words per screen page: " .. tostring(math.floor((total_words/self.pages * 100) / 100)) .. string.char(10)
     -- end
 
