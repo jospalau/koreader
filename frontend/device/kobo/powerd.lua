@@ -490,7 +490,8 @@ function KoboPowerD:beforeSuspend()
         UIManager:unschedule(self._suspendFrontlight)
         UIManager:unschedule(self._resumeFrontlight)
         if self.device:info() ~= "Kobo_goldfinch" and -- ~- Clara2E
-           self.device:info() ~= "Kobo_condor" then -- ~- Elipsa2E
+        self.device:info() ~= "Kobo_condor" and -- ~- Elipsa2E
+        self.device:info() ~= "Kobo_io" then -- ~- Libra2
             self:_stopFrontlightRamp()
         end
         -- Turn off the frontlight
@@ -542,7 +543,8 @@ function KoboPowerD:afterResume()
         -- light does not switch on if it was switched on before suspend
         -- and light switches on if it was switched off before suspend
         if self.device:info() ~= "Kobo_goldfinch" and -- ~- Clara2E
-           self.device:info() ~= "Kobo_condor" then -- ~- Elipsa2E
+        self.device:info() ~= "Kobo_condor" and -- ~- Elipsa2E
+        self.device:info() ~= "Kobo_io" then -- ~- Libra2
             self:_stopFrontlightRamp()
         end
         --
