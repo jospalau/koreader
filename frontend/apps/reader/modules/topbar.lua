@@ -134,7 +134,7 @@ function TopBar:getReadTodayThisMonth(title)
     if title:match("'") then title = title:gsub("'", "''") end
 
     conn = SQ3.open(db_location)
-    sql_stmt = "SELECT id FROM book where title like 'titles';"
+    sql_stmt = "SELECT id FROM book where title like 'titles' order by id desc LIMIT 1;"
     local id_book = conn:rowexec(sql_stmt:gsub("titles", title))
 
 
