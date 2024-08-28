@@ -1724,13 +1724,18 @@ function util.getLastDaysStats(day, include_pages)
 
     local sql_stmt = "SELECT name FROM sqlite_master WHERE type='table' AND name='wpm_stat_data'"
     local exists_table = conn:rowexec(sql_stmt)
+    local stats_table = {}
     if exists_table == nil then
-        return 0, 0
+        table.insert(stats_table, 0)
+        table.insert(stats_table, 0)
+        table.insert(stats_table, 0)
+        table.insert(stats_table, 0)
+        table.insert(stats_table, 0)
+        return "", stats_table
     end
 
     local i = 0
     local stats = ""
-    local stats_table = {}
     if (not include_pages) then
         stats = "["
     end

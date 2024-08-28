@@ -177,7 +177,15 @@ function TopBar:getReadThisYearSoFar()
     local conn = SQ3.open(db_location)
 
 
-    local sql_stmt = [[
+
+    local sql_stmt = "SELECT name FROM sqlite_master WHERE type='table' AND name='wpm_stat_data'"
+    local exists_table = conn:rowexec(sql_stmt)
+    local stats_table = {}
+    if exists_table == nil then
+        return 0
+    end
+
+    sql_stmt = [[
         SELECT sum(duration) AS sum_duration
         FROM   wpm_stat_data
         WHERE  DATE(start_time,'unixepoch','localtime') >= DATE('now', '-%d day','localtime');
