@@ -443,6 +443,7 @@ function Terminal:generateInputDialog()
                             self.history = self.history:sub(1, #self.history - 1)
                         end
 
+                        UIManager:unschedule(Terminal.refresh)
                         UIManager:close(self.input_dialog)
                         if self.touchmenu_instance then
                             self.touchmenu_instance:updateItems()
@@ -452,6 +453,7 @@ function Terminal:generateInputDialog()
                     choice2_callback = function()
                         self.history = ""
                         self:killShell()
+                        UIManager:unschedule(Terminal.refresh)
                         UIManager:close(self.input_dialog)
                         if self.touchmenu_instance then
                             self.touchmenu_instance:updateItems()
@@ -466,7 +468,10 @@ function Terminal:generateInputDialog()
         end,
         strike_callback = function(chars)
             if self.ctrl and #chars == 1 then
-                chars = string.char(chars:upper():byte() - ("A"):byte()+1)
+                local n = chars:upper():byte() - ("A"):byte()+1
+                if n >= 0 then
+                    chars = string.char(n)
+                end
                 self.ctrl = false
             end
             if chars == "\n" then
