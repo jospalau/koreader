@@ -3363,21 +3363,20 @@ function ReaderFooter:onGetTextPage()
             indent2 = Math.round(indent2*100)/100 .. unitindent2
             margin =  Math.round(margin*100)/100 .. unitmargin
             margin2 = Math.round(margin2*100)/100 .. unitmargin2
-            -- fontsize =  fontsize .. unitfontsize
-            -- fontsize2 = fontsize2 .. unitfontsize2
-            -- fontsize = string.format("%.2fp", convertSizeTo(fontsize, "pt"))
-            -- fontsize2 = string.format("%.2fp", convertSizeTo(fontsize2, "pt"))
+            -- fontsize3 = string.format("%.2fp", convertSizeTo(fontsize, "pt"))
             -- This comes always in pxs, we convert it back to pt
             -- See readerfont function onSetFontSize()
             local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
-            fontsize = Math.round((72 * fontsize / display_dpi)* 10)/10 .. "pt"
-            fontsize2 = Math.round((72 * fontsize2 / display_dpi)* 10)/10 .. "pt"
-            text_properties = string.format("%-15s%-10s%-5s","Tag",name2,name) .. string.char(10)
-            text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Line height", height2, height) .. string.char(10)
-            text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Text indent", indent2, indent) .. string.char(10)
-            text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Margin", margin2, margin) .. string.char(10)
-            text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Text align", alignment, alignment2) .. string.char(10)
-            text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Font size", fontsize, fontsize2)
+            fontsize3 = Math.round((72 * fontsize / display_dpi)* 10)/10 .. "pt"
+            fontsize4 = Math.round((72 * fontsize2 / display_dpi)* 10)/10 .. "pt"
+            fontsize =  fontsize .. unitfontsize
+            fontsize2 = fontsize2 .. unitfontsize2
+            text_properties = string.format("%-15s%-15s%-5s","Tag",name2,name) .. string.char(10)
+            text_properties = text_properties .. string.format("%-15s%-15s%-5s", "Line height", height2, height) .. string.char(10)
+            text_properties = text_properties .. string.format("%-15s%-15s%-5s", "Text indent", indent2, indent) .. string.char(10)
+            text_properties = text_properties .. string.format("%-15s%-15s%-5s", "Margin", margin2, margin) .. string.char(10)
+            text_properties = text_properties .. string.format("%-15s%-15s%-5s", "Text align", alignment, alignment2) .. string.char(10)
+            text_properties = text_properties .. string.format("%-15s%-15s%-5s", "Font size", fontsize .. ", " .. fontsize3, fontsize2 .. ", " .. fontsize4)
         else
             text_properties = "Can't find positions to retrieve styles:" .. string.char(10)
             text_properties = text_properties .. "Pos 0: " ..  res.pos0 .. string.char(10)

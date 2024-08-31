@@ -234,8 +234,8 @@ function ReaderFont:onSetFontSize(size, nomessage)
     local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
     -- local size_pt = math.floor((Screen:scaleBySize(size) * 72 / display_dpi) * 100) / 100
 
-
-    local size_px = (display_dpi * size)/72
+    local Math = require("optmath")
+    local size_px = Math.round((display_dpi * size)/72)
 
 
     self.configurable.font_size = size
