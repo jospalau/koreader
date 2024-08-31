@@ -3304,10 +3304,10 @@ function ReaderFooter:onGetTextPage()
 
     -- We look first in the last element in page to retrieve styles and if we don't get information we check then the first element
     if res and res.pos1 ~= ".0" then
-        name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2, alignment, alignment2  = self.ui.document:getHeight(res.pos1)
+        name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2, alignment, alignment2, fontsize, unitfontsize, fontsize2, unitfontsize2 = self.ui.document:getHeight(res.pos1)
 
         if name == "" and res.pos0 ~= ".0"  then
-            name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2, alignment, alignment2  = self.ui.document:getHeight(res.pos0)
+            name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2, alignment, alignment2, fontsize, unitfontsize, fontsize2, unitfontsize2 = self.ui.document:getHeight(res.pos0)
         end
 
 
@@ -3343,9 +3343,14 @@ function ReaderFooter:onGetTextPage()
             unitmargin2 = unitmargin2 .. "*"
         end
 
-        if self.ui.tweaks:find("Left align most text") or  self.ui.tweaks:find("Justify most text") then
+        if self.ui.tweaks:find("Left align most text") or self.ui.tweaks:find("Justify most text") then
             alignment = alignment .. "*"
             alignment2 = alignment2 .. "*"
+        end
+
+        if self.ui.tweaks:find("Ignore publisher font sizes") then
+            unitfontsize = unitfontsize .. "*"
+            unitfontsize2 = unitfontsize2 .. "*"
         end
 
         if name ~= "" then
@@ -3358,11 +3363,21 @@ function ReaderFooter:onGetTextPage()
             indent2 = Math.round(indent2*100)/100 .. unitindent2
             margin =  Math.round(margin*100)/100 .. unitmargin
             margin2 = Math.round(margin2*100)/100 .. unitmargin2
+            -- fontsize =  fontsize .. unitfontsize
+            -- fontsize2 = fontsize2 .. unitfontsize2
+            -- fontsize = string.format("%.2fp", convertSizeTo(fontsize, "pt"))
+            -- fontsize2 = string.format("%.2fp", convertSizeTo(fontsize2, "pt"))
+            -- This comes always in pxs, we convert it back to pt
+            -- See readerfont function onSetFontSize()
+            local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+            fontsize = Math.round((72 * fontsize / display_dpi)* 10)/10 .. "pt"
+            fontsize2 = Math.round((72 * fontsize2 / display_dpi)* 10)/10 .. "pt"
             text_properties = string.format("%-15s%-10s%-5s","Tag",name2,name) .. string.char(10)
             text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Line height", height2, height) .. string.char(10)
             text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Text indent", indent2, indent) .. string.char(10)
             text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Margin", margin2, margin) .. string.char(10)
-            text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Text align", alignment, alignment2)
+            text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Text align", alignment, alignment2) .. string.char(10)
+            text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Font size", fontsize, fontsize2)
         else
             text_properties = "Can't find positions to retrieve styles:" .. string.char(10)
             text_properties = text_properties .. "Pos 0: " ..  res.pos0 .. string.char(10)
