@@ -205,6 +205,64 @@ function TopBar:getReadThisYearSoFar()
 
 end
 
+function TopBar:getTotalRead()
+    local DataStorage = require("datastorage")
+    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
+    -- best to e it to letters, to get '2m' ?
+    -- user_duration_format = "letters"
+
+    local conn = SQ3.open(db_location)
+
+
+
+    local sql_stmt = [[
+        SELECT sum(duration)
+        FROM page_stat
+    ]]
+
+    local read_total = conn:rowexec(string.format(sql_stmt))
+
+    conn:close()
+
+    if read_total == nil then
+        read_total = 0
+    end
+    read_total = tonumber(read_total)
+
+    local Math = require("optmath")
+    return Math.round(read_total / 60 / 60 / 24)
+end
+
+function TopBar:getBooksOpened()
+    local DataStorage = require("datastorage")
+    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
+    -- best to e it to letters, to get '2m' ?
+    -- user_duration_format = "letters"
+
+    local conn = SQ3.open(db_location)
+
+
+
+    local sql_stmt = [[
+        SELECT count(id)
+        FROM book
+    ]]
+
+    local total_books = conn:rowexec(string.format(sql_stmt))
+
+    conn:close()
+
+    if total_books == nil then
+        total_books = 0
+    end
+    total_books = tonumber(total_books)
+
+    return total_books
+end
+
+
 
 function TopBar:init()
 
@@ -281,7 +339,7 @@ function TopBar:onReaderReady()
         self.title = self.title:sub(self.title:find('%]') + 2, self.title:len())
     end
     if self.initial_read_today == nil and self.initial_read_month == nil and self.initial_total_time_book == nil then
-        self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm = self:getReadTodayThisMonth(self.title)
+        self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm = self:getReadTodayThisMonth(self.ui.document._document:getDocumentProps().title)
     end
 
     if self.start_session_time == nil then
@@ -1190,7 +1248,12 @@ function TopBar:paintTo(bb, x, y)
             padding_bottom = self.bottom_padding,
         }
 
-        times[1][1]:setText(time .. "|" .. batt_lvl .. "%")
+
+        -- times[1][1]:setText(time .. "|" .. batt_lvl .. "%")
+
+        local total_read = TopBar:getTotalRead()
+        local total_books = TopBar:getBooksOpened()
+        times[1][1]:setText("BDB: " .. total_books .. ", TR: " .. total_read .. "d")
         times:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM - times[1][1]:getSize().h )
     end
 end
