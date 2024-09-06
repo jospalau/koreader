@@ -1182,7 +1182,7 @@ function Menu:updateItems(select_number, no_recalculate_dimen)
         end
 
         local mandatory = item.mandatory
-        if mandatory and self.calibre_data[Menu.getMenuText(item)] then
+        if mandatory and self.calibre_data[Menu.getMenuText(item)] and self.calibre_data[Menu.getMenuText(item)]["words"] and self.calibre_data[Menu.getMenuText(item)]["words"] ~= "" then
             mandatory = mandatory .. " " .. string.format("%+7s", self.calibre_data[Menu.getMenuText(item)]["words"] .. "w")
         end
 
