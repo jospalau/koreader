@@ -1508,21 +1508,20 @@ function Dispatcher:execute(settings, exec_props)
     -- The notification timeout is 2 seconds by default
     -- If an executed action of a quickmenu takes around the same time tearing can occur
     -- since the notification widget onCloseWidget() function is uses a ui refresh for its dimesions
-    -- This causes tearing sporadiaclly  over the quickmenu when the quickmenu is set to be kept opened
+    -- This causes tearing sporadically  over the quickmenu when the quickmenu is set to be kept opened
     -- Give it 1 more second to the timeout to avoid this
-    if settings["set_font"] then
-       UIManager:show(Notification:new{
-            text = _(settings["set_font"]),
-            timeout = 3,
-        })
-    elseif settings["b_page_margin"] then
-        UIManager:show(Notification:new{
-            text = _("Margins " .. settings["b_page_margin"]),
-            timeout = 3,
-        })
-    end
-
-
+    -- Still can cause tearing, just comment it out
+    -- if settings["set_font"] then
+    --    UIManager:show(Notification:new{
+    --         text = _(settings["set_font"]),
+    --         timeout = 3,
+    --     })
+    -- elseif settings["b_page_margin"] then
+    --     UIManager:show(Notification:new{
+    --         text = _("Margins " .. settings["b_page_margin"]),
+    --         timeout = 3,
+    --     })
+    -- end
 
     local has_many = Dispatcher:_itemsCount(settings) > 1
     if has_many then
