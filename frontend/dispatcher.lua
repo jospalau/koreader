@@ -1509,7 +1509,7 @@ function Dispatcher:execute(settings, exec_props)
     --         text = _("Margins " .. settings["b_page_margin"]),
     --     })
     -- end
-    -- local has_many = Dispatcher:_itemsCount(settings) > 1
+    local has_many = Dispatcher:_itemsCount(settings) > 1
     if has_many then
         UIManager:broadcastEvent(Event:new("BatchedUpdate"))
     end
