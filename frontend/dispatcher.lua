@@ -1187,6 +1187,8 @@ function Dispatcher:_showAsMenu(settings, exec_props)
     if menu_fonts then
         font_face = "myfont4"
     end
+
+    menu_fonts = false -- Let's keep this false
     if exec_props and exec_props.qm_show then
         table.insert(buttons, {{
             text = _("Execute all"),
@@ -1498,16 +1500,16 @@ function Dispatcher:execute(settings, exec_props)
             or (exec_props and exec_props.qm_show) then
         return Dispatcher:_showAsMenu(settings, exec_props)
     end
-    if settings["set_font"]  then
-       UIManager:show(Notification:new{
-            text = _(settings["set_font"]),
-        })
-    elseif settings["b_page_margin"]  then
-        UIManager:show(Notification:new{
-            text = _("Margins " .. settings["b_page_margin"]),
-        })
-    end
-    local has_many = Dispatcher:_itemsCount(settings) > 1
+    -- if settings["set_font"]  then
+    --    UIManager:show(Notification:new{
+    --         text = _(settings["set_font"]),
+    --     })
+    -- elseif settings["b_page_margin"]  then
+    --     UIManager:show(Notification:new{
+    --         text = _("Margins " .. settings["b_page_margin"]),
+    --     })
+    -- end
+    -- local has_many = Dispatcher:_itemsCount(settings) > 1
     if has_many then
         UIManager:broadcastEvent(Event:new("BatchedUpdate"))
     end
