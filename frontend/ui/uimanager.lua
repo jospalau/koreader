@@ -1343,6 +1343,7 @@ function UIManager:_repaint()
             refresh.region.x, refresh.region.y,
             refresh.region.w, refresh.region.h,
             refresh.dither)
+        -- print("paso   " .. refresh.mode)
     end
 
     -- Don't trigger afterPaint if we did not, in fact, paint anything
