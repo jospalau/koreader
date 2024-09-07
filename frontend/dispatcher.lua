@@ -1179,8 +1179,13 @@ function Dispatcher:_showAsMenu(settings, exec_props)
     --local dump = require("dump")
     --print(dump(exec_props))
     local font_face = "myfont2"
+    local menu_fonts = false
     if exec_props["gesture"]["multiswipe_directions"] and exec_props["gesture"]["multiswipe_directions"] == "north east" then
-        font_face = "myfont"
+        menu_fonts = true
+    end
+
+    if menu_fonts then
+        font_face = "myfont4"
     end
     if exec_props and exec_props.qm_show then
         table.insert(buttons, {{
@@ -1253,45 +1258,45 @@ function Dispatcher:_showAsMenu(settings, exec_props)
             local profiles = LuaSettings:open(profiles_file)
             local data = profiles.data
 
+            if not menu_fonts then
+                for _,profo in pairs(data) do
 
-            for _,profo in pairs(data) do
+                    -- My font configuration profiles in a gesture marked as Show as QuickMenu and Keep QuickMenu open,
+                    -- the only one marked as Keep QuickMenu open
+                    -- We do this just for this gesture
+                    if keep_open_on_apply then
+                        if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.set_font and profo.set_font == ui.document._document:getFontFace() and v.text ~= "Profile Reset defaults" then
+                            v.text = v.text .. " ✔"
+                        end
 
-                -- My font configuration profiles in a gesture marked as Show as QuickMenu and Keep QuickMenu open,
-                -- the only one marked as Keep QuickMenu open
-                -- We do this just for this gesture
-                if keep_open_on_apply then
-                    if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.set_font and profo.set_font == ui.document._document:getFontFace() and v.text ~= "Profile Reset defaults" then
-                        v.text = v.text .. " ✔"
-                    end
+                        if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.font_size and profo.font_size == font_size and v.text ~= "Profile Reset defaults" then
+                            v.text = v.text .. " ✔"
+                        end
 
-                    if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.font_size and profo.font_size == font_size and v.text ~= "Profile Reset defaults" then
-                        v.text = v.text .. " ✔"
-                    end
+                        if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.line_spacing and profo.line_spacing == ui.document.configurable.line_spacing and v.text ~= "Profile Reset defaults" then
+                            v.text = v.text .. " ✔"
+                        end
 
-                    if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.line_spacing and profo.line_spacing == ui.document.configurable.line_spacing and v.text ~= "Profile Reset defaults" then
-                        v.text = v.text .. " ✔"
-                    end
-
-                    if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.b_page_margin  and profo.b_page_margin  == ui.document.configurable.b_page_margin  and v.text ~= "Profile Reset defaults" then
-                        v.text = v.text .. " ✔"
-                    end
-                end
-                -- Tweaks are in a different gesture marked as well as Show as QuickMenu but not Keep QuickMenu open
-                if string.match(v.text, "tweak") and ui and ui.tweakst then
-                    for _,tweak in pairs(ui.tweakst) do
-                        if tweak == v.text:gsub("Toggle style tweak: ", "") then
+                        if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.b_page_margin  and profo.b_page_margin  == ui.document.configurable.b_page_margin  and v.text ~= "Profile Reset defaults" then
                             v.text = v.text .. " ✔"
                         end
                     end
+                    -- Tweaks are in a different gesture marked as well as Show as QuickMenu but not Keep QuickMenu open
+                    if string.match(v.text, "tweak") and ui and ui.tweakst then
+                        for _,tweak in pairs(ui.tweakst) do
+                            if tweak == v.text:gsub("Toggle style tweak: ", "") then
+                                v.text = v.text .. " ✔"
+                            end
+                        end
+                    end
                 end
-
             end
             table.insert(buttons, {{
                 text = v.text,
                 enabled = Dispatcher:isActionEnabled(settingsList[v.key]),
                 align = "left",
                 font_face = font_face,
-                font_size = 17,
+                font_size = 16,
                 font_bold = true,
                 is_quickmenu_button = true,
                 callback = function()
@@ -1375,30 +1380,30 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                                 local data = profiles.data
                                 -- settings.settings.order[[prof]]
 
+                                if not menu_fonts then
+                                    for _,profo in pairs(data) do
+                                        if ui and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.set_font and profo.set_font == ui.document._document:getFontFace() and buttonqm[1].text ~= "Profile Reset defaults" then
+                                            buttonqm[1].text = buttonqm[1].text .. " ✔"
+                                        end
+
+                                        if ui and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.font_size and profo.font_size == font_size and buttonqm[1].text ~= "Profile Reset defaults" then
+                                            buttonqm[1].text = buttonqm[1].text .. " ✔"
+                                        end
+
+                                        if ui and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.line_spacing and profo.line_spacing == ui.document.configurable.line_spacing and buttonqm[1].text ~= "Profile Reset defaults" then
+                                            buttonqm[1].text = buttonqm[1].text .. " ✔"
+                                        end
+
+                                        if ui and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.b_page_margin and profo.b_page_margin == ui.document.configurable.b_page_margin and buttonqm[1].text ~= "Profile Reset defaults" then
+                                            buttonqm[1].text = buttonqm[1].text .. " ✔"
+                                        end
 
 
-                                for _,profo in pairs(data) do
-                                    if ui and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.set_font and profo.set_font == ui.document._document:getFontFace() and buttonqm[1].text ~= "Profile Reset defaults" then
-                                        buttonqm[1].text = buttonqm[1].text .. " ✔"
-                                    end
-
-                                    if ui and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.font_size and profo.font_size == font_size and buttonqm[1].text ~= "Profile Reset defaults" then
-                                        buttonqm[1].text = buttonqm[1].text .. " ✔"
-                                    end
-
-                                    if ui and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.line_spacing and profo.line_spacing == ui.document.configurable.line_spacing and buttonqm[1].text ~= "Profile Reset defaults" then
-                                        buttonqm[1].text = buttonqm[1].text .. " ✔"
-                                    end
-
-                                    if ui and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.b_page_margin and profo.b_page_margin == ui.document.configurable.b_page_margin and buttonqm[1].text ~= "Profile Reset defaults" then
-                                        buttonqm[1].text = buttonqm[1].text .. " ✔"
-                                    end
-
-
-                                    if string.match(buttonqm[1].text, "tweak") and ui and ui.tweakst then
-                                        for _,tweak in pairs(ui.tweakst) do
-                                            if tweak == buttonqm[1].text:gsub("Toggle style tweak: ", "") then
-                                                buttonqm[1].text = buttonqm[1].text .. " ✔"
+                                        if string.match(buttonqm[1].text, "tweak") and ui and ui.tweakst then
+                                            for _,tweak in pairs(ui.tweakst) do
+                                                if tweak == buttonqm[1].text:gsub("Toggle style tweak: ", "") then
+                                                    buttonqm[1].text = buttonqm[1].text .. " ✔"
+                                                end
                                             end
                                         end
                                     end
