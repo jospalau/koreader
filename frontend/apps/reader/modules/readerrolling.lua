@@ -996,7 +996,23 @@ function ReaderRolling:onBatchedUpdateDone()
         self.batched_update_count = 0
         -- Be sure any Notification gets a chance to be painted before
         -- a blocking rerendering (:nextTick() is not enough)
-        UIManager:tickAfterNext(self.onUpdatePos, self)
+
+        -- No need this call, this is causing ugly flickers in the Kobo Libra 2 in quick menus configured to be kept opened
+        -- And also is causing render problems in text
+        -- Both things because the call to setDirty() function in handleRenderingDelayed() and updatePos() functions which are called in onUpdatePos()
+        -- partial refresh is the one causing this render problems. It is solved using ui refreshes
+        -- UIManager:tickAfterNext(self.onUpdatePos, self)
+        -- Note the dreaded tearing has been reproduced here after commenting this
+        -- It happens frequently after selecting a font in the font quick menu
+        -- The traces in UIManager have helped to find the reason
+        -- In readerview.lua recalculate() function this has been changed from partial to ui
+        -- UIManager:setDirty(self.dialog, self.currently_scrolling and "fast" or "ui")
+
+        -- But we still need the call for the rerendering
+        -- This refresh is the one that changes when we select the font so I will finally have to leave it like it was, but calling nextTick()
+        -- calling nextTick(), we can use partial again in handleRenderingDelayed() and updatePos() functions and there is no flicker in the Kobo Libra 2
+        -- but for this to work, we need to remove the UIManager:nextTick() call in the _showAsMenu() function of dispatcher.lua as previously was
+        UIManager:nextTick(self.onUpdatePos, self)
     end
 end
 
@@ -1076,10 +1092,11 @@ function ReaderRolling:updatePos(force)
         self.ui:handleEvent(Event:new("DocumentRerendered"))
     end
     self:onUpdateTopStatusBarMarkers()
-    -- Change from partial to ui to test dispatcher
-    -- Actioned when applying a profile with the current typography being used
+    -- Changed from partial to ui to test dispatcher
+    -- Actioned when changing typography from a profile at least (onBatchedUpdateDone(), also change font from UI)
     -- No impact for the moment
-    UIManager:setDirty(self.view.dialog, "ui")
+    -- Changed it back to partial
+    UIManager:setDirty(self.view.dialog, "partial")
     self.current_header_height = self.view.view_mode == "page" and self.ui.document:getHeaderHeight() or 0
     -- Allow for the new rendering to be shown before possibly showing
     -- the "Styles have changed..." ConfirmBox so the user can decide
@@ -1666,10 +1683,11 @@ function ReaderRolling:handleRenderingDelayed()
     self._stepRerenderingAutomation(self.RENDERING_STATE.PARTIALLY_RERENDERED)
     -- Have ReaderView draw the current page, which will provoke the partial rerendering
     -- of the DocFragement the current page is from.
-    -- Change from partial to ui to test dispatcher
-    -- Actioned when changing typography from a profile at least
+    -- Changed from partial to ui to test dispatcher
+    -- Actioned when changing typography from a profile at least (onBatchedUpdateDone(), also change font from UI)
     -- No impact for the moment
-    UIManager:setDirty(self.view.dialog, "ui")
+    -- Changed it back to partial
+    UIManager:setDirty(self.view.dialog, "partial")
 end
 
 function ReaderRolling:handlePartialRerendering()

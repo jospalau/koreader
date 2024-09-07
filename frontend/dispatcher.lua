@@ -1306,7 +1306,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                     -- and there are residues in the screen because these refreshes
                     -- We can use ui instead of partial refreshes in the updatePos() and handleRenderingDelayed()
                     -- functions of the readerrolling.lua source
-                    UIManager:nextTick(function()
+                    -- UIManager:nextTick(function()
                         UIManager:close(quickmenu)
                         if util.stringStartsWith(v.key, "toggle_horizontal_vertical") then
                             keep_open_on_apply = false
@@ -1444,7 +1444,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                                 Device:setScreenDPI(current_dpi)
                             end
                         end
-                    end)
+                    -- end)
                 end,
                 hold_callback = function()
                     if v.key:sub(1, 13) == "profile_exec_" then

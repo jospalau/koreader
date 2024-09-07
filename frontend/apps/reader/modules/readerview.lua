@@ -932,6 +932,9 @@ function ReaderView:recalculate()
 
     -- Flag a repaint so self:paintTo will be called
     -- NOTE: This is also unfortunately called during panning, essentially making sure we'll never be using "fast" for pans ;).
+    -- local dump = require("dump")
+    -- print(dump(debug.getinfo(2)))
+    -- print(dump(debug.getinfo(3)))
     UIManager:setDirty(self.dialog, self.currently_scrolling and "fast" or "partial")
 end
 
