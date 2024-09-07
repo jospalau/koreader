@@ -567,13 +567,17 @@ UIManager:setDirty(self.widget, function() return "ui", self.someelement.dimen e
 @bool refreshdither `true` if widget requires dithering (optional)
 ]]
 function UIManager:setDirty(widget, refreshtype, refreshregion, refreshdither)
+    -- local dump = require("dump")
     -- if refreshtype ~= nil and type(refreshtype) ~= "function" then
     --     print("paso " .. refreshtype .. " " ..  debug.getinfo(1).name .. " " .. debug.getinfo(2).name .. " " .. debug.getinfo(3).name)
-    --     local dump = require("dump")
+    --     print(dump(debug.getinfo(2)))
+    --     print("----")
+    -- elseif type(refreshtype) == "function" then
+    --     print(refreshtype)
     --     print(dump(debug.getinfo(2)))
     --     print("----")
     -- end
-    --
+
     local widget_name
     if widget then
         widget_name = widget.name or widget.id or tostring(widget)
