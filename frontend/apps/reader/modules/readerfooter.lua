@@ -364,8 +364,8 @@ getSessionStats = function (footer)
         end
 
         local words_session = pages_read_session * WPP
-        logger.warn(pages_read_session)
-        logger.warn(percentage_session)
+        -- logger.warn(pages_read_session)
+        -- logger.warn(percentage_session)
 
         percentage_session = math.floor(percentage_session*1000)/10
         local duration = datetime.secondsToClockDuration(user_duration_format, os.time() - session_started, false)
