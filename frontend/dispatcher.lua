@@ -1500,15 +1500,26 @@ function Dispatcher:execute(settings, exec_props)
             or (exec_props and exec_props.qm_show) then
         return Dispatcher:_showAsMenu(settings, exec_props)
     end
-    -- if settings["set_font"]  then
-    --    UIManager:show(Notification:new{
-    --         text = _(settings["set_font"]),
-    --     })
-    -- elseif settings["b_page_margin"]  then
-    --     UIManager:show(Notification:new{
-    --         text = _("Margins " .. settings["b_page_margin"]),
-    --     })
-    -- end
+
+    -- The notification timeout is 2 seconds by default
+    -- If an executed action of a quickmenu takes around the same time tearing can occur
+    -- since the notification widget onCloseWidget() function is uses a ui refresh for its dimesions
+    -- This causes tearing sporadiaclly  over the quickmenu when the quickmenu is set to be kept opened
+    -- Give it 1 more second to the timeout to avoid this
+    if settings["set_font"] then
+       UIManager:show(Notification:new{
+            text = _(settings["set_font"]),
+            timeout = 3,
+        })
+    elseif settings["b_page_margin"] then
+        UIManager:show(Notification:new{
+            text = _("Margins " .. settings["b_page_margin"]),
+            timeout = 3,
+        })
+    end
+
+
+
     local has_many = Dispatcher:_itemsCount(settings) > 1
     if has_many then
         UIManager:broadcastEvent(Event:new("BatchedUpdate"))
