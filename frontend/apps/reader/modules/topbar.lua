@@ -325,7 +325,20 @@ function TopBar:init()
         TopBar.option = 1
     end
 
+    if TopBar.preserved_init_page ~= nil then
+        TopBar.init_page = TopBar.preserved_init_page
+        TopBar.preserved_init_page = nil
+    else
+        TopBar.init_page = nil
+    end
 
+
+    if TopBar.preserved_init_page_screens ~= nil then
+        TopBar.init_page_screens = TopBar.preserved_init_page_screens
+        TopBar.preserved_init_page_screens = nil
+    else
+        TopBar.init_page_screens = nil
+    end
 
 end
 
@@ -350,6 +363,8 @@ function TopBar:onReaderReady()
 
     if duration_raw < 360 or self.ui.statistics._total_pages < 6 then
         self.start_session_time = os.time()
+        TopBar.init_page = nil
+        TopBar.init_page_screens = nil
     end
 
     self.wpm_session = 0
@@ -718,6 +733,8 @@ function TopBar:onPreserveCurrentSession()
     TopBar.preserved_show_alt_bar = self.alt_bar
     TopBar.preserved_altbar_line_thickness= self.altbar_line_thickness
     TopBar.preserved_option= self.option
+    TopBar.preserved_init_page= self.init_page
+    TopBar.preserved_init_page_screens= self.init_page_screens
 
 end
 
@@ -787,8 +804,29 @@ function TopBar:toggleBar(light_on)
         else
            self.progress_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
         end
-        self.times_text:setText(session_time .. "|" .. read_today .. "|" .. read_month)
-        self.times_text_text = session_time .. "|" .. read_today .. "|" .. read_month
+
+
+
+        if self.init_page == nil then
+            self.init_page = self.ui.pagemap:getCurrentPageLabel(true)
+        end
+
+        if self.init_page_screens == nil then
+            self.init_page_screens = self.view.footer.pageno
+        end
+
+        local init_page = 0
+        local pages_session = 0
+        if self.ui.pagemap:wantsPageLabels() then
+            init_page = self.init_page
+            pages_session = self.ui.pagemap:getCurrentPageLabel(true) - init_page
+        else
+            init_page = self.init_page_screens
+            pages_session = self.view.footer.pageno - init_page
+        end
+
+        self.times_text:setText(session_time ..  "(" .. pages_session .. "p)|" .. read_today .. "|" .. read_month)
+        self.times_text_text = session_time ..  "(" .. pages_session .. "p)|" .. read_today .. "|" .. read_month
 
 
 
