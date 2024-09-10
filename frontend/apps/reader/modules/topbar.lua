@@ -822,14 +822,14 @@ function TopBar:toggleBar(light_on)
         if self.ui.pagemap:wantsPageLabels() then
             init_page = self.init_page
             pages_session = self.ui.pagemap:getCurrentPageLabel(true) - init_page
+            self.times_text:setText(session_time ..  "(" .. pages_session .. "p)|" .. read_today .. "|" .. read_month)
+            self.times_text_text = session_time ..  "(" .. pages_session .. "p)|" .. read_today .. "|" .. read_month
         else
             init_page = self.init_page_screens
             pages_session = self.view.footer.pageno - init_page
+            self.times_text:setText(session_time .. "|" .. read_today .. "|" .. read_month)
+            self.times_text_text = session_time .. "|" .. read_today .. "|" .. read_month
         end
-
-        self.times_text:setText(session_time ..  "(" .. pages_session .. "p)|" .. read_today .. "|" .. read_month)
-        self.times_text_text = session_time ..  "(" .. pages_session .. "p)|" .. read_today .. "|" .. read_month
-
 
 
         local powerd = Device:getPowerDevice()
