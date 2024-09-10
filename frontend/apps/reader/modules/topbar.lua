@@ -454,6 +454,13 @@ function TopBar:onReaderReady()
     -- }
 
 
+
+    self.author_text = TextWidget:new{
+        text =  "",
+        face = Font:getFace("myfont3", 8),
+        fgcolor = Blitbuffer.COLOR_BLACK,
+    }
+
     self[1] = FrameContainer:new{
         left_container:new{
             dimen = Geom:new(),
@@ -574,6 +581,11 @@ function TopBar:onReaderReady()
         padding_bottom = self.bottom_padding,
     }
 
+
+    self[21] = left_container:new{
+        dimen = Geom:new{ w = self.author_text:getSize().w, self.author_text:getSize().h },
+        self.author_text,
+    }
 
     self.progress_chapter_bar = ProgressWidget:new{
         width = 200,
@@ -890,6 +902,7 @@ function TopBar:toggleBar(light_on)
         end
 
         self.chapter_text:setText(chapter)
+        self.author_text:setText(self.ui.document._document:getDocumentProps().authors)
 
         local left = self.ui.toc:getChapterPagesLeft(self.view.footer.pageno) or self.ui.document:getTotalPagesLeft(self.view.footer.pageno)
         local left_time = self.view.footer:getDataFromStatistics("", left)
@@ -1058,6 +1071,7 @@ function TopBar:toggleBar(light_on)
         self.chapter_text:setText("")
         self.progress_chapter_text:setText("")
         self.book_progress:setText("")
+        self.author_text:setText("")
         self.progress_bar.width = 0
         self.progress_bar2.width = 0
         self.progress_chapter_bar.width = 0
@@ -1117,6 +1131,9 @@ function TopBar:paintTo(bb, x, y)
             end
         end
         self[1]:paintTo(bb, x + TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
+
+        self[21].dimen = Geom:new{ w = self[2][1]:getSize().w, self[2][1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
+        self[21]:paintTo(bb, x + Screen:scaleBySize(4), y + Screen:scaleBySize(6))
 
         -- Top center
 
