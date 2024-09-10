@@ -197,7 +197,7 @@ function TouchMenuItem:onTapSelect(arg, ges)
         --
         self.item_frame.invert = true
         UIManager:widgetInvert(self.item_frame, highlight_dimen.x, highlight_dimen.y, highlight_dimen.w)
-        if Device.model == "Kobo_spaBW" then -- fast is a bit glitchy in Kobo BW
+        if Device.model == "Kobo_spaBW" or Device.model == "Kobo_monza" then -- fast is a bit glitchy in Kobo Clara BW and Kobo Libra Colour
             UIManager:setDirty(nil, "partial", highlight_dimen)
         else
             UIManager:setDirty(nil, "fast", highlight_dimen)
@@ -258,7 +258,7 @@ function TouchMenuItem:onHoldSelect(arg, ges)
         --
         self.item_frame.invert = true
         UIManager:widgetInvert(self.item_frame, highlight_dimen.x, highlight_dimen.y, highlight_dimen.w)
-        if Device.model == "Kobo_spaBW" then -- fast is a bit glitchy in Kobo BW
+        if Device.model == "Kobo_spaBW" or Device.model == "Kobo_monza" then -- fast is a bit glitchy in Kobo Clara BW and Kobo Libra Colour
             UIManager:setDirty(nil, "partial", highlight_dimen)
         else
             UIManager:setDirty(nil, "fast", highlight_dimen)
