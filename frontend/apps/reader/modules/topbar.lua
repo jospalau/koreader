@@ -459,7 +459,7 @@ function TopBar:onReaderReady()
         text =  "",
         face = Font:getFace("myfont3", 12),
         fgcolor = Blitbuffer.COLOR_BLACK,
-        invert = true,
+        invert = false,
     }
 
 
@@ -637,10 +637,17 @@ function TopBar:onReaderReady()
     }
 
 
-    self[21] = left_container:new{
-        dimen = Geom:new{ w = self.author_text:getSize().w, self.author_text:getSize().h },
-        self.author_text,
+    self[21] = FrameContainer:new{
+        left_container:new{
+            dimen = Geom:new{ w = self.author_text:getSize().w, self.author_text:getSize().h },
+            self.author_text,
+        },
+        -- background = Blitbuffer.COLOR_WHITE,
+        bordersize = 0,
+        padding = 0,
+        padding_bottom = self.bottom_padding,
     }
+
 
     self.progress_chapter_bar = ProgressWidget:new{
         width = 200,
@@ -959,7 +966,7 @@ function TopBar:toggleBar(light_on)
 
         self.chapter_text:setText(chapter)
         if self.option == 1 then
-            self.author_text:setText(self.ui.document._document:getDocumentProps().authors .. " - " ..  self.pub_date)
+            self.author_text:setText(self.ui.document._document:getDocumentProps().authors .. " - " ..  self.pub_date .. " - " .. self.book_progress.text)
         else
             self.author_text:setText("")
         end
@@ -1173,10 +1180,17 @@ end
 
 function TopBar:paintTo(bb, x, y)
     if self.status_bar and self.status_bar == true then
-        self[10][1][1]:setText(self.time_battery_text_text:reverse())
-        self[10]:paintTo(bb, x - self[10][1][1]:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
-        self[4][1][1]:setText(self.times_text_text:reverse())
-        self[4]:paintTo(bb, x - Screen:getHeight() + TopBar.MARGIN_BOTTOM + Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
+        -- self[10][1][1]:setText(self.time_battery_text_text:reverse())
+        -- self[10]:paintTo(bb, x - self[10][1][1]:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
+        -- self[4][1][1]:setText(self.times_text_text:reverse())
+        -- self[4]:paintTo(bb, x - Screen:getHeight() + TopBar.MARGIN_BOTTOM + Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
+
+        if self.view.footer.settings.bar_top then
+            -- self[4]:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() -  Screen:scaleBySize(6))
+            self[21]:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() -  Screen:scaleBySize(6))
+        else
+            self[21]:paintTo(bb, x + Screen:scaleBySize(4), y + Screen:scaleBySize(6))
+        end
         return
     end
     if not self.fm then
@@ -1193,7 +1207,7 @@ function TopBar:paintTo(bb, x, y)
         end
         self[1]:paintTo(bb, x + TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
 
-        self[21].dimen = Geom:new{ w = self[2][1]:getSize().w, self[2][1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
+        self[21].dimen = Geom:new{ w = self[21][1]:getSize().w, self[21][1]:getSize().h }
         self[21]:paintTo(bb, x + Screen:scaleBySize(4), y + Screen:scaleBySize(6))
 
         -- Top center
@@ -1231,18 +1245,25 @@ function TopBar:paintTo(bb, x, y)
         -- self[4][1].dimen.w = self[4][1][1]:getSize().w
         -- self[4]:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
-        self[11][1].dimen.w = self[11][1][1]:getSize().w
-        self[11]:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
-        -- This is inverted to be shown in left margin
-        self[4][1][1]:setText(self.times_text_text:reverse())
-        -- When inverted, the text is positioned to the end of the screen
-        -- So, we take that position as a reference to position it later
-        -- Inverted aligned to side left center
-        -- self[4]:paintTo(bb, x - Screen:getHeight()/2 - self[4][1][1]:getSize().w/2, y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
+        -- Bottom left, commented for the moment, I put here times
+        -- self[11][1].dimen.w = self[11][1][1]:getSize().w
+        -- self[11]:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
-        -- Inverted aligned to side left top
-        self[4]:paintTo(bb, x - Screen:getHeight() + TopBar.MARGIN_BOTTOM + Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
+        self[4][1][1]:setText(self.times_text_text)
+        self[4]:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+
+        -- -- Comment inverted info for the moment
+        -- -- This is inverted to be shown in left margin
+        -- self[4][1][1]:setText(self.times_text_text:reverse())
+        -- -- When inverted, the text is positioned to the end of the screen
+        -- -- So, we take that position as a reference to position it later
+        -- -- Inverted aligned to side left center
+        -- -- self[4]:paintTo(bb, x - Screen:getHeight()/2 - self[4][1][1]:getSize().w/2, y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
+
+        -- -- Inverted aligned to side left top
+        -- -- Remember to set invert = true for self.times_text_text
+        -- self[4]:paintTo(bb, x - Screen:getHeight() + TopBar.MARGIN_BOTTOM + Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
 
 
 
@@ -1260,12 +1281,13 @@ function TopBar:paintTo(bb, x, y)
         self[6]:paintTo(bb, x + Screen:getWidth() - self[6][1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
 
-        self[10][1][1]:setText(self.time_battery_text_text:reverse())
+        -- Comment inverted info for the moment
+        -- self[10][1][1]:setText(self.time_battery_text_text:reverse())
 
 
-        -- Inverted aligned to side left bottom
-        -- self[10]:paintTo(bb, x - self[10][1][1]:getSize().w, y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
-        self[10]:paintTo(bb, x - self[10][1][1]:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
+        -- -- Inverted aligned to side left bottom
+        -- -- self[10]:paintTo(bb, x - self[10][1][1]:getSize().w, y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
+        -- self[10]:paintTo(bb, x - self[10][1][1]:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
 
 
         -- self[6][1].dimen.w = self[6][1][1]:getSize().w
