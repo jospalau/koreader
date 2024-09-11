@@ -902,7 +902,12 @@ function TopBar:toggleBar(light_on)
         end
 
         self.chapter_text:setText(chapter)
-        self.author_text:setText(self.ui.document._document:getDocumentProps().authors)
+        if self.option == 1 then
+            self.author_text:setText(self.ui.document._document:getDocumentProps().authors)
+        else
+            self.author_text:setText("")
+        end
+
 
         local left = self.ui.toc:getChapterPagesLeft(self.view.footer.pageno) or self.ui.document:getTotalPagesLeft(self.view.footer.pageno)
         local left_time = self.view.footer:getDataFromStatistics("", left)
@@ -965,7 +970,7 @@ function TopBar:toggleBar(light_on)
             self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
             self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
             self.progress_bar2.altbar = true
-            self.progress_bar2.show_percentage = true
+            self.progress_bar2.show_percentage =  self.option == 2
             self.progress_bar2.ui = self.ui
             -- Multiple of 3 onwards because we want the line to be a third in the middle of the progress thick line
             -- Value initialized to 3 when init, possible to toggle
