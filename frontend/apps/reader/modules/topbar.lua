@@ -262,7 +262,62 @@ function TopBar:getBooksOpened()
     return total_books
 end
 
+function TopBar:getPublicationDateBook()
+    if not self.ui then return end
+    local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
+    if file_type == "epub" then
+        local css_text = self.ui.document:getDocumentFileContent("OPS/styles/stylesheet.css")
+        if css_text == nil then
+            css_text = self.ui.document:getDocumentFileContent("stylesheet.css")
+        end
+        if css_text == nil then
+            css_text = self.ui.document:getDocumentFileContent("OEBPS/css/style.css")
+        end
 
+        -- $ bsdtar tf arthur-conan-doyle_the-hound-of-the-baskervilles.epub | grep -i css
+        -- epub/css/
+        -- epub/css/core.css
+        -- epub/css/se.css
+        -- epub/css/local.css
+        if css_text == nil then
+            css_text = self.ui.document:getDocumentFileContent("epub/css/core.css")
+        end
+
+        local opf_text = self.ui.document:getDocumentFileContent("OPS/Miscellaneous/content.opf")
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("content.opf")
+        end
+
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("OPS/volume.opf")
+        end
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("volume.opf")
+        end
+
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("OEBPS/Miscellaneous/content.opf")
+        end
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("OEBPS/content.opf")
+        end
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("content.opf")
+        end
+
+        -- $ bsdtar tf arthur-conan-doyle_the-hound-of-the-baskervilles.epub | grep -i content
+        -- epub/content.opf
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("epub/content.opf")
+        end
+
+        if opf_text == nil or not string.gmatch(opf_text, "<dc:date>(.-)</dc:date>")(1) then
+            return ""
+        else
+            return string.gmatch(opf_text, "<dc:date>(.-)</dc:date>")(1):sub(1, 4)
+        end
+    end
+end
 
 function TopBar:init()
 
@@ -690,6 +745,7 @@ function TopBar:onReaderReady()
         TopBar.MARGIN_SIDES =  Screen:scaleBySize(20)
     end
     self.status_bar = self.view.footer_visible
+    self.pub_date = self:getPublicationDateBook()
 end
 function TopBar:onToggleShowTopBar()
     local show_top_bar = G_reader_settings:isTrue("show_top_bar")
@@ -903,7 +959,7 @@ function TopBar:toggleBar(light_on)
 
         self.chapter_text:setText(chapter)
         if self.option == 1 then
-            self.author_text:setText(self.ui.document._document:getDocumentProps().authors)
+            self.author_text:setText(self.ui.document._document:getDocumentProps().authors .. " - " ..  self.pub_date)
         else
             self.author_text:setText("")
         end
