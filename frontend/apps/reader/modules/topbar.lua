@@ -757,6 +757,7 @@ function TopBar:onReaderReady()
     end
     self.status_bar = self.view.footer_visible
     self.pub_date = self:getPublicationDateBook()
+    _, self.total_words = self.ui.document:getBookCharactersCount()
 end
 function TopBar:onToggleShowTopBar()
     local show_top_bar = G_reader_settings:isTrue("show_top_bar")
@@ -937,10 +938,9 @@ function TopBar:toggleBar(light_on)
         --     title = TextWidget.PTF_BOLD_START .. title .. " (" .. self.series .. ")" .. TextWidget.PTF_BOLD_END
         -- end
 
-        local total_characters, total_words = self.ui.document:getBookCharactersCount()
-        local hours_to_read = tonumber(total_words)/(self.avg_wpm * 60)
+        local hours_to_read = tonumber(self.total_words)/(self.avg_wpm * 60)
         local progress =  math.floor(100/hours_to_read * 10)/10
-        self.book_progress:setText(total_words .. "w|" .. tostring(progress) .. "%|" .. read_book)
+        self.book_progress:setText(self.total_words .. "w|" .. tostring(progress) .. "%|" .. read_book)
         title = TextWidget.PTF_BOLD_START .. title .. TextWidget.PTF_BOLD_END
         self.title_text:setText(title)
         self.series_text:setText(self.series)
