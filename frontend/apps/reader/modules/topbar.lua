@@ -400,12 +400,16 @@ end
 function TopBar:onReaderReady()
 
     self.title = self.ui.document._document:getDocumentProps().title
-    self.series = ""
-    if self.title:find('%[%d?.%d]') then
-        self.series = self.title:sub(1, self.title:find('%[') - 2)
-        self.series = "(" .. TextWidget.PTF_BOLD_START .. self.series .. " " ..  tonumber(self.ui.document._document:getDocumentProps().title:match("%b[]"):sub(2, self.ui.document._document:getDocumentProps().title:match("%b[]"):len() - 1)) .. TextWidget.PTF_BOLD_END .. ")"
-        self.title = self.title:sub(self.title:find('%]') + 2, self.title:len())
+    self.series = self.ui.document._document:getDocumentProps().series
+    if self.series ~= "" then
+        self.series = "(" .. TextWidget.PTF_BOLD_START .. self.series .. TextWidget.PTF_BOLD_END .. ")"
     end
+
+    -- if self.title:find('%[%d?.%d]') then
+    --     self.series = self.title:sub(1, self.title:find('%[') - 2)
+    --     self.series = "(" .. TextWidget.PTF_BOLD_START .. self.series .. " " ..  tonumber(self.ui.document._document:getDocumentProps().title:match("%b[]"):sub(2, self.ui.document._document:getDocumentProps().title:match("%b[]"):len() - 1)) .. TextWidget.PTF_BOLD_END .. ")"
+    --     self.title = self.title:sub(self.title:find('%]') + 2, self.title:len())
+    -- end
     if self.initial_read_today == nil and self.initial_read_month == nil and self.initial_total_time_book == nil then
         self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm = self:getReadTodayThisMonth(self.ui.document._document:getDocumentProps().title)
     end
@@ -918,20 +922,25 @@ function TopBar:toggleBar(light_on)
         local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
 
         local title = self.title
-        if (title:find("([0-9,]+w)") ~= nil) then
-            words = self.title:match("([0-9,]+w)"):gsub("w",""):gsub(",","")
-            local hours_to_read = tonumber(words)/(self.avg_wpm * 60)
-            local progress =  math.floor(100/hours_to_read * 10)/10
-            words = title:match("([0-9,]+w)"):gsub("w",""):gsub(",","") .. "w"
-            self.book_progress:setText(words .. "|" .. tostring(progress) .. "%|" .. read_book)
-            title = title:sub(1, title:find('%(')-2, title:len())
-        end
+        -- if (title:find("([0-9,]+w)") ~= nil) then
+        --     words = self.title:match("([0-9,]+w)"):gsub("w",""):gsub(",","")
+        --     local hours_to_read = tonumber(words)/(self.avg_wpm * 60)
+        --     local progress =  math.floor(100/hours_to_read * 10)/10
+        --     words = title:match("([0-9,]+w)"):gsub("w",""):gsub(",","") .. "w"
+        --     self.book_progress:setText(words .. "|" .. tostring(progress) .. "%|" .. read_book)
+        --     title = title:sub(1, title:find('%(')-2, title:len())
+        -- end
         -- title = TextWidget.PTF_BOLD_START .. title .. " with " .. words .. TextWidget.PTF_BOLD_END
         -- if self.series == "" then
         --     title = TextWidget.PTF_BOLD_START .. title .. TextWidget.PTF_BOLD_END
         -- else
         --     title = TextWidget.PTF_BOLD_START .. title .. " (" .. self.series .. ")" .. TextWidget.PTF_BOLD_END
         -- end
+
+        local total_characters, total_words = self.ui.document:getBookCharactersCount()
+        local hours_to_read = tonumber(total_words)/(self.avg_wpm * 60)
+        local progress =  math.floor(100/hours_to_read * 10)/10
+        self.book_progress:setText(total_words .. "w|" .. tostring(progress) .. "%|" .. read_book)
         title = TextWidget.PTF_BOLD_START .. title .. TextWidget.PTF_BOLD_END
         self.title_text:setText(title)
         self.series_text:setText(self.series)

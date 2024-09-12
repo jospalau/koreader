@@ -351,14 +351,14 @@ getSessionStats = function (footer)
         local percentage_session = pages_read_session/total_pages
         local wpm_session = 0
 
-        local title_pages = footer.ui.document._document:getDocumentProps().title
-        local title_words = 0
-        if (title_pages:find("([0-9,]+w)") ~= nil) then
-            title_words = title_pages:match("([0-9,]+w)"):gsub("w",""):gsub(",","")
-        end
-        -- Just to calculate the sesssion wpm I will assume the WPP to be calculated with the books number of words/syntetic pages for the configuration
-        -- Not accurate since pages we turn quick are counted when they should not
-        WPP_SESSION = math.floor((title_words/footer.pages * 100) / 100)
+        -- local title_pages = footer.ui.document._document:getDocumentProps().title
+        -- local title_words = 0
+        -- if (title_pages:find("([0-9,]+w)") ~= nil) then
+        --     title_words = title_pages:match("([0-9,]+w)"):gsub("w",""):gsub(",","")
+        -- end
+        -- -- Just to calculate the sesssion wpm I will assume the WPP to be calculated with the books number of words/syntetic pages for the configuration
+        -- -- Not accurate since pages we turn quick are counted when they should not
+        -- WPP_SESSION = math.floor((title_words/footer.pages * 100) / 100)
         if pages_read_session > 0 then
             wpm_session = math.floor(((pages_read_session * WPP)/((os.time() - session_started)/60))* 100) / 100
         end
@@ -3386,10 +3386,10 @@ function ReaderFooter:onGetTextPage()
 
     local title_pages = self.ui.document._document:getDocumentProps().title
 
-    local title_words = 0
-    if (title_pages:find("([0-9,]+w)") ~= nil) then
-        title_words = title_pages:match("([0-9,]+w)"):gsub("w",""):gsub(",","")
-    end
+    -- local title_words = 0
+    -- if (title_pages:find("([0-9,]+w)") ~= nil) then
+    --     title_words = title_pages:match("([0-9,]+w)"):gsub("w",""):gsub(",","")
+    -- end
 
     local font_size = self.ui.document._document:getFontSize()
     local font_face = self.ui.document._document:getFontFace()
@@ -3511,15 +3511,15 @@ function ReaderFooter:onShowTextProperties()
     end
     local pages = self.ui.statistics.data.pages
     --  title_pages = string.match(title_pages, "%((%w+)")
-    local title_pages_ex = string.match(title_pages, "%b()")
+    -- local title_pages_ex = string.match(title_pages, "%b()")
 
 
-    if (title_pages_ex) then
-        local title_words = title_pages:match("([0-9,]+w)"):gsub("w",""):gsub(",","")
-        title_pages_ex = title_pages_ex:sub(2, title_pages_ex:len() - 1)
-    else
-        title_pages_ex = 0
-    end
+    -- if (title_pages_ex) then
+    --     local title_words = title_pages:match("([0-9,]+w)"):gsub("w",""):gsub(",","")
+    --     title_pages_ex = title_pages_ex:sub(2, title_pages_ex:len() - 1)
+    -- else
+    --     title_pages_ex = 0
+    -- end
 
     local font_size_pt = nil
     local font_size_mm = nil
@@ -3641,33 +3641,33 @@ function ReaderFooter:onShowTextProperties()
     local spp = math.floor(self.ui.statistics.avg_time)
     local pages_read = self.ui.statistics.book_read_pages
     local time_read = self.ui.statistics.book_read_time
-    local wpm = 0
-    local wph = 0
-    local wpm_test = 0
-    if pages_read > 0 and time_read > 0 then
-        local title_words = self.ui.document._document:getDocumentProps().title
-        local title_words_ex = string.match(title_words, "%b()")
-        title_words_ex = title_words_ex:sub(2, title_words_ex:len() - 1)
-        title_words_ex = string.match(title_words_ex, "%- .*")
-        title_words_ex = title_words_ex:sub(2,title_words_ex:len() - 1):gsub(",","")
-        local percentage = self.progress_bar.percentage * 100
-        wpm_test =  math.floor((title_words_ex * self.progress_bar.percentage/(time_read/60)))
+    -- local wpm = 0
+    -- local wph = 0
+    -- local wpm_test = 0
+    -- if pages_read > 0 and time_read > 0 then
+    --     local title_words = self.ui.document._document:getDocumentProps().title
+    --     local title_words_ex = string.match(title_words, "%b()")
+    --     title_words_ex = title_words_ex:sub(2, title_words_ex:len() - 1)
+    --     title_words_ex = string.match(title_words_ex, "%- .*")
+    --     title_words_ex = title_words_ex:sub(2,title_words_ex:len() - 1):gsub(",","")
+    --     local percentage = self.progress_bar.percentage * 100
+    --     wpm_test =  math.floor((title_words_ex * self.progress_bar.percentage/(time_read/60)))
 
-        wpm = math.floor((pages_read * WPP)/(time_read/60))
-        wph = math.floor((pages_read * WPP)/(time_read/60/60))
-    end
+    --     wpm = math.floor((pages_read * WPP)/(time_read/60))
+    --     wph = math.floor((pages_read * WPP)/(time_read/60/60))
+    -- end
 
-    -- Extraigo la información más fácil así
-    title_pages = self.ui.document._document:getDocumentProps().title
+    -- -- Extraigo la información más fácil así
+    -- title_pages = self.ui.document._document:getDocumentProps().title
 
-    local title_words, avg_words_cal, avg_chars_cal, avg_chars_per_word_cal = 0, 0, 0 ,0
-    if (title_pages:find("([0-9,]+w)") ~= nil) then
-        title_words = title_pages:match("([0-9,]+w)")
-        avg_words_cal = math.floor(title_words:sub(1,title_words:len() - 1):gsub(",","")/pages)
-        -- Estimated 5.7 chars per words
-        avg_chars_cal = math.floor(avg_words_cal * 5.7)
-        avg_chars_per_word_cal = math.floor((avg_chars_cal/avg_words_cal) * 100) / 100
-    end
+    -- local title_words, avg_words_cal, avg_chars_cal, avg_chars_per_word_cal = 0, 0, 0 ,0
+    -- if (title_pages:find("([0-9,]+w)") ~= nil) then
+    --     title_words = title_pages:match("([0-9,]+w)")
+    --     avg_words_cal = math.floor(title_words:sub(1,title_words:len() - 1):gsub(",","")/pages)
+    --     -- Estimated 5.7 chars per words
+    --     avg_chars_cal = math.floor(avg_words_cal * 5.7)
+    --     avg_chars_per_word_cal = math.floor((avg_chars_cal/avg_words_cal) * 100) / 100
+    -- end
 
     local percentage_session, pages_read_session, duration, wpm_session, words_session, duration_raw = getSessionStats(self)
     local progress_book = ("%d de %d"):format(self.pageno, self.pages)
