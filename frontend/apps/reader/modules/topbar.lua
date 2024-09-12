@@ -757,7 +757,7 @@ function TopBar:onReaderReady()
     end
     self.status_bar = self.view.footer_visible
     self.pub_date = self:getPublicationDateBook()
-    _, self.total_words = self.ui.document:getBookCharactersCount()
+    self.total_words = select(2, self.ui.document:getBookCharactersCount())
 end
 function TopBar:onToggleShowTopBar()
     local show_top_bar = G_reader_settings:isTrue("show_top_bar")
