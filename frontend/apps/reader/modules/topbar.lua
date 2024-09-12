@@ -403,7 +403,7 @@ function TopBar:onReaderReady()
     self.series = ""
     if self.title:find('%[%d?.%d]') then
         self.series = self.title:sub(1, self.title:find('%[') - 2)
-        self.series = "(" .. TextWidget.PTF_BOLD_START .. self.series .. TextWidget.PTF_BOLD_END .. ")"
+        self.series = "(" .. TextWidget.PTF_BOLD_START .. self.series .. " " ..  tonumber(self.ui.document._document:getDocumentProps().title:match("%b[]"):sub(2, self.ui.document._document:getDocumentProps().title:match("%b[]"):len() - 1)) .. TextWidget.PTF_BOLD_END .. ")"
         self.title = self.title:sub(self.title:find('%]') + 2, self.title:len())
     end
     if self.initial_read_today == nil and self.initial_read_month == nil and self.initial_total_time_book == nil then
