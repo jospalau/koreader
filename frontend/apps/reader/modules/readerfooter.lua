@@ -3669,6 +3669,19 @@ function ReaderFooter:onShowTextProperties()
     --     avg_chars_per_word_cal = math.floor((avg_chars_cal/avg_words_cal) * 100) / 100
     -- end
 
+
+    local duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100
+    local wpm_session, words_session = duration_raw, duration_raw
+    if duration_raw == 0 then
+        wpm_session = 0
+        words_session = 0
+    else
+        wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
+        words_session = self.ui.statistics._total_words
+    end
+
+    local wph_session = wpm_session * 60
+
     local percentage_session, pages_read_session, duration, wpm_session, words_session, duration_raw = getSessionStats(self)
     local progress_book = ("%d de %d"):format(self.pageno, self.pages)
     local string_percentage  = "%0.f%%"
@@ -3736,8 +3749,9 @@ function ReaderFooter:onShowTextProperties()
     .. point .. " This session: " .. duration .. "(" .. percentage_session .. "%, " .. words_session .. ")"  .. "(" .. pages_read_session.. "p) " .. wpm_session .. "wpm" .. important .. string.char(10)
     .. point .. " Today: " .. today_duration  .. "(" .. today_pages .. "p, ".. words_today .. "w) " .. wpm_today .. "wpm" .. string.char(10)
     .. point .. " Week: " .. this_week_duration  .. "(" .. this_week_pages .. "p, ".. words_week .. "w) " .. wpm_week .. "wpm" .. string.char(10)
-    .. point .. " Stats: wpm: " .. wpm .. ", wph: " .. wph .. ", spp: " .. spp .. ", wpmp: " .. wpm_test .. important .. string.char(10)
-    .. point .. " Static info (from Calibre info): wpp: " .. avg_words_cal .. ", cpp: " .. avg_chars_cal .. ", cpw: " .. avg_chars_per_word_cal .. important .. string.char(10)
+    -- .. point .. " Stats: wpm: " .. wpm_session .. ", wph: " .. wph_session .. string.char(10)
+    -- .. point .. " Stats: wpm: " .. wpm .. ", wph: " .. wph .. ", spp: " .. spp .. ", wpmp: " .. wpm_test .. important .. string.char(10)
+    -- .. point .. " Static info (from Calibre info): wpp: " .. avg_words_cal .. ", cpp: " .. avg_chars_cal .. ", cpw: " .. avg_chars_per_word_cal .. important .. string.char(10)
     -- .. point .. " Dynamic info: p: " .. self.ui.statistics._pages_turned .. ", wpp: " .. avg_words .. ", cpp: " .. avg_chars .. ", cpw: " .. avg_chars_per_word .. string.char(10) -- Not used   .. line .. string.char(10) .. string.char(10)
     -- .. pages .. "p_" .. title_pages_ex .. string.char(10) ..  font_face .. "-" ..  "S: "
     -- .. point .. " Font parameters: " .. font_face .. ", " .. font_size .. "px, " .. font_size_pt .. "pt, " .. font_size_mm .. "mm" .. important ..  string.char(10)
