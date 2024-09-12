@@ -1024,9 +1024,6 @@ function CreDocument:getCurrentPage(internal)
     return self._document:getCurrentPage(internal)
 end
 
-function CreDocument:getTextCurrentPage(internal)
-    return self._document:getTextCurrentPage(internal)
-end
 
 function CreDocument:getHeight(internal)
     return self._document:getHeight(internal)
