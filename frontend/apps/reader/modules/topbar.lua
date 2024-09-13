@@ -395,6 +395,10 @@ function TopBar:init()
         TopBar.init_page_screens = nil
     end
 
+
+    TopBar.total_read = TopBar:getTotalRead()
+    TopBar.total_books = TopBar:getBooksOpened()
+
 end
 
 function TopBar:onReaderReady()
@@ -1400,9 +1404,7 @@ function TopBar:paintTo(bb, x, y)
 
         -- times[1][1]:setText(time .. "|" .. batt_lvl .. "%")
 
-        local total_read = TopBar:getTotalRead()
-        local total_books = TopBar:getBooksOpened()
-        times[1][1]:setText("BDB: " .. total_books .. ", TR: " .. total_read .. "d")
+        times[1][1]:setText("BDB: " .. TopBar.total_books .. ", TR: " .. TopBar.total_read .. "d")
         times:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM - times[1][1]:getSize().h )
     end
 end
