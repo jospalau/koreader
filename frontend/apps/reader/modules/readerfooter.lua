@@ -3429,6 +3429,8 @@ function ReaderFooter:onGetTextPage()
 
     -- if not Device:isPocketBook() then
     text = text .. "Total pages (screens): " .. self.pages .. string.char(10) ..
+    "Total pages (1767cpp): " .. self.ui.pagemap:getLastPageLabel(true) .. string.char(10) ..
+
     --"Total pages assuming 1767 cpp: " .. tostring(total_pages) .. string.char(10) ..
     "Total characters: " .. tostring(total_characters) .. string.char(10) ..
     "Total words: " .. tostring(total_words) .. string.char(10) ..
