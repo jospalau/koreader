@@ -944,7 +944,7 @@ function TopBar:toggleBar(light_on)
 
         local hours_to_read = tonumber(self.total_words)/(self.avg_wpm * 60)
         local progress =  math.floor(100/hours_to_read * 10)/10
-        self.total_wordsk = tostring(math.ceil(self.total_words/1000))
+        self.total_wordsk = tostring(math.floor(self.total_words/1000))
         self.book_progress:setText(self.total_wordsk .. "k|" .. tostring(progress) .. "%|" .. read_book)
         title = TextWidget.PTF_BOLD_START .. title .. TextWidget.PTF_BOLD_END
         self.title_text:setText(title)
