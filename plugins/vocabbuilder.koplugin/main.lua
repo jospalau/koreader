@@ -234,6 +234,7 @@ function MenuDialog:setupPluginMenu()
                     text = _("Delete"),
                     callback = function()
                         settings.server = nil
+                        SyncService.removeLastSyncDB(DB.path)
                         UIManager:close(self.sync_dialogue)
                     end
                 },
@@ -248,6 +249,11 @@ function MenuDialog:setupPluginMenu()
                         end
 
                         sync_settings.onConfirm = function(chosen_server)
+                            if settings.server.type ~= chosen_server.type
+                                or settings.server.url ~= chosen_server.url
+                                or settings.server.address ~= chosen_server.address then
+                                    SyncService.removeLastSyncDB(DB.path)
+                            end
                             settings.server = chosen_server
                         end
                         UIManager:show(sync_settings)
@@ -498,6 +504,7 @@ Individual word info dialogue widget
 --]]--
 local WordInfoDialog = FocusManager:extend{
     title = nil,
+    highlighted_word = nil,
     book_title = nil,
     dates = nil,
     padding = Size.padding.large,
@@ -636,7 +643,7 @@ function WordInfoDialog:init()
                             VerticalSpan:new{width= Size.padding.default},
                             has_context and
                             TextBoxWidget:new{
-                                text = "..." .. (self.prev_context or ""):gsub("\n", " ") .. "【" ..self.title.."】" .. (self.next_context or ""):gsub("\n", " ") .. "...",
+                                text = "..." .. (self.prev_context or ""):gsub("\n", " ") .. "【" ..(self.highlighted_word or self.title).."】" .. (self.next_context or ""):gsub("\n", " ") .. "...",
                                 width = width,
                                 face = Font:getFace("smallffont"),
                                 alignment = self.title_align or "left",
@@ -1035,6 +1042,7 @@ end
 function VocabItemWidget:showMore()
     local dialogue = WordInfoDialog:new{
         title = self.item.word,
+        highlighted_word = self.item.highlight,
         book_title = self.item.book_title,
         dates = _("Added on") .. " " .. os.date("%Y-%m-%d", self.item.create_time) .. " | " ..
         _("Review scheduled at") .. " " .. os.date("%Y-%m-%d %H:%M", self.item.due_time),
@@ -2062,15 +2070,20 @@ function VocabBuilder:onWordLookedUp(word, title, is_manual)
     if self.widget and self.widget.current_lookup_word == word then return true end
     local prev_context
     local next_context
+    local highlight
     if settings.with_context and self.ui.highlight then
         prev_context, next_context = self.ui.highlight:getSelectedWordContext(15)
+        if self.ui.highlight.selected_text and self.ui.highlight.selected_text.text then
+            highlight = util.cleanupSelectedText(self.ui.highlight.selected_text.text)
+        end
     end
     DB:insertOrUpdate({
         book_title = title,
         time = os.time(),
         word = word,
         prev_context = prev_context,
-        next_context = next_context
+        next_context = next_context,
+        highlight = highlight ~= word and highlight or nil
     })
     return true
 end

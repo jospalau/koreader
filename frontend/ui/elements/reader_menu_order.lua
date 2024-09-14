@@ -89,7 +89,6 @@ local order = {
     document = {
         "document_metadata_location",
         "document_auto_save",
-        "document_save",
         "document_end_action",
         "language_support",
         "----------------------------",

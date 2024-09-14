@@ -382,6 +382,10 @@ function DeviceListener:onRequestUSBMS()
     MassStorage:start(false)
 end
 
+function DeviceListener:onExit()
+    self.ui.menu:exitOrRestart()
+end
+
 function DeviceListener:onRestart()
     self.ui.menu:exitOrRestart(function() UIManager:restartKOReader() end)
 end
@@ -396,10 +400,6 @@ end
 
 function DeviceListener:onRequestPowerOff()
     UIManager:askForPowerOff()
-end
-
-function DeviceListener:onExit(callback)
-    self.ui.menu:exitOrRestart(callback)
 end
 
 function DeviceListener:onFullRefresh()
