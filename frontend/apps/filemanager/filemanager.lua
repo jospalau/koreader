@@ -29,6 +29,7 @@ local ReadCollection = require("readcollection")
 local ReaderDeviceStatus = require("apps/reader/modules/readerdevicestatus")
 local ReaderDictionary = require("apps/reader/modules/readerdictionary")
 local ReaderWikipedia = require("apps/reader/modules/readerwikipedia")
+local ReaderRsync = require("apps/reader/modules/readerrsync")
 local ReadHistory = require("readhistory")
 local Screenshoter = require("ui/widget/screenshoter")
 local TitleBar = require("ui/widget/titlebar")
@@ -431,6 +432,7 @@ function FileManager:init()
     self:registerModule("languagesupport", LanguageSupport:new{ ui = self })
     self:registerModule("dictionary", ReaderDictionary:new{ ui = self })
     self:registerModule("wikipedia", ReaderWikipedia:new{ ui = self })
+    self:registerModule("rsync", ReaderRsync:new{ ui = self })
     self:registerModule("devicestatus", ReaderDeviceStatus:new{ ui = self })
     self:registerModule("devicelistener", DeviceListener:new{ ui = self })
     self:registerModule("networklistener", NetworkListener:new{ ui = self })
@@ -1384,6 +1386,8 @@ end
 
 function FileManager:onPushConfig()
     local InfoMessage = require("ui/widget/infomessage")
+    local server = G_reader_settings:readSetting("rsync_server") or "192.168.50.252"
+    local port = G_reader_settings:readSetting("rsync_port") or ""
     local rv
     local output = ""
     if not Device:isAndroid() then
@@ -1393,11 +1397,11 @@ function FileManager:onPushConfig()
         end
         local execute = nil
         if Device:isKobo() then
-            execute = io.popen("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/pushConfig.sh)" )
+            execute = io.popen(string.format("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/pushConfig.sh %s %s)", server, port))
         elseif Device:isKindle() then
-            execute = io.popen("/mnt/us/scripts/pushConfig.sh && echo $? || echo $?" )
+            execute = io.popen(string.format("/mnt/us/scripts/pushConfig.sh %s %s && echo $? || echo $?", server, port))
         else -- PocketBook
-            execute = io.popen("/mnt/ext1/scripts/pushConfig.sh && echo $? || echo $?" )
+            execute = io.popen(string.format("/mnt/ext1/scripts/pushConfig.sh %s %s && echo $? || echo $?", server, port))
         end
 
         output = execute:read('*a')
@@ -1411,6 +1415,8 @@ end
 
 function FileManager:onPullConfig()
     local InfoMessage = require("ui/widget/infomessage")
+    local server = G_reader_settings:readSetting("rsync_server") or "192.168.50.252"
+    local port = G_reader_settings:readSetting("rsync_port") or ""
     local rv
     local output = ""
     if not Device:isAndroid() then
@@ -1420,11 +1426,11 @@ function FileManager:onPullConfig()
         end
         local execute = nil
         if Device:isKobo() then
-            execute = io.popen("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/pullConfig.sh)" )
+            execute = io.popen(string.format("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/pullConfig.sh %s %s)", server, port))
         elseif Device:isKindle() then
-            execute = io.popen("/mnt/us/scripts/pullConfig.sh && echo $? || echo $?" )
+            execute = io.popen(string.format("/mnt/us/scripts/pullConfig.sh %s %s && echo $? || echo $?", server, port))
         else -- PocketBook
-            execute = io.popen("/mnt/ext1/scripts/pullConfig.sh && echo $? || echo $?" )
+            execute = io.popen(string.format("/mnt/ext1/scripts/pullConfig.sh %s %s && echo $? || echo $?", server, port))
         end
         output = execute:read('*a')
         local save_text = _("Quit")
@@ -1468,6 +1474,8 @@ end
 
 function FileManager:onGetLastPushingConfig()
     local InfoMessage = require("ui/widget/infomessage")
+    local server = G_reader_settings:readSetting("rsync_server") or "192.168.50.252"
+    local port = G_reader_settings:readSetting("rsync_port") or ""
     local rv
     local output = ""
     if not Device:isAndroid() then
@@ -1477,11 +1485,11 @@ function FileManager:onGetLastPushingConfig()
         end
         local execute = nil
         if Device:isKobo() then
-            execute = io.popen("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/getLastPushing.sh)" )
+            execute = io.popen(string.format("(cd /mnt/onboard/.adds/scripts %s %s && /mnt/onboard/.adds/scripts/getLastPushing.sh)", server, port))
         elseif Device:isKindle() then
-            execute = io.popen("/mnt/us/scripts/getLastPushing.sh && echo $? || echo $?" )
+            execute = io.popen(string.format("/mnt/us/scripts/getLastPushing.sh %s %s && echo $? || echo $?", server, port))
         else -- PocketBook
-            execute = io.popen("/mnt/ext1/scripts/getLastPushing.sh && echo $? || echo $?" )
+            execute = io.popen(string.format("/mnt/ext1/scripts/getLastPushing.sh %s %s && echo $? || echo $?", server, port))
         end
         output = execute:read('*a')
         UIManager:show(InfoMessage:new{
@@ -1494,6 +1502,9 @@ end
 
 function FileManager:onSynchronizeCode()
     local InfoMessage = require("ui/widget/infomessage")
+
+    local server = G_reader_settings:readSetting("rsync_server") or "192.168.50.252"
+    local port = G_reader_settings:readSetting("rsync_port") or ""
     local rv
     local output = ""
     if not Device:isAndroid() then
@@ -1503,11 +1514,11 @@ function FileManager:onSynchronizeCode()
         end
         local execute = nil
         if Device:isKobo() then
-            execute = io.popen("/mnt/onboard/.adds/scripts/syncKOReaderCode.sh && echo $? || echo $?" )
+            execute = io.popen(string.format("/mnt/onboard/.adds/scripts/syncKOReaderCode.sh %s %s && echo $? || echo $?", server, port))
         elseif Device:isKindle() then
-            execute = io.popen("/mnt/us/scripts/syncKOReaderCode.sh && echo $? || echo $?" )
+            execute = io.popen(string.format("/mnt/us/scripts/syncKOReaderCode.sh %s %s && echo $? || echo $?", server, port))
         else -- PocketBook
-            execute = io.popen("/mnt/ext1/scripts/syncKOReaderCode.sh && echo $? || echo $?" )
+            execute = io.popen(string.format("/mnt/ext1/scripts/syncKOReaderCode.sh %s %s && echo $? || echo $?", server, port))
         end
         output = execute:read('*a')
 
@@ -1535,59 +1546,6 @@ function FileManager:onSynchronizeCode()
                     end
                 end,
                 cancel_text = _("No need to restart"),
-                cancel_callback = function()
-                    logger.info("discard defaults")
-                end,
-            })
-        end
-        UIManager:show(InfoMessage:new{
-            text = T(_(output)),
-            face = Font:getFace("myfont"),
-        })
-    end
-end
-
-function FileManager:onSynchronizeCodePhone()
-    local InfoMessage = require("ui/widget/infomessage")
-    local rv
-    local output = ""
-    if not Device:isAndroid() then
-        local NetworkMgr = require("ui/network/manager")
-        if not NetworkMgr:isWifiOn() then
-            NetworkMgr:turnOnWifiAndWaitForConnection()
-        end
-        local execute = nil
-        if Device:isKobo() then
-            execute = io.popen("/mnt/onboard/.adds/scripts/syncKOReaderCodePhone.sh && echo $? || echo $?" )
-        elseif Device:isKindle() then
-            execute = io.popen("/mnt/us/scripts/syncKOReaderCodePhone.sh && echo $? || echo $?" )
-        else -- PocketBook
-            execute = io.popen("/mnt/ext1/scripts/syncKOReaderCodePhone.sh && echo $? || echo $?" )
-        end
-        output = execute:read('*a')
-
-        local save_text = _("Quit")
-        if Device:canRestart() then
-            save_text = _("Restart")
-        end
-        if not string.match(output, "Problem") and not string.match(output, "not connected") then
-            local Size = require("ui/size")
-            UIManager:show(ConfirmBox:new{
-                dismissable = false,
-                text = _("KOReader needs to be restarted."),
-                ok_text = save_text,
-                margin = Size.margin.tiny,
-                padding = Size.padding.tiny,
-                ok_callback = function()
-                    if Device:canRestart() then
-                        UIManager:restartKOReader()
-                        -- The new Clara BW is so quick closing that when presing on Restart it doesn't flash
-                        -- Set a little delay for all devices
-                        local util = require("ffi/util")
-                        util.usleep(100000)
-                    else
-                        UIManager:quit()                                                                                                                                  end
-                end,                                                                                                                                                  cancel_text = _("No need to restart"),
                 cancel_callback = function()
                     logger.info("discard defaults")
                 end,
@@ -1709,6 +1667,8 @@ end
 
 function FileManager:onSyncBooks()
     local InfoMessage = require("ui/widget/infomessage")
+    local server = G_reader_settings:readSetting("rsync_server") or "192.168.50.252"
+    local port = G_reader_settings:readSetting("rsync_port") or ""
     local rv
     local output = ""
     if not Device:isAndroid() then
@@ -1718,11 +1678,11 @@ function FileManager:onSyncBooks()
         end
         local execute = nil
         if Device:isKobo() then
-            execute = io.popen("/mnt/onboard/.adds/scripts/syncBooks.sh && echo $? || echo $?" )
+            execute = io.popen(string.format("/mnt/onboard/.adds/scripts/syncBooks.sh %s %s && echo $? || echo $?", server, port))
         elseif Device:isKindle() then
-            execute = io.popen("/mnt/us/scripts/syncBooks.sh && echo $? || echo $?" )
+            execute = io.popen(string.format("/mnt/us/scripts/syncBooks.sh %s %s && echo $? || echo $?", server, port))
         else -- PocketBook
-            execute = io.popen("/mnt/ext1/scripts/syncBooks.sh && echo $? || echo $?" )
+            execute = io.popen(string.format("/mnt/ext1/scripts/syncBooks.sh %s %s && echo $? || echo $?", server, port))
         end
         output = execute:read('*a')
         UIManager:show(InfoMessage:new{
