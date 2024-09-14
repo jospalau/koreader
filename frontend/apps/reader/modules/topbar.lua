@@ -214,9 +214,14 @@ function TopBar:getTotalRead()
 
     local conn = SQ3.open(db_location)
 
+    local sql_stmt = "SELECT name FROM sqlite_master WHERE type='table' AND name='wpm_stat_data'"
+    local exists_table = conn:rowexec(sql_stmt)
+    local stats_table = {}
+    if exists_table == nil then
+        return 0
+    end
 
-
-    local sql_stmt = [[
+    sql_stmt = [[
         SELECT sum(duration)
         FROM page_stat
     ]]
@@ -243,9 +248,14 @@ function TopBar:getBooksOpened()
 
     local conn = SQ3.open(db_location)
 
+    local sql_stmt = "SELECT name FROM sqlite_master WHERE type='table' AND name='wpm_stat_data'"
+    local exists_table = conn:rowexec(sql_stmt)
+    local stats_table = {}
+    if exists_table == nil then
+        return 0
+    end
 
-
-    local sql_stmt = [[
+    sql_stmt = [[
         SELECT count(id)
         FROM book
     ]]
