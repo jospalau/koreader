@@ -30,7 +30,7 @@ local logger = require("logger")
 local RSync = WidgetContainer:extend{
     name = "RSync",
     server = G_reader_settings:readSetting("rsync_server", "192.168.50.252"),
-    port = G_reader_settings:readSetting("rsync_port", ""),
+    port = G_reader_settings:readSetting("rsync_port","873"),
 }
 
 
@@ -71,6 +71,9 @@ function RSync:addToMainMenu(menu_items)
                                     -- keep_menu_open = true,
                                     callback = function()
                                         local server = server_dialog:getInputValue()
+                                        if server == "" then
+                                            server = "192.168.50.252"
+                                        end
                                         self.server = server
                                         G_reader_settings:saveSetting("rsync_server", server)
 
@@ -97,7 +100,7 @@ function RSync:addToMainMenu(menu_items)
                         title = _("Set custom port"),
                         input = self.port,
                         input_type = "number",
-                        input_hint = _("Port number (default is no port)"),
+                        input_hint = _("Port number (default is 873)"),
                         buttons =  {
                             {
                                 {
@@ -114,13 +117,13 @@ function RSync:addToMainMenu(menu_items)
                                         local port = port_dialog:getInputValue()
                                         logger.warn("port", port)
                                         if port and port >= 1 and port <= 65535 then
-                                            self.port = port
-                                            G_reader_settings:saveSetting("rsync_port", port)
+                                            port = port
                                         end
                                         if not port then
-                                            self.port = ""
-                                            G_reader_settings:saveSetting("rsync_port", port)
+                                            port = "873"
                                         end
+                                        self.port = port
+                                        G_reader_settings:saveSetting("rsync_port", port)
                                         UIManager:close(port_dialog)
                                         touchmenu_instance:updateItems()
                                     end,
