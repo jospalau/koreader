@@ -329,6 +329,68 @@ function TopBar:getPublicationDateBook()
     end
 end
 
+function TopBar:getOriginBook()
+    if not self.ui then return end
+    local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
+    if file_type == "epub" then
+        local css_text = self.ui.document:getDocumentFileContent("OPS/styles/stylesheet.css")
+        if css_text == nil then
+            css_text = self.ui.document:getDocumentFileContent("stylesheet.css")
+        end
+        if css_text == nil then
+            css_text = self.ui.document:getDocumentFileContent("OEBPS/css/style.css")
+        end
+
+        -- $ bsdtar tf arthur-conan-doyle_the-hound-of-the-baskervilles.epub | grep -i css
+        -- epub/css/
+        -- epub/css/core.css
+        -- epub/css/se.css
+        -- epub/css/local.css
+        if css_text == nil then
+            css_text = self.ui.document:getDocumentFileContent("epub/css/core.css")
+        end
+
+        local opf_text = self.ui.document:getDocumentFileContent("OPS/Miscellaneous/content.opf")
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("content.opf")
+        end
+
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("OPS/volume.opf")
+        end
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("volume.opf")
+        end
+
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("OEBPS/Miscellaneous/content.opf")
+        end
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("OEBPS/content.opf")
+        end
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("content.opf")
+        end
+
+        -- $ bsdtar tf arthur-conan-doyle_the-hound-of-the-baskervilles.epub | grep -i content
+        -- epub/content.opf
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("epub/content.opf")
+        end
+
+        local origin = string.match(opf_text, "<opf:meta property=\"calibre:user_metadata\">(.-)</opf:meta>")
+        if origin ~= nil then
+            origin = string.match(origin, "\"#origin\": {(.-)}")
+            if origin ~= nil then
+                origin = string.match(origin, " \"#value#\": \".-\"")
+                origin = string.match(origin, ": .*")
+                origin = origin:sub(4,origin:len() - 1)
+            end
+        end
+        return origin
+    end
+end
+
 function TopBar:init()
 
     -- This is done in readerui.lua because the topbar is started in ReaderView when the menu has not yet been started by ReaderUI
@@ -772,6 +834,8 @@ function TopBar:onReaderReady()
     self.status_bar = self.view.footer_visible
     self.pub_date = self:getPublicationDateBook()
     self.total_words = select(2, self.ui.document:getBookCharactersCount())
+    self.origin_book = self:getOriginBook()
+
 end
 function TopBar:onToggleShowTopBar()
     local show_top_bar = G_reader_settings:isTrue("show_top_bar")
@@ -990,7 +1054,11 @@ function TopBar:toggleBar(light_on)
 
         self.chapter_text:setText(chapter)
         if self.option == 1 then
-            self.author_text:setText(self.ui.document._document:getDocumentProps().authors .. " - " ..  self.pub_date .. " - " .. self.book_progress.text)
+            if self.origin_book and  self.origin_book ~= "" then
+                self.author_text:setText(self.ui.document._document:getDocumentProps().authors .. " - " ..  self.pub_date .. " - "  ..  self.origin_book .. " - " .. self.book_progress.text)
+            else
+                self.author_text:setText(self.ui.document._document:getDocumentProps().authors .. " - " ..  self.pub_date .. " - " .. self.book_progress.text)
+            end
         else
             self.author_text:setText("")
         end
