@@ -195,6 +195,7 @@ function optionsutil.showValues(configurable, option, prefix, document, unit)
         if unit and unit ~= "pt" then
             unit = G_reader_settings:nilOrTrue("metric_length") and "mm" or "in"
         end
+        -- The desktop publishing point (DTP point) or PostScript point is defined as 1/72 or 0.0138 of the international inch
         -- We have now points in the font size, converting to didot points is simple, 1 points = 0.93575007368111 didot points
         if unit == "pt" then
             text = T(_("%1\n%2\nCurrent value: %3 (%4)\nDefault value: %5 (%6)"), name_text, help_text,

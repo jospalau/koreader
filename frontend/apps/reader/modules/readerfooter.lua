@@ -3263,7 +3263,7 @@ function ReaderFooter:onGetStyles()
 end
 
 
-
+-- The desktop publishing point (DTP point) or PostScript point is defined as 1/72 or 0.0138 of the international inch
 -- In the United States and Great Britain, the point is approximately one-seventy-second of an inch (.351 mm), or one-twelfth of a pica and is called a pica point
 -- In Europe, the point is a little bigger (.376 mm) and is called a Didot point
 --  1pt = 0.93575 Didot point
@@ -3405,6 +3405,7 @@ function ReaderFooter:onGetTextPage()
     local font_size_pt =  self.ui.document.configurable.font_size
     local font_size_mm =  self.ui.document.configurable.font_size * 0.35
 
+    -- The desktop publishing point (DTP point) or PostScript point is defined as 1/72 or 0.0138 of the international inch
     -- We have now points in the font size, converting to didot points is simple, 1 points = 0.93575007368111 didot points
     -- local font_size_pt_koreader = string.format(" (%.2fp)", convertSizeTo(self.ui.document.configurable.font_size, "pt"))
     local font_size_pt_koreader = string.format(" (%.2fp)", self.ui.document.configurable.font_size * 0.94)

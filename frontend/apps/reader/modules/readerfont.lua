@@ -184,6 +184,7 @@ function ReaderFont:onReadSettings(config)
 
     local Device = require("device")
     local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+    -- The desktop publishing point (DTP point) or PostScript point is defined as 1/72 or 0.0138 of the international inch
     local size_px = (display_dpi * self.configurable.font_size)/72
 
     if util.getFileNameSuffix(self.ui.document.file) == "epub" then
@@ -234,6 +235,7 @@ function ReaderFont:onSetFontSize(size, nomessage)
     local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
     -- local size_pt = math.floor((Screen:scaleBySize(size) * 72 / display_dpi) * 100) / 100
 
+    -- The desktop publishing point (DTP point) or PostScript point is defined as 1/72 or 0.0138 of the international inch
     local size_px = (display_dpi * size)/72
 
 
