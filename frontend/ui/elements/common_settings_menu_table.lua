@@ -268,10 +268,10 @@ NetworkMgr:getMenuTable(common_settings)
 common_settings.screen = {
     text = _("Screen"),
 }
-common_settings.screen_rotation = require("ui/elements/screen_rotation_menu_table")
-common_settings.screen_dpi = require("ui/elements/screen_dpi_menu_table")
-common_settings.screen_eink_opt = require("ui/elements/screen_eink_opt_menu_table")
-common_settings.screen_notification = require("ui/elements/screen_notification_menu_table")
+common_settings.screen_rotation = dofile("frontend/ui/elements/screen_rotation_menu_table.lua")
+common_settings.screen_dpi = dofile("frontend/ui/elements/screen_dpi_menu_table.lua")
+common_settings.screen_eink_opt = dofile("frontend/ui/elements/screen_eink_opt_menu_table.lua")
+common_settings.screen_notification = dofile("frontend/ui/elements/screen_notification_menu_table.lua")
 
 if Device:isTouchDevice() then
     common_settings.taps_and_gestures = {
@@ -286,13 +286,13 @@ if Device:isTouchDevice() then
             UIManager:broadcastEvent(Event:new("IgnoreHoldCorners"))
         end,
     }
-    common_settings.screen_disable_double_tab = require("ui/elements/screen_disable_double_tap_table")
-    common_settings.menu_activate = require("ui/elements/menu_activate")
+    common_settings.screen_disable_double_tab = dofile("frontend/ui/elements/screen_disable_double_tap_table.lua")
+    common_settings.menu_activate = dofile("frontend/ui/elements/menu_activate.lua")
 end
 
 -- NOTE: Allow disabling color if it's mistakenly enabled on a Grayscale screen (after a settings import?)
 if Screen:isColorEnabled() or Screen:isColorScreen() then
-    common_settings.color_rendering = require("ui/elements/screen_color_menu_table")
+    common_settings.color_rendering = dofile("frontend/ui/elements/screen_color_menu_table.lua")
 end
 
 -- fullscreen toggle for supported devices
@@ -713,26 +713,34 @@ common_settings.device = {
 
 common_settings.keyboard_layout = {
     text = _("Keyboard"),
-    sub_item_table = require("ui/elements/menu_keyboard_layout"),
+    sub_item_table = dofile("frontend/ui/elements/menu_keyboard_layout.lua"),
 }
 
-common_settings.font_ui_fallbacks = require("ui/elements/font_ui_fallbacks")
+common_settings.font_ui_fallbacks = dofile("frontend/ui/elements/font_ui_fallbacks.lua")
 
 common_settings.units = {
-    text = _("Units"),
+    text_func = function()
+        local unit = G_reader_settings:readSetting("dimension_units", "mm")
+        return T(_("Dimension units: %1"), unit)
+    end,
     sub_item_table = {
         {
-            text = _("Metric length"),
+            text = _("Also show values in pixels"),
             checked_func = function()
-                return G_reader_settings:readSetting("metric_length", true)
+                return G_reader_settings:isTrue("dimension_units_append_px")
             end,
-            callback = function(touchmenu_instance)
-                G_reader_settings:toggle("metric_length")
-                if touchmenu_instance then touchmenu_instance:updateItems() end
+            enabled_func = function()
+                return G_reader_settings:readSetting("dimension_units") ~= "px"
             end,
-            keep_menu_open = true,
+            callback = function()
+                G_reader_settings:flipNilOrFalse("dimension_units_append_px")
+            end,
+            separator = true,
         },
-    },
+        genGenericMenuEntry(_("Metric system"),   "dimension_units", "mm", nil, true),
+        genGenericMenuEntry(_("Imperial system"), "dimension_units", "in", nil, true),
+        genGenericMenuEntry(_("Pixels"),          "dimension_units", "px", nil, true),
+    }
 }
 
 common_settings.screenshot = {

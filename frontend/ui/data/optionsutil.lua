@@ -17,52 +17,93 @@ function optionsutil.enableIfEquals(configurable, option, value)
     return configurable[option] == value
 end
 
--- Converts px size to mm, inch or pt
--- if the `metric_length`-setting is not set or true -> mm
--- if the `metric_length`-setting is false -> inch
--- if format == "pt" -> pt
+-- Converts flex px/pt sizes to absolute px, mm, inch or pt
 local function convertSizeTo(px, format)
-    local format_factor = 1 -- we are defaulting on mm
+    local format_factor
 
-    if format == "pt" then
-        format_factor =  format_factor * (2660 / 1000) -- see https://www.wikiwand.com/en/Metric_typographic_units
+    if format == "px" then
+        return Screen:scaleBySize(px)
+    elseif format == "pt" then
+        -- PostScript point,
+        -- c.f., https://en.wikipedia.org/wiki/Metric_typographic_units
+        --     & https://freetype.org/freetype2/docs/glyphs/glyphs-2.html
+        format_factor = 72
     elseif format == "in" then
-        format_factor = 1 / 25.4
+        format_factor = 1
+    else
+        -- i.e., Metric
+        format_factor = 25.4
     end
 
-    local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI() -- use device hardcoded dpi if available
-    return Screen:scaleBySize(px) / display_dpi * 25.4 * format_factor
+    -- We want the actual physical screen DPI if available, not a user override
+    local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+    return Screen:scaleBySize(px) / display_dpi * format_factor
 end
 
-local function real_size_string(ko_size, unit)
-    if not ko_size or not unit then return "" end
-    ko_size = tonumber(ko_size)
-    local shown_unit
+local function formatFlexSize(value, unit)
+    if not value then
+        -- This shouldn't really ever happen...
+        return ""
+    end
+    if not unit then
+        return tostring(value)
+    end
+
+    local size = tonumber(value)
+    if not size then
+        return tostring(value)
+    end
+
+    local shown_unit = unit
+    local fmt = "%d (%.2f %s)"
     if unit == "pt" then
         shown_unit = C_("Font size", "pt")
     elseif unit == "mm" then
         shown_unit = C_("Length", "mm")
     elseif unit == "in" then
         shown_unit = C_("Length", "in")
-    else
-        shown_unit = unit -- for future units
+    elseif unit == "px" then
+        shown_unit = C_("Pixels", "px")
+        -- We don't do subpixel positioning ;)
+        fmt = "%d (%d %s)"
     end
-    if ko_size then
-        return string.format(" (%.2f %s)", convertSizeTo(ko_size, unit), shown_unit)
+
+    if G_reader_settings:isTrue("dimension_units_append_px") and unit ~= "px" then
+        local px_str = C_("Pixels", "px")
+        return string.format(fmt .. " [%d %s]", size, convertSizeTo(size, unit), shown_unit,
+                                                      convertSizeTo(size, "px"), px_str)
     else
-        return ""
+        return string.format(fmt, size, convertSizeTo(size, unit), shown_unit)
     end
 end
 
+-- Public wrapper for callers outside of ConfigOption, where we can't pull name_text_unit from option
+function optionsutil.formatFlexSize(value, unit)
+    unit = unit or G_reader_settings:readSetting("dimension_units", "mm")
+    return formatFlexSize(value, unit)
+end
+
+-- This is used extensively in ui/data/(cre|kopt)options as a `name_text_hold_callback`.
+-- `ConfigOption` will *never* pass the `unit` argument, though,
+-- so if it's unset, we'll try to pull it from `option`'s `name_text_unit` field.
+-- This field can be left unset (which is the vast majority of cases),
+-- in which case we don't do anything fancy with the value,
+-- or it can be set to an explicit unit (e.g., "pt" or "px"),
+-- in which case we append the results of a conversion to that unit in the final string.
+-- It can also be set to `true`, in which case the unit is pulled from user settings ("dimension_units").
 function optionsutil.showValues(configurable, option, prefix, document, unit)
     local default = G_reader_settings:readSetting(prefix.."_"..option.name)
     local current = configurable[option.name]
     local value_default, value_current
+    unit = unit or option.name_text_unit
+    if unit and unit ~= "pt" then
+        unit = G_reader_settings:readSetting("dimension_units", "mm")
+    end
     if option.toggle and option.values then
         -- build a table so we can see if current/default settings map
         -- to a known setting with a name (in option.toggle)
         local arg_table = {}
-        for i=1,#option.values do
+        for i=1, #option.values do
             local val = option.values[i]
             -- flatten table to a string for easy lookup via arg_table
             if type(val) == "table" then val = table.concat(val, ",") end
@@ -97,14 +138,14 @@ function optionsutil.showValues(configurable, option, prefix, document, unit)
             end
         else
             if default then
-                for i=1,#option.labels do
+                for i=1, #option.labels do
                     if default == option.values[i] then
                         default = option.labels[i]
                         break
                     end
                 end
             end
-            for i=1,#option.labels do
+            for i=1, #option.labels do
                 if current == option.values[i] then
                     current = option.labels[i]
                     break
@@ -139,13 +180,16 @@ function optionsutil.showValues(configurable, option, prefix, document, unit)
         local nb_current, nb_default = tonumber(current), tonumber(default)
         if nb_current == nil or nb_default == nil then
             text = T(_("%1\n%2\nCurrent value: %3\nDefault value: %4"), name_text, help_text,
-                                            value_current or current, value_default or default)
+                                            formatFlexSize(value_current or current, unit),
+                                            formatFlexSize(value_default or default, unit))
         elseif value_default then
             text = T(_("%1\n%2\nCurrent value: %3 (%4)\nDefault value: %5 (%6)"), name_text, help_text,
-                                            current, value_current, default, value_default)
+                                            current, formatFlexSize(value_current, unit),
+                                            default, formatFlexSize(value_default, unit))
         else
             text = T(_("%1\n%2\nCurrent value: %3 (%4)\nDefault value: %5"), name_text, help_text,
-                                            current, value_current, default)
+                                            current, formatFlexSize(value_current, unit),
+                                            default)
         end
     else
         if unit and unit ~= "pt" then
@@ -159,9 +203,9 @@ function optionsutil.showValues(configurable, option, prefix, document, unit)
             string.format("%.1fpt", default),
             string.format("%.1fp", default * 0.94))
         else
-            text = T(_("%1\n%2\nCurrent value: %3%4\nDefault value: %5%6"), name_text, help_text,
-                                            current, real_size_string(current, unit),
-                                            default, real_size_string(default, unit))
+            text = T(_("%1\n%2\nCurrent value: %3\nDefault value: %4"), name_text, help_text,
+            formatFlexSize(current, unit),
+            formatFlexSize(default, unit))
         end
     end
     UIManager:show(InfoMessage:new{ text=text })
@@ -170,30 +214,30 @@ end
 function optionsutil.showValuesHMargins(configurable, option)
     local default = G_reader_settings:readSetting("copt_"..option.name)
     local current = configurable[option.name]
-    local unit = G_reader_settings:nilOrTrue("metric_length") and "mm" or "in"
+    local unit = G_reader_settings:readSetting("dimension_units", "mm")
     if not default then
         UIManager:show(InfoMessage:new{
             text = T(_([[
 Current margins:
-  left:  %1%2
-  right: %3%4
+  left: %1
+  right: %2
 Default margins: not set]]),
-                current[1], real_size_string(current[1], unit),
-                current[2], real_size_string(current[2], unit))
+                formatFlexSize(current[1], unit),
+                formatFlexSize(current[2], unit))
         })
     else
         UIManager:show(InfoMessage:new{
             text = T(_([[
 Current margins:
-  left:  %1%2
-  right: %3%4
+  left: %1
+  right: %2
 Default margins:
-  left:  %5%6
-  right: %7%8]]),
-                current[1], real_size_string(current[1], unit),
-                current[2], real_size_string(current[2], unit),
-                default[1], real_size_string(default[1], unit),
-                default[2], real_size_string(default[2], unit))
+  left: %3
+  right: %4]]),
+                formatFlexSize(current[1], unit),
+                formatFlexSize(current[2], unit),
+                formatFlexSize(default[1], unit),
+                formatFlexSize(default[2], unit))
         })
     end
 end
