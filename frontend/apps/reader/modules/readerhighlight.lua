@@ -1953,7 +1953,8 @@ function ReaderHighlight:onHoldRelease()
         -- UIManager:show(Notification:new{
         --     text = (tostring(self.t2 - self.t1)),
         -- })
-        self:onHighlightSearch()
+        self:onHighlightSearchFull()
+
     end
     return true
 end
@@ -2125,6 +2126,21 @@ function ReaderHighlight:onHighlightSearch()
     if self.selected_text then
         local text = util.stripPunctuation(util.cleanupSelectedText(self.selected_text.text))
         self.ui.search:searchText(text)
+    end
+end
+
+function ReaderHighlight:onHighlightSearchFull()
+    logger.dbg("search highlight")
+    -- First, if our dialog is still shown, close it.
+    if self.highlight_dialog then
+        UIManager:close(self.highlight_dialog)
+        self.highlight_dialog = nil
+    end
+    self:highlightFromHoldPos()
+    if self.selected_text then
+        local text = util.stripPunctuation(util.cleanupSelectedText(self.selected_text.text))
+        -- self.ui.search:onShowFulltextSearchInput(text)
+        self.ui.search:fullTextSearch(text)
     end
 end
 

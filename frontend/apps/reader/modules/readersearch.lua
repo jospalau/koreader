@@ -322,6 +322,15 @@ function ReaderSearch:onShowFulltextSearchInput(search_string)
     return true
 end
 
+function ReaderSearch:fullTextSearch(search_string)
+    self.last_search_text = search_string
+    local Trapper = require("ui/trapper")
+    Trapper:wrap(function()
+        self:findAllText(search_string)
+    end)
+    return true
+end
+
 function ReaderSearch:onShowSearchDialog(text, direction, regex, case_insensitive)
     local neglect_current_location = false
     local current_page
