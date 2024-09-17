@@ -2139,6 +2139,7 @@ function ReaderHighlight:onHighlightSearchFull()
     self:highlightFromHoldPos()
     if self.selected_text then
         local text = util.stripPunctuation(util.cleanupSelectedText(self.selected_text.text))
+        self.ui.highlight:clear()
         -- self.ui.search:onShowFulltextSearchInput(text)
         self.ui.search:fullTextSearch(text)
     end
