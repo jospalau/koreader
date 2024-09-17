@@ -247,7 +247,7 @@ function ReaderSearch:searchCallback(reverse, text)
         else
             local Trapper = require("ui/trapper")
             Trapper:wrap(function()
-                self:findAllText(search_text)
+                self:findAllText(search_text, false)
             end)
         end
     end
@@ -326,7 +326,7 @@ function ReaderSearch:fullTextSearch(search_string)
     self.last_search_text = search_string
     local Trapper = require("ui/trapper")
     Trapper:wrap(function()
-        self:findAllText(search_string)
+        self:findAllText(search_string, true)
     end)
     return true
 end
@@ -614,7 +614,7 @@ function ReaderSearch:searchNext(pattern, direction, regex, case_insensitive)
     return self:search(pattern, 1, regex, case_insensitive)
 end
 
-function ReaderSearch:findAllText(search_text)
+function ReaderSearch:findAllText(search_text, untilCurrentPage)
 self.ui.searching = true
     local UIManager = require("ui/uimanager")
     local Notification = require("ui/widget/notification")
@@ -630,7 +630,7 @@ self.ui.searching = true
         UIManager:forceRePaint()
         local completed, res = Trapper:dismissableRunInSubprocess(function()
             return self.ui.document:findAllText(search_text,
-                self.case_insensitive, self.findall_nb_context_words, self.findall_max_hits, self.use_regex)
+                self.case_insensitive, self.findall_nb_context_words, self.findall_max_hits, self.use_regex, untilCurrentPage)
         end, info)
         if not completed then
             self.ui.searching = false

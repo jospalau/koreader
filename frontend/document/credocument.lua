@@ -1434,9 +1434,9 @@ function CreDocument:findText(pattern, origin, direction, case_insensitive, page
     return self._document:findText(pattern, origin, direction == 1, case_insensitive, regex, max_hits)
 end
 
-function CreDocument:findAllText(pattern, case_insensitive, nb_context_words, max_hits, regex)
+function CreDocument:findAllText(pattern, case_insensitive, nb_context_words, max_hits, regex, untilCurrentPage)
     logger.dbg("CreDocument: find all text", pattern, case_insensitive, regex, max_hits, true, nb_context_words)
-    return self._document:findAllText(pattern, case_insensitive, regex, max_hits, true, nb_context_words)
+    return self._document:findAllText(pattern, case_insensitive, regex, max_hits, true, nb_context_words, untilCurrentPage)
 end
 
 function CreDocument:enableInternalHistory(toggle)
