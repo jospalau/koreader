@@ -1483,7 +1483,7 @@ function TopBar:paintTo(bb, x, y)
 
         -- times[1][1]:setText(time .. "|" .. batt_lvl .. "%")
 
-        times[1][1]:setText("BDB: " .. TopBar.total_books .. ", TR: " .. TopBar.total_read .. "d")
+        times[1][1]:setText("BDB: " .. self.total_books .. ", TR: " .. self.total_read .. "d")
         times:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM - times[1][1]:getSize().h )
     end
 end

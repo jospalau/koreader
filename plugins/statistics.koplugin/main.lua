@@ -3151,12 +3151,20 @@ function ReaderStatistics:deleteBooksByTotalDuration(max_total_duration_mn)
                 end
             end
             conn:close()
+            local util = require("util")
+            util.generateStats()
             UIManager:show(InfoMessage:new{
                 text = nb_deleted > 0 and T(N_("Statistics for 1 book removed.",
                                                "Statistics for %1 books removed.",
                                                nb_deleted), nb_deleted)
                                        or T(_("No statistics removed."))
             })
+
+            local FileManager = require("apps/filemanager/filemanager")
+            if FileManager.instance then
+                FileManager.topbar.total_books = FileManager.topbar:getBooksOpened()
+            end
+
         end,
     })
 end
