@@ -18,7 +18,7 @@ local T = require("ffi/util").template
 local _ = require("gettext")
 
 local ReaderPageMap = WidgetContainer:extend{
-    label_font_face = "ffont",
+    label_font_face = "myfont3",
     label_default_font_size = 14,
     -- Black so it's readable (and non-gray-flashing on GloHD)
     label_color = Blitbuffer.COLOR_BLACK,
