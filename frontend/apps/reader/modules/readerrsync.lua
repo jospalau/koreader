@@ -38,6 +38,13 @@ function RSync:init()
     self.ui.menu:registerToMainMenu(RSync)
 end
 
+
+-- function RSync:onPageUpdate(pageno)
+--     local word = "Natsuko"
+--     local page = self.view.state.page
+--     local retval, words_found = self.ui.document:findText(word, 0, 0, true, page, false, 100)
+-- end
+
 function RSync:addToMainMenu(menu_items)
 
     menu_items.rsync_configuration = {
