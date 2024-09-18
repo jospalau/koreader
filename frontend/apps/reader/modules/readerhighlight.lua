@@ -1860,12 +1860,18 @@ end
 function ReaderHighlight:showNote()
     local text = "no note"
     if self.selected_text then
-        text = self.selected_text
+        -- text = self.selected_text.text
+        local annotations = self.ui.annotation.annotations
+        for i, item in ipairs(annotations) do
+            if item.text == self.selected_text.text then
+                text = item.note
+            end
+        end
+        local UIManager = require("ui/uimanager")
+        local Notification = require("ui/widget/notification")
     end
-    local UIManager = require("ui/uimanager")
-    local Notification = require("ui/widget/notification")
     UIManager:show(Notification:new{
-        text = _(text.text),
+        text = _(text),
     })
 end
 function ReaderHighlight:onTranslateText(text, index)
