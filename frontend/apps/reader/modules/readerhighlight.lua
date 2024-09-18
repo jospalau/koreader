@@ -2078,6 +2078,7 @@ function ReaderHighlight:saveHighlight(extend_to_sentence)
         self:highlightFromHoldPos()
     end
     if self.selected_text and self.selected_text.pos0 and self.selected_text.pos1 then
+        -- extend_to_sentence = self.selected_text.text:match(" ")
         local pg_or_xp
         if self.ui.rolling then
             if extend_to_sentence then
