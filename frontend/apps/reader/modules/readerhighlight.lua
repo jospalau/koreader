@@ -147,6 +147,14 @@ function ReaderHighlight:init()
                 end,
             }
         end,
+        ["07_notes"] = function(this, index)
+            return {
+                text = _("Notes"),
+                callback = function()
+                    this:showNote()
+                end,
+            }
+        end,
         -- buttons 08-11 are conditional ones, so the number of buttons can be even or odd
         -- let the Search button be the last, occasionally narrow or wide, less confusing
         ["12_search"] = function(this)
@@ -1848,6 +1856,18 @@ function ReaderHighlight:translate(index)
     end
 end
 
+
+function ReaderHighlight:showNote()
+    local text = "no note"
+    if self.selected_text then
+        text = self.selected_text
+    end
+    local UIManager = require("ui/uimanager")
+    local Notification = require("ui/widget/notification")
+    UIManager:show(Notification:new{
+        text = _(text.text),
+    })
+end
 function ReaderHighlight:onTranslateText(text, index)
     Translator:showTranslation(text, true, nil, nil, true, index)
 end
@@ -1939,6 +1959,9 @@ function ReaderHighlight:onHoldRelease()
                     self:onClose()
                 elseif default_highlight_action == "dictionary" then
                     self:onHighlightDictLookup()
+                    self:onClose()
+                elseif default_highlight_action == "notes" then
+                    self:showNote()
                     self:onClose()
                 elseif default_highlight_action == "search" then
                     self:onHighlightSearch()
