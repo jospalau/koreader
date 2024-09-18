@@ -698,6 +698,7 @@ function ReaderSearch:onShowFindAllResults(not_cached)
         is_borderless = true,
         is_popout = false,
         title_bar_fm_style = true,
+        font_size_search_elements = 10,
         title_bar_left_icon = "appbar.menu",
         onLeftButtonTap = function() self:showAllResultsMenuDialog() end,
         onMenuChoice = function(_menu_self, item)

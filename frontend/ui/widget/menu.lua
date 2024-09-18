@@ -1211,7 +1211,7 @@ function Menu:updateItems(select_number, no_recalculate_dimen)
             pages = self.calibre_data[Menu.getMenuText(item)] and self.calibre_data[Menu.getMenuText(item)]["pages"] or "",
             words = self.calibre_data[Menu.getMenuText(item)] and self.calibre_data[Menu.getMenuText(item)]["words"] or "",
             dim = item.dim,
-            font_size = self.font_size,
+            font_size = self.font_size_search_elements or self.font_size,
             infont_size = self.items_mandatory_font_size or (self.font_size - 4),
             dimen = self.item_dimen:copy(),
             shortcut = item_shortcut,
