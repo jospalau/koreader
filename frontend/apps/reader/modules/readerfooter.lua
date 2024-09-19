@@ -3788,7 +3788,11 @@ function ReaderFooter:onShowTextProperties()
     -- .. point .. " Font parameters: " .. font_face .. ", " .. font_size .. "px, " .. font_size_pt .. "pt, " .. font_size_mm .. "mm" .. important ..  string.char(10)
     .. point .. " L: " ..  nblines .. " - W: " .. nbwords .. " - C: " .. nbcharacters .. " (CFL: " .. nbwords2 .. ")" .. important ..  string.char(10)
     .. line .. string.char(10) .. string.char(10)
-    .. point .. " Light: " .. frontlight .. " - " .. frontlightwarm .. string.char(10)
+    if frontlight ~= "" or frontlightwarm ~= "" then
+        text = text .. point .. " Light: " .. frontlight .. " - " .. frontlightwarm .. string.char(10)
+    else
+        text = text .. point .. " Light off"
+    end
 
     -- .. string.char(10) .. html:sub(100,250)
 
