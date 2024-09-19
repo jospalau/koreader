@@ -3844,80 +3844,100 @@ function ReaderFooter:onMoveStatusBar()
 end
 
 function ReaderFooter:onTest()
-    -- Screen:clear()
-    -- Screen:refreshFull(0, 0, Screen:getWidth(), Screen:getHeight())
-
-    local util = require("ffi/util")
-    -- util.usleep(20000000)
-
-
-    local ScreenSaverWidget = require("ui/widget/screensaverwidget")
-    local OverlapGroup = require("ui/widget/overlapgroup")
-    local ImageWidget = require("ui/widget/imagewidget")
-    local BookStatusWidget = require("ui/widget/bookstatuswidget")
-    local FileManagerBookInfo = require("apps/filemanager/filemanagerbookinfo")
-    local widget_settings = {
-        width = Screen:getWidth(),
-        height = Screen:getHeight(),
-        scale_factor = G_reader_settings:isFalse("screensaver_stretch_images") and 0 or nil,
-        stretch_limit_percentage = G_reader_settings:readSetting("screensaver_stretch_limit_percentage"),
+    local MultiConfirmBox = require("ui/widget/multiconfirmbox")
+    local multi_box= MultiConfirmBox:new{
+        text = "Do you want to reload the document?",
+        choice1_text = _("Yes"),
+        choice1_callback = function()
+            local ReaderUI = require("apps/reader/readerui")
+            local ui = ReaderUI.instance
+            ui:onReload()
+            return true
+        end,
+        choice2_text = _("No"),
+        choice2_callback = function()
+            return true
+        end,
+        cancel_callback = function()
+            return true
+        end,
     }
-    local ReaderUI = require("apps/reader/readerui")
-    local ui = ReaderUI.instance
-    local lastfile = G_reader_settings:readSetting("screensaver_document_cover")
-    local image = FileManagerBookInfo:getCoverImage(ui and ui.document, lastfile)
-    widget_settings.image = image
-    widget_settings.image_disposable = true
+
+    UIManager:show(multi_box)
+    -- -- Screen:clear()
+    -- -- Screen:refreshFull(0, 0, Screen:getWidth(), Screen:getHeight())
+
+    -- local util = require("ffi/util")
+    -- -- util.usleep(20000000)
 
 
-    -- if Device:isKobo() then
-    --     widget_settings.file = "/mnt/onboard/.adds/colores.png"
-    -- elseif Device:isPocketBook() then
-    --     widget_settings.file = "/mnt/ext1/colores.png"
-    -- end
-
-
-    widget_settings.file_do_cache = false
-    widget_settings.alpha = true
-
-
-    local widget = ImageWidget:new(widget_settings)
-
-    -- local doc = ui.document
-    -- local doc_settings = ui.doc_settings
-    -- widget = BookStatusWidget:new{
-    --     thumbnail = FileManagerBookInfo:getCoverImage(doc),
-    --     props = ui.doc_props,
-    --     document = doc,
-    --     settings = doc_settings,
-    --     ui = ui,
-    --     readonly = true,
+    -- local ScreenSaverWidget = require("ui/widget/screensaverwidget")
+    -- local OverlapGroup = require("ui/widget/overlapgroup")
+    -- local ImageWidget = require("ui/widget/imagewidget")
+    -- local BookStatusWidget = require("ui/widget/bookstatuswidget")
+    -- local FileManagerBookInfo = require("apps/filemanager/filemanagerbookinfo")
+    -- local widget_settings = {
+    --     width = Screen:getWidth(),
+    --     height = Screen:getHeight(),
+    --     scale_factor = G_reader_settings:isFalse("screensaver_stretch_images") and 0 or nil,
+    --     stretch_limit_percentage = G_reader_settings:readSetting("screensaver_stretch_limit_percentage"),
     -- }
-
-    local widget = OverlapGroup:new{
-        dimen = {
-            w = Screen:getWidth(),
-            h = Screen:getHeight(),
-        },
-        widget,
-        nil,
-    }
-    local screensaver_widget = ScreenSaverWidget:new{
-        widget = widget,
-        background = Blitbuffer.COLOR_WHITE,
-        covers_fullscreen = true,
-    }
-    screensaver_widget.modal = true
-    screensaver_widget.dithered = true
-
-    UIManager:show(screensaver_widget, "full")
+    -- local ReaderUI = require("apps/reader/readerui")
+    -- local ui = ReaderUI.instance
+    -- local lastfile = G_reader_settings:readSetting("screensaver_document_cover")
+    -- local image = FileManagerBookInfo:getCoverImage(ui and ui.document, lastfile)
+    -- widget_settings.image = image
+    -- widget_settings.image_disposable = true
 
 
-    UIManager:scheduleIn(2, function()
-        -- Screen:refreshFullImp(0, 0, Screen:getWidth(), Screen:getHeight()) --
-        -- UIManager:setDirty("all", "full")
-        UIManager:close(screensaver_widget)
-    end)
+    -- -- if Device:isKobo() then
+    -- --     widget_settings.file = "/mnt/onboard/.adds/colores.png"
+    -- -- elseif Device:isPocketBook() then
+    -- --     widget_settings.file = "/mnt/ext1/colores.png"
+    -- -- end
+
+
+    -- widget_settings.file_do_cache = false
+    -- widget_settings.alpha = true
+
+
+    -- local widget = ImageWidget:new(widget_settings)
+
+    -- -- local doc = ui.document
+    -- -- local doc_settings = ui.doc_settings
+    -- -- widget = BookStatusWidget:new{
+    -- --     thumbnail = FileManagerBookInfo:getCoverImage(doc),
+    -- --     props = ui.doc_props,
+    -- --     document = doc,
+    -- --     settings = doc_settings,
+    -- --     ui = ui,
+    -- --     readonly = true,
+    -- -- }
+
+    -- local widget = OverlapGroup:new{
+    --     dimen = {
+    --         w = Screen:getWidth(),
+    --         h = Screen:getHeight(),
+    --     },
+    --     widget,
+    --     nil,
+    -- }
+    -- local screensaver_widget = ScreenSaverWidget:new{
+    --     widget = widget,
+    --     background = Blitbuffer.COLOR_WHITE,
+    --     covers_fullscreen = true,
+    -- }
+    -- screensaver_widget.modal = true
+    -- screensaver_widget.dithered = true
+
+    -- UIManager:show(screensaver_widget, "full")
+
+
+    -- UIManager:scheduleIn(2, function()
+    --     -- Screen:refreshFullImp(0, 0, Screen:getWidth(), Screen:getHeight()) --
+    --     -- UIManager:setDirty("all", "full")
+    --     UIManager:close(screensaver_widget)
+    -- end)
 end
 
 function ReaderFooter:onShowReadingMotive()
