@@ -3697,10 +3697,10 @@ function ReaderFooter:onShowTextProperties()
     local icon_goal_pages = "⚐"
     local icon_goal_time = "⚐"
     if today_pages > self._goal_pages or today_duration_number>self._goal_time then
-        if today_pages > self._goal_pages then
+        if today_pages >= self._goal_pages then
             icon_goal_pages = "⚑"
         end
-        if today_duration_number>self._goal_time  then
+        if today_duration_number >= self._goal_time  then
             icon_goal_time = "⚑"
         end
     end
