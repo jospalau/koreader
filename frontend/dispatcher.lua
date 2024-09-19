@@ -1201,9 +1201,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
             font_size = 22,
             callback = function()
                 UIManager:close(quickmenu)
-                UIManager:nextTick(function()
-                    Dispatcher:execute(settings, { qm_show = false })
-                end)
+                Dispatcher:execute(settings, { qm_show = false })
             end,
         }})
     end
@@ -1312,7 +1310,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                     -- and there are residues in the screen because these refreshes
                     -- We can use ui instead of partial refreshes in the updatePos() and handleRenderingDelayed()
                     -- functions of the readerrolling.lua source
-                    -- UIManager:nextTick(function()
+                    -- UIManager:nextTick(function() This and other nextTick() calls have been recently removed
                         UIManager:close(quickmenu)
                         if util.stringStartsWith(v.key, "toggle_horizontal_vertical") then
                             keep_open_on_apply = false
@@ -1455,10 +1453,7 @@ function Dispatcher:_showAsMenu(settings, exec_props)
                 hold_callback = function()
                     if v.key:sub(1, 13) == "profile_exec_" then
                         UIManager:close(quickmenu)
-                        --UIManager:sendEvent(Event:new(settingsList[v.key].event, settingsList[v.key].arg, { qm_show = true }))
-                        UIManager:nextTick(function()
-                            UIManager:sendEvent(Event:new(settingsList[v.key].event, settingsList[v.key].arg, { qm_show = true }))
-                        end)
+                        UIManager:sendEvent(Event:new(settingsList[v.key].event, settingsList[v.key].arg, { qm_show = true }))
                     end
                 end,
             }})
