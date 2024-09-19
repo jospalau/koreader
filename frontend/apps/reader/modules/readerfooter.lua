@@ -477,6 +477,38 @@ getThisMonthBookStats = function ()
     return month_duration, month_pages, wpm_month, words_week
 end
 
+getReadThisBook = function (footer)
+    local now_stamp = os.time()
+    local now_t = os.date("*t")
+    local DataStorage = require("datastorage")
+    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    local from_begin_day = now_t.hour * 3600 + now_t.min * 60 + now_t.sec
+    local start_today_time = now_stamp - from_begin_day
+    local conn = SQ3.open(db_location)
+    local title = footer.ui.document._document:getDocumentProps().title
+    local sql_stmt = "SELECT id FROM book where title like 'titles' order by id desc LIMIT 1;"
+    local id_book = conn:rowexec(sql_stmt:gsub("titles", title))
+
+    if id_book == nil then
+        id_book = 0
+    end
+    id_book = tonumber(id_book)
+
+    sql_stmt ="SELECT SUM(duration) FROM wpm_stat_data where id_book = ibp"
+
+
+    local total_time_book = conn:rowexec(sql_stmt:gsub("ibp", id_book))
+
+    if total_time_book == nil then
+        total_time_book = 0
+    end
+
+    conn:close()
+
+    return total_time_book
+
+end
+
 -- functions that generates footer text for each mode
 local footerTextGeneratorMap = {
     empty = function() return "" end,
@@ -3732,11 +3764,12 @@ function ReaderFooter:onShowTextProperties()
 
     local this_week_duration, this_week_pages, wpm_week, words_week = getThisWeekBookStats()
     local this_month_duration, this_month_pages, wpm_month, words_month = getThisMonthBookStats()
+    local time_reading_current_book = getReadThisBook(self)
 
     local user_duration_format = "letters"
     local this_week_duration = datetime.secondsToClockDuration(user_duration_format,this_week_duration, true)
     local this_month_duration = datetime.secondsToClockDuration(user_duration_format,this_month_duration, true)
-
+    local time_reading_current_book = datetime.secondsToClockDuration(user_duration_format,time_reading_current_book, true)
 
     local left_chapter = self.ui.toc:getChapterPagesLeft(self.pageno) or self.ui.document:getTotalPagesLeft(self.pageno)
     if self.settings.pages_left_includes_current_page then
@@ -3776,6 +3809,7 @@ function ReaderFooter:onShowTextProperties()
     .. line .. string.char(10)  .. string.char(10)
     .. point .. " RTRP out of " .. self._goal_pages .. ": " .. (self._goal_pages - today_pages) .. "p " .. icon_goal_pages .. string.char(10)
     .. point .. " RTRT out of " .. self._goal_time .. ": " .. (self._goal_time - today_duration_number) .. "m " .. icon_goal_time  .. string.char(10)
+    .. point .. " This book: " .. time_reading_current_book .. string.char(10)
     .. point .. " This session: " .. duration .. "(" .. percentage_session .. "%, " .. words_session .. ")"  .. "(" .. pages_read_session.. "p) " .. wpm_session .. "wpm" .. important .. string.char(10)
     .. point .. " Today: " .. today_duration  .. "(" .. today_pages .. "p, ".. words_today .. "w) " .. wpm_today .. "wpm" .. string.char(10)
     .. point .. " Week: " .. this_week_duration  .. "(" .. this_week_pages .. "p, ".. words_week .. "w) " .. wpm_week .. "wpm" .. string.char(10)
