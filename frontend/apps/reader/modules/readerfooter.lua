@@ -3883,7 +3883,7 @@ function ReaderFooter:onTest()
         choice1_callback = function()
             local ReaderUI = require("apps/reader/readerui")
             local ui = ReaderUI.instance
-            ui:onReload()
+            ui:reloadDocument(nil, true) -- seamless reload (no infomsg, no flash)
             return true
         end,
         choice2_text = _("No"),
