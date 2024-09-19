@@ -429,8 +429,10 @@ function DeviceListener:onOutOfScreenSaver()
     -- UIManager:scheduleIn(1, function()
     --   UIManager:setDirty(nil, "flashui")
     -- end)
+    -- For Kobo Libra2 or Clara 2E devices, if we pass "all" instead of nil
+    -- there is a bit of flickering on the footer of topbar if they are active
     UIManager:tickAfterNext(function()
-        UIManager:setDirty("all", "full")
+        UIManager:setDirty(nil, "full")
     end)
 
     -- We do this in the generic power source when switching on light
