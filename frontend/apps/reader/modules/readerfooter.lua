@@ -386,16 +386,11 @@ getTodayBookStats = function ()
     local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
     local conn = SQ3.open(db_location)
     local sql_stmt = [[
-        SELECT count(*),
-               sum(sum_duration)
-        FROM    (
-                     SELECT sum(duration)    AS sum_duration
-                     FROM   page_stat
-                     WHERE  start_time >= %d
-                     GROUP  BY id_book, page
-                );
+        SELECT sum(duration), SUM(total_pages)
+        FROM   wpm_stat_data
+        WHERE  start_time >= %d
     ]]
-    local today_pages, today_duration =  conn:rowexec(string.format(sql_stmt, start_today_time))
+    local today_duration, today_pages =  conn:rowexec(string.format(sql_stmt, start_today_time))
     conn:close()
     if today_pages == nil then
         today_pages = 0
