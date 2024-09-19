@@ -3910,21 +3910,14 @@ function ReaderFooter:onMoveStatusBar()
 end
 
 function ReaderFooter:onTest()
-    local MultiConfirmBox = require("ui/widget/multiconfirmbox")
-    local multi_box= MultiConfirmBox:new{
+    local ConfirmBox = require("ui/widget/confirmbox")
+    local multi_box= ConfirmBox:new{
         text = "Do you want to reload the document?",
-        choice1_text = _("Yes"),
-        choice1_callback = function()
+        ok_text = "Yes",
+        ok_callback = function()
             local ReaderUI = require("apps/reader/readerui")
             local ui = ReaderUI.instance
             ui:reloadDocument(nil, true) -- seamless reload (no infomsg, no flash)
-            return true
-        end,
-        choice2_text = _("No"),
-        choice2_callback = function()
-            return true
-        end,
-        cancel_callback = function()
             return true
         end,
     }
