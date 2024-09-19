@@ -423,16 +423,11 @@ getThisWeekBookStats = function ()
     local start_today_time = now_stamp - from_begin_day
     local conn = SQ3.open(db_location)
     local sql_stmt = [[
-        SELECT count(*),
-               sum(sum_duration)
-        FROM    (
-                     SELECT sum(duration)    AS sum_duration
-                     FROM   page_stat
-                     WHERE  start_time >= strftime('%s', DATE('now', 'weekday 0','-6 day'))
-                     GROUP  BY id_book, page
-                );
+        SELECT sum(duration), SUM(total_pages)
+        FROM   wpm_stat_data
+        WHERE  start_time >= strftime('%s', DATE('now', 'weekday 0','-6 day'))
     ]]
-   local week_pages, week_duration = conn:rowexec(sql_stmt)
+   local week_duration, week_pages = conn:rowexec(sql_stmt)
     conn:close()
     if week_pages == nil then
         week_pages = 0
@@ -462,16 +457,11 @@ getThisMonthBookStats = function ()
     local start_today_time = now_stamp - from_begin_day
     local conn = SQ3.open(db_location)
     local sql_stmt = [[
-        SELECT count(*),
-               sum(sum_duration)
-        FROM    (
-                     SELECT sum(duration)    AS sum_duration
-                     FROM   page_stat
-                     WHERE DATE(start_time, 'unixepoch', 'localtime') >= DATE('now', 'localtime', 'start of month')
-                     GROUP  BY id_book, page
-                );
+        SELECT sum(duration), SUM(total_pages)
+        FROM   wpm_stat_data
+        WHERE DATE(start_time, 'unixepoch', 'localtime') >= DATE('now', 'localtime', 'start of month')
     ]]
-   local month_pages, month_duration = conn:rowexec(sql_stmt)
+   local month_duration, month_pages = conn:rowexec(sql_stmt)
     conn:close()
     if month_pages == nil then
         month_pages = 0
