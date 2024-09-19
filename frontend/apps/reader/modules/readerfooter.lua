@@ -3749,6 +3749,7 @@ function ReaderFooter:onShowTextProperties()
     local this_month_duration, this_month_pages, wpm_month, words_month = getThisMonthBookStats()
 
     local user_duration_format = "letters"
+    local this_week_duration = datetime.secondsToClockDuration(user_duration_format,this_week_duration, true)
     local this_month_duration = datetime.secondsToClockDuration(user_duration_format,this_month_duration, true)
 
 
