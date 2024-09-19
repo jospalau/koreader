@@ -56,7 +56,7 @@ local MODE = {
     page_turning_inverted = 19, -- includes both page-turn-button and swipe-and-tap inversion
 }
 
-local WPP=270
+local WPP = 240
 
 local symbol_prefix = {
     letters = {
@@ -451,6 +451,45 @@ getThisWeekBookStats = function ()
     local words_week = week_pages * WPP
 
     return week_duration, week_pages, wpm_week, words_week
+end
+
+getThisMonthBookStats = function ()
+    local now_stamp = os.time()
+    local now_t = os.date("*t")
+    local DataStorage = require("datastorage")
+    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    local from_begin_day = now_t.hour * 3600 + now_t.min * 60 + now_t.sec
+    local start_today_time = now_stamp - from_begin_day
+    local conn = SQ3.open(db_location)
+    local sql_stmt = [[
+        SELECT count(*),
+               sum(sum_duration)
+        FROM    (
+                     SELECT sum(duration)    AS sum_duration
+                     FROM   page_stat
+                     WHERE DATE(start_time, 'unixepoch', 'localtime') >= DATE('now', 'localtime', 'start of month')
+                     GROUP  BY id_book, page
+                );
+    ]]
+   local month_pages, month_duration = conn:rowexec(sql_stmt)
+    conn:close()
+    if month_pages == nil then
+        month_pages = 0
+    end
+    if month_duration == nil then
+        month_duration = 0
+    end
+    month_duration = tonumber(month_duration)
+    month_pages = tonumber(month_pages)
+
+    local wpm_month = 0
+    if month_pages > 0 then
+        wpm_month = math.floor(((month_pages * WPP)/((month_duration)/60))* 100) / 100
+    end
+
+    local words_week = month_pages * WPP
+
+    return month_duration, month_pages, wpm_month, words_week
 end
 
 -- functions that generates footer text for each mode
@@ -3707,8 +3746,10 @@ function ReaderFooter:onShowTextProperties()
 
 
     local this_week_duration, this_week_pages, wpm_week, words_week = getThisWeekBookStats()
+    local this_month_duration, this_month_pages, wpm_month, words_month = getThisMonthBookStats()
+
     local user_duration_format = "letters"
-    local this_week_duration = datetime.secondsToClockDuration(user_duration_format,this_week_duration, true)
+    local this_month_duration = datetime.secondsToClockDuration(user_duration_format,this_month_duration, true)
 
 
     local left_chapter = self.ui.toc:getChapterPagesLeft(self.pageno) or self.ui.document:getTotalPagesLeft(self.pageno)
@@ -3752,6 +3793,7 @@ function ReaderFooter:onShowTextProperties()
     .. point .. " This session: " .. duration .. "(" .. percentage_session .. "%, " .. words_session .. ")"  .. "(" .. pages_read_session.. "p) " .. wpm_session .. "wpm" .. important .. string.char(10)
     .. point .. " Today: " .. today_duration  .. "(" .. today_pages .. "p, ".. words_today .. "w) " .. wpm_today .. "wpm" .. string.char(10)
     .. point .. " Week: " .. this_week_duration  .. "(" .. this_week_pages .. "p, ".. words_week .. "w) " .. wpm_week .. "wpm" .. string.char(10)
+    .. point .. " Month: " .. this_month_duration  .. "(" .. this_month_pages .. "p, ".. words_month .. "w) " .. wpm_month .. "wpm" .. string.char(10)
     -- .. point .. " Stats: wpm: " .. wpm_session .. ", wph: " .. wph_session .. string.char(10)
     -- .. point .. " Stats: wpm: " .. wpm .. ", wph: " .. wph .. ", spp: " .. spp .. ", wpmp: " .. wpm_test .. important .. string.char(10)
     -- .. point .. " Static info (from Calibre info): wpp: " .. avg_words_cal .. ", cpp: " .. avg_chars_cal .. ", cpw: " .. avg_chars_per_word_cal .. important .. string.char(10)
