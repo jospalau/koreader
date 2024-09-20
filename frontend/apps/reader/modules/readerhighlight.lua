@@ -1858,7 +1858,7 @@ end
 
 
 function ReaderHighlight:showNote()
-    local text = "no note"
+    local text = nil
     if self.selected_text then
         -- text = self.selected_text.text
         local annotations = self.ui.annotation.annotations
@@ -1867,12 +1867,34 @@ function ReaderHighlight:showNote()
                 text = item.note
             end
         end
-        local UIManager = require("ui/uimanager")
-        local Notification = require("ui/widget/notification")
+        UIManager:close(self.highlight_dialog)
+        if text then
+            text = '<p style="display:block;font-size:1.25em;">' .. text .. "</p>"
+            --if true then
+              --UIManager:show( require("ui/widget/textviewer"):new{text = text})
+            --end
+            local FootnoteWidget = require("ui/widget/footnotewidget")
+            local popup
+            popup = FootnoteWidget:new{
+                html = text,
+                doc_font_name = self.ui.font.font_face,
+                doc_font_size = Screen:scaleBySize(self.document.configurable.font_size),
+                doc_margins = self.document:getPageMargins(),
+                follow_callback = function() -- follow the link on swipe west
+                    UIManager:close(popup)
+                end,
+                dialog = self.dialog,
+            }
+            UIManager:show(popup)
+        else
+           local UIManager = require("ui/uimanager")
+           local Notification = require("ui/widget/notification")
+            UIManager:show(Notification:new{
+                text = _("No note"),
+            })
+            self:clear()
+        end
     end
-    UIManager:show(Notification:new{
-        text = _(text),
-    })
 end
 function ReaderHighlight:onTranslateText(text, index)
     Translator:showTranslation(text, true, nil, nil, true, index)
