@@ -557,11 +557,25 @@ function ReaderUI:init()
         -- Should never happen, given what we did in (do)showReader...
         logger.err("ReaderUI instance mismatch! Opened", tostring(self), "while we still have an existing instance:", tostring(ReaderUI.instance), debug.traceback())
     end
-
-
+    --self:updateNotes()
     ReaderUI.instance = self
 end
 
+function ReaderUI:updateNotes()
+    -- self.search:fullTextSearch("Citra")
+    self.notes = {}
+    local annotations = self.annotation.annotations
+    for i, item in ipairs(annotations) do
+        if item.note then
+            item.words = self.document:findAllText(item.text, true, 5, 5000, 0, false)
+            table.insert(self.notes, item)
+        end
+    end
+
+    --self.words = self.document:findAllText("Citra", true, 5, 5000, 0, false)
+    --local dump = require("dump")
+    --print(dump(self.notes))
+end
 
 function ReaderUI:registerKeyEvents()
     if Device:hasKeys() then
