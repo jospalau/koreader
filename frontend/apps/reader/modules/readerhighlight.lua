@@ -1892,8 +1892,8 @@ function ReaderHighlight:showNote()
             UIManager:show(Notification:new{
                 text = _("No note"),
             })
-            self:clear()
         end
+        self:clear()
     end
 end
 function ReaderHighlight:onTranslateText(text, index)
