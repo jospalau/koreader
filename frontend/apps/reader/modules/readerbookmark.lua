@@ -1054,7 +1054,7 @@ function ReaderBookmark:getBookmarkItemText(item)
                     text = text .. item.text_orig .. " @" .. item.datetime
                 else
                     text = text .. item.text_orig
-                end		    
+                end
             end
             if item.note then
                 text = text .. "\u{2002}" .. self.display_prefix["note"] .. item.note
@@ -1312,6 +1312,7 @@ function ReaderBookmark:setBookmarkNote(item_or_index, is_new_note, new_note, ca
                             item.type = type_after
                             item.text = self:getBookmarkItemText(item)
                         end
+                        --self.ui.styletweak:updateCssText(true)
                         caller_callback()
                     end,
                 },

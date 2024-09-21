@@ -418,6 +418,18 @@ function ReaderStyleTweak:updateCssText(apply)
         self.css_text = nil
         logger.dbg("made no tweak css (Style tweaks disabled)")
     end
+    --local annotations = self.ui.annotation.annotations
+    --local css = ""
+    ----local dump = require("dump")
+    --for i, item in ipairs(annotations) do
+        --if item.note then
+            ----print(dump(item))
+            --css = css .. 'p[_*=' .. item.text .. ']::after {content: "' .. item.text .. '"; text-decoration: underline;font-size: 0.7em;}\n'
+            ----print(css)
+        --end
+    --end
+    -- self.css_text = self.css_text .. '\np[_*=Citra]::after {content: "test"; text-decoration: underline;font-size: 0.7em;}'
+    --self.css_text = self.css_text .. '\n' .. css
     if apply then
         self.ui:handleEvent(Event:new("ApplyStyleSheet"))
     end
