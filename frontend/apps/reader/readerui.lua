@@ -569,7 +569,7 @@ function ReaderUI:updateNotes()
     self.notes = {}
     local annotations = self.annotation.annotations
     for i, item in ipairs(annotations) do
-        if item.note then
+        if item.note and not item.text:find("%s+") then
             item.words = self.document:findAllText(item.text, true, 5, 5000, 0, false)
             table.insert(self.notes, item)
             for i, word in ipairs(item.words) do
