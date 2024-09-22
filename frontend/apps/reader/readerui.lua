@@ -573,6 +573,7 @@ function ReaderUI:updateNotes()
             item.words = self.document:findAllText(item.text, true, 5, 5000, 0, false)
             table.insert(self.notes, item)
             for i, word in ipairs(item.words) do
+                word.note = item.note
                 local page = self.document:getPageFromXPointer(word.start)
                 if not self.pages_notes[page] then
                     self.pages_notes[page]={}

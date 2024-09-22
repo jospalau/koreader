@@ -1070,7 +1070,7 @@ function ReaderHighlight:onTapXPointerSavedHighlight(ges)
                             --local dump = require("dump")
                             --print(dump(item))
 
-                            return self:showNote(item.matched_text)
+                            return self:showNote(item.note)
                             --return true
                         end
                     end
