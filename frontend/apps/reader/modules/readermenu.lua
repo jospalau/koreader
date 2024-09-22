@@ -356,6 +356,15 @@ function ReaderMenu:setUpdateItemTable()
         hold_callback = function()
         end
     }
+    self.menu_items.highlight_all_notes = {
+        text = _("Highlight all notes"),
+        checked_func = function() return G_reader_settings:isTrue("highlight_all_notes") end,
+        callback = function()
+            local highlight_all_notes = G_reader_settings:isTrue("highlight_all_notes")
+            G_reader_settings:saveSetting("highlight_all_notes", not highlight_all_notes)
+            self.ui:reloadDocument(nil, true) -- seamless reload (no infomsg, no flash)
+        end
+    }
     -- self.menu_items.open_random_favorite = {
     --     text_func = function()
     --         local random_file = self:getRandomFav()

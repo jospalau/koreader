@@ -255,7 +255,9 @@ function ReaderView:paintTo(bb, x, y)
     if self.highlight_visible then
         colorful = self:drawSavedHighlight(bb, x, y)
     end
-    self:drawXPointerSavedHighlightNotes(bb, x, y)
+    if G_reader_settings:isTrue("highlight_all_notes") then
+        self:drawXPointerSavedHighlightNotes(bb, x, y)
+    end
     -- draw temporary highlight
     if self.highlight.temp then
         self:drawTempHighlight(bb, x, y)

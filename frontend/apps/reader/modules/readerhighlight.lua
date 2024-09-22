@@ -1055,28 +1055,29 @@ function ReaderHighlight:onTapXPointerSavedHighlight(ges)
     end
 
 
-    if self.ui.pages_notes[self.ui.view.state.page] then
-        for _, item in ipairs(self.ui.pages_notes[self.ui.view.state.page]) do
-            local boxes = self.ui.document:getScreenBoxesFromPositions(item.start, item["end"], true)
-            if boxes then
-                for _, box in ipairs(boxes) do
-                    if inside_box(pos, box) then
-                        --local UIManager = require("ui/uimanager")
-                        --local Notification = require("ui/widget/notification")
-                        --UIManager:show(Notification:new{
-                           --text =("searching"),
-                        --})
-                        --local dump = require("dump")
-                        --print(dump(item))
+    if G_reader_settings:isTrue("highlight_all_notes") then
+        if self.ui.pages_notes[self.ui.view.state.page] then
+            for _, item in ipairs(self.ui.pages_notes[self.ui.view.state.page]) do
+                local boxes = self.ui.document:getScreenBoxesFromPositions(item.start, item["end"], true)
+                if boxes then
+                    for _, box in ipairs(boxes) do
+                        if inside_box(pos, box) then
+                            --local UIManager = require("ui/uimanager")
+                            --local Notification = require("ui/widget/notification")
+                            --UIManager:show(Notification:new{
+                               --text =("searching"),
+                            --})
+                            --local dump = require("dump")
+                            --print(dump(item))
 
-                        return self:showNote(item.matched_text)
-                        --return true
+                            return self:showNote(item.matched_text)
+                            --return true
+                        end
                     end
                 end
             end
         end
     end
-
 
     local highlights_tapped = {}
     for hl_i, item in ipairs(self.ui.annotation.annotations) do

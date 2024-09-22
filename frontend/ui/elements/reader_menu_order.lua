@@ -73,6 +73,7 @@ local order = {
         "night_mode",
         "show_double_bar",
         "show_top_bar",
+        "highlight_all_notes",
         "----------------------------",
         "network",
         "screen",
