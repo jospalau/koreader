@@ -576,6 +576,11 @@ function ReaderUI:updateNotes()
                     self.pages_notes[page]={}
                 end
                 table.insert(self.pages_notes[page], word)
+                local page2 = self.document:getPageFromXPointer(word["end"])
+                if not self.pages_notes[page2] then
+                    self.pages_notes[page2]={}
+                end
+                table.insert(self.pages_notes[page2], word)
             end
         end
     end

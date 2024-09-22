@@ -1053,6 +1053,31 @@ function ReaderHighlight:onTapXPointerSavedHighlight(ges)
     else
         cur_view_bottom = cur_view_top + self.ui.dimen.h
     end
+
+
+    if self.ui.pages_notes[self.ui.view.state.page] then
+        for _, item in ipairs(self.ui.pages_notes[self.ui.view.state.page]) do
+            local boxes = self.ui.document:getScreenBoxesFromPositions(item.start, item["end"], true)
+            if boxes then
+                for _, box in ipairs(boxes) do
+                    if inside_box(pos, box) then
+                        --local UIManager = require("ui/uimanager")
+                        --local Notification = require("ui/widget/notification")
+                        --UIManager:show(Notification:new{
+                           --text =("searching"),
+                        --})
+                        --local dump = require("dump")
+                        --print(dump(item))
+
+                        return self:showNote(item.matched_text)
+                        --return true
+                    end
+                end
+            end
+        end
+    end
+
+
     local highlights_tapped = {}
     for hl_i, item in ipairs(self.ui.annotation.annotations) do
         if item.drawer then
@@ -1857,8 +1882,24 @@ function ReaderHighlight:translate(index)
 end
 
 
-function ReaderHighlight:showNote()
+function ReaderHighlight:showNote(textNote)
     local text = nil
+    if textNote then
+        local FootnoteWidget = require("ui/widget/footnotewidget")
+        local popup
+        popup = FootnoteWidget:new{
+            html = textNote,
+            doc_font_name = self.ui.font.font_face,
+            doc_font_size = Screen:scaleBySize(self.document.configurable.font_size),
+            doc_margins = self.document:getPageMargins(),
+            follow_callback = function() -- follow the link on swipe west
+                UIManager:close(popup)
+            end,
+            dialog = self.dialog,
+        }
+        UIManager:show(popup)
+        return true
+    end
     if self.selected_text then
         -- text = self.selected_text.text
         local annotations = self.ui.annotation.annotations
@@ -1867,7 +1908,9 @@ function ReaderHighlight:showNote()
                 text = item.note
             end
         end
-        UIManager:close(self.highlight_dialog)
+        if self.highlight_dialog then
+            UIManager:close(self.highlight_dialog)
+        end
         if text then
             text = '<p style="display:block;font-size:1.25em;">' .. text .. "</p>"
             --if true then
