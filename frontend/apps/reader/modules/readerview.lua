@@ -255,7 +255,7 @@ function ReaderView:paintTo(bb, x, y)
     if self.highlight_visible then
         colorful = self:drawSavedHighlight(bb, x, y)
     end
-    --self:drawXPointerSavedHighlightNotes(bb, x, y)
+    self:drawXPointerSavedHighlightNotes(bb, x, y)
     -- draw temporary highlight
     if self.highlight.temp then
         self:drawTempHighlight(bb, x, y)
@@ -816,9 +816,9 @@ function ReaderView:drawXPointerSavedHighlightNotes(bb, x, y)
 --        local dump = require("dump")
 --        UIManager:show( require("ui/widget/textviewer"):new{text = dump(self.ui.notes)})
 --    end
-    for _, itemnote in ipairs(self.ui.notes) do
-        for _, item in ipairs(itemnote.words) do
-            print(item.matched_text)
+--
+    if self.ui.pages_notes[self.state.page] then
+        for _, item in ipairs(self.ui.pages_notes[self.state.page]) do
             -- document:getScreenBoxesFromPositions() is expensive, so we
             -- first check if this item is on current page
             local start_pos = self.document:getPosFromXPointer(item.start)
