@@ -34,6 +34,7 @@ local order = {
         "----------------------------",
         "language",
         "device",
+        "top_manager_infmandhistory",
         -- end common settings
     },
     document = {

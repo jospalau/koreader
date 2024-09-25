@@ -584,6 +584,19 @@ To:
             },
         },
     }
+    self.menu_items.top_manager_infmandhistory = {
+        text = _("Topbar in fm and history"),
+        checked_func = function() return G_reader_settings:isTrue("top_manager_infmandhistory") end,
+        callback = function()
+            local top_manager_infmandhistory = G_reader_settings:isTrue("top_manager_infmandhistory")
+            G_reader_settings:saveSetting("top_manager_infmandhistory", not top_manager_infmandhistory)
+            -- local FileManager = require("apps/filemanager/filemanager")
+            local home_dir = G_reader_settings:readSetting("home_dir") or Device.home_dir or lfs.currentdir()
+            -- FileManager:showFiles(home_dir)
+            local ui = require("apps/filemanager/filemanager").instance
+            ui:showFiles(home_dir)
+        end
+    }
     if Device:isKobo() and not Device:isSunxi() and not Device:hasColorScreen() then
         table.insert(self.menu_items.developer_options.sub_item_table, {
             text = _("Disable forced 8-bit pixel depth"),
