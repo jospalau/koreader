@@ -3842,6 +3842,42 @@ function ReaderFooter:onShowTextProperties()
     return true
 end
 
+function ReaderFooter:onShowNotesFooter()
+    local texto = ""
+    local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
+    if res and res.text then
+        local annotations = self.ui.annotation.annotations
+        for i, item in ipairs(annotations) do
+            if item.note and res.text:find(item.text) then
+                texto = texto .. '<b><p style="display:block;font-size:small;">' .. item.text .. ": </b>" ..  item.note .. "<br>"
+            end
+        end
+
+        if texto ~= "" then
+            -- texto = "<ol>" .. texto .. "</ol>"
+            texto = '<b><p style="display:block;font-size:large;">Notes found in current page: </b><br>' .. texto
+            local FootnoteWidget = require("ui/widget/footnotewidget")
+            local popup
+            popup = FootnoteWidget:new{
+                html = texto,
+                doc_font_name = self.ui.font.font_face,
+                doc_font_size = Screen:scaleBySize(self.ui.document.configurable.font_size),
+                doc_margins = self.ui.document:getPageMargins(),
+                follow_callback = function() -- follow the link on swipe west
+                    UIManager:close(popup)
+                end,
+                dialog = self.dialog,
+            }
+            UIManager:show(popup)
+        else
+            local UIManager = require("ui/uimanager")
+            local Notification = require("ui/widget/notification")
+            UIManager:show(Notification:new{
+                text =("No notes in current page"),
+            })
+        end
+    end
+end
 
 function ReaderFooter:onSwitchStatusBarText()
     local text = ""

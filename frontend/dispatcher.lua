@@ -104,6 +104,7 @@ local settingsList = {
     search_dictionary = {category="none", event="SearchDictionary", title=_("Search dictionary"), general=true, separator=true},
     show_heatmap = {category="none", event="ShowHeatmapView", title=_("Show heatmap"), general=true, separator=true},
     adjust_margins_topbar = {category="none", event="AdjustMarginsTopbar", title=_("Adjust margins topbar"), general=true, separator=true},
+    show_notes_footer = {category="none", event="ShowNotesFooter", title=_("Show notes on footer"), general=true, separator=true},
     ----
 
     -- Device
@@ -385,6 +386,7 @@ local dispatcher_menu_order = {
     "search_dictionary",
     "show_heatmap",
     "adjust_margins_topbar",
+    "show_notes_footer",
     ----
 
     -- Device
