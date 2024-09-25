@@ -590,11 +590,10 @@ To:
         callback = function()
             local top_manager_infmandhistory = G_reader_settings:isTrue("top_manager_infmandhistory")
             G_reader_settings:saveSetting("top_manager_infmandhistory", not top_manager_infmandhistory)
-            -- local FileManager = require("apps/filemanager/filemanager")
-            local home_dir = G_reader_settings:readSetting("home_dir") or Device.home_dir or lfs.currentdir()
-            -- FileManager:showFiles(home_dir)
-            local ui = require("apps/filemanager/filemanager").instance
-            ui:showFiles(home_dir)
+            --local FileManager = require("apps/filemanager/filemanager")
+            --local home_dir = G_reader_settings:readSetting("home_dir") or Device.home_dir or lfs.currentdir()
+            --FileManager:showFiles(home_dir)
+            UIManager:restartKOReader()
         end
     }
     if Device:isKobo() and not Device:isSunxi() and not Device:hasColorScreen() then
