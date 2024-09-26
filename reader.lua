@@ -234,8 +234,12 @@ local function retryLastFile()
     }
 end
 
-local util = require("util")
-util.generateStats()
+
+if G_reader_settings:isTrue("top_manager_infmandhistory") then
+    local util = require("util")
+    util.generateStats()
+end
+
 -- Start app
 local exit_code
 if file then

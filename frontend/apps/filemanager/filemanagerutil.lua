@@ -194,8 +194,10 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
             callback = function()
                 if to_status == "complete" then
                     require("readhistory"):removeItemByPath(file)
-                    local util = require("util")
-                    util.generateStats()
+                    if G_reader_settings:isTrue("top_manager_infmandhistory") then
+                        local util = require("util")
+                        util.generateStats()
+                    end
                 end
                 local has_sidecar_file = DocSettings:hasSidecarFile(file)
                 if to_status == "tbr" then
@@ -303,8 +305,10 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
                     end
                     caller_callback()
                     if check_button_mbr.checked then
-                        local util = require("util")
-                        util.generateStats()
+                        if G_reader_settings:isTrue("top_manager_infmandhistory") then
+                            local util = require("util")
+                            util.generateStats()
+                        end
                     end
                 end,
             }

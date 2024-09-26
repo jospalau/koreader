@@ -590,6 +590,10 @@ To:
         callback = function()
             local top_manager_infmandhistory = G_reader_settings:isTrue("top_manager_infmandhistory")
             G_reader_settings:saveSetting("top_manager_infmandhistory", not top_manager_infmandhistory)
+            if G_reader_settings:isTrue("top_manager_infmandhistory") then
+                local util = require("util")
+                util.generateStats()
+            end
             local ui = require("apps/filemanager/filemanager")
             ui:onClose()
             local FileManager = require("apps/filemanager/filemanager")

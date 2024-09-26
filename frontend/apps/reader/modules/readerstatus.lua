@@ -214,8 +214,10 @@ function ReaderStatus:markBook(mark_read)
     summary.modified = os.date("%Y-%m-%d", os.time())
     -- If History is called over Reader, it will read the file to get the book status, so flush
     self.ui.doc_settings:flush()
-    local util = require("util")
-    util.generateStats()
+    if G_reader_settings:isTrue("top_manager_infmandhistory") then
+        local util = require("util")
+        util.generateStats()
+    end
 end
 
 return ReaderStatus

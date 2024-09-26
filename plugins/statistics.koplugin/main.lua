@@ -3172,8 +3172,10 @@ function ReaderStatistics:deleteBooksByTotalDuration(max_total_duration_mn)
                 end
             end
             conn:close()
-            local util = require("util")
-            util.generateStats()
+            if G_reader_settings:isTrue("top_manager_infmandhistory") then
+                local util = require("util")
+                util.generateStats()
+            end
             UIManager:show(InfoMessage:new{
                 text = nb_deleted > 0 and T(N_("Statistics for 1 book removed.",
                                                "Statistics for %1 books removed.",

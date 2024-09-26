@@ -1468,8 +1468,10 @@ function FileManager:onPullConfig()
             face = Font:getFace("myfont"),
         })
     end
-    local util = require("util")
-    util.generateStats()
+    if G_reader_settings:isTrue("top_manager_infmandhistory") then
+        local util = require("util")
+        util.generateStats()
+    end
 end
 
 function FileManager:onGetLastPushingConfig()
@@ -1703,8 +1705,10 @@ function FileManager:onSyncBooks()
         })
         Device:setIgnoreInput(false)
     end
-    local util = require("util")
-    util.generateStats()
+    if G_reader_settings:isTrue("top_manager_infmandhistory") then
+        local util = require("util")
+        util.generateStats()
+    end
 end
 
 function FileManager:onTurnOnWifiKindle()
