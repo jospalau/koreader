@@ -1131,11 +1131,11 @@ function ReaderFooter:updateFooterContainer()
     -- The self.autoRefreshFooter() function will need a second parameter true:
     -- self:onUpdateFooter(self:shouldBeRepainted(), true)
 
-    -- In any case, the function updateFooterPage() returns now and always true:
-    -- self:updateFooterText(force_repaint, true)
+    -- In any case, the function updateFooterPage() will call always to self:updateFooterText(force_repaint, true) passing true as second parameter
+    -- And autorefresh works without problem with a transparent status bar
     self.footer_content = FrameContainer:new{
         self.vertical_frame,
-        background = Blitbuffer.COLOR_WHITE,
+        -- background = Blitbuffer.COLOR_WHITE, -- Make the status bar transparent
         bordersize = 0,
         padding = 0,
         padding_bottom = self.bottom_padding,
