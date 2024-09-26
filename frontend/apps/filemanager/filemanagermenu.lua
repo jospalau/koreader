@@ -1048,12 +1048,12 @@ Tap a book in the search results to open it.]]),
         callback = function()
             local profiles_file = require("datastorage"):getSettingsDir() .. "/profiles.lua"
             local profiles = require("luasettings"):open(profiles_file)
-            data = profiles.data
+            local data = profiles.data
             local cre = require("document/credocument"):engineInit()
             local face_list = cre.getFontFaces()
             local gestures_path = FFIUtil.joinPath(require("datastorage"):getSettingsDir(), "gestures.lua")
-            settings_data = require("luasettings"):open(gestures_path)
-            gestures = settings_data.data["gesture_reader"]
+            local settings_data = require("luasettings"):open(gestures_path)
+            local gestures = settings_data.data["gesture_reader"]
             for _, font_name in ipairs(face_list) do
                 --print(font_name)
                 local encuentra = false
@@ -1085,10 +1085,10 @@ Tap a book in the search results to open it.]]),
             --print(dump(gestures))
             local UIManager = require("ui/uimanager")
             local Notification = require("ui/widget/notification")
-            if not gestures["multiswipe_north_east"] then
-                UIManager:show(Notification:new{
-                 text = _("Not exits"),
-                })
+            if not gestures["multiswipe_north_east"] or not gestures["multiswipe_north_east"]["settings"] then
+                -- UIManager:show(Notification:new{
+                --  text = _("Not exits"),
+                -- })
 
                 gestures["multiswipe_north_east"] = {
                 ["profile_exec_Reset defaults"] = true,
@@ -1199,7 +1199,7 @@ Tap a book in the search results to open it.]]),
                 --print(dump(all_fonts))
                 gestures["multiswipe_north_east"]["settings"]["order"] = all_fonts
             end
-            data_ordered = {}
+            local data_ordered = {}
             for k, v in FFIUtil.orderedPairs(data) do
                 data_ordered[k] = v
             end
