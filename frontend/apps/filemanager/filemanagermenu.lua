@@ -1081,15 +1081,14 @@ Tap a book in the search results to open it.]]),
                 end
             end
 
-            local dump = require("dump")
-            --print(dump(gestures))
-            local UIManager = require("ui/uimanager")
-            local Notification = require("ui/widget/notification")
+            -- local dump = require("dump")
+            -- print(dump(gestures))
             if not gestures["multiswipe_north_east"] or not gestures["multiswipe_north_east"]["settings"] then
+                -- local UIManager = require("ui/uimanager")
+                -- local Notification = require("ui/widget/notification")
                 -- UIManager:show(Notification:new{
                 --  text = _("Not exits"),
                 -- })
-
                 gestures["multiswipe_north_east"] = {
                 ["profile_exec_Reset defaults"] = true,
                 ["decrease_weight"] = true,
