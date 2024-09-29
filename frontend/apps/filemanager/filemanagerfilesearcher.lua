@@ -143,14 +143,14 @@ function FileSearcher:onShowFileSearchLists(recent, page, search_string)
     local search_dialog
     local check_button_case, check_button_subfolders, check_button_metadata
     self.path = G_reader_settings:readSetting("home_dir")
-    self.search_string = search_string
-    if self.search_string == nil then
-        self.search_string = "*.epub"
+    FileSearcher.search_string = search_string
+    if FileSearcher.search_string == nil then
+        FileSearcher.search_string = "*.epub"
     end
     self.recent = recent
 
     -- self:onSearchSortCompleted(false, recent, page, nil, sorted_size)
-    self:onSearchSortCompleted(false, recent, page, nil)
+    self:doSearchCompleted(false, recent, page, nil)
 end
 
 function FileSearcher:onCloseSearchMenu(recent, search_string)
@@ -159,11 +159,39 @@ function FileSearcher:onCloseSearchMenu(recent, search_string)
 end
 
 function FileSearcher:onShowFileSearchAllCompleted()
-    local search_dialog
-    local check_button_case, check_button_subfolders, check_button_metadata
-    self.path = G_reader_settings:readSetting("home_dir")
-    self.search_string = "*.epub"
-    self:onSearchSortCompleted(true, false)
+    local search_hash = self.path .. (FileSearcher.search_string or "") ..
+        tostring(self.case_sensitive) .. tostring(self.include_subfolders) .. tostring(self.include_metadata)
+    local not_cached = FileSearcher.search_hash ~= search_hash
+    if not_cached then
+        local Trapper = require("ui/trapper")
+        local info = InfoMessage:new{ text = _("Searching… (tap to cancel)") }
+        UIManager:show(info)
+        UIManager:forceRePaint()
+        local completed, dirs, files, no_metadata_count = Trapper:dismissableRunInSubprocess(function()
+            return self:getList()
+        end, info)
+        if not completed then return end
+        UIManager:close(info)
+        FileSearcher.search_hash = search_hash
+        self.no_metadata_count = no_metadata_count
+        -- Cannot do this in getList() within Trapper (cannot serialize function)
+        local collate = FileChooser:getCollate()
+        for i, v in ipairs(dirs) do
+            local f, fullpath, attributes = unpack(v)
+            dirs[i] = FileChooser:getListItem(nil, f, fullpath, attributes, collate)
+        end
+        for i, v in ipairs(files) do
+            local f, fullpath, attributes = unpack(v)
+            files[i] = FileChooser:getListItem(nil, f, fullpath, attributes, collate)
+        end
+        -- If we have a FileChooser instance, use it, to be able to make use of its natsort cache
+        FileSearcher.search_results = (self.ui.file_chooser or FileChooser):genItemTable(dirs, files)
+    end
+    if #FileSearcher.search_results > 0 then
+        self:onShowSearchResults(not_cached) --self:showSearchResults(results, nil, nil, callbackfunc)
+    else
+        self:showSearchResultsMessage(true)
+    end
 end
 
 function FileSearcher:doSearch(callbackfunc)
@@ -233,54 +261,37 @@ function FileSearcher:showSearchResultsComplete(results, callback)
 end
 
 -- function FileSearcher:onSearchSortCompleted(show_complete, show_recent, page, callback, sorted_size)
-function FileSearcher:onSearchSortCompleted(show_complete, show_recent, page, callback)
-    local results
-    local dirs, files = self:getList()
-
-
-    -- If we have a FileChooser instance, use it, to be able to make use of its natsort cache
-    if self.ui.file_chooser then
-        results = self.ui.file_chooser:genItemTable(dirs, files)
-    else
-        results = FileChooser:genItemTable(dirs, files)
-    end
-
-    if show_complete and show_recent then
-        table.sort(results,function(a,b) return b.text>a.text end)
-    end
-    -- if sorted_size then
-    --     table.sort(results,function(a,b) return b.words<a.words end)
-    -- end
-    if (show_complete) then
-        local table_complete = {}
-        for key, value in ipairs(results) do
-            if DocSettings:hasSidecarFile(value.path) then
-                -- local stats = doc_settings:readSetting("stats")
-                -- local book_props = require("apps/filemanager/filemanagerbookinfo").getDocProps(value.path).description
-                local doc_settings = DocSettings:open(value.path)
-                local status = doc_settings:readSetting("summary").status
-                local modified_date = doc_settings:readSetting("summary").modified
-                if status == "complete" then
-                    value.modified_date = modified_date
-                    value.text = modified_date .. " " .. value.text:gsub(string.match(value.text , "^.+(%..+)$"), "")
-                    table_complete[#table_complete+1] = value
-                end
-            end
+function FileSearcher:doSearchCompleted(callbackfunc)
+    local search_hash = self.path .. (FileSearcher.search_string or "") ..
+        tostring(self.case_sensitive) .. tostring(self.include_subfolders) .. tostring(self.include_metadata)
+    local not_cached = FileSearcher.search_hash ~= search_hash
+    if not_cached then
+        local Trapper = require("ui/trapper")
+        local info = InfoMessage:new{ text = _("Searching… (tap to cancel)") }
+        UIManager:show(info)
+        UIManager:forceRePaint()
+        local completed, dirs, files, no_metadata_count = Trapper:dismissableRunInSubprocess(function()
+            return self:getList()
+        end, info)
+        if not completed then return end
+        UIManager:close(info)
+        FileSearcher.search_hash = search_hash
+        self.no_metadata_count = no_metadata_count
+        -- Cannot do this in getList() within Trapper (cannot serialize function)
+        local collate = FileChooser:getCollate()
+        for i, v in ipairs(dirs) do
+            local f, fullpath, attributes = unpack(v)
+            dirs[i] = FileChooser:getListItem(nil, f, fullpath, attributes, collate)
         end
-        results = table_complete
-        table.sort(results, function(a, b) return a.modified_date > b.modified_date end)
-    else
-        if show_recent then
-            table.sort(results, function(a, b) return a.attr.modification > b.attr.modification end)
+        for i, v in ipairs(files) do
+            local f, fullpath, attributes = unpack(v)
+            files[i] = FileChooser:getListItem(nil, f, fullpath, attributes, collate)
         end
+        -- If we have a FileChooser instance, use it, to be able to make use of its natsort cache
+        FileSearcher.search_results = (self.ui.file_chooser or FileChooser):genItemTable(dirs, files)
     end
-
-    if #results > 0 then
-        if (show_complete) then
-            self:showSearchResultsComplete(results, callback)
-        else
-            self:onShowSearchResults(results, show_recent, page, callback)
-        end
+    if #FileSearcher.search_results > 0 then
+        self:onShowSearchResults(not_cached) --self:showSearchResults(results, nil, nil, callbackfunc)
     else
         self:showSearchResultsMessage(true)
     end
