@@ -356,91 +356,95 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
         -- end
         -- We pass this anonymous function as a callback so the history can be refreshed in case any status has been updated
         -- We don't need to pass a history variable since we refresh in the event handler the history if it is opened
-        -- UIManager:broadcastEvent(Event:new("ShowFileSearchLists", true, nil, "*.epub"))
-        -- local CanvasContext = require("document/canvascontext")
-        -- local _view_mode = G_defaults:readSetting("DCREREADER_VIEW_MODE") == "scroll" and 0 or 1 -- and self.SCROLL_VIEW_MODE or self.PAGE_VIEW_MODE
-        -- local cre = require("document/credocument"):engineInit()
-        -- local ok, _document = pcall(cre.newDocView, CanvasContext:getWidth(), CanvasContext:getHeight(), _view_mode)
-        -- if not ok then
-        --     error(_document)  -- will contain error message
-        -- end
+        local Device = require("device")
+        if not Device:isEmulator() then
+            UIManager:broadcastEvent(Event:new("ShowFileSearchLists", true, nil, "*.epub"))
+        else
+            -- local CanvasContext = require("document/canvascontext")
+            -- local _view_mode = G_defaults:readSetting("DCREREADER_VIEW_MODE") == "scroll" and 0 or 1 -- and self.SCROLL_VIEW_MODE or self.PAGE_VIEW_MODE
+            -- local cre = require("document/credocument"):engineInit()
+            -- local ok, _document = pcall(cre.newDocView, CanvasContext:getWidth(), CanvasContext:getHeight(), _view_mode)
+            -- if not ok then
+            --     error(_document)  -- will contain error message
+            -- end
 
-        -- _document:loadDocument("/home/jospalau/save/Addison, Katherine/The Goblin Emperor - Addison, Katherine.epub")
-        -- _document:renderDocument()
-        local DocumentRegistry = require("document/documentregistry")
+            -- _document:loadDocument("/home/jospalau/save/Addison, Katherine/The Goblin Emperor - Addison, Katherine.epub")
+            -- _document:renderDocument()
+            local DocumentRegistry = require("document/documentregistry")
 
-        local files = util.getListAll()
+            local files = util.getListAll()
 
-        local dump = require("dump")
-        -- print(dump(files))
+            local dump = require("dump")
+            -- print(dump(files))
 
-        for file, _ in pairs(files) do
-            print(file)
-            local document = DocumentRegistry:openDocument(file)
-            if document and document.loadDocument then
-                if document:loadDocument() then
-                    -- print("si")
-                    local time = require("ui/time")
-                    local start_time = time.now()
-                    document:enablePartialRerendering(false)
-                    -- document:setEmbeddedStyleSheet(0)
-                    document:setStyleSheet("./data/epub.css", "") -- Empty tweaks
+            for file, _ in pairs(files) do
+                print(file)
+                local document = DocumentRegistry:openDocument(file)
+                if document and document.loadDocument then
+                    if document:loadDocument() then
+                        -- print("si")
+                        local time = require("ui/time")
+                        local start_time = time.now()
+                        document:enablePartialRerendering(false)
+                        -- document:setEmbeddedStyleSheet(0)
+                        document:setStyleSheet("./data/epub.css", "") -- Empty tweaks
 
-                    document._document:invalidateCacheFile()
-                    -- Por defecto coge los estilos de def_stylesheet del fuente lvdocview.cpp
-                    document._document:renderDocument()
-                    print(string.format("  rendering took %.3f seconds", time.to_s(time.since(start_time))))
-                    local pages = document:getPageCount()
-                    print(pages)
-                    -- local res = document._document:findAllText("en", true, 5, 5000, 0, 0)
-                    -- print(dump(res))
-                    if pages >= 100 then
-                        document._document:gotoPage(100)
-                    else
-                        document._document:gotoPage(50)
-                    end
-                    local res = document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
-                    local text_properties=""
-                    if res and res.pos1 ~= ".0" then
-                        -- print(dump(res.text))
-                        local name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2, alignment, alignment2, fontsize, unitfontsize, fontsize2, unitfontsize2 = document:getHeight(res.pos1)
-
-                        if name == "" and res.pos0 ~= ".0"  then
-                            local name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2, alignment, alignment2, fontsize, unitfontsize, fontsize2, unitfontsize2 = document:getHeight(res.pos0)
-                        end
-
-                        if unitheight == "Font" then
-                            height = height * document.configurable.line_spacing/100
-                            height2 = height2 * document.configurable.line_spacing/100
-                        end
-
-                        if name ~= "" then
-                            local Math = require("optmath")
-                            height = Math.round(height*100)/100 .. unitheight
-                            height2 = Math.round(height2*100)/100 .. unitheight2
-                            indent = Math.round(indent*100)/100 .. unitindent
-                            indent2 = Math.round(indent2*100)/100 .. unitindent2
-                            margin =  Math.round(margin*100)/100 .. unitmargin
-                            margin2 = Math.round(margin2*100)/100 .. unitmargin2
-                            text_properties = string.format("%-15s%-10s%-5s","Tag",name2,name) .. string.char(10)
-                            text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Line height", height2, height) .. string.char(10)
-                            text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Text indent", indent2, indent) .. string.char(10)
-                            text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Margin", margin2, margin) .. string.char(10)
-                            text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Text align", alignment, alignment2) .. string.char(10)
-                            -- text_properties = text_properties .. string.format("%-15s%-15s%-5s", "Font size", fontsize .. ", " .. fontsize3, fontsize2 .. ", " .. fontsize4)
+                        document._document:invalidateCacheFile()
+                        -- Por defecto coge los estilos de def_stylesheet del fuente lvdocview.cpp
+                        document._document:renderDocument()
+                        print(string.format("  rendering took %.3f seconds", time.to_s(time.since(start_time))))
+                        local pages = document:getPageCount()
+                        print(pages)
+                        -- local res = document._document:findAllText("en", true, 5, 5000, 0, 0)
+                        -- print(dump(res))
+                        if pages >= 100 then
+                            document._document:gotoPage(100)
                         else
-                            text_properties = "Can't find positions to retrieve styles:" .. string.char(10)
-                            text_properties = text_properties .. "Pos 0: " ..  res.pos0 .. string.char(10)
-                            text_properties = text_properties .. "Pos 1: " .. res.pos1
+                            document._document:gotoPage(50)
                         end
-                        print(text_properties)
+                        local res = document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
+                        local text_properties=""
+                        if res and res.pos1 ~= ".0" then
+                            -- print(dump(res.text))
+                            local name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2, alignment, alignment2, fontsize, unitfontsize, fontsize2, unitfontsize2 = document:getHeight(res.pos1)
+
+                            if name == "" and res.pos0 ~= ".0"  then
+                                local name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2, alignment, alignment2, fontsize, unitfontsize, fontsize2, unitfontsize2 = document:getHeight(res.pos0)
+                            end
+
+                            if unitheight == "Font" then
+                                height = height * document.configurable.line_spacing/100
+                                height2 = height2 * document.configurable.line_spacing/100
+                            end
+
+                            if name ~= "" then
+                                local Math = require("optmath")
+                                height = Math.round(height*100)/100 .. unitheight
+                                height2 = Math.round(height2*100)/100 .. unitheight2
+                                indent = Math.round(indent*100)/100 .. unitindent
+                                indent2 = Math.round(indent2*100)/100 .. unitindent2
+                                margin =  Math.round(margin*100)/100 .. unitmargin
+                                margin2 = Math.round(margin2*100)/100 .. unitmargin2
+                                text_properties = string.format("%-15s%-10s%-5s","Tag",name2,name) .. string.char(10)
+                                text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Line height", height2, height) .. string.char(10)
+                                text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Text indent", indent2, indent) .. string.char(10)
+                                text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Margin", margin2, margin) .. string.char(10)
+                                text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Text align", alignment, alignment2) .. string.char(10)
+                                -- text_properties = text_properties .. string.format("%-15s%-15s%-5s", "Font size", fontsize .. ", " .. fontsize3, fontsize2 .. ", " .. fontsize4)
+                            else
+                                text_properties = "Can't find positions to retrieve styles:" .. string.char(10)
+                                text_properties = text_properties .. "Pos 0: " ..  res.pos0 .. string.char(10)
+                                text_properties = text_properties .. "Pos 1: " .. res.pos1
+                            end
+                            print(text_properties)
+                        end
                     end
+                else
+                    print("Problem loading document")
                 end
-            else
-                print("Problem loading document")
+                document:close()
+                collectgarbage()
             end
-            document:close()
-            collectgarbage()
         end
     elseif string.find("west north east", ges_ev.multiswipe_directions) then
         self._manager.filter = "all"UIManager:broadcastEvent(Event:new("ShowFileSearchAllCompleted"))
