@@ -380,12 +380,25 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
             if document and document.loadDocument then
                 if document:loadDocument() then
                     -- print("si")
+                    local time = require("ui/time")
+                    local start_time = time.now()
+                    document:enablePartialRerendering(false)
+                    -- document:setEmbeddedStyleSheet(0)
+                    document:setStyleSheet("./data/epub.css", "") -- Empty tweaks
+
+                    document._document:invalidateCacheFile()
+                    -- Por defecto coge los estilos de def_stylesheet del fuente lvdocview.cpp
                     document._document:renderDocument()
+                    print(string.format("  rendering took %.3f seconds", time.to_s(time.since(start_time))))
                     local pages = document:getPageCount()
                     print(pages)
                     -- local res = document._document:findAllText("en", true, 5, 5000, 0, 0)
                     -- print(dump(res))
-                    document._document:gotoPage(1)
+                    if pages >= 100 then
+                        document._document:gotoPage(100)
+                    else
+                        document._document:gotoPage(50)
+                    end
                     local res = document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
                     local text_properties=""
                     if res and res.pos1 ~= ".0" then
