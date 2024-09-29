@@ -357,23 +357,6 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
         -- We pass this anonymous function as a callback so the history can be refreshed in case any status has been updated
         -- We don't need to pass a history variable since we refresh in the event handler the history if it is opened
         -- UIManager:broadcastEvent(Event:new("ShowFileSearchLists", true, nil, "*.epub"))
-        -- local Trapper = require("ui/trapper")
-        -- local InfoMessage = require("ui/widget/infomessage")
-        -- local info2 = InfoMessage:new{ text = _("Finished") }
-        -- local completed, result = Trapper:dismissableRunInSubprocess(function()
-        --     local FFIUtil = require("ffi/util")
-        --     local CanvasContext = require("document/canvascontext")
-        --     local _view_mode = G_defaults:readSetting("DCREREADER_VIEW_MODE") == "scroll" and 0 or 1 -- and self.SCROLL_VIEW_MODE or self.PAGE_VIEW_MODE
-        --     local cre = require("document/credocument"):engineInit()
-        --     local ok, _document = pcall(cre.newDocView, CanvasContext:getWidth(), CanvasContext:getHeight(), _view_mode)
-        --     if not ok then
-        --         error(_document)  -- will contain error message
-        --     end
-
-        --     _document:loadDocument("/home/jospalau/save/Addison, Katherine/The Goblin Emperor - Addison, Katherine.epub")
-        --     _document:renderDocument()
-        --     return "aaaa"
-        -- end,  _("Searching… (tap to cancel)"))
         -- local CanvasContext = require("document/canvascontext")
         -- local _view_mode = G_defaults:readSetting("DCREREADER_VIEW_MODE") == "scroll" and 0 or 1 -- and self.SCROLL_VIEW_MODE or self.PAGE_VIEW_MODE
         -- local cre = require("document/credocument"):engineInit()
@@ -385,67 +368,67 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
         -- _document:loadDocument("/home/jospalau/save/Addison, Katherine/The Goblin Emperor - Addison, Katherine.epub")
         -- _document:renderDocument()
         local DocumentRegistry = require("document/documentregistry")
-        local document = DocumentRegistry:openDocument("/home/jospalau/save/Addison, Katherine/The Goblin Emperor - Addison, Katherine.epub")
-        if document and document.loadDocument then
-            if document:loadDocument() then
-                print("si")
-                document._document:renderDocument()
-                local pages = document:getPageCount()
-                print(pages)
-                -- local res = document._document:findAllText("en", true, 5, 5000, 0, 0)
-                -- local dump = require("dump")
-                -- print(dump(res))
-                document._document:gotoPage(20)
-                local res = document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
-                local text_properties=""
-                if res and res.pos1 ~= ".0" then
-                    name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2, alignment, alignment2, fontsize, unitfontsize, fontsize2, unitfontsize2 = document:getHeight(res.pos1)
 
-                    if name == "" and res.pos0 ~= ".0"  then
-                        name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2, alignment, alignment2, fontsize, unitfontsize, fontsize2, unitfontsize2 = document:getHeight(res.pos0)
-                    end
+        local files = util.getListAll()
 
-                    if unitheight == "Font" then
-                        height = height * document.configurable.line_spacing/100
-                        height2 = height2 * document.configurable.line_spacing/100
-                    end
+        local dump = require("dump")
+        -- print(dump(files))
 
-                    if name ~= "" then
-                        local Math = require("optmath")
-                        height = Math.round(height*100)/100 .. unitheight
-                        height2 = Math.round(height2*100)/100 .. unitheight2
-                        indent = Math.round(indent*100)/100 .. unitindent
-                        indent2 = Math.round(indent2*100)/100 .. unitindent2
-                        margin =  Math.round(margin*100)/100 .. unitmargin
-                        margin2 = Math.round(margin2*100)/100 .. unitmargin2
-                        text_properties = string.format("%-15s%-10s%-5s","Tag",name2,name) .. string.char(10)
-                        text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Line height", height2, height) .. string.char(10)
-                        text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Text indent", indent2, indent) .. string.char(10)
-                        text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Margin", margin2, margin) .. string.char(10)
-                        text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Text align", alignment, alignment2) .. string.char(10)
-                        -- text_properties = text_properties .. string.format("%-15s%-15s%-5s", "Font size", fontsize .. ", " .. fontsize3, fontsize2 .. ", " .. fontsize4)
-                    else
-                        text_properties = "Can't find positions to retrieve styles:" .. string.char(10)
-                        text_properties = text_properties .. "Pos 0: " ..  res.pos0 .. string.char(10)
-                        text_properties = text_properties .. "Pos 1: " .. res.pos1
+        for file, _ in pairs(files) do
+            print(file)
+            local document = DocumentRegistry:openDocument(file)
+            if document and document.loadDocument then
+                if document:loadDocument() then
+                    -- print("si")
+                    document._document:renderDocument()
+                    local pages = document:getPageCount()
+                    print(pages)
+                    -- local res = document._document:findAllText("en", true, 5, 5000, 0, 0)
+                    -- print(dump(res))
+                    document._document:gotoPage(1)
+                    local res = document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
+                    local text_properties=""
+                    if res and res.pos1 ~= ".0" then
+                        -- print(dump(res.text))
+                        local name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2, alignment, alignment2, fontsize, unitfontsize, fontsize2, unitfontsize2 = document:getHeight(res.pos1)
+
+                        if name == "" and res.pos0 ~= ".0"  then
+                            local name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2, alignment, alignment2, fontsize, unitfontsize, fontsize2, unitfontsize2 = document:getHeight(res.pos0)
+                        end
+
+                        if unitheight == "Font" then
+                            height = height * document.configurable.line_spacing/100
+                            height2 = height2 * document.configurable.line_spacing/100
+                        end
+
+                        if name ~= "" then
+                            local Math = require("optmath")
+                            height = Math.round(height*100)/100 .. unitheight
+                            height2 = Math.round(height2*100)/100 .. unitheight2
+                            indent = Math.round(indent*100)/100 .. unitindent
+                            indent2 = Math.round(indent2*100)/100 .. unitindent2
+                            margin =  Math.round(margin*100)/100 .. unitmargin
+                            margin2 = Math.round(margin2*100)/100 .. unitmargin2
+                            text_properties = string.format("%-15s%-10s%-5s","Tag",name2,name) .. string.char(10)
+                            text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Line height", height2, height) .. string.char(10)
+                            text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Text indent", indent2, indent) .. string.char(10)
+                            text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Margin", margin2, margin) .. string.char(10)
+                            text_properties = text_properties .. string.format("%-15s%-10s%-5s", "Text align", alignment, alignment2) .. string.char(10)
+                            -- text_properties = text_properties .. string.format("%-15s%-15s%-5s", "Font size", fontsize .. ", " .. fontsize3, fontsize2 .. ", " .. fontsize4)
+                        else
+                            text_properties = "Can't find positions to retrieve styles:" .. string.char(10)
+                            text_properties = text_properties .. "Pos 0: " ..  res.pos0 .. string.char(10)
+                            text_properties = text_properties .. "Pos 1: " .. res.pos1
+                        end
+                        print(text_properties)
                     end
-                    print(text_properties)
                 end
+            else
+                print("Problem loading document")
             end
-        else
-            print("noooo")
+            document:close()
+            collectgarbage()
         end
-
-        -- if not completed then
-        --     UIManager:show(InfoMessage:new{
-        --         text = _("Translation interrupted.")
-        --     })
-        -- end
-        -- if not result or type(result) ~= "string" then
-        --     UIManager:show(InfoMessage:new{
-        --         text = _("Translation failed.")
-        --     })
-        -- end
     elseif string.find("west north east", ges_ev.multiswipe_directions) then
         self._manager.filter = "all"UIManager:broadcastEvent(Event:new("ShowFileSearchAllCompleted"))
     elseif string.find("east north west", ges_ev.multiswipe_directions) and require("apps/reader/readerui").instance == nil then
