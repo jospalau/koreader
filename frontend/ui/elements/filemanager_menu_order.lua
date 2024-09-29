@@ -156,6 +156,8 @@ local order = {
         "wikipedia_lookup",
         "wikipedia_history",
         "----------------------------",
+        "file_search",
+        "file_search_results",
         "find_book_in_calibre_catalog",
         "find_file",
         "find_file_all",
