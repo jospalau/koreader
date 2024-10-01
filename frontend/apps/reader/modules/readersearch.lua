@@ -648,6 +648,10 @@ self.ui.searching = true
         self:onShowFindAllResults(not_cached)
     else
         UIManager:show(InfoMessage:new{ text = _("No results in the document") })
+        self.ui.searching = false
+        UIManager:show(Notification:new{
+            text = _("close searching"),
+        })
     end
 end
 
