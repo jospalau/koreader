@@ -332,12 +332,11 @@ function ReaderFont:onSetFont(face)
         -- local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
         -- local size_px = (display_dpi * self.configurable.font_size)/72
 
-
         -- -- We need this in the renderGlyph() function in freetype.lua source
         -- -- h = tonumber((self.face.size.metrics.ascender - self.face.size.metrics.descender) / 64)
         -- -- h = tonumber(self.face.bbox.yMax / 64)
         -- -- h = tonumber(glyph.metrics.height / 64)
-        -- -- Finally like getXHeight() CREngine function
+        -- -- Finally like getXHeight() function in lvfntman.cpp CREngine source
         -- -- h = tonumber(glyph.metrics.horiBearingY / 64)
         -- local RenderText = require("ui/rendertext")
         -- -- local face_base = Font:getFace("Capita-Regular", size_px, 0, true);
@@ -359,36 +358,11 @@ function ReaderFont:onSetFont(face)
         -- local glyph2 = RenderText:getGlyph(face2, 78, false)
 
 
-        -- local factor = 1
+        -- -- Do the same as getXHeight() function in lvfntman.cpp CREngine source
+        -- local other_adjusted_size = (size_px *  glyph.xheight + size_px/2) / glyph2.xheight
 
-        -- -- local per_font_base = glyph.xheight/size_px
-        -- -- local per_font = glyph2.xheight/size_px
-
-        -- -- if per_font_base/per_font ~= 1 then
-        -- --     if per_font > per_font_base then
-        -- --         factor = (100 - per_font_base/per_font)/100
-        -- --     else
-        -- --         factor = (100 - per_font/per_font_base)/100
-        -- --     end
-        -- -- end
-        -- -- if glyph2.xheight/glyph.xheight ~=1 then
-        -- --     factor = (100 - glyph2.xheight/glyph.xheight)/100
-        -- -- end
-
-
-        -- -- if glyph2.xheight/glyph.xheight ~=1 then
-        -- --     factor = (100 - glyph2.xheight / glyph.xheight)/100
-        -- -- end
-        -- if glyph2.xheight/glyph.xheight ~= 1 then
-        --     if glyph2.xheight < glyph.xheight then
-        --         factor = glyph2.xheight - glyph.xheight
-        --     else
-        --         factor = glyph.xheight - glyph2.xheight
-        --     end
-        -- end
-
-        -- print(size_px.. " " .. glyph.xheight .. " " ..  glyph2.xheight .. " - " .. factor .. "per\n")
-        -- self.ui.document:setFontSize(size_px + factor)
+        -- print(size_px.. " " .. glyph.xheight .. " " ..  glyph2.xheight .. " - " .. other_adjusted_size .. "per\n")
+        -- self.ui.document:setFontSize(other_adjusted_size)
         self.ui:handleEvent(Event:new("UpdatePos"))
     end
 end
