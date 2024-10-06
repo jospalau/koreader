@@ -360,20 +360,21 @@ function ReaderFont:onSetFont(face)
 
 
         -- -- Do the same as getXHeight() function in lvfntman.cpp CREngine source
-        -- -- local other_adjusted_size = (size_px *  glyph.xheight + size_px/2) / glyph2.xheight
+        -- local other_adjusted_size = (size_px *  glyph.xheight + size_px/2) / glyph2.xheight
 
 
-        -- local other_adjusted_size = size_px
-        -- if glyph.xheight ~= glyph2.xheight then
-        --     if glyph.xheight > glyph2.xheight then
-        --         other_adjusted_size = size_px - size_px * (glyph.xheight/size_px  - glyph2.xheight/size_px)
-        --     else
-        --         other_adjusted_size = size_px + size_px * (glyph2.xheight/size_px - glyph.xheight/size_px)
-        --     end
-        -- end
+        -- -- local other_adjusted_size = size_px
+        -- -- if glyph.xheight ~= glyph2.xheight then
+        -- --     if glyph.xheight > glyph2.xheight then
+        -- --         other_adjusted_size = size_px - size_px * (glyph.xheight/size_px  - glyph2.xheight/size_px)
+        -- --     else
+        -- --         other_adjusted_size = size_px + size_px * (glyph2.xheight/size_px - glyph.xheight/size_px)
+        -- --     end
+        -- -- end
 
-        -- print(size_px.. "Aspect ratio " .. glyph.xheight/size_px .. " Aspect ratio2 " ..  glyph2.xheight/size_px .. " - " .. other_adjusted_size .. "per\n")
-        -- self.ui.document:setFontSize(other_adjusted_size)
+        -- local Math = require("optmath")
+        -- print(size_px.. "Aspect ratio " .. glyph.xheight/size_px .. " Aspect ratio2 " ..  glyph2.xheight/size_px .. " - " .. Math.round(other_adjusted_size) .. "per\n")
+        -- self.ui.document:setFontSize(Math.round(other_adjusted_size))
 
         self.ui:handleEvent(Event:new("UpdatePos"))
     end
