@@ -323,9 +323,72 @@ end
 
 function ReaderFont:onSetFont(face)
     if face and self.font_face ~= face then
+        -- local current_face = self.font_face:gsub("%s+", "")
         self.font_face = face
         self.ui.document:setFontFace(face)
         -- signal readerrolling to update pos in new height
+
+
+        -- local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+        -- local size_px = (display_dpi * self.configurable.font_size)/72
+
+
+        -- -- We need this in the renderGlyph() function in freetype.lua source
+        -- -- h = tonumber((self.face.size.metrics.ascender - self.face.size.metrics.descender) / 64)
+        -- -- h = tonumber(self.face.bbox.yMax / 64)
+        -- -- h = tonumber(glyph.metrics.height / 64)
+        -- -- Finally like getXHeight() CREngine function
+        -- -- h = tonumber(glyph.metrics.horiBearingY / 64)
+        -- local RenderText = require("ui/rendertext")
+        -- -- local face_base = Font:getFace("Capita-Regular", size_px, 0, true);
+        -- local face_base = Font:getFace(current_face, size_px, 0);
+        -- local glyph = RenderText:getGlyph(face_base, 78, false)
+
+
+        -- -- local fonts = FontList:getFontList()
+        -- -- local escaped_realname = self.font_face:gsub("[-]", "%%-"):gsub("%s+", ""):gsub("_", ""):gsub("-", "")
+        -- -- local font_name = ""
+        -- -- for _k, _v in ipairs(fonts) do
+        -- --     if _v:find(escaped_realname) and (_v:find("Regular") or _v:find("Medium") or _v:find("Normal")) then
+        -- --         print("encuentra " .. _v)
+        -- --         break
+        -- --     end
+        -- -- end
+
+        -- local face2 = Font:getFace(self.font_face:gsub("%s+", ""), size_px, 0);
+        -- local glyph2 = RenderText:getGlyph(face2, 78, false)
+
+
+        -- local factor = 1
+
+        -- -- local per_font_base = glyph.xheight/size_px
+        -- -- local per_font = glyph2.xheight/size_px
+
+        -- -- if per_font_base/per_font ~= 1 then
+        -- --     if per_font > per_font_base then
+        -- --         factor = (100 - per_font_base/per_font)/100
+        -- --     else
+        -- --         factor = (100 - per_font/per_font_base)/100
+        -- --     end
+        -- -- end
+        -- -- if glyph2.xheight/glyph.xheight ~=1 then
+        -- --     factor = (100 - glyph2.xheight/glyph.xheight)/100
+        -- -- end
+
+
+        -- -- if glyph2.xheight/glyph.xheight ~=1 then
+        -- --     factor = (100 - glyph2.xheight / glyph.xheight)/100
+        -- -- end
+        -- if glyph2.xheight/glyph.xheight ~= 1 then
+        --     if glyph2.xheight < glyph.xheight then
+        --         factor = glyph2.xheight - glyph.xheight
+        --     else
+        --         factor = glyph.xheight - glyph2.xheight
+        --     end
+        -- end
+
+        -- print(size_px.. " " .. glyph.xheight .. " " ..  glyph2.xheight .. " - " .. factor .. "per\n")
+        -- self.ui.document:setFontSize(size_px + factor)
         self.ui:handleEvent(Event:new("UpdatePos"))
     end
 end
