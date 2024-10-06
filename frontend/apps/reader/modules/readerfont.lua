@@ -339,9 +339,10 @@ function ReaderFont:onSetFont(face)
         -- -- Finally like getXHeight() function in lvfntman.cpp CREngine source
         -- -- h = tonumber(glyph.metrics.horiBearingY / 64)
         -- local RenderText = require("ui/rendertext")
-        -- -- local face_base = Font:getFace("Capita-Regular", size_px, 0, true);
-        -- local face_base = Font:getFace(current_face, size_px, 0);
-        -- local glyph = RenderText:getGlyph(face_base, 78, false)
+        -- -- local face_base = Font:getFace("Capita-Regular", size_px, 0, false);
+        -- -- 120 decimal value x character
+        -- local face_base = Font:getFace(current_face, size_px, 0, false);
+        -- local glyph = RenderText:getGlyph(face_base, 120)
 
 
         -- -- local fonts = FontList:getFontList()
@@ -354,15 +355,23 @@ function ReaderFont:onSetFont(face)
         -- --     end
         -- -- end
 
-        -- local face2 = Font:getFace(self.font_face:gsub("%s+", ""), size_px, 0);
-        -- local glyph2 = RenderText:getGlyph(face2, 78, false)
+        -- local face2 = Font:getFace(self.font_face:gsub("%s+", ""), size_px, 0, false);
+        -- local glyph2 = RenderText:getGlyph(face2,  120)
 
 
         -- -- Do the same as getXHeight() function in lvfntman.cpp CREngine source
-        -- local other_adjusted_size = (size_px *  glyph.xheight + size_px/2) / glyph2.xheight
+        -- local other_adjusted_size = size_px
+        -- if glyph.xheight ~= glyph2.xheight then
+        --     if glyph.xheight > glyph2.xheight then
+        --         other_adjusted_size = size_px - size_px * ( glyph.xheight/size_px  -glyph2.xheight/size_px)
+        --     else
+        --         other_adjusted_size = size_px + size_px * (glyph2.xheight/size_px - glyph.xheight/size_px )
+        --     end
+        -- end
 
-        -- print(size_px.. " " .. glyph.xheight .. " " ..  glyph2.xheight .. " - " .. other_adjusted_size .. "per\n")
+        -- print(size_px.. "Aspect ratio" .. glyph.xheight/size_px .. " Aspect ratio2 " ..  glyph2.xheight/size_px .. " - " .. other_adjusted_size .. "per\n")
         -- self.ui.document:setFontSize(other_adjusted_size)
+
         self.ui:handleEvent(Event:new("UpdatePos"))
     end
 end
