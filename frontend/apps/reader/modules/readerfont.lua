@@ -328,7 +328,6 @@ function ReaderFont:onSetFont(face)
         self.ui.document:setFontFace(face)
         -- signal readerrolling to update pos in new height
 
-
         -- local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
         -- local size_px = (display_dpi * self.configurable.font_size)/72
 
@@ -360,21 +359,25 @@ function ReaderFont:onSetFont(face)
 
 
         -- -- Do the same as getXHeight() function in lvfntman.cpp CREngine source
-        -- local other_adjusted_size = (size_px *  glyph.xheight + size_px/2) / glyph2.xheight
+        -- -- local other_adjusted_size = (size_px *  glyph.xheight + size_px/2) / glyph2.xheight
 
 
-        -- -- local other_adjusted_size = size_px
-        -- -- if glyph.xheight ~= glyph2.xheight then
-        -- --     if glyph.xheight > glyph2.xheight then
-        -- --         other_adjusted_size = size_px - size_px * (glyph.xheight/size_px  - glyph2.xheight/size_px)
-        -- --     else
-        -- --         other_adjusted_size = size_px + size_px * (glyph2.xheight/size_px - glyph.xheight/size_px)
-        -- --     end
-        -- -- end
+        -- local other_adjusted_size = self.configurable.font_size
+        -- if glyph.xheight ~= glyph2.xheight then
+        --     if glyph.xheight > glyph2.xheight then
+        --         other_adjusted_size = other_adjusted_size - other_adjusted_size * (glyph.xheight/size_px  - glyph2.xheight/size_px)
+        --     else
+        --         other_adjusted_size = other_adjusted_size + other_adjusted_size * (glyph2.xheight/size_px - glyph.xheight/size_px)
+        --     end
+        -- end
 
         -- local Math = require("optmath")
-        -- print(size_px.. "Aspect ratio " .. glyph.xheight/size_px .. " Aspect ratio2 " ..  glyph2.xheight/size_px .. " - " .. Math.round(other_adjusted_size) .. "per\n")
-        -- self.ui.document:setFontSize(Math.round(other_adjusted_size))
+        -- print(self.configurable.font_size.. "Aspect ratio " .. glyph.xheight/size_px .. " Aspect ratio2 " ..  glyph2.xheight/size_px .. " - " .. Math.round(other_adjusted_size) .. "per\n")
+        -- self.ui.document:setFontSize(display_dpi * other_adjusted_size/72)
+
+        -- -- The desktop publishing point (DTP point) or PostScript point is defined as 1/72 or 0.0138 of the international inch
+        -- self.configurable.font_size = Math.round(other_adjusted_size*100)/100
+        -- -- self.configurable.font_size = Math.round((((other_adjusted_size * 72)/display_dpi) *100))/100 -- Convert back to pt
 
         self.ui:handleEvent(Event:new("UpdatePos"))
     end
