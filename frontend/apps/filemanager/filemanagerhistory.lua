@@ -33,6 +33,8 @@ local filter_text = {
 }
 
 function FileManagerHistory:init()
+    local util = require("util")
+    self.calibre_data = util.loadCalibreData()
     self.ui.menu:registerToMainMenu(self)
 end
 
@@ -233,8 +235,12 @@ function FileManagerHistory:onMenuHold(item)
         filemanagerutil.genBookDescriptionButton(file, self.book_props, close_dialog_callback, item.dim),
     })
 
+    local title = BD.filename(item.text):gsub(".epub","")
+    if self.calibre_data[Menu.getMenuText(item)] and self.calibre_data[Menu.getMenuText(item)]["words"] then
+        title = title .. " - " .. tostring(math.floor(self.calibre_data[Menu.getMenuText(item)]["words"]/1000)) .."kw"
+    end
     self.histfile_dialog = ButtonDialog:new{
-        title = BD.filename(item.text),
+        title = title,
         title_align = "center",
         buttons = buttons,
     }
