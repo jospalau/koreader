@@ -274,7 +274,7 @@ function DoubleBar:toggleBar()
                 title = title:sub(1, title:find('%(')-2, title:len())
             end
         end
-        title = TextWidget.PTF_BOLD_START .. title .. " with " .. words .. TextWidget.PTF_BOLD_END
+        title = TextWidget.PTF_BOLD_START .. title .. TextWidget.PTF_BOLD_END
         self.title_text:setText(title)
 
         local chapter = self.ui.toc:getTocTitleByPage(self.view.footer.pageno) ~= ""
