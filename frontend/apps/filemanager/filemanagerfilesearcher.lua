@@ -150,7 +150,10 @@ function FileSearcher:onShowFileSearchLists(recent, page, search_string)
     self.recent = recent
 
     -- self:onSearchSortCompleted(false, recent, page, nil, sorted_size)
-    self:doSearchCompleted(false, recent, page, nil)
+    local Trapper = require("ui/trapper")
+    Trapper:wrap(function()
+        self:doSearchCompleted(false, recent, page, nil)
+    end)
 end
 
 function FileSearcher:onCloseSearchMenu(recent, search_string)
@@ -197,7 +200,10 @@ function FileSearcher:onShowFileSearchAllCompleted()
     end
 
     -- self:onSearchSortCompleted(false, recent, page, nil, sorted_size)
-    self:doSearchCompleted(true, nil, nil, nil)
+    local Trapper = require("ui/trapper")
+    Trapper:wrap(function()
+        self:doSearchCompleted(true, nil, nil, nil)
+    end)
 end
 
 function FileSearcher:doSearch(callbackfunc)
