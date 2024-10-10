@@ -157,7 +157,7 @@ function FileSearcher:onShowFileSearchLists(recent, page, search_string)
 end
 
 function FileSearcher:onCloseSearchMenu(recent, search_string)
-    UIManager:close(self.search_menu)
+    -- UIManager:close(self.search_menu) We do this at the end of the trapper wrapped function doSearchCompleted()
     self:onShowFileSearchLists(recent, self.search_menu.page, search_string)
 end
 
@@ -331,6 +331,8 @@ function FileSearcher:doSearchCompleted(show_complete, show_recent, page, callba
             end
         end
     end
+    -- Delay the search menu closure until here instead of in onCloseSearchMenu() so history is not shown when search menu it is reloaded
+    UIManager:close(self.search_menu)
     if #FileSearcher.search_results > 0 then
         self:onShowSearchResults(not_cached, show_complete, show_recent, page, callback)  --self:showSearchResults(results, nil, nil, callbackfunc)
     else
@@ -583,8 +585,6 @@ function FileSearcher:onShowSearchResults(not_cached, results, show_recent, page
                 end
 
             end
-
-
             UIManager:close(self.search_menu)
         end
     -- end
