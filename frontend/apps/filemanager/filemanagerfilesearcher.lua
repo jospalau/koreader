@@ -342,6 +342,13 @@ function FileSearcher:getList()
         ["/mnt/base-us"] = true, -- Kindle
     }
     local search_string = FileSearcher.search_string
+
+    local words = {}
+    if search_string:find("|") then
+        for word in string.gmatch(search_string, '([^%|]+)') do -- We scape | using %|
+            table.insert(words, word)
+        end
+    end
     -- local calibre_data = util.loadCalibreData()
     if search_string ~= "*" then -- one * to show all files
         if not self.case_sensitive then
@@ -384,12 +391,22 @@ function FileSearcher:getList()
                     elseif attributes.mode == "file" and not util.stringStartsWith(f, "._")
                             and (FileChooser.show_unsupported or DocumentRegistry:hasProvider(fullpath))
                             and FileChooser:show_file(f) then
-                        if self:isFileMatch(f, fullpath, search_string, true) then
-                            table.insert(dirs, { f, fullpath, attributes })
-                            -- local file = FileChooser:getListItem(nil, f, fullpath, attributes, collate)
-                            -- file.pages = calibre_data[file.text] and calibre_data[file.text].pages or 0
-                            -- file.words = calibre_data[file.text] and calibre_data[file.text].words or 0
-                            -- table.insert(files, file)
+                        if #words > 0 then
+                            for _, word in ipairs(words) do
+                                local title = word:sub(1, word:find("-") - 2)
+                                -- local author = word:sub(word:find("-") + 2, word:len()):gsub(".epub", "")
+                                if fullpath:find(title) then
+                                    table.insert(dirs, { f, fullpath, attributes })
+                                end
+                            end
+                        else
+                            if self:isFileMatch(f, fullpath, search_string, true) then
+                                table.insert(dirs, { f, fullpath, attributes })
+                                -- local file = FileChooser:getListItem(nil, f, fullpath, attributes, collate)
+                                -- file.pages = calibre_data[file.text] and calibre_data[file.text].pages or 0
+                                -- file.words = calibre_data[file.text] and calibre_data[file.text].words or 0
+                                -- table.insert(files, file)
+                            end
                         end
                     end
                 end
@@ -669,7 +686,11 @@ function FileSearcher:showFileDialog(item, callback)
             end,
         },
     })
-    local title = file
+    local title = file:gsub(".epub","")
+    title = select(2, util.splitFilePathName(title))
+    if self.search_menu.ui.history.calibre_data[Menu.getMenuText(item)] and self.search_menu.ui.history.calibre_data[Menu.getMenuText(item)]["pubdate"]  and self.search_menu.ui.history.calibre_data[Menu.getMenuText(item)]["words"] then
+        title = title .. ", " .. self.search_menu.ui.history.calibre_data[Menu.getMenuText(item)]["pubdate"]:sub(1, 4) .. " - " .. tostring(math.floor(self.search_menu.ui.history.calibre_data[Menu.getMenuText(item)]["words"]/1000)) .."kw"
+    end
     if bookinfo then
         if bookinfo.title then
             title = title .. "\n\n" .. T(_("Title: %1"), bookinfo.title)

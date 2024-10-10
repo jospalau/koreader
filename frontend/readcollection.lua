@@ -13,21 +13,36 @@ local ReadCollection = {
     default_collection_name = "favorites",
 }
 
--- function ReadCollection:OpenRandomFav()
---     local col_fav = self:prepareList("favorites")
---     if not col_fav then return end
---     local i = 1
---     local file_name = nil
---     local random_fav = math.random(1, #col_fav)
---     for _, fav in pairs(col_fav) do
---         if i == random_fav then
---             file_name = fav.file
---             break
---         end
---         i = i + 1
---     end
---     return file_name
--- end
+function ReadCollection:OpenRandomFav()
+    local col_fav = self.coll["MBR Tier 2"]
+    if not col_fav then return end
+
+    local len = 0
+    for entry in pairs(col_fav) do
+        len= len + 1
+    end
+
+
+    if len == 0 then return end
+    local util = require("util")
+    local i = 1
+    local file_name = nil
+    local files = ""
+    for i = 1, 3, 1 do
+        local j = 1
+        local random_fav = math.random(1, len)
+        for _, fav in pairs(col_fav) do
+            if j == random_fav then
+                file_name = fav.file
+                local filename = select(2, util.splitFilePathName(file_name))
+                files = files .. "|" .. filename
+                break
+            end
+            j = j + 1
+        end
+    end
+    return files:sub(2, files:len())
+end
 -- read, write
 
 local function buildEntry(file, order, mandatory)

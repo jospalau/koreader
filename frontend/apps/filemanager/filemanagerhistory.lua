@@ -454,11 +454,31 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
             end
         end
     elseif string.find("west north east", ges_ev.multiswipe_directions) then
-        self._manager.filter = "all"UIManager:broadcastEvent(Event:new("ShowFileSearchAllCompleted"))
-    elseif string.find("east north west", ges_ev.multiswipe_directions) and require("apps/reader/readerui").instance == nil then
+        self._manager.filter = "all"
+        UIManager:broadcastEvent(Event:new("ShowFileSearchAllCompleted"))
+    -- elseif string.find("east north west", ges_ev.multiswipe_directions) and require("apps/reader/readerui").instance == nil then
+    elseif string.find("north west", ges_ev.multiswipe_directions) then
         -- local FileManager = require("apps/filemanager/filemanager")
         -- -- FileManager:openFile(G_reader_settings:readSetting("home_dir") .. "/Shakespeare, William/Romeo and Juliet - William Shakespeare.epub")
         -- FileManager:openFile("resources/arthur-conan-doyle_the-hound-of-the-baskervilles.epub")
+
+        local ReadCollection = require("readcollection")
+        local files = ReadCollection:OpenRandomFav()
+
+        if not files then
+            local UIManager = require("ui/uimanager")
+            local Notification = require("ui/widget/notification")
+            UIManager:show(Notification:new{
+                text = _("No MBR collection or no books in collection"),
+            })
+            return
+        end
+
+
+        UIManager:broadcastEvent(Event:new("ShowFileSearchLists", true, nil, files))
+
+
+
     elseif string.find("east south", ges_ev.multiswipe_directions) then
         self._manager.filter = "all"
         self._manager.search_string = nil
