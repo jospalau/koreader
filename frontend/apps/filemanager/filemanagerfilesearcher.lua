@@ -394,6 +394,9 @@ function FileSearcher:getList()
                         if #words > 0 then
                             for _, word in ipairs(words) do
                                 local title = word:sub(1, word:find("-") - 2)
+                                if title:find("%(") then
+                                    title = title:sub(1, title:find("%(") - 2)
+                                end
                                 -- local author = word:sub(word:find("-") + 2, word:len()):gsub(".epub", "")
                                 if fullpath:find(title) then
                                     table.insert(dirs, { f, fullpath, attributes })
