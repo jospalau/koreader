@@ -195,9 +195,7 @@ function FileSearcher:onShowFileSearchAllCompleted()
     local search_dialog
     local check_button_case, check_button_subfolders, check_button_metadata
     self.path = G_reader_settings:readSetting("home_dir")
-    if FileSearcher.search_string == nil then
-        FileSearcher.search_string = "*.epub"
-    end
+    FileSearcher.search_string = "*.epub"
 
     -- self:onSearchSortCompleted(false, recent, page, nil, sorted_size)
     local Trapper = require("ui/trapper")
@@ -634,6 +632,10 @@ function FileSearcher:showFileDialog(item, callback)
         -- local Event = require("ui/event")
         -- UIManager:broadcastEvent(Event:new("ShowFileSearchAll"))
     end
+
+   local function close_dialog_callback2()
+        UIManager:close(dialog)
+    end
     -- When Show folder in file to the callback in onShowFileSearchAll()
     local function close_dialog_menu_callback(file)
         UIManager:close(dialog)
@@ -658,7 +660,7 @@ function FileSearcher:showFileDialog(item, callback)
                 filemanagerutil.genResetSettingsButton(doc_settings_or_file, close_dialog_callback, is_currently_opened),
                 -- The last change calls update_item_callback() but I will continue calling close_dialog_callback() and the search it will be reopened
                 -- Basically because I close the dialog always there is an action in close_dialog_callback()
-                self.ui.collections:genAddToCollectionButton(file, close_dialog_callback, close_dialog_callback),
+                self.ui.collections:genAddToCollectionButton(file, close_dialog_callback2, close_dialog_callback),
             })
         end
         table.insert(buttons, {
@@ -676,7 +678,7 @@ function FileSearcher:showFileDialog(item, callback)
                     FileManager:showDeleteFileDialog(file, post_delete_callback)
                 end,
             },
-            filemanagerutil.genBookInformationButton(doc_settings_or_file, bookinfo, close_dialog_callback),
+            filemanagerutil.genBookInformationButton(doc_settings_or_file, bookinfo, close_dialog_callback2),
         })
     end
     table.insert(buttons, {
