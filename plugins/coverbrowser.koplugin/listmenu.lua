@@ -926,7 +926,7 @@ function ListMenu:_recalculateDimen()
         self.itemnum_orig = self.path_items[self.path]
         self.focused_path_orig = self.focused_path
     end
-    local available_height = self.inner_dimen.h - self.others_height - Size.line.thin
+    local available_height = self.inner_dimen.h - self.others_height - Size.line.thin - 50
 
     if self.files_per_page == nil then -- first drawing
         -- Default perpage is computed from a base of 64px per ListMenuItem,
