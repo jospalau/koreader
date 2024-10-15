@@ -1011,11 +1011,15 @@ function MosaicMenu:_updateItemsBuildUI()
     local cur_row = nil
     local idx_offset = (self.page - 1) * self.perpage
     local line_layout = {}
+    local select_number
     for idx = 1, self.perpage do
         local index = idx_offset + idx
         local entry = self.item_table[index]
         if entry == nil then break end
         entry.idx = index
+        if index == self.itemnumber then -- focused item
+            select_number = idx
+        end
         -- Keyboard shortcuts, as done in Menu
         local item_shortcut, shortcut_style
         if self.is_enable_shortcut then
@@ -1069,6 +1073,7 @@ function MosaicMenu:_updateItemsBuildUI()
     end
     table.insert(self.layout, line_layout)
     table.insert(self.item_group, VerticalSpan:new{ width = self.item_margin }) -- bottom padding
+    return select_number
 end
 
 return MosaicMenu
