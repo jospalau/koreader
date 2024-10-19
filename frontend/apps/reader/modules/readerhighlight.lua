@@ -801,6 +801,7 @@ Except when in two columns mode, where this is limited to showing only the previ
             self.allow_corner_scroll = G_reader_settings:nilOrTrue("highlight_corner_scroll")
         end,
     })
+
     -- we allow user to select the rate at which the content selection tool moves through screen
     if not Device:isTouchDevice() and Device:hasDPad() then
         table.insert(menu_items.long_press.sub_item_table, {
@@ -865,11 +866,9 @@ Except when in two columns mode, where this is limited to showing only the previ
                 UIManager:show(spin_widget)
             end,
         })
-    end
 
-    -- long_press setting is under taps_and_gestures menu which is not available for non-touch devices
-    -- Clone long_press setting and change its label, making it much more meaningful for non-touch device users.
-    if not Device:isTouchDevice() and Device:hasDPad() then
+        -- long_press setting is under taps_and_gestures menu which is not available for non-touch devices
+        -- Clone long_press setting and change its label, making it much more meaningful for non-touch device users.
         menu_items.selection_text = menu_items.long_press
         menu_items.selection_text.text = _("Selection on text")
         menu_items.long_press = nil
@@ -1872,7 +1871,6 @@ function ReaderHighlight:getSelectedWordContext(nb_words)
 end
 
 function ReaderHighlight:viewSelectionHTML(debug_view, no_css_files_buttons)
-    if self.ui.paging then return end
     if self.selected_text and self.selected_text.pos0 and self.selected_text.pos1 then
         local ViewHtml = require("ui/viewhtml")
         ViewHtml:viewSelectionHTML(self.ui.document, self.selected_text)
@@ -2538,7 +2536,7 @@ function ReaderHighlight:getSavedExtendedHighlightPage(highlight, page, index)
     local item = {
         datetime = highlight.datetime,
         drawer   = highlight.drawer,
-        color    = highlight.color or self.highlight.saved_color,
+        color    = highlight.color or self.view.highlight.saved_color,
         text     = highlight.text,
         note     = highlight.note,
         page     = highlight.page,
