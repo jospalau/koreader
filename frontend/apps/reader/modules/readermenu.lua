@@ -365,6 +365,14 @@ function ReaderMenu:setUpdateItemTable()
             self.ui:reloadDocument(nil, true) -- seamless reload (no infomsg, no flash)
         end
     }
+    self.menu_items.scale_font_to_current_font = {
+        text = _("Scale font to current font"),
+        checked_func = function() return G_reader_settings:isTrue("scale_font_to_current_font") end,
+        callback = function()
+            local scale_font_to_current_font = G_reader_settings:isTrue("scale_font_to_current_font")
+            G_reader_settings:saveSetting("scale_font_to_current_font", not scale_font_to_current_font)
+        end
+    }
     -- self.menu_items.open_random_favorite = {
     --     text_func = function()
     --         local random_file = self:getRandomFav()

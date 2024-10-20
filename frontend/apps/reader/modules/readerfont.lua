@@ -328,49 +328,50 @@ function ReaderFont:onSetFont(face)
         self.ui.document:setFontFace(face)
 
         -- signal readerrolling to update pos in new height
+        if G_reader_settings:isTrue("scale_font_to_current_font") then
+            local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+            local size_px = (display_dpi * self.configurable.font_size)/72
 
-        local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
-        local size_px = (display_dpi * self.configurable.font_size)/72
-
-        -- We need this in the renderGlyph() function in freetype.lua source
-        -- h = tonumber((self.face.size.metrics.ascender - self.face.size.metrics.descender) / 64)
-        -- h = tonumber(self.face.bbox.yMax / 64)
-        -- h = tonumber(glyph.metrics.height / 64)
-        -- Finally like getXHeight() function in lvfntman.cpp CREngine source
-        -- h = tonumber(glyph.metrics.horiBearingY / 64)
-        local RenderText = require("ui/rendertext")
-        -- local face_base = Font:getFace("Capita-Regular", size_px, 0, false);
-        -- 120 decimal value x character
-        local face_base = Font:getFace(current_face, size_px, 0, false);
-        local glyph = RenderText:getGlyph(face_base, 120)
-
-
-        -- local fonts = FontList:getFontList()
-        -- local escaped_realname = self.font_face:gsub("[-]", "%%-"):gsub("%s+", ""):gsub("_", ""):gsub("-", "")
-        -- local font_name = ""
-        -- for _k, _v in ipairs(fonts) do
-        --     if _v:find(escaped_realname) and (_v:find("Regular") or _v:find("Medium") or _v:find("Normal")) then
-        --         print("encuentra " .. _v)
-        --         break
-        --     end
-        -- end
-
-        local face2 = Font:getFace(self.font_face:gsub("%s+", ""), size_px, 0, false);
-        local glyph2 = RenderText:getGlyph(face2,  120)
+            -- We need this in the renderGlyph() function in freetype.lua source
+            -- h = tonumber((self.face.size.metrics.ascender - self.face.size.metrics.descender) / 64)
+            -- h = tonumber(self.face.bbox.yMax / 64)
+            -- h = tonumber(glyph.metrics.height / 64)
+            -- Finally like getXHeight() function in lvfntman.cpp CREngine source
+            -- h = tonumber(glyph.metrics.horiBearingY / 64)
+            local RenderText = require("ui/rendertext")
+            -- local face_base = Font:getFace("Capita-Regular", size_px, 0, false);
+            -- 120 decimal value x character
+            local face_base = Font:getFace(current_face, size_px, 0, false);
+            local glyph = RenderText:getGlyph(face_base, 120)
 
 
-        -- Do the same as getXHeight() function in lvfntman.cpp CREngine source
-        -- local other_adjusted_size = (size_px *  glyph.xheight + size_px/2) / glyph2.xheight
+            -- local fonts = FontList:getFontList()
+            -- local escaped_realname = self.font_face:gsub("[-]", "%%-"):gsub("%s+", ""):gsub("_", ""):gsub("-", "")
+            -- local font_name = ""
+            -- for _k, _v in ipairs(fonts) do
+            --     if _v:find(escaped_realname) and (_v:find("Regular") or _v:find("Medium") or _v:find("Normal")) then
+            --         print("encuentra " .. _v)
+            --         break
+            --     end
+            -- end
 
-        local other_adjusted_size = size_px * ((glyph.xheight/size_px)/(glyph2.xheight/size_px))
+            local face2 = Font:getFace(self.font_face:gsub("%s+", ""), size_px, 0, false);
+            local glyph2 = RenderText:getGlyph(face2,  120)
 
-        local Math = require("optmath")
-        -- print("Original" .. size_px.. ", Aspect ratio " .. glyph.xheight/size_px .. ", Aspect ratio2 " ..  glyph2.xheight/size_px .. ", New " .. Math.round(other_adjusted_size) .. "\n")
-        self.ui.document:setFontSize(other_adjusted_size)
 
-        -- The desktop publishing point (DTP point) or PostScript point is defined as 1/72 or 0.0138 of the international inch
-        -- self.configurable.font_size = Math.round(other_adjusted_size*100)/100
-        self.configurable.font_size = Math.round((((other_adjusted_size * 72)/display_dpi) *100))/100 -- Convert back to pt
+            -- Do the same as getXHeight() function in lvfntman.cpp CREngine source
+            -- local other_adjusted_size = (size_px *  glyph.xheight + size_px/2) / glyph2.xheight
+
+            local other_adjusted_size = size_px * ((glyph.xheight/size_px)/(glyph2.xheight/size_px))
+
+            local Math = require("optmath")
+            -- print("Original" .. size_px.. ", Aspect ratio " .. glyph.xheight/size_px .. ", Aspect ratio2 " ..  glyph2.xheight/size_px .. ", New " .. Math.round(other_adjusted_size) .. "\n")
+            self.ui.document:setFontSize(other_adjusted_size)
+
+            -- The desktop publishing point (DTP point) or PostScript point is defined as 1/72 or 0.0138 of the international inch
+            -- self.configurable.font_size = Math.round(other_adjusted_size*100)/100
+            self.configurable.font_size = Math.round((((other_adjusted_size * 72)/display_dpi) *100))/100 -- Convert back to pt
+        end
         self.ui:handleEvent(Event:new("UpdatePos"))
     end
 end

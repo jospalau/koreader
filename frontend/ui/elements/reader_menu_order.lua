@@ -74,6 +74,7 @@ local order = {
         "show_double_bar",
         "show_top_bar",
         "highlight_all_notes",
+        "scale_font_to_current_font",
         "----------------------------",
         "network",
         "screen",
