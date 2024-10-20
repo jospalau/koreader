@@ -323,62 +323,54 @@ end
 
 function ReaderFont:onSetFont(face)
     if face and self.font_face ~= face then
-        -- local current_face = self.font_face:gsub("%s+", "")
+        local current_face = self.font_face:gsub("%s+", "")
         self.font_face = face
         self.ui.document:setFontFace(face)
+
         -- signal readerrolling to update pos in new height
 
-        -- local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
-        -- local size_px = (display_dpi * self.configurable.font_size)/72
+        local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+        local size_px = (display_dpi * self.configurable.font_size)/72
 
-        -- -- We need this in the renderGlyph() function in freetype.lua source
-        -- -- h = tonumber((self.face.size.metrics.ascender - self.face.size.metrics.descender) / 64)
-        -- -- h = tonumber(self.face.bbox.yMax / 64)
-        -- -- h = tonumber(glyph.metrics.height / 64)
-        -- -- Finally like getXHeight() function in lvfntman.cpp CREngine source
-        -- -- h = tonumber(glyph.metrics.horiBearingY / 64)
-        -- local RenderText = require("ui/rendertext")
-        -- -- local face_base = Font:getFace("Capita-Regular", size_px, 0, false);
-        -- -- 120 decimal value x character
-        -- local face_base = Font:getFace(current_face, size_px, 0, false);
-        -- local glyph = RenderText:getGlyph(face_base, 120)
-
-
-        -- -- local fonts = FontList:getFontList()
-        -- -- local escaped_realname = self.font_face:gsub("[-]", "%%-"):gsub("%s+", ""):gsub("_", ""):gsub("-", "")
-        -- -- local font_name = ""
-        -- -- for _k, _v in ipairs(fonts) do
-        -- --     if _v:find(escaped_realname) and (_v:find("Regular") or _v:find("Medium") or _v:find("Normal")) then
-        -- --         print("encuentra " .. _v)
-        -- --         break
-        -- --     end
-        -- -- end
-
-        -- local face2 = Font:getFace(self.font_face:gsub("%s+", ""), size_px, 0, false);
-        -- local glyph2 = RenderText:getGlyph(face2,  120)
+        -- We need this in the renderGlyph() function in freetype.lua source
+        -- h = tonumber((self.face.size.metrics.ascender - self.face.size.metrics.descender) / 64)
+        -- h = tonumber(self.face.bbox.yMax / 64)
+        -- h = tonumber(glyph.metrics.height / 64)
+        -- Finally like getXHeight() function in lvfntman.cpp CREngine source
+        -- h = tonumber(glyph.metrics.horiBearingY / 64)
+        local RenderText = require("ui/rendertext")
+        -- local face_base = Font:getFace("Capita-Regular", size_px, 0, false);
+        -- 120 decimal value x character
+        local face_base = Font:getFace(current_face, size_px, 0, false);
+        local glyph = RenderText:getGlyph(face_base, 120)
 
 
-        -- -- Do the same as getXHeight() function in lvfntman.cpp CREngine source
-        -- -- local other_adjusted_size = (size_px *  glyph.xheight + size_px/2) / glyph2.xheight
-
-
-        -- local other_adjusted_size = self.configurable.font_size
-        -- if glyph.xheight ~= glyph2.xheight then
-        --     if glyph.xheight > glyph2.xheight then
-        --         other_adjusted_size = other_adjusted_size - other_adjusted_size * (glyph.xheight/size_px  - glyph2.xheight/size_px)
-        --     else
-        --         other_adjusted_size = other_adjusted_size + other_adjusted_size * (glyph2.xheight/size_px - glyph.xheight/size_px)
+        -- local fonts = FontList:getFontList()
+        -- local escaped_realname = self.font_face:gsub("[-]", "%%-"):gsub("%s+", ""):gsub("_", ""):gsub("-", "")
+        -- local font_name = ""
+        -- for _k, _v in ipairs(fonts) do
+        --     if _v:find(escaped_realname) and (_v:find("Regular") or _v:find("Medium") or _v:find("Normal")) then
+        --         print("encuentra " .. _v)
+        --         break
         --     end
         -- end
 
-        -- local Math = require("optmath")
-        -- print(self.configurable.font_size.. "Aspect ratio " .. glyph.xheight/size_px .. " Aspect ratio2 " ..  glyph2.xheight/size_px .. " - " .. Math.round(other_adjusted_size) .. "per\n")
-        -- self.ui.document:setFontSize(display_dpi * other_adjusted_size/72)
+        local face2 = Font:getFace(self.font_face:gsub("%s+", ""), size_px, 0, false);
+        local glyph2 = RenderText:getGlyph(face2,  120)
 
-        -- -- The desktop publishing point (DTP point) or PostScript point is defined as 1/72 or 0.0138 of the international inch
+
+        -- Do the same as getXHeight() function in lvfntman.cpp CREngine source
+        -- local other_adjusted_size = (size_px *  glyph.xheight + size_px/2) / glyph2.xheight
+
+        local other_adjusted_size = size_px * ((glyph.xheight/size_px)/(glyph2.xheight/size_px))
+
+        local Math = require("optmath")
+        -- print("Original" .. size_px.. ", Aspect ratio " .. glyph.xheight/size_px .. ", Aspect ratio2 " ..  glyph2.xheight/size_px .. ", New " .. Math.round(other_adjusted_size) .. "\n")
+        self.ui.document:setFontSize(other_adjusted_size)
+
+        -- The desktop publishing point (DTP point) or PostScript point is defined as 1/72 or 0.0138 of the international inch
         -- self.configurable.font_size = Math.round(other_adjusted_size*100)/100
-        -- -- self.configurable.font_size = Math.round((((other_adjusted_size * 72)/display_dpi) *100))/100 -- Convert back to pt
-
+        self.configurable.font_size = Math.round((((other_adjusted_size * 72)/display_dpi) *100))/100 -- Convert back to pt
         self.ui:handleEvent(Event:new("UpdatePos"))
     end
 end
