@@ -363,6 +363,8 @@ function ReaderFont:onSetFont(face)
             -- local other_adjusted_size = (size_px *  glyph.xheight + size_px/2) / glyph2.xheight
 
             local other_adjusted_size = size_px * ((glyph.xheight/size_px)/(glyph2.xheight/size_px))
+            self.configurable.line_spacing = self.configurable.line_spacing * (size_px/other_adjusted_size)
+            self.ui.document:setInterlineSpacePercent(self.configurable.line_spacing)
 
             local Math = require("optmath")
             -- print("Original" .. size_px.. ", Aspect ratio " .. glyph.xheight/size_px .. ", Aspect ratio2 " ..  glyph2.xheight/size_px .. ", New " .. Math.round(other_adjusted_size) .. "\n")
