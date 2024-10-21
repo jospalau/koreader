@@ -183,7 +183,10 @@ function PageBrowserWidget:init()
     -- Compute settings-dependant sizes and options, and build the inner widgets
     -- (this will call self:update())
     self:updateLayout()
-    UIManager:broadcastEvent(Event:new("ToggleShowTopBar"))
+    if G_reader_settings:isTrue("show_top_bar") then
+        UIManager:broadcastEvent(Event:new("ToggleShowTopBar"))
+        self.ui.view.topbar.wason = true
+    end
 end
 
 function PageBrowserWidget:updateEditableStuff(update_view)
@@ -1092,7 +1095,10 @@ function PageBrowserWidget:onClose(close_all_parents)
         self.ui.bookmark:onPageUpdate(self.ui:getCurrentPage())
         UIManager:setDirty(self.ui.dialog, "full")
     end
-    UIManager:broadcastEvent(Event:new("ToggleShowTopBar"))
+    if self.ui.view.topbar and self.ui.view.topbar.wason then
+        UIManager:broadcastEvent(Event:new("ToggleShowTopBar"))
+        self.ui.view.topbar.wason = nil
+    end
 
     return true
 end

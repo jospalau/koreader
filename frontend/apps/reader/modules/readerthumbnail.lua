@@ -438,6 +438,7 @@ function ReaderThumbnail:_getPageImage(page)
 
     -- Common to ReaderRolling and ReaderPaging
     self.ui.view.footer_visible = false -- We want no footer on page image
+    -- We disable the topbar widget in pagebrowserwidget.lua before opening the widget to enable it after closing it
     if self.ui.view.highlight.lighten_factor < 0.3 then
         self.ui.view.highlight.lighten_factor = 0.3 -- make lighten highlight a bit darker
     end
