@@ -323,7 +323,7 @@ end
 
 function ReaderFont:onSetFont(face)
     if face and self.font_face ~= face then
-        local current_face = self.font_face:gsub("%s+", "")
+        local current_face = self.font_face:gsub("%s+", "") .. "-Regular"
         self.font_face = face
         self.ui.document:setFontFace(face)
 
@@ -355,7 +355,7 @@ function ReaderFont:onSetFont(face)
             --     end
             -- end
 
-            local face2 = Font:getFace(self.font_face:gsub("%s+", ""), size_px, 0, false);
+            local face2 = Font:getFace(self.font_face:gsub("%s+", "") .. "-Regular", size_px, 0, false);
             local glyph2 = RenderText:getGlyph(face2,  120)
 
 
