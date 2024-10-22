@@ -3875,7 +3875,7 @@ function ReaderFooter:onShowNotesFooter()
                 follow_callback = function() -- follow the link on swipe west
                     UIManager:close(popup)
                 end,
-                dialog = self.dialog,
+                dialog = self.ui.dialog,
             }
             UIManager:show(popup)
         else
