@@ -531,16 +531,16 @@ function Screensaver:show()
             if self:withBackground() then
                 Screen:clear()
             end
-            if require("apps/reader/readerui").instance then
-                Screen:refreshFull(0, 0, Screen:getWidth(), Screen:getHeight())
-            end
+            -- if require("apps/reader/readerui").instance then
+            --     Screen:refreshFull(0, 0, Screen:getWidth(), Screen:getHeight())
+            -- end
 
             -- On Kobo, on sunxi SoCs with a recent kernel, wait a tiny bit more to avoid weird refresh glitches...
             if Device:isKobo() and (Device:isSunxi() or Device.model == "Kobo_io") then
                 ffiUtil.usleep(150 * 1000)
             end
 
-            if require("apps/filemanager/filemanager").instance then
+            if Device.model ~= "Kobo_monza"  or (require("apps/filemanager/filemanager").instance and Device.model == "Kobo_monza")  then
                 UIManager:tickAfterNext(function()
                     UIManager:setDirty(nil, "full")
                 end)
