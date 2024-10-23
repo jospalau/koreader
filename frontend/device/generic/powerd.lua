@@ -157,23 +157,23 @@ function BasePowerD:turnOffFrontlight(done_callback)
     if not cb_handled and done_callback then
         done_callback()
     end
-    if self:isFrontlightOff() then
-        local ui = require("apps/reader/readerui").instance
-        if ui and ui.view[4] and G_reader_settings:isTrue("show_top_bar") then
-            ui.view[4]:toggleBar()
-            UIManager:setDirty("all", "full")
-        end
-    end
+    -- if self:isFrontlightOff() then
+    --     local ui = require("apps/reader/readerui").instance
+    --     if ui and ui.view[4] and G_reader_settings:isTrue("show_top_bar") then
+    --         ui.view[4]:toggleBar()
+    --         UIManager:setDirty("all", "full")
+    --     end
+    -- end
     return true
 end
 
 function BasePowerD:turnOnFrontlight(done_callback)
-    local ui = require("apps/reader/readerui").instance
-         if ui and ui.view[4] then
-             -- We pass true to show the light on indicator in the topbar so it works after suspend too
-             ui.view[4]:toggleBar(true)
-             UIManager:setDirty("all", "full")
-         end
+    -- local ui = require("apps/reader/readerui").instance
+    -- if ui and ui.view[4] then
+    --     -- We pass true to show the light on indicator in the topbar so it works after suspend too
+    --     ui.view[4]:toggleBar(true)
+    --     UIManager:setDirty("all", "full")
+    -- end
     if not self.device:hasFrontlight() then return end
     if self:isFrontlightOn() then return false end
     if self.fl_intensity == self.fl_min then return false end  --- @fixme what the hell?

@@ -872,6 +872,18 @@ function TopBar:onSuspend()
     self.last_frontlight = self.frontlight
 end
 
+function TopBar:onFrontlightStateChanged()
+    if not Device.screen_saver_mode then
+        self:toggleBar()
+        -- local Screen = require("device").screen
+        -- self:paintTo(Screen.bb, 0, 0)
+        -- UIManager:setDirty(self, "ui")
+        UIManager:widgetRepaint(self, 0, 0)
+        UIManager:setDirty(self, function()
+            return "ui"
+        end)
+    end
+end
 
 function TopBar:onResume()
     self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm = self:getReadTodayThisMonth(self.ui.document._document:getDocumentProps().title)
