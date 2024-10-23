@@ -876,8 +876,8 @@ end
 function TopBar:onResume()
     self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm = self:getReadTodayThisMonth(self.ui.document._document:getDocumentProps().title)
     self.start_session_time = os.time()
-    self.init_page = nil
-    self.init_page_screens = nil
+    TopBar.init_page = nil
+    TopBar.init_page_screens = nil
     self:toggleBar()
 end
 
@@ -967,12 +967,12 @@ function TopBar:toggleBar(light_on)
 
 
 
-        if self.init_page == nil then
-            self.init_page = self.ui.pagemap:getCurrentPageLabel(true)
+        if TopBar.init_page == nil then
+            TopBar.init_page = self.ui.pagemap:getCurrentPageLabel(true)
         end
 
-        if self.init_page_screens == nil then
-            self.init_page_screens = self.view.footer.pageno
+        if TopBar.init_page_screens == nil then
+            TopBar.init_page_screens = self.view.footer.pageno
         end
 
         local init_page = 0
