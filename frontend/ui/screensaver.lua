@@ -540,6 +540,8 @@ function Screensaver:show()
                 ffiUtil.usleep(150 * 1000)
             end
 
+            -- On Kobo Libra Colour, the full refresh that occurs when showing the screensaver widget works in ui, so there is double flash
+            -- We omit it but we still want it when in fm
             if Device.model ~= "Kobo_monza"  or (require("apps/filemanager/filemanager").instance and Device.model == "Kobo_monza")  then
                 UIManager:tickAfterNext(function()
                     UIManager:setDirty(nil, "full")
