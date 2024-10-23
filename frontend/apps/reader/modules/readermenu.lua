@@ -371,6 +371,7 @@ function ReaderMenu:setUpdateItemTable()
         callback = function()
             local scale_font_to_current_font = G_reader_settings:isTrue("scale_font_to_current_font")
             G_reader_settings:saveSetting("scale_font_to_current_font", not scale_font_to_current_font)
+            self.ui.document:setOriginalFontSize(1)
         end
     }
     -- self.menu_items.open_random_favorite = {

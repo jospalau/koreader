@@ -1564,6 +1564,10 @@ function CreDocument:getBookCharactersCount()
     return self._document:getBookCharactersCount()
 end
 
+function CreDocument:setOriginalFontSize(size)
+    return self._document:setOriginalFontSize(size)
+end
+
 function CreDocument:register(registry)
     registry:addProvider("azw", "application/vnd.amazon.mobi8-ebook", self, 90)
     registry:addProvider("azw", "application/x-mobi8-ebook", self, 90) -- Alternative mimetype for OPDS.

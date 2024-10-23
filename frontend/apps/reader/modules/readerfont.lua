@@ -369,7 +369,7 @@ function ReaderFont:onSetFont(face)
             local Math = require("optmath")
             -- print("Original" .. size_px.. ", Aspect ratio " .. glyph.xheight/size_px .. ", Aspect ratio2 " ..  glyph2.xheight/size_px .. ", New " .. Math.round(other_adjusted_size) .. "\n")
             self.ui.document:setFontSize(other_adjusted_size)
-
+            self.ui.document:setOriginalFontSize(size_px)
             -- The desktop publishing point (DTP point) or PostScript point is defined as 1/72 or 0.0138 of the international inch
             -- self.configurable.font_size = Math.round(other_adjusted_size*100)/100
             self.configurable.font_size = Math.round((((other_adjusted_size * 72)/display_dpi) *100))/100 -- Convert back to pt
