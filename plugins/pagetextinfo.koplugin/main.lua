@@ -284,13 +284,16 @@ end
 
 function PageTextInfo:paintTo(bb, x, y)
     if self.is_enabled and self.vertical_frame then
-        -- This is paint before some other stuff. This is the way to paint it just after all with a little bit of a delay
-        UIManager:scheduleIn(0.1, function()
-            self.vertical_frame:paintTo(bb, x + Screen:getWidth() -  self.vertical_frame[1][1]:getSize().w - self.vertical_frame[1].padding, y)
-            local Screen = require("device").screen
-            -- self:paintTo(Screen.bb, 0, 0)
-            UIManager:setDirty(self, "ui")
-        end)
+        -- self.vertical_frame:paintTo(bb, x + Screen:getWidth() -  self.vertical_frame[1][1]:getSize().w - self.vertical_frame[1].padding, y)
+        self.vertical_frame:paintTo(bb, x + Screen:getWidth() -  self.vertical_frame[1][1]:getSize().w - self.vertical_frame[1].padding, y + 80)
+        -- -- This is painted before some other stuff like for instance the dogear widget. This is the way to paint it just after all in the next UI tick.
+        -- -- But we leave it commented since sometimes it is painted even over the application menus
+        -- UIManager:scheduleIn(0, function()
+        --     self.vertical_frame:paintTo(bb, x + Screen:getWidth() -  self.vertical_frame[1][1]:getSize().w - self.vertical_frame[1].padding, y)
+        --     local Screen = require("device").screen
+        --     -- self:paintTo(Screen.bb, 0, 0)
+        --     UIManager:setDirty(self, "ui")
+        -- end)
 
     end
 
