@@ -60,7 +60,7 @@ function PageTextInfo:init()
 
     self.vg1 = VerticalGroup:new{
         left_container:new{
-            dimen = Geom:new{ w = 350, h = 20 },
+            dimen = Geom:new{ w = 380, h = 20 },
             TextWidget:new{
                 text =  "",
                 face = Font:getFace("myfont4"),
@@ -69,7 +69,7 @@ function PageTextInfo:init()
         },
         VerticalSpan:new{width = 20},
         left_container:new{
-            dimen = Geom:new{ w = 350, h = 20 },
+            dimen = Geom:new{ w = 380, h = 20 },
             TextWidget:new{
                 text =  "",
                 face = Font:getFace("myfont4"),
@@ -78,7 +78,7 @@ function PageTextInfo:init()
         },
         VerticalSpan:new{width = 20},
         left_container:new{
-            dimen = Geom:new{ w = 350, h = 20 },
+            dimen = Geom:new{ w = 380, h = 20 },
             TextWidget:new{
                 text =  "",
                 face = Font:getFace("myfont4"),
@@ -96,7 +96,7 @@ function PageTextInfo:init()
 
     self.vg2 = VerticalGroup:new{
         left_container:new{
-            dimen = Geom:new{ w = 350, h = 20 },
+            dimen = Geom:new{ w = 380, h = 20 },
             TextWidget:new{
                 text =  "",
                 face = Font:getFace("myfont4"),
@@ -105,7 +105,7 @@ function PageTextInfo:init()
         },
         VerticalSpan:new{width = 20},
         left_container:new{
-            dimen = Geom:new{ w = 350, h = 20 },
+            dimen = Geom:new{ w = 380, h = 20 },
             TextWidget:new{
                 text =  "",
                 face = Font:getFace("myfont4"),
@@ -114,7 +114,7 @@ function PageTextInfo:init()
         },
         VerticalSpan:new{width = 20},
         left_container:new{
-            dimen = Geom:new{ w = 350, h = 20 },
+            dimen = Geom:new{ w = 380, h = 20 },
             TextWidget:new{
                 text =  "",
                 face = Font:getFace("myfont4"),
