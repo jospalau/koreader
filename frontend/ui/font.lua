@@ -83,7 +83,7 @@ local Font = {
         xx_smallinfofont = "NotoSans-Regular.ttf",
 
         -- myfont = "Capita-Regular.otf",
-        myfont = "BitterPro-Medium.ttf",
+        myfont = "DroidSansMono.ttf",
         myfont2 = "PoorRichard-Regular.ttf",
 
         -- myfont3 = "Consolas.ttf",
