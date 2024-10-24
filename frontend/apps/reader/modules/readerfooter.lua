@@ -2629,6 +2629,8 @@ function ReaderFooter:checkNewDay()
         if topbar then
             topbar.initial_read_today, topbar.initial_read_month, topbar.initial_total_time_book, topbar.avg_wpm  = topbar:getReadTodayThisMonth(topbar.title)
             topbar.start_session_time = os.time()
+            topbar.init_page = nil
+            topbar.init_page_screens = nil
         end
     end
 end
