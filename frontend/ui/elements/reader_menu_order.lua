@@ -59,6 +59,7 @@ local order = {
         "----------------------------",
         "page_overlap",
         "speed_reading_module_perception_expander",
+        "page_text_info",
         "----------------------------",
         "highlight_options",
         "selection_text", -- if Device:hasDPad()
