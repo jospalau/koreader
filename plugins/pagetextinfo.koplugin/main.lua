@@ -281,10 +281,19 @@ function PageTextInfo:addToMainMenu(menu_items)
     }
 end
 
-
-
 function PageTextInfo:paintTo(bb, x, y)
     if self.is_enabled and self.vertical_frame then
+        local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
+        if res and res.pos0 and res.pos1 then
+            local boxes = self.ui.document:getScreenBoxesFromPositions(res.pos0, res.pos1, true)
+            if boxes then
+                for _, box in ipairs(boxes) do
+                    if box.h ~= 0 then
+                        self.view:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
+                    end
+                end
+            end
+        end
         -- self.vertical_frame:paintTo(bb, x + Screen:getWidth() -  self.vertical_frame[1][1]:getSize().w - self.vertical_frame[1].padding, y)
         self.vertical_frame:paintTo(bb, x + Screen:getWidth() -  self.vertical_frame[1][1]:getSize().w - self.vertical_frame[1].padding, y)
         -- -- This is painted before some other stuff like for instance the dogear widget. This is the way to paint it just after all in the next UI tick.
@@ -295,8 +304,6 @@ function PageTextInfo:paintTo(bb, x, y)
         --     -- self:paintTo(Screen.bb, 0, 0)
         --     UIManager:setDirty(self, "ui")
         -- end)
-
     end
-
 end
 return PageTextInfo
