@@ -56,29 +56,30 @@ function PageTextInfo:init()
     -- end
     self:onDispatcherRegisterActions()
     self.ui.menu:registerToMainMenu(self)
-
+    self.width = 400
+    self.height = 20
 
     self.vg1 = VerticalGroup:new{
         left_container:new{
-            dimen = Geom:new{ w = 380, h = 20 },
+            dimen = Geom:new{ w = self.width, h = self.height },
             TextWidget:new{
                 text =  "",
                 face = Font:getFace("myfont4"),
                 fgcolor = Blitbuffer.COLOR_BLACK,
             },
         },
-        VerticalSpan:new{width = 20},
+        VerticalSpan:new{width = self.height},
         left_container:new{
-            dimen = Geom:new{ w = 380, h = 20 },
+            dimen = Geom:new{ w = self.width, h = self.height },
             TextWidget:new{
                 text =  "",
                 face = Font:getFace("myfont4"),
                 fgcolor = Blitbuffer.COLOR_BLACK,
             },
         },
-        VerticalSpan:new{width = 20},
+        VerticalSpan:new{width = self.height},
         left_container:new{
-            dimen = Geom:new{ w = 380, h = 20 },
+            dimen = Geom:new{ w = self.width, h = self.height },
             TextWidget:new{
                 text =  "",
                 face = Font:getFace("myfont4"),
@@ -90,31 +91,31 @@ function PageTextInfo:init()
     self.f1 = FrameContainer:new{
         self.vg1,
         background = Blitbuffer.COLOR_WHITE,
-        padding = 20,
+        padding = self.height,
         bordersize = 0,
     }
 
     self.vg2 = VerticalGroup:new{
         left_container:new{
-            dimen = Geom:new{ w = 380, h = 20 },
+            dimen = Geom:new{ w = self.width, h = self.height },
             TextWidget:new{
                 text =  "",
                 face = Font:getFace("myfont4"),
                 fgcolor = Blitbuffer.COLOR_BLACK,
             },
         },
-        VerticalSpan:new{width = 20},
+        VerticalSpan:new{width = self.height},
         left_container:new{
-            dimen = Geom:new{ w = 380, h = 20 },
+            dimen = Geom:new{ w = self.width, h = self.height },
             TextWidget:new{
                 text =  "",
                 face = Font:getFace("myfont4"),
                 fgcolor = Blitbuffer.COLOR_BLACK,
             },
         },
-        VerticalSpan:new{width = 20},
+        VerticalSpan:new{width = self.height},
         left_container:new{
-            dimen = Geom:new{ w = 380, h = 20 },
+            dimen = Geom:new{ w = self.width, h = self.height },
             TextWidget:new{
                 text =  "",
                 face = Font:getFace("myfont4"),
@@ -126,7 +127,7 @@ function PageTextInfo:init()
     self.f2 = FrameContainer:new{
         self.vg2,
         background = Blitbuffer.COLOR_WHITE,
-        padding = 20,
+        padding = self.height,
         bordersize = 0,
     }
     -- self.f1 = FrameContainer:new{
@@ -285,7 +286,7 @@ end
 function PageTextInfo:paintTo(bb, x, y)
     if self.is_enabled and self.vertical_frame then
         -- self.vertical_frame:paintTo(bb, x + Screen:getWidth() -  self.vertical_frame[1][1]:getSize().w - self.vertical_frame[1].padding, y)
-        self.vertical_frame:paintTo(bb, x + Screen:getWidth() -  self.vertical_frame[1][1]:getSize().w - self.vertical_frame[1].padding, y + 80)
+        self.vertical_frame:paintTo(bb, x + Screen:getWidth() -  self.vertical_frame[1][1]:getSize().w - self.vertical_frame[1].padding, y)
         -- -- This is painted before some other stuff like for instance the dogear widget. This is the way to paint it just after all in the next UI tick.
         -- -- But we leave it commented since sometimes it is painted even over the application menus
         -- UIManager:scheduleIn(0, function()
