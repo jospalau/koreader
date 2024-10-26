@@ -220,7 +220,7 @@ function PageTextInfo:onPageUpdate()
     local nbwords = 0
     local nbcharacters = 0
     if res and res.text then
-        local words = util.splitToWords(res.text) -- contar palabras
+        local words = util.splitToWords2(res.text) -- contar palabras
         local characters = res.text -- contar caracteres
         -- logger.warn(words)
         nbwords = #words -- # es equivalente a string.len()
@@ -297,17 +297,17 @@ function PageTextInfo:paintTo(bb, x, y)
                         -- }
                         -- t:paintTo(bb, x, box.y)
                             local text_line = self.ui.document._document:getTextFromPositions(0, box.y, Screen:getWidth(), box.y, false, true).text
-                            local words = util.splitToWords(text_line)
+                            local words = util.splitToWords2(text_line)
                             total_words = total_words + #words
                             local t = TextWidget:new{
                                 text =  #words,
-                                face = Font:getFace("myfont4", 6),
+                                face = Font:getFace("myfont4", self.ui.document.configurable.font_size),
                                 fgcolor = Blitbuffer.COLOR_BLACK,
                             }
                             t:paintTo(bb, x, box.y)
                             local t2 = TextWidget:new{
                                 text =  total_words,
-                                face = Font:getFace("myfont4", 6),
+                                face = Font:getFace("myfont4", self.ui.document.configurable.font_size),
                                 fgcolor = Blitbuffer.COLOR_BLACK,
                             }
                             t2:paintTo(bb, x + Screen:getWidth() - t2:getSize().w, box.y)
