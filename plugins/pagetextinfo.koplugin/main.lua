@@ -287,15 +287,37 @@ function PageTextInfo:paintTo(bb, x, y)
         if res and res.pos0 and res.pos1 then
             local boxes = self.ui.document:getScreenBoxesFromPositions(res.pos0, res.pos1, true)
             if boxes then
+                local total_words = 0
                 for _, box in ipairs(boxes) do
                     if box.h ~= 0 then
-                        self.view:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
+                        -- local t = TextWidget:new{
+                        --     text =  "New line",
+                        --     face = Font:getFace("myfont4", 6),
+                        --     fgcolor = Blitbuffer.COLOR_BLACK,
+                        -- }
+                        -- t:paintTo(bb, x, box.y)
+                            local text_line = self.ui.document._document:getTextFromPositions(0, box.y, Screen:getWidth(), box.y, false, true).text
+                            local words = util.splitToWords(text_line)
+                            total_words = total_words + #words
+                            local t = TextWidget:new{
+                                text =  #words,
+                                face = Font:getFace("myfont4", 6),
+                                fgcolor = Blitbuffer.COLOR_BLACK,
+                            }
+                            t:paintTo(bb, x, box.y)
+                            local t2 = TextWidget:new{
+                                text =  total_words,
+                                face = Font:getFace("myfont4", 6),
+                                fgcolor = Blitbuffer.COLOR_BLACK,
+                            }
+                            t2:paintTo(bb, x + Screen:getWidth() - t2:getSize().w, box.y)
                     end
+                    self.view:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
                 end
             end
         end
         -- self.vertical_frame:paintTo(bb, x + Screen:getWidth() -  self.vertical_frame[1][1]:getSize().w - self.vertical_frame[1].padding, y)
-        self.vertical_frame:paintTo(bb, x + Screen:getWidth() -  self.vertical_frame[1][1]:getSize().w - self.vertical_frame[1].padding, y)
+        self.vertical_frame:paintTo(bb, x + Screen:getWidth() - self.vertical_frame[1][1]:getSize().w - self.vertical_frame[1].padding, y)
         -- -- This is painted before some other stuff like for instance the dogear widget. This is the way to paint it just after all in the next UI tick.
         -- -- But we leave it commented since sometimes it is painted even over the application menus
         -- UIManager:scheduleIn(0, function()
