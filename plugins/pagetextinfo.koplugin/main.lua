@@ -288,6 +288,7 @@ function PageTextInfo:paintTo(bb, x, y)
             local boxes = self.ui.document:getScreenBoxesFromPositions(res.pos0, res.pos1, true)
             if boxes then
                 local total_words = 0
+                local last_word = ""
                 for _, box in ipairs(boxes) do
                     if box.h ~= 0 then
                         -- local t = TextWidget:new{
@@ -296,11 +297,20 @@ function PageTextInfo:paintTo(bb, x, y)
                         --     fgcolor = Blitbuffer.COLOR_BLACK,
                         -- }
                         -- t:paintTo(bb, x, box.y)
-                            local text_line = self.ui.document._document:getTextFromPositions(0, box.y, Screen:getWidth(), box.y, false, true).text
-                            local words = util.splitToWords2(text_line)
-                            total_words = total_words + #words
+                            local text_line = self.ui.document._document:getTextFromPositions(box.x, box.y, Screen:getWidth(), box.y, false, true).text
+                            local words = #util.splitToWords2(text_line)
+                            if util.splitToWords2(text_line)[1] == last_word then
+                                words = words - 1
+                            end
+                            last_word = util.splitToWords2(text_line)[#util.splitToWords2(text_line)]
+                            -- print(text_line:sub(1, 10))
+                            -- print(text_line:sub(#text_line-10, #text_line))
+                            -- if text_line:sub(#text_line, #text_line) == "-" then
+                            --     words = words - 1
+                            -- end
+                            total_words = total_words + words
                             local t = TextWidget:new{
-                                text =  #words,
+                                text =  words,
                                 face = Font:getFace("myfont4", self.ui.document.configurable.font_size),
                                 fgcolor = Blitbuffer.COLOR_BLACK,
                             }
@@ -316,8 +326,8 @@ function PageTextInfo:paintTo(bb, x, y)
                 end
             end
         end
-        -- self.vertical_frame:paintTo(bb, x + Screen:getWidth() -  self.vertical_frame[1][1]:getSize().w - self.vertical_frame[1].padding, y)
-        self.vertical_frame:paintTo(bb, x + Screen:getWidth() - self.vertical_frame[1][1]:getSize().w - self.vertical_frame[1].padding, y)
+        self.vertical_frame:paintTo(bb, x + Screen:getWidth() -  self.vertical_frame[1][1]:getSize().w - self.vertical_frame[1].padding, y)
+        -- self.vertical_frame:paintTo(bb, x + Screen:getWidth() - self.vertical_frame[1][1]:getSize().w - self.vertical_frame[1].padding, y)
         -- -- This is painted before some other stuff like for instance the dogear widget. This is the way to paint it just after all in the next UI tick.
         -- -- But we leave it commented since sometimes it is painted even over the application menus
         -- UIManager:scheduleIn(0, function()
