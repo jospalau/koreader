@@ -86,6 +86,15 @@ function PageTextInfo:init()
                 fgcolor = Blitbuffer.COLOR_BLACK,
             },
         },
+        VerticalSpan:new{width = self.height},
+        left_container:new{
+            dimen = Geom:new{ w = self.width, h = self.height },
+            TextWidget:new{
+                text =  "",
+                face = Font:getFace("myfont4"),
+                fgcolor = Blitbuffer.COLOR_BLACK,
+            },
+        },
     }
 
     self.f1 = FrameContainer:new{
@@ -207,46 +216,9 @@ function PageTextInfo:onReaderReady()
 end
 
 
-function PageTextInfo:onPageUpdate()
-    local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
-    local nblines = 0
-    if res and res.pos0 and res.pos1 then
-        local segments = self.ui.document:getScreenBoxesFromPositions(res.pos0, res.pos1, true)
-        -- logger.warn(segments)
-        nblines = #segments
-    end
-    res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
-    -- logger.warn(res.text)
-    local nbwords = 0
-    local nbcharacters = 0
-    if res and res.text then
-        local words = util.splitToWords2(res.text) -- contar palabras
-        local characters = res.text -- contar caracteres
-        -- logger.warn(words)
-        nbwords = #words -- # es equivalente a string.len()
-        nbcharacters = #characters
-    end
-    res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), 1, false, true)
-    local nbwords2 = 0
-    if res and res.text then
-        local words = res.text
-        nbwords2 = #words
-    end
+-- function PageTextInfo:onPageUpdate()
 
-    local duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100
-    local wpm = 0
-    if self.ui.statistics._total_words > 0 then
-        wpm = math.floor(self.ui.statistics._total_words/duration_raw)
-    end
-    self.vg1[1][1]:setText("Lines      " .. nblines)
-    self.vg1[3][1]:setText("Words      " .. nbwords)
-    self.vg1[5][1]:setText("Words CFL  " .. nbwords2)
-
-
-    self.vg2[1][1]:setText("Total words session " .. self.ui.statistics._total_words)
-    self.vg2[3][1]:setText("Total pages session " .. self.ui.statistics._total_pages)
-    self.vg2[5][1]:setText("Wpm session         " .. wpm)
-end
+-- end
 
 
 -- function PageTextInfo:addToMainMenu(menu_items)
@@ -282,13 +254,13 @@ function PageTextInfo:addToMainMenu(menu_items)
 end
 
 function PageTextInfo:paintTo(bb, x, y)
+    local total_words = 0
     if self.is_enabled and self.vertical_frame then
         local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
         if res and res.pos0 and res.pos1 then
             local boxes = self.ui.document:getScreenBoxesFromPositions(res.pos0, res.pos1, true)
             if boxes then
-                local total_words = 0
-                local last_word = ""
+                -- local last_word = ""
                 for _, box in ipairs(boxes) do
                     if box.h ~= 0 then
                         -- local t = TextWidget:new{
@@ -298,11 +270,23 @@ function PageTextInfo:paintTo(bb, x, y)
                         -- }
                         -- t:paintTo(bb, x, box.y)
                             local text_line = self.ui.document._document:getTextFromPositions(box.x, box.y, Screen:getWidth(), box.y, false, true).text
-                            local words = #util.splitToWords2(text_line)
-                            if util.splitToWords2(text_line)[1] == last_word then
-                                words = words - 1
-                            end
-                            last_word = util.splitToWords2(text_line)[#util.splitToWords2(text_line)]
+                            text_line = text_line:gsub("’", ""):gsub("‘", ""):gsub("–", ""):gsub("— ", ""):gsub(" ", ""):gsub("”", ""):gsub("“", ""):gsub("”", "…")
+                            local wordst = util.splitToWords2(text_line)
+                            -- for i = #wordst, 1, -1 do
+                            --     if wordst[i] == "’" or wordst[i] == "–" or wordst[i] == " " or wordst[i] == "”" or wordst[i] == "…" or wordst[i] == "…’" then
+                            --       table.remove(wordst, i)
+                            --     end
+                            -- end
+                            local words = #wordst
+                            -- local dump = require("dump")
+                            -- print(dump(wordst))
+                            -- Hyphenated words are counted twice since getTextFromPositions returns the whole word for the line.
+                            -- They can be removed but it is fine to count them twice
+                            -- if last_word:find(util.splitToWords2(text_line)[1]) then
+                            -- if util.splitToWords2(text_line)[1] == last_word then
+                            --     words = words - 1
+                            -- end
+                            -- last_word = util.splitToWords2(text_line)[#util.splitToWords2(text_line)]
                             -- print(text_line:sub(1, 10))
                             -- print(text_line:sub(#text_line-10, #text_line))
                             -- if text_line:sub(#text_line, #text_line) == "-" then
@@ -326,6 +310,46 @@ function PageTextInfo:paintTo(bb, x, y)
                 end
             end
         end
+        local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
+        local nblines = 0
+        if res and res.pos0 and res.pos1 then
+            local segments = self.ui.document:getScreenBoxesFromPositions(res.pos0, res.pos1, true)
+            -- logger.warn(segments)
+            nblines = #segments
+        end
+        res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
+        -- logger.warn(res.text)
+        local nbwords = 0
+        local nbcharacters = 0
+        if res and res.text then
+            local words = util.splitToWords2(res.text) -- contar palabras
+            local characters = res.text -- contar caracteres
+            -- logger.warn(words)
+            nbwords = #words -- # es equivalente a string.len()
+            nbcharacters = #characters
+        end
+        res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), 1, false, true)
+        local chars_first_line = 0
+        if res and res.text then
+            local words = res.text
+            chars_first_line = #words
+        end
+
+        local duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100
+        local wpm = 0
+        if self.ui.statistics._total_words > 0 then
+            wpm = math.floor(self.ui.statistics._total_words/duration_raw)
+        end
+        self.vg1[1][1]:setText("Lines      " .. nblines)
+        self.vg1[3][1]:setText("Words      " .. total_words)
+        self.vg1[5][1]:setText("Characters " .. nbcharacters)
+        self.vg1[7][1]:setText("CFL        " .. chars_first_line)
+
+
+        self.vg2[1][1]:setText("Total words session " .. self.ui.statistics._total_words)
+        self.vg2[3][1]:setText("Total pages session " .. self.ui.statistics._total_pages)
+        self.vg2[5][1]:setText("Wpm session         " .. wpm)
+
         self.vertical_frame:paintTo(bb, x + Screen:getWidth() - self.vertical_frame[1][1]:getSize().w - self.vertical_frame[1].padding, y)
         -- -- This is painted before some other stuff like for instance the dogear widget. This is the way to paint it just after all in the next UI tick.
         -- -- But we leave it commented since sometimes it is painted even over the application menus
