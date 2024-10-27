@@ -424,8 +424,8 @@ function DeviceListener:onRequestUSBMS()
     MassStorage:start(false)
 end
 
-function DeviceListener:onExit()
-    self.ui.menu:exitOrRestart()
+function DeviceListener:onExit(callback)
+    self.ui.menu:exitOrRestart(callback)
 end
 
 function DeviceListener:onRestart()
