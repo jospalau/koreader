@@ -17,8 +17,8 @@ function ReaderDogear:init()
     -- to not overwrite the book text.
     -- For other documents, there is no easy way to know if valuable content
     -- may be hidden by the icon (kopt's page_margin is quite obscure).
-    self.dogear_min_size = math.ceil(math.min(Screen:getWidth(), Screen:getHeight()) * (1/40))
-    self.dogear_max_size = 2.5 * math.ceil(math.min(Screen:getWidth(), Screen:getHeight()) * (1/32))
+    self.dogear_min_size = math.ceil(math.min(Screen:getWidth(), Screen:getHeight()) * (1/20))
+    self.dogear_max_size = math.ceil(math.min(Screen:getWidth(), Screen:getHeight()) * (1/16))
     self.dogear_size = nil
     self.icon = nil
     self.dogear_y_offset = 0
@@ -39,8 +39,8 @@ function ReaderDogear:setupDogear(new_dogear_size)
         self.icon = IconWidget:new{
             icon = "dogear.alpha",
             rotation_angle = BD.mirroredUILayout() and 90 or 0,
-            width = self.dogear_max_size,
-            height = self.dogear_max_size,
+            width = self.dogear_size,
+            height = self.dogear_size,
             alpha = true, -- Keep the alpha layer intact
         }
         self.top_pad = VerticalSpan:new{width = self.dogear_y_offset}
@@ -77,8 +77,8 @@ function ReaderDogear:onSetPageMarginst(margins)
     -- As the icon is squared, we can take the max() instead of the min() of
     -- top & right margins and be sure no text is hidden by the icon
     -- (the provided margins are not scaled, so do as ReaderTypeset)
-    local margin = Screen:scaleBySize(math.max(margin_top, margin_right))
-    local new_dogear_size = math.min(self.dogear_max_size, math.max(self.dogear_min_size, margin))
+    local margin = Screen:scaleBySize(math.max(margin_top * 2, margin_right * 2))
+    local new_dogear_size = math.min(self.dogear_max_size, math.max(self.dogear_min_size, margin)) * 1.5
     self:setupDogear(new_dogear_size)
 end
 
@@ -115,6 +115,9 @@ function ReaderDogear:onChangeViewMode()
 end
 
 function ReaderDogear:resetLayout()
+    local new_screen_width = Screen:getWidth()
+    if new_screen_width == self._last_screen_width then return end
+    self._last_screen_width = new_screen_width
     -- NOTE: RightContainer aligns to the right of its *own* width...
     self[1].dimen.w = Screen:getWidth()
 end
