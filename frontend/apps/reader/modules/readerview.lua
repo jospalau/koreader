@@ -1102,6 +1102,7 @@ end
 
 function ReaderView:onToggleHorizontalVertical()
     local rotation = Screen:getRotationMode()
+    -- The only devices rotating the cover will be the PocketBooks, we can see the event handler onGenerateCover() in the main.lua source of the cover image plugin
     if rotation == 0 then -- PORTRAIT
         UIManager:broadcastEvent(Event:new("SetRotationMode", 1))
         UIManager:broadcastEvent(Event:new("GenerateCover", 1))
