@@ -72,6 +72,7 @@ function FileManagerCollection:onShowColl(collection_name)
         onLeftButtonTap = function() self:showCollDialog() end,
         onMenuChoice = self.onMenuChoice,
         onMenuHold = self.onMenuHold,
+        onMultiSwipe = self.onMultiSwipe,
         _manager = self,
         _recreate_func = function() self:onShowColl(collection_name) end,
         collection_name = collection_name,
@@ -204,6 +205,11 @@ function FileManagerCollection:onMenuHold(item)
     return true
 end
 
+
+function FileManagerCollection:onMultiSwipe(arg, ges_ev)
+    UIManager:close(self)
+    self._manager.ui.collections:onShowCollList()
+end
 function FileManagerCollection:showCollDialog()
     local coll_dialog
     local buttons = {
