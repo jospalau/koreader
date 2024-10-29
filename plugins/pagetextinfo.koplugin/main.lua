@@ -25,7 +25,7 @@ local _ = require("gettext")
 local PageTextInfo = WidgetContainer:extend{
     is_enabled = nil,
     name = "textinfo",
-    is_doc_only = false,
+    is_doc_only = true,
 }
 
 function PageTextInfo:onDispatcherRegisterActions()
