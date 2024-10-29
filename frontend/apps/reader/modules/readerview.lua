@@ -1070,13 +1070,15 @@ function ReaderView:restoreViewContext(ctx)
     return false
 end
 
-function ReaderView:onSetRotationMode(rotation, nodimensions)
-    if rotation ~= nil then
-        local old_rotation = Screen:getRotationMode()
-        if rotation == old_rotation then
-            return
-        end
+function ReaderView:onSetRotationMode(mode)
+    local old_mode = Screen:getRotationMode()
+    if mode ~= nil and mode ~= old_mode then
+        Screen:setRotationMode(mode)
+        self:rotate(mode, old_mode)
+    end
+end
 
+function ReaderView:rotate(mode, old_mode)
         -- NOTE: We cannot rely on getScreenMode, as it actually checks the screen dimensions, instead of the rotation mode.
         --       (i.e., it returns how the screen *looks* like, not how it's oriented relative to its native layout).
         --       This would horribly break if you started in Portrait (both rotation and visually),
@@ -1084,35 +1086,19 @@ function ReaderView:onSetRotationMode(rotation, nodimensions)
         --       If you then attempted to switch to a Landscape *rotation*, it would mistakenly think the layout hadn't changed!
         --       So, instead, as we're concerned with *rotation* layouts, just compare the two.
         --       We use LinuxFB-style constants, so, Portraits are even, Landscapes are odds, making this trivial.
-        local matching_orientation = bit.band(rotation, 1) == bit.band(old_rotation, 1)
-
-        if rotation ~= old_rotation and matching_orientation then
-            -- No layout change, just rotate & repaint with a flash
-            Screen:setRotationMode(rotation)
-            UIManager:setDirty(self.dialog, "full")
-            if not Device:isAndroid() then
-                Notification:notify(T(_("Rotation mode set to: %1"), optionsutil:getOptionText("SetRotationMode", rotation)))
-            end
-            return
-        end
-
-        Screen:setRotationMode(rotation)
-    end
-
-    UIManager:setDirty(nil, "full") -- SetDimensions will only request a partial, we want a flash
-    local new_screen_size = Screen:getSize()
-    if not nodimensions then
+    local matching_orientation = bit.band(mode, 1) == bit.band(old_mode, 1)
+    if matching_orientation then
+        -- No layout change, just rotate & repaint with a flash
+        UIManager:setDirty(self.dialog, "full")
+    else
+        UIManager:setDirty(nil, "full") -- SetDimensions will only request a partial, we want a flash
+        local new_screen_size = Screen:getSize()
         self.ui:handleEvent(Event:new("SetDimensions", new_screen_size))
+        self.ui:onScreenResize(new_screen_size)
+        self.ui:handleEvent(Event:new("InitScrollPageStates"))
     end
-    self.ui:onScreenResize(new_screen_size)
-    self.ui:handleEvent(Event:new("InitScrollPageStates"))
-    if not Device:isAndroid() then
-        Notification:notify(T(_("Rotation mode set to: %1"), optionsutil:getOptionText("SetRotationMode", rotation)))
-    end
-    return true
+    Notification:notify(T(_("Rotation mode set to: %1"), optionsutil:getOptionText("SetRotationMode", mode)))
 end
-
-
 
 function ReaderView:onToggleHorizontalVertical()
     local rotation = Screen:getRotationMode()
@@ -1232,7 +1218,7 @@ function ReaderView:onBBoxUpdate(bbox)
     self.use_bbox = bbox and true or false
 end
 
---- @note: From ReaderRotation, which is broken and disabled.
+--- @note: From ReaderRotation, which was broken, and has been removed in #12658
 function ReaderView:onRotationUpdate(rotation)
     self.state.rotation = rotation
     self:recalculate()
