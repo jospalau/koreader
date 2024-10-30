@@ -179,6 +179,7 @@ local order = {
         "----------------------------",
         "favorites",
         "collections",
+        "series",
         "generate_favorites",
         "generate_font_profiles",
         -- "open_random_favorite",

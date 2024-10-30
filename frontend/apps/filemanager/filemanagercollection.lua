@@ -18,6 +18,7 @@ local util = require("util")
 
 local FileManagerCollection = WidgetContainer:extend{
     title = _("Collections"),
+    title2 = _("Series"),
     default_collection_title = _("All"),
     checkmark = "\u{2713}",
 }
@@ -39,6 +40,12 @@ function FileManagerCollection:addToMainMenu(menu_items)
             self:onShowCollList()
         end,
     }
+    menu_items.series = {
+        text = self.title2,
+        callback = function()
+            self:onShowSeriesList()
+        end,
+    }
 end
 
 -- collection
@@ -58,7 +65,7 @@ function FileManagerCollection:refreshFileManager()
     end
 end
 
-function FileManagerCollection:onShowColl(collection_name)
+function FileManagerCollection:onShowColl(collection_name, series)
     collection_name = collection_name or ReadCollection.default_collection_name
     self.coll_menu = Menu:new{
         ui = self.ui,
@@ -76,6 +83,7 @@ function FileManagerCollection:onShowColl(collection_name)
         _manager = self,
         _recreate_func = function() self:onShowColl(collection_name) end,
         collection_name = collection_name,
+        series = series,
     }
     self.coll_menu.close_callback = function()
         if self.ui.history.hist_menu then
@@ -208,7 +216,11 @@ end
 
 function FileManagerCollection:onMultiSwipe(arg, ges_ev)
     UIManager:close(self)
-    self._manager.ui.collections:onShowCollList()
+    if self.series then
+        self._manager.ui.collections:onShowSeriesList()
+    else
+        self._manager.ui.collections:onShowCollList()
+    end
 end
 function FileManagerCollection:showCollDialog()
     local coll_dialog
@@ -330,6 +342,40 @@ function FileManagerCollection:onShowCollList(file_or_files, caller_callback, no
     return true
 end
 
+function FileManagerCollection:onShowSeriesList(file_or_files, caller_callback, no_dialog)
+    self.selected_colections = nil
+    if file_or_files then -- select mode
+        if type(file_or_files) == "string" then -- checkmark collections containing the file
+            self.selected_colections = ReadCollection:getCollectionsWithFile(file_or_files)
+        else -- do not checkmark any
+            self.selected_colections = {}
+        end
+    end
+    self.coll_list = Menu:new{
+        subtitle = "",
+        covers_fullscreen = true,
+        is_borderless = true,
+        is_popout = false,
+        title_bar_fm_style = true,
+        -- title_bar_left_icon = file_or_files and "check" or "appbar.menu",
+        onLeftButtonTap = function() self:showCollListDialog(caller_callback, no_dialog) end,
+        onMenuChoice = self.onCollListChoice,
+        -- onMenuHold = self.onCollListHold,
+        _manager = self,
+        collection_name = "series",
+        _recreate_func = function() self:onShowCollList(file_or_files, caller_callback, no_dialog) end,
+    }
+    self.coll_list.close_callback = function(force_close)
+        if force_close or self.selected_colections == nil then
+            self:refreshFileManager()
+            UIManager:close(self.coll_list)
+            self.coll_list = nil
+        end
+    end
+    self:updateSeriesListItemTable(true) -- init
+    UIManager:show(self.coll_list)
+    return true
+end
 
 function FileManagerCollection:onGenerateFavorites()
     local files = util.getListAll()
@@ -392,6 +438,50 @@ function FileManagerCollection:updateCollListItemTable(do_init, item_number)
     self.coll_list:switchItemTable(title, item_table, item_number or -1, nil, subtitle)
 end
 
+function FileManagerCollection:updateSeriesListItemTable(do_init, item_number)
+    local item_table
+    if do_init then
+        item_table = {}
+        for name, coll in pairs(ReadCollection.coll) do
+            local mandatory
+            if self.selected_colections then
+                mandatory = self.selected_colections[name] and self.checkmark or "  "
+                self.coll_list.items_mandatory_font_size = self.coll_list.font_size
+            else
+                mandatory = util.tableSize(coll)
+            end
+            if ReadCollection.coll_series[name] == 1 then
+                table.insert(item_table, {
+                    text      = self:getCollectionTitle(name),
+                    mandatory = mandatory,
+                    name      = name,
+                    order     = ReadCollection.coll_order[name],
+                })
+            end
+        end
+        if #item_table > 1 then
+            table.sort(item_table, function(v1, v2) return v1.order < v2.order end)
+        end
+    else
+        item_table = self.coll_list.item_table
+    end
+    local title = T(_("Series (%1)"), #item_table)
+    local subtitle
+    if self.selected_colections then
+        local selected_nb = util.tableSize(self.selected_colections)
+        subtitle = self.selected_colections and T(_("Selected: %1"), selected_nb)
+        if do_init and selected_nb > 0 then -- show first collection containing the long-pressed book
+            for i, item in ipairs(item_table) do
+                if self.selected_colections[item.name] then
+                    item_number = i
+                    break
+                end
+            end
+        end
+    end
+    self.coll_list:switchItemTable(title, item_table, item_number or -1, nil, subtitle)
+end
+
 function FileManagerCollection:onCollListChoice(item)
     if self._manager.selected_colections then
         if item.mandatory == self._manager.checkmark then
@@ -403,7 +493,7 @@ function FileManagerCollection:onCollListChoice(item)
         end
         self._manager:updateCollListItemTable()
     else
-        self._manager:onShowColl(item.name)
+        self._manager:onShowColl(item.name, self.collection_name == "series")
     end
 end
 

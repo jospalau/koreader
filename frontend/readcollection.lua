@@ -74,6 +74,7 @@ function ReadCollection:_read()
     logger.dbg("ReadCollection: reading from collection file")
     self.coll = {}
     self.coll_order = {}
+    self.coll_series = {}
     for coll_name, collection in pairs(collections.data) do
         local coll = {}
         for _, v in ipairs(collection) do
@@ -87,6 +88,7 @@ function ReadCollection:_read()
             collection.settings = { order = 1 }
         end
         self.coll_order[coll_name] = collection.settings.order
+        self.coll_series[coll_name] = collection.settings.series
     end
 end
 
