@@ -132,7 +132,7 @@ end
 function ReadCollection:isFileInCollectionsNotAll(file)
     file = FFIUtil.realpath(file) or file
     for collection, coll in pairs(self.coll) do
-        if collection == "favorites" or  collection == "All sorted by words" then goto continue end
+        if collection ~= "MBR Tier 2" and collection ~= "Short MBR" then goto continue end
         if coll[file] then
             return true
         end
