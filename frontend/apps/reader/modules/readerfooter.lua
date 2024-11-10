@@ -486,6 +486,7 @@ getReadThisBook = function (footer)
     local start_today_time = now_stamp - from_begin_day
     local conn = SQ3.open(db_location)
     local title = footer.ui.document._document:getDocumentProps().title
+    if title:match("'") then title = title:gsub("'", "''") end
     local sql_stmt = "SELECT id FROM book where title like 'titles' order by id desc LIMIT 1;"
     local id_book = conn:rowexec(sql_stmt:gsub("titles", title))
 
