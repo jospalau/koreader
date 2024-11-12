@@ -453,18 +453,18 @@ function TopBar:init()
     end
 
     if TopBar.preserved_init_page ~= nil then
-        TopBar.init_page = TopBar.preserved_init_page
+        self.init_page = TopBar.preserved_init_page
         TopBar.preserved_init_page = nil
     else
-        TopBar.init_page = nil
+        self.init_page = nil
     end
 
 
     if TopBar.preserved_init_page_screens ~= nil then
-        TopBar.init_page_screens = TopBar.preserved_init_page_screens
+        self.init_page_screens = TopBar.preserved_init_page_screens
         TopBar.preserved_init_page_screens = nil
     else
-        TopBar.init_page_screens = nil
+        self.init_page_screens = nil
     end
 
 
@@ -498,8 +498,8 @@ function TopBar:onReaderReady()
 
     if duration_raw < 360 or self.ui.statistics._total_pages < 6 then
         self.start_session_time = os.time()
-        TopBar.init_page = nil
-        TopBar.init_page_screens = nil
+        self.init_page = nil
+        self.init_page_screens = nil
     end
 
     self.wpm_session = 0
