@@ -889,8 +889,8 @@ end
 function TopBar:onResume()
     self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm = self:getReadTodayThisMonth(self.ui.document._document:getDocumentProps().title)
     self.start_session_time = os.time()
-    TopBar.init_page = nil
-    TopBar.init_page_screens = nil
+    self.init_page = nil
+    self.init_page_screens = nil
     self:toggleBar()
 end
 
