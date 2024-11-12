@@ -978,14 +978,12 @@ function TopBar:toggleBar(light_on)
            self.progress_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
         end
 
-
-
-        if TopBar.init_page == nil then
-            TopBar.init_page = self.ui.pagemap:getCurrentPageLabel(true)
+        if self.init_page == nil then
+            self.init_page = self.ui.pagemap:getCurrentPageLabel(true)
         end
 
-        if TopBar.init_page_screens == nil then
-            TopBar.init_page_screens = self.view.footer.pageno
+        if self.init_page_screens == nil then
+            self.init_page_screens = self.view.footer.pageno
         end
 
         local init_page = 0
