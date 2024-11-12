@@ -116,16 +116,15 @@ if Device:hasFrontlight() then
         if new_intensity <= 0 then
             powerd:turnOffFrontlight()
         else
-            local was_off = powerd:isFrontlightOff()
+            -- local was_off = powerd:isFrontlightOff()
             powerd:setIntensity(new_intensity)
-            if was_off and new_intensity > 0 then
-               local ui = require("apps/reader/readerui").instance
-               if ui and ui.view[4] then
-                   ui.view[4]:toggleBar()
-                   UIManager:setDirty("all", "full")
-               end
-            end
-
+            -- if was_off and new_intensity > 0 then
+            --    local ui = require("apps/reader/readerui").instance
+            --    if ui and ui.view[4] then
+            --        ui.view[4]:toggleBar()
+            --        UIManager:setDirty("all", "full")
+            --    end
+            -- end
         end
         powerd:updateResumeFrontlightState()
         return true
