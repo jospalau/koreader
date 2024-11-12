@@ -873,7 +873,8 @@ function TopBar:onSuspend()
 end
 
 function TopBar:onFrontlightStateChanged()
-    if not Device.screen_saver_mode then
+    local top_widget = UIManager:getTopmostVisibleWidget() or {}
+    if not Device.screen_saver_mode and top_widget.name == "ReaderUI" then
         self:toggleBar()
         -- local Screen = require("device").screen
         -- self:paintTo(Screen.bb, 0, 0)
