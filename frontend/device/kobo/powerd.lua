@@ -489,12 +489,7 @@ function KoboPowerD:beforeSuspend()
         -- We only want the *last* scheduled suspend/resume frontlight task to run to avoid ramps running amok...
         UIManager:unschedule(self._suspendFrontlight)
         UIManager:unschedule(self._resumeFrontlight)
-        if self.device:info() ~= "Kobo_goldfinch" and -- ~- Clara2E
-        self.device:info() ~= "Kobo_condor" and -- ~- Elipsa2E
-        self.device:info() ~= "Kobo_io" and -- ~- Libra2
-        self.device:info() ~= "Kobo_spaBW" then -- ~- ClaraBW
-            self:_stopFrontlightRamp()
-        end
+        self:_stopFrontlightRamp()
         -- Turn off the frontlight
         -- NOTE: Funky delay mainly to yield to the EPDC's refresh on UP systems.
         --       (Neither yieldToEPDC nor nextTick & friends quite cut it here)...
@@ -541,13 +536,14 @@ function KoboPowerD:afterResume()
         -- At least in Clara 2E if we open the sleep cover and put it back on in less than a second but not too quick
         -- light does not switch on if it was switched on before suspend
         -- and light switches on if it was switched off before suspend
-        if self.device:info() ~= "Kobo_goldfinch" and -- ~- Clara2E
-        self.device:info() ~= "Kobo_condor" and -- ~- Elipsa2E
-        self.device:info() ~= "Kobo_io" and -- ~- Libra2
-        self.device:info() ~= "Kobo_spaBW" then -- ~- ClaraBW
-            self:_stopFrontlightRamp()
-        end
-        --
+        -- if self.device:info() ~= "Kobo_goldfinch" and -- ~- Clara2E
+        -- self.device:info() ~= "Kobo_condor" and -- ~- Elipsa2E
+        -- self.device:info() ~= "Kobo_io" and -- ~- Libra2
+        -- self.device:info() ~= "Kobo_spaBW" then -- ~- ClaraBW
+        --     self:_stopFrontlightRamp()
+        -- end
+        -- Just commented for all Kobo devices
+        -- self:_stopFrontlightRamp()
         -- Turn the frontlight back on
         -- NOTE: There's quite likely *more* resource contention than on suspend here :/.
         UIManager:scheduleIn(0.001, self._resumeFrontlight, self)
