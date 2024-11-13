@@ -141,7 +141,7 @@ function IconButton:onTapIconButton()
         --       otherwise, it's lost.
         --       This changes nothing in practice, since we follow by explicitly requesting to drain the refresh queue ;).
         if Device.model == "Kobo_spaBW" then -- fast is a bit glitchy in Kobo BW
-            UIManager:setDirty(nil, "ui", self.dimen)
+            UIManager:setDirty(nil, "fast", self.dimen)
         else
             UIManager:setDirty(nil, "fast", self.dimen)
         end
