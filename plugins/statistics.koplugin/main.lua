@@ -3794,6 +3794,31 @@ function ReaderStatistics:getCurrentBookReadPages()
     return read_pages
 end
 
+
+function ReaderStatistics:getReadTodayThisMonth(year, month)
+    local conn = SQ3.open(db_location)
+
+    local sql_stmt = ""
+
+    local sql_stmt = [[
+        SELECT ROUND(CAST(SUM(duration)/60 as real)/60,2),
+        strftime('%%Y',DATE(datetime(start_time,'unixepoch','localtime'))),
+        strftime('%%m',DATE(datetime(start_time,'unixepoch','localtime')))
+        FROM wpm_stat_data GROUP BY strftime('%%Y',DATE(datetime(start_time,'unixepoch','localtime'))), strftime('%%m',DATE(datetime(start_time,'unixepoch','localtime')))
+        HAVING CAST(strftime('%%Y',DATE(datetime(start_time,'unixepoch','localtime'))) as decimal) ='%d'
+        AND CAST(strftime('%%m',DATE(datetime(start_time,'unixepoch','localtime'))) as decimal) ='%d';
+        ]]
+
+    local read_month = conn:rowexec(string.format(sql_stmt, year, month))
+
+    if read_month == nil then
+        read_month = 0
+    end
+    read_month = tonumber(read_month)
+
+    return read_month
+end
+
 function ReaderStatistics:canSync()
     return self.settings.sync_server ~= nil and self.settings.is_enabled
 end
