@@ -603,6 +603,19 @@ To:
             -- UIManager:restartKOReader()
         end
     }
+    self.menu_items.sort_dir_number_files = {
+        text = _("Sort dirs by number of files"),
+        checked_func = function() return G_reader_settings:isTrue("sort_dir_number_files") end,
+        callback = function()
+            local sort_dir_number_files = G_reader_settings:isTrue("sort_dir_number_files")
+            G_reader_settings:saveSetting("sort_dir_number_files", not sort_dir_number_files)
+            if G_reader_settings:isTrue("sort_dir_number_files") then
+                local util = require("util")
+                util.generateStats()
+            end
+            FileChooser:refreshPath()
+        end
+    }
     if Device:isKobo() and not Device:isSunxi() and not Device:hasColorScreen() then
         table.insert(self.menu_items.developer_options.sub_item_table, {
             text = _("Disable forced 8-bit pixel depth"),

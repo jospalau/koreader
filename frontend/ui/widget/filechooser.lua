@@ -334,6 +334,9 @@ function FileChooser:getList(path, collate)
             end
         end
     end
+    -- local dump = require("dump")
+    -- print(dump(dirs))
+
     return dirs, files
 end
 
@@ -383,6 +386,8 @@ function FileChooser:getListItem(dirpath, f, fullpath, attributes, collate)
         end
         item.mandatory = self:getMenuItemMandatory(item, collate)
     else -- folder
+        local sub_dirs, dir_files = self:getList(item.path)
+        item.files_no = #dir_files
         if item.text == "./." then -- added as content of an unreadable directory
             item.text = _("Current folder not readable. Some content may not be shown.")
         else
@@ -454,6 +459,10 @@ function FileChooser:genItemTable(dirs, files, path)
             sorting = self:getSortingFunction(self.collates.strcoll)
         end
         table.sort(dirs, sorting)
+        if G_reader_settings:isTrue("sort_dir_number_files") then
+            table.sort(dirs, function(a,b)
+            return a.files_no > b.files_no end)
+            end
         table.move(dirs, 1, #dirs, 1, item_table)
         table.move(files, 1, #files, #item_table + 1, item_table)
     end
