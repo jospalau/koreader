@@ -459,7 +459,7 @@ function FileChooser:genItemTable(dirs, files, path)
             sorting = self:getSortingFunction(self.collates.strcoll)
         end
         table.sort(dirs, sorting)
-        if G_reader_settings:isTrue("sort_dir_number_files") then
+        if G_reader_settings:isTrue("sort_dir_number_files") and path then
             table.sort(dirs, function(a,b)
             return a.files_no > b.files_no end)
             end
