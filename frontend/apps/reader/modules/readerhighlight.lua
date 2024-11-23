@@ -1037,23 +1037,25 @@ function ReaderHighlight:onTap(_, ges)
         end
     end
     if G_reader_settings:isTrue("highlight_all_notes") then
-        local pos = self.view:screenToPageTransform(ges.pos)
-        if self.ui.pages_notes[self.ui.view.state.page] then
-            for _, item in ipairs(self.ui.pages_notes[self.ui.view.state.page]) do
-                local boxes = self.ui.document:getScreenBoxesFromPositions(item.start, item["end"], true)
-                if boxes then
-                    for _, box in ipairs(boxes) do
-                        if inside_box(pos, box) then
-                            --local UIManager = require("ui/uimanager")
-                            --local Notification = require("ui/widget/notification")
-                            --UIManager:show(Notification:new{
-                               --text =("searching"),
-                            --})
-                            --local dump = require("dump")
-                            --print(dump(item))
+        if ges and ges.pos then
+            local pos = self.view:screenToPageTransform(ges.pos)
+            if self.ui.pages_notes[self.ui.view.state.page] then
+                for _, item in ipairs(self.ui.pages_notes[self.ui.view.state.page]) do
+                    local boxes = self.ui.document:getScreenBoxesFromPositions(item.start, item["end"], true)
+                    if boxes then
+                        for _, box in ipairs(boxes) do
+                            if inside_box(pos, box) then
+                                --local UIManager = require("ui/uimanager")
+                                --local Notification = require("ui/widget/notification")
+                                --UIManager:show(Notification:new{
+                                --text =("searching"),
+                                --})
+                                --local dump = require("dump")
+                                --print(dump(item))
 
-                            return self:showNote(item.note)
-                            --return true
+                                return self:showNote(item.note)
+                                --return true
+                            end
                         end
                     end
                 end
@@ -1195,6 +1197,10 @@ function ReaderHighlight:showHighlightNoteOrDialog(index)
                             self:writePdfAnnotation("content", annotation, nil)
                             if self.view.highlight.note_mark then -- refresh note marker
                                 UIManager:setDirty(self.dialog, "ui")
+                            end
+                            if G_reader_settings:isTrue("highlight_all_notes") then
+                                self.ui:updateNotes()
+                                UIManager:setDirty("all", "full")
                             end
                         end,
                     },
