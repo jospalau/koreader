@@ -1693,7 +1693,6 @@ function util.getListAll()
     return t
 end
 
-
 function util.getList(search_string, search_finished, search_tbr, search_mbr)
     local FileChooser = require("ui/widget/filechooser")
     local Utf8Proc = require("ffi/utf8proc")
@@ -1781,8 +1780,6 @@ function util.getList(search_string, search_finished, search_tbr, search_mbr)
     return dirs, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year, files_finished_last_year
 end
 
-
-
 function util.getLastDaysStats(day, include_pages)
     local SQ3 = require("lua-ljsqlite3/init")
     local datetime = require("datetime")
@@ -1868,7 +1865,6 @@ function util.generateStats()
     end
 end
 
-
 -- Like util.splitWords(), but not capturing space and punctuations
 function util.splitToWords2(text)
     local wlist = {}
@@ -1884,18 +1880,6 @@ function util.splitToWords2(text)
     return wlist
 end
 
-function util.cleanupSelectedText(text)
-    -- Trim spaces and new lines at start and end
-    local text = text:gsub("^[\n%s]*", "")
-    text = text:gsub("[\n%s]*$", "")
-    -- Trim spaces around newlines
-    text = text:gsub("%s*\n%s*", "\n")
-    -- Trim consecutive spaces (that would probably have collapsed
-    -- in rendered CreDocuments)
-    text = text:gsub("%s%s+", " ")
-    return text
-end
-
 function util.dump(o)
     if type(o) == 'table' then
        local s = '{ '
@@ -1909,7 +1893,6 @@ function util.dump(o)
     end
  end
 
-
 function util.loadCalibreData()
     local DataStorage = require("datastorage")
     local ffiutil = require("ffi/util")
@@ -1919,4 +1902,15 @@ function util.loadCalibreData()
     end
     return {}
 end
+
+function util.which(command, path)
+    path = path or os.getenv("PATH") or ""
+    for p in path:gmatch("([^:]+)") do
+        p = p .. "/" .. command
+        if ffiUtil.isExecutable(p) then
+            return p
+        end
+    end
+end
+
 return util
