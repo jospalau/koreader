@@ -398,13 +398,15 @@ function Button:_doFeedbackHighlight()
         self[1].invert = true
         UIManager:widgetInvert(self[1], self[1].dimen.x, self[1].dimen.y)
     end
-    -- Fast mode is a bit glitchy in Kobo Clara BW. Most of the times, the invertion of colors does not work with fast mode whe selecting a button. We can use ui mode
-    -- With the Kobo Libra Colour it is not glitchy but there is a bit more of a flash in the inversion. We can solve this using partial mode
-    if Device.model == "Kobo_spaBW" or Device.model == "Kobo_monza" then
-        UIManager:setDirty(nil, "partial", self[1].dimen)
-    else
-        UIManager:setDirty(nil, "fast", self[1].dimen)
-    end
+    -- -- Fast mode is a bit glitchy in Kobo Clara BW. Most of the times, the invertion of colors does not work with fast mode whe selecting a button. We can use ui mode
+    -- -- With the Kobo Libra Colour it is not glitchy but there is a bit more of a flash in the inversion. We can solve this using partial mode
+    -- if Device.model == "Kobo_spaBW" or Device.model == "Kobo_monza" then
+    --     UIManager:setDirty(nil, "partial", self[1].dimen)
+    -- else
+    --     UIManager:setDirty(nil, "fast", self[1].dimen)
+    -- end
+    -- Use "fast" as it was for all the devices. We pass 5000 to yieldToEPDC() and it works for Clara BW
+    UIManager:setDirty(nil, "fast", self[1].dimen)
 end
 
 function Button:_undoFeedbackHighlight(is_translucent)
@@ -459,7 +461,7 @@ function Button:onTapSelectButton()
                     --       The other approach would be to *ask* the EPDC to block until it's *completely* done,
                     --       but that's too much (because we only care about it being done *reading* the fb),
                     --       and that could take upwards of 300ms, which is also way too much ;).
-                    UIManager:yieldToEPDC()
+                    UIManager:yieldToEPDC(5000)
                 end
                 -- Unhighlight
                 --

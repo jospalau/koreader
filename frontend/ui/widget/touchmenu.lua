@@ -197,16 +197,19 @@ function TouchMenuItem:onTapSelect(arg, ges)
         --
         self.item_frame.invert = true
         UIManager:widgetInvert(self.item_frame, highlight_dimen.x, highlight_dimen.y, highlight_dimen.w)
-        -- Fast mode is a bit glitchy in Kobo Clara BW. Most of the times, the invertion of colors does not work with fast mode whe selecting a button. We can use ui mode
-        -- With the Kobo Libra Colour it is not glitchy but there is a bit more of a flash in the inversion. We can solve this using partial mode
-        if Device.model == "Kobo_spaBW" or Device.model == "Kobo_monza" then
-            UIManager:setDirty(nil, "partial", highlight_dimen)
-        else
-            UIManager:setDirty(nil, "fast", highlight_dimen)
-        end
+        -- -- Fast mode is a bit glitchy in Kobo Clara BW. Most of the times, the invertion of colors does not work with fast mode whe selecting a button. We can use ui mode
+        -- -- With the Kobo Libra Colour it is not glitchy but there is a bit more of a flash in the inversion. We can solve this using partial mode
+        -- if Device.model == "Kobo_spaBW" or Device.model == "Kobo_monza" then
+        --     UIManager:setDirty(nil, "partial", highlight_dimen)
+        -- else
+        --     UIManager:setDirty(nil, "fast", highlight_dimen)
+        -- end
+
+        -- Use "fast" as it was for all the devices. We pass 5000 to yieldToEPDC() and it works for Clara BW
+        UIManager:setDirty(nil, "fast", highlight_dimen)
 
         UIManager:forceRePaint()
-        UIManager:yieldToEPDC()
+        UIManager:yieldToEPDC(5000)
 
         -- Unhighlight
         --
@@ -260,16 +263,18 @@ function TouchMenuItem:onHoldSelect(arg, ges)
         --
         self.item_frame.invert = true
         UIManager:widgetInvert(self.item_frame, highlight_dimen.x, highlight_dimen.y, highlight_dimen.w)
-        -- Fast mode is a bit glitchy in Kobo Clara BW. Most of the times, the invertion of colors does not work with fast mode whe selecting a button. We can use ui mode
-        -- With the Kobo Libra Colour it is not glitchy but there is a bit more of a flash in the inversion. We can solve this using partial mode
-        if Device.model == "Kobo_spaBW" or Device.model == "Kobo_monza" then
-            UIManager:setDirty(nil, "partial", highlight_dimen)
-        else
-            UIManager:setDirty(nil, "fast", highlight_dimen)
-        end
+        -- -- Fast mode is a bit glitchy in Kobo Clara BW. Most of the times, the invertion of colors does not work with fast mode whe selecting a button. We can use ui mode
+        -- -- With the Kobo Libra Colour it is not glitchy but there is a bit more of a flash in the inversion. We can solve this using partial mode
+        -- if Device.model == "Kobo_spaBW" or Device.model == "Kobo_monza" then
+        --     UIManager:setDirty(nil, "partial", highlight_dimen)
+        -- else
+        --     UIManager:setDirty(nil, "fast", highlight_dimen)
+        -- end
 
+        -- Use "fast" as it was for all the devices. We pass 5000 to yieldToEPDC() and it works for Clara BW
+        UIManager:setDirty(nil, "fast", highlight_dimen)
         UIManager:forceRePaint()
-        UIManager:yieldToEPDC()
+        UIManager:yieldToEPDC(5000)
 
         -- Unhighlight
         --
