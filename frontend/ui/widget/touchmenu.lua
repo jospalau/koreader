@@ -213,6 +213,12 @@ function TouchMenuItem:onTapSelect(arg, ges)
             UIManager:setDirty(nil, "ui", highlight_dimen)
         end
 
+
+        -- There are no glitches in the new Libra Colour but there is a flash after pressing a button. We avoid it
+        if Device.model == "Kobo_monza" then
+            local util = require("ffi/util")
+            util.usleep(100000)
+        end
         -- Callback
         --
         self.menu:onMenuSelect(self.item, tap_on_checkmark)

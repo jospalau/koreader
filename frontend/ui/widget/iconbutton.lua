@@ -125,13 +125,18 @@ function IconButton:onTapIconButton()
         UIManager:setDirty(nil, "fast", self.dimen)
 
         UIManager:forceRePaint()
-        UIManager:yieldToEPDC()
+        UIManager:yieldToEPDC(5000)
 
         -- Unhighlight
         --
         self.image.invert = false
         UIManager:widgetInvert(self.image, self.dimen.x + h_padding, self.dimen.y + self.padding_top)
 
+        -- There are no glitches in the new Libra Colour but there is a flash after pressing a button. We avoid it
+        if Device.model == "Kobo_monza" then
+            local util = require("ffi/util")
+            util.usleep(100000)
+        end
         -- Callback
         --
         self.callback()
@@ -140,11 +145,8 @@ function IconButton:onTapIconButton()
         --       so we need to enqueue the actual refresh request for the unhighlight post-callback,
         --       otherwise, it's lost.
         --       This changes nothing in practice, since we follow by explicitly requesting to drain the refresh queue ;).
-        if Device.model == "Kobo_spaBW" then -- fast is a bit glitchy in Kobo BW
-            UIManager:setDirty(nil, "fast", self.dimen)
-        else
-            UIManager:setDirty(nil, "fast", self.dimen)
-        end
+        -- Use "fast" as it was for all the devices. We pass 5000 to yieldToEPDC() and it will work for Clara BW without glitches
+        UIManager:setDirty(nil, "fast", self.dimen)
 
         UIManager:forceRePaint()
     end
