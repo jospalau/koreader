@@ -473,7 +473,7 @@ function Button:onTapSelectButton()
                 -- There are no glitches in the new Libra Colour but there is a flash after pressing a button. We avoid it
                 if Device.model == "Kobo_monza" then
                     local util = require("ffi/util")
-                    util.usleep(100000)
+                    util.usleep(250000)
                 end
                 -- Callback
                 --
