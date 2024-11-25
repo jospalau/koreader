@@ -202,7 +202,11 @@ function TouchMenuItem:onTapSelect(arg, ges)
         UIManager:setDirty(nil, "fast", highlight_dimen)
 
         UIManager:forceRePaint()
-        UIManager:yieldToEPDC(5000)
+        if Device.model == "Kobo_spaBW" then
+            UIManager:yieldToEPDC(5000)
+        else
+            UIManager:yieldToEPDC()
+        end
 
         -- Unhighlight
         --
@@ -266,7 +270,11 @@ function TouchMenuItem:onHoldSelect(arg, ges)
         -- Use "fast" as it was for all the devices. We pass 5000 to yieldToEPDC() and it will work for Clara BW without glitches
         UIManager:setDirty(nil, "fast", highlight_dimen)
         UIManager:forceRePaint()
-        UIManager:yieldToEPDC(5000)
+        if Device.model == "Kobo_spaBW" then
+            UIManager:yieldToEPDC(5000)
+        else
+            UIManager:yieldToEPDC()
+        end
 
         -- Unhighlight
         --

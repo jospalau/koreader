@@ -1971,8 +1971,10 @@ function ReaderHighlight:onTranslateCurrentPage()
 end
 
 function ReaderHighlight:onHoldRelease()
-    local util = require("ffi/util")
-    util.usleep(350000)
+    if Device:isKobo() then
+        local util = require("ffi/util")
+        util.usleep(350000)
+    end
     if self.clear_id then
         -- Something has requested a clear id and is about to clear
         -- the highlight: it may be a onHoldClose() that handled

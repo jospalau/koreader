@@ -125,7 +125,11 @@ function IconButton:onTapIconButton()
         UIManager:setDirty(nil, "fast", self.dimen)
 
         UIManager:forceRePaint()
-        UIManager:yieldToEPDC(5000)
+        if Device.model == "Kobo_spaBW" then
+            UIManager:yieldToEPDC(5000)
+        else
+            UIManager:yieldToEPDC()
+        end
 
         -- Unhighlight
         --

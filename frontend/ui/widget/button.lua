@@ -455,7 +455,11 @@ function Button:onTapSelectButton()
                     --       The other approach would be to *ask* the EPDC to block until it's *completely* done,
                     --       but that's too much (because we only care about it being done *reading* the fb),
                     --       and that could take upwards of 300ms, which is also way too much ;).
-                    UIManager:yieldToEPDC(5000)
+                    if Device.model == "Kobo_spaBW" then
+                        UIManager:yieldToEPDC(5000)
+                    else
+                        UIManager:yieldToEPDC()
+                    end
                 end
                 -- Unhighlight
                 --
