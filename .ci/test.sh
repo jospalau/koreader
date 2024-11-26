@@ -4,11 +4,14 @@ CI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "${CI_DIR}/common.sh"
 
-pushd install/koreader && {
-    # the circleci command spits out newlines; we want spaces instead
-    BUSTED_OVERRIDES="$(circleci tests glob "spec/front/unit/*_spec.lua" | circleci tests split --split-by=timings --timings-type=filename | tr '\n' ' ')"
-} && popd || exit
+if [[ -z "${CIRCLE_PULL_REQUEST}" ]] && [[ "${CIRCLE_BRANCH}" == 'master' ]]; then
+    # We're on master: do a full testsuite run with coverage.
+    target='coverage'
+else
+    # Pull request / not on master: do a regular testsuite run.
+    target='testfront'
+fi
 
-make testfront --assume-old=all BUSTED_OVERRIDES="${BUSTED_OVERRIDES}"
+make "${target}" --assume-old=all T="-o '${PWD}/test-results.xml'"
 
 # vim: sw=4
