@@ -2050,8 +2050,9 @@ function ReaderHighlight:onHoldRelease()
         -- UIManager:show(Notification:new{
         --     text = (tostring(self.t2 - self.t1)),
         -- })
-        self:onHighlightSearchFull()
-
+        if self.is_word_selection then -- single-word selection
+            self:onHighlightSearchFull()
+        end
     end
     return true
 end
