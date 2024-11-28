@@ -359,6 +359,132 @@ function PageTextInfo:paintTo(bb, x, y)
         --     -- self:paintTo(Screen.bb, 0, 0)
         --     UIManager:setDirty(self, "ui")
         -- end)
+
+        local times_text = TextWidget:new{
+            text =  "",
+            face = Font:getFace("myfont3", 12),
+            fgcolor = Blitbuffer.COLOR_BLACK,
+            invert = true,
+        }
+
+        local Device = require("device")
+        local datetime = require("datetime")
+        local powerd = Device:getPowerDevice()
+        local batt_lvl = tostring(powerd:getCapacity())
+
+
+
+        local time = datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
+
+        local last_file = "None"
+        if G_reader_settings:readSetting("lastfile") ~= nil then
+            last_file = G_reader_settings:readSetting("lastfile")
+        end
+
+
+        -- local time_battery_text_text = time .. "|" .. batt_lvl .. "%|" ..  last_file
+
+        -- times_text:setText(time_battery_text_text:reverse())
+        -- times_text:paintTo(bb, x - times_text:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y)
+
+        local Screen = Device.screen
+
+        local books_information = FrameContainer:new{
+            left_container:new{
+                dimen = Geom:new{ w = Screen:getWidth(), h = 12 },
+                TextWidget:new{
+                    text =  "",
+                    face = Font:getFace("myfont3", 12),
+                    fgcolor = Blitbuffer.COLOR_BLACK,
+                },
+            },
+            background = Blitbuffer.COLOR_WHITE,
+            bordersize = 0,
+            padding = 5,
+        }
+
+        -- local FileManagerFileSearcher = require("apps/filemanager/filemanagerfilesearcher")
+        -- local _, files = self:getList("*.epub")
+        -- books_information[1][1]:setText("TF: " .. tostring(#files))
+
+        local ffiutil = require("ffi/util")
+        local topbar = self.ui.view[4]
+        if G_reader_settings:readSetting("home_dir") and ffiutil.realpath(G_reader_settings:readSetting("home_dir") .. "/stats.lua") then
+            local ok, stats = pcall(dofile, G_reader_settings:readSetting("home_dir") .. "/stats.lua")
+            local last_days = ""
+            for k, v in pairs(stats["stats_last_days"]) do
+                last_days = v > 0 and last_days .. " ● " or last_days .. " ○ "
+            end
+            -- local execute = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub' | wc -l" )
+            -- local execute2 = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub.lua' -exec ls {} + | wc -l")
+            -- books_information[1][1]:setText("TB: " .. execute:read('*a') .. "TBC: " .. execute2:read('*a'))
+
+            local stat_years = 0
+            if topbar then
+                stats_year = topbar:getReadThisYearSoFar()
+            end
+            if stats_year > 0 then
+                stats_year = "+" .. stats_year
+            end
+            books_information[1][1]:setText("B: " .. stats["total_books"]
+            .. ", BF: " .. stats["total_books_finished"]
+            .. ", BFTM: " .. stats["total_books_finished_this_month"]
+            .. ", BFTY: " .. stats["total_books_finished_this_year"]
+            .. ", BFLY: " .. stats["total_books_finished_last_year"]
+            .. ", BMBR: " .. stats["total_books_mbr"]
+            .. ", BTBR: " .. stats["total_books_tbr"]
+            .. ", LD: " .. last_days
+            .. " " .. stats_year)
+        else
+            books_information[1][1]:setText("No stats.lua file in home dir")
+        end
+
+        -- books_information:paintTo(bb, x + topbar.MARGIN_SIDES, Screen:getHeight() - topbar.MARGIN_BOTTOM)
+
+
+        local times = FrameContainer:new{
+            left_container:new{
+                dimen = Geom:new{ w = Screen:getWidth(), h = 12 },
+                TextWidget:new{
+                    text =  "",
+                    face = Font:getFace("myfont3", 12),
+                    fgcolor = Blitbuffer.COLOR_BLACK,
+                },
+            },
+            background = Blitbuffer.COLOR_WHITE,
+            bordersize = 0,
+            padding = 5,
+        }
+
+
+        -- times[1][1]:setText(time .. "|" .. batt_lvl .. "%")
+
+
+        -- local space = FrameContainer:new{
+        --     left_container:new{
+        --         dimen = Geom:new{ w = Screen:getWidth(), h = 12 },
+        --         VerticalSpan:new{width = 29, background = Blitbuffer.COLOR_WHITE},
+        --     },
+        --     background = Blitbuffer.COLOR_WHITE,
+        --     bordersize = 0,
+        --     padding = 0,
+        -- }
+
+        local total_read = ""
+        local total_books = ""
+        if topbar then
+            total_read = topbar:getTotalRead()
+            total_books = topbar:getBooksOpened()
+        end
+        self.vertical_frame2 = VerticalGroup:new{}
+        table.insert(self.vertical_frame2, times)
+        -- table.insert(self.vertical_frame2, VerticalSpan:new{width = 8}) -- We set the vertical space using padding for both of the elements that make up the vertical frame
+        table.insert(self.vertical_frame2, books_information)
+
+        -- times[1].dimen.w = self.vertical_frame2:getSize().w
+        times[1].dimen.wh = self.vertical_frame2:getSize().h
+        times[1][1]:setText("BDB: " .. total_books .. ", TR: " .. total_read .. "d")
+    self.vertical_frame2:paintTo(bb, x + topbar.MARGIN_SIDES, Screen:getHeight() - self.vertical_frame2:getSize().h )
     end
 end
 return PageTextInfo
