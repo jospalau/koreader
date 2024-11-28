@@ -401,7 +401,7 @@ function PageTextInfo:paintTo(bb, x, y)
             background = Blitbuffer.COLOR_WHITE,
             bordersize = 0,
             padding = 0,
-            padding_left = Screen:scaleBySize(6),
+            padding_left = Screen:scaleBySize(10),
             padding_bottom = Screen:scaleBySize(6),
         }
 
@@ -456,8 +456,8 @@ function PageTextInfo:paintTo(bb, x, y)
             background = Blitbuffer.COLOR_WHITE,
             bordersize = 0,
             padding = 0,
-            padding_left = Screen:scaleBySize(6),
-            padding_bottom = Screen:scaleBySize(10),
+            padding_left = Screen:scaleBySize(10),
+            padding_bottom = Screen:scaleBySize(11),
             padding_top = Screen:scaleBySize(6),
         }
 
@@ -489,7 +489,7 @@ function PageTextInfo:paintTo(bb, x, y)
         -- times[1].dimen.w = self.vertical_frame2:getSize().w
         times[1].dimen.wh = self.vertical_frame2:getSize().h
         times[1][1]:setText("BDB: " .. total_books .. ", TR: " .. total_read .. "d")
-    self.vertical_frame2:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() - self.vertical_frame2:getSize().h )
+    self.vertical_frame2:paintTo(bb, x, Screen:getHeight() - self.vertical_frame2:getSize().h )
     end
 end
 return PageTextInfo
