@@ -122,7 +122,11 @@ function IconButton:onTapIconButton()
         --
         self.image.invert = true
         UIManager:widgetInvert(self.image, self.dimen.x + h_padding, self.dimen.y + self.padding_top)
-        UIManager:setDirty(nil, "fast", self.dimen)
+         if Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch" then
+            UIManager:setDirty(nil, "ui", self.dimen)
+         else
+            UIManager:setDirty(nil, "fast", self.dimen)
+         end
 
         UIManager:forceRePaint()
         if Device.model == "Kobo_spaBW" then
@@ -150,7 +154,11 @@ function IconButton:onTapIconButton()
         --       otherwise, it's lost.
         --       This changes nothing in practice, since we follow by explicitly requesting to drain the refresh queue ;).
         -- Use "fast" as it was for all the devices. We pass 5000 to yieldToEPDC() and it will work for Clara BW without glitches
-        UIManager:setDirty(nil, "fast", self.dimen)
+        if Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch" then
+            UIManager:setDirty(nil, "ui", self.dimen)
+         else
+            UIManager:setDirty(nil, "fast", self.dimen)
+         end
 
         UIManager:forceRePaint()
     end
