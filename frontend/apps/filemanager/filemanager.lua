@@ -337,8 +337,25 @@ function FileManager:setupLayout()
             })
         end
 
+        local title = ""
+        if is_file then
+            title = BD.filename(file:match("([^/]+)$"))
+
+            local extension = string.lower(string.match(title, ".+%.([^.]+)") or "")
+            if extension == "epub" then
+                title = title:gsub(".epub","")
+            end
+
+            if self.calibre_data[Menu.getMenuText(item)] and self.calibre_data[Menu.getMenuText(item)]["pubdate"] and self.calibre_data[Menu.getMenuText(item)]["words"] then
+                title = title .. ", " .. self.calibre_data[Menu.getMenuText(item)]["pubdate"]:sub(1, 4) .. " - " .. tostring(math.floor(self.calibre_data[Menu.getMenuText(item)]["words"]/1000)) .."kw"
+            end
+
+        else
+            title = BD.directory(file:match("([^/]+)$"))
+        end
+
         self.file_dialog = ButtonDialog:new{
-            title = is_file and BD.filename(file:match("([^/]+)$")) or BD.directory(file:match("([^/]+)$")),
+            title = title,
             title_align = "center",
             buttons = buttons,
         }
@@ -401,6 +418,7 @@ end
 
 -- NOTE: The only thing that will *ever* instantiate a new FileManager object is our very own showFiles below!
 function FileManager:init()
+    self.calibre_data = util.loadCalibreData()
     self:setupLayout()
     self.active_widgets = {}
 
