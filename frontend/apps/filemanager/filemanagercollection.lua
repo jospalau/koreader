@@ -78,7 +78,11 @@ function FileManagerCollection:onShowColl(collection_name, series)
         onLeftButtonTap = function() self:showCollDialog() end,
         onReturn = function()
             self.coll_menu.close_callback()
-            self:onShowCollList()
+            if series == true then
+                self:onShowSeriesList()
+            else
+                self:onShowCollList()
+            end
         end,
         onMenuChoice = self.onMenuChoice,
         onMenuHold = self.onMenuHold,
