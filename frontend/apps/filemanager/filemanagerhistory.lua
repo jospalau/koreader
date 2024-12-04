@@ -234,9 +234,8 @@ function FileManagerHistory:onMenuHold(item)
     })
 
     local title = BD.filename(item.text):gsub(".epub","")
-    if self.calibre_data[Menu.getMenuText(item)] and self.calibre_data[Menu.getMenuText(item)]["pubdate"]  and self.calibre_data[Menu.getMenuText(item)]["words"] then
-        title = title .. ", " .. self.calibre_data[Menu.getMenuText(item)]["pubdate"]:sub(1, 4) .. " - " .. tostring(math.floor(self.calibre_data[Menu.getMenuText(item)]["words"]/1000)) .."kw"
-
+    if self.calibre_data[Menu.getMenuText(item)] and self.calibre_data[Menu.getMenuText(item)]["pubdate"] and self.calibre_data[Menu.getMenuText(item)]["words"] and self.calibre_data[Menu.getMenuText(item)]["grrating"] then
+        title = title .. ", " ..  self.calibre_data[Menu.getMenuText(item)]["grrating"] .. "★ - " .. self.calibre_data[Menu.getMenuText(item)]["pubdate"]:sub(1, 4) .. " - " .. tostring(math.floor(self.calibre_data[Menu.getMenuText(item)]["words"]/1000)) .."kw"
     end
     self.histfile_dialog = ButtonDialog:new{
         title = title,
