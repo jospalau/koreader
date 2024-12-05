@@ -1058,7 +1058,17 @@ function ReaderUI:onSearchDictionary()
             if res and res.text then
                 local words = util.splitToWords2(res.text)
                 if #words == 1 then
-                    self:handleEvent(Event:new("LookupWord", util.cleanupSelectedText(res.text)))
+                    local boxes = self.document:getScreenBoxesFromPositions(res.pos0, res.pos1, true)
+                    -- local boxes = index and ReaderHighlight:getHighlightVisibleBoxes(index) or (ReaderHighlight.selected_text.sboxes or ReaderHighlight.selected_text.pboxes)
+                    local word_boxes
+                    if boxes ~= nil then
+                        word_boxes = {}
+                        for i, box in ipairs(boxes) do
+                            word_boxes[i] = self.view:pageToScreenTransform(res.pos0.page, box)
+                        end
+                    end
+                    self.dictionary:onLookupWord(util.cleanupSelectedText(res.text), false, boxes)
+                    -- self:handleEvent(Event:new("LookupWord", util.cleanupSelectedText(res.text)))
                 end
             end
         end
