@@ -355,7 +355,7 @@ function BookInfo:onShowBookDescription(description, file)
 end
 
 function BookInfo:onShowBookCover(file, force_orig)
-    local cover_bb = self:getCoverImage(self.document, file, force_orig)
+    local cover_bb = self:getCoverImage(nil, file, force_orig)
     if cover_bb then
         local ImageViewer = require("ui/widget/imageviewer")
         local imgviewer = ImageViewer:new{
