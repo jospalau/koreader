@@ -248,7 +248,7 @@ function FileManagerHistory:onMenuHold(item)
     end
 
     self.file_dialog = ButtonDialog:new{
-        title = BD.filename(item.text),
+        title = title,
         title_align = "center",
         buttons = buttons,
     }

@@ -2237,7 +2237,7 @@ function ReaderHighlight:onHighlightSearchFull()
     end
 end
 
-function ReaderHighlight:onHighlightDictLookup()
+function ReaderHighlight:lookupDict(index)
     logger.dbg("dictionary lookup highlight")
     self:highlightFromHoldPos()
     if self.selected_text then
