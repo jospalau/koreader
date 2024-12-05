@@ -138,18 +138,18 @@ end
 
 function FileManagerHistory:onMenuHold(item)
     local file = item.file
-    self.histfile_dialog = nil
+    self.file_dialog = nil
     self.book_props = self.ui.coverbrowser and self.ui.coverbrowser:getBookInfo(file)
 
     local function close_dialog_callback()
-        UIManager:close(self.histfile_dialog)
+        UIManager:close(self.file_dialog)
     end
     local function close_dialog_menu_callback()
-        UIManager:close(self.histfile_dialog)
+        UIManager:close(self.file_dialog)
         self._manager.hist_menu.close_callback()
     end
     local function close_dialog_update_callback()
-        UIManager:close(self.histfile_dialog)
+        UIManager:close(self.file_dialog)
         if self._manager.filter ~= "all" or self._manager.is_frozen then
             self._manager:fetchStatuses(false)
         else
@@ -213,7 +213,7 @@ function FileManagerHistory:onMenuHold(item)
         {
             text = _("Remove from history"),
             callback = function()
-                UIManager:close(self.histfile_dialog)
+                UIManager:close(self.file_dialog)
                 -- The item's idx field is tied to the current *view*, so we can only pass it as-is when there's no filtering *at all* involved.
                 local index = item.idx
                 if self._manager.search_string or self._manager.selected_collections or self._manager.filter ~= "all" then
@@ -233,17 +233,32 @@ function FileManagerHistory:onMenuHold(item)
         filemanagerutil.genBookDescriptionButton(file, self.book_props, close_dialog_callback, item.dim),
     })
 
+    if self._manager.file_dialog_added_buttons ~= nil then
+        for _, row_func in ipairs(self._manager.file_dialog_added_buttons) do
+            local row = row_func(file, true, self.book_props)
+            if row ~= nil then
+                table.insert(buttons, row)
+            end
+        end
+    end
+
     local title = BD.filename(item.text):gsub(".epub","")
     if self.calibre_data[Menu.getMenuText(item)] and self.calibre_data[Menu.getMenuText(item)]["pubdate"] and self.calibre_data[Menu.getMenuText(item)]["words"] and self.calibre_data[Menu.getMenuText(item)]["grrating"] then
         title = title .. ", " ..  self.calibre_data[Menu.getMenuText(item)]["grrating"] .. "★ - " .. self.calibre_data[Menu.getMenuText(item)]["pubdate"]:sub(1, 4) .. " - " .. tostring(math.floor(self.calibre_data[Menu.getMenuText(item)]["words"]/1000)) .."kw"
     end
-    self.histfile_dialog = ButtonDialog:new{
-        title = title,
+
+    self.file_dialog = ButtonDialog:new{
+        title = BD.filename(item.text),
         title_align = "center",
         buttons = buttons,
     }
-    UIManager:show(self.histfile_dialog)
+    UIManager:show(self.file_dialog)
     return true
+end
+
+function FileManagerHistory.getMenuInstance()
+    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+    return ui.history.hist_menu
 end
 
 function FileManagerHistory:onShowHist(search_info)

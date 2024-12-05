@@ -337,6 +337,15 @@ function FileManager:setupLayout()
             })
         end
 
+        if file_manager.file_dialog_added_buttons ~= nil then
+            for _, row_func in ipairs(file_manager.file_dialog_added_buttons) do
+                local row = row_func(file, is_file, self.book_props)
+                if row ~= nil then
+                    table.insert(buttons, row)
+                end
+            end
+        end
+
         local title = ""
         if is_file then
             title = BD.filename(file:match("([^/]+)$"))
@@ -349,7 +358,6 @@ function FileManager:setupLayout()
             if self.calibre_data[Menu.getMenuText(item)] and self.calibre_data[Menu.getMenuText(item)]["pubdate"] and self.calibre_data[Menu.getMenuText(item)]["words"] and self.calibre_data[Menu.getMenuText(item)]["grrating"] then
                 title = title .. ", " ..  self.calibre_data[Menu.getMenuText(item)]["grrating"] .. "★ - " .. self.calibre_data[Menu.getMenuText(item)]["pubdate"]:sub(1, 4) .. " - " .. tostring(math.floor(self.calibre_data[Menu.getMenuText(item)]["words"]/1000)) .."kw"
             end
-
         else
             title = BD.directory(file:match("([^/]+)$"))
         end
@@ -501,6 +509,35 @@ function FileManager:onSwipeFM(ges)
         self.file_chooser:onPrevPage()
     end
     return true
+end
+
+function FileManager:addFileDialogButtons(row_id, row_func) -- FileManager, History, Collections file_dialog
+    self.file_dialog_added_buttons = self.file_dialog_added_buttons or { index = {} }
+    if self.file_dialog_added_buttons.index[row_id] == nil then
+        table.insert(self.file_dialog_added_buttons, row_func)
+        self.file_dialog_added_buttons.index[row_id] = #self.file_dialog_added_buttons
+    end
+end
+
+function FileManager:removeFileDialogButtons(row_id)
+    local index = self.file_dialog_added_buttons and self.file_dialog_added_buttons.index[row_id]
+    if index ~= nil then
+        table.remove(self.file_dialog_added_buttons, index)
+        if #self.file_dialog_added_buttons == 0 then
+            self.file_dialog_added_buttons = nil
+        else
+            self.file_dialog_added_buttons.index[row_id] = nil
+            for id, idx in pairs(self.file_dialog_added_buttons.index) do
+                if idx > index then
+                    self.file_dialog_added_buttons.index[id] = idx - 1
+                end
+            end
+        end
+    end
+end
+
+function FileManager.getMenuInstance()
+    return FileManager.instance.file_chooser
 end
 
 function FileManager:onShowPlusMenu()
