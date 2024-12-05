@@ -1059,7 +1059,6 @@ function ReaderUI:onSearchDictionary()
                 local words = util.splitToWords2(res.text)
                 if #words == 1 then
                     local boxes = self.document:getScreenBoxesFromPositions(res.pos0, res.pos1, true)
-                    -- local boxes = index and ReaderHighlight:getHighlightVisibleBoxes(index) or (ReaderHighlight.selected_text.sboxes or ReaderHighlight.selected_text.pboxes)
                     local word_boxes
                     if boxes ~= nil then
                         word_boxes = {}
