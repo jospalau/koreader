@@ -387,13 +387,13 @@ function BookInfo:getCoverImage(doc, file, force_orig)
     end
     -- orig cover
     local is_doc = doc and true or false
-    if not is_doc or doc.file ~= file then
+    if not is_doc then
         doc = DocumentRegistry:openDocument(file)
         if doc and doc.loadDocument then -- CreDocument
             doc:loadDocument(false) -- load only metadata
         end
     end
-    if doc and doc.file == file then
+    if doc then
         cover_bb = doc:getCoverPageImage()
         if not is_doc then
             doc:close()
