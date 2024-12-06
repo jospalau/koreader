@@ -398,7 +398,7 @@ function Button:_doFeedbackHighlight()
         self[1].invert = true
         UIManager:widgetInvert(self[1], self[1].dimen.x, self[1].dimen.y)
     end
-    -- Fast mode is a bit glitchy in Kobo Clara BW. Most of the times, the invertion of colors does not work with fast mode whe selecting a button. Using ui mode it will work properly
+    -- Fast mode is a bit glitchy in Kobo Clara BW. Most of the times, the invertion of colors does not work with fast mode whe selecting a button. Using ui refreshing mode it will work properly
     -- In any case, we can solve by it calling UIManager:yieldToEPDC(5000) further down for this device but the white text with black background looks a bit aliased
     if Device.model == "Kobo_spaBW" then
         UIManager:setDirty(nil, "ui", self[1].dimen)
@@ -475,7 +475,8 @@ function Button:onTapSelectButton()
                 end
 
                 -- There are no glitches in the new Libra Colour but there is a flash after pressing a button. We avoid it
-                if Device.model == "Kobo_monza" then
+                -- It is the same for the new Kobo BW. It does not flash but it remains a bit the buttons when pressed
+                if Device.model == "Kobo_spaBW" or Device.model == "Kobo_monza" then
                     local util = require("ffi/util")
                     util.usleep(250000)
                 end
