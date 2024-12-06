@@ -398,9 +398,10 @@ function Button:_doFeedbackHighlight()
         self[1].invert = true
         UIManager:widgetInvert(self[1], self[1].dimen.x, self[1].dimen.y)
     end
-    -- Fast mode is a bit glitchy in Kobo Clara BW. Most of the times, the invertion of colors does not work with fast mode whe selecting a button. Using ui refreshing mode it will work properly
+    -- Fast mode is a bit glitchy in Kobo Clara BW. Most of the times, the invertion of colors does not work with fast mode whe selecting a button. Using ui refresh mode it will work properly
     -- In any case, we can solve by it calling UIManager:yieldToEPDC(5000) further down for this device but the white text with black background looks a bit aliased
-    if Device.model == "Kobo_spaBW" then
+    -- Fast refresh mode works fine for Kobo Libra Colour but it also looks a bit aliased so we use ui refresh mode as well
+    if Device.model == "Kobo_spaBW" or Device.model == "Kobo_monza" then
         UIManager:setDirty(nil, "ui", self[1].dimen)
     else
         UIManager:setDirty(nil, "fast", self[1].dimen)
@@ -474,11 +475,11 @@ function Button:onTapSelectButton()
                     self:_undoFeedbackHighlight(is_translucent)
                 end
 
-                -- There are no glitches in the new Libra Colour but there is a flash after pressing a button. We avoid it
-                -- It is the same for the new Kobo BW. It does not flash but it remains a bit the buttons when pressed
+                -- There are no glitches in the new Libra Colour with fast refresh mode but there is a flash after pressing a button. We avoid it with a delay here
+                -- It is the same for the new Kobo BW when using ui refresh mode. It does not flash but it remains a little bit longer when the button is pressed
                 if Device.model == "Kobo_spaBW" or Device.model == "Kobo_monza" then
                     local util = require("ffi/util")
-                    util.usleep(250000)
+                    util.usleep(400000)
                 end
                 -- Callback
                 --
