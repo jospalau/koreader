@@ -193,7 +193,7 @@ function FileManagerHistory:onMenuHold(item)
         {
             text = _("Readd to history"),
             callback = function()
-                UIManager:close(self.histfile_dialog)
+                UIManager:close(self.file_dialog)
                 require("readhistory"):removeItem(item)
                 require("readhistory"):addItem(item.file,os.time())
                 self._manager:fetchStatuses(false)
