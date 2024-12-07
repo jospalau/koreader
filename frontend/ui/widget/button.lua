@@ -401,6 +401,7 @@ function Button:_doFeedbackHighlight()
     -- Fast mode is a bit glitchy in Kobo Clara BW. Most of the times, the invertion of colors does not work with fast mode whe selecting a button. Using ui refresh mode it will work properly
     -- In any case, we can solve by it calling UIManager:yieldToEPDC(5000) further down for this device but the white text with black background looks a bit aliased
     -- Fast refresh mode works fine for Kobo Libra Colour but it also looks a bit aliased so we use ui refresh mode as well
+    -- Finally in both cases we call to UIManager:yieldToEPDC() passing a bigger delay since when pressing the buttons they flash in the Kobo Libra Colour and remain a bit longer than the rest of the dialog in the Kobo Libra BW
     if Device.model == "Kobo_spaBW" or Device.model == "Kobo_monza" then
         UIManager:setDirty(nil, "ui", self[1].dimen)
     else
@@ -460,7 +461,14 @@ function Button:onTapSelectButton()
                     --       The other approach would be to *ask* the EPDC to block until it's *completely* done,
                     --       but that's too much (because we only care about it being done *reading* the fb),
                     --       and that could take upwards of 300ms, which is also way too much ;).
-                    UIManager:yieldToEPDC()
+
+                    -- There are no glitches in the new Libra Colour with fast refresh mode but there is a flash after pressing a button. We avoid it with a delay here
+                    -- It is the same for the new Kobo BW when using ui refresh mode. It does not flash but it remains a little bit longer when the button is pressed
+                    if Device.model == "Kobo_spaBW" or Device.model == "Kobo_monza" then
+                        UIManager:yieldToEPDC(300000)
+                    else
+                        UIManager:yieldToEPDC()
+                    end
                 end
                 -- Unhighlight
                 --
@@ -475,12 +483,6 @@ function Button:onTapSelectButton()
                     self:_undoFeedbackHighlight(is_translucent)
                 end
 
-                -- There are no glitches in the new Libra Colour with fast refresh mode but there is a flash after pressing a button. We avoid it with a delay here
-                -- It is the same for the new Kobo BW when using ui refresh mode. It does not flash but it remains a little bit longer when the button is pressed
-                if Device.model == "Kobo_spaBW" or Device.model == "Kobo_monza" then
-                    local util = require("ffi/util")
-                    util.usleep(400000)
-                end
                 -- Callback
                 --
                 self.callback()
