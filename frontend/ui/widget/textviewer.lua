@@ -616,7 +616,7 @@ function TextViewer:onShowMenu()
                 local widget = SpinWidget:new{
                     title_text = _("Font size"),
                     value = self.text_font_size,
-                    value_min = 12,
+                    value_min = 10,
                     value_max = 30,
                     default_value = self.monospace_font and 16 or 20,
                     keep_shown_on_apply = true,
