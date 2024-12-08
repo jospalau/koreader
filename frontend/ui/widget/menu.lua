@@ -746,7 +746,6 @@ function Menu:init()
     }
 
     self.paths = {}  -- per instance table to trace navigation path
-    local util = require("util")
     self.calibre_data = util.loadCalibreData()
     -----------------------------------
     -- start to set up widget layout --

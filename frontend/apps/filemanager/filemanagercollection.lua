@@ -24,6 +24,7 @@ local FileManagerCollection = WidgetContainer:extend{
 }
 
 function FileManagerCollection:init()
+    self.calibre_data = util.loadCalibreData()
     self.ui.menu:registerToMainMenu(self)
 end
 
@@ -223,8 +224,12 @@ function FileManagerCollection:onMenuHold(item)
         end
     end
 
+    local title = BD.filename(item.text):gsub(".epub","")
+    if self.calibre_data[Menu.getMenuText(item)] and self.calibre_data[Menu.getMenuText(item)]["pubdate"] and self.calibre_data[Menu.getMenuText(item)]["words"] and self.calibre_data[Menu.getMenuText(item)]["grrating"] then
+        title = title .. ", " ..  self.calibre_data[Menu.getMenuText(item)]["grrating"] .. "★ - " .. self.calibre_data[Menu.getMenuText(item)]["pubdate"]:sub(1, 4) .. " - " .. tostring(math.floor(self.calibre_data[Menu.getMenuText(item)]["words"]/1000)) .."kw"
+    end
     self.file_dialog = ButtonDialog:new{
-        title = BD.filename(item.text),
+        title = title,
         title_align = "center",
         buttons = buttons,
     }

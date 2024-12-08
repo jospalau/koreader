@@ -31,7 +31,6 @@ local filter_text = {
 }
 
 function FileManagerHistory:init()
-    local util = require("util")
     self.calibre_data = util.loadCalibreData()
     self.ui.menu:registerToMainMenu(self)
 end
