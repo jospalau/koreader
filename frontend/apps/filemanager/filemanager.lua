@@ -354,9 +354,8 @@ function FileManager:setupLayout()
             if extension == "epub" then
                 title = title:gsub(".epub","")
             end
-
-            if self.calibre_data[Menu.getMenuText(item)] and self.calibre_data[Menu.getMenuText(item)]["pubdate"] and self.calibre_data[Menu.getMenuText(item)]["words"] and self.calibre_data[Menu.getMenuText(item)]["grrating"] then
-                title = title .. ", " ..  self.calibre_data[Menu.getMenuText(item)]["grrating"] .. "★ - " .. self.calibre_data[Menu.getMenuText(item)]["pubdate"]:sub(1, 4) .. " - " .. tostring(math.floor(self.calibre_data[Menu.getMenuText(item)]["words"]/1000)) .."kw"
+            if self.calibre_data[Menu.getMenuText(item)] and self.calibre_data[Menu.getMenuText(item)]["pubdate"] and self.calibre_data[Menu.getMenuText(item)]["words"] and self.calibre_data[Menu.getMenuText(item)]["grrating"] and self.calibre_data[Menu.getMenuText(item)]["grvotes"] then
+                title = title .. ", " ..  self.calibre_data[Menu.getMenuText(item)]["pubdate"]:sub(1, 4) .. " - " .. self.calibre_data[Menu.getMenuText(item)]["grrating"] .. "★ ("  .. self.calibre_data[Menu.getMenuText(item)]["grvotes"] .. ") - " .. tostring(math.floor(self.calibre_data[Menu.getMenuText(item)]["words"]/1000)) .."kw"
             end
         else
             title = BD.directory(file:match("([^/]+)$"))
