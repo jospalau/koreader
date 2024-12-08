@@ -108,6 +108,7 @@ local settingsList = {
     toggle_horizontal_vertical = {category="none", event="ToggleHorizontalVertical", title=_("Toggle screen layout"), general=true, separator=true},
     search_dictionary = {category="none", event="SearchDictionary", title=_("Search dictionary"), general=true, separator=true},
     show_heatmap = {category="none", event="ShowHeatmapView", title=_("Show heatmap"), general=true, separator=true},
+    show_general_stats = {category="none", event="ShowGeneralStats", title=_("Show general stats"), general=true, separator=true},
     adjust_margins_topbar = {category="none", event="AdjustMarginsTopbar", title=_("Adjust margins topbar"), general=true, separator=true},
     show_notes_footer = {category="none", event="ShowNotesFooter", title=_("Show notes on footer"), general=true, separator=true},
     ----
@@ -398,6 +399,7 @@ local dispatcher_menu_order = {
     "toggle_horizontal_vertical",
     "search_dictionary",
     "show_heatmap",
+    "show_general_stats",
     "adjust_margins_topbar",
     "show_notes_footer",
     ----

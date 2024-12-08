@@ -3969,4 +3969,27 @@ function ReaderStatistics.onSync(local_path, cached_path, income_path)
     return true
 end
 
+function ReaderStatistics:onShowGeneralStats()
+    local TextViewer = require("ui/widget/textviewer")
+    local file_path = DataStorage:getSettingsDir() .. "/stats_koreader.txt"
+    local file_handle = io.open(file_path, "rb")
+    if not file_handle then
+        local UIManager = require("ui/uimanager")
+        local Notification = require("ui/widget/notification")
+        UIManager:show(Notification:new{
+            text = _("No stats_koreader.html file found"),
+        })
+    else
+        local file_content = file_handle:read("*all")
+        file_content = file_content -- util.htmlToPlainTextIfHtml(file_content)
+        UIManager:show(TextViewer:new{
+            title = "Stats",
+            title_multilines = true,
+            text = file_content,
+            text_type = "file_content",
+            -- text_type = prop_key == "description" and "book_info" or nil,
+        })
+    end
+end
+
 return ReaderStatistics
