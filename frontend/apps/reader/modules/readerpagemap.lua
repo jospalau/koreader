@@ -45,7 +45,8 @@ function ReaderPageMap:_postInit()
     if self.ui.document.info.has_pages then
         return
     end
-    self.ui.document:buildSyntheticPageMapIfNoneDocumentProvided(1767)
+    -- self.ui.document:buildSyntheticPageMapIfNoneDocumentProvided(1767)
+    self.ui.document:buildSyntheticPageMapIfNoneDocumentProvided(2081) -- Changed to 2081 so that way the number of synthetic pages is the same as the physical copy of Wind and Truth
     if not self.ui.document:hasPageMap() then
         return
     end
