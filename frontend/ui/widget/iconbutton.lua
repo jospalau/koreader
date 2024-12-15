@@ -149,16 +149,13 @@ function IconButton:onTapIconButton()
         --
         self.callback()
 
-        -- NOTE: plugins/coverbrowser.koplugin/covermenu (ab)uses UIManager:clearRenderStack,
-        --       so we need to enqueue the actual refresh request for the unhighlight post-callback,
-        --       otherwise, it's lost.
-        --       This changes nothing in practice, since we follow by explicitly requesting to drain the refresh queue ;).
+        -- Ignore this refresh since it has been removed from upstream
         -- Use "fast" as it was for all the devices. We pass 5000 to yieldToEPDC() and it will work for Clara BW without glitches
-        if Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch" then
-            UIManager:setDirty(nil, "ui", self.dimen)
-         else
-            UIManager:setDirty(nil, "fast", self.dimen)
-         end
+        -- if Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch" then
+        --    UIManager:setDirty(nil, "ui", self.dimen)
+        -- else
+        --    UIManager:setDirty(nil, "fast", self.dimen)
+        -- end
 
         UIManager:forceRePaint()
     end
