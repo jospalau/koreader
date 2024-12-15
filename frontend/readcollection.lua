@@ -130,7 +130,7 @@ function ReadCollection:isFileInCollections(file)
 end
 
 function ReadCollection:isFileInCollectionsNotAll(file)
-    file = FFIUtil.realpath(file) or file
+    file = ffiUtil.realpath(file) or file
     for collection, coll in pairs(self.coll) do
         if collection ~= "MBR Tier 2" and collection ~= "Short MBR" then goto continue end
         if coll[file] then
