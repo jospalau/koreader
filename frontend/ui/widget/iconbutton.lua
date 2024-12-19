@@ -149,13 +149,16 @@ function IconButton:onTapIconButton()
         --
         self.callback()
 
+        -- Do not ignore it at all since it is missing a refresh in the top left menu icon
+        -- when opening the window which allows to select the different dictionaries available
+        -- The icon remains highlighted after opening this window
         -- Ignore this refresh since it has been removed from upstream
         -- Use "fast" as it was for all the devices. We pass 5000 to yieldToEPDC() and it will work for Clara BW without glitches
-        -- if Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch" then
-        --    UIManager:setDirty(nil, "ui", self.dimen)
-        -- else
-        --    UIManager:setDirty(nil, "fast", self.dimen)
-        -- end
+        if Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch" then
+           UIManager:setDirty(nil, "ui", self.dimen)
+        else
+           UIManager:setDirty(nil, "fast", self.dimen)
+        end
 
         UIManager:forceRePaint()
     end
