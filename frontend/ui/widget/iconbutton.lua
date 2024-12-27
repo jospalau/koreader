@@ -159,7 +159,6 @@ function IconButton:onTapIconButton()
         else
            UIManager:setDirty(nil, "fast", self.dimen)
         end
-
         UIManager:forceRePaint()
     end
     return true

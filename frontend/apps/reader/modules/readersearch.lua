@@ -697,6 +697,7 @@ function ReaderSearch:onShowFindAllResults(not_cached)
         item_table = self.findall_results,
         items_per_page = self.findall_results_per_page,
         items_max_lines = self.findall_results_max_lines,
+        multilines_forced = true, -- to always have search_string in bold
         covers_fullscreen = true,
         is_borderless = true,
         is_popout = false,
@@ -763,7 +764,16 @@ function ReaderSearch:showAllResultsMenuDialog()
     local buttons = {
         {
             {
-                text = _("Filter by current chapter"),
+                text = _("All results"),
+                callback = function()
+                    UIManager:close(button_dialog)
+                    self:updateAllResultsMenu(self.findall_results)
+                end,
+            },
+        },
+        {
+            {
+                text = _("Results in current chapter"),
                 callback = function()
                     UIManager:close(button_dialog)
                     local current_chapter = self.ui.toc:getTocTitleOfCurrentPage()
@@ -782,6 +792,7 @@ function ReaderSearch:showAllResultsMenuDialog()
                 end,
             },
         },
+        {}, -- separator
         {
             {
                 text_func = function()
