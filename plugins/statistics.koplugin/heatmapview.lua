@@ -116,7 +116,7 @@ function CalendarDay:init()
 
 
     local bg_color = Blitbuffer.COLOR_WHITE
-
+    --print(self.duration)
     if self.duration >= 4 then
         bg_color = Blitbuffer.COLOR_BLACK
     elseif self.duration>= 2 then
@@ -256,8 +256,20 @@ local HeatmapView = FocusManager:extend{
         [10] = 4,
         [11] = 4,
         },
+    mondays_months_2025 = {
+        [1] = 4,
+        [2] = 4,
+        [3] = 5,
+        [4] = 4,
+        [5] = 4,
+        [6] = 5,
+        [7] = 4,
+        [8] = 4,
+        [9] = 5,
+        [10] = 4,
+        [11] = 4,
+        },
 }
-
 
 function HeatmapView:isLeapYear(year)
     if ((year % 4 == 0) and (year % 100 ~= 0)) or (year % 400 == 0) then
@@ -519,7 +531,12 @@ function HeatmapView:init()
     self.dates, self.hours = self:getDates('2024')
     local main_content2024 = HorizontalGroup:new{}
     self:_populateItems(main_content2024, '2024')
-    self.months_2024 = self.months
+    self.months_2024 = deep_copy(self.months)
+    self.months = HorizontalGroup:new{}
+    table.insert(self.months, VerticalSpan:new{ width = Screen:scaleBySize(20) })
+
+
+    table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(40) })
 
     self.title_bar_2024 = TitleBar:new{
         fullscreen = self.covers_fullscreen,
@@ -533,6 +550,23 @@ function HeatmapView:init()
         -- show_parent = self,
     }
 
+    self.dates, self.hours = self:getDates('2025')
+    --local dump = require("dump")
+    --print(dump(self.dates))
+    local main_content2025 = HorizontalGroup:new{}
+    self:_populateItems(main_content2025, '2025')
+    self.months_2025 = deep_copy(self.months)
+    self.title_bar_2025 = TitleBar:new{
+        fullscreen = self.covers_fullscreen,
+        title_face_fullscreen = Font:getFace("myfont3", Screen:scaleBySize(8)),
+        bottom_v_padding = 20,
+        width = self.dimen.w,
+        align = "left",
+        title = "2025 (" .. string.format("%.2fd)",self.hours / 24),
+        title_h_padding = self.outer_padding, -- have month name aligned with calendar left edge
+        -- close_callback = function() self:onClose() end,
+        -- show_parent = self,
+    }
     local content = OverlapGroup:new{
         dimen = Geom:new{
             w = self.dimen.w,
@@ -561,6 +595,19 @@ function HeatmapView:init()
                 HorizontalSpan:new{ width = self.outer_padding },
                 self.day_names,
                 main_content2024,
+            },
+            FrameContainer:new{
+                padding = 0,
+                bordersize = 0,
+                padding_bottom = 60,
+                HorizontalSpan:new{ width = self.outer_padding },
+            },
+            self.title_bar_2025,
+            self.months_2025,
+            HorizontalGroup:new{
+                HorizontalSpan:new{ width = self.outer_padding },
+                self.day_names,
+                main_content2025,
             },
         },
     }
@@ -600,10 +647,15 @@ function HeatmapView:_populateItems(main_content, year)
             face = Font:getFace("myfont3", Screen:scaleBySize(3)),
             bold = true,
         }
+        padding = 0
+        --if i == 0 and year == '2025' then
+        --    padding = 80
+        --end
         local fc =  FrameContainer:new{
             padding = 0,
             bordersize = 0,
             padding_right = 0,
+            padding_left = padding,
             LeftContainer:new{
                 dimen = Geom:new{w = month_name:getSize().w, h = month_name:getSize().h },
                 month_name,
@@ -616,8 +668,10 @@ function HeatmapView:_populateItems(main_content, year)
             -- table.insert(self.months, HorizontalSpan:new{ width = (Screen:scaleBySize(12) * self.months_weeks_2023[i + 1] ) - month_name:getSize().w })--  Screen:scaleBySize(fc[1][1]:getSize().w) })
             if year == '2023' then
                 table.insert(self.months, HorizontalSpan:new{ width = self.size_tile * self.mondays_months_2023[i + 1] - month_name:getSize().w})
-            else
+            elseif year == '2024' then
                 table.insert(self.months, HorizontalSpan:new{ width = self.size_tile * self.mondays_months_2024[i + 1] - month_name:getSize().w})
+            else
+                table.insert(self.months, HorizontalSpan:new{ width = self.size_tile * self.mondays_months_2025[i + 1] - month_name:getSize().w})
             end
 
         end
@@ -648,10 +702,10 @@ function HeatmapView:_populateItems(main_content, year)
         local weekx = tonumber(os.date("%V", date))
         local yearx = tonumber(os.date("%Y", date))
         local monthx = tonumber(os.date("%d", date))
-        -- print(weekday)
+        --print(weekday)
         rday = tonumber(rday)
         -- if dayc % 8 == 0 then
-        if i == 1 and weekx == 52 then
+        if i == 1 and weekx == 52 or i == 1 and weekx == 1 then
             cur_week = CalendarWeek:new{
                 height = self.size_tile,
                 width = self.size_tile,
@@ -675,7 +729,10 @@ function HeatmapView:_populateItems(main_content, year)
                 if j >= weekday and (rday == 1 or rday == 2 or rday == 3 or rday == 4 or rday == 5 or rday == 6 or rday == 7) then
                     paint_left = true
                 end
-
+                duration = 0
+                if i == 1 and weekx == 1 and j >= weekday then
+                    duration = self.dates[i][1][2]
+                end
                 local calendar_day = CalendarDay:new{
                     is_different_year = j < weekday and true or false,
                     day = j < weekday and "" or i,
@@ -687,7 +744,7 @@ function HeatmapView:_populateItems(main_content, year)
                     height = self.size_tile,
                     width = self.size_tile,
                     show_parent = self,
-                    duration = 0,
+                    duration = duration,
                 }
                 cur_week:addDay(calendar_day)
                 table.insert(layout_week, calendar_day)
