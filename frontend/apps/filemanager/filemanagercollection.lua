@@ -519,8 +519,14 @@ function FileManagerCollection:onShowCollList(file_or_selected_collections, call
             self:refreshFileManager()
             UIManager:close(self.coll_list)
             if self.ui.history.hist_menu and self.ui.history.restart then
-                UIManager:close(self.ui.history.hist_menu)
-                self.ui.history:onShowHist()
+                --UIManager:close(self.ui.history.hist_menu)
+                --self.ui.history:onShowHist()
+                self.ui.history:fetchStatuses(false)
+                self.ui.history:updateItemTable()
+                -- No need to reopen the history nor call updateItems() to have covers
+                -- The covers are refreshed as well if needed when the history is shown again
+                -- I leave the variable name though
+                --self.ui.history.hist_menu:updateItems()
                 self.ui.history.restart = false
             end
             self.coll_list = nil
