@@ -100,10 +100,6 @@ function FileManagerCollection:onShowColl(collection_name, series)
     }
     table.insert(self.coll_menu.paths, true) -- enable onReturn button
     self.coll_menu.close_callback = function()
-        if self.ui.history.hist_menu then
-            self.ui.history:fetchStatuses(false)
-            self.ui.history:updateItemTable()
-        end
         self:refreshFileManager()
         UIManager:close(self.coll_menu)
         self.coll_menu = nil
