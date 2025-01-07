@@ -187,6 +187,10 @@ function FileManagerCollection:onMenuHold(item)
         UIManager:close(self.file_dialog)
         self._manager:updateItemTable()
         self._manager.files_updated = true
+        if self.ui and self.ui.history.hist_menu then
+            self.ui.history:fetchStatuses(false)
+            self.ui.history:updateItemTable()
+        end
     end
     local is_currently_opened = file == (self.ui.document and self.ui.document.file)
 
