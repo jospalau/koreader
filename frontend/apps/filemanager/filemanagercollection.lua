@@ -188,8 +188,9 @@ function FileManagerCollection:onMenuHold(item)
         self._manager:updateItemTable()
         self._manager.files_updated = true
         if self.ui and self.ui.history.hist_menu then
-            self.ui.history:fetchStatuses(false)
-            self.ui.history:updateItemTable()
+            --self.ui.history:fetchStatuses(false)
+            --self.ui.history:updateItemTable()
+            self.ui.history.restart = true
         end
     end
     local is_currently_opened = file == (self.ui.document and self.ui.document.file)
@@ -517,6 +518,11 @@ function FileManagerCollection:onShowCollList(file_or_selected_collections, call
         if force_close or self.selected_collections == nil then
             self:refreshFileManager()
             UIManager:close(self.coll_list)
+            if self.ui.history.hist_menu and self.ui.history.restart then
+                UIManager:close(self.ui.history.hist_menu)
+                self.ui.history:onShowHist()
+                self.ui.history.restart = false
+            end
             self.coll_list = nil
         end
     end
