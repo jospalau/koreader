@@ -114,7 +114,6 @@ function ListMenuItem:init()
     -- filepath may be provided as 'file' (history, collection) or 'path' (filechooser)
     -- store it as attribute so we can use it elsewhere
     self.filepath = self.entry.file or self.entry.path
-
     -- As done in MenuItem
     -- Squared letter for keyboard navigation
     if self.shortcut then
@@ -424,6 +423,14 @@ function ListMenuItem:update()
 
             if require("readhistory"):getIndexByFile(self.filepath) and not DocSettings:hasSidecarFile(self.filepath) then
                 pages_str = _("MBR")
+            end
+
+            if self.show_parent.calibre_data and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")] and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["pubdate"] then
+                if pages_str ~= "" then
+                    pages_str = pages_str .. " - " .. self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["pubdate"]:sub(1, 4)
+                else
+                    pages_str = self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["pubdate"]:sub(1, 4)
+                end
             end
             -- Build the right widget
 
