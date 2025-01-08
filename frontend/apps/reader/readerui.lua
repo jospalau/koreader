@@ -961,6 +961,8 @@ end
 function ReaderUI:onHome()
     local file = self.document.file
     if file:find("resources/arthur%-conan%-doyle%_the%-hound%-of%-the%-baskervilles.epub") then
+        local DataStorage = require("datastorage")
+        file = DataStorage:getFullDataDir() .. "/" .. file
         if require("readhistory"):getIndexByFile(file) then
             require("readhistory"):removeItemByPath(file)
             self:onClose()
