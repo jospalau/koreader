@@ -425,11 +425,13 @@ function ListMenuItem:update()
                 pages_str = _("MBR")
             end
 
-            if self.show_parent.calibre_data and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")] and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["pubdate"] then
+            if self.show_parent.calibre_data and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")] and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["pubdate"] and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["words"] then
+                local words = tostring(math.floor(self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["words"]/1000)) .."kw"
+                local pubdate = self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["pubdate"]:sub(1, 4)
                 if pages_str ~= "" then
-                    pages_str = pages_str .. " - " .. self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["pubdate"]:sub(1, 4)
+                    pages_str = pages_str .. " - " .. words .. " - " .. pubdate
                 else
-                    pages_str = self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["pubdate"]:sub(1, 4)
+                    pages_str = words .. " - " .. pubdate
                 end
             end
             -- Build the right widget
