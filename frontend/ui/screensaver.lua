@@ -659,6 +659,7 @@ function Screensaver:show()
                 text = screensaver_message,
                 readonly = true,
                 dismissable = false,
+                force_one_line = true,
             }
         else
             local face = Font:getFace("infofont")
