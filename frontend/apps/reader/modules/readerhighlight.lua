@@ -1964,7 +1964,7 @@ function ReaderHighlight:onTranslateCurrentPage()
 end
 
 function ReaderHighlight:onHoldRelease()
-    if Device:isKobo() then
+    if Device:isKobo() or Device:isKindle() then
         local util = require("ffi/util")
         util.usleep(350000)
     end
