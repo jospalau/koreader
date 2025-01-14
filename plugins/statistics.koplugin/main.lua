@@ -138,7 +138,8 @@ function ReaderStatistics:init()
         ["Kobo_cadmus"] = 2, -- Kobo Sage
         ["Kobo_goldfinch"] = 3, -- Kobo Clara 2E
         ["KindlePaperWhite5"] = 4,
-        ["ditingp_global"] = 5, -- Xiaomi
+        -- ["ditingp_global"] = 5, -- Xiaomi
+        ["KindleBasic5"] = 5, -- Kindle Basic
         ["boox"] = 6,
         ["PB700"] = 7, -- PocketBook
         ["ares"] = 8, -- Likebook Ares
