@@ -1081,7 +1081,7 @@ Tap a book in the search results to open it.]]),
             local data = profiles.data
             local cre = require("document/credocument"):engineInit()
             local face_list = cre.getFontFaces()
-            local gestures_path = FFIUtil.joinPath(require("datastorage"):getSettingsDir(), "gestures.lua")
+            local gestures_path = ffiUtil.joinPath(require("datastorage"):getSettingsDir(), "gestures.lua")
             local settings_data = require("luasettings"):open(gestures_path)
             local gestures = settings_data.data["gesture_reader"]
             for _, font_name in ipairs(face_list) do
