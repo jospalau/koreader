@@ -3978,7 +3978,7 @@ function ReaderStatistics:onShowGeneralStats()
         local UIManager = require("ui/uimanager")
         local Notification = require("ui/widget/notification")
         UIManager:show(Notification:new{
-            text = _("No stats_koreader.html file found"),
+            text = _("No stats_koreader.txt file found"),
         })
     else
         local file_content = file_handle:read("*all")
