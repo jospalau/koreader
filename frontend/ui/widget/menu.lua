@@ -567,7 +567,14 @@ function MenuItem:onTapSelect(arg, ges)
         end
 
         UIManager:forceRePaint()
-        UIManager:yieldToEPDC()
+
+
+        if Device.model == "KindleBasic5" then
+            UIManager:yieldToEPDC(10000)
+        else
+            UIManager:yieldToEPDC()
+        end
+
 
         -- Unhighlight
         --
@@ -615,7 +622,12 @@ function MenuItem:onHoldSelect(arg, ges)
         end
 
         UIManager:forceRePaint()
-        UIManager:yieldToEPDC()
+
+        if Device.model == "KindleBasic5" then
+            UIManager:yieldToEPDC(10000)
+        else
+            UIManager:yieldToEPDC()
+        end
 
         -- Unhighlight
         --
