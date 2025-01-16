@@ -120,9 +120,10 @@ function IconButton:onTapIconButton()
 
         -- Highlight
         --
+
         self.image.invert = true
         UIManager:widgetInvert(self.image, self.dimen.x + h_padding, self.dimen.y + self.padding_top)
-         if Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch" then
+         if Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch" or Device.model == "KindleBasic5" then
             UIManager:setDirty(nil, "ui", self.dimen)
          else
             UIManager:setDirty(nil, "fast", self.dimen)
@@ -154,7 +155,7 @@ function IconButton:onTapIconButton()
         -- The icon remains highlighted after opening this window
         -- Ignore this refresh since it has been removed from upstream
         -- Use "fast" as it was for all the devices. We pass 5000 to yieldToEPDC() and it will work for Clara BW without glitches
-        if Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch" then
+        if Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch" or Device.model == "KindleBasic5" then
            UIManager:setDirty(nil, "ui", self.dimen)
         else
            UIManager:setDirty(nil, "fast", self.dimen)
