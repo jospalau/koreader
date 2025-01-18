@@ -692,6 +692,7 @@ function FileSearcher:showFileDialog(item, callback)
     })
     local title = file:gsub(".epub","")
     title = select(2, util.splitFilePathName(title))
+    local Menu = require("ui/widget/menu")
     if self.search_menu.ui.history.calibre_data[Menu.getMenuText(item)] and self.search_menu.ui.history.calibre_data[Menu.getMenuText(item)]["pubdate"] and self.search_menu.ui.history.calibre_data[Menu.getMenuText(item)]["words"] and self.search_menu.ui.history.calibre_data[Menu.getMenuText(item)]["grrating"] and self.search_menu.ui.history.calibre_data[Menu.getMenuText(item)]["grvotes"] then
         title = title .. ", " ..  self.search_menu.ui.history.calibre_data[Menu.getMenuText(item)]["pubdate"]:sub(1, 4) .. " - " .. self.search_menu.ui.history.calibre_data[Menu.getMenuText(item)]["grrating"] .. "★ ("  .. self.search_menu.ui.history.calibre_data[Menu.getMenuText(item)]["grvotes"] .. ") - " .. tostring(math.floor(self.search_menu.ui.history.calibre_data[Menu.getMenuText(item)]["words"]/1000)) .."kw"
     end

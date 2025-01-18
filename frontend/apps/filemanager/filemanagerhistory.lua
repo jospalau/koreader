@@ -235,6 +235,7 @@ function FileManagerHistory:onMenuHold(item)
     end
 
     local title = BD.filename(item.text):gsub(".epub","")
+    local Menu = require("ui/widget/menu")
     if self.calibre_data[Menu.getMenuText(item)] and self.calibre_data[Menu.getMenuText(item)]["pubdate"] and self.calibre_data[Menu.getMenuText(item)]["words"] and self.calibre_data[Menu.getMenuText(item)]["grrating"] and self.calibre_data[Menu.getMenuText(item)]["grvotes"] then
         title = title .. ", " ..  self.calibre_data[Menu.getMenuText(item)]["pubdate"]:sub(1, 4) .. " - " .. self.calibre_data[Menu.getMenuText(item)]["grrating"] .. "★ ("  .. self.calibre_data[Menu.getMenuText(item)]["grvotes"] .. ") - " .. tostring(math.floor(self.calibre_data[Menu.getMenuText(item)]["words"]/1000)) .."kw"
     end

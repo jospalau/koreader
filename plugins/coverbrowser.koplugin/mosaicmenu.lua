@@ -734,7 +734,7 @@ function MosaicMenuItem:paintTo(bb, x, y)
     end
 
     local in_history =  require("readhistory"):getIndexByFile(self.filepath)
-    local has_sidecar_file = DocSettings:hasSidecarFile(self.filepath)
+    local has_sidecar_file = require("docsettings"):hasSidecarFile(self.filepath)
     local current_reading = false
     if self.do_hint_opened and (self.been_opened or in_history) then
         -- bottom right corner

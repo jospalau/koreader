@@ -411,7 +411,7 @@ function ListMenuItem:update()
                 end
             end
 
-            if require("readhistory"):getIndexByFile(self.filepath) and not DocSettings:hasSidecarFile(self.filepath) then
+            if require("readhistory"):getIndexByFile(self.filepath) and not require("docsettings"):hasSidecarFile(self.filepath) then
                 pages_str = _("MBR")
             end
 
