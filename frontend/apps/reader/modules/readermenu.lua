@@ -371,9 +371,9 @@ function ReaderMenu:setUpdateItemTable()
     self.menu_items.highlight_all_words_vocabulary = {
         text = _("Highlight all words vocabulary"),
         checked_func = function() return G_reader_settings:isTrue("highlight_all_words_vocabulary") end,
-        enabled_func = function()
-            return false
-        end,
+        -- enabled_func = function()
+        --     return false
+        -- end,
         callback = function()
             local highlight_all_words_vocabulary = G_reader_settings:isTrue("highlight_all_words_vocabulary")
             G_reader_settings:saveSetting("highlight_all_words_vocabulary", not highlight_all_words_vocabulary)

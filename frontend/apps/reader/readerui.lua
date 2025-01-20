@@ -599,19 +599,38 @@ function ReaderUI:updateWordsVocabulary()
 
     --local row, names = stmt:step({}, {})
     self.words = {}
-    local all_words = ""
+    self.all_words = ""
     row = {}
     while stmt:step(row) do
         local word = row[1]
         if not word:find("%s+") and word:len() > 3 then
-            all_words = all_words .. word .. "|"
+            self.all_words = self.all_words .. word .. "|"
         end
     end
     conn:close()
 
-    if all_words then
-        all_words = all_words:sub(1, all_words:len() - 1)
-        local words = self.document:findAllText(all_words, true, 5, 300000, 0, false)
+    -- if all_words then
+    --     all_words = all_words:sub(1, all_words:len() - 1)
+    --     local words = self.document:findAllText(all_words, true, 5, 300000, 0, false)
+    --     if words then
+    --         for i, wordi in ipairs(words) do
+    --             local page = self.document:getPageFromXPointer(wordi.start)
+    --             if not self.words[page] then
+    --                 self.words[page]={}
+    --             end
+    --             table.insert(self.words[page], wordi)
+    --             local page2 = self.document:getPageFromXPointer(wordi["end"])
+    --             if not self.words[page2] then
+    --                 self.words[page2]={}
+    --             end
+    --             table.insert(self.words[page2], wordi)
+    --         end
+    --     end
+    -- end
+
+    if self.all_words then
+        self.all_words = self.all_words:sub(1, self.all_words:len() - 1)
+        local words = self.document:findText(self.all_words, 0, 0, false, true, true, 100)
         if words then
             for i, wordi in ipairs(words) do
                 local page = self.document:getPageFromXPointer(wordi.start)
@@ -627,7 +646,6 @@ function ReaderUI:updateWordsVocabulary()
             end
         end
     end
-
     --self.words = self.document:findAllText("Citra", true, 5, 5000, 0, false)
     --local dump = require("dump")
     --print(dump(self.notes))
