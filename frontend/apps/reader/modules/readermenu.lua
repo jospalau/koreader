@@ -368,6 +368,18 @@ function ReaderMenu:setUpdateItemTable()
             self.ui:reloadDocument(nil, true) -- seamless reload (no infomsg, no flash)
         end
     }
+    self.menu_items.highlight_all_words_vocabulary = {
+        text = _("Highlight all words vocabulary"),
+        checked_func = function() return G_reader_settings:isTrue("highlight_all_words_vocabulary") end,
+        enabled_func = function()
+            return false
+        end,
+        callback = function()
+            local highlight_all_words_vocabulary = G_reader_settings:isTrue("highlight_all_words_vocabulary")
+            G_reader_settings:saveSetting("highlight_all_words_vocabulary", not highlight_all_words_vocabulary)
+            self.ui:reloadDocument(nil, true) -- seamless reload (no infomsg, no flash)
+        end
+    }
     self.menu_items.scale_font_to_current_font = {
         text = _("Scale font to current font"),
         checked_func = function() return G_reader_settings:isTrue("scale_font_to_current_font") end,
