@@ -217,21 +217,23 @@ end
 
 
 function PageTextInfo:onPageUpdate()
-    if self.ui.all_words then
-        self.ui.all_words = self.ui.all_words:sub(1, self.ui.all_words:len() - 1)
-        local words = self.document:findText(self.ui.all_words, 0, 0, false, true, true, 100)
-        if words then
-            for i, wordi in ipairs(words) do
-                local page = self.document:getPageFromXPointer(wordi.start)
-                if not self.ui.words[page] then
-                    self.ui.words[page]={}
+    if G_reader_settings:isTrue("highlight_all_words_vocabulary") then
+        if self.ui.all_words then
+            self.ui.all_words = self.ui.all_words:sub(1, self.ui.all_words:len() - 1)
+            local words = self.document:findText(self.ui.all_words, 1, false, true, -1, true, 100) -- Page not used, set -1
+            if words then
+                for i, wordi in ipairs(words) do
+                    local page = self.document:getPageFromXPointer(wordi.start)
+                    if not self.ui.words[page] then
+                        self.ui.words[page]={}
+                    end
+                    table.insert(self.ui.words[page], wordi)
+                    local page2 = self.document:getPageFromXPointer(wordi["end"])
+                    if not self.ui.words[page2] then
+                        self.ui.words[page2]={}
+                    end
+                    table.insert(self.ui.words[page2], wordi)
                 end
-                table.insert(self.ui.words[page], wordi)
-                local page2 = self.document:getPageFromXPointer(wordi["end"])
-                if not self.ui.words[page2] then
-                    self.ui.words[page2]={}
-                end
-                table.insert(self.ui.words[page2], wordi)
             end
         end
     end

@@ -630,7 +630,7 @@ function ReaderUI:updateWordsVocabulary()
 
     if self.all_words then
         self.all_words = self.all_words:sub(1, self.all_words:len() - 1)
-        local words = self.document:findText(self.all_words, 0, 0, false, true, true, 100)
+        local words = self.document:findText(self.all_words, 1, false, true, -1, true, 100) -- Page not used, set -1
         if words then
             for i, wordi in ipairs(words) do
                 local page = self.document:getPageFromXPointer(wordi.start)
@@ -646,9 +646,12 @@ function ReaderUI:updateWordsVocabulary()
             end
         end
     end
-    --self.words = self.document:findAllText("Citra", true, 5, 5000, 0, false)
-    --local dump = require("dump")
-    --print(dump(self.notes))
+    -- In the cre.cpp source findText() function, there is a call to doc->text_view->selectWords( words ); when looking for words
+    -- But when it finishes doesn't called doc->text_view->clearSelection(); like thefindAllText() function does
+    -- The result is that the words are highlighted by the CREngine
+    -- But only happens here when loading the document. It does not happen when turning pages
+    -- It should be done in the cre.cpp source but I do it here since I haven't found any other issue
+    self.document:clearSelection()
 end
 
 function ReaderUI:registerKeyEvents()
