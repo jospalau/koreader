@@ -137,12 +137,12 @@ function ReaderStatistics:init()
         ["Kobo_io"] = 1, -- Kobo Libra 2
         ["Kobo_cadmus"] = 2, -- Kobo Sage
         ["Kobo_goldfinch"] = 3, -- Kobo Clara 2E
-        ["KindlePaperWhite5"] = 4,
+        ["KindlePaperWhite6"] = 4, -- Kindle Paperwhite 6
         -- ["ditingp_global"] = 5, -- Xiaomi
         ["KindleBasic5"] = 5, -- Kindle Basic
         ["boox"] = 6,
         ["PB700"] = 7, -- PocketBook
-        ["ares"] = 8, -- Likebook Ares
+        -- ["ares"] = 8, -- Likebook Ares -- Reserved for physical readings
         ["Kobo_condor"] = 9, -- Kobo Elipsa 2E
         ["Kobo_spaBW"] = 10, -- Clara BW
         ["Kobo_spaColour"] = 11, -- Clara Colour
