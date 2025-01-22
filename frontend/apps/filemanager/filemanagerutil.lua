@@ -107,17 +107,17 @@ end
 
 -- Get a document status ("new", "reading", "complete", or "abandoned")
 function filemanagerutil.getStatus(file)
-    -- if DocSettings:hasSidecarFile(file) then
-    --     local summary = DocSettings:open(file):readSetting("summary")
-    --     if summary and summary.status and summary.status ~= "" then
-    --         return summary.status
-    --     end
-    --     return "reading"
-    -- end
-    -- -- Default status was new, now is call mbr
-    -- return "mbr"
-    local book_info = BookList.getBookInfo(file)
-    return book_info.been_opened and book_info.status or "new"
+    if DocSettings:hasSidecarFile(file) then
+        local summary = DocSettings:open(file):readSetting("summary")
+        if summary and summary.status and summary.status ~= "" then
+            return summary.status
+        end
+        return "reading"
+    end
+    -- Default status was new, now is call mbr
+    return "mbr"
+    -- local book_info = BookList.getBookInfo(file)
+    -- return book_info.been_opened and book_info.status or "new"
 end
 
 function filemanagerutil.getLastModified(file)
