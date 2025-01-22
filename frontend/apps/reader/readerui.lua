@@ -1069,6 +1069,8 @@ function ReaderUI:onHome()
 
                 local doc_settings = DocSettings:open(file)
                 doc_settings:purge()
+                require("ui/widget/booklist").resetBookInfoCache(file)
+                -- require("bookinfomanager"):deleteBookInfo(file)
 
                 -- UIManager:broadcastEvent(Event:new("InvalidateMetadataCache", file))
                 -- UIManager:broadcastEvent(Event:new("DocSettingsItemsChanged", file))
@@ -1090,6 +1092,7 @@ function ReaderUI:onHome()
             choice2_text = _("No, just exit"),
             choice2_callback = function()
                 self:onClose()
+                require("ui/widget/booklist").resetBookInfoCache(file)
                 self:showFileManager(file)
                 return true
             end,
