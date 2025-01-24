@@ -475,6 +475,7 @@ end
 
 function TopBar:onReaderReady()
 
+    self:onSetDimensions()
     self.title = self.ui.document._document:getDocumentProps().title
     self.series = self.ui.document._document:getDocumentProps().series
     if self.series ~= "" then
@@ -886,6 +887,11 @@ function TopBar:onFrontlightStateChanged()
     end
 end
 
+function TopBar:onSetDimensions()
+    self.width = Screen:getWidth()
+end
+
+
 function TopBar:onResume()
     self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm = self:getReadTodayThisMonth(self.ui.document._document:getDocumentProps().title)
     self.start_session_time = os.time()
@@ -1126,7 +1132,7 @@ function TopBar:toggleBar(light_on)
         -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
 
 
-        self.progress_bar2.width = Screen:getSize().w - 2 * TopBar.MARGIN_SIDES
+        self.progress_bar2.width = self.width - 2 * TopBar.MARGIN_SIDES
         self.space_after_alt_bar = 15
         if self.alt_bar then
             -- Begin alternative progress bar
