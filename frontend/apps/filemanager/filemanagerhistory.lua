@@ -264,6 +264,7 @@ function FileManagerHistory:onShowHist(search_info)
     -- end
 
     self.hist_menu = BookList:new{
+        title = self.hist_menu_title,
         title_bar_left_icon = "appbar.menu",
         onLeftButtonTap = function() self:showHistDialog() end,
         onMenuChoice = self.onMenuChoice,
