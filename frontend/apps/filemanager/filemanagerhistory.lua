@@ -513,12 +513,10 @@ function FileManagerHistory:onDoubleTapBottomRight(arg, ges_ev)
 end
 
 function FileManagerHistory:fetchStatusesOut(count)
+    local BookList = require("ui/widget/booklist")
     for _, v in ipairs(require("readhistory").hist) do
         local status
-        status = filemanagerutil.getStatus(v.file)
-        if not filter_text[status] then
-            status = "reading"
-        end
+        status = BookList.getBookStatus(v.file)
         if count then
             self.count[status] = self.count[status] + 1
         end
@@ -538,7 +536,7 @@ function FileManagerHistory:onShowHistMBR()
     local ReadHistory = require("readhistory")
     -- ReadHistory.hist = {}
     -- ReadHistory:reload(true)
-    self.hist_menu = Menu:new{
+    self.hist_menu = BookList:new{
         ui = self.ui,
         covers_fullscreen = true, -- hint for UIManager:_repaint()
         is_borderless = true,
@@ -572,7 +570,7 @@ function FileManagerHistory:onShowHistTBR()
     local ReadHistory = require("readhistory")
     -- ReadHistory.hist = {}
     -- ReadHistory:reload(true)
-    self.hist_menu = Menu:new{
+    self.hist_menu = BookList:new{
         ui = self.ui,
         covers_fullscreen = true, -- hint for UIManager:_repaint()
         is_borderless = true,

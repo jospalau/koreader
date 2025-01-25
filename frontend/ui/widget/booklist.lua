@@ -95,18 +95,28 @@ function BookList.getDocSettings(file)
 end
 
 function BookList.getBookStatus(file)
-    local book_info = BookList.getBookInfo(file)
-    return book_info.been_opened and book_info.status or "new"
+    if DocSettings:hasSidecarFile(file) then
+        local summary = DocSettings:open(file):readSetting("summary")
+        if summary and summary.status and summary.status ~= "" then
+            return summary.status
+        end
+        return "reading"
+    end
+    -- Default status was new, now is call mbr
+    return "mbr"
+    -- local book_info = BookList.getBookInfo(file)
+    -- return book_info.been_opened and book_info.status or "new"
 end
 
 function BookList.getBookStatusString(status, with_prefix)
     local status_string = ({
-        new       = _("New"),      -- no sidecar file
+        mbr       = _("MBR"),      -- no sidecar file. No sidecar and in considered mbr
         reading   = _("Reading"),  -- doc_settings.summary.status
         abandoned = _("On hold"),  -- doc_settings.summary.status
         complete  = _("Finished"), -- doc_settings.summary.status
         deleted   = _("Deleted"),
         all       = _("All"),
+        tbr  = _("TBR"),
     })[status]
     return with_prefix and T(_("Status: %1"), status_string:lower()) or status_string
 end

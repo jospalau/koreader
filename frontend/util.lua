@@ -1744,7 +1744,8 @@ function util.getList(search_string, search_finished, search_tbr, search_mbr)
                             if string.find(f, search_string) then
                                 table.insert(files, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
                                 local filemanagerutil = require("apps/filemanager/filemanagerutil")
-                                if filemanagerutil.getStatus(fullpath) == "complete" then
+                                local BookList = require("ui/widget/booklist")
+                                if BookList.getBookStatus(fullpath) == "complete" then
                                     table.insert(files_finished, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
                                     local last_modified_date = filemanagerutil.getLastModified(fullpath)
                                     if last_modified_date then
@@ -1761,8 +1762,8 @@ function util.getList(search_string, search_finished, search_tbr, search_mbr)
                                         end
                                     end
                                 end
-                                local filemanagerutil = require("apps/filemanager/filemanagerutil")
-                                if filemanagerutil.getStatus(fullpath) == "tbr" then
+                                local BookList = require("ui/widget/booklist")
+                                if BookList.getBookStatus(fullpath) == "tbr" then
                                     table.insert(files_tbr, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
                                 end
                                 local in_history =  require("readhistory"):getIndexByFile(fullpath)

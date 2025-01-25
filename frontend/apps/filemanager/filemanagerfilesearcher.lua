@@ -307,10 +307,10 @@ function FileSearcher:doSearchCompleted(show_complete, show_recent, page, callba
         if (show_complete) then
             local table_complete = {}
             for key, value in ipairs(FileSearcher.search_results) do
-                if DocSettings:hasSidecarFile(value.path) then
+                if require("docsettings"):hasSidecarFile(value.path) then
                     -- local stats = doc_settings:readSetting("stats")
                     -- local book_props = require("apps/filemanager/filemanagerbookinfo").getDocProps(value.path).description
-                    local doc_settings = DocSettings:open(value.path)
+                    local doc_settings = require("docsettings"):open(value.path)
                     local status = doc_settings:readSetting("summary").status
                     local modified_date = doc_settings:readSetting("summary").modified
                     if status == "complete" then

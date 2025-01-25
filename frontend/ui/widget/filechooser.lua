@@ -354,14 +354,14 @@ function FileChooser:getListItem(dirpath, f, fullpath, attributes, collate)
         if require("readhistory"):getIndexByFile(fullpath) then
             item.in_history = true
         end
-        if filemanagerutil.getStatus(fullpath) == "tbr" then
+        if BookList.getBookStatus(fullpath) == "tbr" then
             item.in_tbr = true
-        elseif filemanagerutil.getStatus(fullpath) == "complete" then
+        elseif BookList.getBookStatus(fullpath) == "complete" then
             item.is_finished = true
 
-        elseif filemanagerutil.getStatus(fullpath) == "abandoned" then
+        elseif BookList.getBookStatus(fullpath) == "abandoned" then
             item.is_paused = true
-        elseif filemanagerutil.getStatus(fullpath) == "reading" then
+        elseif BookList.getBookStatus(fullpath) == "reading" then
             item.is_being_read = true
         end
 

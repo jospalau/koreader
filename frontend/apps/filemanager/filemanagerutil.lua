@@ -98,6 +98,7 @@ function filemanagerutil.resetDocumentSettings(file)
     end
 end
 
+-- Moved to booklist.lua
 -- -- Get a document status ("new", "reading", "complete", or "abandoned")
 -- function filemanagerutil.getStatus(file)
 --     if DocSettings:hasSidecarFile(file) then

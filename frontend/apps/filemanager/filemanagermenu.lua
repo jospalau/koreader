@@ -134,11 +134,11 @@ function FileManagerMenu:onOpenLastDoc()
         })
         return
     end
-
-    if filemanagerutil.getStatus(last_file) ~= "reading" then
+    local BookList = require("ui/widget/booklist")
+    if BookList.getBookStatus(last_file) ~= "reading" then
         local InfoMessage = require("ui/widget/infomessage")
         UIManager:show(InfoMessage:new{
-            text = _("This book is not currently being read"),
+            text = _("This book is not currently being read, is " .. BookList.getBookStatusString(BookList.getBookStatus(last_file))),
         })
         local FileManager = require("apps/filemanager/filemanager")
         FileManager.instance.history:onShowHist()

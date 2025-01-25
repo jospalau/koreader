@@ -344,7 +344,8 @@ function FileManagerCollection:showCollDialog()
         }},
         {}, -- separator
         {
-            genFilterByStatusButton("new"),
+            genFilterByStatusButton("mbr"),
+            genFilterByStatusButton("tbr"),
             genFilterByStatusButton("reading"),
         },
         {
