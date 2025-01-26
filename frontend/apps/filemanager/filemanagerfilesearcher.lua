@@ -658,7 +658,8 @@ function FileSearcher:showFileDialog(item, callback)
             self.search_menu.item_table[index[file]].text = status .. select(2, util.splitFilePathName(file))
         else
             self.search_menu.item_table[index[file]].in_history = require("readhistory"):getIndexByFile(file) ~= nil
-            self.search_menu.item_table[index[file]].bold = to_status
+            self.search_menu.item_table[index[file]].bold = true
+            -- to_status is true/false depending if we checked Add to the history as MBR. We don't use it since both will be bold
         end
 
 
