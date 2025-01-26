@@ -1212,10 +1212,9 @@ function Menu:updateItems(select_number, no_recalculate_dimen)
         end
 
         local mandatory = item.mandatory
-        if mandatory and self.calibre_data[item.text] and self.calibre_data[item.text]["words"] and self.calibre_data[item.text]["words"] ~= "" then
-            mandatory = mandatory .. " " .. string.format("%+7s", self.calibre_data[item.text]["words"] .. "w")
+        if mandatory and self.calibre_data[item.text] and self.calibre_data[item.text]["words"] and self.calibre_data[item.text]["words"] ~= "" and self.calibre_data[item.text]["pubdate"] and self.calibre_data[item.text]["pubdate"] ~= "" then
+            mandatory = string.format("%+4s", self.calibre_data[item.text]["pubdate"]:sub(1, 4)) .. " - " .. string.format("%+3s",tostring(math.floor(self.calibre_data[item.text]["words"]/1000))) .."kw"
         end
-
         local item_tmp = MenuItem:new{
             idx = index,
             show_parent = self.show_parent,
