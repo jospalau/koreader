@@ -213,7 +213,7 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                 summary.status = to_status
                 filemanagerutil.saveSummary(doc_settings_or_file, summary)
                 BookList.setBookInfoCacheProperty(file, "status", to_status)
-                caller_callback()
+                caller_callback(file, to_status)
                 if to_status == "complete" or to_status == "tbr" then
                     local util = require("util")
                     util.generateStats()
@@ -288,7 +288,7 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
                         BookList.setBookInfoCacheProperty(file, "been_opened", false)
                         require("readhistory"):fileSettingsPurged(file)
                     end
-                    caller_callback()
+                    caller_callback(file, check_button_mbr.checked)
                     if check_button_mbr.checked then
                         if G_reader_settings:isTrue("top_manager_infmandhistory") then
                             local util = require("util")

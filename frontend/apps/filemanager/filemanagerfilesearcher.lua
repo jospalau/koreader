@@ -315,7 +315,7 @@ function FileSearcher:doSearchCompleted(show_complete, show_recent, page, callba
                     local modified_date = doc_settings:readSetting("summary").modified
                     if status == "complete" then
                         value.modified_date = modified_date
-                        value.text = modified_date .. " " .. value.text:gsub(string.match(value.text , "^.+(%..+)$"), "")
+                        value.text = modified_date .. " " .. value.text --.. value.text:gsub(string.match(value.text , "^.+(%..+)$"), "")
                         table_complete[#table_complete+1] = value
                     end
                 end
@@ -507,76 +507,84 @@ function FileSearcher:onShowSearchResults(not_cached, results, show_recent, page
         -- end
 
 
+        -- Not used since we are not reopening the file searcher
         -- If we are not in history and not in reader we want to go to a folder if a folder is selected and open history if a file is manipulated
         -- If we are in history and in fm we want to go to a folder is a folder is selected and remain in history if a file manipulated
         -- If we are in reader there is no menu for File Search so nothing to be done
         -- If we are in history and in reader we want to go to a folder if a folder is selected and remain in history if a file is manipulated
         self.search_menu.close_callback = function(file, actioned)
-            self.selected_files = nil
-            -- Coming nil when closing the search results list window with esc or clicking on X, Menu:onCloseAllMenus() in menu.lua
-            if file == nil then
-                UIManager:close(self.search_menu)
-                return
-            end
-
-            -- If history open in previous search menu, refresh it
-            if self.search_menu.ui.history.hist_menu then
-                self.ui.history:fetchStatuses(false)
-                self.ui.history:updateItemTable()
-
-                if self.ui.file_chooser then
-                    self.ui.file_chooser:refreshPath()
-                end
-                -- self.search_menu.ui.history.hist_menu.close_callback()
-                -- local Event = require("ui/event")
-                -- UIManager:broadcastEvent(Event:new("CloseSearchMenu", false, self.search_string))
-                -- return
-            end
-
-            -- -- If in reader and in history refresh it
-            -- if require("apps/reader/readerui").instance and require("apps/reader/readerui").instance.history then
-            --     -- UIManager:close(require("apps/reader/readerui").instance.history)
-            --     self.ui.history:fetchStatuses(false)
-            --     self.ui.history:updateItemTable()
+            -- self.selected_files = nil
+            -- -- Coming nil when closing the search results list window with esc or clicking on X, Menu:onCloseAllMenus() in menu.lua
+            -- if file == nil then
+            --     UIManager:close(self.search_menu)
+            --     return
             -- end
 
+            -- -- If history open in previous search menu, refresh it
+            -- if self.search_menu.ui.history.hist_menu then
+            --     self.ui.history:fetchStatuses(false)
+            --     self.ui.history:updateItemTable()
 
-            -- If file is not false, it is a file or a directory
-            if lfs.attributes(file, "mode") == "file" then
-                -- Coming actioned = true when we select a file and we action anything different to Show folder
-                -- self.close_callback(file, true) in FileSearcher:onMenuSelect(item, callback)
-                if actioned then
-                    -- We want to go to the history in this case if no history to show what we changed
-                    -- if not self.search_menu.ui.history.hist_menu and not require("apps/reader/readerui").instance then
-                    --     local FileManager = require("apps/filemanager/filemanager")
-                    --     FileManager.instance.history:onShowHist()
-                    -- end
-                    -- -- If no history we open it
-                    -- if not self.search_menu.ui.history.hist_menu and require("apps/reader/readerui").instance then
-                    --     local FileManager = require("apps/filemanager/filemanager")
-                    --     require("apps/reader/readerui").instance.history:onShowHist()
-                    -- end
+            --     if self.ui.file_chooser then
+            --         self.ui.file_chooser:refreshPath()
+            --     end
+            --     -- self.search_menu.ui.history.hist_menu.close_callback()
+            --     -- local Event = require("ui/event")
+            --     -- UIManager:broadcastEvent(Event:new("CloseSearchMenu", false, self.search_string))
+            --     -- return
+            -- end
 
-                    -- if self.search_menu.ui.history.hist_menu then
-                    --     self.search_menu.ui.history.hist_menu.close_callback()
-                    -- end
-                    local Event = require("ui/event")
-                    UIManager:broadcastEvent(Event:new("CloseSearchMenu", self.recent, self.search_string))
-                    return
-                else
-                    -- When we select a file and we action Show folder. Closing history if it is open, to go to the folder containing the file
+            -- -- -- If in reader and in history refresh it
+            -- -- if require("apps/reader/readerui").instance and require("apps/reader/readerui").instance.history then
+            -- --     -- UIManager:close(require("apps/reader/readerui").instance.history)
+            -- --     self.ui.history:fetchStatuses(false)
+            -- --     self.ui.history:updateItemTable()
+            -- -- end
+
+
+            -- -- If file is not false, it is a file or a directory
+            -- if lfs.attributes(file, "mode") == "file" then
+            --     -- Coming actioned = true when we select a file and we action anything different to Show folder
+            --     -- self.close_callback(file, true) in FileSearcher:onMenuSelect(item, callback)
+            --     if actioned then
+            --         -- We want to go to the history in this case if no history to show what we changed
+            --         -- if not self.search_menu.ui.history.hist_menu and not require("apps/reader/readerui").instance then
+            --         --     local FileManager = require("apps/filemanager/filemanager")
+            --         --     FileManager.instance.history:onShowHist()
+            --         -- end
+            --         -- -- If no history we open it
+            --         -- if not self.search_menu.ui.history.hist_menu and require("apps/reader/readerui").instance then
+            --         --     local FileManager = require("apps/filemanager/filemanager")
+            --         --     require("apps/reader/readerui").instance.history:onShowHist()
+            --         -- end
+
+            --         -- if self.search_menu.ui.history.hist_menu then
+            --         --     self.search_menu.ui.history.hist_menu.close_callback()
+            --         -- end
+            --         local Event = require("ui/event")
+            --         UIManager:broadcastEvent(Event:new("CloseSearchMenu", self.recent, self.search_string))
+            --         return
+            --     else
+            --         -- When we select a file and we action Show folder. Closing history if it is open, to go to the folder containing the file
+            --         if self.search_menu.ui.history.hist_menu then
+            --             self.search_menu.ui.history.hist_menu.close_callback()
+            --         end
+            --     end
+            -- else -- Directory
+            --     -- Coming a directory when we select a directory and we action Show folder. Closing history if open to go to the folder
+            --     if self.search_menu.ui.history.hist_menu then
+            --         self.search_menu.ui.history.hist_menu.close_callback()
+            --     end
+
+            -- end
+            if file and ((lfs.attributes(file, "mode") == "file" and not actioned) or lfs.attributes(file, "mode") == "directory") then
+                if lfs.attributes(file, "mode") == "directory" then
                     if self.search_menu.ui.history.hist_menu then
                         self.search_menu.ui.history.hist_menu.close_callback()
                     end
                 end
-            else -- Directory
-                -- Coming a directory when we select a directory and we action Show folder. Closing history if open to go to the folder
-                if self.search_menu.ui.history.hist_menu then
-                    self.search_menu.ui.history.hist_menu.close_callback()
-                end
-
+                UIManager:close(self.search_menu)
             end
-            UIManager:close(self.search_menu)
         end
     -- end
 
@@ -612,12 +620,55 @@ end
 function FileSearcher:showFileDialog(item, callback)
     local file = item.path
     local bookinfo, dialog
-    local function close_dialog_callback()
+    local function close_dialog_callback(file, to_status)
         UIManager:close(dialog)
         -- local FileManager = require("apps/filemanager/filemanager")
         -- FileManager.instance.history:onShowHist()
         -- Pass false instead of the file
         self.search_menu.close_callback(file, true)
+
+        local index={}
+        for k, v in pairs(self.search_menu.item_table) do
+            index[v.path] = k
+        end
+
+        self.search_menu.item_table[index[file]].in_tbr = false
+        self.search_menu.item_table[index[file]].is_finished = false
+        self.search_menu.item_table[index[file]].is_paused = false
+        self.search_menu.item_table[index[file]].is_being_read = false
+        self.search_menu.item_table[index[file]].in_history = false
+        self.search_menu.item_table[index[file]].bold = false
+        if type(to_status) == "string"  then -- MBR, callback called from different place
+            local status = ""
+            if to_status == "tbr" then
+                self.search_menu.item_table[index[file]].in_tbr = true
+            end
+
+            if to_status == "complete" then
+                self.search_menu.item_table[index[file]].is_finished = true
+            end
+
+            if to_status == "abandoned" then
+                self.search_menu.item_table[index[file]].is_paused = true
+            end
+
+            if to_status == "reading" then
+                self.search_menu.item_table[index[file]].is_being_read = true
+            end
+            self.search_menu.item_table[index[file]].text = status .. select(2, util.splitFilePathName(file))
+        else
+            self.search_menu.item_table[index[file]].in_history = require("readhistory"):getIndexByFile(file) ~= nil
+            self.search_menu.item_table[index[file]].bold = to_status
+        end
+
+
+        self.search_menu:onGotoPage(self.search_menu.page)
+        self.search_hash = ""
+
+        if self.ui and self.ui.history.hist_menu then
+            self.ui.history:fetchStatuses(false)
+            self.ui.history:updateItemTable()
+        end
 
         -- if self.ui.history.hist_menu then
         --     self.ui.history.hist_menu.close_callback()
