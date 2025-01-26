@@ -76,6 +76,7 @@ local FileChooser = BookList:extend{
     },
     path_items = nil, -- hash, store last browsed location (item index) for each path
     goto_letter = true,
+    calibre_data = util.loadCalibreData(),
     collates = {
         strcoll = {
             text = _("name"),
@@ -244,6 +245,34 @@ local FileChooser = BookList:extend{
                 return item.opened and string.format("%d\u{202F}%%", 100 * item.percent_finished) or "–"
             end,
         },
+        publication_date = {
+            text = _("publication date"),
+            menu_order = 100,
+            can_collate_mixed = true,
+            init_sort_func = function(cache)
+                return function(a, b)
+                    if a.is_file and b.is_file then
+                        return a.pubdate < b.pubdate
+                    else
+                        return ffiUtil.strcoll(a.text, b.text)
+                    end
+                end, cache
+            end,
+        },
+        word_count = {
+            text = _("word count"),
+            menu_order = 110,
+            can_collate_mixed = true,
+            init_sort_func = function(cache)
+                return function(a, b)
+                    if a.is_file and b.is_file then
+                        return a.words < b.words
+                    else
+                        return ffiUtil.strcoll(a.text, b.text)
+                    end
+                end, cache
+            end,
+        },
     },
 }
 
@@ -338,6 +367,16 @@ function FileChooser:getListItem(dirpath, f, fullpath, attributes, collate)
         local show_file_in_bold = G_reader_settings:readSetting("show_file_in_bold")
         item.bidi_wrap_func = BD.filename
         item.is_file = true
+
+        item.pubdate = 0
+        if self.calibre_data and self.calibre_data[f] and self.calibre_data[f]["pubdate"] then
+            item.pubdate = tonumber(self.calibre_data[f]["pubdate"]:sub(1, 4))
+        end
+
+        item.words = 0
+        if self.calibre_data and self.calibre_data[f] and self.calibre_data[f]["words"] then
+            item.words = tonumber(math.floor(self.calibre_data[f]["words"]/1000))
+        end
         if collate.item_func ~= nil then
             collate.item_func(item)
         end
