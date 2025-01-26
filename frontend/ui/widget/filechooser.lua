@@ -251,11 +251,7 @@ local FileChooser = BookList:extend{
             can_collate_mixed = true,
             init_sort_func = function(cache)
                 return function(a, b)
-                    if a.is_file and b.is_file then
-                        return a.pubdate < b.pubdate
-                    else
-                        return ffiUtil.strcoll(a.text, b.text)
-                    end
+                    return a.pubdate < b.pubdate
                 end, cache
             end,
         },
@@ -265,11 +261,7 @@ local FileChooser = BookList:extend{
             can_collate_mixed = true,
             init_sort_func = function(cache)
                 return function(a, b)
-                    if a.is_file and b.is_file then
-                        return a.words < b.words
-                    else
-                        return ffiUtil.strcoll(a.text, b.text)
-                    end
+                    return a.words < b.words
                 end, cache
             end,
         },
@@ -360,6 +352,8 @@ function FileChooser:getListItem(dirpath, f, fullpath, attributes, collate)
         path = fullpath,
         attr = attributes,
     }
+    item.pubdate = 0
+    item.words = 0
     if attributes.mode == "file" then
         -- set to false to show all files in regular font
         -- set to "opened" to show opened files in bold
@@ -368,12 +362,10 @@ function FileChooser:getListItem(dirpath, f, fullpath, attributes, collate)
         item.bidi_wrap_func = BD.filename
         item.is_file = true
 
-        item.pubdate = 0
         if self.calibre_data and self.calibre_data[f] and self.calibre_data[f]["pubdate"] then
             item.pubdate = tonumber(self.calibre_data[f]["pubdate"]:sub(1, 4))
         end
 
-        item.words = 0
         if self.calibre_data and self.calibre_data[f] and self.calibre_data[f]["words"] then
             item.words = tonumber(math.floor(self.calibre_data[f]["words"]/1000))
         end

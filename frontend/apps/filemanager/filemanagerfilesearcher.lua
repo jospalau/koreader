@@ -205,7 +205,7 @@ end
 
 function FileSearcher:doSearch(callbackfunc)
     local search_hash = self.path .. (FileSearcher.search_string or "") ..
-        tostring(self.case_sensitive) .. tostring(self.include_subfolders) .. tostring(self.include_metadata)
+        tostring(self.case_sensitive) .. tostring(self.include_subfolders) .. tostring(self.include_metadata) .. select(2, FileChooser:getCollate())
     local not_cached = FileSearcher.search_hash ~= search_hash
     if not_cached then
         local Trapper = require("ui/trapper")
@@ -272,7 +272,7 @@ end
 -- function FileSearcher:onSearchSortCompleted(show_complete, show_recent, page, callback, sorted_size)
 function FileSearcher:doSearchCompleted(show_complete, show_recent, page, callback, sorted_size)
     local search_hash = self.path .. (FileSearcher.search_string or "") ..
-        tostring(self.case_sensitive) .. tostring(self.include_subfolders) .. tostring(self.include_metadata)
+        tostring(self.case_sensitive) .. tostring(self.include_subfolders) .. tostring(self.include_metadata) .. select(2, FileChooser:getCollate())
     local not_cached = true -- FileSearcher.search_hash ~= search_hash I don't want to cache for this case
     if not_cached then
         local Trapper = require("ui/trapper")
