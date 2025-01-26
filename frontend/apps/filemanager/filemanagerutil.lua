@@ -168,14 +168,15 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
         -- If we are not in the File Manager (we are in an opened book)
         -- don't allow to change the current reading book to the tbr
         -- because opened tbr books status is moved to reading when opening them (readerui.lua)
-        if to_status == "tbr" and ui and ui.document and ui.document.file and file == ui.document.file then
+        -- don´t allow to change to any status
+        if ui and ui.document and ui.document.file and file == ui.document.file then
             enabled = false
         else
-             enabled = status ~= to_status
+            enabled = status ~= to_status
         end
         return {
             text = BookList.getBookStatusString(to_status) .. (status == to_status and "  ✓" or ""),
-            enabled = status ~= to_status,
+            enabled = enabled,
             callback = function()
                 if to_status == "complete" then
                     require("readhistory"):removeItemByPath(file)
