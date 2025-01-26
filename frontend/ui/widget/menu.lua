@@ -251,6 +251,7 @@ function MenuItem:init()
         text = "☆ " .. " " .. text
     end
 
+    -- This is for simple lists and it is not used since it is already showed next to the file size using the mandatory property for each menu entry created
     -- if self.words ~= "" then
     --     text = text .. ", " .. self.words .. "w"
     -- end
@@ -1211,8 +1212,8 @@ function Menu:updateItems(select_number, no_recalculate_dimen)
         end
 
         local mandatory = item.mandatory
-        if mandatory and self.calibre_data[Menu.getMenuText(item)] and self.calibre_data[Menu.getMenuText(item)]["words"] and self.calibre_data[Menu.getMenuText(item)]["words"] ~= "" then
-            mandatory = mandatory .. " " .. string.format("%+7s", self.calibre_data[Menu.getMenuText(item)]["words"] .. "w")
+        if mandatory and self.calibre_data[item.text] and self.calibre_data[item.text]["words"] and self.calibre_data[item.text]["words"] ~= "" then
+            mandatory = mandatory .. " " .. string.format("%+7s", self.calibre_data[item.text]["words"] .. "w")
         end
 
         local item_tmp = MenuItem:new{
@@ -1233,8 +1234,8 @@ function Menu:updateItems(select_number, no_recalculate_dimen)
             is_finished =item.is_finished == true,
             is_paused = item.is_paused == true,
             is_being_read = item.is_being_read == true,
-            pages = self.calibre_data[Menu.getMenuText(item)] and self.calibre_data[Menu.getMenuText(item)]["pages"] or "",
-            words = self.calibre_data[Menu.getMenuText(item)] and self.calibre_data[Menu.getMenuText(item)]["words"] or "",
+            pages = self.calibre_data[item.text] and self.calibre_data[item.text]["pages"] or "",
+            words = self.calibre_data[item.text] and self.calibre_data[item.text]["words"] or "",
             dim = item.dim,
             font_size = self.font_size_search_elements or self.font_size,
             infont_size = self.items_mandatory_font_size or (self.font_size - 4),
