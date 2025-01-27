@@ -819,6 +819,11 @@ function ReaderUI:showReaderCoroutine(file, provider, seamless)
         timeout = 0.0,
         invisible = seamless,
     })
+    if G_reader_settings:isTrue("top_manager_infmandhistory") then
+        require("apps/filemanager/filemanager").all_files[file][1] = "reading"
+        local util = require("util")
+        util.generateStats()
+    end
     -- doShowReader might block for a long time, so force repaint here
     UIManager:forceRePaint()
     UIManager:nextTick(function()
@@ -1071,6 +1076,13 @@ function ReaderUI:onHome()
                 doc_settings:purge()
                 require("ui/widget/booklist").resetBookInfoCache(file)
                 -- require("bookinfomanager"):deleteBookInfo(file)
+
+
+                if G_reader_settings:isTrue("top_manager_infmandhistory") then
+                    require("apps/filemanager/filemanager").all_files[file][1] = "mbr"
+                    local util = require("util")
+                    util.generateStats()
+                end
 
                 -- UIManager:broadcastEvent(Event:new("InvalidateMetadataCache", file))
                 -- UIManager:broadcastEvent(Event:new("DocSettingsItemsChanged", file))
