@@ -181,6 +181,8 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                 if to_status == "complete" then
                     require("readhistory"):removeItemByPath(file)
                 end
+
+                -- This is just for tbr, for abandoned (paused books) we don't want to remove the book settings
                 local has_sidecar_file = DocSettings:hasSidecarFile(file)
                 if to_status == "tbr" then
                     if has_sidecar_file then
@@ -207,10 +209,22 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                     require("readhistory"):addItem(file, os.time())
                 end
 
+                -- This is not necessary but I leave it since it is a way to refresh both history and fm
+                -- require("ui/widget/booklist").resetBookInfoCache(file)
+                -- local ui = require("apps/filemanager/filemanager").instance
+                -- if ui.history.hist_menu then
+                --     ui.history:updateItemTable()
+                -- end
+                -- if ui.instance then
+                --     ui.instance:onRefresh()
+                -- end
+
+                -- Instead the following
                 summary.status = to_status
                 filemanagerutil.saveSummary(doc_settings_or_file, summary)
-                BookList.setBookInfoCacheProperty(file, "status", to_status)
-                caller_callback(file, to_status)
+                -- require("bookinfomanager"):deleteBookInfo(file)
+                require("ui/widget/booklist").resetBookInfoCache(file)
+
                 -- if to_status == "complete" or to_status == "tbr" then
                 --     local util = require("util")
                 --     util.generateStats()
@@ -227,17 +241,9 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                     end
 
                     local util = require("util")
-
                     util.generateStats()
                 end
-                require("ui/widget/booklist").resetBookInfoCache(file)
-                local ui = require("apps/filemanager/filemanager").instance
-                if ui.history.hist_menu then
-                    ui.history:updateItemTable()
-                end
-                if ui.instance then
-                    ui.instance:onRefresh()
-                end
+                caller_callback(file, to_status)
             end,
         }
     end
@@ -308,7 +314,6 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
                         BookList.setBookInfoCacheProperty(file, "been_opened", false)
                         require("readhistory"):fileSettingsPurged(file)
                     end
-                    caller_callback(file, check_button_mbr.checked)
                     if G_reader_settings:isTrue("top_manager_infmandhistory") then
                         if check_button_mbr.checked then
                             require("apps/filemanager/filemanager").all_files[file][1] = "mbr"
@@ -318,6 +323,7 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
                         local util = require("util")
                         util.generateStats()
                     end
+                    caller_callback(file, check_button_mbr.checked)
                 end,
             }
             check_button_mbr = CheckButton:new{
