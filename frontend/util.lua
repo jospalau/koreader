@@ -1783,26 +1783,20 @@ end
 -- end
 
 function util.getList(search_string, search_finished, search_tbr, search_mbr)
-    local FileChooser = require("ui/widget/filechooser")
-    local Utf8Proc = require("ffi/utf8proc")
-    local DocumentRegistry = require("document/documentregistry")
     local lfs = require("libs/libkoreader-lfs")
-    local no_metadata_count = 0
-    local sys_folders = { -- do not search in sys_folders
-        ["/dev"] = true,
-        ["/proc"] = true,
-        ["/sys"] = true,
-    }
+    local DocSettings = require("docsettings")
+    local ReadHistory = require("readhistory")
+    local BookList = require("ui/widget/booklist")
+
     local dirs, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year, files_finished_last_year = {}, {}, {}, {}, {}, {}, {}, {}
-    local scan_dirs = {G_reader_settings:readSetting("home_dir")}
     local cur_month = os.date("%m")
     local cur_year = os.date("%Y")
     for fullpath, _ in pairs(require("apps/filemanager/filemanager").all_files) do
         table.insert(files, fullpath)
-        local attributes = lfs.attributes(fullpath) or {}
         local filemanagerutil = require("apps/filemanager/filemanagerutil")
         local BookList = require("ui/widget/booklist")
-        if BookList.getBookStatus(fullpath) == "complete" then
+        local book_status = BookList.getBookStatus(fullpath)
+        if book_status == "complete" then
             table.insert(files_finished, fullpath)
             local last_modified_date = filemanagerutil.getLastModified(fullpath)
             if last_modified_date then
@@ -1819,12 +1813,10 @@ function util.getList(search_string, search_finished, search_tbr, search_mbr)
                 end
             end
         end
-        local BookList = require("ui/widget/booklist")
-        if BookList.getBookStatus(fullpath) == "tbr" then
+        if book_status == "tbr" then
             table.insert(files_tbr, fullpath)
         end
-        local in_history =  require("readhistory"):getIndexByFile(fullpath)
-        local DocSettings = require("docsettings")
+        local in_history =  ReadHistory:getIndexByFile(fullpath)
         local has_sidecar_file = DocSettings:hasSidecarFile(fullpath)
         if in_history and not has_sidecar_file then
             table.insert(files_mbr, fullpath)
