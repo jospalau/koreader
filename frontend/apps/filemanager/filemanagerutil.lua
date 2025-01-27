@@ -194,7 +194,7 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                         if (type(doc_settings_or_file) == "table") then
                             doc_settings_or_file.data = {}
                             doc_settings_or_file:flush()
-                          else
+                        else
                             local doc_settings = DocSettings:open(file)
                             doc_settings.data.stats = {}
                             -- When coming from the search list because we set a book to be in tbr from there
@@ -203,13 +203,16 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                             -- Then when we go back to the FM view, we will have the cover without percentage if it was with percentage
                             doc_settings.data.percent_finished = nil
                             doc_settings:flush()
-                          end
+                        end
                     end
                     require("readhistory"):removeItemByPath(file)
                     require("readhistory"):addItem(file, os.time())
                 end
 
-                -- This is not necessary but I leave it since it is a way to refresh both history and fm
+                summary.status = to_status
+                filemanagerutil.saveSummary(doc_settings_or_file, summary)
+
+                -- This is not necessary since there is a better way to refresh both history and fm:
                 -- require("ui/widget/booklist").resetBookInfoCache(file)
                 -- local ui = require("apps/filemanager/filemanager").instance
                 -- if ui.history.hist_menu then
@@ -219,16 +222,15 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                 --     ui.instance:onRefresh()
                 -- end
 
-                -- Instead the following
-                summary.status = to_status
-                filemanagerutil.saveSummary(doc_settings_or_file, summary)
-                -- require("bookinfomanager"):deleteBookInfo(file)
+                -- We just have to reset the cache:
                 require("ui/widget/booklist").resetBookInfoCache(file)
+                -- It is enough with this. When we reset the cache, this happens: BookList.book_info_cache[file] = nil
+                -- So when BookList.getBookInfo() is invoked, the cached book information won't be found and it will be retrieved
+                -- Empty if not sidecar: BookList.book_info_cache[file] = { been_opened = false }
+                -- Or with the sidecar information if sidecar: BookList.setBookInfoCache(file, DocSettings:open(file))
+                -- BookList.getBookInfo() is invoked in many places to retrieve the proper updated information
+                -- require("bookinfomanager"):deleteBookInfo(file)
 
-                -- if to_status == "complete" or to_status == "tbr" then
-                --     local util = require("util")
-                --     util.generateStats()
-                -- end
                 if G_reader_settings:isTrue("top_manager_infmandhistory") then
                     require("apps/filemanager/filemanager").all_files[file][1] = to_status
                     local pattern = "(%d+)-(%d+)-(%d+)"
