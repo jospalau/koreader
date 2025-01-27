@@ -227,7 +227,16 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                     end
 
                     local util = require("util")
+
                     util.generateStats()
+                end
+                require("ui/widget/booklist").resetBookInfoCache(file)
+                local ui = require("apps/filemanager/filemanager").instance
+                if ui.history.hist_menu then
+                    ui.history:updateItemTable()
+                end
+                if ui.instance then
+                    ui.instance:onRefresh()
                 end
             end,
         }
