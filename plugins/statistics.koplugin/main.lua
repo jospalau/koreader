@@ -149,21 +149,6 @@ function ReaderStatistics:init()
         ["Kobo_monza"] = 12 -- Libra Colour
     }
 
-    self.devices_reversed = {
-        [1] = "LB",
-        [2] = "KS",
-        [3] = "KC2e",
-        [4] = "KP",
-        [5] = "KB",
-        [6] = "BP",
-        [7] = "PB",
-        [8] = "Phy",
-        [9] = "KE",
-        [10] = "KCBW",
-        [11] = "KCC",
-        [12] = "KLC"
-    }
-
     if Device:isPocketBook() and not ReaderStatistics.preserve then
         os.execute("killall taskmgr.app")
     end
@@ -2728,11 +2713,10 @@ function ReaderStatistics:getBooksFromPeriod(period_begin, period_end, callback_
     local results = {}
     local sql_stmt_res_book = [[
         SELECT  book_tbl.title AS title,
-                count(distinct page_stat_tbl.total_pages),
+                count(distinct page_stat_tbl.page),
                 sum(page_stat_tbl.duration),
-                book_tbl.id,
-                id_device
-        FROM    wpm_stat_data AS page_stat_tbl, book AS book_tbl
+                book_tbl.id
+        FROM    page_stat AS page_stat_tbl, book AS book_tbl
         WHERE   page_stat_tbl.id_book=book_tbl.id AND page_stat_tbl.start_time BETWEEN %d AND %d
         GROUP   BY book_tbl.id
         ORDER   BY book_tbl.last_open DESC;
@@ -2747,7 +2731,7 @@ function ReaderStatistics:getBooksFromPeriod(period_begin, period_end, callback_
     local user_duration_format = G_reader_settings:readSetting("duration_format")
     for i=1, #result_book.title do
         table.insert(results, {
-            self.devices_reversed[tonumber(result_book[5][i])] .. " " .. result_book[1][i],
+            result_book[1][i],
             T(N_("%1 (1 page)", "%1 (%2 pages)", tonumber(result_book[2][i])), datetime.secondsToClockDuration(user_duration_format, tonumber(result_book[3][i]), false), tonumber(result_book[2][i])),
             duration = tonumber(result_book[3][i]),
             book_id = tonumber(result_book[4][i]),
