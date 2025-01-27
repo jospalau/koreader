@@ -1638,17 +1638,13 @@ end
 
 function util.getListAll()
     local FileChooser = require("ui/widget/filechooser")
-    local Utf8Proc = require("ffi/utf8proc")
     local DocumentRegistry = require("document/documentregistry")
     local lfs = require("libs/libkoreader-lfs")
-    local no_metadata_count = 0
-    local sys_folders = { -- do not search in sys_folders
-        ["/dev"] = true,
-        ["/proc"] = true,
-        ["/sys"] = true,
-    }
+    local DocSettings = require("docsettings")
+    local ReadHistory = require("readhistory")
+    local BookList = require("ui/widget/booklist")
+    local filemanagerutil = require("apps/filemanager/filemanagerutil")
     local collate = FileChooser:getCollate()
-
     local search_string = ".*.epub"
 
     local files = {}
@@ -1676,7 +1672,23 @@ function util.getListAll()
                         and (FileChooser.show_unsupported or DocumentRegistry:hasProvider(fullpath))
                         and FileChooser:show_file(f) then
                             if string.find(f, search_string) then
-                                table.insert(files, FileChooser:getListItem(nil, f, fullpath, attributes, collate).path)
+                                local pattern = "(%d+)-(%d+)-(%d+)"
+                                local last_modified_date = filemanagerutil.getLastModified(fullpath)
+                                local ryear, rmonth, rday = 0, 0, 0
+                                if last_modified_date then
+                                    ryear, rmonth, rday = last_modified_date:match(pattern)
+                                end
+
+                                local book_status = BookList.getBookStatus(fullpath)
+                                if book_status ~= "mbr" then
+                                    print(book_status)
+                                end
+                                local in_history =  ReadHistory:getIndexByFile(fullpath)
+                                -- local has_sidecar_file = DocSettings:hasSidecarFile(fullpath)
+                                if book_status == "mbr" and in_history == nil then
+                                    book_status = "new"
+                                end
+                                table.insert(files, {FileChooser:getListItem(nil, f, fullpath, attributes, collate).path, book_status, ryear, rmonth, rday})
                                 -- files[#files + 1] = FileChooser:getListItem(nil, f, fullpath, attributes, collate).path
                             end
                     end
@@ -1687,9 +1699,9 @@ function util.getListAll()
     end
 
     local t = {}
-    for i=1, #files do
-        local szKey = files[i];
-        t[szKey] = true
+    for i = 1, #files do
+        local szKey = files[i][1];
+        t[szKey] = {files[i][2], files[i][3], files[i][4], files[i][5]}
     end
     return t
 end
@@ -1783,44 +1795,35 @@ end
 -- end
 
 function util.getList(search_string, search_finished, search_tbr, search_mbr)
-    local lfs = require("libs/libkoreader-lfs")
-    local DocSettings = require("docsettings")
-    local ReadHistory = require("readhistory")
-    local BookList = require("ui/widget/booklist")
-
     local dirs, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year, files_finished_last_year = {}, {}, {}, {}, {}, {}, {}, {}
     local cur_month = os.date("%m")
     local cur_year = os.date("%Y")
-    for fullpath, _ in pairs(require("apps/filemanager/filemanager").all_files) do
+    for fullpath, file in pairs(require("apps/filemanager/filemanager").all_files) do
+        local book_status = file[1]
+        local ryear = file[2]
+        local rmonth = file[3]
+        local rday = file[4]
+
         table.insert(files, fullpath)
-        local filemanagerutil = require("apps/filemanager/filemanagerutil")
-        local BookList = require("ui/widget/booklist")
-        local book_status = BookList.getBookStatus(fullpath)
         if book_status == "complete" then
             table.insert(files_finished, fullpath)
-            local last_modified_date = filemanagerutil.getLastModified(fullpath)
-            if last_modified_date then
-                local pattern = "(%d+)-(%d+)-(%d+)"
-                local ryear, rmonth, rday = last_modified_date:match(pattern)
-                if cur_year == ryear then
-                    table.insert(files_finished_this_year, fullpath)
-                    if cur_month == rmonth then
-                        table.insert(files_finished_this_month, fullpath)
-                    end
+            if cur_year == ryear then
+                table.insert(files_finished_this_year, fullpath)
+                if cur_month == rmonth then
+                    table.insert(files_finished_this_month, fullpath)
                 end
-                if tostring(tonumber(cur_year) - 1) == ryear then
-                    table.insert(files_finished_last_year, fullpath)
-                end
+            end
+            if tostring(tonumber(cur_year) - 1) == ryear then
+                table.insert(files_finished_last_year, fullpath)
             end
         end
         if book_status == "tbr" then
             table.insert(files_tbr, fullpath)
         end
-        local in_history =  ReadHistory:getIndexByFile(fullpath)
-        local has_sidecar_file = DocSettings:hasSidecarFile(fullpath)
-        if in_history and not has_sidecar_file then
+        if book_status == "mbr" then
             table.insert(files_mbr, fullpath)
         end
+
     end
     return dirs, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year, files_finished_last_year
 end

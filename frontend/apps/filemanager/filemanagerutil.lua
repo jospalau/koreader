@@ -180,10 +180,6 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
             callback = function()
                 if to_status == "complete" then
                     require("readhistory"):removeItemByPath(file)
-                    if G_reader_settings:isTrue("top_manager_infmandhistory") then
-                        local util = require("util")
-                        util.generateStats()
-                    end
                 end
                 local has_sidecar_file = DocSettings:hasSidecarFile(file)
                 if to_status == "tbr" then
@@ -219,8 +215,20 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                 --     local util = require("util")
                 --     util.generateStats()
                 -- end
-                local util = require("util")
-                util.generateStats()
+                if G_reader_settings:isTrue("top_manager_infmandhistory") then
+                    require("apps/filemanager/filemanager").all_files[file][1] = to_status
+                    if to_status == "complete" then
+                        local pattern = "(%d+)-(%d+)-(%d+)"
+                        local last_modified_date = filemanagerutil.getLastModified(file)
+                        local ryear, rmonth, rday = last_modified_date:match(pattern)
+                        require("apps/filemanager/filemanager").all_files[file][2] = ryear
+                        require("apps/filemanager/filemanager").all_files[file][3] = rmonth
+                        require("apps/filemanager/filemanager").all_files[file][4] = rday
+                    end
+
+                    local util = require("util")
+                    util.generateStats()
+                end
             end,
         }
     end
@@ -292,11 +300,14 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
                         require("readhistory"):fileSettingsPurged(file)
                     end
                     caller_callback(file, check_button_mbr.checked)
-                    if check_button_mbr.checked then
-                        if G_reader_settings:isTrue("top_manager_infmandhistory") then
-                            local util = require("util")
-                            util.generateStats()
+                    if G_reader_settings:isTrue("top_manager_infmandhistory") then
+                        if check_button_mbr.checked then
+                            require("apps/filemanager/filemanager").all_files[file][1] = "mbr"
+                        else
+                            require("apps/filemanager/filemanager").all_files[file][1] = ""
                         end
+                        local util = require("util")
+                        util.generateStats()
                     end
                 end,
             }
