@@ -1694,6 +1694,94 @@ function util.getListAll()
     return t
 end
 
+-- function util.getList(search_string, search_finished, search_tbr, search_mbr)
+--     local FileChooser = require("ui/widget/filechooser")
+--     local Utf8Proc = require("ffi/utf8proc")
+--     local DocumentRegistry = require("document/documentregistry")
+--     local lfs = require("libs/libkoreader-lfs")
+--     local no_metadata_count = 0
+--     local sys_folders = { -- do not search in sys_folders
+--         ["/dev"] = true,
+--         ["/proc"] = true,
+--         ["/sys"] = true,
+--     }
+--     local collate = FileChooser:getCollate()
+
+--     if search_string ~= "*" then -- one * to show all files
+
+--         -- replace '.' with '%.'
+--         search_string = search_string:gsub("%.","%%%.")
+--         -- replace '*' with '.*'
+--         search_string = search_string:gsub("%*","%.%*")
+--         -- replace '?' with '.'
+--         search_string = search_string:gsub("%?","%.")
+--     end
+
+--     local dirs, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year, files_finished_last_year = {}, {}, {}, {}, {}, {}, {}, {}
+--     local scan_dirs = {G_reader_settings:readSetting("home_dir")}
+--     local cur_month = os.date("%m")
+--     local cur_year = os.date("%Y")
+--     while #scan_dirs ~= 0 do
+--         local new_dirs = {}
+--         -- handle each dir
+--         for _, d in ipairs(scan_dirs) do
+--             -- handle files in d
+--             local ok, iter, dir_obj = pcall(lfs.dir, d)
+--             if ok then
+--                 for f in iter, dir_obj do
+--                     local fullpath = "/" .. f
+--                     if d ~= "/" then
+--                         fullpath = d .. fullpath
+--                     end
+--                     local attributes = lfs.attributes(fullpath) or {}
+--                     if attributes.mode == "directory"  and f ~= "." and f ~= ".."
+--                         and (FileChooser.show_hidden or not util.stringStartsWith(f, "."))
+--                         and FileChooser:show_dir(f) then
+--                             table.insert(new_dirs, fullpath)
+--                     elseif attributes.mode == "file" and not util.stringStartsWith(f, "._")
+--                         and (FileChooser.show_unsupported or DocumentRegistry:hasProvider(fullpath))
+--                         and FileChooser:show_file(f) then
+--                             if string.find(f, search_string) then
+--                                 table.insert(files, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
+--                                 local filemanagerutil = require("apps/filemanager/filemanagerutil")
+--                                 local BookList = require("ui/widget/booklist")
+--                                 if BookList.getBookStatus(fullpath) == "complete" then
+--                                     table.insert(files_finished, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
+--                                     local last_modified_date = filemanagerutil.getLastModified(fullpath)
+--                                     if last_modified_date then
+--                                         local pattern = "(%d+)-(%d+)-(%d+)"
+--                                         local ryear, rmonth, rday = last_modified_date:match(pattern)
+--                                         if cur_year == ryear then
+--                                             table.insert(files_finished_this_year, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
+--                                             if cur_month == rmonth then
+--                                                 table.insert(files_finished_this_month, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
+--                                             end
+--                                         end
+--                                         if tostring(tonumber(cur_year) - 1) == ryear then
+--                                             table.insert(files_finished_last_year, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
+--                                         end
+--                                     end
+--                                 end
+--                                 local BookList = require("ui/widget/booklist")
+--                                 if BookList.getBookStatus(fullpath) == "tbr" then
+--                                     table.insert(files_tbr, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
+--                                 end
+--                                 local in_history =  require("readhistory"):getIndexByFile(fullpath)
+--                                 local DocSettings = require("docsettings")
+--                                 local has_sidecar_file = DocSettings:hasSidecarFile(fullpath)
+--                                 if in_history and not has_sidecar_file then
+--                                     table.insert(files_mbr, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
+--                                 end
+--                             end
+--                     end
+--                 end
+--             end
+--         end
+--         scan_dirs = new_dirs
+--     end
+--     return dirs, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year, files_finished_last_year
+-- end
+
 function util.getList(search_string, search_finished, search_tbr, search_mbr)
     local FileChooser = require("ui/widget/filechooser")
     local Utf8Proc = require("ffi/utf8proc")
@@ -1705,83 +1793,45 @@ function util.getList(search_string, search_finished, search_tbr, search_mbr)
         ["/proc"] = true,
         ["/sys"] = true,
     }
-    local collate = FileChooser:getCollate()
-
-    if search_string ~= "*" then -- one * to show all files
-
-        -- replace '.' with '%.'
-        search_string = search_string:gsub("%.","%%%.")
-        -- replace '*' with '.*'
-        search_string = search_string:gsub("%*","%.%*")
-        -- replace '?' with '.'
-        search_string = search_string:gsub("%?","%.")
-    end
-
     local dirs, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year, files_finished_last_year = {}, {}, {}, {}, {}, {}, {}, {}
     local scan_dirs = {G_reader_settings:readSetting("home_dir")}
     local cur_month = os.date("%m")
     local cur_year = os.date("%Y")
-    while #scan_dirs ~= 0 do
-        local new_dirs = {}
-        -- handle each dir
-        for _, d in ipairs(scan_dirs) do
-            -- handle files in d
-            local ok, iter, dir_obj = pcall(lfs.dir, d)
-            if ok then
-                for f in iter, dir_obj do
-                    local fullpath = "/" .. f
-                    if d ~= "/" then
-                        fullpath = d .. fullpath
+    for fullpath, _ in pairs(require("apps/filemanager/filemanager").all_files) do
+        table.insert(files, fullpath)
+        local attributes = lfs.attributes(fullpath) or {}
+        local filemanagerutil = require("apps/filemanager/filemanagerutil")
+        local BookList = require("ui/widget/booklist")
+        if BookList.getBookStatus(fullpath) == "complete" then
+            table.insert(files_finished, fullpath)
+            local last_modified_date = filemanagerutil.getLastModified(fullpath)
+            if last_modified_date then
+                local pattern = "(%d+)-(%d+)-(%d+)"
+                local ryear, rmonth, rday = last_modified_date:match(pattern)
+                if cur_year == ryear then
+                    table.insert(files_finished_this_year, fullpath)
+                    if cur_month == rmonth then
+                        table.insert(files_finished_this_month, fullpath)
                     end
-                    local attributes = lfs.attributes(fullpath) or {}
-                    if attributes.mode == "directory"  and f ~= "." and f ~= ".."
-                        and (FileChooser.show_hidden or not util.stringStartsWith(f, "."))
-                        and FileChooser:show_dir(f) then
-                            table.insert(new_dirs, fullpath)
-                    elseif attributes.mode == "file" and not util.stringStartsWith(f, "._")
-                        and (FileChooser.show_unsupported or DocumentRegistry:hasProvider(fullpath))
-                        and FileChooser:show_file(f) then
-                            if string.find(f, search_string) then
-                                table.insert(files, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
-                                local filemanagerutil = require("apps/filemanager/filemanagerutil")
-                                local BookList = require("ui/widget/booklist")
-                                if BookList.getBookStatus(fullpath) == "complete" then
-                                    table.insert(files_finished, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
-                                    local last_modified_date = filemanagerutil.getLastModified(fullpath)
-                                    if last_modified_date then
-                                        local pattern = "(%d+)-(%d+)-(%d+)"
-                                        local ryear, rmonth, rday = last_modified_date:match(pattern)
-                                        if cur_year == ryear then
-                                            table.insert(files_finished_this_year, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
-                                            if cur_month == rmonth then
-                                                table.insert(files_finished_this_month, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
-                                            end
-                                        end
-                                        if tostring(tonumber(cur_year) - 1) == ryear then
-                                            table.insert(files_finished_last_year, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
-                                        end
-                                    end
-                                end
-                                local BookList = require("ui/widget/booklist")
-                                if BookList.getBookStatus(fullpath) == "tbr" then
-                                    table.insert(files_tbr, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
-                                end
-                                local in_history =  require("readhistory"):getIndexByFile(fullpath)
-                                local DocSettings = require("docsettings")
-                                local has_sidecar_file = DocSettings:hasSidecarFile(fullpath)
-                                if in_history and not has_sidecar_file then
-                                    table.insert(files_mbr, FileChooser:getListItem(nil, f, fullpath, attributes, collate))
-                                end
-                            end
-                    end
+                end
+                if tostring(tonumber(cur_year) - 1) == ryear then
+                    table.insert(files_finished_last_year, fullpath)
                 end
             end
         end
-        scan_dirs = new_dirs
+        local BookList = require("ui/widget/booklist")
+        if BookList.getBookStatus(fullpath) == "tbr" then
+            table.insert(files_tbr, fullpath)
+        end
+        local in_history =  require("readhistory"):getIndexByFile(fullpath)
+        local DocSettings = require("docsettings")
+        local has_sidecar_file = DocSettings:hasSidecarFile(fullpath)
+        if in_history and not has_sidecar_file then
+            table.insert(files_mbr, fullpath)
+        end
     end
     return dirs, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year, files_finished_last_year
 end
-
 function util.getLastDaysStats(day, include_pages)
     local SQ3 = require("lua-ljsqlite3/init")
     local datetime = require("datetime")

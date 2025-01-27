@@ -215,10 +215,12 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                 filemanagerutil.saveSummary(doc_settings_or_file, summary)
                 BookList.setBookInfoCacheProperty(file, "status", to_status)
                 caller_callback(file, to_status)
-                if to_status == "complete" or to_status == "tbr" then
-                    local util = require("util")
-                    util.generateStats()
-                end
+                -- if to_status == "complete" or to_status == "tbr" then
+                --     local util = require("util")
+                --     util.generateStats()
+                -- end
+                local util = require("util")
+                util.generateStats()
             end,
         }
     end

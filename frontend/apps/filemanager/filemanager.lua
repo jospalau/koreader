@@ -53,12 +53,14 @@ local FileManager = InputContainer:extend{
     active_widgets = nil, -- array
     root_path = lfs.currentdir(),
 
+    all_files = util.getListAll(),
     clipboard = nil, -- for single file operations
     selected_files = nil, -- for group file operations
 
     mv_bin = Device:isAndroid() and "/system/bin/mv" or "/bin/mv",
     cp_bin = Device:isAndroid() and "/system/bin/cp" or "/bin/cp",
 }
+
 
 
 -- function FileManager:paintTo(bb, x, y)
