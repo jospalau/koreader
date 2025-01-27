@@ -231,14 +231,12 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                 -- end
                 if G_reader_settings:isTrue("top_manager_infmandhistory") then
                     require("apps/filemanager/filemanager").all_files[file][1] = to_status
-                    if to_status == "complete" then
-                        local pattern = "(%d+)-(%d+)-(%d+)"
-                        local last_modified_date = filemanagerutil.getLastModified(file)
-                        local ryear, rmonth, rday = last_modified_date:match(pattern)
-                        require("apps/filemanager/filemanager").all_files[file][2] = ryear
-                        require("apps/filemanager/filemanager").all_files[file][3] = rmonth
-                        require("apps/filemanager/filemanager").all_files[file][4] = rday
-                    end
+                    local pattern = "(%d+)-(%d+)-(%d+)"
+                    local last_modified_date = filemanagerutil.getLastModified(file)
+                    local ryear, rmonth, rday = last_modified_date:match(pattern)
+                    require("apps/filemanager/filemanager").all_files[file][2] = ryear
+                    require("apps/filemanager/filemanager").all_files[file][3] = rmonth
+                    require("apps/filemanager/filemanager").all_files[file][4] = rday
 
                     local util = require("util")
                     util.generateStats()
@@ -320,6 +318,9 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
                         else
                             require("apps/filemanager/filemanager").all_files[file][1] = ""
                         end
+                        require("apps/filemanager/filemanager").all_files[file][2] = 0
+                        require("apps/filemanager/filemanager").all_files[file][3] = 0
+                        require("apps/filemanager/filemanager").all_files[file][4] = 0
                         local util = require("util")
                         util.generateStats()
                     end

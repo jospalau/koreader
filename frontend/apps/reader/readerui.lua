@@ -499,6 +499,19 @@ function ReaderUI:init()
         summary.status = "reading"
     end
 
+
+    if G_reader_settings:isTrue("top_manager_infmandhistory") then
+        require("apps/filemanager/filemanager").all_files[self.document.file][1] = "reading"
+        local pattern = "(%d+)-(%d+)-(%d+)"
+        local ryear, rmonth, rday = summary.modified:match(pattern)
+        require("apps/filemanager/filemanager").all_files[self.document.file][2] = ryear
+        require("apps/filemanager/filemanager").all_files[self.document.file][3] = rmonth
+        require("apps/filemanager/filemanager").all_files[self.document.file][4] = rday
+        local util = require("util")
+        util.generateStats()
+    end
+
+
     -- After initialisation notify that document is loaded and rendered
     -- CREngine only reports correct page count after rendering is done
     -- Need the same event for PDF document
@@ -819,11 +832,6 @@ function ReaderUI:showReaderCoroutine(file, provider, seamless)
         timeout = 0.0,
         invisible = seamless,
     })
-    if G_reader_settings:isTrue("top_manager_infmandhistory") then
-        require("apps/filemanager/filemanager").all_files[file][1] = "reading"
-        local util = require("util")
-        util.generateStats()
-    end
     -- doShowReader might block for a long time, so force repaint here
     UIManager:forceRePaint()
     UIManager:nextTick(function()
@@ -1080,6 +1088,9 @@ function ReaderUI:onHome()
 
                 if G_reader_settings:isTrue("top_manager_infmandhistory") then
                     require("apps/filemanager/filemanager").all_files[file][1] = "mbr"
+                    require("apps/filemanager/filemanager").all_files[file][2] = 0
+                    require("apps/filemanager/filemanager").all_files[file][3] = 0
+                    require("apps/filemanager/filemanager").all_files[file][4] = 0
                     local util = require("util")
                     util.generateStats()
                 end
