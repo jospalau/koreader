@@ -464,7 +464,7 @@ function Button:onTapSelectButton()
 
                     -- There are no glitches in the new Libra Colour with fast refresh mode but there is a flash after pressing a button. We avoid it with a delay here
                     -- It is the same for the new Kobo BW when using ui refresh mode. It does not flash but it remains a little bit longer when the button is pressed
-                    if Device.model == "Kobo_spaBW" or Device.model == "Kobo_monza" or Device.model == "Kobo_condor" or Device:isKindle() then
+                    if Device:isKobo() or Device:isKindle() then
                         UIManager:yieldToEPDC(300000)
                     else
                         UIManager:yieldToEPDC()
