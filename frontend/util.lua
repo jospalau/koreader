@@ -1680,9 +1680,6 @@ function util.getListAll()
                                 end
 
                                 local book_status = BookList.getBookStatus(fullpath)
-                                if book_status ~= "mbr" then
-                                    print(book_status)
-                                end
                                 local in_history =  ReadHistory:getIndexByFile(fullpath)
                                 -- local has_sidecar_file = DocSettings:hasSidecarFile(fullpath)
                                 if book_status == "mbr" and in_history == nil then
