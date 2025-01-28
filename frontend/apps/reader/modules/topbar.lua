@@ -1379,7 +1379,7 @@ function TopBar:paintTo(bb, x, y)
         -- print(string.byte(self[5][1][1].text, 1,-1))
         -- Bottom center
          if self[5][1][1].text ~= "" then
-            self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5][1][1]:getSize().w/2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+            self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5][1][1]:getSize().w/2, Screen:getHeight() - TopBar.MARGIN_BOTTOM  - self[5][1][1]:getSize().h)
         end
 
         -- Bottom right
