@@ -546,6 +546,7 @@ end
 
 function FileManager:onToggleSelectMode(do_refresh)
     logger.dbg("toggle select mode")
+    FileManagerFileSearcher.search_hash = ""
     if self.selected_files then
         self.selected_files = nil
         self.title_bar:setRightIcon("plus")
