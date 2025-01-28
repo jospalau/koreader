@@ -1103,7 +1103,7 @@ function TopBar:toggleBar(light_on)
         local hours_to_read = tonumber(self.total_words)/(self.avg_wpm * 60)
         local progress =  math.floor(100/hours_to_read * 10)/10
         self.total_wordsk = tostring(math.floor(self.total_words/1000))
-        self.book_progress:setText(self.total_wordsk .. "kw|" .. tostring(self.sessions_current_book) .. "#s|" .. tostring(progress) .. "%|" .. read_book)
+        self.book_progress:setText(self.total_wordsk .. "kw|" .. tostring(self.sessions_current_book) .. "s|" .. tostring(progress) .. "%|" .. read_book)
         title = TextWidget.PTF_BOLD_START .. title .. TextWidget.PTF_BOLD_END
         self.title_text:setText(title)
         self.series_text:setText(self.series)
@@ -1426,8 +1426,10 @@ function TopBar:paintTo(bb, x, y)
         -- self[11][1].dimen.w = self[11][1][1]:getSize().w
         -- self[11]:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
-        self[4][1][1]:setText(self.times_text_text)
-        self[4]:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+        if self.option == 1 then
+            self[4][1][1]:setText(self.times_text_text)
+            self[4]:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+        end
 
         -- -- Comment inverted info for the moment
         -- -- This is inverted to be shown in left margin
@@ -1446,7 +1448,9 @@ function TopBar:paintTo(bb, x, y)
         -- print(string.byte(self[5][1][1].text, 1,-1))
         -- Bottom center
          if self[5][1][1].text ~= "" then
-            self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5][1][1]:getSize().w/2, Screen:getHeight() - TopBar.MARGIN_BOTTOM  - self[5][1][1]:getSize().h)
+            if self.option == 2 then
+                self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5][1][1]:getSize().w/2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+            end
         end
 
         -- Bottom right
