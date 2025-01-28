@@ -166,7 +166,6 @@ function TopBar:getReadTodayThisMonth(title)
 
 
 
-
     local sql_stmt = [[
         SELECT sum(duration)
         FROM wpm_stat_data
@@ -182,6 +181,21 @@ function TopBar:getReadTodayThisMonth(title)
     end
     read_last_month = tonumber(read_last_month)
 
+
+    local sql_stmt = [[
+        SELECT sum(duration)
+        FROM wpm_stat_data
+            WHERE strftime('%Y',DATE(datetime(start_time,'unixepoch'))) = 'year'
+    ]]
+
+
+    local read_year = conn:rowexec(sql_stmt:gsub("year", os.date("*t").year))
+
+    if read_year == nil then
+        read_year = 0
+    end
+    read_year = tonumber(read_year)
+
     conn:close()
     if read_today == nil then
         read_today = 0
@@ -193,7 +207,7 @@ function TopBar:getReadTodayThisMonth(title)
     end
     read_month = tonumber(read_month)
 
-    return read_today, read_month, total_time_book, avg_wpm, sessions_current_book, read_last_month
+    return read_today, read_month, total_time_book, avg_wpm, sessions_current_book, read_last_month, read_year
 end
 
 function TopBar:getReadThisYearSoFar()
@@ -447,7 +461,12 @@ function TopBar:init()
 
     if TopBar.preserved_initial_read_last_month then
         self.initial_read_last_month = TopBar.preserved_initial_read_last_month
-        TopBar.preserved_initial_read_last_month= nil
+        TopBar.preserved_initial_read_last_month = nil
+    end
+
+    if TopBar.preserved_initial_read_year then
+        self.initial_read_year = TopBar.preserved_initial_read_year
+        TopBar.preserved_initial_read_year = nil
     end
 
     if TopBar.preserved_initial_total_time_book then
@@ -526,8 +545,8 @@ function TopBar:onReaderReady()
     --     self.series = "(" .. TextWidget.PTF_BOLD_START .. self.series .. " " ..  tonumber(self.ui.document._document:getDocumentProps().title:match("%b[]"):sub(2, self.ui.document._document:getDocumentProps().title:match("%b[]"):len() - 1)) .. TextWidget.PTF_BOLD_END .. ")"
     --     self.title = self.title:sub(self.title:find('%]') + 2, self.title:len())
     -- end
-    if self.initial_read_today == nil and self.initial_read_month == nil and self.initial_total_time_book == nil and self.sessions_current_book == nil and self.read_last_month == nil then
-        self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm, self.sessions_current_book, self.initial_read_last_month = self:getReadTodayThisMonth(self.ui.document._document:getDocumentProps().title)
+    if self.initial_read_today == nil and self.initial_read_month == nil and self.initial_total_time_book == nil and self.sessions_current_book == nil and self.read_last_month == nil and self.initial_read_year == nil then
+        self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm, self.sessions_current_book, self.initial_read_last_month, self.initial_read_year = self:getReadTodayThisMonth(self.ui.document._document:getDocumentProps().title)
     end
 
     if self.start_session_time == nil then
@@ -932,7 +951,7 @@ end
 
 
 function TopBar:onResume()
-    self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm, self.sessions_current_book, self.initial_read_last_month = self:getReadTodayThisMonth(self.ui.document._document:getDocumentProps().title)
+    self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm, self.sessions_current_book, self.initial_read_last_month, self.initial_read_year = self:getReadTodayThisMonth(self.ui.document._document:getDocumentProps().title)
     self.start_session_time = os.time()
     self.init_page = nil
     self.init_page_screens = nil
@@ -946,6 +965,7 @@ function TopBar:onPreserveCurrentSession()
     TopBar.preserved_initial_read_today = self.initial_read_today
     TopBar.preserved_initial_read_month = self.initial_read_month
     TopBar.preserved_initial_read_last_month = self.initial_read_last_month
+    TopBar.preserved_initial_read_year = self.initial_read_year
     TopBar.preserved_initial_total_time_book = self.initial_total_time_book
     TopBar.preserved_avg_wpm = self.avg_wpm
     TopBar.preserved_sessions_current_book = self.sessions_current_book
@@ -1007,16 +1027,19 @@ function TopBar:toggleBar(light_on)
         self.wpm_text:setText(self.wpm_session .. "wpm")
 
         local read_today = self.initial_read_today + (os.time() - self.start_session_time)
-        read_today = datetime.secondsToClockDuration(user_duration_format, read_today, false)
+        read_today = read_today > 86400 and math.floor(read_today/60/60/24 * 100)/100 .. "d" or datetime.secondsToClockDuration(user_duration_format, read_today, false)
 
         local read_month = self.initial_read_month + (os.time() - self.start_session_time)
-        read_month = datetime.secondsToClockDuration(user_duration_format, read_month, false)
+        read_month = read_month > 86400 and math.floor(read_month/60/60/24 * 100)/100 .. "d" or datetime.secondsToClockDuration(user_duration_format, read_month, false)
 
         local read_last_month = self.initial_read_last_month + (os.time() - self.start_session_time)
-        read_last_month = datetime.secondsToClockDuration(user_duration_format, read_last_month, false)
+        read_last_month = read_last_month > 86400 and math.floor(read_last_month/60/60/24 * 100)/100 .. "d" or datetime.secondsToClockDuration(user_duration_format, read_last_month, false)
+
+        local read_year = self.initial_read_year + (os.time() - self.start_session_time)
+        read_year = read_year > 86400 and math.floor(read_year/60/60/24 * 100)/100 .. "d" or datetime.secondsToClockDuration(user_duration_format, read_year, false)
 
         local read_book = self.initial_total_time_book + (os.time() - self.start_session_time)
-        read_book = datetime.secondsToClockDuration(user_duration_format, read_book, false)
+        read_book = read_book > 86400 and math.floor(read_book/60/60/24 * 100)/100 .. "d" or datetime.secondsToClockDuration(user_duration_format, read_book, false)
 
 
         self.session_time_text:setText(datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")))
@@ -1041,13 +1064,13 @@ function TopBar:toggleBar(light_on)
         if self.ui.pagemap:wantsPageLabels() then
             init_page = self.init_page
             pages_session = self.ui.pagemap:getCurrentPageLabel(true) - init_page
-            self.times_text:setText(session_time ..  "(" .. pages_session .. "p)|" .. read_today .. "|" .. read_month .. "|" .. read_last_month)
-            self.times_text_text = session_time ..  "(" .. pages_session .. "p)|" .. read_today .. "|" .. read_month .. "|" .. read_last_month
+            self.times_text:setText("RTS: " .. session_time ..  "(" .. pages_session .. "p), RT: " .. read_today .. ", RTM: " .. read_month .. ", RLM: " .. read_last_month .. ", RTY: " .. read_year)
+            self.times_text_text = "RTS: " .. session_time ..  "(" .. pages_session .. "p), RT: " .. read_today .. ", RTM: " .. read_month .. ", RLM: " .. read_last_month .. ", RTY: " .. read_year
         else
             init_page = self.init_page_screens
             pages_session = self.view.footer.pageno - init_page
-            self.times_text:setText(session_time .. "|" .. read_today .. "|" .. read_month .. "|" .. read_last_month)
-            self.times_text_text = session_time .. "|" .. read_today .. "|" .. read_month .. "|" .. read_last_month
+            self.times_text:setText("RTS: " .. session_time .. ", RT: " .. read_today .. ", RTM: " .. read_month .. ", RLM: " .. read_last_month .. ", RTY: " .. read_year)
+            self.times_text_text = "RTS: " .. session_time .. ", RT: " .. read_today .. ", RTM: " .. read_month .. ", RLM: " .. read_last_month .. ", RTY: " .. read_year
         end
 
 
