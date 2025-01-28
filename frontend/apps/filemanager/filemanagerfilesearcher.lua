@@ -513,12 +513,12 @@ function FileSearcher:onShowSearchResults(not_cached, results, show_recent, page
         -- If we are in reader there is no menu for File Search so nothing to be done
         -- If we are in history and in reader we want to go to a folder if a folder is selected and remain in history if a file is manipulated
         self.search_menu.close_callback = function(file, actioned)
-            -- self.selected_files = nil
-            -- -- Coming nil when closing the search results list window with esc or clicking on X, Menu:onCloseAllMenus() in menu.lua
-            -- if file == nil then
-            --     UIManager:close(self.search_menu)
-            --     return
-            -- end
+            self.selected_files = nil
+            -- Coming nil when closing the search results list window with esc or clicking on X, Menu:onCloseAllMenus() in menu.lua
+            if file == nil then
+                UIManager:close(self.search_menu)
+                return
+            end
 
             -- -- If history open in previous search menu, refresh it
             -- if self.search_menu.ui.history.hist_menu then
@@ -577,13 +577,13 @@ function FileSearcher:onShowSearchResults(not_cached, results, show_recent, page
             --     end
 
             -- end
-            if file and ((lfs.attributes(file, "mode") == "file" and not actioned) or lfs.attributes(file, "mode") == "directory") then
+            if (lfs.attributes(file, "mode") == "file" and not actioned) or lfs.attributes(file, "mode") == "directory" then
                 if lfs.attributes(file, "mode") == "directory" then
                     if self.search_menu.ui.history.hist_menu then
                         self.search_menu.ui.history.hist_menu.close_callback()
                     end
                 end
-                UIManager:close(self.search_menu)
+                return
             end
         end
     -- end
