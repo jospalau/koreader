@@ -152,7 +152,21 @@ function TopBar:getReadTodayThisMonth(title)
         total_time_book = 0
     end
 
+
+    sql_stmt ="SELECT COUNT(id_book) FROM wpm_stat_data where id_book = ibp"
+
+
+    local sessions_current_book = conn:rowexec(sql_stmt:gsub("ibp", id_book))
+
+    if sessions_current_book == nil then
+        sessions_current_book = 0
+    end
+
+    sessions_current_book = tonumber(sessions_current_book)
+
     conn:close()
+
+
 
     if read_today == nil then
         read_today = 0
@@ -164,7 +178,7 @@ function TopBar:getReadTodayThisMonth(title)
     end
     read_month = tonumber(read_month)
 
-    return read_today, read_month, total_time_book, avg_wpm
+    return read_today, read_month, total_time_book, avg_wpm, sessions_current_book
 end
 
 function TopBar:getReadThisYearSoFar()
@@ -426,6 +440,11 @@ function TopBar:init()
         TopBar.preserved_avg_wpm = nil
     end
 
+    if TopBar.preserved_sessions_current_book ~= nil then
+        self.sessions_current_book = TopBar.preserved_sessions_current_book
+        TopBar.preserved_sessions_current_book = nil
+    end
+
     if TopBar.preserved_alt_bar ~= nil then
         TopBar.show_top_bar = TopBar.preserved_alt_bar
         TopBar.preserved_alt_bar = nil
@@ -487,8 +506,8 @@ function TopBar:onReaderReady()
     --     self.series = "(" .. TextWidget.PTF_BOLD_START .. self.series .. " " ..  tonumber(self.ui.document._document:getDocumentProps().title:match("%b[]"):sub(2, self.ui.document._document:getDocumentProps().title:match("%b[]"):len() - 1)) .. TextWidget.PTF_BOLD_END .. ")"
     --     self.title = self.title:sub(self.title:find('%]') + 2, self.title:len())
     -- end
-    if self.initial_read_today == nil and self.initial_read_month == nil and self.initial_total_time_book == nil then
-        self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm = self:getReadTodayThisMonth(self.ui.document._document:getDocumentProps().title)
+    if self.initial_read_today == nil and self.initial_read_month == nil and self.initial_total_time_book == nil and self.sessions_current_book == nil then
+        self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm, self.sessions_current_book = self:getReadTodayThisMonth(self.ui.document._document:getDocumentProps().title)
     end
 
     if self.start_session_time == nil then
@@ -893,7 +912,7 @@ end
 
 
 function TopBar:onResume()
-    self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm = self:getReadTodayThisMonth(self.ui.document._document:getDocumentProps().title)
+    self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm, self.sessions_current_book = self:getReadTodayThisMonth(self.ui.document._document:getDocumentProps().title)
     self.start_session_time = os.time()
     self.init_page = nil
     self.init_page_screens = nil
@@ -908,6 +927,7 @@ function TopBar:onPreserveCurrentSession()
     TopBar.preserved_initial_read_month = self.initial_read_month
     TopBar.preserved_initial_total_time_book = self.initial_total_time_book
     TopBar.preserved_avg_wpm = self.avg_wpm
+    TopBar.preserved_sessions_current_book = self.sessions_current_book
     TopBar.preserved_alt_bar = self.show_top_bar
     TopBar.preserved_show_alt_bar = self.alt_bar
     TopBar.preserved_altbar_line_thickness= self.altbar_line_thickness
@@ -1036,7 +1056,7 @@ function TopBar:toggleBar(light_on)
         local hours_to_read = tonumber(self.total_words)/(self.avg_wpm * 60)
         local progress =  math.floor(100/hours_to_read * 10)/10
         self.total_wordsk = tostring(math.floor(self.total_words/1000))
-        self.book_progress:setText(self.total_wordsk .. "k|" .. tostring(progress) .. "%|" .. read_book)
+        self.book_progress:setText(self.total_wordsk .. "kw|" .. tostring(self.sessions_current_book) .. "#s|" .. tostring(progress) .. "%|" .. read_book)
         title = TextWidget.PTF_BOLD_START .. title .. TextWidget.PTF_BOLD_END
         self.title_text:setText(title)
         self.series_text:setText(self.series)
