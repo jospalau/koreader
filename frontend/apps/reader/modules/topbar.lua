@@ -632,8 +632,9 @@ function TopBar:onReaderReady()
 
     self.chapter_text = TextWidget:new{
         text =  "",
-        face = Font:getFace("myfont3"),
+        face = Font:getFace("myfont3", 14),
         fgcolor = Blitbuffer.COLOR_BLACK,
+        bold = true,
     }
 
     self.progress_chapter_text = TextWidget:new{
@@ -1066,15 +1067,15 @@ function TopBar:toggleBar(light_on)
             pages_session = self.ui.pagemap:getCurrentPageLabel(true) - init_page
             -- self.times_text:setText("RTS: " .. session_time ..  "(" .. pages_session .. "p), RT: " .. read_today .. ", RTM: " .. read_month .. ", RLM: " .. read_last_month .. ", RTY: " .. read_year)
             -- self.times_text_text = "RTS: " .. session_time ..  "(" .. pages_session .. "p), RT: " .. read_today .. ", RTM: " .. read_month .. ", RLM: " .. read_last_month .. ", RTY: " .. read_year
-            self.times_text:setText(session_time ..  "(" .. pages_session .. "p)," .. read_today .. "," .. read_month .. "," .. read_last_month .. "," .. read_year)
-            self.times_text_text = session_time ..  "(" .. pages_session .. "p)," .. read_today .. "," .. read_month .. "," .. read_last_month .. "," .. read_year
+            self.times_text:setText(session_time ..  "(" .. pages_session .. "p)," .. read_today .. "," .. read_month) -- .. "," .. read_last_month .. "," .. read_year)
+            self.times_text_text = session_time ..  "(" .. pages_session .. "p)," .. read_today .. "," .. read_month --.. "," .. read_last_month .. "," .. read_year
         else
             init_page = self.init_page_screens
             pages_session = self.view.footer.pageno - init_page
             -- self.times_text:setText("RTS: " .. session_time .. ", RT: " .. read_today .. ", RTM: " .. read_month .. ", RLM: " .. read_last_month .. ", RTY: " .. read_year)
             -- self.times_text_text = "RTS: " .. session_time .. ", RT: " .. read_today .. ", RTM: " .. read_month .. ", RLM: " .. read_last_month .. ", RTY: " .. read_year
-            self.times_text:setText(session_time .. "," .. read_today .. "," .. read_month .. "," .. read_last_month .. "," .. read_year)
-            self.times_text_text = session_time .. "," .. read_today .. "," .. read_month .. "," .. read_last_month .. "," .. read_year
+            self.times_text:setText(session_time .. "," .. read_today .. "," .. read_month) --.. "," .. read_last_month .. "," .. read_year)
+            self.times_text_text = session_time .. "," .. read_today .. "," .. read_month -- .. "," .. read_last_month .. "," .. read_year
         end
 
 
@@ -1125,7 +1126,7 @@ function TopBar:toggleBar(light_on)
         -- self.progress_bar.height = self.title_text:getSize().h
         -- self.progress_chapter_bar.height = self.title_text:getSize().h
 
-        self.progress_bar.height = self.chapter_text.face.size
+        -- self.progress_bar.height = self.chapter_text.face.size
         self.progress_barr.height = 1
 
         self.progress_chapter_bar.height = self.title_text.face.size
@@ -1140,6 +1141,11 @@ function TopBar:toggleBar(light_on)
             self.progress_chapter_bar.width = 250
         end
 
+        -- if chapter:len() <= 30 then
+        --     self.chapter_text:setText(chapter)
+        -- else
+        --     self.chapter_text:setText(chapter:gsub(1, 30) .. "…")
+        -- end
         self.chapter_text:setText(chapter)
         if self.option == 1 then
             if self.origin_book and  self.origin_book ~= "" then
@@ -1453,6 +1459,20 @@ function TopBar:paintTo(bb, x, y)
         -- Bottom center
          if self[5][1][1].text ~= "" then
             -- if self.option == 2 then
+            -- self[5][1][1].face = Font:getFace("myfont3", 14)
+            -- if self[5][1][1]:getSize().w > Screen:getWidth()/3 then
+            --     self[5][1][1].face = Font:getFace("myfont3", 12)
+            -- end
+            local text_widget = TextWidget:new{
+                text = self[5][1][1].text:gsub(" ", "\u{00A0}"), -- no-break-space
+                max_width = Screen:getWidth() * 30 * (1/100),
+                face = Font:getFace("myfont3", 14),
+                bold = true,
+            }
+            local fitted_text, add_ellipsis = text_widget:getFittedText()
+            self[5][1][1].text = fitted_text
+            text_widget:free()
+
             self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5][1][1]:getSize().w/2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
             -- end
         end
