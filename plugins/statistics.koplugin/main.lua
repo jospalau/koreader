@@ -3706,7 +3706,7 @@ function ReaderStatistics:getReadingDurationBySecond(ts)
                     else
                         -- No period yet accounted: this is a continuation from previous day's last page read:
                         -- make it start at 0, so the continuation is visible
-                        table.insert(periods, { start = 0, finish = finish })
+                        table.insert(periods, { start = 0, finish = finish, device = self.devices_reversed[tonumber(res[5][i])] })
                     end
                 else
                     -- Different book, or gap from previous read page of same book is not ignorable: add a new period
