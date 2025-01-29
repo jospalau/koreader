@@ -988,7 +988,7 @@ function CalendarDayView:refreshTimeline()
                         break
                     end
                     local finish = i==finish_hour-start_hour and period.finish or (start_hour+i+1) * 3600 - 1
-                    local span = self:generateSpan(start, finish, bgcolor, fgcolor, v[1], period.device)
+                    local span = self:generateSpan(start, finish, bgcolor, fgcolor, v[1])
                     if span then table.insert(self.timeline, span) end
                 end
             end
@@ -999,7 +999,7 @@ function CalendarDayView:refreshTimeline()
     end)
 end
 
-function CalendarDayView:generateSpan(start, finish, bgcolor, fgcolor, title, device)
+function CalendarDayView:generateSpan(start, finish, bgcolor, fgcolor, title)
     local width = math.floor((finish - start)/3600*self.timeline_width)
     if width <= 0 then return end
     local start_hour = math.floor(start / 3600)
@@ -1022,7 +1022,7 @@ function CalendarDayView:generateSpan(start, finish, bgcolor, fgcolor, title, de
         CenterContainer:new{
             dimen = Geom:new{ h = self.hour_height - 2 * self.inner_padding, w = width },
             width > min_width and TextWidget:new{
-                text = device .. ", " .. title,
+                text = title,
                 face = Font:getFace("cfont", font_size),
                 padding = 0,
                 fgcolor = fgcolor,
