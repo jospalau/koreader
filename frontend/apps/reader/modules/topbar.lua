@@ -1067,15 +1067,15 @@ function TopBar:toggleBar(light_on)
             pages_session = self.ui.pagemap:getCurrentPageLabel(true) - init_page
             -- self.times_text:setText("RTS: " .. session_time ..  "(" .. pages_session .. "p), RT: " .. read_today .. ", RTM: " .. read_month .. ", RLM: " .. read_last_month .. ", RTY: " .. read_year)
             -- self.times_text_text = "RTS: " .. session_time ..  "(" .. pages_session .. "p), RT: " .. read_today .. ", RTM: " .. read_month .. ", RLM: " .. read_last_month .. ", RTY: " .. read_year
-            self.times_text:setText(session_time ..  "(" .. pages_session .. "p)," .. read_today .. "," .. read_month) -- .. "," .. read_last_month .. "," .. read_year)
-            self.times_text_text = session_time ..  "(" .. pages_session .. "p)," .. read_today .. "," .. read_month --.. "," .. read_last_month .. "," .. read_year
+            self.times_text:setText(session_time ..  "(" .. pages_session .. "p)," .. read_today .. "," .. read_month .. "," .. read_last_month .. "," .. read_year)
+            self.times_text_text = session_time ..  "(" .. pages_session .. "p)," .. read_today .. "," .. read_month .. "," .. read_last_month .. "," .. read_year
         else
             init_page = self.init_page_screens
             pages_session = self.view.footer.pageno - init_page
             -- self.times_text:setText("RTS: " .. session_time .. ", RT: " .. read_today .. ", RTM: " .. read_month .. ", RLM: " .. read_last_month .. ", RTY: " .. read_year)
             -- self.times_text_text = "RTS: " .. session_time .. ", RT: " .. read_today .. ", RTM: " .. read_month .. ", RLM: " .. read_last_month .. ", RTY: " .. read_year
-            self.times_text:setText(session_time .. "," .. read_today .. "," .. read_month) --.. "," .. read_last_month .. "," .. read_year)
-            self.times_text_text = session_time .. "," .. read_today .. "," .. read_month -- .. "," .. read_last_month .. "," .. read_year
+            self.times_text:setText(session_time .. "," .. read_today .. "," .. read_month .. "," .. read_last_month .. "," .. read_year)
+            self.times_text_text = session_time .. "," .. read_today .. "," .. read_month .. "," .. read_last_month .. "," .. read_year
         end
 
 
@@ -1473,7 +1473,8 @@ function TopBar:paintTo(bb, x, y)
             self[5][1][1].text = fitted_text
             text_widget:free()
 
-            self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5][1][1]:getSize().w/2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+            -- self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5][1][1]:getSize().w/2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+            self[5]:paintTo(bb, x + Screen:getWidth()/2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
             -- end
         end
 
