@@ -152,6 +152,7 @@ function TopBar:getReadTodayThisMonth(title)
         total_time_book = 0
     end
 
+    total_time_book = tonumber(total_time_book)
 
     sql_stmt ="SELECT COUNT(id_book) FROM wpm_stat_data where id_book = ibp"
 
