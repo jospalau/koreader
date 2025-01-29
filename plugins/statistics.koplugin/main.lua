@@ -151,18 +151,18 @@ function ReaderStatistics:init()
     }
 
     self.devices_reversed = {
-        [1] = "KL2",
-        [2] = "KSag",
-        [3] = "KC2e",
+        [1] = "KoLi2",
+        [2] = "KoSag",
+        [3] = "KoCl2e",
         [4] = "KinP",
         [5] = "KinB",
         [6] = "BooxP",
-        [7] = "PocB",
+        [7] = "PocBook",
         [8] = "Phy",
         [9] = "KEli",
-        [10] = "KCBW",
-        [11] = "KCC",
-        [12] = "KLC",
+        [10] = "KoCBW",
+        [11] = "KoClC",
+        [12] = "KoLiC",
         [100] = "Em"
     }
 
