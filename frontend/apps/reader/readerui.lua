@@ -500,7 +500,7 @@ function ReaderUI:init()
     end
 
 
-    if G_reader_settings:isTrue("top_manager_infmandhistory") then
+    if G_reader_settings:isTrue("top_manager_infmandhistory") and not self.document.file:find("resources/arthur%-conan%-doyle%_the%-hound%-of%-the%-baskervilles.epub") then
         require("apps/filemanager/filemanager").all_files[self.document.file][1] = "reading"
         local pattern = "(%d+)-(%d+)-(%d+)"
         local ryear, rmonth, rday = summary.modified:match(pattern)
