@@ -712,6 +712,27 @@ function CalendarDayView:setupView()
 
     self.kv_pairs = self.reader_statistics:getBooksFromPeriod(self.day_ts, self.day_ts + 86400)
     local seconds_books = self.reader_statistics:getReadingDurationBySecond(self.day_ts)
+
+    -- if seconds_books[self.reader_statistics.id_curr_book] == nil then
+        table.insert(self.kv_pairs, {
+            self.reader_statistics.data.title,
+            -- T(N_("%1 (1 page)", "%1 (%2 pages)", tonumber(result_book[2][i])), datetime.secondsToClockDuration(user_duration_format, tonumber(result_book[3][i]), false), tonumber(result_book[2][i])),
+            "Current reading session",
+            book_id = self.reader_statistics.id_curr_book+1,
+            duration = 0,
+            0,
+            -- hold_callback = function(kv_page, kv_item)
+            --     self:resetStatsForBookForPeriod(id_book, result_book[4][i], result_book[5][i], result_book[1][i], function()
+            --         kv_page:removeKeyValueItem(kv_item) -- Reset, refresh what's displayed
+            --     end)
+            -- end,
+        })
+        seconds_books[self.reader_statistics.id_curr_book+1] = {
+            title = self.reader_statistics.data.title,
+            periods = {},
+        }
+    -- end
+    table.insert(seconds_books[self.reader_statistics.id_curr_book+1].periods, { start = self.reader_statistics.start_current_period - self.day_ts, finish = os.time() - self.day_ts, device = self.reader_statistics.devices_reversed[self.reader_statistics.devices[Device.model]] })
     for _, kv in ipairs(self.kv_pairs) do
         if seconds_books[kv.book_id] then
             kv.periods = seconds_books[kv.book_id].periods
@@ -988,7 +1009,7 @@ function CalendarDayView:refreshTimeline()
                         break
                     end
                     local finish = i==finish_hour-start_hour and period.finish or (start_hour+i+1) * 3600 - 1
-                    local span = self:generateSpan(start, finish, bgcolor, fgcolor, v[1])
+                    local span = self:generateSpan(start, finish, bgcolor, fgcolor, v[1], period.device)
                     if span then table.insert(self.timeline, span) end
                 end
             end
@@ -999,7 +1020,7 @@ function CalendarDayView:refreshTimeline()
     end)
 end
 
-function CalendarDayView:generateSpan(start, finish, bgcolor, fgcolor, title)
+function CalendarDayView:generateSpan(start, finish, bgcolor, fgcolor, title, device)
     local width = math.floor((finish - start)/3600*self.timeline_width)
     if width <= 0 then return end
     local start_hour = math.floor(start / 3600)
@@ -1022,7 +1043,7 @@ function CalendarDayView:generateSpan(start, finish, bgcolor, fgcolor, title)
         CenterContainer:new{
             dimen = Geom:new{ h = self.hour_height - 2 * self.inner_padding, w = width },
             width > min_width and TextWidget:new{
-                text = title,
+                text = device .. ", " .. title,
                 face = Font:getFace("cfont", font_size),
                 padding = 0,
                 fgcolor = fgcolor,
