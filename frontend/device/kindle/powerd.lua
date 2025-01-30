@@ -24,6 +24,8 @@ function KindlePowerD:init()
         self.fl_max = self.fl_max + 1
     end
 
+    self.fl_max = self.device.model == "KindlePaperWhite6" and 12 or 24
+
     self:initWakeupMgr()
 end
 
