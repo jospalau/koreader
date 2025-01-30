@@ -231,7 +231,7 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                 -- BookList.getBookInfo() is invoked in many places to retrieve the proper updated information
                 -- require("bookinfomanager"):deleteBookInfo(file)
 
-                if G_reader_settings:isTrue("top_manager_infmandhistory") then
+                if G_reader_settings:isTrue("top_manager_infmandhistory") and util.getFileNameSuffix(file) == "epub" then
                     require("apps/filemanager/filemanager").all_files[file].status = to_status
                     local pattern = "(%d+)-(%d+)-(%d+)"
                     local last_modified_date = filemanagerutil.getLastModified(file)
@@ -314,7 +314,7 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
                         BookList.setBookInfoCacheProperty(file, "been_opened", false)
                         require("readhistory"):fileSettingsPurged(file)
                     end
-                    if G_reader_settings:isTrue("top_manager_infmandhistory") then
+                    if G_reader_settings:isTrue("top_manager_infmandhistory") and util.getFileNameSuffix(file) == "epub" then
                         if check_button_mbr.checked then
                             require("apps/filemanager/filemanager").all_files[file].status = "mbr"
                         else

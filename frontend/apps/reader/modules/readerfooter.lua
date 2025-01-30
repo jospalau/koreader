@@ -2638,7 +2638,9 @@ end
 
 function ReaderFooter:onPageUpdate(pageno)
     local toc_markers_update = false
-    self:checkNewDay()
+    if self.ui.statistics then
+        self:checkNewDay()
+    end
     if self.ui.document:hasHiddenFlows() then
         local flow = self.pageno and self.ui.document:getPageFlow(self.pageno)
         local new_flow = pageno and self.ui.document:getPageFlow(pageno)
@@ -2756,8 +2758,9 @@ end
 
 function ReaderFooter:onToggleFooterMode()
     if self.has_no_mode and self.settings.disable_progress_bar then return end
-    if self.settings.all_at_once or self.has_no_mode then
-        if self.mode >= 1 then
+    if util.getFileNameSuffix(self.ui.document.file) == "epub"
+        and (self.settings.all_at_once or self.has_no_mode) then
+       if self.mode >= 1 then
             --self.ui.view[4]:showTopBar()
             self.ui.view[4].status_bar = false
             self.mode = self.mode_list.off
@@ -2961,6 +2964,7 @@ function ReaderFooter:onCloseWidget()
 end
 
 function ReaderFooter:onPrintChapterLeftFbink()
+    if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
     local clock ="⌚ " ..  datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
     local left_chapter = self.ui.toc:getChapterPagesLeft(self.pageno) or self.ui.document:getTotalPagesLeft(self.pageno)
     if self.settings.pages_left_includes_current_page then
@@ -3002,6 +3006,7 @@ function ReaderFooter:onPrintChapterLeftFbink()
 end
 
 function ReaderFooter:onPrintSessionDurationFbink()
+    if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
     local percentage_session, pages_read_session, duration = getSessionStats(self)
 
 
@@ -3040,6 +3045,7 @@ function ReaderFooter:onPrintSessionDurationFbink()
 end
 
 function ReaderFooter:onPrintProgressBookFbink()
+    if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
     local string_percentage  = "%0.f%%"
     local percentage = string_percentage:format(self.progress_bar.percentage * 100)
 
@@ -3078,6 +3084,7 @@ function ReaderFooter:onPrintProgressBookFbink()
 end
 
 function ReaderFooter:onPrintClockFbink()
+    if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
     local clock =  datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
 
     local InfoMessage = require("ui/widget/infomessage")
@@ -3116,6 +3123,7 @@ function ReaderFooter:onPrintClockFbink()
 end
 
 function ReaderFooter:onPrintDurationChapterFbink()
+    if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
     if not self.ui.toc then
         return "n/a"
     end
@@ -3161,6 +3169,7 @@ function ReaderFooter:onPrintDurationChapterFbink()
 end
 
 function ReaderFooter:onPrintDurationNextChapterFbink()
+    if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
     if not self.ui.toc then
         return "n/a"
     end
@@ -3210,6 +3219,7 @@ function ReaderFooter:onPrintDurationNextChapterFbink()
 end
 
 function ReaderFooter:onPrintWpmSessionFbink()
+    if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
     local duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100
     local wpm_session,_words_session = duration_raw
     if duration_raw == 0 then
@@ -3248,8 +3258,7 @@ end
 
 
 function ReaderFooter:onGetStyles()
-    local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
-    if file_type == "pdf" then return end
+    if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
     local css_text = self.ui.document:getDocumentFileContent("OPS/styles/stylesheet.css")
     if css_text == nil then
         css_text = self.ui.document:getDocumentFileContent("stylesheet.css")
@@ -3355,8 +3364,7 @@ local function convertSizeTo(px, format)
 end
 
 function ReaderFooter:onGetTextPage()
-    local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
-    if file_type == "pdf" then return end
+    if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
     local cur_page = self.ui.document:getCurrentPage()
     local total_characters = 0
     -- if not Device:isPocketBook() then
@@ -3529,6 +3537,7 @@ function ReaderFooter:onGetTextPage()
     return true
 end
 function ReaderFooter:onShowTextProperties()
+    if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
     if not self.ui.rolling then
         return "n/a"
     end
@@ -3855,6 +3864,7 @@ function ReaderFooter:onShowTextProperties()
 end
 
 function ReaderFooter:onShowNotesFooter()
+    if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
     local texto = ""
     local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
     if res and res.text then

@@ -499,25 +499,23 @@ function ReaderUI:init()
         summary.status = "reading"
     end
 
-
-    if G_reader_settings:isTrue("top_manager_infmandhistory") and not self.document.file:find("resources/arthur%-conan%-doyle%_the%-hound%-of%-the%-baskervilles.epub") then
-        require("apps/filemanager/filemanager").all_files[self.document.file].status = "reading"
-        local pattern = "(%d+)-(%d+)-(%d+)"
-        local ryear, rmonth, rday = summary.modified:match(pattern)
-        require("apps/filemanager/filemanager").all_files[self.document.file].last_modified_year = ryear
-        require("apps/filemanager/filemanager").all_files[self.document.file].last_modified_month = rmonth
-        require("apps/filemanager/filemanager").all_files[self.document.file].last_modified_day = rday
-        local util = require("util")
-        util.generateStats()
-    end
-
-
     -- After initialisation notify that document is loaded and rendered
     -- CREngine only reports correct page count after rendering is done
     -- Need the same event for PDF document
     self:handleEvent(Event:new("ReaderReady", self.doc_settings))
 
     if util.getFileNameSuffix(self.document.file) == "epub" then
+        if G_reader_settings:isTrue("top_manager_infmandhistory")
+        and not self.document.file:find("resources/arthur%-conan%-doyle%_the%-hound%-of%-the%-baskervilles.epub") then
+            require("apps/filemanager/filemanager").all_files[self.document.file].status = "reading"
+            local pattern = "(%d+)-(%d+)-(%d+)"
+            local ryear, rmonth, rday = summary.modified:match(pattern)
+            require("apps/filemanager/filemanager").all_files[self.document.file].last_modified_year = ryear
+            require("apps/filemanager/filemanager").all_files[self.document.file].last_modified_month = rmonth
+            require("apps/filemanager/filemanager").all_files[self.document.file].last_modified_day = rday
+            local util = require("util")
+            util.generateStats()
+        end
         -- There is a small delay when manipulating the cover in the coverimage plugin
         -- so the start_session_time in the topbar may be shown a bit delayed when opening the document
         -- This happens for devices using the coverimage plugin like PocketBook or Android devices
@@ -1086,7 +1084,8 @@ function ReaderUI:onHome()
                 -- require("bookinfomanager"):deleteBookInfo(file)
 
 
-                if G_reader_settings:isTrue("top_manager_infmandhistory") then
+                if G_reader_settings:isTrue("top_manager_infmandhistory")
+                    and util.getFileNameSuffix(file) == "epub" then
                     require("apps/filemanager/filemanager").all_files[file].status = "mbr"
                     require("apps/filemanager/filemanager").all_files[file].last_modified_year = 0
                     require("apps/filemanager/filemanager").all_files[file].last_modified_month = 0
@@ -1215,6 +1214,7 @@ end
 -- end
 
 function ReaderUI:onAdjustMarginsTopbar()
+    if util.getFileNameSuffix(self.document.file) ~= "epub" then return end
     local Event = require("ui/event")
     if not G_reader_settings:isTrue("show_top_bar") or self.view[4].status_bar == true then
         if self.view.footer_visible then

@@ -273,6 +273,7 @@ function PageTextInfo:addToMainMenu(menu_items)
 end
 
 function PageTextInfo:paintTo(bb, x, y)
+    if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
     local total_words = 0
     if self.is_enabled and self.vertical_frame then
         local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
