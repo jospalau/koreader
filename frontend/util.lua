@@ -1698,7 +1698,7 @@ function util.getListAll()
     local t = {}
     for i = 1, #files do
         local szKey = files[i][1];
-        t[szKey] = {files[i][2], files[i][3], files[i][4], files[i][5]}
+        t[szKey] = {status = files[i][2], last_modified_year = files[i][3], last_modified_month = files[i][4], last_modified_day = files[i][5]}
     end
     return t
 end
@@ -1795,11 +1795,11 @@ function util.getList(search_string, search_finished, search_tbr, search_mbr)
     local dirs, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year, files_finished_last_year = {}, {}, {}, {}, {}, {}, {}, {}
     local cur_month = os.date("%m")
     local cur_year = os.date("%Y")
-    for fullpath, file in pairs(require("apps/filemanager/filemanager").all_files) do
-        local book_status = file[1]
-        local ryear = file[2]
-        local rmonth = file[3]
-        local rday = file[4]
+    for fullpath, file_properties in pairs(require("apps/filemanager/filemanager").all_files) do
+        local book_status = file_properties.status
+        local ryear = file_properties.last_modified_year
+        local rmonth = file_properties.last_modified_month
+        local rday = file_properties.last_modified_day
 
         table.insert(files, fullpath)
         if book_status == "complete" then

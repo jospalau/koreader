@@ -501,12 +501,12 @@ function ReaderUI:init()
 
 
     if G_reader_settings:isTrue("top_manager_infmandhistory") and not self.document.file:find("resources/arthur%-conan%-doyle%_the%-hound%-of%-the%-baskervilles.epub") then
-        require("apps/filemanager/filemanager").all_files[self.document.file][1] = "reading"
+        require("apps/filemanager/filemanager").all_files[self.document.file].status = "reading"
         local pattern = "(%d+)-(%d+)-(%d+)"
         local ryear, rmonth, rday = summary.modified:match(pattern)
-        require("apps/filemanager/filemanager").all_files[self.document.file][2] = ryear
-        require("apps/filemanager/filemanager").all_files[self.document.file][3] = rmonth
-        require("apps/filemanager/filemanager").all_files[self.document.file][4] = rday
+        require("apps/filemanager/filemanager").all_files[self.document.file].last_modified_year = ryear
+        require("apps/filemanager/filemanager").all_files[self.document.file].last_modified_month = rmonth
+        require("apps/filemanager/filemanager").all_files[self.document.file].last_modified_day = rday
         local util = require("util")
         util.generateStats()
     end
@@ -1087,10 +1087,10 @@ function ReaderUI:onHome()
 
 
                 if G_reader_settings:isTrue("top_manager_infmandhistory") then
-                    require("apps/filemanager/filemanager").all_files[file][1] = "mbr"
-                    require("apps/filemanager/filemanager").all_files[file][2] = 0
-                    require("apps/filemanager/filemanager").all_files[file][3] = 0
-                    require("apps/filemanager/filemanager").all_files[file][4] = 0
+                    require("apps/filemanager/filemanager").all_files[file].status = "mbr"
+                    require("apps/filemanager/filemanager").all_files[file].last_modified_year = 0
+                    require("apps/filemanager/filemanager").all_files[file].last_modified_month = 0
+                    require("apps/filemanager/filemanager").all_files[file].last_modified_day = 0
                     local util = require("util")
                     util.generateStats()
                 end
