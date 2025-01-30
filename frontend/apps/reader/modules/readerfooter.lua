@@ -2784,11 +2784,12 @@ function ReaderFooter:onToggleFooterMode()
     end
     self:applyFooterMode()
     G_reader_settings:saveSetting("reader_footer_mode", self.mode)
-    --self:onUpdateFooter(true)
     -- Importante pasar el segundo parámetro a true, esto dispara la función updatePos() en el fuente readerrolling.lua y tenemos un refresco parcial
     -- Y por eso funciona
     -- self:refreshFooter(true, true)
-    self:refreshFooter(true)
+    UIManager:setDirty(self.view.dialog, function()
+        return self.view.currently_scrolling and "fast" or "ui", self.footer_content.dimen
+    end)
     UIManager:setDirty(nil, function()
         return self.view.currently_scrolling and "fast" or "ui", self.footer_content.dimen
     end)
@@ -3971,7 +3972,9 @@ function ReaderFooter:onMoveStatusBar()
     -- Importante pasar el segundo parámetro a true, esto dispara la función updatePos() en el fuente readerrolling.lua y tenemos un refresco parcial
     -- Y por eso funciona
     -- self:refreshFooter(true, true)
-    self:refreshFooter(true)
+    UIManager:setDirty(self.view.dialog, function()
+        return self.view.currently_scrolling and "fast" or "ui", self.footer_content.dimen
+    end)
     UIManager:setDirty(nil, function()
         return self.view.currently_scrolling and "fast" or "ui", self.footer_content.dimen
     end)
