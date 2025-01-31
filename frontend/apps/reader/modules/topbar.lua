@@ -1014,7 +1014,10 @@ function TopBar:onSwitchTopBar()
 
         -- TopBar.is_enabled = not TopBar.is_enabled
         -- self:toggleBar()
-        UIManager:setDirty("all", "partial")
+        -- UIManager:setDirty("all", "partial")
+        UIManager:setDirty(self.view.dialog, function()
+            return self.view.currently_scrolling and "fast" or "ui"
+        end)
     end
 end
 
