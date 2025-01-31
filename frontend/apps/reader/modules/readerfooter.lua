@@ -2782,20 +2782,31 @@ function ReaderFooter:onToggleFooterMode()
             end
         end
     end
-    self:applyFooterMode()
-    G_reader_settings:saveSetting("reader_footer_mode", self.mode)
+
     -- Importante pasar el segundo parámetro a true, esto dispara la función updatePos() en el fuente readerrolling.lua y tenemos un refresco parcial
     -- Y por eso funciona
     -- self:refreshFooter(true, true)
-    UIManager:setDirty(self.view.dialog, function()
-        return self.view.currently_scrolling and "fast" or "ui", self.footer_content.dimen
-    end)
+
+    self:applyFooterMode()
+    G_reader_settings:saveSetting("reader_footer_mode", self.mode)
+
+    local text = self:genFooterText() or ""
+    for _, v in ipairs(self.additional_footer_content) do
+        local value = v()
+        if value and value ~= "" then
+            text = text == "" and value or value .. self:genSeparator() .. text
+        end
+    end
+    self.footer_text:setText(text)
+
     UIManager:setDirty(nil, function()
         return self.view.currently_scrolling and "fast" or "ui", self.footer_content.dimen
     end)
+
     UIManager:setDirty(self.view.dialog, function()
         return self.view.currently_scrolling and "fast" or "ui", self.ui.view[4].dimen
     end)
+
     self:rescheduleFooterAutoRefreshIfNeeded()
     return true
 end
