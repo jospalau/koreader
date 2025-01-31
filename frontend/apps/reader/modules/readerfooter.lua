@@ -2790,21 +2790,27 @@ function ReaderFooter:onToggleFooterMode()
     self:applyFooterMode()
     G_reader_settings:saveSetting("reader_footer_mode", self.mode)
 
-    local text = self:genFooterText() or ""
-    for _, v in ipairs(self.additional_footer_content) do
-        local value = v()
-        if value and value ~= "" then
-            text = text == "" and value or value .. self:genSeparator() .. text
-        end
-    end
-    self.footer_text:setText(text)
+    -- local text = self:genFooterText() or ""
+    -- for _, v in ipairs(self.additional_footer_content) do
+    --     local value = v()
+    --     if value and value ~= "" then
+    --         text = text == "" and value or value .. self:genSeparator() .. text
+    --     end
+    -- end
+    -- self.footer_text:setText(text)
+    -- local margins_width = 2 * Screen:scaleBySize(self.settings.progress_margin_width)
+    -- self.footer_text:setMaxWidth(math.floor(self._saved_screen_width - margins_width))
+    -- UIManager:setDirty(nil, function()
+    --     return self.view.currently_scrolling and "fast" or "ui", self.footer_content.dimen
+    -- end)
 
-    UIManager:setDirty(nil, function()
-        return self.view.currently_scrolling and "fast" or "ui", self.footer_content.dimen
-    end)
+    -- UIManager:setDirty(self.view.dialog, function()
+    --     return self.view.currently_scrolling and "fast" or "ui", self.ui.view[4].dimen
+    -- end)
 
+    self:onUpdateFooter(true)
     UIManager:setDirty(self.view.dialog, function()
-        return self.view.currently_scrolling and "fast" or "ui", self.ui.view[4].dimen
+        return self.view.currently_scrolling and "fast" or "ui", self.footer_content.dimen
     end)
 
     self:rescheduleFooterAutoRefreshIfNeeded()
@@ -3983,6 +3989,7 @@ function ReaderFooter:onMoveStatusBar()
     UIManager:setDirty(self.view.dialog, function()
         return self.view.currently_scrolling and "fast" or "ui"
     end)
+
     self:rescheduleFooterAutoRefreshIfNeeded()
     if self.settings.bar_top then
         UIManager:show(Notification:new{
