@@ -2783,8 +2783,8 @@ function ReaderFooter:onToggleFooterMode()
         end
     end
 
-    -- Importante pasar el segundo parámetro a true, esto dispara la función updatePos() en el fuente readerrolling.lua y tenemos un refresco parcial
-    -- Y por eso funciona
+    -- It is important to pass the second parameter as true, so the function updatePos() in source readerrolling.lua will be executed performing a partial refresh
+    -- And that's why it works
     -- self:refreshFooter(true, true)
 
     self:applyFooterMode()
@@ -2808,6 +2808,11 @@ function ReaderFooter:onToggleFooterMode()
     --     return self.view.currently_scrolling and "fast" or "ui", self.ui.view[4].dimen
     -- end)
 
+    -- With the following two calls we will have fast or ui (depending if we are scrolling or not) refreshes when toggling the footer mode
+    -- We can do the refreshes manually like in the previous commented block but the problem is that if we hide the footer toggling it, turn a page and show it toggling it
+    -- it won't be properly formatted. We need to reconfigure the footer configuration manually like we are partially doing in the commented block code calling to self.footer_text:setText(text)
+    -- There is a function updateFooterText() which will be doing it as a result of calling self:onUpdateFooter(true)
+    -- The function will also perform the rest of the refreshes needed
     self:onUpdateFooter(true)
     UIManager:setDirty(self.view.dialog, function()
         return self.view.currently_scrolling and "fast" or "ui", self.footer_content.dimen
@@ -3976,8 +3981,8 @@ function ReaderFooter:onMoveStatusBar()
 
     self.settings.bar_top = not self.settings.bar_top
 
-    -- Importante pasar el segundo parámetro a true, esto dispara la función updatePos() en el fuente readerrolling.lua y tenemos un refresco parcial
-    -- Y por eso funciona
+    -- It is important to pass the second parameter as true, so the function updatePos() in source readerrolling.lua will be executed performing a partial refresh
+    -- And that's why it works
     -- self:refreshFooter(true, true)
 
     self:updateFooterContainer()
