@@ -674,6 +674,12 @@ function ReaderRolling:onPanRelease(_, ges)
     end
 end
 
+-- This won't work but I leave it as it is because I set the double tap gesture ready in this source in case we want to do something else with this or other gestures in the future
+-- Instead, we are using a SearchDictionary event defined in the source dispatcher.lua with a corresponding action named Search dictionary
+-- This Search dictionary action is assigned to double tap in both Left side and Right side in the Taps and gestures configuration instead of Turn pages with a value of 10 which is the default
+-- The event is captured in the source readerui.lua and it is exactly the same as this, we turn 10 or -10 pages if we double tap on the right or left sides, or we call the dictionary if we double tap any other place
+-- If we want to use this handler for the gesture, we have to set Pass through for both Left side and Right side in the Taps and gestures configuration
+-- For the hold action press modification, I modified the readerhighlight.lua source which is capturing the hold event
 function ReaderRolling:onDoubleTap(_, ges)
         local util = require("util")
         if util.getFileNameSuffix(self.ui.document.file) ~= "epub"  then return end
