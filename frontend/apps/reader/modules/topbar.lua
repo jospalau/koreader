@@ -500,8 +500,17 @@ function TopBar:init()
     end
 
     if TopBar.preserved_altbar_line_thickness ~= nil then
-        TopBar.alt_bar = TopBar.preserved_altbar_line_thickness
+        TopBar.altbar_line_thickness = TopBar.preserved_altbar_line_thickness
         TopBar.preserved_altbar_line_thickness = nil
+    else
+        TopBar.altbar_line_thickness = 3
+    end
+
+    if TopBar.preserved_altbar_ticks_height ~= nil then
+        TopBar.altbar_ticks_height = TopBar.preserved_altbar_ticks_height
+        TopBar.preserved_altbar_ticks_height = nil
+    else
+        TopBar.altbar_ticks_height = 7
     end
 
     if TopBar.preserved_option ~= nil then
@@ -517,7 +526,6 @@ function TopBar:init()
     else
         self.init_page = nil
     end
-
 
     if TopBar.preserved_init_page_screens ~= nil then
         self.init_page_screens = TopBar.preserved_init_page_screens
@@ -835,9 +843,9 @@ function TopBar:onReaderReady()
         tick_width = Screen:scaleBySize(1),
         ticks = nil, -- ticks will be populated in self:updateFooterText
         last = nil, -- last will be initialized in self:updateFooterText
-        altbar_line_thickness = 3, -- Initial value, it is used in alternative
+        altbar_line_thickness = TopBar.altbar_line_thickness, -- Initial value, it is used in alternative
         -- factor = 1,
-        altbar_ticks_height = 7,
+        altbar_ticks_height = TopBar.altbar_ticks_height,
         -- bordercolor = Blitbuffer.COLOR_WHITE,
     }
 
@@ -973,11 +981,11 @@ function TopBar:onPreserveCurrentSession()
     TopBar.preserved_sessions_current_book = self.sessions_current_book
     TopBar.preserved_alt_bar = self.show_top_bar
     TopBar.preserved_show_alt_bar = self.alt_bar
-    TopBar.preserved_altbar_line_thickness= self.altbar_line_thickness
-    TopBar.preserved_option= self.option
-    TopBar.preserved_init_page= self.init_page
+    TopBar.preserved_altbar_line_thickness = self.progress_bar2.altbar_line_thickness
+    TopBar.preserved_altbar_ticks_height = self.progress_bar2.altbar_ticks_height
+    TopBar.preserved_option = self.option
+    TopBar.preserved_init_page = self.init_page
     TopBar.preserved_init_page_screens= self.init_page_screens
-
 end
 
 
@@ -1223,7 +1231,7 @@ function TopBar:toggleBar(light_on)
             self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
             self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
             self.progress_bar2.altbar = true
-            self.progress_bar2.show_percentage =  self.option == 2
+            self.progress_bar2.show_percentage = self.option == 2
             self.progress_bar2.ui = self.ui
             -- Multiple of 3 onwards because we want the line to be a third in the middle of the progress thick line
             -- Value initialized to 3 when init, possible to toggle
