@@ -502,13 +502,12 @@ end
 
 
 function FileManagerHistory:onDoubleTapBottomRight(arg, ges_ev)
-    -- self._manager.ui.collections:onShowColl()
-    -- This would be top the left menu callback function for collection widget if used
-    local caller_callback = function()
-        self.ui.history:fetchStatuses(false)
-        self.ui.history:updateItemTable()
-    end
-    --self._manager.ui.collections:onShowCollList(nil, caller_callback, true)
+    -- -- This would be top the left menu callback function for collection widget if used
+    -- local caller_callback = function()
+    --     self.ui.history:fetchStatuses(false)
+    --     self.ui.history:updateItemTable()
+    -- end
+    -- --self._manager.ui.collections:onShowCollList(nil, caller_callback, true)
     self._manager.ui.collections:onShowCollList()
     return true
 end
