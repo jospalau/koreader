@@ -1365,6 +1365,10 @@ function TopBar:onPageUpdate()
 
 end
 
+function TopBar:onPosUpdate(new_pos)
+    self:toggleBar()
+end
+
 function TopBar:paintTo(bb, x, y)
     if self.status_bar and self.status_bar == true then
         -- self[10][1][1]:setText(self.time_battery_text_text:reverse())
