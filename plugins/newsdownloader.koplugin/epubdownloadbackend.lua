@@ -22,7 +22,6 @@ local EpubDownloadBackend = {
    -- accessible here so that caller can know it's a user dismiss.
    dismissed_error_code = "Interrupted by user",
 }
-local max_redirects = 5; --prevent infinite redirects
 
 local FeedCache = CacheSQLite:new{
     slots = 500,
@@ -158,19 +157,13 @@ local function build_cookies(cookies)
 end
 
 -- Get URL content
-local function getUrlContent(url, cookies, timeout, maxtime, redirectCount, add_to_cache)
-    logger.dbg("getUrlContent(", url, ",", cookies, ", ", timeout, ",", maxtime, ",", redirectCount, ",", add_to_cache, ")")
-    if not redirectCount then
-        redirectCount = 0
-    elseif redirectCount == max_redirects then
-        error("EpubDownloadBackend: reached max redirects: ", redirectCount)
-    end
+local function getUrlContent(url, cookies, timeout, maxtime, add_to_cache)
+    logger.dbg("getUrlContent(", url, ",", cookies, ", ", timeout, ",", maxtime, ",", add_to_cache, ")")
 
     if not timeout then timeout = 10 end
     logger.dbg("timeout:", timeout)
 
     local sink = {}
-    local parsed = socket_url.parse(url)
     socketutil:set_timeout(timeout, maxtime or 30)
     local request = {
         url     = url,
@@ -185,12 +178,12 @@ local function getUrlContent(url, cookies, timeout, maxtime, redirectCount, add_
 
     socketutil:reset_timeout()
     local content = table.concat(sink) -- empty or content accumulated till now
-    logger.dbg("After http.request")
-    logger.dbg("type(code):", type(code))
-    logger.dbg("code:", code)
-    logger.dbg("headers:", headers)
-    logger.dbg("status:", status)
-    logger.dbg("#content:", #content)
+    logger.dbg(
+        "getUrlContent: after http.request",
+        "type(code):", type(code), "code:", code, "headers:", headers,
+        "status:", status,
+        "#content:", #content
+    )
 
     if code == socketutil.TIMEOUT_CODE or
        code == socketutil.SSL_HANDSHAKE_CODE or
@@ -206,23 +199,6 @@ local function getUrlContent(url, cookies, timeout, maxtime, redirectCount, add_
     if headers == nil then
         logger.warn("No HTTP headers:", status or code or "network unreachable")
         return false, "Network or remote server unavailable"
-    end
-    if not code or code < 200 or code > 299 then -- all 200..299 HTTP codes are OK
-        if code and code > 299 and code < 400  and headers and headers.location then -- handle 301, 302...
-           local redirected_url = headers.location
-           local parsed_redirect_location = socket_url.parse(redirected_url)
-           if not parsed_redirect_location.host then
-             parsed_redirect_location.host = parsed.host
-             parsed_redirect_location.scheme = parsed.scheme
-             redirected_url = socket_url.build(parsed_redirect_location)
-           end
-           logger.dbg("getUrlContent: Redirecting to url: ", redirected_url)
-           return getUrlContent(redirected_url, timeout, maxtime, redirectCount + 1, add_to_cache)
-        else
-           error("EpubDownloadBackend: Don't know how to handle HTTP response status:", status or code)
-        end
-        logger.warn("HTTP status not okay:", status or code)
-        return false, status or code
     end
     if headers and headers["content-length"] then
         -- Check we really got the announced content size
@@ -267,21 +243,24 @@ function EpubDownloadBackend:getConnectionCookies(url, credentials)
     logger.dbg("request:", request, ", body: ", body)
     local code, headers, status = socket.skip(1, http.request(request))
 
-    logger.dbg("code:", code)
-    logger.dbg("headers:", headers)
-    logger.dbg("status:", status)
+    logger.dbg(
+        "getConnectionCookies: after http.request",
+        "code:", code,
+        "headers:", headers,
+        "status:", status
+    )
 
     local cookies = {}
     local to_parse = headers["set-cookie"]
     split_set_cookie(to_parse, cookies)
-    logger.dbg("Cookies: ", cookies)
+    logger.dbg("getConnectionCookies: cookies:", cookies)
 
     return cookies
 end
 
 function EpubDownloadBackend:getResponseAsString(url, cookies, add_to_cache)
     logger.dbg("EpubDownloadBackend:getResponseAsString(", url, ")")
-    local success, content = getUrlContent(url, cookies, nil, nil, nil, add_to_cache)
+    local success, content = getUrlContent(url, cookies, nil, nil, add_to_cache)
     if (success) then
         return content
     else
@@ -313,7 +292,7 @@ function EpubDownloadBackend:loadPage(url, cookies)
         local timeout, maxtime = 10, 60
         success, content = getUrlContent(url, cookies, timeout, maxtime)
     end
-    logger.dbg("success:", success, "type(content):", type(content), "content:", content:sub(1, 500), "...")
+    logger.dbg("success:", success, "type(content):", type(content), "content:", type(content) == "string" and content:sub(1, 500), "...")
     if not success then
         error(content)
     else
