@@ -2805,17 +2805,17 @@ function ReaderFooter:onToggleFooterMode()
     -- end)
 
     -- UIManager:setDirty(self.view.dialog, function()
-    --     return self.view.currently_scrolling and "fast" or "ui", self.ui.view[4].dimen
+    --     return self.view.currently_scrolling and "fast" or "ui"
     -- end)
 
     -- With the following two calls we will have fast or ui (depending if we are scrolling or not) refreshes when toggling the footer mode
     -- We can do the refreshes manually like in the previous commented block but the problem is that if we hide the footer toggling it, turn a page and show it toggling it
     -- it won't be properly formatted. We need to reconfigure the footer configuration manually like we are partially doing in the commented block code calling to self.footer_text:setText(text)
     -- There is a function updateFooterText() which will be doing it as a result of calling self:onUpdateFooter(true)
-    -- The function will also perform the rest of the refreshes needed
+    -- This function will perform afterwards the other refresh needed
     self:onUpdateFooter(true)
     UIManager:setDirty(self.view.dialog, function()
-        return self.view.currently_scrolling and "fast" or "ui", self.footer_content.dimen
+        return self.view.currently_scrolling and "fast" or "ui"
     end)
 
     self:rescheduleFooterAutoRefreshIfNeeded()
