@@ -638,9 +638,11 @@ function FileChooser:onMenuSelect(item)
     -- parent directory of dir without permission get nil mode
     -- we need to change to parent path in this case
     if item.is_file then
-        if G_reader_settings:isTrue("top_manager_infmandhistory") and item.path and (util.getFileNameSuffix(item.path) == "epub"
-            and require("apps/filemanager/filemanager").all_files[item.path].status == "mbr"
-            or require("apps/filemanager/filemanager").all_files[item.path].status == "new") then
+        if G_reader_settings:isTrue("top_manager_infmandhistory")
+            and item.path
+            and util.getFileNameSuffix(item.path) == "epub"
+            and (require("apps/filemanager/filemanager").all_files[item.path].status == "mbr"
+                or require("apps/filemanager/filemanager").all_files[item.path].status == "new") then
             local MultiConfirmBox = require("ui/widget/multiconfirmbox")
             local text = " do you want to open it?"
             local multi_box= MultiConfirmBox:new{

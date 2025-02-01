@@ -1472,8 +1472,11 @@ function Menu:onMenuSelect(item)
                 return true
             end
         end
-        if G_reader_settings:isTrue("top_manager_infmandhistory") and item.file and (util.getFileNameSuffix(item.file) == "epub" and require("apps/filemanager/filemanager").all_files[item.file].status == "mbr"
-        or require("apps/filemanager/filemanager").all_files[item.file].status == "new") then
+        if G_reader_settings:isTrue("top_manager_infmandhistory")
+            and item.file
+            and util.getFileNameSuffix(item.file) == "epub"
+            and (require("apps/filemanager/filemanager").all_files[item.file].status == "mbr"
+                or require("apps/filemanager/filemanager").all_files[item.file].status == "new") then
             local MultiConfirmBox = require("ui/widget/multiconfirmbox")
             local text = " do you want to open it?"
             local multi_box= MultiConfirmBox:new{
