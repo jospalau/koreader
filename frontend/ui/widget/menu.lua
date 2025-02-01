@@ -1472,7 +1472,29 @@ function Menu:onMenuSelect(item)
                 return true
             end
         end
-        self:onMenuChoice(item)
+        if G_reader_settings:isTrue("top_manager_infmandhistory") and item.file and (util.getFileNameSuffix(item.file) == "epub" and require("apps/filemanager/filemanager").all_files[item.file].status == "mbr"
+        or require("apps/filemanager/filemanager").all_files[item.file].status == "new") then
+            local MultiConfirmBox = require("ui/widget/multiconfirmbox")
+            local text = " do you want to open it?"
+            local multi_box= MultiConfirmBox:new{
+                text = require("apps/filemanager/filemanager").all_files[item.file].status == "mbr" and "Book in MBR".. text  or "Book not opened" .. text,
+                choice1_text = _("Yes"),
+                choice1_callback = function()
+                    self:onMenuChoice(item)
+                end,
+                choice2_text = _("Do not open it"),
+                choice2_callback = function()
+                    return
+                end,
+                cancel_callback = function()
+                    return
+                end,
+            }
+            UIManager:show(multi_box)
+            return false
+        else
+            self:onMenuChoice(item)
+        end
         if self.close_callback then
             self.close_callback()
         end
