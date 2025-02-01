@@ -2753,7 +2753,12 @@ function ReaderFooter:TapFooter(ges)
         return true
     end
     if self.settings.lock_tap then return end
-    return self:onToggleFooterMode()
+    local text = not self.ui.gestures.ignore_hold_corners and "Hold and double tap unlock" or "Hold and double tap lock"
+    UIManager:show(Notification:new{
+        text = _(tostring(text)),
+    })
+    -- return self:onToggleFooterMode()
+    return self.ui.gestures:onIgnoreHoldCorners(not self.ui.gestures.ignore_hold_corners)
 end
 
 function ReaderFooter:onToggleFooterMode()
