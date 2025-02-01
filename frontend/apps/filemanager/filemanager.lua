@@ -49,7 +49,7 @@ local Screen = Device.screen
 local T = ffiUtil.template
 
 local FileManager = InputContainer:extend{
-    title = _("KOReader"),
+    -- title = _("KOReader"),
     active_widgets = nil, -- array
     root_path = lfs.currentdir(),
 
@@ -152,6 +152,7 @@ function FileManager:setupLayout()
         right_icon_size_ratio = 1,
         right_icon_tap_callback = function() self:onShowPlusMenu() end,
         right_icon_hold_callback = false, -- propagate long-press to dispatcher
+        center_icon = true,
     }
 
     local file_chooser = FileChooser:new{

@@ -64,6 +64,12 @@ local TitleBar = OverlapGroup:extend{
     right_icon_tap_callback = function() end,
     right_icon_hold_callback = function() end,
     right_icon_allow_flash = true,
+    center_icon = nil,
+    center_icon_size_ratio = 0.6,
+    center_icon_rotation_angle = 0,
+    center_icon_tap_callback = function() end,
+    center_icon_hold_callback = function() end,
+    center_icon_allow_flash = true,
         -- set any of these _callback to false to not handle the event
         -- and let it propagate; otherwise the event is discarded
 
@@ -101,6 +107,7 @@ function TitleBar:init()
     local right_icon_size = Screen:scaleBySize(DGENERIC_ICON_SIZE * self.right_icon_size_ratio)
     self.has_left_icon = false
     self.has_right_icon = false
+    self.has_center_icon = false
 
     -- No button on non-touch device
     local left_icon_reserved_width = 0
@@ -113,7 +120,10 @@ function TitleBar:init()
         self.has_right_icon = true
         right_icon_reserved_width = right_icon_size + self.button_padding
     end
-
+    if self.center_icon then
+        self.has_center_icon = true
+        center_icon_reserved_width = right_icon_size + self.button_padding
+    end
     if self.align == "center" then
         -- Keep title and subtitle text centered even if single button
         left_icon_reserved_width = math.max(left_icon_reserved_width, right_icon_reserved_width)
@@ -387,6 +397,16 @@ function TitleBar:init()
         }
         table.insert(self, self.right_button)
     end
+    if self.has_center_icon then
+        local ImageWidget = require("ui/widget/imagewidget")
+        self.center_button = ImageWidget:new{
+            file = "resources/logo.png",
+            overlap_align = "center",
+            width = right_icon_size * 2,
+            height = right_icon_size,
+        }
+        table.insert(self, self.center_button)
+    end
 
     -- Call our base class's init (especially since OverlapGroup has very peculiar self.dimen semantics...)
     OverlapGroup.init(self)
@@ -473,9 +493,14 @@ function TitleBar:generateHorizontalLayout()
     if self.left_button then
         table.insert(row, self.left_button)
     end
+    if self.center_button then
+        table.insert(row, self.center_button)
+    end
+
     if self.right_button then
         table.insert(row, self.right_button)
     end
+
     local layout = {}
     if #row > 0 then
         table.insert(layout, row)
