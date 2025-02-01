@@ -402,8 +402,8 @@ function TitleBar:init()
         self.center_button = ImageWidget:new{
             file = "resources/logo.png",
             overlap_align = "center",
-            width = right_icon_size * 2,
-            height = right_icon_size,
+            -- width = right_icon_size * 2,
+            -- height = right_icon_size,
         }
         table.insert(self, self.center_button)
     end
@@ -485,6 +485,13 @@ function TitleBar:setRightIcon(icon)
         self.right_button:setIcon(icon)
         UIManager:setDirty(self.show_parent, "ui", self.dimen)
     end
+end
+
+function TitleBar:toggleCenterICon(toggle)
+    self.center_button.hide = toggle
+    self.title_widget:setText(toggle and "KOReader" or "")
+    -- self.subtitle_widget:setText("")
+    UIManager:setDirty(self.show_parent, "ui", self.dimen)
 end
 
 -- layout for FocusManager

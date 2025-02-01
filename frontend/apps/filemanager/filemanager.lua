@@ -49,7 +49,7 @@ local Screen = Device.screen
 local T = ffiUtil.template
 
 local FileManager = InputContainer:extend{
-    -- title = _("KOReader"),
+    title = _("KOReader"),
     active_widgets = nil, -- array
     root_path = lfs.currentdir(),
 
@@ -128,6 +128,10 @@ function FileManager:updateTitleBarPath(path)
         text = "☆ " .. text
     end
     self.title_bar:setSubTitle(text)
+
+    -- self.title_bar.center_icon = path == (G_reader_settings:readSetting("home_dir") or filemanagerutil.getDefaultDir()) and true or false
+    -- self.title_bar.title = path == (G_reader_settings:readSetting("home_dir") or filemanagerutil.getDefaultDir()) and _("KOReader") or ""
+    self.title_bar:toggleCenterICon(path ~= (G_reader_settings:readSetting("home_dir") or filemanagerutil.getDefaultDir()))
 end
 
 FileManager.onPathChanged = FileManager.updateTitleBarPath
