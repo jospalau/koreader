@@ -209,6 +209,12 @@ function ReaderStatus:markBook(mark_read)
     -- If History is called over Reader, it will read the file to get the book status, so flush
     self.ui.doc_settings:flush()
     if G_reader_settings:isTrue("top_manager_infmandhistory") then
+        local pattern = "(%d+)-(%d+)-(%d+)"
+        local ryear, rmonth, rday = summary.modified:match(pattern)
+        require("apps/filemanager/filemanager").all_files[self.document.file].status = summary.status
+        require("apps/filemanager/filemanager").all_files[self.document.file].last_modified_year = ryear
+        require("apps/filemanager/filemanager").all_files[self.document.file].last_modified_month = rmonth
+        require("apps/filemanager/filemanager").all_files[self.document.file].last_modified_day = rday
         local util = require("util")
         util.generateStats()
     end
