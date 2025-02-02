@@ -261,7 +261,7 @@ function ReaderView:paintTo(bb, x, y)
         self:drawXPointerSavedHighlightNotes(bb, x, y)
     end
 
-    if G_reader_settings:isTrue("highlight_all_words_vocabulary") then
+    if G_reader_settings:isTrue("highlight_all_words_vocabulary") and self.ui.pagetextinfo then
         self:drawXPointerVocabulary(bb, x, y)
     end
 
@@ -931,8 +931,8 @@ function ReaderView:drawXPointerVocabulary(bb, x, y)
 --        UIManager:show( require("ui/widget/textviewer"):new{text = dump(self.ui.notes)})
 --    end
 --
-    if self.ui.words[self.state.page] then
-        for _, item in ipairs(self.ui.words[self.state.page]) do
+    if self.ui.pagetextinfo.words[self.state.page] then
+        for _, item in ipairs(self.ui.pagetextinfo.words[self.state.page]) do
             -- document:getScreenBoxesFromPositions() is expensive, so we
             -- first check if this item is on current page
             local start_pos = self.document:getPosFromXPointer(item.start)
