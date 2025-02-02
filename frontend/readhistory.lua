@@ -303,8 +303,8 @@ function ReadHistory:clearMissing()
     end
 end
 
-function ReadHistory:removeItemByPath(path)
-    local index = self:getIndexByFile(path)
+function ReadHistory:removeItemByPath(path, no_flush)
+    local index = self:getIndexByFile(path, no_flush)
     if index then
         self:removeItem(self.hist[index], index)
     end
