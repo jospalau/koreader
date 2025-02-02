@@ -407,7 +407,7 @@ function ReaderBookmark:removeItem(item, item_idx)
     if item.drawer then
         self.ui.highlight:deleteHighlight(index) -- will call ReaderBookmark:removeItemByIndex()
         if G_reader_settings:isTrue("highlight_all_notes") then
-            self.ui:updateNotes()
+            self.ui.pagetextinfo:updateNotes()
         end
     else -- dogear bookmark, update it in case we removed a bookmark for current page
         self:removeItemByIndex(index)
@@ -1317,7 +1317,7 @@ function ReaderBookmark:setBookmarkNote(item_or_index, is_new_note, new_note, ca
                         end
                         --self.ui.styletweak:updateCssText(true)
                         if G_reader_settings:isTrue("highlight_all_notes") then
-                            self.ui:updateNotes()
+                            self.ui.pagetextinfo:updateNotes()
                         end
                         caller_callback()
                     end,

@@ -561,44 +561,14 @@ function ReaderUI:init()
         -- Should never happen, given what we did in (do)showReader...
         logger.err("ReaderUI instance mismatch! Opened", tostring(self), "while we still have an existing instance:", tostring(ReaderUI.instance), debug.traceback())
     end
-    if G_reader_settings:isTrue("highlight_all_notes") then
-        self:updateNotes()
+    if G_reader_settings:isTrue("highlight_all_notes") and self.pagetextinfo then
+        self.pagetextinfo:updateNotes()
     end
 
     if G_reader_settings:isTrue("highlight_all_words_vocabulary") and self.pagetextinfo then
         self.pagetextinfo:updateWordsVocabulary()
     end
     ReaderUI.instance = self
-end
-
-function ReaderUI:updateNotes()
-    -- self.search:fullTextSearch("Citra")
-    self.pages_notes = {}
-    self.notes = {}
-    local annotations = self.annotation.annotations
-    for i, item in ipairs(annotations) do
-        if item.note and not item.text:find("%s+") then
-            item.words = self.document:findAllText(item.text, true, 5, 5000, 0, false)
-            table.insert(self.notes, item)
-            for i, word in ipairs(item.words) do
-                word.note = item.note
-                local page = self.document:getPageFromXPointer(word.start)
-                if not self.pages_notes[page] then
-                    self.pages_notes[page]={}
-                end
-                table.insert(self.pages_notes[page], word)
-                local page2 = self.document:getPageFromXPointer(word["end"])
-                if not self.pages_notes[page2] then
-                    self.pages_notes[page2]={}
-                end
-                table.insert(self.pages_notes[page2], word)
-            end
-        end
-    end
-
-    --self.words = self.document:findAllText("Citra", true, 5, 5000, 0, false)
-    --local dump = require("dump")
-    --print(dump(self.notes))
 end
 
 function ReaderUI:registerKeyEvents()

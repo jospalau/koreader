@@ -1035,11 +1035,11 @@ function ReaderHighlight:onTap(_, ges)
             return self:showChooseHighlightDialog(highlights_tapped)
         end
     end
-    if G_reader_settings:isTrue("highlight_all_notes") then
+    if G_reader_settings:isTrue("highlight_all_notes") and self.ui.pagetextinfo.pages_notes then
         if ges and ges.pos then
             local pos = self.view:screenToPageTransform(ges.pos)
-            if self.ui.pages_notes[self.ui.view.state.page] then
-                for _, item in ipairs(self.ui.pages_notes[self.ui.view.state.page]) do
+            if self.ui.pagetextinfo.pages_notes[self.ui.view.state.page] then
+                for _, item in ipairs(self.ui.pagetextinfo.pages_notes[self.ui.view.state.page]) do
                     local boxes = self.ui.document:getScreenBoxesFromPositions(item.start, item["end"], true)
                     if boxes then
                         for _, box in ipairs(boxes) do
@@ -1213,7 +1213,7 @@ function ReaderHighlight:showHighlightNoteOrDialog(index)
                                 UIManager:setDirty(self.dialog, "ui")
                             end
                             if G_reader_settings:isTrue("highlight_all_notes") then
-                                self.ui:updateNotes()
+                                self.ui.pagetextinfo:updateNotes()
                                 UIManager:setDirty("all", "full")
                             end
                         end,
