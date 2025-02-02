@@ -1035,7 +1035,7 @@ function ReaderHighlight:onTap(_, ges)
             return self:showChooseHighlightDialog(highlights_tapped)
         end
     end
-    if G_reader_settings:isTrue("highlight_all_notes") and self.ui.pagetextinfo.pages_notes then
+    if G_reader_settings:isTrue("highlight_all_notes") and self.ui.pagetextinfo then
         if ges and ges.pos then
             local pos = self.view:screenToPageTransform(ges.pos)
             if self.ui.pagetextinfo.pages_notes[self.ui.view.state.page] then
