@@ -2109,9 +2109,16 @@ function VocabBuilder:onWordLookedUp(word, title, is_manual)
         highlight = highlight ~= word and highlight or nil
     }) end
 
-    local remove = function() DB:remove({
-        word = word
-    }) end
+    local remove = function()
+        DB:remove({
+            word = word
+        })
+        if G_reader_settings:isTrue("highlight_all_words_vocabulary") and self.ui.pagetextinfo then
+            self.ui.pagetextinfo:updateWordsVocabulary()
+        end
+        UIManager:setDirty(nil, "ui")
+
+    end
 
     local item = DB:hasWord(word)
     if item then
