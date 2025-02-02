@@ -610,15 +610,51 @@ function ReaderUI:updateWordsVocabulary()
 
     --local row, names = stmt:step({}, {})
     self.words = {}
-    self.all_words = ""
+    -- self.all_words = ""
+    local t = {}
     row = {}
     while stmt:step(row) do
         local word = row[1]
         if not word:find("%s+") and word:len() > 3 then
-            self.all_words = self.all_words .. word .. "|"
+            -- self.all_words = self.all_words .. word .. "|"
+            table.insert(t, word)
         end
     end
+
     conn:close()
+    self.all_words = {}
+    for i=1, #t do
+        self.all_words[t[i]] = "";
+    end
+
+
+    if self.all_words then
+        local res = self.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
+        if res and res.text then
+            local words_page = util.splitToWords2(res.text) -- contar palabras
+            if words_page and self.all_words then
+                for i = 1, #words_page do
+                    local word_page = words_page[i]
+                    if self.all_words[word_page] then
+                        local words = self.document:findText(word_page, 1, false, true, -1, false, 100) -- Page not used, set -1
+                        for j = 1, #words do
+                            local wordi = words[j]
+                            local page = self.document:getPageFromXPointer(wordi.start)
+                            if not self.words[page] then
+                                self.words[page] = {}
+                            end
+                            table.insert(self.words[page], wordi)
+                            local page2 = self.document:getPageFromXPointer(wordi["end"])
+                            if not self.words[page2] then
+                                self.words[page2] = {}
+                            end
+                            table.insert(self.words[page2], wordi)
+                        end
+                    end
+                end
+            end
+        end
+    end
 
     -- if all_words then
     --     all_words = all_words:sub(1, all_words:len() - 1)
@@ -639,24 +675,24 @@ function ReaderUI:updateWordsVocabulary()
     --     end
     -- end
 
-    if self.all_words then
-        self.all_words = self.all_words:sub(1, self.all_words:len() - 1)
-        local words = self.document:findText(self.all_words, 1, false, true, -1, true, 100) -- Page not used, set -1
-        if words then
-            for i, wordi in ipairs(words) do
-                local page = self.document:getPageFromXPointer(wordi.start)
-                if not self.words[page] then
-                    self.words[page]={}
-                end
-                table.insert(self.words[page], wordi)
-                local page2 = self.document:getPageFromXPointer(wordi["end"])
-                if not self.words[page2] then
-                    self.words[page2]={}
-                end
-                table.insert(self.words[page2], wordi)
-            end
-        end
-    end
+    -- if self.all_words then
+    --     self.all_words = self.all_words:sub(1, self.all_words:len() - 1)
+    --     local words = self.document:findText(self.all_words, 1, false, true, -1, true, 100) -- Page not used, set -1
+    --     if words then
+    --         for i, wordi in ipairs(words) do
+    --             local page = self.document:getPageFromXPointer(wordi.start)
+    --             if not self.words[page] then
+    --                 self.words[page]={}
+    --             end
+    --             table.insert(self.words[page], wordi)
+    --             local page2 = self.document:getPageFromXPointer(wordi["end"])
+    --             if not self.words[page2] then
+    --                 self.words[page2]={}
+    --             end
+    --             table.insert(self.words[page2], wordi)
+    --         end
+    --     end
+    -- end
     -- In the cre.cpp source findText() function, there is a call to doc->text_view->selectWords( words ); when looking for words
     -- But when it finishes doesn't called doc->text_view->clearSelection(); like thefindAllText() function does
     -- The result is that the words are highlighted by the CREngine
