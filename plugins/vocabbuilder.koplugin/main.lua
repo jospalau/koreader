@@ -579,7 +579,7 @@ function WordInfoDialog:init()
         end
     }
 
-    local buttons = self.update_callback and {{cancel_button, update_button}} or {{reset_button, remove_button}}
+    local buttons = self.update_callback and {{cancel_button, update_button, remove_button}} or {{reset_button, remove_button}}
     if self.vocabbuilder and self.vocabbuilder.item.last_due_time then
         table.insert(buttons, {{
             text = _("Undo study status"),
@@ -2109,6 +2109,10 @@ function VocabBuilder:onWordLookedUp(word, title, is_manual)
         highlight = highlight ~= word and highlight or nil
     }) end
 
+    local remove = function() DB:remove({
+        word = word
+    }) end
+
     local item = DB:hasWord(word)
     if item then
         local date_str = T(_("Added on %1"), os.date("%Y-%m-%d", item.create_time))
@@ -2121,6 +2125,7 @@ function VocabBuilder:onWordLookedUp(word, title, is_manual)
             prev_context = item.prev_context,
             next_context = item.next_context,
             update_callback = update,
+            remove_callback = remove,
         }
         UIManager:show(dialog)
     else
