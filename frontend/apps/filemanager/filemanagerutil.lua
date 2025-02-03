@@ -302,7 +302,7 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
 
                     -- If Add to the history as MBR is not checked, it will be removed from the history always
                     if check_button_mbr.checked then
-                        require("readhistory"):addItem(file, os.time(), true)
+                        require("readhistory"):addItem(file, os.time())
                     else
                         require("readhistory"):removeItemByPath(file)
                     end
