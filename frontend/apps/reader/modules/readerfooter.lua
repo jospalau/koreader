@@ -2773,6 +2773,7 @@ function ReaderFooter:TapFooter(ges)
     })
     -- return self:onToggleFooterMode()
     return self.ui.gestures:onIgnoreHoldCorners(not self.ui.gestures.ignore_hold_corners)
+        and self.ui.pagetextinfo:toggleHighlightAllWordsVocabulary(self.ui.gestures.ignore_hold_corners)
 end
 
 function ReaderFooter:onToggleFooterMode()

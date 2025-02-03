@@ -47,6 +47,11 @@ function PageTextInfo:onPageTextInfo()
     -- UIManager:show(popup)
 end
 
+function PageTextInfo:toggleHighlightAllWordsVocabulary(toggle)
+    G_reader_settings:saveSetting("highlight_all_words_vocabulary", toggle)
+    UIManager:setDirty("all", "full")
+end
+
 function PageTextInfo:init()
 
     if not self.settings then self:readSettingsFile() end

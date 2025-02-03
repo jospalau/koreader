@@ -2108,16 +2108,14 @@ function VocabBuilder:onWordLookedUp(word, title, is_manual)
         next_context = next_context,
         highlight = highlight ~= word and highlight or nil
     }) end
-
     local remove = function()
         DB:remove({
             word = word
         })
-        if G_reader_settings:isTrue("highlight_all_words_vocabulary") and self.ui.pagetextinfo and util.getFileNameSuffix(file) == "epub" then
+        if G_reader_settings:isTrue("highlight_all_words_vocabulary") and self.ui.pagetextinfo and util.getFileNameSuffix(self.ui.document.file) == "epub" then
             self.ui.pagetextinfo:updateWordsVocabulary()
+            UIManager:setDirty(nil, "ui")
         end
-        UIManager:setDirty(nil, "ui")
-
     end
 
     local item = DB:hasWord(word)
@@ -2137,6 +2135,10 @@ function VocabBuilder:onWordLookedUp(word, title, is_manual)
         UIManager:show(dialog)
     else
         update()
+    end
+    if G_reader_settings:isTrue("highlight_all_words_vocabulary") and self.ui.pagetextinfo and util.getFileNameSuffix(self.ui.document.file) == "epub" then
+        self.ui.pagetextinfo:updateWordsVocabulary()
+        UIManager:setDirty(nil, "ui")
     end
 
     return true
