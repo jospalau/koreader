@@ -234,7 +234,7 @@ local function retryLastFile()
     }
 end
 
-
+-- require("apps/filemanager/filemanager") in the function getList() in util.lua will make the data available
 if G_reader_settings:isTrue("top_manager_infmandhistory") then
     local util = require("util")
     util.generateStats()

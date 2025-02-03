@@ -1637,6 +1637,28 @@ function util.round_decimal(num, points)
 end
 
 function util.getListAll()
+    -- This will be fired in the source reader.lua when calling the util.generateStats() function
+    -- The function util.generateStats() saves the table in the file books.lua when called:
+    -- util.writeToFile(dump(require("apps/filemanager/filemanager").all_files), G_reader_settings:readSetting("home_dir") .. "/books.lua", true, true, true)
+    -- This invokes require("apps/filemanager/filemanager").all_files
+    -- which loads the modules filemanager calling the function getListAll() just the first time the module is loaded
+    -- If there is no file books.lua (first time executing it without the file)
+    -- or the number of epub files in the file is different than the ones in the file system (when adding new books basically), the file will be generated
+    -- The file will be updated everytime there is a modification in the books statuses in the util.generateStats() function so
+    -- that way, the information is consistent when loading it next time
+    if G_reader_settings:readSetting("home_dir") .. "/books.lua" then
+        if ffiUtil.realpath(G_reader_settings:readSetting("home_dir") .. "/books.lua") then
+            local ok, calibre_data = pcall(dofile, G_reader_settings:readSetting("home_dir") .. "/books.lua")
+            local home = G_reader_settings:readSetting("home_dir")
+            local files = 0
+            for dir in io.popen("find  " .. home .. " -iname '*.epub'"):lines() do
+                files = files + 1
+            end
+            if ok and files == util.tableSize(calibre_data) then
+                return calibre_data
+            end
+        end
+    end
     local FileChooser = require("ui/widget/filechooser")
     local DocumentRegistry = require("document/documentregistry")
     local lfs = require("libs/libkoreader-lfs")
@@ -1644,8 +1666,9 @@ function util.getListAll()
     local ReadHistory = require("readhistory")
     local BookList = require("ui/widget/booklist")
     local filemanagerutil = require("apps/filemanager/filemanagerutil")
+    local dump = require("dump")
     local collate = FileChooser:getCollate()
-    local search_string = ".*.epub"
+    local search_string = ".*%.epub"
 
     local files = {}
     local scan_dirs = {G_reader_settings:readSetting("home_dir")}
@@ -1700,6 +1723,8 @@ function util.getListAll()
         local szKey = files[i][1];
         t[szKey] = {status = files[i][2], last_modified_year = files[i][3], last_modified_month = files[i][4], last_modified_day = files[i][5]}
     end
+    -- We don't need to save the file, it will be saved when calling util.generateStats() after running through here
+    -- util.writeToFile(dump(t), G_reader_settings:readSetting("home_dir") .. "/books.lua", true, true, true)
     return t
 end
 
@@ -1894,7 +1919,8 @@ end
 
 function util.generateStats()
     local dump = require("dump")
-    local _, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year, files_finished_last_year = util.getList("*.epub")
+    util.writeToFile(dump(require("apps/filemanager/filemanager").all_files), G_reader_settings:readSetting("home_dir") .. "/books.lua", true, true, true)
+    local _, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year, files_finished_last_year = util.getList()
     local _, stats_last_days = util.getLastDaysStats(5, true)
     local stats = {["total_books"] = #files,
                 ["total_books_finished"] = #files_finished,
