@@ -303,7 +303,7 @@ function PageTextInfo:updateWordsVocabulary()
     row = {}
     while stmt:step(row) do
         local word = row[1]
-        if not word:find("%s+") then -- and word:len() > 3 then
+        if not word:find("%s+") and word:len() > 3 then
             -- self.all_words = self.all_words .. word .. "|"
             table.insert(t, word)
         end
@@ -328,7 +328,8 @@ function PageTextInfo:updateWordsVocabulary()
                         if i > 1 then
                             words = self.document:findText(word_page, 1, false, true, -1, false, 100)
                         else
-                            local cre = require("document/credocument"):engineInit()
+                            -- local cre = require("document/credocument"):engineInit()
+                            local cre = require("libs/libkoreader-cre")
                             local suggested_hyphenation = cre.getHyphenationForWord(word_page)
                             if self.all_words[word_page] and suggested_hyphenation:find("-") then
                                 word_page = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len())
