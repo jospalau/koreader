@@ -716,7 +716,7 @@ function FileManagerHistory:onOpenRandomFav(hist_dialog)
     for _, v in ipairs(require("readhistory").hist) do
         -- MBR books are in the history file but dont;t have sidecard directory
         -- local status = filemanagerutil.getStatus(v.file)
-        if not DocSettings:hasSidecarFile(v.file) then
+        if not require("docsettings"):hasSidecarFile(v.file) then
             table.insert(mbr_list, v)
         end
     end
