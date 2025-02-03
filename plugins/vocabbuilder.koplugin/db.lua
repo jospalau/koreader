@@ -392,7 +392,7 @@ end
 
 function VocabularyBuilder:remove(item)
     local conn = SQ3.open(db_location)
-    local stmt = conn:prepare("DELETE FROM vocabulary WHERE word = ? ;")
+    local stmt = conn:prepare("DELETE FROM vocabulary WHERE upper(word) = upper(?) ;")
     stmt:bind(item.word)
     stmt:step()
     stmt:clearbind():reset()
