@@ -183,8 +183,10 @@ function FileManagerHistory:onMenuHold(item)
             text = _("Readd to history"),
             callback = function()
                 UIManager:close(self.file_dialog)
+                local last_current_file = G_reader_settings:readSetting("lastfile")
                 require("readhistory"):removeItem(item)
                 require("readhistory"):addItem(item.file,os.time())
+                G_reader_settings:saveSetting("lastfile", last_current_file)
                 self._manager:fetchStatuses(false)
                 self._manager:updateItemTable()
             end,

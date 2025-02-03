@@ -205,8 +205,10 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                             doc_settings:flush()
                         end
                     end
+                    local last_current_file = G_reader_settings:readSetting("lastfile")
                     require("readhistory"):removeItemByPath(file)
                     require("readhistory"):addItem(file, os.time())
+                    G_reader_settings:saveSetting("lastfile", last_current_file)
                 end
 
                 summary.status = to_status
@@ -316,7 +318,9 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
                     end
                     if G_reader_settings:isTrue("top_manager_infmandhistory") and util.getFileNameSuffix(file) == "epub" then
                         if check_button_mbr.checked then
+                            local last_current_file = G_reader_settings:readSetting("lastfile")
                             require("apps/filemanager/filemanager").all_files[file].status = "mbr"
+                            G_reader_settings:saveSetting("lastfile", last_current_file)
                         else
                             require("apps/filemanager/filemanager").all_files[file].status = ""
                         end
