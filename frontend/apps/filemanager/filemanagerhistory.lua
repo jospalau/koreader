@@ -183,8 +183,8 @@ function FileManagerHistory:onMenuHold(item)
             text = _("Readd to history"),
             callback = function()
                 UIManager:close(self.file_dialog)
-                require("readhistory"):removeItem(item, nil, true)
-                require("readhistory"):addItem(item.file, os.time(), true)
+                require("readhistory"):removeItem(item)
+                require("readhistory"):addItem(item.file,os.time())
                 self._manager:fetchStatuses(false)
                 self._manager:updateItemTable()
             end,

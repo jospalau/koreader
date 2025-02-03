@@ -205,8 +205,8 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                             doc_settings:flush()
                         end
                     end
-                    require("readhistory"):removeItemByPath(file, true)
-                    require("readhistory"):addItem(file, os.time(), true)
+                    require("readhistory"):removeItemByPath(file)
+                    require("readhistory"):addItem(file, os.time())
                 end
 
                 summary.status = to_status
