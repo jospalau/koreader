@@ -326,7 +326,8 @@ function PageTextInfo:updateWordsVocabulary()
                     if i == 1 or self.all_words[word_page] then
                         local words  = {}
                         if i > 1 then
-                            words = self.document:findText(word_page, 1, false, true, -1, false, 100)
+                            -- words = self.document:findText(word_page, 1, false, true, -1, false, 100)
+                            words = self.document:findText("[ ^]+" .. word_page .. "[ ^]+", 1, false, true, -1, true, 15)
                         else
                             -- local cre = require("document/credocument"):engineInit()
                             local cre = require("libs/libkoreader-cre")
@@ -335,7 +336,7 @@ function PageTextInfo:updateWordsVocabulary()
                                 word_page = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len())
                                 words = self.document:findText(word_page, 1, false, true, -1, false, 1) -- Page not used, set -1
                             elseif self.all_words[word_page] then
-                                words = self.document:findText(word_page, 1, false, true, -1, false, 100)
+                                words = self.document:findText("[ ^]+" .. word_page .. "[ ^]+", 1, false, true, -1, true, 15)
                             end
                         end
                         for j = 1, #words do
