@@ -303,7 +303,7 @@ function PageTextInfo:updateWordsVocabulary()
     row = {}
     while stmt:step(row) do
         local word = row[1]
-        if not word:find("%s+") and word:len() > 3 then
+        if not word:find("%s+") then -- and word:len() > 3 then
             -- self.all_words = self.all_words .. word .. "|"
             table.insert(t, word)
         end
@@ -323,8 +323,20 @@ function PageTextInfo:updateWordsVocabulary()
             if words_page and self.all_words then
                 for i = 1, #words_page do
                     local word_page = words_page[i]
-                    if self.all_words[word_page] then
-                        local words = self.document:findText(word_page, 1, false, true, -1, false, 100) -- Page not used, set -1
+                    if i == 1 or self.all_words[word_page] then
+                        local words  = {}
+                        if i > 1 then
+                            words = self.document:findText(word_page, 1, false, true, -1, false, 100)
+                        else
+                            local cre = require("document/credocument"):engineInit()
+                            local suggested_hyphenation = cre.getHyphenationForWord(word_page)
+                            if self.all_words[word_page] and suggested_hyphenation:find("-") then
+                                word_page = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len())
+                                words = self.document:findText(word_page, 1, false, true, -1, false, 1) -- Page not used, set -1
+                            elseif self.all_words[word_page] then
+                                words = self.document:findText(word_page, 1, false, true, -1, false, 100)
+                            end
+                        end
                         for j = 1, #words do
                             local wordi = words[j]
                             local page = self.document:getPageFromXPointer(wordi.start)
