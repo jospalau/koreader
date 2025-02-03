@@ -234,7 +234,12 @@ local function retryLastFile()
     }
 end
 
-
+-- The function util.generateStats() calls the function getList() also in the source util.lua
+-- This function invokes require("apps/filemanager/filemanager").all_files to start the loop which goes over all the files:
+-- for fullpath, file_properties in pairs(require("apps/filemanager/filemanager").all_files) do
+-- The files are loaded in the property all_files of the filemanager module on the fly
+-- just the first time the module is loaded calling the function getListAll()
+-- And this happens in this very moment with this first call to generateStats()
 if G_reader_settings:isTrue("top_manager_infmandhistory") then
     local util = require("util")
     util.generateStats()

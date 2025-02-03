@@ -1645,7 +1645,7 @@ function util.getListAll()
     local BookList = require("ui/widget/booklist")
     local filemanagerutil = require("apps/filemanager/filemanagerutil")
     local collate = FileChooser:getCollate()
-    local search_string = ".*.epub"
+    local search_string = ".*%.epub"
 
     local files = {}
     local scan_dirs = {G_reader_settings:readSetting("home_dir")}
@@ -1791,7 +1791,7 @@ end
 --     return dirs, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year, files_finished_last_year
 -- end
 
-function util.getList(search_string, search_finished, search_tbr, search_mbr)
+function util.getList()
     local dirs, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year, files_finished_last_year = {}, {}, {}, {}, {}, {}, {}, {}
     local cur_month = os.date("%m")
     local cur_year = os.date("%Y")
@@ -1894,7 +1894,7 @@ end
 
 function util.generateStats()
     local dump = require("dump")
-    local _, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year, files_finished_last_year = util.getList("*.epub")
+    local _, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year, files_finished_last_year = util.getList()
     local _, stats_last_days = util.getLastDaysStats(5, true)
     local stats = {["total_books"] = #files,
                 ["total_books_finished"] = #files_finished,
