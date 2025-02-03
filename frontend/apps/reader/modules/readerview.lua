@@ -261,7 +261,7 @@ function ReaderView:paintTo(bb, x, y)
         self:drawXPointerSavedHighlightNotes(bb, x, y)
     end
 
-    if G_reader_settings:isTrue("highlight_all_words_vocabulary") and self.ui.pagetextinfo then
+    if G_reader_settings:isTrue("highlight_all_words_vocabulary") and self.ui.pagetextinfo and util.getFileNameSuffix(self.document.file) == "epub" then
         self:drawXPointerVocabulary(bb, x, y)
     end
 

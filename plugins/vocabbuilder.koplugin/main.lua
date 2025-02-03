@@ -2113,7 +2113,7 @@ function VocabBuilder:onWordLookedUp(word, title, is_manual)
         DB:remove({
             word = word
         })
-        if G_reader_settings:isTrue("highlight_all_words_vocabulary") and self.ui.pagetextinfo then
+        if G_reader_settings:isTrue("highlight_all_words_vocabulary") and self.ui.pagetextinfo and util.getFileNameSuffix(file) == "epub" then
             self.ui.pagetextinfo:updateWordsVocabulary()
         end
         UIManager:setDirty(nil, "ui")

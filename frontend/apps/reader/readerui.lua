@@ -565,7 +565,7 @@ function ReaderUI:init()
         self.pagetextinfo:updateNotes()
     end
 
-    if G_reader_settings:isTrue("highlight_all_words_vocabulary") and self.pagetextinfo then
+    if G_reader_settings:isTrue("highlight_all_words_vocabulary") and self.pagetextinfo and util.getFileNameSuffix(file) == "epub" then
         self.pagetextinfo:updateWordsVocabulary()
     end
     ReaderUI.instance = self
