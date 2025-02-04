@@ -427,12 +427,12 @@ function PageTextInfo:updateWordsVocabulary()
             local words_page = util.splitToWords2(res.text) -- contar palabras
             if words_page and self.all_words then
                 for i = 1, #words_page do
-                    local word_page = words_page[i]
+                    local word_page = words_page[i] --:gsub("[^%w%s]+", "")
                     if i == 1 or self.all_words[word_page] then
                         local words  = {}
                         if i > 1 then
                             -- words = self.document:findText(word_page, 1, false, true, -1, false, 100)
-                            words = self.document:findText("[ ^]+" .. word_page .. "[ ^]+", 1, false, true, -1, true, 15)
+                            words = self.document:findText("[ ^]+" .. word_page .. "[.,!? ^]+", 1, false, true, -1, true, 15)
                         else
                             -- local cre = require("document/credocument"):engineInit()
                             local cre = require("libs/libkoreader-cre")
@@ -441,21 +441,23 @@ function PageTextInfo:updateWordsVocabulary()
                                 word_page = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len())
                                 words = self.document:findText(word_page, 1, false, true, -1, false, 1) -- Page not used, set -1
                             elseif self.all_words[word_page] then
-                                words = self.document:findText("[ ^]+" .. word_page .. "[ ^]+", 1, false, true, -1, true, 15)
+                                words = self.document:findText("[ ^]+" .. word_page .. "[.,!? ^]+", 1, false, true, -1, true, 15)
                             end
                         end
-                        for j = 1, #words do
-                            local wordi = words[j]
-                            local page = self.document:getPageFromXPointer(wordi.start)
-                            if not self.words[page] then
-                                self.words[page] = {}
+                        if words then
+                            for j = 1, #words do
+                                local wordi = words[j]
+                                local page = self.document:getPageFromXPointer(wordi.start)
+                                if not self.words[page] then
+                                    self.words[page] = {}
+                                end
+                                table.insert(self.words[page], wordi)
+                                local page2 = self.document:getPageFromXPointer(wordi["end"])
+                                if not self.words[page2] then
+                                    self.words[page2] = {}
+                                end
+                                table.insert(self.words[page2], wordi)
                             end
-                            table.insert(self.words[page], wordi)
-                            local page2 = self.document:getPageFromXPointer(wordi["end"])
-                            if not self.words[page2] then
-                                self.words[page2] = {}
-                            end
-                            table.insert(self.words[page2], wordi)
                         end
                     end
                 end
