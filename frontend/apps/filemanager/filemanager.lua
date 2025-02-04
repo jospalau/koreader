@@ -2028,4 +2028,20 @@ function FileManager:onSetMixedSorting(toggle)
     return true
 end
 
+function FileManager:onToggleSortByMode()
+    local sort_by_bode = G_reader_settings:readSetting("collate")
+    if sort_by_bode == "publication_date" then
+        self:onSetSortBy("word_count")
+    elseif sort_by_bode == "word_count" then
+        self:onSetSortBy("gr_rating")
+    elseif sort_by_bode == "gr_rating" then
+        self:onSetSortBy("gr_votes")
+    elseif sort_by_bode == "gr_votes" then
+        self:onSetSortBy("publication_date")
+    else
+        self:onSetSortBy("publication_date")
+    end
+    return true
+end
+
 return FileManager
