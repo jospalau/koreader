@@ -122,7 +122,7 @@ function PageTextInfo:init()
     -- end
     self:onDispatcherRegisterActions()
     self.ui.menu:registerToMainMenu(self)
-    self.ui.pagetextinfo = self
+    -- self.ui.pagetextinfo = self
     self.width = 400
     self.height = 20
 

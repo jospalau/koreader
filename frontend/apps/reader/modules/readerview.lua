@@ -385,8 +385,13 @@ function ReaderView:paintTo(bb, x, y)
 
     -- We paint this plugin (registered as module in its onReaderReady() event handler) the last to be on top of everything
     -- It is already painted previously when iterating all the view_modules but we want it on top of the topbar and the dogear widget
-    if self.view_modules["pagetextinfo"] then
-        self.view_modules["pagetextinfo"]:paintTo(bb, x, y)
+    -- if self.view_modules["pagetextinfo"] then
+    --     self.view_modules["pagetextinfo"]:paintTo(bb, x, y)
+    -- end
+
+    -- There is a reference in the ui for every plugin we can use
+    if self.ui.pagetextinfo then
+        self.ui.pagetextinfo:paintTo(bb, x, y)
     end
 
     -- if G_reader_settings:isTrue("show_wpm") and not G_reader_settings:isTrue("show_time") then
