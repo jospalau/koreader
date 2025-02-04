@@ -223,7 +223,12 @@ end
 
 
 function PageTextInfo:onPageUpdate()
-    self:updateWordsVocabulary()
+    if G_reader_settings:isTrue("highlight_all_words_vocabulary") and util.getFileNameSuffix(self.ui.document.file) == "epub" then
+        self:updateWordsVocabulary()
+    end
+    if G_reader_settings:isTrue("highlight_all_notes") and util.getFileNameSuffix(self.ui.document.file) == "epub" then
+        self:updateNotes()
+    end
 end
 
 
@@ -259,34 +264,73 @@ function PageTextInfo:addToMainMenu(menu_items)
     }
 end
 
+-- function PageTextInfo:updateNotes()
+--     -- self.search:fullTextSearch("Citra")
+--     self.pages_notes = {}
+--     self.notes = {}
+--     local annotations = self.ui.annotation.annotations
+--     for i, item in ipairs(annotations) do
+--         if item.note and not item.text:find("%s+") then
+--             item.words = self.document:findAllText(item.text, true, 5, 5000, 0, false)
+--             table.insert(self.notes, item)
+--             for i, word in ipairs(item.words) do
+--                 word.note = item.note
+--                 local page = self.document:getPageFromXPointer(word.start)
+--                 if not self.pages_notes[page] then
+--                     self.pages_notes[page]={}
+--                 end
+--                 table.insert(self.pages_notes[page], word)
+--                 local page2 = self.document:getPageFromXPointer(word["end"])
+--                 if not self.pages_notes[page2] then
+--                     self.pages_notes[page2]={}
+--                 end
+--                 table.insert(self.pages_notes[page2], word)
+--             end
+--         end
+--     end
+
+--     --self.words = self.document:findAllText("Citra", true, 5, 5000, 0, false)
+--     --local dump = require("dump")
+--     --print(dump(self.notes))
+-- end
+
 function PageTextInfo:updateNotes()
     -- self.search:fullTextSearch("Citra")
     self.pages_notes = {}
     self.notes = {}
     local annotations = self.ui.annotation.annotations
-    for i, item in ipairs(annotations) do
-        if item.note and not item.text:find("%s+") then
-            item.words = self.document:findAllText(item.text, true, 5, 5000, 0, false)
-            table.insert(self.notes, item)
-            for i, word in ipairs(item.words) do
-                word.note = item.note
-                local page = self.document:getPageFromXPointer(word.start)
-                if not self.pages_notes[page] then
-                    self.pages_notes[page]={}
+    local res = self.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
+    if res and res.text then
+        local t = util.splitToWords2(res.text) -- contar palabras
+        local words_page = {}
+        for i=1, #t do
+            words_page[t[i]] = "";
+        end
+        if words_page and annotations then
+            for i, item in ipairs(annotations) do
+                if words_page[item.text] then
+                    local words = self.document:findText(item.text, 1, false, true, -1, false, 15)
+                    if item.note and not item.text:find("%s+") then
+                        table.insert(self.notes, item)
+                        for i, word in ipairs(words) do
+                            word.note = item.note
+                            local page = self.document:getPageFromXPointer(word.start)
+                            if not self.pages_notes[page] then
+                                self.pages_notes[page]={}
+                            end
+                            table.insert(self.pages_notes[page], word)
+                            local page2 = self.document:getPageFromXPointer(word["end"])
+                            if not self.pages_notes[page2] then
+                                self.pages_notes[page2]={}
+                            end
+                            table.insert(self.pages_notes[page2], word)
+                        end
+                    end
                 end
-                table.insert(self.pages_notes[page], word)
-                local page2 = self.document:getPageFromXPointer(word["end"])
-                if not self.pages_notes[page2] then
-                    self.pages_notes[page2]={}
-                end
-                table.insert(self.pages_notes[page2], word)
             end
         end
     end
-
-    --self.words = self.document:findAllText("Citra", true, 5, 5000, 0, false)
-    --local dump = require("dump")
-    --print(dump(self.notes))
+    self.ui.document:clearSelection()
 end
 
 function PageTextInfo:updateWordsVocabulary()
