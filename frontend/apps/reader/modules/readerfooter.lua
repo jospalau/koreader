@@ -2779,7 +2779,9 @@ function ReaderFooter:TapFooter(ges)
     end
 
     self.ui.gestures:onIgnoreHoldCorners(not self.ui.gestures.ignore_hold_corners)
-    self.ui.pagetextinfo:toggleHighlightAllWordsVocabulary(self.ui.gestures.ignore_hold_corners)
+    if self.view.view_modules["pagetextinfo"] then
+        self.ui.pagetextinfo:toggleHighlightAllWordsVocabulary(self.ui.gestures.ignore_hold_corners)
+    end
     return true
 end
 
