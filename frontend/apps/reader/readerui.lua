@@ -521,10 +521,10 @@ function ReaderUI:init()
         -- This happens for devices using the coverimage plugin like PocketBook or Android devices
         -- but we do it here for all devices after having executed all the ReaderReady event handlers for all the objects
         -- self.view[4] is the topbar object created in readerview.lua
-        self.menu:registerToMainMenu(self.view[4])
+        self.menu:registerToMainMenu(self.view.topbar)
         self.menu:registerToMainMenu(self.view[5])
-        if os.time() - self.view[4].start_session_time < 5 then
-            self.view[4].start_session_time = os.time()
+        if os.time() - self.view.topbar.start_session_time < 5 then
+            self.view.topbar.start_session_time = os.time()
         end
         -- Some things are broken when opening pdf files. I just read epubs with KOReader, but in any case we can avoid the crashes putting some conditions for epub format
         -- local file_type = string.lower(string.match(self.document.file, ".+%.([^.]+)") or "")
@@ -1117,7 +1117,7 @@ end
 function ReaderUI:onAdjustMarginsTopbar()
     if util.getFileNameSuffix(self.document.file) ~= "epub" then return end
     local Event = require("ui/event")
-    if not G_reader_settings:isTrue("show_top_bar") or self.view[4].status_bar == true then
+    if not G_reader_settings:isTrue("show_top_bar") or self.topbar.status_bar == true then
         if self.view.footer_visible then
             -- We want physical pixels because margins are set up like this
             -- so, we can't use self.view.footer:getHeight()

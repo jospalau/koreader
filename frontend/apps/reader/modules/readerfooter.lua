@@ -1187,10 +1187,10 @@ function ReaderFooter:rescheduleFooterAutoRefreshIfNeeded()
             -- (We want to avoid the footer to be painted over a widget covering it - we would
             -- be fine refreshing it if the widget is not covering it, but this is hard to
             -- guess from here.)
-            if self.ui.view[4] and G_reader_settings:isTrue("show_top_bar") then
+            if self.ui.view.topbar and G_reader_settings:isTrue("show_top_bar") then
                 self:checkNewDay()
-                self.ui.view[4]:toggleBar()
-                UIManager:setDirty(self.ui.view[4], "ui")
+                self.ui.view.topbar:toggleBar()
+                UIManager:setDirty(self.ui.view.topbar, "ui")
             end
             self:onUpdateFooter(self:shouldBeRepainted())
 
@@ -2640,7 +2640,7 @@ function ReaderFooter:checkNewDay()
         self.ui.statistics._pages_turned = 0
         self.ui.statistics._total_pages = 0
         self.ui.statistics._total_words  = 0
-        local topbar = self.ui.view[4]
+        local topbar = self.ui.view.topbar
         if topbar then
             topbar.initial_read_today, topbar.initial_read_month, topbar.initial_total_time_book, topbar.avg_wpm, topbar.sessions_current_book, topbar.initial_read_last_month, topbar.initial_read_year = topbar:getReadTodayThisMonth(topbar.title)
             topbar.start_session_time = os.time()
@@ -2773,9 +2773,9 @@ function ReaderFooter:TapFooter(ges)
     })
     -- return self:onToggleFooterMode()
     if self.ui.gestures.ignore_hold_corners then
-        self.ui.view[4].ignore_corners = ""
+        self.ui.view.topbar.ignore_corners = ""
     else
-        self.ui.view[4].ignore_corners = "🔒"
+        self.ui.view.topbar.ignore_corners = "🔒"
     end
 
     self.ui.gestures:onIgnoreHoldCorners(not self.ui.gestures.ignore_hold_corners)
@@ -2791,11 +2791,11 @@ function ReaderFooter:onToggleFooterMode()
         and (self.settings.all_at_once or self.has_no_mode) then
        if self.mode >= 1 then
             --self.ui.view[4]:showTopBar()
-            self.ui.view[4].status_bar = false
+            self.ui.view.topbar.status_bar = false
             self.mode = self.mode_list.off
         else
             --self.ui.view[4]:hideTopBar()
-            self.ui.view[4].status_bar = true
+            self.ui.view.topbar.status_bar = true
             self.mode = self.mode_list.page_progress
         end
     else

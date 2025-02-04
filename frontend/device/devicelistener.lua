@@ -181,7 +181,7 @@ if Device:hasFrontlight() then
     function DeviceListener:onToggleFrontlight()
         local powerd = Device:getPowerDevice()
         local new_text
-        local topbar = self.ui.view[4]
+        local topbar = self.ui.view.topbar
         if powerd:isFrontlightOn() then
             new_text = _("Frontlight disabled.")
         else
@@ -446,7 +446,7 @@ end
 function DeviceListener:onFullRefresh()
     if self.ui and self.ui.view then
         self.ui:handleEvent(Event:new("UpdateFooter", self.ui.view.footer_visible))
-        self.ui.view[4]:toggleBar()
+        self.ui.view.topbar:toggleBar()
     end
     UIManager:setDirty("all", "full")
 end
