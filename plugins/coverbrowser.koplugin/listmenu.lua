@@ -560,7 +560,9 @@ function ListMenuItem:update()
                     end
                 end
             else
-                authors = (metadata and pubdate) and authors .. pubdate .. metadata
+                if authors then
+                    authors = (metadata and pubdate) and authors .. pubdate .. metadata
+                end
             end
             if reduce_font_size and not fixed_font_size then
                 fontsize_title = _fontSize(17, 21)
