@@ -377,7 +377,8 @@ function ListMenuItem:update()
                 -- Display these instead of the read %
                 if pages then
                     if status == "complete" then
-                        pages_str = T(N_("Finished – 1 page", "Finished – %1 pages", pages), pages)
+                        -- pages_str = T(N_("Finished – 1 page", "Finished – %1 pages", pages), pages)
+                        pages_str = _("Finished")
                     elseif status == "abandoned" then
                         pages_str = T(N_("Ona hold – 1 page", "On hold – %1 pages", pages), pages)
                     else
@@ -529,6 +530,16 @@ function ListMenuItem:update()
                 end
             end
             title = BD.auto(title)
+            local pubdate = nil
+            local metadata = nil
+            if self.show_parent.calibre_data[bookinfo.filename] and self.show_parent.calibre_data[bookinfo.filename]["words"] and self.show_parent.calibre_data[bookinfo.filename]["words"] ~= ""
+                and self.show_parent.calibre_data[bookinfo.filename]["pubdate"] and self.show_parent.calibre_data[bookinfo.filename]["pubdate"] ~= ""
+                and self.show_parent.calibre_data[bookinfo.filename]["grvotes"] and self.show_parent.calibre_data[bookinfo.filename]["grvotes"] ~= ""
+                and self.show_parent.calibre_data[bookinfo.filename]["grrating"] and self.show_parent.calibre_data[bookinfo.filename]["grrating"] ~= "" then
+                    pubdate = " (" .. string.format("%+4s", self.show_parent.calibre_data[bookinfo.filename]["pubdate"]:sub(1, 4)) .. ")"
+                    metadata = " → " .. string.format("%+4s", self.show_parent.calibre_data[bookinfo.filename]["grrating"]) .. "⭐" ..
+                    self.show_parent.calibre_data[bookinfo.filename]["grvotes"] .. "↑"
+            end
             -- add Series metadata if requested
             if series_mode and bookinfo.series then
                 local series = bookinfo.series_index and bookinfo.series .. " #" .. bookinfo.series_index
@@ -538,6 +549,7 @@ function ListMenuItem:update()
                     title = title .. " - " .. series
                 elseif series_mode == "append_series_to_authors" then
                     authors = authors and authors .. " - " .. series or series
+                    authors = (metadata and pubdate) and authors .. pubdate .. metadata
                 else -- "series_in_separate_line"
                     if authors then
                         authors = series .. "\n" .. authors
@@ -547,10 +559,12 @@ function ListMenuItem:update()
                         authors = series
                     end
                 end
+            else
+                authors = (metadata and pubdate) and authors .. pubdate .. metadata
             end
             if reduce_font_size and not fixed_font_size then
                 fontsize_title = _fontSize(17, 21)
-                fontsize_authors = _fontSize(15, 19)
+                fontsize_authors = _fontSize(15, 17)
             end
             if bookinfo.unsupported then
                 -- Let's show this fact in place of the anyway empty authors slot
