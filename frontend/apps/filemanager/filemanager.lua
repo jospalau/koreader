@@ -1773,7 +1773,12 @@ function FileManager:onSyncBooks()
                 end,
                 cancel_text = _("No need to restart"),
                 cancel_callback = function()
-                    logger.info("discard defaults")
+                    if G_reader_settings:isTrue("top_manager_infmandhistory") then
+                        require("apps/filemanager/filemanager").all_files = util.getListAll()
+                        local util = require("util")
+                        util.generateStats()
+                        self.file_chooser:refreshPath()
+                    end
                 end,
             })
             UIManager:show(InfoMessage:new{
