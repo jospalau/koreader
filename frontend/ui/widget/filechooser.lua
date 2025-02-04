@@ -265,6 +265,26 @@ local FileChooser = BookList:extend{
                 end, cache
             end,
         },
+        gr_votes = {
+            text = _("GR Votes"),
+            menu_order = 120,
+            can_collate_mixed = true,
+            init_sort_func = function(cache)
+                return function(a, b)
+                    return a.grvotes > b.grvotes
+                end, cache
+            end,
+        },
+        gr_rating = {
+            text = _("GR Rating"),
+            menu_order = 130,
+            can_collate_mixed = true,
+            init_sort_func = function(cache)
+                return function(a, b)
+                    return a.grrating > b.grrating
+                end, cache
+            end,
+        },
     },
 }
 
@@ -354,6 +374,8 @@ function FileChooser:getListItem(dirpath, f, fullpath, attributes, collate)
     }
     item.pubdate = 0
     item.words = 0
+    item.grvotes = 0
+    item.grrating = 0
     if attributes.mode == "file" then
         -- set to false to show all files in regular font
         -- set to "opened" to show opened files in bold
@@ -369,6 +391,15 @@ function FileChooser:getListItem(dirpath, f, fullpath, attributes, collate)
         if self.calibre_data and self.calibre_data[f] and self.calibre_data[f]["words"] then
             item.words = tonumber(math.floor(self.calibre_data[f]["words"]/1000))
         end
+
+        if self.calibre_data and self.calibre_data[f] and self.calibre_data[f]["grvotes"] then
+            item.grvotes = tonumber(self.calibre_data[f]["grvotes"])
+        end
+
+        if self.calibre_data and self.calibre_data[f] and self.calibre_data[f]["grrating"] then
+            item.grrating = tonumber(self.calibre_data[f]["grrating"])
+        end
+
         if collate.item_func ~= nil then
             collate.item_func(item)
         end

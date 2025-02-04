@@ -1212,8 +1212,14 @@ function Menu:updateItems(select_number, no_recalculate_dimen)
         end
 
         local mandatory = item.mandatory
-        if mandatory and self.calibre_data[item.text] and self.calibre_data[item.text]["words"] and self.calibre_data[item.text]["words"] ~= "" and self.calibre_data[item.text]["pubdate"] and self.calibre_data[item.text]["pubdate"] ~= "" then
-            mandatory = string.format("%+4s", self.calibre_data[item.text]["pubdate"]:sub(1, 4)) .. " - " .. string.format("%+3s",tostring(math.floor(self.calibre_data[item.text]["words"]/1000))) .."kw"
+        if mandatory and self.calibre_data[item.text] and self.calibre_data[item.text]["words"] and self.calibre_data[item.text]["words"] ~= ""
+            and self.calibre_data[item.text]["pubdate"] and self.calibre_data[item.text]["pubdate"] ~= ""
+            and self.calibre_data[item.text]["grvotes"] and self.calibre_data[item.text]["grvotes"] ~= ""
+            and self.calibre_data[item.text]["grrating"] and self.calibre_data[item.text]["grrating"] ~= "" then
+                mandatory = string.format("%+4s", self.calibre_data[item.text]["pubdate"]:sub(1, 4)) ..
+                " - " .. string.format("%+3s",tostring(math.floor(self.calibre_data[item.text]["words"]/1000))) .."kw" ..
+                " - " .. string.format("%+6s", self.calibre_data[item.text]["grvotes"]) .."↑" ..
+                " - " .. string.format("%+4s", self.calibre_data[item.text]["grrating"]) .."⋆"
         end
         local item_tmp = MenuItem:new{
             idx = index,
