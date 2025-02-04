@@ -283,7 +283,11 @@ function PageTextInfo:onReaderReady()
 end
 
 
-function PageTextInfo:onPageUpdate()
+function PageTextInfo:onPageUpdate(pageno)
+    -- Avoid double execution when loading document
+    if self.pageno == nil then self.pageno = pageno return end
+    self.pageno = pageno
+
     if G_reader_settings:isTrue("highlight_all_words_vocabulary") and util.getFileNameSuffix(self.ui.document.file) == "epub" then
         self:updateWordsVocabulary()
     end
