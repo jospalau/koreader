@@ -561,8 +561,8 @@ function ReaderUI:init()
         -- Should never happen, given what we did in (do)showReader...
         logger.err("ReaderUI instance mismatch! Opened", tostring(self), "while we still have an existing instance:", tostring(ReaderUI.instance), debug.traceback())
     end
-    if G_reader_settings:isTrue("highlight_all_notes") and self.pagetextinfo and self.pagetextinfo and util.getFileNameSuffix(self.document.file) == "epub" then
-        self.pagetextinfo:updateNotes()
+    if G_reader_settings:isTrue("highlight_all_words_vocabulary") and self.pagetextinfo and self.pagetextinfo and util.getFileNameSuffix(self.document.file) == "epub" then
+        self.pagetextinfo:updateWordsVocabulary()
     end
 
     if G_reader_settings:isTrue("highlight_all_notes") and self.pagetextinfo and self.pagetextinfo and util.getFileNameSuffix(self.document.file) == "epub" then

@@ -49,6 +49,9 @@ end
 
 function PageTextInfo:toggleHighlightAllWordsVocabulary(toggle)
     G_reader_settings:saveSetting("highlight_all_words_vocabulary", toggle)
+    if toggle then
+        self:updateWordsVocabulary()
+    end
     UIManager:setDirty("all", "full")
 end
 
