@@ -515,7 +515,7 @@ function FileSearcher:onShowSearchResults(not_cached, results, show_recent, page
         self.search_menu.close_callback = function(file, actioned)
             self.selected_files = nil
             -- Coming nil when closing the search results list window with esc or clicking on X, Menu:onCloseAllMenus() in menu.lua
-            if file == nil then
+            if file == nil or ((lfs.attributes(file, "mode") == "file" or lfs.attributes(file, "mode") == "directory") and not actioned) then
                 UIManager:close(self.search_menu)
                 return
             end
