@@ -279,7 +279,7 @@ end
 
 function PageTextInfo:onReaderReady()
     self.ui.menu:registerToMainMenu(self)
-    self.view:registerViewModule("textinfo", self)
+    self.view:registerViewModule("pagetextinfo", self)
 end
 
 
