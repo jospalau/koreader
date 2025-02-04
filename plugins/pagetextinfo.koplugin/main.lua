@@ -372,6 +372,11 @@ end
 --     --print(dump(self.notes))
 -- end
 
+
+function PageTextInfo:onCloseDocument()
+    self.ui.gestures:onIgnoreHoldCorners(false)
+end
+
 function PageTextInfo:updateNotes()
     -- self.search:fullTextSearch("Citra")
     self.pages_notes = {}
