@@ -1117,7 +1117,7 @@ end
 function ReaderUI:onAdjustMarginsTopbar()
     if util.getFileNameSuffix(self.document.file) ~= "epub" then return end
     local Event = require("ui/event")
-    if not G_reader_settings:isTrue("show_top_bar") or self.topbar.status_bar == true then
+    if not G_reader_settings:isTrue("show_top_bar") or self.view.topbar.status_bar == true then
         if self.view.footer_visible then
             -- We want physical pixels because margins are set up like this
             -- so, we can't use self.view.footer:getHeight()
