@@ -122,8 +122,17 @@ function PageTextInfo:init()
     --     return
     -- end
     self:onDispatcherRegisterActions()
-    self.ui.menu:registerToMainMenu(self)
+
+    -- We call the function registerToMainMenu() here if we want the menu entry to be shown both for the fm and the reader top menus
+    -- If we want the menu entry to be shown just for the reader like in this plugin, better to call it in the onReaderReady() event handler function
+    -- In both cases we need to define the function PageTextInfo:addToMainMenu() with the custom menu items
+    -- and configure them in a proper menu section adding the name given to the menu items (menu_items.pagetextinfo)
+    -- in the filemanager_menu_order.lua source for the fm or in the reader_menu_order.lua source for the reader
+    -- self.ui.menu:registerToMainMenu(self)
+
+    -- Not needed since it is automatically available
     -- self.ui.pagetextinfo = self
+
     self.width = 400
     self.height = 20
 
@@ -313,7 +322,10 @@ end
 -- end
 
 function PageTextInfo:addToMainMenu(menu_items)
-    menu_items.page_text_info = {
+    -- If we don't want this being called for the filemanager, better to call self.ui.menu:registerToMainMenu(self) in the onReaderReady() event handler function
+    -- Although we can set in the init() function and skip it like this:
+    -- if require("apps/filemanager/filemanager").instance then return end
+    menu_items.pagetextinfo = {
         text = _("Page text info"),
         sub_item_table ={
             {

@@ -59,7 +59,6 @@ local order = {
         "----------------------------",
         "page_overlap",
         "speed_reading_module_perception_expander",
-        "page_text_info",
         "----------------------------",
         "highlight_options",
         "selection_text", -- if Device:hasDPad()
@@ -181,6 +180,7 @@ local order = {
         "calibre",
         "exporter",
         "statistics",
+        "pagetextinfo",
         "progress_sync",
         "move_to_archive",
         "wallabag",
