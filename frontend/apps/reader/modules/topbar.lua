@@ -1639,6 +1639,40 @@ function TopBar:paintTo(bb, x, y)
 
         times[1][1]:setText("BDB: " .. self.total_books .. ", TR: " .. self.total_read .. "d")
         times:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM - times[1][1]:getSize().h )
+
+        local collate = FrameContainer:new{
+            left_container:new{
+                dimen = Geom:new(),
+                TextWidget:new{
+                    text =  "",
+                    face = Font:getFace("myfont3", 12),
+                    fgcolor = Blitbuffer.COLOR_BLACK,
+                },
+            },
+            -- background = Blitbuffer.COLOR_WHITE,
+            bordersize = 0,
+            padding = 0,
+            padding_bottom = self.bottom_padding,
+        }
+        if self.fm and not self.history then
+            local sort_by_bode = G_reader_settings:readSetting("collate")
+            local collate_symbol = ""
+            if sort_by_bode == "publication_date" then
+                collate_symbol = "PD"
+            elseif sort_by_bode == "word_count" then
+                collate_symbol = "WC"
+            elseif sort_by_bode == "gr_rating" then
+                collate_symbol = "GRR"
+            elseif sort_by_bode == "gr_votes" then
+                collate_symbol = "GRV"
+            else
+                collate_symbol = "O"
+            end
+            collate[1][1]:setText(collate_symbol)
+
+            -- collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, y + Screen:scaleBySize(6))
+            collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM - times[1][1]:getSize().h )
+        end
     end
 end
 

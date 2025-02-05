@@ -299,6 +299,7 @@ function FileManagerHistory:onShowHist(search_info)
         view = nil,
         ui = nil,
         fm = true,
+        history = true,
     }
 
     if search_info then
