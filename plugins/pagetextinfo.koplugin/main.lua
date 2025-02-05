@@ -107,7 +107,8 @@ function PageTextInfo:onPageTextInfo()
 end
 
 function PageTextInfo:toggleHighlightAllWordsVocabulary(toggle)
-    G_reader_settings:saveSetting("highlight_all_words_vocabulary", toggle)
+    self.settings:saveSetting("highlight_all_words_vocabulary", toggle)
+    self.settings:flush()
     if toggle then
         self:updateWordsVocabulary()
     end
@@ -118,6 +119,22 @@ function PageTextInfo:init()
 
     if not self.settings then self:readSettingsFile() end
     self.is_enabled = self.settings:isTrue("is_enabled")
+
+    if PageTextInfo.preserved_hightlight_all_notes then
+        self.settings:saveSetting("highlight_all_notes", PageTextInfo.preserved_hightlight_all_notes)
+        PageTextInfo.preserved_hightlight_all_notes = nil
+        self.settings:flush()
+    end
+
+    if PageTextInfo.preserved_highlight_all_words_vocabulary then
+        self.settings:saveSetting("highlight_all_words_vocabulary",  PageTextInfo.preserved_highlight_all_words_vocabulary)
+        PageTextInfo.preserved_highlight_all_words_vocabulary = nil
+        self.settings:flush()
+    end
+
+
+
+
     -- if not self.is_enabled then
     --     return
     -- end
@@ -298,10 +315,10 @@ function PageTextInfo:onPageUpdate(pageno)
     if self.pageno == nil then self.pageno = pageno return end
     self.pageno = pageno
 
-    if G_reader_settings:isTrue("highlight_all_words_vocabulary") and util.getFileNameSuffix(self.ui.document.file) == "epub" then
+    if self.settings:isTrue("highlight_all_words_vocabulary") and util.getFileNameSuffix(self.ui.document.file) == "epub" then
         self:updateWordsVocabulary()
     end
-    if G_reader_settings:isTrue("highlight_all_notes") and util.getFileNameSuffix(self.ui.document.file) == "epub" then
+    if self.settings:isTrue("highlight_all_notes") and util.getFileNameSuffix(self.ui.document.file) == "epub" then
         self:updateNotes()
     end
 end
@@ -338,6 +355,36 @@ function PageTextInfo:addToMainMenu(menu_items)
                     return true
                 end,
             },
+            {
+                text = _("Page text info"),
+                sub_item_table ={
+                    {
+                        text = _("Highlight all notes"),
+                        checked_func = function() return self.settings:isTrue("highlight_all_notes") end,
+                        callback = function()
+                            local highlight_all_notes = self.settings:isTrue("highlight_all_notes")
+                            self.settings:saveSetting("highlight_all_notes", not highlight_all_notes)
+                            self.ui:reloadDocument(nil, true) -- seamless reload (no infomsg, no flash)
+                            self.settings:flush()
+                            return true
+                        end,
+                    },
+                    {
+                        text = _("Highlight all words vocabulary"),
+                        checked_func = function() return self.settings:isTrue("highlight_all_words_vocabulary") end,
+                        -- enabled_func = function()
+                        --     return false
+                        -- end,
+                        callback = function()
+                            local highlight_all_words_vocabulary = self.settings:isTrue("highlight_all_words_vocabulary")
+                            self.settings:saveSetting("highlight_all_words_vocabulary", not highlight_all_words_vocabulary)
+                            self.ui:reloadDocument(nil, true) -- seamless reload (no infomsg, no flash)
+                            self.settings:flush()
+                            return true
+                        end,
+                    }
+                },
+            }
         },
     }
 end
@@ -375,6 +422,14 @@ end
 
 function PageTextInfo:onCloseDocument()
     self.ui.gestures:onIgnoreHoldCorners(false)
+    self.settings:saveSetting("highlight_all_notes", false)
+    self.settings:saveSetting("highlight_all_words_vocabulary", false)
+    self.settings:flush()
+end
+
+function PageTextInfo:onPreserveCurrentSession()
+    PageTextInfo.preserved_hightlight_all_notes = self.settings:readSetting("highlight_all_notes")
+    PageTextInfo.preserved_highlight_all_words_vocabulary = self.settings:readSetting("highlight_all_words_vocabulary")
 end
 
 function PageTextInfo:updateNotes()

@@ -1035,7 +1035,7 @@ function ReaderHighlight:onTap(_, ges)
             return self:showChooseHighlightDialog(highlights_tapped)
         end
     end
-    if G_reader_settings:isTrue("highlight_all_notes") and self.ui.pagetextinfo then
+    if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_notes") then
         if ges and ges.pos then
             local pos = self.view:screenToPageTransform(ges.pos)
             if self.ui.pagetextinfo.pages_notes[self.ui.view.state.page] then
@@ -1212,7 +1212,7 @@ function ReaderHighlight:showHighlightNoteOrDialog(index)
                             if self.view.highlight.note_mark then -- refresh note marker
                                 UIManager:setDirty(self.dialog, "ui")
                             end
-                            if G_reader_settings:isTrue("highlight_all_notes") then
+                            if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_notes") then
                                 self.ui.pagetextinfo:updateNotes()
                                 UIManager:setDirty("all", "full")
                             end

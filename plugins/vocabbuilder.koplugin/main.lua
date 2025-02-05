@@ -2112,7 +2112,7 @@ function VocabBuilder:onWordLookedUp(word, title, is_manual)
         DB:remove({
             word = word
         })
-        if G_reader_settings:isTrue("highlight_all_words_vocabulary") and self.ui.pagetextinfo and util.getFileNameSuffix(self.ui.document.file) == "epub" then
+        if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary") and util.getFileNameSuffix(self.ui.document.file) == "epub" then
             self.ui.pagetextinfo:updateWordsVocabulary()
             UIManager:setDirty(nil, "ui")
         end
@@ -2136,7 +2136,7 @@ function VocabBuilder:onWordLookedUp(word, title, is_manual)
     else
         update()
     end
-    if G_reader_settings:isTrue("highlight_all_words_vocabulary") and self.ui.pagetextinfo and util.getFileNameSuffix(self.ui.document.file) == "epub" then
+    if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary") and util.getFileNameSuffix(self.ui.document.file) == "epub" then
         self.ui.pagetextinfo:updateWordsVocabulary()
         UIManager:setDirty(nil, "ui")
     end

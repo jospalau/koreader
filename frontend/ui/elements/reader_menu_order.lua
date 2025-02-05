@@ -73,8 +73,8 @@ local order = {
         "night_mode",
         "show_double_bar",
         "show_top_bar",
-        "highlight_all_notes",
-        "highlight_all_words_vocabulary",
+        -- "highlight_all_notes", Page text info plugin
+        -- "highlight_all_words_vocabulary", Page text info plugin
         "scale_font_to_current_font",
         "----------------------------",
         "network",
