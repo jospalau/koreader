@@ -273,6 +273,15 @@ function ReadCollection:RemoveAllFavoritesAll()
     return true
 end
 
+-- Remove all items in a given collection
+function ReadCollection:RemoveAllCollection(collection)
+    for file in pairs(self.coll[collection]) do
+        self.coll[collection][file] = nil
+    end
+    self:write()
+    return true
+end
+
 
 function ReadCollection:_updateItem(coll_name, file_name, new_filepath, new_path)
     local coll = self.coll[coll_name]

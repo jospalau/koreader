@@ -86,6 +86,7 @@ function FileManagerCollection:onShowColl(collection_name, series)
         onMenuChoice = self.onMenuChoice,
         onMenuHold = self.onMenuHold,
         onMultiSwipe = self.onMultiSwipe,
+        onTap = self.onTap,
         ui = self.ui,
         _manager = self,
         _recreate_func = function() self:onShowColl(collection_name) end,
@@ -1073,6 +1074,33 @@ function FileManagerCollection:genAddToCollectionButton(file_or_files, caller_pr
             self:onShowCollList(is_single_file and file_or_files or {}, caller_callback)
         end,
     }
+end
+
+function FileManagerCollection:onTap(arg, ges_ev)
+    table.sort(self.item_table, function(v1, v2)
+        return v1.text < v2.text
+    end)
+
+
+    local files = {}
+    for i = 1, #self.item_table do
+        local file = self.item_table[i].file
+        files[file] = ""
+    end
+
+    ReadCollection:RemoveAllCollection(self.collection_name)
+    local collections = {}
+    collections[self.collection_name] = true
+    ReadCollection:addItemsMultiple(files, collections)
+
+    local ordered_files = ReadCollection:getOrderedCollectionName(self.collection_name)
+    ReadCollection:updateCollectionOrder(self.collection_name, ordered_files)
+
+
+    self.item_table = ReadCollection:getOrderedCollection(self.collection_name)
+    self.ui.collections:onShowColl(self.collection_name)
+    -- self._manager.ui.collections:onShowColl(self.collection_name)
+    return UIManager:close(self)
 end
 
 return FileManagerCollection
