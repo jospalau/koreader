@@ -356,7 +356,7 @@ function PageTextInfo:addToMainMenu(menu_items)
                 end,
             },
             {
-                text = _("Page text info"),
+                text = _("Highlight"),
                 sub_item_table ={
                     {
                         text = _("Highlight all notes"),
