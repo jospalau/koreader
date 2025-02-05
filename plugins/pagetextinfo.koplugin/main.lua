@@ -120,17 +120,17 @@ function PageTextInfo:init()
     if not self.settings then self:readSettingsFile() end
     self.is_enabled = self.settings:isTrue("is_enabled")
 
-    if PageTextInfo.preserved_hightlight_all_notes then
-        self.settings:saveSetting("highlight_all_notes", PageTextInfo.preserved_hightlight_all_notes)
-        PageTextInfo.preserved_hightlight_all_notes = nil
-        self.settings:flush()
-    end
+    -- if PageTextInfo.preserved_hightlight_all_notes then
+    --     self.settings:saveSetting("highlight_all_notes", PageTextInfo.preserved_hightlight_all_notes)
+    --     PageTextInfo.preserved_hightlight_all_notes = nil
+    --     self.settings:flush()
+    -- end
 
-    if PageTextInfo.preserved_highlight_all_words_vocabulary then
-        self.settings:saveSetting("highlight_all_words_vocabulary",  PageTextInfo.preserved_highlight_all_words_vocabulary)
-        PageTextInfo.preserved_highlight_all_words_vocabulary = nil
-        self.settings:flush()
-    end
+    -- if PageTextInfo.preserved_highlight_all_words_vocabulary then
+    --     self.settings:saveSetting("highlight_all_words_vocabulary",  PageTextInfo.preserved_highlight_all_words_vocabulary)
+    --     PageTextInfo.preserved_highlight_all_words_vocabulary = nil
+    --     self.settings:flush()
+    -- end
 
 
 
@@ -427,10 +427,10 @@ function PageTextInfo:onCloseDocument()
     self.settings:flush()
 end
 
-function PageTextInfo:onPreserveCurrentSession()
-    PageTextInfo.preserved_hightlight_all_notes = self.settings:readSetting("highlight_all_notes")
-    PageTextInfo.preserved_highlight_all_words_vocabulary = self.settings:readSetting("highlight_all_words_vocabulary")
-end
+-- function PageTextInfo:onPreserveCurrentSession()
+--     PageTextInfo.preserved_hightlight_all_notes = self.settings:readSetting("highlight_all_notes")
+--     PageTextInfo.preserved_highlight_all_words_vocabulary = self.settings:readSetting("highlight_all_words_vocabulary")
+-- end
 
 function PageTextInfo:updateNotes()
     -- self.search:fullTextSearch("Citra")
