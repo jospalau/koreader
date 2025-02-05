@@ -920,15 +920,24 @@ function Menu:init()
 
     self.page_info_text = self.page_info_text or Button:new{
         text = "",
-        hold_input = {
+        hold_input = not  (self.title == "" and not (self.collection_name or self.search)) and {
             title = title_goto,
             input_type = type_goto,
             hint_func = hint_func,
             buttons = buttons,
-        },
-        call_hold_input_on_tap = true,
+        } or nil,
+        tap_input_func = (self.title == "" and not (self.collection_name or self.search)) and function()
+            return {
+                UIManager:sendEvent(Event:new("ShowFileSearch", "*.epub")),
+                callback = function(input)
+                    self:setCustomServer(input)
+                end,
+            } or nil
+        end,
+        call_hold_input_on_tap = (self.title == "" and not (self.collection_name or self.search)) and false or true,
         bordersize = 0,
         text_font_bold = false,
+        no_window = (self.title == "" and not (self.collection_name or self.search)) and true or nil,
     }
     self.page_info = HorizontalGroup:new{
         self.page_info_first_chev,
@@ -1142,10 +1151,15 @@ function Menu:updatePageInfo(select_number)
         end
         -- update page information
         self.page_info_text:setText(T(_("Page %1 of %2"), self.page, self.page_num))
-        if self.page_num > 1 then
+
+        if self.title == "" and not (self.collection_name or self.search) then
             self.page_info_text:enable()
         else
-            self.page_info_text:disableWithoutDimming()
+            if self.page_num > 1 then
+                self.page_info_text:enable()
+            else
+                self.page_info_text:disableWithoutDimming()
+            end
         end
         self.page_info_left_chev:show()
         self.page_info_right_chev:show()

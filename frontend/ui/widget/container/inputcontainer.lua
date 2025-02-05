@@ -394,8 +394,10 @@ function InputContainer:onInput(input, ignore_first_hold_release)
             },
         },
     }
-    UIManager:show(self.input_dialog)
-    self.input_dialog:onShowKeyboard(ignore_first_hold_release)
+    if self.no_window == nil then
+        UIManager:show(self.input_dialog)
+        self.input_dialog:onShowKeyboard(ignore_first_hold_release)
+    end
 end
 
 function InputContainer:closeInputDialog()
