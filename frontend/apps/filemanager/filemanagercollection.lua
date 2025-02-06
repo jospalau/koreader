@@ -1231,7 +1231,7 @@ function FileManagerCollection:onTap(arg, ges_ev)
         local info = InfoMessage:new{ text = _("Searching… (tap to cancel)") }
         UIManager:show(info)
         UIManager:forceRePaint()
-        local completed, files_table, files_returned = Trapper:dismissableRunInSubprocess(function()
+        local completed, files_table = Trapper:dismissableRunInSubprocess(function()
             local files_with_metadata = {}
             local sort_by_mode = G_reader_settings:readSetting("collate")
             -- local FFIUtil = require("ffi/util")
@@ -1290,21 +1290,19 @@ function FileManagerCollection:onTap(arg, ges_ev)
                 files[file] = ""
             end
 
-            -- self.item_table = ReadCollection:getOrderedCollection(self.collection_name)
-            -- ReadCollection:RemoveAllCollection(self.collection_name)
+            ReadCollection:RemoveAllCollection(self.collection_name)
+            local collections = {}
+            collections[self.collection_name] = true
+            ReadCollection:addItemsMultiple(files, collections)
 
             -- UIManager:forceRePaint()
             -- self:onShowColl(collection.collection_name)
             -- return UIManager:close(collection)
-            return files_with_metadata, files
+            return files_with_metadata
         end, info)
         if not completed then return end
-        self.item_table = files_table
-        ReadCollection:RemoveAllCollection(self.collection_name)
-        local collections = {}
-        collections[self.collection_name] = true
-        ReadCollection:addItemsMultiple(files_returned, collections)
-        ReadCollection:updateCollectionOrder(self.collection_name, self.item_table)
+        -- The write call needs to be out
+        ReadCollection:updateCollectionOrder(self.collection_name, files_table)
 
         UIManager:close(info)
 
