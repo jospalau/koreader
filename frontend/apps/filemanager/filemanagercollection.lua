@@ -1066,7 +1066,7 @@ function FileManagerCollection:searchCollections()
     end
 
     local Trapper = require("ui/trapper")
-    local info = InfoMessage:new{ text = _("Searching… (tap to cancel)") }
+    local info = InfoMessage:new{ text = _("Sorting collection… (tap to cancel)") }
     UIManager:show(info)
     UIManager:forceRePaint()
     local completed, files_found, files_found_order = Trapper:dismissableRunInSubprocess(function()
