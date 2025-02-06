@@ -557,7 +557,9 @@ function ListMenuItem:update()
                     title = title .. " - " .. series
                 elseif series_mode == "append_series_to_authors" then
                     authors = authors and authors .. " - " .. series or series
-                    authors = (metadata and pubdate) and authors .. pubdate .. metadata
+                    if metadata and pubdate then
+                        authors = authors .. pubdate .. metadata
+                    end
                 else -- "series_in_separate_line"
                     if authors then
                         authors = series .. "\n" .. authors
