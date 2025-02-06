@@ -1562,7 +1562,9 @@ function TopBar:paintTo(bb, x, y)
             if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
                 local sort_by_mode = self.collection_collate
                 local collate_symbol = ""
-                if sort_by_mode == "publication_date" then
+                if sort_by_mode == "strcoll" then
+                    collate_symbol = "Name"
+                elseif sort_by_mode == "publication_date" then
                     collate_symbol = "PD"
                 elseif sort_by_mode == "word_count" then
                     collate_symbol = "WC"
@@ -1679,7 +1681,9 @@ function TopBar:paintTo(bb, x, y)
                 if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
                     local sort_by_bode = G_reader_settings:readSetting("collate")
                     local collate_symbol = ""
-                    if sort_by_bode == "publication_date" then
+                    if sort_by_bode == "strcoll" then
+                        collate_symbol = "Name"
+                    elseif sort_by_bode == "publication_date" then
                         collate_symbol = "PD"
                     elseif sort_by_bode == "word_count" then
                         collate_symbol = "WC"

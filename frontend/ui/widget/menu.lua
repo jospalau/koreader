@@ -1617,7 +1617,7 @@ function Menu:onCloseWidget()
         UIManager:setDirty(nil, "ui")
     end
     if self.title == "Collection" then
-        UIManager:broadcastEvent(Event:new("SetSortBy", "publication_date"))
+        UIManager:broadcastEvent(Event:new("SetSortBy", "strcoll"))
         local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
         ui.collection_collate = nil
     end

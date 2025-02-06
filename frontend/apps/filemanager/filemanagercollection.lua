@@ -109,7 +109,7 @@ function FileManagerCollection:onShowColl(collection_name, series)
         self.match_table = nil
     end
     self:updateItemTable()
-    G_reader_settings:saveSetting("collate", "publication_date")
+    G_reader_settings:saveSetting("collate", "strcoll")
     UIManager:show(self.coll_menu)
 
     return true
@@ -1098,9 +1098,9 @@ end
 -- Because some collections can have many books, we do it in a subprocess to be able to interrupt it if needed
 
 -- Every time we open any collection, the hardcoded Sort text is shown on the bottom right of the topbar associated to the menu widget
--- and then we can start tapping and toggling the different sort modes
+-- and then we can start tapping and toggling the different sort modes starting with strcoll
 -- This will be the default behaviour for any collection we open
--- Every time we close any collection, the fm will be set to publication date sorting mode
+-- Every time we close any collection, the fm will be set to strcoll sorting mode
 
 -- The following does not apply since we reuse the widget instead of reopening:
 -- -- When collections are opened, they may be sorted or not, we don't care, first time we tap they will be sorted using the current system collate
@@ -1143,7 +1143,11 @@ function FileManagerCollection:onTap(arg, ges_ev)
                         files_with_metadata[i] = file
                     end
 
-                    if sort_by_mode == "publication_date" then
+                    if sort_by_mode == "strcoll" then
+                        table.sort(files_with_metadata, function(v1, v2)
+                            return v1.text < v2.text
+                        end)
+                    elseif sort_by_mode == "publication_date" then
                         table.sort(files_with_metadata, function(v1, v2)
                             return v1.pubdate < v2.pubdate
                         end)
@@ -1161,7 +1165,7 @@ function FileManagerCollection:onTap(arg, ges_ev)
                         end)
                     else
                         table.sort(files_with_metadata, function(v1, v2)
-                            return v1.pubdate < v2.pubdate
+                            return v1.text < v2.text
                         end)
                     end
                 else
@@ -1202,7 +1206,10 @@ function FileManagerCollection:onTap(arg, ges_ev)
 
             -- There is no need if we use the topbar object
             local sort_by_mode = G_reader_settings:readSetting("collate")
-            if sort_by_mode == "publication_date" then
+            if sort_by_mode == "strcoll" then
+                G_reader_settings:saveSetting("collate", "publication_date")
+                self._manager.coll_menu.topbar:setCollectionCollate("strcoll")
+            elseif sort_by_mode == "publication_date" then
                 G_reader_settings:saveSetting("collate", "word_count")
                 self._manager.coll_menu.topbar:setCollectionCollate("publication_date")
             elseif sort_by_mode == "word_count" then
@@ -1212,10 +1219,10 @@ function FileManagerCollection:onTap(arg, ges_ev)
                 G_reader_settings:saveSetting("collate", "gr_votes")
                 self._manager.coll_menu.topbar:setCollectionCollate("gr_rating")
             elseif sort_by_mode == "gr_votes" then
-                G_reader_settings:saveSetting("collate", "publication_date")
+                G_reader_settings:saveSetting("collate", "strcoll")
                 self._manager.coll_menu.topbar:setCollectionCollate("gr_votes")
             else
-                G_reader_settings:saveSetting("collate", "publication_date")
+                G_reader_settings:saveSetting("collate", "strcoll")
                 self._manager.coll_menu.topbar:setCollectionCollate("")
             end
 

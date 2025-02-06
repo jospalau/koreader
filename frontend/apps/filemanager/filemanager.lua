@@ -2038,16 +2038,18 @@ function FileManager:onToggleSortByMode()
     local DataStorage = require("datastorage")
     if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
         local sort_by_mode = G_reader_settings:readSetting("collate")
-        if sort_by_mode == "publication_date" then
+        if sort_by_mode == "strcoll" then
+            self:onSetSortBy("publication_date")
+        elseif sort_by_mode == "publication_date" then
             self:onSetSortBy("word_count")
         elseif sort_by_mode == "word_count" then
             self:onSetSortBy("gr_rating")
         elseif sort_by_mode == "gr_rating" then
             self:onSetSortBy("gr_votes")
         elseif sort_by_mode == "gr_votes" then
-        self:onSetSortBy("publication_date")
+            self:onSetSortBy("strcoll")
         else
-            self:onSetSortBy("publication_date")
+            self:onSetSortBy("strcoll")
         end
         self.file_chooser:onGotoPage(1)
     end
