@@ -25,6 +25,7 @@ local SQ3 = require("lua-ljsqlite3/init")
 local ProgressWidget = require("ui/widget/progresswidget")
 local Device = require("device")
 local Size = require("ui/size")
+local ffiUtil = require("ffi/util")
 
 
 -- self[4] = self.topbar in readerview.lua
@@ -1558,27 +1559,31 @@ function TopBar:paintTo(bb, x, y)
             padding_bottom = self.bottom_padding,
         }
         if self.collection then
-            local sort_by_mode = (require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance).collection_collate
-            local collate_symbol = ""
-            if sort_by_mode == "publication_date" then
-                collate_symbol = "PD"
-            elseif sort_by_mode == "word_count" then
-                collate_symbol = "WC"
-            elseif sort_by_mode == "gr_rating" then
-                collate_symbol = "GRR"
-            elseif sort_by_mode == "gr_votes" then
-                collate_symbol = "GRV"
+            if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
+                local sort_by_mode = (require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance).collection_collate
+                local collate_symbol = ""
+                if sort_by_mode == "publication_date" then
+                    collate_symbol = "PD"
+                elseif sort_by_mode == "word_count" then
+                    collate_symbol = "WC"
+                elseif sort_by_mode == "gr_rating" then
+                    collate_symbol = "GRR"
+                elseif sort_by_mode == "gr_votes" then
+                    collate_symbol = "GRV"
+                else
+                    collate_symbol = "O"
+                end
+                local no_collate = (require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance).no_collate
+                if no_collate then
+                    collate_symbol = ""
+                end
+
+                collate[1][1]:setText(collate_symbol)
+                collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - collate[1][1]:getSize().h )
             else
-                collate_symbol = "O"
+                collate[1][1]:setText("?")
+                collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - collate[1][1]:getSize().h )
             end
-            local no_collate = (require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance).no_collate
-            if no_collate then
-                collate_symbol = ""
-            end
-
-
-            collate[1][1]:setText(collate_symbol)
-            collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - collate[1][1]:getSize().h )
         else
             local times_text = TextWidget:new{
                 text =  "",
@@ -1625,8 +1630,7 @@ function TopBar:paintTo(bb, x, y)
             -- local _, files = self:getList("*.epub")
             -- books_information[1][1]:setText("TF: " .. tostring(#files))
 
-            local ffiutil = require("ffi/util")
-            if G_reader_settings:readSetting("home_dir") and ffiutil.realpath(G_reader_settings:readSetting("home_dir") .. "/stats.lua") then
+            if G_reader_settings:readSetting("home_dir") and ffiUtil.realpath(G_reader_settings:readSetting("home_dir") .. "/stats.lua") then
                 local ok, stats = pcall(dofile, G_reader_settings:readSetting("home_dir") .. "/stats.lua")
                 local last_days = ""
                 for k, v in pairs(stats["stats_last_days"]) do
@@ -1676,23 +1680,27 @@ function TopBar:paintTo(bb, x, y)
             times[1][1]:setText("BDB: " .. self.total_books .. ", TR: " .. self.total_read .. "d")
             times:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM - times[1][1]:getSize().h )
             if self.fm and not self.history then
-                local sort_by_bode = G_reader_settings:readSetting("collate")
-                local collate_symbol = ""
-                if sort_by_bode == "publication_date" then
-                    collate_symbol = "PD"
-                elseif sort_by_bode == "word_count" then
-                    collate_symbol = "WC"
-                elseif sort_by_bode == "gr_rating" then
-                    collate_symbol = "GRR"
-                elseif sort_by_bode == "gr_votes" then
-                    collate_symbol = "GRV"
+                if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
+                    local sort_by_bode = G_reader_settings:readSetting("collate")
+                    local collate_symbol = ""
+                    if sort_by_bode == "publication_date" then
+                        collate_symbol = "PD"
+                    elseif sort_by_bode == "word_count" then
+                        collate_symbol = "WC"
+                    elseif sort_by_bode == "gr_rating" then
+                        collate_symbol = "GRR"
+                    elseif sort_by_bode == "gr_votes" then
+                        collate_symbol = "GRV"
+                    else
+                        collate_symbol = "O"
+                    end
+                    collate[1][1]:setText(collate_symbol)
+                    -- collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, y + Screen:scaleBySize(6))
+                    collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
                 else
-                    collate_symbol = "O"
+                    collate[1][1]:setText("?")
+                    collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
                 end
-                collate[1][1]:setText(collate_symbol)
-
-                -- collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, y + Screen:scaleBySize(6))
-                collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
             end
         end
     end

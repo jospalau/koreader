@@ -2035,17 +2035,20 @@ function FileManager:onSetMixedSorting(toggle)
 end
 
 function FileManager:onToggleSortByMode()
-    local sort_by_mode = G_reader_settings:readSetting("collate")
-    if sort_by_mode == "publication_date" then
-        self:onSetSortBy("word_count")
-    elseif sort_by_mode == "word_count" then
-        self:onSetSortBy("gr_rating")
-    elseif sort_by_mode == "gr_rating" then
-        self:onSetSortBy("gr_votes")
-    elseif sort_by_mode == "gr_votes" then
+    local DataStorage = require("datastorage")
+    if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
+        local sort_by_mode = G_reader_settings:readSetting("collate")
+        if sort_by_mode == "publication_date" then
+            self:onSetSortBy("word_count")
+        elseif sort_by_mode == "word_count" then
+            self:onSetSortBy("gr_rating")
+        elseif sort_by_mode == "gr_rating" then
+            self:onSetSortBy("gr_votes")
+        elseif sort_by_mode == "gr_votes" then
         self:onSetSortBy("publication_date")
     else
         self:onSetSortBy("publication_date")
+    end
     end
     return true
 end
