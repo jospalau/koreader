@@ -1558,7 +1558,7 @@ function TopBar:paintTo(bb, x, y)
             padding_bottom = self.bottom_padding,
         }
         if self.collection then
-            local sort_by_mode = ( require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance).collection_collate
+            local sort_by_mode = (require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance).collection_collate
             local collate_symbol = ""
             if sort_by_mode == "publication_date" then
                 collate_symbol = "PD"
@@ -1571,6 +1571,12 @@ function TopBar:paintTo(bb, x, y)
             else
                 collate_symbol = "O"
             end
+            local no_collate = (require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance).no_collate
+            if no_collate then
+                collate_symbol = ""
+            end
+
+
             collate[1][1]:setText(collate_symbol)
             collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - collate[1][1]:getSize().h )
         else
