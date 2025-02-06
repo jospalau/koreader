@@ -2046,9 +2046,10 @@ function FileManager:onToggleSortByMode()
             self:onSetSortBy("gr_votes")
         elseif sort_by_mode == "gr_votes" then
         self:onSetSortBy("publication_date")
-    else
-        self:onSetSortBy("publication_date")
-    end
+        else
+            self:onSetSortBy("publication_date")
+        end
+        self.file_chooser:onGotoPage(1)
     end
     return true
 end
