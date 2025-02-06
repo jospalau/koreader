@@ -1096,6 +1096,16 @@ function FileManagerCollection:genAddToCollectionButton(file_or_files, caller_pr
     }
 end
 
+-- When tapping on the bottom right of the collections lists we want to sort out the collections
+-- but just in memory, we don't to save the file when ordering them
+
+-- Because some collections can have many books, we do it in a subprocess to be able to interrupt it if needed
+
+-- When collections are opened, they may be sorted or not, we don't care, first time we tap they will be sorted using the current system collate
+-- and the consecutive tappings will sort them toggling some of the system collates
+
+-- When switching collections, the sorting will remain active for the last collection sorted if we don't start sorting other collections
+-- When going back to the fm, the fm will be using the last sorting mode used while sorting collections for consistency
 function FileManagerCollection:onTap(arg, ges_ev)
 
     local Trapper = require("ui/trapper")
