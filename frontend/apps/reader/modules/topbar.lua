@@ -1560,7 +1560,7 @@ function TopBar:paintTo(bb, x, y)
         }
         if self.collection then
             if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
-                local sort_by_mode = (require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance).collection_collate
+                local sort_by_mode = self.collection_collate
                 local collate_symbol = ""
                 if sort_by_mode == "publication_date" then
                     collate_symbol = "PD"
@@ -1571,11 +1571,7 @@ function TopBar:paintTo(bb, x, y)
                 elseif sort_by_mode == "gr_votes" then
                     collate_symbol = "GRV"
                 else
-                    collate_symbol = "O"
-                end
-                local no_collate = (require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance).no_collate
-                if no_collate then
-                    collate_symbol = ""
+                    collate_symbol = "Sort"
                 end
 
                 collate[1][1]:setText(collate_symbol)
@@ -1794,5 +1790,8 @@ function TopBar:addToMainMenu(menu_items)
     }
 end
 
+function TopBar:setCollectionCollate(collate)
+    self.collection_collate = collate
+end
 
 return TopBar

@@ -109,13 +109,7 @@ function FileManagerCollection:onShowColl(collection_name, series)
         self.match_table = nil
     end
     self:updateItemTable()
-    self.current_collection = collection_name
-    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-    if self.last_collection == nil or self.current_collection ~= self.last_collection then
-        ui.no_collate = true
-    else
-        ui.no_collate = false
-    end
+    G_reader_settings:saveSetting("collate", "publication_date")
     UIManager:show(self.coll_menu)
 
     return true
@@ -580,10 +574,6 @@ function FileManagerCollection:onShowCollList(file_or_selected_collections, call
                 -- I leave the variable name though
                 --self.ui.history.hist_menu:updateItems()
                 -- self.ui.history.restart = false
-            end
-            local Event = require("ui/event")
-            if self.last_collate then
-                UIManager:broadcastEvent(Event:new("SetSortBy", self.last_collate))
             end
             self.coll_list = nil
         end
@@ -1102,16 +1092,23 @@ function FileManagerCollection:genAddToCollectionButton(file_or_files, caller_pr
     }
 end
 
--- When tapping on the bottom right of the collections lists we want to sort out the collections
+-- When tapping on the bottom right of the collections lists we want to sort the collections
 -- but just in memory, we don't to save the file when ordering them
 
 -- Because some collections can have many books, we do it in a subprocess to be able to interrupt it if needed
 
--- When collections are opened, they may be sorted or not, we don't care, first time we tap they will be sorted using the current system collate
--- and the consecutive tappings will sort them toggling some of the system collates
+-- Every time we open any collection, the hardcoded Sort text is shown on the bottom right of the topbar associated to the menu widget
+-- and then we can start tapping and toggling the different sort modes
+-- This will be the default behaviour for any collection we open
+-- Every time we close any collection, the fm will be set to publication date sorting mode
 
--- When switching collections, the sorting will remain active for the last collection sorted if we don't start sorting other collections
--- When going back to the fm, the fm will be using the last sorting mode used while sorting collections for consistency
+-- The following does not apply since we reuse the widget instead of reopening:
+-- -- When collections are opened, they may be sorted or not, we don't care, first time we tap they will be sorted using the current system collate
+-- -- and the consecutive tappings will sort them toggling some of the system collates
+-- -- When switching collections, the sorting will remain active for the last collection sorted if we don't start sorting other collections
+-- -- When going back to the fm, the fm will be using the last sorting mode used while sorting collections for consistency
+
+
 function FileManagerCollection:onTap(arg, ges_ev)
     local DataStorage = require("datastorage")
     if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
@@ -1195,41 +1192,37 @@ function FileManagerCollection:onTap(arg, ges_ev)
 
             UIManager:close(info)
 
-            local sort_by_mode = G_reader_settings:readSetting("collate")
             -- We need to pass the previous sort mode to the topbar
             -- and can't use the current topbar object associated with this fm collection
-            -- because we sort the data and we create another fm collection which will have another topbar object
             -- We use the fm or the reader main instance (depending if we are in fm or reader mode)
-            -- to pass the previousr sort mode to the topbar
-            local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-            ui.collection_collate = sort_by_mode
+            -- to pass the previous sort mode to the topbar
+
+            -- local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+            -- ui.collection_collate = sort_by_mode
+
+            -- There is no need if we use the topbar object
+            local sort_by_mode = G_reader_settings:readSetting("collate")
             if sort_by_mode == "publication_date" then
                 G_reader_settings:saveSetting("collate", "word_count")
-                self._manager.last_collate = "publication_date"
+                self._manager.coll_menu.topbar:setCollectionCollate("publication_date")
             elseif sort_by_mode == "word_count" then
                 G_reader_settings:saveSetting("collate", "gr_rating")
-                self._manager.last_collate = "word_count"
+                self._manager.coll_menu.topbar:setCollectionCollate("word_count")
             elseif sort_by_mode == "gr_rating" then
                 G_reader_settings:saveSetting("collate", "gr_votes")
-                self._manager.last_collate = "gr_rating"
+                self._manager.coll_menu.topbar:setCollectionCollate("gr_rating")
             elseif sort_by_mode == "gr_votes" then
                 G_reader_settings:saveSetting("collate", "publication_date")
-                self._manager.last_collate = "gr_votes"
+                self._manager.coll_menu.topbar:setCollectionCollate("gr_votes")
             else
                 G_reader_settings:saveSetting("collate", "publication_date")
-                self._manager.last_collate = ""
+                self._manager.coll_menu.topbar:setCollectionCollate("")
             end
 
-            if self._manager.last_collection == nil or self._manager.current_collection ~= self._manager.last_collection then
-                ui.no_collate = true
-            else
-                ui.no_collate = false
-            end
-
-            self._manager.last_collection = self.collection_name
-            UIManager:close(self)
-
-            self._manager.ui.collections:onShowColl(self.collection_name)
+            -- UIManager:close(self)
+            -- self._manager.ui.collections:onShowColl(self.collection_name)
+            self._manager:updateItemTable()
+            self._manager.coll_menu:onGotoPage(1)
         end)
     end
     return

@@ -1616,6 +1616,11 @@ function Menu:onCloseWidget()
             or (ReaderUI.instance and not ReaderUI.instance.tearing_down) then
         UIManager:setDirty(nil, "ui")
     end
+    if self.title == "Collection" then
+        UIManager:broadcastEvent(Event:new("SetSortBy", "publication_date"))
+        local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+        ui.collection_collate = nil
+    end
 end
 
 function Menu:onClose()
