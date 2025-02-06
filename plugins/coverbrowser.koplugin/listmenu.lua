@@ -416,17 +416,19 @@ function ListMenuItem:update()
                 pages_str = _("MBR")
             end
 
-            if self.show_parent.calibre_data
-                and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]
-                and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["pubdate"]
-                and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["words"] then
-                    local words = tostring(math.floor(self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["words"]/1000)) .."kw"
-                    local pubdate = self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["pubdate"]:sub(1, 4)
-                    if pages_str ~= "" then
-                        pages_str = pages_str .. " - " .. words .. " - " .. pubdate
-                    else
-                        pages_str = words .. " - " .. pubdate
-                    end
+            if not BookInfoManager:getSetting("hide_file_info") then
+                if self.show_parent.calibre_data
+                    and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]
+                    and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["pubdate"]
+                    and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["words"] then
+                        local words = tostring(math.floor(self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["words"]/1000)) .."kw"
+                        local pubdate = self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["pubdate"]:sub(1, 4)
+                        if pages_str ~= "" then
+                            pages_str = pages_str .. " - " .. words .. " - " .. pubdate
+                        else
+                            pages_str = words .. " - " .. pubdate
+                        end
+                end
             end
             -- Build the right widget
 
@@ -444,6 +446,25 @@ function ListMenuItem:update()
                     fgcolor = fgcolor,
                 }
                 table.insert(wright_items, wfileinfo)
+            else
+                local metadata = ""
+                if self.show_parent.calibre_data
+                    and BookInfoManager:getSetting("hide_file_info")
+                    and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]
+                    and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["pubdate"]
+                    and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["words"] then
+                        local words = tostring(math.floor(self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["words"]/1000)) .."kw"
+                        local pubdate = self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["pubdate"]:sub(1, 4)
+                        metadata = words .. " - " .. pubdate
+                end
+                if pages_str then
+                    local wfileinfo = TextWidget:new{
+                        text = metadata,
+                        face = Font:getFace("cfont", fontsize_info),
+                        fgcolor = fgcolor,
+                    }
+                    table.insert(wright_items, wfileinfo)
+                end
             end
 
             if not BookInfoManager:getSetting("hide_page_info") then
