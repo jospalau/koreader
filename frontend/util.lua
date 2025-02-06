@@ -1895,7 +1895,7 @@ end
 function util.generateStats()
     local dump = require("dump")
     local _, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year, files_finished_last_year = util.getList()
-    local _, stats_last_days = util.getLastDaysStats(5, true)
+    local _, stats_last_days = util.getLastDaysStats(3, true)
     local stats = {["total_books"] = #files,
                 ["total_books_finished"] = #files_finished,
                 ["total_books_finished_this_month"] = #files_finished_this_month,
