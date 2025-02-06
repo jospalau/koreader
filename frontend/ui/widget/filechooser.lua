@@ -673,11 +673,20 @@ function FileChooser:onMenuSelect(item)
             and item.path
             and util.getFileNameSuffix(item.path) == "epub"
             and (require("apps/filemanager/filemanager").all_files[item.path].status == "mbr"
-                or require("apps/filemanager/filemanager").all_files[item.path].status == "new") then
+                or require("apps/filemanager/filemanager").all_files[item.path].status == "new"
+                or require("apps/filemanager/filemanager").all_files[item.path].status == "complete") then
             local MultiConfirmBox = require("ui/widget/multiconfirmbox")
-            local text = " do you want to open it?"
+            local text = ", do you want to open it?"
+            if require("apps/filemanager/filemanager").all_files[item.path].status == "mbr" then
+                text = "Book in MBR" .. text
+            elseif require("apps/filemanager/filemanager").all_files[item.path].status == "new" then
+                text = "Book not opened" .. text
+            else
+                text = "Book finished" .. text
+            end
+
             local multi_box= MultiConfirmBox:new{
-                text = require("apps/filemanager/filemanager").all_files[item.path].status == "mbr" and "Book in MBR".. text  or "Book not opened" .. text,
+                text = text,
                 choice1_text = _("Yes"),
                 choice1_callback = function()
                     self:onFileSelect(item)
