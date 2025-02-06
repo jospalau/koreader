@@ -1197,4 +1197,9 @@ function ReaderUI:getCurrentPage()
     return self.paging and self.paging.current_page or self.document:getCurrentPage()
 end
 
+function ReaderUI:onSetSortBy(mode)
+    G_reader_settings:saveSetting("collate", mode)
+    return true
+end
+
 return ReaderUI
