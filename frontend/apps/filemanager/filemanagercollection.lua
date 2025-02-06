@@ -1148,31 +1148,165 @@ function FileManagerCollection:genAddToCollectionButton(file_or_files, caller_pr
     }
 end
 
-function FileManagerCollection:onTap(arg, ges_ev)
-    local files = {}
-    if self.calibre_data then
-        for i = 1, #self.item_table do
-            local file = self.item_table[i]
-            if self.calibre_data[file.text] and
-                self.calibre_data[file.text]["pubdate"]
-                and self.calibre_data[file.text]["words"]
-                and self.calibre_data[file.text]["grrating"]
-                and self.calibre_data[file.text]["grvotes"] then
-                file.pubdate = tonumber(self.calibre_data[file.text]["pubdate"]:sub(1, 4))
-                file.words = tonumber(self.calibre_data[file.text]["words"])
-                file.grrating = tonumber(self.calibre_data[file.text]["grrating"])
-                file.grvotes = tonumber(self.calibre_data[file.text]["grvotes"])
-            else
-                file.pubdate = 0
-                file.words = 0
-                file.grrating = 0
-                file.grvotes = 0
+
+local function _doRestart(collection)
+    local Trapper = require("ui/trapper")
+    Trapper:wrap(function()
+        local files = {}
+        local sort_by_mode = G_reader_settings:readSetting("collate")
+        if collection.calibre_data then
+            for i = 1, #collection.item_table do
+                local file = collection.item_table[i]
+                if collection.calibre_data[file.text] and
+                collection.calibre_data[file.text]["pubdate"]
+                    and collection.calibre_data[file.text]["words"]
+                    and collection.calibre_data[file.text]["grrating"]
+                    and collection.calibre_data[file.text]["grvotes"] then
+                    file.pubdate = tonumber(collection.calibre_data[file.text]["pubdate"]:sub(1, 4))
+                    file.words = tonumber(collection.calibre_data[file.text]["words"])
+                    file.grrating = tonumber(collection.calibre_data[file.text]["grrating"])
+                    file.grvotes = tonumber(collection.calibre_data[file.text]["grvotes"])
+                else
+                    file.pubdate = 0
+                    file.words = 0
+                    file.grrating = 0
+                    file.grvotes = 0
+                end
+                files[i] = file
             end
-            files[i] = file
+
+            collection.item_table = files
+
+            if sort_by_mode == "publication_date" then
+                table.sort(collection.item_table, function(v1, v2)
+                    return v1.pubdate < v2.pubdate
+                end)
+            elseif sort_by_mode == "word_count" then
+                table.sort(collection.item_table, function(v1, v2)
+                    return v1.words < v2.words
+                end)
+            elseif sort_by_mode == "gr_rating" then
+                table.sort(collection.item_table, function(v1, v2)
+                    return v1.grrating < v2.grrating
+                end)
+            elseif sort_by_mode == "gr_votes" then
+                table.sort(collection.item_table, function(v1, v2)
+                    return v1.grvotes < v2.grvotes
+                end)
+            else
+                table.sort(collection.item_table, function(v1, v2)
+                    return v1.pubdate < v2.pubdate
+                end)
+            end
+        else
+            table.sort(collection.item_table, function(v1, v2)
+                return v1.text < v2.text
+            end)
         end
 
-        self.item_table = files
+        local files = {}
+        for i = 1, #collection.item_table do
+            local file = collection.item_table[i].file
+            files[file] = ""
+        end
 
+        -- collection.item_table = ReadCollection:getOrderedCollection(collection.collection_name)
+        ReadCollection:RemoveAllCollection(collection.collection_name)
+        local collections = {}
+        collections[collection.collection_name] = true
+        ReadCollection:addItemsMultiple(files, collections)
+        ReadCollection:updateCollectionOrder(collection.collection_name, collection.item_table)
+
+        -- UIManager:forceRePaint()
+        -- self:onShowColl(collection.collection_name)
+        -- return UIManager:close(collection)
+        return true
+    end)
+end
+
+function FileManagerCollection:onTap(arg, ges_ev)
+
+    local Trapper = require("ui/trapper")
+    Trapper:wrap(function()
+        local info = InfoMessage:new{ text = _("Searching… (tap to cancel)") }
+        UIManager:show(info)
+        UIManager:forceRePaint()
+        local completed, files_table, files_returned = Trapper:dismissableRunInSubprocess(function()
+            local files_with_metadata = {}
+            local sort_by_mode = G_reader_settings:readSetting("collate")
+            -- local FFIUtil = require("ffi/util")
+            -- FFIUtil.sleep(2)
+            if self.calibre_data then
+                for i = 1, #self.item_table do
+                    local file = self.item_table[i]
+                    if self.calibre_data[file.text] and
+                    self.calibre_data[file.text]["pubdate"]
+                        and self.calibre_data[file.text]["words"]
+                        and self.calibre_data[file.text]["grrating"]
+                        and self.calibre_data[file.text]["grvotes"] then
+                        file.pubdate = tonumber(self.calibre_data[file.text]["pubdate"]:sub(1, 4))
+                        file.words = tonumber(self.calibre_data[file.text]["words"])
+                        file.grrating = tonumber(self.calibre_data[file.text]["grrating"])
+                        file.grvotes = tonumber(self.calibre_data[file.text]["grvotes"])
+                    else
+                        file.pubdate = 0
+                        file.words = 0
+                        file.grrating = 0
+                        file.grvotes = 0
+                    end
+                    files_with_metadata[i] = file
+                end
+
+                if sort_by_mode == "publication_date" then
+                    table.sort(files_with_metadata, function(v1, v2)
+                        return v1.pubdate < v2.pubdate
+                    end)
+                elseif sort_by_mode == "word_count" then
+                    table.sort(files_with_metadata, function(v1, v2)
+                        return v1.words < v2.words
+                    end)
+                elseif sort_by_mode == "gr_rating" then
+                    table.sort(files_with_metadata, function(v1, v2)
+                        return v1.grrating < v2.grrating
+                    end)
+                elseif sort_by_mode == "gr_votes" then
+                    table.sort(files_with_metadata, function(v1, v2)
+                        return v1.grvotes < v2.grvotes
+                    end)
+                else
+                    table.sort(files_with_metadata, function(v1, v2)
+                        return v1.pubdate < v2.pubdate
+                    end)
+                end
+            else
+                table.sort(files_with_metadata, function(v1, v2)
+                    return v1.text < v2.text
+                end)
+            end
+
+            local files = {}
+            for i = 1, #files_with_metadata do
+                local file = self.item_table[i].file
+                files[file] = ""
+            end
+
+            -- self.item_table = ReadCollection:getOrderedCollection(self.collection_name)
+            -- ReadCollection:RemoveAllCollection(self.collection_name)
+
+            -- UIManager:forceRePaint()
+            -- self:onShowColl(collection.collection_name)
+            -- return UIManager:close(collection)
+            return files_with_metadata, files
+        end, info)
+        if not completed then return end
+        self.item_table = files_table
+        ReadCollection:RemoveAllCollection(self.collection_name)
+        local collections = {}
+        collections[self.collection_name] = true
+        ReadCollection:addItemsMultiple(files_returned, collections)
+        ReadCollection:updateCollectionOrder(self.collection_name, self.item_table)
+
+        UIManager:close(info)
 
         local sort_by_mode = G_reader_settings:readSetting("collate")
         -- We need to pass the previous sort mode to the topbar
@@ -1183,54 +1317,21 @@ function FileManagerCollection:onTap(arg, ges_ev)
         local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
         ui.collection_collate = sort_by_mode
         if sort_by_mode == "publication_date" then
-            table.sort(self.item_table, function(v1, v2)
-                return v1.pubdate < v2.pubdate
-            end)
             G_reader_settings:saveSetting("collate", "word_count")
         elseif sort_by_mode == "word_count" then
-            table.sort(self.item_table, function(v1, v2)
-                return v1.words < v2.words
-            end)
             G_reader_settings:saveSetting("collate", "gr_rating")
         elseif sort_by_mode == "gr_rating" then
-            table.sort(self.item_table, function(v1, v2)
-                return v1.grrating < v2.grrating
-            end)
             G_reader_settings:saveSetting("collate", "gr_votes")
         elseif sort_by_mode == "gr_votes" then
-            table.sort(self.item_table, function(v1, v2)
-                return v1.grvotes < v2.grvotes
-            end)
             G_reader_settings:saveSetting("collate", "publication_date")
         else
-            table.sort(self.item_table, function(v1, v2)
-                return v1.pubdate < v2.pubdate
-            end)
             G_reader_settings:saveSetting("collate", "publication_date")
         end
-    else
-        table.sort(self.item_table, function(v1, v2)
-            return v1.text < v2.text
-        end)
-    end
+        UIManager:close(self)
+        self._manager.ui.collections:onShowColl(self.collection_name)
+    end)
 
-    local files = {}
-    for i = 1, #self.item_table do
-        local file = self.item_table[i].file
-        files[file] = ""
-    end
-
-    ReadCollection:RemoveAllCollection(self.collection_name)
-    local collections = {}
-    collections[self.collection_name] = true
-    ReadCollection:addItemsMultiple(files, collections)
-    ReadCollection:updateCollectionOrder(self.collection_name, self.item_table)
-
-
-    -- self.item_table = ReadCollection:getOrderedCollection(self.collection_name)
-    self.ui.collections:onShowColl(self.collection_name)
-    -- self._manager.ui.collections:onShowColl(self.collection_name)
-    return UIManager:close(self)
+    return
 end
 
 return FileManagerCollection
