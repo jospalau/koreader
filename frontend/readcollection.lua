@@ -92,7 +92,7 @@ function ReadCollection:_read()
     end
 end
 
-function ReadCollection:write(collection_name)
+function ReadCollection:write(collection_name, no_flush)
     local collections = LuaSettings:open(collection_file)
     for coll_name in pairs(collections.data) do
         if not self.coll[coll_name] then
@@ -109,7 +109,9 @@ function ReadCollection:write(collection_name)
         end
     end
     logger.dbg("ReadCollection: writing to collection file")
-    collections:flush()
+    if not no_flush then
+        collections:flush()
+    end
 end
 
 -- info
@@ -274,11 +276,11 @@ function ReadCollection:RemoveAllFavoritesAll()
 end
 
 -- Remove all items in a given collection
-function ReadCollection:RemoveAllCollection(collection)
+function ReadCollection:RemoveAllCollection(collection, no_flush)
     for file in pairs(self.coll[collection]) do
         self.coll[collection][file] = nil
     end
-    self:write()
+    self:write(nil, no_flush)
     return true
 end
 
@@ -358,12 +360,12 @@ function ReadCollection:getOrderedCollectionName(collection_name)
     return ordered_coll
 end
 
-function ReadCollection:updateCollectionOrder(collection_name, ordered_coll)
+function ReadCollection:updateCollectionOrder(collection_name, ordered_coll, no_flush)
     local coll = self.coll[collection_name]
     for i, item in ipairs(ordered_coll) do
         coll[item.file].order = i
     end
-    self:write(collection_name)
+    self:write(collection_name, no_flush)
 end
 
 -- manage collections

@@ -1290,10 +1290,10 @@ function FileManagerCollection:onTap(arg, ges_ev)
                 files[file] = ""
             end
 
-            ReadCollection:RemoveAllCollection(self.collection_name)
+            ReadCollection:RemoveAllCollection(self.collection_name, true)
             local collections = {}
             collections[self.collection_name] = true
-            ReadCollection:addItemsMultiple(files, collections)
+            ReadCollection:addItemsMultiple(files, collections, true)
 
             -- UIManager:forceRePaint()
             -- self:onShowColl(collection.collection_name)
@@ -1302,7 +1302,7 @@ function FileManagerCollection:onTap(arg, ges_ev)
         end, info)
         if not completed then return end
         -- The write call needs to be out
-        ReadCollection:updateCollectionOrder(self.collection_name, files_table)
+        ReadCollection:updateCollectionOrder(self.collection_name, files_table, true)
 
         UIManager:close(info)
 
@@ -1325,6 +1325,7 @@ function FileManagerCollection:onTap(arg, ges_ev)
         else
             G_reader_settings:saveSetting("collate", "publication_date")
         end
+
         UIManager:close(self)
         self._manager.ui.collections:onShowColl(self.collection_name)
     end)
