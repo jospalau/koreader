@@ -1543,103 +1543,6 @@ function TopBar:paintTo(bb, x, y)
         -- text_container2:paintTo(bb, x + Screen:getWidth() - text_container2:getSize().w - 20, y + 20)
         -- text_container2:paintTo(bb, x + Screen:getWidth()/2 - text_container2:getSize().w/2, y + 20)
     else
-
-        local times_text = TextWidget:new{
-            text =  "",
-            face = Font:getFace("myfont3", 12),
-            fgcolor = Blitbuffer.COLOR_BLACK,
-            invert = true,
-        }
-
-        local powerd = Device:getPowerDevice()
-        local batt_lvl = tostring(powerd:getCapacity())
-
-
-
-        local time = datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
-
-        local last_file = "None"
-        if G_reader_settings:readSetting("lastfile") ~= nil then
-            last_file = G_reader_settings:readSetting("lastfile")
-        end
-
-
-        -- local time_battery_text_text = time .. "|" .. batt_lvl .. "%|" ..  last_file
-
-        -- times_text:setText(time_battery_text_text:reverse())
-        -- times_text:paintTo(bb, x - times_text:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y)
-
-
-        local books_information = FrameContainer:new{
-            left_container:new{
-                dimen = Geom:new(),
-                TextWidget:new{
-                    text =  "",
-                    face = Font:getFace("myfont3", 12),
-                    fgcolor = Blitbuffer.COLOR_BLACK,
-                },
-            },
-            -- background = Blitbuffer.COLOR_WHITE,
-            bordersize = 0,
-            padding = 0,
-            padding_bottom = self.bottom_padding,
-        }
-
-        -- local FileManagerFileSearcher = require("apps/filemanager/filemanagerfilesearcher")
-        -- local _, files = self:getList("*.epub")
-        -- books_information[1][1]:setText("TF: " .. tostring(#files))
-
-        local ffiutil = require("ffi/util")
-        if G_reader_settings:readSetting("home_dir") and ffiutil.realpath(G_reader_settings:readSetting("home_dir") .. "/stats.lua") then
-            local ok, stats = pcall(dofile, G_reader_settings:readSetting("home_dir") .. "/stats.lua")
-            local last_days = ""
-            for k, v in pairs(stats["stats_last_days"]) do
-                last_days = v > 0 and last_days .. " ● " or last_days .. " ○ "
-            end
-            -- local execute = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub' | wc -l" )
-            -- local execute2 = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub.lua' -exec ls {} + | wc -l")
-            -- books_information[1][1]:setText("TB: " .. execute:read('*a') .. "TBC: " .. execute2:read('*a'))
-
-            local stats_year = TopBar:getReadThisYearSoFar()
-            if stats_year > 0 then
-                stats_year = "+" .. stats_year
-            end
-            books_information[1][1]:setText("B: " .. stats["total_books"]
-            .. ", BF: " .. stats["total_books_finished"]
-            .. ", BFTM: " .. stats["total_books_finished_this_month"]
-            .. ", BFTY: " .. stats["total_books_finished_this_year"]
-            .. ", BFLY: " .. stats["total_books_finished_last_year"]
-            .. ", BMBR: " .. stats["total_books_mbr"]
-            .. ", BTBR: " .. stats["total_books_tbr"]
-            .. ", LD: " .. last_days
-            .. " " .. stats_year)
-        else
-            books_information[1][1]:setText("No stats.lua file in home dir")
-        end
-        books_information:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
-
-
-        local times = FrameContainer:new{
-            left_container:new{
-                dimen = Geom:new(),
-                TextWidget:new{
-                    text =  "",
-                    face = Font:getFace("myfont3", 12),
-                    fgcolor = Blitbuffer.COLOR_BLACK,
-                },
-            },
-            -- background = Blitbuffer.COLOR_WHITE,
-            bordersize = 0,
-            padding = 0,
-            padding_bottom = self.bottom_padding,
-        }
-
-
-        -- times[1][1]:setText(time .. "|" .. batt_lvl .. "%")
-
-        times[1][1]:setText("BDB: " .. self.total_books .. ", TR: " .. self.total_read .. "d")
-        times:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM - times[1][1]:getSize().h )
-
         local collate = FrameContainer:new{
             left_container:new{
                 dimen = Geom:new(),
@@ -1654,24 +1557,137 @@ function TopBar:paintTo(bb, x, y)
             padding = 0,
             padding_bottom = self.bottom_padding,
         }
-        if self.fm and not self.history then
-            local sort_by_bode = G_reader_settings:readSetting("collate")
+        if self.collection then
+            local sort_by_mode = ( require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance).collection_collate
             local collate_symbol = ""
-            if sort_by_bode == "publication_date" then
+            if sort_by_mode == "publication_date" then
                 collate_symbol = "PD"
-            elseif sort_by_bode == "word_count" then
+            elseif sort_by_mode == "word_count" then
                 collate_symbol = "WC"
-            elseif sort_by_bode == "gr_rating" then
+            elseif sort_by_mode == "gr_rating" then
                 collate_symbol = "GRR"
-            elseif sort_by_bode == "gr_votes" then
+            elseif sort_by_mode == "gr_votes" then
                 collate_symbol = "GRV"
             else
                 collate_symbol = "O"
             end
             collate[1][1]:setText(collate_symbol)
+            collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - collate[1][1]:getSize().h )
+        else
+            local times_text = TextWidget:new{
+                text =  "",
+                face = Font:getFace("myfont3", 12),
+                fgcolor = Blitbuffer.COLOR_BLACK,
+                invert = true,
+            }
 
-            -- collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, y + Screen:scaleBySize(6))
-            collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM - times[1][1]:getSize().h )
+            local powerd = Device:getPowerDevice()
+            local batt_lvl = tostring(powerd:getCapacity())
+
+
+
+            local time = datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
+
+            local last_file = "None"
+            if G_reader_settings:readSetting("lastfile") ~= nil then
+                last_file = G_reader_settings:readSetting("lastfile")
+            end
+
+
+            -- local time_battery_text_text = time .. "|" .. batt_lvl .. "%|" ..  last_file
+
+            -- times_text:setText(time_battery_text_text:reverse())
+            -- times_text:paintTo(bb, x - times_text:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y)
+
+
+            local books_information = FrameContainer:new{
+                left_container:new{
+                    dimen = Geom:new(),
+                    TextWidget:new{
+                        text =  "",
+                        face = Font:getFace("myfont3", 12),
+                        fgcolor = Blitbuffer.COLOR_BLACK,
+                    },
+                },
+                -- background = Blitbuffer.COLOR_WHITE,
+                bordersize = 0,
+                padding = 0,
+                padding_bottom = self.bottom_padding,
+            }
+
+            -- local FileManagerFileSearcher = require("apps/filemanager/filemanagerfilesearcher")
+            -- local _, files = self:getList("*.epub")
+            -- books_information[1][1]:setText("TF: " .. tostring(#files))
+
+            local ffiutil = require("ffi/util")
+            if G_reader_settings:readSetting("home_dir") and ffiutil.realpath(G_reader_settings:readSetting("home_dir") .. "/stats.lua") then
+                local ok, stats = pcall(dofile, G_reader_settings:readSetting("home_dir") .. "/stats.lua")
+                local last_days = ""
+                for k, v in pairs(stats["stats_last_days"]) do
+                    last_days = v > 0 and last_days .. " ● " or last_days .. " ○ "
+                end
+                -- local execute = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub' | wc -l" )
+                -- local execute2 = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub.lua' -exec ls {} + | wc -l")
+                -- books_information[1][1]:setText("TB: " .. execute:read('*a') .. "TBC: " .. execute2:read('*a'))
+
+                local stats_year = TopBar:getReadThisYearSoFar()
+                if stats_year > 0 then
+                    stats_year = "+" .. stats_year
+                end
+                books_information[1][1]:setText("B: " .. stats["total_books"]
+                .. ", BF: " .. stats["total_books_finished"]
+                .. ", BFTM: " .. stats["total_books_finished_this_month"]
+                .. ", BFTY: " .. stats["total_books_finished_this_year"]
+                .. ", BFLY: " .. stats["total_books_finished_last_year"]
+                .. ", BMBR: " .. stats["total_books_mbr"]
+                .. ", BTBR: " .. stats["total_books_tbr"]
+                .. ", LD: " .. last_days
+                .. " " .. stats_year)
+            else
+                books_information[1][1]:setText("No stats.lua file in home dir")
+            end
+            books_information:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+
+
+            local times = FrameContainer:new{
+                left_container:new{
+                    dimen = Geom:new(),
+                    TextWidget:new{
+                        text =  "",
+                        face = Font:getFace("myfont3", 12),
+                        fgcolor = Blitbuffer.COLOR_BLACK,
+                    },
+                },
+                -- background = Blitbuffer.COLOR_WHITE,
+                bordersize = 0,
+                padding = 0,
+                padding_bottom = self.bottom_padding,
+            }
+
+
+            -- times[1][1]:setText(time .. "|" .. batt_lvl .. "%")
+
+            times[1][1]:setText("BDB: " .. self.total_books .. ", TR: " .. self.total_read .. "d")
+            times:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM - times[1][1]:getSize().h )
+            if self.fm and not self.history then
+                local sort_by_bode = G_reader_settings:readSetting("collate")
+                local collate_symbol = ""
+                if sort_by_bode == "publication_date" then
+                    collate_symbol = "PD"
+                elseif sort_by_bode == "word_count" then
+                    collate_symbol = "WC"
+                elseif sort_by_bode == "gr_rating" then
+                    collate_symbol = "GRR"
+                elseif sort_by_bode == "gr_votes" then
+                    collate_symbol = "GRV"
+                else
+                    collate_symbol = "O"
+                end
+                collate[1][1]:setText(collate_symbol)
+
+                -- collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, y + Screen:scaleBySize(6))
+                collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM - collate[1][1]:getSize().h )
+            end
         end
     end
 end

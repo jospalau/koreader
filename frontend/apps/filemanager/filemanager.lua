@@ -54,6 +54,7 @@ local FileManager = InputContainer:extend{
     root_path = lfs.currentdir(),
 
     all_files = util.getListAll(),
+    calibre_data = util.loadCalibreData(),
     clipboard = nil, -- for single file operations
     selected_files = nil, -- for group file operations
 
