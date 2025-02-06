@@ -1641,14 +1641,14 @@ function TopBar:paintTo(bb, x, y)
                     stats_year = "+" .. stats_year
                 end
                 books_information[1][1]:setText("B: " .. stats["total_books"]
-                .. ", BF: " .. stats["total_books_finished"]
-                .. ", BFTM: " .. stats["total_books_finished_this_month"]
-                .. ", BFTY: " .. stats["total_books_finished_this_year"]
-                .. ", BFLY: " .. stats["total_books_finished_last_year"]
-                .. ", BMBR: " .. stats["total_books_mbr"]
-                .. ", BTBR: " .. stats["total_books_tbr"]
-                .. ", LD: " .. last_days
-                .. " " .. stats_year)
+                .. ", BF:" .. stats["total_books_finished"]
+                .. ", BFTM:" .. stats["total_books_finished_this_month"]
+                .. ", BFTY:" .. stats["total_books_finished_this_year"]
+                .. ", BFLY:" .. stats["total_books_finished_last_year"]
+                .. ", BMBR:" .. stats["total_books_mbr"]
+                .. ", BTBR:" .. stats["total_books_tbr"]
+                .. ", LD:" .. last_days
+                .. stats_year)
             else
                 books_information[1][1]:setText("No stats.lua file in home dir")
             end
@@ -1692,7 +1692,7 @@ function TopBar:paintTo(bb, x, y)
                 collate[1][1]:setText(collate_symbol)
 
                 -- collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, y + Screen:scaleBySize(6))
-                collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM - collate[1][1]:getSize().h )
+                collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
             end
         end
     end
