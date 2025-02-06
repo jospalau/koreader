@@ -575,6 +575,10 @@ function FileManagerCollection:onShowCollList(file_or_selected_collections, call
                 --self.ui.history.hist_menu:updateItems()
                 -- self.ui.history.restart = false
             end
+            local Event = require("ui/event")
+            if self.last_collate then
+                UIManager:broadcastEvent(Event:new("SetSortBy", self.last_collate))
+            end
             self.coll_list = nil
         end
     end
@@ -1184,14 +1188,19 @@ function FileManagerCollection:onTap(arg, ges_ev)
         ui.collection_collate = sort_by_mode
         if sort_by_mode == "publication_date" then
             G_reader_settings:saveSetting("collate", "word_count")
+            self._manager.last_collate = "publication_date"
         elseif sort_by_mode == "word_count" then
             G_reader_settings:saveSetting("collate", "gr_rating")
+            self._manager.last_collate = "word_count"
         elseif sort_by_mode == "gr_rating" then
             G_reader_settings:saveSetting("collate", "gr_votes")
+            self._manager.last_collate = "gr_rating"
         elseif sort_by_mode == "gr_votes" then
             G_reader_settings:saveSetting("collate", "publication_date")
+            self._manager.last_collate = "gr_votes"
         else
             G_reader_settings:saveSetting("collate", "publication_date")
+            self._manager.last_collate = ""
         end
 
         if self._manager.last_collection == nil or self._manager.current_collection ~= self._manager.last_collection then
