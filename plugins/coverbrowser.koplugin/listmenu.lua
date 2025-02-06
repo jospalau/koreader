@@ -416,14 +416,17 @@ function ListMenuItem:update()
                 pages_str = _("MBR")
             end
 
-            if self.show_parent.calibre_data and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")] and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["pubdate"] and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["words"] then
-                local words = tostring(math.floor(self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["words"]/1000)) .."kw"
-                local pubdate = self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["pubdate"]:sub(1, 4)
-                if pages_str ~= "" then
-                    pages_str = pages_str .. " - " .. words .. " - " .. pubdate
-                else
-                    pages_str = words .. " - " .. pubdate
-                end
+            if self.show_parent.calibre_data
+                and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]
+                and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["pubdate"]
+                and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["words"] then
+                    local words = tostring(math.floor(self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["words"]/1000)) .."kw"
+                    local pubdate = self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["pubdate"]:sub(1, 4)
+                    if pages_str ~= "" then
+                        pages_str = pages_str .. " - " .. words .. " - " .. pubdate
+                    else
+                        pages_str = words .. " - " .. pubdate
+                    end
             end
             -- Build the right widget
 
@@ -532,10 +535,15 @@ function ListMenuItem:update()
             title = BD.auto(title)
             local pubdate = nil
             local metadata = nil
-            if self.show_parent.calibre_data[bookinfo.filename] and self.show_parent.calibre_data[bookinfo.filename]["words"] and self.show_parent.calibre_data[bookinfo.filename]["words"] ~= ""
-                and self.show_parent.calibre_data[bookinfo.filename]["pubdate"] and self.show_parent.calibre_data[bookinfo.filename]["pubdate"] ~= ""
-                and self.show_parent.calibre_data[bookinfo.filename]["grvotes"] and self.show_parent.calibre_data[bookinfo.filename]["grvotes"] ~= ""
-                and self.show_parent.calibre_data[bookinfo.filename]["grrating"] and self.show_parent.calibre_data[bookinfo.filename]["grrating"] ~= "" then
+            if self.show_parent.calibre_data[bookinfo.filename]
+                and self.show_parent.calibre_data[bookinfo.filename]["words"]
+                and self.show_parent.calibre_data[bookinfo.filename]["words"] ~= ""
+                and self.show_parent.calibre_data[bookinfo.filename]["pubdate"]
+                and self.show_parent.calibre_data[bookinfo.filename]["pubdate"] ~= ""
+                and self.show_parent.calibre_data[bookinfo.filename]["grvotes"]
+                and self.show_parent.calibre_data[bookinfo.filename]["grvotes"] ~= ""
+                and self.show_parent.calibre_data[bookinfo.filename]["grrating"]
+                and self.show_parent.calibre_data[bookinfo.filename]["grrating"] ~= "" then
                     pubdate = " (" .. string.format("%+4s", self.show_parent.calibre_data[bookinfo.filename]["pubdate"]:sub(1, 4)) .. ")"
                     metadata = " → " .. string.format("%+4s", self.show_parent.calibre_data[bookinfo.filename]["grrating"]) .. "⭐" ..
                     self.show_parent.calibre_data[bookinfo.filename]["grvotes"] .. "↑"

@@ -283,8 +283,14 @@ function FileManagerCollection:onMenuHold(item)
     end
 
     local title = BD.filename(item.text):gsub(".epub","")
-    if self.calibre_data[item.text] and self.calibre_data[item.text]["pubdate"] and self.calibre_data[item.text]["words"] and self.calibre_data[item.text]["grrating"] and self.calibre_data[item.text]["grvotes"] then
-        title = title .. ", " ..  self.calibre_data[item.text]["pubdate"]:sub(1, 4) .. " - " .. self.calibre_data[item.text]["grrating"] .. "★ ("  .. self.calibre_data[item.text]["grvotes"] .. ") - " .. tostring(math.floor(self.calibre_data[item.text]["words"]/1000)) .."kw"
+    if self.calibre_data[item.text] and self.calibre_data[item.text]["pubdate"]
+        and self.calibre_data[item.text]["words"]
+        and self.calibre_data[item.text]["grrating"]
+        and self.calibre_data[item.text]["grvotes"] then
+            title = title .. ", " ..  self.calibre_data[item.text]["pubdate"]:sub(1, 4) ..
+            " - " .. self.calibre_data[item.text]["grrating"] .. "★ ("  ..
+            self.calibre_data[item.text]["grvotes"] .. ") - " ..
+            tostring(math.floor(self.calibre_data[item.text]["words"]/1000)) .."kw"
     end
     self.file_dialog = ButtonDialog:new{
         title = title,
