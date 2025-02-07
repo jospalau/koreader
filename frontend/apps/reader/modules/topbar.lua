@@ -1558,6 +1558,22 @@ function TopBar:paintTo(bb, x, y)
             padding = 0,
             padding_bottom = self.bottom_padding,
         }
+
+        local reverse_collate = FrameContainer:new{
+            left_container:new{
+                dimen = Geom:new(),
+                TextWidget:new{
+                    text =  "",
+                    face = Font:getFace("myfont3", 12),
+                    fgcolor = Blitbuffer.COLOR_BLACK,
+                },
+            },
+            -- background = Blitbuffer.COLOR_WHITE,
+            bordersize = 0,
+            padding = 0,
+            padding_bottom = self.bottom_padding,
+        }
+
         if self.collection then
             if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
                 local sort_by_mode = self.collection_collate
@@ -1679,17 +1695,17 @@ function TopBar:paintTo(bb, x, y)
             times:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM - times[1][1]:getSize().h )
             if self.fm and not self.history then
                 if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
-                    local sort_by_bode = G_reader_settings:readSetting("collate")
+                    local sort_by_mode = G_reader_settings:readSetting("collate")
                     local collate_symbol = ""
-                    if sort_by_bode == "strcoll" then
+                    if sort_by_mode == "strcoll" then
                         collate_symbol = "Name"
-                    elseif sort_by_bode == "publication_date" then
+                    elseif sort_by_mode == "publication_date" then
                         collate_symbol = "PD"
-                    elseif sort_by_bode == "word_count" then
+                    elseif sort_by_mode == "word_count" then
                         collate_symbol = "WC"
-                    elseif sort_by_bode == "gr_rating" then
+                    elseif sort_by_mode == "gr_rating" then
                         collate_symbol = "GRR"
-                    elseif sort_by_bode == "gr_votes" then
+                    elseif sort_by_mode == "gr_votes" then
                         collate_symbol = "GRV"
                     else
                         collate_symbol = "O"
@@ -1697,6 +1713,16 @@ function TopBar:paintTo(bb, x, y)
                     collate[1][1]:setText(collate_symbol)
                     -- collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, y + Screen:scaleBySize(6))
                     collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+
+                    local reverse_collate_mode = G_reader_settings:readSetting("reverse_collate")
+                    if reverse_collate_mode then
+                        reverse_collate[1][1]:setText("↓")
+                    else
+                        reverse_collate[1][1]:setText("↑")
+                    end
+                    -- collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, y + Screen:scaleBySize(6))
+                    reverse_collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - reverse_collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+
                 else
                     collate[1][1]:setText("?")
                     collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)

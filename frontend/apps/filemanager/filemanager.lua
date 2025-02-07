@@ -20,6 +20,8 @@ local FileManagerShortcuts = require("apps/filemanager/filemanagershortcuts")
 local FrameContainer = require("ui/widget/container/framecontainer")
 local InfoMessage = require("ui/widget/infomessage")
 local InputContainer = require("ui/widget/container/inputcontainer")
+local Geom = require("ui/geometry")
+local GestureRange = require("ui/gesturerange")
 local InputDialog = require("ui/widget/inputdialog")
 local LanguageSupport = require("languagesupport")
 local Menu = require("ui/widget/menu")
@@ -52,7 +54,7 @@ local FileManager = InputContainer:extend{
     title = _("KOReader"),
     active_widgets = nil, -- array
     root_path = lfs.currentdir(),
-
+    disable_double_tap = false,
     all_files = util.getListAll(),
     clipboard = nil, -- for single file operations
     selected_files = nil, -- for group file operations
@@ -111,6 +113,22 @@ function FileManager:initGesListener()
             handler = function(ges)
                 self:onSwipeFM(ges)
             end,
+        },
+        {
+            id = "filemanager_tap",
+            ges = "tap",
+            screen_zone = {
+                ratio_x = 7/8, ratio_y = 7/8, ratio_w = 1/8, ratio_h = 1/8,
+            },
+            handler = function(ges) return self:onTapBottomRight(nil, ges) end,
+        },
+        {
+            id = "filemanager_double_tap",
+            ges = "double_tap",
+            screen_zone = {
+                ratio_x = 7/8, ratio_y = 7/8, ratio_w = 1/8, ratio_h = 1/8,
+            },
+            handler = function(ges) return self:onDoubleTapBottonRight(nil, ges) end,
         },
     })
 end
@@ -393,6 +411,8 @@ function FileManager:setupLayout()
     self.menu = FileManagerMenu:new{
         ui = self
     }
+
+
 
     -- No need to reinvent the wheel, use FileChooser's layout
     self.layout = file_chooser.layout
@@ -1451,6 +1471,20 @@ function FileManager:showSelectedFilesList()
     UIManager:show(menu)
 end
 
+function FileManager:onTap(arg, ges_ev)
+    self._manager.ui.statistics:onShowCalendarView()
+    return true
+end
+
+
+function FileManager:onTapBottomRight(arg, ges_ev)
+    return self:onToggleSortByMode()
+end
+
+function FileManager:onDoubleTapBottonRight(arg, ges_ev)
+    return self:onToggleReverseSorting()
+end
+
 function FileManager:onPushConfig()
     local InfoMessage = require("ui/widget/infomessage")
     local server = G_reader_settings:readSetting("rsync_server") or "192.168.50.252"
@@ -2031,6 +2065,15 @@ end
 function FileManager:onSetMixedSorting(toggle)
     G_reader_settings:saveSetting("collate_mixed", toggle or nil)
     self.file_chooser:refreshPath()
+    return true
+end
+
+function FileManager:onToggleReverseSorting()
+    local DataStorage = require("datastorage")
+    if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
+        self:onSetReverseSorting(not G_reader_settings:isTrue("reverse_collate"))
+        self.file_chooser:onGotoPage(1)
+    end
     return true
 end
 
