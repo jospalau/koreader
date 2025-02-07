@@ -1122,10 +1122,9 @@ function FileManagerCollection:onTap(arg, ges_ev)
             local completed, files_table = Trapper:dismissableRunInSubprocess(function()
                 local files_with_metadata = {}
                 local sort_by_mode = G_reader_settings:readSetting("collate")
-                                -- Reverse collate is always set to nil (ascending order) when creating the collection so topbar will show it blank
+                -- Reverse collate is always set to nil (ascending order) when creating the collection so topbar will show it blank
                 -- This means, that while we toggle sorting modes and we don't reverse the sorting mode we will get ascending order
-                -- First time we tap to reverse, self.current_reverse_collate_mode will be used-- Reverse collate is always set to nil (ascending order) when creating the collection, so
-                local reverse_collate_mode = self.current_reverse_collate_mode and self.current_reverse_collate_mode or not G_reader_settings:readSetting("reverse_collate")
+                local reverse_collate_mode = G_reader_settings:readSetting("reverse_collate") == nil and true or G_reader_settings:readSetting("reverse_collate")
                 -- local FFIUtil = require("ffi/util")
                 -- FFIUtil.sleep(2)
                 if self.calibre_data then
@@ -1243,27 +1242,32 @@ function FileManagerCollection:onTap(arg, ges_ev)
             if sort_by_mode == "strcoll" then
                 G_reader_settings:saveSetting("collate", "publication_date")
                 self._manager.coll_menu.topbar:setCollectionCollate("strcoll")
-                self.current_collate = ("strcoll")
+                self.current_collate = "strcoll"
             elseif sort_by_mode == "publication_date" then
                 G_reader_settings:saveSetting("collate", "word_count")
                 self._manager.coll_menu.topbar:setCollectionCollate("publication_date")
-                self.current_collate = ("publication_date")
+                self.current_collate = "publication_date"
             elseif sort_by_mode == "word_count" then
                 G_reader_settings:saveSetting("collate", "gr_rating")
                 self._manager.coll_menu.topbar:setCollectionCollate("word_count")
-                self.current_collate = ("word_count")
+                self.current_collate = "word_count"
             elseif sort_by_mode == "gr_rating" then
                 G_reader_settings:saveSetting("collate", "gr_votes")
                 self._manager.coll_menu.topbar:setCollectionCollate("gr_rating")
-                self.current_collate = ("gr_rating")
+                self.current_collate = "gr_rating"
             elseif sort_by_mode == "gr_votes" then
                 G_reader_settings:saveSetting("collate", "strcoll")
                 self._manager.coll_menu.topbar:setCollectionCollate("gr_votes")
-                self.current_collate = ("gr_votes")
+                self.current_collate = "gr_votes"
             else
                 G_reader_settings:saveSetting("collate", "strcoll")
-                self.current_collate = ("")
                 self._manager.coll_menu.topbar:setCollectionCollate("")
+                self.current_collate = ""
+            end
+
+            if not self.current_reverse_collate_mode then
+                G_reader_settings:saveSetting("reverse_collate", true)
+                self.current_reverse_collate_mode = G_reader_settings:readSetting("reverse_collate")
             end
 
             -- UIManager:close(self)
@@ -1286,7 +1290,7 @@ function FileManagerCollection:onDoubleTap(arg, ges_ev)
             local completed, files_table = Trapper:dismissableRunInSubprocess(function()
                 local files_with_metadata = {}
                 local sort_by_mode = self.current_collate and self.current_collate or G_reader_settings:readSetting("collate")
-                local reverse_collate_mode = self.current_reverse_collate_mode and not self.current_reverse_collate_mode or not G_reader_settings:readSetting("reverse_collate")
+                local reverse_collate_mode = not G_reader_settings:readSetting("reverse_collate")
                 -- local FFIUtil = require("ffi/util")
                 -- FFIUtil.sleep(2)
                 if self.calibre_data then
@@ -1400,8 +1404,13 @@ function FileManagerCollection:onDoubleTap(arg, ges_ev)
             -- ui.collection_collate = sort_by_mode
 
             -- There is no need if we use the topbar object
-            G_reader_settings:saveSetting("reverse_collate", not G_reader_settings:readSetting("reverse_collate"))
             self.current_reverse_collate_mode = G_reader_settings:readSetting("reverse_collate")
+            G_reader_settings:saveSetting("reverse_collate", not G_reader_settings:readSetting("reverse_collate"))
+            if not self.current_collate then
+                G_reader_settings:saveSetting("collate", "publication_date")
+                self._manager.coll_menu.topbar:setCollectionCollate("strcoll")
+                self.current_collate = "strcoll"
+            end
 
 
             -- UIManager:close(self)
