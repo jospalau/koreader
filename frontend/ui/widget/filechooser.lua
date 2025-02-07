@@ -248,7 +248,7 @@ local FileChooser = BookList:extend{
         publication_date = {
             text = _("publication date"),
             menu_order = 100,
-            can_collate_mixed = true,
+            can_collate_mixed = false,
             init_sort_func = function(cache)
                 return function(a, b)
                     return a.pubdate < b.pubdate
@@ -258,7 +258,7 @@ local FileChooser = BookList:extend{
         word_count = {
             text = _("word count"),
             menu_order = 110,
-            can_collate_mixed = true,
+            can_collate_mixed = false,
             init_sort_func = function(cache)
                 return function(a, b)
                     return a.words < b.words
@@ -268,20 +268,20 @@ local FileChooser = BookList:extend{
         gr_votes = {
             text = _("GR Votes"),
             menu_order = 120,
-            can_collate_mixed = true,
+            can_collate_mixed = false,
             init_sort_func = function(cache)
                 return function(a, b)
-                    return a.grvotes > b.grvotes
+                    return a.grvotes < b.grvotes
                 end, cache
             end,
         },
         gr_rating = {
             text = _("GR Rating"),
             menu_order = 130,
-            can_collate_mixed = true,
+            can_collate_mixed = false,
             init_sort_func = function(cache)
                 return function(a, b)
-                    return a.grrating > b.grrating
+                    return a.grrating < b.grrating
                 end, cache
             end,
         },
