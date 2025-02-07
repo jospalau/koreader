@@ -1595,7 +1595,9 @@ function TopBar:paintTo(bb, x, y)
                 collate[1][1]:setText(collate_symbol)
                 collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - collate[1][1]:getSize().h )
                 local reverse_collate_mode = G_reader_settings:readSetting("reverse_collate")
-                if not reverse_collate_mode then
+                if reverse_collate_mode == nil then
+                    reverse_collate[1][1]:setText("")
+                elseif not reverse_collate_mode then
                     reverse_collate[1][1]:setText("↓")
                 else
                     reverse_collate[1][1]:setText("↑")
@@ -1830,10 +1832,6 @@ end
 
 function TopBar:setCollectionCollate(collate)
     self.collection_collate = collate
-end
-
-function TopBar:setCollectionReverseCollate(reverse)
-    self.collection_reverse_collate = true
 end
 
 return TopBar
