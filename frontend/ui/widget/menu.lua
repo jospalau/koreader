@@ -27,6 +27,7 @@ local Utf8Proc = require("ffi/utf8proc")
 local VerticalGroup = require("ui/widget/verticalgroup")
 local VerticalSpan = require("ui/widget/verticalspan")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
+local IconButton = require("ui/widget/iconbutton")
 local ffiUtil = require("ffi/util")
 local logger = require("logger")
 local util = require("util")
@@ -795,6 +796,36 @@ function Menu:init()
         }
     end
 
+
+    local function execute()
+        local UIManager = require("ui/uimanager")
+        local Notification = require("ui/widget/notification")
+        return UIManager:show(Notification:new{
+            text =("searching"),
+        })
+    end
+
+    local size_icon_sort_button = G_defaults:readSetting("DGENERIC_ICON_SIZE") * 1.5
+    self.sort_button = IconButton:new{
+        icon = "home",
+        width = size_icon_sort_button,
+        height = size_icon_sort_button,
+        -- padding = self.button_padding,
+        padding_left = 0, -- extend button tap zone
+        padding_bottom = 0,
+        overlap_align = "right",
+        -- callback = function () local UIManager = require("ui/uimanager")
+        --     local Notification = require("ui/widget/notification")
+        --     return UIManager:show(Notification:new{
+        --         text =("searching"),
+        --     })
+        --     end,
+        callback = execute,
+        hold_callback = nil,
+        allow_flash = true,
+        -- show_parent = self.show_parent,
+    }
+
     -- group for items
     self.item_group = VerticalGroup:new{}
     -- group for page info
@@ -985,9 +1016,48 @@ function Menu:init()
     end
     local footer = BottomContainer:new{
         dimen = self.inner_dimen:copy(),
-        margin_bottom = margin_bottom,
+        margin_bottom = 20,
         self.page_info,
     }
+
+    local sort_icon = BottomContainer:new{
+        dimen = self.inner_dimen:copy(),
+        WidgetContainer:new{
+            dimen = Geom:new{
+                x = self.screen_w - size_icon_sort_button - size_icon_sort_button, y = 0,
+                w = self.screen_w,
+                h = size_icon_sort_button,
+            },
+            FrameContainer:new{
+                -- LeftContainer:new{
+                    dimen = Geom:new(),
+                    -- TextWidget:new{
+                    --     text =  "aaaaa",
+                    --     face = Font:getFace("myfont3", 12),
+                    --     fgcolor = Blitbuffer.COLOR_BLACK,
+                    -- },
+                    -- IconButton:new{
+                    --     icon = "topbar.thumbsup",
+                    --     width = 24,
+                    --     height = 24,
+                    --     -- padding = self.button_padding,
+                    --     padding_left = 0, -- extend button tap zone
+                    --     padding_bottom = 0,
+                    --     -- overlap_align = "right",
+                    --     -- callback = self:toggleSortMode(),
+                    --     hold_callback = nil,
+                    --     allow_flash = true,
+                    --     -- show_parent = self.show_parent,
+                    -- },
+                    self.sort_button,
+                -- },
+                -- background = Blitbuffer.COLOR_WHITE,
+                bordersize = 0,
+                padding = 0,
+            },
+        }
+    }
+
     local page_return = BottomContainer:new{
         dimen = self.inner_dimen:copy(),
         WidgetContainer:new{
@@ -1014,6 +1084,7 @@ function Menu:init()
         dimen = self.inner_dimen:copy(),
         self.content_group,
         page_return,
+        -- (G_reader_settings:isTrue("top_manager_infmandhistory") and (self.title == "" or  self.title == "Collection")) and sort_icon or nil,
         footer,
     }
 
