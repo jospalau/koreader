@@ -364,7 +364,9 @@ function PageTextInfo:addToMainMenu(menu_items)
                         callback = function()
                             local highlight_all_notes = self.settings:isTrue("highlight_all_notes")
                             self.settings:saveSetting("highlight_all_notes", not highlight_all_notes)
-                            self.ui:reloadDocument(nil, true) -- seamless reload (no infomsg, no flash)
+                            -- self.ui:reloadDocument(nil, true) -- seamless reload (no infomsg, no flash)
+                            self:updateNotes()
+                            UIManager:setDirty("all", "full")
                             self.settings:flush()
                             return true
                         end,
@@ -378,7 +380,9 @@ function PageTextInfo:addToMainMenu(menu_items)
                         callback = function()
                             local highlight_all_words_vocabulary = self.settings:isTrue("highlight_all_words_vocabulary")
                             self.settings:saveSetting("highlight_all_words_vocabulary", not highlight_all_words_vocabulary)
-                            self.ui:reloadDocument(nil, true) -- seamless reload (no infomsg, no flash)
+                            -- self.ui:reloadDocument(nil, true) -- seamless reload (no infomsg, no flash)
+                            self:updateWordsVocabulary()
+                            UIManager:setDirty("all", "full")
                             self.settings:flush()
                             return true
                         end,
