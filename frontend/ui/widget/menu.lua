@@ -83,6 +83,48 @@ function ItemShortCutIcon:init()
     }
 end
 
+
+local Sorter = InputContainer:extend{
+}
+
+function Sorter:init()
+    self.ges_events = {
+        Tap = {
+            GestureRange:new{
+                ges = "tap",
+                range = Geom:new{ x = Screen:getSize().w - 100, y = Screen:getSize().h - 100, w = 100, h = 100},
+            },
+        },
+        DoubleTap = {
+            GestureRange:new{
+                ges = "double_tap",
+                range = Geom:new{ x = Screen:getSize().w - 100, y = Screen:getSize().h - 100, w = 100, h = 100},
+            },
+        },
+        -- HoldSelect = {
+        --     GestureRange:new{
+        --         ges = self.handle_hold_on_hold_release and "hold_release" or "hold",
+        --         range = self.dimen,
+        --     },
+        -- },
+    }
+end
+function Sorter:onTap(arg, ges)
+    local UIManager = require("ui/uimanager")
+    local Notification = require("ui/widget/notification")
+        UIManager:show(Notification:new{
+        text =("searching"),
+    })
+end
+
+function Sorter:onDoubleTap(arg, ges)
+    local UIManager = require("ui/uimanager")
+    local Notification = require("ui/widget/notification")
+        UIManager:show(Notification:new{
+        text =("searching2"),
+    })
+end
+
 --[[
 Widget that displays an item for menu
 --]]
@@ -795,6 +837,9 @@ function Menu:init()
         }
     end
 
+    self.sorter = Sorter:new{
+    }
+
     -- group for items
     self.item_group = VerticalGroup:new{}
     -- group for page info
@@ -1023,7 +1068,8 @@ function Menu:init()
         padding = 0,
         margin = 0,
         radius = self.is_popout and math.floor(self.dimen.w * (1/20)) or 0,
-        content
+        content,
+        -- self.sorter
     }
 
     ------------------------------------------
