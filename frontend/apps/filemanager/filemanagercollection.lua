@@ -89,6 +89,7 @@ function FileManagerCollection:onShowColl(collection_name, series)
         onMenuHold = self.onMenuHold,
         onMultiSwipe = self.onMultiSwipe,
         onTap = self.onTap,
+        onDoubleTapBottomRight = self.onDoubleTap,
         ui = self.ui,
         _manager = self,
         _recreate_func = function() self:onShowColl(collection_name) end,
@@ -1120,6 +1121,7 @@ function FileManagerCollection:onTap(arg, ges_ev)
             local completed, files_table = Trapper:dismissableRunInSubprocess(function()
                 local files_with_metadata = {}
                 local sort_by_mode = G_reader_settings:readSetting("collate")
+                local reverse_collate_mode = self.current_reverse_collate_mode and self.current_reverse_collate_mode or G_reader_settings:readSetting("reverse_collate")
                 -- local FFIUtil = require("ffi/util")
                 -- FFIUtil.sleep(2)
                 if self.calibre_data then
@@ -1143,30 +1145,58 @@ function FileManagerCollection:onTap(arg, ges_ev)
                         files_with_metadata[i] = file
                     end
 
-                    if sort_by_mode == "strcoll" then
-                        table.sort(files_with_metadata, function(v1, v2)
-                            return v1.text < v2.text
-                        end)
-                    elseif sort_by_mode == "publication_date" then
-                        table.sort(files_with_metadata, function(v1, v2)
-                            return v1.pubdate < v2.pubdate
-                        end)
-                    elseif sort_by_mode == "word_count" then
-                        table.sort(files_with_metadata, function(v1, v2)
-                            return v1.words < v2.words
-                        end)
-                    elseif sort_by_mode == "gr_rating" then
-                        table.sort(files_with_metadata, function(v1, v2)
-                            return v1.grrating < v2.grrating
-                        end)
-                    elseif sort_by_mode == "gr_votes" then
-                        table.sort(files_with_metadata, function(v1, v2)
-                            return v1.grvotes < v2.grvotes
-                        end)
+                    if reverse_collate_mode then
+                        if sort_by_mode == "strcoll" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.text < v2.text
+                            end)
+                        elseif sort_by_mode == "publication_date" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.pubdate < v2.pubdate
+                            end)
+                        elseif sort_by_mode == "word_count" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.words < v2.words
+                            end)
+                        elseif sort_by_mode == "gr_rating" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.grrating < v2.grrating
+                            end)
+                        elseif sort_by_mode == "gr_votes" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.grvotes < v2.grvotes
+                            end)
+                        else
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.text < v2.text
+                            end)
+                        end
                     else
-                        table.sort(files_with_metadata, function(v1, v2)
-                            return v1.text < v2.text
-                        end)
+                        if sort_by_mode == "strcoll" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.text > v2.text
+                            end)
+                        elseif sort_by_mode == "publication_date" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.pubdate > v2.pubdate
+                            end)
+                        elseif sort_by_mode == "word_count" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.words > v2.words
+                            end)
+                        elseif sort_by_mode == "gr_rating" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.grrating > v2.grrating
+                            end)
+                        elseif sort_by_mode == "gr_votes" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.grvotes > v2.grvotes
+                            end)
+                        else
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.text < v2.text
+                            end)
+                        end
                     end
                 else
                     table.sort(files_with_metadata, function(v1, v2)
@@ -1209,22 +1239,167 @@ function FileManagerCollection:onTap(arg, ges_ev)
             if sort_by_mode == "strcoll" then
                 G_reader_settings:saveSetting("collate", "publication_date")
                 self._manager.coll_menu.topbar:setCollectionCollate("strcoll")
+                self.current_collate = ("strcoll")
             elseif sort_by_mode == "publication_date" then
                 G_reader_settings:saveSetting("collate", "word_count")
                 self._manager.coll_menu.topbar:setCollectionCollate("publication_date")
+                self.current_collate = ("publication_date")
             elseif sort_by_mode == "word_count" then
                 G_reader_settings:saveSetting("collate", "gr_rating")
                 self._manager.coll_menu.topbar:setCollectionCollate("word_count")
+                self.current_collate = ("word_count")
             elseif sort_by_mode == "gr_rating" then
                 G_reader_settings:saveSetting("collate", "gr_votes")
                 self._manager.coll_menu.topbar:setCollectionCollate("gr_rating")
+                self.current_collate = ("gr_rating")
             elseif sort_by_mode == "gr_votes" then
                 G_reader_settings:saveSetting("collate", "strcoll")
                 self._manager.coll_menu.topbar:setCollectionCollate("gr_votes")
+                self.current_collate = ("gr_votes")
             else
                 G_reader_settings:saveSetting("collate", "strcoll")
+                self.current_collate = ("")
                 self._manager.coll_menu.topbar:setCollectionCollate("")
             end
+
+            -- UIManager:close(self)
+            -- self._manager.ui.collections:onShowColl(self.collection_name)
+            self._manager:updateItemTable()
+            self._manager.coll_menu:onGotoPage(1)
+        end)
+    end
+    return
+end
+
+function FileManagerCollection:onDoubleTap(arg, ges_ev)
+    local DataStorage = require("datastorage")
+    if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
+        local Trapper = require("ui/trapper")
+        Trapper:wrap(function()
+            local info = InfoMessage:new{ text = _("Searching… (tap to cancel)") }
+            UIManager:show(info)
+            UIManager:forceRePaint()
+            local completed, files_table = Trapper:dismissableRunInSubprocess(function()
+                local files_with_metadata = {}
+                local sort_by_mode = self.current_collate and self.current_collate or G_reader_settings:readSetting("collate")
+                local reverse_collate_mode = self.current_reverse_collate_mode and not self.current_reverse_collate_mode or not G_reader_settings:readSetting("reverse_collate")
+                -- local FFIUtil = require("ffi/util")
+                -- FFIUtil.sleep(2)
+                if self.calibre_data then
+                    for i = 1, #self.item_table do
+                        local file = self.item_table[i]
+                        if self.calibre_data[file.text] and
+                        self.calibre_data[file.text]["pubdate"]
+                            and self.calibre_data[file.text]["words"]
+                            and self.calibre_data[file.text]["grrating"]
+                            and self.calibre_data[file.text]["grvotes"] then
+                            file.pubdate = tonumber(self.calibre_data[file.text]["pubdate"]:sub(1, 4))
+                            file.words = tonumber(self.calibre_data[file.text]["words"])
+                            file.grrating = tonumber(self.calibre_data[file.text]["grrating"])
+                            file.grvotes = tonumber(self.calibre_data[file.text]["grvotes"])
+                        else
+                            file.pubdate = 0
+                            file.words = 0
+                            file.grrating = 0
+                            file.grvotes = 0
+                        end
+                        files_with_metadata[i] = file
+                    end
+
+                    if reverse_collate_mode then
+                        if sort_by_mode == "strcoll" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.text < v2.text
+                            end)
+                        elseif sort_by_mode == "publication_date" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.pubdate < v2.pubdate
+                            end)
+                        elseif sort_by_mode == "word_count" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.words < v2.words
+                            end)
+                        elseif sort_by_mode == "gr_rating" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.grrating < v2.grrating
+                            end)
+                        elseif sort_by_mode == "gr_votes" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.grvotes < v2.grvotes
+                            end)
+                        else
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.text < v2.text
+                            end)
+                        end
+                    else
+                        if sort_by_mode == "strcoll" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.text > v2.text
+                            end)
+                        elseif sort_by_mode == "publication_date" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.pubdate > v2.pubdate
+                            end)
+                        elseif sort_by_mode == "word_count" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.words > v2.words
+                            end)
+                        elseif sort_by_mode == "gr_rating" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.grrating > v2.grrating
+                            end)
+                        elseif sort_by_mode == "gr_votes" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.grvotes > v2.grvotes
+                            end)
+                        else
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.text < v2.text
+                            end)
+                        end
+                    end
+                else
+                    table.sort(files_with_metadata, function(v1, v2)
+                        return v1.text < v2.text
+                    end)
+                end
+
+                local files = {}
+                for i = 1, #files_with_metadata do
+                    local file = self.item_table[i].file
+                    files[file] = ""
+                end
+
+                ReadCollection:RemoveAllCollection(self.collection_name, true)
+                local collections = {}
+                collections[self.collection_name] = true
+                ReadCollection:addItemsMultiple(files, collections, true)
+
+                -- UIManager:forceRePaint()
+                -- self:onShowColl(collection.collection_name)
+                -- return UIManager:close(collection)
+                return files_with_metadata
+            end, info)
+            if not completed then return end
+            -- The write call needs to be out
+            ReadCollection:updateCollectionOrder(self.collection_name, files_table, true)
+
+            UIManager:close(info)
+
+            -- We need to pass the previous sort mode to the topbar
+            -- and can't use the current topbar object associated with this fm collection
+            -- We use the fm or the reader main instance (depending if we are in fm or reader mode)
+            -- to pass the previous sort mode to the topbar
+
+            -- local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+            -- ui.collection_collate = sort_by_mode
+
+            -- There is no need if we use the topbar object
+            self._manager.coll_menu.topbar:setCollectionReverseCollate(G_reader_settings:readSetting("reverse_collate"))
+            G_reader_settings:saveSetting("reverse_collate", not G_reader_settings:readSetting("reverse_collate"))
+            self.current_reverse_collate_mode = G_reader_settings:readSetting("reverse_collate")
+
 
             -- UIManager:close(self)
             -- self._manager.ui.collections:onShowColl(self.collection_name)
