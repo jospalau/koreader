@@ -384,7 +384,7 @@ function MenuDialog:setupBookMenu(sort_item, onSuccess)
                     item.callback()
                 end
             end
-            self.show_parent:goToPage(self.show_parent.show_page)
+            self.show_parent:onGoToPage(self.show_parent.show_page)
         end
     }
     local select_all_button = {
@@ -396,7 +396,7 @@ function MenuDialog:setupBookMenu(sort_item, onSuccess)
                     item.callback()
                 end
             end
-            self.show_parent:goToPage(self.show_parent.show_page)
+            self.show_parent:onGoToPage(self.show_parent.show_page)
         end
     }
     local select_page_all_button = {
@@ -408,7 +408,7 @@ function MenuDialog:setupBookMenu(sort_item, onSuccess)
                     content.item.callback()
                 end
             end
-            self.show_parent:goToPage(self.show_parent.show_page)
+            self.show_parent:onGoToPage(self.show_parent.show_page)
         end
     }
     local deselect_page_all_button = {
@@ -420,7 +420,7 @@ function MenuDialog:setupBookMenu(sort_item, onSuccess)
                     content.item.callback()
                 end
             end
-            self.show_parent:goToPage(self.show_parent.show_page)
+            self.show_parent:onGoToPage(self.show_parent.show_page)
         end
     }
     local buttons = ButtonTable:new{
