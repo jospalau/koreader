@@ -835,6 +835,13 @@ This is just an example, that will need to be adapted into a user style tweak.]]
 }
             ]], -- (This last empty background-image: works for cancelling any previous one
         },
+        {
+            id = "dropcaps_line_height",
+            title = _("Drop caps line-height value to be 0.2"),
+            description = _("Assign a line height value of 0.2 to the css class dropcap"),
+            priority = 5, -- Override "Ignore margins and paddings" above
+            css = [[.dropcap {line-height: 0.2 !important;}]],
+        },
     },
     {
         title = _("In-page footnotes"),
