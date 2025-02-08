@@ -1087,9 +1087,13 @@ function ReaderUI:onSearchDictionary()
                     self.lastevent.gesture.pos.x, self.lastevent.gesture.pos.y, false, false)
 
         if self.lastevent.gesture.pos.x < math.max(Screen:scaleBySize(40), Screen:scaleBySize(self.document.configurable.h_page_margins[1])) then
-            self.rolling:onGotoViewRel(-10)
+            if not G_reader_settings:isTrue("ignore_hold_corners") then
+                self.rolling:onGotoViewRel(-10)
+            end
         elseif self.lastevent.gesture.pos.x > Screen:getWidth() - math.max(Screen:scaleBySize(40), Screen:scaleBySize(self.document.configurable.h_page_margins[1])) then
-            self.rolling:onGotoViewRel(10)
+            if not G_reader_settings:isTrue("ignore_hold_corners") then
+                self.rolling:onGotoViewRel(10)
+            end
         else
             if res and res.text then
                 local words = util.splitToWords2(res.text)

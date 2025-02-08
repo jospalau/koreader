@@ -685,9 +685,9 @@ function ReaderRolling:onDoubleTap(_, ges)
         if util.getFileNameSuffix(self.ui.document.file) ~= "epub"  then return end
         local res = self.ui.document._document:getTextFromPositions(ges.pos.x, ges.pos.y,
                     ges.pos.x, ges.pos.y, false, false)
-        if ges.pos.x < Screen:scaleBySize(40) then
+        if ges.pos.x < Screen:scaleBySize(40) and not G_reader_settings:isTrue("ignore_hold_corners") then
             self:onGotoViewRel(-10)
-        elseif ges.pos.x > Screen:getWidth() - Screen:scaleBySize(40) then
+        elseif ges.pos.x > Screen:getWidth() - Screen:scaleBySize(40) and not G_reader_settings:isTrue("ignore_hold_corners") then
             self:onGotoViewRel(10)
         else
             if res and res.text then
