@@ -489,7 +489,7 @@ function PageTextInfo:updateWordsVocabulary()
     row = {}
     while stmt:step(row) do
         local word = row[1]
-        if not word:find("%s+") and word:len() > 3 then
+        if not word:find("%s+") then -- and word:len() > 3 then
             -- self.all_words = self.all_words .. word .. "|"
             table.insert(t, word)
         end
@@ -502,6 +502,10 @@ function PageTextInfo:updateWordsVocabulary()
     end
 
 
+    -- Using regular expressions to get full words is very slow and then we have to remove the characters used in them
+    -- Searching text without regular expressions we won't get words, we will get the position in the dom (start and end)
+    -- for each of the places the text if found wether the full word or the text inside a word and we want full words to highlight them
+    -- When painting in the source readerview.lua, we get the boxes from the positions and using the boxes we can get the fulls words to highlight them
     if self.all_words then
         local res = self.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
         if res and res.text then
@@ -516,7 +520,7 @@ function PageTextInfo:updateWordsVocabulary()
                         if i > 1 then
                             -- words = self.document:findText(word_page, 1, false, true, -1, false, 100)
                             -- words = self.document:findText("[ ^]+" .. word_page .. "[ .,!?^]+", 1, false, true, -1, true, 5)
-                            words = self.document:findText(word_page, 1, false, true, -1, false, 15)
+                            words = self.document:findText(word_page, 1, false, true, -1, false, 40)
                         else
                             -- local cre = require("document/credocument"):engineInit()
                             local cre = require("libs/libkoreader-cre")
@@ -530,7 +534,7 @@ function PageTextInfo:updateWordsVocabulary()
                                 end
                             elseif self.all_words[word_page] then
                             -- words = self.document:findText("[ ^]+" .. word_page .. "[ .,!?^]+", 1, false, true, -1, true, 5)
-                            words = self.document:findText(word_page, 1, false, true, -1, false, 15)
+                            words = self.document:findText(word_page, 1, false, true, -1, false, 40)
                             end
                         end
                         if words then
