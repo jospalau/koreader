@@ -404,7 +404,11 @@ function VirtualKey:onTapSelect(skip_flash)
     if self.flash_keyboard and not skip_flash and not self.skiptap then
         self:invert(true)
         UIManager:forceRePaint()
-        UIManager:yieldToEPDC()
+        if Device:isKobo() or Device:isKindle() then
+            UIManager:yieldToEPDC(300000)
+        else
+            UIManager:yieldToEPDC()
+        end
 
         self:invert(false)
         if self.callback then
