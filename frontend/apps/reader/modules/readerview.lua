@@ -948,13 +948,25 @@ function ReaderView:drawXPointerVocabulary(bb, x, y)
             if end_pos >= cur_view_top then
                 local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true) -- get_segments=true
                 if boxes then
-                    local word = self.document:getWordFromPosition(boxes[1])
-                    -- print(word)
-                    boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
-                    if boxes then
-                        for _, box in ipairs(boxes) do
-                            if box.h ~= 0 then
-                                self:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
+                    if item.text == nil then
+                        if boxes then
+                            for _, box in ipairs(boxes) do
+                                if box.h ~= 0 then
+                                    self:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
+                                end
+                            end
+                        end
+                    else
+                        local word = self.document:getWordFromPosition(boxes[1])
+                        -- print(word)
+                        if word.word == item.text then
+                            boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
+                            if boxes then
+                                for _, box in ipairs(boxes) do
+                                    if box.h ~= 0 then
+                                        self:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
+                                    end
+                                end
                             end
                         end
                     end

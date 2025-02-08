@@ -533,14 +533,23 @@ function PageTextInfo:updateWordsVocabulary()
                                     words = self.document:findText(word_page, 1, false, true, -1, false, 1) -- Page not used, set -1
                                 end
                             elseif self.all_words[word_page] then
-                            -- words = self.document:findText("[ ^]+" .. word_page .. "[ .,!?^]+", 1, false, true, -1, true, 5)
-                            words = self.document:findText(word_page, 1, false, true, -1, false, 40)
+                                -- words = self.document:findText("[ ^]+" .. word_page .. "[ .,!?^]+", 1, false, true, -1, true, 5)
+                                words = self.document:findText(word_page, 1, false, true, -1, false, 1)
                             end
                         end
                         if words then
                             for j = 1, #words do
                                 local wordi = words[j]
+                                -- First result of the first word of the page in case is hyphenated
+                                -- In this case we want always
+                                if i == 1 and j == 1 then
+                                    wordi.text = nil
+                                else
+                                    wordi.text = word_page
+                                end
+
                                 local word = self.document:getTextFromXPointers(wordi.start, wordi["end"])
+                                -- Not using regular expressions
                                 -- print(word)
                                 -- print(wordi.start)
                                 -- if word:sub(word:len()) == " " then
