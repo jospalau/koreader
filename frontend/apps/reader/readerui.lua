@@ -1202,4 +1202,9 @@ function ReaderUI:onSetSortBy(mode)
     return true
 end
 
+function ReaderUI:onSetReverseSorting(mode)
+    G_reader_settings:saveSetting("SetReverseSorting", mode)
+    return true
+end
+
 return ReaderUI

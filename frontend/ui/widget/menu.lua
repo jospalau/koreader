@@ -1617,10 +1617,15 @@ function Menu:onCloseWidget()
         UIManager:setDirty(nil, "ui")
     end
     if self.title == "Collection" then
-        UIManager:broadcastEvent(Event:new("SetReverseSorting", nil))
-        UIManager:broadcastEvent(Event:new("SetSortBy", "strcoll"))
-        -- local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-        -- ui.collection_collate = nil
+        if self.current_collate == nil and self.current_reverse_collate_mode == nil then
+            UIManager:broadcastEvent(Event:new("SetSortBy", self.initial_collate))
+            UIManager:broadcastEvent(Event:new("SetReverseSorting", self.initial_reverse_collate_mode))
+        else
+            UIManager:broadcastEvent(Event:new("SetSortBy", "strcoll"))
+            UIManager:broadcastEvent(Event:new("SetReverseSorting", nil))
+            -- local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+            -- ui.collection_collate = nil
+        end
     end
 end
 

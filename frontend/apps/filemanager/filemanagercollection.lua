@@ -110,6 +110,8 @@ function FileManagerCollection:onShowColl(collection_name, series)
         self.match_table = nil
     end
     self:updateItemTable()
+    self.coll_menu.initial_collate = G_reader_settings:readSetting("collate")
+    self.coll_menu.initial_reverse_collate_mode = G_reader_settings:readSetting("reverse_collate")
     G_reader_settings:saveSetting("collate", "strcoll")
     G_reader_settings:saveSetting("reverse_collate", nil)
     UIManager:show(self.coll_menu)
