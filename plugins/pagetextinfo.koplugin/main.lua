@@ -505,6 +505,8 @@ function PageTextInfo:updateWordsVocabulary()
     if self.all_words then
         local res = self.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
         if res and res.text then
+            -- print(res.pos0)
+            -- print(res.pos1)
             local words_page = util.splitToWords2(res.text) -- contar palabras
             if words_page and self.all_words then
                 for i = 1, #words_page do
@@ -513,7 +515,7 @@ function PageTextInfo:updateWordsVocabulary()
                         local words  = {}
                         if i > 1 then
                             -- words = self.document:findText(word_page, 1, false, true, -1, false, 100)
-                            words = self.document:findText("[ ^]+" .. word_page .. "[.,!? ^]+", 1, false, true, -1, true, 15)
+                            words = self.document:findText("[ ^]+" .. word_page .. "[ .,!?^]+", 1, false, true, -1, true, 5)
                         else
                             -- local cre = require("document/credocument"):engineInit()
                             local cre = require("libs/libkoreader-cre")
@@ -526,12 +528,29 @@ function PageTextInfo:updateWordsVocabulary()
                                     words = self.document:findText(word_page, 1, false, true, -1, false, 1) -- Page not used, set -1
                                 end
                             elseif self.all_words[word_page] then
-                                words = self.document:findText("[ ^]+" .. word_page .. "[.,!? ^]+", 1, false, true, -1, true, 15)
+                            words = self.document:findText("[ ^]+" .. word_page .. "[ .,!?^]+", 1, false, true, -1, true, 5)
                             end
                         end
                         if words then
                             for j = 1, #words do
                                 local wordi = words[j]
+                                local word = self.document:getTextFromXPointers(wordi.start, wordi["end"])
+                                -- print(word)
+                                -- print(wordi.start)
+                                if word:sub(word:len()) == " " then
+                                    local pos = tonumber(wordi["end"]:sub(wordi["end"]:find("%.") + 1, wordi["end"]:len()))
+                                    pos = pos - 1
+                                    wordi["end"] = wordi["end"]:sub(1, wordi["end"]:find("%.") - 1) .. "." .. pos
+                                    word = self.document:getTextFromXPointers(wordi.start, wordi["end"])
+                                end
+                                if word:sub(word:len()) == "." or
+                                    word:sub(word:len()) == "," or
+                                    word:sub(word:len()) == "!" or
+                                    word:sub(word:len()) == "?" then
+                                    local pos = tonumber(wordi["end"]:sub(wordi["end"]:find("%.") + 1, wordi["end"]:len()))
+                                    pos = pos - 1
+                                    wordi["end"] = wordi["end"]:sub(1, wordi["end"]:find("%.") - 1) .. "." .. pos
+                                end
                                 local page = self.document:getPageFromXPointer(wordi.start)
                                 if not self.words[page] then
                                     self.words[page] = {}
