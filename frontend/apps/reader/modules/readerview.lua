@@ -957,7 +957,7 @@ function ReaderView:drawXPointerVocabulary(bb, x, y)
                             end
                         end
                     else
-                        local word = self.document:getWordFromPosition(boxes[1])
+                        local word = self.document:getWordFromPosition(boxes[1], true)
                         -- print(word)
                         if word.word == item.text then
                             boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
