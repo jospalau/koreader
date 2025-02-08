@@ -426,6 +426,7 @@ end
 
 function PageTextInfo:onCloseDocument()
     self.ui.gestures:onIgnoreHoldCorners(false)
+    self.ui.disable_double_tap = false
     self.settings:saveSetting("highlight_all_notes", false)
     self.settings:saveSetting("highlight_all_words_vocabulary", false)
     self.settings:flush()

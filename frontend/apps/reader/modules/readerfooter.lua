@@ -2778,10 +2778,16 @@ function ReaderFooter:TapFooter(ges)
         self.ui.view.topbar.ignore_corners = "🔒"
     end
 
+
     self.ui.gestures:onIgnoreHoldCorners(not self.ui.gestures.ignore_hold_corners)
-    if self.view.view_modules["pagetextinfo"] then
-        self.ui.pagetextinfo:toggleHighlightAllWordsVocabulary(self.ui.gestures.ignore_hold_corners)
-    end
+    self.ui.disable_double_tap = self.ui.gestures.ignore_hold_corners
+    UIManager:setDirty(self.view.dialog, function()
+        return self.view.currently_scrolling and "fast" or "ui"
+    end)
+    -- UIManager:setDirty("all", "full")
+    -- if self.view.view_modules["pagetextinfo"] then
+    --     self.ui.pagetextinfo:toggleHighlightAllWordsVocabulary(self.ui.gestures.ignore_hold_corners)
+    -- end
     return true
 end
 
