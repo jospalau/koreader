@@ -515,7 +515,8 @@ function PageTextInfo:updateWordsVocabulary()
                         local words  = {}
                         if i > 1 then
                             -- words = self.document:findText(word_page, 1, false, true, -1, false, 100)
-                            words = self.document:findText("[ ^]+" .. word_page .. "[ .,!?^]+", 1, false, true, -1, true, 5)
+                            -- words = self.document:findText("[ ^]+" .. word_page .. "[ .,!?^]+", 1, false, true, -1, true, 5)
+                            words = self.document:findText(word_page, 1, false, true, -1, false, 15)
                         else
                             -- local cre = require("document/credocument"):engineInit()
                             local cre = require("libs/libkoreader-cre")
@@ -528,7 +529,8 @@ function PageTextInfo:updateWordsVocabulary()
                                     words = self.document:findText(word_page, 1, false, true, -1, false, 1) -- Page not used, set -1
                                 end
                             elseif self.all_words[word_page] then
-                            words = self.document:findText("[ ^]+" .. word_page .. "[ .,!?^]+", 1, false, true, -1, true, 5)
+                            -- words = self.document:findText("[ ^]+" .. word_page .. "[ .,!?^]+", 1, false, true, -1, true, 5)
+                            words = self.document:findText(word_page, 1, false, true, -1, false, 15)
                             end
                         end
                         if words then
@@ -537,20 +539,20 @@ function PageTextInfo:updateWordsVocabulary()
                                 local word = self.document:getTextFromXPointers(wordi.start, wordi["end"])
                                 -- print(word)
                                 -- print(wordi.start)
-                                if word:sub(word:len()) == " " then
-                                    local pos = tonumber(wordi["end"]:sub(wordi["end"]:find("%.") + 1, wordi["end"]:len()))
-                                    pos = pos - 1
-                                    wordi["end"] = wordi["end"]:sub(1, wordi["end"]:find("%.") - 1) .. "." .. pos
-                                    word = self.document:getTextFromXPointers(wordi.start, wordi["end"])
-                                end
-                                if word:sub(word:len()) == "." or
-                                    word:sub(word:len()) == "," or
-                                    word:sub(word:len()) == "!" or
-                                    word:sub(word:len()) == "?" then
-                                    local pos = tonumber(wordi["end"]:sub(wordi["end"]:find("%.") + 1, wordi["end"]:len()))
-                                    pos = pos - 1
-                                    wordi["end"] = wordi["end"]:sub(1, wordi["end"]:find("%.") - 1) .. "." .. pos
-                                end
+                                -- if word:sub(word:len()) == " " then
+                                --     local pos = tonumber(wordi["end"]:sub(wordi["end"]:find("%.") + 1, wordi["end"]:len()))
+                                --     pos = pos - 1
+                                --     wordi["end"] = wordi["end"]:sub(1, wordi["end"]:find("%.") - 1) .. "." .. pos
+                                --     word = self.document:getTextFromXPointers(wordi.start, wordi["end"])
+                                -- end
+                                -- if word:sub(word:len()) == "." or
+                                --     word:sub(word:len()) == "," or
+                                --     word:sub(word:len()) == "!" or
+                                --     word:sub(word:len()) == "?" then
+                                --     local pos = tonumber(wordi["end"]:sub(wordi["end"]:find("%.") + 1, wordi["end"]:len()))
+                                --     pos = pos - 1
+                                --     wordi["end"] = wordi["end"]:sub(1, wordi["end"]:find("%.") - 1) .. "." .. pos
+                                -- end
                                 local page = self.document:getPageFromXPointer(wordi.start)
                                 if not self.words[page] then
                                     self.words[page] = {}
