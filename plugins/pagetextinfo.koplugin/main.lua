@@ -534,7 +534,7 @@ function PageTextInfo:updateWordsVocabulary()
                                 end
                             elseif self.all_words[word_page] then
                                 -- words = self.document:findText("[ ^]+" .. word_page .. "[ .,!?^]+", 1, false, true, -1, true, 5)
-                                words = self.document:findText(word_page, 1, false, true, -1, false, 1)
+                                words = self.document:findText(word_page, 1, false, true, -1, false, 40)
                             end
                         end
                         if words then
