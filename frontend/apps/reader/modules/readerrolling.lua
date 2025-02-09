@@ -401,14 +401,6 @@ function ReaderRolling:setupTouchZones()
             },
             handler = function(ges) return self:onPanRelease(nil, ges) end,
         },
-        {
-            id = "double_tap_all",
-            ges = "double_tap",
-            screen_zone = {
-                ratio_x = 0, ratio_y = 0, ratio_w = 1, ratio_h = 1,
-            },
-            handler = function(ges) return self:onDoubleTap(nil, ges) end,
-        },
     })
 end
 
@@ -672,31 +664,6 @@ function ReaderRolling:onPanRelease(_, ges)
             UIManager:setDirty(self.view.dialog, "partial")
         end
     end
-end
-
--- This won't work but I leave it as it is because I set the double tap gesture ready in this source in case we want to do something else with this or other gestures in the future
--- Instead, we are using a SearchDictionary event defined in the source dispatcher.lua with a corresponding action named Search dictionary
--- This Search dictionary action is assigned to double tap in both Left side and Right side in the Taps and gestures configuration instead of Turn pages with a value of 10 which is the default
--- The event is captured in the source readerui.lua and it is exactly the same as this, we turn 10 or -10 pages if we double tap on the right or left sides, or we call the dictionary if we double tap any other place
--- If we want to use this handler for the gesture, we have to set Pass through for both Left side and Right side in the Taps and gestures configuration
--- For the hold action press modification, I modified the readerhighlight.lua source which is capturing the hold event
-function ReaderRolling:onDoubleTap(_, ges)
-        local util = require("util")
-        if util.getFileNameSuffix(self.ui.document.file) ~= "epub"  then return end
-        local res = self.ui.document._document:getTextFromPositions(ges.pos.x, ges.pos.y,
-                    ges.pos.x, ges.pos.y, false, false)
-        if ges.pos.x < Screen:scaleBySize(40) and not G_reader_settings:isTrue("ignore_hold_corners") then
-            self:onGotoViewRel(-10)
-        elseif ges.pos.x > Screen:getWidth() - Screen:scaleBySize(40) and not G_reader_settings:isTrue("ignore_hold_corners") then
-            self:onGotoViewRel(10)
-        else
-            if res and res.text then
-                local words = util.splitToWords2(res.text)
-                if #words == 1 then
-                    self.ui:handleEvent(Event:new("LookupWord", util.cleanupSelectedText(res.text)))
-                end
-            end
-        end
 end
 
 function ReaderRolling:onHandledAsSwipe()

@@ -1424,7 +1424,7 @@ arguments are:
                                    { gesture = ges } - a `gestures` object
 --]]--
 function Dispatcher:execute(settings, exec_props)
-    if require("apps/reader/readerui").instance then require("apps/reader/readerui").instance.lastevent = exec_props end
+    -- if require("apps/reader/readerui").instance then require("apps/reader/readerui").instance.lastevent = exec_props end
     if ((exec_props == nil or exec_props.qm_show == nil) and settings.settings and settings.settings.show_as_quickmenu)
             or (exec_props and exec_props.qm_show) then
         return Dispatcher._showAsMenu(settings, exec_props)

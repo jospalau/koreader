@@ -5,7 +5,7 @@
 local Dispatcher = require("dispatcher")  -- luacheck:ignore
 local InfoMessage = require("ui/widget/infomessage")
 local UIManager = require("ui/uimanager")
-local WidgetContainer = require("ui/widget/container/widgetcontainer")
+local InputContainer = require("ui/widget/container/inputcontainer")
 local Font = require("ui/font")
 local TextWidget = require("ui/widget/textwidget")
 local VerticalGroup = require("ui/widget/verticalgroup")
@@ -19,10 +19,11 @@ local Size = require("ui/size")
 local Screen = require("device").screen
 local LuaSettings = require("luasettings")
 local DataStorage = require("datastorage")
+local Device = require("device")
 local util = require("util")
 local _ = require("gettext")
 
-local PageTextInfo = WidgetContainer:extend{
+local PageTextInfo = InputContainer:extend{
     is_enabled = nil,
     name = "pagetextinfo",
     is_doc_only = false,
@@ -106,6 +107,20 @@ function PageTextInfo:onPageTextInfo()
     -- UIManager:show(popup)
 end
 
+function PageTextInfo:initGesListener()
+    if not Device:isTouchDevice() then return end
+    self.ui:registerTouchZones({
+
+        {
+            id = "pagetextinfo_double_tap",
+            ges = "double_tap",
+            screen_zone = {
+                ratio_x = 0, ratio_y = 0, ratio_w = 1, ratio_h = 1,
+            },
+            handler = function(ges) return self:onDoubleTap(nil, ges) end,
+        },
+    })
+end
 function PageTextInfo:toggleHighlightAllWordsVocabulary(toggle)
     self.settings:saveSetting("highlight_all_words_vocabulary", toggle)
     self.settings:flush()
@@ -115,8 +130,49 @@ function PageTextInfo:toggleHighlightAllWordsVocabulary(toggle)
     UIManager:setDirty("all", "full")
 end
 
-function PageTextInfo:init()
 
+
+-- In order for double tap events to arrive we need to configure the gestures plugin:
+-- Menu gear icon - Taps and gestures - Gesture manager - Double tap and we set Left side and Right side to Pass through
+
+-- Originally, the OnDoubleTap() event handler function was readerrolling but it was not working because I was using a dispatcher action (defined now in this plugin)
+-- configured for the left and right side double taps events of the gesture plugin
+
+-- Original comment:
+-- This won't work but I leave it as it is because I set the double tap gesture ready in this source in case we want to do something else with this or other gestures in the future
+-- Instead, we are using a SearchDictionary event defined in the source dispatcher.lua with a corresponding action named Search dictionary
+-- This Search dictionary action is assigned to double tap in both Left side and Right side in the Taps and gestures configuration instead of Turn pages with a value of 10 which is the default
+-- The event is captured in the source readerui.lua and it is exactly the same as this, we turn 10 or -10 pages if we double tap on the right or left sides, or we call the dictionary if we double tap any other place
+-- If we want to use this handler for the gesture, we have to set Pass through for both Left side and Right side in the Taps and gestures configuration
+-- For the hold action press modification, I modified the readerhighlight.lua source which is capturing the hold event
+function PageTextInfo:onDoubleTap(_, ges)
+    if util.getFileNameSuffix(self.ui.document.file) ~= "epub"  then return end
+    local res = self.ui.document._document:getTextFromPositions(ges.pos.x, ges.pos.y,
+                ges.pos.x, ges.pos.y, false, false)
+    if ges.pos.x < Screen:scaleBySize(40) and not G_reader_settings:isTrue("ignore_hold_corners") then
+        self.ui.rolling:onGotoViewRel(-10)
+    elseif ges.pos.x > Screen:getWidth() - Screen:scaleBySize(40) and not G_reader_settings:isTrue("ignore_hold_corners") then
+        self.ui.rolling:onGotoViewRel(10)
+    else
+        if res and res.text then
+            local words = util.splitToWords2(res.text)
+            if #words == 1 then
+                local boxes = self.ui.document:getScreenBoxesFromPositions(res.pos0, res.pos1, true)
+                local word_boxes
+                if boxes ~= nil then
+                    word_boxes = {}
+                    for i, box in ipairs(boxes) do
+                        word_boxes[i] = self.ui.view:pageToScreenTransform(res.pos0.page, box)
+                    end
+                end
+                self.ui.dictionary:onLookupWord(util.cleanupSelectedText(res.text), false, boxes)
+                -- self:handleEvent(Event:new("LookupWord", util.cleanupSelectedText(res.text)))
+            end
+        end
+    end
+end
+
+function PageTextInfo:init()
     if not self.settings then self:readSettingsFile() end
     self.is_enabled = self.settings:isTrue("is_enabled")
 
@@ -139,6 +195,7 @@ function PageTextInfo:init()
     --     return
     -- end
     self:onDispatcherRegisterActions()
+    self:initGesListener()
 
     -- We call the function registerToMainMenu() here if we want the menu entry to be shown both for the fm and the reader top menus
     -- If we want the menu entry to be shown just for the reader like in this plugin, better to call it in the onReaderReady() event handler function
@@ -869,4 +926,44 @@ function PageTextInfo:paintTo(bb, x, y)
         -- self.vertical_frame2:paintTo(bb, x, Screen:getHeight() - self.vertical_frame2:getSize().h )
     end
 end
+
+-- Moved from readerui.lua. It won't be used since I handle double taps events in this plugin
+-- function ReaderUI:onSearchDictionary()
+--     if util.getFileNameSuffix(self.document.file) ~= "epub"  then return end
+--     if self.lastevent  then
+--         local res = self.document._document:getTextFromPositions(self.lastevent.gesture.pos.x, self.lastevent.gesture.pos.y,
+--                     self.lastevent.gesture.pos.x, self.lastevent.gesture.pos.y, false, false)
+
+--         if self.lastevent.gesture.pos.x < math.max(Screen:scaleBySize(40), Screen:scaleBySize(self.document.configurable.h_page_margins[1])) then
+--             if not G_reader_settings:isTrue("ignore_hold_corners") then
+--                 self.rolling:onGotoViewRel(-10)
+--             end
+--         elseif self.lastevent.gesture.pos.x > Screen:getWidth() - math.max(Screen:scaleBySize(40), Screen:scaleBySize(self.document.configurable.h_page_margins[1])) then
+--             if not G_reader_settings:isTrue("ignore_hold_corners") then
+--                 self.rolling:onGotoViewRel(10)
+--             end
+--         else
+--             if res and res.text then
+--                 local words = util.splitToWords2(res.text)
+--                 if #words == 1 then
+--                     local boxes = self.document:getScreenBoxesFromPositions(res.pos0, res.pos1, true)
+--                     local word_boxes
+--                     if boxes ~= nil then
+--                         word_boxes = {}
+--                         for i, box in ipairs(boxes) do
+--                             word_boxes[i] = self.view:pageToScreenTransform(res.pos0.page, box)
+--                         end
+--                     end
+--                     self.dictionary:onLookupWord(util.cleanupSelectedText(res.text), false, boxes)
+--                     -- self:handleEvent(Event:new("LookupWord", util.cleanupSelectedText(res.text)))
+--                 end
+--             end
+--         end
+--     end
+-- end
+
+-- function ReaderUI:onOpenRandomFav()
+--     self:switchDocument(self.menu:getRandomFav())
+-- end
+
 return PageTextInfo

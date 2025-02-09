@@ -1249,6 +1249,15 @@ function ReaderFooter:setupTouchZones()
             -- or links have priority)
         },
         {
+            id = "readerfooter_double_tap",
+            ges = "double_tap",
+            screen_zone = footer_screen_zone,
+            handler = function(ges) return self:DoubleTapFooter(nil, ges) end,
+            overrides = {
+                "pagetextinfo_double_tap",
+            },
+        },
+        {
             id = "readerfooter_hold",
             ges = "hold",
             screen_zone = footer_screen_zone,
@@ -2767,7 +2776,7 @@ function ReaderFooter:TapFooter(ges)
         return true
     end
     if self.settings.lock_tap then return end
-    local text = not self.ui.gestures.ignore_hold_corners and "Hold and double tap unlock" or "Hold and double tap lock"
+    local text = not self.ui.gestures.ignore_hold_corners and "Hold and double tap lock" or "Hold and double tap unlock"
     UIManager:show(Notification:new{
         text = _(tostring(text)),
     })
@@ -2788,6 +2797,41 @@ function ReaderFooter:TapFooter(ges)
     -- if self.view.view_modules["pagetextinfo"] then
     --     self.ui.pagetextinfo:toggleHighlightAllWordsVocabulary(self.ui.gestures.ignore_hold_corners)
     -- end
+    return true
+end
+
+function ReaderFooter:DoubleTapFooter(ges)
+    if self.view.flipping_visible and ges then
+        local pos = ges.pos
+        local dimen = self.progress_bar.dimen
+        -- if reader footer is not drawn before the dimen value should be nil
+        if dimen then
+            local percentage = (pos.x - dimen.x)/dimen.w
+            self.ui:handleEvent(Event:new("GotoPercentage", percentage))
+        end
+        self:onUpdateFooter(true)
+        return true
+    end
+    if self.settings.lock_tap then return end
+    local text = not self.ui.gestures.ignore_hold_corners and "Hold and double tap lock" or "Hold and double tap unlock"
+    UIManager:show(Notification:new{
+        text = _(tostring(text)),
+    })
+    -- return self:onToggleFooterMode()
+    if self.ui.gestures.ignore_hold_corners then
+        self.ui.view.topbar.ignore_corners = ""
+    else
+        self.ui.view.topbar.ignore_corners = "🔒"
+    end
+
+
+    self.ui.gestures:onIgnoreHoldCorners(not self.ui.gestures.ignore_hold_corners)
+    UIManager:setDirty(self.view.dialog, function()
+        return self.view.currently_scrolling and "fast" or "ui"
+    end)
+    if self.view.view_modules["pagetextinfo"] then
+        self.ui.pagetextinfo:toggleHighlightAllWordsVocabulary(self.ui.gestures.ignore_hold_corners)
+    end
     return true
 end
 

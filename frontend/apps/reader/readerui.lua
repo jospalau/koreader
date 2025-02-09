@@ -1080,44 +1080,6 @@ function ReaderUI:onOpenLastDoc()
     self:switchDocument(self.menu:getPreviousFile())
 end
 
-function ReaderUI:onSearchDictionary()
-    if util.getFileNameSuffix(self.document.file) ~= "epub"  then return end
-    if self.lastevent  then
-        local res = self.document._document:getTextFromPositions(self.lastevent.gesture.pos.x, self.lastevent.gesture.pos.y,
-                    self.lastevent.gesture.pos.x, self.lastevent.gesture.pos.y, false, false)
-
-        if self.lastevent.gesture.pos.x < math.max(Screen:scaleBySize(40), Screen:scaleBySize(self.document.configurable.h_page_margins[1])) then
-            if not G_reader_settings:isTrue("ignore_hold_corners") then
-                self.rolling:onGotoViewRel(-10)
-            end
-        elseif self.lastevent.gesture.pos.x > Screen:getWidth() - math.max(Screen:scaleBySize(40), Screen:scaleBySize(self.document.configurable.h_page_margins[1])) then
-            if not G_reader_settings:isTrue("ignore_hold_corners") then
-                self.rolling:onGotoViewRel(10)
-            end
-        else
-            if res and res.text then
-                local words = util.splitToWords2(res.text)
-                if #words == 1 then
-                    local boxes = self.document:getScreenBoxesFromPositions(res.pos0, res.pos1, true)
-                    local word_boxes
-                    if boxes ~= nil then
-                        word_boxes = {}
-                        for i, box in ipairs(boxes) do
-                            word_boxes[i] = self.view:pageToScreenTransform(res.pos0.page, box)
-                        end
-                    end
-                    self.dictionary:onLookupWord(util.cleanupSelectedText(res.text), false, boxes)
-                    -- self:handleEvent(Event:new("LookupWord", util.cleanupSelectedText(res.text)))
-                end
-            end
-        end
-    end
-end
-
--- function ReaderUI:onOpenRandomFav()
---     self:switchDocument(self.menu:getRandomFav())
--- end
-
 function ReaderUI:onAdjustMarginsTopbar()
     if util.getFileNameSuffix(self.document.file) ~= "epub" then return end
     local Event = require("ui/event")
