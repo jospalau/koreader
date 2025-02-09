@@ -133,7 +133,7 @@ end
 
 
 -- In order for double tap events to arrive we need to configure the gestures plugin:
--- Menu gear icon - Taps and gestures - Gesture manager - Double tap and we set Left side and Right side to Pass through
+-- Menu gear icon - Taps and gestures - Gesture manager - Double tap and we set Left side and Right side to Pass through clearing the default actions
 
 -- Originally, the OnDoubleTap() event handler function was readerrolling but it was not working because I was using a dispatcher action (defined now in this plugin)
 -- configured for the left and right side double taps events of the gesture plugin

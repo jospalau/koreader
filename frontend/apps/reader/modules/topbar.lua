@@ -1415,14 +1415,15 @@ function TopBar:paintTo(bb, x, y)
         -- self[4][1][1]:setText(self.times_text_text:reverse())
         -- self[4]:paintTo(bb, x - Screen:getHeight() + TopBar.MARGIN_BOTTOM + Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
 
+        self[22][1][1]:setText(self.ignore_corners)
         if self.view.footer.settings.bar_top then
             -- self[4]:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() -  Screen:scaleBySize(6))
             self[21]:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() -  Screen:scaleBySize(6))
+            self[22]:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - 2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
         else
             self[21]:paintTo(bb, x + Screen:scaleBySize(4), y + Screen:scaleBySize(6))
+            self[22]:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - 2, y + Screen:scaleBySize(6))
         end
-        self[22][1][1]:setText(self.ignore_corners)
-        self[22]:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - 2, y + Screen:scaleBySize(6))
         return
     end
     if not self.fm then
@@ -1456,7 +1457,7 @@ function TopBar:paintTo(bb, x, y)
         -- end
 
         self[22][1][1]:setText(self.ignore_corners)
-        self[22]:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - TopBar.MARGIN_SIDES, y + Screen:scaleBySize(6))
+        self[22]:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - 2, y + Screen:scaleBySize(6))
 
         self[2].dimen = Geom:new{ w = self[2][1]:getSize().w, self[2][1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
         self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
