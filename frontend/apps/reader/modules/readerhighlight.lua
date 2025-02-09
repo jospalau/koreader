@@ -1392,7 +1392,7 @@ function ReaderHighlight:onShowHighlightMenu(index)
 
     local highlight_buttons = {{}}
 
-    local columns = 2
+    local columns = 1
     for idx, fn_button in ffiUtil.orderedPairs(self._highlight_buttons) do
         local button = fn_button(self, index)
         if not button.show_in_highlight_dialog_func or button.show_in_highlight_dialog_func() then
@@ -1404,7 +1404,15 @@ function ReaderHighlight:onShowHighlightMenu(index)
         end
     end
 
+    local Font = require("ui/font")
+    local current_dpi = G_reader_settings:readSetting("screen_dpi")
+    if not Device:isAndroid() then
+        Device:setScreenDPI(100)
+    end
     self.highlight_dialog = ButtonDialog:new{
+        shrink_unneeded_width = true,
+        title_face = Font:getFace("smalltfont"),
+        shrink_min_width = math.floor(0.3 * Screen:getWidth()),
         buttons = highlight_buttons,
         anchor = function()
             return self:_getDialogAnchor(self.highlight_dialog, index)
@@ -1414,6 +1422,9 @@ function ReaderHighlight:onShowHighlightMenu(index)
     -- NOTE: Disable merging for this update,
     --       or the buggy Sage kernel may alpha-blend it into the page (with a bogus alpha value, to boot)...
     UIManager:show(self.highlight_dialog, "[ui]")
+    if not Device:isAndroid() then
+        Device:setScreenDPI(current_dpi)
+    end
 end
 
 function ReaderHighlight:_getDialogAnchor(dialog, index)
