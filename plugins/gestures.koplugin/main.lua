@@ -1159,7 +1159,7 @@ function Gestures:gestureAction(action, ges)
     end
     local action_list = self.gestures[action]
     if action_list == nil
-        or (ges.ges == "hold" and self.ignore_hold_corners) then
+        or ((ges.ges == "hold" or ges.ges == "double_tap") and self.ignore_hold_corners) then
         return
     else
         self.ui:handleEvent(Event:new("HandledAsSwipe"))
