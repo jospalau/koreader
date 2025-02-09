@@ -2780,23 +2780,36 @@ function ReaderFooter:TapFooter(ges)
     UIManager:show(Notification:new{
         text = _(tostring(text)),
     })
-    -- return self:onToggleFooterMode()
-    if self.ui.gestures.ignore_hold_corners then
-        self.ui.view.topbar.ignore_corners = ""
-    else
-        self.ui.view.topbar.ignore_corners = "🔒"
-    end
-
 
     self.ui.gestures:onIgnoreHoldCorners(not self.ui.gestures.ignore_hold_corners)
     self.ui.disable_double_tap = self.ui.gestures.ignore_hold_corners
+
+    -- When double tapping the footer, the double tap will also be locked and the vocabulary builder words will be highlighted
+    -- and we won't be able to double tap the footer and won't be able then to deactivated the vocabulary builder words highlighting automaticaly
+    -- We do it here when tapping. When tapping after double tapping, the double tap will be unlocked and the vocabulary builder words unhighlighted
+    if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary") then
+        self.ui.pagetextinfo.settings:saveSetting("highlight_all_words_vocabulary", false)
+    end
+
+    if self.ui.gestures.ignore_hold_corners then
+        if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary") then
+            self.ui.view.topbar.ignore_corners = "\u{F0F6} 🔒"
+        else
+            self.ui.view.topbar.ignore_corners = "🔒"
+        end
+    else
+        if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary") then
+            self.ui.view.topbar.ignore_corners = "\u{F0F6}"
+        else
+            self.ui.view.topbar.ignore_corners = ""
+        end
+    end
+
     UIManager:setDirty(self.view.dialog, function()
         return self.view.currently_scrolling and "fast" or "ui"
     end)
     -- UIManager:setDirty("all", "full")
-    -- if self.view.view_modules["pagetextinfo"] then
-    --     self.ui.pagetextinfo:toggleHighlightAllWordsVocabulary(self.ui.gestures.ignore_hold_corners)
-    -- end
+    -- return self:onToggleFooterMode()
     return true
 end
 
@@ -2817,21 +2830,29 @@ function ReaderFooter:DoubleTapFooter(ges)
     UIManager:show(Notification:new{
         text = _(tostring(text)),
     })
-    -- return self:onToggleFooterMode()
-    if self.ui.gestures.ignore_hold_corners then
-        self.ui.view.topbar.ignore_corners = ""
-    else
-        self.ui.view.topbar.ignore_corners = "🔒"
-    end
-
 
     self.ui.gestures:onIgnoreHoldCorners(not self.ui.gestures.ignore_hold_corners)
-    UIManager:setDirty(self.view.dialog, function()
-        return self.view.currently_scrolling and "fast" or "ui"
-    end)
+    self.ui.disable_double_tap = self.ui.gestures.ignore_hold_corners
     if self.view.view_modules["pagetextinfo"] then
         self.ui.pagetextinfo:toggleHighlightAllWordsVocabulary(self.ui.gestures.ignore_hold_corners)
     end
+    if self.ui.gestures.ignore_hold_corners then
+        if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary") then
+            self.ui.view.topbar.ignore_corners = "\u{F0F6} 🔒"
+        else
+            self.ui.view.topbar.ignore_corners = "🔒"
+        end
+    else
+        if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary") then
+            self.ui.view.topbar.ignore_corners = "\u{F0F6}"
+        else
+            self.ui.view.topbar.ignore_corners = ""
+        end
+    end
+    UIManager:setDirty(self.view.dialog, function()
+        return self.view.currently_scrolling and "fast" or "ui"
+    end)
+
     return true
 end
 

@@ -903,7 +903,7 @@ function TopBar:onReaderReady()
             dimen = Geom:new(),
             TextWidget:new{
                 text =  "a",
-                face = Font:getFace("myfont3", 12),
+                face = Font:getFace("symbols", 12),
                 fgcolor = Blitbuffer.COLOR_BLACK,
             },
         },
@@ -1293,14 +1293,21 @@ function TopBar:toggleBar(light_on)
         -- self.progress_bar.height = self.title_text:getSize().h
         -- self.progress_chapter_bar.height = self.title_text:getSize().h
 
-        -- ○ ◎ ● ◐ ◑ ◒ ◓
-
         if self.ui.gestures.ignore_hold_corners then
-            self.ignore_corners = "🔒"
+            if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary") then
+                self.ignore_corners = "\u{F0F6} 🔒"
+            else
+                self.ignore_corners = "🔒"
+            end
         else
-            self.ignore_corners = ""
+            if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary") then
+                self.ignore_corners = "\u{F0F6}"
+            else
+                self.ignore_corners = ""
+            end
         end
 
+        -- ○ ◎ ● ◐ ◑ ◒ ◓
         local configurable = self.ui.document.configurable
         local powerd = Device:getPowerDevice()
 
@@ -1415,7 +1422,7 @@ function TopBar:paintTo(bb, x, y)
             self[21]:paintTo(bb, x + Screen:scaleBySize(4), y + Screen:scaleBySize(6))
         end
         self[22][1][1]:setText(self.ignore_corners)
-        self[22]:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - TopBar.MARGIN_SIDES, y + Screen:scaleBySize(6))
+        self[22]:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - 2, y + Screen:scaleBySize(6))
         return
     end
     if not self.fm then
