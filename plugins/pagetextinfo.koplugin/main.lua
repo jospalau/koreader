@@ -110,7 +110,17 @@ end
 function PageTextInfo:initGesListener()
     if not Device:isTouchDevice() then return end
     self.ui:registerTouchZones({
-
+        -- {
+        --     id = "pagetextinfo_tap",
+        --     ges = "tap",
+        --     screen_zone = {
+        --         ratio_x = 0, ratio_y = 0, ratio_w = 1, ratio_h = 1,
+        --     },
+        --     overrides = {
+        --         "readerconfigmenu_tap",
+        --     },
+        --     handler = function(ges) return self:onTap(nil, ges) end,
+        -- },
         {
             id = "pagetextinfo_double_tap",
             ges = "double_tap",
@@ -170,7 +180,15 @@ function PageTextInfo:onDoubleTap(_, ges)
             end
         end
     end
+    return true
 end
+
+-- function PageTextInfo:onTap(_, ges)
+--     if util.getFileNameSuffix(self.ui.document.file) ~= "epub"  then return false end
+--     local res = self.ui.document._document:getTextFromPositions(ges.pos.x, ges.pos.y,
+--                 ges.pos.x, ges.pos.y, false, false)
+--     return false -- Pass the event
+-- end
 
 function PageTextInfo:init()
     if not self.settings then self:readSettingsFile() end
