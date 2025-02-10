@@ -705,7 +705,16 @@ function PageTextInfo:updateWordsVocabulary()
     self.ui.document:clearSelection()
 end
 function PageTextInfo:paintTo(bb, x, y)
+
     if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
+    if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_notes") then
+        self:drawXPointerSavedHighlightNotes(bb, x, y)
+    end
+
+    if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary") then
+        self:drawXPointerVocabulary(bb, x, y)
+    end
+
     local total_words = 0
     if self.is_enabled and self.vertical_frame then
         local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
@@ -943,6 +952,111 @@ function PageTextInfo:paintTo(bb, x, y)
         -- times[1][1]:setText("BDB: " .. total_books .. ", TR: " .. total_read .. "d")
         -- self.vertical_frame2:paintTo(bb, x, Screen:getHeight() - self.vertical_frame2:getSize().h )
     end
+end
+
+function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
+    -- Getting screen boxes is done for each tap on screen (changing pages,
+    -- showing menu...). We might want to cache these boxes per page (and
+    -- clear that cache when page layout change or highlights are added
+    -- or removed).
+    -- Even in page mode, it's safer to use pos and ui.dimen.h
+    -- than pages' xpointers pos, even if ui.dimen.h is a bit
+    -- larger than pages' heights
+    local cur_view_top = self.document:getCurrentPos()
+    local cur_view_bottom
+    if self.view_mode == "page" and self.document:getVisiblePageCount() > 1 then
+        cur_view_bottom = cur_view_top + 2 * self.ui.dimen.h
+    else
+        cur_view_bottom = cur_view_top + self.ui.dimen.h
+    end
+    local colorful
+--    if true then
+--        local dump = require("dump")
+--        UIManager:show( require("ui/widget/textviewer"):new{text = dump(self.ui.notes)})
+--    end
+--
+    if self.ui.pagetextinfo.pages_notes[self.ui.view.state.page] then
+        for _, item in ipairs(self.ui.pagetextinfo.pages_notes[self.ui.view.state.page]) do
+            -- document:getScreenBoxesFromPositions() is expensive, so we
+            -- first check if this item is on current page
+            local start_pos = self.document:getPosFromXPointer(item.start)
+            --if start_pos > cur_view_bottom then return colorful end -- this and all next highlights are after the current page
+            local end_pos = self.document:getPosFromXPointer(item["end"])
+            if end_pos >= cur_view_top then
+                local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true) -- get_segments=true
+                if boxes then
+                    for _, box in ipairs(boxes) do
+                        if box.h ~= 0 then
+                            self.ui.view:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return colorful
+end
+
+
+
+function PageTextInfo:drawXPointerVocabulary(bb, x, y)
+    -- Getting screen boxes is done for each tap on screen (changing pages,
+    -- showing menu...). We might want to cache these boxes per page (and
+    -- clear that cache when page layout change or highlights are added
+    -- or removed).
+    -- Even in page mode, it's safer to use pos and ui.dimen.h
+    -- than pages' xpointers pos, even if ui.dimen.h is a bit
+    -- larger than pages' heights
+    local cur_view_top = self.document:getCurrentPos()
+    local cur_view_bottom
+    if self.view_mode == "page" and self.document:getVisiblePageCount() > 1 then
+        cur_view_bottom = cur_view_top + 2 * self.ui.dimen.h
+    else
+        cur_view_bottom = cur_view_top + self.ui.dimen.h
+    end
+    local colorful
+--    if true then
+--        local dump = require("dump")
+--        UIManager:show( require("ui/widget/textviewer"):new{text = dump(self.ui.notes)})
+--    end
+--
+    if self.ui.pagetextinfo.words[self.ui.view.state.page] then
+        for _, item in ipairs(self.ui.pagetextinfo.words[self.ui.view.state.page]) do
+            -- document:getScreenBoxesFromPositions() is expensive, so we
+            -- first check if this item is on current page
+            local start_pos = self.document:getPosFromXPointer(item.start)
+            --if start_pos > cur_view_bottom then return colorful end -- this and all next highlights are after the current page
+            local end_pos = self.document:getPosFromXPointer(item["end"])
+            if end_pos >= cur_view_top then
+                local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true) -- get_segments=true
+                if boxes then
+                    if item.text == nil then
+                        if boxes then
+                            for _, box in ipairs(boxes) do
+                                if box.h ~= 0 then
+                                    self.ui.view:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
+                                end
+                            end
+                        end
+                    else
+                        local word = self.document:getWordFromPosition(boxes[1], true)
+                        -- print(word)
+                        if word.word == item.text then
+                            boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
+                            if boxes then
+                                for _, box in ipairs(boxes) do
+                                    if box.h ~= 0 then
+                                        self.ui.view:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return colorful
 end
 
 -- Moved from readerui.lua. It won't be used since I handle double taps events in this plugin

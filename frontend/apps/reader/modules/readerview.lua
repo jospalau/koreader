@@ -257,14 +257,6 @@ function ReaderView:paintTo(bb, x, y)
     if self.highlight_visible then
         colorful = self:drawSavedHighlight(bb, x, y)
     end
-    if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_notes") and util.getFileNameSuffix(self.document.file) == "epub" then
-        self:drawXPointerSavedHighlightNotes(bb, x, y)
-    end
-
-    if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary") and util.getFileNameSuffix(self.document.file) == "epub" then
-        self:drawXPointerVocabulary(bb, x, y)
-    end
-
     -- draw temporary highlight
     if self.highlight.temp then
         self:drawTempHighlight(bb, x, y)
@@ -871,111 +863,6 @@ function ReaderView:drawXPointerSavedHighlight(bb, x, y)
     return colorful
 end
 
-
-function ReaderView:drawXPointerSavedHighlightNotes(bb, x, y)
-    -- Getting screen boxes is done for each tap on screen (changing pages,
-    -- showing menu...). We might want to cache these boxes per page (and
-    -- clear that cache when page layout change or highlights are added
-    -- or removed).
-    -- Even in page mode, it's safer to use pos and ui.dimen.h
-    -- than pages' xpointers pos, even if ui.dimen.h is a bit
-    -- larger than pages' heights
-    local cur_view_top = self.document:getCurrentPos()
-    local cur_view_bottom
-    if self.view_mode == "page" and self.document:getVisiblePageCount() > 1 then
-        cur_view_bottom = cur_view_top + 2 * self.ui.dimen.h
-    else
-        cur_view_bottom = cur_view_top + self.ui.dimen.h
-    end
-    local colorful
---    if true then
---        local dump = require("dump")
---        UIManager:show( require("ui/widget/textviewer"):new{text = dump(self.ui.notes)})
---    end
---
-    if self.ui.pagetextinfo.pages_notes[self.state.page] then
-        for _, item in ipairs(self.ui.pagetextinfo.pages_notes[self.state.page]) do
-            -- document:getScreenBoxesFromPositions() is expensive, so we
-            -- first check if this item is on current page
-            local start_pos = self.document:getPosFromXPointer(item.start)
-            --if start_pos > cur_view_bottom then return colorful end -- this and all next highlights are after the current page
-            local end_pos = self.document:getPosFromXPointer(item["end"])
-            if end_pos >= cur_view_top then
-                local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true) -- get_segments=true
-                if boxes then
-                    for _, box in ipairs(boxes) do
-                        if box.h ~= 0 then
-                            self:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return colorful
-end
-
-
-
-function ReaderView:drawXPointerVocabulary(bb, x, y)
-    -- Getting screen boxes is done for each tap on screen (changing pages,
-    -- showing menu...). We might want to cache these boxes per page (and
-    -- clear that cache when page layout change or highlights are added
-    -- or removed).
-    -- Even in page mode, it's safer to use pos and ui.dimen.h
-    -- than pages' xpointers pos, even if ui.dimen.h is a bit
-    -- larger than pages' heights
-    local cur_view_top = self.document:getCurrentPos()
-    local cur_view_bottom
-    if self.view_mode == "page" and self.document:getVisiblePageCount() > 1 then
-        cur_view_bottom = cur_view_top + 2 * self.ui.dimen.h
-    else
-        cur_view_bottom = cur_view_top + self.ui.dimen.h
-    end
-    local colorful
---    if true then
---        local dump = require("dump")
---        UIManager:show( require("ui/widget/textviewer"):new{text = dump(self.ui.notes)})
---    end
---
-    if self.ui.pagetextinfo.words[self.state.page] then
-        for _, item in ipairs(self.ui.pagetextinfo.words[self.state.page]) do
-            -- document:getScreenBoxesFromPositions() is expensive, so we
-            -- first check if this item is on current page
-            local start_pos = self.document:getPosFromXPointer(item.start)
-            --if start_pos > cur_view_bottom then return colorful end -- this and all next highlights are after the current page
-            local end_pos = self.document:getPosFromXPointer(item["end"])
-            if end_pos >= cur_view_top then
-                local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true) -- get_segments=true
-                if boxes then
-                    if item.text == nil then
-                        if boxes then
-                            for _, box in ipairs(boxes) do
-                                if box.h ~= 0 then
-                                    self:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
-                                end
-                            end
-                        end
-                    else
-                        local word = self.document:getWordFromPosition(boxes[1], true)
-                        -- print(word)
-                        if word.word == item.text then
-                            boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
-                            if boxes then
-                                for _, box in ipairs(boxes) do
-                                    if box.h ~= 0 then
-                                        self:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return colorful
-end
 function ReaderView:drawHighlightRect(bb, _x, _y, rect, drawer, color, draw_note_mark)
     local x, y, w, h = rect.x, rect.y, rect.w, rect.h
     if drawer == "lighten" or drawer == "invert" then
