@@ -57,11 +57,13 @@ end
 function VocabularyBuilder:createDB()
     local db_conn = SQ3.open(db_location)
     -- Make it WAL, if possible
-    if Device:canUseWAL() then
-        db_conn:exec("PRAGMA journal_mode=WAL;")
-    else
-        db_conn:exec("PRAGMA journal_mode=TRUNCATE;")
-    end
+    -- if Device:canUseWAL() then
+    --     db_conn:exec("PRAGMA journal_mode=WAL;")
+    -- else
+    --     db_conn:exec("PRAGMA journal_mode=TRUNCATE;")
+    -- end
+    -- We don't want wal mode for the journal, we want changes instantly to be able to sync just one db file
+    db_conn:exec("PRAGMA journal_mode=DELETE;")
     -- Create db
     db_conn:exec(VOCABULARY_DB_SCHEMA)
     -- Check version

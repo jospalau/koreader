@@ -19,6 +19,7 @@ local Size = require("ui/size")
 local Screen = require("device").screen
 local LuaSettings = require("luasettings")
 local DataStorage = require("datastorage")
+local ffiUtil = require("ffi/util")
 local Device = require("device")
 local util = require("util")
 local _ = require("gettext")
@@ -568,8 +569,8 @@ function PageTextInfo:updateNotes()
 end
 
 function PageTextInfo:updateWordsVocabulary()
-
-    local db_location = require("datastorage"):getSettingsDir() .. "/vocabulary_builder.sqlite3"
+    if not ffiUtil.realpath(DataStorage:getSettingsDir() .. "/vocabulary_builder.sqlite3") then return end
+    local db_location = DataStorage:getSettingsDir() .. "/vocabulary_builder.sqlite3"
     sql_stmt = "SELECT distinct(word) FROM vocabulary"
     local conn = require("lua-ljsqlite3/init").open(db_location)
     stmt = conn:prepare(sql_stmt)
@@ -723,11 +724,11 @@ end
 function PageTextInfo:paintTo(bb, x, y)
 
     if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
-    if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_notes") then
+    if self.words and self.settings:isTrue("highlight_all_notes") then
         self:drawXPointerSavedHighlightNotes(bb, x, y)
     end
 
-    if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary") then
+    if self.words and self.settings:isTrue("highlight_all_words_vocabulary") then
         self:drawXPointerVocabulary(bb, x, y)
     end
 
@@ -991,8 +992,8 @@ function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
 --        UIManager:show( require("ui/widget/textviewer"):new{text = dump(self.ui.notes)})
 --    end
 --
-    if self.ui.pagetextinfo.pages_notes[self.ui.view.state.page] then
-        for _, item in ipairs(self.ui.pagetextinfo.pages_notes[self.ui.view.state.page]) do
+    if self.pages_notes[self.ui.view.state.page] then
+        for _, item in ipairs(self.pages_notes[self.ui.view.state.page]) do
             -- document:getScreenBoxesFromPositions() is expensive, so we
             -- first check if this item is on current page
             local start_pos = self.document:getPosFromXPointer(item.start)
@@ -1036,8 +1037,8 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
 --        UIManager:show( require("ui/widget/textviewer"):new{text = dump(self.ui.notes)})
 --    end
 --
-    if self.ui.pagetextinfo.words[self.ui.view.state.page] then
-        for _, item in ipairs(self.ui.pagetextinfo.words[self.ui.view.state.page]) do
+    if self.words[self.ui.view.state.page] then
+        for _, item in ipairs(self.words[self.ui.view.state.page]) do
             -- document:getScreenBoxesFromPositions() is expensive, so we
             -- first check if this item is on current page
             local start_pos = self.document:getPosFromXPointer(item.start)
