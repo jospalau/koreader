@@ -461,6 +461,22 @@ function PageTextInfo:addToMainMenu(menu_items)
                             self.settings:flush()
                             return true
                         end,
+                    },
+                    {
+                        text = _("Show definitions"),
+                        checked_func = function() return self.settings:isTrue("show_definitions") end,
+                        -- enabled_func = function()
+                        --     return false
+                        -- end,
+                        callback = function()
+                            local show_definitions = self.settings:isTrue("show_definitions")
+                            self.settings:saveSetting("show_definitions", not show_definitions)
+                            -- self.ui:reloadDocument(nil, true) -- seamless reload (no infomsg, no flash)
+                            self:updateWordsVocabulary()
+                            UIManager:setDirty("all", "full")
+                            self.settings:flush()
+                            return true
+                        end,
                     }
                 },
             }
@@ -1030,6 +1046,8 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
             if end_pos >= cur_view_top then
                 local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true) -- get_segments=true
                 if boxes then
+                    -- We don't need to show the translation for this case:
+                    -- (word has been hyphenated and it is the first word in the page)
                     if item.text == nil then
                         if boxes then
                             for _, box in ipairs(boxes) do
@@ -1046,6 +1064,31 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                             if boxes then
                                 for _, box in ipairs(boxes) do
                                     if box.h ~= 0 then
+                                        if self.settings:isTrue("show_definitions") then
+                                            local dictionaries = {}
+                                            table.insert(dictionaries, "Babylon English-Spanish")
+                                            local results = self.ui.dictionary:startSdcv(word.word, dictionaries, true)
+                                            local translation = ""
+
+                                            if results and results[1] then
+                                                translation = results[1].definition:gsub("%b<>","")
+                                            end
+                                            local test = FrameContainer:new{
+                                                left_container:new{
+                                                    dimen = Geom:new(),
+                                                    TextWidget:new{
+                                                        text =  translation,
+                                                        face = Font:getFace(self.ui.document:getFontFace(), self.ui.document.configurable.font_size - 4),
+                                                        fgcolor = Blitbuffer.COLOR_BLACK,
+                                                    },
+                                                },
+                                                -- background = Blitbuffer.COLOR_WHITE,
+                                                bordersize = 0,
+                                                padding = 0,
+                                                padding_bottom = self.bottom_padding,
+                                            }
+                                            test:paintTo(bb, box.x + box.w/2 - test[1][1]:getSize().w/2 , box.y)
+                                        end
                                         self.ui.view:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
                                     end
                                 end
