@@ -194,7 +194,7 @@ end
 function PageTextInfo:init()
     if not self.settings then self:readSettingsFile() end
     self.is_enabled = self.settings:isTrue("is_enabled")
-
+    self.translations = {}
     -- if PageTextInfo.preserved_hightlight_all_notes then
     --     self.settings:saveSetting("highlight_all_notes", PageTextInfo.preserved_hightlight_all_notes)
     --     PageTextInfo.preserved_hightlight_all_notes = nil
@@ -1068,11 +1068,19 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                                         if self.settings:isTrue("show_definitions") then
                                             local dictionaries = {}
                                             table.insert(dictionaries, "Babylon English-Spanish")
-                                            local results = self.ui.dictionary:startSdcv(word.word, dictionaries, true)
-                                            local translation = ""
 
-                                            if results and results[1] then
-                                                translation = results[1].definition:gsub("%b<>","")
+                                            local translation = ""
+                                            if not self.translations[word.word] then
+                                                local results = self.ui.dictionary:startSdcv(word.word, dictionaries, true)
+
+                                                if results and results[1] then
+                                                    translation = results[1].definition:gsub("%b<>","")
+                                                    self.translations[word.word] = translation
+                                                else
+                                                    self.translations[word.word] = ""
+                                                end
+                                            else
+                                                translation = self.translations[word.word]
                                             end
                                             local test = FrameContainer:new{
                                                 left_container:new{
@@ -1081,7 +1089,7 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                                                         text =  translation,
                                                         -- face = Font:getFace(self.ui.document:getFontFace():gsub(" ",""), self.ui.document:getFontSize() * 0.75),
                                                         -- face = Font:getFace("myfont4"),
-                                                        face = Font:getFace(self.ui.document:getFontFace():gsub(" ","") .. "-Italic", self.ui.document.configurable.font_size * 0.75, 0, true), -- Same font italic reduced 25%
+                                                        face = Font:getFace(self.ui.document:getFontFace():gsub(" ","") .. "-Regular", self.ui.document.configurable.font_size * 0.75, 0, true), -- Same font reduced 25%
                                                         -- fgcolor = Blitbuffer.COLOR_GRAY,
                                                     },
                                                 },
