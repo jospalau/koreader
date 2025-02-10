@@ -1059,7 +1059,7 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                     else
                         local word = self.document:getWordFromPosition(boxes[1], true)
                         -- print(word)
-                        if word.word == item.text then
+                        if word.word:upper() == item.text:upper() then
                             boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
                             if boxes then
                                 for _, box in ipairs(boxes) do
@@ -1078,8 +1078,10 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                                                     dimen = Geom:new(),
                                                     TextWidget:new{
                                                         text =  translation,
-                                                        face = Font:getFace(self.ui.document:getFontFace(), self.ui.document.configurable.font_size - 4),
-                                                        fgcolor = Blitbuffer.COLOR_BLACK,
+                                                        -- face = Font:getFace(self.ui.document:getFontFace():gsub(" ",""), self.ui.document:getFontSize() * 0.75),
+                                                        -- face = Font:getFace("myfont4"),
+                                                        face = Font:getFace(self.ui.document:getFontFace():gsub(" ","") .. "-Italic", self.ui.document.configurable.font_size * 0.75, 0, true), -- Same font italic reduced 25%
+                                                        -- fgcolor = Blitbuffer.COLOR_GRAY,
                                                     },
                                                 },
                                                 -- background = Blitbuffer.COLOR_WHITE,
@@ -1087,7 +1089,13 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                                                 padding = 0,
                                                 padding_bottom = self.bottom_padding,
                                             }
-                                            test:paintTo(bb, box.x + box.w/2 - test[1][1]:getSize().w/2 , box.y)
+                                            if box.x < Screen:getWidth()/4 then
+                                                test:paintTo(bb, box.x , box.y)
+                                            elseif box.x > Screen:getWidth() - Screen:getWidth()/4 then
+                                                test:paintTo(bb, box.x + box.w - test[1][1]:getSize().w , box.y)
+                                            else
+                                                test:paintTo(bb, box.x + box.w/2 - test[1][1]:getSize().w/2 , box.y)
+                                            end
                                         end
                                         self.ui.view:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
                                     end
