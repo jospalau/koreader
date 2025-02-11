@@ -1110,7 +1110,17 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                                                 test:paintTo(bb, box.x + box.w/2 - test[1][1]:getSize().w/2 , box.y + translation_font_size/2)
                                             end
                                         end
-                                        self.ui.view:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
+
+                                        local Device = require("device")
+                                        local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+                                        local font_size_px = (display_dpi * self.ui.document.configurable.font_size) / 72
+
+
+                                        local line_spacing_pct = self.ui.font.configurable.line_spacing * (1/100)
+                                        VSPACE = math.ceil(font_size_px * 0.25 * line_spacing_pct)
+                                        local xrect = box:copy()
+                                        xrect.y = xrect.y - VSPACE
+                                        self.ui.view:drawHighlightRect(bb, x, y, xrect, "underscore", nil, false)
                                     end
                                 end
                             end
