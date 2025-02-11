@@ -150,7 +150,7 @@ function ReaderHighlight:init()
             return {
                 text = _("Notes"),
                 callback = function()
-                    this:showNote()
+                    self.ui.pagetextinfo:showNote()
                 end,
             }
         end,
@@ -1035,32 +1035,6 @@ function ReaderHighlight:onTap(_, ges)
             return self:showChooseHighlightDialog(highlights_tapped)
         end
     end
-    if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_notes") then
-        if ges and ges.pos then
-            local pos = self.view:screenToPageTransform(ges.pos)
-            if self.ui.pagetextinfo.pages_notes[self.ui.view.state.page] then
-                for _, item in ipairs(self.ui.pagetextinfo.pages_notes[self.ui.view.state.page]) do
-                    local boxes = self.ui.document:getScreenBoxesFromPositions(item.start, item["end"], true)
-                    if boxes then
-                        for _, box in ipairs(boxes) do
-                            if inside_box(pos, box) then
-                                --local UIManager = require("ui/uimanager")
-                                --local Notification = require("ui/widget/notification")
-                                --UIManager:show(Notification:new{
-                                --text =("searching"),
-                                --})
-                                --local dump = require("dump")
-                                --print(dump(item))
-
-                                return self:showNote(item.note)
-                                --return true
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
 end
 
 function ReaderHighlight:getHighlightVisibleBoxes(index)
@@ -1885,63 +1859,6 @@ function ReaderHighlight:translate(index)
 end
 
 
-function ReaderHighlight:showNote(textNote)
-    local text = nil
-    if textNote then
-        local FootnoteWidget = require("ui/widget/footnotewidget")
-        local popup
-        popup = FootnoteWidget:new{
-            html = textNote,
-            doc_font_name = self.ui.font.font_face,
-            doc_font_size = Screen:scaleBySize(self.document.configurable.font_size),
-            doc_margins = self.document:getPageMargins(),
-            follow_callback = function() -- follow the link on swipe west
-                UIManager:close(popup)
-            end,
-            dialog = self.dialog,
-        }
-        UIManager:show(popup)
-        return true
-    end
-    if self.selected_text then
-        -- text = self.selected_text.text
-        local annotations = self.ui.annotation.annotations
-        for i, item in ipairs(annotations) do
-            if item.text == self.selected_text.text then
-                text = item.note
-            end
-        end
-        if self.highlight_dialog then
-            UIManager:close(self.highlight_dialog)
-        end
-        if text then
-            text = '<p style="display:block;font-size:1.25em;">' .. text .. "</p>"
-            --if true then
-              --UIManager:show( require("ui/widget/textviewer"):new{text = text})
-            --end
-            local FootnoteWidget = require("ui/widget/footnotewidget")
-            local popup
-            popup = FootnoteWidget:new{
-                html = text,
-                doc_font_name = self.ui.font.font_face,
-                doc_font_size = Screen:scaleBySize(self.document.configurable.font_size),
-                doc_margins = self.document:getPageMargins(),
-                follow_callback = function() -- follow the link on swipe west
-                    UIManager:close(popup)
-                end,
-                dialog = self.dialog,
-            }
-            UIManager:show(popup)
-        else
-           local UIManager = require("ui/uimanager")
-           local Notification = require("ui/widget/notification")
-            UIManager:show(Notification:new{
-                text = _("No note"),
-            })
-        end
-        self:clear()
-    end
-end
 function ReaderHighlight:onTranslateText(text, index)
     Translator:showTranslation(text, true, nil, nil, true, index)
 end
@@ -2039,7 +1956,7 @@ function ReaderHighlight:onHoldRelease()
                     self:lookupDict()
                     self:onClose()
                 elseif default_highlight_action == "notes" then
-                    self:showNote()
+                    self.ui.pagetextinfo:showNote()
                     self:onClose()
                 elseif default_highlight_action == "search" then
                     self:onHighlightSearch()

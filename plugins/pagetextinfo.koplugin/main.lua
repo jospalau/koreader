@@ -111,17 +111,18 @@ end
 function PageTextInfo:initGesListener()
     if not Device:isTouchDevice() then return end
     self.ui:registerTouchZones({
-        -- {
-        --     id = "pagetextinfo_tap",
-        --     ges = "tap",
-        --     screen_zone = {
-        --         ratio_x = 0, ratio_y = 0, ratio_w = 1, ratio_h = 1,
-        --     },
-        --     overrides = {
-        --         "readerconfigmenu_tap",
-        --     },
-        --     handler = function(ges) return self:onTap(nil, ges) end,
-        -- },
+        {
+            id = "pagetextinfo_tap",
+            ges = "tap",
+            screen_zone = {
+                ratio_x = 0, ratio_y = 0, ratio_w = 1, ratio_h = 1,
+            },
+            overrides = {
+                "readerconfigmenu_tap",
+                "readerhighlight_tap_select_mode",
+            },
+            handler = function(ges) return self:onTap(nil, ges) end,
+        },
         {
             id = "pagetextinfo_double_tap",
             ges = "double_tap",
@@ -184,12 +185,138 @@ function PageTextInfo:onDoubleTap(_, ges)
     return true
 end
 
--- function PageTextInfo:onTap(_, ges)
---     if util.getFileNameSuffix(self.ui.document.file) ~= "epub"  then return false end
---     local res = self.ui.document._document:getTextFromPositions(ges.pos.x, ges.pos.y,
---                 ges.pos.x, ges.pos.y, false, false)
---     return false -- Pass the event
--- end
+local function inside_box(pos, box)
+    if pos then
+        local x, y = pos.x, pos.y
+        if box.x <= x and box.y <= y
+            and box.x + box.w >= x
+            and box.y + box.h >= y then
+            return true
+        end
+    end
+end
+
+
+-- If no argument, the call is coming from a new entry Notes added in the readerhighlight.lua source
+-- to show possible notes associate to a word
+function PageTextInfo:showNote(text_note)
+    if text_note then
+        local text = ""
+        local annotations = self.ui.annotation.annotations
+        for i, item in ipairs(annotations) do
+            if item.note and item.text == text_note then
+                text = text .. '<p style="display:block;font-size:1.25em;">' .. item.note .. "</p>"
+            end
+        end
+        local FootnoteWidget = require("ui/widget/footnotewidget")
+        local popup
+        popup = FootnoteWidget:new{
+            html = text,
+            doc_font_name = self.ui.font.font_face,
+            doc_font_size = Screen:scaleBySize(self.document.configurable.font_size),
+            doc_margins = self.document:getPageMargins(),
+            follow_callback = function() -- follow the link on swipe west
+                UIManager:close(popup)
+            end,
+            dialog = self.dialog,
+        }
+        UIManager:show(popup)
+        return true
+    end
+    local text = nil
+    local annotations = self.ui.annotation.annotations
+    for i, item in ipairs(annotations) do
+        if item.text == self.ui.highlight.selected_text.text then
+            text = item.note
+        end
+    end
+    if self.ui.highlight.highlight_dialog then
+        UIManager:close(self.ui.highlight.highlight_dialog)
+    end
+    local FootnoteWidget = require("ui/widget/footnotewidget")
+    local popup = nil
+    if text then
+        text = '<p style="display:block;font-size:1.25em;">' .. text .. "</p>"
+        --if true then
+            --UIManager:show( require("ui/widget/textviewer"):new{text = text})
+        --end
+        popup = FootnoteWidget:new{
+            html = text,
+            doc_font_name = self.ui.font.font_face,
+            doc_font_size = Screen:scaleBySize(self.document.configurable.font_size),
+            doc_margins = self.document:getPageMargins(),
+            follow_callback = function() -- follow the link on swipe west
+                UIManager:close(popup)
+            end,
+            dialog = self.dialog,
+        }
+    else
+        popup = FootnoteWidget:new{
+            html = "No notes",
+            doc_font_name = self.ui.font.font_face,
+            doc_font_size = Screen:scaleBySize(self.document.configurable.font_size),
+            doc_margins = self.document:getPageMargins(),
+            follow_callback = function() -- follow the link on swipe west
+                UIManager:close(popup)
+            end,
+            dialog = self.dialog,
+        }
+        -- local UIManager = require("ui/uimanager")
+        -- local Notification = require("ui/widget/notification")
+        -- UIManager:show(Notification:new{
+        --     text = _("No note"),
+        -- })
+    end
+    UIManager:show(popup)
+    self.ui.highlight:clear()
+    return false
+end
+
+
+-- If highlight all notes is not activated
+-- or there is not any annotation associated to the word
+-- The event will be passed returning false
+
+-- To be able to perform just our tap action when tapping a word with annotation
+-- avoiding the tap action of the highlight modules to be fired
+-- we need to set readerhighlight_tap_select_mode
+-- in the overrides property of the tap touch zone definition
+-- but, we still can invoke the highlight tap event returning false
+
+-- In any case, when highlight all notes is activated
+-- this plugin will manage what to do when tapping a notes
+-- which basically is to show all the notes associated to a word having one or more note
+function PageTextInfo:onTap(_, ges)
+    if util.getFileNameSuffix(self.ui.document.file) ~= "epub"  then return false end
+    local res = self.ui.document._document:getTextFromPositions(ges.pos.x, ges.pos.y,
+                ges.pos.x, ges.pos.y, false, false)
+    if self.settings:isTrue("highlight_all_notes") then
+        if ges and ges.pos then
+            local pos = self.view:screenToPageTransform(ges.pos)
+            if self.pages_notes[self.view.state.page] then
+                for _, item in ipairs(self.pages_notes[self.view.state.page]) do
+                    local boxes = self.ui.document:getScreenBoxesFromPositions(item.start, item["end"], true)
+                    if boxes then
+                        for _, box in ipairs(boxes) do
+                            if inside_box(pos, box) then
+                                -- local UIManager = require("ui/uimanager")
+                                -- local Notification = require("ui/widget/notification")
+                                -- UIManager:show(Notification:new{
+                                -- text =("searching"),
+                                -- })
+                                -- local dump = require("dump")
+                                -- print(dump(item))
+                                local word = self.document:getWordFromPosition(box, true)
+                                return self:showNote(word.word)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return false -- Pass the event
+end
 
 function PageTextInfo:init()
     if not self.settings then self:readSettingsFile() end
@@ -724,7 +851,7 @@ end
 function PageTextInfo:paintTo(bb, x, y)
 
     if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
-    if self.words and self.settings:isTrue("highlight_all_notes") then
+    if self.settings:isTrue("highlight_all_notes") then
         self:drawXPointerSavedHighlightNotes(bb, x, y)
     end
 
