@@ -1237,7 +1237,9 @@ function ReaderFooter:setupTouchZones()
         {
             id = "readerfooter_tap",
             ges = "tap",
-            screen_zone = footer_screen_zone,
+            screen_zone = {
+                ratio_x = 0, ratio_y = 24/25, ratio_w = 1, ratio_h =25,
+            },
             handler = function(ges) return self:TapFooter(ges) end,
             overrides = {
                 "readerconfigmenu_ext_tap",
@@ -1251,8 +1253,10 @@ function ReaderFooter:setupTouchZones()
         {
             id = "readerfooter_double_tap",
             ges = "double_tap",
-            screen_zone = footer_screen_zone,
-            handler = function(ges) return self:DoubleTapFooter(nil, ges) end,
+            screen_zone = {
+                ratio_x = 0, ratio_y = 24/25, ratio_w = 1, ratio_h =25,
+            },
+            handler = function(ges) return self:DoubleTapFooter(ges) end,
             overrides = {
                 "pagetextinfo_double_tap",
             },
