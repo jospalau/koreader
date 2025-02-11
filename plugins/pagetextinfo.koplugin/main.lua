@@ -1131,7 +1131,22 @@ function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
                 if boxes then
                     for _, box in ipairs(boxes) do
                         if box.h ~= 0 then
-                            self.ui.view:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
+                            local mark = FrameContainer:new{
+                                left_container:new{
+                                    dimen = Geom:new(),
+                                    TextWidget:new{
+                                        text =  "\u{EB4D}",
+                                        face = Font:getFace("symbols", 12),
+                                        fgcolor = Blitbuffer.COLOR_BLACK,
+                                    },
+                                },
+                                -- background = Blitbuffer.COLOR_WHITE,
+                                bordersize = 0,
+                                padding = 0,
+                                padding_bottom = self.bottom_padding,
+                            }
+                            -- self.ui.view:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
+                            mark:paintTo(bb, box.x, box.y)
                         end
                     end
                 end
