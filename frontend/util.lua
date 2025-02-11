@@ -1912,7 +1912,7 @@ end
 -- Like util.splitWords(), but not capturing space and punctuations
 function util.splitToWords2(text)
     local wlist = {}
-    for word in util.gsplit(text, "[%s%p]+", false) do
+    for word in util.gsplit(text, "[%s%p“”]+", false) do
         if util.hasCJKChar(word) then
             for char in util.gsplit(word, "[\192-\255][\128-\191]+", true) do
                 table.insert(wlist, char)
