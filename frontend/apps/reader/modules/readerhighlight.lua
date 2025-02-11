@@ -1186,7 +1186,7 @@ function ReaderHighlight:showHighlightNoteOrDialog(index)
                             if self.view.highlight.note_mark then -- refresh note marker
                                 UIManager:setDirty(self.dialog, "ui")
                             end
-                            if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_notes") then
+                            if self.ui.pagetextinfo and (self.ui.pagetextinfo.settings:isTrue("highlight_all_notes") or self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary")) then
                                 self.ui.pagetextinfo:updateNotes()
                                 UIManager:setDirty("all", "full")
                             end

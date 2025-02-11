@@ -407,7 +407,7 @@ function ReaderBookmark:removeItem(item, item_idx)
     local index = item_idx or self:getBookmarkItemIndex(item)
     if item.drawer then
         self.ui.highlight:deleteHighlight(index) -- will call ReaderBookmark:removeItemByIndex()
-        if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_notes") then
+        if self.ui.pagetextinfo and (self.ui.pagetextinfo.settings:isTrue("highlight_all_notes") or self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary")) then
             self.ui.pagetextinfo:updateNotes()
         end
     else -- dogear bookmark, update it in case we removed a bookmark for current page
@@ -1317,7 +1317,7 @@ function ReaderBookmark:setBookmarkNote(item_or_index, is_new_note, new_note, ca
                             item.text = self:getBookmarkItemText(item)
                         end
                         --self.ui.styletweak:updateCssText(true)
-                        if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_notes") then
+                        if self.ui.pagetextinfo and (self.ui.pagetextinfo.settings:isTrue("highlight_all_notes") or self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary")) then
                             self.ui.pagetextinfo:updateNotes()
                         end
                         caller_callback()

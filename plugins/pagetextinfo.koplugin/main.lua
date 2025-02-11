@@ -138,6 +138,7 @@ function PageTextInfo:toggleHighlightAllWordsVocabulary(toggle)
     self.settings:flush()
     if toggle then
         self:updateWordsVocabulary()
+        self:updateNotes()
     end
     UIManager:setDirty("all", "full")
 end
@@ -521,7 +522,7 @@ function PageTextInfo:onPageUpdate(pageno)
     if self.settings:isTrue("highlight_all_words_vocabulary") and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
         self:updateWordsVocabulary()
     end
-    if self.settings:isTrue("highlight_all_notes") and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
+    if (self.settings:isTrue("highlight_all_notes") or self.settings:isTrue("highlight_all_words_vocabulary")) and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
         self:updateNotes()
     end
 end
@@ -851,7 +852,7 @@ end
 function PageTextInfo:paintTo(bb, x, y)
 
     if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
-    if self.settings:isTrue("highlight_all_notes") then
+    if self.settings:isTrue("highlight_all_notes") or self.settings:isTrue("highlight_all_words_vocabulary") then
         self:drawXPointerSavedHighlightNotes(bb, x, y)
     end
 
