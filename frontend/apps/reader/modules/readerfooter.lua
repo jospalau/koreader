@@ -1252,7 +1252,7 @@ function ReaderFooter:setupTouchZones()
             id = "readerfooter_double_tap",
             ges = "double_tap",
             screen_zone = footer_screen_zone,
-            handler = function(ges) return self:DoubleTapFooter(ges) end,
+            handler = function(ges) return self:DoubleTapFooter(nil, ges) end,
             overrides = {
                 "pagetextinfo_double_tap",
             },
@@ -2764,10 +2764,6 @@ function ReaderFooter:onExitFlippingMode()
 end
 
 function ReaderFooter:TapFooter(ges)
-    if not self.footer_content.dimen:contains(ges.pos) then
-        -- We held outside the footer: meep!
-        return true
-    end
     if self.ui.gestures.ignore_hold_corners and self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary") then
         return self:DoubleTapFooter(ges)
     end
@@ -2830,10 +2826,6 @@ function ReaderFooter:TapFooter(ges)
 end
 
 function ReaderFooter:DoubleTapFooter(ges)
-    if not self.footer_content.dimen:contains(ges.pos) then
-        -- We held outside the footer: meep!
-        return true
-    end
     if self.view.flipping_visible and ges then
         local pos = ges.pos
         local dimen = self.progress_bar.dimen
