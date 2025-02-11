@@ -677,6 +677,7 @@ function PageTextInfo:updateNotes()
                         table.insert(self.notes, item)
                         for i, word in ipairs(words) do
                             word.note = item.note
+                            word.text = item.text
                             local page = self.document:getPageFromXPointer(word.start)
                             if not self.pages_notes[page] then
                                 self.pages_notes[page]={}
@@ -1130,24 +1131,30 @@ function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
             if end_pos >= cur_view_top then
                 local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true) -- get_segments=true
                 if boxes then
-                    for _, box in ipairs(boxes) do
-                        if box.h ~= 0 then
-                            local mark = FrameContainer:new{
-                                left_container:new{
-                                    dimen = Geom:new(),
-                                    TextWidget:new{
-                                        text =  "\u{EB4D}",
-                                        face = Font:getFace("symbols", 12),
-                                        fgcolor = Blitbuffer.COLOR_BLACK,
-                                    },
-                                },
-                                -- background = Blitbuffer.COLOR_WHITE,
-                                bordersize = 0,
-                                padding = 0,
-                                padding_bottom = self.bottom_padding,
-                            }
-                            -- self.ui.view:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
-                            mark:paintTo(bb, box.x, box.y)
+                    local word = self.document:getWordFromPosition(boxes[1], true)
+                    if word.word:upper() == item.text:upper() then
+                        boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
+                        if boxes then
+                            for _, box in ipairs(boxes) do
+                                if box.h ~= 0 then
+                                    local mark = FrameContainer:new{
+                                        left_container:new{
+                                            dimen = Geom:new(),
+                                            TextWidget:new{
+                                                text =  "\u{EB4D}",
+                                                face = Font:getFace("symbols", 12),
+                                                fgcolor = Blitbuffer.COLOR_BLACK,
+                                            },
+                                        },
+                                        -- background = Blitbuffer.COLOR_WHITE,
+                                        bordersize = 0,
+                                        padding = 0,
+                                        padding_bottom = self.bottom_padding,
+                                    }
+                                    -- self.ui.view:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
+                                    mark:paintTo(bb, box.x, box.y)
+                                end
+                            end
                         end
                     end
                 end
@@ -1202,7 +1209,6 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                         end
                     else
                         local word = self.document:getWordFromPosition(boxes[1], true)
-                        -- print(word)
                         if word.word:upper() == item.text:upper() then
                             boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
                             if boxes then
