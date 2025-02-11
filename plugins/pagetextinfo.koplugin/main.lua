@@ -391,10 +391,10 @@ function PageTextInfo:onPageUpdate(pageno)
     if self.pageno == nil then self.pageno = pageno return end
     self.pageno = pageno
 
-    if self.settings:isTrue("highlight_all_words_vocabulary") and util.getFileNameSuffix(self.ui.document.file) == "epub" then
+    if self.settings:isTrue("highlight_all_words_vocabulary") and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
         self:updateWordsVocabulary()
     end
-    if self.settings:isTrue("highlight_all_notes") and util.getFileNameSuffix(self.ui.document.file) == "epub" then
+    if self.settings:isTrue("highlight_all_notes") and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
         self:updateNotes()
     end
 end
@@ -534,7 +534,7 @@ function PageTextInfo:updateNotes()
     self.pages_notes = {}
     self.notes = {}
     local annotations = self.ui.annotation.annotations
-    local res = self.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
+    local res = self.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false)
     if res and res.text then
         local t = util.splitToWords2(res.text) -- contar palabras
         local words_page = {}
@@ -600,7 +600,7 @@ function PageTextInfo:updateWordsVocabulary()
     -- for each of the places the text if found wether the full word or the text inside a word and we want full words to highlight them
     -- When painting in the source readerview.lua, we get the boxes from the positions and using the boxes we can get the fulls words to highlight them
     if self.all_words then
-        local res = self.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
+        local res = self.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false)
         if res and res.text then
             -- print(res.pos0)
             -- print(res.pos1)
