@@ -671,23 +671,46 @@ function PageTextInfo:updateNotes()
         end
         if words_page and annotations then
             for i, item in ipairs(annotations) do
+                local words = nil
+                local hyphenated = false
                 if words_page[item.text] then
-                    local words = self.document:findText(item.text, 1, false, true, -1, false, 15)
-                    if item.note and not item.text:find("%s+") then
-                        table.insert(self.notes, item)
-                        for i, word in ipairs(words) do
-                            word.note = item.note
-                            word.text = item.text
-                            local page = self.document:getPageFromXPointer(word.start)
-                            if not self.pages_notes[page] then
-                                self.pages_notes[page]={}
+                    if t[1] == item.text then -- If first word is hyphenated
+                        hyphenated = true
+                        local cre = require("libs/libkoreader-cre")
+                        local suggested_hyphenation = cre.getHyphenationForWord(item.text)
+                        if suggested_hyphenation:find("-") then
+                            local suggested = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len())
+                            words = self.document:findText(suggested, 1, false, true, -1, false, 1) -- Page not used, set -1
+                            if not words then
+                                suggested  = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):gsub("-","")
+                                words = self.document:findText(suggested, 1, false, true, -1, false, 1) -- Page not used, set -1
                             end
-                            table.insert(self.pages_notes[page], word)
-                            local page2 = self.document:getPageFromXPointer(word["end"])
-                            if not self.pages_notes[page2] then
-                                self.pages_notes[page2]={}
+                        end
+                    else
+                        words = self.document:findText(item.text, 1, false, true, -1, false, 30)
+                    end
+                    -- words = self.document:findText(item.text, 1, false, true, -1, false, 30)
+                    if words then
+                        if item.note and not item.text:find("%s+") then
+                            table.insert(self.notes, item)
+                            for i, word in ipairs(words) do
+                                word.note = item.note
+                                if hyphenated then
+                                    word.text = nil
+                                else
+                                    word.text = item.text
+                                end
+                                local page = self.document:getPageFromXPointer(word.start)
+                                if not self.pages_notes[page] then
+                                    self.pages_notes[page]={}
+                                end
+                                table.insert(self.pages_notes[page], word)
+                                local page2 = self.document:getPageFromXPointer(word["end"])
+                                if not self.pages_notes[page2] then
+                                    self.pages_notes[page2]={}
+                                end
+                                table.insert(self.pages_notes[page2], word)
                             end
-                            table.insert(self.pages_notes[page2], word)
                         end
                     end
                 end
@@ -1131,9 +1154,7 @@ function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
             if end_pos >= cur_view_top then
                 local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true) -- get_segments=true
                 if boxes then
-                    local word = self.document:getWordFromPosition(boxes[1], true)
-                    if word.word:upper() == item.text:upper() then
-                        boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
+                    if item.text == nil then
                         if boxes then
                             for _, box in ipairs(boxes) do
                                 if box.h ~= 0 then
@@ -1153,6 +1174,33 @@ function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
                                     }
                                     -- self.ui.view:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
                                     mark:paintTo(bb, box.x, box.y)
+                                end
+                            end
+                        end
+                    else
+                        local word = self.document:getWordFromPosition(boxes[1], true)
+                        if word.word:upper() == item.text:upper() then
+                            boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
+                            if boxes then
+                                for _, box in ipairs(boxes) do
+                                    if box.h ~= 0 then
+                                        local mark = FrameContainer:new{
+                                            left_container:new{
+                                                dimen = Geom:new(),
+                                                TextWidget:new{
+                                                    text =  "\u{EB4D}",
+                                                    face = Font:getFace("symbols", 12),
+                                                    fgcolor = Blitbuffer.COLOR_BLACK,
+                                                },
+                                            },
+                                            -- background = Blitbuffer.COLOR_WHITE,
+                                            bordersize = 0,
+                                            padding = 0,
+                                            padding_bottom = self.bottom_padding,
+                                        }
+                                        -- self.ui.view:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
+                                        mark:paintTo(bb, box.x, box.y)
+                                    end
                                 end
                             end
                         end
