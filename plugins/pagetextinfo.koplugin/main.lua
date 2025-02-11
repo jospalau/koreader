@@ -1074,7 +1074,10 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                                                 local results = self.ui.dictionary:startSdcv(word.word, dictionaries, true)
 
                                                 if results and results[1] then
-                                                    translation = results[1].definition:gsub("%b<>","")
+                                                    translation = results[1].definition:gsub("%b<>",""):gsub("%\n","")
+                                                    if translation:find(";") then
+                                                        translation = translation:sub(1, translation:find(";") - 1)
+                                                    end
                                                     self.translations[word.word] = translation
                                                 else
                                                     self.translations[word.word] = ""
@@ -1082,6 +1085,7 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                                             else
                                                 translation = self.translations[word.word]
                                             end
+                                            local translation_font_size = self.ui.document.configurable.font_size * 0.60
                                             local test = FrameContainer:new{
                                                 left_container:new{
                                                     dimen = Geom:new(),
@@ -1089,7 +1093,7 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                                                         text =  translation,
                                                         -- face = Font:getFace(self.ui.document:getFontFace():gsub(" ",""), self.ui.document:getFontSize() * 0.75),
                                                         -- face = Font:getFace("myfont4"),
-                                                        face = Font:getFace(self.ui.document:getFontFace():gsub(" ","") .. "-Regular", self.ui.document.configurable.font_size * 0.75, 0, true), -- Same font reduced 25%
+                                                        face = Font:getFace(self.ui.document:getFontFace():gsub(" ","") .. "-Regular", translation_font_size, 0, true), -- Same font reduced 40%
                                                         -- fgcolor = Blitbuffer.COLOR_GRAY,
                                                     },
                                                 },
@@ -1099,11 +1103,11 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                                                 padding_bottom = self.bottom_padding,
                                             }
                                             if box.x < Screen:getWidth()/4 then
-                                                test:paintTo(bb, box.x , box.y)
+                                                test:paintTo(bb, box.x , box.y + translation_font_size/2)
                                             elseif box.x > Screen:getWidth() - Screen:getWidth()/4 then
-                                                test:paintTo(bb, box.x + box.w - test[1][1]:getSize().w , box.y)
+                                                test:paintTo(bb, box.x + box.w - test[1][1]:getSize().w , box.y + translation_font_size/2)
                                             else
-                                                test:paintTo(bb, box.x + box.w/2 - test[1][1]:getSize().w/2 , box.y)
+                                                test:paintTo(bb, box.x + box.w/2 - test[1][1]:getSize().w/2 , box.y + translation_font_size/2)
                                             end
                                         end
                                         self.ui.view:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
