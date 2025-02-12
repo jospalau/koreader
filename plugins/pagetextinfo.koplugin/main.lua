@@ -1333,15 +1333,26 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
 --
     if self.words[self.ui.view.state.page] then
         for _, item in ipairs(self.words[self.ui.view.state.page]) do
+            local more_than_one_word = false
             -- document:getScreenBoxesFromPositions() is expensive, so we
             -- first check if this item is on current page
             local start_pos = self.document:getPosFromXPointer(item.start)
             --if start_pos > cur_view_bottom then return colorful end -- this and all next highlights are after the current page
             local end_pos = self.document:getPosFromXPointer(item["end"])
             if end_pos >= cur_view_top then
-                local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true) -- get_segments=true
+                -- Pass false, otherwise, if true is passed and an italic word is highlighted
+                -- it gets also the previous word
+                -- Not always but it happens depending the typography options applied
+                -- The problem passing false is that it crashes with some other words
+                -- So for this cases we call it with false or we set more_than_one_word just to paint it
+                local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true)
                 if boxes then
                     local word = self.document:getWordFromPosition(boxes[1], true)
+                    if word.word:find(" ") then
+                        boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], false)
+                        word = self.document:getWordFromPosition(boxes[1], true)
+                        -- more_than_one_word = true
+                    end
                     if (item.hyphenated and word.word:upper() == item.text:upper()) or word.word:upper() == item.text:upper() then
                         boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
                         if boxes then
@@ -1410,7 +1421,7 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                                 end
                             end
                         end
-                    elseif item.hyphenated then
+                    elseif item.hyphenated or more_than_one_word then
                         if boxes then
                             for _, box in ipairs(boxes) do
                                 if box.h ~= 0 then
