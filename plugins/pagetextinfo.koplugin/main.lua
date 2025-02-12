@@ -1340,18 +1340,33 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
             --if start_pos > cur_view_bottom then return colorful end -- this and all next highlights are after the current page
             local end_pos = self.document:getPosFromXPointer(item["end"])
             if end_pos >= cur_view_top then
-                -- Pass false, otherwise, if true is passed and an italic word is highlighted
-                -- it gets also the previous word
-                -- Not always but it happens depending the typography options applied
-                -- The problem passing false is that it crashes with some other words
-                -- So for this cases we call it with false or we set more_than_one_word just to paint it
+                -- If the word to search starts after a i or em (also an a) tag
+                -- ...it had actually <i class="calibre4">grown</i> from the tree;...</p>
+                -- Removing the </p> or putting the space inside i fixes it
+                -- sometimes it gets also the previous word. It happens depending on the typography options applied
+                -- It is not common in any case
+                -- Passing false to getWordFromPosition() does not work
+                -- In these cases, we detect if there is more than word coming, compare the last word with the item one
+                -- and if it is the same, set set more_than_one_word and it will be highlighted propertly
+                -- (the boxes retrieved are correct)
+
+                -- For some of these cases there are more than one box, we pick up the second one and it works
+                -- But for some other cases, the node start and end coming from the search are not valid,
+                -- so the box retrieved is not right
                 local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true)
                 if boxes then
-                    local word = self.document:getWordFromPosition(boxes[1], true)
-                    if word.word:find(" ") then
-                        boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], false)
+                    local word
+                    if #boxes >1 then
+                        word = self.document:getWordFromPosition(boxes[2], true)
+                    else
                         word = self.document:getWordFromPosition(boxes[1], true)
-                        -- more_than_one_word = true
+                    end
+                    if word.word:find(" ") then
+                        -- print("paso   " .. item.text ..  "-" .. word.word)
+                        local word = word.word:sub(word.word:find(" ") + 1, word.word:len())
+                        if item.text:upper() == word:upper() then
+                            more_than_one_word = true
+                        end
                     end
                     if (item.hyphenated and word.word:upper() == item.text:upper()) or word.word:upper() == item.text:upper() then
                         boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
