@@ -675,19 +675,39 @@ function PageTextInfo:updateNotes()
                 local hyphenated = false
                 if words_page[item.text] then
                     if t[1] == item.text then -- If first word is hyphenated
-                        hyphenated = true
                         local cre = require("libs/libkoreader-cre")
                         local suggested_hyphenation = cre.getHyphenationForWord(item.text)
                         if suggested_hyphenation:find("-") then
+                            hyphenated = true
                             local suggested = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len())
                             words = self.document:findText(suggested, 1, false, true, -1, false, 1) -- Page not used, set -1
                             if not words then
-                                suggested  = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):gsub("-","")
+                                suggested  = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
+                                suggested_hyphenation:len()):sub(suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
+                                suggested_hyphenation:len()):find("-")+1,suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):len())
                                 words = self.document:findText(suggested, 1, false, true, -1, false, 1) -- Page not used, set -1
+                                if not words then
+                                    suggested  = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
+                                    suggested_hyphenation:len()):sub(suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
+                                    suggested_hyphenation:len()):find("-")+1,suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):len()):sub(
+                                        suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
+                                        suggested_hyphenation:len()):sub(suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
+                                        suggested_hyphenation:len()):find("-")+1,suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):len()):find("-") + 1,
+                                        suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
+                                        suggested_hyphenation:len()):sub(suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
+                                        suggested_hyphenation:len()):find("-")+1,suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):len()):len())
+                                    words = self.document:findText(suggested, 1, false, true, -1, false, 1) -- Page not used, set -1
+                                    if not words then
+                                        suggested  = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):gsub("-","")
+                                        words = self.document:findText(suggested, 1, false, true, -1, false, 1) -- Page not used, set -1
+                                    end
+                                end
                             end
+                        else
+                            words = self.document:findText(item.text, 1, false, true, -1, false, 1) -- Page not used, set -1
                         end
                     else
-                        words = self.document:findText(item.text, 1, false, true, -1, false, 30)
+                        words = self.document:findText(item.text, 1, false, true, -1, false, 60)
                     end
                     -- words = self.document:findText(item.text, 1, false, true, -1, false, 30)
                     if words then
@@ -695,10 +715,11 @@ function PageTextInfo:updateNotes()
                             table.insert(self.notes, item)
                             for i, word in ipairs(words) do
                                 word.note = item.note
+                                word.text = item.text
                                 if hyphenated then
-                                    word.text = nil
+                                    word.hyphenated = true
                                 else
-                                    word.text = item.text
+
                                 end
                                 local page = self.document:getPageFromXPointer(word.start)
                                 if not self.pages_notes[page] then
@@ -760,68 +781,81 @@ function PageTextInfo:updateWordsVocabulary()
             if words_page and self.all_words then
                 for i = 1, #words_page do
                     local word_page = words_page[i] --:gsub("[^%w%s]+", "")
-                    if i == 1 or self.all_words[word_page] then
-                        local words  = {}
-                        if i > 1 then
-                            -- words = self.document:findText(word_page, 1, false, true, -1, false, 100)
-                            -- words = self.document:findText("[ ^]+" .. word_page .. "[ .,!?^]+", 1, false, true, -1, true, 5)
-                            words = self.document:findText(word_page, 1, false, true, -1, false, 40)
-                        else
-                            -- local cre = require("document/credocument"):engineInit()
-                            local cre = require("libs/libkoreader-cre")
-                            local suggested_hyphenation = cre.getHyphenationForWord(word_page)
-                            if self.all_words[word_page] and suggested_hyphenation:find("-") then
-                                word_page = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len())
-                                words = self.document:findText(word_page, 1, false, true, -1, false, 1) -- Page not used, set -1
+                    local words = nil
+                    local hyphenated = false
+                    if i == 1 and self.all_words[word_page] then-- If first word is hyphenated
+                        local cre = require("libs/libkoreader-cre")
+                        local suggested_hyphenation = cre.getHyphenationForWord(word_page)
+                        if suggested_hyphenation:find("-") then
+                            hyphenated = true
+                            local suggested = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len())
+                            words = self.document:findText(suggested, 1, false, true, -1, false, 1) -- Page not used, set -1
+                            if not words then
+                                suggested  = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
+                                suggested_hyphenation:len()):sub(suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
+                                suggested_hyphenation:len()):find("-")+1,suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):len())
+                                words = self.document:findText(suggested, 1, false, true, -1, false, 1) -- Page not used, set -1
                                 if not words then
-                                    word_page = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):gsub("-","")
-                                    words = self.document:findText(word_page, 1, false, true, -1, false, 1) -- Page not used, set -1
+                                    suggested  = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
+                                    suggested_hyphenation:len()):sub(suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
+                                    suggested_hyphenation:len()):find("-")+1,suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):len()):sub(
+                                        suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
+                                        suggested_hyphenation:len()):sub(suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
+                                        suggested_hyphenation:len()):find("-")+1,suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):len()):find("-") + 1,
+                                        suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
+                                        suggested_hyphenation:len()):sub(suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
+                                        suggested_hyphenation:len()):find("-")+1,suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):len()):len())
+                                    words = self.document:findText(suggested, 1, false, true, -1, false, 1) -- Page not used, set -1
+                                    if not words then
+                                        suggested  = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):gsub("-","")
+                                        words = self.document:findText(suggested, 1, false, true, -1, false, 1) -- Page not used, set -1
+                                    end
                                 end
-                            elseif self.all_words[word_page] then
-                                -- words = self.document:findText("[ ^]+" .. word_page .. "[ .,!?^]+", 1, false, true, -1, true, 5)
-                                words = self.document:findText(word_page, 1, false, true, -1, false, 40)
                             end
+                        else
+                            words = self.document:findText(word_page, 1, false, true, -1, false, 1) -- Page not used, set -1
                         end
-                        if words then
-                            for j = 1, #words do
-                                local wordi = words[j]
-                                -- First result of the first word of the page in case is hyphenated
-                                -- In this case we want always
-                                if i == 1 and j == 1 then
-                                    wordi.text = nil
-                                else
-                                    wordi.text = word_page
-                                end
-
-                                local word = self.document:getTextFromXPointers(wordi.start, wordi["end"])
-                                -- Not using regular expressions
-                                -- print(word)
-                                -- print(wordi.start)
-                                -- if word:sub(word:len()) == " " then
-                                --     local pos = tonumber(wordi["end"]:sub(wordi["end"]:find("%.") + 1, wordi["end"]:len()))
-                                --     pos = pos - 1
-                                --     wordi["end"] = wordi["end"]:sub(1, wordi["end"]:find("%.") - 1) .. "." .. pos
-                                --     word = self.document:getTextFromXPointers(wordi.start, wordi["end"])
-                                -- end
-                                -- if word:sub(word:len()) == "." or
-                                --     word:sub(word:len()) == "," or
-                                --     word:sub(word:len()) == "!" or
-                                --     word:sub(word:len()) == "?" then
-                                --     local pos = tonumber(wordi["end"]:sub(wordi["end"]:find("%.") + 1, wordi["end"]:len()))
-                                --     pos = pos - 1
-                                --     wordi["end"] = wordi["end"]:sub(1, wordi["end"]:find("%.") - 1) .. "." .. pos
-                                -- end
-                                local page = self.document:getPageFromXPointer(wordi.start)
-                                if not self.words[page] then
-                                    self.words[page] = {}
-                                end
-                                table.insert(self.words[page], wordi)
-                                local page2 = self.document:getPageFromXPointer(wordi["end"])
-                                if not self.words[page2] then
-                                    self.words[page2] = {}
-                                end
-                                table.insert(self.words[page2], wordi)
+                    elseif self.all_words[word_page] then
+                        words = self.document:findText(word_page, 1, false, true, -1, false, 30)
+                    end
+                    if words then
+                        for j = 1, #words do
+                            local wordi = words[j]
+                            wordi.text = word_page
+                            -- First result of the first word of the page in case is hyphenated
+                            -- In this case we want always
+                            if hyphenated then
+                                wordi.hyphenated = true
                             end
+
+                            local word = self.document:getTextFromXPointers(wordi.start, wordi["end"])
+                            -- Not using regular expressions
+                            -- print(word)
+                            -- print(wordi.start)
+                            -- if word:sub(word:len()) == " " then
+                            --     local pos = tonumber(wordi["end"]:sub(wordi["end"]:find("%.") + 1, wordi["end"]:len()))
+                            --     pos = pos - 1
+                            --     wordi["end"] = wordi["end"]:sub(1, wordi["end"]:find("%.") - 1) .. "." .. pos
+                            --     word = self.document:getTextFromXPointers(wordi.start, wordi["end"])
+                            -- end
+                            -- if word:sub(word:len()) == "." or
+                            --     word:sub(word:len()) == "," or
+                            --     word:sub(word:len()) == "!" or
+                            --     word:sub(word:len()) == "?" then
+                            --     local pos = tonumber(wordi["end"]:sub(wordi["end"]:find("%.") + 1, wordi["end"]:len()))
+                            --     pos = pos - 1
+                            --     wordi["end"] = wordi["end"]:sub(1, wordi["end"]:find("%.") - 1) .. "." .. pos
+                            -- end
+                            local page = self.document:getPageFromXPointer(wordi.start)
+                            if not self.words[page] then
+                                self.words[page] = {}
+                            end
+                            table.insert(self.words[page], wordi)
+                            local page2 = self.document:getPageFromXPointer(wordi["end"])
+                            if not self.words[page2] then
+                                self.words[page2] = {}
+                            end
+                            table.insert(self.words[page2], wordi)
                         end
                     end
                 end
@@ -1154,7 +1188,9 @@ function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
             if end_pos >= cur_view_top then
                 local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true) -- get_segments=true
                 if boxes then
-                    if item.text == nil then
+                    local word = self.document:getWordFromPosition(boxes[1], true)
+                    if (item.hyphenated and word.word:upper() == item.text:upper()) or word.word:upper() == item.text:upper() then
+                        boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
                         if boxes then
                             for _, box in ipairs(boxes) do
                                 if box.h ~= 0 then
@@ -1177,10 +1213,7 @@ function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
                                 end
                             end
                         end
-                    else
-                        local word = self.document:getWordFromPosition(boxes[1], true)
-                        if word.word:upper() == item.text:upper() then
-                            boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
+                        if item.hyphenated then
                             if boxes then
                                 for _, box in ipairs(boxes) do
                                     if box.h ~= 0 then
@@ -1245,80 +1278,83 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
             if end_pos >= cur_view_top then
                 local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true) -- get_segments=true
                 if boxes then
-                    -- We don't need to show the translation for this case:
-                    -- (word has been hyphenated and it is the first word in the page)
-                    if item.text == nil then
+                    local word = self.document:getWordFromPosition(boxes[1], true)
+                    if (item.hyphenated and word.word:upper() == item.text:upper()) or word.word:upper() == item.text:upper() then
+                        boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
                         if boxes then
                             for _, box in ipairs(boxes) do
                                 if box.h ~= 0 then
-                                    self.ui.view:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
+                                    if self.settings:isTrue("show_definitions") then
+                                        local dictionaries = {}
+                                        table.insert(dictionaries, "Babylon English-Spanish")
+
+                                        local translation = ""
+                                        if not self.translations[word.word] then
+                                            local results = self.ui.dictionary:startSdcv(word.word, dictionaries, true)
+
+                                            if results and results[1] then
+                                                translation = results[1].definition:gsub("%b<>",""):gsub("%\n","")
+                                                if translation:find(";") then
+                                                    translation = translation:sub(1, translation:find(";") - 1)
+                                                end
+                                                self.translations[word.word] = translation
+                                            else
+                                                self.translations[word.word] = ""
+                                            end
+                                        else
+                                            translation = self.translations[word.word]
+                                        end
+                                        local translation_font_size = self.ui.document.configurable.font_size * 0.60
+                                        local test = FrameContainer:new{
+                                            left_container:new{
+                                                dimen = Geom:new(),
+                                                TextWidget:new{
+                                                    text =  translation,
+                                                    -- face = Font:getFace(self.ui.document:getFontFace():gsub(" ",""), self.ui.document:getFontSize() * 0.75),
+                                                    -- face = Font:getFace("myfont4"),
+                                                    face = Font:getFace(self.ui.document:getFontFace():gsub(" ","") .. "-Regular", translation_font_size, 0, true), -- Same font reduced 40%
+                                                    -- fgcolor = Blitbuffer.COLOR_GRAY,
+                                                },
+                                            },
+                                            -- background = Blitbuffer.COLOR_WHITE,
+                                            bordersize = 0,
+                                            padding = 0,
+                                            padding_bottom = self.bottom_padding,
+                                        }
+                                        if box.x < Screen:getWidth()/4 then
+                                            test:paintTo(bb, box.x , box.y + translation_font_size/2)
+                                        elseif box.x > Screen:getWidth() - Screen:getWidth()/4 then
+                                            test:paintTo(bb, box.x + box.w - test[1][1]:getSize().w , box.y + translation_font_size/2)
+                                        else
+                                            test:paintTo(bb, box.x + box.w/2 - test[1][1]:getSize().w/2 , box.y + translation_font_size/2)
+                                        end
+                                    end
+
+                                    local Device = require("device")
+                                    local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+                                    local font_size_px = (display_dpi * self.ui.document.configurable.font_size) / 72
+
+
+                                    local line_spacing_pct = self.ui.font.configurable.line_spacing * (1/100)
+                                    VSPACE = math.ceil(font_size_px * 0.25 * line_spacing_pct)
+                                    local xrect = box:copy()
+                                    xrect.y = xrect.y - VSPACE
+                                    self.ui.view:drawHighlightRect(bb, x, y, xrect, "underscore", nil, false)
                                 end
                             end
                         end
-                    else
-                        local word = self.document:getWordFromPosition(boxes[1], true)
-                        if word.word:upper() == item.text:upper() then
-                            boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
-                            if boxes then
-                                for _, box in ipairs(boxes) do
-                                    if box.h ~= 0 then
-                                        if self.settings:isTrue("show_definitions") then
-                                            local dictionaries = {}
-                                            table.insert(dictionaries, "Babylon English-Spanish")
-
-                                            local translation = ""
-                                            if not self.translations[word.word] then
-                                                local results = self.ui.dictionary:startSdcv(word.word, dictionaries, true)
-
-                                                if results and results[1] then
-                                                    translation = results[1].definition:gsub("%b<>",""):gsub("%\n","")
-                                                    if translation:find(";") then
-                                                        translation = translation:sub(1, translation:find(";") - 1)
-                                                    end
-                                                    self.translations[word.word] = translation
-                                                else
-                                                    self.translations[word.word] = ""
-                                                end
-                                            else
-                                                translation = self.translations[word.word]
-                                            end
-                                            local translation_font_size = self.ui.document.configurable.font_size * 0.60
-                                            local test = FrameContainer:new{
-                                                left_container:new{
-                                                    dimen = Geom:new(),
-                                                    TextWidget:new{
-                                                        text =  translation,
-                                                        -- face = Font:getFace(self.ui.document:getFontFace():gsub(" ",""), self.ui.document:getFontSize() * 0.75),
-                                                        -- face = Font:getFace("myfont4"),
-                                                        face = Font:getFace(self.ui.document:getFontFace():gsub(" ","") .. "-Regular", translation_font_size, 0, true), -- Same font reduced 40%
-                                                        -- fgcolor = Blitbuffer.COLOR_GRAY,
-                                                    },
-                                                },
-                                                -- background = Blitbuffer.COLOR_WHITE,
-                                                bordersize = 0,
-                                                padding = 0,
-                                                padding_bottom = self.bottom_padding,
-                                            }
-                                            if box.x < Screen:getWidth()/4 then
-                                                test:paintTo(bb, box.x , box.y + translation_font_size/2)
-                                            elseif box.x > Screen:getWidth() - Screen:getWidth()/4 then
-                                                test:paintTo(bb, box.x + box.w - test[1][1]:getSize().w , box.y + translation_font_size/2)
-                                            else
-                                                test:paintTo(bb, box.x + box.w/2 - test[1][1]:getSize().w/2 , box.y + translation_font_size/2)
-                                            end
-                                        end
-
-                                        local Device = require("device")
-                                        local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
-                                        local font_size_px = (display_dpi * self.ui.document.configurable.font_size) / 72
-
-
-                                        local line_spacing_pct = self.ui.font.configurable.line_spacing * (1/100)
-                                        VSPACE = math.ceil(font_size_px * 0.25 * line_spacing_pct)
-                                        local xrect = box:copy()
-                                        xrect.y = xrect.y - VSPACE
-                                        self.ui.view:drawHighlightRect(bb, x, y, xrect, "underscore", nil, false)
-                                    end
+                    elseif item.hyphenated then
+                        if boxes then
+                            for _, box in ipairs(boxes) do
+                                if box.h ~= 0 then
+                                    local Device = require("device")
+                                    local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+                                    local font_size_px = (display_dpi * self.ui.document.configurable.font_size) / 72
+                                    local line_spacing_pct = self.ui.font.configurable.line_spacing * (1/100)
+                                    VSPACE = math.ceil(font_size_px * 0.25 * line_spacing_pct)
+                                    local xrect = box:copy()
+                                    xrect.y = xrect.y - VSPACE
+                                    self.ui.view:drawHighlightRect(bb, x, y, xrect, "underscore", nil, false)
                                 end
                             end
                         end
