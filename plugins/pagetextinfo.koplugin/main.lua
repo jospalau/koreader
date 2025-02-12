@@ -541,11 +541,70 @@ end
 --         end,
 --     }
 -- end
+local function getIfosInDir(path)
+    -- Get all the .ifo under directory path.
+    -- Don't walk into "res/" subdirectories, as per Stardict specs, they
+    -- may contain possibly many resource files (image, audio files...)
+    -- that could slow down our walk here.
+    local ifos = {}
+    local ok, iter, dir_obj = pcall(lfs.dir, path)
+    if ok then
+        for name in iter, dir_obj do
+            if name ~= "." and name ~= ".." and name ~= "res" then
+                local fullpath = path.."/"..name
+                local attributes = lfs.attributes(fullpath)
+                if attributes ~= nil then
+                    if attributes.mode == "directory" then
+                        local dirifos = getIfosInDir(fullpath) -- recurse
+                        for _, ifo in pairs(dirifos) do
+                            table.insert(ifos, ifo)
+                        end
+                    elseif fullpath:match("%.ifo$") then
+                        table.insert(ifos, fullpath)
+                    end
+                end
+            end
+        end
+    end
+    return ifos
+end
 
 function PageTextInfo:addToMainMenu(menu_items)
     -- If we don't want this being called for the filemanager, better to call self.ui.menu:registerToMainMenu(self) in the onReaderReady() event handler function
     -- Although we can set in the init() function and skip it like this:
     -- if require("apps/filemanager/filemanager").instance then return end
+    self.data_dir = G_defaults:readSetting("STARDICT_DATA_DIR") or
+        os.getenv("STARDICT_DATA_DIR") or
+        DataStorage:getDataDir() .. "/data/dict"
+    local ifo_files = getIfosInDir(self.data_dir)
+    local table_dictionaries = {}
+    for _, ifo_file in pairs(ifo_files) do
+        local f = io.open(ifo_file, "r")
+        if f then
+            local content = f:read("*all")
+            f:close()
+            local dictname = content:match("\nbookname=(.-)\r?\n")
+            table.insert(table_dictionaries, {
+                text = dictname,
+                checked_func = function() return self.settings:readSetting("dictionary") == dictname end,
+                callback = function()
+                    self.settings:saveSetting("dictionary", dictname)
+                    self.settings:flush()
+                    if self.settings:isTrue("highlight_all_words_vocabulary") and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
+                        self.translations = {}
+                        self:updateWordsVocabulary()
+                        UIManager:setDirty("all", "full")
+                    end
+                    if (self.settings:isTrue("highlight_all_notes") or self.settings:isTrue("highlight_all_words_vocabulary")) and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
+                        self.translations = {}
+                        self:updateNotes()
+                        UIManager:setDirty("all", "full")
+                    end
+                    return true
+                end,
+            })
+        end
+    end
     menu_items.pagetextinfo = {
         text = _("Page text info"),
         sub_item_table ={
@@ -606,7 +665,11 @@ function PageTextInfo:addToMainMenu(menu_items)
                             self.settings:flush()
                             return true
                         end,
-                    }
+                    },
+                    {
+                        text = _("Dictionaries"),
+                        sub_item_table = table_dictionaries,
+                    },
                 },
             }
         },
@@ -1286,7 +1349,11 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                                 if box.h ~= 0 then
                                     if self.settings:isTrue("show_definitions") then
                                         local dictionaries = {}
-                                        table.insert(dictionaries, "Babylon English-Spanish")
+                                        if self.settings:readSetting("dictionary") then
+                                            table.insert(dictionaries, self.settings:readSetting("dictionary"))
+                                        else
+                                            table.insert(dictionaries, "Babylon English-Spanish")
+                                        end
 
                                         local translation = ""
                                         if not self.translations[word.word] then
