@@ -247,7 +247,8 @@ local settingsList = {
     embedded_css = {category="string", rolling=true},
     embedded_fonts = {category="string", rolling=true},
     smooth_scaling = {category="string", rolling=true},
-    nightmode_images = {category="string", rolling=true},
+    nightmode_images = {category="string", rolling=true, separator=true},
+    ----
 
     -- parsed from KoptOptions
     kopt_trim_page = {category="string", paging=true},
@@ -1223,6 +1224,7 @@ function Dispatcher._showAsMenu(settings, exec_props)
             table.insert(buttons, {{
                 text = v.text,
                 enabled = Dispatcher:isActionEnabled(settingsList[v.key]),
+                -- menu_style = true,
                 align = "left",
                 font_face = font_face,
                 font_size = 16,
