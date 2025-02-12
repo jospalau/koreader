@@ -745,12 +745,12 @@ function PageTextInfo:updateNotes()
                             local suggested = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len())
                             words = self.document:findText(suggested, 1, false, true, -1, false, 1) -- Page not used, set -1
                             if not words then
-                                suggested  = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
+                                suggested = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
                                 suggested_hyphenation:len()):sub(suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
                                 suggested_hyphenation:len()):find("-")+1,suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):len())
                                 words = self.document:findText(suggested, 1, false, true, -1, false, 1) -- Page not used, set -1
                                 if not words then
-                                    suggested  = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
+                                    suggested = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
                                     suggested_hyphenation:len()):sub(suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
                                     suggested_hyphenation:len()):find("-")+1,suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):len()):sub(
                                         suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
@@ -761,7 +761,7 @@ function PageTextInfo:updateNotes()
                                         suggested_hyphenation:len()):find("-")+1,suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):len()):len())
                                     words = self.document:findText(suggested, 1, false, true, -1, false, 1) -- Page not used, set -1
                                     if not words then
-                                        suggested  = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):gsub("-","")
+                                        suggested = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):gsub("-","")
                                         words = self.document:findText(suggested, 1, false, true, -1, false, 1) -- Page not used, set -1
                                     end
                                 end
@@ -854,12 +854,12 @@ function PageTextInfo:updateWordsVocabulary()
                             local suggested = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len())
                             words = self.document:findText(suggested, 1, false, true, -1, false, 1) -- Page not used, set -1
                             if not words then
-                                suggested  = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
+                                suggested = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
                                 suggested_hyphenation:len()):sub(suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
                                 suggested_hyphenation:len()):find("-")+1,suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):len())
                                 words = self.document:findText(suggested, 1, false, true, -1, false, 1) -- Page not used, set -1
                                 if not words then
-                                    suggested  = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
+                                    suggested = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
                                     suggested_hyphenation:len()):sub(suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
                                     suggested_hyphenation:len()):find("-")+1,suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):len()):sub(
                                         suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
@@ -870,7 +870,7 @@ function PageTextInfo:updateWordsVocabulary()
                                         suggested_hyphenation:len()):find("-")+1,suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):len()):len())
                                     words = self.document:findText(suggested, 1, false, true, -1, false, 1) -- Page not used, set -1
                                     if not words then
-                                        suggested  = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):gsub("-","")
+                                        suggested = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):gsub("-","")
                                         words = self.document:findText(suggested, 1, false, true, -1, false, 1) -- Page not used, set -1
                                     end
                                 end
@@ -1251,8 +1251,8 @@ function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
             if end_pos >= cur_view_top then
                 local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true) -- get_segments=true
                 if boxes then
-                    local word = self.document:getWordFromPosition(boxes[1], true)
-                    if (item.hyphenated and word.word:upper() == item.text:upper()) or word.word:upper() == item.text:upper() then
+                    local word = self.ui.document._document:getTextFromPositions(boxes[1].x, boxes[1].y, boxes[1].x, boxes[1].y, false, false)
+                    if (item.hyphenated and word.text:upper() == item.text:upper()) or word.text:upper() == item.text:upper() then
                         boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
                         if boxes then
                             for _, box in ipairs(boxes) do
@@ -1333,7 +1333,7 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
 --
     if self.words[self.ui.view.state.page] then
         for _, item in ipairs(self.words[self.ui.view.state.page]) do
-            local more_than_one_word = false
+            -- local more_than_one_word = false
             -- document:getScreenBoxesFromPositions() is expensive, so we
             -- first check if this item is on current page
             local start_pos = self.document:getPosFromXPointer(item.start)
@@ -1353,22 +1353,27 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                 -- For some of these cases there are more than one box, we pick up the second one and it works
                 -- But for some other cases still does not work
                 -- The box retrieved is valid always
+                -- Finally we use getTextFromPositions()
+                -- If a case is missed, we can pass boxes[1].x + 1 as first argument
                 local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true)
                 if boxes then
                     local word
-                    if #boxes >1 then
-                        word = self.document:getWordFromPosition(boxes[2], true)
-                    else
-                        word = self.document:getWordFromPosition(boxes[1], true)
-                    end
-                    if word.word:find(" ") then
-                        -- print("paso   " .. item.text ..  "-" .. word.word)
-                        local word = word.word:sub(word.word:find(" ") + 1, word.word:len())
-                        if item.text:upper() == word:upper() then
-                            more_than_one_word = true
-                        end
-                    end
-                    if (item.hyphenated and word.word:upper() == item.text:upper()) or word.word:upper() == item.text:upper() then
+                    -- local dump = require("dump")
+                    -- print(dump(boxes))
+                    local word = self.ui.document._document:getTextFromPositions(boxes[1].x, boxes[1].y, boxes[1].x, boxes[1].y, false, false)
+                    -- if #boxes >1 then
+                    --     word = self.document:getWordFromPosition(boxes[2], true)
+                    -- else
+                    --     word = self.document:getWordFromPosition(boxes[1], true)
+                    -- end
+                    -- if word.word:find(" ") then
+                    --     -- print("paso   " .. item.text ..  "-" .. word.word)
+                    --     local word = word.word:sub(word.word:find(" ") + 1, word.word:len())
+                    --     if item.text:upper() == word:upper() then
+                    --         more_than_one_word = true
+                    --     end
+                    -- end
+                    if (item.hyphenated and word.text:upper() == item.text:upper()) or word.text:upper() == item.text:upper() then
                         boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
                         if boxes then
                             for _, box in ipairs(boxes) do
@@ -1382,20 +1387,20 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                                         end
 
                                         local translation = ""
-                                        if not self.translations[word.word] then
-                                            local results = self.ui.dictionary:startSdcv(word.word, dictionaries, true)
+                                        if not self.translations[word.text] then
+                                            local results = self.ui.dictionary:startSdcv(word.text, dictionaries, true)
 
                                             if results and results[1] then
                                                 translation = results[1].definition:gsub("%b<>",""):gsub("%\n","")
                                                 if translation:find(";") then
                                                     translation = translation:sub(1, translation:find(";") - 1)
                                                 end
-                                                self.translations[word.word] = translation
+                                                self.translations[word.text] = translation
                                             else
-                                                self.translations[word.word] = ""
+                                                self.translations[word.text] = ""
                                             end
                                         else
-                                            translation = self.translations[word.word]
+                                            translation = self.translations[word.text]
                                         end
                                         local translation_font_size = self.ui.document.configurable.font_size * 0.60
                                         local test = FrameContainer:new{
@@ -1436,7 +1441,7 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                                 end
                             end
                         end
-                    elseif item.hyphenated or more_than_one_word then
+                    elseif item.hyphenated then -- or more_than_one_word then
                         if boxes then
                             for _, box in ipairs(boxes) do
                                 if box.h ~= 0 then
