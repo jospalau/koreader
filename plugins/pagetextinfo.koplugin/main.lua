@@ -1351,8 +1351,8 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                 -- (the boxes retrieved are correct)
 
                 -- For some of these cases there are more than one box, we pick up the second one and it works
-                -- But for some other cases, the node start and end coming from the search are not valid,
-                -- so the box retrieved is not right
+                -- But for some other cases still does not work
+                -- The box retrieved is valid always
                 local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true)
                 if boxes then
                     local word
