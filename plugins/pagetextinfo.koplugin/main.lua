@@ -171,15 +171,11 @@ function PageTextInfo:onDoubleTap(_, ges)
             local words = util.splitToWords2(res.text)
             if #words == 1 then
                 local boxes = self.ui.document:getScreenBoxesFromPositions(res.pos0, res.pos1, true)
-                local word_boxes
                 if boxes ~= nil then
-                    word_boxes = {}
-                    for i, box in ipairs(boxes) do
-                        word_boxes[i] = self.ui.view:pageToScreenTransform(res.pos0.page, box)
-                    end
+                    self.ui.dictionary:onLookupWord(util.cleanupSelectedText(res.text), false, boxes)
+                    -- self:handleEvent(Event:new("LookupWord", util.cleanupSelectedText(res.text)))
                 end
-                self.ui.dictionary:onLookupWord(util.cleanupSelectedText(res.text), false, boxes)
-                -- self:handleEvent(Event:new("LookupWord", util.cleanupSelectedText(res.text)))
+
             end
         end
     end
