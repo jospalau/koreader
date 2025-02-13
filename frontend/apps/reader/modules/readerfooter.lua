@@ -2768,7 +2768,7 @@ function ReaderFooter:onExitFlippingMode()
 end
 
 function ReaderFooter:TapFooter(ges)
-    if self.ui.gestures.ignore_hold_corners and self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary") then
+    if self.ui.gestures.ignore_hold_corners and self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
         return self:DoubleTapFooter(ges)
     end
     if self.view.flipping_visible and ges then
@@ -2808,13 +2808,13 @@ function ReaderFooter:TapFooter(ges)
 
 
     if self.ui.gestures.ignore_hold_corners then
-        if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary") then
+        if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
             self.ui.view.topbar.ignore_corners = "\u{F0F6} 🔒"
         else
             self.ui.view.topbar.ignore_corners = "🔒"
         end
     else
-        if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary") then
+        if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
             self.ui.view.topbar.ignore_corners = "\u{F0F6}"
         else
             self.ui.view.topbar.ignore_corners = ""
@@ -2854,13 +2854,13 @@ function ReaderFooter:DoubleTapFooter(ges)
         self.ui.pagetextinfo:toggleHighlightAllWordsVocabulary(self.ui.gestures.ignore_hold_corners)
     end
     if self.ui.gestures.ignore_hold_corners then
-        if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary") then
+        if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
             self.ui.view.topbar.ignore_corners = "\u{F0F6} 🔒"
         else
             self.ui.view.topbar.ignore_corners = "🔒"
         end
     else
-        if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary") then
+        if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
             self.ui.view.topbar.ignore_corners = "\u{F0F6}"
         else
             self.ui.view.topbar.ignore_corners = ""

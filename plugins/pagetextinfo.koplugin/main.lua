@@ -14,11 +14,13 @@ local LineWidget = require("ui/widget/linewidget")
 local Blitbuffer = require("ffi/blitbuffer")
 local left_container = require("ui/widget/container/leftcontainer")
 local FrameContainer = require("ui/widget/container/framecontainer")
+local TextViewer = require("ui/widget/textviewer")
 local Geom = require("ui/geometry")
 local Size = require("ui/size")
 local Screen = require("device").screen
 local LuaSettings = require("luasettings")
 local DataStorage = require("datastorage")
+local Event = require("ui/event")
 local ffiUtil = require("ffi/util")
 local Device = require("device")
 local util = require("util")
@@ -134,7 +136,7 @@ function PageTextInfo:initGesListener()
     })
 end
 function PageTextInfo:toggleHighlightAllWordsVocabulary(toggle)
-    self.settings:saveSetting("highlight_all_words_vocabulary", toggle)
+    self.settings:saveSetting("highlight_all_words_vocabulary_builder_and_notes", toggle)
     self.settings:flush()
     if toggle then
         self:updateWordsVocabulary()
@@ -198,28 +200,95 @@ end
 -- to show possible notes associate to a word
 function PageTextInfo:showNote(text_note)
     if text_note then
-        local text = ""
+        -- local text = ""
+        -- local annotations = self.ui.annotation.annotations
+        -- for i, item in ipairs(annotations) do
+        --     if item.note and item.text:upper() == text_note:upper() then
+        --         text = text .. '<p style="display:block;font-size:1.25em;">' .. item.note .. "</p>"
+        --     end
+        -- end
+        -- local FootnoteWidget = require("ui/widget/footnotewidget")
+        -- local popup
+        -- popup = FootnoteWidget:new{
+        --     html = text,
+        --     doc_font_name = self.ui.font.font_face,
+        --     doc_font_size = Screen:scaleBySize(self.document.configurable.font_size),
+        --     doc_margins = self.document:getPageMargins(),
+        --     follow_callback = function() -- follow the link on swipe west
+        --         UIManager:close(popup)
+        --     end,
+        --     dialog = self.dialog,
+        -- }
+        -- UIManager:show(popup)
+        -- return true
+
         local annotations = self.ui.annotation.annotations
         for i, item in ipairs(annotations) do
-            if item.note and item.text == text_note then
-                text = text .. '<p style="display:block;font-size:1.25em;">' .. item.note .. "</p>"
+            if item.note and item.text:upper() == text_note:upper() then
+                local bookmark_note = item.note
+                local index = i
+                local textviewer
+                textviewer = TextViewer:new{
+                    title = _("Note"),
+                    show_menu = false,
+                    text = bookmark_note,
+                    width = math.floor(math.min(self.ui.highlight.screen_w, self.ui.highlight.screen_h) * 0.8),
+                    height = math.floor(math.max(self.ui.highlight.screen_w, self.ui.highlight.screen_h) * 0.4),
+                    anchor = function()
+                        return self.ui.highlight:_getDialogAnchor(textviewer, index)
+                    end,
+                    buttons_table = {
+                        {
+                            {
+                                text = _("Delete note"),
+                                callback = function()
+                                    UIManager:close(textviewer)
+                                    local annotation = self.ui.annotation.annotations[index]
+                                    annotation.note = nil
+                                    self.ui:handleEvent(Event:new("AnnotationsModified",
+                                            { annotation, nb_highlights_added = 1, nb_notes_added = -1 }))
+                                            self.ui.highlight:writePdfAnnotation("content", annotation, nil)
+                                    if self.view.highlight.note_mark then -- refresh note marker
+                                        UIManager:setDirty(self.dialog, "ui")
+                                    end
+                                    if self.settings:isTrue("highlight_all_notes_and_allow_to_edit_them_on_tap") or self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
+                                        self:updateNotes()
+                                        UIManager:setDirty("all", "full")
+                                    end
+                                end,
+                            },
+                            {
+                                text = _("Edit note"),
+                                callback = function()
+                                    UIManager:close(textviewer)
+                                    self.ui.highlight:editNote(index)
+                                end,
+                            },
+                        },
+                        {
+                            {
+                                text = _("Delete highlight"),
+                                callback = function()
+                                    UIManager:close(textviewer)
+                                    self.ui.highlight:deleteHighlight(index)
+                                end,
+                            },
+                            {
+                                text = _("Highlight menu"),
+                                callback = function()
+                                    UIManager:close(textviewer)
+                                    self.ui.highlight:showHighlightDialog(index)
+                                end,
+                            },
+                        },
+                    },
+                }
+                UIManager:show(textviewer)
+                return true
             end
         end
-        local FootnoteWidget = require("ui/widget/footnotewidget")
-        local popup
-        popup = FootnoteWidget:new{
-            html = text,
-            doc_font_name = self.ui.font.font_face,
-            doc_font_size = Screen:scaleBySize(self.document.configurable.font_size),
-            doc_margins = self.document:getPageMargins(),
-            follow_callback = function() -- follow the link on swipe west
-                UIManager:close(popup)
-            end,
-            dialog = self.dialog,
-        }
-        UIManager:show(popup)
-        return true
     end
+
     local text = nil
     local annotations = self.ui.annotation.annotations
     for i, item in ipairs(annotations) do
@@ -287,7 +356,7 @@ function PageTextInfo:onTap(_, ges)
     if util.getFileNameSuffix(self.ui.document.file) ~= "epub"  then return false end
     local res = self.ui.document._document:getTextFromPositions(ges.pos.x, ges.pos.y,
                 ges.pos.x, ges.pos.y, false, false)
-    if self.settings:isTrue("highlight_all_notes") then
+    if self.settings:isTrue("highlight_all_notes_and_allow_to_edit_them_on_tap") then
         if ges and ges.pos then
             local pos = self.view:screenToPageTransform(ges.pos)
             if self.pages_notes[self.view.state.page] then
@@ -515,10 +584,10 @@ function PageTextInfo:onPageUpdate(pageno)
     if self.pageno == nil then self.pageno = pageno return end
     self.pageno = pageno
 
-    if self.settings:isTrue("highlight_all_words_vocabulary") and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
+    if self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
         self:updateWordsVocabulary()
     end
-    if (self.settings:isTrue("highlight_all_notes") or self.settings:isTrue("highlight_all_words_vocabulary")) and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
+    if (self.settings:isTrue("highlight_all_notes_and_allow_to_edit_them_on_tap") or self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes")) and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
         self:updateNotes()
     end
 end
@@ -586,12 +655,12 @@ function PageTextInfo:addToMainMenu(menu_items)
                 callback = function()
                     self.settings:saveSetting("dictionary", dictname)
                     self.settings:flush()
-                    if self.settings:isTrue("highlight_all_words_vocabulary") and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
+                    if self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
                         self.translations = {}
                         self:updateWordsVocabulary()
                         UIManager:setDirty("all", "full")
                     end
-                    if (self.settings:isTrue("highlight_all_notes") or self.settings:isTrue("highlight_all_words_vocabulary")) and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
+                    if (self.settings:isTrue("highlight_all_notes_and_allow_to_edit_them_on_tap") or self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes")) and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
                         self.translations = {}
                         self:updateNotes()
                         UIManager:setDirty("all", "full")
@@ -618,11 +687,11 @@ function PageTextInfo:addToMainMenu(menu_items)
                 text = _("Highlight"),
                 sub_item_table ={
                     {
-                        text = _("Highlight all notes"),
-                        checked_func = function() return self.settings:isTrue("highlight_all_notes") end,
+                        text = _("Highlight all notes and allow to edit them on tap"),
+                        checked_func = function() return self.settings:isTrue("highlight_all_notes_and_allow_to_edit_them_on_tap") end,
                         callback = function()
-                            local highlight_all_notes = self.settings:isTrue("highlight_all_notes")
-                            self.settings:saveSetting("highlight_all_notes", not highlight_all_notes)
+                            local highlight_all_notes_and_allow_to_edit_them_on_tap = self.settings:isTrue("highlight_all_notes_and_allow_to_edit_them_on_tap")
+                            self.settings:saveSetting("highlight_all_notes_and_allow_to_edit_them_on_tap", not highlight_all_notes_and_allow_to_edit_them_on_tap)
                             -- self.ui:reloadDocument(nil, true) -- seamless reload (no infomsg, no flash)
                             self:updateNotes()
                             UIManager:setDirty("all", "full")
@@ -631,14 +700,14 @@ function PageTextInfo:addToMainMenu(menu_items)
                         end,
                     },
                     {
-                        text = _("Highlight all words vocabulary"),
-                        checked_func = function() return self.settings:isTrue("highlight_all_words_vocabulary") end,
+                        text = _("Highlight all words vocabulary builder and notes"),
+                        checked_func = function() return self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") end,
                         -- enabled_func = function()
                         --     return false
                         -- end,
                         callback = function()
-                            local highlight_all_words_vocabulary = self.settings:isTrue("highlight_all_words_vocabulary")
-                            self.settings:saveSetting("highlight_all_words_vocabulary", not highlight_all_words_vocabulary)
+                            local highlight_all_words_vocabulary_builder_and_notes = self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes")
+                            self.settings:saveSetting("highlight_all_words_vocabulary_builder_and_notes", not highlight_all_words_vocabulary_builder_and_notes)
                             -- self.ui:reloadDocument(nil, true) -- seamless reload (no infomsg, no flash)
                             self:updateWordsVocabulary()
                             UIManager:setDirty("all", "full")
@@ -706,8 +775,8 @@ end
 function PageTextInfo:onCloseDocument()
     self.ui.gestures:onIgnoreHoldCorners(false)
     self.ui.disable_double_tap = false
-    self.settings:saveSetting("highlight_all_notes", false)
-    self.settings:saveSetting("highlight_all_words_vocabulary", false)
+    self.settings:saveSetting("highlight_all_notes_and_allow_to_edit_them_on_tap", false)
+    self.settings:saveSetting("highlight_all_words_vocabulary_builder_and_notes", false)
     self.settings:flush()
 end
 
@@ -969,11 +1038,11 @@ end
 function PageTextInfo:paintTo(bb, x, y)
 
     if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
-    if self.settings:isTrue("highlight_all_notes") or self.settings:isTrue("highlight_all_words_vocabulary") then
+    if self.settings:isTrue("highlight_all_notes_and_allow_to_edit_them_on_tap") or self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
         self:drawXPointerSavedHighlightNotes(bb, x, y)
     end
 
-    if self.words and self.settings:isTrue("highlight_all_words_vocabulary") then
+    if self.words and self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
         self:drawXPointerVocabulary(bb, x, y)
     end
 

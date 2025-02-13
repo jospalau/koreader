@@ -1294,13 +1294,13 @@ function TopBar:toggleBar(light_on)
         -- self.progress_chapter_bar.height = self.title_text:getSize().h
 
         if self.ui.gestures.ignore_hold_corners then
-            if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary") then
+            if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
                 self.ignore_corners = "\u{F0F6} 🔒"
             else
                 self.ignore_corners = "🔒"
             end
         else
-            if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary") then
+            if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
                 self.ignore_corners = "\u{F0F6}"
             else
                 self.ignore_corners = ""
