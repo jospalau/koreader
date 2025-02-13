@@ -131,7 +131,7 @@ function IconButton:onTapIconButton()
 
         UIManager:forceRePaint()
         if Device.model == "Kobo_spaBW" or Device:isKindle() then
-            UIManager:yieldToEPDC(5000)
+            UIManager:yieldToEPDC(8000)
         else
             UIManager:yieldToEPDC()
         end
