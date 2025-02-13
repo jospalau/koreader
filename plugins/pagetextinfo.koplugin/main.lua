@@ -174,14 +174,15 @@ function PageTextInfo:onDoubleTap(_, ges)
             if #words == 1 then
                 local boxes = self.ui.document:getScreenBoxesFromPositions(res.pos0, res.pos1, true)
                 if boxes ~= nil then
-                    self.ui.dictionary:onLookupWord(util.cleanupSelectedText(res.text), false, boxes)
+                    self.ui.dictionary:onLookupWord(util.cleanupSelectedText(res.text), false, boxes, nil, nil, function()
+                        UIManager:setDirty(nil, "full")
+                    end)
                     -- self:handleEvent(Event:new("LookupWord", util.cleanupSelectedText(res.text)))
                 end
 
             end
         end
     end
-    return true
 end
 
 local function inside_box(pos, box)
