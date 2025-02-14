@@ -1237,6 +1237,8 @@ function TopBar:toggleBar(light_on)
 
 
         self.progress_bar2.width = self.width - 2 * TopBar.MARGIN_SIDES
+        -- No scaled because margins are saved not scaled even though they are scaled
+        -- when set (see onSetPageMargins() in readertypeset.lua)
         self.space_after_alt_bar = 15
         if self.alt_bar then
             -- Begin alternative progress bar
@@ -1258,11 +1260,12 @@ function TopBar:toggleBar(light_on)
             -- factor 1 with altbar_line_thickness 3 and factor 3 with altbar_line_thickness 6
             -- Factor is not used, I finally hardcoded the value of altbar_ticks_height and altbar_line_thickness for the only two configurations I like
             -- Both parameteres initialized when creating progress_bar2 and onSwitchTopBar() changes
-            self.progress_bar2.tick_width = 2
+            self.progress_bar2.tick_width = 2 -- Not scaled, we want 2px size for ticks width
             -- End alternative progress bar
         else
             self.progress_bar2.altbar = false
-            self.progress_bar2.height = 20
+            -- self.progress_bar2.height = 20 -- Not scaled
+            self.progress_bar2:setHeight(10)
             -- self.progress_bar2:updateStyle(false, 10)
             -- self.progress_bar2.bgcolor = Blitbuffer.COLOR_DARK_GRAY
             -- self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
