@@ -1408,6 +1408,7 @@ function TopBar:onPosUpdate(new_pos)
     self:toggleBar()
 end
 
+
 function TopBar:paintTo(bb, x, y)
     if self.status_bar and self.status_bar == true then
         -- self[10][1][1]:setText(self.time_battery_text_text:reverse())
@@ -1416,13 +1417,35 @@ function TopBar:paintTo(bb, x, y)
         -- self[4]:paintTo(bb, x - Screen:getHeight() + TopBar.MARGIN_BOTTOM + Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
 
         self[22][1][1]:setText(self.ignore_corners)
+        local duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100
+        local wpm = 0
+        if self.ui.statistics._total_words > 0 then
+            wpm = math.floor(self.ui.statistics._total_words/duration_raw)
+        end
+        local wpm_frame = FrameContainer:new{
+            left_container:new{
+                dimen = Geom:new(),
+                TextWidget:new{
+                    text = wpm .. "wpm",
+                    face = Font:getFace("myfont"),
+                    fgcolor = Blitbuffer.COLOR_GRAY,
+                }
+            },
+            -- background = Blitbuffer.COLOR_WHITE,
+            bordersize = 0,
+            padding = 0,
+            padding_bottom = self.bottom_padding,
+        }
+
         if self.view.footer.settings.bar_top then
             -- self[4]:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() -  Screen:scaleBySize(6))
-            self[21]:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() -  Screen:scaleBySize(6))
+            self[21]:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() - Screen:scaleBySize(6))
             self[22]:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - 2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+            wpm_frame:paintTo(bb, x + Screen:getWidth() - wpm_frame[1][1]:getSize().w, Screen:getHeight() - Screen:scaleBySize(8))
         else
             self[21]:paintTo(bb, x + Screen:scaleBySize(4), y + Screen:scaleBySize(6))
             self[22]:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - 2, y + Screen:scaleBySize(6))
+            wpm_frame:paintTo(bb, x + Screen:getWidth() - wpm_frame[1][1]:getSize().w, y + Screen:scaleBySize(9))
         end
         return
     end
