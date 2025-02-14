@@ -176,18 +176,18 @@ function ProgressWidget:paintTo(bb, x, y)
         end
 
         if self.altbar then
-            -- Progress line
-            bb:paintRect(fill_x,
-                        y - self.altbar_line_thickness/2, -- position line
-                        math.ceil(fill_width * self.percentage),
-                        self.altbar_line_thickness,  --30, -- size line
-                        self.bordercolor)
             -- Fixed line
             -- We want the line to be a third in the middle of the progress thick line
             bb:paintRect(fill_x,
-                        y - self.altbar_line_thickness/2 + self.altbar_line_thickness/3,
+                        math.ceil(y - self.altbar_line_thickness/2 + self.altbar_line_thickness/3),
                         self.width,
-                        self.altbar_line_thickness/3,
+                        math.ceil(self.altbar_line_thickness/3),
+                        self.bordercolor)
+            -- Progress line
+            bb:paintRect(fill_x,
+                        math.ceil(y - self.altbar_line_thickness/2), -- position line
+                        math.ceil(fill_width * self.percentage),
+                        self.altbar_line_thickness,  --30, -- size line
                         self.bordercolor)
         else
             bb:paintRect(fill_x,
@@ -222,13 +222,13 @@ function ProgressWidget:paintTo(bb, x, y)
                 -- if position < self.percentage then
                 if tick <= self.ui.view.footer.pageno then
                     bb:paintRect(x + self.margin_h + self.bordersize + tick_x,
-                                y - self.altbar_ticks_height/2, -- position ticks
+                                math.ceil(y - self.altbar_ticks_height/2), -- position ticks
                                 self.tick_width,
                                 self.altbar_ticks_height,-- size ticks
                                 Blitbuffer.COLOR_WHITE) --self.bordercolor With Blitbuffer.COLOR_WHITE is other effect.
                 else
                     bb:paintRect(x + self.margin_h + self.bordersize + tick_x,
-                                y - self.altbar_ticks_height/2,
+                                math.ceil(y - self.altbar_ticks_height/2),
                                 self.tick_width,
                                 self.altbar_ticks_height,
                                 self.bordercolor)

@@ -1251,15 +1251,21 @@ function TopBar:toggleBar(light_on)
             self.progress_bar2.show_percentage = self.option == 2
             self.progress_bar2.ui = self.ui
             -- Multiple of 3 onwards because we want the line to be a third in the middle of the progress thick line
-            -- Value initialized to 3 when init, possible to toggle
             -- self.progress_bar2.altbar_line_thickness = 3
             -- self.progress_bar2.altbar_line_thickness = 6
+            -- self.progress_bar2.altbar_line_thickness/3 is the line height (thickness) calculated in the widget)
+            -- We need a tick height minimum of self.progress_bar2.altbar_line_thickness/3
+            -- Adding a little bit more, an even number, to have the same tick size up and down the line
+            -- self.progress_bar2.altbar_ticks_height = (self.progress_bar2.altbar_line_thickness/3) + 4 -- Line size, not progress line
+
+            -- Factor variable is not used. Ifinally hardcoded the value of altbar_ticks_height and altbar_line_thickness
+            -- for the only two configurations I like
+            -- Both parameteres are initialized when creating progress_bar2 and onSwitchTopBar() changes
+
             -- self.progress_bar2.factor = 3
             -- The factor plays well with any value which final product is even (3, 9, 15, 21). So even values. More size, higher ticks. I am using a value of 3 with altbar_line_thickness 3 and 6
             -- A factor of 1 also works and we can alternate it
             -- factor 1 with altbar_line_thickness 3 and factor 3 with altbar_line_thickness 6
-            -- Factor is not used, I finally hardcoded the value of altbar_ticks_height and altbar_line_thickness for the only two configurations I like
-            -- Both parameteres initialized when creating progress_bar2 and onSwitchTopBar() changes
             self.progress_bar2.tick_width = 2 -- Not scaled, we want 2px size for ticks width
             -- End alternative progress bar
         else
