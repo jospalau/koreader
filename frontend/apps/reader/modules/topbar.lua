@@ -504,7 +504,7 @@ function TopBar:init()
         TopBar.altbar_line_thickness = TopBar.preserved_altbar_line_thickness
         TopBar.preserved_altbar_line_thickness = nil
     else
-        TopBar.altbar_line_thickness = 3
+        TopBar.altbar_line_thickness = 9
     end
 
     if TopBar.preserved_altbar_ticks_height ~= nil then
@@ -1019,8 +1019,8 @@ function TopBar:onSwitchTopBar()
                 TopBar.alt_bar = false
                 self.option = 3
             else
-                self.progress_bar2.altbar_ticks_height = 7
-                self.progress_bar2.altbar_line_thickness = 3
+                self.progress_bar2.altbar_ticks_height = 5
+                self.progress_bar2.altbar_line_thickness = 9
                 -- self.progress_bar2.factor = 1
                 TopBar.show_top_bar = false
                 self.option = 4
