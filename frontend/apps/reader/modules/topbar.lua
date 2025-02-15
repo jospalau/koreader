@@ -1253,12 +1253,15 @@ function TopBar:toggleBar(light_on)
             -- Multiple of 3 onwards because we want the line to be a third in the middle of the progress thick line
             -- self.progress_bar2.altbar_line_thickness = 3
             -- self.progress_bar2.altbar_line_thickness = 6
-            -- self.progress_bar2.altbar_line_thickness/3 is the line height (thickness) calculated in the widget)
-            -- We need a tick height minimum of self.progress_bar2.altbar_line_thickness/3
-            -- Adding a little bit more, an even number, to have the same tick size up and down the line
+
+
+            -- self.progress_bar2.altbar_line_thickness is the line height (thickness) of the progress bar line
+            -- self.progress_bar2.altbar_line_thickness/3 is the line height (thickness) of the fixed static bar line calculated in the widget
+            -- We need a minimum tick height of self.progress_bar2.altbar_line_thickness/3
+            -- And then we add a little bit more, an even number, to have the same tick size up and down the line
             -- self.progress_bar2.altbar_ticks_height = (self.progress_bar2.altbar_line_thickness/3) + 4 -- Line size, not progress line
 
-            -- Factor variable is not used. Ifinally hardcoded the value of altbar_ticks_height and altbar_line_thickness
+            -- Factor variable is not used. I finally hardcoded the value of altbar_ticks_height and altbar_line_thickness
             -- for the only two configurations I like
             -- Both parameteres are initialized when creating progress_bar2 and onSwitchTopBar() changes
 
@@ -1450,11 +1453,13 @@ function TopBar:paintTo(bb, x, y)
             -- self[4]:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() -  Screen:scaleBySize(6))
             self[21]:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() - Screen:scaleBySize(6))
             self[22]:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - 2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
-            wpm_frame:paintTo(bb, x + Screen:getWidth() - wpm_frame[1][1]:getSize().w, Screen:getHeight() - Screen:scaleBySize(8))
+            -- wpm_frame:paintTo(bb, x + Screen:getWidth() - wpm_frame[1][1]:getSize().w, Screen:getHeight() - Screen:scaleBySize(8))
+            wpm_frame:paintTo(bb, x + Screen:scaleBySize(4) + self[21][1][1]:getSize().w, Screen:getHeight() - Screen:scaleBySize(6))
         else
             self[21]:paintTo(bb, x + Screen:scaleBySize(4), y + Screen:scaleBySize(6))
             self[22]:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - 2, y + Screen:scaleBySize(6))
-            wpm_frame:paintTo(bb, x + Screen:getWidth() - wpm_frame[1][1]:getSize().w, y + Screen:scaleBySize(9))
+            -- wpm_frame:paintTo(bb, x + Screen:getWidth() - wpm_frame[1][1]:getSize().w, y + Screen:scaleBySize(9))
+            wpm_frame:paintTo(bb, x + Screen:scaleBySize(4) + self[21][1][1]:getSize().w, y + Screen:scaleBySize(6))
         end
         return
     end
