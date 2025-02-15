@@ -1453,13 +1453,15 @@ function TopBar:paintTo(bb, x, y)
             -- self[4]:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() -  Screen:scaleBySize(6))
             self[21]:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() - Screen:scaleBySize(6))
             self[22]:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - 2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
-            -- wpm_frame:paintTo(bb, x + Screen:getWidth() - wpm_frame[1][1]:getSize().w, Screen:getHeight() - Screen:scaleBySize(8))
-            wpm_frame:paintTo(bb, x + Screen:scaleBySize(4) + self[21][1][1]:getSize().w, Screen:getHeight() - Screen:scaleBySize(6))
+            if not self.ui.gestures.ignore_hold_corners then
+                wpm_frame:paintTo(bb, x + Screen:getWidth() - wpm_frame[1][1]:getSize().w, Screen:getHeight() - Screen:scaleBySize(8))
+            end
         else
             self[21]:paintTo(bb, x + Screen:scaleBySize(4), y + Screen:scaleBySize(6))
             self[22]:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - 2, y + Screen:scaleBySize(6))
-            -- wpm_frame:paintTo(bb, x + Screen:getWidth() - wpm_frame[1][1]:getSize().w, y + Screen:scaleBySize(9))
-            wpm_frame:paintTo(bb, x + Screen:scaleBySize(4) + self[21][1][1]:getSize().w, y + Screen:scaleBySize(6))
+            if not self.ui.gestures.ignore_hold_corners then
+                wpm_frame:paintTo(bb, x + Screen:getWidth() - wpm_frame[1][1]:getSize().w, y + Screen:scaleBySize(9))
+            end
         end
         return
     end
