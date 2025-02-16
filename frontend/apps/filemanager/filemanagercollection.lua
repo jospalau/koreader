@@ -90,8 +90,8 @@ function FileManagerCollection:onShowColl(collection_name, series)
         onMenuChoice = self.onMenuChoice,
         onMenuHold = self.onMenuHold,
         onMultiSwipe = self.onMultiSwipe,
-        onTap = self.onTap,
-        onDoubleTapBottomRight = self.onDoubleTap,
+        onTap = self.onTapBottomRightCollection,
+        onDoubleTapBottomRight = self.onDoubleTapBottomRightCollection,
         ui = self.ui,
         _manager = self,
         _recreate_func = function() self:onShowColl(collection_name) end,
@@ -568,12 +568,15 @@ function FileManagerCollection:onShowCollList(file_or_selected_collections, call
         title_bar_fm_style = true,
         title_bar_left_icon = title_bar_left_icon,
         onLeftButtonTap = function() self:showCollListDialog(caller_callback, no_dialog) end,
+        onDoubleTapBottomRight = self.onDoubleTapBottomRightCollections,
         onMenuChoice = self.onCollListChoice,
         onMenuHold = self.onCollListHold,
         _manager = self,
         collection_name = "listall",
         _recreate_func = function() self:onShowCollList(file_or_selected_collections, caller_callback, no_dialog) end,
     }
+    self.coll_list.disable_double_tap = false
+
     self.coll_list.close_callback = function(force_close)
         if force_close or self.selected_collections == nil then
             self:refreshFileManager()
@@ -614,12 +617,14 @@ function FileManagerCollection:onShowSeriesList(file_or_files, caller_callback, 
         title_bar_fm_style = true,
         -- title_bar_left_icon = file_or_files and "check" or "appbar.menu",
         onLeftButtonTap = function() self:showCollListDialog(caller_callback, no_dialog) end,
+        onDoubleTapBottomRight = self.onDoubleTapBottomRightCollections,
         onMenuChoice = self.onCollListChoice,
         -- onMenuHold = self.onCollListHold,
         _manager = self,
         collection_name = "series",
         _recreate_func = function() self:onShowCollList(file_or_files, caller_callback, no_dialog) end,
     }
+    self.coll_list.disable_double_tap = false
     self.coll_list.close_callback = function(force_close)
         if force_close or self.selected_colections == nil then
             self:refreshFileManager()
@@ -697,7 +702,7 @@ function FileManagerCollection:updateCollListItemTable(do_init, item_number)
     self.coll_list:switchItemTable(title, item_table, item_number or -1, itemmatch, subtitle)
 end
 
-function FileManagerCollection:updateSeriesListItemTable(do_init, item_number)
+function FileManagerCollection:updateSeriesListItemTable(do_init, item_number, toggle_sort)
     local item_table
     if do_init then
         item_table = {}
@@ -719,10 +724,21 @@ function FileManagerCollection:updateSeriesListItemTable(do_init, item_number)
             end
         end
         if #item_table > 1 then
-            table.sort(item_table, function(v1, v2) return v1.order < v2.order end)
+            if toggle_sort then
+                table.sort(item_table, function(v1, v2) return v1.order > v2.order end)
+            else
+                table.sort(item_table, function(v1, v2) return v1.order < v2.order end)
+            end
         end
     else
         item_table = self.coll_list.item_table
+        if #item_table > 1 and toggle_sort ~= nil then
+            if toggle_sort then
+                table.sort(item_table, function(v1, v2) return v1.order > v2.order end)
+            else
+                table.sort(item_table, function(v1, v2) return v1.order < v2.order end)
+            end
+        end
     end
     local title = T(_("Series (%1)"), #item_table)
     local subtitle
@@ -1163,6 +1179,16 @@ function FileManagerCollection:genAddToCollectionButton(file_or_files, caller_pr
     }
 end
 
+function FileManagerCollection:onDoubleTapBottomRightCollections(arg, ges_ev)
+    if not self.order then self.order = true
+    else
+        self.order = not self.order
+    end
+    self._manager:updateSeriesListItemTable(false, nil, self.order)
+    self._manager.coll_list:onGotoPage(1)
+    return true
+end
+
 -- When tapping on the bottom right of the collections lists we want to sort the collections
 -- but just in memory, we don't to save the file when ordering them
 
@@ -1180,7 +1206,7 @@ end
 -- -- When going back to the fm, the fm will be using the last sorting mode used while sorting collections for consistency
 
 
-function FileManagerCollection:onTap(arg, ges_ev)
+function FileManagerCollection:onTapBottomRightCollection(arg, ges_ev)
     local DataStorage = require("datastorage")
     if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
         local Trapper = require("ui/trapper")
@@ -1348,7 +1374,7 @@ function FileManagerCollection:onTap(arg, ges_ev)
     return
 end
 
-function FileManagerCollection:onDoubleTap(arg, ges_ev)
+function FileManagerCollection:onDoubleTapBottomRightCollection(arg, ges_ev)
     local DataStorage = require("datastorage")
     if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
         local Trapper = require("ui/trapper")
