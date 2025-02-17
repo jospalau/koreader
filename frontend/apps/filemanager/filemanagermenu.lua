@@ -1231,7 +1231,7 @@ Tap a book in the search results to open it.]]),
                 gestures["multiswipe_north_east"]["settings"]["order"] = all_fonts
             end
             local data_ordered = {}
-            for k, v in FFIUtil.orderedPairs(data) do
+            for k, v in ffiUtil.orderedPairs(data) do
                 data_ordered[k] = v
             end
 
