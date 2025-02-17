@@ -619,6 +619,16 @@ function FileManagerCollection:showArrangeBooksDialog()
                         self.updated_collections[collection_name] = true
                         self:setCollate(false, false)
                         self:updateItemTable()
+                        self.initial_collate = ""
+                        self.initial_reverse_collate_mode = G_reader_settings:readSetting("reverse_collate")
+                        G_reader_settings:saveSetting("collate", "strcoll")
+                        G_reader_settings:saveSetting("reverse_collate", nil)
+                        self.coll_menu.topbar:setCollectionCollate("")
+                        self.coll_menu.current_collate = nil
+                        self.coll_menu.current_reverse_collate_mode = nil
+                        -- UIManager:setDirty(self, function()
+                        --     return "ui"
+                        -- end)
                     end,
                 })
             end,
@@ -781,7 +791,7 @@ function FileManagerCollection:onGenerateFavorites()
     return true
 end
 
-function FileManagerCollection:updateCollListItemTable(do_init, item_number)
+function FileManagerCollection:updateCollListItemTable(do_init, item_number, toggle_sort)
     local item_table
     if do_init then
         item_table = {}
@@ -802,6 +812,15 @@ function FileManagerCollection:updateCollListItemTable(do_init, item_number)
         end
         if #item_table > 1 then
             table.sort(item_table, function(v1, v2) return v1.order < v2.order end)
+        end
+        if #item_table > 1 then
+            if toggle_sort ~= nil then
+                if toggle_sort then
+                    table.sort(item_table, function(v1, v2) return (ReadCollection.coll_settings[v1.text] and ReadCollection.coll_settings[v2.text]) and ReadCollection.coll_settings[v1.text].number_files > ReadCollection.coll_settings[v2.text].number_files  end)
+                else
+                    table.sort(item_table, function(v1, v2) return (ReadCollection.coll_settings[v1.text] and ReadCollection.coll_settings[v2.text]) and ReadCollection.coll_settings[v1.text].number_files < ReadCollection.coll_settings[v2.text].number_files  end)
+                end
+            end
         end
     else
         item_table = self.coll_list.item_table
@@ -826,7 +845,10 @@ function FileManagerCollection:updateCollListItemTable(do_init, item_number)
     self.coll_list:switchItemTable(title, item_table, item_number or -1, itemmatch, subtitle)
 end
 
-function FileManagerCollection:updateSeriesListItemTable(do_init, item_number, toggle_sort)
+-- Don't need the parameter item_number for this function which is used when creating a new collection
+-- First, there is no way to set a collection as series, it is done externally with a script from Calibre data
+-- Second, the collections widget with the series view does not allow to create collections since top left menu is disabled
+function FileManagerCollection:updateSeriesListItemTable(do_init, toggle_sort)
     local item_table
     if do_init then
         item_table = {}
@@ -838,7 +860,7 @@ function FileManagerCollection:updateSeriesListItemTable(do_init, item_number, t
             else
                 mandatory = util.tableSize(coll)
             end
-            if ReadCollection.coll_series[name] == 1 then
+            if ReadCollection.coll_settings[name]["series"] then
                 table.insert(item_table, {
                     text      = self:getCollectionTitle(name),
                     mandatory = mandatory,
@@ -848,10 +870,12 @@ function FileManagerCollection:updateSeriesListItemTable(do_init, item_number, t
             end
         end
         if #item_table > 1 then
-            if toggle_sort then
-                table.sort(item_table, function(v1, v2) return v1.text > v2.text end)
-            else
-                table.sort(item_table, function(v1, v2) return v1.text < v2.text end)
+            if toggle_sort ~= nil then
+                if toggle_sort then
+                    table.sort(item_table, function(v1, v2) return (ReadCollection.coll_settings[v1.text] and ReadCollection.coll_settings[v2.text]) and ReadCollection.coll_settings[v1.text].number_files > ReadCollection.coll_settings[v2.text].number_files  end)
+                else
+                    table.sort(item_table, function(v1, v2) return (ReadCollection.coll_settings[v1.text] and ReadCollection.coll_settings[v2.text]) and ReadCollection.coll_settings[v1.text].number_files < ReadCollection.coll_settings[v2.text].number_files  end)
+                end
             end
         end
     else
@@ -865,20 +889,7 @@ function FileManagerCollection:updateSeriesListItemTable(do_init, item_number, t
         end
     end
     local title = T(_("Series (%1)"), #item_table)
-    local subtitle
-    if self.selected_colections then
-        local selected_nb = util.tableSize(self.selected_colections)
-        subtitle = self.selected_colections and T(_("Selected: %1"), selected_nb)
-        if do_init and selected_nb > 0 then -- show first collection containing the long-pressed book
-            for i, item in ipairs(item_table) do
-                if self.selected_colections[item.name] then
-                    item_number = i
-                    break
-                end
-            end
-        end
-    end
-    self.coll_list:switchItemTable(title, item_table, item_number or -1, nil, subtitle)
+    self.coll_list:switchItemTable(title, item_table)
 end
 
 function FileManagerCollection:onCollListChoice(item)
@@ -1321,7 +1332,13 @@ function FileManagerCollection:onDoubleTapBottomRightCollections(arg, ges_ev)
     else
         self.order = not self.order
     end
-    self._manager:updateSeriesListItemTable(false, nil, self.order)
+
+    if self.collection_name == "listall" then
+        self._manager:updateCollListItemTable(true, nil, self.order)
+    else
+        self._manager:updateSeriesListItemTable(true, self.order)
+    end
+
     self._manager.coll_list:onGotoPage(1)
     return true
 end
@@ -1344,6 +1361,14 @@ end
 
 
 function FileManagerCollection:onTapBottomRightCollection(arg, ges_ev)
+    if ReadCollection.coll_settings[self.collection_name].collate then
+        self._manager.coll_menu.topbar:setCollectionCollate("not_manual_sorting")
+        G_reader_settings:saveSetting("reverse_collate", nil)
+        UIManager:setDirty(self, function()
+            return "ui"
+        end)
+        return
+    end
     local DataStorage = require("datastorage")
     if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
         local Trapper = require("ui/trapper")
@@ -1512,6 +1537,14 @@ function FileManagerCollection:onTapBottomRightCollection(arg, ges_ev)
 end
 
 function FileManagerCollection:onDoubleTapBottomRightCollection(arg, ges_ev)
+    if ReadCollection.coll_settings[self.collection_name].collate then
+        self._manager.coll_menu.topbar:setCollectionCollate("not_manual_sorting")
+        G_reader_settings:saveSetting("reverse_collate", nil)
+        UIManager:setDirty(self, function()
+            return "ui"
+        end)
+        return
+    end
     local DataStorage = require("datastorage")
     if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
         local Trapper = require("ui/trapper")

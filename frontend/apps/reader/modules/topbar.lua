@@ -1635,6 +1635,10 @@ function TopBar:paintTo(bb, x, y)
                     collate_symbol = "GRR"
                 elseif sort_by_mode == "gr_votes" then
                     collate_symbol = "GRV"
+                elseif sort_by_mode == "not_manual_sorting" then
+                    collate_symbol = "Set manual sorting"
+                elseif sort_by_mode == "manual_sorting" then
+                    collate_symbol = "Set manual sorting"
                 else
                     collate_symbol = "Sort"
                 end
@@ -1879,6 +1883,10 @@ end
 
 function TopBar:setCollectionCollate(collate)
     self.collection_collate = collate
+end
+
+function TopBar:getCollectionCollate()
+    return self.collection_collate
 end
 
 return TopBar

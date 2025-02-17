@@ -72,7 +72,6 @@ function ReadCollection:_read()
     end
     logger.dbg("ReadCollection: reading from collection file")
     self.coll = {}
-    self.coll_series = {}
     self.coll_settings = {}
     for coll_name, collection in pairs(collections.data) do
         local coll = {}
@@ -84,7 +83,8 @@ function ReadCollection:_read()
         end
         self.coll[coll_name] = coll
         self.coll_settings[coll_name] = collection.settings or { order = 1 } -- favorites, first run
-        self.coll_series[coll_name] = collection.settings.series
+        self.coll_settings[coll_name]["number_files"] = util.tableSize(coll)
+        self.coll_settings[coll_name]["series"] = collection.settings.series
     end
 end
 
