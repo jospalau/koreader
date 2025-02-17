@@ -507,14 +507,16 @@ function ReaderUI:init()
     if util.getFileNameSuffix(self.document.file) == "epub" then
         if G_reader_settings:isTrue("top_manager_infmandhistory")
         and not self.document.file:find("resources/arthur%-conan%-doyle%_the%-hound%-of%-the%-baskervilles.epub") then
-            require("apps/filemanager/filemanager").all_files[self.document.file].status = "reading"
-            local pattern = "(%d+)-(%d+)-(%d+)"
-            local ryear, rmonth, rday = summary.modified:match(pattern)
-            require("apps/filemanager/filemanager").all_files[self.document.file].last_modified_year = ryear
-            require("apps/filemanager/filemanager").all_files[self.document.file].last_modified_month = rmonth
-            require("apps/filemanager/filemanager").all_files[self.document.file].last_modified_day = rday
-            local util = require("util")
-            util.generateStats()
+            if require("apps/filemanager/filemanager").all_files[self.document.file].status ~= "complete" then
+                require("apps/filemanager/filemanager").all_files[self.document.file].status = "reading"
+                local pattern = "(%d+)-(%d+)-(%d+)"
+                local ryear, rmonth, rday = summary.modified:match(pattern)
+                require("apps/filemanager/filemanager").all_files[self.document.file].last_modified_year = ryear
+                require("apps/filemanager/filemanager").all_files[self.document.file].last_modified_month = rmonth
+                require("apps/filemanager/filemanager").all_files[self.document.file].last_modified_day = rday
+                local util = require("util")
+                util.generateStats()
+            end
         end
         -- There is a small delay when manipulating the cover in the coverimage plugin
         -- so the start_session_time in the topbar may be shown a bit delayed when opening the document
