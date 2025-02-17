@@ -1391,8 +1391,8 @@ function FileManagerCollection:onTapBottomRightCollection(arg, ges_ev)
                         self.calibre_data[file.text]["pubdate"]
                             and self.calibre_data[file.text]["words"]
                             and self.calibre_data[file.text]["grrating"]
-                            and self.calibre_data[file.text]["series"]
-                            and self.calibre_data[file.text]["grvotes"] then
+                            and self.calibre_data[file.text]["grvotes"]
+                            and self.calibre_data[file.text]["series"] then
                             file.pubdate = tonumber(self.calibre_data[file.text]["pubdate"]:sub(1, 4))
                             file.words = tonumber(self.calibre_data[file.text]["words"])
                             file.grrating = tonumber(self.calibre_data[file.text]["grrating"])
@@ -1403,7 +1403,7 @@ function FileManagerCollection:onTapBottomRightCollection(arg, ges_ev)
                             file.words = 0
                             file.grrating = 0
                             file.grvotes = 0
-                            file.series = ""
+                            file.series = "zzzz"
                         end
                         files_with_metadata[i] = file
                     end
@@ -1581,7 +1581,7 @@ function FileManagerCollection:onDoubleTapBottomRightCollection(arg, ges_ev)
                             and self.calibre_data[file.text]["words"]
                             and self.calibre_data[file.text]["grrating"]
                             and self.calibre_data[file.text]["grvotes"]
-                            and self.calibre_data[file.text]["grvotes"] then
+                            and self.calibre_data[file.text]["series"] then
                             file.pubdate = tonumber(self.calibre_data[file.text]["pubdate"]:sub(1, 4))
                             file.words = tonumber(self.calibre_data[file.text]["words"])
                             file.grrating = tonumber(self.calibre_data[file.text]["grrating"])
@@ -1592,7 +1592,7 @@ function FileManagerCollection:onDoubleTapBottomRightCollection(arg, ges_ev)
                             file.words = 0
                             file.grrating = 0
                             file.grvotes = 0
-                            file.series = ""
+                            file.series = "zzzz"
                         end
                         files_with_metadata[i] = file
                     end
