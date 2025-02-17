@@ -164,6 +164,7 @@ function FileChooser:getListItem(dirpath, f, fullpath, attributes, collate)
     item.words = 0
     item.grvotes = 0
     item.grrating = 0
+    item.series = ""
     if attributes.mode == "file" then
         -- set to false to show all files in regular font
         -- set to "opened" to show opened files in bold
@@ -186,6 +187,10 @@ function FileChooser:getListItem(dirpath, f, fullpath, attributes, collate)
 
         if self.calibre_data and self.calibre_data[f] and self.calibre_data[f]["grrating"] then
             item.grrating = tonumber(self.calibre_data[f]["grrating"])
+        end
+
+        if self.calibre_data and self.calibre_data[f] and self.calibre_data[f]["series"] then
+            item.series = self.calibre_data[f]["series"]
         end
 
         if collate.item_func ~= nil then

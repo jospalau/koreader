@@ -1768,6 +1768,8 @@ function TopBar:paintTo(bb, x, y)
                         collate_symbol = "GRR"
                     elseif sort_by_mode == "gr_votes" then
                         collate_symbol = "GRV"
+                    elseif sort_by_mode == "series" then
+                        collate_symbol = "S"
                     else
                         collate_symbol = "O"
                     end

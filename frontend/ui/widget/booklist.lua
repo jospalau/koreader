@@ -277,6 +277,16 @@ local BookList = Menu:extend{
                 end, cache
             end,
         },
+        series = {
+            text = _("Series"),
+            menu_order = 140,
+            can_collate_mixed = false,
+            init_sort_func = function(cache)
+                return function(a, b)
+                    return a.series < b.series
+                end, cache
+            end,
+        },
     },
 }
 

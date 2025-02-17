@@ -2080,6 +2080,8 @@ function FileManager:onToggleSortByMode()
         elseif sort_by_mode == "gr_rating" then
             self:onSetSortBy("gr_votes")
         elseif sort_by_mode == "gr_votes" then
+            self:onSetSortBy("series")
+        elseif sort_by_mode == "series" then
             self:onSetSortBy("strcoll")
         else
             self:onSetSortBy("strcoll")
