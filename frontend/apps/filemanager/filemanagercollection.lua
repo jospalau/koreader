@@ -1391,16 +1391,19 @@ function FileManagerCollection:onTapBottomRightCollection(arg, ges_ev)
                         self.calibre_data[file.text]["pubdate"]
                             and self.calibre_data[file.text]["words"]
                             and self.calibre_data[file.text]["grrating"]
+                            and self.calibre_data[file.text]["series"]
                             and self.calibre_data[file.text]["grvotes"] then
                             file.pubdate = tonumber(self.calibre_data[file.text]["pubdate"]:sub(1, 4))
                             file.words = tonumber(self.calibre_data[file.text]["words"])
                             file.grrating = tonumber(self.calibre_data[file.text]["grrating"])
                             file.grvotes = tonumber(self.calibre_data[file.text]["grvotes"])
+                            file.series = self.calibre_data[file.text]["series"]
                         else
                             file.pubdate = 0
                             file.words = 0
                             file.grrating = 0
                             file.grvotes = 0
+                            file.series = ""
                         end
                         files_with_metadata[i] = file
                     end
@@ -1425,6 +1428,10 @@ function FileManagerCollection:onTapBottomRightCollection(arg, ges_ev)
                         elseif sort_by_mode == "gr_votes" then
                             table.sort(files_with_metadata, function(v1, v2)
                                 return v1.grvotes < v2.grvotes
+                            end)
+                        elseif sort_by_mode == "series" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.series < v2.series
                             end)
                         else
                             table.sort(files_with_metadata, function(v1, v2)
@@ -1451,6 +1458,10 @@ function FileManagerCollection:onTapBottomRightCollection(arg, ges_ev)
                         elseif sort_by_mode == "gr_votes" then
                             table.sort(files_with_metadata, function(v1, v2)
                                 return v1.grvotes > v2.grvotes
+                            end)
+                        elseif sort_by_mode == "series" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.series > v2.series
                             end)
                         else
                             table.sort(files_with_metadata, function(v1, v2)
@@ -1513,9 +1524,13 @@ function FileManagerCollection:onTapBottomRightCollection(arg, ges_ev)
                 self._manager.coll_menu.topbar:setCollectionCollate("gr_rating")
                 self.current_collate = "gr_rating"
             elseif sort_by_mode == "gr_votes" then
-                G_reader_settings:saveSetting("collate", "strcoll")
+                G_reader_settings:saveSetting("collate", "series")
                 self._manager.coll_menu.topbar:setCollectionCollate("gr_votes")
                 self.current_collate = "gr_votes"
+            elseif sort_by_mode == "series" then
+                G_reader_settings:saveSetting("collate", "strcoll")
+                self._manager.coll_menu.topbar:setCollectionCollate("series")
+                self.current_collate = "series"
             else
                 G_reader_settings:saveSetting("collate", "strcoll")
                 self._manager.coll_menu.topbar:setCollectionCollate("")
@@ -1565,16 +1580,19 @@ function FileManagerCollection:onDoubleTapBottomRightCollection(arg, ges_ev)
                         self.calibre_data[file.text]["pubdate"]
                             and self.calibre_data[file.text]["words"]
                             and self.calibre_data[file.text]["grrating"]
+                            and self.calibre_data[file.text]["grvotes"]
                             and self.calibre_data[file.text]["grvotes"] then
                             file.pubdate = tonumber(self.calibre_data[file.text]["pubdate"]:sub(1, 4))
                             file.words = tonumber(self.calibre_data[file.text]["words"])
                             file.grrating = tonumber(self.calibre_data[file.text]["grrating"])
                             file.grvotes = tonumber(self.calibre_data[file.text]["grvotes"])
+                            file.series = self.calibre_data[file.text]["series"]
                         else
                             file.pubdate = 0
                             file.words = 0
                             file.grrating = 0
                             file.grvotes = 0
+                            file.series = ""
                         end
                         files_with_metadata[i] = file
                     end
@@ -1599,6 +1617,10 @@ function FileManagerCollection:onDoubleTapBottomRightCollection(arg, ges_ev)
                         elseif sort_by_mode == "gr_votes" then
                             table.sort(files_with_metadata, function(v1, v2)
                                 return v1.grvotes < v2.grvotes
+                            end)
+                        elseif sort_by_mode == "series" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.series < v2.series
                             end)
                         else
                             table.sort(files_with_metadata, function(v1, v2)
@@ -1625,6 +1647,10 @@ function FileManagerCollection:onDoubleTapBottomRightCollection(arg, ges_ev)
                         elseif sort_by_mode == "gr_votes" then
                             table.sort(files_with_metadata, function(v1, v2)
                                 return v1.grvotes > v2.grvotes
+                            end)
+                        elseif sort_by_mode == "series" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.series > v2.series
                             end)
                         else
                             table.sort(files_with_metadata, function(v1, v2)
