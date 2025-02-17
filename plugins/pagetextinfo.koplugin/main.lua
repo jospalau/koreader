@@ -1499,8 +1499,10 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                                     local font_size_px = (display_dpi * self.ui.document.configurable.font_size) / 72
 
 
+                                    local face = Font:getFace(self.ui.document:getFontFace():gsub(" ","") .. "-Regular", 12)
+                                    local face_height, face_ascender = face.ftsize:getHeightAndAscender()
                                     local line_spacing_pct = self.ui.font.configurable.line_spacing * (1/100)
-                                    VSPACE = math.ceil(font_size_px * 0.25 * line_spacing_pct)
+                                    VSPACE = math.ceil(font_size_px * (face_ascender/100) * line_spacing_pct)
                                     local xrect = box:copy()
                                     xrect.y = xrect.y - VSPACE
                                     self.ui.view:drawHighlightRect(bb, x, y, xrect, "underscore", nil, false)
