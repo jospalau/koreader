@@ -133,8 +133,21 @@ function PageTextInfo:initGesListener()
             },
             handler = function(ges) return self:onDoubleTap(nil, ges) end,
         },
+        {
+            id = "pagetextinfo_swipe",
+            ges = "swipe",
+            overrides = {
+                "rolling_swipe",
+                "paging_swipe",
+            },
+            screen_zone = {
+                ratio_x = 0, ratio_y = 0, ratio_w = 1, ratio_h = 1,
+            },
+            handler = function(ges) return self:onSwipe(nil, ges) end,
+        },
     })
 end
+
 function PageTextInfo:toggleHighlightAllWordsVocabulary(toggle)
     self.settings:saveSetting("highlight_all_words_vocabulary_builder_and_notes", toggle)
     self.settings:flush()
@@ -142,10 +155,15 @@ function PageTextInfo:toggleHighlightAllWordsVocabulary(toggle)
         self:updateWordsVocabulary()
         self:updateNotes()
     end
-    UIManager:setDirty("all", "full")
+    return UIManager:setDirty(self.view.dialog, "ui")
 end
 
-
+function PageTextInfo:onSwipe(_, ges)
+    self.settings:saveSetting("highlight_all_words_vocabulary_builder_and_notes", not self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes"))
+    self.ui.gestures:onIgnoreHoldCorners(true)
+    self.view.topbar:toggleBar()
+    return self:toggleHighlightAllWordsVocabulary(self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes"))
+end
 
 -- In order for double tap events to arrive we need to configure the gestures plugin:
 -- Menu gear icon - Taps and gestures - Gesture manager - Double tap and we set Left side and Right side to Pass through clearing the default actions
