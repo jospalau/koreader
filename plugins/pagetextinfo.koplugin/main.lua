@@ -586,7 +586,16 @@ function PageTextInfo:init()
     -- local vertical_span = VerticalSpan:new{width = Size.span.vertical_default}
     -- table.insert(self.vertical_frame, self.separator_line)
     -- table.insert(self.vertical_frame, vertical_span)
+    self.initialized = false
+    -- self.ui:registerPostInitCallback(function()
+    --     self:_postInit()
+    -- end)
 end
+
+
+-- function PageTextInfo:_postInit()
+--     self.initialized = true
+-- end
 
 function PageTextInfo:readSettingsFile()
     self.settings = LuaSettings:open(DataStorage:getSettingsDir() .. "/pagetextinfo.lua")
@@ -595,13 +604,13 @@ end
 function PageTextInfo:onReaderReady()
     self.ui.menu:registerToMainMenu(self)
     self.view:registerViewModule("pagetextinfo", self)
+    self.initialized = true
 end
 
 
 function PageTextInfo:onPageUpdate(pageno)
     -- Avoid double execution when loading document
-    if self.pageno == nil then self.pageno = pageno return end
-    self.pageno = pageno
+    if not self.initialized then return end
 
     if self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
         self:updateWordsVocabulary()
