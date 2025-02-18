@@ -155,14 +155,17 @@ function PageTextInfo:toggleHighlightAllWordsVocabulary(toggle)
         self:updateWordsVocabulary()
         self:updateNotes()
     end
-    return UIManager:setDirty(self.view.dialog, "ui")
+    self.view.topbar:toggleBar()
+    UIManager:setDirty(self.view.dialog, "ui")
+    return true
 end
 
 function PageTextInfo:onSwipe(_, ges)
-    self.settings:saveSetting("highlight_all_words_vocabulary_builder_and_notes", not self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes"))
     self.ui.gestures:onIgnoreHoldCorners(true)
-    self.view.topbar:toggleBar()
-    return self:toggleHighlightAllWordsVocabulary(self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes"))
+    self.ui.disable_double_tap = self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes")
+    -- We need also to change this, otherwise the toggle does not work just with self.ui.disable_double_tap
+    Device.input.disable_double_tap = self.ui.disable_double_tap
+    return self:toggleHighlightAllWordsVocabulary(not self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes"))
 end
 
 -- In order for double tap events to arrive we need to configure the gestures plugin:
