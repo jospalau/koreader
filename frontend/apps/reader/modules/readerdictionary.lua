@@ -768,7 +768,17 @@ function ReaderDictionary:onShowDictionaryLookup()
     return true
 end
 
-function ReaderDictionary:rawSdcv(words, dict_names, fuzzy_search, lookup_progress_msg)
+
+local executeSearch = function(cmd)
+    local std_out = io.popen(cmd, "r")
+    if std_out then
+        local output = std_out:read("*all")
+        std_out:close()
+        return true, output
+    end
+end
+
+function ReaderDictionary:rawSdcv(words, dict_names, fuzzy_search, lookup_progress_msg, no_dismiss)
     -- Allow for two sdcv calls : one in the classic data/dict, and
     -- another one in data/dict_ext if it exists
     -- We could put in data/dict_ext dictionaries with a great number of words
@@ -830,13 +840,18 @@ function ReaderDictionary:rawSdcv(words, dict_names, fuzzy_search, lookup_progre
         -- We must ensure we will have some output to be readable (if no
         -- definition found, sdcv will output some message on stderr, and
         -- let stdout empty) by appending an "echo":
-        cmd = cmd .. "; echo"
+        cmd = cmd .. " 2>/dev/null; echo"
         -- NOTE: Bionic doesn't support rpath, but does honor LD_LIBRARY_PATH...
         --       Give it a shove so it can actually find the STL.
         if android then
             C.setenv("LD_LIBRARY_PATH", android.nativeLibraryDir, 1)
         end
-        local completed, results_str = Trapper:dismissablePopen(cmd, lookup_progress_msg)
+        local completed, results_str = nil, nil
+        if no_dismiss then
+            completed, results_str = executeSearch(cmd)
+        else
+            completed, results_str = Trapper:dismissablePopen(cmd, lookup_progress_msg)
+        end
         if android then
             -- NOTE: It's unset by default, so this is perfectly fine.
             C.unsetenv("LD_LIBRARY_PATH")
@@ -876,7 +891,7 @@ function ReaderDictionary:rawSdcv(words, dict_names, fuzzy_search, lookup_progre
     return lookup_cancelled, all_results
 end
 
-function ReaderDictionary:startSdcv(word, dict_names, fuzzy_search)
+function ReaderDictionary:startSdcv(word, dict_names, fuzzy_search, no_dismiss)
     local words = {word}
 
     if self.ui.languagesupport and self.ui.languagesupport:hasActiveLanguagePlugins() then
@@ -905,7 +920,7 @@ function ReaderDictionary:startSdcv(word, dict_names, fuzzy_search)
         fuzzy_search = false
     end
 
-    local lookup_cancelled, results = self:rawSdcv(words, dict_names, fuzzy_search, self.lookup_progress_msg or false)
+    local lookup_cancelled, results = self:rawSdcv(words, dict_names, fuzzy_search, self.lookup_progress_msg or false, no_dismiss)
     if results == nil then -- no dictionaries found
         return {
             {

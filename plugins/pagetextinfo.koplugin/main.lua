@@ -1485,7 +1485,7 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
 
                                         local translation = ""
                                         if not self.translations[word.text] then
-                                            local results = self.ui.dictionary:startSdcv(word.text, dictionaries, true)
+                                            local results = self.ui.dictionary:startSdcv(word.text, dictionaries, true, true)
 
                                             if results and results[1] then
                                                 translation = results[1].definition:gsub("%b<>",""):gsub("%\n","")
