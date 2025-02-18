@@ -84,7 +84,7 @@ function ReadCollection:_read()
         self.coll[coll_name] = coll
         self.coll_settings[coll_name] = collection.settings or { order = 1 } -- favorites, first run
         self.coll_settings[coll_name]["number_files"] = util.tableSize(coll)
-        self.coll_settings[coll_name]["series"] = collection.settings.series
+        self.coll_settings[coll_name]["series"] = (collection.settings and collection.settings.series) and collection.settings.series or nil
     end
 end
 
