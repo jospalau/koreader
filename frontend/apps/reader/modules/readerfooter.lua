@@ -2791,6 +2791,10 @@ function ReaderFooter:TapFooter(ges)
     self.ui.gestures:onIgnoreHoldCorners(not self.ui.gestures.ignore_hold_corners)
     self.ui.disable_double_tap = self.ui.gestures.ignore_hold_corners
 
+    -- This is not needed because it will work when the notification widget is closed
+    -- but I leave it in case I decide to remove the notification
+    Device.input.disable_double_tap = self.ui.disable_double_tap
+
     -- No need for this, we are not stopping the double tap:
     -- -- When double tapping the footer, the double tap will also be locked and the vocabulary builder words will be highlighted
     -- -- and we won't be able to double tap the footer and won't be able then to deactivated the vocabulary builder words highlighting automaticaly
