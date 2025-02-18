@@ -161,6 +161,7 @@ function PageTextInfo:toggleHighlightAllWordsVocabulary(toggle)
 end
 
 function PageTextInfo:onSwipe(_, ges)
+    if not self.initialized then return end
     self.ui.gestures:onIgnoreHoldCorners(true)
     self.ui.disable_double_tap = self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes")
     -- We need also to change this, otherwise the toggle does not work just with self.ui.disable_double_tap
