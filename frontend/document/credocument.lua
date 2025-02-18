@@ -120,7 +120,7 @@ function CreDocument:engineInit()
         -- we need to initialize the CRE font list
         local fonts = FontList:getFontList()
         for k, v in ipairs(fonts) do
-            if not v:find("/urw/") and not v:find("/nerdfonts/symbols.ttf") then
+            if not v:find("/urw/") and not v:find("/nerdfonts/symbols.ttf") and not v:find(".*Canela.*") then
                 local ok, err = pcall(cre.registerFont, v)
                 if not ok then
                     logger.err("failed to register crengine font:", err)
