@@ -674,7 +674,6 @@ function TopBar:onReaderReady()
         -- background = Blitbuffer.COLOR_WHITE,
         bordersize = 0,
         padding = 0,
-        padding_bottom = self.bottom_padding,
     }
 
     self[2] = left_container:new{
@@ -707,7 +706,6 @@ function TopBar:onReaderReady()
         -- background = Blitbuffer.COLOR_WHITE,
         bordersize = 0,
         padding = 0,
-        padding_bottom = self.bottom_padding,
     }
 
     self[11] = FrameContainer:new{
@@ -718,7 +716,6 @@ function TopBar:onReaderReady()
         -- background = Blitbuffer.COLOR_WHITE,
         bordersize = 0,
         padding = 0,
-        padding_bottom = self.bottom_padding,
     }
 
 
@@ -731,7 +728,6 @@ function TopBar:onReaderReady()
         -- background = Blitbuffer.COLOR_WHITE,
         bordersize = 0,
         padding = 0,
-        padding_bottom = self.bottom_padding,
     }
     self[6] = FrameContainer:new{
         left_container:new{
@@ -741,7 +737,6 @@ function TopBar:onReaderReady()
         -- background = Blitbuffer.COLOR_WHITE,
         bordersize = 0,
         padding = 0,
-        padding_bottom = self.bottom_padding,
     }
 
 
@@ -762,7 +757,6 @@ function TopBar:onReaderReady()
         -- background = Blitbuffer.COLOR_WHITE,
         bordersize = 0,
         padding = 0,
-        padding_bottom = self.bottom_padding,
     }
 
 
@@ -783,7 +777,6 @@ function TopBar:onReaderReady()
         -- background = Blitbuffer.COLOR_WHITE,
         bordersize = 0,
         padding = 0,
-        padding_bottom = self.bottom_padding,
     }
 
 
@@ -795,7 +788,6 @@ function TopBar:onReaderReady()
         -- background = Blitbuffer.COLOR_WHITE,
         bordersize = 0,
         padding = 0,
-        padding_bottom = self.bottom_padding,
     }
 
 
@@ -817,7 +809,6 @@ function TopBar:onReaderReady()
         -- background = Blitbuffer.COLOR_WHITE,
         bordersize = 0,
         padding = 0,
-        padding_bottom = self.bottom_padding,
     }
 
 
@@ -858,7 +849,6 @@ function TopBar:onReaderReady()
         -- background = Blitbuffer.COLOR_WHITE,
         bordersize = 0,
         padding = 0,
-        padding_bottom = self.bottom_padding,
     }
 
     -- self.bottom_frame = FrameContainer:new{
@@ -895,7 +885,6 @@ function TopBar:onReaderReady()
         -- background = Blitbuffer.COLOR_WHITE,
         bordersize = 0,
         padding = 0,
-        padding_bottom = self.bottom_padding,
     }
 
     self[22] = FrameContainer:new{
@@ -910,7 +899,6 @@ function TopBar:onReaderReady()
         -- background = Blitbuffer.COLOR_WHITE,
         bordersize = 0,
         padding = 0,
-        padding_bottom = self.bottom_padding,
     }
     if Device:isAndroid() then
         TopBar.MARGIN_SIDES =  Screen:scaleBySize(20)
@@ -1446,7 +1434,6 @@ function TopBar:paintTo(bb, x, y)
             -- background = Blitbuffer.COLOR_WHITE,
             bordersize = 0,
             padding = 0,
-            padding_bottom = self.bottom_padding,
         }
 
         if self.view.footer.settings.bar_top then
@@ -1603,7 +1590,6 @@ function TopBar:paintTo(bb, x, y)
             -- background = Blitbuffer.COLOR_WHITE,
             bordersize = 0,
             padding = 0,
-            padding_bottom = self.bottom_padding,
         }
 
         local reverse_collate = FrameContainer:new{
@@ -1618,7 +1604,6 @@ function TopBar:paintTo(bb, x, y)
             -- background = Blitbuffer.COLOR_WHITE,
             bordersize = 0,
             padding = 0,
-            padding_bottom = self.bottom_padding,
         }
 
         if self.collection then
@@ -1700,7 +1685,6 @@ function TopBar:paintTo(bb, x, y)
                 -- background = Blitbuffer.COLOR_WHITE,
                 bordersize = 0,
                 padding = 0,
-                padding_bottom = self.bottom_padding,
             }
 
             -- local FileManagerFileSearcher = require("apps/filemanager/filemanagerfilesearcher")
@@ -1748,7 +1732,6 @@ function TopBar:paintTo(bb, x, y)
                 -- background = Blitbuffer.COLOR_WHITE,
                 bordersize = 0,
                 padding = 0,
-                padding_bottom = self.bottom_padding,
             }
 
 
