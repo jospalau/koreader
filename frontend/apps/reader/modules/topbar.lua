@@ -1409,6 +1409,15 @@ function TopBar:onPosUpdate(new_pos)
 end
 
 
+local getMem = function(cmd)
+    local std_out = io.popen(cmd, "r")
+    if std_out then
+        local output = std_out:read("*all")
+        std_out:close()
+        return true, output
+    end
+end
+
 function TopBar:paintTo(bb, x, y)
     if self.status_bar and self.status_bar == true then
         -- self[10][1][1]:setText(self.time_battery_text_text:reverse())
@@ -1436,18 +1445,40 @@ function TopBar:paintTo(bb, x, y)
             padding = 0,
         }
 
+        local Math = require("optmath")
+        local mem = 0
+        local result, mem_result = getMem("cat /proc/$(pgrep luajit | head -1)/statm | awk '{ print $2 }'")
+        if result and mem_result then
+            mem = Math.round(tonumber(mem_result) * 4 / 1024)
+        end
+
+        local mem_frame = FrameContainer:new{
+            left_container:new{
+                dimen = Geom:new(),
+                TextWidget:new{
+                    text = mem .. "MB",
+                    face = Font:getFace("myfont"),
+                    fgcolor = Blitbuffer.COLOR_GRAY,
+                }
+            },
+            -- background = Blitbuffer.COLOR_WHITE,
+            bordersize = 0,
+            padding = 0,
+        }
         if self.view.footer.settings.bar_top then
             -- self[4]:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() -  Screen:scaleBySize(6))
             self[21]:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() - Screen:scaleBySize(6))
-            self[22]:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - 2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
-            if not self.ui.gestures.ignore_hold_corners then
-                wpm_frame:paintTo(bb, x + Screen:getWidth() - wpm_frame[1][1]:getSize().w, Screen:getHeight() - Screen:scaleBySize(8))
+            self[22]:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - Screen:scaleBySize(2), Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+            mem_frame:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - mem_frame[1][1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
+            if self.ui.gestures.ignore_hold_corners and self.ui.gestures.ignore_hold_corners == false then
+                mem_frame:paintTo(bb, x + Screen:getWidth() - mem_frame[1][1]:getSize().w, Screen:getHeight() - Screen:scaleBySize(8))
             end
         else
             self[21]:paintTo(bb, x + Screen:scaleBySize(4), y + Screen:scaleBySize(6))
-            self[22]:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - 2, y + Screen:scaleBySize(6))
-            if not self.ui.gestures.ignore_hold_corners then
-                wpm_frame:paintTo(bb, x + Screen:getWidth() - wpm_frame[1][1]:getSize().w, y + Screen:scaleBySize(9))
+            self[22]:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - Screen:scaleBySize(2), y + Screen:scaleBySize(6))
+            mem_frame:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - mem_frame[1][1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
+            if self.ui.gestures.ignore_hold_corners and self.ui.gestures.ignore_hold_corners == false then
+                mem_frame:paintTo(bb, x + Screen:getWidth() - mem_frame[1][1]:getSize().w, y + Screen:scaleBySize(9))
             end
         end
         return
