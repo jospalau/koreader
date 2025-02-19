@@ -166,10 +166,19 @@ function PageTextInfo:onSwipe(_, ges)
     local direction = BD.flipDirectionIfMirroredUILayout(ges.direction)
     if direction == "west" then
         self.ui.gestures:onIgnoreHoldCorners(true)
-        self.ui.disable_double_tap = self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes")
-        -- We need also to change this, otherwise the toggle does not work just with self.ui.disable_double_tap
-        Device.input.disable_double_tap = self.ui.disable_double_tap
-        return self:toggleHighlightAllWordsVocabulary(not self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes"))
+        if not self.ui.disable_double_tap then
+            self.ui.disable_double_tap = true
+            -- We need also to change this, otherwise the toggle does not work just with self.ui.disable_double_tap
+            Device.input.disable_double_tap = self.ui.disable_double_tap
+            self.settings:saveSetting("highlight_all_words_vocabulary_builder_and_notes", false)
+            self.view.topbar:toggleBar()
+            UIManager:setDirty(self.view.dialog, "ui")
+        else
+            self.ui.disable_double_tap = false
+            -- We need also to change this, otherwise the toggle does not work just with self.ui.disable_double_tap
+            Device.input.disable_double_tap = self.ui.disable_double_tap
+            return self:toggleHighlightAllWordsVocabulary(not self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes"))
+        end
     end
     return false
 end
