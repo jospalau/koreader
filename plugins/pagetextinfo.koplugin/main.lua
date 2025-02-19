@@ -2,6 +2,7 @@
 --     return { disabled = true, }
 -- end
 
+local BD = require("ui/bidi")
 local Dispatcher = require("dispatcher")  -- luacheck:ignore
 local InfoMessage = require("ui/widget/infomessage")
 local UIManager = require("ui/uimanager")
@@ -162,11 +163,15 @@ end
 
 function PageTextInfo:onSwipe(_, ges)
     if not self.initialized then return end
-    self.ui.gestures:onIgnoreHoldCorners(true)
-    self.ui.disable_double_tap = self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes")
-    -- We need also to change this, otherwise the toggle does not work just with self.ui.disable_double_tap
-    Device.input.disable_double_tap = self.ui.disable_double_tap
-    return self:toggleHighlightAllWordsVocabulary(not self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes"))
+    local direction = BD.flipDirectionIfMirroredUILayout(ges.direction)
+    if direction == "west" then
+        self.ui.gestures:onIgnoreHoldCorners(true)
+        self.ui.disable_double_tap = self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes")
+        -- We need also to change this, otherwise the toggle does not work just with self.ui.disable_double_tap
+        Device.input.disable_double_tap = self.ui.disable_double_tap
+        return self:toggleHighlightAllWordsVocabulary(not self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes"))
+    end
+    return false
 end
 
 -- In order for double tap events to arrive we need to configure the gestures plugin:
