@@ -1452,6 +1452,9 @@ function TopBar:paintTo(bb, x, y)
             mem = Math.round(tonumber(mem_result) * 4 / 1024)
         end
 
+        -- local mem = collectgarbage("count")
+        -- mem = Math.round(tonumber(mem)/ 1024)
+
         local mem_frame = FrameContainer:new{
             left_container:new{
                 dimen = Geom:new(),
