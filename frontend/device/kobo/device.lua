@@ -1342,14 +1342,14 @@ function Kobo:suspend()
 
     -- On MTK, any suspend/standby attempt while plugged-in will hang the kernel... -_-"
     -- NOTE: isCharging is still true while isCharged!
-    if self:isMTK() and self.powerd:isCharging() then
-        logger.info("Kobo suspend: skipping the suspend request for now: device is plugged in and would otherwise crash!")
+    -- if self:isMTK() and self.powerd:isCharging() then
+    --     logger.info("Kobo suspend: skipping the suspend request for now: device is plugged in and would otherwise crash!")
 
-        -- Do the usual scheduling dance, so we get a chance to fire the UnexpectedWakeupLimit event...
-        UIManager:unschedule(self.checkUnexpectedWakeup)
-        self:scheduleUnexpectedWakeupGuard()
-        return
-    end
+    --     -- Do the usual scheduling dance, so we get a chance to fire the UnexpectedWakeupLimit event...
+    --     UIManager:unschedule(self.checkUnexpectedWakeup)
+    --     self:scheduleUnexpectedWakeupGuard()
+    --     return
+    -- end
 
     -- Murder Wi-Fi (again, c.f., `Device:onPowerEvent`) if NetworkMgr is attempting to connect or currently connected...
     -- (Most likely because of a rerunWhenOnline in a Suspend handler)
