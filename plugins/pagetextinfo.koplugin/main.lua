@@ -183,6 +183,7 @@ end
 -- If we want to use this handler for the gesture, we have to set Pass through for both Left side and Right side in the Taps and gestures configuration
 -- For the hold action press modification, I modified the readerhighlight.lua source which is capturing the hold event
 function PageTextInfo:onDoubleTap(_, ges)
+    if not self.initialized then return end
     if util.getFileNameSuffix(self.ui.document.file) ~= "epub"  then return end
     local res = self.ui.document._document:getTextFromPositions(ges.pos.x, ges.pos.y,
                 ges.pos.x, ges.pos.y, false, false)
@@ -376,6 +377,7 @@ end
 -- this plugin will manage what to do when tapping a notes
 -- which basically is to show all the notes associated to a word having one or more note
 function PageTextInfo:onTap(_, ges)
+    if not self.initialized then return end
     if util.getFileNameSuffix(self.ui.document.file) ~= "epub"  then return false end
     local res = self.ui.document._document:getTextFromPositions(ges.pos.x, ges.pos.y,
                 ges.pos.x, ges.pos.y, false, false)
