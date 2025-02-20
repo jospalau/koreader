@@ -21,6 +21,7 @@ local datetime = require("datetime")
 local BottomContainer = require("ui/widget/container/bottomcontainer")
 local FrameContainer = require("ui/widget/container/framecontainer")
 local VerticalGroup = require("ui/widget/verticalgroup")
+local Math = require("optmath")
 local SQ3 = require("lua-ljsqlite3/init")
 local ProgressWidget = require("ui/widget/progresswidget")
 local Device = require("device")
@@ -541,8 +542,31 @@ function TopBar:init()
 
 end
 
-function TopBar:onReaderReady()
+local getMem = function()
+    -- local cmd = "cat /proc/$(pgrep luajit | head -1)/statm | awk '{ print $2 }'"
+    -- local std_out = io.popen(cmd, "r")
+    -- if std_out then
+    --     local output = std_out:read("*all")
+    --     std_out:close()
+    --     return true, output
+    -- end
+    local stat = io.open("/proc/self/stat", "r")
+    if stat == nil then return end
 
+    local util = require("util")
+    local t = util.splitToArray(stat:read("*line"), " ")
+    stat:close()
+
+    if #t == 0 then return 0 end
+
+    return Math.round(tonumber(t[24]) / 256)
+end
+
+function TopBar:onReaderReady()
+    self.initial_memory = getMem()
+
+    local powerd = Device:getPowerDevice()
+    self.initial_battery_lvl = powerd:getCapacity()
     self:onSetDimensions()
     self.title = self.ui.document._document:getDocumentProps().title
     self.series = self.ui.document._document:getDocumentProps().series
@@ -1408,16 +1432,6 @@ function TopBar:onPosUpdate(new_pos)
     self:toggleBar()
 end
 
-
-local getMem = function(cmd)
-    local std_out = io.popen(cmd, "r")
-    if std_out then
-        local output = std_out:read("*all")
-        std_out:close()
-        return true, output
-    end
-end
-
 function TopBar:paintTo(bb, x, y)
     if self.status_bar and self.status_bar == true then
         -- self[10][1][1]:setText(self.time_battery_text_text:reverse())
@@ -1445,12 +1459,11 @@ function TopBar:paintTo(bb, x, y)
             padding = 0,
         }
 
-        local Math = require("optmath")
-        local mem = 0
-        local result, mem_result = getMem("cat /proc/$(pgrep luajit | head -1)/statm | awk '{ print $2 }'")
-        if result and mem_result then
-            mem = Math.round(tonumber(mem_result) * 4 / 1024)
-        end
+        local mem = getMem()
+        -- local result, mem_result = getMem("cat /proc/$(pgrep luajit | head -1)/statm | awk '{ print $2 }'")
+        -- if result and mem_result then
+        --     mem = Math.round(tonumber(mem_result) * 4 / 1024)
+        -- end
 
         -- local mem = collectgarbage("count")
         -- mem = Math.round(tonumber(mem)/ 1024)
@@ -1468,20 +1481,80 @@ function TopBar:paintTo(bb, x, y)
             bordersize = 0,
             padding = 0,
         }
+
+        local mem_diff = math.abs(self.initial_memory - mem)
+        local mem_frame_diff = FrameContainer:new{
+            left_container:new{
+                dimen = Geom:new(),
+                TextWidget:new{
+                    text = mem_diff .. "MB",
+                    face = Font:getFace("myfont"),
+                    fgcolor = Blitbuffer.COLOR_GRAY,
+                }
+            },
+            -- background = Blitbuffer.COLOR_WHITE,
+            bordersize = 0,
+            padding = 0,
+        }
+
+        local powerd = Device:getPowerDevice()
+        local battery_lvl = powerd:getCapacity()
+
+
+        local battery_frame = FrameContainer:new{
+            left_container:new{
+                dimen = Geom:new(),
+                TextWidget:new{
+                    text = battery_lvl .. "%",
+                    face = Font:getFace("myfont"),
+                    fgcolor = Blitbuffer.COLOR_GRAY,
+                }
+            },
+            -- background = Blitbuffer.COLOR_WHITE,
+            bordersize = 0,
+            padding = 0,
+        }
+
+        local battery_frame_diff = FrameContainer:new{
+            left_container:new{
+                dimen = Geom:new(),
+                TextWidget:new{
+                    text = (self.initial_battery_lvl - battery_lvl) .. "%",
+                    face = Font:getFace("myfont"),
+                    fgcolor = Blitbuffer.COLOR_GRAY,
+                }
+            },
+            -- background = Blitbuffer.COLOR_WHITE,
+            bordersize = 0,
+            padding = 0,
+        }
+
         if self.view.footer.settings.bar_top then
             -- self[4]:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() -  Screen:scaleBySize(6))
             self[21]:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() - Screen:scaleBySize(6))
             self[22]:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - Screen:scaleBySize(2), Screen:getHeight() - TopBar.MARGIN_BOTTOM)
-            mem_frame:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - mem_frame[1][1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
+            battery_frame_diff:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
+            battery_frame:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1][1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
+            mem_frame_diff:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1][1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
+            mem_frame:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1][1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - mem_frame[1][1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
             if self.ui.gestures.ignore_hold_corners and self.ui.gestures.ignore_hold_corners == false then
-                mem_frame:paintTo(bb, x + Screen:getWidth() - mem_frame[1][1]:getSize().w, Screen:getHeight() - Screen:scaleBySize(8))
+                battery_frame_diff:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1][1]:getSize().w, Screen:getHeight() - Screen:scaleBySize(8))
+                battery_frame:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1][1]:getSize().w, Screen:getHeight() - Screen:scaleBySize(8))
+                mem_frame_diff:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1][1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
+                mem_frame:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1][1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - mem_frame[1][1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
             end
         else
             self[21]:paintTo(bb, x + Screen:scaleBySize(4), y + Screen:scaleBySize(6))
             self[22]:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - Screen:scaleBySize(2), y + Screen:scaleBySize(6))
-            mem_frame:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - mem_frame[1][1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
+            battery_frame_diff:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
+            battery_frame:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1][1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
+            mem_frame_diff:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1][1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
+            mem_frame:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1][1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - mem_frame[1][1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
             if self.ui.gestures.ignore_hold_corners and self.ui.gestures.ignore_hold_corners == false then
-                mem_frame:paintTo(bb, x + Screen:getWidth() - mem_frame[1][1]:getSize().w, y + Screen:scaleBySize(9))
+                battery_frame_diff:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1][1]:getSize().w, y + Screen:scaleBySize(9))
+                battery_frame:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1][1]:getSize().w, y + Screen:scaleBySize(9))
+                mem_frame_diff:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1][1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
+                mem_frame:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1][1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - mem_frame[1][1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
             end
         end
         return
