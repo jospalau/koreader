@@ -781,7 +781,7 @@ function TouchMenu:updateItems()
             or self.dimen
         local refresh_type = "ui"
         if self.is_fresh then
-            refresh_type = "ui"
+            refresh_type = "flashui"
             -- Drop the region, too, to make it full-screen? May help when starting from a "small" menu.
             --refresh_dimen = nil
             self.is_fresh = false
