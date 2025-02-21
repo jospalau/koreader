@@ -992,6 +992,8 @@ function TopBar:onResume()
     self.start_session_time = os.time()
     self.init_page = nil
     self.init_page_screens = nil
+    local powerd = Device:getPowerDevice()
+    self.initial_battery_lvl = powerd:getCapacity()
     self:toggleBar()
 end
 
