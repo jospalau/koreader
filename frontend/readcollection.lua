@@ -360,12 +360,12 @@ function ReadCollection:getOrderedCollectionName(collection_name)
     return ordered_coll
 end
 
-function ReadCollection:updateCollectionOrder(collection_name, ordered_coll, no_flush)
+function ReadCollection:updateCollectionOrder(collection_name, ordered_coll)
     local coll = self.coll[collection_name]
     for i, item in ipairs(ordered_coll) do
         coll[item.file].order = i
     end
-    self:write(collection_name, no_flush)
+    self:write()
 end
 
 -- manage collections
