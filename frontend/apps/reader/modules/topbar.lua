@@ -1749,7 +1749,7 @@ function TopBar:paintTo(bb, x, y)
                     reverse_collate[1][1]:setText("↑")
                 end
                 -- collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, y + Screen:scaleBySize(6))
-                reverse_collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - reverse_collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+                reverse_collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - reverse_collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - reverse_collate[1][1]:getSize().h)
             else
                 collate[1][1]:setText("?")
                 collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - collate[1][1]:getSize().h )
