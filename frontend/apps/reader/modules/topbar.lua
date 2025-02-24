@@ -1714,7 +1714,6 @@ function TopBar:paintTo(bb, x, y)
             bordersize = 0,
             padding = 0,
         }
-
         if self.collection then
             if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
                 local sort_by_mode = self.collection_collate
@@ -1884,6 +1883,27 @@ function TopBar:paintTo(bb, x, y)
                     collate[1][1]:setText("?")
                     collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
                 end
+               local ignore_double_tap_frame = FrameContainer:new{
+                    left_container:new{
+                        dimen = Geom:new(),
+                        TextWidget:new{
+                            text =  "",
+                            face = Font:getFace("myfont3", 12),
+                            fgcolor = Blitbuffer.COLOR_BLACK,
+                        },
+                    },
+                    -- background = Blitbuffer.COLOR_WHITE,
+                    bordersize = 0,
+                    padding = 0,
+                }
+
+                local fm = require("apps/filemanager/filemanager").instance
+                if not fm.disable_double_tap then
+                    ignore_double_tap_frame[1][1]:setText("🔒")
+                else
+                    ignore_double_tap_frame[1][1]:setText("")
+                end
+                ignore_double_tap_frame:paintTo(bb, x + Screen:getWidth() - ignore_double_tap_frame[1][1]:getSize().w - Screen:scaleBySize(2), Screen:getHeight() - TopBar.MARGIN_BOTTOM)
             end
         end
     end

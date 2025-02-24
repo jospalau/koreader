@@ -53,7 +53,7 @@ local FileManager = InputContainer:extend{
     title = _("KOReader"),
     active_widgets = nil, -- array
     root_path = lfs.currentdir(),
-    disable_double_tap = false,
+    disable_double_tap = true,
     all_files = util.getListAll(),
     clipboard = nil, -- for single file operations
     selected_files = nil, -- for group file operations
@@ -128,6 +128,14 @@ function FileManager:initGesListener()
                 ratio_x = 7/8, ratio_y = 7/8, ratio_w = 1/8, ratio_h = 1/8,
             },
             handler = function(ges) return self:onDoubleTapBottonRight(nil, ges) end,
+        },
+        {
+            id = "filemanager_swipe",
+            ges = "swipe",
+            screen_zone = {
+                ratio_x = 0, ratio_y = 0, ratio_w = 1, ratio_h = 1,
+            },
+            handler = function(ges) return self:onSwipe(nil, ges) end,
         },
     })
 end
@@ -1466,13 +1474,22 @@ function FileManager:onTap(arg, ges_ev)
     return true
 end
 
-
 function FileManager:onTapBottomRight(arg, ges_ev)
     return self:onToggleSortByMode()
 end
 
 function FileManager:onDoubleTapBottonRight(arg, ges_ev)
     return self:onToggleReverseSorting()
+end
+
+function FileManager:onSwipe(_, ges)
+    local direction = BD.flipDirectionIfMirroredUILayout(ges.direction)
+    if direction == "west" then
+        self.disable_double_tap = not self.disable_double_tap
+        Device.input.disable_double_tap = self.disable_double_tap
+        UIManager:setDirty(self, "ui")
+    end
+    return true
 end
 
 function FileManager:onPushConfig()
@@ -2054,11 +2071,13 @@ end
 
 function FileManager:onSetMixedSorting(toggle)
     G_reader_settings:saveSetting("collate_mixed", toggle or nil)
+
     self.file_chooser:refreshPath()
     return true
 end
 
 function FileManager:onToggleReverseSorting()
+    if self.disable_double_tap then return end
     local DataStorage = require("datastorage")
     if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
         self:onSetReverseSorting(not G_reader_settings:isTrue("reverse_collate"))
@@ -2068,6 +2087,7 @@ function FileManager:onToggleReverseSorting()
 end
 
 function FileManager:onToggleSortByMode()
+    if self.disable_double_tap then return end
     local DataStorage = require("datastorage")
     if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
         local sort_by_mode = G_reader_settings:readSetting("collate")
