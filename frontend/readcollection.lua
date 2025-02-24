@@ -167,6 +167,7 @@ function ReadCollection:getCollectionsWithFile(file)
 end
 
 function ReadCollection:getCollectionNextOrder(collection_name)
+    if self.coll_settings[collection_name].collate then return end
     local max_order = 0
     for _, item in pairs(self.coll[collection_name]) do
         if max_order < item.order then
