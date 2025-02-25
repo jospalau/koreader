@@ -164,7 +164,7 @@ end
 function PageTextInfo:onSwipe(_, ges)
     if not self.initialized then return end
     local direction = BD.flipDirectionIfMirroredUILayout(ges.direction)
-    if direction == "west" then
+    if direction == "north" then
         self.ui.gestures:onIgnoreHoldCorners(true)
         if not self.ui.disable_double_tap then
             self.ui.disable_double_tap = true

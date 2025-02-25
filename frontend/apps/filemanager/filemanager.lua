@@ -129,14 +129,6 @@ function FileManager:initGesListener()
             },
             handler = function(ges) return self:onDoubleTapBottonRight(nil, ges) end,
         },
-        {
-            id = "filemanager_swipe",
-            ges = "swipe",
-            screen_zone = {
-                ratio_x = 0, ratio_y = 0, ratio_w = 1, ratio_h = 1,
-            },
-            handler = function(ges) return self:onSwipe(nil, ges) end,
-        },
     })
 end
 
@@ -544,6 +536,10 @@ function FileManager:onSwipeFM(ges)
         self.file_chooser:onNextPage()
     elseif direction == "east" then
         self.file_chooser:onPrevPage()
+    elseif direction == "north" then
+            self.disable_double_tap = not self.disable_double_tap
+            Device.input.disable_double_tap = self.disable_double_tap
+            UIManager:setDirty(self, "ui")
     end
     return true
 end
@@ -1480,16 +1476,6 @@ end
 
 function FileManager:onDoubleTapBottonRight(arg, ges_ev)
     return self:onToggleReverseSorting()
-end
-
-function FileManager:onSwipe(_, ges)
-    local direction = BD.flipDirectionIfMirroredUILayout(ges.direction)
-    if direction == "west" then
-        self.disable_double_tap = not self.disable_double_tap
-        Device.input.disable_double_tap = self.disable_double_tap
-        UIManager:setDirty(self, "ui")
-    end
-    return true
 end
 
 function FileManager:onPushConfig()
