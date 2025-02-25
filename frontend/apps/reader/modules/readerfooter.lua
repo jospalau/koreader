@@ -1187,13 +1187,16 @@ function ReaderFooter:rescheduleFooterAutoRefreshIfNeeded()
             -- (We want to avoid the footer to be painted over a widget covering it - we would
             -- be fine refreshing it if the widget is not covering it, but this is hard to
             -- guess from here.)
-            if self.ui.view.topbar and G_reader_settings:isTrue("show_top_bar") then
-                self:checkNewDay()
-                self.ui.view.topbar:toggleBar()
-                UIManager:setDirty(self.ui.view.topbar, "ui")
+            local top_wg = UIManager:getTopmostVisibleWidget() or {}
+            -- logger.info("ReaderFooter:shouldBeRepainted, top_wg name:", top_wg.name, "src:", debug.getinfo(top_wg.init or top_wg._init or top_wg.free or top_wg.new or top_wg.paintTo or function() end, "S").short_src,  "fs:", top_wg.covers_fullscreen, "ft:", top_wg.covers_footer)
+            if top_wg.name == "ReaderUI" then
+                if self.ui.view.topbar and G_reader_settings:isTrue("show_top_bar") then
+                    self:checkNewDay()
+                    self.ui.view.topbar:toggleBar()
+                    UIManager:setDirty(self.ui.view.topbar, "ui")
+                end
+                self:onUpdateFooter(self:shouldBeRepainted())
             end
-            self:onUpdateFooter(self:shouldBeRepainted())
-
             self:rescheduleFooterAutoRefreshIfNeeded() -- schedule (or not) next refresh
         end
     end
