@@ -267,9 +267,9 @@ function TopBar:getTotalRead()
         return 0
     end
 
-    sql_stmt = [[
+    local sql_stmt = [[
         SELECT sum(duration)
-        FROM page_stat
+        FROM page_stat_data
     ]]
 
     local read_total = conn:rowexec(string.format(sql_stmt))
@@ -438,7 +438,7 @@ function TopBar:getOriginBook()
 end
 
 function TopBar:init()
-
+    if self.fm then return end
     -- This is done in readerui.lua because the topbar is started in ReaderView when the menu has not yet been started by ReaderUI
     -- if not self.fm then
     --     self.ui.menu:registerToMainMenu(self)
@@ -535,11 +535,6 @@ function TopBar:init()
     else
         self.init_page_screens = nil
     end
-
-
-    TopBar.total_read = TopBar:getTotalRead()
-    TopBar.total_books = TopBar:getBooksOpened()
-
 end
 
 local getMem = function()
@@ -1845,7 +1840,7 @@ function TopBar:paintTo(bb, x, y)
 
             -- times[1][1]:setText(time .. "|" .. batt_lvl .. "%")
 
-            times[1][1]:setText("BDB: " .. self.total_books .. ", TR: " .. self.total_read .. "d")
+            times[1][1]:setText("BDB: " .. TopBar:getBooksOpened() .. ", TR: " .. TopBar:getTotalRead() .. "d")
             times:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM - times[1][1]:getSize().h )
             if self.fm and not self.history then
                 if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
