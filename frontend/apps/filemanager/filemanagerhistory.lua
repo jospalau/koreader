@@ -484,6 +484,10 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
     --     FileManager:openFile("resources/Forthcoming_Books.pdf")
     else
         self:onClose()
+        if require("apps/reader/readerui").instance then
+            self.ui.view.topbar:toggleBar()
+            UIManager:setDirty(self.ui.view.topbar, "ui")
+        end
         -- if self._manager.ui.history.send then
         --     local FileManager = require("apps/filemanager/filemanager")
         --     local dir = util.splitFilePathName(self._manager.ui.history.file)
@@ -492,7 +496,7 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
         --     self._manager.ui.history.file = nil
         -- end
 
-        local FileManager = require("apps/filemanager/filemanager")
+        -- local FileManager = require("apps/filemanager/filemanager")
         -- FileManager.instance:onRefresh()
     end
     return true
