@@ -123,14 +123,15 @@ function IconButton:onTapIconButton()
 
         self.image.invert = true
         UIManager:widgetInvert(self.image, self.dimen.x + h_padding, self.dimen.y + self.padding_top)
-         if Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch" or Device:isKindle() then
+        local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+         if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch" or Device:isKindle()) then
             UIManager:setDirty(nil, "ui", self.dimen)
          else
             UIManager:setDirty(nil, "fast", self.dimen)
          end
 
         UIManager:forceRePaint()
-        if Device.model == "Kobo_spaBW" or Device:isKindle() then
+        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_spaBW" or Device:isKindle()) then
             UIManager:yieldToEPDC(8000)
         else
             UIManager:yieldToEPDC()
@@ -141,8 +142,9 @@ function IconButton:onTapIconButton()
         self.image.invert = false
         UIManager:widgetInvert(self.image, self.dimen.x + h_padding, self.dimen.y + self.padding_top)
 
+        local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
         -- There are no glitches in the new Libra Colour but there is a flash after pressing a button. We avoid it
-        if Device.model == "Kobo_monza" or Device:isPocketBook() then
+        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_monza" or Device:isPocketBook()) then
             local util = require("ffi/util")
             util.usleep(250000)
         end

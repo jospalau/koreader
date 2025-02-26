@@ -453,7 +453,7 @@ function PageTextInfo:init()
     -- In both cases we need to define the function PageTextInfo:addToMainMenu() with the custom menu items
     -- and configure them in a proper menu section adding the name given to the menu items (menu_items.pagetextinfo)
     -- in the filemanager_menu_order.lua source for the fm or in the reader_menu_order.lua source for the reader
-    -- self.ui.menu:registerToMainMenu(self)
+    self.ui.menu:registerToMainMenu(self)
 
     -- Not needed since it is automatically available
     -- self.ui.pagetextinfo = self
@@ -622,7 +622,7 @@ function PageTextInfo:readSettingsFile()
 end
 
 function PageTextInfo:onReaderReady()
-    self.ui.menu:registerToMainMenu(self)
+    -- self.ui.menu:registerToMainMenu(self)
     self.view:registerViewModule("pagetextinfo", self)
     self.initialized = true
 end
@@ -685,108 +685,135 @@ end
 function PageTextInfo:addToMainMenu(menu_items)
     -- If we don't want this being called for the filemanager, better to call self.ui.menu:registerToMainMenu(self) in the onReaderReady() event handler function
     -- Although we can set in the init() function and skip it like this:
-    -- if require("apps/filemanager/filemanager").instance then return end
-    self.data_dir = G_defaults:readSetting("STARDICT_DATA_DIR") or
-        os.getenv("STARDICT_DATA_DIR") or
-        DataStorage:getDataDir() .. "/data/dict"
-    local ifo_files = getIfosInDir(self.data_dir)
-    local table_dictionaries = {}
-    for _, ifo_file in pairs(ifo_files) do
-        local f = io.open(ifo_file, "r")
-        if f then
-            local content = f:read("*all")
-            f:close()
-            local dictname = content:match("\nbookname=(.-)\r?\n")
-            table.insert(table_dictionaries, {
-                text = dictname,
-                checked_func = function() return self.settings:readSetting("dictionary") == dictname end,
-                callback = function()
-                    self.settings:saveSetting("dictionary", dictname)
-                    self.settings:flush()
-                    if self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
-                        self.translations = {}
-                        self:updateWordsVocabulary()
-                        UIManager:setDirty("all", "full")
-                    end
-                    if (self.settings:isTrue("highlight_all_notes_and_allow_to_edit_them_on_tap") or self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes")) and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
-                        self.translations = {}
-                        self:updateNotes()
-                        UIManager:setDirty("all", "full")
-                    end
-                    return true
-                end,
-            })
-        end
-    end
-    menu_items.pagetextinfo = {
-        text = _("Page text info"),
-        sub_item_table ={
-            {
-                text = _("Enable"),
-                checked_func = function() return self.is_enabled end,
-                callback = function()
-                    self.is_enabled = not self.is_enabled
-                    self.settings:saveSetting("is_enabled", self.is_enabled)
-                    self.settings:flush()
-                    return true
-                end,
+    if require("apps/filemanager/filemanager").instance then
+        menu_items.pagetextinfo = {
+            text = _("Page text info"),
+            sub_item_table ={
+                {
+                    text = _("Enable devices tweaks"),
+                    checked_func = function() return self.settings:isTrue("enable_devices_tweaks") end,
+                    callback = function()
+                        local enable_devices_tweaks = not self.settings:isTrue("enable_devices_tweaks")
+                        self.settings:saveSetting("enable_devices_tweaks", enable_devices_tweaks)
+                        self.settings:flush()
+                        return true
+                    end,
+                },
             },
-            {
-                text = _("Highlight"),
-                sub_item_table ={
-                    {
-                        text = _("Highlight all notes and allow to edit them on tap"),
-                        checked_func = function() return self.settings:isTrue("highlight_all_notes_and_allow_to_edit_them_on_tap") end,
-                        callback = function()
-                            local highlight_all_notes_and_allow_to_edit_them_on_tap = self.settings:isTrue("highlight_all_notes_and_allow_to_edit_them_on_tap")
-                            self.settings:saveSetting("highlight_all_notes_and_allow_to_edit_them_on_tap", not highlight_all_notes_and_allow_to_edit_them_on_tap)
-                            -- self.ui:reloadDocument(nil, true) -- seamless reload (no infomsg, no flash)
+        }
+    else
+        self.data_dir = G_defaults:readSetting("STARDICT_DATA_DIR") or
+            os.getenv("STARDICT_DATA_DIR") or
+            DataStorage:getDataDir() .. "/data/dict"
+        local ifo_files = getIfosInDir(self.data_dir)
+        local table_dictionaries = {}
+        for _, ifo_file in pairs(ifo_files) do
+            local f = io.open(ifo_file, "r")
+            if f then
+                local content = f:read("*all")
+                f:close()
+                local dictname = content:match("\nbookname=(.-)\r?\n")
+                table.insert(table_dictionaries, {
+                    text = dictname,
+                    checked_func = function() return self.settings:readSetting("dictionary") == dictname end,
+                    callback = function()
+                        self.settings:saveSetting("dictionary", dictname)
+                        self.settings:flush()
+                        if self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
+                            self.translations = {}
+                            self:updateWordsVocabulary()
+                            UIManager:setDirty("all", "full")
+                        end
+                        if (self.settings:isTrue("highlight_all_notes_and_allow_to_edit_them_on_tap") or self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes")) and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
+                            self.translations = {}
                             self:updateNotes()
                             UIManager:setDirty("all", "full")
-                            self.settings:flush()
-                            return true
-                        end,
-                    },
-                    {
-                        text = _("Highlight all words vocabulary builder and notes"),
-                        checked_func = function() return self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") end,
-                        -- enabled_func = function()
-                        --     return false
-                        -- end,
-                        callback = function()
-                            local highlight_all_words_vocabulary_builder_and_notes = self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes")
-                            self.settings:saveSetting("highlight_all_words_vocabulary_builder_and_notes", not highlight_all_words_vocabulary_builder_and_notes)
-                            -- self.ui:reloadDocument(nil, true) -- seamless reload (no infomsg, no flash)
-                            self:updateWordsVocabulary()
-                            UIManager:setDirty("all", "full")
-                            self.settings:flush()
-                            return true
-                        end,
-                    },
-                    {
-                        text = _("Show definitions"),
-                        checked_func = function() return self.settings:isTrue("show_definitions") end,
-                        -- enabled_func = function()
-                        --     return false
-                        -- end,
-                        callback = function()
-                            local show_definitions = self.settings:isTrue("show_definitions")
-                            self.settings:saveSetting("show_definitions", not show_definitions)
-                            -- self.ui:reloadDocument(nil, true) -- seamless reload (no infomsg, no flash)
-                            self:updateWordsVocabulary()
-                            UIManager:setDirty("all", "full")
-                            self.settings:flush()
-                            return true
-                        end,
-                    },
-                    {
-                        text = _("Dictionaries"),
-                        sub_item_table = table_dictionaries,
-                    },
+                        end
+                        return true
+                    end,
+                })
+            end
+        end
+        menu_items.pagetextinfo = {
+            text = _("Page text info"),
+            sub_item_table ={
+                {
+                    text = _("Enable"),
+                    checked_func = function() return self.is_enabled end,
+                    callback = function()
+                        self.is_enabled = not self.is_enabled
+                        self.settings:saveSetting("is_enabled", self.is_enabled)
+                        self.settings:flush()
+                        return true
+                    end,
                 },
-            }
-        },
-    }
+                {
+                    text = _("Enable devices tweaks"),
+                    checked_func = function() return self.settings:isTrue("enable_devices_tweaks") end,
+                    callback = function()
+                        local enable_devices_tweaks = not self.settings:isTrue("enable_devices_tweaks")
+                        self.settings:saveSetting("enable_devices_tweaks", enable_devices_tweaks)
+                        self.settings:flush()
+                        return true
+                    end,
+                },
+                {
+                    text = _("Highlight"),
+                    sub_item_table ={
+                        {
+                            text = _("Highlight all notes and allow to edit them on tap"),
+                            checked_func = function() return self.settings:isTrue("highlight_all_notes_and_allow_to_edit_them_on_tap") end,
+                            callback = function()
+                                local highlight_all_notes_and_allow_to_edit_them_on_tap = self.settings:isTrue("highlight_all_notes_and_allow_to_edit_them_on_tap")
+                                self.settings:saveSetting("highlight_all_notes_and_allow_to_edit_them_on_tap", not highlight_all_notes_and_allow_to_edit_them_on_tap)
+                                -- self.ui:reloadDocument(nil, true) -- seamless reload (no infomsg, no flash)
+                                self:updateNotes()
+                                UIManager:setDirty("all", "full")
+                                self.settings:flush()
+                                return true
+                            end,
+                        },
+                        {
+                            text = _("Highlight all words vocabulary builder and notes"),
+                            checked_func = function() return self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") end,
+                            -- enabled_func = function()
+                            --     return false
+                            -- end,
+                            callback = function()
+                                local highlight_all_words_vocabulary_builder_and_notes = self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes")
+                                self.settings:saveSetting("highlight_all_words_vocabulary_builder_and_notes", not highlight_all_words_vocabulary_builder_and_notes)
+                                -- self.ui:reloadDocument(nil, true) -- seamless reload (no infomsg, no flash)
+                                self:updateWordsVocabulary()
+                                UIManager:setDirty("all", "full")
+                                self.settings:flush()
+                                return true
+                            end,
+                        },
+                        {
+                            text = _("Show definitions"),
+                            checked_func = function() return self.settings:isTrue("show_definitions") end,
+                            -- enabled_func = function()
+                            --     return false
+                            -- end,
+                            callback = function()
+                                local show_definitions = self.settings:isTrue("show_definitions")
+                                self.settings:saveSetting("show_definitions", not show_definitions)
+                                -- self.ui:reloadDocument(nil, true) -- seamless reload (no infomsg, no flash)
+                                self:updateWordsVocabulary()
+                                UIManager:setDirty("all", "full")
+                                self.settings:flush()
+                                return true
+                            end,
+                        },
+                        {
+                            text = _("Dictionaries"),
+                            sub_item_table = table_dictionaries,
+                        },
+                    },
+                }
+            },
+        }
+    end
 end
 
 -- function PageTextInfo:updateNotes()

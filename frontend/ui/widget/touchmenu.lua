@@ -202,7 +202,8 @@ function TouchMenuItem:onTapSelect(arg, ges)
         UIManager:setDirty(nil, "fast", highlight_dimen)
 
         UIManager:forceRePaint()
-        if Device.model == "Kobo_spaBW" or Device.model == "KindleBasic5" then
+        local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_spaBW" or Device.model == "KindleBasic5") then
             UIManager:yieldToEPDC(5000)
         else
             UIManager:yieldToEPDC()
@@ -219,7 +220,7 @@ function TouchMenuItem:onTapSelect(arg, ges)
 
 
         -- There are no glitches in the new Libra Colour but there is a flash after pressing a button. We avoid it
-        if Device.model == "Kobo_monza" or Device:isPocketBook() then
+        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_monza" or Device:isPocketBook()) then
             local util = require("ffi/util")
             util.usleep(250000)
         end
@@ -270,7 +271,8 @@ function TouchMenuItem:onHoldSelect(arg, ges)
         -- Use "fast" as it was for all the devices. We pass 5000 to yieldToEPDC() and it will work for Clara BW without glitches
         UIManager:setDirty(nil, "fast", highlight_dimen)
         UIManager:forceRePaint()
-        if Device.model == "Kobo_spaBW" or Device.model == "KindleBasic5" then
+        local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_spaBW" or Device.model == "KindleBasic5") then
             UIManager:yieldToEPDC(5000)
         else
             UIManager:yieldToEPDC()

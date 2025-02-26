@@ -122,7 +122,7 @@ local order = {
         "calibre",
         "exporter",
         "statistics",
-        -- "pagetextinfo", -- Not needed for filemanager
+        "pagetextinfo",
         "cloud_storage",
         "move_to_archive",
         "wallabag",

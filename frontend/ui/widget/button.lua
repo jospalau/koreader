@@ -411,7 +411,8 @@ function Button:_doFeedbackHighlight()
     -- In any case, we can solve by it calling UIManager:yieldToEPDC(5000) further down for this device but the white text with black background looks a bit aliased
     -- Fast refresh mode works fine for Kobo Libra Colour but it also looks a bit aliased so we use ui refresh mode as well
     -- Finally in both cases we call to UIManager:yieldToEPDC() passing a bigger delay since when pressing the buttons they flash in the Kobo Libra Colour and remain a bit longer than the rest of the dialog in the Kobo Libra BW
-    if Device.model == "Kobo_spaBW" or Device.model == "Kobo_monza" then
+    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+    if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_spaBW" or Device.model == "Kobo_monza") then
         UIManager:setDirty(nil, "ui", self[1].dimen)
     else
         UIManager:setDirty(nil, "fast", self[1].dimen)
