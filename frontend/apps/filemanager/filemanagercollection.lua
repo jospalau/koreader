@@ -93,7 +93,7 @@ function FileManagerCollection:onShowColl(collection_name, series)
         onLeftButtonTap = function() self:showCollDialog() end,
         onReturn = function()
             self.from_collection_name = self:getCollectionTitle(collection_name)
-            self.coll_menu.close_callback()
+            self.booklist_menu.close_callback()
             if series == true then
                 self:onShowSeriesList()
             else
@@ -126,11 +126,11 @@ function FileManagerCollection:onShowColl(collection_name, series)
     end
     self:setCollate()
     self:updateItemTable()
-    self.coll_menu.initial_collate = G_reader_settings:readSetting("collate")
-    self.coll_menu.initial_reverse_collate_mode = G_reader_settings:readSetting("reverse_collate")
+    self.booklist_menu.initial_collate = G_reader_settings:readSetting("collate")
+    self.booklist_menu.initial_reverse_collate_mode = G_reader_settings:readSetting("reverse_collate")
     G_reader_settings:saveSetting("collate", "strcoll")
     G_reader_settings:saveSetting("reverse_collate", nil)
-    UIManager:show(self.coll_menu)
+    UIManager:show(self.booklist_menu)
 
     return true
 end
@@ -624,9 +624,9 @@ function FileManagerCollection:showArrangeBooksDialog()
                         self.initial_reverse_collate_mode = G_reader_settings:readSetting("reverse_collate")
                         G_reader_settings:saveSetting("collate", "strcoll")
                         G_reader_settings:saveSetting("reverse_collate", nil)
-                        self.coll_menu.topbar:setCollectionCollate("")
-                        self.coll_menu.current_collate = nil
-                        self.coll_menu.current_reverse_collate_mode = nil
+                        self.booklist_menu.topbar:setCollectionCollate("")
+                        self.booklist_menu.current_collate = nil
+                        self.booklist_menu.current_reverse_collate_mode = nil
                         -- UIManager:setDirty(self, function()
                         --     return "ui"
                         -- end)
@@ -1364,7 +1364,7 @@ end
 
 function FileManagerCollection:onTapBottomRightCollection(arg, ges_ev)
     if ReadCollection.coll_settings[self.collection_name].collate then
-        self._manager.coll_menu.topbar:setCollectionCollate("not_manual_sorting")
+        self._manager.booklist_menu.topbar:setCollectionCollate("not_manual_sorting")
         G_reader_settings:saveSetting("reverse_collate", nil)
         UIManager:setDirty(self, function()
             return "ui"
@@ -1511,31 +1511,31 @@ function FileManagerCollection:onTapBottomRightCollection(arg, ges_ev)
             local sort_by_mode = G_reader_settings:readSetting("collate")
             if sort_by_mode == "strcoll" then
                 G_reader_settings:saveSetting("collate", "publication_date")
-                self._manager.coll_menu.topbar:setCollectionCollate("strcoll")
+                self._manager.booklist_menu.topbar:setCollectionCollate("strcoll")
                 self.current_collate = "strcoll"
             elseif sort_by_mode == "publication_date" then
                 G_reader_settings:saveSetting("collate", "word_count")
-                self._manager.coll_menu.topbar:setCollectionCollate("publication_date")
+                self._manager.booklist_menu.topbar:setCollectionCollate("publication_date")
                 self.current_collate = "publication_date"
             elseif sort_by_mode == "word_count" then
                 G_reader_settings:saveSetting("collate", "gr_rating")
-                self._manager.coll_menu.topbar:setCollectionCollate("word_count")
+                self._manager.booklist_menu.topbar:setCollectionCollate("word_count")
                 self.current_collate = "word_count"
             elseif sort_by_mode == "gr_rating" then
                 G_reader_settings:saveSetting("collate", "gr_votes")
-                self._manager.coll_menu.topbar:setCollectionCollate("gr_rating")
+                self._manager.booklist_menu.topbar:setCollectionCollate("gr_rating")
                 self.current_collate = "gr_rating"
             elseif sort_by_mode == "gr_votes" then
                 G_reader_settings:saveSetting("collate", "series")
-                self._manager.coll_menu.topbar:setCollectionCollate("gr_votes")
+                self._manager.booklist_menu.topbar:setCollectionCollate("gr_votes")
                 self.current_collate = "gr_votes"
             elseif sort_by_mode == "series" then
                 G_reader_settings:saveSetting("collate", "strcoll")
-                self._manager.coll_menu.topbar:setCollectionCollate("series")
+                self._manager.booklist_menu.topbar:setCollectionCollate("series")
                 self.current_collate = "series"
             else
                 G_reader_settings:saveSetting("collate", "strcoll")
-                self._manager.coll_menu.topbar:setCollectionCollate("")
+                self._manager.booklist_menu.topbar:setCollectionCollate("")
                 self.current_collate = ""
             end
 
@@ -1547,7 +1547,7 @@ function FileManagerCollection:onTapBottomRightCollection(arg, ges_ev)
             -- UIManager:close(self)
             -- self._manager.ui.collections:onShowColl(self.collection_name)
             self._manager:updateItemTable()
-            self._manager.coll_menu:onGotoPage(1)
+            self._manager.booklist_menu:onGotoPage(1)
         end)
     end
     return
@@ -1555,7 +1555,7 @@ end
 
 function FileManagerCollection:onDoubleTapBottomRightCollection(arg, ges_ev)
     if ReadCollection.coll_settings[self.collection_name].collate then
-        self._manager.coll_menu.topbar:setCollectionCollate("not_manual_sorting")
+        self._manager.booklist_menu.topbar:setCollectionCollate("not_manual_sorting")
         G_reader_settings:saveSetting("reverse_collate", nil)
         UIManager:setDirty(self, function()
             return "ui"
@@ -1701,7 +1701,7 @@ function FileManagerCollection:onDoubleTapBottomRightCollection(arg, ges_ev)
             G_reader_settings:saveSetting("reverse_collate", not G_reader_settings:readSetting("reverse_collate"))
             if not self.current_collate then
                 G_reader_settings:saveSetting("collate", "publication_date")
-                self._manager.coll_menu.topbar:setCollectionCollate("strcoll")
+                self._manager.booklist_menu.topbar:setCollectionCollate("strcoll")
                 self.current_collate = "strcoll"
             end
 
@@ -1709,7 +1709,7 @@ function FileManagerCollection:onDoubleTapBottomRightCollection(arg, ges_ev)
             -- UIManager:close(self)
             -- self._manager.ui.collections:onShowColl(self.collection_name)
             self._manager:updateItemTable()
-            self._manager.coll_menu:onGotoPage(1)
+            self._manager.booklist_menu:onGotoPage(1)
         end)
     end
     return
