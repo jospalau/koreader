@@ -231,6 +231,13 @@ function FileManagerCollection:onMenuHold(item)
         UIManager:close(self.file_dialog)
         self.close_callback()
     end
+    local function close_dialog_menu_callback2()
+        if self.ui.history.booklist_menu then
+            UIManager:close(self.ui.history.booklist_menu)
+        end
+        UIManager:close(self.file_dialog)
+        self.close_callback()
+    end
     local function close_dialog_update_callback()
         UIManager:close(self.file_dialog)
         self._manager:updateItemTable()
@@ -293,7 +300,7 @@ function FileManagerCollection:onMenuHold(item)
         },
     })
     table.insert(buttons, {
-        filemanagerutil.genShowFolderButton(file, close_dialog_menu_callback),
+        filemanagerutil.genShowFolderButton(file, close_dialog_menu_callback2),
         filemanagerutil.genBookInformationButton(doc_settings_or_file, book_props, close_dialog_callback),
     })
     table.insert(buttons, {
@@ -717,7 +724,7 @@ function FileManagerCollection:onShowCollList(file_or_selected_collections, call
         if force_close or self.selected_collections == nil then
             self:refreshFileManager()
             UIManager:close(self.coll_list)
-            if self.ui.history.hist_menu then -- and self.ui.history.restart then
+            if self.ui.history.booklist_menu then -- and self.ui.history.restart then
                 --UIManager:close(self.ui.history.hist_menu)
                 --self.ui.history:onShowHist()
                 self.ui.history:fetchStatuses(false)
