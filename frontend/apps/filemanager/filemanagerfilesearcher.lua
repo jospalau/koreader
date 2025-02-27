@@ -554,6 +554,9 @@ function FileSearcher:onMenuSelect(item, callback)
                 end
             end
         else
+            if self.ui.history.booklist_menu then
+                UIManager:close(self.ui.history.booklist_menu)
+            end
             self._manager.update_files = nil
             self.close_callback()
             if self.ui.file_chooser then
