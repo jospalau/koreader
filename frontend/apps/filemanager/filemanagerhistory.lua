@@ -454,7 +454,7 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
         end
 
 
-        UIManager:broadcastEvent(Event:new("ShowFileSearchLists", true, nil, files))
+        UIManager:broadcastEvent(Event:new("ShowFileSearchLists", true, files))
 
 
 

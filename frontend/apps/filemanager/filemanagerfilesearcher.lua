@@ -44,9 +44,12 @@ function FileSearcher:addToMainMenu(menu_items)
         -- @translators Search for files by name.
         text = _("File search"),
         help_text = _([[Search a book by filename in the current or home folder and its subfolders.
+
 Wildcards for one '?' or more '*' characters can be used.
 A search for '*' will show all files.
+
 The sorting order is the same as in filemanager.
+
 Tap a book in the search results to open it.]]),
         callback = function()
             self:onShowFileSearch()
@@ -133,99 +136,38 @@ function FileSearcher:onShowFileSearch(search_string, callbackfunc)
     return true
 end
 
--- function FileSearcher:onShowFileSearchLists(recent, page, search_string, sorted_size)
-function FileSearcher:onShowFileSearchLists(recent, page, search_string)
-    -- local callback_func = function(file, restart)
-    --         -- Coming nil when closing the search results list window with esc or clicking on X, Menu:onCloseAllMenus() in menu.lua
-    --         if file == nil then
-    --             -- if not self.search_menu.ui.history.hist_menu and not require("apps/reader/readerui").instance then
-    --             --     local FileManager = require("apps/filemanager/filemanager")
-    --             --     FileManager.instance.history:onShowHist()
-    --             -- end
-    --             UIManager:close(self.search_menu)
-    --             return
-    --         end
-
-    --         -- Coming restart = false when clicking on Show folder for a file in the search results list window
-    --         --  self.close_callback(file, false) in filemanagerutil.genShowFolderButton(file, caller_callback, button_disabled)
-    --         if lfs.attributes(file, "mode") == "file" and not restart then
-    --             if self.search_menu.ui.history.hist_menu then
-    --                 self.search_menu.ui.history.hist_menu.close_callback()
-    --             end
-    --             UIManager:close(self.search_menu)
-    --             return
-    --         end
-
-    --         -- Otherwise, restart = true when clicking in any other option for a file in the search results list window
-    --         -- self.close_callback(file, true) in FileSearcher:onMenuSelect(item, callback)
-    --         if self.search_menu.ui.history.hist_menu then
-    --             self.ui.history:fetchStatuses(false)
-    --             self.ui.history:updateItemTable()
-    --         end
-    --         local Event = require("ui/event")
-    --         UIManager:broadcastEvent(Event:new("CloseSearchMenu", recent, self.search_string))
-    --     end
-    local search_dialog
-    local check_button_case, check_button_subfolders, check_button_metadata
-    self.path = G_reader_settings:readSetting("home_dir")
+function FileSearcher:onShowFileSearchLists(recent, search_string)
+    FileSearcher.search_path = G_reader_settings:readSetting("home_dir")
     FileSearcher.search_string = search_string
     if FileSearcher.search_string == nil then
         FileSearcher.search_string = "*.epub"
     end
+    local filemanagerutil = require("apps/filemanager/filemanagerutil")
+    self.path = G_reader_settings:readSetting("home_dir") or filemanagerutil.getDefaultDir()
+    self.case_sensitive = false
+    self.include_subfolders = true
+    self.include_metadata = false
     self.recent = recent
 
     -- self:onSearchSortCompleted(false, recent, page, nil, sorted_size)
     local Trapper = require("ui/trapper")
     Trapper:wrap(function()
-        self:doSearchCompleted(false, recent, page, nil)
+        self:doSearchCompleted(false, recent)
     end)
 end
 
-function FileSearcher:onCloseSearchMenu(recent, search_string)
-    -- UIManager:close(self.search_menu) We do this at the end of the trapper wrapped function doSearchCompleted()
-    self:onShowFileSearchLists(recent, self.search_menu.page, search_string)
-end
-
 function FileSearcher:onShowFileSearchAllCompleted()
-    -- local callback_func = function(file, restart)
-    --         -- Coming nil when closing the search results list window with esc or clicking on X, Menu:onCloseAllMenus() in menu.lua
-    --         if file == nil then
-    --             -- if not self.search_menu.ui.history.hist_menu and not require("apps/reader/readerui").instance then
-    --             --     local FileManager = require("apps/filemanager/filemanager")
-    --             --     FileManager.instance.history:onShowHist()
-    --             -- end
-    --             UIManager:close(self.search_menu)
-    --             return
-    --         end
-
-    --         -- Coming restart = false when clicking on Show folder for a file in the search results list window
-    --         --  self.close_callback(file, false) in filemanagerutil.genShowFolderButton(file, caller_callback, button_disabled)
-    --         if lfs.attributes(file, "mode") == "file" and not restart then
-    --             if self.search_menu.ui.history.hist_menu then
-    --                 self.search_menu.ui.history.hist_menu.close_callback()
-    --             end
-    --             UIManager:close(self.search_menu)
-    --             return
-    --         end
-
-    --         -- Otherwise, restart = true when clicking in any other option for a file in the search results list window
-    --         -- self.close_callback(file, true) in FileSearcher:onMenuSelect(item, callback)
-    --         if self.search_menu.ui.history.hist_menu then
-    --             self.ui.history:fetchStatuses(false)
-    --             self.ui.history:updateItemTable()
-    --         end
-    --         local Event = require("ui/event")
-    --         UIManager:broadcastEvent(Event:new("CloseSearchMenu", recent, self.search_string))
-    --     end
-    local search_dialog
-    local check_button_case, check_button_subfolders, check_button_metadata
-    self.path = G_reader_settings:readSetting("home_dir")
+    FileSearcher.search_path = G_reader_settings:readSetting("home_dir")
     FileSearcher.search_string = "*.epub"
-
+    local filemanagerutil = require("apps/filemanager/filemanagerutil")
+    self.path = G_reader_settings:readSetting("home_dir") or filemanagerutil.getDefaultDir()
+    self.case_sensitive = false
+    self.include_subfolders = true
+    self.include_metadata = false
     -- self:onSearchSortCompleted(false, recent, page, nil, sorted_size)
     local Trapper = require("ui/trapper")
     Trapper:wrap(function()
-        self:doSearchCompleted(true, nil, nil, nil)
+        self:doSearchCompleted(true, nil)
     end)
 end
 
@@ -267,7 +209,7 @@ end
 
 
 function FileSearcher:showSearchResultsComplete(results, callback)
-    self.search_menu = Menu:new{
+    self.booklist_menu = Menu:new{
         title = T(_("Completed books (%1)"), #results),
         item_table = results,
         ui = self.ui,
@@ -279,7 +221,7 @@ function FileSearcher:showSearchResultsComplete(results, callback)
     }
 
     if callback then
-        self.search_menu.close_callback = callback
+        self.booklist_menu.close_callback = callback
     else
         self.booklist_menu.close_callback = function()
             self:refreshFileManager()
@@ -294,14 +236,13 @@ function FileSearcher:showSearchResultsComplete(results, callback)
         end
     end
 
-    UIManager:show(self.search_menu)
+    UIManager:show(self.booklist_menu)
     if self.no_metadata_count ~= 0 then
         self:showSearchResultsMessage()
     end
 end
 
--- function FileSearcher:onSearchSortCompleted(show_complete, show_recent, page, callback, sorted_size)
-function FileSearcher:doSearchCompleted(show_complete, show_recent, page, callback, sorted_size)
+function FileSearcher:doSearchCompleted(show_complete, show_recent)
     local search_hash = self.path .. (FileSearcher.search_string or "") ..
         tostring(self.case_sensitive) .. tostring(self.include_subfolders) .. tostring(self.include_metadata) .. select(2, FileChooser:getCollate())
     local not_cached = true -- FileSearcher.search_hash ~= search_hash I don't want to cache for this case
@@ -332,9 +273,6 @@ function FileSearcher:doSearchCompleted(show_complete, show_recent, page, callba
         if show_complete and show_recent then
             table.sort(FileSearcher.search_results,function(a,b) return b.text>a.text end)
         end
-        -- if sorted_size then
-        --     table.sort(FileSearcher.search_results,function(a,b) return b.words<a.words end)
-        -- end
         if (show_complete) then
             local table_complete = {}
             for key, value in ipairs(FileSearcher.search_results) do
@@ -360,14 +298,13 @@ function FileSearcher:doSearchCompleted(show_complete, show_recent, page, callba
         end
     end
     -- Delay the search menu closure until here instead of in onCloseSearchMenu() so history is not shown when search menu it is reloaded
-    UIManager:close(self.search_menu)
+    UIManager:close(self.booklist_menu)
     if #FileSearcher.search_results > 0 then
-        self:onShowSearchResults(not_cached, show_complete, show_recent, page, callback)  --self:showSearchResults(results, nil, nil, callbackfunc)
+        self:onShowSearchResults(not_cached, show_complete, show_recent)  --self:showSearchResults(results, nil, nil, callbackfunc)
     else
         self:showSearchResultsMessage(true)
     end
 end
-
 
 function FileSearcher:getList()
     self.no_metadata_count = 0 -- will be updated in doSearch() with result from subprocess
@@ -439,6 +376,7 @@ function FileSearcher:getList()
                                 end
                             end
                         else
+                            print(fullpath)
                             if self:isFileMatch(f, fullpath, search_string, true) then
                                 table.insert(dirs, { f, fullpath, attributes })
                                 -- local file = FileChooser:getListItem(nil, f, fullpath, attributes, collate)
@@ -514,7 +452,7 @@ function FileSearcher:refreshFileManager()
     end
 end
 
-function FileSearcher:onShowSearchResults(not_cached, results, show_recent, page, callback)
+function FileSearcher:onShowSearchResults(not_cached, results, show_recent)
     if not not_cached and FileSearcher.search_results == nil then
         self:onShowFileSearch()
         return true
@@ -523,6 +461,7 @@ function FileSearcher:onShowSearchResults(not_cached, results, show_recent, page
    -- This may be hijacked by CoverBrowser plugin and needs to be known as booklist_menu.
     self.booklist_menu = BookList:new{
         name = "filesearcher",
+        title = "filesearcher",
         subtitle = T(_("Query: %1"), FileSearcher.search_string),
         title_bar_left_icon = "appbar.menu",
         onLeftButtonTap = function() self:setSelectMode() end,
@@ -532,105 +471,20 @@ function FileSearcher:onShowSearchResults(not_cached, results, show_recent, page
         _manager = self,
         _recreate_func = function() self:onShowSearchResults(not_cached) end,
     }
-
-    -- -- Coming from the event declared in onShowFileSearchAll() to get a list, callback function coming from onShowFileSearchAll()
-    -- if callback then
-    --     self.search_menu.close_callback = callback
-    --     -- UIManager:close(self.search_menu)
-    -- else -- Coming from onShowFileSearch(), we create the callback function here
-        -- self.search_menu.close_callback = function()
-        --     UIManager:close(self.search_menu)
-        --     local Event = require("ui/event")
-        --     UIManager:broadcastEvent(Event:new("ShowFileSearchAll", show_recent))
-        --     if self.ui.file_chooser then
-        --         self.ui.file_chooser:refreshPath()
-        --     end
-        -- end
-
-
-        -- Not used since we are not reopening the file searcher
-        -- If we are not in history and not in reader we want to go to a folder if a folder is selected and open history if a file is manipulated
-        -- If we are in history and in fm we want to go to a folder is a folder is selected and remain in history if a file manipulated
-        -- If we are in reader there is no menu for File Search so nothing to be done
-        -- If we are in history and in reader we want to go to a folder if a folder is selected and remain in history if a file is manipulated
-        self.search_menu.close_callback = function(file, actioned)
+    self.booklist_menu.close_callback = function()
+        self:refreshFileManager()
+        if self.ui.history.booklist_menu then
+            self.ui.history:fetchStatuses(false)
+            self.ui.history:updateItemTable()
+        end
+        UIManager:close(self.booklist_menu)
+        self.booklist_menu = nil
+        if self.selected_files then
             self.selected_files = nil
-            -- Coming nil when closing the search results list window with esc or clicking on X, Menu:onCloseAllMenus() in menu.lua
-            if file == nil or ((lfs.attributes(file, "mode") == "file" or lfs.attributes(file, "mode") == "directory") and not actioned) then
-                UIManager:close(self.search_menu)
-                return
-            end
-
-            -- -- If history open in previous search menu, refresh it
-            -- if self.search_menu.ui.history.hist_menu then
-            --     self.ui.history:fetchStatuses(false)
-            --     self.ui.history:updateItemTable()
-
-            --     if self.ui.file_chooser then
-            --         self.ui.file_chooser:refreshPath()
-            --     end
-            --     -- self.search_menu.ui.history.hist_menu.close_callback()
-            --     -- local Event = require("ui/event")
-            --     -- UIManager:broadcastEvent(Event:new("CloseSearchMenu", false, self.search_string))
-            --     -- return
-            -- end
-
-            -- -- -- If in reader and in history refresh it
-            -- -- if require("apps/reader/readerui").instance and require("apps/reader/readerui").instance.history then
-            -- --     -- UIManager:close(require("apps/reader/readerui").instance.history)
-            -- --     self.ui.history:fetchStatuses(false)
-            -- --     self.ui.history:updateItemTable()
-            -- -- end
-
-
-            -- -- If file is not false, it is a file or a directory
-            -- if lfs.attributes(file, "mode") == "file" then
-            --     -- Coming actioned = true when we select a file and we action anything different to Show folder
-            --     -- self.close_callback(file, true) in FileSearcher:onMenuSelect(item, callback)
-            --     if actioned then
-            --         -- We want to go to the history in this case if no history to show what we changed
-            --         -- if not self.search_menu.ui.history.hist_menu and not require("apps/reader/readerui").instance then
-            --         --     local FileManager = require("apps/filemanager/filemanager")
-            --         --     FileManager.instance.history:onShowHist()
-            --         -- end
-            --         -- -- If no history we open it
-            --         -- if not self.search_menu.ui.history.hist_menu and require("apps/reader/readerui").instance then
-            --         --     local FileManager = require("apps/filemanager/filemanager")
-            --         --     require("apps/reader/readerui").instance.history:onShowHist()
-            --         -- end
-
-            --         -- if self.search_menu.ui.history.hist_menu then
-            --         --     self.search_menu.ui.history.hist_menu.close_callback()
-            --         -- end
-            --         local Event = require("ui/event")
-            --         UIManager:broadcastEvent(Event:new("CloseSearchMenu", self.recent, self.search_string))
-            --         return
-            --     else
-            --         -- When we select a file and we action Show folder. Closing history if it is open, to go to the folder containing the file
-            --         if self.search_menu.ui.history.hist_menu then
-            --             self.search_menu.ui.history.hist_menu.close_callback()
-            --         end
-            --     end
-            -- else -- Directory
-            --     -- Coming a directory when we select a directory and we action Show folder. Closing history if open to go to the folder
-            --     if self.search_menu.ui.history.hist_menu then
-            --         self.search_menu.ui.history.hist_menu.close_callback()
-            --     end
-
-            -- end
-            if (lfs.attributes(file, "mode") == "file" and not actioned) or lfs.attributes(file, "mode") == "directory" then
-                if lfs.attributes(file, "mode") == "directory" then
-                    if self.search_menu.ui.history.hist_menu then
-                        self.search_menu.ui.history.hist_menu.close_callback()
-                    end
-                end
-                return
+            for _, item in ipairs(FileSearcher.search_results) do
+                item.dim = nil
             end
         end
-    -- end
-
-    if page then
-        self.search_menu:onGotoPage(page)
     end
     self:updateItemTable(FileSearcher.search_results)
     UIManager:show(self.booklist_menu)
@@ -657,7 +511,7 @@ function FileSearcher:onMenuSelect(item, callback)
             self._manager:updateItemTable()
         end
     else
-        self._manager:showFileDialog(item, callback) if item.is_file then
+        if item.is_file then
             if DocumentRegistry:hasProvider(item.path, nil, true) then
                 self.close_callback()
                 local FileManager = require("apps/filemanager/filemanager")
@@ -683,83 +537,30 @@ function FileSearcher:onMenuHold(item)
     local is_file = item.is_file or false
     self.file_dialog = nil
 
-    local function close_dialog_callback(file, to_status)
-        UIManager:close(dialog)
-        -- local FileManager = require("apps/filemanager/filemanager")
-        -- FileManager.instance.history:onShowHist()
-        -- Pass false instead of the file
-        self.search_menu.close_callback(file, true)
-
-        local index={}
-        for k, v in pairs(self.search_menu.item_table) do
-            index[v.path] = k
-        end
-
-        self.search_menu.item_table[index[file]].in_tbr = false
-        self.search_menu.item_table[index[file]].is_finished = false
-        self.search_menu.item_table[index[file]].is_paused = false
-        self.search_menu.item_table[index[file]].is_being_read = false
-        self.search_menu.item_table[index[file]].in_history = false
-        self.search_menu.item_table[index[file]].bold = false
-        if type(to_status) == "string"  then -- MBR, callback called from different place
-            local status = ""
-            if to_status == "tbr" then
-                self.search_menu.item_table[index[file]].in_tbr = true
-            end
-
-            if to_status == "complete" then
-                self.search_menu.item_table[index[file]].is_finished = true
-            end
-
-            if to_status == "abandoned" then
-                self.search_menu.item_table[index[file]].is_paused = true
-            end
-
-            if to_status == "reading" then
-                self.search_menu.item_table[index[file]].is_being_read = true
-            end
-            self.search_menu.item_table[index[file]].text = status .. select(2, util.splitFilePathName(file))
-        else
-            self.search_menu.item_table[index[file]].in_history = require("readhistory"):getIndexByFile(file) ~= nil
-            self.search_menu.item_table[index[file]].bold = true
-            -- to_status is true/false depending if we checked Add to the history as MBR. We don't use it since both will be bold
-        end
-
-
-        self.search_menu:onGotoPage(self.search_menu.page)
-        self.search_hash = ""
-
-        if self.ui and self.ui.history.hist_menu then
-            self.ui.history:fetchStatuses(false)
-            self.ui.history:updateItemTable()
-        end
-
-        -- if self.ui.history.hist_menu then
-        --     self.ui.history.hist_menu.close_callback()
-        -- end
-        -- local Event = require("ui/event")
-        -- UIManager:broadcastEvent(Event:new("ShowFileSearchAll"))
-    end
-
-    local function close_dialog_callback2()
+    local function close_dialog_callback()
         UIManager:close(self.file_dialog)
     end
-    -- When Show folder in file to the callback in onShowFileSearchAll()
-    local function close_dialog_menu_callback(file)
+    local function close_dialog_menu_callback()
         UIManager:close(self.file_dialog)
-        self.close_callback(file, false)
+        self.close_callback()
     end
-
+    local function close_dialog_menu_callback2()
+        if self.ui.history.booklist_menu then
+            UIManager:close(self.ui.history.booklist_menu)
+        end
+        UIManager:close(self.file_dialog)
+        self.close_callback()
+    end
     local function close_dialog_update_callback()
         UIManager:close(self.file_dialog)
         self._manager:updateItemTable()
         self._manager.files_updated = true
     end
-    local function update_item_callback()
-        local function close_menu_refresh_callback()
+    local function close_menu_refresh_callback()
         self._manager.files_updated = true
         self.close_callback()
     end
+
     local buttons = {}
     local book_props, is_currently_opened
     if is_file then
@@ -787,68 +588,67 @@ function FileSearcher:onMenuHold(item)
             table.insert(buttons, {}) -- separator
             table.insert(buttons, {
                 filemanagerutil.genResetSettingsButton(doc_settings_or_file, close_dialog_update_callback, is_currently_opened),
-                -- The last change calls update_item_callback() but I will continue calling close_dialog_callback() and the search it will be reopened
-                -- Basically because I close the dialog always there is an action in close_dialog_callback()
-                self._manager.ui.collections:genAddToCollectionButton(file, close_dialog_callback2, close_dialog_callback),
-                })
-            end
-            if Device:canExecuteScript(file) then
-                table.insert(buttons, {
-                    filemanagerutil.genExecuteScriptButton(file, close_dialog_menu_callback)
-                })
-            end
-            if FileManagerConverter:isSupported(file) then
-                table.insert(buttons, {
-                    FileManagerConverter:genConvertButton(file, close_dialog_callback, close_menu_refresh_callback)
-                })
-            end
-            table.insert(buttons, {
-                {
-                    text = _("Delete"),
-                    enabled = not is_currently_opened,
-                    callback = function()
-                        local function post_delete_callback()
-                            table.remove(FileSearcher.search_results, item.idx)
-                            table.remove(self.item_table, item.idx)
-                            close_dialog_update_callback()
-                        end
-                        local FileManager = require("apps/filemanager/filemanager")
-                        FileManager:showDeleteFileDialog(file, post_delete_callback)
-                    end,
-                },
-                {
-                    text = _("Open with…"),
-                    callback = function()
-                        close_dialog_callback()
-                        local FileManager = require("apps/filemanager/filemanager")
-                        FileManager.showOpenWithDialog(self.ui, file)
-                    end,
-                },
-            })
-            table.insert(buttons, {
-                filemanagerutil.genShowFolderButton(file, close_dialog_menu_callback),
-                filemanagerutil.genBookInformationButton(doc_settings_or_file, book_props, close_dialog_callback),
-            })
-            if has_provider then
-                table.insert(buttons, {
-                    filemanagerutil.genBookCoverButton(file, book_props, close_dialog_callback),
-                    filemanagerutil.genBookDescriptionButton(file, book_props, close_dialog_callback),
-                })
-            end
-        else -- folder
-            table.insert(buttons, {
-                filemanagerutil.genShowFolderButton(file, close_dialog_menu_callback),
+                self._manager.ui.collections:genAddToCollectionButton(file, close_dialog_callback, close_dialog_update_callback),
             })
         end
-        if self._manager.file_dialog_added_buttons ~= nil then
-            for _, row_func in ipairs(self._manager.file_dialog_added_buttons) do
-                local row = row_func(file, true, book_props)
-                if row ~= nil then
-                    table.insert(buttons, row)
-                end
+        if Device:canExecuteScript(file) then
+            table.insert(buttons, {
+                filemanagerutil.genExecuteScriptButton(file, close_dialog_menu_callback)
+            })
+        end
+        if FileManagerConverter:isSupported(file) then
+            table.insert(buttons, {
+                FileManagerConverter:genConvertButton(file, close_dialog_callback, close_menu_refresh_callback)
+            })
+        end
+        table.insert(buttons, {
+            {
+                text = _("Delete"),
+                enabled = not is_currently_opened,
+                callback = function()
+                    local function post_delete_callback()
+                        table.remove(FileSearcher.search_results, item.idx)
+                        table.remove(self.item_table, item.idx)
+                        close_dialog_update_callback()
+                    end
+                    local FileManager = require("apps/filemanager/filemanager")
+                    FileManager:showDeleteFileDialog(file, post_delete_callback)
+                end,
+            },
+            {
+                text = _("Open with…"),
+                callback = function()
+                    close_dialog_callback()
+                    local FileManager = require("apps/filemanager/filemanager")
+                    FileManager.showOpenWithDialog(self.ui, file)
+                end,
+            },
+        })
+        table.insert(buttons, {
+            filemanagerutil.genShowFolderButton(file, close_dialog_menu_callback2),
+            filemanagerutil.genBookInformationButton(doc_settings_or_file, book_props, close_dialog_callback),
+        })
+        if has_provider then
+            table.insert(buttons, {
+                filemanagerutil.genBookCoverButton(file, book_props, close_dialog_callback),
+                filemanagerutil.genBookDescriptionButton(file, book_props, close_dialog_callback),
+            })
+        end
+    else -- folder
+        table.insert(buttons, {
+            filemanagerutil.genShowFolderButton(file, close_dialog_menu_callback2),
+        })
+    end
+
+    if self._manager.file_dialog_added_buttons ~= nil then
+        for _, row_func in ipairs(self._manager.file_dialog_added_buttons) do
+            local row = row_func(file, true, book_props)
+            if row ~= nil then
+                table.insert(buttons, row)
             end
         end
     end
+
     self.file_dialog = ButtonDialog:new{
         title = is_file and BD.filename(file) or BD.directory(file),
         title_align = "center",
@@ -933,8 +733,102 @@ function FileSearcher:showSelectModeDialog()
                     self.files_updated = nil -- refresh fm later
                     self.booklist_menu.close_callback()
                     if self.ui.file_chooser then
-                        if self.search_menu.ui.history.hist_menu then
-                            self.search_menu.ui.history.hist_menu.close_callback()
+                        self.ui.selected_files = selected_files
+                        self.ui.title_bar:setRightIcon("check")
+                        self.ui.file_chooser:refreshPath()
+                    else -- called from Reader
+                        self.ui:onClose()
+                        self.ui:showFileManager(FileSearcher.search_path .. "/", selected_files)
+                    end
+                end,
+            },
+        },
+    }
+    select_dialog = ButtonDialog:new{
+        title = title,
+        title_align = "center",
+        buttons = buttons,
+    }
+    UIManager:show(select_dialog)
+end
+
+function FileSearcher.getMenuInstance()
+    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+    return ui.filesearcher.booklist_menu
+end
+
+function FileSearcher:setSelectMode()
+    if self.selected_files then
+        self:showSelectModeDialog()
+    else
+        self.selected_files = {}
+        self.booklist_menu:setTitleBarLeftIcon("check")
+    end
+end
+
+function FileSearcher:showSelectModeDialog()
+    local item_table = self.booklist_menu.item_table
+    local select_count = util.tableSize(self.selected_files)
+    local actions_enabled = select_count > 0
+    local title = actions_enabled and T(N_("1 file selected", "%1 files selected", select_count), select_count)
+        or _("No files selected")
+    local select_dialog
+    local buttons = {
+        {
+            {
+                text = _("Deselect all"),
+                enabled = actions_enabled,
+                callback = function()
+                    UIManager:close(select_dialog)
+                    for file in pairs (self.selected_files) do
+                        self.selected_files[file] = nil
+                    end
+                    for _, item in ipairs(item_table) do
+                        item.dim = nil
+                    end
+                    self:updateItemTable()
+                end,
+            },
+            {
+                text = _("Select all"),
+                callback = function()
+                    UIManager:close(select_dialog)
+                    for _, item in ipairs(item_table) do
+                        if item.is_file then
+                            item.dim = true
+                            self.selected_files[item.path] = true
+                        end
+                    end
+                    self:updateItemTable()
+                end,
+            },
+        },
+        {
+            {
+                text = _("Exit select mode"),
+                callback = function()
+                    UIManager:close(select_dialog)
+                    self.selected_files = nil
+                    self.booklist_menu:setTitleBarLeftIcon("appbar.menu")
+                    if actions_enabled then
+                        for _, item in ipairs(item_table) do
+                            item.dim = nil
+                        end
+                    end
+                    self:updateItemTable()
+                end,
+            },
+            {
+                text = _("Select in file browser"),
+                enabled = actions_enabled,
+                callback = function()
+                    UIManager:close(select_dialog)
+                    local selected_files = self.selected_files
+                    self.files_updated = nil -- refresh fm later
+                    self.booklist_menu.close_callback()
+                    if self.ui.file_chooser then
+                        if self.booklist_menu.ui.history.hist_menu then
+                            self.booklist_menu.ui.history.hist_menu.close_callback()
                         end
                         self.ui.selected_files = selected_files
                         self.ui.title_bar:setRightIcon("check")
