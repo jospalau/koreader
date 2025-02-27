@@ -1162,6 +1162,7 @@ function ReaderUI:onAdjustMarginsTopbar()
             -- self.document.configurable.h_page_margins[1] = 12
             -- self.document.configurable.h_page_margins[2] = 12
             -- self:handleEvent(Event:new("SetPageMargins", margins))
+            -- Height to width ratio to be approximately sqrt(2), 50/35 = 1.43
             if self.document.configurable.b_page_margin ~= 50
                 or self.document.configurable.t_page_margin ~= 50
                 or self.document.configurable.h_page_margins[1] ~= 35

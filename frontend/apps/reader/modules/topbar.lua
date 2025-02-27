@@ -1014,9 +1014,20 @@ end
 
 
 function TopBar:onSwitchTopBar()
-    if self.toggled then
+    if not TopBar.is_enabled then
         G_reader_settings:saveSetting("show_top_bar", true)
         TopBar.is_enabled = true
+        TopBar.show_top_bar = true
+        TopBar.alt_bar = true
+        self.progress_bar2.altbar_ticks_height = 5
+        self.progress_bar2.altbar_line_thickness = 9
+        TopBar.option = 1
+        self:toggleBar()
+
+        UIManager:setDirty(self.view.dialog, function()
+            return self.view.currently_scrolling and "fast" or "ui"
+        end)
+        return
     end
     if G_reader_settings:isTrue("show_top_bar") then
         if TopBar.show_top_bar then
@@ -1038,10 +1049,16 @@ function TopBar:onSwitchTopBar()
                 TopBar.show_top_bar = false
                 TopBar.option = 4
             end
+        -- We don't want to cycle disabling/enabling the topbar
+        -- since there is a swipe gesture in the page text info plugin
+        -- to toggle it on and off
         -- elseif TopBar.is_enabled then
         --     TopBar.is_enabled = false
+        -- Although we do it here. First we disable it and then
+        -- we let it ready to start from the beginning
         else
-            TopBar.is_enabled = true
+            G_reader_settings:saveSetting("show_top_bar", false)
+            TopBar.is_enabled = false
             TopBar.show_top_bar = true
             TopBar.alt_bar = true
             self.progress_bar2.altbar_ticks_height = 5
@@ -1062,7 +1079,6 @@ end
 function TopBar:quickToggleOnOff(put_off)
     G_reader_settings:saveSetting("show_top_bar", put_off)
     TopBar.is_enabled = put_off
-    self.toggled = true
     self:toggleBar()
     UIManager:setDirty(self.view.dialog, function()
         return self.view.currently_scrolling and "fast" or "ui"
