@@ -63,13 +63,26 @@ function FileManagerHistory:onShowHist(search_info)
     -- This may be hijacked by CoverBrowser plugin and needs to be known as booklist_menu.
     self.booklist_menu = BookList:new{
         name = "history",
+        title = "History",
         title_bar_left_icon = "appbar.menu",
         onLeftButtonTap = function() self:showHistDialog() end,
         onMenuChoice = self.onMenuChoice,
         onMenuHold = self.onMenuHold,
+        onMultiSwipe = self.onMultiSwipe,
+        onTap = self.onTap,
+        onDoubleTapBottomLeft = self.onDoubleTapBottomLeft,
+        onDoubleTapBottomRight = self.onDoubleTapBottomRight,
         ui = self.ui,
         _manager = self,
         _recreate_func = function() self:onShowHist(search_info) end,
+    }
+    self.booklist_menu.disable_double_tap = false
+
+    self.booklist_menu.topbar = Topbar:new{
+        view = nil,
+        ui = nil,
+        fm = true,
+        history = true
     }
     self.booklist_menu.close_callback = function()
         self:refreshFileManager()
@@ -526,7 +539,8 @@ function FileManagerHistory:onShowHistMBR()
     local ReadHistory = require("readhistory")
     -- ReadHistory.hist = {}
     -- ReadHistory:reload(true)
-    self.hist_menu = BookList:new{
+    self.booklist_menu = BookList:new{
+        name = "history",
         ui = self.ui,
         covers_fullscreen = true, -- hint for UIManager:_repaint()
         is_borderless = true,
@@ -541,7 +555,7 @@ function FileManagerHistory:onShowHistMBR()
     self.filter = "mbr"
     self:fetchStatusesOut(false)
     self:updateItemTable()
-    self.hist_menu.close_callback = function()
+    self.booklist_menu.close_callback = function()
         if self.files_updated then -- refresh Filemanager list of files
             if self.ui.file_chooser then
                 self.ui.file_chooser:refreshPath()
@@ -549,10 +563,10 @@ function FileManagerHistory:onShowHistMBR()
             self.files_updated = nil
         end
         self.statuses_fetched = nil
-        UIManager:close(self.hist_menu)
-        self.hist_menu = nil
+        UIManager:close(self.booklist_menu)
+        self.booklist_menu = nil
     end
-    UIManager:show(self.hist_menu)
+    UIManager:show(self.booklist_menu)
     return true
 end
 
@@ -560,7 +574,8 @@ function FileManagerHistory:onShowHistTBR()
     local ReadHistory = require("readhistory")
     -- ReadHistory.hist = {}
     -- ReadHistory:reload(true)
-    self.hist_menu = BookList:new{
+    self.booklist_menu = BookList:new{
+        name = "history",
         ui = self.ui,
         covers_fullscreen = true, -- hint for UIManager:_repaint()
         is_borderless = true,
@@ -575,7 +590,7 @@ function FileManagerHistory:onShowHistTBR()
     self.filter = "tbr"
     self:fetchStatusesOut(false)
     self:updateItemTable()
-    self.hist_menu.close_callback = function()
+    self.booklist_menu.close_callback = function()
         if self.files_updated then -- refresh Filemanager list of files
             if self.ui.file_chooser then
                 self.ui.file_chooser:refreshPath()
@@ -583,10 +598,10 @@ function FileManagerHistory:onShowHistTBR()
             self.files_updated = nil
         end
         self.statuses_fetched = nil
-        UIManager:close(self.hist_menu)
-        self.hist_menu = nil
+        UIManager:close(self.booklist_menu)
+        self.booklist_menu = nil
     end
-    UIManager:show(self.hist_menu)
+    UIManager:show(self.booklist_menu)
     return true
 end
 function FileManagerHistory:showHistDialog()
