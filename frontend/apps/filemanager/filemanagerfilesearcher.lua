@@ -513,9 +513,45 @@ function FileSearcher:onMenuSelect(item, callback)
     else
         if item.is_file then
             if DocumentRegistry:hasProvider(item.path, nil, true) then
-                self.close_callback()
-                local FileManager = require("apps/filemanager/filemanager")
-                FileManager.openFile(self.ui, item.path)
+                if G_reader_settings:isTrue("top_manager_infmandhistory")
+                and item.path
+                and util.getFileNameSuffix(item.path) == "epub"
+                and (require("apps/filemanager/filemanager").all_files[item.path].status == "mbr"
+                    or require("apps/filemanager/filemanager").all_files[item.path].status == "new"
+                    or require("apps/filemanager/filemanager").all_files[item.path].status == "complete") then
+                    local MultiConfirmBox = require("ui/widget/multiconfirmbox")
+                    local text = ", do you want to open it?"
+                    if require("apps/filemanager/filemanager").all_files[item.path].status == "mbr" then
+                        text = "Book in MBR" .. text
+                    elseif require("apps/filemanager/filemanager").all_files[item.path].status == "new" then
+                        text = "Book not opened" .. text
+                    else
+                        text = "Book finished" .. text
+                    end
+
+                    local multi_box= MultiConfirmBox:new{
+                        text = text,
+                        choice1_text = _("Yes"),
+                        choice1_callback = function()
+                            self.close_callback()
+                            local FileManager = require("apps/filemanager/filemanager")
+                            FileManager.openFile(self.ui, item.path)
+                        end,
+                        choice2_text = _("Do not open it"),
+                        choice2_callback = function()
+                            return
+                        end,
+                        cancel_callback = function()
+                            return
+                        end,
+                    }
+                    UIManager:show(multi_box)
+                    return false
+                else
+                    self.close_callback()
+                    local FileManager = require("apps/filemanager/filemanager")
+                    FileManager.openFile(self.ui, item.path)
+                end
             end
         else
             self._manager.update_files = nil
