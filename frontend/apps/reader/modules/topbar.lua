@@ -1014,33 +1014,39 @@ end
 
 
 function TopBar:onSwitchTopBar()
+    if self.toggled then
+        G_reader_settings:saveSetting("show_top_bar", true)
+        TopBar.is_enabled = true
+    end
     if G_reader_settings:isTrue("show_top_bar") then
         if TopBar.show_top_bar then
-            if self.progress_bar2.altbar_ticks_height == 7 then
+            if TopBar.option == 1 then
                 self.progress_bar2.altbar_ticks_height = 16
                 self.progress_bar2.altbar_line_thickness = 6
-                self.option = 2
+                TopBar.option = 2
                 -- self.progress_bar2.factor = 3
-            elseif self.progress_bar2.altbar_ticks_height == 16 then
+            elseif TopBar.option == 2 then
                 self.progress_bar2.altbar_ticks_height = -1
                 self.progress_bar2.altbar_line_thickness = -1
                 -- self.progress_bar2.factor = -1
                 TopBar.alt_bar = false
-                self.option = 3
-            else
+                TopBar.option = 3
+            elseif TopBar.option == 3 then
                 self.progress_bar2.altbar_ticks_height = 5
                 self.progress_bar2.altbar_line_thickness = 9
                 -- self.progress_bar2.factor = 1
                 TopBar.show_top_bar = false
-                self.option = 4
+                TopBar.option = 4
             end
-        elseif TopBar.is_enabled then
-            TopBar.is_enabled = false
+        -- elseif TopBar.is_enabled then
+        --     TopBar.is_enabled = false
         else
             TopBar.is_enabled = true
             TopBar.show_top_bar = true
             TopBar.alt_bar = true
-            self.option = 1
+            self.progress_bar2.altbar_ticks_height = 5
+            self.progress_bar2.altbar_line_thickness = 9
+            TopBar.option = 1
         end
         self:toggleBar()
 
@@ -1051,6 +1057,16 @@ function TopBar:onSwitchTopBar()
             return self.view.currently_scrolling and "fast" or "ui"
         end)
     end
+end
+
+function TopBar:quickToggleOnOff(put_off)
+    G_reader_settings:saveSetting("show_top_bar", put_off)
+    TopBar.is_enabled = put_off
+    self.toggled = true
+    self:toggleBar()
+    UIManager:setDirty(self.view.dialog, function()
+        return self.view.currently_scrolling and "fast" or "ui"
+    end)
 end
 
 

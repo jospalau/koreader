@@ -1155,13 +1155,24 @@ function ReaderUI:onAdjustMarginsTopbar()
                 end
             end
         else
-            -- Adjust margin values to the topbar. Values are in pixels
-            local margins = { 12, 12, 12, 12}
-            self.document.configurable.t_page_margin = 12
-            self.document.configurable.b_page_margin = 12
-            self.document.configurable.h_page_margins[1] = 12
-            self.document.configurable.h_page_margins[2] = 12
-            self:handleEvent(Event:new("SetPageMargins", margins))
+            -- -- Adjust margin values to the topbar. Values are in pixels
+            -- local margins = { 12, 12, 12, 12}
+            -- self.document.configurable.t_page_margin = 12
+            -- self.document.configurable.b_page_margin = 12
+            -- self.document.configurable.h_page_margins[1] = 12
+            -- self.document.configurable.h_page_margins[2] = 12
+            -- self:handleEvent(Event:new("SetPageMargins", margins))
+            if self.document.configurable.b_page_margin ~= 50
+                or self.document.configurable.t_page_margin ~= 50
+                or self.document.configurable.h_page_margins[1] ~= 35
+                or self.document.configurable.h_page_margins[2] ~= 35  then
+                local margins = { 35, 50, 35, 50}
+                self.document.configurable.b_page_margin = 50
+                self.document.configurable.t_page_margin = 50
+                self.document.configurable.h_page_margins[1] = 35
+                self.document.configurable.h_page_margins[2] = 35
+                self:handleEvent(Event:new("SetPageMargins", margins))
+            end
         end
     end
 end
