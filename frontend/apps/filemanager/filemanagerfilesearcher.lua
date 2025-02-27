@@ -688,8 +688,28 @@ function FileSearcher:onMenuHold(item)
         end
     end
 
+    local title = file:gsub(".epub","")
+    title = select(2, util.splitFilePathName(title))
+    if self._manager.ui.history.calibre_data[item.text]
+        and self._manager.ui.history.calibre_data[item.text]["pubdate"]
+        and self._manager.ui.history.calibre_data[item.text]["words"]
+        and self._manager.ui.history.calibre_data[item.text]["grrating"]
+        and self._manager.ui.history.calibre_data[item.text]["grvotes"] then
+            title = title .. ", " ..  self._manager.ui.history.calibre_data[item.text]["pubdate"]:sub(1, 4)
+            .. " - " .. self._manager.ui.history.calibre_data[item.text]["grrating"] .. "★ ("
+            .. self._manager.ui.history.calibre_data[item.text]["grvotes"] .. ") - "
+            .. tostring(math.floor(self._manager.ui.history.calibre_data[item.text]["words"]/1000)) .."kw"
+    end
+    if bookinfo then
+        if bookinfo.title then
+            title = title .. "\n\n" .. T(_("Title: %1"), bookinfo.title)
+        end
+        if bookinfo.authors then
+            title = title .. "\n" .. T(_("Authors: %1"), bookinfo.authors:gsub("[\n\t]", "|"))
+        end
+    end
     self.file_dialog = ButtonDialog:new{
-        title = is_file and BD.filename(file) or BD.directory(file),
+        title = title .. "\n",
         title_align = "center",
         buttons = buttons,
     }
