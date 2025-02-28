@@ -1419,6 +1419,7 @@ function TopBar:toggleBar(light_on)
         self.progress_chapter_text:setText("")
         self.book_progress:setText("")
         self.author_text:setText("")
+        self.test_light:setText("")
         self.progress_bar.width = 0
         self.progress_bar2.width = 0
         self.progress_chapter_bar.width = 0
@@ -1426,29 +1427,29 @@ function TopBar:toggleBar(light_on)
         self.time_battery_text_text = ""
         local configurable = self.ui.document.configurable
         local powerd = Device:getPowerDevice()
-        if self.last_frontlight ~= nil then
-            self.frontlight = self.last_frontlight
-            self.last_frontlight = nil
-        else
-            if light_on or powerd:isFrontlightOn() then
-                self.frontlight = " ☼"
-            else
-                self.frontlight = ""
-            end
-        end
-        if Device:isAndroid() then
-            if configurable.h_page_margins[1] == 20 and configurable.t_page_margin == 9 + 6 and configurable.h_page_margins[2] == 20 and configurable.b_page_margin == 15 then
-                self.test_light:setText(" ● " .. self.frontlight)
-            else
-                self.test_light:setText(" ○ " .. self.frontlight)
-            end
-        else
-            if configurable.h_page_margins[1] == 15 and configurable.t_page_margin == 9 + 6 and configurable.h_page_margins[2] == 15 and configurable.b_page_margin == 15 then
-                self.test_light:setText(" ● " .. self.frontlight)
-            else
-                self.test_light:setText(" ○ " .. self.frontlight)
-            end
-        end
+        -- if self.last_frontlight ~= nil then
+        --     self.frontlight = self.last_frontlight
+        --     self.last_frontlight = nil
+        -- else
+        --     if light_on or powerd:isFrontlightOn() then
+        --         self.frontlight = " ☼"
+        --     else
+        --         self.frontlight = ""
+        --     end
+        -- end
+        -- if Device:isAndroid() then
+        --     if configurable.h_page_margins[1] == 20 and configurable.t_page_margin == 9 + 6 and configurable.h_page_margins[2] == 20 and configurable.b_page_margin == 15 then
+        --         self.test_light:setText(" ● " .. self.frontlight)
+        --     else
+        --         self.test_light:setText(" ○ " .. self.frontlight)
+        --     end
+        -- else
+        --     if configurable.h_page_margins[1] == 15 and configurable.t_page_margin == 9 + 6 and configurable.h_page_margins[2] == 15 and configurable.b_page_margin == 15 then
+        --         self.test_light:setText(" ● " .. self.frontlight)
+        --     else
+        --         self.test_light:setText(" ○ " .. self.frontlight)
+        --     end
+        -- end
     end
 end
 
