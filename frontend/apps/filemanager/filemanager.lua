@@ -147,7 +147,9 @@ function FileManager:updateTitleBarPath(path)
 
     -- self.title_bar.center_icon = path == (G_reader_settings:readSetting("home_dir") or filemanagerutil.getDefaultDir()) and true or false
     -- self.title_bar.title = path == (G_reader_settings:readSetting("home_dir") or filemanagerutil.getDefaultDir()) and _("KOReader") or ""
-    self.title_bar:toggleCenterICon(path ~= (G_reader_settings:readSetting("home_dir") or filemanagerutil.getDefaultDir()))
+    if self.title_bar.toggleCenterICon then
+        self.title_bar:toggleCenterICon(path ~= (G_reader_settings:readSetting("home_dir") or filemanagerutil.getDefaultDir()))
+    end
 end
 
 FileManager.onPathChanged = FileManager.updateTitleBarPath
@@ -485,6 +487,10 @@ function FileManager:init()
         end
     end
 
+    -- Call again to setupLayout() if hooked by any plugin
+    if FileManager.hooked_fmSetupLayout then
+        self:setupLayout()
+    end
     self:initGesListener()
     self:handleEvent(Event:new("SetDimensions", self.dimen))
     self:handleEvent(Event:new("PathChanged", self.file_chooser.path))
