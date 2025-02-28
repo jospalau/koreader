@@ -379,6 +379,11 @@ function ListMenuItem:update()
                     if status == "complete" then
                         -- pages_str = T(N_("Finished – 1 page", "Finished – %1 pages", pages), pages)
                         pages_str = _("Finished")
+                        if G_reader_settings:isTrue("top_manager_infmandhistory") then
+                            pages_str = pages_str .. " " .. require("apps/filemanager/filemanager").all_files[self.filepath].last_modified_month .. "/"
+                            .. require("apps/filemanager/filemanager").all_files[self.filepath].last_modified_year
+                        end
+
                     elseif status == "abandoned" then
                         pages_str = T(N_("Ona hold – 1 page", "On hold – %1 pages", pages), pages)
                     else
