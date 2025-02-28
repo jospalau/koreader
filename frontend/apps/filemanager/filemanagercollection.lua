@@ -117,6 +117,7 @@ function FileManagerCollection:onShowColl(collection_name, series)
             collection = true,
         }
     }
+    self.booklist_menu.disable_double_tap = false
     table.insert(self.booklist_menu.paths, true) -- enable onReturn button
     self.booklist_menu.close_callback = function()
         self:refreshFileManager()
