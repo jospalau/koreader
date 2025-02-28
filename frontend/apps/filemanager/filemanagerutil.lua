@@ -234,13 +234,13 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                 -- require("bookinfomanager"):deleteBookInfo(file)
 
                 if G_reader_settings:isTrue("top_manager_infmandhistory") and util.getFileNameSuffix(file) == "epub" then
-                    require("apps/filemanager/filemanager").all_files[file].status = to_status
+                    _G.all_files[file].status = to_status
                     local pattern = "(%d+)-(%d+)-(%d+)"
                     local last_modified_date = filemanagerutil.getLastModified(file)
                     local ryear, rmonth, rday = last_modified_date:match(pattern)
-                    require("apps/filemanager/filemanager").all_files[file].last_modified_year = ryear
-                    require("apps/filemanager/filemanager").all_files[file].last_modified_month = rmonth
-                    require("apps/filemanager/filemanager").all_files[file].last_modified_day = rday
+                    _G.all_files[file].last_modified_year = ryear
+                    _G.all_files[file].last_modified_month = rmonth
+                    _G.all_files[file].last_modified_day = rday
 
                     local util = require("util")
                     util.generateStats()
@@ -319,14 +319,14 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
                     if G_reader_settings:isTrue("top_manager_infmandhistory") and util.getFileNameSuffix(file) == "epub" then
                         if check_button_mbr.checked then
                             local last_current_file = G_reader_settings:readSetting("lastfile")
-                            require("apps/filemanager/filemanager").all_files[file].status = "mbr"
+                            _G.all_files[file].status = "mbr"
                             G_reader_settings:saveSetting("lastfile", last_current_file)
                         else
-                            require("apps/filemanager/filemanager").all_files[file].status = ""
+                            _G.all_files[file].status = ""
                         end
-                        require("apps/filemanager/filemanager").all_files[file].last_modified_year = 0
-                        require("apps/filemanager/filemanager").all_files[file].last_modified_month = 0
-                        require("apps/filemanager/filemanager").all_files[file].last_modified_day = 0
+                        _G.all_files[file].last_modified_year = 0
+                        _G.all_files[file].last_modified_month = 0
+                        _G.all_files[file].last_modified_day = 0
                         local util = require("util")
                         util.generateStats()
                     end

@@ -516,14 +516,14 @@ function FileSearcher:onMenuSelect(item, callback)
                 if G_reader_settings:isTrue("top_manager_infmandhistory")
                 and item.path
                 and util.getFileNameSuffix(item.path) == "epub"
-                and (require("apps/filemanager/filemanager").all_files[item.path].status == "mbr"
-                    or require("apps/filemanager/filemanager").all_files[item.path].status == "new"
-                    or require("apps/filemanager/filemanager").all_files[item.path].status == "complete") then
+                and (_G.all_files[item.path].status == "mbr"
+                    or _G.all_files[item.path].status == "new"
+                    or _G.all_files[item.path].status == "complete") then
                     local MultiConfirmBox = require("ui/widget/multiconfirmbox")
                     local text = ", do you want to open it?"
-                    if require("apps/filemanager/filemanager").all_files[item.path].status == "mbr" then
+                    if _G.all_files[item.path].status == "mbr" then
                         text = "Book in MBR" .. text
-                    elseif require("apps/filemanager/filemanager").all_files[item.path].status == "new" then
+                    elseif _G.all_files[item.path].status == "new" then
                         text = "Book not opened" .. text
                     else
                         text = "Book finished" .. text

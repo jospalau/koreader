@@ -54,7 +54,6 @@ local FileManager = InputContainer:extend{
     active_widgets = nil, -- array
     root_path = lfs.currentdir(),
     disable_double_tap = true,
-    all_files = util.getListAll(),
     clipboard = nil, -- for single file operations
     selected_files = nil, -- for group file operations
 
@@ -1801,7 +1800,7 @@ function FileManager:onSyncBooks()
                 cancel_text = _("No need to restart"),
                 cancel_callback = function()
                     if G_reader_settings:isTrue("top_manager_infmandhistory") then
-                        require("apps/filemanager/filemanager").all_files = util.getListAll()
+                        _G.all_files = util.getListAll()
                         local util = require("util")
                         util.generateStats()
                         self.file_chooser:refreshPath()

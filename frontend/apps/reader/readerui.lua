@@ -507,13 +507,13 @@ function ReaderUI:init()
     if util.getFileNameSuffix(self.document.file) == "epub" then
         if G_reader_settings:isTrue("top_manager_infmandhistory")
         and not self.document.file:find("resources/arthur%-conan%-doyle%_the%-hound%-of%-the%-baskervilles.epub") then
-            if require("apps/filemanager/filemanager").all_files[self.document.file].status ~= "complete" then
-                require("apps/filemanager/filemanager").all_files[self.document.file].status = "reading"
+            if _G.all_files[self.document.file].status ~= "complete" then
+                _G.all_files[self.document.file].status = "reading"
                 local pattern = "(%d+)-(%d+)-(%d+)"
                 local ryear, rmonth, rday = summary.modified:match(pattern)
-                require("apps/filemanager/filemanager").all_files[self.document.file].last_modified_year = ryear
-                require("apps/filemanager/filemanager").all_files[self.document.file].last_modified_month = rmonth
-                require("apps/filemanager/filemanager").all_files[self.document.file].last_modified_day = rday
+                _G.all_files[self.document.file].last_modified_year = ryear
+                _G.all_files[self.document.file].last_modified_month = rmonth
+                _G.all_files[self.document.file].last_modified_day = rday
                 local util = require("util")
                 util.generateStats()
             end
@@ -994,10 +994,10 @@ function ReaderUI:onHome()
 
                 if G_reader_settings:isTrue("top_manager_infmandhistory")
                     and util.getFileNameSuffix(file) == "epub" then
-                    require("apps/filemanager/filemanager").all_files[file].status = "mbr"
-                    require("apps/filemanager/filemanager").all_files[file].last_modified_year = 0
-                    require("apps/filemanager/filemanager").all_files[file].last_modified_month = 0
-                    require("apps/filemanager/filemanager").all_files[file].last_modified_day = 0
+                    _G.all_files[file].status = "mbr"
+                    _G.all_files[file].last_modified_year = 0
+                    _G.all_files[file].last_modified_month = 0
+                    _G.all_files[file].last_modified_day = 0
                     local util = require("util")
                     util.generateStats()
                 end

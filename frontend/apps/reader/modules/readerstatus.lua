@@ -211,10 +211,10 @@ function ReaderStatus:markBook(mark_read)
     if G_reader_settings:isTrue("top_manager_infmandhistory") then
         local pattern = "(%d+)-(%d+)-(%d+)"
         local ryear, rmonth, rday = summary.modified:match(pattern)
-        require("apps/filemanager/filemanager").all_files[self.document.file].status = summary.status
-        require("apps/filemanager/filemanager").all_files[self.document.file].last_modified_year = ryear
-        require("apps/filemanager/filemanager").all_files[self.document.file].last_modified_month = rmonth
-        require("apps/filemanager/filemanager").all_files[self.document.file].last_modified_day = rday
+        _G.all_files[self.document.file].status = summary.status
+        _G.all_files[self.document.file].last_modified_year = ryear
+        _G.all_files[self.document.file].last_modified_month = rmonth
+        _G.all_files[self.document.file].last_modified_day = rday
         local util = require("util")
         util.generateStats()
     end

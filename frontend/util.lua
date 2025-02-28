@@ -1795,7 +1795,7 @@ function util.getList()
     local dirs, files, files_finished, files_tbr, files_mbr, files_finished_this_month, files_finished_this_year, files_finished_last_year = {}, {}, {}, {}, {}, {}, {}, {}
     local cur_month = os.date("%m")
     local cur_year = os.date("%Y")
-    for fullpath, file_properties in pairs(require("apps/filemanager/filemanager").all_files) do
+    for fullpath, file_properties in pairs(_G.all_files) do
         local book_status = file_properties.status
         local ryear = file_properties.last_modified_year
         local rmonth = file_properties.last_modified_month
