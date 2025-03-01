@@ -595,7 +595,6 @@ function TopBar:onReaderReady()
         self.wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
     end
 
-
     self.wpm_text = TextWidget:new{
         text = self.wpm_session .. "wpm",
         face = Font:getFace("myfont3"),
@@ -610,14 +609,13 @@ function TopBar:onReaderReady()
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
-
-    self.test_light = TextWidget:new{
+    self.test_light_text = TextWidget:new{
         text = "",
         face = Font:getFace("myfont3"),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
-    self.progress_text = TextWidget:new{
+    self.progress_book_text = TextWidget:new{
         text =  "",
         face = Font:getFace("myfont3"),
         fgcolor = Blitbuffer.COLOR_BLACK,
@@ -630,8 +628,7 @@ function TopBar:onReaderReady()
         invert = false,
     }
 
-
-    self.book_progress = TextWidget:new{
+    self.book_stats_text = TextWidget:new{
         text =  "",
         face = Font:getFace("myfont3", 12),
         fgcolor = Blitbuffer.COLOR_BLACK,
@@ -644,20 +641,17 @@ function TopBar:onReaderReady()
         invert = true,
     }
 
-
     self.title_text = TextWidget:new{
         text =  "",
         face = Font:getFace("myfont3"),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
-
     self.series_text = TextWidget:new{
         text =  "",
         face = Font:getFace("myfont3", 10),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
-
 
     self.chapter_text = TextWidget:new{
         text =  "",
@@ -677,31 +671,23 @@ function TopBar:onReaderReady()
     --     self.wpm_text,
     -- }
 
-
-
     self.author_text = TextWidget:new{
         text =  "",
         face = Font:getFace("myfont3", 8),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
-    self[1] = FrameContainer:new{
-        left_container:new{
-            dimen = Geom:new(),
-            self.test_light,
-        },
-        -- background = Blitbuffer.COLOR_WHITE,
-        bordersize = 0,
-        padding = 0,
+    self.light_widget_container = left_container:new{
+        dimen = Geom:new(),
+        self.test_light_text,
     }
 
-    self[2] = left_container:new{
-        dimen = Geom:new{ w = self.progress_text:getSize().w, self.progress_text:getSize().h },
-        self.progress_text,
+    self.progress_widget_container = left_container:new{
+        dimen = Geom:new{ w = self.progress_book_text:getSize().w, self.progress_book_text:getSize().h },
+        self.progress_book_text,
     }
 
-
-    self[3] = HorizontalGroup:new{
+    self.title_and_series_widget_container = HorizontalGroup:new{
         background = Blitbuffer.COLOR_WHITE,
         bordersize = self.border_size,
         padding = 0,
@@ -717,49 +703,27 @@ function TopBar:onReaderReady()
         }
     }
 
-    self[4] = FrameContainer:new{
-        left_container:new{
-            dimen = Geom:new(),
-            self.times_text,
-        },
-        -- background = Blitbuffer.COLOR_WHITE,
-        bordersize = 0,
-        padding = 0,
+    self.stats_times_widget_container = left_container:new{
+        dimen = Geom:new(),
+        self.times_text,
     }
 
-    self[11] = FrameContainer:new{
-        left_container:new{
-            dimen = Geom:new{ w = self.book_progress:getSize().w, self.book_progress:getSize().h },
-            self.book_progress,
-        },
-        -- background = Blitbuffer.COLOR_WHITE,
-        bordersize = 0,
-        padding = 0,
+    self.progress_book_widget_container = left_container:new{
+        dimen = Geom:new{ w = self.book_stats_text:getSize().w, self.book_stats_text:getSize().h },
+        self.book_stats_text,
     }
 
-
-
-    self[5] = FrameContainer:new{
-        left_container:new{
-            dimen = Geom:new(),
-            self.chapter_text,
-        },
-        -- background = Blitbuffer.COLOR_WHITE,
-        bordersize = 0,
-        padding = 0,
-    }
-    self[6] = FrameContainer:new{
-        left_container:new{
-            dimen = Geom:new(),
-            self.progress_chapter_text,
-        },
-        -- background = Blitbuffer.COLOR_WHITE,
-        bordersize = 0,
-        padding = 0,
+    self.chapter_widget_container = left_container:new{
+        dimen = Geom:new(),
+        self.chapter_text,
     }
 
+    self.progress_chapter_widget_container = left_container:new{
+        dimen = Geom:new(),
+        self.progress_chapter_text,
+    }
 
-    self.progress_bar  = ProgressWidget:new{
+    self.progress_bar_book = ProgressWidget:new{
         width = 200,
         height = 5,
         percentage = 0,
@@ -768,47 +732,20 @@ function TopBar:onReaderReady()
         last = nil, -- last will be initialized in self:updateFooterText
     }
 
-    self[7] = FrameContainer:new{
+    self.progress_bar_book_widget_container = FrameContainer:new{
         left_container:new{
             dimen = Geom:new(),
-            self.progress_bar,
+            self.progress_bar_book,
         },
         -- background = Blitbuffer.COLOR_WHITE,
         bordersize = 0,
         padding = 0,
     }
 
-
-    self.progress_barr  = ProgressWidget:new{
-        width = 200,
-        height = 5,
-        percentage = 0,
-        tick_width = Screen:scaleBySize(1),
-        ticks = nil, -- ticks will be populated in self:updateFooterText
-        last = nil, -- last will be initialized in self:updateFooterText
+    self.author_information_widget_container = left_container:new{
+        dimen = Geom:new{ w = self.author_text:getSize().w, self.author_text:getSize().h },
+        self.author_text,
     }
-
-    self[20] = FrameContainer:new{
-        left_container:new{
-            dimen = Geom:new(),
-            self.progress_barr,
-        },
-        -- background = Blitbuffer.COLOR_WHITE,
-        bordersize = 0,
-        padding = 0,
-    }
-
-
-    self[21] = FrameContainer:new{
-        left_container:new{
-            dimen = Geom:new{ w = self.author_text:getSize().w, self.author_text:getSize().h },
-            self.author_text,
-        },
-        -- background = Blitbuffer.COLOR_WHITE,
-        bordersize = 0,
-        padding = 0,
-    }
-
 
     self.progress_chapter_bar = ProgressWidget:new{
         width = 200,
@@ -819,8 +756,7 @@ function TopBar:onReaderReady()
         last = nil, -- last will be initialized in self:updateFooterText
     }
 
-
-    self[8] = FrameContainer:new{
+    self.progress_chapter_bar_chapter_widget_container = FrameContainer:new{
         left_container:new{
             dimen = Geom:new(),
             self.progress_chapter_bar,
@@ -830,8 +766,7 @@ function TopBar:onReaderReady()
         padding = 0,
     }
 
-
-    -- self.progress_bar2  = ProgressWidget:new{
+    -- self.main_progress_bar  = ProgressWidget:new{
     --     width = Screen:getSize().w,
     --     height = 5,
     --     percentage = 0,
@@ -846,7 +781,7 @@ function TopBar:onReaderReady()
     --     radius = 0,
     -- }
 
-    self.progress_bar2  = ProgressWidget:new{
+    self.main_progress_bar  = ProgressWidget:new{
         width = Screen:getSize().w,
         height = 0,
         percentage = 0,
@@ -860,10 +795,10 @@ function TopBar:onReaderReady()
         -- bordercolor = Blitbuffer.COLOR_WHITE,
     }
 
-    self[9] = FrameContainer:new{
+    self.progress_bar_widget_container = FrameContainer:new{
         left_container:new{
             dimen = Geom:new(),
-            self.progress_bar2,
+            self.main_progress_bar,
         },
         -- background = Blitbuffer.COLOR_WHITE,
         bordersize = 0,
@@ -875,8 +810,8 @@ function TopBar:onReaderReady()
     --     padding_bottom = 20,
     --     bordersize = 0,
     --     VerticalGroup:new{
-    --         -- self.progress_text,
-    --         self.progress_text,
+    --         -- self.progress_book_text,
+    --         self.progress_book_text,
     --     },
     -- }
 
@@ -895,29 +830,18 @@ function TopBar:onReaderReady()
     --     }
     -- }
 
-
-    self[10] = FrameContainer:new{
-        left_container:new{
-            dimen = Geom:new(),
-            self.time_battery_text,
-        },
-        -- background = Blitbuffer.COLOR_WHITE,
-        bordersize = 0,
-        padding = 0,
+    self.battery_widget_container = left_container:new{
+        dimen = Geom:new(),
+        self.time_battery_text,
     }
 
-    self[22] = FrameContainer:new{
-        left_container:new{
-            dimen = Geom:new(),
-            TextWidget:new{
-                text =  "a",
-                face = Font:getFace("symbols", 12),
-                fgcolor = Blitbuffer.COLOR_BLACK,
-            },
+    self.ignore_corners_widget_container = left_container:new{
+        dimen = Geom:new(),
+        TextWidget:new{
+            text =  "",
+            face = Font:getFace("symbols", 12),
+            fgcolor = Blitbuffer.COLOR_BLACK,
         },
-        -- background = Blitbuffer.COLOR_WHITE,
-        bordersize = 0,
-        padding = 0,
     }
     if Device:isAndroid() then
         TopBar.MARGIN_SIDES =  Screen:scaleBySize(20)
@@ -964,8 +888,8 @@ function TopBar:onSuspend()
 end
 
 function TopBar:onFrontlightStateChanged()
-    local top_widget = UIManager:getTopmostVisibleWidget() or {}
-    if not Device.screen_saver_mode and top_widget.name == "ReaderUI" then
+    local top_widget_container = UIManager:getTopmostVisibleWidget() or {}
+    if not Device.screen_saver_mode and top_widget_container.name == "ReaderUI" then
         self:toggleBar()
         -- local Screen = require("device").screen
         -- self:paintTo(Screen.bb, 0, 0)
@@ -1005,8 +929,8 @@ function TopBar:onPreserveCurrentSession()
     TopBar.preserved_sessions_current_book = self.sessions_current_book
     TopBar.preserved_alt_bar = self.show_top_bar
     TopBar.preserved_show_alt_bar = self.alt_bar
-    TopBar.preserved_altbar_line_thickness = self.progress_bar2.altbar_line_thickness
-    TopBar.preserved_altbar_ticks_height = self.progress_bar2.altbar_ticks_height
+    TopBar.preserved_altbar_line_thickness = self.main_progress_bar.altbar_line_thickness
+    TopBar.preserved_altbar_ticks_height = self.main_progress_bar.altbar_ticks_height
     TopBar.preserved_option = self.option
     TopBar.preserved_init_page = self.init_page
     TopBar.preserved_init_page_screens= self.init_page_screens
@@ -1019,8 +943,8 @@ function TopBar:onSwitchTopBar()
         TopBar.is_enabled = true
         TopBar.show_top_bar = true
         TopBar.alt_bar = true
-        self.progress_bar2.altbar_ticks_height = 5
-        self.progress_bar2.altbar_line_thickness = 9
+        self.main_progress_bar.altbar_ticks_height = 5
+        self.main_progress_bar.altbar_line_thickness = 9
         TopBar.option = 1
         self:toggleBar()
 
@@ -1032,20 +956,20 @@ function TopBar:onSwitchTopBar()
     if G_reader_settings:isTrue("show_top_bar") then
         if TopBar.show_top_bar then
             if TopBar.option == 1 then
-                self.progress_bar2.altbar_ticks_height = 16
-                self.progress_bar2.altbar_line_thickness = 6
+                self.main_progress_bar.altbar_ticks_height = 16
+                self.main_progress_bar.altbar_line_thickness = 6
                 TopBar.option = 2
-                -- self.progress_bar2.factor = 3
+                -- self.main_progress_bar.factor = 3
             elseif TopBar.option == 2 then
-                self.progress_bar2.altbar_ticks_height = -1
-                self.progress_bar2.altbar_line_thickness = -1
-                -- self.progress_bar2.factor = -1
+                self.main_progress_bar.altbar_ticks_height = -1
+                self.main_progress_bar.altbar_line_thickness = -1
+                -- self.main_progress_bar.factor = -1
                 TopBar.alt_bar = false
                 TopBar.option = 3
             elseif TopBar.option == 3 then
-                self.progress_bar2.altbar_ticks_height = 5
-                self.progress_bar2.altbar_line_thickness = 9
-                -- self.progress_bar2.factor = 1
+                self.main_progress_bar.altbar_ticks_height = 5
+                self.main_progress_bar.altbar_line_thickness = 9
+                -- self.main_progress_bar.factor = 1
                 TopBar.show_top_bar = false
                 TopBar.option = 4
             end
@@ -1061,8 +985,8 @@ function TopBar:onSwitchTopBar()
             TopBar.is_enabled = false
             TopBar.show_top_bar = true
             TopBar.alt_bar = true
-            self.progress_bar2.altbar_ticks_height = 5
-            self.progress_bar2.altbar_line_thickness = 9
+            self.main_progress_bar.altbar_ticks_height = 5
+            self.main_progress_bar.altbar_line_thickness = 9
             TopBar.option = 1
         end
         self:toggleBar()
@@ -1115,9 +1039,9 @@ function TopBar:toggleBar(light_on)
 
 
         if self.ui.pagemap:wantsPageLabels() then
-           self.progress_text:setText(("%d de %d"):format(self.ui.pagemap:getCurrentPageLabel(true), self.ui.pagemap:getLastPageLabel(true)))
+           self.progress_book_text:setText(("%d de %d"):format(self.ui.pagemap:getCurrentPageLabel(true), self.ui.pagemap:getLastPageLabel(true)))
         else
-           self.progress_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
+           self.progress_book_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
         end
 
         if self.init_page == nil then
@@ -1163,7 +1087,7 @@ function TopBar:toggleBar(light_on)
         --     local hours_to_read = tonumber(words)/(self.avg_wpm * 60)
         --     local progress =  math.floor(100/hours_to_read * 10)/10
         --     words = title:match("([0-9,]+w)"):gsub("w",""):gsub(",","") .. "w"
-        --     self.book_progress:setText(words .. "|" .. tostring(progress) .. "%|" .. read_book)
+        --     self.book_stats_text:setText(words .. "|" .. tostring(progress) .. "%|" .. read_book)
         --     title = title:sub(1, title:find('%(')-2, title:len())
         -- end
         -- title = TextWidget.PTF_BOLD_START .. title .. " with " .. words .. TextWidget.PTF_BOLD_END
@@ -1176,7 +1100,7 @@ function TopBar:toggleBar(light_on)
         local hours_to_read = tonumber(self.total_words)/(self.avg_wpm * 60)
         local progress =  math.floor(100/hours_to_read * 10)/10
         self.total_wordsk = tostring(math.floor(self.total_words/1000))
-        self.book_progress:setText(self.total_wordsk .. "kw|" .. tostring(self.sessions_current_book) .. "s|" .. tostring(progress) .. "%|" .. read_book)
+        self.book_stats_text:setText(self.total_wordsk .. "kw|" .. tostring(self.sessions_current_book) .. "s|" .. tostring(progress) .. "%|" .. read_book)
         title = TextWidget.PTF_BOLD_START .. title .. TextWidget.PTF_BOLD_END
         self.title_text:setText(title)
         self.series_text:setText(self.series)
@@ -1186,29 +1110,26 @@ function TopBar:toggleBar(light_on)
         and TextWidget.PTF_BOLD_START .. self.ui.toc:getTocTitleByPage(self.view.footer.pageno) .. TextWidget.PTF_BOLD_END or ""
 
 
-        -- self.separator_line.dimen.w = self.progress_bar2.width
+        -- self.separator_line.dimen.w = self.main_progress_bar.width
         -- -- progress bars size slightly bigger than the font size
-        -- self.progress_bar.height = Font:getFace("myfont4").size + 10
+        -- self.progress_bar_book.height = Font:getFace("myfont4").size + 10
         -- self.progress_chapter_bar.height = Font:getFace("myfont4").size + 10
 
-        -- self.progress_bar.height = self.title_text:getSize().h
+        -- self.progress_bar_book.height = self.title_text:getSize().h
         -- self.progress_chapter_bar.height = self.title_text:getSize().h
 
-        -- self.progress_bar.height = self.chapter_text.face.size
-        self.progress_barr.height = 1
-
-        self.progress_chapter_bar.height = self.title_text.face.size
+        self.progress_bar_book.height = self.progress_book_text.face.size
+        self.progress_chapter_bar.height = self.chapter_text.face.size
 
         if Device:isAndroid() then
-            self.progress_bar.width = 150
-            self.progress_barr.width = 150
+            self.progress_bar_book.width = 150
             self.progress_chapter_bar.width = 150
         else
-            self.progress_bar.width = 250
-            self.progress_barr.width = 250
+            self.progress_bar_book.width = 250
             self.progress_chapter_bar.width = 250
         end
 
+        self.progress_bar_book.width = self.progress_book_text:getSize().w
         -- if chapter:len() <= 30 then
         --     self.chapter_text:setText(chapter)
         -- else
@@ -1217,9 +1138,9 @@ function TopBar:toggleBar(light_on)
         self.chapter_text:setText(chapter)
         if self.option == 1 then
             if self.origin_book and  self.origin_book ~= "" then
-                self.author_text:setText(self.ui.document._document:getDocumentProps().authors .. " - " ..  self.pub_date .. " - "  ..  self.origin_book .. " - " .. self.book_progress.text)
+                self.author_text:setText(self.ui.document._document:getDocumentProps().authors .. " - " ..  self.pub_date .. " - "  ..  self.origin_book .. " - " .. self.book_stats_text.text)
             else
-                self.author_text:setText(self.ui.document._document:getDocumentProps().authors .. " - " ..  self.pub_date .. " - " .. self.book_progress.text)
+                self.author_text:setText(self.ui.document._document:getDocumentProps().authors .. " - " ..  self.pub_date .. " - " .. self.book_stats_text.text)
             end
         else
             self.author_text:setText("")
@@ -1233,117 +1154,117 @@ function TopBar:toggleBar(light_on)
 
 
         -- -- Option 1 for the three bars
-        -- self.progress_bar:updateStyle(false, nil)
+        -- self.progress_bar_book:updateStyle(false, nil)
 
 
         -- self.progress_chapter_bar:updateStyle(false, nil)
 
         -- With or without white bordercolor
-        -- self.progress_bar2:updateStyle(false, nil)
-        -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_WHITE
+        -- self.main_progress_bar:updateStyle(false, nil)
+        -- self.main_progress_bar.bordercolor = Blitbuffer.COLOR_WHITE
 
 
         -- -- Option 2 for the three bars
-        -- self.progress_bar2:updateStyle(false, 10) -- Optionally the size
-        -- self.progress_bar.bgcolor = Blitbuffer.COLOR_DARK_GRAY
-        -- self.progress_bar.fillcolor = Blitbuffer.COLOR_BLACK
+        -- self.main_progress_bar:updateStyle(false, 10) -- Optionally the size
+        -- self.progress_bar_book.bgcolor = Blitbuffer.COLOR_DARK_GRAY
+        -- self.progress_bar_book.fillcolor = Blitbuffer.COLOR_BLACK
 
 
         -- self.progress_chapter_bar.bgcolor = Blitbuffer.COLOR_DARK_GRAY
         -- self.progress_chapter_bar.fillcolor = Blitbuffer.COLOR_BLACK
 
         -- -- With or without white bordercolor
-        -- self.progress_bar2.bgcolor = Blitbuffer.COLOR_DARK_GRAY
-        -- self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
-        -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_WHITE
+        -- self.main_progress_bar.bgcolor = Blitbuffer.COLOR_DARK_GRAY
+        -- self.main_progress_bar.fillcolor = Blitbuffer.COLOR_BLACK
+        -- self.main_progress_bar.bordercolor = Blitbuffer.COLOR_WHITE
 
 
         -- -- Other options just for top bar
-        -- self.progress_bar2:updateStyle(false, 5)
-        -- self.progress_bar2.bgcolor = Blitbuffer.COLOR_BLACK
-        -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_WHITE
-        -- self.progress_bar2.fillcolor = Blitbuffer.COLOR_DARK_GRAY
+        -- self.main_progress_bar:updateStyle(false, 5)
+        -- self.main_progress_bar.bgcolor = Blitbuffer.COLOR_BLACK
+        -- self.main_progress_bar.bordercolor = Blitbuffer.COLOR_WHITE
+        -- self.main_progress_bar.fillcolor = Blitbuffer.COLOR_DARK_GRAY
 
         -- Same inverted. I like this one
-        -- self.progress_bar2:updateStyle(false, 5)
-        -- self.progress_bar2.bgcolor = Blitbuffer.COLOR_DARK_GRAY
-        -- self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
-        -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_WHITE
+        -- self.main_progress_bar:updateStyle(false, 5)
+        -- self.main_progress_bar.bgcolor = Blitbuffer.COLOR_DARK_GRAY
+        -- self.main_progress_bar.fillcolor = Blitbuffer.COLOR_BLACK
+        -- self.main_progress_bar.bordercolor = Blitbuffer.COLOR_WHITE
 
 
-        -- self.progress_bar2:updateStyle(false, 1)
-        -- self.progress_bar2.bgcolor = Blitbuffer.COLOR_WHITE
-        -- self.progress_bar2.fillcolor = Blitbuffer.COLOR_DARK_GRAY
-        -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
+        -- self.main_progress_bar:updateStyle(false, 1)
+        -- self.main_progress_bar.bgcolor = Blitbuffer.COLOR_WHITE
+        -- self.main_progress_bar.fillcolor = Blitbuffer.COLOR_DARK_GRAY
+        -- self.main_progress_bar.bordercolor = Blitbuffer.COLOR_BLACK
 
 
-        self.progress_bar2.width = self.width - 2 * TopBar.MARGIN_SIDES
+        self.main_progress_bar.width = self.width - 2 * TopBar.MARGIN_SIDES
         -- No scaled because margins are saved not scaled even though they are scaled
         -- when set (see onSetPageMargins() in readertypeset.lua)
         self.space_after_alt_bar = 15
         if self.alt_bar then
             -- Begin alternative progress bar
             -- This last configuration goes with the separation line. Everything is hardcoded because it is difficult to make it proportional
-            self.progress_bar2:updateStyle(false, 1)
-            self.progress_bar2.bgcolor = Blitbuffer.COLOR_WHITE
-            self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
-            self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
-            self.progress_bar2.altbar = true
-            self.progress_bar2.show_percentage = self.option == 2
-            self.progress_bar2.ui = self.ui
+            self.main_progress_bar:updateStyle(false, 1)
+            self.main_progress_bar.bgcolor = Blitbuffer.COLOR_WHITE
+            self.main_progress_bar.bordercolor = Blitbuffer.COLOR_BLACK
+            self.main_progress_bar.fillcolor = Blitbuffer.COLOR_BLACK
+            self.main_progress_bar.altbar = true
+            self.main_progress_bar.show_percentage = self.option == 2
+            self.main_progress_bar.ui = self.ui
             -- Multiple of 3 onwards because we want the line to be a third in the middle of the progress thick line
-            -- self.progress_bar2.altbar_line_thickness = 3
-            -- self.progress_bar2.altbar_line_thickness = 6
+            -- self.main_progress_bar.altbar_line_thickness = 3
+            -- self.main_progress_bar.altbar_line_thickness = 6
 
 
-            -- self.progress_bar2.altbar_line_thickness is the line height (thickness) of the progress bar line
-            -- self.progress_bar2.altbar_line_thickness/3 is the line height (thickness) of the fixed static bar line calculated in the widget
-            -- We need a minimum tick height of self.progress_bar2.altbar_line_thickness/3
+            -- self.main_progress_bar.altbar_line_thickness is the line height (thickness) of the progress bar line
+            -- self.main_progress_bar.altbar_line_thickness/3 is the line height (thickness) of the fixed static bar line calculated in the widget
+            -- We need a minimum tick height of self.main_progress_bar.altbar_line_thickness/3
             -- And then we add a little bit more, an even number, to have the same tick size up and down the line
-            -- self.progress_bar2.altbar_ticks_height = (self.progress_bar2.altbar_line_thickness/3) + 4 -- Line size, not progress line
+            -- self.main_progress_bar.altbar_ticks_height = (self.main_progress_bar.altbar_line_thickness/3) + 4 -- Line size, not progress line
 
             -- Factor variable is not used. I finally hardcoded the value of altbar_ticks_height and altbar_line_thickness
             -- for the only two configurations I like
             -- Both parameteres are initialized when creating progress_bar2 and onSwitchTopBar() changes
 
-            -- self.progress_bar2.factor = 3
+            -- self.main_progress_bar.factor = 3
             -- The factor plays well with any value which final product is even (3, 9, 15, 21). So even values. More size, higher ticks. I am using a value of 3 with altbar_line_thickness 3 and 6
             -- A factor of 1 also works and we can alternate it
             -- factor 1 with altbar_line_thickness 3 and factor 3 with altbar_line_thickness 6
-            self.progress_bar2.tick_width = 2 -- Not scaled, we want 2px size for ticks width
+            self.main_progress_bar.tick_width = 2 -- Not scaled, we want 2px size for ticks width
             -- End alternative progress bar
         else
-            self.progress_bar2.altbar = false
-            -- self.progress_bar2.height = 20 -- Not scaled
-            self.progress_bar2:setHeight(10)
-            -- self.progress_bar2:updateStyle(false, 10)
-            -- self.progress_bar2.bgcolor = Blitbuffer.COLOR_DARK_GRAY
-            -- self.progress_bar2.fillcolor = Blitbuffer.COLOR_BLACK
-            -- self.progress_bar2.bordercolor = Blitbuffer.COLOR_WHITE
-            self.progress_bar2.bgcolor = Blitbuffer.COLOR_WHITE
-            self.progress_bar2.fillcolor = Blitbuffer.COLOR_DARK_GRAY
-            self.progress_bar2.bordercolor = Blitbuffer.COLOR_BLACK
-            self.progress_bar2.bordersize = Screen:scaleBySize(1)
+            self.main_progress_bar.altbar = false
+            -- self.main_progress_bar.height = 20 -- Not scaled
+            self.main_progress_bar:setHeight(10)
+            -- self.main_progress_bar:updateStyle(false, 10)
+            -- self.main_progress_bar.bgcolor = Blitbuffer.COLOR_DARK_GRAY
+            -- self.main_progress_bar.fillcolor = Blitbuffer.COLOR_BLACK
+            -- self.main_progress_bar.bordercolor = Blitbuffer.COLOR_WHITE
+            self.main_progress_bar.bgcolor = Blitbuffer.COLOR_WHITE
+            self.main_progress_bar.fillcolor = Blitbuffer.COLOR_DARK_GRAY
+            self.main_progress_bar.bordercolor = Blitbuffer.COLOR_BLACK
+            self.main_progress_bar.bordersize = Screen:scaleBySize(1)
         end
         local time_spent_book = self.ui.statistics:getBookStat(self.ui.statistics.id_curr_book)
 
         if time_spent_book == nil then
-            self.progress_bar2.time_spent_book = ""
+            self.main_progress_bar.time_spent_book = ""
         else
-            -- self.progress_bar2.time_spent_book = time_spent_book[4][2]
-            -- self.progress_bar2.time_spent_book =  math.floor(self.view.footer.pageno / self.view.footer.pages*1000)/10 .. "%"
-            self.progress_bar2.time_spent_book =  tostring(left)
+            -- self.main_progress_bar.time_spent_book = time_spent_book[4][2]
+            -- self.main_progress_bar.time_spent_book =  math.floor(self.view.footer.pageno / self.view.footer.pages*1000)/10 .. "%"
+            self.main_progress_bar.time_spent_book =  tostring(left)
         end
 
 
-        self.progress_bar.last = self.pages or self.ui.document:getPageCount()
-        -- self.progress_bar.ticks = self.ui.toc:getTocTicksFlattened()
-        self.progress_bar2.last = self.pages or self.ui.document:getPageCount()
-        self.progress_bar2.ticks = self.ui.toc:getTocTicksFlattened()
-        self.progress_bar:setPercentage(self.view.footer.pageno / self.view.footer.pages)
-        self.progress_bar2:setPercentage(self.view.footer.pageno / self.view.footer.pages)
+        self.progress_bar_book.last = self.pages or self.ui.document:getPageCount()
+        -- self.progress_bar_book.ticks = self.ui.toc:getTocTicksFlattened()
+        self.main_progress_bar.last = self.pages or self.ui.document:getPageCount()
+        self.main_progress_bar.ticks = self.ui.toc:getTocTicksFlattened()
+        self.progress_bar_book:setPercentage(self.view.footer.pageno / self.view.footer.pages)
+        self.main_progress_bar:setPercentage(self.view.footer.pageno / self.view.footer.pages)
         self.progress_chapter_bar:setPercentage(self.view.footer:getChapterProgress(true))
-        -- self.progress_bar.height = self.title_text:getSize().h
+        -- self.progress_bar_book.height = self.title_text:getSize().h
         -- self.progress_chapter_bar.height = self.title_text:getSize().h
 
         if self.ui.gestures.ignore_hold_corners then
@@ -1377,29 +1298,29 @@ function TopBar:toggleBar(light_on)
         if self.option == 1 or self.option == 2 or self.option == 3 then
             if Device:isAndroid() then
                 if configurable.h_page_margins[1] == 20 and configurable.t_page_margin == self.space_after_alt_bar + 9 + 6 and configurable.h_page_margins[2] == 20 and configurable.b_page_margin == 15 then
-                    self.test_light:setText(" ● " .. self.frontlight)
+                    self.test_light_text:setText(" ● " .. self.frontlight)
                 else
-                    self.test_light:setText(" ○ " .. self.frontlight)
+                    self.test_light_text:setText(" ○ " .. self.frontlight)
                 end
             else
                 if configurable.h_page_margins[1] == 15 and configurable.t_page_margin == self.space_after_alt_bar + 9 + 6 and configurable.h_page_margins[2] == 15 and configurable.b_page_margin == 15 then
-                    self.test_light:setText(" ● " .. self.frontlight)
+                    self.test_light_text:setText(" ● " .. self.frontlight)
                 else
-                    self.test_light:setText(" ○ " .. self.frontlight)
+                    self.test_light_text:setText(" ○ " .. self.frontlight)
                 end
             end
         elseif self.option == 4 then
             if Device:isAndroid() then
                 if configurable.h_page_margins[1] == 20 and configurable.t_page_margin == 9 + 6 and configurable.h_page_margins[2] == 20 and configurable.b_page_margin == 15 then
-                    self.test_light:setText(" ● " .. self.frontlight)
+                    self.test_light_text:setText(" ● " .. self.frontlight)
                 else
-                    self.test_light:setText(" ○ " .. self.frontlight)
+                    self.test_light_text:setText(" ○ " .. self.frontlight)
                 end
             else
                 if configurable.h_page_margins[1] == 15 and configurable.t_page_margin == 9 + 6 and configurable.h_page_margins[2] == 15 and configurable.b_page_margin == 15 then
-                    self.test_light:setText(" ● " .. self.frontlight)
+                    self.test_light_text:setText(" ● " .. self.frontlight)
                 else
-                    self.test_light:setText(" ○ " .. self.frontlight)
+                    self.test_light_text:setText(" ○ " .. self.frontlight)
                 end
             end
         end
@@ -1410,18 +1331,18 @@ function TopBar:toggleBar(light_on)
         end
     else
         self.session_time_text:setText("")
-        self.progress_text:setText("")
+        self.progress_book_text:setText("")
         self.times_text:setText("")
         self.time_battery_text:setText("")
         self.title_text:setText("")
         self.series_text:setText("")
         self.chapter_text:setText("")
         self.progress_chapter_text:setText("")
-        self.book_progress:setText("")
+        self.book_stats_text:setText("")
         self.author_text:setText("")
-        self.test_light:setText("")
-        self.progress_bar.width = 0
-        self.progress_bar2.width = 0
+        self.test_light_text:setText("")
+        self.progress_bar_book.width = 0
+        self.main_progress_bar.width = 0
         self.progress_chapter_bar.width = 0
         self.times_text_text = ""
         self.time_battery_text_text = ""
@@ -1439,15 +1360,15 @@ function TopBar:toggleBar(light_on)
         -- end
         -- if Device:isAndroid() then
         --     if configurable.h_page_margins[1] == 20 and configurable.t_page_margin == 9 + 6 and configurable.h_page_margins[2] == 20 and configurable.b_page_margin == 15 then
-        --         self.test_light:setText(" ● " .. self.frontlight)
+        --         self.test_light_text:setText(" ● " .. self.frontlight)
         --     else
-        --         self.test_light:setText(" ○ " .. self.frontlight)
+        --         self.test_light_text:setText(" ○ " .. self.frontlight)
         --     end
         -- else
         --     if configurable.h_page_margins[1] == 15 and configurable.t_page_margin == 9 + 6 and configurable.h_page_margins[2] == 15 and configurable.b_page_margin == 15 then
-        --         self.test_light:setText(" ● " .. self.frontlight)
+        --         self.test_light_text:setText(" ● " .. self.frontlight)
         --     else
-        --         self.test_light:setText(" ○ " .. self.frontlight)
+        --         self.test_light_text:setText(" ○ " .. self.frontlight)
         --     end
         -- end
     end
@@ -1464,12 +1385,12 @@ end
 
 function TopBar:paintTo(bb, x, y)
     if self.status_bar and self.status_bar == true then
-        -- self[10][1][1]:setText(self.time_battery_text_text:reverse())
-        -- self[10]:paintTo(bb, x - self[10][1][1]:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
-        -- self[4][1][1]:setText(self.times_text_text:reverse())
-        -- self[4]:paintTo(bb, x - Screen:getHeight() + TopBar.MARGIN_BOTTOM + Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
+        -- self.battery_widget_container[1]:setText(self.time_battery_text_text:reverse())
+        -- self.battery_widget_container:paintTo(bb, x - self.battery_widget_container[1]:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
+        -- self.stats_times_widget_container[1]:setText(self.times_text_text:reverse())
+        -- self.stats_times_widget_container:paintTo(bb, x - Screen:getHeight() + TopBar.MARGIN_BOTTOM + Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
 
-        self[22][1][1]:setText(self.ignore_corners)
+        self.ignore_corners_widget_container[1]:setText(self.ignore_corners)
         local duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100
         local wpm = 0
         if self.ui.statistics._total_words > 0 then
@@ -1498,142 +1419,118 @@ function TopBar:paintTo(bb, x, y)
         -- local mem = collectgarbage("count")
         -- mem = Math.round(tonumber(mem)/ 1024)
 
-        local mem_frame = FrameContainer:new{
-            left_container:new{
-                dimen = Geom:new(),
-                TextWidget:new{
-                    text = mem .. "MB",
-                    face = Font:getFace("myfont"),
-                    fgcolor = Blitbuffer.COLOR_GRAY,
-                }
-            },
-            -- background = Blitbuffer.COLOR_WHITE,
-            bordersize = 0,
-            padding = 0,
+        local mem_frame = left_container:new{
+            dimen = Geom:new(),
+            TextWidget:new{
+                text = mem .. "MB",
+                face = Font:getFace("myfont"),
+                fgcolor = Blitbuffer.COLOR_GRAY,
+            }
         }
-
         local mem_diff = math.abs(self.initial_memory - mem)
-        local mem_frame_diff = FrameContainer:new{
-            left_container:new{
-                dimen = Geom:new(),
-                TextWidget:new{
-                    text = mem_diff .. "MB",
-                    face = Font:getFace("myfont"),
-                    fgcolor = Blitbuffer.COLOR_GRAY,
-                }
-            },
-            -- background = Blitbuffer.COLOR_WHITE,
-            bordersize = 0,
-            padding = 0,
+        local mem_frame_diff = left_container:new{
+            dimen = Geom:new(),
+            TextWidget:new{
+                text = mem_diff .. "MB",
+                face = Font:getFace("myfont"),
+                fgcolor = Blitbuffer.COLOR_GRAY,
+            }
         }
 
         local powerd = Device:getPowerDevice()
         local battery_lvl = powerd:getCapacity()
 
-
-        local battery_frame = FrameContainer:new{
-            left_container:new{
-                dimen = Geom:new(),
-                TextWidget:new{
-                    text = battery_lvl .. "%",
-                    face = Font:getFace("myfont"),
-                    fgcolor = Blitbuffer.COLOR_GRAY,
-                }
-            },
-            -- background = Blitbuffer.COLOR_WHITE,
-            bordersize = 0,
-            padding = 0,
+        local battery_frame = left_container:new{
+            dimen = Geom:new(),
+            TextWidget:new{
+                text = battery_lvl .. "%",
+                face = Font:getFace("myfont"),
+                fgcolor = Blitbuffer.COLOR_GRAY,
+            }
         }
 
-        local battery_frame_diff = FrameContainer:new{
-            left_container:new{
-                dimen = Geom:new(),
-                TextWidget:new{
-                    text = (self.initial_battery_lvl - battery_lvl) .. "%",
-                    face = Font:getFace("myfont"),
-                    fgcolor = Blitbuffer.COLOR_GRAY,
-                }
-            },
-            -- background = Blitbuffer.COLOR_WHITE,
-            bordersize = 0,
-            padding = 0,
+        local battery_frame_diff = left_container:new{
+            dimen = Geom:new(),
+            TextWidget:new{
+                text = (self.initial_battery_lvl - battery_lvl) .. "%",
+                face = Font:getFace("myfont"),
+                fgcolor = Blitbuffer.COLOR_GRAY,
+            }
         }
-
         if self.view.footer.settings.bar_top then
-            -- self[4]:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() -  Screen:scaleBySize(6))
-            self[21]:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() - Screen:scaleBySize(6))
-            self[22]:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - Screen:scaleBySize(2), Screen:getHeight() - TopBar.MARGIN_BOTTOM)
-            battery_frame_diff:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
-            battery_frame:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1][1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
-            mem_frame_diff:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1][1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
-            mem_frame:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1][1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - mem_frame[1][1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
+            -- self.stats_times_widget_container:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() -  Screen:scaleBySize(6))
+            self.author_information_widget_container:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() - Screen:scaleBySize(6))
+            self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth()- self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+            battery_frame_diff:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
+            battery_frame:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
+            mem_frame_diff:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
+            mem_frame:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - mem_frame[1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
             if self.ui.gestures.ignore_hold_corners and self.ui.gestures.ignore_hold_corners == false then
-                battery_frame_diff:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1][1]:getSize().w, Screen:getHeight() - Screen:scaleBySize(8))
-                battery_frame:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1][1]:getSize().w, Screen:getHeight() - Screen:scaleBySize(8))
-                mem_frame_diff:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1][1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
-                mem_frame:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1][1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - mem_frame[1][1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
+                battery_frame_diff:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1]:getSize().w, Screen:getHeight() - Screen:scaleBySize(8))
+                battery_frame:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w, Screen:getHeight() - Screen:scaleBySize(8))
+                mem_frame_diff:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
+                mem_frame:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - mem_frame[1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
             end
         else
-            self[21]:paintTo(bb, x + Screen:scaleBySize(4), y + Screen:scaleBySize(6))
-            self[22]:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - Screen:scaleBySize(2), y + Screen:scaleBySize(6))
-            battery_frame_diff:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
-            battery_frame:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1][1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
-            mem_frame_diff:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1][1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
-            mem_frame:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1][1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - mem_frame[1][1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
+            self.author_information_widget_container:paintTo(bb, x + Screen:scaleBySize(4), y + Screen:scaleBySize(6))
+            self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), y + Screen:scaleBySize(6))
+            battery_frame_diff:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
+            battery_frame:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
+            mem_frame_diff:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
+            mem_frame:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - mem_frame[1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
             if self.ui.gestures.ignore_hold_corners and self.ui.gestures.ignore_hold_corners == false then
-                battery_frame_diff:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1][1]:getSize().w, y + Screen:scaleBySize(9))
-                battery_frame:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1][1]:getSize().w, y + Screen:scaleBySize(9))
-                mem_frame_diff:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1][1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
-                mem_frame:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1][1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1][1]:getSize().w - Screen:scaleBySize(6) - mem_frame[1][1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
+                battery_frame_diff:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1]:getSize().w, y + Screen:scaleBySize(9))
+                battery_frame:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w, y + Screen:scaleBySize(9))
+                mem_frame_diff:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
+                mem_frame:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1]:getSize().w - Screen:scaleBySize(6) -  mem_frame[1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
             end
         end
         return
     end
     if not self.fm then
-        -- The alighment is good but there are things to take into account
+        -- The alignment is good but there are things to take into account
         -- - Any screen side in any screen type, flushed or recessed are not aligned with the frame, they can be a little bit hidden. It depends on the devices
         -- - There are some fonts that are bigger than its em square so the aligment may be not right. For instance Bitter Pro descender overpass its bottom limits
         if TopBar.show_top_bar then
-            if self.progress_bar2.altbar then
-                self[9]:paintTo(bb, x + TopBar.MARGIN_SIDES, y + Screen:scaleBySize(12))
+            if self.main_progress_bar.altbar then
+                self.progress_bar_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES, y + Screen:scaleBySize(12))
             else
-                self[9]:paintTo(bb, x + TopBar.MARGIN_SIDES, y + Screen:scaleBySize(9))
-                -- self[9]:paintTo(bb, x, Screen:getHeight() - Screen:scaleBySize(12))
+                self.progress_bar_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES, y + Screen:scaleBySize(9))
+                -- self.progress_bar_widget_container:paintTo(bb, x, Screen:getHeight() - Screen:scaleBySize(12))
             end
         end
-        self[1]:paintTo(bb, x + TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
+        self.light_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
 
-        self[21].dimen = Geom:new{ w = self[21][1]:getSize().w, self[21][1]:getSize().h }
-        self[21]:paintTo(bb, x + Screen:scaleBySize(4), y + Screen:scaleBySize(6))
+        -- self[21].dimen = Geom:new{ w = self[21][1]:getSize().w, self[21][1]:getSize().h }
+        self.author_information_widget_container:paintTo(bb, x + Screen:scaleBySize(4), y + Screen:scaleBySize(6))
 
         -- Top center
 
-        self[3]:paintTo(bb, x + Screen:getWidth()/2 + self[3][1][1]:getSize().w/2 - self[3][2][1]:getSize().w/2, y + TopBar.MARGIN_TOP)
-        -- self[3]:paintTo(bb, x + Screen:getWidth()/2, y + 20)
+        self.title_and_series_widget_container:paintTo(bb, x + Screen:getWidth()/2 + self.title_and_series_widget_container[1][1]:getSize().w/2 - self.title_and_series_widget_container[2][1]:getSize().w/2, y + TopBar.MARGIN_TOP)
+        -- self.title_and_series_widget_container:paintTo(bb, x + Screen:getWidth()/2, y + 20)
 
 
         -- Top right
         -- Commented the text, using progress bar
         -- if not TopBar.show_top_bar then
-        --     self[7]:paintTo(bb, x + Screen:getWidth() - self[7][1][1]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
-        --     -- self[20]:paintTo(bb, x + Screen:getWidth() - self[20][1][1]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
+        --     self.progress_bar_book_widget_container:paintTo(bb, x + Screen:getWidth() - self.progress_bar_book_widget_container[1][1]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
         -- end
 
-        self[22][1][1]:setText(self.ignore_corners)
-        self[22]:paintTo(bb, x + Screen:getWidth() - self[22][1][1]:getSize().w - 2, y + Screen:scaleBySize(6))
+        self.ignore_corners_widget_container[1]:setText(self.ignore_corners)
+        self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - 2, y + Screen:scaleBySize(6))
 
-        self[2].dimen = Geom:new{ w = self[2][1]:getSize().w, self[2][1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
-        self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
+        self.progress_widget_container.dimen = Geom:new{ w = self.progress_widget_container[1]:getSize().w, self.progress_widget_container[1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
+        self.progress_widget_container:paintTo(bb, Screen:getWidth() - self.progress_widget_container:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
         -- if TopBar.show_top_bar then
-        --     self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
+        --     self.progress_widget_container:paintTo(bb, Screen:getWidth() - self.progress_widget_container:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
         -- end
 
         -- Si no se muestra la barra de progreso de arriba, se muestra la de arriba a la derecha
         -- Y si se muestra la de arriba a la derecha, queremos mover el texto unos pocos píxeles a la izquierda
         -- if not TopBar.show_top_bar then
-        --     self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN_SIDES - 20, y + TopBar.MARGIN_TOP)
+        --     self.progress_widget_container:paintTo(bb, Screen:getWidth() - self.progress_widget_container:getSize().w - TopBar.MARGIN_SIDES - 20, y + TopBar.MARGIN_TOP)
         -- else
-        --     self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
+        --     self.progress_widget_container:paintTo(bb, Screen:getWidth() - self.progress_widget_container:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
         -- end
 
 
@@ -1641,106 +1538,94 @@ function TopBar:paintTo(bb, x, y)
         -- For the bottom components it is better to use frame containers.
         -- It is better to position them without the dimensions simply passing x and y to the paintTo method
         -- Bottom left
-        -- self[4][1].dimen.w = self[4][1][1]:getSize().w
-        -- self[4]:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+        -- self.stats_times_widget_container.dimen.w = self.stats_times_widget_container[1]:getSize().w
+        -- self.stats_times_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
 
         -- Bottom left, commented for the moment, I put here times
-        -- self[11][1].dimen.w = self[11][1][1]:getSize().w
-        -- self[11]:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+        -- self.progress_book_widget_container.dimen.w = self.progress_book_widget_container[1]:getSize().w
+        -- self.progress_book_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
         -- if self.option == 1 then
-        self[4][1][1]:setText(self.times_text_text)
-        self[4]:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+        self.stats_times_widget_container[1]:setText(self.times_text_text)
+        self.stats_times_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
         -- end
 
         -- -- Comment inverted info for the moment
         -- -- This is inverted to be shown in left margin
-        -- self[4][1][1]:setText(self.times_text_text:reverse())
+        -- self.stats_times_widget_container[1]:setText(self.times_text_text:reverse())
         -- -- When inverted, the text is positioned to the end of the screen
         -- -- So, we take that position as a reference to position it later
         -- -- Inverted aligned to side left center
-        -- -- self[4]:paintTo(bb, x - Screen:getHeight()/2 - self[4][1][1]:getSize().w/2, y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
+        -- -- self.stats_times_widget_container:paintTo(bb, x - Screen:getHeight()/2 - self.stats_times_widget_container[1]:getSize().w/2, y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
 
         -- -- Inverted aligned to side left top
         -- -- Remember to set invert = true for self.times_text_text
-        -- self[4]:paintTo(bb, x - Screen:getHeight() + TopBar.MARGIN_BOTTOM + Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
+        -- self.stats_times_widget_container:paintTo(bb, x - Screen:getHeight() + TopBar.MARGIN_BOTTOM + Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
 
 
 
-        -- print(string.byte(self[5][1][1].text, 1,-1))
+        -- print(string.byte(self.chapter_widget_container [1].text, 1,-1))
         -- Bottom center
-         if self[5][1][1].text ~= "" then
+         if self.chapter_widget_container[1].text ~= "" then
             -- if self.option == 2 then
-            -- self[5][1][1].face = Font:getFace("myfont3", 14)
-            -- if self[5][1][1]:getSize().w > Screen:getWidth()/3 then
-            --     self[5][1][1].face = Font:getFace("myfont3", 12)
+            -- self.chapter_widget_container[1].face = Font:getFace("myfont3", 14)
+            -- if self.chapter_widget_container[1]:getSize().w > Screen:getWidth()/3 then
+            --     self.chapter_widget_container[1].face = Font:getFace("myfont3", 12)
             -- end
-            local text_widget = TextWidget:new{
-                text = self[5][1][1].text:gsub(" ", "\u{00A0}"), -- no-break-space
+            local text_widget_container = TextWidget:new{
+                text = self.chapter_widget_container[1].text:gsub(" ", "\u{00A0}"), -- no-break-space
                 max_width = Screen:getWidth() * 30 * (1/100),
                 face = Font:getFace("myfont3", 14),
                 bold = true,
             }
-            local fitted_text, add_ellipsis = text_widget:getFittedText()
-            self[5][1][1].text = fitted_text
-            text_widget:free()
+            local fitted_text, add_ellipsis = text_widget_container:getFittedText()
+            self.chapter_widget_container[1].text = fitted_text
+            text_widget_container:free()
 
-            -- self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5][1][1]:getSize().w/2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
-            self[5]:paintTo(bb, x + Screen:getWidth()/2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+            -- self.chapter_widget_container:paintTo(bb, x + Screen:getWidth()/2 - self.chapter_widget_container[1]:getSize().w/2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+            self.chapter_widget_container:paintTo(bb, x + Screen:getWidth()/2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
             -- end
         end
 
         -- Bottom right
         -- Use progress bar
-        -- self[8]:paintTo(bb, x + Screen:getWidth() - self[8][1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
-        -- self[20]:paintTo(bb, x + Screen:getWidth() - self[20][1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+        -- self.progress_chapter_bar_chapter_widget_container:paintTo(bb, x + Screen:getWidth() - self.progress_chapter_bar_chapter_widget_container[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
-        self[6]:paintTo(bb, x + Screen:getWidth() - self[6][1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+        self.progress_chapter_widget_container:paintTo(bb, x + Screen:getWidth() - self.progress_chapter_widget_container[1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
 
         -- Comment inverted info for the moment
-        -- self[10][1][1]:setText(self.time_battery_text_text:reverse())
+        -- self.battery_widget_container[1]:setText(self.time_battery_text_text:reverse())
 
 
         -- -- Inverted aligned to side left bottom
-        -- -- self[10]:paintTo(bb, x - self[10][1][1]:getSize().w, y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
-        -- self[10]:paintTo(bb, x - self[10][1][1]:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
+        -- -- self.battery_widget_container:paintTo(bb, x - self.battery_widget_container[1]:getSize().w, y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
+        --self.battery_widget_container:paintTo(bb, x - self.battery_widget_container[1]:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
 
 
-        -- self[6][1].dimen.w = self[6][1][1]:getSize().w
+        -- self.progress_chapter_widget_container.dimen.w = self.progress_chapter_widget_container[1]:getSize().w
         -- -- La barra de progreso de abajo a la derecha se muestra siempre y queremos mover el texto unos pocos píxeles a la izquierda
-        -- self[6]:paintTo(bb, x + Screen:getWidth() - self[6][1]:getSize().w - TopBar.MARGIN_SIDES - 20, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+        -- self.progress_chapter_widget_container:paintTo(bb, x + Screen:getWidth() - self.progress_chapter_widget_container:getSize().w - TopBar.MARGIN_SIDES - 20, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
         -- text_container2:paintTo(bb, x + Screen:getWidth() - text_container2:getSize().w - 20, y + 20)
         -- text_container2:paintTo(bb, x + Screen:getWidth()/2 - text_container2:getSize().w/2, y + 20)
     else
-        local collate = FrameContainer:new{
-            left_container:new{
-                dimen = Geom:new(),
-                TextWidget:new{
-                    text =  "",
-                    face = Font:getFace("myfont3", 12),
-                    fgcolor = Blitbuffer.COLOR_BLACK,
-                },
+        local collate_widget_container = left_container:new{
+            dimen = Geom:new(),
+            TextWidget:new{
+                text =  "",
+                face = Font:getFace("myfont3", 12),
+                fgcolor = Blitbuffer.COLOR_BLACK,
             },
-            -- background = Blitbuffer.COLOR_WHITE,
-            bordersize = 0,
-            padding = 0,
         }
-
-        local reverse_collate = FrameContainer:new{
-            left_container:new{
-                dimen = Geom:new(),
-                TextWidget:new{
-                    text =  "",
-                    face = Font:getFace("myfont3", 12),
-                    fgcolor = Blitbuffer.COLOR_BLACK,
-                },
+        local reverse_collate_widget_container = left_container:new{
+            dimen = Geom:new(),
+            TextWidget:new{
+                text =  "",
+                face = Font:getFace("myfont3", 12),
+                fgcolor = Blitbuffer.COLOR_BLACK,
             },
-            -- background = Blitbuffer.COLOR_WHITE,
-            bordersize = 0,
-            padding = 0,
         }
         if self.collection then
             if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
@@ -1766,24 +1651,24 @@ function TopBar:paintTo(bb, x, y)
                     collate_symbol = "Sort"
                 end
 
-                collate[1][1]:setText(collate_symbol)
-                collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - collate[1][1]:getSize().h )
+                collate_widget_container[1]:setText(collate_symbol)
+                collate_widget_container:paintTo(bb, x + Screen:getWidth() - collate_widget_container[1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - collate_widget_container[1]:getSize().h )
                 local reverse_collate_mode = G_reader_settings:readSetting("reverse_collate")
                 if reverse_collate_mode == nil then
-                    reverse_collate[1][1]:setText("")
+                    reverse_collate_widget_container[1]:setText("")
                 elseif not reverse_collate_mode then
-                    reverse_collate[1][1]:setText("↓")
+                    reverse_collate_widget_container[1]:setText("↓")
                 else
-                    reverse_collate[1][1]:setText("↑")
+                    reverse_collate_widget_container[1]:setText("↑")
                 end
-                -- collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, y + Screen:scaleBySize(6))
-                reverse_collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - reverse_collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - reverse_collate[1][1]:getSize().h)
+                -- collate_widget_container:paintTo(bb, x + Screen:getWidth() - collate_widget_container[1][1]:getSize().w - TopBar.MARGIN_SIDES, y + Screen:scaleBySize(6))
+                reverse_collate_widget_container:paintTo(bb, x + Screen:getWidth() - collate_widget_container[1]:getSize().w - reverse_collate_widget_container[1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - reverse_collate_widget_container[1]:getSize().h)
             else
-                collate[1][1]:setText("?")
-                collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - collate[1][1]:getSize().h )
+                collate_widget_container[1]:setText("?")
+                collate_widget_container:paintTo(bb, x + Screen:getWidth() - collate_widget_container[1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - collate_widget_container[1]:getSize().h )
             end
         else
-            local times_text = TextWidget:new{
+            local times_text_widget_container = TextWidget:new{
                 text =  "",
                 face = Font:getFace("myfont3", 12),
                 fgcolor = Blitbuffer.COLOR_BLACK,
@@ -1805,27 +1690,23 @@ function TopBar:paintTo(bb, x, y)
 
             -- local time_battery_text_text = time .. "|" .. batt_lvl .. "%|" ..  last_file
 
-            -- times_text:setText(time_battery_text_text:reverse())
-            -- times_text:paintTo(bb, x - times_text:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y)
+            -- times_text_widget_container:setText(time_battery_text_text:reverse())
+            -- times_text_widget_container:paintTo(bb, x - times_text_widget_container:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y)
 
 
-            local books_information = FrameContainer:new{
-                left_container:new{
-                    dimen = Geom:new(),
-                    TextWidget:new{
-                        text =  "",
-                        face = Font:getFace("myfont3", 12),
-                        fgcolor = Blitbuffer.COLOR_BLACK,
-                    },
+            local books_information_widget_container = left_container:new{
+                dimen = Geom:new(),
+                TextWidget:new{
+                    text =  "",
+                    face = Font:getFace("myfont3", 12),
+                    bold = true,
+                    fgcolor = Blitbuffer.COLOR_BLACK,
                 },
-                -- background = Blitbuffer.COLOR_WHITE,
-                bordersize = 0,
-                padding = 0,
             }
 
             -- local FileManagerFileSearcher = require("apps/filemanager/filemanagerfilesearcher")
             -- local _, files = self:getList("*.epub")
-            -- books_information[1][1]:setText("TF: " .. tostring(#files))
+            -- books_information_widget_container[1]:setText("TF: " .. tostring(#files))
 
             if G_reader_settings:readSetting("home_dir") and ffiUtil.realpath(G_reader_settings:readSetting("home_dir") .. "/stats.lua") then
                 local ok, stats = pcall(dofile, G_reader_settings:readSetting("home_dir") .. "/stats.lua")
@@ -1835,13 +1716,13 @@ function TopBar:paintTo(bb, x, y)
                 end
                 -- local execute = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub' | wc -l" )
                 -- local execute2 = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub.lua' -exec ls {} + | wc -l")
-                -- books_information[1][1]:setText("TB: " .. execute:read('*a') .. "TBC: " .. execute2:read('*a'))
+                -- books_information_widget_container[1]:setText("TB: " .. execute:read('*a') .. "TBC: " .. execute2:read('*a'))
 
                 local stats_year = TopBar:getReadThisYearSoFar()
                 if stats_year > 0 then
                     stats_year = "+" .. stats_year
                 end
-                books_information[1][1]:setText("B: " .. stats["total_books"]
+                books_information_widget_container[1]:setText("B: " .. stats["total_books"]
                 .. ", BF:" .. stats["total_books_finished"]
                 .. ", BFTM:" .. stats["total_books_finished_this_month"]
                 .. ", BFTY:" .. stats["total_books_finished_this_year"]
@@ -1851,30 +1732,26 @@ function TopBar:paintTo(bb, x, y)
                 .. ", LD:" .. last_days
                 .. stats_year)
             else
-                books_information[1][1]:setText("No stats.lua file in home dir")
+                books_information_widget_container[1]:setText("No stats.lua file in home dir")
             end
-            books_information:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+            books_information_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
 
-            local times = FrameContainer:new{
-                left_container:new{
-                    dimen = Geom:new(),
-                    TextWidget:new{
-                        text =  "",
-                        face = Font:getFace("myfont3", 12),
-                        fgcolor = Blitbuffer.COLOR_BLACK,
-                    },
+            local times_widget_container =
+            left_container:new{
+                dimen = Geom:new(),
+                TextWidget:new{
+                    text =  "",
+                    face = Font:getFace("myfont3", 12),
+                    bold = true,
+                    fgcolor = Blitbuffer.COLOR_BLACK,
                 },
-                -- background = Blitbuffer.COLOR_WHITE,
-                bordersize = 0,
-                padding = 0,
             }
 
-
-            -- times[1][1]:setText(time .. "|" .. batt_lvl .. "%")
-
-            times[1][1]:setText("BDB: " .. TopBar:getBooksOpened() .. ", TR: " .. TopBar:getTotalRead() .. "d")
-            times:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM - times[1][1]:getSize().h )
+            -- times[1]:setText(time .. "|" .. batt_lvl .. "%")
+            times_widget_container[1]:setText("BDB: " .. TopBar:getBooksOpened() .. ", TR: " .. TopBar:getTotalRead() .. "d")
+            -- times.dimen = Geom:new{ w = times[1]:getSize().w, h = times[1].face.size }
+            times_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM - times_widget_container[1].face.size - 4)
             if self.fm and not self.history then
                 if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
                     local sort_by_mode = G_reader_settings:readSetting("collate")
@@ -1894,44 +1771,39 @@ function TopBar:paintTo(bb, x, y)
                     else
                         collate_symbol = "O"
                     end
-                    collate[1][1]:setText(collate_symbol)
-                    -- collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, y + Screen:scaleBySize(6))
-                    collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+                    collate_widget_container[1]:setText(collate_symbol)
+                    -- collate:paintTo(bb, x + Screen:getWidth() - collate[1]:getSize().w - TopBar.MARGIN_SIDES, y + Screen:scaleBySize(6))
+                    collate_widget_container:paintTo(bb, x + Screen:getWidth() - collate_widget_container[1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
                     local reverse_collate_mode = G_reader_settings:readSetting("reverse_collate")
                     if reverse_collate_mode then
-                        reverse_collate[1][1]:setText("↓")
+                        reverse_collate_widget_container[1]:setText("↓")
                     else
-                        reverse_collate[1][1]:setText("↑")
+                        reverse_collate_widget_container[1]:setText("↑")
                     end
-                    -- collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, y + Screen:scaleBySize(6))
-                    reverse_collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - reverse_collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+                    -- collate:paintTo(bb, x + Screen:getWidth() - collate[1]:getSize().w - TopBar.MARGIN_SIDES, y + Screen:scaleBySize(6))
+                    reverse_collate_widget_container:paintTo(bb, x + Screen:getWidth() - collate_widget_container[1]:getSize().w - reverse_collate_widget_container[1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
                 else
-                    collate[1][1]:setText("?")
-                    collate:paintTo(bb, x + Screen:getWidth() - collate[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+                    collate_widget_container[1]:setText("?")
+                    collate_widget_container:paintTo(bb, x + Screen:getWidth() - collate_widget_container[1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
                 end
-               local ignore_double_tap_frame = FrameContainer:new{
-                    left_container:new{
-                        dimen = Geom:new(),
-                        TextWidget:new{
-                            text =  "",
-                            face = Font:getFace("myfont3", 12),
-                            fgcolor = Blitbuffer.COLOR_BLACK,
-                        },
+               local ignore_double_tap_frame_widget_container = left_container:new{
+                    dimen = Geom:new(),
+                    TextWidget:new{
+                        text =  "",
+                        face = Font:getFace("myfont3", 12),
+                        fgcolor = Blitbuffer.COLOR_BLACK,
                     },
-                    -- background = Blitbuffer.COLOR_WHITE,
-                    bordersize = 0,
-                    padding = 0,
                 }
 
                 local fm = require("apps/filemanager/filemanager").instance
                 if not fm.disable_double_tap then
-                    ignore_double_tap_frame[1][1]:setText("🔒")
+                    ignore_double_tap_frame_widget_container[1]:setText("🔒")
                 else
-                    ignore_double_tap_frame[1][1]:setText("")
+                    ignore_double_tap_frame_widget_container[1]:setText("")
                 end
-                ignore_double_tap_frame:paintTo(bb, x + Screen:getWidth() - ignore_double_tap_frame[1][1]:getSize().w - Screen:scaleBySize(2), Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+                ignore_double_tap_frame_widget_container:paintTo(bb, x + Screen:getWidth() - ignore_double_tap_frame_widget_container[1]:getSize().w - Screen:scaleBySize(2), Screen:getHeight() - TopBar.MARGIN_BOTTOM)
             end
         end
     end

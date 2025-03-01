@@ -84,11 +84,14 @@ local Font = {
 
         -- myfont = "Capita-Regular.otf",
         myfont = "DroidSansMono.ttf",
-        myfont2 = "PoorRichard-Regular.ttf",
+        -- myfont2 = "PoorRichard-Regular.ttf",
+        myfont2 = "SourceSans3-Regular.ttf",
 
         -- myfont3 = "Consolas.ttf",
-        myfont3 = "DankMono-Bold.ttf",
+        myfont3 = "DankMono-Regular.ttf",
+        -- myfont3 = "SourceSans3-Regular.ttf",
         myfont4 = "DroidSansMono.ttf",
+        myfont5 = "PoorRichard-Regular.ttf",
     },
     sizemap = {
         cfont = 24,

@@ -1108,17 +1108,13 @@ function Dispatcher._showAsMenu(settings, exec_props)
     local buttons = {}
     --local dump = require("dump")
     --print(dump(exec_props))
-    local font_face = "myfont2"
-    local menu_fonts = false
+    local font_face_default = "myfont2"
+    local font_size_default = 14
     if exec_props["gesture"]["multiswipe_directions"] and exec_props["gesture"]["multiswipe_directions"] == "north east" then
-        menu_fonts = true
+        font_face_default = "myfont5"
+        font_size_default = 16
     end
 
-    if menu_fonts then
-        font_face = "myfont4"
-    end
-
-    menu_fonts = false -- Let's keep this false
     if exec_props and exec_props.qm_show then
         table.insert(buttons, {{
             text = _("Execute all"),
@@ -1188,46 +1184,45 @@ function Dispatcher._showAsMenu(settings, exec_props)
             local profiles = LuaSettings:open(profiles_file)
             local data = profiles.data
 
-            if not menu_fonts then
-                for _,profo in pairs(data) do
+            for _,profo in pairs(data) do
 
-                    -- My font configuration profiles in a gesture marked as Show as QuickMenu and Keep QuickMenu open,
-                    -- the only one marked as Keep QuickMenu open
-                    -- We do this just for this gesture
-                    if keep_open_on_apply then
-                        if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.set_font and profo.set_font == ui.document._document:getFontFace() and v.text ~= "Profile Reset defaults" then
-                            v.text = v.text .. " ✔"
-                        end
-
-                        if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.font_size and profo.font_size == font_size and v.text ~= "Profile Reset defaults" then
-                            v.text = v.text .. " ✔"
-                        end
-
-                        if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.line_spacing and profo.line_spacing == ui.document.configurable.line_spacing and v.text ~= "Profile Reset defaults" then
-                            v.text = v.text .. " ✔"
-                        end
-
-                        if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.b_page_margin  and profo.b_page_margin  == ui.document.configurable.b_page_margin  and v.text ~= "Profile Reset defaults" then
-                            v.text = v.text .. " ✔"
-                        end
+                -- My font configuration profiles in a gesture marked as Show as QuickMenu and Keep QuickMenu open,
+                -- the only one marked as Keep QuickMenu open
+                -- We do this just for this gesture
+                if keep_open_on_apply then
+                    if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.set_font and profo.set_font == ui.document._document:getFontFace() and v.text ~= "Profile Reset defaults" then
+                        v.text = v.text .. " ✔"
                     end
-                    -- Tweaks are in a different gesture marked as well as Show as QuickMenu but not Keep QuickMenu open
-                    if string.match(v.text, "tweak") and ui and ui.tweakst then
-                        for _,tweak in pairs(ui.tweakst) do
-                            if tweak == v.text:gsub("Toggle style tweak: ", "") then
-                                v.text = v.text .. " ✔"
-                            end
+
+                    if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.font_size and profo.font_size == font_size and v.text ~= "Profile Reset defaults" then
+                        v.text = v.text .. " ✔"
+                    end
+
+                    if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.line_spacing and profo.line_spacing == ui.document.configurable.line_spacing and v.text ~= "Profile Reset defaults" then
+                        v.text = v.text .. " ✔"
+                    end
+
+                    if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.b_page_margin  and profo.b_page_margin  == ui.document.configurable.b_page_margin  and v.text ~= "Profile Reset defaults" then
+                        v.text = v.text .. " ✔"
+                    end
+                end
+                -- Tweaks are in a different gesture marked as well as Show as QuickMenu but not Keep QuickMenu open
+                if string.match(v.text, "tweak") and ui and ui.tweakst then
+                    for _,tweak in pairs(ui.tweakst) do
+                        if tweak == v.text:gsub("Toggle style tweak: ", "") then
+                            v.text = v.text .. " ✔"
                         end
                     end
                 end
             end
+
             table.insert(buttons, {{
                 text = v.text,
                 enabled = Dispatcher:isActionEnabled(settingsList[v.key]),
                 -- menu_style = true,
                 align = "left",
-                font_face = font_face,
-                font_size = 16,
+                font_face = font_face_default,
+                font_size = font_size_default,
                 font_bold = true,
                 is_quickmenu_button = true,
                 callback = function()
