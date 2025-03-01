@@ -37,7 +37,7 @@ function CheckMark:init()
     -- direction, for proper rendering on the right).
     local para_direction_rtl = BD.mirroredUILayout()
     local checked_widget = TextWidget:new{
-        text = " ✓", -- preceded by thin space for better alignment
+        text = "  ✓", -- preceded by thin space for better alignment
         face = self.face,
         para_direction_rtl = para_direction_rtl,
     }
