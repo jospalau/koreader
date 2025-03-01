@@ -124,6 +124,10 @@ function IconButton:onTapIconButton()
         self.image.invert = true
         UIManager:widgetInvert(self.image, self.dimen.x + h_padding, self.dimen.y + self.padding_top)
         local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+
+        -- When using Kobo Libra 2 and Kobo Clara 2E (same for Kindle devices) in fm and display mode is set to detailed, if we tap on the top home and + icons,
+        -- the first horizontal line of the list is overlapped a bit with white.
+        -- Fix this using ui refresh in the icon button widget when tapping.
          if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch" or Device:isKindle()) then
             UIManager:setDirty(nil, "ui", self.dimen)
          else
@@ -131,8 +135,8 @@ function IconButton:onTapIconButton()
          end
 
         UIManager:forceRePaint()
-        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_spaBW" or Device:isKindle()) then
-            UIManager:yieldToEPDC(10000)
+        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and Device:isKobo() or Device:isKindle() or Device:isPocketBook() then
+            UIManager:yieldToEPDC(150000)
         else
             UIManager:yieldToEPDC()
         end
@@ -142,21 +146,19 @@ function IconButton:onTapIconButton()
         self.image.invert = false
         UIManager:widgetInvert(self.image, self.dimen.x + h_padding, self.dimen.y + self.padding_top)
 
-        local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-        -- There are no glitches in the new Libra Colour but there is a flash after pressing a button. We avoid it
-        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_monza" or Device:isPocketBook()) then
-            local util = require("ffi/util")
-            util.usleep(250000)
-        end
+        -- local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+        -- -- There are no glitches in the new Libra Colour but there is a flash after pressing a button. We avoid it
+        -- if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_monza" or Device:isPocketBook()) then
+        --     -- local util = require("ffi/util")
+        --     -- util.usleep(250000)
+        --     UIManager:yieldToEPDC(100000)
+        -- end
         -- Callback
         --
         self.callback()
 
-        -- Do not ignore it at all since it is missing a refresh in the top left menu icon
-        -- when opening the window which allows to select the different dictionaries available
-        -- The icon remains highlighted after opening this window
-        -- Ignore this refresh since it has been removed from upstream
-        -- Use "fast" as it was for all the devices. We pass 5000 to yieldToEPDC() and it will work for Clara BW without glitches
+        -- We need the Kindle devices, the Kobo Libra 2 and the Kobo Clara 2E to perform a ui refresh here as well
+        -- when reverting the highlighting
         if Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch" or Device:isKindle() then
            UIManager:setDirty(nil, "ui", self.dimen)
         else

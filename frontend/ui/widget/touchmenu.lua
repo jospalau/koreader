@@ -203,8 +203,8 @@ function TouchMenuItem:onTapSelect(arg, ges)
 
         UIManager:forceRePaint()
         local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_spaBW" or Device.model == "KindleBasic5") then
-            UIManager:yieldToEPDC(5000)
+        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and Device:isKobo() or Device:isKindle() or Device:isPocketBook() then
+            UIManager:yieldToEPDC(150000)
         else
             UIManager:yieldToEPDC()
         end
@@ -218,12 +218,11 @@ function TouchMenuItem:onTapSelect(arg, ges)
             UIManager:setDirty(nil, "ui", highlight_dimen)
         end
 
-
-        -- There are no glitches in the new Libra Colour but there is a flash after pressing a button. We avoid it
-        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_monza" or Device:isPocketBook()) then
-            local util = require("ffi/util")
-            util.usleep(250000)
-        end
+        -- -- There are no glitches in the new Libra Colour but there is a flash after pressing a button. We avoid it
+        -- if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_monza" or Device:isPocketBook()) then
+        --     local util = require("ffi/util")
+        --     util.usleep(250000)
+        -- end
         -- Callback
         --
         self.menu:onMenuSelect(self.item, tap_on_checkmark)
@@ -272,8 +271,8 @@ function TouchMenuItem:onHoldSelect(arg, ges)
         UIManager:setDirty(nil, "fast", highlight_dimen)
         UIManager:forceRePaint()
         local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_spaBW" or Device.model == "KindleBasic5") then
-            UIManager:yieldToEPDC(5000)
+        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and Device:isKobo() or Device:isKindle() or Device:isPocketBook() then
+            UIManager:yieldToEPDC(150000)
         else
             UIManager:yieldToEPDC()
         end

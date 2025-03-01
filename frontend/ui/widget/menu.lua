@@ -562,17 +562,18 @@ function MenuItem:onTapSelect(arg, ges)
         self[1].invert = true
         UIManager:widgetInvert(self[1], self[1].dimen.x, self[1].dimen.y)
         local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and Device.model == "Kobo_spaBW" then -- fast is a bit glitchy in Kobo BW
-            UIManager:setDirty(nil, "ui", self[1].dimen)
-        else
-            UIManager:setDirty(nil, "fast", self[1].dimen)
-        end
+        -- if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and Device.model == "Kobo_spaBW" then -- fast is a bit glitchy in Kobo BW
+        --     UIManager:setDirty(nil, "ui", self[1].dimen)
+        -- else
+        --     UIManager:setDirty(nil, "fast", self[1].dimen)
+        -- end
+        UIManager:setDirty(nil, "fast", self[1].dimen)
 
         UIManager:forceRePaint()
 
 
-        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and Device:isKindle() then
-            UIManager:yieldToEPDC(10000)
+        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and Device:isKobo() or Device:isKindle() or Device:isPocketBook() then
+            UIManager:yieldToEPDC(150000)
         else
             UIManager:yieldToEPDC()
         end
@@ -618,16 +619,16 @@ function MenuItem:onHoldSelect(arg, ges)
         self[1].invert = true
         UIManager:widgetInvert(self[1], self[1].dimen.x, self[1].dimen.y)
         local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and Device.model == "Kobo_spaBW" then -- fast is a bit glitchy in Kobo BW
-            UIManager:setDirty(nil, "ui", self[1].dimen)
-        else
-            UIManager:setDirty(nil, "fast", self[1].dimen)
-        end
-
+        -- if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and Device.model == "Kobo_spaBW" then -- fast is a bit glitchy in Kobo BW
+        --     UIManager:setDirty(nil, "ui", self[1].dimen)
+        -- else
+        --     UIManager:setDirty(nil, "fast", self[1].dimen)
+        -- end
+        UIManager:setDirty(nil, "fast", self[1].dimen)
         UIManager:forceRePaint()
 
-        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and Device:isKindle() then
-            UIManager:yieldToEPDC(10000)
+        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and Device:isKobo() or Device:isKindle() or Device:isPocketBook() then
+            UIManager:yieldToEPDC(150000)
         else
             UIManager:yieldToEPDC()
         end
