@@ -1334,7 +1334,31 @@ function PageTextInfo:updateWordsVocabulary()
         self.all_words[t[i]] = "";
     end
 
+    local function removeDupes(tab)
+        local set = {}
+        local finalTab = {}
+        for i, val in pairs (tab) do
+            if not set[val] then
+                set[val] =  1
+            else
+                set[val] = set[val] + 1
+                table.remove(tab, i)
+            end
 
+        end
+
+        -- for k, v in pairs(set) do
+        --     -- if v == 1 then
+        --     --     finalTab[#finalTab+1] = k
+        --     -- end
+        --     finalTab[#finalTab+1] = k
+        -- end
+
+        -- local dump = require("dump")
+        -- print(dump(tab))
+        -- print(dump(finalTab))
+        return tab
+    end
     -- Using regular expressions to get full words is very slow and then we have to remove the characters used in them
     -- Searching text without regular expressions we won't get words, we will get the position in the dom (start and end)
     -- for each of the places the text if found wether the full word or the text inside a word and we want full words to highlight them
@@ -1344,7 +1368,7 @@ function PageTextInfo:updateWordsVocabulary()
         if res and res.text then
             -- print(res.pos0)
             -- print(res.pos1)
-            local words_page = util.splitToWords2(res.text) -- contar palabras
+            local words_page = removeDupes(util.splitToWords2(res.text))
             if words_page and self.all_words then
                 for i = 1, #words_page do
                     local word_page = words_page[i] --:gsub("[^%w%s]+", "")
@@ -1861,6 +1885,14 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                 -- If a case is missed, we can pass boxes[1].x + 1 as first argument
                 local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true)
                 if boxes then
+                    local Device = require("device")
+                    local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+                    local font_size_px = (display_dpi * self.ui.document.configurable.font_size) / 72
+                    local current_font = self.ui.document:getFontFace():gsub(" ","")
+                    local face = Font:getFace(current_font .. "-Regular", font_size_px)
+                    local factor = (current_font:find(".*Garamond.*") or current_font:find(".*APHont.*") or current_font:find(".*Spectral.*")) and 0.40 or 0.30
+                    local line_spacing_pct = self.ui.font.configurable.line_spacing * (1/100)
+                    VSPACE = math.ceil(font_size_px * factor * line_spacing_pct)
                     local word
                     -- local dump = require("dump")
                     -- print(dump(boxes))
@@ -1931,19 +1963,32 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                                             test:paintTo(bb, box.x + box.w/2 - test[1][1]:getSize().w/2 , box.y + translation_font_size/2)
                                         end
                                     end
-
-                                    local Device = require("device")
-                                    local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
-                                    local font_size_px = (display_dpi * self.ui.document.configurable.font_size) / 72
-
-
-                                    local face = Font:getFace(self.ui.document:getFontFace():gsub(" ","") .. "-Regular", 12)
-                                    local face_height, face_ascender = face.ftsize:getHeightAndAscender()
-                                    local line_spacing_pct = self.ui.font.configurable.line_spacing * (1/100)
-                                    VSPACE = math.ceil(font_size_px * (face_ascender/100) * line_spacing_pct)
+                                    -- local RenderText = require("ui/rendertext")
+                                    -- local glyph = RenderText:getGlyph(face, 120)
+                                    -- print("paso " ..  glyph.xheight)
+                                    -- print("paso " ..  glyph.h)
+                                    -- print("paso " ..  face.ftsize:getCapHeight())
+                                    -- print("  ")
+                                    -- local xrect = box:copy()
+                                    -- if self.ui.document:getFontFace():gsub(" ",""):find(".*Garamond.*")
+                                    -- or self.ui.document:getFontFace():gsub(" ",""):find(".*APHont.*")
+                                    -- or self.ui.document:getFontFace():gsub(" ",""):find(".*Vollkorn.*") then
+                                    --     bb:paintRect(xrect.x, xrect.y + math.floor(xrect.h/2) + 1 + face.ftsize:getCapHeight()/2, xrect.w, Size.line.thick, nil)
+                                    -- else
+                                    --     local face_height, face_ascender = face.ftsize:getHeightAndAscender()
+                                    --     local line_spacing_pct = self.ui.font.configurable.line_spacing * (1/100)
+                                    --     VSPACE = math.ceil(font_size_px * (face_ascender/100) * line_spacing_pct)
+                                    --     local xrect = box:copy()
+                                    --     xrect.y = xrect.y - VSPACE
+                                    --     self.ui.view:drawHighlightRect(bb, x, y, xrect, "underscore", nil, false)
+                                    --     -- self.ui.view:drawHighlightRect(bb, x, y, xrect, "lighten", Blitbuffer.COLOR_LIGHT_GRAY, false)
+                                    -- end
+                                    -- local face_height, face_ascender = face.ftsize:getHeightAndAscender()
                                     local xrect = box:copy()
                                     xrect.y = xrect.y - VSPACE
-                                    self.ui.view:drawHighlightRect(bb, x, y, xrect, "underscore", nil, false)
+                                    -- self.ui.view:drawHighlightRect(bb, x, y, xrect, "underscore", nil, false)
+                                    -- self.ui.view:drawHighlightRect(bb, x, y, xrect, "lighten", Blitbuffer.COLOR_LIGHT_GRAY, false)
+                                    bb:paintRect(xrect.x, xrect.y + xrect.h - 1, xrect.w, Size.line.thick, nil)
                                 end
                             end
                         end
@@ -1951,11 +1996,6 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                         if boxes then
                             for _, box in ipairs(boxes) do
                                 if box.h ~= 0 then
-                                    local Device = require("device")
-                                    local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
-                                    local font_size_px = (display_dpi * self.ui.document.configurable.font_size) / 72
-                                    local line_spacing_pct = self.ui.font.configurable.line_spacing * (1/100)
-                                    VSPACE = math.ceil(font_size_px * 0.25 * line_spacing_pct)
                                     local xrect = box:copy()
                                     xrect.y = xrect.y - VSPACE
                                     self.ui.view:drawHighlightRect(bb, x, y, xrect, "underscore", nil, false)
