@@ -565,6 +565,16 @@ function FileSearcher:onMenuSelect(item, callback)
             else -- called from Reader
                 self.ui:onClose()
                 self.ui:showFileManager(item.path)
+                -- When the title bar is hijacked by the page text info plugin
+                -- the fm instance when showing folder for folders will be restarted
+                -- in search lists (when listing from the reader mode and only for directories).
+                -- We have the new instance here so we can change to path
+                local ui = require("apps/filemanager/filemanager").instance
+                if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("enable_change_bar_menu") then
+                    local pathname = util.splitFilePathName(item.path)
+                    ui.file_chooser:changeToPath(pathname, item.path)
+                    -- ui:showFiles(item.path)
+                end
             end
         end
     end

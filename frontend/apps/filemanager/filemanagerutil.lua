@@ -378,13 +378,24 @@ function filemanagerutil.genShowFolderButton(file, caller_callback, button_disab
                 local pathname = util.splitFilePathName(file)
                 ui.file_chooser:changeToPath(pathname, file)
                 -- Since recently is possible to open the default collection from the history with a quick gesture. We close the history when in fm if opened. No needed if in ui
-                if ui.history.hist_menu then
-                    ui.history.hist_menu.close_callback()
-                end
+                -- For the file search lists it is done in the onCloseWidget() function
+                -- if ui.history.booklist_menu then
+                --     ui.history.booklist_menu.close_callback()
+                -- end
             else
                 ui = require("apps/reader/readerui").instance
                 ui:onClose()
                 ui:showFileManager(file)
+                -- When the title bar is hijacked by the page text info plugin
+                -- the fm instance when showing folder for folders will be restarted
+                -- in search lists (when listing from the reader mode and only for directories).
+                -- We have the new instance here so we can change to path
+                local ui = require("apps/filemanager/filemanager").instance
+                if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_change_bar_menu") then
+                    local pathname = util.splitFilePathName(file)
+                    ui.file_chooser:changeToPath(pathname, file)
+                    -- ui:showFiles(file)
+                end
             end
         end,
     }
