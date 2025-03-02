@@ -272,7 +272,7 @@ function TouchMenuItem:onHoldSelect(arg, ges)
         UIManager:forceRePaint()
         local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
         if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and Device:isKobo() or Device:isKindle() or Device:isPocketBook() then
-            UIManager:yieldToEPDC(150000)
+            UIManager:yieldToEPDC(200000)
         else
             UIManager:yieldToEPDC()
         end
