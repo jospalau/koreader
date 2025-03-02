@@ -1371,12 +1371,24 @@ function TopBar:toggleBar(light_on)
         --         self.test_light_text:setText(" ○ " .. self.frontlight)
         --     end
         -- end
+        if self.ui.gestures.ignore_hold_corners then
+            if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
+                self.ignore_corners = "\u{F0F6} 🔒"
+            else
+                self.ignore_corners = "🔒"
+            end
+        else
+            if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
+                self.ignore_corners = "\u{F0F6}"
+            else
+                self.ignore_corners = ""
+            end
+        end
     end
 end
 
 function TopBar:onPageUpdate()
     self:toggleBar()
-
 end
 
 function TopBar:onPosUpdate(new_pos)
@@ -1807,6 +1819,11 @@ function TopBar:paintTo(bb, x, y)
             end
         end
     end
+end
+
+function TopBar:paintToDisabled(bb, x, y)
+    self.ignore_corners_widget_container[1]:setText(self.ignore_corners)
+    self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - 2, y + Screen:scaleBySize(6))
 end
 
 function TopBar:onAdjustMarginsTopbar()
