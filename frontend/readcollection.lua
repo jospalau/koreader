@@ -1,4 +1,5 @@
 local DataStorage = require("datastorage")
+local DocumentRegistry = require("document/documentregistry")
 local LuaSettings = require("luasettings")
 local ffiUtil = require("ffi/util")
 local lfs = require("libs/libkoreader-lfs")
@@ -73,6 +74,7 @@ function ReadCollection:_read()
     logger.dbg("ReadCollection: reading from collection file")
     self.coll = {}
     self.coll_settings = {}
+    local updated_collections = {}
     for coll_name, collection in pairs(collections.data) do
         local coll = {}
         for _, v in ipairs(collection) do
@@ -85,6 +87,12 @@ function ReadCollection:_read()
         self.coll_settings[coll_name] = collection.settings or { order = 1 } -- favorites, first run
         self.coll_settings[coll_name]["number_files"] = util.tableSize(coll)
         self.coll_settings[coll_name]["series"] = (collection.settings and collection.settings.series) and collection.settings.series or nil
+        if self:updateCollectionFromFolder(coll_name) > 0 then
+            updated_collections[coll_name] = true
+        end
+    end
+    if next(updated_collections) ~= nil then
+        self:write(updated_collections)
     end
 end
 
@@ -179,8 +187,8 @@ end
 
 -- manage items
 
-function ReadCollection:addItem(file, collection_name)
-    local item = buildEntry(file, self:getCollectionNextOrder(collection_name))
+function ReadCollection:addItem(file, collection_name, attr)
+    local item = buildEntry(file, self:getCollectionNextOrder(collection_name), attr)
     self.coll[collection_name][item.file] = item
 end
 
@@ -340,6 +348,24 @@ function ReadCollection:updateItemsByPath(path, new_path) -- FM: rename folder, 
     if do_write then
         self:write()
     end
+end
+
+function ReadCollection:updateCollectionFromFolder(collection_name)
+    local count = 0
+    if self.coll_settings[collection_name].folders then
+        local coll = self.coll[collection_name]
+        local function add_item_callback(file, filename, attr)
+            file = ffiUtil.realpath(file)
+            if coll[file] == nil and DocumentRegistry:hasProvider(file) then
+                self:addItem(file, collection_name, attr)
+                count = count + 1
+            end
+        end
+        for folder, folder_settings in pairs(self.coll_settings[collection_name].folders) do
+            util.findFiles(folder, add_item_callback, folder_settings.subfolders)
+        end
+    end
+    return count
 end
 
 function ReadCollection:getOrderedCollection(collection_name)
