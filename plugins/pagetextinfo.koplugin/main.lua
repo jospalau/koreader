@@ -497,7 +497,7 @@ end
 function PageTextInfo:onSwipe(_, ges)
     if not self.initialized then return end
     local direction = BD.flipDirectionIfMirroredUILayout(ges.direction)
-    if direction == "north" then
+    if direction == "west" then
         self.ui.gestures:onIgnoreHoldCorners(true)
         if not self.ui.disable_double_tap then
             self.ui.disable_double_tap = true
@@ -512,7 +512,7 @@ function PageTextInfo:onSwipe(_, ges)
             Device.input.disable_double_tap = self.ui.disable_double_tap
             return self:toggleHighlightAllWordsVocabulary(not self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes"))
         end
-    elseif direction == "south" then
+    elseif direction == "north" then
         if self.view.topbar.is_enabled == nil or self.view.topbar.is_enabled == false then
             self.view.topbar:quickToggleOnOff(true)
         else
