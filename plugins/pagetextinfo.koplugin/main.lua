@@ -1890,7 +1890,7 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                     local font_size_px = (display_dpi * self.ui.document.configurable.font_size) / 72
                     local current_font = self.ui.document:getFontFace():gsub(" ","")
                     local face = Font:getFace(current_font .. "-Regular", font_size_px)
-                    local factor = (current_font:find(".*Garamond.*") or current_font:find(".*APHont.*") or current_font:find(".*Spectral.*")) and 0.40 or 0.30
+                    local factor = (current_font:find(".*Garamond.*") or current_font:find(".*APHont.*") or current_font:find(".*Spectral.*")) and 0.40 or 0.25
                     local line_spacing_pct = self.ui.font.configurable.line_spacing * (1/100)
                     VSPACE = math.ceil(font_size_px * factor * line_spacing_pct)
                     local word
