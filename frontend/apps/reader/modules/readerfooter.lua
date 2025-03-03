@@ -2649,6 +2649,7 @@ function ReaderFooter:checkNewDay()
     local session_started = self.ui.statistics.start_current_period
     local daysdiff = now_t.day - os.date("*t", session_started).day
     if daysdiff > 0 then
+        logger.info("New day " .. os.time())
         self.ui.statistics:insertDBSessionStats()
         self.ui.statistics:insertDB()
         self.ui.statistics._initial_read_today = nil

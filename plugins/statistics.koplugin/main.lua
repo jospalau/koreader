@@ -1095,12 +1095,16 @@ function ReaderStatistics:insertDBSessionStats()
     end
     local id_book = self.id_curr_book
 
-    local duration_raw =  math.floor((os.time() - self.start_current_period))
-    local duration_raw_mins =  math.floor(((os.time() - self.start_current_period)/60)* 100) / 100
+    local current_time_inserting = os.time()
+    local duration_raw = current_time_inserting - self.start_current_period
+    local duration_raw_mins = math.floor(((current_time_inserting - self.start_current_period)/60)* 100) / 100
     local wpm_session = math.floor(self._total_words/duration_raw_mins)
     if duration_raw < 360 or self._total_pages < 6 then
         return
     end
+    logger.info("Session starting " .. self.start_current_period)
+    logger.info("Session ending " .. current_time_inserting)
+    logger.info("Session duration " .. duration_raw)
     --date -s "2024-08-22 23:59:33"
     --print(string.format("%d, %d, %d", self.start_current_period, duration_raw, self._total_pages))
     local conn = SQ3.open(db_location)
