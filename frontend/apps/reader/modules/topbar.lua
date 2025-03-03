@@ -535,6 +535,11 @@ function TopBar:init()
     else
         self.init_page_screens = nil
     end
+
+    if TopBar.preserved_initial_battery_lvl then
+        self.initial_battery_lvl = TopBar.preserved_initial_battery_lvl
+        TopBar.preserved_initial_battery_lvl = nil
+    end
 end
 
 local getMem = function()
@@ -561,7 +566,11 @@ function TopBar:onReaderReady()
     self.initial_memory = getMem()
 
     local powerd = Device:getPowerDevice()
-    self.initial_battery_lvl = powerd:getCapacity()
+    if self.initial_battery_lvl == nil then
+        self.initial_battery_lvl = powerd:getCapacity()
+    end
+
+
     self:onSetDimensions()
     self.title = self.ui.document._document:getDocumentProps().title
     self.series = self.ui.document._document:getDocumentProps().series
@@ -933,7 +942,8 @@ function TopBar:onPreserveCurrentSession()
     TopBar.preserved_altbar_ticks_height = self.main_progress_bar.altbar_ticks_height
     TopBar.preserved_option = self.option
     TopBar.preserved_init_page = self.init_page
-    TopBar.preserved_init_page_screens= self.init_page_screens
+    TopBar.preserved_init_page_screens = self.init_page_screens
+    TopBar.preserved_initial_battery_lvl = self.initial_battery_lvl
 end
 
 
