@@ -4245,9 +4245,9 @@ function ReaderFooter:onShowReadingMotive()
         stretch_limit_percentage = G_reader_settings:readSetting("screensaver_stretch_limit_percentage"),
     }
 
-    widget_settings.image = image
     widget_settings.image_disposable = true
-    widget_settings.file =  "resources/screenSaverKeepCalm.jpg"
+    -- widget_settings.file =  "resources/screenSaverKeepCalm.jpg"
+    widget_settings.file =  "resources/oneMoreChapter.jpg"
 
     -- if Device:isKobo() then
     --     widget_settings.file = "/mnt/onboard/.adds/colores.png"
