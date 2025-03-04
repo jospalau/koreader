@@ -1222,7 +1222,7 @@ end
 
 
 function PageTextInfo:onCloseDocument()
-    UIManager:unschedule(self.insertSession)
+    -- UIManager:unschedule(self.insertSession)
     self.ui.gestures:onIgnoreHoldCorners(false)
     self.ui.disable_double_tap = false
     self.settings:saveSetting("highlight_all_notes_and_allow_to_edit_them_on_tap", false)
