@@ -1102,14 +1102,9 @@ function ReaderStatistics:checkNewDay()
         self._pages_turned = 0
         self._total_pages = 0
         self._total_words  = 0
-        local topbar = self.ui.view.topbar
-        if topbar then
-            topbar.initial_read_today, topbar.initial_read_month, topbar.initial_total_time_book, topbar.avg_wpm, topbar.sessions_current_book, topbar.initial_read_last_month, topbar.initial_read_year = topbar:getReadTodayThisMonth(topbar.title)
-            topbar.start_session_time = now_ts
-            topbar.init_page = nil
-            topbar.init_page_screens = nil
-        end
+        return true
     end
+    return false
 end
 
 function ReaderStatistics:insertSession()
@@ -3407,7 +3402,9 @@ function ReaderStatistics:onPageUpdate(pageno)
         self.page_stat[pageno] = { { now_ts, 0 } }
     end
 
-    self:checkNewDay()
+    if self:checkNewDay() then
+        self.ui.view.topbar:resetSession()
+    end
 
     -- local show_wpm = G_reader_settings:isTrue("show_wpm")
     -- local duration_raw =  math.floor(((os.time() - self.start_current_period)/60)* 100) / 100

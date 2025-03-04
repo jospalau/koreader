@@ -815,7 +815,9 @@ function ReaderFooter:rescheduleFooterAutoRefreshIfNeeded()
             -- logger.info("ReaderFooter:shouldBeRepainted, top_wg name:", top_wg.name, "src:", debug.getinfo(top_wg.init or top_wg._init or top_wg.free or top_wg.new or top_wg.paintTo or function() end, "S").short_src,  "fs:", top_wg.covers_fullscreen, "ft:", top_wg.covers_footer)
             if top_wg.name == "ReaderUI" then
                 if self.ui.statistics and self.ui.view.topbar and G_reader_settings:isTrue("show_top_bar") then
-                    self.ui.statistics:checkNewDay()
+                    if self.ui.statistics:checkNewDay() then
+                        self.ui.view.topbar:resetSession()
+                    end
                     self.ui.view.topbar:toggleBar()
                 end
                 self:onUpdateFooter(self:shouldBeRepainted())
