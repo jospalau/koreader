@@ -239,7 +239,7 @@ function ReaderStatistics:init()
             self._total_words = 0
             local res = nil
             if self.ui.document then
-                res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
+                res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
             end
             local nbwords = 0
             local nbcharacters = 0
@@ -3345,7 +3345,7 @@ function ReaderStatistics:onPageUpdate(pageno)
     -- I modified readersearch.lua to set self.ui.searching so if the search windows is open I want count words
     -- Count always if not searchin
     if not self.ui.searching then
-        local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
+        local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
         local nbwords = 0
         local nbcharacters = 0
         if res and res.text then
@@ -3496,7 +3496,7 @@ function ReaderStatistics:onResume()
         --self:onReadingResumed() --Not interested in this, since I don't call onReadingPaused() en onSuspend()
         self._last_nbwords = 0
         self._total_words = 0
-        local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
+        local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
         local nbwords = 0
         local nbcharacters = 0
         if res and res.text then
@@ -3564,7 +3564,7 @@ function ReaderStatistics:onReaderReady(config)
     -- we have correct page count now, do the actual initialization work
     self:initData()
     self.view.footer:maybeUpdateFooter()
-    local res = self.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
+    local res = self.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
     local nbwords = 0
     local nbcharacters = 0
     if res and res.text then
