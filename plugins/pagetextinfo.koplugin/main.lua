@@ -966,6 +966,16 @@ function PageTextInfo:onReaderReady()
     -- self.ui.menu:registerToMainMenu(self)
     self.view:registerViewModule("pagetextinfo", self)
     self.initialized = true
+--     self.insertSession = function()
+--         self.ui.view.footer:insertSession()
+--         if self.view.topbar.is_enabled then
+--             self.view.topbar:toggleBar()
+--             UIManager:setDirty(self.view.dialog, "ui")
+--         end
+--         UIManager:scheduleIn(600, self.insertSession)
+--     end
+--     UIManager:unschedule(self.insertSession)
+--     UIManager:scheduleIn(600, self.insertSession)
 end
 
 
@@ -1212,6 +1222,7 @@ end
 
 
 function PageTextInfo:onCloseDocument()
+    UIManager:unschedule(self.insertSession)
     self.ui.gestures:onIgnoreHoldCorners(false)
     self.ui.disable_double_tap = false
     self.settings:saveSetting("highlight_all_notes_and_allow_to_edit_them_on_tap", false)

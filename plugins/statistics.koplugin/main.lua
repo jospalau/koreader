@@ -1100,7 +1100,7 @@ function ReaderStatistics:insertDBSessionStats()
     local duration_raw_mins = math.floor(((now_ts - self.start_current_period)/60)* 100) / 100
     local wpm_session = math.floor(self._total_words/duration_raw_mins)
     if duration_raw < 360 or self._total_pages < 6 then
-        return
+        return false
     end
     logger.info("Session starting " .. self.start_current_period .. " " .. os.date("%Y-%m-%d %H:%M:%S", self.start_current_period))
     logger.info("Session ending " .. now_ts .. " " .. os.date("%Y-%m-%d %H:%M:%S", now_ts))
@@ -1114,6 +1114,7 @@ function ReaderStatistics:insertDBSessionStats()
     -- conn:exec('COMMIT;')
     stmt:close()
     conn:close()
+    return true
 end
 
 function dump(o)

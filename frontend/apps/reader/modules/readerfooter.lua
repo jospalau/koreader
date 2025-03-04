@@ -1193,7 +1193,6 @@ function ReaderFooter:rescheduleFooterAutoRefreshIfNeeded()
                 if self.ui.view.topbar and G_reader_settings:isTrue("show_top_bar") then
                     self:checkNewDay()
                     self.ui.view.topbar:toggleBar()
-                    UIManager:setDirty(self.ui.view.topbar, "ui")
                 end
                 self:onUpdateFooter(self:shouldBeRepainted())
             end
@@ -2666,6 +2665,28 @@ function ReaderFooter:checkNewDay()
             topbar.init_page_screens = nil
         end
     end
+end
+
+function ReaderFooter:insertSession()
+    local now_t = os.date("*t")
+    local now_ts = os.time()
+    logger.info("Timer time to insert session " .. now_ts .. " " .. os.date("%Y-%m-%d %H:%M:%S", now_ts))
+    local session_inserted = self.ui.statistics:insertDBSessionStats()
+    if not session_inserted then return false end
+    self.ui.statistics:insertDB()
+    self.ui.statistics._initial_read_today = nil
+    self.ui.statistics.start_current_period = now_ts
+    self.ui.statistics._pages_turned = 0
+    self.ui.statistics._total_pages = 0
+    self.ui.statistics._total_words  = 0
+    local topbar = self.ui.view.topbar
+    if topbar then
+        topbar.initial_read_today, topbar.initial_read_month, topbar.initial_total_time_book, topbar.avg_wpm, topbar.sessions_current_book, topbar.initial_read_last_month, topbar.initial_read_year = topbar:getReadTodayThisMonth(topbar.title)
+        topbar.start_session_time = now_ts
+        topbar.init_page = nil
+        topbar.init_page_screens = nil
+    end
+    return true
 end
 
 function ReaderFooter:onPageUpdate(pageno)
