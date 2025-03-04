@@ -1087,6 +1087,52 @@ function ReaderStatistics:onBookMetadataChanged(prop_updated)
     conn:close()
 end
 
+function ReaderStatistics:checkNewDay()
+    -- Put this code here, before topbar event and works even footer off
+    local now_t = os.date("*t")
+    local session_started = self.start_current_period
+    local daysdiff = now_t.day - os.date("*t", session_started).day
+    if daysdiff > 0 then
+        local now_ts = os.time()
+        logger.info("New day " .. now_ts .. " " .. os.date("%Y-%m-%d %H:%M:%S", now_ts))
+        self:insertDBSessionStats()
+        self:insertDB()
+        self._initial_read_today = nil
+        self.start_current_period = now_ts
+        self._pages_turned = 0
+        self._total_pages = 0
+        self._total_words  = 0
+        local topbar = self.ui.view.topbar
+        if topbar then
+            topbar.initial_read_today, topbar.initial_read_month, topbar.initial_total_time_book, topbar.avg_wpm, topbar.sessions_current_book, topbar.initial_read_last_month, topbar.initial_read_year = topbar:getReadTodayThisMonth(topbar.title)
+            topbar.start_session_time = now_ts
+            topbar.init_page = nil
+            topbar.init_page_screens = nil
+        end
+    end
+end
+
+function ReaderStatistics:insertSession()
+    local now_t = os.date("*t")
+    local now_ts = os.time()
+    logger.info("Timer time to insert session " .. now_ts .. " " .. os.date("%Y-%m-%d %H:%M:%S", now_ts))
+    local session_inserted = self:insertDBSessionStats()
+    if not session_inserted then return false end
+    self:insertDB()
+    self._initial_read_today = nil
+    self.start_current_period = now_ts
+    self._pages_turned = 0
+    self._total_pages = 0
+    self._total_words  = 0
+    local topbar = self.ui.view.topbar
+    if topbar then
+        topbar.initial_read_today, topbar.initial_read_month, topbar.initial_total_time_book, topbar.avg_wpm, topbar.sessions_current_book, topbar.initial_read_last_month, topbar.initial_read_year = topbar:getReadTodayThisMonth(topbar.title)
+        topbar.start_session_time = now_ts
+        topbar.init_page = nil
+        topbar.init_page_screens = nil
+    end
+    return true
+end
 
 -- Keep track of sessions that have been running for at least 5 minutes
 function ReaderStatistics:insertDBSessionStats()
@@ -3330,14 +3376,16 @@ function ReaderStatistics:onPageUpdate(pageno)
         UIManager:tickAfterNext(function()
             self:insertDB()
             self._pages_turned = self._pages_turned + 1
-            self.view.footer:onUpdateFooter(true)
+            -- The reader footer does not show statistics anymore, it will be updated in its source onPageUpdate() event handler function
+            -- self.view.footer:onUpdateFooter(true)
             -- insertDB will call resetVolatileStats for us ;)
         end)
     end
 
     -- Footer to be updated always.
     -- We call the footer onUpdateFooter() event handler function here instead of being called in the footer onPageUpdate() event handler function
-    self.view.footer:onUpdateFooter(true)
+    -- The reader footer does not show statistics anymore, it will be updated in its source onPageUpdate() event handler function
+    -- self.view.footer:onUpdateFooter(true)
 
     -- Update average time per page (if need be, insertDB will have updated the totals and cleared the volatiles)
     -- NOTE: Until insertDB runs, while book_read_pages only counts *distinct* pages,
@@ -3358,6 +3406,8 @@ function ReaderStatistics:onPageUpdate(pageno)
     else
         self.page_stat[pageno] = { { now_ts, 0 } }
     end
+
+    self:checkNewDay()
 
     -- local show_wpm = G_reader_settings:isTrue("show_wpm")
     -- local duration_raw =  math.floor(((os.time() - self.start_current_period)/60)* 100) / 100

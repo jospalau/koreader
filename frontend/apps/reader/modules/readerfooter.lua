@@ -1190,8 +1190,8 @@ function ReaderFooter:rescheduleFooterAutoRefreshIfNeeded()
             local top_wg = UIManager:getTopmostVisibleWidget() or {}
             -- logger.info("ReaderFooter:shouldBeRepainted, top_wg name:", top_wg.name, "src:", debug.getinfo(top_wg.init or top_wg._init or top_wg.free or top_wg.new or top_wg.paintTo or function() end, "S").short_src,  "fs:", top_wg.covers_fullscreen, "ft:", top_wg.covers_footer)
             if top_wg.name == "ReaderUI" then
-                if self.ui.view.topbar and G_reader_settings:isTrue("show_top_bar") then
-                    self:checkNewDay()
+                if self.ui.statistics and self.ui.view.topbar and G_reader_settings:isTrue("show_top_bar") then
+                    self.ui.statistics:checkNewDay()
                     self.ui.view.topbar:toggleBar()
                 end
                 self:onUpdateFooter(self:shouldBeRepainted())
@@ -2642,58 +2642,8 @@ function ReaderFooter:onTocReset()
     end
 end
 
-function ReaderFooter:checkNewDay()
-    -- Put this code here, before topbar event and works even footer off
-    local now_t = os.date("*t")
-    local session_started = self.ui.statistics.start_current_period
-    local daysdiff = now_t.day - os.date("*t", session_started).day
-    if daysdiff > 0 then
-        local now_ts = os.time()
-        logger.info("New day " .. now_ts .. " " .. os.date("%Y-%m-%d %H:%M:%S", now_ts))
-        self.ui.statistics:insertDBSessionStats()
-        self.ui.statistics:insertDB()
-        self.ui.statistics._initial_read_today = nil
-        self.ui.statistics.start_current_period = now_ts
-        self.ui.statistics._pages_turned = 0
-        self.ui.statistics._total_pages = 0
-        self.ui.statistics._total_words  = 0
-        local topbar = self.ui.view.topbar
-        if topbar then
-            topbar.initial_read_today, topbar.initial_read_month, topbar.initial_total_time_book, topbar.avg_wpm, topbar.sessions_current_book, topbar.initial_read_last_month, topbar.initial_read_year = topbar:getReadTodayThisMonth(topbar.title)
-            topbar.start_session_time = now_ts
-            topbar.init_page = nil
-            topbar.init_page_screens = nil
-        end
-    end
-end
-
-function ReaderFooter:insertSession()
-    local now_t = os.date("*t")
-    local now_ts = os.time()
-    logger.info("Timer time to insert session " .. now_ts .. " " .. os.date("%Y-%m-%d %H:%M:%S", now_ts))
-    local session_inserted = self.ui.statistics:insertDBSessionStats()
-    if not session_inserted then return false end
-    self.ui.statistics:insertDB()
-    self.ui.statistics._initial_read_today = nil
-    self.ui.statistics.start_current_period = now_ts
-    self.ui.statistics._pages_turned = 0
-    self.ui.statistics._total_pages = 0
-    self.ui.statistics._total_words  = 0
-    local topbar = self.ui.view.topbar
-    if topbar then
-        topbar.initial_read_today, topbar.initial_read_month, topbar.initial_total_time_book, topbar.avg_wpm, topbar.sessions_current_book, topbar.initial_read_last_month, topbar.initial_read_year = topbar:getReadTodayThisMonth(topbar.title)
-        topbar.start_session_time = now_ts
-        topbar.init_page = nil
-        topbar.init_page_screens = nil
-    end
-    return true
-end
-
 function ReaderFooter:onPageUpdate(pageno)
     local toc_markers_update = false
-    if self.ui.statistics then
-        self:checkNewDay()
-    end
     if self.ui.document:hasHiddenFlows() then
         local flow = self.pageno and self.ui.document:getPageFlow(self.pageno)
         local new_flow = pageno and self.ui.document:getPageFlow(pageno)
@@ -2711,7 +2661,8 @@ function ReaderFooter:onPageUpdate(pageno)
     end
     self.ui.doc_settings:saveSetting("doc_pages", self.pages) -- for Book information
     -- This is called now in the onPageUpdate() event handler function of the statistic plugins main.lua source
-    -- self:updateFooterPage()
+    -- The reader footer does not show statistics anymore so we update it here
+    self:updateFooterPage()
 end
 
 function ReaderFooter:onPosUpdate(pos, pageno)
