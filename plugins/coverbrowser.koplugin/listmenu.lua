@@ -392,6 +392,10 @@ function ListMenuItem:update()
                 else
                     if status == "complete" then
                         pages_str = _("Finished")
+                        if G_reader_settings:isTrue("top_manager_infmandhistory") then
+                            pages_str = pages_str .. " " .. _G.all_files[self.filepath].last_modified_month .. "/"
+                            .. _G.all_files[self.filepath].last_modified_year
+                        end
                     elseif status == "abandoned" then
                         pages_str =  _("On hold")
                     else
