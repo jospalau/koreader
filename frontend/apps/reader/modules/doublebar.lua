@@ -48,6 +48,10 @@ function DoubleBar:init()
         self.start_session_time = DoubleBar.preserved_start_session_time
         DoubleBar.preserved_start_session_time = nil
     end
+
+    self.ui:registerPostReaderReadyCallback(function()
+        self.ui.menu:registerToMainMenu(self)
+    end)
 end
 
 function DoubleBar:onReaderReady()
@@ -342,6 +346,7 @@ end
 
 -- This is called after self.ui.menu:registerToMainMenu(self) in the init method
 -- But in this case registerToMainMenu() needs to be called in readerui.lua because the menu is still not available
+-- We do it in the init() function using a registerPostReaderReadyCallback() function
 function DoubleBar:addToMainMenu(menu_items)
     local Event = require("ui/event")
     menu_items.show_double_bar = {

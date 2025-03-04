@@ -499,50 +499,41 @@ function ReaderUI:init()
         summary.status = "reading"
     end
 
+    if G_reader_settings:isTrue("top_manager_infmandhistory")
+    and not self.document.file:find("resources/arthur%-conan%-doyle%_the%-hound%-of%-the%-baskervilles.epub") then
+        if _G.all_files[self.document.file].status ~= "complete" then
+            _G.all_files[self.document.file].status = "reading"
+            local pattern = "(%d+)-(%d+)-(%d+)"
+            local ryear, rmonth, rday = summary.modified:match(pattern)
+            _G.all_files[self.document.file].last_modified_year = ryear
+            _G.all_files[self.document.file].last_modified_month = rmonth
+            _G.all_files[self.document.file].last_modified_day = rday
+            local util = require("util")
+            util.generateStats()
+        end
+    end
+
     -- After initialisation notify that document is loaded and rendered
     -- CREngine only reports correct page count after rendering is done
     -- Need the same event for PDF document
     self:handleEvent(Event:new("ReaderReady", self.doc_settings))
 
-    if util.getFileNameSuffix(self.document.file) == "epub" then
-        if G_reader_settings:isTrue("top_manager_infmandhistory")
-        and not self.document.file:find("resources/arthur%-conan%-doyle%_the%-hound%-of%-the%-baskervilles.epub") then
-            if _G.all_files[self.document.file].status ~= "complete" then
-                _G.all_files[self.document.file].status = "reading"
-                local pattern = "(%d+)-(%d+)-(%d+)"
-                local ryear, rmonth, rday = summary.modified:match(pattern)
-                _G.all_files[self.document.file].last_modified_year = ryear
-                _G.all_files[self.document.file].last_modified_month = rmonth
-                _G.all_files[self.document.file].last_modified_day = rday
-                local util = require("util")
-                util.generateStats()
-            end
-        end
-        -- There is a small delay when manipulating the cover in the coverimage plugin
-        -- so the start_session_time in the topbar may be shown a bit delayed when opening the document
-        -- This happens for devices using the coverimage plugin like PocketBook or Android devices
-        -- but we do it here for all devices after having executed all the ReaderReady event handlers for all the objects
-        -- self.view[4] is the topbar object created in readerview.lua
-        self.menu:registerToMainMenu(self.view.topbar)
-        self.menu:registerToMainMenu(self.view[5])
-        if os.time() - self.view.topbar.start_session_time < 5 then
-            self.view.topbar.start_session_time = os.time()
-        end
-        -- Some things are broken when opening pdf files. I just read epubs with KOReader, but in any case we can avoid the crashes putting some conditions for epub format
-        -- local file_type = string.lower(string.match(self.document.file, ".+%.([^.]+)") or "")
-        -- if file_type == "epub" then
-        local res = self.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
-        local nbwords = 0
-        local nbcharacters = 0
-        if res and res.text then
-            local words = util.splitToWords2(res.text) -- contar palabras
-            local characters = res.text -- contar caracteres
-            -- logger.warn(words)
-            nbwords = #words -- # es equivalente a string.len()
-            nbcharacters = #characters
-        end
-        self.statistics._last_nbwords = nbwords
-    end
+    -- if util.getFileNameSuffix(self.document.file) == "epub" then
+    --     -- There is a small delay when manipulating the cover in the coverimage plugin
+    --     -- so the start_session_time in the topbar may be shown a bit delayed when opening the document
+    --     -- This happens for devices using the coverimage plugin like PocketBook or Android devices
+    --     -- but we do it here for all devices after having executed all the ReaderReady event handlers for all the objects
+    --     -- self.view[4] is the topbar object created in readerview.lua
+    --     -- self.menu:registerToMainMenu(self.view.topbar)
+    --     -- self.menu:registerToMainMenu(self.view[5])
+    --     -- We do this in a postReaderReadyCallback function in the topbar
+    --     -- if os.time() - self.view.topbar.start_session_time < 5 then
+    --     --     self.view.topbar.start_session_time = os.time()
+    --     -- end
+    --     -- Some things are broken when opening pdf files. I just read epubs with KOReader, but in any case we can avoid the crashes putting some conditions for epub format
+    --     -- local file_type = string.lower(string.match(self.document.file, ".+%.([^.]+)") or "")
+    --     -- if file_type == "epub" then
+    -- end
     for _,v in ipairs(self.postReaderReadyCallback) do
         v()
     end

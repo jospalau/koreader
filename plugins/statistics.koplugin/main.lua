@@ -3564,6 +3564,17 @@ function ReaderStatistics:onReaderReady(config)
     -- we have correct page count now, do the actual initialization work
     self:initData()
     self.view.footer:maybeUpdateFooter()
+    local res = self.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, true)
+    local nbwords = 0
+    local nbcharacters = 0
+    if res and res.text then
+        local words = util.splitToWords2(res.text) -- contar palabras
+        local characters = res.text -- contar caracteres
+        -- logger.warn(words)
+        nbwords = #words -- # es equivalente a string.len()
+        nbcharacters = #characters
+    end
+    self._last_nbwords = nbwords
 end
 
 function ReaderStatistics:onShowCalendarView()

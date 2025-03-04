@@ -540,6 +540,13 @@ function TopBar:init()
         self.initial_battery_lvl = TopBar.preserved_initial_battery_lvl
         TopBar.preserved_initial_battery_lvl = nil
     end
+
+    self.ui:registerPostReaderReadyCallback(function()
+        self.ui.menu:registerToMainMenu(self)
+        if os.time() - self.start_session_time < 5 then
+            self.start_session_time = os.time()
+        end
+    end)
 end
 
 local getMem = function()
@@ -1019,6 +1026,13 @@ function TopBar:quickToggleOnOff(put_off)
     end)
 end
 
+function TopBar:resetSession()
+    self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm, self.sessions_current_book, self.initial_read_last_month, self.initial_read_year = self:getReadTodayThisMonth(self.title)
+    local now_ts = os.time()
+    self.start_session_time = now_ts
+    self.init_page = nil
+    self.init_page_screens = nil
+end
 
 function TopBar:toggleBar(light_on)
     if TopBar.is_enabled then
@@ -1413,7 +1427,7 @@ function TopBar:paintTo(bb, x, y)
         -- self.stats_times_widget_container:paintTo(bb, x - Screen:getHeight() + TopBar.MARGIN_BOTTOM + Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
 
         self.ignore_corners_widget_container[1]:setText(self.ignore_corners)
-        local duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100
+        local duration_raw =  math.floor(((os.time() - self.start_session_time)/60)* 100) / 100
         local wpm = 0
         if self.ui.statistics._total_words > 0 then
             wpm = math.floor(self.ui.statistics._total_words/duration_raw)
@@ -1897,6 +1911,7 @@ end
 
 -- This is called after self.ui.menu:registerToMainMenu(self) in the init method
 -- But in this case registerToMainMenu() needs to be called in readerui.lua because the menu is still not available
+-- We do it in the init() function using a registerPostReaderReadyCallback() function
 function TopBar:addToMainMenu(menu_items)
     local Event = require("ui/event")
     -- menu_items.show_double_bar = {
