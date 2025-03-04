@@ -26,6 +26,8 @@ local Event = require("ui/event")
 local ffiUtil = require("ffi/util")
 local datetime = require("datetime")
 local Device = require("device")
+local ConfirmBox = require("ui/widget/confirmbox")
+local logger = require("logger")
 local util = require("util")
 local SQ3 = require("lua-ljsqlite3/init")
 local _ = require("gettext")
@@ -3520,6 +3522,362 @@ function PageTextInfo:onShowReadingMotive()
         -- UIManager:setDirty("all", "full")
         UIManager:close(screensaver_widget)
     end)
+end
+
+function PageTextInfo:onPushConfig()
+    local InfoMessage = require("ui/widget/infomessage")
+    local server = G_reader_settings:readSetting("rsync_server") or "192.168.50.252"
+    local port = G_reader_settings:readSetting("rsync_port") or ""
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen(string.format("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/pushConfig.sh %s %s)", server, port))
+        elseif Device:isKindle() then
+            execute = io.popen(string.format("/mnt/us/scripts/pushConfig.sh %s %s && echo $? || echo $?", server, port))
+        else -- PocketBook
+            execute = io.popen(string.format("/mnt/ext1/scripts/pushConfig.sh %s %s && echo $? || echo $?", server, port))
+        end
+
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
+
+function PageTextInfo:onPullConfig()
+    local InfoMessage = require("ui/widget/infomessage")
+    local server = G_reader_settings:readSetting("rsync_server") or "192.168.50.252"
+    local port = G_reader_settings:readSetting("rsync_port") or ""
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen(string.format("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/pullConfig.sh %s %s)", server, port))
+        elseif Device:isKindle() then
+            execute = io.popen(string.format("/mnt/us/scripts/pullConfig.sh %s %s && echo $? || echo $?", server, port))
+        else -- PocketBook
+            execute = io.popen(string.format("/mnt/ext1/scripts/pullConfig.sh %s %s && echo $? || echo $?", server, port))
+        end
+        output = execute:read('*a')
+        local save_text = _("Quit")
+        if Device:canRestart() then
+            save_text = _("Restart")
+        end
+
+        if not string.match(output, "Problem") and not string.match(output, "not connected") then
+            local Size = require("ui/size")
+            UIManager:show(ConfirmBox:new{
+                dismissable = false,
+                text = _("KOReader needs to be restarted."),
+                ok_text = save_text,
+                margin = Size.margin.tiny,
+                padding = Size.padding.tiny,
+                ok_callback = function()
+                    if Device:canRestart() then
+                        UIManager:restartKOReader()
+                        -- The new Clara BW is so quick closing that when presing on Restart it doesn't flash
+                        -- Set a little delay for all devices
+                        local util = require("ffi/util")
+                        util.usleep(100000)
+                    else
+                        UIManager:quit()
+                    end
+                end,
+                cancel_text = _("No need to restart"),
+                cancel_callback = function()
+                    logger.info("discard defaults")
+                end,
+            })
+        end
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+    end
+    if G_reader_settings:isTrue("top_manager_infmandhistory") then
+        local util = require("util")
+        util.generateStats()
+    end
+end
+
+function PageTextInfo:onGetLastPushingConfig()
+    local InfoMessage = require("ui/widget/infomessage")
+    local server = G_reader_settings:readSetting("rsync_server") or "192.168.50.252"
+    local port = G_reader_settings:readSetting("rsync_port") or ""
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen(string.format("(cd /mnt/onboard/.adds/scripts %s %s && /mnt/onboard/.adds/scripts/getLastPushing.sh)", server, port))
+        elseif Device:isKindle() then
+            execute = io.popen(string.format("/mnt/us/scripts/getLastPushing.sh %s %s && echo $? || echo $?", server, port))
+        else -- PocketBook
+            execute = io.popen(string.format("/mnt/ext1/scripts/getLastPushing.sh %s %s && echo $? || echo $?", server, port))
+        end
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
+
+function PageTextInfo:onSynchronizeCode()
+    local InfoMessage = require("ui/widget/infomessage")
+
+    local server = G_reader_settings:readSetting("rsync_server") or "192.168.50.252"
+    local port = G_reader_settings:readSetting("rsync_port") or ""
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen(string.format("/mnt/onboard/.adds/scripts/syncKOReaderCode.sh %s %s && echo $? || echo $?", server, port))
+        elseif Device:isKindle() then
+            execute = io.popen(string.format("/mnt/us/scripts/syncKOReaderCode.sh %s %s && echo $? || echo $?", server, port))
+        else -- PocketBook
+            execute = io.popen(string.format("/mnt/ext1/scripts/syncKOReaderCode.sh %s %s && echo $? || echo $?", server, port))
+        end
+        output = execute:read('*a')
+
+        local save_text = _("Quit")
+        if Device:canRestart() then
+            save_text = _("Restart")
+        end
+        if not string.match(output, "Problem") and not string.match(output, "not connected") then
+            local Size = require("ui/size")
+            UIManager:show(ConfirmBox:new{
+                dismissable = false,
+                text = _("KOReader needs to be restarted."),
+                ok_text = save_text,
+                margin = Size.margin.tiny,
+                padding = Size.padding.tiny,
+                ok_callback = function()
+                    if Device:canRestart() then
+                        UIManager:restartKOReader()
+                        -- The new Clara BW is so quick closing that when presing on Restart it doesn't flash
+                        -- Set a little delay for all devices
+                        local util = require("ffi/util")
+                        util.usleep(100000)
+                    else
+                        UIManager:quit()
+                    end
+                end,
+                cancel_text = _("No need to restart"),
+                cancel_callback = function()
+                    logger.info("discard defaults")
+                end,
+            })
+        end
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+    end
+end
+
+function PageTextInfo:onInstallLastVersion()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = io.popen("/mnt/onboard/.adds/scripts/getKOReaderNewVersion.sh && echo $? || echo $?" )
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
+
+function PageTextInfo:onToggleSSH()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = nil
+        if not util.pathExists("/tmp/dropbear_koreader.pid") then
+            text = "Starting SSH Server"
+        else
+            text = "Stopping SSH Server"
+        end
+        if Device:isKobo() then
+            execute = "/mnt/onboard/.adds/scripts/launchDropbear.sh && echo $? || echo $?"
+        else --Kindle
+            execute = "/mnt/us/scripts/launchDropbear.sh && echo $? || echo $?"
+        end
+
+        if os.execute(execute) ~= 0 then
+            if not util.pathExists("/tmp/dropbear_koreader.pid") then
+                UIManager:show(InfoMessage:new{
+                    text = "Error starting SSH Server",
+                })
+            else
+                UIManager:show(InfoMessage:new{
+                    text = "Error stopping SSH Server",
+                })
+            end
+        end
+        UIManager:show(InfoMessage:new{
+            text = T(_(text)),
+            face = Font:getFace("myfont"),
+        })
+    end
+end
+
+function PageTextInfo:onToggleRsyncdService()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen("/mnt/onboard/.adds/scripts/launchRsyncd.sh && echo $? || echo $?" )
+        elseif Device:isKindle() then
+            execute = io.popen("/mnt/us/scripts/launchRsyncd.sh && echo $? || echo $?" )
+        else -- PocketBook
+            execute = io.popen("/mnt/ext1/scripts/launchRsyncd.sh && echo $? || echo $?" )
+        end
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
+
+function PageTextInfo:onShowDbStats()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen("(cd /mnt/onboard/.adds/scripts/statsKOReaderDB && /mnt/onboard/.adds/scripts/statsKOReaderDB/stats.sh)")
+        elseif Device:isKindle() then
+            execute = io.popen("(cd /mnt/us/scripts/statsKOReaderDB && /mnt/us/scripts/statsKOReaderDB/stats.sh)")
+        else -- PocketBook
+            execute = io.popen("(cd /mnt/ext1/scripts/statsKOReaderDB && /mnt/ext1/scripts/statsKOReaderDB/stats.sh)")
+        end
+        output = execute:read('*a')
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
+
+    end
+end
+
+function PageTextInfo:onSyncBooks()
+    local InfoMessage = require("ui/widget/infomessage")
+    local server = G_reader_settings:readSetting("rsync_server") or "192.168.50.252"
+    local port = G_reader_settings:readSetting("rsync_port") or ""
+    local rv
+    local output = ""
+    if not Device:isAndroid() then
+        local NetworkMgr = require("ui/network/manager")
+        if not NetworkMgr:isWifiOn() then
+            NetworkMgr:turnOnWifiAndWaitForConnection()
+        end
+        local execute = nil
+        if Device:isKobo() then
+            execute = io.popen(string.format("/mnt/onboard/.adds/scripts/syncBooks.sh %s %s && echo $? || echo $?", server, port))
+        elseif Device:isKindle() then
+            execute = io.popen(string.format("/mnt/us/scripts/syncBooks.sh %s %s && echo $? || echo $?", server, port))
+        else -- PocketBook
+            execute = io.popen(string.format("/mnt/ext1/scripts/syncBooks.sh %s %s && echo $? || echo $?", server, port))
+        end
+        output = execute:read('*a')
+        local save_text = _("Quit")
+        if Device:canRestart() then
+            save_text = _("Restart")
+        end
+        if not string.match(output, "Problem") and not string.match(output, "not connected") then
+            local Size = require("ui/size")
+            UIManager:show(ConfirmBox:new{
+                dismissable = false,
+                text = _("KOReader needs to be restarted."),
+                ok_text = save_text,
+                margin = Size.margin.tiny,
+                padding = Size.padding.tiny,
+                ok_callback = function()
+                    if Device:canRestart() then
+                        UIManager:restartKOReader()
+                        -- The new Clara BW is so quick closing that when presing on Restart it doesn't flash
+                        -- Set a little delay for all devices
+                        local util = require("ffi/util")
+                        util.usleep(100000)
+                    else
+                        UIManager:quit()
+                    end
+                end,
+                cancel_text = _("No need to restart"),
+                cancel_callback = function()
+                    if G_reader_settings:isTrue("top_manager_infmandhistory") then
+                        _G.all_files = util.getListAll()
+                        local util = require("util")
+                        util.generateStats()
+                        self.file_chooser:refreshPath()
+                    end
+                end,
+            })
+            UIManager:show(InfoMessage:new{
+                text = T(_(output)),
+                face = Font:getFace("myfont"),
+            })
+        end
+    end
+end
+
+function PageTextInfo:onTurnOnWifiKindle()
+    local InfoMessage = require("ui/widget/infomessage")
+    local rv
+    local output = ""
+    local NetworkMgr = require("ui/network/manager")
+    local execute = io.popen("/mnt/us/scripts/connectNetwork.sh && echo $? || echo $?" )
+    output = execute:read('*a')
+    UIManager:show(InfoMessage:new{
+        text = T(_(output)),
+        face = Font:getFace("myfont"),
+    })
 end
 
 return PageTextInfo
