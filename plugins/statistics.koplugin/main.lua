@@ -1097,11 +1097,6 @@ function ReaderStatistics:checkNewDay()
         logger.info("New day " .. now_ts .. " " .. os.date("%Y-%m-%d %H:%M:%S", now_ts))
         self:insertDBSessionStats()
         self:insertDB()
-        self._initial_read_today = nil
-        self.start_current_period = now_ts
-        self._pages_turned = 0
-        self._total_pages = 0
-        self._total_words  = 0
         return true
     end
     return false
@@ -1114,18 +1109,6 @@ function ReaderStatistics:insertSession()
     local session_inserted = self:insertDBSessionStats()
     if not session_inserted then return false end
     self:insertDB()
-    self._initial_read_today = nil
-    self.start_current_period = now_ts
-    self._pages_turned = 0
-    self._total_pages = 0
-    self._total_words  = 0
-    local topbar = self.ui.view.topbar
-    if topbar then
-        topbar.initial_read_today, topbar.initial_read_month, topbar.initial_total_time_book, topbar.avg_wpm, topbar.sessions_current_book, topbar.initial_read_last_month, topbar.initial_read_year = topbar:getReadTodayThisMonth(topbar.title)
-        topbar.start_session_time = now_ts
-        topbar.init_page = nil
-        topbar.init_page_screens = nil
-    end
     return true
 end
 
@@ -1155,6 +1138,11 @@ function ReaderStatistics:insertDBSessionStats()
     -- conn:exec('COMMIT;')
     stmt:close()
     conn:close()
+    self._initial_read_today = nil
+    self.start_current_period = now_ts
+    self._pages_turned = 0
+    self._total_pages = 0
+    self._total_words  = 0
     return true
 end
 

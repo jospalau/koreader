@@ -971,16 +971,18 @@ function PageTextInfo:onReaderReady()
     -- self.ui.menu:registerToMainMenu(self)
     self.view:registerViewModule("pagetextinfo", self)
     self.initialized = true
---     self.insertSession = function()
---         self.ui.view.footer:insertSession()
---         if self.view.topbar.is_enabled then
---             self.view.topbar:toggleBar()
---             UIManager:setDirty(self.view.dialog, "ui")
---         end
---         UIManager:scheduleIn(600, self.insertSession)
---     end
---     UIManager:unschedule(self.insertSession)
---     UIManager:scheduleIn(600, self.insertSession)
+    -- self.insertSession = function()
+    --     if self.ui.statistics then
+    --         if self.ui.statistics:insertSession() and self.view.topbar.is_enabled then
+    --             self.view.topbar:resetSession()
+    --             self.view.topbar:toggleBar()
+    --             UIManager:setDirty(self.view.dialog, "ui")
+    --         end
+    --     end
+    --     UIManager:scheduleIn(600, self.insertSession)
+    -- end
+    -- UIManager:unschedule(self.insertSession)
+    -- UIManager:scheduleIn(600, self.insertSession)
 end
 
 
