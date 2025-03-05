@@ -3855,7 +3855,7 @@ function PageTextInfo:onSyncBooks()
                         _G.all_files = util.getListAll()
                         local util = require("util")
                         util.generateStats()
-                        self.file_chooser:refreshPath()
+                        require("apps/filemanager/filemanager").instance.file_chooser:refreshPath()
                     end
                 end,
             })
