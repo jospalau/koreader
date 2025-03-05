@@ -138,6 +138,7 @@ function ButtonProgressWidget:update()
             preselect = highlighted,
             text_font_face = self.font_face,
             text_font_size = self.font_size,
+            progress = true,
             callback = function()
                 self.callback(i)
                 self.position = i
