@@ -404,8 +404,9 @@ function VirtualKey:onTapSelect(skip_flash)
     if self.flash_keyboard and not skip_flash and not self.skiptap then
         self:invert(true)
         UIManager:forceRePaint()
-        if Device:isKobo() or Device:isKindle() then
-            UIManager:yieldToEPDC(300000)
+        local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device:isKobo() or Device:isKindle()) then
+            UIManager:yieldToEPDC(10000)
         else
             UIManager:yieldToEPDC()
         end

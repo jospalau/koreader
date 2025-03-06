@@ -135,11 +135,7 @@ function IconButton:onTapIconButton()
          end
 
         UIManager:forceRePaint()
-        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device:isKobo() or Device:isKindle() or Device:isPocketBook()) then
-            UIManager:yieldToEPDC(200000)
-        else
-            UIManager:yieldToEPDC()
-        end
+        UIManager:yieldToEPDC(10000)
 
         -- Unhighlight
         --
@@ -159,7 +155,7 @@ function IconButton:onTapIconButton()
 
         -- We need the Kindle devices, the Kobo Libra 2 and the Kobo Clara 2E to perform a ui refresh here as well
         -- when reverting the highlighting
-        if Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch" or Device:isKindle() then
+        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch" or Device:isKindle()) then
            UIManager:setDirty(nil, "ui", self.dimen)
         else
            UIManager:setDirty(nil, "fast", self.dimen)

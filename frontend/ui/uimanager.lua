@@ -261,6 +261,14 @@ function UIManager:close(widget, refreshtype, refreshregion, refreshdither)
         for i = start_idx, #self._window_stack do
             self:setDirty(self._window_stack[i].widget)
         end
+        -- When closing the multiconfirmbox widget with flash buttons and menu items option is enabled
+        -- the button tapped flashes a little bit and the rest of the widget close
+        -- We avoid the flashing with a little bit of a delay here before refreshing the rest of the widgets
+        -- For all the devices and widgets but as an options with the page text info plugin enable devices tweaks enabled
+        local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+        if ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
+            self:yieldToEPDC(50000)
+        end
         self:_refresh(refreshtype, refreshregion, refreshdither)
     end
     if widget._restored_input_gestures then

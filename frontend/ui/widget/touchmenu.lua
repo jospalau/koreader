@@ -202,12 +202,7 @@ function TouchMenuItem:onTapSelect(arg, ges)
         UIManager:setDirty(nil, "fast", highlight_dimen)
 
         UIManager:forceRePaint()
-        local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device:isKobo() or Device:isKindle() or Device:isPocketBook()) then
-            UIManager:yieldToEPDC(150000)
-        else
-            UIManager:yieldToEPDC()
-        end
+        UIManager:yieldToEPDC(10000)
 
         -- Unhighlight
         --
@@ -270,12 +265,7 @@ function TouchMenuItem:onHoldSelect(arg, ges)
         -- Use "fast" as it was for all the devices. We pass 5000 to yieldToEPDC() and it will work for Clara BW without glitches
         UIManager:setDirty(nil, "fast", highlight_dimen)
         UIManager:forceRePaint()
-        local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device:isKobo() or Device:isKindle() or Device:isPocketBook()) then
-            UIManager:yieldToEPDC(200000)
-        else
-            UIManager:yieldToEPDC()
-        end
+        UIManager:yieldToEPDC(10000)
 
         -- Unhighlight
         --
