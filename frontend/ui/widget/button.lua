@@ -449,7 +449,7 @@ end
 function Button:onTapSelectButton()
     if self.enabled or self.allow_tap_when_disabled then
         if self.callback then
-            if G_reader_settings:isFalse("flash_ui") then
+            if G_reader_settings:isFalse("flash_ui") and not self.is_quickmenu_button then
                 self.callback()
             else
                 -- NOTE: We have a few tricks up our sleeve in case our parent is inside a translucent MovableContainer...
