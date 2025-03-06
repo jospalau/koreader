@@ -572,7 +572,7 @@ function MenuItem:onTapSelect(arg, ges)
         UIManager:forceRePaint()
 
 
-        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and Device:isKobo() or Device:isKindle() or Device:isPocketBook() then
+        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device:isKobo() or Device:isKindle() or Device:isPocketBook()) then
             UIManager:yieldToEPDC(150000)
         else
             UIManager:yieldToEPDC()
@@ -627,7 +627,7 @@ function MenuItem:onHoldSelect(arg, ges)
         UIManager:setDirty(nil, "fast", self[1].dimen)
         UIManager:forceRePaint()
 
-        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and Device:isKobo() or Device:isKindle() or Device:isPocketBook() then
+        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device:isKobo() or Device:isKindle() or Device:isPocketBook()) then
             UIManager:yieldToEPDC(150000)
         else
             UIManager:yieldToEPDC()
