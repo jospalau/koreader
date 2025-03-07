@@ -98,6 +98,7 @@ function MultiConfirmBox:init()
                     text = self.choice1_text,
                     text_func = self.choice1_text_func,
                     enabled = self.choice1_enabled,
+                    flash_button = self.flash_yes,
                     callback = function()
                         self.choice1_callback()
                         UIManager:close(self)
@@ -107,6 +108,7 @@ function MultiConfirmBox:init()
                     text = self.choice2_text,
                     text_func = self.choice2_text_func,
                     enabled = self.choice2_enabled,
+                    flash_button = self.flash_no,
                     callback = function()
                         self.choice2_callback()
                         UIManager:close(self)

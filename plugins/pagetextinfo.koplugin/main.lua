@@ -3588,6 +3588,7 @@ function PageTextInfo:onPullConfig()
                 ok_text = save_text,
                 margin = Size.margin.tiny,
                 padding = Size.padding.tiny,
+                flash_yes = true,
                 ok_callback = function()
                     if Device:canRestart() then
                         UIManager:restartKOReader()
@@ -3678,6 +3679,7 @@ function PageTextInfo:onSynchronizeCode()
                 ok_text = save_text,
                 margin = Size.margin.tiny,
                 padding = Size.padding.tiny,
+                flash_yes = true,
                 ok_callback = function()
                     if Device:canRestart() then
                         UIManager:restartKOReader()
@@ -3840,6 +3842,8 @@ function PageTextInfo:onSyncBooks()
                 ok_text = save_text,
                 margin = Size.margin.tiny,
                 padding = Size.padding.tiny,
+                flash_yes = true,
+                flash_no = true,
                 ok_callback = function()
                     if Device:canRestart() then
                         UIManager:restartKOReader()

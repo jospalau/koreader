@@ -294,6 +294,7 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
                          _("Information will be permanently lost."),
                     BD.filepath(file)),
                 ok_text = _(text),
+                flash_yes = true,
                 ok_callback = function()
                     local data_to_purge = {
                         doc_settings         = check_button_settings.checked,

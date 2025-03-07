@@ -1020,6 +1020,8 @@ function ReaderUI:onHome()
             cancel_callback = function()
                 return true
             end,
+            flash_yes = true,
+            flash_no = true,
         }
         UIManager:show(multi_box)
     end

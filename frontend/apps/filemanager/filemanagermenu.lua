@@ -1257,6 +1257,7 @@ Tap a book in the search results to open it.]]),
                 cancel_callback = function()
                     logger.info("discard defaults")
                 end,
+                flash_yes = true,
             })
         end,
         hold_callback = function()

@@ -69,6 +69,7 @@ local Button = InputContainer:extend{
     menu_style = nil, -- see init()
     vsync = nil, -- when "flash_ui" is enabled, allow bundling the highlight with the callback, and fence that batch away from the unhighlight. Avoid delays when callback requires a "partial" on Kobo Mk. 7, c.f., ffi/framebuffer_mxcfb for more details.
     is_quickmenu_button = false,
+    flash_button = false,
 }
 
 function Button:init()
@@ -449,7 +450,7 @@ end
 function Button:onTapSelectButton()
     if self.enabled or self.allow_tap_when_disabled then
         if self.callback then
-            if G_reader_settings:isFalse("flash_ui") and not self.is_quickmenu_button then
+            if G_reader_settings:isFalse("flash_ui") and not (self.is_quickmenu_button or self.flash_button) then
                 self.callback()
             else
                 -- NOTE: We have a few tricks up our sleeve in case our parent is inside a translucent MovableContainer...
@@ -498,7 +499,7 @@ function Button:onTapSelectButton()
                 is_translucent = is_translucent and self.show_parent.movable.alpha
                 -- The spin widget is closed if we tap on the buttons quickly when using the Kobo Libra Colour
                 -- Force repaint but no for quick menus buttons
-                if not self.is_quickmenu_button then
+                if not self.is_quickmenu_button and not self.flash_button then
                     UIManager:forceRePaint() -- Ensures whatever the callback wanted to paint will be shown *now*...
                 end
                 if self.vsync then

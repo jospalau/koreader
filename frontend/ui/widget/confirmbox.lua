@@ -107,6 +107,7 @@ function ConfirmBox:init()
     local buttons = {{ -- single row
         {
             text = self.cancel_text,
+            flash_button = self.flash_no,
             callback = function()
                 self.cancel_callback()
                 UIManager:close(self)
@@ -114,6 +115,7 @@ function ConfirmBox:init()
         },
         {
             text = self.ok_text,
+            flash_button = self.flash_yes,
             callback = function()
                 self.ok_callback()
                 if self.keep_dialog_open then return end
