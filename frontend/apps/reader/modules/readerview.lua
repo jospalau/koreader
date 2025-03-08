@@ -1251,7 +1251,8 @@ function ReaderView:onRotationUpdate(rotation)
 end
 
 function ReaderView:onPageChangeAnimation(forward)
-    if Device:canDoSwipeAnimation() and G_reader_settings:isTrue("swipe_animations") then
+    local top_wg = UIManager:getTopmostVisibleWidget() or {}
+    if Device:canDoSwipeAnimation() and G_reader_settings:isTrue("swipe_animations") and top_wg.name == "ReaderUI" then
         if self.inverse_reading_order then forward = not forward end
         Screen:setSwipeAnimations(true)
         Screen:setSwipeDirection(forward)
