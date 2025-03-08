@@ -660,7 +660,11 @@ function TouchMenu:onCloseWidget()
     local ReaderUI = require("apps/reader/readerui")
     if (FileManager.instance and not FileManager.instance.tearing_down)
             or (ReaderUI.instance and not ReaderUI.instance.tearing_down) then
-        UIManager:setDirty(nil, "flashui")
+        if G_reader_settings:isTrue("avoid_flashing_ui") then
+            UIManager:setDirty(nil, "full")
+        else
+            UIManager:setDirty(nil, "flashui")
+        end
     end
 end
 
