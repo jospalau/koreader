@@ -202,7 +202,20 @@ function TouchMenuItem:onTapSelect(arg, ges)
         UIManager:setDirty(nil, "fast", highlight_dimen)
 
         UIManager:forceRePaint()
-        UIManager:yieldToEPDC(10000)
+        local entry = nil
+        for i = 1, #self.menu.item_table do
+            if self.menu.item_table[i].id == self.item.id then
+                entry = self.menu.item_table[i]
+                break
+            end
+        end
+
+        local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+        if Device:isKindle() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and entry and entry.sub_item_table then
+            UIManager:yieldToEPDC(200000)
+        else
+            UIManager:yieldToEPDC(10000)
+        end
 
         -- Unhighlight
         --

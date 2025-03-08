@@ -100,6 +100,7 @@ end
 
 function IconButton:onTapIconButton()
     if not self.callback then return end
+    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
     if G_reader_settings:isFalse("flash_ui") or not self.allow_flash then
         self.callback()
     else
@@ -123,7 +124,6 @@ function IconButton:onTapIconButton()
 
         self.image.invert = true
         UIManager:widgetInvert(self.image, self.dimen.x + h_padding, self.dimen.y + self.padding_top)
-        local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
 
         -- When using Kobo Libra 2 and Kobo Clara 2E (same for Kindle devices) in fm and display mode is set to detailed, if we tap on the top home and + icons,
         -- the first horizontal line of the list is overlapped a bit with white.
@@ -135,7 +135,11 @@ function IconButton:onTapIconButton()
          end
 
         UIManager:forceRePaint()
-        UIManager:yieldToEPDC(10000)
+        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and self.icon == "chevron.up" then
+            UIManager:yieldToEPDC(250000)
+        else
+            UIManager:yieldToEPDC(10000)
+        end
 
         -- Unhighlight
         --
