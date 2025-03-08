@@ -1030,13 +1030,13 @@ function DictQuickLookup:onCloseWidget()
 
     -- NOTE: Drop region to make it a full-screen flash
     UIManager:setDirty(nil, function()
-        return "ui", nil
+        return "flashui", nil
     end)
 end
 
 function DictQuickLookup:onShow()
     UIManager:setDirty(self, function()
-        return "ui", self.dict_frame.dimen
+        return "flashui", self.dict_frame.dimen
     end)
     return true
 end
