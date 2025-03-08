@@ -556,7 +556,7 @@ function PageTextInfo:onDoubleTap(_, ges)
                 local boxes = self.ui.document:getScreenBoxesFromPositions(res.pos0, res.pos1, true)
                 if boxes ~= nil then
                     self.ui.dictionary:onLookupWord(util.cleanupSelectedText(res.text), false, boxes, nil, nil, function()
-                        --UIManager:setDirty(nil, "full")
+                        UIManager:setDirty(nil, "full")
                     end)
                     -- self:handleEvent(Event:new("LookupWord", util.cleanupSelectedText(res.text)))
                 end
