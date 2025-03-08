@@ -184,7 +184,7 @@ function TouchMenuItem:onTapSelect(arg, ges)
     -- If the menu hasn't actually been drawn yet, don't do anything (as it's confusing, and the coordinates may be wrong).
     if not self.item_frame.dimen then return true end
 
-    if G_reader_settings:isFalse("flash_ui") then
+    if G_reader_settings:isFalse("flash_ui") and not (self.item.id == "restart_koreader" or self.item.id == "sleep" or self.item.id == "poweroff" or self.item.id == "reboot" or self.item.id == "exit") then
         self.menu:onMenuSelect(self.item, tap_on_checkmark)
     else
         -- c.f., ui/widget/iconbutton for the canonical documentation about the flash_ui code flow
