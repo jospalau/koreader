@@ -156,7 +156,7 @@ function CheckButton:onTapCheckButton()
             UIManager:setDirty(nil, "fast", highlight_dimen)
 
             UIManager:forceRePaint()
-            UIManager:yieldToEPDC(50000)
+            UIManager:yieldToEPDC(10000)
 
             -- Unhighlight
             --

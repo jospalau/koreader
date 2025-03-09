@@ -267,11 +267,7 @@ function UIManager:close(widget, refreshtype, refreshregion, refreshdither)
         -- For all the devices and widgets but as an options with the page text info plugin enable devices tweaks enabled
         local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
         if ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
-            if Device:isAndroid() then
-                self:yieldToEPDC(300000)
-            else
-                self:yieldToEPDC(50000)
-            end
+            self:yieldToEPDC(50000)
         end
         self:_refresh(refreshtype, refreshregion, refreshdither)
     end

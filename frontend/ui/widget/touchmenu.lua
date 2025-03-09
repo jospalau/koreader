@@ -202,15 +202,20 @@ function TouchMenuItem:onTapSelect(arg, ges)
         UIManager:setDirty(nil, "fast", highlight_dimen)
 
         UIManager:forceRePaint()
-        -- local entry = nil
-        -- for i = 1, #self.menu.item_table do
-        --     if self.menu.item_table[i].id == self.item.id then
-        --         entry = self.menu.item_table[i]
-        --         break
-        --     end
-        -- end
+        local entry = nil
+        for i = 1, #self.menu.item_table do
+            if self.menu.item_table[i].id == self.item.id then
+                entry = self.menu.item_table[i]
+                break
+            end
+        end
 
-        UIManager:yieldToEPDC(5000)
+        local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+        if Device:isKindle() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and entry and entry.sub_item_table then
+            UIManager:yieldToEPDC(200000)
+        else
+            UIManager:yieldToEPDC(10000)
+        end
 
         -- Unhighlight
         --
@@ -273,7 +278,7 @@ function TouchMenuItem:onHoldSelect(arg, ges)
         -- Use "fast" as it was for all the devices. We pass 5000 to yieldToEPDC() and it will work for Clara BW without glitches
         UIManager:setDirty(nil, "fast", highlight_dimen)
         UIManager:forceRePaint()
-        UIManager:yieldToEPDC(5000)
+        UIManager:yieldToEPDC(10000)
 
         -- Unhighlight
         --
@@ -778,16 +783,6 @@ function TouchMenu:updateItems()
     -- NOTE: Also avoid repainting what's underneath us on initial popup.
     -- NOTE: And we also only need to repaint what's behind us when switching to a smaller menu...
     local keep_bg = old_dimen and self.dimen.h >= old_dimen.h
-    -- Slow down a bit the menu for Kindle devices to avoid icons and menu entries flashes lingering
-    -- New devices are quicker
-    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-    if Device:isKindle() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
-        UIManager:yieldToEPDC(75000)
-    elseif Device.model == "Kobo_monza" and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
-        UIManager:yieldToEPDC(200000)
-    elseif Device:isAndroid() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
-        UIManager:yieldToEPDC(400000)
-    end
     UIManager:setDirty((self.is_fresh or keep_bg) and self.show_parent or "all", function()
         local refresh_dimen =
             old_dimen and old_dimen:combine(self.dimen)

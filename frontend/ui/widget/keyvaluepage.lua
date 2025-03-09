@@ -227,7 +227,7 @@ function KeyValueItem:onTap()
             UIManager:widgetInvert(self[1], self[1].dimen.x, self[1].dimen.y)
 
             UIManager:forceRePaint()
-            UIManager:yieldToEPDC(5000)
+            UIManager:yieldToEPDC(10000)
 
             -- Unhighlight
             --
