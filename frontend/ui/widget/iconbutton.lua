@@ -128,17 +128,18 @@ function IconButton:onTapIconButton()
         -- When using Kobo Libra 2 and Kobo Clara 2E (same for Kindle devices) in fm and display mode is set to detailed, if we tap on the top home and + icons,
         -- the first horizontal line of the list is overlapped a bit with white.
         -- Fix this using ui refresh in the icon button widget when tapping.
-         if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch" or Device:isKindle()) then
+         if self.show_parent.root_path and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch" or Device:isKindle()) then
             UIManager:setDirty(nil, "ui", self.dimen)
          else
             UIManager:setDirty(nil, "fast", self.dimen)
          end
 
         UIManager:forceRePaint()
-        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and self.icon == "chevron.up" then
-            UIManager:yieldToEPDC(250000)
+        if Device:isKindle() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
+            -- Since we set a delay when calling the updateItems() function in the touchmenu.lua source, we need a bit more time to flash
+            UIManager:yieldToEPDC(15000)
         else
-            UIManager:yieldToEPDC(10000)
+            UIManager:yieldToEPDC(5000)
         end
 
         -- Unhighlight
@@ -159,7 +160,7 @@ function IconButton:onTapIconButton()
 
         -- We need the Kindle devices, the Kobo Libra 2 and the Kobo Clara 2E to perform a ui refresh here as well
         -- when reverting the highlighting
-        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch" or Device:isKindle()) then
+        if self.show_parent.root_path and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch" or Device:isKindle()) then
            UIManager:setDirty(nil, "ui", self.dimen)
         else
            UIManager:setDirty(nil, "fast", self.dimen)
