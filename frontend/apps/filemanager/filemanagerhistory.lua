@@ -476,6 +476,10 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
         if require("apps/reader/readerui").instance then
             self.ui.view.topbar:toggleBar()
             UIManager:setDirty(self.ui.view.topbar, "ui")
+        -- else
+        --     UIManager:tickAfterNext(function()
+        --         UIManager:setDirty(self._manager.file_chooser, "flashui")
+        --     end)
         end
         -- if self._manager.ui.history.send then
         --     local FileManager = require("apps/filemanager/filemanager")
