@@ -135,10 +135,11 @@ function IconButton:onTapIconButton()
          end
 
         UIManager:forceRePaint()
-        if Device.model == "Kobo_monza" or (Device:isKindle() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and self.icon == "chevron.up") then
+        -- We don't do it for Kindle devices since we changed framebuffer_mxcfb.lua to use waveform_reagl as fast refresh
+        if Device.model == "Kobo_monza" then -- or (Device:isKindle() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and self.icon == "chevron.up") then
             UIManager:yieldToEPDC(200000)
-        elseif Device:isKindle() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
-            UIManager:yieldToEPDC(20000)
+        -- elseif Device:isKindle() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
+        --     UIManager:yieldToEPDC(20000)
         else
             UIManager:yieldToEPDC(5000)
         end

@@ -478,12 +478,13 @@ function Button:onTapSelectButton()
                     -- In any case the ui refresh mode is just used for quick menus buttons
                     local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
                     -- The paginator icons are buttons, not iconbuttons and they don't flash properly in Kindle devices from time to time
-                    if Device:isKindle() and self.icon and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
-                        UIManager:yieldToEPDC(120000)
-                    elseif Device.model == "Kobo_monza" then
+                    -- We don't do it for Kindle devices since we changed framebuffer_mxcfb.lua to use waveform_reagl as fast refresh
+                    -- if Device:isKindle() and self.icon and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
+                    --     UIManager:yieldToEPDC(120000)
+                    if Device.model == "Kobo_monza" then
                         UIManager:yieldToEPDC(175000)
                     else
-                        UIManager:yieldToEPDC(50000)
+                        UIManager:yieldToEPDC(5000)
                     end
                 end
                 -- Unhighlight

@@ -202,16 +202,17 @@ function TouchMenuItem:onTapSelect(arg, ges)
         UIManager:setDirty(nil, "fast", highlight_dimen)
 
         UIManager:forceRePaint()
-        local entry = nil
-        for i = 1, #self.menu.item_table do
-            if self.menu.item_table[i].id == self.item.id then
-                entry = self.menu.item_table[i]
-                break
-            end
-        end
+        -- local entry = nil
+        -- for i = 1, #self.menu.item_table do
+        --     if self.menu.item_table[i].id == self.item.id then
+        --         entry = self.menu.item_table[i]
+        --         break
+        --     end
+        -- end
 
         local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-        if Device.model == "Kobo_monza" or (Device:isKindle() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and entry and entry.sub_item_table) then
+        -- We don't do it for Kindle devices since we changed framebuffer_mxcfb.lua to use waveform_reagl as fast refresh
+        if Device.model == "Kobo_monza" then -- or (Device:isKindle() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and entry and entry.sub_item_table) then
             UIManager:yieldToEPDC(200000)
         else
             UIManager:yieldToEPDC(5000)
