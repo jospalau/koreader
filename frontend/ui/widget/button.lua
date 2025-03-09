@@ -479,7 +479,9 @@ function Button:onTapSelectButton()
                     local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
                     -- The paginator icons are buttons, not iconbuttons and they don't flash properly in Kindle devices from time to time
                     if Device:isKindle() and self.icon and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
-                        UIManager:yieldToEPDC(100000)
+                        UIManager:yieldToEPDC(120000)
+                    elseif Device.model == "Kobo_monza" then
+                        UIManager:yieldToEPDC(175000)
                     else
                         UIManager:yieldToEPDC(50000)
                     end
