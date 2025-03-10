@@ -482,8 +482,6 @@ function Button:onTapSelectButton()
                         UIManager:yieldToEPDC(120000)
                     elseif Device:isKindle() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
                         UIManager:yieldToEPDC(10000)
-                    elseif Device.model == "Kobo_monza" and self.icon and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
-                        UIManager:yieldToEPDC(175000)
                     else
                         UIManager:yieldToEPDC(5000)
                     end

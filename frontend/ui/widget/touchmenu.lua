@@ -210,12 +210,7 @@ function TouchMenuItem:onTapSelect(arg, ges)
             end
         end
 
-        local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-        if Device.model == "Kobo_monza" or (Device:isKindle() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and entry and entry.sub_item_table) then
-            UIManager:yieldToEPDC(200000)
-        else
-            UIManager:yieldToEPDC(5000)
-        end
+        UIManager:yieldToEPDC(5000)
 
         -- Unhighlight
         --
@@ -783,6 +778,25 @@ function TouchMenu:updateItems()
     -- NOTE: Also avoid repainting what's underneath us on initial popup.
     -- NOTE: And we also only need to repaint what's behind us when switching to a smaller menu...
     local keep_bg = old_dimen and self.dimen.h >= old_dimen.h
+    -- Slow down a bit the menu for some devices in which there are flashes lingering
+    if not G_reader_settings:isFalse("flash_ui") then
+        -- Input:inhibitInput(true) -- Inhibit any past and upcoming input events.
+        -- Device:setIgnoreInput(true) -- Avoid ANRs on Android with unprocessed events.
+        local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+        if Device:isKindle() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
+            UIManager:yieldToEPDC(75000)
+        elseif Device.model == "Kobo_spaBW" and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
+            UIManager:yieldToEPDC(250000)
+        elseif Device.model == "Kobo_monza" and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
+            UIManager:yieldToEPDC(200000)
+        elseif Device:isAndroid() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
+            UIManager:yieldToEPDC(400000)
+        -- elseif ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
+        --     UIManager:yieldToEPDC(5000)
+        end
+        -- Device:setIgnoreInput(false) -- Allow processing of events (on Android).
+        -- Input:inhibitInputUntil(0.2) -- Discard input events, which might have
+    end
     UIManager:setDirty((self.is_fresh or keep_bg) and self.show_parent or "all", function()
         local refresh_dimen =
             old_dimen and old_dimen:combine(self.dimen)

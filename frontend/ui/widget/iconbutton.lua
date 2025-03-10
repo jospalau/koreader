@@ -135,9 +135,7 @@ function IconButton:onTapIconButton()
          end
 
         UIManager:forceRePaint()
-        if Device.model == "Kobo_monza" or (Device:isKindle() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and self.icon == "chevron.up") then
-            UIManager:yieldToEPDC(200000)
-        elseif Device:isKindle() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
+        if Device:isKindle() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
             UIManager:yieldToEPDC(10000)
         else
             UIManager:yieldToEPDC(5000)

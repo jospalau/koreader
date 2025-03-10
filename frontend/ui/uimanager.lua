@@ -266,8 +266,8 @@ function UIManager:close(widget, refreshtype, refreshregion, refreshdither)
         -- We avoid the flashing with a little bit of a delay here before refreshing the rest of the widgets
         -- For all the devices and widgets but as an options with the page text info plugin enable devices tweaks enabled
         local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-        if ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
-            self:yieldToEPDC(50000)
+        if not G_reader_settings:isFalse("flash_ui") and ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
+            self:yieldToEPDC(200000)
         end
         self:_refresh(refreshtype, refreshregion, refreshdither)
     end
