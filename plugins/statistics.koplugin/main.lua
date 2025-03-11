@@ -140,7 +140,6 @@ end
 function ReaderStatistics:init()
     self._pages_turned = 0
     -- self._last_nbwords = 0 -- initialized in readerui.lua
-    self._last_nbchars = 0
     self._total_words = 0
     self._total_chars = 0
     self._total_pages = 0
@@ -239,7 +238,7 @@ function ReaderStatistics:init()
         ReaderStatistics.preserved_initial_read_todays= nil
     end
 
-    if self.start_current_period then
+    if require("apps/reader/readerui").instance and self.start_current_period then
 
         local duration_raw =  math.floor((os.time() - self.start_current_period))
         if duration_raw < 360 or self._total_pages < 6 then
@@ -248,20 +247,8 @@ function ReaderStatistics:init()
             self._total_pages = 0
             self._total_words = 0
             local res = nil
-            if self.ui.document then
-                res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
-            end
-            local nbwords = 0
-            local nbcharacters = 0
-            if res and res.text then
-                local words = splitToWords(res.text) -- contar palabras
-                local characters = res.text -- contar caracteres
-                -- logger.warn(words)
-                nbwords = #words -- # es equivalente a string.len()
-                nbcharacters = #characters
-            end
+            local nbwords = select(2, self.ui.view:getCurrentPageLineWordCounts())
             self._last_nbwords = nbwords
-            self._last_nbchars = nbcharacters
         end
     end
 
@@ -3306,7 +3293,6 @@ function ReaderStatistics:onPageUpdate(pageno)
             local diff_time = now_ts - self.start_current_period
             if diff_time >= self.settings.min_sec and diff_time <= self.settings.max_sec then
                 self._total_words = self._last_nbwords + self._total_words
-                self._total_chars = self._last_nbchars + self._total_chars
                 self._total_pages = self._total_pages + 1
             end
         end
@@ -3332,7 +3318,6 @@ function ReaderStatistics:onPageUpdate(pageno)
         if not closing and not self.ui.searching then -- don't count statistics when closing the book and when searching
             -- This to be done only when computing a page obviously
             self._total_words = self._last_nbwords + self._total_words
-            self._total_chars = self._last_nbchars + self._total_chars
             self._total_pages = self._total_pages + 1
         end
 
@@ -3348,7 +3333,6 @@ function ReaderStatistics:onPageUpdate(pageno)
         -- The new table sessions don't take into account the maximum time so I compute all the stats as well
         if not closing and not self.ui.searching then -- don't count statistics when closing the book and when searching
             self._total_words = self._last_nbwords + self._total_words
-            self._total_chars = self._last_nbchars + self._total_chars
             self._total_pages = self._total_pages + 1
         end
     end
@@ -3359,18 +3343,8 @@ function ReaderStatistics:onPageUpdate(pageno)
     -- I modified readersearch.lua to set self.ui.searching so if the search windows is open I want count words
     -- Count always if not searchin
     if not self.ui.searching then
-        local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
-        local nbwords = 0
-        local nbcharacters = 0
-        if res and res.text then
-            local words = splitToWords(res.text) -- contar palabras
-            local characters = res.text -- contar caracteres
-            -- logger.warn(words)
-            nbwords = #words -- # es equivalente a string.len()
-            nbcharacters = #characters
-        end
+        local nbwords = select(2, self.ui.view:getCurrentPageLineWordCounts())
         self._last_nbwords = nbwords
-        self._last_nbchars = nbcharacters
     end
 
     if closing then
@@ -3510,18 +3484,8 @@ function ReaderStatistics:onResume()
         --self:onReadingResumed() --Not interested in this, since I don't call onReadingPaused() en onSuspend()
         self._last_nbwords = 0
         self._total_words = 0
-        local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
-        local nbwords = 0
-        local nbcharacters = 0
-        if res and res.text then
-            local words = splitToWords(res.text) -- contar palabras
-            local characters = res.text -- contar caracteres
-            -- logger.warn(words)
-            nbwords = #words -- # es equivalente a string.len()
-            nbcharacters = #characters
-        end
+        local nbwords = select(2, self.ui.view:getCurrentPageLineWordCounts())
         self._last_nbwords = nbwords
-        self._last_nbchars = nbcharacters
         self._total_pages = 0
         -- Kindle, Android and PocketBook need refresh in the footer to show new start_current_period
         -- Android needs full refresh passing true, true. I set this for all the devices
@@ -3585,16 +3549,7 @@ function ReaderStatistics:onReaderReady(config)
             self:initData()
             self.view.footer:maybeUpdateFooter()
         end
-        local res = self.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
-        local nbwords = 0
-        local nbcharacters = 0
-        if res and res.text then
-            local words = util.splitToWords2(res.text:gsub("’", ""):gsub("‘", ""):gsub("–", ""):gsub("— ", ""):gsub(" ", ""):gsub("”", ""):gsub("“", ""):gsub("”", "…")) -- contar palabras
-            local characters = res.text -- contar caracteres
-            -- logger.warn(words)
-            nbwords = #words -- # es equivalente a string.len()
-            nbcharacters = #characters
-        end
+        local nbwords = select(2, self.ui.view:getCurrentPageLineWordCounts())
         self._last_nbwords = nbwords
     end)
 end
