@@ -128,14 +128,14 @@ function IconButton:onTapIconButton()
         -- When using Kobo Libra 2 and Kobo Clara 2E (same for Kindle devices) in fm and display mode is set to detailed, if we tap on the top home and + icons,
         -- the first horizontal line of the list is overlapped a bit with white.
         -- Fix this using ui refresh in the icon button widget when tapping.
-        if self.show_parent.root_path and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch" or Device:isKindle()) then
+        if self.show_parent.root_path and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") and (Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch" or Device:isKindle()) then
             UIManager:setDirty(nil, "ui", self.dimen)
          else
             UIManager:setDirty(nil, "fast", self.dimen)
          end
 
         UIManager:forceRePaint()
-        if Device:isKindle() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
+        if Device:isKindle() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") then
             UIManager:yieldToEPDC(10000)
         else
             UIManager:yieldToEPDC(5000)
@@ -148,7 +148,7 @@ function IconButton:onTapIconButton()
 
         -- local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
         -- -- There are no glitches in the new Libra Colour but there is a flash after pressing a button. We avoid it
-        -- if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_monza" or Device:isPocketBook()) then
+        -- if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") and (Device.model == "Kobo_monza" or Device:isPocketBook()) then
         --     -- local util = require("ffi/util")
         --     -- util.usleep(250000)
         --     UIManager:yieldToEPDC(100000)
@@ -159,7 +159,7 @@ function IconButton:onTapIconButton()
 
         -- We need the Kindle devices, the Kobo Libra 2 and the Kobo Clara 2E to perform a ui refresh here as well
         -- when reverting the highlighting
-        if self.show_parent.root_path and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch" or Device:isKindle()) then
+        if self.show_parent.root_path and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") and (Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch" or Device:isKindle()) then
            UIManager:setDirty(nil, "ui", self.dimen)
         else
            UIManager:setDirty(nil, "fast", self.dimen)

@@ -222,7 +222,7 @@ function TouchMenuItem:onTapSelect(arg, ges)
         end
 
         -- -- There are no glitches in the new Libra Colour but there is a flash after pressing a button. We avoid it
-        -- if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_monza" or Device:isPocketBook()) then
+        -- if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") and (Device.model == "Kobo_monza" or Device:isPocketBook()) then
         --     local util = require("ffi/util")
         --     util.usleep(250000)
         -- end
@@ -786,15 +786,15 @@ function TouchMenu:updateItems()
         -- Input:inhibitInput(true) -- Inhibit any past and upcoming input events.
         -- Device:setIgnoreInput(true) -- Avoid ANRs on Android with unprocessed events.
         local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-        if Device:isKindle() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
+        if Device:isKindle() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") then
             UIManager:yieldToEPDC(75000)
-        elseif Device.model == "Kobo_spaBW" and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
+        elseif Device.model == "Kobo_spaBW" and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") then
             UIManager:yieldToEPDC(250000)
-        elseif Device.model == "Kobo_monza" and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
+        elseif Device.model == "Kobo_monza" and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") then
             UIManager:yieldToEPDC(200000)
-        elseif Device:isAndroid() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
+        elseif Device:isAndroid() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") then
             UIManager:yieldToEPDC(400000)
-        -- elseif ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
+        -- elseif ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") then
         --     UIManager:yieldToEPDC(5000)
         end
         -- Device:setIgnoreInput(false) -- Allow processing of events (on Android).

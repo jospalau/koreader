@@ -405,7 +405,7 @@ function VirtualKey:onTapSelect(skip_flash)
         self:invert(true)
         UIManager:forceRePaint()
         local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device:isKobo() or Device:isKindle()) then
+        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") and (Device:isKobo() or Device:isKindle()) then
             UIManager:yieldToEPDC(10000)
         else
             UIManager:yieldToEPDC()

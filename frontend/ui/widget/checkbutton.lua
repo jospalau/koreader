@@ -148,7 +148,7 @@ function CheckButton:onTapCheckButton()
             UIManager:widgetInvert(self[1], highlight_dimen.x, highlight_dimen.y, highlight_dimen.w)
             -- local Device = require("device")
             -- local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-            -- if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and Device.model == "Kobo_spaBW" then -- fast is a bit glitchy in Kobo BW
+            -- if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") and Device.model == "Kobo_spaBW" then -- fast is a bit glitchy in Kobo BW
             --     UIManager:setDirty(nil, "ui", self[1].dimen)
             -- else
             --     UIManager:setDirty(nil, "fast", highlight_dimen)

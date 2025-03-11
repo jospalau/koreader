@@ -413,7 +413,7 @@ function Button:_doFeedbackHighlight()
     -- Fast refresh mode works fine for Kobo Libra Colour but it also looks a bit aliased so we use ui refresh mode as well
     -- We use ui refresh just for the quick menus buttons
     local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-    if self.is_quickmenu_button and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") and (Device.model == "Kobo_spaBW" or Device.model == "Kobo_monza") then
+    if self.is_quickmenu_button and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") and (Device.model == "Kobo_spaBW" or Device.model == "Kobo_monza") then
         UIManager:setDirty(nil, "ui", self[1].dimen)
     else
         UIManager:setDirty(nil, "fast", self[1].dimen)
@@ -478,9 +478,9 @@ function Button:onTapSelectButton()
                     -- In any case the ui refresh mode is just used for quick menus buttons
                     local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
                     -- The paginator icons are buttons, not iconbuttons and they don't flash properly in Kindle devices from time to time
-                    if Device:isKindle() and self.icon and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
+                    if Device:isKindle() and self.icon and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") then
                         UIManager:yieldToEPDC(120000)
-                    elseif Device:isKindle() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
+                    elseif Device:isKindle() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") then
                         UIManager:yieldToEPDC(10000)
                     else
                         UIManager:yieldToEPDC(5000)

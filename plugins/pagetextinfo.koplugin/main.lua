@@ -1073,11 +1073,11 @@ function PageTextInfo:addToMainMenu(menu_items)
                     end,
                 },
                 {
-                    text = _("Enable devices tweaks"),
-                    checked_func = function() return self.settings:isTrue("enable_devices_tweaks") end,
+                    text = _("Enable devices flashes tweaks"),
+                    checked_func = function() return self.settings:isTrue("enable_devices_flashes_tweaks") end,
                     callback = function()
-                        local enable_devices_tweaks = not self.settings:isTrue("enable_devices_tweaks")
-                        self.settings:saveSetting("enable_devices_tweaks", enable_devices_tweaks)
+                        local enable_devices_flashes_tweaks = not self.settings:isTrue("enable_devices_flashes_tweaks")
+                        self.settings:saveSetting("enable_devices_flashes_tweaks", enable_devices_flashes_tweaks)
                         self.settings:flush()
                         return true
                     end,
@@ -1141,11 +1141,11 @@ function PageTextInfo:addToMainMenu(menu_items)
                     end,
                 },
                 {
-                    text = _("Enable devices tweaks"),
-                    checked_func = function() return self.settings:isTrue("enable_devices_tweaks") end,
+                    text = _("Enable devices flashes tweaks"),
+                    checked_func = function() return self.settings:isTrue("enable_devices_flashes_tweaks") end,
                     callback = function()
-                        local enable_devices_tweaks = not self.settings:isTrue("enable_devices_tweaks")
-                        self.settings:saveSetting("enable_devices_tweaks", enable_devices_tweaks)
+                        local enable_devices_flashes_tweaks = not self.settings:isTrue("enable_devices_flashes_tweaks")
+                        self.settings:saveSetting("enable_devices_flashes_tweaks", enable_devices_flashes_tweaks)
                         self.settings:flush()
                         return true
                     end,
