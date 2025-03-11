@@ -3269,7 +3269,7 @@ function ReaderStatistics:onPosUpdate(pos, pageno)
 end
 
 function ReaderStatistics:onPageUpdate(pageno)
-        if not self:isEnabledAndNotFrozen() then
+    if not self:isEnabledAndNotFrozen() then
         return
     end
 
@@ -3302,6 +3302,14 @@ function ReaderStatistics:onPageUpdate(pageno)
     local then_ts = data_tuple and data_tuple[1]
     -- If we don't have a previous timestamp to compare to, abort early
     if not then_ts then
+        if not closing and not self.ui.searching then
+            local diff_time = now_ts - self.start_current_period
+            if diff_time >= self.settings.min_sec and diff_time <= self.settings.max_sec then
+                self._total_words = self._last_nbwords + self._total_words
+                self._total_chars = self._last_nbchars + self._total_chars
+                self._total_pages = self._total_pages + 1
+            end
+        end
         logger.dbg("ReaderStatistics: No timestamp for previous page", self.curr_page)
         self.page_stat[pageno] = { { now_ts, 0 } }
         self.curr_page = pageno
@@ -3565,6 +3573,10 @@ function ReaderStatistics:onReadingResumed()
 end
 
 function ReaderStatistics:onReaderReady(config)
+    -- nextTick() prevents this plugin onPageUpdate() event handler function calls
+    -- self.ui:registerPostReaderReadyCallback() calls defined in some sources
+    -- that are triggered in other places by the ReaderReady event when opening the document
+    -- nothing valuable for this plugin
     UIManager:nextTick(function()
         if self.settings.is_enabled then
             self.data = config:readSetting("stats", { performance_in_pages = {} })
@@ -3577,7 +3589,7 @@ function ReaderStatistics:onReaderReady(config)
         local nbwords = 0
         local nbcharacters = 0
         if res and res.text then
-            local words = util.splitToWords2(res.text) -- contar palabras
+            local words = util.splitToWords2(res.text:gsub("’", ""):gsub("‘", ""):gsub("–", ""):gsub("— ", ""):gsub(" ", ""):gsub("”", ""):gsub("“", ""):gsub("”", "…")) -- contar palabras
             local characters = res.text -- contar caracteres
             -- logger.warn(words)
             nbwords = #words -- # es equivalente a string.len()

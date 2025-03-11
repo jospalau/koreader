@@ -1564,7 +1564,7 @@ function PageTextInfo:paintTo(bb, x, y)
                         --     fgcolor = Blitbuffer.COLOR_BLACK,
                         -- }
                         -- t:paintTo(bb, x, box.y)
-                            local text_line = self.ui.document._document:getTextFromPositions(box.x, box.y, Screen:getWidth(), box.y, false, true).text
+                            local text_line = self.ui.document._document:getTextFromPositions(box.x, box.y, Screen:getWidth(), box.y, false, false).text
                             text_line = text_line:gsub("’", ""):gsub("‘", ""):gsub("–", ""):gsub("— ", ""):gsub(" ", ""):gsub("”", ""):gsub("“", ""):gsub("”", "…")
                             local wordst = util.splitToWords2(text_line)
                             -- for i = #wordst, 1, -1 do
