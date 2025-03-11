@@ -556,7 +556,9 @@ function PageTextInfo:onDoubleTap(_, ges)
                 local boxes = self.ui.document:getScreenBoxesFromPositions(res.pos0, res.pos1, true)
                 if boxes ~= nil then
                     self.ui.dictionary:onLookupWord(util.cleanupSelectedText(res.text), false, boxes, nil, nil, function()
-                        UIManager:setDirty(nil, "full")
+                        if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("enable_extra_refreshes") then
+                            UIManager:setDirty(nil, "full")
+                        end
                     end)
                     -- self:handleEvent(Event:new("LookupWord", util.cleanupSelectedText(res.text)))
                 end
@@ -1080,6 +1082,16 @@ function PageTextInfo:addToMainMenu(menu_items)
                         return true
                     end,
                 },
+                {
+                    text = _("Enable extra refreshes"),
+                    checked_func = function() return self.settings:isTrue("enable_extra_refreshes") end,
+                    callback = function()
+                        local enable_extra_refreshes = not self.settings:isTrue("enable_extra_refreshes")
+                        self.settings:saveSetting("enable_extra_refreshes", enable_extra_refreshes)
+                        self.settings:flush()
+                        return true
+                    end,
+                },
             },
         }
     else
@@ -1134,6 +1146,16 @@ function PageTextInfo:addToMainMenu(menu_items)
                     callback = function()
                         local enable_devices_tweaks = not self.settings:isTrue("enable_devices_tweaks")
                         self.settings:saveSetting("enable_devices_tweaks", enable_devices_tweaks)
+                        self.settings:flush()
+                        return true
+                    end,
+                },
+                {
+                    text = _("Enable extra refreshes"),
+                    checked_func = function() return self.settings:isTrue("enable_extra_refreshes") end,
+                    callback = function()
+                        local enable_extra_refreshes = not self.settings:isTrue("enable_extra_refreshes")
+                        self.settings:saveSetting("enable_extra_refreshes", enable_extra_refreshes)
                         self.settings:flush()
                         return true
                     end,

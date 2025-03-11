@@ -1349,7 +1349,7 @@ function Dispatcher._showAsMenu(settings, exec_props)
                             end
 
                             local so = quickmenu:getScrolledOffset()
-
+                            local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
                             quickmenu = ButtonDialog:new{
                                 title = title,
                                 title_align = "center",
@@ -1359,7 +1359,9 @@ function Dispatcher._showAsMenu(settings, exec_props)
                                 use_info_style = false,
                                 buttons =  quickmenu.buttons,
                                 anchor = exec_props and exec_props.qm_anchor,
-                                tap_close_callback = function() if keep_open_on_apply then UIManager:setDirty("all", "full") end end,
+                                tap_close_callback = function() if keep_open_on_apply and ui.pagetextinfo
+                                                        and ui.pagetextinfo.settings:isTrue("enable_extra_refreshes") then
+                                                            UIManager:setDirty(nil, "full") end end,
                                 quickmenu = true,
                             }
 
@@ -1394,6 +1396,7 @@ function Dispatcher._showAsMenu(settings, exec_props)
     if not Device:isAndroid() then
         Device:setScreenDPI(150)
     end
+    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
     quickmenu = ButtonDialog:new{
         title = title,
         title_align = "center",
@@ -1403,7 +1406,9 @@ function Dispatcher._showAsMenu(settings, exec_props)
         use_info_style = false,
         buttons = buttons,
         anchor = exec_props and exec_props.qm_anchor,
-        tap_close_callback = function() if keep_open_on_apply then UIManager:setDirty("all", "full") end end,
+        tap_close_callback = function() if keep_open_on_apply and ui.pagetextinfo
+            and ui.pagetextinfo.settings:isTrue("enable_extra_refreshes") then
+                UIManager:setDirty(nil, "full") end end,
         quickmenu = true,
     }
     UIManager:show(quickmenu)

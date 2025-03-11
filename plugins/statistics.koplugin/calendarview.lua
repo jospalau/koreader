@@ -1093,7 +1093,10 @@ end
 
 function CalendarDayView:onClose()
     UIManager:close(self)
-    UIManager:setDirty("all", "full")
+    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+    if  ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_refreshes") then
+        UIManager:setDirty(nil, "full")
+    end
     if self.close_callback then
         self:close_callback()
     end
