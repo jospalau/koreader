@@ -261,7 +261,10 @@ function InfoMessage:onCloseWidget()
         -- because there are a few messages being shown and being closed
         -- nothing bad anyway
         if not Device:isAndroid() then
-            UIManager:setDirty(nil, "full")
+            local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+            if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_refreshes") then
+                UIManager:setDirty(nil, "full")
+            end
         end
         -- return "ui", self.movable.dimen
     end)
