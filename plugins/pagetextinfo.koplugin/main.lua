@@ -1551,60 +1551,60 @@ function PageTextInfo:paintTo(bb, x, y)
 
     local total_words = 0
     if self.is_enabled and self.vertical_frame then
-        local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
-        if res and res.pos0 and res.pos1 then
-            local boxes = self.ui.document:getScreenBoxesFromPositions(res.pos0, res.pos1, true)
-            if boxes then
-                -- local last_word = ""
-                for _, box in ipairs(boxes) do
-                    if box.h ~= 0 then
-                        -- local t = TextWidget:new{
-                        --     text =  "New line",
-                        --     face = Font:getFace("myfont4", 6),
-                        --     fgcolor = Blitbuffer.COLOR_BLACK,
-                        -- }
-                        -- t:paintTo(bb, x, box.y)
-                            local text_line = self.ui.document._document:getTextFromPositions(box.x, box.y, Screen:getWidth(), box.y, false, false).text
-                            text_line = text_line:gsub("’", ""):gsub("‘", ""):gsub("–", ""):gsub("— ", ""):gsub(" ", ""):gsub("”", ""):gsub("“", ""):gsub("”", "…")
-                            local wordst = util.splitToWords2(text_line)
-                            -- for i = #wordst, 1, -1 do
-                            --     if wordst[i] == "’" or wordst[i] == "–" or wordst[i] == " " or wordst[i] == "”" or wordst[i] == "…" or wordst[i] == "…’" then
-                            --       table.remove(wordst, i)
-                            --     end
-                            -- end
-                            local words = #wordst
-                            -- local dump = require("dump")
-                            -- print(dump(wordst))
-                            -- Hyphenated words are counted twice since getTextFromPositions returns the whole word for the line.
-                            -- They can be removed but it is fine to count them twice
-                            -- if last_word:find(util.splitToWords2(text_line)[1]) then
-                            -- if util.splitToWords2(text_line)[1] == last_word then
-                            --     words = words - 1
-                            -- end
-                            -- last_word = util.splitToWords2(text_line)[#util.splitToWords2(text_line)]
-                            -- print(text_line:sub(1, 10))
-                            -- print(text_line:sub(#text_line-10, #text_line))
-                            -- if text_line:sub(#text_line, #text_line) == "-" then
-                            --     words = words - 1
-                            -- end
-                            total_words = total_words + words
-                            local t = TextWidget:new{
-                                text =  words,
-                                face = Font:getFace("myfont4", self.ui.document.configurable.font_size),
-                                fgcolor = Blitbuffer.COLOR_BLACK,
-                            }
-                            t:paintTo(bb, x, box.y)
-                            local t2 = TextWidget:new{
-                                text =  total_words,
-                                face = Font:getFace("myfont4", self.ui.document.configurable.font_size),
-                                fgcolor = Blitbuffer.COLOR_BLACK,
-                            }
-                            t2:paintTo(bb, x + Screen:getWidth() - t2:getSize().w, box.y)
-                    end
-                    self.view:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
-                end
-            end
-        end
+        -- local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
+        -- if res and res.pos0 and res.pos1 then
+        --     local boxes = self.ui.document:getScreenBoxesFromPositions(res.pos0, res.pos1, true)
+        --     if boxes then
+        --         -- local last_word = ""
+        --         for _, box in ipairs(boxes) do
+        --             if box.h ~= 0 then
+        --                 -- local t = TextWidget:new{
+        --                 --     text =  "New line",
+        --                 --     face = Font:getFace("myfont4", 6),
+        --                 --     fgcolor = Blitbuffer.COLOR_BLACK,
+        --                 -- }
+        --                 -- t:paintTo(bb, x, box.y)
+        --                     local text_line = self.ui.document._document:getTextFromPositions(box.x, box.y, Screen:getWidth(), box.y, false, false).text
+        --                     text_line = text_line:gsub("’", ""):gsub("‘", ""):gsub("–", ""):gsub("— ", ""):gsub(" ", ""):gsub("”", ""):gsub("“", ""):gsub("”", "…")
+        --                     local wordst = util.splitToWords2(text_line)
+        --                     -- for i = #wordst, 1, -1 do
+        --                     --     if wordst[i] == "’" or wordst[i] == "–" or wordst[i] == " " or wordst[i] == "”" or wordst[i] == "…" or wordst[i] == "…’" then
+        --                     --       table.remove(wordst, i)
+        --                     --     end
+        --                     -- end
+        --                     local words = #wordst
+        --                     -- local dump = require("dump")
+        --                     -- print(dump(wordst))
+        --                     -- Hyphenated words are counted twice since getTextFromPositions returns the whole word for the line.
+        --                     -- They can be removed but it is fine to count them twice
+        --                     -- if last_word:find(util.splitToWords2(text_line)[1]) then
+        --                     -- if util.splitToWords2(text_line)[1] == last_word then
+        --                     --     words = words - 1
+        --                     -- end
+        --                     -- last_word = util.splitToWords2(text_line)[#util.splitToWords2(text_line)]
+        --                     -- print(text_line:sub(1, 10))
+        --                     -- print(text_line:sub(#text_line-10, #text_line))
+        --                     -- if text_line:sub(#text_line, #text_line) == "-" then
+        --                     --     words = words - 1
+        --                     -- end
+        --                     total_words = total_words + words
+        --                     local t = TextWidget:new{
+        --                         text =  words,
+        --                         face = Font:getFace("myfont4", self.ui.document.configurable.font_size),
+        --                         fgcolor = Blitbuffer.COLOR_BLACK,
+        --                     }
+        --                     t:paintTo(bb, x, box.y)
+        --                     local t2 = TextWidget:new{
+        --                         text =  total_words,
+        --                         face = Font:getFace("myfont4", self.ui.document.configurable.font_size),
+        --                         fgcolor = Blitbuffer.COLOR_BLACK,
+        --                     }
+        --                     t2:paintTo(bb, x + Screen:getWidth() - t2:getSize().w, box.y)
+        --             end
+        --             self.view:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
+        --         end
+        --     end
+        -- end
         local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
         local nblines = 0
         if res and res.pos0 and res.pos1 then
@@ -1617,7 +1617,7 @@ function PageTextInfo:paintTo(bb, x, y)
         local nbwords = 0
         local nbcharacters = 0
         if res and res.text then
-            local words = util.splitToWords2(res.text) -- contar palabras
+            local words = util.splitToWords2(res.text:gsub("’", ""):gsub("‘", ""):gsub("–", ""):gsub("— ", ""):gsub(" ", ""):gsub("”", ""):gsub("“", ""):gsub("”", "…")) -- contar palabras
             local characters = res.text -- contar caracteres
             -- logger.warn(words)
             nbwords = #words -- # es equivalente a string.len()
@@ -1636,7 +1636,7 @@ function PageTextInfo:paintTo(bb, x, y)
             wpm = math.floor(self.ui.statistics._total_words/duration_raw)
         end
         self.vg1[1][1]:setText("Lines      " .. nblines)
-        self.vg1[3][1]:setText("Words      " .. total_words)
+        self.vg1[3][1]:setText("Words      " .. nbwords)
         self.vg1[5][1]:setText("Characters " .. nbcharacters)
         self.vg1[7][1]:setText("CFL        " .. chars_first_line)
 
