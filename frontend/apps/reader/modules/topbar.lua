@@ -546,6 +546,15 @@ function TopBar:init()
         if os.time() - self.start_session_time < 5 then
             self.start_session_time = os.time()
         end
+
+        self:toggleBar()
+        UIManager:nextTick(function()
+            self.onPageUpdate = function(this, pageno)
+                self:toggleBar()
+                return
+            end
+            -- self:toggleBar()
+        end)
     end)
 end
 
@@ -1174,7 +1183,7 @@ function TopBar:toggleBar(light_on)
         local left = self.ui.toc:getChapterPagesLeft(self.view.footer.pageno) or self.ui.document:getTotalPagesLeft(self.view.footer.pageno)
         local left_time = self.view.footer:getDataFromStatistics("", left)
 
-        self.progress_chapter_text:setText(self.view.footer:getChapterProgress(false) .. " " .. left_time)
+        self.progress_chapter_text:setText(self.view.footer:getChapterProgress(false)) -- .. " " .. left_time)
 
 
         -- -- Option 1 for the three bars
@@ -1411,9 +1420,11 @@ function TopBar:toggleBar(light_on)
     end
 end
 
-function TopBar:onPageUpdate()
-    self:toggleBar()
-end
+-- Defined in the init() function using registerPostReaderReadyCallback() after nextTick()
+-- so it is not called several times when opening the document by other sources using registerPostReaderReadyCallback()
+-- function TopBar:onPageUpdate()
+--     self:toggleBar()
+-- end
 
 function TopBar:onPosUpdate(new_pos)
     self:toggleBar()
@@ -1611,7 +1622,7 @@ function TopBar:paintTo(bb, x, y)
             -- end
             local text_widget_container = TextWidget:new{
                 text = self.chapter_widget_container[1].text:gsub(" ", "\u{00A0}"), -- no-break-space
-                max_width = Screen:getWidth() * 30 * (1/100),
+                max_width = Screen:getWidth() * 40 * (1/100),
                 face = Font:getFace("myfont3", 14),
                 bold = true,
             }
@@ -1627,7 +1638,6 @@ function TopBar:paintTo(bb, x, y)
         -- Bottom right
         -- Use progress bar
         -- self.progress_chapter_bar_chapter_widget_container:paintTo(bb, x + Screen:getWidth() - self.progress_chapter_bar_chapter_widget_container[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
-
         self.progress_chapter_widget_container:paintTo(bb, x + Screen:getWidth() - self.progress_chapter_widget_container[1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
 
 
