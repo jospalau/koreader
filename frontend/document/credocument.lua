@@ -702,6 +702,7 @@ function CreDocument:getScreenBoxesFromPositions(pos0, pos1, get_segments)
     local line_boxes = {}
     if pos0 and pos1 then
         local word_boxes = self._document:getWordBoxesFromPositions(pos0, pos1, get_segments)
+        if not word_boxes then return end
         for i = 1, #word_boxes do
             local line_box = word_boxes[i]
             table.insert(line_boxes, Geom:new{
