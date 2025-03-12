@@ -3320,8 +3320,6 @@ function ReaderStatistics:onPageUpdate(pageno)
             self._total_words = self._last_nbwords + self._total_words
             self._total_pages = self._total_pages + 1
         end
-
-
     elseif diff_time > self.settings.max_sec then
         self.mem_read_time = self.mem_read_time + self.settings.max_sec
         if #page_data == 1 and curr_duration == 0 then
