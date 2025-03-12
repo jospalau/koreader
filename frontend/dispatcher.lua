@@ -1406,7 +1406,7 @@ function Dispatcher._showAsMenu(settings, exec_props)
         use_info_style = false,
         buttons = buttons,
         anchor = exec_props and exec_props.qm_anchor,
-        tap_close_callback = function() if keep_open_on_apply and ui.pagetextinfo
+        tap_close_callback = function() if ui.pagetextinfo
             and ui.pagetextinfo.settings:isTrue("enable_extra_refreshes") then
                 UIManager:setDirty(nil, "full") end end,
         quickmenu = true,
