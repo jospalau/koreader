@@ -534,6 +534,9 @@ function FileSearcher:onMenuSelect(item, callback)
                         choice1_text = _("Yes"),
                         choice1_callback = function()
                             self.close_callback()
+                            if self.ui.history.booklist_menu then
+                                UIManager:close(self.ui.history.booklist_menu)
+                            end
                             local FileManager = require("apps/filemanager/filemanager")
                             FileManager.openFile(self.ui, item.path)
                         end,
@@ -549,6 +552,9 @@ function FileSearcher:onMenuSelect(item, callback)
                     return false
                 else
                     self.close_callback()
+                    if self.ui.history.booklist_menu then
+                        UIManager:close(self.ui.history.booklist_menu)
+                    end
                     local FileManager = require("apps/filemanager/filemanager")
                     FileManager.openFile(self.ui, item.path)
                 end
