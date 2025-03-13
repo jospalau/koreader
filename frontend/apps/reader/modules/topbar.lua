@@ -646,6 +646,12 @@ function TopBar:onReaderReady()
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
+    self.current_page_text = TextWidget:new{
+        text =  "",
+        face = Font:getFace("myfont3"),
+        fgcolor = Blitbuffer.COLOR_BLACK,
+    }
+
     self.times_text = TextWidget:new{
         text =  "",
         face = Font:getFace("myfont3", 12),
@@ -710,6 +716,11 @@ function TopBar:onReaderReady()
     self.progress_widget_container = left_container:new{
         dimen = Geom:new{ w = self.progress_book_text:getSize().w, self.progress_book_text:getSize().h },
         self.progress_book_text,
+    }
+
+    self.current_page_widget_container = left_container:new{
+        dimen = Geom:new{ w = self.current_page_text:getSize().w, self.current_page_text:getSize().h },
+        self.current_page_text,
     }
 
     self.title_and_series_widget_container = HorizontalGroup:new{
@@ -1073,8 +1084,10 @@ function TopBar:toggleBar(light_on)
 
         if self.ui.pagemap:wantsPageLabels() then
            self.progress_book_text:setText(("%d de %d"):format(self.ui.pagemap:getCurrentPageLabel(true), self.ui.pagemap:getLastPageLabel(true)))
+           self.current_page_text:setText(("%d"):format(self.ui.pagemap:getCurrentPageLabel(true)))
         else
            self.progress_book_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
+           self.current_page_text:setText(("%d"):format(self.view.footer.pageno))
         end
 
         if self.init_page == nil then
@@ -1365,6 +1378,7 @@ function TopBar:toggleBar(light_on)
     else
         self.session_time_text:setText("")
         self.progress_book_text:setText("")
+        self.current_page_text:setText("")
         self.times_text:setText("")
         self.time_battery_text:setText("")
         self.title_text:setText("")
@@ -1404,6 +1418,13 @@ function TopBar:toggleBar(light_on)
         --         self.test_light_text:setText(" ○ " .. self.frontlight)
         --     end
         -- end
+        if self.ui.pagemap:wantsPageLabels() then
+            self.progress_book_text:setText(("%d de %d"):format(self.ui.pagemap:getCurrentPageLabel(true), self.ui.pagemap:getLastPageLabel(true)))
+            self.current_page_text:setText(("%d"):format(self.ui.pagemap:getCurrentPageLabel(true)))
+         else
+            self.progress_book_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
+            self.current_page_text:setText(("%d"):format(self.view.footer.pageno))
+         end
         if self.ui.gestures.ignore_hold_corners then
             if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
                 self.ignore_corners = "\u{F0F6} 🔒"
@@ -1858,6 +1879,7 @@ end
 function TopBar:paintToDisabled(bb, x, y)
     self.ignore_corners_widget_container[1]:setText(self.ignore_corners)
     self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - 2, y + Screen:scaleBySize(6))
+    self.current_page_widget_container:paintTo(bb, x + Screen:getWidth()/2  - self.current_page_widget_container[1]:getSize().w / 2,  Screen:getHeight() - TopBar.MARGIN_BOTTOM - self.current_page_widget_container[1].face.size - 4)
 end
 
 function TopBar:onAdjustMarginsTopbar()
