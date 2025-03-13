@@ -2493,6 +2493,7 @@ function ReaderFooter:onToggleFooterMode()
             self.ui.view.topbar.status_bar = true
             self.mode = self.mode_list.page_progress
         end
+        self.ui.view.topbar:toggleBar()
     else
         self.mode = (self.mode + 1) % self.mode_nb
         for i, m in ipairs(self.mode_index) do

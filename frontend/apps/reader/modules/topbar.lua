@@ -1418,13 +1418,13 @@ function TopBar:toggleBar(light_on)
         --         self.test_light_text:setText(" ○ " .. self.frontlight)
         --     end
         -- end
-        if self.ui.pagemap:wantsPageLabels() then
-            self.progress_book_text:setText(("%d de %d"):format(self.ui.pagemap:getCurrentPageLabel(true), self.ui.pagemap:getLastPageLabel(true)))
-            self.current_page_text:setText(("%d"):format(self.ui.pagemap:getCurrentPageLabel(true)))
-         else
-            self.progress_book_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
-            self.current_page_text:setText(("%d"):format(self.view.footer.pageno))
-         end
+        if not self.status_bar then
+            if self.ui.pagemap:wantsPageLabels() then
+                self.current_page_text:setText(("%d"):format(self.ui.pagemap:getCurrentPageLabel(true)))
+            else
+                self.current_page_text:setText(("%d"):format(self.view.footer.pageno))
+            end
+        end
         if self.ui.gestures.ignore_hold_corners then
             if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
                 self.ignore_corners = "\u{F0F6} 🔒"
