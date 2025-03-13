@@ -523,6 +523,37 @@ function PageTextInfo:onSwipe(_, ges)
         else
             self.view.topbar:quickToggleOnOff(false)
         end
+    elseif direction == "east" then
+        -- local doc_settings = DocSettings:open(doc_path)
+        local reference_page = self.ui.doc_settings:readSetting("reference_page_xpointer")
+        if not reference_page then
+            local xp = self.ui.document:getXPointer()
+            self.ui.doc_settings:saveSetting("reference_page_xpointer", xp)
+            self.ui.doc_settings:flush()
+        else
+            local pageno = self.ui.document:getPageFromXPointer(reference_page)
+            local pageno_label = self.ui.pagemap:getXPointerPageLabel(reference_page)
+            local toc_title = self.ui.toc:getTocTitleByPage(pageno)
+            local _ = require("gettext")
+            local MultiConfirmBox = require("ui/widget/multiconfirmbox")
+            UIManager:show(MultiConfirmBox:new{
+                text = _("Already set inside chapter " .. toc_title .. ", do you want to reset it to this page?"),
+                choice1_text = _("Yes"),
+                choice1_callback = function()
+                    local xp = self.ui.document:getXPointer()
+                    self.ui.doc_settings:saveSetting("reference_page_xpointer", xp)
+                    self.ui.doc_settings:flush()
+                    return true
+                end,
+                choice2_text = _("Take me"),
+                choice2_callback = function()
+                    self.ui.pagemap.ui.link:addCurrentLocationToStack()
+                    self.ui.rolling:onGotoXPointer(reference_page)
+                    return true
+                end,
+            })
+        end
+        return
     end
     return false
 end
