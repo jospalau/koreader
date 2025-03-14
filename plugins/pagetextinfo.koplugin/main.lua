@@ -1646,19 +1646,22 @@ function PageTextInfo:paintTo(bb, x, y)
             chars_first_line = #words
         end
 
-        local duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100
-        local wpm = 0
-        if self.ui.statistics._total_words > 0 then
-            wpm = math.floor(self.ui.statistics._total_words/duration_raw)
-        end
         self.vg1[1][1]:setText("Lines      " .. nblines)
         self.vg1[3][1]:setText("Words      " .. nbwords)
         self.vg1[5][1]:setText("CFL        " .. chars_first_line)
 
-
-        self.vg2[1][1]:setText("Total words session " .. self.ui.statistics._total_words)
-        self.vg2[3][1]:setText("Total pages session " .. self.ui.statistics._total_pages)
-        self.vg2[5][1]:setText("Wpm session         " .. wpm)
+        if self.ui.statistics then
+            local duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100
+            local wpm = 0
+            if self.ui.statistics._total_words > 0 then
+                wpm = math.floor(self.ui.statistics._total_words/duration_raw)
+            end
+            self.vg2[1][1]:setText("Total words session " .. self.ui.statistics._total_words)
+            self.vg2[3][1]:setText("Total pages session " .. self.ui.statistics._total_pages)
+            self.vg2[5][1]:setText("Wpm session         " .. wpm)
+        else
+            self.vg2[1][1]:setText("Statistics plugin not enabled")
+        end
 
         self.vertical_frame:paintTo(bb, x + Screen:getWidth() - self.vertical_frame[1][1]:getSize().w - self.vertical_frame[1].padding, y)
         -- -- This is painted before some other stuff like for instance the dogear widget. This is the way to paint it just after all in the next UI tick.

@@ -1060,7 +1060,9 @@ function TopBar:toggleBar(light_on)
         local session_time = datetime.secondsToClockDuration(user_duration_format, os.time() - self.start_session_time, false)
 
         local duration_raw =  math.floor((os.time() - self.start_session_time))
-        self.wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
+        if self.ui.statistics and self.ui.statistics._total_words then
+            self.wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
+        end
         self.wpm_text:setText(self.wpm_session .. "wpm")
 
         local read_today = self.initial_read_today + (os.time() - self.start_session_time)
@@ -1292,7 +1294,10 @@ function TopBar:toggleBar(light_on)
             self.main_progress_bar.bordercolor = Blitbuffer.COLOR_BLACK
             self.main_progress_bar.bordersize = Screen:scaleBySize(1)
         end
-        local time_spent_book = self.ui.statistics:getBookStat(self.ui.statistics.id_curr_book)
+        local time_spent_book = nil
+        if self.ui.statistics and self.ui.statistics.id_curr_book then
+            time_spent_book = self.ui.statistics:getBookStat(self.ui.statistics.id_curr_book)
+        end
 
         if time_spent_book == nil then
             self.main_progress_bar.time_spent_book = ""

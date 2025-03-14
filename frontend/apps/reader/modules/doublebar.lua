@@ -65,7 +65,7 @@ function DoubleBar:onReaderReady()
     end
 
     self.wpm_session = 0
-    if duration_raw > 0 and self.ui.statistics._total_words then
+    if duration_raw > 0 and self.ui.statistics and self.ui.statistics._total_words then
         self.wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
     end
 
@@ -257,7 +257,9 @@ function DoubleBar:toggleBar()
         local session_time = datetime.secondsToClockDuration(user_duration_format, os.time() - self.start_session_time, false)
 
         local duration_raw =  math.floor((os.time() - self.start_session_time))
-        self.wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
+        if self.ui.statistics and self.ui.statistics._total_words then
+            self.wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
+        end
         self.wpm_text:setText(self.wpm_session .. "wpm")
 
         self.session_time_text:setText(datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")))
