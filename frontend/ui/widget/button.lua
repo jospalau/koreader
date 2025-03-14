@@ -521,6 +521,11 @@ function Button:onTapSelectButton()
                 -- NOTE: If a Button is marked vsync, we have a guarantee from the programmer that the widget it belongs to is still alive and top-level post-callback,
                 --       so we can do this safely without risking UI glitches.
                 if self.vsync then
+                    -- skimto widget button not flashing properly in this devices
+                    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+                    if (Device:isKindle() or Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch") and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") then
+                        UIManager:yieldToEPDC(20000)
+                    end
                     self:_undoFeedbackHighlight(is_translucent)
                     UIManager:forceRePaint()
                 end
