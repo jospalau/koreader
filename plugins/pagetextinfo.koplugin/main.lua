@@ -587,7 +587,7 @@ function PageTextInfo:onDoubleTap(_, ges)
                 local boxes = self.ui.document:getScreenBoxesFromPositions(res.pos0, res.pos1, true)
                 if boxes ~= nil then
                     self.ui.dictionary:onLookupWord(util.cleanupSelectedText(res.text), false, boxes, nil, nil, function()
-                        if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("enable_extra_refreshes") then
+                        if self.settings:isTrue("enable_extra_refreshes") then
                             UIManager:setDirty(nil, "full")
                         end
                     end)

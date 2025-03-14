@@ -3592,7 +3592,9 @@ function ReaderStatistics:onShowCalendarDayView()
     self.kv = nil -- clean left over stack link
     local CalendarView = require("calendarview")
     CalendarView:showCalendarDayView(self)
-    UIManager:setDirty("all", "full")
+    if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("enable_extra_refreshes") then
+        UIManager:setDirty(nil, "full")
+    end
 end
 
 -- Used by calendarview.lua CalendarView
