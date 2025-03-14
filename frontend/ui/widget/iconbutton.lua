@@ -137,6 +137,8 @@ function IconButton:onTapIconButton()
         UIManager:forceRePaint()
         if (Device:isKindle() or Device.model == "Kobo_io" or Device.model == "Kobo_goldfinch") and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") then
             UIManager:yieldToEPDC(25000)
+        elseif (Device:isPocketBook() or Device.model == "Kobo_cadmus") and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") then
+            UIManager:yieldToEPDC(300000)
         else
             UIManager:yieldToEPDC(5000)
         end
