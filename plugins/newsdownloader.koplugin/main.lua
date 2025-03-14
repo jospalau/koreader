@@ -34,14 +34,6 @@ local NewsDownloader = WidgetContainer:extend{
     download_dir = nil,
     file_extension = ".epub",
     config_key_custom_dl_dir = "custom_dl_dir",
-    empty_feed = {
-        [1] = "https://",
-        limit = 5,
-        download_full_article = false,
-        include_images = true,
-        enable_filter = false,
-        filter_element = ""
-    },
     kv = nil, -- KeyValuePage
 }
 
@@ -57,6 +49,18 @@ local function getFeedTitle(possible_title)
     elseif possible_title[1] and type(possible_title[1]) == "string" then
         return util.htmlEntitiesToUtf8(possible_title[1])
     end
+end
+
+-- Returns a new empty field that can be modified by the caller
+local function getEmptyFeed()
+   return {
+        [1] = "https://",
+        limit = 5,
+        download_full_article = false,
+        include_images = true,
+        enable_filter = false,
+        filter_element = ""
+    }
 end
 
 -- There can be multiple links.
@@ -225,7 +229,7 @@ function NewsDownloader:loadConfigAndProcessFeeds(touchmenu_instance)
             -- add a feed to their list.
             local feed_item_vc = FeedView:getItem(
                 1,
-                self.empty_feed,
+                getEmptyFeed(),
                 function(id, edit_key, value)
                     self:editFeedAttribute(id, edit_key, value)
                 end
@@ -340,7 +344,7 @@ function NewsDownloader:processFeedSource(url, credentials, limit, unsupported_f
     -- Check if we have a cached response first
     local cache = DownloadBackend:getCache()
     local cached_response = cache:check(url)
-    local ok, response
+    local ok, error, response
 
     local cookies = nil
     if credentials ~= nil then
@@ -475,7 +479,7 @@ function NewsDownloader:processFeedSource(url, credentials, limit, unsupported_f
 
     -- Process the feeds accordingly.
     if is_atom then
-        ok = pcall(function()
+        ok, error = pcall(function()
                 return self:processFeed(
                     FEED_TYPE_ATOM,
                     feeds,
@@ -489,7 +493,7 @@ function NewsDownloader:processFeedSource(url, credentials, limit, unsupported_f
                 )
         end)
     elseif is_rss then
-        ok = pcall(function()
+        ok, error = pcall(function()
                 return self:processFeed(
                     FEED_TYPE_RSS,
                     feeds,
@@ -509,6 +513,7 @@ function NewsDownloader:processFeedSource(url, credentials, limit, unsupported_f
     if not ok or (not is_rss and not is_atom) then
         local error_message
         if not ok then
+            logger.err("NewsDownloader: Error processing feed", error)
             error_message = _("(Reason: Failed to download content)")
         elseif not is_rss then
             error_message = _("(Reason: Couldn't process RSS)")
@@ -796,7 +801,7 @@ function NewsDownloader:viewFeedList()
                 -- Prepare the view with all the callbacks for editing the attributes
                 local feed_item_vc = FeedView:getItem(
                     #feed_config + 1,
-                    self.empty_feed,
+                    getEmptyFeed(),
                     function(id, edit_key, value)
                         self:editFeedAttribute(id, edit_key, value)
                     end
@@ -960,7 +965,7 @@ function NewsDownloader:updateFeedConfig(id, key, value)
     if id > #feed_config then
         table.insert(
             feed_config,
-            self.empty_feed
+            getEmptyFeed()
         )
     end
 
