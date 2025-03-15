@@ -409,6 +409,10 @@ function TopBar:getOriginBook()
         end
 
         if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("OEBPS/volume.opf")
+        end
+
+        if opf_text == nil then
             opf_text = self.ui.document:getDocumentFileContent("OEBPS/Miscellaneous/content.opf")
         end
         if opf_text == nil then
