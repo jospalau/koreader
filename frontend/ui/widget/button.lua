@@ -413,7 +413,7 @@ function Button:_doFeedbackHighlight()
     -- Fast refresh mode works fine for Kobo Libra Colour but it also looks a bit aliased so we use ui refresh mode as well
     -- We use ui refresh just for the quick menus buttons
     local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-    if self.is_quickmenu_button and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") and (Device.model == "Kobo_spaBW" or Device.model == "Kobo_monza") then
+    if self.is_quickmenu_button and ui.pagetextinfo and (ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") or ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_minimum_flashes")) and (Device.model == "Kobo_spaBW" or Device.model == "Kobo_monza") then
         UIManager:setDirty(nil, "ui", self[1].dimen)
     else
         UIManager:setDirty(nil, "fast", self[1].dimen)
