@@ -486,7 +486,7 @@ function Button:onTapSelectButton()
                     -- The paginator icons are buttons, not iconbuttons and they don't flash properly in Kindle devices from time to time
                     if Device:isKindle() and self.icon and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") then
                         UIManager:yieldToEPDC(120000)
-                    elseif Device:isKindle() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") then
+                    elseif Device:isKindle() and (ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") or ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_minimum_flashes")) then
                         UIManager:yieldToEPDC(10000)
                     else
                         UIManager:yieldToEPDC(5000)
