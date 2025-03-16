@@ -116,7 +116,10 @@ function FileManagerCollection:onShowColl(collection_name, series)
             ui = nil,
             fm = true,
             collection = true,
-        }
+        },
+        search_callback = function(search_string)
+            self:onShowCollectionsSearchDialog(search_string, collection_name)
+        end,
     }
     self.booklist_menu.disable_double_tap = false
     table.insert(self.booklist_menu.paths, true) -- enable onReturn button
