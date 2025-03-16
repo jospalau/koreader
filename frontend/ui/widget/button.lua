@@ -449,8 +449,15 @@ end
 
 function Button:onTapSelectButton()
     if self.enabled or self.allow_tap_when_disabled then
+        local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+        local flash = false
+        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_minimum_flashes") then
+            if self.is_quickmenu_button then -- or self.flash_button then
+                flash = true
+            end
+        end
         if self.callback then
-            if G_reader_settings:isFalse("flash_ui") and not (self.is_quickmenu_button or self.flash_button) then
+            if G_reader_settings:isFalse("flash_ui") and not flash then
                 self.callback()
             else
                 -- NOTE: We have a few tricks up our sleeve in case our parent is inside a translucent MovableContainer...
@@ -476,7 +483,6 @@ function Button:onTapSelectButton()
                     -- There are no glitches in the new Libra Colour with fast refresh mode but there is a flash after pressing a button. We avoid it with a delay here
                     -- It is the same for the new Kobo BW when using ui refresh mode. It does not flash but it remains a little bit longer when the button is pressed
                     -- In any case the ui refresh mode is just used for quick menus buttons
-                    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
                     -- The paginator icons are buttons, not iconbuttons and they don't flash properly in Kindle devices from time to time
                     if Device:isKindle() and self.icon and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") then
                         UIManager:yieldToEPDC(120000)

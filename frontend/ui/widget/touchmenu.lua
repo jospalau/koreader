@@ -184,7 +184,14 @@ function TouchMenuItem:onTapSelect(arg, ges)
     -- If the menu hasn't actually been drawn yet, don't do anything (as it's confusing, and the coordinates may be wrong).
     if not self.item_frame.dimen then return true end
 
-    if G_reader_settings:isFalse("flash_ui") and not (self.item.id == "restart_koreader" or self.item.id == "sleep" or self.item.id == "poweroff" or self.item.id == "reboot" or self.item.id == "exit") then
+    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+    local flash = false
+    if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_minimum_flashes") then
+        if self.item.id == "restart_koreader" or self.item.id == "sleep" or self.item.id == "poweroff" or self.item.id == "reboot" or self.item.id == "exit" then
+            flash = true
+        end
+    end
+    if G_reader_settings:isFalse("flash_ui") and not flash then
         self.menu:onMenuSelect(self.item, tap_on_checkmark)
     else
         -- c.f., ui/widget/iconbutton for the canonical documentation about the flash_ui code flow

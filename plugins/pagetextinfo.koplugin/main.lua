@@ -1097,6 +1097,9 @@ function PageTextInfo:addToMainMenu(menu_items)
                 {
                     text = _("Enable devices flashes tweaks"),
                     checked_func = function() return self.settings:isTrue("enable_devices_flashes_tweaks") end,
+                    help_text = _([[Some tweaks to fix the different issues for the different devices when flashing elements in the UI.
+
+This is to be active only if the option flash buttons and menu items or the option allow to flash some elements are checked.]]),
                     callback = function()
                         local enable_devices_flashes_tweaks = not self.settings:isTrue("enable_devices_flashes_tweaks")
                         self.settings:saveSetting("enable_devices_flashes_tweaks", enable_devices_flashes_tweaks)
@@ -1107,9 +1110,21 @@ function PageTextInfo:addToMainMenu(menu_items)
                 {
                     text = _("Enable extra refreshes"),
                     checked_func = function() return self.settings:isTrue("enable_extra_refreshes") end,
+                    help_text = _([[Allow extra refreshes which will work as an alternative or in addition to the option avoid mandatory black flashes in UI if it is enabled.]]),
                     callback = function()
                         local enable_extra_refreshes = not self.settings:isTrue("enable_extra_refreshes")
                         self.settings:saveSetting("enable_extra_refreshes", enable_extra_refreshes)
+                        self.settings:flush()
+                        return true
+                    end,
+                },
+                {
+                    text = _("Enable minimum flashes"),
+                    checked_func = function() return self.settings:isTrue("enable_minimum_flashes") end,
+                    help_text = _([[Allow to flash some elements like quick menu buttons even though the option flash buttons and menu items is not checked.]]),
+                    callback = function()
+                        local enable_minimum_flashes = not self.settings:isTrue("enable_minimum_flashes")
+                        self.settings:saveSetting("enable_minimum_flashes", enable_minimum_flashes)
                         self.settings:flush()
                         return true
                     end,
@@ -1165,6 +1180,9 @@ function PageTextInfo:addToMainMenu(menu_items)
                 {
                     text = _("Enable devices flashes tweaks"),
                     checked_func = function() return self.settings:isTrue("enable_devices_flashes_tweaks") end,
+                    help_text = _([[Some tweaks to fix the different issues for the different devices when flashing elements in the UI.
+
+This is to be active only if the option flash buttons and menu items or the option allow to flash some elements are checked.]]),
                     callback = function()
                         local enable_devices_flashes_tweaks = not self.settings:isTrue("enable_devices_flashes_tweaks")
                         self.settings:saveSetting("enable_devices_flashes_tweaks", enable_devices_flashes_tweaks)
@@ -1175,9 +1193,21 @@ function PageTextInfo:addToMainMenu(menu_items)
                 {
                     text = _("Enable extra refreshes"),
                     checked_func = function() return self.settings:isTrue("enable_extra_refreshes") end,
+                    help_text = _([[Allow extra refreshes which will work as an alternative or in addition to the option avoid mandatory black flashes in UI if it is enabled.]]),
                     callback = function()
                         local enable_extra_refreshes = not self.settings:isTrue("enable_extra_refreshes")
                         self.settings:saveSetting("enable_extra_refreshes", enable_extra_refreshes)
+                        self.settings:flush()
+                        return true
+                    end,
+                },
+                {
+                    text = _("Enable minimum flashes"),
+                    checked_func = function() return self.settings:isTrue("enable_minimum_flashes") end,
+                    help_text = _([[Allow to flash some elements like quick menu buttons even though the option flash buttons and menu items is not checked.]]),
+                    callback = function()
+                        local enable_minimum_flashes = not self.settings:isTrue("enable_minimum_flashes")
+                        self.settings:saveSetting("enable_minimum_flashes", enable_minimum_flashes)
                         self.settings:flush()
                         return true
                     end,
