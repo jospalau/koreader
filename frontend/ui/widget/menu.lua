@@ -1624,6 +1624,7 @@ function Menu:onCloseWidget()
         --     -- local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
         --     -- ui.collection_collate = nil
         -- end
+        local Event = require("ui/event")
         if self.current_collate ~= nil then
             UIManager:broadcastEvent(Event:new("SetSortBy", "strcoll"))
         end
