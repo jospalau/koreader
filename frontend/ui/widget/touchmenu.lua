@@ -781,12 +781,9 @@ function TouchMenu:updateItems()
     local keep_bg = old_dimen and self.dimen.h >= old_dimen.h
     -- Slow down a bit the menu for some devices in which there are flashes lingering
     if not G_reader_settings:isFalse("flash_ui") then
+        -- Input:inhibitInput(true) -- Inhibit any past and upcoming input events.
+        -- Device:setIgnoreInput(true) -- Avoid ANRs on Android with unprocessed events.
         local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-        if self.refresh and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_refreshes") then
-            Input:inhibitInput(true) -- Inhibit any past and upcoming input events.
-            Device:setIgnoreInput(true) -- Avoid ANRs on Android with unprocessed events.
-        end
-
         if Device:isKindle() and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") then
             UIManager:yieldToEPDC(75000)
         elseif Device.model == "Kobo_spaBW" and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") then
@@ -798,37 +795,22 @@ function TouchMenu:updateItems()
         -- elseif ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") then
         --     UIManager:yieldToEPDC(5000)
         end
-        if self.refresh and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_refreshes") then
-            Device:setIgnoreInput(false) -- Allow processing of events (on Android).
-            Input:inhibitInputUntil(0) -- Discard input events, which might have
-        end
+        -- Device:setIgnoreInput(false) -- Allow processing of events (on Android).
+        -- Input:inhibitInputUntil(0.2) -- Discard input events, which might have
     end
-    self.refresh = self.bar.menu.cur_tab ~= self.last_tab
     UIManager:setDirty((self.is_fresh or keep_bg) and self.show_parent or "all", function()
         local refresh_dimen =
             old_dimen and old_dimen:combine(self.dimen)
             or self.dimen
-            local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
         local refresh_type = "ui"
-        if self.refresh and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_refreshes") then
-            refresh_type = "full"
-        end
         if self.is_fresh then
             refresh_type = "flashui"
-            if self.refresh and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_refreshes") then
-                refresh_type = "full"
-            end
             -- Drop the region, too, to make it full-screen? May help when starting from a "small" menu.
             --refresh_dimen = nil
             self.is_fresh = false
         end
-        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_refreshes") then
-            return refresh_type, nil -- Flash the whole screen
-        else
-            return refresh_type, refresh_dimen
-        end
+        return refresh_type, refresh_dimen
     end)
-    self.last_tab = self.bar.menu.cur_tab
 end
 
 function TouchMenu:switchMenuTab(tab_num)
