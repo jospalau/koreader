@@ -100,6 +100,11 @@ end
 
 function IconButton:onTapIconButton()
     if not self.callback then return end
+
+    -- if self.icon and (self.icon == "appbar.tools" or self.icon == "appbar.settings" or self.icon == "appbar.search"  or self.icon == "appbar.filebrowser" or self.icon == "appbar.menu" or self.icon == "appbar.navigation" or self.icon == "appbar.typeset") then
+    --     self.allow_flash = false
+    -- end
+
     local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
     if G_reader_settings:isFalse("flash_ui") or not self.allow_flash then
         self.callback()
