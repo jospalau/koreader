@@ -504,18 +504,29 @@ function PageTextInfo:onSwipe(_, ges)
     local direction = BD.flipDirectionIfMirroredUILayout(ges.direction)
     if direction == "west" then
         self.ui.gestures:onIgnoreHoldCorners(true)
-        if not self.ui.disable_double_tap then
+        if self.settings:readSetting("highlight_all_words_vocabulary_builder_and_notes") then
+            Device.input.disable_double_tap = false
+            self.ui.gestures:onIgnoreHoldCorners(false)
+            self.view.topbar:toggleBar()
+            UIManager:setDirty(self.view.dialog, "ui")
+            return self:toggleHighlightAllWordsVocabulary(not self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes"))
+        elseif not self.ui.disable_double_tap then
             self.ui.disable_double_tap = true
             -- We need also to change this, otherwise the toggle does not work just with self.ui.disable_double_tap
             Device.input.disable_double_tap = self.ui.disable_double_tap
             self.settings:saveSetting("highlight_all_words_vocabulary_builder_and_notes", false)
             self.view.topbar:toggleBar()
             UIManager:setDirty(self.view.dialog, "ui")
-        else
+        elseif self.ui.disable_double_tap then
             self.ui.disable_double_tap = false
             -- We need also to change this, otherwise the toggle does not work just with self.ui.disable_double_tap
             Device.input.disable_double_tap = self.ui.disable_double_tap
             return self:toggleHighlightAllWordsVocabulary(not self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes"))
+        else
+            self.settings:saveSetting("highlight_all_words_vocabulary_builder_and_notes", false)
+            self.ui.disable_double_tap = true
+            self.view.topbar:toggleBar()
+            UIManager:setDirty(self.view.dialog, "ui")
         end
     elseif direction == "north" then
         if self.view.topbar.is_enabled == nil or self.view.topbar.is_enabled == false then
