@@ -46,7 +46,8 @@ function ReaderPageMap:_postInit()
         return
     end
     -- self.ui.document:buildSyntheticPageMapIfNoneDocumentProvided(1767)
-    self.ui.document:buildSyntheticPageMapIfNoneDocumentProvided(2081) -- Changed to 2081 so that way the number of synthetic pages is the same as the physical copy of Wind and Truth
+    -- self.ui.document:buildSyntheticPageMapIfNoneDocumentProvided(2081) -- Changed to 2081 so that way the number of synthetic pages is the same as the physical copy of Wind and Truth
+    self.ui.document:buildSyntheticPageMapIfNoneDocumentProvided(1500) -- Changed to 1500 now, to have roughly 50p read per hour
     if not self.ui.document:hasPageMap() then
         return
     end
