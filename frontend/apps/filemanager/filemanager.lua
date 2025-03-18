@@ -1708,6 +1708,21 @@ function FileManager:onSetMixedSorting(toggle)
     return true
 end
 
+function FileManager:onOpenNextOrPreviousFileInFolder(prev)
+    local last_file = G_reader_settings:readSetting("lastfile")
+    if not last_file then return true end
+    local file = self.file_chooser:getNextOrPreviousFileInFolder(last_file, prev)
+    if file then
+        self:openFile(file)
+    else
+        UIManager:show(InfoMessage:new{
+            text = prev and _("Last book is the first file in the folder. No previous file to open.")
+                         or _("Last book is the last file in the folder. No next file to open."),
+        })
+    end
+    return true
+end
+
 function FileManager:onToggleReverseSorting()
     if self.disable_double_tap then return end
     local DataStorage = require("datastorage")
