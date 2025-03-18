@@ -3654,6 +3654,15 @@ function PageTextInfo:onPullConfig()
                 padding = Size.padding.tiny,
                 flash_yes = true,
                 ok_callback = function()
+                    local execute = nil
+                    if Device:isKobo() then
+                        execute = io.popen("/mnt/onboard/.adds/koreader/fbink -mM -f -c -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14 Restarting...")
+                    elseif Device:isKindle() then
+                        execute = io.popen("/mnt/us/koreader/fbink -mM -f -c -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14 Restarting...")
+                    else --PocketBook
+                        execute = io.popen("/mnt/ext1/applications/koreader/fbink -mM -f -c -t regular=/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf Restarting...")
+                    end
+                    local output = execute:read('*a')
                     if Device:canRestart() then
                         UIManager:restartKOReader()
                         -- The new Clara BW is so quick closing that when presing on Restart it doesn't flash
@@ -3745,6 +3754,15 @@ function PageTextInfo:onSynchronizeCode()
                 padding = Size.padding.tiny,
                 flash_yes = true,
                 ok_callback = function()
+                    local execute = nil
+                    if Device:isKobo() then
+                        execute = io.popen("/mnt/onboard/.adds/koreader/fbink -mM -f -c -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14 Restarting...")
+                    elseif Device:isKindle() then
+                        execute = io.popen("/mnt/us/koreader/fbink -mM -f -c -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14 Restarting...")
+                    else --PocketBook
+                        execute = io.popen("/mnt/ext1/applications/koreader/fbink -mM -f -c -t regular=/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf Restarting...")
+                    end
+                    local output = execute:read('*a')
                     if Device:canRestart() then
                         UIManager:restartKOReader()
                         -- The new Clara BW is so quick closing that when presing on Restart it doesn't flash
@@ -3909,6 +3927,15 @@ function PageTextInfo:onSyncBooks()
                 flash_yes = true,
                 flash_no = true,
                 ok_callback = function()
+                    local execute = nil
+                    if Device:isKobo() then
+                        execute = io.popen("/mnt/onboard/.adds/koreader/fbink -mM -f -c -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14 Restarting...")
+                    elseif Device:isKindle() then
+                        execute = io.popen("/mnt/us/koreader/fbink -mM -f -c -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14 Restarting...")
+                    else --PocketBook
+                        execute = io.popen("/mnt/ext1/applications/koreader/fbink -mM -f -c -t regular=/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf Restarting...")
+                    end
+                    local output = execute:read('*a')
                     if Device:canRestart() then
                         UIManager:restartKOReader()
                         -- The new Clara BW is so quick closing that when presing on Restart it doesn't flash
@@ -3922,6 +3949,15 @@ function PageTextInfo:onSyncBooks()
                 cancel_text = _("No need to restart"),
                 cancel_callback = function()
                     if G_reader_settings:isTrue("top_manager_infmandhistory") then
+                        local execute = nil
+                        if Device:isKobo() then
+                            execute = io.popen("/mnt/onboard/.adds/koreader/fbink -mM -f -c -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14 Updating...")
+                        elseif Device:isKindle() then
+                            execute = io.popen("/mnt/us/koreader/fbink -mM -f -c -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14 Updating...")
+                        else --PocketBook
+                            execute = io.popen("/mnt/ext1/applications/koreader/fbink -mM -f -c -t regular=/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf Updating...")
+                        end
+                        local output = execute:read('*a')
                         _G.all_files = util.getListAll()
                         local util = require("util")
                         util.generateStats()
