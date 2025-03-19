@@ -470,17 +470,13 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
             })
             return
         end
-
-
         UIManager:broadcastEvent(Event:new("ShowFileSearchLists", true, files))
-
-
-
     elseif string.find("east south", ges_ev.multiswipe_directions) then
         self._manager.filter = "all"
         self._manager.search_string = nil
         self._manager.selected_colections = nil
         self._manager:updateItemTable()
+        self._manager.booklist_menu:onGotoPage(1)
         local UIManager = require("ui/uimanager")
         local Notification = require("ui/widget/notification")
         UIManager:show(Notification:new{
