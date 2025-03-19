@@ -1908,33 +1908,62 @@ function TopBar:onAdjustMarginsTopbar()
         -- Exceptions are Android in which side margins are set to 20
         -- And top margin when alternative status bar is on. Value is set to self.space_after_alt_bar (fixed to 15) + 9, adding a little bit more too, 6 more pixels
 
-        self.ui.document.configurable.b_page_margin = 15
-        if Device:isAndroid() then
-            self.ui.document.configurable.h_page_margins[1] = 20
-            self.ui.document.configurable.h_page_margins[2] = 20
-        else
-            self.ui.document.configurable.h_page_margins[1] = 15
-            self.ui.document.configurable.h_page_margins[2] = 15
-        end
-
+        local bottom_margin = 15
         local margins = {}
-        if self.show_top_bar then
-            if Device:isAndroid() then
-                margins = { 20, self.space_after_alt_bar + 9 + 6, 20, 15}
+        if Device:isAndroid() then
+            if self.show_top_bar then
+                if self.ui.document.configurable.t_page_margin ~= self.space_after_alt_bar + 9 + 6 or
+                self.ui.document.configurable.b_page_margin ~= bottom_margin or
+                self.ui.document.configurable.h_page_margins[1] ~= 20 or
+                self.ui.document.configurable.h_page_margins[2] ~= 20 then
+                    local margins = { 20, self.space_after_alt_bar + 9 + 6, 20, 0}
+                    self.ui.document.configurable.t_page_margin = self.space_after_alt_bar + 9 + 6
+                    self.ui.document.configurable.b_page_margin = bottom_margin
+                    self.ui.document.configurable.h_page_margins[1] = 20
+                    self.ui.document.configurable.h_page_margins[2] = 20
+                    self.ui:handleEvent(Event:new("SetPageMargins", margins))
+                end
             else
-                margins = { 15, self.space_after_alt_bar + 9 + 6, 15, 15}
+                if self.ui.document.configurable.t_page_margin ~= 9 + 6 or
+                self.ui.document.configurable.b_page_margin ~= bottom_margin or
+                self.ui.document.configurable.h_page_margins[1] ~= 20 or
+                self.ui.document.configurable.h_page_margins[2] ~= 20 then
+                    local margins = { 20, 9 + 6, 20, 0}
+                    self.ui.document.configurable.t_page_margin = 9 + 6
+                    self.ui.document.configurable.b_page_margin = bottom_margin
+                    self.ui.document.configurable.h_page_margins[1] = 20
+                    self.ui.document.configurable.h_page_margins[2] = 20
+                    self.ui:handleEvent(Event:new("SetPageMargins", margins))
+                end
             end
-            self.ui.document.configurable.t_page_margin = self.space_after_alt_bar + 9 + 6
         else
-            if Device:isAndroid() then
-                margins = { 20, 9 + 6, 20, 15}
+            if self.show_top_bar then
+                if self.ui.document.configurable.t_page_margin ~= self.space_after_alt_bar + 9 + 6 or
+                self.ui.document.configurable.b_page_margin ~= bottom_margin or
+                self.ui.document.configurable.h_page_margins[1] ~= 15 or
+                self.ui.document.configurable.h_page_margins[2] ~= 15 then
+                    local margins = { 15, self.space_after_alt_bar + 9 + 6, 15, 0}
+                    self.ui.document.configurable.t_page_margin = self.space_after_alt_bar + 9 + 6
+                    self.ui.document.configurable.b_page_margin = bottom_margin
+                    self.ui.document.configurable.h_page_margins[1] = 15
+                    self.ui.document.configurable.h_page_margins[2] = 15
+                    self.ui:handleEvent(Event:new("SetPageMargins", margins))
+                end
             else
-                margins = { 15, 9 + 6, 15, 15}
+                if self.ui.document.configurable.t_page_margin ~= 9 + 6 or
+                self.ui.document.configurable.b_page_margin ~= bottom_margin or
+                self.ui.document.configurable.h_page_margins[1] ~= 15 or
+                self.ui.document.configurable.h_page_margins[2] ~= 15 then
+                    local margins = { 15, 9 + 6, 15, 0}
+                    self.ui.document.configurable.t_page_margin = 9 + 6
+                    self.ui.document.configurable.b_page_margin = bottom_margin
+                    self.ui.document.configurable.h_page_margins[1] = 15
+                    self.ui.document.configurable.h_page_margins[2] = 15
+                    self.ui:handleEvent(Event:new("SetPageMargins", margins))
+                end
             end
-            self.ui.document.configurable.t_page_margin = 9 + 6
         end
 
-        self.ui:handleEvent(Event:new("SetPageMargins", margins))
 
       --self.ui:saveSettings()
    end
