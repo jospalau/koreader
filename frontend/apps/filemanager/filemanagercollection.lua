@@ -169,8 +169,19 @@ end
 function FileManagerCollection:isItemMatch(item)
     if self.match_table then
         if self.match_table.status then
-            if self.match_table.status ~= BookList.getBookStatus(item.file) then
-                return false
+            if self.match_table.status == "mbr" then
+
+                local has_sidecar_file = BookList.hasBookBeenOpened(item.file)
+                local in_history =  require("readhistory"):getIndexByFile(item.file)
+                if in_history and not has_sidecar_file then
+                    return true
+                else
+                    return false
+                end
+            else
+                if self.match_table.status ~= BookList.getBookStatus(item.file) then
+                    return false
+                end
             end
         end
         if self.match_table.props then
