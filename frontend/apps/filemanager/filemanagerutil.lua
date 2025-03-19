@@ -216,7 +216,7 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                         local DocSettings = require("docsettings")
                         local doc_settings = DocSettings:open(first_element_history)
                         local summary = doc_settings:readSetting("summary", {})
-                        if summary.status == "reading" then
+                        if summary.status == "reading" or (require("apps/reader/readerui").instance and require("apps/reader/readerui").instance.document and require("apps/reader/readerui").instance.document.file == first_element_history) then
                             require("readhistory"):removeItemByPath(first_element_history)
                             require("readhistory"):addItem(first_element_history, os.time() + 1)
                         end
@@ -341,7 +341,7 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
                                 local DocSettings = require("docsettings")
                                 local doc_settings = DocSettings:open(first_element_history)
                                 local summary = doc_settings:readSetting("summary", {})
-                                if summary.status == "reading" then
+                                if summary.status == "reading" or (require("apps/reader/readerui").instance and require("apps/reader/readerui").instance.document and require("apps/reader/readerui").instance.document.file == first_element_history) then
                                     require("readhistory"):removeItemByPath(first_element_history)
                                     require("readhistory"):addItem(first_element_history, os.time() + 1)
                                 end

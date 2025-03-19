@@ -263,7 +263,7 @@ function FileManagerHistory:onMenuHold(item)
                     local DocSettings = require("docsettings")
                     local doc_settings = DocSettings:open(first_element_history)
                     local summary = doc_settings:readSetting("summary", {})
-                    if summary.status == "reading" then
+                    if summary.status == "reading" or (self.ui and self.ui.document and self.ui.document.file == first_element_history) then
                         require("readhistory"):removeItemByPath(first_element_history)
                         require("readhistory"):addItem(first_element_history, os.time() + 1)
                     end
