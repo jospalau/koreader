@@ -1502,12 +1502,15 @@ function Menu:onMenuSelect(item)
             and item.file
             and util.getFileNameSuffix(item.file) == "epub"
             and (_G.all_files[item.file].status == "mbr"
+                or _G.all_files[item.file].status == "tbr"
                 or _G.all_files[item.file].status == "new"
                 or _G.all_files[item.file].status == "complete") then
             local MultiConfirmBox = require("ui/widget/multiconfirmbox")
             local text = ", do you want to open it?"
                 if _G.all_files[item.file].status == "mbr" then
                     text = "Book in MBR" .. text
+                elseif _G.all_files[item.file].status == "tbr" then
+                    text = "Book in TBR" .. text
                 elseif _G.all_files[item.file].status == "new" then
                     text = "Book not opened" .. text
                 else
