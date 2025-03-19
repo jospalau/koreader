@@ -45,7 +45,7 @@ local TopBar = WidgetContainer:extend{
     -- Para verlo en detalle, es mejor no poner ningún estilo en las barras de progreso
     MARGIN_TOP = Screen:scaleBySize(9),
     MARGIN_BOTTOM = Screen:scaleBySize(9),
-    -- show_top_bar = true,
+    -- show_bar_in_top_bar = true,
 }
 
 
@@ -449,7 +449,7 @@ function TopBar:init()
     -- end
     -- La inicialización del objeto ocurre una única vez pero el método init ocurre cada vez que abrimos el documento
     TopBar.is_enabled = G_reader_settings:isTrue("show_top_bar")
-    -- TopBar.show_top_bar = true
+    -- TopBar.show_bar_in_top_bar = true
     -- TopBar.alt_bar = true
     if TopBar.preserved_start_session_time then
         self.start_session_time = TopBar.preserved_start_session_time
@@ -489,13 +489,6 @@ function TopBar:init()
     if TopBar.preserved_sessions_current_book ~= nil then
         self.sessions_current_book = TopBar.preserved_sessions_current_book
         TopBar.preserved_sessions_current_book = nil
-    end
-
-    if TopBar.preserved_alt_bar ~= nil then
-        TopBar.show_top_bar = TopBar.preserved_alt_bar
-        TopBar.preserved_alt_bar = nil
-    else
-        TopBar.show_top_bar = true
     end
 
     if TopBar.preserved_show_alt_bar ~= nil then
@@ -967,7 +960,6 @@ function TopBar:onPreserveCurrentSession()
     TopBar.preserved_initial_total_time_book = self.initial_total_time_book
     TopBar.preserved_avg_wpm = self.avg_wpm
     TopBar.preserved_sessions_current_book = self.sessions_current_book
-    TopBar.preserved_alt_bar = self.show_top_bar
     TopBar.preserved_show_alt_bar = self.alt_bar
     TopBar.preserved_altbar_line_thickness = self.main_progress_bar.altbar_line_thickness
     TopBar.preserved_altbar_ticks_height = self.main_progress_bar.altbar_ticks_height
@@ -982,7 +974,7 @@ function TopBar:onSwitchTopBar()
     if not TopBar.is_enabled then
         G_reader_settings:saveSetting("show_top_bar", true)
         TopBar.is_enabled = true
-        TopBar.show_top_bar = true
+        TopBar.show_bar_in_top_bar = true
         TopBar.alt_bar = true
         self.main_progress_bar.altbar_ticks_height = 5
         self.main_progress_bar.altbar_line_thickness = 9
@@ -995,7 +987,7 @@ function TopBar:onSwitchTopBar()
         return
     end
     if G_reader_settings:isTrue("show_top_bar") then
-        if TopBar.show_top_bar then
+        if TopBar.show_bar_in_top_bar then
             if TopBar.option == 1 then
                 self.main_progress_bar.altbar_ticks_height = 16
                 self.main_progress_bar.altbar_line_thickness = 6
@@ -1011,7 +1003,7 @@ function TopBar:onSwitchTopBar()
                 self.main_progress_bar.altbar_ticks_height = 5
                 self.main_progress_bar.altbar_line_thickness = 9
                 -- self.main_progress_bar.factor = 1
-                TopBar.show_top_bar = false
+                TopBar.show_bar_in_top_bar = false
                 TopBar.option = 4
             end
         -- We don't want to cycle disabling/enabling the topbar
@@ -1024,7 +1016,7 @@ function TopBar:onSwitchTopBar()
         else
             G_reader_settings:saveSetting("show_top_bar", false)
             TopBar.is_enabled = false
-            TopBar.show_top_bar = true
+            TopBar.show_bar_in_top_bar = true
             TopBar.alt_bar = true
             self.main_progress_bar.altbar_ticks_height = 5
             self.main_progress_bar.altbar_line_thickness = 9
@@ -1379,7 +1371,7 @@ function TopBar:toggleBar(light_on)
                 end
             end
         end
-        if TopBar.show_top_bar then
+        if TopBar.show_bar_in_top_bar then
             TopBar.MARGIN_TOP = Screen:scaleBySize(9) + Screen:scaleBySize(self.space_after_alt_bar)
         else
             TopBar.MARGIN_TOP = Screen:scaleBySize(9)
@@ -1568,7 +1560,7 @@ function TopBar:paintTo(bb, x, y)
         -- The alignment is good but there are things to take into account
         -- - Any screen side in any screen type, flushed or recessed are not aligned with the frame, they can be a little bit hidden. It depends on the devices
         -- - There are some fonts that are bigger than its em square so the aligment may be not right. For instance Bitter Pro descender overpass its bottom limits
-        if TopBar.show_top_bar then
+        if TopBar.show_bar_in_top_bar then
             if self.main_progress_bar.altbar then
                 self.progress_bar_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES, y + Screen:scaleBySize(12))
             else
@@ -1589,7 +1581,7 @@ function TopBar:paintTo(bb, x, y)
 
         -- Top right
         -- Commented the text, using progress bar
-        -- if not TopBar.show_top_bar then
+        -- if not TopBar.show_bar_in_top_bar then
         --     self.progress_bar_book_widget_container:paintTo(bb, x + Screen:getWidth() - self.progress_bar_book_widget_container[1][1]:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
         -- end
 
@@ -1598,13 +1590,13 @@ function TopBar:paintTo(bb, x, y)
 
         self.progress_widget_container.dimen = Geom:new{ w = self.progress_widget_container[1]:getSize().w, self.progress_widget_container[1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
         self.progress_widget_container:paintTo(bb, Screen:getWidth() - self.progress_widget_container:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
-        -- if TopBar.show_top_bar then
+        -- if TopBar.show_bar_in_top_bar then
         --     self.progress_widget_container:paintTo(bb, Screen:getWidth() - self.progress_widget_container:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
         -- end
 
         -- Si no se muestra la barra de progreso de arriba, se muestra la de arriba a la derecha
         -- Y si se muestra la de arriba a la derecha, queremos mover el texto unos pocos píxeles a la izquierda
-        -- if not TopBar.show_top_bar then
+        -- if not TopBar.show_bar_in_top_bar then
         --     self.progress_widget_container:paintTo(bb, Screen:getWidth() - self.progress_widget_container:getSize().w - TopBar.MARGIN_SIDES - 20, y + TopBar.MARGIN_TOP)
         -- else
         --     self.progress_widget_container:paintTo(bb, Screen:getWidth() - self.progress_widget_container:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
@@ -1911,7 +1903,7 @@ function TopBar:onAdjustMarginsTopbar()
         local bottom_margin = 15
         local margins = {}
         if Device:isAndroid() then
-            if self.show_top_bar then
+            if self.show_bar_in_top_bar then
                 if self.ui.document.configurable.t_page_margin ~= self.space_after_alt_bar + 9 + 6 or
                 self.ui.document.configurable.b_page_margin ~= bottom_margin or
                 self.ui.document.configurable.h_page_margins[1] ~= 20 or
@@ -1937,7 +1929,7 @@ function TopBar:onAdjustMarginsTopbar()
                 end
             end
         else
-            if self.show_top_bar then
+            if self.show_bar_in_top_bar then
                 if self.ui.document.configurable.t_page_margin ~= self.space_after_alt_bar + 9 + 6 or
                 self.ui.document.configurable.b_page_margin ~= bottom_margin or
                 self.ui.document.configurable.h_page_margins[1] ~= 15 or
