@@ -1167,6 +1167,43 @@ function ReaderUI:onAdjustMarginsTopbar()
                 self.document.configurable.h_page_margins[1] = 35
                 self.document.configurable.h_page_margins[2] = 35
                 self:handleEvent(Event:new("SetPageMargins", margins))
+            else
+                if self.rolling and not self.rolling.rendering_state then
+                    local OverlapGroup = require("ui/widget/overlapgroup")
+                    local BookStatusWidget = require("ui/widget/bookstatuswidget")
+                    local FileManagerBookInfo = require("apps/filemanager/filemanagerbookinfo")
+
+
+                    local doc = self.document
+                    local doc_settings = self.doc_settings
+                    local widget = BookStatusWidget:new{
+                        thumbnail = FileManagerBookInfo:getCoverImage(doc),
+                        props = self.doc_props,
+                        document = doc,
+                        settings = doc_settings,
+                        ui = self,
+                        readonly = true,
+                    }
+
+                    local widget = OverlapGroup:new{
+                        dimen = {
+                            w = Screen:getWidth(),
+                            h = Screen:getHeight(),
+                        },
+                        widget,
+                        nil,
+                    }
+
+
+                    UIManager:show(widget, "full")
+
+
+                    UIManager:scheduleIn(3, function()
+                        -- Screen:refreshFullImp(0, 0, Screen:getWidth(), Screen:getHeight())
+                        -- UIManager:setDirty("all", "full")
+                        UIManager:close(widget)
+                    end)
+                end
             end
         end
     end
