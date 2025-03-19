@@ -205,10 +205,22 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                             doc_settings:flush()
                         end
                     end
-                    local last_current_file = G_reader_settings:readSetting("lastfile")
+                    local first_element_history
+                    if require("readhistory").hist and require("readhistory").hist[1] and require("readhistory").hist[1].file then
+                        first_element_history = require("readhistory").hist[1].file
+                    end
                     require("readhistory"):removeItemByPath(file)
                     require("readhistory"):addItem(file, os.time())
-                    G_reader_settings:saveSetting("lastfile", last_current_file)
+
+                    if first_element_history then
+                        local DocSettings = require("docsettings")
+                        local doc_settings = DocSettings:open(first_element_history)
+                        local summary = doc_settings:readSetting("summary", {})
+                        if summary.status == "reading" then
+                            require("readhistory"):removeItemByPath(first_element_history)
+                            require("readhistory"):addItem(first_element_history, os.time() + 1)
+                        end
+                    end
                 end
 
                 summary.status = to_status
@@ -296,6 +308,10 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
                 ok_text = _(text),
                 flash_yes = true,
                 ok_callback = function()
+                    local first_element_history
+                    if require("readhistory").hist and require("readhistory").hist[1] and require("readhistory").hist[1].file then
+                        first_element_history = require("readhistory").hist[1].file
+                    end
                     local data_to_purge = {
                         doc_settings         = check_button_settings.checked,
                         custom_cover_file    = check_button_cover.checked and custom_cover_file,
@@ -319,9 +335,18 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
                     end
                     if G_reader_settings:isTrue("top_manager_infmandhistory") and util.getFileNameSuffix(file) == "epub" then
                         if check_button_mbr.checked then
-                            local last_current_file = G_reader_settings:readSetting("lastfile")
                             _G.all_files[file].status = "mbr"
-                            G_reader_settings:saveSetting("lastfile", last_current_file)
+
+                            if first_element_history then
+                                local DocSettings = require("docsettings")
+                                local doc_settings = DocSettings:open(first_element_history)
+                                local summary = doc_settings:readSetting("summary", {})
+                                if summary.status == "reading" then
+                                    require("readhistory"):removeItemByPath(first_element_history)
+                                    require("readhistory"):addItem(first_element_history, os.time() + 1)
+                                end
+                            end
+                            G_reader_settings:flush()
                         else
                             _G.all_files[file].status = ""
                         end

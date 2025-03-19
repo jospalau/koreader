@@ -251,10 +251,24 @@ function FileManagerHistory:onMenuHold(item)
             text = _("Readd to history"),
             callback = function()
                 UIManager:close(self.file_dialog)
-                local last_current_file = G_reader_settings:readSetting("lastfile")
+                local first_element_history
+                if require("readhistory").hist and require("readhistory").hist[1] and require("readhistory").hist[1].file then
+                    first_element_history = require("readhistory").hist[1].file
+                end
+
                 require("readhistory"):removeItem(item)
                 require("readhistory"):addItem(item.file,os.time())
-                G_reader_settings:saveSetting("lastfile", last_current_file)
+
+                if first_element_history then
+                    local DocSettings = require("docsettings")
+                    local doc_settings = DocSettings:open(first_element_history)
+                    local summary = doc_settings:readSetting("summary", {})
+                    if summary.status == "reading" then
+                        require("readhistory"):removeItemByPath(first_element_history)
+                        require("readhistory"):addItem(first_element_history, os.time() + 1)
+                    end
+                end
+
                 self._manager:fetchStatuses(false)
                 self._manager:updateItemTable()
             end,

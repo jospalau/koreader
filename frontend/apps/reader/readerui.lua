@@ -889,6 +889,11 @@ function ReaderUI:onClose(full_refresh)
         file = self.document.file
         require("readhistory"):updateLastBookTime(self.tearing_down)
         require("readcollection"):updateLastBookTime(file)
+
+        -- -- Ensure current document is always last in history
+        -- require("readhistory"):removeItemByPath(file)
+        -- require("readhistory"):addItem(file, os.time())
+
         -- Serialize the most recently displayed page for later launch
         DocCache:serialize(file)
         logger.dbg("closing document")
