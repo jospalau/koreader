@@ -491,6 +491,13 @@ function TopBar:init()
         TopBar.preserved_sessions_current_book = nil
     end
 
+    if TopBar.preserved_alt_bar ~= nil then
+        TopBar.show_bar_in_top_bar = TopBar.preserved_alt_bar
+        TopBar.preserved_alt_bar = nil
+        else
+            TopBar.show_bar_in_top_bar = true
+    end
+
     if TopBar.preserved_show_alt_bar ~= nil then
         TopBar.alt_bar = TopBar.preserved_show_alt_bar
         TopBar.preserved_show_alt_bar = nil
@@ -960,6 +967,7 @@ function TopBar:onPreserveCurrentSession()
     TopBar.preserved_initial_total_time_book = self.initial_total_time_book
     TopBar.preserved_avg_wpm = self.avg_wpm
     TopBar.preserved_sessions_current_book = self.sessions_current_book
+    TopBar.preserved_alt_bar = self.show_bar_in_top_bar
     TopBar.preserved_show_alt_bar = self.alt_bar
     TopBar.preserved_altbar_line_thickness = self.main_progress_bar.altbar_line_thickness
     TopBar.preserved_altbar_ticks_height = self.main_progress_bar.altbar_ticks_height
