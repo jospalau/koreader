@@ -1112,7 +1112,7 @@ function Dispatcher._showAsMenu(settings, exec_props)
     --print(dump(exec_props))
     local font_face_default = "myfont2"
     local font_size_default = 14
-    if exec_props["gesture"]["multiswipe_directions"] and exec_props["gesture"]["multiswipe_directions"] == "north east" then
+    if exec_props["gesture"] and exec_props["gesture"]["multiswipe_directions"] and exec_props["gesture"]["multiswipe_directions"] == "north east" then
         font_face_default = "myfont5"
         font_size_default = 16
     end
