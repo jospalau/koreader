@@ -171,7 +171,7 @@ end
 
 function ButtonTable:addVerticalSpan()
     table.insert(self.container, VerticalSpan:new{
-        width = Size.span.vertical_default,
+        width = not self.quickmenu and Size.span.vertical_default or 0,
     })
 end
 
@@ -180,7 +180,7 @@ function ButtonTable:addVerticalSeparator(black_line)
         background = black_line and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_GRAY,
         dimen = Geom:new{
             w = self.width,
-            h = self.sep_width,
+            h = not self.quickmenu and self.sep_width or 0,
         },
     })
 end

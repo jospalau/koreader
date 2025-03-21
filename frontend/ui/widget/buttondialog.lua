@@ -117,6 +117,7 @@ function ButtonDialog:init()
 
     self.buttontable = ButtonTable:new{
         buttons = self.buttons,
+        quickmenu = self.quickmenu,
         width = self.width - 2*Size.border.window - 2*Size.padding.button,
         shrink_unneeded_width = self.shrink_unneeded_width,
         shrink_min_width = self.shrink_min_width,

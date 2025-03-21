@@ -1397,6 +1397,7 @@ function Dispatcher._showAsMenu(settings, exec_props)
         Device:setScreenDPI(150)
     end
     local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+    buttons.quick_menu = true
     quickmenu = ButtonDialog:new{
         title = title,
         title_align = "center",
