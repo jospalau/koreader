@@ -1059,6 +1059,14 @@ function TopBar:resetSession()
 end
 
 function TopBar:toggleBar(light_on)
+    if self.init_page == nil then
+        self.init_page = self.ui.pagemap:getCurrentPageLabel(true)
+    end
+
+    if self.init_page_screens == nil then
+        self.init_page_screens = self.view.footer.pageno
+    end
+
     if TopBar.is_enabled then
         local user_duration_format = "modern"
         local session_time = datetime.secondsToClockDuration(user_duration_format, os.time() - self.start_session_time, false)
@@ -1094,14 +1102,6 @@ function TopBar:toggleBar(light_on)
         else
            self.progress_book_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
            self.current_page_text:setText(("%d"):format(self.view.footer.pageno))
-        end
-
-        if self.init_page == nil then
-            self.init_page = self.ui.pagemap:getCurrentPageLabel(true)
-        end
-
-        if self.init_page_screens == nil then
-            self.init_page_screens = self.view.footer.pageno
         end
 
         local init_page = 0
