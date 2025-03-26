@@ -6,6 +6,7 @@ local ffiUtil = require("ffi/util")
 local sort = require("sort")
 local util = require("util")
 local _ = require("gettext")
+local C_ = _.pgettext
 local T = ffiUtil.template
 
 local BookList = Menu:extend{
@@ -404,17 +405,29 @@ function BookList.getBookStatus(file)
 end
 
 local status_strings = {
-    mbr       = _("MBR"),      -- no sidecar file. No sidecar and in considered mbr
-    reading   = _("Reading"),  -- doc_settings.summary.status
-    abandoned = _("On hold"),  -- doc_settings.summary.status
-    complete  = _("Finished"), -- doc_settings.summary.status
-    deleted   = _("Deleted"),
-    all       = _("All"),
-    tbr  = _("TBR"),
+    mbr       = C_("Status of group of books", "MBR"),      -- no sidecar file. No sidecar and in considered mbr
+    reading   = C_("Status of group of books", "Reading"),  -- doc_settings.summary.status
+    abandoned = C_("Status of group of books", "On hold"),  -- doc_settings.summary.status
+    complete  = C_("Status of group of books", "Finished"), -- doc_settings.summary.status
+    deleted   = C_("Status of group of books", "Deleted"),
+    all       = C_("Status of group of books", "All"),
+    tbr  = C_("Status of group of books", "TBR"),
+    --all       = C_("Status of group of books", "All"),
+    --deleted   = C_("Status of group of books", "Deleted"),
+    --new       = C_("Status of group of books", "New"),      -- no sidecar file
+    --reading   = C_("Status of group of books", "Reading"),  -- doc_settings.summary.status
+    --abandoned = C_("Status of group of books", "On hold"),  -- doc_settings.summary.status
+    --complete  = C_("Status of group of books", "Finished"), -- doc_settings.summary.status
 }
 
-function BookList.getBookStatusString(status, with_prefix)
-    local status_string = status and status_strings[status]
+local status_strings_singular = {
+    reading   = C_("Status of single book", "Reading"),
+    abandoned = C_("Status of single book", "On hold"),
+    complete  = C_("Status of single book", "Finished"),
+}
+
+function BookList.getBookStatusString(status, with_prefix, singular)
+    local status_string = status and (singular and status_strings_singular[status] or status_strings[status])
     if status_string then
         if with_prefix then
             status_string = Utf8Proc.lowercase(util.fixUtf8(status_string, "?"))

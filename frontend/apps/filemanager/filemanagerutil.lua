@@ -175,8 +175,8 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
             enabled = status ~= to_status
         end
         return {
-            text = BookList.getBookStatusString(to_status) .. (status == to_status and "  ✓" or ""),
-            enabled = enabled,
+            text = BookList.getBookStatusString(to_status, false, true) .. (status == to_status and "  ✓" or ""),
+            enabled = status ~= to_status,
             callback = function()
                 if to_status == "complete" then
                     require("readhistory"):removeItemByPath(file)
