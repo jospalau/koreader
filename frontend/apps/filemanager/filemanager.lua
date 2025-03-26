@@ -483,8 +483,13 @@ function FileManager:init()
             end
         end
     end
-
     self:setupLayout()
+
+    -- Not needed after last upstream change delaying the execution
+    -- Call again to setupLayout() if hooked by any plugin
+    --if FileManager.hooked_fmSetupLayout then
+        --self:setupLayout()
+    --end
     self:initGesListener()
     self:handleEvent(Event:new("SetDimensions", self.dimen))
     self:handleEvent(Event:new("PathChanged", self.file_chooser.path))
@@ -1680,7 +1685,6 @@ function FileManager.getSortByActions()
 end
 
 function FileManager:onSetSortBy(mode)
-    --self.file_chooser.ui = self
     G_reader_settings:saveSetting("collate", mode)
     self.file_chooser:clearSortingCache()
     self.file_chooser:refreshPath()

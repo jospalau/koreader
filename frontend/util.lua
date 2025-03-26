@@ -1644,7 +1644,7 @@ function util.getListAll()
     local ReadHistory = require("readhistory")
     local BookList = require("ui/widget/booklist")
     local filemanagerutil = require("apps/filemanager/filemanagerutil")
-    local collate = FileChooser:getCollate()
+    local collate = "name"
     local search_string = ".*%.epub"
 
     local files = {}
