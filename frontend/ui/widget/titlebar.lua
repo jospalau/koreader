@@ -234,6 +234,9 @@ function TitleBar:init()
             }
         end
     end
+    if self.show_parent.name == "history" then
+        self.subtitle_widget = nil
+    end
     -- To debug vertical positioning:
     -- local FrameContainer = require("ui/widget/container/framecontainer")
     -- self.title_widget = FrameContainer:new{ padding=0, margin=0, bordersize=1, self.title_widget}
