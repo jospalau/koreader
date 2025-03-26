@@ -964,7 +964,7 @@ function Menu:init()
             if Device:isAndroid() then
                 margin_bottom = 20
             else
-                margin_bottom = 25
+                margin_bottom = 22
             end
     end
     local footer = BottomContainer:new{
