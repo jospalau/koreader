@@ -178,6 +178,7 @@ function FileManager:setupLayout()
     }
 
     local file_chooser = FileChooser:new{
+        name = "filemanager",
         path = self.root_path,
         focused_path = self.focused_file,
         show_parent = self.show_parent,
@@ -186,7 +187,7 @@ function FileManager:setupLayout()
         -- allow left bottom tap gesture, otherwise it is eaten by hidden return button
         return_arrow_propagation = true,
         -- allow Menu widget to delegate handling of some gestures to GestureManager
-        filemanager = self,
+        ui = self,
         -- Tell FileChooser (i.e., Menu) to use our own title bar instead of Menu's default one
         custom_title_bar = self.title_bar,
         search_callback = function(search_string)
@@ -405,12 +406,6 @@ function FileManager:setupLayout()
 
     self[1] = fm_ui
 
-    self.menu = FileManagerMenu:new{
-        ui = self
-    }
-
-
-
     -- No need to reinvent the wheel, use FileChooser's layout
     self.layout = file_chooser.layout
 
@@ -454,7 +449,6 @@ end
 -- NOTE: The only thing that will *ever* instantiate a new FileManager object is our very own showFiles below!
 function FileManager:init()
     self.calibre_data = util.loadCalibreData()
-    self:setupLayout()
     self.active_widgets = {}
 
     self:registerModule("screenshot", Screenshoter:new{
@@ -462,7 +456,7 @@ function FileManager:init()
         ui = self,
     }, true)
 
-    self:registerModule("menu", self.menu)
+    self:registerModule("menu", FileManagerMenu:new{ ui = self })
     self:registerModule("history", FileManagerHistory:new{ ui = self })
     self:registerModule("bookinfo", FileManagerBookInfo:new{ ui = self })
     self:registerModule("collections", FileManagerCollection:new{ ui = self })
@@ -490,10 +484,7 @@ function FileManager:init()
         end
     end
 
-    -- Call again to setupLayout() if hooked by any plugin
-    if FileManager.hooked_fmSetupLayout then
-        self:setupLayout()
-    end
+    self:setupLayout()
     self:initGesListener()
     self:handleEvent(Event:new("SetDimensions", self.dimen))
     self:handleEvent(Event:new("PathChanged", self.file_chooser.path))
@@ -1689,6 +1680,7 @@ function FileManager.getSortByActions()
 end
 
 function FileManager:onSetSortBy(mode)
+    --self.file_chooser.ui = self
     G_reader_settings:saveSetting("collate", mode)
     self.file_chooser:clearSortingCache()
     self.file_chooser:refreshPath()
