@@ -921,7 +921,7 @@ function ListMenu:_recalculateDimen()
         self.itemnum_orig = self.path_items[self.path]
         self.focused_path_orig = self.focused_path
     end
-    local available_height = self.inner_dimen.h - self.others_height - Size.line.thin - 50
+    local available_height = self.inner_dimen.h - self.others_height - Size.line.thin - 15
 
     if self.files_per_page == nil then -- first drawing
         -- Default perpage is computed from a base of 64px per ListMenuItem,
@@ -982,7 +982,7 @@ end
 function ListMenu:_updateItemsBuildUI()
     -- Build our list
     local line_widget = LineWidget:new{
-        dimen = Geom:new{ w = self.width or self.screen_w, h = Size.line.thin },
+        dimen = Geom:new{ w = self.width or self.screen_w, h = 0 },
         background = Blitbuffer.COLOR_DARK_GRAY,
     }
     table.insert(self.item_group, line_widget)
