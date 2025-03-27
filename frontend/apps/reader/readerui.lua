@@ -1086,6 +1086,44 @@ function ReaderUI:onOpenLastDoc()
     self:switchDocument(self.menu:getPreviousFile())
 end
 
+function ReaderUI:showBookStatus()
+    if self.rolling and not self.rolling.rendering_state then
+        local OverlapGroup = require("ui/widget/overlapgroup")
+        local BookStatusWidget = require("ui/widget/bookstatuswidget")
+        local FileManagerBookInfo = require("apps/filemanager/filemanagerbookinfo")
+
+
+        local doc = self.document
+        local doc_settings = self.doc_settings
+        local widget = BookStatusWidget:new{
+            thumbnail = FileManagerBookInfo:getCoverImage(doc),
+            props = self.doc_props,
+            document = doc,
+            settings = doc_settings,
+            ui = self,
+            readonly = true,
+        }
+
+        local widget = OverlapGroup:new{
+            dimen = {
+                w = Screen:getWidth(),
+                h = Screen:getHeight(),
+            },
+            widget,
+            nil,
+        }
+
+
+        UIManager:show(widget, "full")
+
+        UIManager:scheduleIn(3, function()
+            -- Screen:refreshFullImp(0, 0, Screen:getWidth(), Screen:getHeight())
+            -- UIManager:setDirty("all", "full")
+            UIManager:close(widget)
+        end)
+    end
+end
+
 function ReaderUI:onAdjustMarginsTopbar()
     if util.getFileNameSuffix(self.document.file) ~= "epub" then return end
     local Event = require("ui/event")
@@ -1111,6 +1149,8 @@ function ReaderUI:onAdjustMarginsTopbar()
                         self.document.configurable.h_page_margins[1] = 20
                         self.document.configurable.h_page_margins[2] = 20
                         self:handleEvent(Event:new("SetPageMargins", margins))
+                    else
+                        self:showBookStatus()
                     end
                 else
                     if self.document.configurable.t_page_margin ~= footer_height or
@@ -1123,6 +1163,8 @@ function ReaderUI:onAdjustMarginsTopbar()
                         self.document.configurable.h_page_margins[1] = 15
                         self.document.configurable.h_page_margins[2] = 15
                         self:handleEvent(Event:new("SetPageMargins", margins))
+                    else
+                        self:showBookStatus()
                     end
                 end
             else
@@ -1138,6 +1180,8 @@ function ReaderUI:onAdjustMarginsTopbar()
                         self.document.configurable.h_page_margins[1] = 20
                         self.document.configurable.h_page_margins[2] = 20
                         self:handleEvent(Event:new("SetPageMargins", margins))
+                    else
+                        self:showBookStatus()
                     end
                 else
                     if self.document.configurable.t_page_margin ~= 12 or
@@ -1150,6 +1194,8 @@ function ReaderUI:onAdjustMarginsTopbar()
                         self.document.configurable.h_page_margins[1] = 15
                         self.document.configurable.h_page_margins[2] = 15
                         self:handleEvent(Event:new("SetPageMargins", margins))
+                    else
+                        self:showBookStatus()
                     end
                 end
             end
@@ -1173,42 +1219,7 @@ function ReaderUI:onAdjustMarginsTopbar()
                 self.document.configurable.h_page_margins[2] = 35
                 self:handleEvent(Event:new("SetPageMargins", margins))
             else
-                if self.rolling and not self.rolling.rendering_state then
-                    local OverlapGroup = require("ui/widget/overlapgroup")
-                    local BookStatusWidget = require("ui/widget/bookstatuswidget")
-                    local FileManagerBookInfo = require("apps/filemanager/filemanagerbookinfo")
-
-
-                    local doc = self.document
-                    local doc_settings = self.doc_settings
-                    local widget = BookStatusWidget:new{
-                        thumbnail = FileManagerBookInfo:getCoverImage(doc),
-                        props = self.doc_props,
-                        document = doc,
-                        settings = doc_settings,
-                        ui = self,
-                        readonly = true,
-                    }
-
-                    local widget = OverlapGroup:new{
-                        dimen = {
-                            w = Screen:getWidth(),
-                            h = Screen:getHeight(),
-                        },
-                        widget,
-                        nil,
-                    }
-
-
-                    UIManager:show(widget, "full")
-
-
-                    UIManager:scheduleIn(3, function()
-                        -- Screen:refreshFullImp(0, 0, Screen:getWidth(), Screen:getHeight())
-                        -- UIManager:setDirty("all", "full")
-                        UIManager:close(widget)
-                    end)
-                end
+                self:showBookStatus()
             end
         end
     end

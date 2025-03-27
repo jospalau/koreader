@@ -1922,6 +1922,8 @@ function TopBar:onAdjustMarginsTopbar()
                     self.ui.document.configurable.h_page_margins[1] = 20
                     self.ui.document.configurable.h_page_margins[2] = 20
                     self.ui:handleEvent(Event:new("SetPageMargins", margins))
+                else
+                    self.ui:showBookStatus()
                 end
             else
                 if self.ui.document.configurable.t_page_margin ~= 9 + 6 or
@@ -1934,6 +1936,8 @@ function TopBar:onAdjustMarginsTopbar()
                     self.ui.document.configurable.h_page_margins[1] = 20
                     self.ui.document.configurable.h_page_margins[2] = 20
                     self.ui:handleEvent(Event:new("SetPageMargins", margins))
+                else
+                    self.ui:showBookStatus()
                 end
             end
         else
@@ -1948,6 +1952,8 @@ function TopBar:onAdjustMarginsTopbar()
                     self.ui.document.configurable.h_page_margins[1] = 15
                     self.ui.document.configurable.h_page_margins[2] = 15
                     self.ui:handleEvent(Event:new("SetPageMargins", margins))
+                else
+                    self.ui:showBookStatus()
                 end
             else
                 if self.ui.document.configurable.t_page_margin ~= 9 + 6 or
@@ -1960,6 +1966,8 @@ function TopBar:onAdjustMarginsTopbar()
                     self.ui.document.configurable.h_page_margins[1] = 15
                     self.ui.document.configurable.h_page_margins[2] = 15
                     self.ui:handleEvent(Event:new("SetPageMargins", margins))
+                else
+                    self.ui:showBookStatus()
                 end
             end
         end
