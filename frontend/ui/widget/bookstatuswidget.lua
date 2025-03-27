@@ -299,6 +299,38 @@ function BookStatusWidget:genBookInfoGroup()
             text_author
         }
     )
+    local calibre_data = util.loadCalibreData()
+    local metadata = "Metadata"
+    local __, book_name = util.splitFilePathName(self.ui.document.file)
+    if calibre_data[book_name]
+        and calibre_data[book_name]["words"]
+        and calibre_data[book_name]["words"] ~= ""
+        and calibre_data[book_name]["pubdate"]
+        and calibre_data[book_name]["pubdate"] ~= ""
+        and calibre_data[book_name]["grvotes"]
+        and calibre_data[book_name]["grvotes"] ~= ""
+        and calibre_data[book_name]["grrating"]
+        and calibre_data[book_name]["grrating"] ~= "" then
+            metadata = "(" .. string.format("%+4s", calibre_data[book_name]["pubdate"]:sub(1, 4)) .. ")" ..
+            " → " .. string.format("%+4s", calibre_data[book_name]["grrating"]) .. "⭐" ..
+            calibre_data[book_name]["grvotes"] .. "↑"
+    end
+
+    local metadata_calibre = TextBoxWidget:new{
+        text = metadata,
+        lang = lang,
+        face = self.small_font_face,
+        width = width,
+        alignment = "center",
+    }
+    table.insert(book_meta_info_group,
+        CenterContainer:new{
+            dimen = Geom:new{ w = width, h = metadata_calibre:getSize().h },
+            metadata_calibre
+        }
+    )
+    -- progress bar
+    local read_percentage = self.ui:getCurrentPage() / self.total_pages
     -- progress bar
     local read_percentage = self.ui:getCurrentPage() / self.total_pages
     local progress_bar = ProgressWidget:new{
