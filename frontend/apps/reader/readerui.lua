@@ -500,7 +500,8 @@ function ReaderUI:init()
     end
 
     if G_reader_settings:isTrue("top_manager_infmandhistory")
-    and not self.document.file:find("resources/arthur%-conan%-doyle%_the%-hound%-of%-the%-baskervilles.epub") then
+    and not self.document.file:find("resources/arthur%-conan%-doyle%_the%-hound%-of%-the%-baskervilles.epub")
+    and _G.all_files then
         if _G.all_files[self.document.file].status ~= "complete" then
             _G.all_files[self.document.file].status = "reading"
             local pattern = "(%d+)-(%d+)-(%d+)"

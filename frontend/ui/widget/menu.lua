@@ -1502,6 +1502,7 @@ function Menu:onMenuSelect(item)
         if G_reader_settings:isTrue("top_manager_infmandhistory")
             and item.file
             and util.getFileNameSuffix(item.file) == "epub"
+            and _G.all_files
             and (_G.all_files[item.file].status == "mbr"
                 or _G.all_files[item.file].status == "tbr"
                 or _G.all_files[item.file].status == "new"
