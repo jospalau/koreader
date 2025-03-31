@@ -936,7 +936,14 @@ function TopBar:onFrontlightStateChanged()
         -- UIManager:setDirty(self, "ui")
         UIManager:widgetRepaint(self, 0, 0)
         UIManager:setDirty(self, function()
-            return "ui"
+            return "ui",
+            Geom:new{ w = Screen:getWidth(), h = self:getHeight(), y = 0}
+        end)
+        UIManager:setDirty(self, function()
+            return "ui",
+            Geom:new{ w = Screen:getWidth(),
+            h = self:getBottomHeight(),
+            y = Screen:getHeight() - self:getBottomHeight()}
         end)
     end
 end
@@ -990,7 +997,14 @@ function TopBar:onSwitchTopBar()
         self:toggleBar()
 
         UIManager:setDirty(self.view.dialog, function()
-            return self.view.currently_scrolling and "fast" or "ui"
+            return self.view.currently_scrolling and "fast" or "ui",
+            Geom:new{ w = Screen:getWidth(), h = self:getHeight(), y = 0}
+        end)
+        UIManager:setDirty(self.view.dialog, function()
+            return self.view.currently_scrolling and "fast" or "ui",
+            Geom:new{ w = Screen:getWidth(),
+            h = self:getBottomHeight(),
+            y = Screen:getHeight() - self:getBottomHeight()}
         end)
         return
     end
@@ -1036,7 +1050,14 @@ function TopBar:onSwitchTopBar()
         -- self:toggleBar()
         -- UIManager:setDirty("all", "partial")
         UIManager:setDirty(self.view.dialog, function()
-            return self.view.currently_scrolling and "fast" or "ui"
+            return self.view.currently_scrolling and "fast" or "ui",
+            Geom:new{ w = Screen:getWidth(), h = self:getHeight(), y = 0}
+        end)
+        UIManager:setDirty(self.view.dialog, function()
+            return self.view.currently_scrolling and "fast" or "ui",
+            Geom:new{ w = Screen:getWidth(),
+            h = self:getBottomHeight(),
+            y = Screen:getHeight() - self:getBottomHeight()}
         end)
     end
 end
@@ -1046,8 +1067,30 @@ function TopBar:quickToggleOnOff(put_off)
     TopBar.is_enabled = put_off
     self:toggleBar()
     UIManager:setDirty(self.view.dialog, function()
-        return self.view.currently_scrolling and "fast" or "ui"
+        return self.view.currently_scrolling and "fast" or "ui",
+        Geom:new{ w = Screen:getWidth(), h = self:getHeight(), y = 0}
     end)
+    UIManager:setDirty(self.view.dialog, function()
+        return self.view.currently_scrolling and "fast" or "ui",
+        Geom:new{ w = Screen:getWidth(),
+        h = self:getBottomHeight(),
+        y = Screen:getHeight() - self:getBottomHeight()}
+    end)
+end
+
+function TopBar:getHeight()
+   -- if TopBar.show_bar_in_top_bar then
+    return Screen:scaleBySize(12)
+    + self.progress_bar_widget_container:getSize().h
+    + self.space_after_alt_bar
+    + self.title_and_series_widget_container[1][1].face.size
+    -- else
+    --    return self.title_and_series_widget_container[1][1].face.size
+    -- end
+end
+
+function TopBar:getBottomHeight()
+    return TopBar.MARGIN_BOTTOM + self.current_page_widget_container[1].face.size
 end
 
 function TopBar:resetSession()
@@ -1888,7 +1931,7 @@ end
 function TopBar:paintToDisabled(bb, x, y)
     self.ignore_corners_widget_container[1]:setText(self.ignore_corners)
     self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - 2, y + Screen:scaleBySize(6))
-    self.current_page_widget_container:paintTo(bb, x + Screen:getWidth()/2  - self.current_page_widget_container[1]:getSize().w / 2,  Screen:getHeight() - TopBar.MARGIN_BOTTOM - self.current_page_widget_container[1].face.size - 4)
+    self.current_page_widget_container:paintTo(bb, x + Screen:getWidth()/2  - self.current_page_widget_container[1]:getSize().w / 2,  Screen:getHeight() - TopBar.MARGIN_BOTTOM - self.current_page_widget_container[1].face.size)
 end
 
 function TopBar:onAdjustMarginsTopbar()

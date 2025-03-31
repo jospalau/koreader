@@ -2540,10 +2540,16 @@ function ReaderFooter:onToggleFooterMode()
     -- This function will perform afterwards the other refresh needed
     self:onUpdateFooter(true)
     UIManager:setDirty(self.view.dialog, function()
-        return self.view.currently_scrolling and "fast" or "ui"
+        return self.view.currently_scrolling and "fast" or "ui",
+      Geom:new{ w = Screen:getWidth(), h = self.ui.view.topbar:getHeight(), y = 0}
     end)
-
-    self:rescheduleFooterAutoRefreshIfNeeded()
+    UIManager:setDirty(self.view.dialog, function()
+       return self.view.currently_scrolling and "fast" or "ui",
+        Geom:new{ w = Screen:getWidth(),
+        h = self.ui.view.topbar:getBottomHeight(),
+        y = Screen:getHeight() - self.ui.view.topbar:getBottomHeight()}
+        end)
+        self:rescheduleFooterAutoRefreshIfNeeded()
     return true
 end
 
