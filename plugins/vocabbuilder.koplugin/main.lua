@@ -1220,7 +1220,7 @@ function VocabItemWidget:onShowBookAssignment(title_changed_cb)
                                             self.show_parent:showChangeBookTitleDialog(sort_item, onSuccess)
                                         end
                                     })
-                                    sort_widget:goToPage(sort_widget.show_page)
+                                    sort_widget:onGoToPage(sort_widget.show_page)
                                 else
                                     UIManager:show(require("ui/widget/notification"):new{
                                         text = _("Book title already in use."),
