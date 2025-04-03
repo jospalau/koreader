@@ -1082,7 +1082,7 @@ function TopBar:getHeight()
    -- if TopBar.show_bar_in_top_bar then
     return Screen:scaleBySize(12)
     + self.progress_bar_widget_container:getSize().h
-    + self.space_after_alt_bar
+    + 15 -- self.space_after_alt_bar
     + self.title_and_series_widget_container[1][1].face.size
     -- else
     --    return self.title_and_series_widget_container[1][1].face.size
