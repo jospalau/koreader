@@ -1109,7 +1109,7 @@ function TopBar:toggleBar(light_on)
     if self.init_page_screens == nil then
         self.init_page_screens = self.view.footer.pageno
     end
-
+    self.space_after_alt_bar = 0
     if TopBar.is_enabled then
         local user_duration_format = "modern"
         local session_time = datetime.secondsToClockDuration(user_duration_format, os.time() - self.start_session_time, false)
