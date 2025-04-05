@@ -324,10 +324,6 @@ end
 function ReaderFont:onSetFont(face)
     if face and self.font_face ~= face then
         local current_face = self.font_face:gsub("%s+", "") .. "-Regular"
-        self.font_face = face
-        self.ui.document:setFontFace(face)
-
-        -- signal readerrolling to update pos in new height
         if G_reader_settings:isTrue("scale_font_to_current_font") then
             local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
             local size_px = (display_dpi * self.configurable.font_size)/72
@@ -374,7 +370,15 @@ function ReaderFont:onSetFont(face)
             -- self.configurable.font_size = Math.round(other_adjusted_size*100)/100
             self.configurable.font_size = Math.round((((other_adjusted_size * 72)/display_dpi) *100))/100 -- Convert back to pt
         end
-        self.ui:handleEvent(Event:new("UpdatePos"))
+        for _, fontinfo in pairs(FontList.fontinfo) do
+            if fontinfo[1].name == face then
+                self.font_face = face
+                self.ui.document:setFontFace(face)
+                -- signal readerrolling to update pos in new height
+                self.ui:handleEvent(Event:new("UpdatePos"))
+                return
+            end
+        end
     end
 end
 
