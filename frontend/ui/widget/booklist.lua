@@ -398,13 +398,16 @@ function BookList.getBookStatus(file)
         end
         return "reading"
     end
+    local in_history =  require("readhistory"):getIndexByFile(file)
+    if in_history then return "mbr" end
     -- Default status was new, now is call mbr
-    return "mbr"
+    return "new"
     -- local book_info = BookList.getBookInfo(file)
     -- return book_info.been_opened and book_info.status or "new"
 end
 
 local status_strings = {
+    new       = C_("Status of group of books", "New"),
     mbr       = C_("Status of group of books", "MBR"),      -- no sidecar file. No sidecar and in considered mbr
     reading   = C_("Status of group of books", "Reading"),  -- doc_settings.summary.status
     abandoned = C_("Status of group of books", "On hold"),  -- doc_settings.summary.status

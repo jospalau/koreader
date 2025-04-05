@@ -1316,7 +1316,7 @@ dbg:guard(FileManagerMenu, 'setUpdateItemTable',
 
 function FileManagerMenu:getShowFilterMenuTable()
     local FileChooser = require("ui/widget/filechooser")
-    local statuses = { "new", "reading", "abandoned", "complete" }
+    local statuses = { "new", "mbr", "tbr", "reading", "abandoned", "complete" }
     local sub_item_table = {
         {
             text = BookList.getBookStatusString("all"):lower(),
