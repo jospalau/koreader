@@ -271,13 +271,14 @@ function BookStatusWidget:genBookInfoGroup()
     -- Get a chance to have title and authors rendered with alternate
     -- glyphs for the book language
     local props = self.ui.doc_props
+    local series = self.ui.document._document:getDocumentProps().series
     local lang = props.language
     -- title
     local book_meta_info_group = VerticalGroup:new{
         align = "center",
         VerticalSpan:new{ width = height * 0.2 },
         TextBoxWidget:new{
-            text = props.display_title,
+            text = series ~= "" and props.display_title .. ", " .. series or props.display_title,
             lang = lang,
             width = width,
             face = self.medium_font_face,
@@ -311,7 +312,7 @@ function BookStatusWidget:genBookInfoGroup()
         and calibre_data[book_name]["grvotes"] ~= ""
         and calibre_data[book_name]["grrating"]
         and calibre_data[book_name]["grrating"] ~= "" then
-            metadata = "(" .. string.format("%+4s", calibre_data[book_name]["pubdate"]:sub(1, 4)) .. ")" ..
+            metadata = "(" .. tostring(math.floor(calibre_data[book_name]["words"]/1000)) .."kw, ".. string.format("%+4s", calibre_data[book_name]["pubdate"]:sub(1, 4)) .. ")" ..
             " → " .. string.format("%+4s", calibre_data[book_name]["grrating"]) .. "⭐" ..
             calibre_data[book_name]["grvotes"] .. "↑"
     end
