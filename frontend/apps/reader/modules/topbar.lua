@@ -45,6 +45,7 @@ local TopBar = WidgetContainer:extend{
     -- Para verlo en detalle, es mejor no poner ningún estilo en las barras de progreso
     MARGIN_TOP = Screen:scaleBySize(9),
     MARGIN_BOTTOM = Screen:scaleBySize(9),
+    MARGIN_BOTTOM_CURRENT_PAGE = Screen:scaleBySize(25),
     -- show_bar_in_top_bar = true,
 }
 
@@ -1090,7 +1091,7 @@ function TopBar:getHeight()
 end
 
 function TopBar:getBottomHeight()
-    return TopBar.MARGIN_BOTTOM + self.current_page_widget_container[1].face.size
+    return TopBar.MARGIN_BOTTOM_CURRENT_PAGE + self.current_page_widget_container[1].face.size
 end
 
 function TopBar:resetSession()
@@ -1931,7 +1932,7 @@ end
 function TopBar:paintToDisabled(bb, x, y)
     self.ignore_corners_widget_container[1]:setText(self.ignore_corners)
     self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - 2, y + Screen:scaleBySize(6))
-    self.current_page_widget_container:paintTo(bb, x + Screen:getWidth()/2  - self.current_page_widget_container[1]:getSize().w / 2,  Screen:getHeight() - TopBar.MARGIN_BOTTOM - self.current_page_widget_container[1].face.size)
+    self.current_page_widget_container:paintTo(bb, x + Screen:getWidth()/2  - self.current_page_widget_container[1]:getSize().w / 2,  Screen:getHeight() - TopBar.MARGIN_BOTTOM_CURRENT_PAGE)
 end
 
 function TopBar:onAdjustMarginsTopbar()
