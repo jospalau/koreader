@@ -237,14 +237,6 @@ function FileManager:setupLayout()
         local buttons = {
             {
                 {
-                    text = C_("File", "Copy"),
-                    enabled = is_not_parent_folder,
-                    callback = function()
-                        UIManager:close(self.file_dialog)
-                        file_manager:copyFile(file)
-                    end,
-                },
-                {
                     text = C_("File", "Paste"),
                     enabled = file_manager.clipboard and true or false,
                     callback = function()
@@ -264,16 +256,16 @@ function FileManager:setupLayout()
                         end
                     end,
                 },
-            },
-            {
                 {
-                    text = _("Cut"),
+                    text = _("Rename"),
                     enabled = is_not_parent_folder,
                     callback = function()
                         UIManager:close(self.file_dialog)
-                        file_manager:cutFile(file)
+                        file_manager:showRenameFileDialog(file, is_file)
                     end,
                 },
+            },
+            {
                 {
                     text = _("Delete"),
                     enabled = is_not_parent_folder,
@@ -283,13 +275,21 @@ function FileManager:setupLayout()
                     end,
                 },
                 {
-                    text = _("Rename"),
+                    text = _("Cut"),
                     enabled = is_not_parent_folder,
                     callback = function()
                         UIManager:close(self.file_dialog)
-                        file_manager:showRenameFileDialog(file, is_file)
+                        file_manager:cutFile(file)
                     end,
-                }
+                },
+                {
+                    text = C_("File", "Copy"),
+                    enabled = is_not_parent_folder,
+                    callback = function()
+                        UIManager:close(self.file_dialog)
+                        file_manager:copyFile(file)
+                    end,
+                },
             },
             {}, -- separator
         }
@@ -605,12 +605,13 @@ function FileManager:tapPlus()
     local function close_dialog_callback()
         UIManager:close(plus_dialog)
     end
-    local function refresh_titlebar_callback()
-        self:updateTitleBarPath()
-    end
 
     local title, buttons
     if self.selected_files then
+        local function close_dialog_toggle_select_mode_callback()
+            UIManager:close(plus_dialog)
+            self:onToggleSelectMode(true)
+        end
         local function toggle_select_mode_callback()
             self:onToggleSelectMode(true)
         end
@@ -620,55 +621,6 @@ function FileManager:tapPlus()
             or _("No files selected")
         buttons = {
             {
-                self.collections:genAddToCollectionButton(self.selected_files, close_dialog_callback, toggle_select_mode_callback),
-            },
-            {
-                {
-                    text = _("Show selected files list"),
-                    enabled = actions_enabled,
-                    callback = function()
-                        UIManager:close(plus_dialog)
-                        self:showSelectedFilesList()
-                    end,
-                },
-                {
-                    text = _("Copy"),
-                    enabled = actions_enabled,
-                    callback = function()
-                        self.cutfile = false
-                        self:showCopyMoveSelectedFilesDialog(close_dialog_callback)
-                    end,
-                },
-            },
-            {
-                {
-                    text = _("Select all files in folder"),
-                    callback = function()
-                        UIManager:close(plus_dialog)
-                        self.file_chooser:selectAllFilesInFolder(true)
-                    end,
-                },
-                {
-                    text = _("Move"),
-                    enabled = actions_enabled,
-                    callback = function()
-                        self.cutfile = true
-                        self:showCopyMoveSelectedFilesDialog(close_dialog_callback)
-                    end,
-                },
-            },
-            {
-                {
-                    text = _("Deselect all"),
-                    enabled = actions_enabled,
-                    callback = function()
-                        UIManager:close(plus_dialog)
-                        for file in pairs (self.selected_files) do
-                            self.selected_files[file] = nil
-                        end
-                        self.file_chooser:selectAllFilesInFolder(false) -- undim
-                    end,
-                },
                 {
                     text = _("Delete"),
                     enabled = actions_enabled,
@@ -683,6 +635,62 @@ function FileManager:tapPlus()
                         })
                     end,
                 },
+                {
+                    text = _("Move"),
+                    enabled = actions_enabled,
+                    callback = function()
+                        self.cutfile = true
+                        self:showCopyMoveSelectedFilesDialog(close_dialog_callback)
+                    end,
+                },
+                {
+                    text = _("Copy"),
+                    enabled = actions_enabled,
+                    callback = function()
+                        self.cutfile = false
+                        self:showCopyMoveSelectedFilesDialog(close_dialog_callback)
+                    end,
+                },
+            },
+            {}, -- separator
+            filemanagerutil.genMultipleStatusButtonsRow(self.selected_files,
+                close_dialog_toggle_select_mode_callback, not actions_enabled),
+            {}, -- separator
+            {
+                filemanagerutil.genMultipleResetSettingsButton(self.selected_files,
+                    close_dialog_toggle_select_mode_callback, not actions_enabled),
+                self.collections:genAddToCollectionButton(self.selected_files,
+                    close_dialog_callback, toggle_select_mode_callback, not actions_enabled),
+            },
+            {
+                {
+                    text = _("Export highlights"),
+                    enabled = (actions_enabled and self.exporter) and true or false,
+                    callback = function()
+                        self.exporter:exportFilesNotes(self.selected_files)
+                    end,
+                },
+            },
+            {}, -- separator
+            {
+                {
+                    text = _("Deselect all"),
+                    enabled = actions_enabled,
+                    callback = function()
+                        UIManager:close(plus_dialog)
+                        for file in pairs (self.selected_files) do
+                            self.selected_files[file] = nil
+                        end
+                        self.file_chooser:selectAllFilesInFolder(false) -- undim
+                    end,
+                },
+                {
+                    text = _("Select all files in folder"),
+                    callback = function()
+                        UIManager:close(plus_dialog)
+                        self.file_chooser:selectAllFilesInFolder(true)
+                    end,
+                },
             },
             {
                 {
@@ -693,10 +701,11 @@ function FileManager:tapPlus()
                     end,
                 },
                 {
-                    text = _("Export highlights"),
-                    enabled = (actions_enabled and self.exporter) and true or false,
+                    text = _("Show selected files list"),
+                    enabled = actions_enabled,
                     callback = function()
-                        self.exporter:exportFilesNotes(self.selected_files)
+                        UIManager:close(plus_dialog)
+                        self:showSelectedFilesList()
                     end,
                 },
             },
@@ -712,7 +721,17 @@ function FileManager:tapPlus()
                 self.folder_shortcuts:genShowFolderShortcutsButton(close_dialog_callback),
             },
         }
-    else
+
+        local refresh_button = self.coverbrowser
+            and self.coverbrowser:genMultipleRefreshBookInfoButton(close_dialog_toggle_select_mode_callback, not actions_enabled)
+        if refresh_button ~= nil then
+            table.insert(buttons, 7, refresh_button) -- before 'select mode' buttons
+        end
+
+    else -- no selected files
+        local function refresh_titlebar_callback()
+            self:updateTitleBarPath()
+        end
         title = BD.dirpath(filemanagerutil.abbreviate(self.file_chooser.path))
         buttons = {
             {
