@@ -1141,6 +1141,22 @@ This is to be active only if the option flash buttons and menu items or the opti
                         return true
                     end,
                 },
+                {
+                    text = _("Enable extra tweaks"),
+                    checked_func = function() return self.settings:isTrue("enable_extra_tweaks") end,
+                    help_text = _([[Extra tweaks to have them all gathered under a setting.]]),
+                    callback = function()
+                        local enable_extra_tweaks = not self.settings:isTrue("enable_extra_tweaks")
+                        self.settings:saveSetting("enable_extra_tweaks", enable_extra_tweaks)
+                        self.settings:flush()
+
+                        local FileManager = require("apps/filemanager/filemanager").instance
+                        if FileManager then
+                            FileManager:onRefresh()
+                        end
+                        return true
+                    end,
+                },
             },
         }
     else
@@ -1220,6 +1236,17 @@ This is to be active only if the option flash buttons and menu items or the opti
                     callback = function()
                         local enable_minimum_flashes = not self.settings:isTrue("enable_minimum_flashes")
                         self.settings:saveSetting("enable_minimum_flashes", enable_minimum_flashes)
+                        self.settings:flush()
+                        return true
+                    end,
+                },
+                {
+                    text = _("Enable extra tweaks"),
+                    checked_func = function() return self.settings:isTrue("enable_extra_tweaks") end,
+                    help_text = _([[Extra tweaks to have them all gathered under a setting.]]),
+                    callback = function()
+                        local enable_extra_tweaks = not self.settings:isTrue("enable_extra_tweaks")
+                        self.settings:saveSetting("enable_extra_tweaks", enable_extra_tweaks)
                         self.settings:flush()
                         return true
                     end,

@@ -234,7 +234,8 @@ function TitleBar:init()
             }
         end
     end
-    if self.show_parent and self.show_parent.name == "history" then
+    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+    if ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") and self.show_parent and self.show_parent.name == "history" then
         self.subtitle_widget = nil
     end
     -- To debug vertical positioning:

@@ -921,7 +921,13 @@ function ListMenu:_recalculateDimen()
         self.itemnum_orig = self.path_items[self.path]
         self.focused_path_orig = self.focused_path
     end
-    local available_height = self.inner_dimen.h - self.others_height - Size.line.thin - 15
+    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+    local available_height = 0
+    if ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+        available_height = self.inner_dimen.h - self.others_height - Size.line.thin - 15
+    else
+        available_height = self.inner_dimen.h - self.others_height - Size.line.thin - 50
+    end
 
     if self.files_per_page == nil then -- first drawing
         -- Default perpage is computed from a base of 64px per ListMenuItem,
@@ -980,9 +986,12 @@ function ListMenu:_recalculateDimen()
 end
 
 function ListMenu:_updateItemsBuildUI()
+    -- The file manager module instance may not yet ready (when loading KOReader and existing reader mode)
+    -- so we need to retrieve the page text info plugin from the module and not the module instance
+    local FileManager = require("apps/filemanager/filemanager")
     -- Build our list
     local line_widget = LineWidget:new{
-        dimen = Geom:new{ w = self.width or self.screen_w, h = 0 },
+        dimen = Geom:new{ w = self.width or self.screen_w, h = (FileManager and FileManager.pagetextinfo and FileManager.pagetextinfo.settings:isTrue("enable_extra_tweaks")) and 0 or Size.line.thin },
         background = Blitbuffer.COLOR_DARK_GRAY,
     }
     table.insert(self.item_group, line_widget)

@@ -444,6 +444,12 @@ function FileManager:registerModule(name, ui_module, always_active)
         -- to get events even when hidden
         table.insert(self.active_widgets, ui_module)
     end
+    -- Add the page text info plugin as a module property as well
+    -- since it needs to be used before the instance is assigned in the init() funcion:
+    -- FileManager.instance = self
+    if name == "pagetextinfo" then
+        FileManager.pagetextinfo = ui_module
+    end
 end
 
 -- NOTE: The only thing that will *ever* instantiate a new FileManager object is our very own showFiles below!

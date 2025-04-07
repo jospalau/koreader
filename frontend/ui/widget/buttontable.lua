@@ -170,17 +170,19 @@ function ButtonTable:init()
 end
 
 function ButtonTable:addVerticalSpan()
+    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
     table.insert(self.container, VerticalSpan:new{
-        width = not self.quickmenu and Size.span.vertical_default or 0,
+        width = (ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") and self.quickmenu) and 0 or Size.span.vertical_default,
     })
 end
 
 function ButtonTable:addVerticalSeparator(black_line)
+    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
     table.insert(self.container, LineWidget:new{
         background = black_line and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_GRAY,
         dimen = Geom:new{
             w = self.width,
-            h = not self.quickmenu and self.sep_width or 0,
+            h = (ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") and self.quickmenu) and 0 or self.sep_width,
         },
     })
 end
