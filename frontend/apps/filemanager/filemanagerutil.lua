@@ -284,9 +284,35 @@ function filemanagerutil.genMultipleStatusButtonsRow(files, caller_callback, but
                         for file in pairs(files) do
                             local doc_settings = BookList.getDocSettings(file)
                             local summary = doc_settings:readSetting("summary") or {}
+                            local has_sidecar_file = BookList.hasBookBeenOpened(file)
+                            if to_status == "tbr" then
+                                if has_sidecar_file then
+                                    -- If we put a book to the tbr, we want to remove all the info in the sidecar but the summary with the status
+                                    -- This is just in case it was in the TBR and previously opened
+                                    -- We also want to readd it to the history so that way we can reorder easily the tbr list if we want putting them on hold and back to tbr
+                                    doc_settings.data.stats = {}
+                                    doc_settings.data.percent_finished = nil
+                                    doc_settings:flush()
+                                    require("ui/widget/booklist").resetBookInfoCache(file)
+                                end
+                                require("readhistory"):removeItemByPath(file)
+                                require("readhistory"):addItem(file, os.time())
+                            end
                             summary.status = to_status
                             filemanagerutil.saveSummary(doc_settings, summary)
                             BookList.setBookInfoCacheProperty(file, "status", to_status)
+                            if G_reader_settings:isTrue("top_manager_infmandhistory") and util.getFileNameSuffix(file) == "epub" then
+                                _G.all_files[file].status = to_status
+                                local pattern = "(%d+)-(%d+)-(%d+)"
+                                local last_modified_date = filemanagerutil.getLastModified(file)
+                                local ryear, rmonth, rday = last_modified_date:match(pattern)
+                                _G.all_files[file].last_modified_year = ryear
+                                _G.all_files[file].last_modified_month = rmonth
+                                _G.all_files[file].last_modified_day = rday
+
+                                local util = require("util")
+                                util.generateStats()
+                            end
                         end
                         caller_callback()
                     end,
@@ -296,6 +322,7 @@ function filemanagerutil.genMultipleStatusButtonsRow(files, caller_callback, but
     end
     return {
         genStatusButton("reading"),
+        genStatusButton("tbr"),
         genStatusButton("abandoned"),
         genStatusButton("complete"),
     }
@@ -442,6 +469,16 @@ function filemanagerutil.genMultipleResetSettingsButton(files, caller_callback, 
                             UIManager:broadcastEvent(Event:new("InvalidateMetadataCache", file))
                             BookList.setBookInfoCacheProperty(file, "been_opened", false)
                             require("readhistory"):fileSettingsPurged(file)
+                        end
+                        require("readhistory"):removeItemByPath(file)
+                        if G_reader_settings:isTrue("top_manager_infmandhistory") and util.getFileNameSuffix(file) == "epub" then
+                            _G.all_files[file].status = ""
+                            _G.all_files[file].last_modified_year = 0
+                            _G.all_files[file].last_modified_month = 0
+                            _G.all_files[file].last_modified_day = 0
+
+                            local util = require("util")
+                            util.generateStats()
                         end
                     end
                     caller_callback()

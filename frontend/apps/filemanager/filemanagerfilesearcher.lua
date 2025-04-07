@@ -904,10 +904,10 @@ function FileSearcher:showSelectModeDialog()
                     local selected_files = self.selected_files
                     self.files_updated = nil -- refresh fm later
                     self.booklist_menu.close_callback()
+                    if self.ui.history.booklist_menu then
+                        UIManager:close(self.ui.history.booklist_menu)
+                    end
                     if self.ui.file_chooser then
-                        if self.booklist_menu.ui.history.hist_menu then
-                            self.booklist_menu.ui.history.hist_menu.close_callback()
-                        end
                         self.ui.selected_files = selected_files
                         self.ui.title_bar:setRightIcon("check")
                         self.ui.file_chooser:refreshPath()

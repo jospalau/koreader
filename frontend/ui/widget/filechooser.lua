@@ -467,7 +467,7 @@ function FileChooser:onMenuSelect(item)
     -- parent directory of dir without permission get nil mode
     -- we need to change to parent path in this case
     if item.is_file then
-        if G_reader_settings:isTrue("top_manager_infmandhistory")
+        if G_reader_settings:isTrue("top_manager_infmandhistory") and self.ui and not self.ui.selected_files
             and item.path
             and util.getFileNameSuffix(item.path) == "epub"
             and (_G.all_files[item.path].status == "mbr"
