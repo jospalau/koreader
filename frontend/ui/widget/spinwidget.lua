@@ -104,6 +104,8 @@ function SpinWidget:init()
 end
 
 function SpinWidget:update(numberpicker_value, numberpicker_value_index)
+    -- local Input = Device.input
+    -- Input:inhibitInputUntil(0.2)
     local prev_movable_offset = self.movable and self.movable:getMovedOffset()
     local prev_movable_alpha = self.movable and self.movable.alpha
     self.layout = {}
@@ -292,6 +294,7 @@ function SpinWidget:update(numberpicker_value, numberpicker_value_index)
         self.movable:setMovedOffset(prev_movable_offset)
     end
     self:refocusWidget()
+    UIManager:forceRePaint()
     UIManager:setDirty(self, function()
         return "ui", self.spin_frame.dimen
     end)
