@@ -319,6 +319,16 @@ function TopBar:getBooksOpened()
     return total_books
 end
 
+function TopBar:getDateAndVersion()
+    local DataStorage = require("datastorage")
+    local date_and_version_file_path = DataStorage:getDataDir() .. "/dateandversion"
+    local date_and_version = io.open(date_and_version_file_path, "r")
+    if date_and_version == nil then return "No dateandversion file" end
+
+    local t = date_and_version:read("*line")
+    return t
+end
+
 function TopBar:getPublicationDateBook()
     if not self.ui then return end
     local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
@@ -1872,6 +1882,20 @@ function TopBar:paintTo(bb, x, y)
             times_widget_container[1]:setText("BDB: " .. TopBar:getBooksOpened() .. ", TR: " .. TopBar:getTotalRead() .. "d")
             -- times.dimen = Geom:new{ w = times[1]:getSize().w, h = times[1].face.size }
             times_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM - times_widget_container[1].face.size - 4)
+
+            local version_widget_container =
+            left_container:new{
+                dimen = Geom:new(),
+                TextWidget:new{
+                    text =  "aa",
+                    face = Font:getFace("myfont3", 12),
+                    bold = true,
+                    fgcolor = Blitbuffer.COLOR_BLACK,
+                },
+            }
+            version_widget_container[1]:setText(TopBar:getDateAndVersion())
+            version_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM - times_widget_container[1].face.size - version_widget_container[1].face.size - 8)
+
             if self.fm and not self.history then
                 if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
                     local sort_by_mode = G_reader_settings:readSetting("collate")
