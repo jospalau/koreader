@@ -689,19 +689,19 @@ function TopBar:onReaderReady()
 
     self.title_text = TextWidget:new{
         text =  "",
-        face = Font:getFace("myfont3"),
+        face = Font:getFace("Consolas-Regular.ttf", 14),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
     self.series_text = TextWidget:new{
         text =  "",
-        face = Font:getFace("myfont3", 10),
+        face = Font:getFace("Consolas-Regular.ttf", 10),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
     self.chapter_text = TextWidget:new{
         text =  "",
-        face = Font:getFace("myfont3", 14),
+        face = Font:getFace("Consolas-Regular.ttf", 14),
         fgcolor = Blitbuffer.COLOR_BLACK,
         bold = true,
     }
