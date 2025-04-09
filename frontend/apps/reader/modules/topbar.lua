@@ -624,7 +624,7 @@ function TopBar:onReaderReady()
 
     local duration_raw = math.floor((os.time() - self.start_session_time))
 
-    if duration_raw < 360 or self.ui.statistics._total_pages < 6 then
+    if duration_raw < self.ui.statistics.min_time_valid_session or self.ui.statistics._total_pages < self.ui.statistics.min_pages_valid_session then
         self.start_session_time = os.time()
         self.init_page = nil
         self.init_page_screens = nil

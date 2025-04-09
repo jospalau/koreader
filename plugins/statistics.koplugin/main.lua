@@ -38,6 +38,8 @@ local DEFAULT_MAX_READ_SEC = 7200
 local DEFAULT_CALENDAR_START_DAY_OF_WEEK = 2 -- Monday
 local DEFAULT_CALENDAR_NB_BOOK_SPANS = 3
 
+local MIN_TIME_VALID_SESSION = 360
+local MIN_PAGES_VALID_SESSION = 6
 -- Current DB schema version
 local DB_SCHEMA_VERSION = 20221111
 
@@ -86,6 +88,8 @@ local ReaderStatistics = Widget:extend{
     page_stat = nil, -- Dictionary, indexed by page (hash), contains a list (array) of { timestamp, duration } tuples.
     data = nil, -- table
     doc_md5 = nil,
+    min_time_valid_session = MIN_TIME_VALID_SESSION,
+    min_pages_valid_session = MIN_PAGES_VALID_SESSION,
 }
 
 -- Like util.splitWords(), but not capturing space and punctuations
@@ -241,7 +245,7 @@ function ReaderStatistics:init()
     if require("apps/reader/readerui").instance and self.start_current_period then
 
         local duration_raw =  math.floor((os.time() - self.start_current_period))
-        if duration_raw < 360 or self._total_pages < 6 then
+        if duration_raw < self.min_time_valid_session or self._total_pages < self.min_pages_valid_session then
             self.start_current_period = os.time()
             self._pages_turned = 0
             self._total_pages = 0
@@ -1120,7 +1124,7 @@ function ReaderStatistics:insertDBSessionStats()
     local duration_raw = now_ts - self.start_current_period
     local duration_raw_mins = math.floor(((now_ts - self.start_current_period)/60)* 100) / 100
     local wpm_session = math.floor(self._total_words/duration_raw_mins)
-    if duration_raw < 360 or self._total_pages < 6 then
+    if duration_raw < self.min_time_valid_session or self._total_pages < self.min_pages_valid_session then
         return false
     end
     logger.info("Session starting " .. self.start_current_period .. " " .. os.date("%Y-%m-%d %H:%M:%S", self.start_current_period))
@@ -1181,7 +1185,7 @@ function ReaderStatistics:insertDB(updated_pagecount)
     -- since the info is not stored in db after the document is reopened
     -- Something could be done in ReaderStatistics:init() so self:resetVolatileStats() is not called
     -- But it is not that important
-    if duration_raw < 360 or self._total_pages < 6 then
+    if duration_raw < self.min_time_valid_session or self._total_pages < self.min_pages_valid_session then
         return
     end
     -- The current page stat, having yet no duration, will be ignored
