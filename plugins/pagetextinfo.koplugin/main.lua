@@ -3988,16 +3988,20 @@ function PageTextInfo:onSyncBooks()
                         local output = execute:read('*a')
                         _G.all_files = util.getListAll()
                         local util = require("util")
+                        -- We need to read the history file
+                        -- because we can have books in the history
+                        -- that are not physically in the device
+                        require("readhistory"):reload(true)
                         util.generateStats()
                         require("apps/filemanager/filemanager").instance.file_chooser:refreshPath()
                     end
                 end,
             })
-            UIManager:show(InfoMessage:new{
-                text = T(_(output)),
-                face = Font:getFace("myfont"),
-            })
         end
+        UIManager:show(InfoMessage:new{
+            text = T(_(output)),
+            face = Font:getFace("myfont"),
+        })
     end
 end
 
