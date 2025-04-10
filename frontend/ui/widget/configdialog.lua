@@ -251,6 +251,7 @@ function ConfigOption:init()
     })
 
     for c = 1, #self.options do
+        if self.options[c].name == "font_size" and self.config.ui.pagetextinfo and self.config.ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") then goto continue end
         local show_default = not self.options[c].advanced or show_advanced
         local show = self.options[c].show
         -- Prefer show_func over show if there's one
@@ -266,6 +267,7 @@ function ConfigOption:init()
             local item_font_size = self.options[c].item_font_size and self.options[c].item_font_size or default_item_font_size
             local option_height = Screen:scaleBySize(self.options[c].height and self.options[c].height or
                     default_option_height + (self.options[c].height or 30) * ((self.options[c].row_count or 1) -1))
+
             local item_spacing_width = Screen:scaleBySize(self.options[c].spacing and self.options[c].spacing or default_items_spacing)
             local enabled = true
             if item_align == 1.0 then
@@ -671,6 +673,7 @@ function ConfigOption:init()
             table.insert(horizontal_group, option_items_container)
             table.insert(vertical_group, horizontal_group)
         end -- if show ~= false
+        ::continue::
     end -- for c = 1, #self.options
 
     table.insert(vertical_group, VerticalSpan:new{ width = default_option_vpadding })
