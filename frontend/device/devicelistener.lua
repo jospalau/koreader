@@ -448,6 +448,9 @@ function DeviceListener:onFullRefresh()
         self.ui:handleEvent(Event:new("UpdateFooter", self.ui.view.footer_visible))
         self.ui.view.topbar:toggleBar()
     end
+    if not require("apps/reader/readerui").instance then
+        require("apps/filemanager/filemanager").instance.file_chooser:refreshPath()
+    end
     UIManager:setDirty("all", "full")
 end
 

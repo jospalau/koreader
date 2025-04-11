@@ -494,6 +494,8 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
         --     UIManager:tickAfterNext(function()
         --         UIManager:setDirty(self._manager.file_chooser, "flashui")
         --     end)
+        else
+            require("apps/filemanager/filemanager").instance.file_chooser:refreshPath()
         end
         -- if self._manager.ui.history.send then
         --     local FileManager = require("apps/filemanager/filemanager")
