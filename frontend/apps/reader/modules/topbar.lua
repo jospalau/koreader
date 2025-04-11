@@ -1591,7 +1591,7 @@ function TopBar:paintTo(bb, x, y)
         if self.view.footer.settings.bar_top then
             -- self.stats_times_widget_container:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() -  Screen:scaleBySize(6))
             self.author_information_widget_container:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() - Screen:scaleBySize(6))
-            self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth()- self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+            self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), Screen:getHeight() - TopBar.MARGIN_BOTTOM)
             battery_frame_diff:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
             battery_frame:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
             mem_frame_diff:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
@@ -1955,7 +1955,11 @@ end
 
 function TopBar:paintToDisabled(bb, x, y)
     self.ignore_corners_widget_container[1]:setText(self.ignore_corners)
-    self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - 2, y + Screen:scaleBySize(6))
+    if self.status_bar and self.status_bar == true and self.view.footer.settings.bar_top then
+        self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+    else
+        self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), y + Screen:scaleBySize(6))
+    end
     self.current_page_widget_container:paintTo(bb, x + Screen:getWidth()/2  - self.current_page_widget_container[1]:getSize().w / 2,  Screen:getHeight() - TopBar.MARGIN_BOTTOM_CURRENT_PAGE)
 end
 
