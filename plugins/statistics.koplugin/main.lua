@@ -242,8 +242,7 @@ function ReaderStatistics:init()
         ReaderStatistics.preserved_initial_read_todays= nil
     end
 
-    if require("apps/reader/readerui").instance and self.start_current_period then
-
+    if self.ui.view and self.start_current_period then
         local duration_raw =  math.floor((os.time() - self.start_current_period))
         if duration_raw < self.min_time_valid_session or self._total_pages < self.min_pages_valid_session then
             self.start_current_period = os.time()
