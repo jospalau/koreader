@@ -3544,7 +3544,7 @@ function ReaderStatistics:onReaderReady(config)
     -- that are triggered in other places by the ReaderReady event when opening the document
     -- nothing valuable for this plugin
     UIManager:nextTick(function()
-        if self.settings.is_enabled then
+        if self.settings and self.settings.is_enabled then
             self.data = config:readSetting("stats", { performance_in_pages = {} })
             self.doc_md5 = config:readSetting("partial_md5_checksum")
             -- we have correct page count now, do the actual initialization work
