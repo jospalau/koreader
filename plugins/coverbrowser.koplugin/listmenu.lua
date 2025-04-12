@@ -922,12 +922,12 @@ function ListMenu:_recalculateDimen()
         self.focused_path_orig = self.focused_path
     end
     local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-    local available_height = 0
-    if ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") then
-        available_height = self.inner_dimen.h - self.others_height - Size.line.thin - 15
-    else
-        available_height = self.inner_dimen.h - self.others_height - Size.line.thin - 50
-    end
+    local available_height = self.inner_dimen.h - self.others_height - Size.line.thin - 15
+    -- if ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+    --     available_height = self.inner_dimen.h - self.others_height - Size.line.thin - 15
+    -- else
+    --     available_height = self.inner_dimen.h - self.others_height - Size.line.thin - 15
+    -- end
 
     if self.files_per_page == nil then -- first drawing
         -- Default perpage is computed from a base of 64px per ListMenuItem,
