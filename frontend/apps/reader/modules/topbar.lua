@@ -1377,17 +1377,19 @@ function TopBar:toggleBar(light_on)
         -- self.progress_chapter_bar.height = self.title_text:getSize().h
 
         if self.ui.gestures.ignore_hold_corners then
+            -- If page text info plugin highlight_all_words_vocabulary_builder_and_notes setting is true, then self.ui.gestures.ignore_hold_corners will be true so the corner words can be double tapped
             if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
-                self.ignore_corners = "\u{F0F6} 🔒"
+                self.ignore_corners = "\u{F0F6}"
             else
                 self.ignore_corners = "🔒"
             end
         else
-            if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
-                self.ignore_corners = "\u{F0F6}"
-            else
-                self.ignore_corners = ""
-            end
+            self.ignore_corners = ""
+            -- if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
+            --     self.ignore_corners = "\u{F0F6}"
+            -- else
+            --     self.ignore_corners = ""
+            -- end
         end
 
         -- ○ ◎ ● ◐ ◑ ◒ ◓
@@ -1489,17 +1491,19 @@ function TopBar:toggleBar(light_on)
             end
         end
         if self.ui.gestures.ignore_hold_corners then
+            -- If page text info plugin highlight_all_words_vocabulary_builder_and_notes setting is true, then self.ui.gestures.ignore_hold_corners will be true so the corner words can be double tapped
             if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
-                self.ignore_corners = "\u{F0F6} 🔒"
+                self.ignore_corners = "\u{F0F6}"
             else
                 self.ignore_corners = "🔒"
             end
         else
-            if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
-                self.ignore_corners = "\u{F0F6}"
-            else
-                self.ignore_corners = ""
-            end
+            self.ignore_corners = ""
+            -- if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
+            --     self.ignore_corners = "\u{F0F6}"
+            -- else
+            --     self.ignore_corners = ""
+            -- end
         end
     end
 end

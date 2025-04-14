@@ -2413,21 +2413,7 @@ function ReaderFooter:TapFooter(ges)
 
     -- That means, we can still double tap the footer to toggle it
 
-
-    if self.ui.gestures.ignore_hold_corners then
-        if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
-            self.ui.view.topbar.ignore_corners = "\u{F0F6} 🔒"
-        else
-            self.ui.view.topbar.ignore_corners = "🔒"
-        end
-    else
-        if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
-            self.ui.view.topbar.ignore_corners = "\u{F0F6}"
-        else
-            self.ui.view.topbar.ignore_corners = ""
-        end
-    end
-
+    self.ui.view.topbar:toggleBar()
     UIManager:setDirty(self.view.dialog, function()
         return self.view.currently_scrolling and "fast" or "ui"
     end)
@@ -2460,19 +2446,8 @@ function ReaderFooter:DoubleTapFooter(ges)
     if self.view.view_modules["pagetextinfo"] then
         self.ui.pagetextinfo:toggleHighlightAllWordsVocabulary(self.ui.gestures.ignore_hold_corners)
     end
-    if self.ui.gestures.ignore_hold_corners then
-        if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
-            self.ui.view.topbar.ignore_corners = "\u{F0F6} 🔒"
-        else
-            self.ui.view.topbar.ignore_corners = "🔒"
-        end
-    else
-        if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
-            self.ui.view.topbar.ignore_corners = "\u{F0F6}"
-        else
-            self.ui.view.topbar.ignore_corners = ""
-        end
-    end
+
+    self.ui.view.topbar:toggleBar()
     UIManager:setDirty(self.view.dialog, function()
         return self.view.currently_scrolling and "fast" or "ui"
     end)
