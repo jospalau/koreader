@@ -989,6 +989,7 @@ function PageTextInfo:init()
     -- local vertical_span = VerticalSpan:new{width = Size.span.vertical_default}
     -- table.insert(self.vertical_frame, self.separator_line)
     -- table.insert(self.vertical_frame, vertical_span)
+    self.pages_notes = {}
     self.initialized = false
     -- self.ui:registerPostInitCallback(function()
     --     self:_postInit()
@@ -1277,7 +1278,12 @@ This is to be active only if the option flash buttons and menu items or the opti
                                 local highlight_all_words_vocabulary_builder_and_notes = self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes")
                                 self.settings:saveSetting("highlight_all_words_vocabulary_builder_and_notes", not highlight_all_words_vocabulary_builder_and_notes)
                                 -- self.ui:reloadDocument(nil, true) -- seamless reload (no infomsg, no flash)
+
                                 self:updateWordsVocabulary()
+                                self.ui.gestures:onIgnoreHoldCorners(not highlight_all_words_vocabulary_builder_and_notes)
+                                if self.ui.view.topbar then
+                                    self.ui.view.topbar:toggleBar()
+                                end
                                 UIManager:setDirty("all", "full")
                                 self.settings:flush()
                                 return true
