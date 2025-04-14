@@ -3282,6 +3282,7 @@ function ReaderStatistics:onPageUpdate(pageno)
     end
 
 
+    self.pageturn_count = self.pageturn_count + 1
     local now_ts = os.time()
 
     -- Get the previous page's last timestamp (if there is one)
@@ -3292,13 +3293,15 @@ function ReaderStatistics:onPageUpdate(pageno)
     local then_ts = data_tuple and data_tuple[1]
     -- If we don't have a previous timestamp to compare to, abort early
     if not then_ts then
-        if not closing and not self.ui.searching then
-            local diff_time = now_ts - self.start_current_period
-            if diff_time >= self.settings.min_sec and diff_time <= self.settings.max_sec then
-                self._total_words = self._last_nbwords + self._total_words
-                self._total_pages = self._total_pages + 1
-            end
-        end
+        -- No need for this, it was introduced after calling UIManager:nextTick() in the onReaderReady() function
+        -- but the change has been reverted a few weeks later
+        -- if not closing and not self.ui.searching then
+        --     local diff_time = now_ts - self.start_current_period
+        --     if diff_time >= self.settings.min_sec and diff_time <= self.settings.max_sec then
+        --         self._total_words = self._last_nbwords + self._total_words
+        --         self._total_pages = self._total_pages + 1
+        --     end
+        -- end
         logger.dbg("ReaderStatistics: No timestamp for previous page", self.curr_page)
         self.page_stat[pageno] = { { now_ts, 0 } }
         self.curr_page = pageno
@@ -3542,17 +3545,18 @@ function ReaderStatistics:onReaderReady(config)
     -- self.ui:registerPostReaderReadyCallback() calls defined in some sources
     -- that are triggered in other places by the ReaderReady event when opening the document
     -- nothing valuable for this plugin
-    UIManager:nextTick(function()
-        if self.settings and self.settings.is_enabled then
-            self.data = config:readSetting("stats", { performance_in_pages = {} })
-            self.doc_md5 = config:readSetting("partial_md5_checksum")
-            -- we have correct page count now, do the actual initialization work
-            self:initData()
-            self.view.footer:maybeUpdateFooter()
-        end
-        local nbwords = select(2, self.ui.view:getCurrentPageLineWordCounts())
-        self._last_nbwords = nbwords
-    end)
+    -- This was reverted upstream
+    -- UIManager:nextTick(function()
+    if self.settings.is_enabled then
+        self.data = config:readSetting("stats", { performance_in_pages = {} })
+        self.doc_md5 = config:readSetting("partial_md5_checksum")
+        -- we have correct page count now, do the actual initialization work
+        self:initData()
+        self.view.footer:maybeUpdateFooter()
+    end
+    local nbwords = select(2, self.ui.view:getCurrentPageLineWordCounts())
+    self._last_nbwords = nbwords
+    -- end)
 end
 
 function ReaderStatistics:onShowCalendarView()
