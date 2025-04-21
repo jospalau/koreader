@@ -508,6 +508,9 @@ function FileManagerCollection:showSelectModeDialog()
                 text = _("Select in file browser"),
                 enabled = actions_enabled,
                 callback = function()
+                    if self.ui.history.booklist_menu then
+                        UIManager:close(self.ui.history.booklist_menu)
+                    end
                     UIManager:close(select_dialog)
                     local selected_files = self.selected_files
                     local files_updated = self.files_updated
