@@ -330,9 +330,11 @@ function ListMenuItem:update()
                     if status == "complete" then
                         -- pages_str = T(N_("Finished – 1 page", "Finished – %1 pages", pages), pages)
                         pages_str = _("Finished")
-                        if G_reader_settings:isTrue("top_manager_infmandhistory") then
-                            pages_str = pages_str .. " " .. _G.all_files[self.filepath].last_modified_month .. "/"
-                            .. _G.all_files[self.filepath].last_modified_year
+                        if G_reader_settings:isTrue("top_manager_infmandhistory")
+                            and _G.all_files
+                            and _G.all_files[self.filepath] then
+                                pages_str = pages_str .. " " .. _G.all_files[self.filepath].last_modified_month .. "/"
+                                .. _G.all_files[self.filepath].last_modified_year
                         end
 
                     elseif status == "abandoned" then
@@ -343,9 +345,11 @@ function ListMenuItem:update()
                 else
                     if status == "complete" then
                         pages_str = _("Finished")
-                        if G_reader_settings:isTrue("top_manager_infmandhistory") then
-                            pages_str = pages_str .. " " .. _G.all_files[self.filepath].last_modified_month .. "/"
-                            .. _G.all_files[self.filepath].last_modified_year
+                        if G_reader_settings:isTrue("top_manager_infmandhistory")
+                            and _G.all_files
+                            and _G.all_files[self.filepath] then
+                                pages_str = pages_str .. " " .. _G.all_files[self.filepath].last_modified_month .. "/"
+                                .. _G.all_files[self.filepath].last_modified_year
                         end
                     elseif status == "abandoned" then
                         pages_str =  _("On hold")

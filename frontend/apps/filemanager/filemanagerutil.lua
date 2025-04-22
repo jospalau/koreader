@@ -247,17 +247,20 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                 -- BookList.getBookInfo() is invoked in many places to retrieve the proper updated information
                 -- require("bookinfomanager"):deleteBookInfo(file)
 
-                if G_reader_settings:isTrue("top_manager_infmandhistory") and util.getFileNameSuffix(file) == "epub" then
-                    _G.all_files[file].status = to_status
-                    local pattern = "(%d+)-(%d+)-(%d+)"
-                    local last_modified_date = filemanagerutil.getLastModified(file)
-                    local ryear, rmonth, rday = last_modified_date:match(pattern)
-                    _G.all_files[file].last_modified_year = ryear
-                    _G.all_files[file].last_modified_month = rmonth
-                    _G.all_files[file].last_modified_day = rday
+                if G_reader_settings:isTrue("top_manager_infmandhistory")
+                    and util.getFileNameSuffix(file) == "epub"
+                    and _G.all_files
+                    and _G.all_files[file] then
+                        _G.all_files[file].status = to_status
+                        local pattern = "(%d+)-(%d+)-(%d+)"
+                        local last_modified_date = filemanagerutil.getLastModified(file)
+                        local ryear, rmonth, rday = last_modified_date:match(pattern)
+                        _G.all_files[file].last_modified_year = ryear
+                        _G.all_files[file].last_modified_month = rmonth
+                        _G.all_files[file].last_modified_day = rday
 
-                    local util = require("util")
-                    util.generateStats()
+                        local util = require("util")
+                        util.generateStats()
                 end
                 caller_callback(file, to_status)
             end,
@@ -301,17 +304,20 @@ function filemanagerutil.genMultipleStatusButtonsRow(files, caller_callback, but
                             summary.status = to_status
                             filemanagerutil.saveSummary(doc_settings, summary)
                             BookList.setBookInfoCacheProperty(file, "status", to_status)
-                            if G_reader_settings:isTrue("top_manager_infmandhistory") and util.getFileNameSuffix(file) == "epub" then
-                                _G.all_files[file].status = to_status
-                                local pattern = "(%d+)-(%d+)-(%d+)"
-                                local last_modified_date = filemanagerutil.getLastModified(file)
-                                local ryear, rmonth, rday = last_modified_date:match(pattern)
-                                _G.all_files[file].last_modified_year = ryear
-                                _G.all_files[file].last_modified_month = rmonth
-                                _G.all_files[file].last_modified_day = rday
+                            if G_reader_settings:isTrue("top_manager_infmandhistory")
+                                and util.getFileNameSuffix(file) == "epub"
+                                and _G.all_files
+                                and _G.all_files[file] then
+                                    _G.all_files[file].status = to_status
+                                    local pattern = "(%d+)-(%d+)-(%d+)"
+                                    local last_modified_date = filemanagerutil.getLastModified(file)
+                                    local ryear, rmonth, rday = last_modified_date:match(pattern)
+                                    _G.all_files[file].last_modified_year = ryear
+                                    _G.all_files[file].last_modified_month = rmonth
+                                    _G.all_files[file].last_modified_day = rday
 
-                                local util = require("util")
-                                util.generateStats()
+                                    local util = require("util")
+                                    util.generateStats()
                             end
                         end
                         caller_callback()
@@ -393,28 +399,31 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
                         BookList.setBookInfoCacheProperty(file, "been_opened", false)
                         require("readhistory"):fileSettingsPurged(file)
                     end
-                    if G_reader_settings:isTrue("top_manager_infmandhistory") and util.getFileNameSuffix(file) == "epub" then
-                        if check_button_mbr.checked then
-                            _G.all_files[file].status = "mbr"
+                    if G_reader_settings:isTrue("top_manager_infmandhistory")
+                        and util.getFileNameSuffix(file) == "epub"
+                        and _G.all_files
+                        and _G.all_files[file] then
+                            if check_button_mbr.checked then
+                                _G.all_files[file].status = "mbr"
 
-                            if first_element_history then
-                                local DocSettings = require("docsettings")
-                                local doc_settings = DocSettings:open(first_element_history)
-                                local summary = doc_settings:readSetting("summary", {})
-                                if summary.status == "reading" or (require("apps/reader/readerui").instance and require("apps/reader/readerui").instance.document and require("apps/reader/readerui").instance.document.file == first_element_history) then
-                                    require("readhistory"):removeItemByPath(first_element_history)
-                                    require("readhistory"):addItem(first_element_history, os.time() + 1)
+                                if first_element_history then
+                                    local DocSettings = require("docsettings")
+                                    local doc_settings = DocSettings:open(first_element_history)
+                                    local summary = doc_settings:readSetting("summary", {})
+                                    if summary.status == "reading" or (require("apps/reader/readerui").instance and require("apps/reader/readerui").instance.document and require("apps/reader/readerui").instance.document.file == first_element_history) then
+                                        require("readhistory"):removeItemByPath(first_element_history)
+                                        require("readhistory"):addItem(first_element_history, os.time() + 1)
+                                    end
                                 end
+                                G_reader_settings:flush()
+                            else
+                                _G.all_files[file].status = ""
                             end
-                            G_reader_settings:flush()
-                        else
-                            _G.all_files[file].status = ""
-                        end
-                        _G.all_files[file].last_modified_year = 0
-                        _G.all_files[file].last_modified_month = 0
-                        _G.all_files[file].last_modified_day = 0
-                        local util = require("util")
-                        util.generateStats()
+                            _G.all_files[file].last_modified_year = 0
+                            _G.all_files[file].last_modified_month = 0
+                            _G.all_files[file].last_modified_day = 0
+                            local util = require("util")
+                            util.generateStats()
                     end
                     caller_callback(file, check_button_mbr.checked)
                 end,
@@ -471,12 +480,14 @@ function filemanagerutil.genMultipleResetSettingsButton(files, caller_callback, 
                             require("readhistory"):fileSettingsPurged(file)
                         end
                         require("readhistory"):removeItemByPath(file)
-                        if G_reader_settings:isTrue("top_manager_infmandhistory") and util.getFileNameSuffix(file) == "epub" then
-                            _G.all_files[file].status = ""
-                            _G.all_files[file].last_modified_year = 0
-                            _G.all_files[file].last_modified_month = 0
-                            _G.all_files[file].last_modified_day = 0
-
+                        if G_reader_settings:isTrue("top_manager_infmandhistory")
+                            and util.getFileNameSuffix(file) == "epub"
+                            and _G.all_files
+                            and _G.all_files[file] then
+                                _G.all_files[file].status = ""
+                                _G.all_files[file].last_modified_year = 0
+                                _G.all_files[file].last_modified_month = 0
+                                _G.all_files[file].last_modified_day = 0
                             local util = require("util")
                             util.generateStats()
                         end

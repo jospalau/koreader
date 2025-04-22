@@ -470,38 +470,40 @@ function FileChooser:onMenuSelect(item)
         if G_reader_settings:isTrue("top_manager_infmandhistory") and self.ui and not self.ui.selected_files
             and item.path
             and util.getFileNameSuffix(item.path) == "epub"
+            and _G.all_files
+            and _G.all_files[item.path]
             and (_G.all_files[item.path].status == "mbr"
                 or _G.all_files[item.path].status == "tbr"
                 or _G.all_files[item.path].status == "new"
                 or _G.all_files[item.path].status == "complete") then
-            local MultiConfirmBox = require("ui/widget/multiconfirmbox")
-            local text = ", do you want to open it?"
-            if _G.all_files[item.path].status == "mbr" then
-                text = "Book in MBR" .. text
-            elseif _G.all_files[item.path].status == "tbr" then
-                text = "Book in TBR" .. text
-            elseif _G.all_files[item.path].status == "new" then
-                text = "Book not opened" .. text
-            else
-                text = "Book finished" .. text
-            end
+                local MultiConfirmBox = require("ui/widget/multiconfirmbox")
+                local text = ", do you want to open it?"
+                if _G.all_files[item.path].status == "mbr" then
+                    text = "Book in MBR" .. text
+                elseif _G.all_files[item.path].status == "tbr" then
+                    text = "Book in TBR" .. text
+                elseif _G.all_files[item.path].status == "new" then
+                    text = "Book not opened" .. text
+                else
+                    text = "Book finished" .. text
+                end
 
-            local multi_box= MultiConfirmBox:new{
-                text = text,
-                choice1_text = _("Yes"),
-                choice1_callback = function()
-                    self:onFileSelect(item)
-                end,
-                choice2_text = _("Do not open it"),
-                choice2_callback = function()
-                    return
-                end,
-                cancel_callback = function()
-                    return
-                end,
-            }
-            UIManager:show(multi_box)
-            return false
+                local multi_box= MultiConfirmBox:new{
+                    text = text,
+                    choice1_text = _("Yes"),
+                    choice1_callback = function()
+                        self:onFileSelect(item)
+                    end,
+                    choice2_text = _("Do not open it"),
+                    choice2_callback = function()
+                        return
+                    end,
+                    cancel_callback = function()
+                        return
+                    end,
+                }
+                UIManager:show(multi_box)
+                return false
         else
             self:onFileSelect(item)
         end

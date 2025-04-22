@@ -516,6 +516,8 @@ function FileSearcher:onMenuSelect(item, callback)
                 if G_reader_settings:isTrue("top_manager_infmandhistory")
                 and item.path
                 and util.getFileNameSuffix(item.path) == "epub"
+                and _G.all_files
+                and _G.all_files[item.path]
                 and (_G.all_files[item.path].status == "mbr"
                     or _G.all_files[item.path].status == "tbr"
                     or _G.all_files[item.path].status == "new"

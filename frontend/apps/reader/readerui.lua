@@ -501,7 +501,8 @@ function ReaderUI:init()
 
     if G_reader_settings:isTrue("top_manager_infmandhistory")
     and not self.document.file:find("resources/arthur%-conan%-doyle%_the%-hound%-of%-the%-baskervilles.epub")
-    and _G.all_files then
+    and _G.all_files
+    and _G.all_files[self.document.file] then
         if _G.all_files[self.document.file].status ~= "complete" then
             _G.all_files[self.document.file].status = "reading"
             local pattern = "(%d+)-(%d+)-(%d+)"
@@ -991,13 +992,14 @@ function ReaderUI:onHome()
 
 
                 if G_reader_settings:isTrue("top_manager_infmandhistory")
-                    and util.getFileNameSuffix(file) == "epub" then
-                    _G.all_files[file].status = "mbr"
-                    _G.all_files[file].last_modified_year = 0
-                    _G.all_files[file].last_modified_month = 0
-                    _G.all_files[file].last_modified_day = 0
-                    local util = require("util")
-                    util.generateStats()
+                    and util.getFileNameSuffix(file) == "epub"
+                    and _G.all_files[file] then
+                        _G.all_files[file].status = "mbr"
+                        _G.all_files[file].last_modified_year = 0
+                        _G.all_files[file].last_modified_month = 0
+                        _G.all_files[file].last_modified_day = 0
+                        local util = require("util")
+                        util.generateStats()
                 end
 
                 -- UIManager:broadcastEvent(Event:new("InvalidateMetadataCache", file))

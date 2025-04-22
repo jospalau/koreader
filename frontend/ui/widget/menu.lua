@@ -1503,6 +1503,7 @@ function Menu:onMenuSelect(item)
             and item.file
             and util.getFileNameSuffix(item.file) == "epub"
             and _G.all_files
+            and _G.all_files[item.file]
             and (_G.all_files[item.file].status == "mbr"
                 or _G.all_files[item.file].status == "tbr"
                 or _G.all_files[item.file].status == "new"

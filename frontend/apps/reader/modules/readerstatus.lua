@@ -213,15 +213,18 @@ function ReaderStatus:markBook(mark_read)
     summary.modified = os.date("%Y-%m-%d", os.time())
     -- If History is called over Reader, it will read the file to get the book status, so flush
     self.ui.doc_settings:flush()
-    if G_reader_settings:isTrue("top_manager_infmandhistory") then
-        local pattern = "(%d+)-(%d+)-(%d+)"
-        local ryear, rmonth, rday = summary.modified:match(pattern)
-        _G.all_files[self.document.file].status = summary.status
-        _G.all_files[self.document.file].last_modified_year = ryear
-        _G.all_files[self.document.file].last_modified_month = rmonth
-        _G.all_files[self.document.file].last_modified_day = rday
-        local util = require("util")
-        util.generateStats()
+    if G_reader_settings:isTrue("top_manager_infmandhistory")
+        and util.getFileNameSuffix(self.document.file) == "epub"
+        and _G.all_files
+        and _G.all_files[self.document.file] then
+            local pattern = "(%d+)-(%d+)-(%d+)"
+            local ryear, rmonth, rday = summary.modified:match(pattern)
+            _G.all_files[self.document.file].status = summary.status
+            _G.all_files[self.document.file].last_modified_year = ryear
+            _G.all_files[self.document.file].last_modified_month = rmonth
+            _G.all_files[self.document.file].last_modified_day = rday
+            local util = require("util")
+            util.generateStats()
     end
 end
 
