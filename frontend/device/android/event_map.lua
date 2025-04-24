@@ -27,9 +27,5 @@ return {
     [84] = "Search",--SEARCH
     [92] = "LPgBack", -- PAGE_UP
     [93] = "LPgFwd",  -- PAGE_DOWN
-
-    [104] = "LPgBack", -- T68 PageUp
-    [109] = "LPgFwd",  -- T68 PageDown
     [117] = "Right",   -- Boox Palma function button
-    [139] = "Menu",    -- T68 Menu
 }
