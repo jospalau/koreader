@@ -166,6 +166,7 @@ function ReaderStatistics:init()
     }
 
     self.devices_reversed = {
+        [0] = "Unknown",
         [1] = "KoLi2",
         [2] = "KoSag",
         [3] = "KoCl2e",
