@@ -3305,7 +3305,7 @@ function PageTextInfo:onShowTextProperties()
     --     avg_chars_cal = math.floor(avg_words_cal * 5.7)
     --     avg_chars_per_word_cal = math.floor((avg_chars_cal/avg_words_cal) * 100) / 100
     -- end
-
+    local user_duration_format = "letters"
 
     local duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100
     local wpm_session, words_session = duration_raw, duration_raw
@@ -3324,15 +3324,16 @@ function PageTextInfo:onShowTextProperties()
     local string_percentage  = "%0.f%%"
     local percentage = string_percentage:format(self.view.footer.progress_bar.percentage * 100)
     local today_duration, today_pages, wpm_today, words_today = getTodayBookStats()
-    local user_duration_format = "letters"
-    local today_duration_number = math.floor(today_duration/60)
-    local today_duration = datetime.secondsToClockDuration(user_duration_format,today_duration, true)
+    local today_duration = today_duration + (self.view.topbar and (os.time() - self.view.topbar.start_session_time) or 0)
+    local today_duration_number = math.floor((today_duration / 60) * 10) / 10
+    today_duration = datetime.secondsToClockDuration(user_duration_format, today_duration, true)
 
+    today_pages = today_pages + (self.ui.statistics and self.ui.statistics._total_pages or 0)
     local icon_goal_pages = "⚐"
     local icon_goal_time = "⚐"
     self._goal_time = 120
     self._goal_pages = 100
-    if today_pages > self._goal_pages or today_duration_number>self._goal_time then
+    if today_pages > self._goal_pages or today_duration_number > self._goal_time then
         if today_pages >= self._goal_pages then
             icon_goal_pages = "⚑"
         end
@@ -3344,12 +3345,13 @@ function PageTextInfo:onShowTextProperties()
 
     local this_week_duration, this_week_pages, wpm_week, words_week = getThisWeekBookStats()
     local this_month_duration, this_month_pages, wpm_month, words_month = getThisMonthBookStats()
-    local time_reading_current_book = getReadThisBook(self.ui.view.footer)
 
-    local user_duration_format = "letters"
+    local time_reading_current_book = getReadThisBook(self.ui.view.footer)
+    time_reading_current_book = time_reading_current_book + (self.view.topbar and (os.time() - self.view.topbar.start_session_time) or 0)
+    time_reading_current_book = datetime.secondsToClockDuration(user_duration_format, time_reading_current_book, true)
+
     local this_week_duration = datetime.secondsToClockDuration(user_duration_format,this_week_duration, true)
     local this_month_duration = datetime.secondsToClockDuration(user_duration_format,this_month_duration, true)
-    local time_reading_current_book = datetime.secondsToClockDuration(user_duration_format,time_reading_current_book, true)
 
     local left_chapter = self.ui.toc:getChapterPagesLeft(self.view.state.page) or self.ui.document:getTotalPagesLeft(self.view.state.page)
     if self.settings.pages_left_includes_current_page then
