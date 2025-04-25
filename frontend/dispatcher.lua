@@ -1215,7 +1215,7 @@ function Dispatcher._showAsMenu(settings, exec_props)
                 -- Tweaks are in a different gesture marked as well as Show as QuickMenu but not Keep QuickMenu open
                 if string.match(v.text, "tweak") and ui and ui.tweakst then
                     for _,tweak in pairs(ui.tweakst) do
-                        if tweak == v.text:gsub("Toggle style tweak: ", "") then
+                        if tweak == v.text:gsub("Style tweak '", ""):gsub("' toggle", "") then
                             v.text = v.text .. " ✔"
                         end
                     end
@@ -1333,7 +1333,7 @@ function Dispatcher._showAsMenu(settings, exec_props)
 
                                         if buttonqm[1] and string.match(buttonqm[1].text, "tweak") and ui and ui.tweakst then
                                             for _,tweak in pairs(ui.tweakst) do
-                                                if tweak == buttonqm[1].text:gsub("Toggle style tweak: ", "") then
+                                                if tweak == buttonqm[1].text:gsub("Style tweak '", ""):gsub("' toggle", "") then
                                                     buttonqm[1].text = buttonqm[1].text .. " ✔"
                                                 end
                                             end
