@@ -327,7 +327,7 @@ function ReaderFont:onSetFont(face)
         if G_reader_settings:isTrue("scale_font_to_current_font") then
             local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
             local size_px = (display_dpi * self.configurable.font_size)/72
-
+            local Math = require("optmath")
             -- We need this in the renderGlyph() function in freetype.lua source
             -- h = tonumber((self.face.size.metrics.ascender - self.face.size.metrics.descender) / 64)
             -- h = tonumber(self.face.bbox.yMax / 64)
@@ -338,8 +338,8 @@ function ReaderFont:onSetFont(face)
             -- local face_base = Font:getFace("Capita-Regular", size_px, 0, false);
             -- 120 decimal value x character
             local face_base = Font:getFace(current_face, size_px, 0, false);
-            local glyph = RenderText:getGlyph(face_base, 120)
-
+            -- local glyph = RenderText:getGlyph(face_base, 120)
+            local x_height = Math.round(face_base.ftsize:getXHeight() * size_px)
 
             -- local fonts = FontList:getFontList()
             -- local escaped_realname = self.font_face:gsub("[-]", "%%-"):gsub("%s+", ""):gsub("_", ""):gsub("-", "")
@@ -351,14 +351,14 @@ function ReaderFont:onSetFont(face)
             --     end
             -- end
 
-            local face2 = Font:getFace(self.font_face:gsub("%s+", "") .. "-Regular", size_px, 0, false);
-            local glyph2 = RenderText:getGlyph(face2,  120)
-
+            local face_base2 = Font:getFace(self.font_face:gsub("%s+", "") .. "-Regular", size_px, 0, false);
+            -- local glyph2 = RenderText:getGlyph(face2,  120)
+            local x_height2 = Math.round(face_base2.ftsize:getXHeight() * size_px)
 
             -- Do the same as getXHeight() function in lvfntman.cpp CREngine source
             -- local other_adjusted_size = (size_px *  glyph.xheight + size_px/2) / glyph2.xheight
 
-            local other_adjusted_size = size_px * ((glyph.xheight/size_px)/(glyph2.xheight/size_px))
+            local other_adjusted_size = size_px * ((x_height/size_px)/(x_height2/size_px))
             self.configurable.line_spacing = self.configurable.line_spacing * (size_px/other_adjusted_size)
             self.ui.document:setInterlineSpacePercent(self.configurable.line_spacing)
 
