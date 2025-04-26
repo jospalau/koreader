@@ -2705,13 +2705,17 @@ function PageTextInfo:onGetTextPage()
     local face_base = Font:getFace(current_face, size_px, 0, false);
     local glyph = RenderText:getGlyph(face_base, 120)
 
-    local x_height = 0
-    if face_base.ftsize:getSxHeight() > 0 then
-        local ratio = face_base.ftsize:getSxHeight() / face_base.ftsize:getUnitsPerEM()
-        x_height = Math.round(ratio * size_px * 100) / 100
-    else
-        x_height = glyph.xheight
-    end
+    -- The parameter sxHeight in the OS/2 table does not exist for all the fonts and it is not accurate for some of them (Crimson Text)
+    -- The xheight property created for glyphs in the source freetype.lua as tonumber(glyph.metrics.horiBearingY / 64) neither it is
+    -- if face_base.ftsize:getSxHeight() > 0 then
+    --     local ratio = face_base.ftsize:getSxHeight() / face_base.ftsize:getUnitsPerEM()
+    --     x_height = Math.round(ratio * size_px * 100) / 100
+    -- else
+    --     x_height = glyph.xheight
+    -- end
+
+    -- We use this getXHeight() which computed the correct value
+    local x_height = Math.round(face_base.ftsize:getXHeight() * size_px)
 
 
     local x_height_mm = Math.round((x_height * (25.4 / display_dpi) * 100)) / 100
