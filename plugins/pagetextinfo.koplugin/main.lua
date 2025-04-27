@@ -500,6 +500,49 @@ function PageTextInfo:toggleHighlightAllWordsVocabulary(toggle)
     return true
 end
 
+local RulerOverlay = InputContainer:extend{
+    name = "RulerOverlay",
+}
+
+function RulerOverlay:init()
+    local GestureRange = require("ui/gesturerange")
+    local ImageWidget = require("ui/widget/imagewidget")
+    local widget_settings = {
+        width = Screen:getWidth(),
+        height = Screen:getHeight(),
+        scale_factor = G_reader_settings:isFalse("screensaver_stretch_images") and 0 or nil,
+        stretch_limit_percentage = G_reader_settings:readSetting("screensaver_stretch_limit_percentage"),
+        alpha = 0 -- transparency (0.0 = fully transparent, 1.0 = opaque)
+    }
+
+    self.ges_events = {
+        Tap = {
+            GestureRange:new{
+                ges = "tap",
+                range = self.dimen,
+            },
+        },
+    }
+    widget_settings.image_disposable = true
+    widget_settings.file = "resources/rulerKoboClaraBW.png"
+
+
+    widget_settings.file_do_cache = false
+    widget_settings.alpha = true
+
+
+    self.ruler_widget = ImageWidget:new(widget_settings)
+    UIManager:show(self.ruler_widget)
+    UIManager:show(self)
+end
+
+function RulerOverlay:onTap(arg, ges_ev)
+    -- Closes itself on tap
+    UIManager:close(self.ruler_widget)
+    UIManager:close(self)
+    return true -- event handled
+end
+
 function PageTextInfo:onSwipe(_, ges)
     if not self.initialized then return end
     local direction = BD.flipDirectionIfMirroredUILayout(ges.direction)
@@ -534,6 +577,10 @@ function PageTextInfo:onSwipe(_, ges)
             self.view.topbar:quickToggleOnOff(true)
         else
             self.view.topbar:quickToggleOnOff(false)
+        end
+    elseif direction == "south" then
+        if Device.model == "Kobo_spaBW" then
+            RulerOverlay:new()
         end
     elseif direction == "east" then
         -- local doc_settings = DocSettings:open(doc_path)
