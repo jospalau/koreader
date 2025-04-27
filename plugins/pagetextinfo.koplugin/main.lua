@@ -545,14 +545,18 @@ function RulerOverlay:onTapRuler(arg, ges_ev)
     -- UIManager:close(self)
     -- local ruler_overlay = RulerOverlay:new()
     -- UIManager:show(ruler_overlay.ruler_widget)
-    local Screen = require("device").screen
-    local ruler = self.ruler_widget
-    UIManager:setDirty(require("apps/reader/readerui").instance.view.dialog, "ui")
-    -- UIManager:show(ruler_overlay)
-    UIManager:scheduleIn(0.5, function()
-        ruler:paintTo(Screen.bb, ges_ev.pos.x - Screen:getWidth() / 2, ges_ev.pos.y)
-        UIManager:setDirty(nil, "ui")
-    end)
+    if self.tapped == nil or self.tapped == false then
+        local Screen = require("device").screen
+        local ruler = self.ruler_widget
+        UIManager:setDirty(require("apps/reader/readerui").instance.view.dialog, "ui")
+        -- UIManager:show(ruler_overlay)
+        self.tapped = true
+        UIManager:scheduleIn(0.5, function()
+            ruler:paintTo(Screen.bb, ges_ev.pos.x - Screen:getWidth() / 2, ges_ev.pos.y)
+            UIManager:setDirty(nil, "ui")
+            self.tapped = false
+        end)
+    end
 
     return true -- event handled
 end
@@ -599,12 +603,12 @@ function PageTextInfo:onSwipe(_, ges)
             self.view.topbar:quickToggleOnOff(false)
         end
     elseif direction == "south" then
-        -- if Device.model == "Kobo_spaBW" then
+        if Device:isEmulator() or Device.model == "Kobo_spaBW" then
             local ruler_overlay = RulerOverlay:new()
             -- UIManager:show(ruler_overlay.ruler_widget)
             ruler_overlay.ruler_widget:paintTo(Screen.bb, 0, 0)
             UIManager:show(ruler_overlay)
-        -- end
+        end
     elseif direction == "east" then
         -- local doc_settings = DocSettings:open(doc_path)
         local reference_page = self.ui.doc_settings:readSetting("reference_page_xpointer")
