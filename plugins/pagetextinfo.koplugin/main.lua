@@ -510,34 +510,54 @@ function RulerOverlay:init()
     local widget_settings = {
         width = Screen:getWidth(),
         height = Screen:getHeight(),
-        scale_factor = G_reader_settings:isFalse("screensaver_stretch_images") and 0 or nil,
-        stretch_limit_percentage = G_reader_settings:readSetting("screensaver_stretch_limit_percentage"),
+        x = 1000,
+        y = 1000,
         alpha = 0 -- transparency (0.0 = fully transparent, 1.0 = opaque)
     }
 
     self.ges_events = {
-        Tap = {
+        TapRuler = {
             GestureRange:new{
                 ges = "tap",
                 range = self.dimen,
             },
         },
+        SwipeRuler = {
+            GestureRange:new{
+                ges = "swipe",
+                range = self.dimen,
+            },
+        },
     }
-    widget_settings.image_disposable = true
+    -- widget_settings.image_disposable = true
     widget_settings.file = "resources/rulerKoboClaraBW.png"
 
 
-    widget_settings.file_do_cache = false
+    -- widget_settings.file_do_cache = false
     widget_settings.alpha = true
 
 
     self.ruler_widget = ImageWidget:new(widget_settings)
-    UIManager:show(self.ruler_widget)
-    UIManager:show(self)
 end
 
-function RulerOverlay:onTap(arg, ges_ev)
-    -- Closes itself on tap
+function RulerOverlay:onTapRuler(arg, ges_ev)
+    -- UIManager:close(self.ruler_widget)
+    -- UIManager:close(self)
+    -- local ruler_overlay = RulerOverlay:new()
+    -- UIManager:show(ruler_overlay.ruler_widget)
+    local Screen = require("device").screen
+    local ruler = self.ruler_widget
+    UIManager:setDirty(require("apps/reader/readerui").instance.view.dialog, "ui")
+    -- UIManager:show(ruler_overlay)
+    UIManager:scheduleIn(0.5, function()
+        ruler:paintTo(Screen.bb, ges_ev.pos.x - Screen:getWidth() / 2, ges_ev.pos.y)
+        UIManager:setDirty(nil, "ui")
+    end)
+
+    return true -- event handled
+end
+
+function RulerOverlay:onSwipeRuler(arg, ges_ev)
     UIManager:close(self.ruler_widget)
     UIManager:close(self)
     return true -- event handled
@@ -579,9 +599,12 @@ function PageTextInfo:onSwipe(_, ges)
             self.view.topbar:quickToggleOnOff(false)
         end
     elseif direction == "south" then
-        if Device.model == "Kobo_spaBW" then
-            RulerOverlay:new()
-        end
+        -- if Device.model == "Kobo_spaBW" then
+            local ruler_overlay = RulerOverlay:new()
+            -- UIManager:show(ruler_overlay.ruler_widget)
+            ruler_overlay.ruler_widget:paintTo(Screen.bb, 0, 0)
+            UIManager:show(ruler_overlay)
+        -- end
     elseif direction == "east" then
         -- local doc_settings = DocSettings:open(doc_path)
         local reference_page = self.ui.doc_settings:readSetting("reference_page_xpointer")
