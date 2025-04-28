@@ -2842,6 +2842,7 @@ function PageTextInfo:onGetTextPage()
     "Font: " .. font_face .. string.char(10) ..
     "Font size: " .. font_size .. "px, " .. font_size_pt .. "pt" .. font_size_pt_koreader .. ", " .. font_size_mm .. "mm" .. string.char(10) ..
     "Font weight: " .. font_weight .. string.char(10) ..
+    "Device resolution: " .. Screen:getHeight() .. "x" .. Screen:getWidth() .. ", " .. display_dpi .. "ppi" .. string.char(10) ..
     "Font x-height: " .. x_height .. "px, " .. x_height_mm .. "mm. 2.1-2.6mm best (1.7-2.3mm frequent) at 40cm (half way from shoulder to fist)" .. string.char(10) .. string.char(10) ..
     "Number of tweaks: " .. self.ui.tweaks_no .. string.char(10) ..
     self.ui.tweaks .. string.char(10) ..
