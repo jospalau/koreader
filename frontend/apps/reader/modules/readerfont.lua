@@ -340,6 +340,7 @@ function ReaderFont:onSetFont(face)
             local face_base = Font:getFace(current_face, size_px, 0, false);
             -- local glyph = RenderText:getGlyph(face_base, 120)
             local x_height = face_base.ftsize:getXHeight() * size_px
+            local line_height = face_base.ftsize:getLineHeight() * size_px
 
             -- local fonts = FontList:getFontList()
             -- local escaped_realname = self.font_face:gsub("[-]", "%%-"):gsub("%s+", ""):gsub("_", ""):gsub("-", "")
@@ -354,12 +355,14 @@ function ReaderFont:onSetFont(face)
             local face_base2 = Font:getFace(face:gsub("%s+", "") .. "-Regular", size_px, 0, false);
             -- local glyph2 = RenderText:getGlyph(face2,  120)
             local x_height2 = face_base2.ftsize:getXHeight() * size_px
+            local line_height2 = face_base2.ftsize:getLineHeight() * size_px
 
             -- Do the same as getXHeight() function in lvfntman.cpp CREngine source
             -- local other_adjusted_size = (size_px *  glyph.xheight + size_px/2) / glyph2.xheight
 
             local other_adjusted_size = size_px * ((x_height/size_px)/(x_height2/size_px))
-            self.configurable.line_spacing = self.configurable.line_spacing * (size_px/other_adjusted_size)
+            self.configurable.line_spacing = self.configurable.line_spacing * (line_height2/line_height)
+
             self.ui.document:setInterlineSpacePercent(self.configurable.line_spacing)
 
             local Math = require("optmath")
