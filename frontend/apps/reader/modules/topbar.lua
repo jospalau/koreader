@@ -1112,6 +1112,29 @@ function TopBar:resetSession()
     self.init_page_screens = nil
 end
 
+function TopBar:getXHeightRangeLabel(xh_mm)
+    local min = 1.6
+    local sweet_min = 2.1
+    local sweet_max = 2.56
+    local optimum = 2.3
+    local epsilon = 0.05
+
+    local label
+    if math.abs(xh_mm - optimum) <= epsilon then
+        label = "optimum"
+    elseif xh_mm < min then
+        label = "low"
+    elseif xh_mm < sweet_min then
+        label = "feasible"
+    elseif xh_mm <= sweet_max then
+        label = "sweet"
+    else
+        label = "oversized"
+    end
+
+    return string.format("xH: %.2fmm (%.1f–%.1f–%.1f) [%s]", xh_mm, sweet_min, optimum, sweet_max, label)
+end
+
 function TopBar:toggleBar(light_on)
     if self.init_page == nil then
         self.init_page = self.ui.pagemap:getCurrentPageLabel(true)
@@ -1203,10 +1226,22 @@ function TopBar:toggleBar(light_on)
         --     title = TextWidget.PTF_BOLD_START .. title .. " (" .. self.series .. ")" .. TextWidget.PTF_BOLD_END
         -- end
 
+
+        local font_face = self.ui.document._document:getFontFace()
+        local current_face = font_face:gsub("%s+", "") .. "-Regular"
+        local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+        local size_px = (display_dpi * self.ui.document.configurable.font_size)/72
+        local face_base = Font:getFace(current_face, size_px, 0, false);
+        local x_height = Math.round(face_base.ftsize:getXHeight() * size_px)
+        local x_height_mm = Math.round((x_height * (25.4 / display_dpi) * 100)) / 100
+        local x_height_with_range = self:getXHeightRangeLabel(x_height_mm)
+
         local hours_to_read = tonumber(self.total_words)/(self.avg_wpm * 60)
         local progress =  math.floor(100/hours_to_read * 10)/10
         self.total_wordsk = tostring(math.floor(self.total_words/1000))
-        self.book_stats_text:setText(self.total_wordsk .. "kw|" .. tostring(self.sessions_current_book) .. "s|" .. tostring(progress) .. "%|" .. read_book)
+        self.book_stats_text:setText(self.total_wordsk .. "kw|"
+        .. tostring(self.sessions_current_book) .. "s|" .. tostring(progress) .. "%|"
+        .. read_book .."|" .. x_height_with_range)
         title = TextWidget.PTF_BOLD_START .. title .. TextWidget.PTF_BOLD_END
         self.title_text:setText(title)
         self.series_text:setText(self.series)
