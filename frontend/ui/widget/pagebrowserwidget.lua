@@ -1014,6 +1014,11 @@ function PageBrowserWidget:onShowMenu()
                         self:updateLayout()
                     end
                 end,
+                hold_callback = function()
+                    if self:updateNbCols(-2, true) then
+                        self:updateLayout()
+                    end
+                end,
                 width = plus_minus_width,
             },
             {
@@ -1021,6 +1026,11 @@ function PageBrowserWidget:onShowMenu()
                 enabled_func = function() return self.nb_cols < self.max_nb_cols end,
                 callback = function()
                     if self:updateNbCols(1, true) then
+                        self:updateLayout()
+                    end
+                end,
+                hold_callback = function()
+                    if self:updateNbCols(2, true) then
                         self:updateLayout()
                     end
                 end,
@@ -1041,6 +1051,11 @@ function PageBrowserWidget:onShowMenu()
                         self:updateLayout()
                     end
                 end,
+                hold_callback = function()
+                    if self:updateNbRows(-2, true) then
+                        self:updateLayout()
+                    end
+                end,
                 width = plus_minus_width,
             },
             {
@@ -1048,6 +1063,11 @@ function PageBrowserWidget:onShowMenu()
                 enabled_func = function() return self.nb_rows < self.max_nb_rows end,
                 callback = function()
                     if self:updateNbRows(1, true) then
+                        self:updateLayout()
+                    end
+                end,
+                hold_callback = function()
+                    if self:updateNbRows(2, true) then
                         self:updateLayout()
                     end
                 end,
@@ -1739,9 +1759,11 @@ function PageBrowserWidget:onThumbnailHold(page, ges)
             align = "left",
             callback = function()
                 UIManager:close(button_dialog)
-                self.ui.handmade:addOrEditPageTocItem(page, function()
-                    self:updateEditableStuff(true)
-                end)
+                self.ui.handmade:addOrEditPageTocItem(page, function() self:updateEditableStuff(true) end)
+            end,
+            hold_callback = function() -- no dialog: adds empty TOC item if none existing
+                UIManager:close(button_dialog)
+                self.ui.handmade:addOrEditPageTocItem(page, function() self:updateEditableStuff(true) end, nil, true)
             end,
         }})
     end
