@@ -680,6 +680,12 @@ function TopBar:onReaderReady()
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
+    self.typography_text = TextWidget:new{
+        text =  "",
+        face = Font:getFace("myfont3", 12),
+        fgcolor = Blitbuffer.COLOR_BLACK,
+    }
+
     self.time_battery_text = TextWidget:new{
         text =  "",
         face = Font:getFace("myfont3", 12),
@@ -1112,7 +1118,7 @@ function TopBar:resetSession()
     self.init_page_screens = nil
 end
 
-function TopBar:getXHeightRangeLabel(xh_mm)
+function TopBar:getXHeightRangeLabel(size_pt, xh_mm)
     local min = 1.6
     local sweet_min = 2.1
     local sweet_max = 2.56
@@ -1132,7 +1138,7 @@ function TopBar:getXHeightRangeLabel(xh_mm)
         label = "oversized"
     end
 
-    return string.format("xH: %.2fmm (%.1f–%.1f–%.1f) [%s]", xh_mm, sweet_min, optimum, sweet_max, label)
+    return string.format("fS: %.2fpt, xH: %.2fmm (%.1f–%.1f–%.1f) [%s]", size_pt, xh_mm, sweet_min, optimum, sweet_max, label)
 end
 
 function TopBar:toggleBar(light_on)
@@ -1231,17 +1237,20 @@ function TopBar:toggleBar(light_on)
         local current_face = font_face:gsub("%s+", "") .. "-Regular"
         local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
         local size_px = (display_dpi * self.ui.document.configurable.font_size)/72
+        local size_pt = (size_px/display_dpi) * 72
         local face_base = Font:getFace(current_face, size_px, 0, false);
         local x_height = Math.round(face_base.ftsize:getXHeight() * size_px)
         local x_height_mm = Math.round((x_height * (25.4 / display_dpi) * 100)) / 100
-        local x_height_with_range = self:getXHeightRangeLabel(x_height_mm)
+        local x_height_with_range = self:getXHeightRangeLabel(size_pt, x_height_mm)
 
         local hours_to_read = tonumber(self.total_words)/(self.avg_wpm * 60)
         local progress =  math.floor(100/hours_to_read * 10)/10
         self.total_wordsk = tostring(math.floor(self.total_words/1000))
         self.book_stats_text:setText(self.total_wordsk .. "kw|"
         .. tostring(self.sessions_current_book) .. "s|" .. tostring(progress) .. "%|"
-        .. read_book .."|" .. x_height_with_range)
+        .. read_book)
+
+        self.typography_text:setText(x_height_with_range)
         title = TextWidget.PTF_BOLD_START .. title .. TextWidget.PTF_BOLD_END
         self.title_text:setText(title)
         self.series_text:setText(self.series)
@@ -1279,9 +1288,9 @@ function TopBar:toggleBar(light_on)
         self.chapter_text:setText(chapter)
         if self.option == 1 then
             if self.origin_book and  self.origin_book ~= "" then
-                self.author_text:setText(self.ui.document._document:getDocumentProps().authors .. " - " ..  self.pub_date .. " - "  ..  self.origin_book .. " - " .. self.book_stats_text.text)
+                self.author_text:setText(self.ui.document._document:getDocumentProps().authors .. " - " ..  self.pub_date .. " - "  ..  self.origin_book .. " - " .. self.book_stats_text.text .. " - " .. self.typography_text.text)
             else
-                self.author_text:setText(self.ui.document._document:getDocumentProps().authors .. " - " ..  self.pub_date .. " - " .. self.book_stats_text.text)
+                self.author_text:setText(self.ui.document._document:getDocumentProps().authors .. " - " ..  self.pub_date .. " - " .. self.book_stats_text.text .. " - " .. self.typography_text.text)
             end
         else
             self.author_text:setText("")
@@ -1486,6 +1495,7 @@ function TopBar:toggleBar(light_on)
         self.chapter_text:setText("")
         self.progress_chapter_text:setText("")
         self.book_stats_text:setText("")
+        self.typography_text:setText("")
         self.author_text:setText("")
         self.test_light_text:setText("")
         self.progress_bar_book.width = 0
