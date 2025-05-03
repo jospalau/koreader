@@ -55,6 +55,8 @@ local PageTextInfo = InputContainer:extend{
     is_doc_only = false,
 }
 
+PageTextInfo.readability_table = dofile("plugins/pagetextinfo.koplugin/readability_table.lua")
+
 local function onFolderUp()
     if not (G_reader_settings:isTrue("lock_home_folder") and
         FileManager.instance.file_chooser.path == G_reader_settings:readSetting("home_dir")) then
@@ -2799,6 +2801,7 @@ function PageTextInfo:onGetTextPage()
     local x_height_mm = Math.round((x_height * (25.4 / display_dpi) * 100)) / 100
     local font_weight = 400 + self.ui.document.configurable.font_base_weight * 100
 
+    local readability = self.readability_table[current_face] and self.readability_table[current_face] or "N/A"
     -- The desktop publishing point (DTP point) or PostScript point is defined as 1/72 or 0.0138 of the international inch
     -- We have now points in the font size, converting to didot points is simple, 1 points = 0.93575007368111 didot points
     -- local font_size_pt_koreader = string.format(" (%.2fp)", convertSizeTo(self.ui.document.configurable.font_size, "pt"))
@@ -2843,7 +2846,7 @@ function PageTextInfo:onGetTextPage()
     "Average time read last 90 days: " .. avg_last_ninety_days .. "h" .. string.char(10) ..
     "Average time read last 180 days: " .. avg_last_hundred_and_eighty_days .. "h" .. string.char(10) ..
     "Avg wpm and wph: " .. avg_wpm .. string.char(10) .. string.char(10) ..
-    "Font: " .. font_face .. string.char(10) ..
+    "Font: " .. font_face .. " (" .. readability .. ")" .. string.char(10) ..
     "Font size: " .. font_size .. "px, " .. font_size_pt .. "pt" .. font_size_pt_koreader .. ", " .. font_size_mm .. "mm" .. string.char(10) ..
     "Font weight: " .. font_weight .. string.char(10) ..
     "Device resolution: " .. Screen:getWidth() .. "x" .. Screen:getHeight() .. ", " .. display_dpi .. "ppi" .. string.char(10) ..
