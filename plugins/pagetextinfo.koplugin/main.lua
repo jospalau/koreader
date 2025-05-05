@@ -56,6 +56,7 @@ local PageTextInfo = InputContainer:extend{
 }
 
 PageTextInfo.readability_table = dofile("plugins/pagetextinfo.koplugin/readability_table.lua")
+PageTextInfo.genres_table = dofile("plugins/pagetextinfo.koplugin/genres_table.lua")
 
 local function onFolderUp()
     if not (G_reader_settings:isTrue("lock_home_folder") and
@@ -2625,11 +2626,11 @@ function PageTextInfo:onGetStyles()
     local text =  string.char(10) .. htmlw
     .. string.char(10) .. csss_classes
     .. string.char(10) .. csss
-    UIManager:show(InfoMessage:new{
-        text = T(_(text)),
-        no_refresh_on_close = false,
-        face = Font:getFace("myfont3"),
-        width = math.floor(Screen:getWidth() * 0.85),
+    UIManager:show(TextViewer:new{
+        title = "Book styles",
+        title_multilines = true,
+        text = text,
+        text_type = "file_content",
     })
     return true
 end
@@ -3220,6 +3221,74 @@ getReadThisBook = function(footer)
 
 end
 
+function PageTextInfo:getGenreBook()
+    if not self.ui then return end
+    local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
+    if file_type == "epub" then
+        local css_text = self.ui.document:getDocumentFileContent("OPS/styles/stylesheet.css")
+        if css_text == nil then
+            css_text = self.ui.document:getDocumentFileContent("stylesheet.css")
+        end
+        if css_text == nil then
+            css_text = self.ui.document:getDocumentFileContent("OEBPS/css/style.css")
+        end
+
+        -- $ bsdtar tf arthur-conan-doyle_the-hound-of-the-baskervilles.epub | grep -i css
+        -- epub/css/
+        -- epub/css/core.css
+        -- epub/css/se.css
+        -- epub/css/local.css
+        if css_text == nil then
+            css_text = self.ui.document:getDocumentFileContent("epub/css/core.css")
+        end
+
+        local opf_text = self.ui.document:getDocumentFileContent("OPS/Miscellaneous/content.opf")
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("content.opf")
+        end
+
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("OPS/volume.opf")
+        end
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("volume.opf")
+        end
+
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("OEBPS/volume.opf")
+        end
+
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("OEBPS/Miscellaneous/content.opf")
+        end
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("OEBPS/content.opf")
+        end
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("content.opf")
+        end
+
+        -- $ bsdtar tf arthur-conan-doyle_the-hound-of-the-baskervilles.epub | grep -i content
+        -- epub/content.opf
+        if opf_text == nil then
+            opf_text = self.ui.document:getDocumentFileContent("epub/content.opf")
+        end
+
+        local origin = string.match(opf_text, "<opf:meta property=\"calibre:user_metadata\">(.-)</opf:meta>")
+        if origin ~= nil then
+            origin = string.match(origin, "\"#genre\": {(.-)}")
+            if origin ~= nil then
+                origin = string.match(origin, " \"#value#\": \".-\"")
+                if origin ~= nil then
+                    origin = string.match(origin, ": .*")
+                    origin = origin:sub(4,origin:len() - 1)
+                end
+            end
+        end
+        return origin
+    end
+end
+
 function PageTextInfo:onShowTextProperties()
     if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
     if not self.ui.rolling then
@@ -3499,7 +3568,24 @@ function PageTextInfo:onShowTextProperties()
     .. point .. " Genres: " .. opf_genre .. string.char(10)
     -- .. opf_calibre .. string.char(10)
     .. line .. string.char(10)  .. string.char(10)
-    .. point .. " RTRP out of " .. self._goal_pages .. ": " .. (self._goal_pages - today_pages) .. "p " .. icon_goal_pages .. string.char(10)
+
+
+    local genre = self:getGenreBook()
+    if genre == nil or genre == "Unknown" then
+        genre = "N/A"
+    end
+    text = text .. "Genre: " .. genre .. string.char(10)
+    if genre ~= nil and genre ~= "N/A" then
+        local genre_profile = self.genres_table[genre] and self.genres_table[genre] or "N/A"
+        if genre_profile.fonts ~= nil then
+            text = text .. "Suggested fonts: " .. genre_profile.fonts .. string.char(10)
+            text = text .. "Tap to apply a random profile" .. string.char(10)  .. string.char(10)
+        else
+            text = text .. "No profile for this genre was found" .. string.char(10)
+        end
+    end
+    text = text .. line .. string.char(10)  .. string.char(10)
+    text = text .. point .. " RTRP out of " .. self._goal_pages .. ": " .. (self._goal_pages - today_pages) .. "p " .. icon_goal_pages .. string.char(10)
     .. point .. " RTRT out of " .. self._goal_time .. ": " .. (self._goal_time - today_duration_number) .. "m " .. icon_goal_time  .. string.char(10)
     .. point .. " This book: " .. time_reading_current_book .. string.char(10)
     .. point .. " This session: " .. duration .. "(" .. percentage_session .. "%, " .. words_session .. "w)"  .. "(" .. pages_read_session.. "p) " .. wpm_session .. "wpm" .. important .. string.char(10)
@@ -3525,12 +3611,43 @@ function PageTextInfo:onShowTextProperties()
 
     -- self.ui.statistics._total_chars=self.ui.statistics._total_char + nbcharacters
     -- local avg_character_pages =  self.ui.statistics._total_chars/ self.ui.statistics._pages_turned
-    UIManager:show(InfoMessage:new{
-        text = T(_(text)),
-        no_refresh_on_close = false,
-        face = Font:getFace("myfont"),
-        width = math.floor(Screen:getWidth() * 0.85),
-    })
+    local TextViewer = require("ui/widget/textviewer")
+    local textviewer = TextViewer:new{
+        title = "Book information",
+        title_multilines = true,
+        text = text,
+        text_type = "file_content",
+    }
+    -- local original_onTapClose = textviewer.onTapClose
+    textviewer.onTapClose = function(textviewer)
+        local genre = self:getGenreBook()
+
+        local genre_profile = self.genres_table[genre] and self.genres_table[genre] or nil
+        if genre_profile == nil or genre_profile == "Unknown" then
+            UIManager:show(Notification:new{
+                text = _("No genre found for this book"),
+            })
+            -- textviewer.onTapClose = original_onTapClose
+        else
+            local selected_profile = genre_profile.presets[math.random(1, #genre_profile.presets)]
+            local font_profile = selected_profile.font
+            local weight_profile = selected_profile.weight
+            local font_weight = 400 + (weight_profile * 100)
+            local line_spacing_percent_profile = selected_profile.line_spacing_percent
+            local line_spacing_em_profile = selected_profile.line_spacing_em
+            UIManager:close(textviewer)
+
+            UIManager:nextTick(function()
+                UIManager:broadcastEvent(Event:new("SetFont", font_profile))
+                UIManager:broadcastEvent(Event:new("SetFontBaseWeight", weight_profile))
+                UIManager:broadcastEvent(Event:new("SetLineSpace", line_spacing_percent_profile))
+                UIManager:show(Notification:new{
+                    text = _(font_profile .. ", " .. font_weight .. ", " .. line_spacing_em_profile),
+                })
+            end)
+        end
+    end
+    UIManager:show(textviewer)
     return true
 end
 
@@ -4135,5 +4252,6 @@ function PageTextInfo:onTurnOnWifiKindle()
         face = Font:getFace("myfont"),
     })
 end
+
 
 return PageTextInfo
