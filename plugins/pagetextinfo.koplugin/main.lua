@@ -4179,7 +4179,7 @@ function PageTextInfo:onSyncBooks()
         if Device:canRestart() then
             save_text = _("Restart")
         end
-        if not string.match(output, "Problem") and not string.match(output, "not connected") then
+        if not string.match(output, "Problem syncing") and not string.match(output, "not connected") then
             local Size = require("ui/size")
             UIManager:show(ConfirmBox:new{
                 dismissable = false,
