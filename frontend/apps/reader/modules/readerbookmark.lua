@@ -1185,6 +1185,36 @@ function ReaderBookmark:showBookmarkDetails(item_or_index)
     local buttons_table = {
         {
             {
+                text = "▕◁",
+                enabled = item_idx > 1,
+                callback = function()
+                    _showBookmarkDetails(1)
+                end,
+            },
+            {
+                text = "◁",
+                enabled = item_idx > 1,
+                callback = function()
+                    _showBookmarkDetails(item_idx - 1)
+                end,
+            },
+            {
+                text = "▷",
+                enabled = item_idx < items_nb,
+                callback = function()
+                    _showBookmarkDetails(item_idx + 1)
+                end,
+            },
+            {
+                text = "▷▏",
+                enabled = item_idx < items_nb,
+                callback = function()
+                    _showBookmarkDetails(items_nb)
+                end,
+            },
+        },
+        {
+            {
                 text = _("Reset text"),
                 enabled = item.text_edited and not_select_mode or false,
                 callback = function()
@@ -1228,12 +1258,6 @@ function ReaderBookmark:showBookmarkDetails(item_or_index)
         },
         {
             {
-                text = _("Close"),
-                callback = function()
-                    textviewer:onClose()
-                end,
-            },
-            {
                 text = _("Go to bookmark"),
                 enabled = not (bm_menu and bm_menu.select_count),
                 callback = function()
@@ -1243,34 +1267,10 @@ function ReaderBookmark:showBookmarkDetails(item_or_index)
                     end
                 end,
             },
-        },
-        {
             {
-                text = "▕◁",
-                enabled = item_idx > 1,
+                text = _("Close"),
                 callback = function()
-                    _showBookmarkDetails(1)
-                end,
-            },
-            {
-                text = "◁",
-                enabled = item_idx > 1,
-                callback = function()
-                    _showBookmarkDetails(item_idx - 1)
-                end,
-            },
-            {
-                text = "▷",
-                enabled = item_idx < items_nb,
-                callback = function()
-                    _showBookmarkDetails(item_idx + 1)
-                end,
-            },
-            {
-                text = "▷▏",
-                enabled = item_idx < items_nb,
-                callback = function()
-                    _showBookmarkDetails(items_nb)
+                    textviewer:onClose()
                 end,
             },
         },
