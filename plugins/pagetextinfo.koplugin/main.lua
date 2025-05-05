@@ -3578,6 +3578,7 @@ function PageTextInfo:onShowTextProperties()
     if genre ~= nil and genre ~= "N/A" then
         local genre_profile = self.genres_table[genre] and self.genres_table[genre] or "N/A"
         if genre_profile.fonts ~= nil then
+            text = text .. "Ideal fonts to use, " .. genre_profile.description .. string.char(10)
             text = text .. "Suggested fonts: " .. genre_profile.fonts .. string.char(10)
             text = text .. "Tap to apply a random profile" .. string.char(10)  .. string.char(10)
         else
