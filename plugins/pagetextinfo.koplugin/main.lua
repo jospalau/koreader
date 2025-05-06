@@ -2662,12 +2662,6 @@ end
 function PageTextInfo:onGetTextPage()
     if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
     local cur_page = self.ui.document:getCurrentPage()
-    local total_characters = 0
-    -- if not Device:isPocketBook() then
-    total_characters, total_words = self.ui.document:getBookCharactersCount()
-    -- total_words = math.ceil(total_characters/5.7)
-    -- total_pages = math.ceil(total_characters/1767)
-    -- end
     local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
     -- local name, name2, height, unitheight, height2, unitheight2, indent, unitindent, indent2, unitindent2, margin, unitmargin, margin2, unitmargin2 = "","","","","","","","","","","","","",""
     local text_properties=""
@@ -2756,12 +2750,6 @@ function PageTextInfo:onGetTextPage()
         end
     end
 
-    local title_pages = self.ui.document._document:getDocumentProps().title
-
-    -- local title_words = 0
-    -- if (title_pages:find("([0-9,]+w)") ~= nil) then
-    --     title_words = title_pages:match("([0-9,]+w)"):gsub("w",""):gsub(",","")
-    -- end
 
     local font_size = self.ui.document._document:getFontSize()
     local font_face = self.ui.document._document:getFontFace()
@@ -2821,38 +2809,13 @@ function PageTextInfo:onGetTextPage()
 
     local sessions, avg_wpm, avg_last_seven_days, avg_last_thirty_days, avg_last_sixty_days, avg_last_ninety_days, avg_last_hundred_and_eighty_days = getSessionsInfo(self.ui.view.footer)
     avg_wpm = math.floor(avg_wpm) .. "wpm" .. ", " .. math.floor(avg_wpm*60) .. "wph"
-    local text = ""
 
-
-
-
-    -- if not Device:isPocketBook() then
-    text = text .. "Total pages (screens): " .. self.ui.document:getPageCount() .. string.char(10) ..
-    "Total pages (1767cpp): " .. self.ui.pagemap:getLastPageLabel(true) .. string.char(10) ..
-
-    --"Total pages assuming 1767 cpp: " .. tostring(total_pages) .. string.char(10) ..
-    "Total characters: " .. tostring(total_characters) .. string.char(10) ..
-    "Total words: " .. tostring(total_words) .. string.char(10) ..
-    -- Dividing characters between 5.7
-    "Total words (total chars/5.7): " .. tostring(math.ceil(total_characters/5.7)) .. string.char(10) -- Dividing characters between 5.7
-    --"Words per screen page: " .. tostring(math.floor((total_words/self.pages * 100) / 100)) .. string.char(10)
-    -- end
-
-    --text = text .. "Total words Calibre: " .. title_words .. string.char(10) ..
-    --"Words per page Calibre: " .. tostring(math.floor((title_words/self.pages * 100) / 100)) .. string.char(10) .. string.char(10) ..
-    text = text .. "Total sessions in db: " .. tostring(sessions) .. string.char(10) ..
-    "Average time read last 7 days: " .. avg_last_seven_days .. "h" .. string.char(10) ..
-    "Average time read last 30 days: " .. avg_last_thirty_days .. "h" .. string.char(10) ..
-    "Average time read last 60 days: " .. avg_last_sixty_days .. "h" .. string.char(10) ..
-    "Average time read last 90 days: " .. avg_last_ninety_days .. "h" .. string.char(10) ..
-    "Average time read last 180 days: " .. avg_last_hundred_and_eighty_days .. "h" .. string.char(10) ..
-    "Avg wpm and wph: " .. avg_wpm .. string.char(10) .. string.char(10) ..
-    "Font: " .. font_face .. " (" .. readability .. ")" .. string.char(10) ..
+    local text = "Font: " .. font_face .. " (" .. readability .. ")" .. string.char(10) ..
     "Font size: " .. font_size .. "px, " .. font_size_pt .. "pt" .. font_size_pt_koreader .. ", " .. font_size_mm .. "mm" .. string.char(10) ..
     "Font weight: " .. font_weight .. string.char(10) ..
     "Device resolution: " .. Screen:getWidth() .. "x" .. Screen:getHeight() .. ", " .. display_dpi .. "ppi" .. string.char(10) ..
     "Font x-height: " .. x_height .. "px, " .. x_height_mm .. "mm. 2.1-2.6mm best (1.7-2.3mm frequent) at 40cm (half way from shoulder to fist)" .. string.char(10) .. string.char(10) ..
-    "Number of tweaks: " .. self.ui.tweaks_no .. string.char(10) ..
+    "Applied tweaks: " .. self.ui.tweaks_no .. string.char(10) ..
     self.ui.tweaks .. string.char(10) ..
     text_properties
     UIManager:show(InfoMessage:new{
@@ -3552,40 +3515,79 @@ function PageTextInfo:onShowTextProperties()
     -- local sessions, avg_wpm, avg_last_seven_days, avg_last_thirty_days = getSessionsInfo(self)
     -- avg_wpm = math.floor(avg_wpm) .. "wpm" .. ", " .. math.floor(avg_wpm*60) .. "wph"
 
-    local line = "﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏﹏"
+    local line = "\n────────────────────────────────\n"
     local point = "‣"
     local important = " \u{261C}"
 
+    local title_pages = self.ui.document._document:getDocumentProps().title
 
-    -- .. "Avg wpm and wph in all sessions: " .. avg_wpm .. string.char(10)
-    -- .. "Average time read last 7 days: " .. avg_last_seven_days .. "h" .. string.char(10)
-    -- .. "Average time read last 30 days: " .. avg_last_thirty_days .. "h" .. string.char(10) .. string.char(10)
+    -- local title_words = 0
+    -- if (title_pages:find("([0-9,]+w)") ~= nil) then
+    --     title_words = title_pages:match("([0-9,]+w)"):gsub("w",""):gsub(",","")
+    -- end
+
+
+    local total_characters = 0
+    -- if not Device:isPocketBook() then
+    total_characters, total_words = self.ui.document:getBookCharactersCount()
+    -- total_words = math.ceil(total_characters/5.7)
+    -- total_pages = math.ceil(total_characters/1767)
+    -- end
+
+    local sessions, avg_wpm, avg_last_seven_days, avg_last_thirty_days, avg_last_sixty_days, avg_last_ninety_days, avg_last_hundred_and_eighty_days = getSessionsInfo(self.ui.view.footer)
+    avg_wpm = math.floor(avg_wpm) .. "wpm" .. ", " .. math.floor(avg_wpm*60) .. "wph"
+
     local text = clock .. " " .. title_pages .. string.char(10) .. string.char(10)
     .. point .. " Progress book: " .. progress_book .. " (" .. percentage .. ")" ..  string.char(10)
-    .. point .. " Left chapter " .. chapter .. ": " .. left_chapter  .. important .. string.char(10)
-    .. line .. string.char(10)  .. string.char(10)
+    .. point .. " Left chapter " .. chapter .. ": " .. left_chapter  .. important
+    .. line
     .. point .. " Author: " ..  author .. string.char(10)
     .. point .. " Genres: " .. opf_genre .. string.char(10)
     -- .. opf_calibre .. string.char(10)
-    .. line .. string.char(10)  .. string.char(10)
-
-
     local genre = self:getGenreBook()
     if genre == nil or genre == "Unknown" then
         genre = "N/A"
     end
-    text = text .. "Genre: " .. genre .. string.char(10)
+    text = text .. point .. " Main Genre: " .. genre .. string.char(10)
     if genre ~= nil and genre ~= "N/A" then
         local genre_profile = self.genres_table[genre] and self.genres_table[genre] or "N/A"
         if genre_profile.fonts ~= nil then
-            text = text .. "Ideal fonts to use, " .. genre_profile.description .. string.char(10)
-            text = text .. "Suggested fonts: " .. genre_profile.fonts .. string.char(10)
-            text = text .. "Tap to apply a random profile" .. string.char(10)  .. string.char(10)
+            text = text .. point .. " Ideal fonts to use: " .. string.char(10) .. " " .. genre_profile.description .. string.char(10)
+            text = text .. point .. " Suggested fonts: " .. string.char(10)
+            for font in string.gmatch(genre_profile.fonts, '([^,]+)') do
+                local trimmed_font = font:match("^%s*(.-)%s*$")
+                text = text .. " " .. trimmed_font.. string.char(10)
+            end
+            text = text .. "» Tap to apply a random profile"
         else
-            text = text .. "No profile for this genre was found" .. string.char(10)
+            text = text .. "No profile for this genre was found"
         end
     end
-    text = text .. line .. string.char(10)  .. string.char(10)
+    text = text .. line
+    text = text .. "Total pages (screens): " .. self.ui.document:getPageCount() .. string.char(10) ..
+    "Total pages (1767cpp): " .. self.ui.pagemap:getLastPageLabel(true) .. string.char(10) ..
+
+    --"Total pages assuming 1767 cpp: " .. tostring(total_pages) .. string.char(10) ..
+    "Total characters: " .. tostring(total_characters) .. string.char(10) ..
+    "Total words: " .. tostring(total_words) .. string.char(10) ..
+    -- Dividing characters between 5.7
+    "Total words (total chars/5.7): " .. tostring(math.ceil(total_characters/5.7)) .. string.char(10) -- Dividing characters between 5.7
+    --"Words per screen page: " .. tostring(math.floor((total_words/self.pages * 100) / 100)) .. string.char(10)
+    -- end
+
+    --text = text .. "Total words Calibre: " .. title_words .. string.char(10) ..
+    --"Words per page Calibre: " .. tostring(math.floor((title_words/self.pages * 100) / 100)) .. string.char(10) .. string.char(10) ..
+    text = text .. "Total sessions in db: " .. tostring(sessions) .. string.char(10) ..
+    "Average time read last 7 days: " .. avg_last_seven_days .. "h" .. string.char(10) ..
+    "Average time read last 30 days: " .. avg_last_thirty_days .. "h" .. string.char(10) ..
+    "Average time read last 60 days: " .. avg_last_sixty_days .. "h" .. string.char(10) ..
+    "Average time read last 90 days: " .. avg_last_ninety_days .. "h" .. string.char(10) ..
+    "Average time read last 180 days: " .. avg_last_hundred_and_eighty_days .. "h" .. string.char(10) ..
+    "Avg wpm and wph: " .. avg_wpm .. string.char(10) .. string.char(10)
+
+    -- .. "Avg wpm and wph in all sessions: " .. avg_wpm .. string.char(10)
+    -- .. "Average time read last 7 days: " .. avg_last_seven_days .. "h" .. string.char(10)
+    -- .. "Average time read last 30 days: " .. avg_last_thirty_days .. "h" .. string.char(10) .. string.char(10)
     text = text .. point .. " RTRP out of " .. self._goal_pages .. ": " .. (self._goal_pages - today_pages) .. "p " .. icon_goal_pages .. string.char(10)
     .. point .. " RTRT out of " .. self._goal_time .. ": " .. (self._goal_time - today_duration_number) .. "m " .. icon_goal_time  .. string.char(10)
     .. point .. " This book: " .. time_reading_current_book .. string.char(10)
@@ -3599,8 +3601,7 @@ function PageTextInfo:onShowTextProperties()
     -- .. point .. " Dynamic info: p: " .. self.ui.statistics._pages_turned .. ", wpp: " .. avg_words .. ", cpp: " .. avg_chars .. ", cpw: " .. avg_chars_per_word .. string.char(10) -- Not used   .. line .. string.char(10) .. string.char(10)
     -- .. pages .. "p_" .. title_pages_ex .. string.char(10) ..  font_face .. "-" ..  "S: "
     -- .. point .. " Font parameters: " .. font_face .. ", " .. font_size .. "px, " .. font_size_pt .. "pt, " .. font_size_mm .. "mm" .. important ..  string.char(10)
-    .. point .. " L: " ..  nblines .. " - W: " .. nbwords .. " (CFL: " .. characters_first_line .. ")" .. important ..  string.char(10)
-    .. line .. string.char(10) .. string.char(10)
+    .. point .. " L: " ..  nblines .. " - W: " .. nbwords .. " (CFL: " .. characters_first_line .. ")" .. important .. line
     if frontlight ~= "" or frontlightwarm ~= "" then
         text = text .. point .. " Light: " .. frontlight .. " - " .. frontlightwarm .. string.char(10)
     else
@@ -3614,7 +3615,7 @@ function PageTextInfo:onShowTextProperties()
     -- local avg_character_pages =  self.ui.statistics._total_chars/ self.ui.statistics._pages_turned
     local TextViewer = require("ui/widget/textviewer")
     local textviewer = TextViewer:new{
-        title = "Book information",
+        title = "Book information and stats",
         title_multilines = true,
         text = text,
         text_type = "file_content",
