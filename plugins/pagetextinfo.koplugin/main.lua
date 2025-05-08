@@ -2771,24 +2771,34 @@ function PageTextInfo:onGetTextPage()
     local current_face = font_face:gsub("%s+", "") .. "-Regular"
     local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
     local size_px = (display_dpi * self.ui.document.configurable.font_size)/72
+
     local face_base = Font:getFace(current_face, size_px, 0, false);
-    local glyph = RenderText:getGlyph(face_base, 120)
+    local x_height = 0
+    local x_height_mm = 0
+    local font_weight = 0
+    if face_base == nil then
+        x_height = "N/A"
+        x_height_mm = "N/A"
+        font_weight = "N/A"
+    else
+        local glyph = RenderText:getGlyph(face_base, 120)
 
-    -- The parameter sxHeight in the OS/2 table does not exist for all the fonts and it is not accurate for some of them (Crimson Text)
-    -- The xheight property created for glyphs in the source freetype.lua as tonumber(glyph.metrics.horiBearingY / 64) neither it is
-    -- if face_base.ftsize:getSxHeight() > 0 then
-    --     local ratio = face_base.ftsize:getSxHeight() / face_base.ftsize:getUnitsPerEM()
-    --     x_height = Math.round(ratio * size_px * 100) / 100
-    -- else
-    --     x_height = glyph.xheight
-    -- end
+        -- The parameter sxHeight in the OS/2 table does not exist for all the fonts and it is not accurate for some of them (Crimson Text)
+        -- The xheight property created for glyphs in the source freetype.lua as tonumber(glyph.metrics.horiBearingY / 64) neither it is
+        -- if face_base.ftsize:getSxHeight() > 0 then
+        --     local ratio = face_base.ftsize:getSxHeight() / face_base.ftsize:getUnitsPerEM()
+        --     x_height = Math.round(ratio * size_px * 100) / 100
+        -- else
+        --     x_height = glyph.xheight
+        -- end
 
-    -- We use this getXHeight() which computed the correct value
-    local x_height = Math.round(face_base.ftsize:getXHeight() * size_px)
-
-
-    local x_height_mm = Math.round((x_height * (25.4 / display_dpi) * 100)) / 100
-    local font_weight = 400 + self.ui.document.configurable.font_base_weight * 100
+        -- We use this getXHeight() which computed the correct value
+        x_height = Math.round(face_base.ftsize:getXHeight() * size_px)
+        x_height_mm = Math.round((x_height * (25.4 / display_dpi) * 100)) / 100
+        x_height = x_height .."px"
+        x_height_mm = x_height_mm .."mm"
+        font_weight = 400 + self.ui.document.configurable.font_base_weight * 100
+    end
 
     local readability = self.readability_table[current_face] and self.readability_table[current_face] or "N/A"
     -- The desktop publishing point (DTP point) or PostScript point is defined as 1/72 or 0.0138 of the international inch
@@ -2814,7 +2824,12 @@ function PageTextInfo:onGetTextPage()
     "Font size: " .. font_size .. "px, " .. font_size_pt .. "pt" .. font_size_pt_koreader .. ", " .. font_size_mm .. "mm" .. string.char(10) ..
     "Font weight: " .. font_weight .. string.char(10) ..
     "Device resolution: " .. Screen:getWidth() .. "x" .. Screen:getHeight() .. ", " .. display_dpi .. "ppi" .. string.char(10) ..
-    "Font x-height: " .. x_height .. "px, " .. x_height_mm .. "mm. 2.1-2.6mm best (1.7-2.3mm frequent) at 40cm (half way from shoulder to fist)" .. string.char(10) .. string.char(10) ..
+    "Font x-height: " .. x_height .. ", " .. x_height_mm .. string.char(10) ..
+    "At @40 cm reading distance:" .. string.char(10) ..
+    " • 2.1–2.6 mm optimal" .. string.char(10) ..
+    " • 1.7–1.85 mm preferred aesthetic range · compact yet comfortable" .. string.char(10) ..
+    " • <1.7 mm low/demanding · needs good contrast & sharp rendering" .. string.char(10) ..
+    " • >2.6 mm too large · breaks text density & flow" .. string.char(10) .. string.char(10) ..
     "Applied tweaks: " .. self.ui.tweaks_no .. string.char(10) ..
     self.ui.tweaks .. string.char(10) ..
     text_properties

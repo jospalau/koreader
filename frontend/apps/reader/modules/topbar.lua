@@ -1119,26 +1119,19 @@ function TopBar:resetSession()
 end
 
 function TopBar:getXHeightRangeLabel(size_pt, xh_mm)
-    local min = 1.6
-    local sweet_min = 2.1
-    local sweet_max = 2.56
-    local optimum = 2.3
-    local epsilon = 0.05
-
+    local perfect_min = 1.7     -- A partir de aquí empieza a ser cómodo
+    local perfect_max = 1.85    -- Más allá empieza a parecer visualmente grande
     local label
-    if math.abs(xh_mm - optimum) <= epsilon then
-        label = "optimum"
-    elseif xh_mm < min then
-        label = "low"
-    elseif xh_mm < sweet_min then
-        label = "feasible"
-    elseif xh_mm <= sweet_max then
-        label = "sweet"
+
+    if xh_mm < perfect_min then
+      label = "low"
+    elseif xh_mm <= perfect_max then
+      label = "perfect"
     else
-        label = "oversized"
+      label = "too big"
     end
 
-    return string.format("fS: %.2fpt, xH: %.2fmm (%.1f–%.1f–%.1f) [%s]", size_pt, xh_mm, sweet_min, optimum, sweet_max, label)
+    return string.format("fS: %.2fpt, xH: %.2fmm (%.2f–%.2f) [%s]", size_pt, xh_mm, perfect_min, perfect_max, label)
 end
 
 function TopBar:toggleBar(light_on)
@@ -1239,9 +1232,15 @@ function TopBar:toggleBar(light_on)
         local size_px = (display_dpi * self.ui.document.configurable.font_size)/72
         local size_pt = (size_px/display_dpi) * 72
         local face_base = Font:getFace(current_face, size_px, 0, false);
-        local x_height = Math.round(face_base.ftsize:getXHeight() * size_px)
-        local x_height_mm = Math.round((x_height * (25.4 / display_dpi) * 100)) / 100
-        local x_height_with_range = self:getXHeightRangeLabel(size_pt, x_height_mm)
+        local x_height = 0
+        local x_height_mm = 0
+        local x_height_with_range = "N/A"
+        if face_base ~= nil then
+            x_height = Math.round(face_base.ftsize:getXHeight() * size_px)
+            x_height_mm = Math.round((x_height * (25.4 / display_dpi) * 100)) / 100
+            x_height_with_range = self:getXHeightRangeLabel(size_pt, x_height_mm)
+        end
+
 
         local hours_to_read = tonumber(self.total_words)/(self.avg_wpm * 60)
         local progress =  math.floor(100/hours_to_read * 10)/10
