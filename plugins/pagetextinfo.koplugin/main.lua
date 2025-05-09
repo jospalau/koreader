@@ -3559,7 +3559,7 @@ function PageTextInfo:onShowTextProperties()
     .. point .. " Author: " ..  author .. string.char(10)
     .. point .. " Genres: " .. opf_genre .. string.char(10)
     -- .. opf_calibre .. string.char(10)
-    local genre = self:getGenreBook()
+    local genre = self:getGenreBook():match("^%w+%.(.+)$") or self:getGenreBook()
     if genre == nil or genre == "Unknown" then
         genre = "N/A"
     end
@@ -3637,7 +3637,7 @@ function PageTextInfo:onShowTextProperties()
     }
     -- local original_onTapClose = textviewer.onTapClose
     textviewer.onTapClose = function(textviewer)
-        local genre = self:getGenreBook()
+        local genre = self:getGenreBook():match("^%w+%.(.+)$") or self:getGenreBook()
 
         local genre_profile = self.genres_table[genre] and self.genres_table[genre] or nil
         if genre_profile == nil or genre_profile == "Unknown" then
