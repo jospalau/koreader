@@ -559,6 +559,14 @@ local PocketBook618 = PocketBook:extend{
     display_dpi = 212,
 }
 
+-- PocketBook Verse Lite (619)
+local PocketBook619 = PocketBook:extend{
+    model = "PBVerseLite",
+    display_dpi = 212,
+    isAlwaysPortrait = yes,
+    hasKeys = no,
+}
+
 -- PocketBook Touch (622)
 local PocketBook622 = PocketBook:extend{
     model = "PBTouch",
@@ -878,6 +886,8 @@ elseif codename == "617" then
     return PocketBook617
 elseif codename == "618" then
     return PocketBook618
+elseif codename == "619" then
+    return PocketBook619
 elseif codename == "622" then
     return PocketBook622
 elseif codename == "623" then
