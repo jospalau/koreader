@@ -545,6 +545,9 @@ function RulerOverlay:init()
 
 
     self.ruler_widget = ImageWidget:new(widget_settings)
+    self.pos_x = 0
+    self.pos_y = 0
+    self.last_pos_x = -1
 end
 
 function RulerOverlay:onTapRuler(arg, ges_ev)
@@ -553,11 +556,12 @@ function RulerOverlay:onTapRuler(arg, ges_ev)
     -- local ruler_overlay = RulerOverlay:new()
     -- UIManager:show(ruler_overlay.ruler_widget)
     if self.tapped == nil or self.tapped == false then
-        local Screen = require("device").screen
         local ruler = self.ruler_widget
         UIManager:setDirty(require("apps/reader/readerui").instance.view.dialog, "ui")
         -- UIManager:show(ruler_overlay)
         self.tapped = true
+        self.pos_x = ges_ev.pos.x
+        self.pos_y = ges_ev.pos.y
         UIManager:scheduleIn(0.5, function()
             ruler:paintTo(Screen.bb, ges_ev.pos.x - Screen:getWidth() / 2, ges_ev.pos.y)
             UIManager:setDirty(nil, "ui")
@@ -572,6 +576,22 @@ function RulerOverlay:onSwipeRuler(arg, ges_ev)
     UIManager:close(self.ruler_widget)
     UIManager:close(self)
     return true -- event handled
+end
+
+function RulerOverlay:onSuspend()
+    --UIManager:close(self.ruler_widget)
+    --UIManager:close(self)
+    return true
+end
+
+function RulerOverlay:onResume()
+    UIManager:scheduleIn(1, function()
+        if self.pos_x > 0 and self.pos_x ~= self.last_pos_x then self.pos_x = self.pos_x - Screen:getWidth() / 2 end
+        self.last_pos_x = self.pos_x
+        self.ruler_widget:paintTo(Screen.bb, self.pos_x, self.pos_y)
+        UIManager:setDirty(nil, "ui")
+    end)
+    return true
 end
 
 function PageTextInfo:onSwipe(_, ges)
