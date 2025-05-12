@@ -1118,6 +1118,21 @@ function TopBar:resetSession()
     self.init_page_screens = nil
 end
 
+function TopBar:classifyLeading(lf, x_height, ascender, descender)
+    if not x_height or x_height == 0 then return "invalid" end
+    local safe_min = (ascender + descender) / x_height
+    print("Ascender: " .. ascender)
+    print("Descender: " .. descender)
+    print("X-height: " .. x_height)
+    print("Safe min: " .. safe_min)
+    if lf < safe_min then return "collision"
+    elseif lf < safe_min + 0.15 then return "compact"
+    elseif lf < safe_min + 0.4 then return "balanced"
+    elseif lf < safe_min + 0.6 then return "airy"
+    else return "very airy"
+    end                     -- Excessive spacing, feels like children's books or UI
+end
+
 function TopBar:getXHeightRangeLabel(size_pt, xh_mm)
     local perfect_min = 1.7     -- A partir de aquí empieza a ser cómodo
     local perfect_max = 1.85    -- Más allá empieza a parecer visualmente grande
@@ -1235,10 +1250,18 @@ function TopBar:toggleBar(light_on)
         local x_height = 0
         local x_height_mm = 0
         local x_height_with_range = "N/A"
+        local line_height = 0
+        local leading_factor_text = "N/A"
         if face_base ~= nil then
             x_height = Math.round(face_base.ftsize:getXHeight() * size_px)
             x_height_mm = Math.round((x_height * (25.4 / display_dpi) * 100)) / 100
             x_height_with_range = self:getXHeightRangeLabel(size_pt, x_height_mm)
+            local line_spacing_factor = self.ui.document.configurable.line_spacing / 100
+            local x_height2, ascender, descender = face_base.ftsize:getAscDesc()
+            -- How many times the x_height fits in the line height
+            -- The line height is the distance from one baseline line to the other
+            local leading_factor = math.floor(((1.2 * size_px * line_spacing_factor) / x_height ) * 100) / 100 -- 1.2em hardcoded as it is in all books in Calibre
+            leading_factor_text = leading_factor .. " (" .. self:classifyLeading(leading_factor, x_height2, ascender, descender) .. ")"
         end
 
 
@@ -1249,7 +1272,7 @@ function TopBar:toggleBar(light_on)
         .. tostring(self.sessions_current_book) .. "s|" .. tostring(progress) .. "%|"
         .. read_book)
 
-        self.typography_text:setText(x_height_with_range)
+        self.typography_text:setText(x_height_with_range .. ", lF: " .. leading_factor_text)
         title = TextWidget.PTF_BOLD_START .. title .. TextWidget.PTF_BOLD_END
         self.title_text:setText(title)
         self.series_text:setText(self.series)
