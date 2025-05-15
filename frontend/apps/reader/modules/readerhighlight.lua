@@ -2067,7 +2067,16 @@ function ReaderHighlight:onHoldRelease()
         return true
     end
     self.t2 = os.time()
-    if (self.t1 and self.t2 and self.t2 - self.t1 < 2) then
+    if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") and self.t1 and self.t2 and self.t2 - self.t1 < 2 then
+        -- local UIManager = require("ui/uimanager")
+        -- local Notification = require("ui/widget/notification")
+        -- UIManager:show(Notification:new{
+        --     text = (tostring(self.t2 - self.t1)),
+        -- })
+        if self.selected_text then
+            self:onHighlightSearchFull()
+        end
+    else
 
         local long_final_hold = self.long_hold_reached
         self:_resetHoldTimer(true) -- clear state
@@ -2127,15 +2136,6 @@ function ReaderHighlight:onHoldRelease()
                     -- which will have been the first search result
                 end
             end
-        end
-    else
-        -- local UIManager = require("ui/uimanager")
-        -- local Notification = require("ui/widget/notification")
-        -- UIManager:show(Notification:new{
-        --     text = (tostring(self.t2 - self.t1)),
-        -- })
-        if self.selected_text then
-            self:onHighlightSearchFull()
         end
     end
     return true
