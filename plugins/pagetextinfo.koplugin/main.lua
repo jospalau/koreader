@@ -1601,6 +1601,36 @@ local function normalize_word(word)
     return word
 end
 
+local function tailAfterFirstHyphen(str)
+    local pos = str:find("-")
+    return pos and str:sub(pos + 1) or str
+end
+
+local function nestedTail(str, depth)
+    local segment = tailAfterFirstHyphen(str)
+    for _ = 2, depth do
+        segment = tailAfterFirstHyphen(segment)
+    end
+    return segment
+end
+
+local function findBestHyphenatedMatch(doc, hyphenatedWord)
+    local attempts = {
+        tailAfterFirstHyphen(hyphenatedWord),       -- nivel 1
+        nestedTail(hyphenatedWord, 2),              -- nivel 2
+        nestedTail(hyphenatedWord, 3),              -- nivel 3
+        -- nestedTail(hyphenatedWord, 4),              -- nivel 4
+        hyphenatedWord:gsub("-", "")                -- sin guiones
+    }
+
+    for _, suggestion in ipairs(attempts) do
+        local found = doc:findText(suggestion, 1, false, true, -1, false, 1)
+        if found then return found end
+    end
+
+    return nil
+end
+
 function PageTextInfo:updateWordsVocabulary()
     if not ffiUtil.realpath(DataStorage:getSettingsDir() .. "/vocabulary_builder.sqlite3") then return end
     local db_location = DataStorage:getSettingsDir() .. "/vocabulary_builder.sqlite3"
@@ -1667,38 +1697,17 @@ function PageTextInfo:updateWordsVocabulary()
                     local word_page = words_page[i] --:gsub("[^%w%s]+", "")
                     local words = nil
                     local hyphenated = false
-                    if i == 1 and self.all_words[word_page] then-- If first word is hyphenated
+                    if i == 1 and self.all_words[word_page] then
                         local cre = require("libs/libkoreader-cre")
-                        local suggested_hyphenation = cre.getHyphenationForWord(word_page)
-                        if suggested_hyphenation:find("-") then
+                        local hyphenation = cre.getHyphenationForWord(word_page)
+
+                        if hyphenation:find("-") then
                             hyphenated = true
-                            local suggested = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len())
-                            words = self.document:findText(suggested, 1, false, true, -1, false, 1) -- Page not used, set -1
-                            if not words then
-                                suggested = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
-                                suggested_hyphenation:len()):sub(suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
-                                suggested_hyphenation:len()):find("-")+1,suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):len())
-                                words = self.document:findText(suggested, 1, false, true, -1, false, 1) -- Page not used, set -1
-                                if not words then
-                                    suggested = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
-                                    suggested_hyphenation:len()):sub(suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
-                                    suggested_hyphenation:len()):find("-")+1,suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):len()):sub(
-                                        suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
-                                        suggested_hyphenation:len()):sub(suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
-                                        suggested_hyphenation:len()):find("-")+1,suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):len()):find("-") + 1,
-                                        suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
-                                        suggested_hyphenation:len()):sub(suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1,
-                                        suggested_hyphenation:len()):find("-")+1,suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):len()):len())
-                                    words = self.document:findText(suggested, 1, false, true, -1, false, 1) -- Page not used, set -1
-                                    if not words then
-                                        suggested = suggested_hyphenation:sub(suggested_hyphenation:find("-") + 1, suggested_hyphenation:len()):gsub("-","")
-                                        words = self.document:findText(suggested, 1, false, true, -1, false, 1) -- Page not used, set -1
-                                    end
-                                end
-                            end
+                            words = findBestHyphenatedMatch(self.document, hyphenation)
                         else
-                            words = self.document:findText(word_page, 1, false, true, -1, false, 1) -- Page not used, set -1
+                            words = self.document:findText(word_page, 1, false, true, -1, false, 1)
                         end
+
                     elseif self.all_words[word_page] or self.all_words[normalize_word(word_page)] then
                         words = self.document:findText(word_page, 1, false, true, -1, false, 30)
                     end
