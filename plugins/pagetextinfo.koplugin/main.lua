@@ -2253,8 +2253,19 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                             for _, box in ipairs(boxes) do
                                 if box.h ~= 0 then
                                     local xrect = box:copy()
-                                    xrect.y = xrect.y - VSPACE
-                                    self.ui.view:drawHighlightRect(bb, x, y, xrect, "underscore", nil, false)
+                                    -- xrect.y = xrect.y - VSPACE
+                                    -- self.ui.view:drawHighlightRect(bb, x, y, xrect, "underscore", nil, false)
+                                    -- xrect.y = xrect.y - VSPACE
+                                    -- self.ui.view:drawHighlightRect(bb, x, y, xrect, "underscore", nil, false)
+                                    local line_h = xrect.h
+                                    local ascender  = line_h * 0.80
+                                    local y_baseline = xrect.y + ascender
+                                    if current_font:find(".*UglyQua.*") or current_font:find(".*Literata.*") or current_font:find(".*BitterPro.*") then
+                                        ascender  = line_h * 0.90       -- baseline slightly higher
+                                    elseif current_font:find(".*Vollkorn.*") or current_font:find(".*Garamond.*") or current_font:find(".*APHont.*") then
+                                        ascender  = line_h * 0.68       -- baseline slightly lower
+                                    end
+                                    bb:paintRect(xrect.x, y_baseline, xrect.w, Size.line.thick, nil)
                                 end
                             end
                         end
