@@ -1566,36 +1566,6 @@ local function removeDupes(tab)
     return result
 end
 
-local function normalize_word(word)
-    word = word:lower()
-    word = word:gsub("[.,!?;:’'\"”“()%%%-]", "") -- remove punctuation
-
-    -- Contractions
-    word = word:gsub("'s$", "")    -- he's -> he
-    word = word:gsub("'re$", "")   -- they're -> they
-    word = word:gsub("'ve$", "")   -- they've -> they
-    word = word:gsub("n't$", "")   -- didn't -> did
-    word = word:gsub("'ll$", "")   -- it'll -> it
-    word = word:gsub("'d$", "")    -- she'd -> she
-
-    -- Strip common suffixes
-    word = word:gsub("ies$", "y")
-    word = word:gsub("ing$", "")
-    word = word:gsub("ed$", "")
-    word = word:gsub("s$", "")
-    word = word:gsub("ly$", "")
-    word = word:gsub("ness$", "")
-    word = word:gsub("ment$", "")
-    word = word:gsub("able$", "")
-    word = word:gsub("ful$", "")
-    word = word:gsub("ous$", "")
-
-    -- Double-letter gerund fix (e.g., stopping → stop)
-    word = word:gsub("([a-z])%1ing$", "%1")
-
-    return word
-end
-
 function PageTextInfo:updateWordsVocabulary()
     if not ffiUtil.realpath(DataStorage:getSettingsDir() .. "/vocabulary_builder.sqlite3") then return end
     local db_location = DataStorage:getSettingsDir() .. "/vocabulary_builder.sqlite3"
@@ -1639,7 +1609,7 @@ function PageTextInfo:updateWordsVocabulary()
                         else
                             words = self.document:findText(word_page, 1, false, true, -1, false, 1)
                         end
-                    elseif self.all_words[word_page] or self.all_words[normalize_word(word_page)] then
+                    elseif self.all_words[word_page] then
                         words = self.document:findText(word_page, 1, false, true, -1, false, 30)
                     end
                     if words then
@@ -2218,19 +2188,23 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                                     -- bb:paintRect(xrect.x, xrect.y + xrect.h - 1, xrect.w, Size.line.thick, nil)
                                     local line_h = xrect.h  -- Total height of the text line rectangle
 
-                                    -- Estimate typographic metrics as proportions of the line height
-                                    -- In most Latin-script fonts:
-                                    -- The ascender (top of l, h, b) reaches about 70–75% of the line height
+                                    -- Estimate typographic metrics as proportions of the line height. In most Latin-script fonts:
+                                    -- The visible tops of tall letters (l, h, b) typically reach ~70–75% of the line height,
+                                    -- while the font's ascender metric (which defines the top of the line box) is usually 80–90%.
                                     -- The descender (bottom of g, y, p) accounts for ~20–30%
                                     -- The baseline (where most letters sit) is between those two zones
                                     local ascender  = line_h * 0.80     -- Height from top of line to baseline
                                     local x_height  = line_h * 0.48     -- Height from baseline to top of lowercase letters (e.g. "x")
                                     local descender = line_h * 0.26     -- Depth below the baseline for letters like "g", "p", "y"
 
-                                    if current_font:find(".*UglyQua.*") or current_font:find(".*Literata.*") or current_font:find(".*BitterPro.*") then
+                                    if current_font:find(".*UglyQua.*") or current_font:find(".*Literata.*")
+                                        or current_font:find(".*BitterPro.*") or current_font:find(".*ChartereBook.*") then
                                         ascender  = line_h * 0.90       -- baseline slightly higher
-                                    elseif current_font:find(".*Vollkorn.*") or current_font:find(".*Garamond.*") or current_font:find(".*APHont.*") then
-                                        ascender  = line_h * 0.68       -- baseline slightly lower
+                                    elseif current_font:find(".*Chare.*") then
+                                        ascender  = line_h * 0.72       -- baseline slightly lower
+                                    elseif current_font:find(".*Vollkorn.*") or current_font:find(".*Garamond.*")
+                                        or current_font:find(".*APHont.*") or current_font:find(".*Thesis.*") then
+                                        ascender  = line_h * 0.68       -- baseline slightly more lower
                                     end
                                     -- Compute y-coordinates of typographic reference lines
                                     local y_baseline = xrect.y + ascender          -- Baseline position relative to line top
@@ -2255,10 +2229,14 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                                     local line_h = xrect.h
                                     local ascender  = line_h * 0.80
                                     local y_baseline = xrect.y + ascender
-                                    if current_font:find(".*UglyQua.*") or current_font:find(".*Literata.*") or current_font:find(".*BitterPro.*") then
+                                    if current_font:find(".*UglyQua.*") or current_font:find(".*Literata.*")
+                                        or current_font:find(".*BitterPro.*") or current_font:find(".*ChartereBook.*") then
                                         ascender  = line_h * 0.90       -- baseline slightly higher
-                                    elseif current_font:find(".*Vollkorn.*") or current_font:find(".*Garamond.*") or current_font:find(".*APHont.*") then
-                                        ascender  = line_h * 0.68       -- baseline slightly lower
+                                    elseif current_font:find(".*Chare.*") then
+                                        ascender  = line_h * 0.72       -- baseline slightly lower
+                                    elseif current_font:find(".*Vollkorn.*") or current_font:find(".*Garamond.*")
+                                        or current_font:find(".*APHont.*") or current_font:find(".*Thesis.*") then
+                                        ascender  = line_h * 0.68       -- baseline slightly more lower
                                     end
                                     bb:paintRect(xrect.x, y_baseline, xrect.w, Size.line.thick, nil)
                                 end
