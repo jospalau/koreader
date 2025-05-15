@@ -1546,31 +1546,21 @@ function PageTextInfo:updateNotes()
     self.ui.document:clearSelection()
 end
 
-local function normalize_word(word)
-    local irregulars = {
-        ["went"] = "go",
-        ["gone"] = "go",
-        ["ran"] = "run",
-        ["bought"] = "buy",
-        ["thought"] = "think",
-        ["taught"] = "teach",
-        ["dreamt"] = "dream",
-        ["slept"] = "sleep",
-        ["kept"] = "keep",
-        ["felt"] = "feel",
-        ["left"] = "leave",
-        ["found"] = "find",
-        ["made"] = "make",
-        ["had"] = "have",
-        ["did"] = "do",
-        ["done"] = "do",
-        ["was"] = "be",
-        ["were"] = "be",
-        ["been"] = "be"
-    }
+local function removeDupes(tab)
+    local seen = {}
+    local result = {}
+    for _, val in ipairs(tab) do
+        if not seen[val] then
+            seen[val] = true
+            table.insert(result, val)
+        end
+    end
+    return result
+end
 
+local function normalize_word(word)
     word = word:lower()
-    word = word:gsub("[.,!?;:’'\"”“()%-]", "") -- remove punctuation
+    word = word:gsub("[.,!?;:’'\"”“()%%%-]", "") -- remove punctuation
 
     -- Contractions
     word = word:gsub("'s$", "")    -- he's -> he
@@ -1579,9 +1569,6 @@ local function normalize_word(word)
     word = word:gsub("n't$", "")   -- didn't -> did
     word = word:gsub("'ll$", "")   -- it'll -> it
     word = word:gsub("'d$", "")    -- she'd -> she
-
-    -- Irregulars
-    if irregulars[word] then return irregulars[word] end
 
     -- Strip common suffixes
     word = word:gsub("ies$", "y")
@@ -1638,50 +1625,17 @@ function PageTextInfo:updateWordsVocabulary()
     local conn = require("lua-ljsqlite3/init").open(db_location)
     stmt = conn:prepare(sql_stmt)
 
-    --local row, names = stmt:step({}, {})
     self.words = {}
-    -- self.all_words = ""
-    local t = {}
-    row = {}
-    while stmt:step(row) do
-        local word = row[1]
-        if not word:find("%s+") then -- and word:len() > 3 then
-            -- self.all_words = self.all_words .. word .. "|"
-            table.insert(t, word)
-        end
-    end
-
-    conn:close()
     self.all_words = {}
-    for i=1, #t do
-        self.all_words[t[i]] = "";
-    end
-
-    local function removeDupes(tab)
-        local set = {}
-        local finalTab = {}
-        for i, val in pairs (tab) do
-            if not set[val] then
-                set[val] =  1
-            else
-                set[val] = set[val] + 1
-                table.remove(tab, i)
-            end
-
+    while true do
+        local row = {}
+        if not stmt:step(row) then break end
+        local word = row[1]
+        if not word:find("%s+") then
+            self.all_words[word] = ""
         end
-
-        -- for k, v in pairs(set) do
-        --     -- if v == 1 then
-        --     --     finalTab[#finalTab+1] = k
-        --     -- end
-        --     finalTab[#finalTab+1] = k
-        -- end
-
-        -- local dump = require("dump")
-        -- print(dump(tab))
-        -- print(dump(finalTab))
-        return tab
     end
+
     -- Using regular expressions to get full words is very slow and then we have to remove the characters used in them
     -- Searching text without regular expressions we won't get words, we will get the position in the dom (start and end)
     -- for each of the places the text if found wether the full word or the text inside a word and we want full words to highlight them
