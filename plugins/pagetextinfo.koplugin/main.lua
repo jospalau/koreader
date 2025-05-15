@@ -2122,9 +2122,9 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                     local font_size_px = (display_dpi * self.ui.document.configurable.font_size) / 72
                     local current_font = self.ui.document:getFontFace():gsub(" ","")
                     local face = Font:getFace(current_font .. "-Regular", font_size_px)
-                    local factor = (current_font:find(".*Garamond.*") or current_font:find(".*APHont.*") or current_font:find(".*Spectral.*")) and 0.40 or 0.25
-                    local line_spacing_pct = self.ui.font.configurable.line_spacing * (1/100)
-                    VSPACE = math.ceil(font_size_px * factor * line_spacing_pct)
+                    -- local factor = (current_font:find(".*Garamond.*") or current_font:find(".*APHont.*") or current_font:find(".*Spectral.*")) and 0.40 or 0.25
+                    -- local line_spacing_pct = self.ui.font.configurable.line_spacing * (1/100)
+                    -- VSPACE = math.ceil(font_size_px * factor * line_spacing_pct)
                     local word
                     -- local dump = require("dump")
                     -- print(dump(boxes))
@@ -2217,10 +2217,34 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                                     -- end
                                     -- local face_height, face_ascender = face.ftsize:getHeightAndAscender()
                                     local xrect = box:copy()
-                                    xrect.y = xrect.y - VSPACE
+                                    -- xrect.y = xrect.y - VSPACE
                                     -- self.ui.view:drawHighlightRect(bb, x, y, xrect, "underscore", nil, false)
                                     -- self.ui.view:drawHighlightRect(bb, x, y, xrect, "lighten", Blitbuffer.COLOR_LIGHT_GRAY, false)
-                                    bb:paintRect(xrect.x, xrect.y + xrect.h - 1, xrect.w, Size.line.thick, nil)
+                                    -- bb:paintRect(xrect.x, xrect.y + xrect.h - 1, xrect.w, Size.line.thick, nil)
+                                    local line_h = xrect.h  -- Total height of the text line rectangle
+
+                                    -- Estimate typographic metrics as proportions of the line height
+                                    -- In most Latin-script fonts:
+                                    -- The ascender (top of l, h, b) reaches about 70–75% of the line height
+                                    -- The descender (bottom of g, y, p) accounts for ~20–30%
+                                    -- The baseline (where most letters sit) is between those two zones
+                                    local ascender  = line_h * 0.80     -- Height from top of line to baseline
+                                    local x_height  = line_h * 0.48     -- Height from baseline to top of lowercase letters (e.g. "x")
+                                    local descender = line_h * 0.26     -- Depth below the baseline for letters like "g", "p", "y"
+
+                                    if current_font:find(".*UglyQua.*") or current_font:find(".*Literata.*") or current_font:find(".*BitterPro.*") then
+                                        ascender  = line_h * 0.90       -- baseline slightly higher
+                                    elseif current_font:find(".*Vollkorn.*") or current_font:find(".*Garamond.*") or current_font:find(".*APHont.*") then
+                                        ascender  = line_h * 0.68       -- baseline slightly lower
+                                    end
+                                    -- Compute y-coordinates of typographic reference lines
+                                    local y_baseline = xrect.y + ascender          -- Baseline position relative to line top
+                                    local y_xheight  = y_baseline - x_height       -- x-height line above baseline
+                                    local y_desc     = y_baseline + descender      -- Bottom of descenders below baseline
+
+                                    -- bb:paintRect(xrect.x, y_xheight, xrect.w, Size.line.thick, nil)    -- x-height
+                                    bb:paintRect(xrect.x, y_baseline, xrect.w, Size.line.thick, nil)   -- baseline
+                                    -- bb:paintRect(xrect.x, y_desc, xrect.w, Size.line.thick, nil)       -- descender
                                 end
                             end
                         end
