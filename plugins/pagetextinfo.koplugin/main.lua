@@ -1546,6 +1546,61 @@ function PageTextInfo:updateNotes()
     self.ui.document:clearSelection()
 end
 
+local function normalize_word(word)
+    local irregulars = {
+        ["went"] = "go",
+        ["gone"] = "go",
+        ["ran"] = "run",
+        ["bought"] = "buy",
+        ["thought"] = "think",
+        ["taught"] = "teach",
+        ["dreamt"] = "dream",
+        ["slept"] = "sleep",
+        ["kept"] = "keep",
+        ["felt"] = "feel",
+        ["left"] = "leave",
+        ["found"] = "find",
+        ["made"] = "make",
+        ["had"] = "have",
+        ["did"] = "do",
+        ["done"] = "do",
+        ["was"] = "be",
+        ["were"] = "be",
+        ["been"] = "be"
+    }
+
+    word = word:lower()
+    word = word:gsub("[.,!?;:’'\"”“()%-]", "") -- remove punctuation
+
+    -- Contractions
+    word = word:gsub("'s$", "")    -- he's -> he
+    word = word:gsub("'re$", "")   -- they're -> they
+    word = word:gsub("'ve$", "")   -- they've -> they
+    word = word:gsub("n't$", "")   -- didn't -> did
+    word = word:gsub("'ll$", "")   -- it'll -> it
+    word = word:gsub("'d$", "")    -- she'd -> she
+
+    -- Irregulars
+    if irregulars[word] then return irregulars[word] end
+
+    -- Strip common suffixes
+    word = word:gsub("ies$", "y")
+    word = word:gsub("ing$", "")
+    word = word:gsub("ed$", "")
+    word = word:gsub("s$", "")
+    word = word:gsub("ly$", "")
+    word = word:gsub("ness$", "")
+    word = word:gsub("ment$", "")
+    word = word:gsub("able$", "")
+    word = word:gsub("ful$", "")
+    word = word:gsub("ous$", "")
+
+    -- Double-letter gerund fix (e.g., stopping → stop)
+    word = word:gsub("([a-z])%1ing$", "%1")
+
+    return word
+end
+
 function PageTextInfo:updateWordsVocabulary()
     if not ffiUtil.realpath(DataStorage:getSettingsDir() .. "/vocabulary_builder.sqlite3") then return end
     local db_location = DataStorage:getSettingsDir() .. "/vocabulary_builder.sqlite3"
@@ -1644,7 +1699,7 @@ function PageTextInfo:updateWordsVocabulary()
                         else
                             words = self.document:findText(word_page, 1, false, true, -1, false, 1) -- Page not used, set -1
                         end
-                    elseif self.all_words[word_page] then
+                    elseif self.all_words[word_page] or self.all_words[normalize_word(word_page)] then
                         words = self.document:findText(word_page, 1, false, true, -1, false, 30)
                     end
                     if words then
