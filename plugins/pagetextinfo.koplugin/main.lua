@@ -2809,7 +2809,16 @@ function PageTextInfo:onGetTextPage()
     local font_size_pt =  self.ui.document.configurable.font_size
     local font_size_mm =  self.ui.document.configurable.font_size * 0.35
 
-
+    -- Calculates the visual angle in arcminutes from size (mm) and distance (mm)
+    function arcminutes_from_mm(size_mm, distance_mm)
+        -- Visual angle in radians: 2 * atan(size / (2 * distance))
+        local angle_rad = 2 * math.atan(size_mm / (2 * distance_mm))
+        -- Convert to degrees
+        local angle_deg = math.deg(angle_rad)
+        -- Convert to arcminutes (1 degree = 60 arcminutes)
+        local angle_arcmin = angle_deg * 60
+        return angle_arcmin
+    end
     local RenderText = require("ui/rendertext")
     local Math = require("optmath")
     local current_face = font_face:gsub("%s+", "") .. "-Regular"
@@ -2819,10 +2828,12 @@ function PageTextInfo:onGetTextPage()
     local face_base = Font:getFace(current_face, size_px, 0, false);
     local x_height = 0
     local x_height_mm = 0
+    local arcminutes_40cm = 0
     local font_weight = 0
     if face_base == nil then
         x_height = "N/A"
         x_height_mm = "N/A"
+        arcminutes_40cm = "N/A"
         font_weight = "N/A"
     else
         local glyph = RenderText:getGlyph(face_base, 120)
@@ -2839,8 +2850,10 @@ function PageTextInfo:onGetTextPage()
         -- We use this getXHeight() which computed the correct value
         x_height = Math.round(face_base.ftsize:getXHeight() * size_px)
         x_height_mm = Math.round((x_height * (25.4 / display_dpi) * 100)) / 100
+        arcminutes_40cm = arcminutes_from_mm(x_height_mm, 400)
         x_height = x_height .."px"
         x_height_mm = x_height_mm .."mm"
+        arcminutes_40cm = string.format("%.1f′ @40cm", arcminutes_40cm)
         font_weight = 400 + self.ui.document.configurable.font_base_weight * 100
     end
 
@@ -2868,12 +2881,15 @@ function PageTextInfo:onGetTextPage()
     "Font size: " .. font_size .. "px, " .. font_size_pt .. "pt" .. font_size_pt_koreader .. ", " .. font_size_mm .. "mm" .. string.char(10) ..
     "Font weight: " .. font_weight .. string.char(10) ..
     "Device resolution: " .. Screen:getWidth() .. "x" .. Screen:getHeight() .. ", " .. display_dpi .. "ppi" .. string.char(10) ..
-    "Font x-height: " .. x_height .. ", " .. x_height_mm .. string.char(10) ..
-    "At @40 cm reading distance:" .. string.char(10) ..
-    " • 2.1–2.6 mm optimal" .. string.char(10) ..
-    " • 1.7–1.85 mm preferred aesthetic range · compact yet comfortable" .. string.char(10) ..
-    " • <1.7 mm low/demanding · needs good contrast & sharp rendering" .. string.char(10) ..
-    " • >2.6 mm too large · breaks text density & flow" .. string.char(10) .. string.char(10) ..
+    "Font x-height: " .. x_height .. ", " .. x_height_mm .. " (" .. arcminutes_40cm .. ")" .. string.char(10) ..
+    " • ~20′ is ideal for effortless reading" .. string.char(10) ..
+    " • <15′ may strain the eyes without good contrast" .. string.char(10) ..
+    " • >25′ feels oversized and slows reading" .. string.char(10) ..
+    "At ~40cm, forearm length (from elbow to knuckles):" .. string.char(10) ..
+    " • 2.1–2.6 mm (18–22′) optimal · effortless reading" .. string.char(10) ..
+    " • 1.7–1.85 mm (14.6–15.9′) compact yet comfortable · preferred aesthetic range" .. string.char(10) ..
+    " • <1.7 mm (<14.6′) low/demanding · needs good contrast & sharp rendering" .. string.char(10) ..
+    " • >2.6 mm (>22.3′) too large · disrupts flow and density" .. string.char(10) .. string.char(10) ..
     "Applied tweaks: " .. self.ui.tweaks_no .. string.char(10) ..
     self.ui.tweaks .. string.char(10) ..
     text_properties
