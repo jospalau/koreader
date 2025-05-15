@@ -1911,16 +1911,39 @@ end
 
 -- Like util.splitWords(), but not capturing space and punctuations
 function util.splitToWords2(text)
+    -- Normalize typographic punctuation to ASCII equivalents
+    text = text
+        :gsub("[‘’]", "'")
+        :gsub("[“”]", '"')
+        :gsub("—", "-")
+
     local wlist = {}
-    for word in util.gsplit(text, "[%s%p“”—]+", false) do
+
+    -- Improved separator pattern: split by spaces and punctuation
+    for word in util.gsplit(text, "[%s%p]+", false) do
         if util.hasCJKChar(word) then
-            for char in util.gsplit(word, "[\192-\255][\128-\191]+", true) do
+            -- Split UTF-8 word into characters
+            local i = 1
+            local len = #word
+            while i <= len do
+                local c = word:byte(i)
+                local char_len = 1
+                if c >= 0xF0 then
+                    char_len = 4
+                elseif c >= 0xE0 then
+                    char_len = 3
+                elseif c >= 0xC0 then
+                    char_len = 2
+                end
+                local char = word:sub(i, i + char_len - 1)
                 table.insert(wlist, char)
+                i = i + char_len
             end
         else
             table.insert(wlist, word)
         end
     end
+
     return wlist
 end
 
