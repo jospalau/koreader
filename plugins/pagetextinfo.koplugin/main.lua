@@ -1480,7 +1480,8 @@ local function findBestHyphenatedMatch(doc, hyphenatedWord)
         tailAfterFirstHyphen(hyphenatedWord),       -- nivel 1
         nestedTail(hyphenatedWord, 2),              -- nivel 2
         nestedTail(hyphenatedWord, 3),              -- nivel 3
-        -- nestedTail(hyphenatedWord, 4),              -- nivel 4
+        nestedTail(hyphenatedWord, 4),              -- nivel 4
+        nestedTail(hyphenatedWord, 5),              -- nivel 5
         hyphenatedWord:gsub("-", "")                -- sin guiones
     }
 
