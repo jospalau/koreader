@@ -2135,10 +2135,10 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                     -- In such cases, getTextFromPositions() may return surrounding text as well
                     -- Here, we discard the extra text and rely on item.start to retrieve accurate boxes
                     -- Example: boxes = self.document:getScreenBoxesFromPositions(item.start, word.pos1, true)
-                    if word.text:match("^[^%.]+%.") then
-                        word.text = word.text:gsub("^[^%.]+%.", ""):match("^%s*(.-)$")
-                    end
-
+                    -- print(word.text)
+                    -- Extract only the final word, ignoring any leading punctuation or quote characters.
+                    word.text = word.text:match("[A-Za-zÁÉÍÓÚÜÑáéíóúüñ']+$") or word.text
+                    --word.text = word.text:match(".*[%p%s](%w+)%s*$") or word.text
                     -- if #boxes >1 then
                     --     word = self.document:getWordFromPosition(boxes[2], true)
                     -- else
