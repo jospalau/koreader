@@ -2045,25 +2045,57 @@ function getTranslation(self, word)
     local dictionaries = {}
     local defaultDict = "Babylon English-Spanish"
 
-    if self.settings:readSetting("dictionary") then
-        table.insert(dictionaries, self.settings:readSetting("dictionary"))
-    else
-        table.insert(dictionaries, defaultDict)
-    end
+    local selected_dict = self.settings:readSetting("dictionary") or defaultDict
+    table.insert(dictionaries, selected_dict)
 
     local results = self.ui.dictionary:startSdcv(word, dictionaries, true, true)
     local translation = ""
 
     if results and results[1] and results[1].definition then
-        translation = results[1].definition:gsub("%b<>", ""):gsub("\n", "")
-        local first_semicolon = translation:find(";")
-        if first_semicolon then
-            translation = translation:sub(1, first_semicolon - 1)
-        end
+        local dict_name = results[1].dictionary or selected_dict
+        local def = results[1].definition
+        translation = extractTranslation(def, dict_name)
     end
 
     self.translations[word] = translation
     return translation
+end
+
+function extractTranslation(definition, dict_name)
+    dict_name = dict_name:lower()
+    if dict_name:find("babylon") then
+        return extractBabylon(definition)
+    else
+        return fallbackExtractor(definition)
+    end
+end
+
+function extractBabylon(def)
+    def = def:gsub("%b<>", ""):gsub("[\r\n]+", "\n") -- Limpia HTML y normaliza saltos de línea
+
+    local lines = {}
+    for line in def:gmatch("[^\n]+") do
+        local clean = line:match("^%s*(.-)%s*$")
+        if clean and clean ~= "" then
+            table.insert(lines, clean)
+        end
+    end
+
+    -- Filtramos líneas que no sean la traducción
+    for i = 1, #lines do
+        local line = lines[i]
+        if line:match("[áéíóúñÑ]") or line:match("[a-zA-Z],") or line:match(";") then
+            return line
+        end
+    end
+
+    -- Si no encontramos una línea clara, devolvemos la última
+    return lines[#lines] or def
+end
+
+function fallbackExtractor(def)
+    def = def:gsub("%b<>", ""):gsub("[\r\n]", " ")
+    return def:match("^[^;%.]+") or def
 end
 
 function PageTextInfo:drawXPointerVocabulary(bb, x, y)
