@@ -1121,10 +1121,10 @@ end
 function TopBar:classifyLeading(lf, x_height, ascender, descender)
     if not x_height or x_height == 0 then return "invalid" end
     local safe_min = (ascender + descender) / x_height
-    print("Ascender: " .. ascender)
-    print("Descender: " .. descender)
-    print("X-height: " .. x_height)
-    print("Safe min: " .. safe_min)
+    -- print("Ascender: " .. ascender)
+    -- print("Descender: " .. descender)
+    -- print("X-height: " .. x_height)
+    -- print("Safe min: " .. safe_min)
     if lf < safe_min then return "collision"
     elseif lf < safe_min + 0.15 then return "compact"
     elseif lf < safe_min + 0.4 then return "balanced"
