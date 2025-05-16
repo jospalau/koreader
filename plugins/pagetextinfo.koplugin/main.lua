@@ -1980,8 +1980,11 @@ function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
                 local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true) -- get_segments=true
                 if boxes then
                     local word = self.ui.document._document:getTextFromPositions(boxes[1].x, boxes[1].y, boxes[1].x, boxes[1].y, false, false)
+                    if word.text:match("^[^%.]+%.") then
+                        word.text = word.text:gsub("^[^%.]+%.", ""):match("^%s*(.-)$")
+                    end
                     if (item.hyphenated and word.text:upper() == item.text:upper()) or word.text:upper() == item.text:upper() then
-                        boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
+                        boxes = self.document:getScreenBoxesFromPositions(item.start, word.pos1, true)
                         if boxes then
                             for _, box in ipairs(boxes) do
                                 if box.h ~= 0 then
