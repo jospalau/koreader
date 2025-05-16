@@ -2110,6 +2110,9 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                 -- The box retrieved is valid always
                 -- Finally we use getTextFromPositions()
                 -- If a case is missed, we can pass boxes[1].x + 1 as first argument
+
+                -- We want to ensure the visible text matches the target word exactly
+                -- This avoids false positives where the word is merely contained within a larger one (e.g., "a" in "action").
                 local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true)
                 if boxes then
                     local Device = require("device")
@@ -2120,10 +2123,19 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                     -- local factor = (current_font:find(".*Garamond.*") or current_font:find(".*APHont.*") or current_font:find(".*Spectral.*")) and 0.40 or 0.25
                     -- local line_spacing_pct = self.ui.font.configurable.line_spacing * (1/100)
                     -- VSPACE = math.ceil(font_size_px * factor * line_spacing_pct)
-                    local word
                     -- local dump = require("dump")
                     -- print(dump(boxes))
                     local word = self.ui.document._document:getTextFromPositions(boxes[1].x, boxes[1].y, boxes[1].x, boxes[1].y, false, false)
+
+                    -- Sometimes the bounding boxes returned for the text are not precise
+                    -- This usually happens when the word is wrapped in tags like <em>, <b>, etc.
+                    -- In such cases, getTextFromPositions() may return surrounding text as well
+                    -- Here, we discard the extra text and rely on item.start to retrieve accurate boxes
+                    -- Example: boxes = self.document:getScreenBoxesFromPositions(item.start, word.pos1, true)
+                    if word.text:match("^[^%.]+%.") then
+                        word.text = word.text:gsub("^[^%.]+%.", ""):match("^%s*(.-)$")
+                    end
+
                     -- if #boxes >1 then
                     --     word = self.document:getWordFromPosition(boxes[2], true)
                     -- else
@@ -2137,7 +2149,7 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                     --     end
                     -- end
                     if (item.hyphenated and word.text:upper() == item.text:upper()) or word.text:upper() == item.text:upper() then
-                        boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
+                        boxes = self.document:getScreenBoxesFromPositions(item.start, word.pos1, true)
                         if boxes then
                             for _, box in ipairs(boxes) do
                                 if box.h ~= 0 then
