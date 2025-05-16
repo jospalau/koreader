@@ -2036,6 +2036,35 @@ function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
     return colorful
 end
 
+function getTranslation(self, word)
+    if self.translations[word] then
+        return self.translations[word]
+    end
+
+    local dictionaries = {}
+    local defaultDict = "Babylon English-Spanish"
+
+    if self.settings:readSetting("dictionary") then
+        table.insert(dictionaries, self.settings:readSetting("dictionary"))
+    else
+        table.insert(dictionaries, defaultDict)
+    end
+
+    local results = self.ui.dictionary:startSdcv(word, dictionaries, true, true)
+    local translation = ""
+
+    if results and results[1] and results[1].definition then
+        translation = results[1].definition:gsub("%b<>", ""):gsub("\n", "")
+        local first_semicolon = translation:find(";")
+        if first_semicolon then
+            translation = translation:sub(1, first_semicolon - 1)
+        end
+    end
+
+    self.translations[word] = translation
+    return translation
+end
+
 function PageTextInfo:drawXPointerVocabulary(bb, x, y)
     -- Getting screen boxes is done for each tap on screen (changing pages,
     -- showing menu...). We might want to cache these boxes per page (and
@@ -2119,23 +2148,7 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                                         else
                                             table.insert(dictionaries, "Babylon English-Spanish")
                                         end
-
-                                        local translation = ""
-                                        if not self.translations[word.text] then
-                                            local results = self.ui.dictionary:startSdcv(word.text, dictionaries, true, true)
-
-                                            if results and results[1] then
-                                                translation = results[1].definition:gsub("%b<>",""):gsub("%\n","")
-                                                if translation:find(";") then
-                                                    translation = translation:sub(1, translation:find(";") - 1)
-                                                end
-                                                self.translations[word.text] = translation
-                                            else
-                                                self.translations[word.text] = ""
-                                            end
-                                        else
-                                            translation = self.translations[word.text]
-                                        end
+                                        local translation = getTranslation(self, word.text)
                                         local translation_font_size = self.ui.document.configurable.font_size * 0.60
                                         local test = FrameContainer:new{
                                             left_container:new{
