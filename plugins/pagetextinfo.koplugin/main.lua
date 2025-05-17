@@ -2071,7 +2071,10 @@ function extractTranslation(definition, dict_name)
 end
 
 function extractBabylon(def)
-    def = def:gsub("%b<>", ""):gsub("[\r\n]+", "\n") -- Limpia HTML y normaliza saltos de línea
+    if not def or def == "" then return "" end
+
+    -- Limpia etiquetas HTML y normaliza saltos de línea
+    def = def:gsub("%b<>", ""):gsub("[\r\n]+", "\n")
 
     local lines = {}
     for line in def:gmatch("[^\n]+") do
@@ -2081,15 +2084,25 @@ function extractBabylon(def)
         end
     end
 
-    -- Filtramos líneas que no sean la traducción
-    for i = 1, #lines do
-        local line = lines[i]
-        if line:match("[áéíóúñÑ]") or line:match("[a-zA-Z],") or line:match(";") then
-            return line
+    -- Busca línea que parezca traducción (letras con acento, coma o punto y coma)
+    for _, line in ipairs(lines) do
+        -- Evita encabezados tipo "1. ", "adj.", etc.
+        local stripped = line:gsub("^%d+%.%s*", ""):gsub("^%a+%.%s*", "")
+        if #stripped > 2 and #stripped < 80 and
+           (stripped:match("[áéíóúñÑ]") or stripped:match("[a-zA-Z],") or stripped:match(";")) then
+            return stripped
         end
     end
 
-    -- Si no encontramos una línea clara, devolvemos la última
+    -- Si nada encaja, intenta devolver la primera línea que no sea encabezado
+    for _, line in ipairs(lines) do
+        local stripped = line:gsub("^%d+%.%s*", ""):gsub("^%a+%.%s*", "")
+        if #stripped > 2 and #stripped < 80 and stripped:match("%a") then
+            return stripped
+        end
+    end
+
+    -- Último recurso: la última línea o la definición entera
     return lines[#lines] or def
 end
 
