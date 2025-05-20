@@ -1100,7 +1100,7 @@ function PageTextInfo:init()
     if self.ui.highlight then
         self.ui.highlight._highlight_buttons["14_send_to_bot"] = function(this)
             return {
-                text = _("Send to Bot"),
+                text = _("Send to Server"),
                 enabled = this.hold_pos ~= nil and this.selected_text ~= nil and this.selected_text.text ~= "",
                 callback = function()
                     UIManager:scheduleIn(0, function()
@@ -4547,7 +4547,7 @@ function PageTextInfo:sendHighlightToServer()
 
     for _, url in ipairs(server_urls) do
         local cmd = string.format(
-            curl_path .. [[ -s -X POST %s -H "Content-Type: application/json" -d '%s' -o %s]],
+            curl_path .. [[ --connect-timeout 2 -s -X POST %s -H "Content-Type: application/json" -d '%s' -o %s]],
             url,
             json_payload:gsub("'", "'\\''"),
             tmpfile
