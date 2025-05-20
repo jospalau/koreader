@@ -1095,6 +1095,21 @@ function PageTextInfo:init()
     -- self.ui:registerPostInitCallback(function()
     --     self:_postInit()
     -- end)
+    self.server = self.settings:readSetting("server", "192.168.50.252")
+    self.port = self.settings:readSetting("server_port","5000")
+    if self.ui.highlight then
+        self.ui.highlight._highlight_buttons["14_send_to_bot"] = function(this)
+            return {
+                text = _("Send to Bot"),
+                enabled = this.hold_pos ~= nil and this.selected_text ~= nil and this.selected_text.text ~= "",
+                callback = function()
+                    UIManager:scheduleIn(0, function()
+                        self.ui.pagetextinfo:sendHighlightToServer()
+                    end)
+                end,
+            }
+        end
+    end
 end
 
 -- function PageTextInfo:_postInit()
@@ -1352,6 +1367,102 @@ This is to be active only if the option flash buttons and menu items or the opti
                         self.settings:flush()
                         return true
                     end,
+                },
+                {
+                    text = _("Python server configuration"),
+                    sub_item_table = {
+                        {
+                            text_func = function()
+                                return T(_("Server: %1"), self.server)
+                            end,
+                            keep_menu_open = true,
+                            callback = function(touchmenu_instance)
+                                local InputDialog = require("ui/widget/inputdialog")
+                                local server_dialog
+                                server_dialog = InputDialog:new{
+                                    title = _("Set server"),
+                                    input = self.server,
+                                    input_type = "string",
+                                    input_hint = _("Server (default is 192.168.50.252)"),
+                                    buttons =  {
+                                        {
+                                            {
+                                                text = _("Cancel"),
+                                                id = "close",
+                                                callback = function()
+                                                    UIManager:close(server_dialog)
+                                                end,
+                                            },
+                                            {
+                                                text = _("OK"),
+                                                -- keep_menu_open = true,
+                                                callback = function()
+                                                    local server = server_dialog:getInputValue()
+                                                    if server == "" then
+                                                        server = "192.168.50.252"
+                                                    end
+                                                    self.server = server
+                                                    self.settings:saveSetting("server", server)
+
+                                                    UIManager:close(server_dialog)
+                                                    touchmenu_instance:updateItems()
+                                                end,
+                                            },
+                                        },
+                                    },
+                                }
+                                UIManager:show(server_dialog)
+                                server_dialog:onShowKeyboard()
+                            end,
+                        },
+                        {
+                            text_func = function()
+                                return T(_("Port: %1"), self.port)
+                            end,
+                            keep_menu_open = true,
+                            callback = function(touchmenu_instance)
+                                local InputDialog = require("ui/widget/inputdialog")
+                                local port_dialog
+                                port_dialog = InputDialog:new{
+                                    title = _("Set custom port"),
+                                    input = self.port,
+                                    input_type = "number",
+                                    input_hint = _("Port number (default is 5000)"),
+                                    buttons =  {
+                                        {
+                                            {
+                                                text = _("Cancel"),
+                                                id = "close",
+                                                callback = function()
+                                                    UIManager:close(port_dialog)
+                                                end,
+                                            },
+                                            {
+                                                text = _("OK"),
+                                                -- keep_menu_open = true,
+                                                callback = function()
+                                                    local port = port_dialog:getInputValue()
+                                                    logger.warn("port", port)
+                                                    if port and port >= 1 and port <= 65535 then
+                                                        port = port
+                                                    end
+                                                    if not port then
+                                                        port = "5000"
+                                                    end
+                                                    self.port = port
+                                                    self.settings:saveSetting("server_port", port)
+                                                    UIManager:close(port_dialog)
+                                                    touchmenu_instance:updateItems()
+                                                end,
+                                            },
+                                        },
+                                    },
+                                }
+                                UIManager:show(port_dialog)
+                                port_dialog:onShowKeyboard()
+                            end,
+                        }
+                    },
                 },
                 {
                     text = _("Highlight"),
@@ -4386,5 +4497,122 @@ function PageTextInfo:onTurnOnWifiKindle()
     })
 end
 
+function PageTextInfo:sendHighlightToServer()
+    logger.info("--- Sending highlight to local FastAPI server ---")
+
+    if not self.ui.highlight.selected_text or not self.ui.highlight.selected_text.text or self.ui.highlight.selected_text.text == "" then
+        logger.warn("No text selected.")
+        UIManager:show(Notification:new{ text = _("No text selected.") })
+        return
+    end
+
+    local text = util.cleanupSelectedText(self.ui.highlight.selected_text.text)
+    local book_id = self.ui.doc_props and self.ui.doc_props.title or self.ui.document:getFileName()
+
+    local payload = {
+        book_id = book_id,
+        visible_text = text,
+    }
+
+    local JSON = require("json")
+    local ok, json_payload = pcall(JSON.encode, payload)
+    if not ok then
+        logger.err("SendToBot: Failed to encode JSON payload:", json_payload)
+        UIManager:show(InfoMessage:new{ title = _("Encoding error"), text = _("Could not prepare request."), timeout = 4 })
+        return
+    end
+
+    local NetworkMgr = require("ui/network/manager")
+    if not NetworkMgr:isConnected() then
+        logger.info("SendToBot: No network connection.")
+        NetworkMgr:promptWifiOn(function()
+            self:sendHighlightToServer()
+        end, _("Connect to Wi-Fi to send the highlight?"))
+        return
+    end
+
+    -- List of server URLs to try
+    local server_urls = {
+        "http://192.168.50.250:5000/analyze", -- Main server
+        "http://" .. self.server .. ":" .. self.port .. "/analyze", -- Android hotspot gateway
+    }
+
+    local tmpfile = "/tmp/koreader_send_result.json"
+    local curl_ok = false
+    local selected_url = nil
+    local curl_path = "curl"
+    if Device:isKobo() then
+        curl_path = "/mnt/onboard/.niluje/usbnet/bin/curl"
+    end
+
+    for _, url in ipairs(server_urls) do
+        local cmd = string.format(
+            curl_path .. [[ -s -X POST %s -H "Content-Type: application/json" -d '%s' -o %s]],
+            url,
+            json_payload:gsub("'", "'\\''"),
+            tmpfile
+        )
+        logger.info("SendToBot: Trying server: " .. url)
+        local result = os.execute(cmd)
+        if result == 0 then
+            curl_ok = true
+            selected_url = url
+            break
+        else
+            logger.warn("SendToBot: Failed to contact " .. url)
+        end
+    end
+
+    if not curl_ok then
+        logger.err("SendToBot: All server attempts failed.")
+        UIManager:show(InfoMessage:new{
+            title = _("Send failed"),
+            text = _("Could not contact any server."),
+            timeout = 6,
+        })
+        return
+    end
+
+    local f = io.open(tmpfile, "r")
+    if not f then
+        logger.err("SendToBot: Cannot read result file.")
+        return
+    end
+    local content = f:read("*a")
+    f:close()
+
+    local success, response = pcall(function()
+        return JSON.decode(content)
+    end)
+
+    if not success or not response or not response.words then
+        logger.err("SendToBot: Invalid server response.")
+        UIManager:show(InfoMessage:new{
+            title = _("Error"),
+            text = _("Invalid response from local server."),
+            timeout = 5,
+        })
+        return
+    end
+
+    local lines = {}
+    for _, entry in ipairs(response.words) do
+        table.insert(lines, string.format("• %s (%s)", entry.word, entry.level or "?"))
+    end
+
+    if response.interpretation then
+        table.insert(lines, "")
+        table.insert(lines, "Mood: " .. (response.mood or "?"))
+        table.insert(lines, response.interpretation)
+    end
+
+    UIManager:show(InfoMessage:new{
+        title = _("Highlight analyzed"),
+        text = table.concat(lines, "\n"),
+        timeout = 10,
+    })
+
+    logger.info("--- Highlight sent and processed successfully ---")
+end
 
 return PageTextInfo
