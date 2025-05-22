@@ -1098,13 +1098,26 @@ function PageTextInfo:init()
     self.server = self.settings:readSetting("server", "192.168.50.252")
     self.port = self.settings:readSetting("server_port","5000")
     if self.ui.highlight then
-        self.ui.highlight._highlight_buttons["14_send_to_bot"] = function(this)
+        self.ui.highlight._highlight_buttons["14_get_mood"] = function(this)
             return {
-                text = _("Send to Server"),
+                text = _("Get mood"),
                 enabled = this.hold_pos ~= nil and this.selected_text ~= nil and this.selected_text.text ~= "",
+                is_quickmenu_button = true, -- To make it flash
                 callback = function()
                     UIManager:scheduleIn(0, function()
-                        self.ui.pagetextinfo:sendHighlightToServer()
+                        self.ui.pagetextinfo:sendHighlightToServerForMood()
+                    end)
+                end,
+            }
+        end
+        self.ui.highlight._highlight_buttons["15_get_heatmap"] = function(this)
+            return {
+                text = _("Get heatmap"),
+                enabled = this.hold_pos ~= nil and this.selected_text ~= nil and this.selected_text.text ~= "",
+                is_quickmenu_button = true, -- To make it flash
+                callback = function()
+                    UIManager:scheduleIn(0, function()
+                        self.ui.pagetextinfo:sendHighlightToServerForHeatmap()
                     end)
                 end,
             }
@@ -2157,7 +2170,8 @@ function getTranslation(self, word)
     local defaultDict = "Babylon English-Spanish"
 
     local selected_dict = self.settings:readSetting("dictionary") or defaultDict
-    table.insert(dictionaries, selected_dict)
+    table.insert(dictionaries, "WordReference EN-ES")
+    table.insert(dictionaries, "Babylon English-Spanish")
 
     local results = self.ui.dictionary:startSdcv(word, dictionaries, true, true)
     local translation = ""
@@ -2165,23 +2179,14 @@ function getTranslation(self, word)
     if results and results[1] and results[1].definition then
         local dict_name = results[1].dictionary or selected_dict
         local def = results[1].definition
-        translation = extractTranslation(def, dict_name)
+        translation = extractDefinition(def)
     end
 
     self.translations[word] = translation
     return translation
 end
 
-function extractTranslation(definition, dict_name)
-    dict_name = dict_name:lower()
-    if dict_name:find("babylon") then
-        return extractBabylon(definition)
-    else
-        return fallbackExtractor(definition)
-    end
-end
-
-function extractBabylon(def)
+function extractDefinition(def)
     if not def or def == "" then return "" end
 
     -- Limpia etiquetas HTML y normaliza saltos de línea
@@ -2215,11 +2220,6 @@ function extractBabylon(def)
 
     -- Último recurso: la última línea o la definición entera
     return lines[#lines] or def
-end
-
-function fallbackExtractor(def)
-    def = def:gsub("%b<>", ""):gsub("[\r\n]", " ")
-    return def:match("^[^;%.]+") or def
 end
 
 function PageTextInfo:drawXPointerVocabulary(bb, x, y)
@@ -4497,51 +4497,41 @@ function PageTextInfo:onTurnOnWifiKindle()
     })
 end
 
-function PageTextInfo:sendHighlightToServer()
-    logger.info("--- Sending highlight to local FastAPI server ---")
-
-    if not self.ui.highlight.selected_text or not self.ui.highlight.selected_text.text or self.ui.highlight.selected_text.text == "" then
-        logger.warn("No text selected.")
-        UIManager:show(Notification:new{ text = _("No text selected.") })
-        return
-    end
-
-    local text = util.cleanupSelectedText(self.ui.highlight.selected_text.text)
-    local book_id = self.ui.doc_props and self.ui.doc_props.title or self.ui.document:getFileName()
-
-    local payload = {
-        book_id = book_id,
-        visible_text = text,
-    }
-
+function PageTextInfo:sendJsonToServer(endpoint, payload, callback)
     local JSON = require("json")
+    local logger = require("logger")
+    local UIManager = require("ui/uimanager")
+    local NetworkMgr = require("ui/network/manager")
+
     local ok, json_payload = pcall(JSON.encode, payload)
     if not ok then
-        logger.err("SendToBot: Failed to encode JSON payload:", json_payload)
-        UIManager:show(InfoMessage:new{ title = _("Encoding error"), text = _("Could not prepare request."), timeout = 4 })
+        logger.err("sendJsonToServer: Failed to encode payload")
+        UIManager:show(InfoMessage:new{
+            title = _("Encoding error"),
+            text = _("Could not prepare request."),
+            timeout = 4,
+        })
         return
     end
 
-    local NetworkMgr = require("ui/network/manager")
     if not NetworkMgr:isConnected() then
-        logger.info("SendToBot: No network connection.")
+        logger.info("sendJsonToServer: No network connection.")
         NetworkMgr:promptWifiOn(function()
-            self:sendHighlightToServer()
-        end, _("Connect to Wi-Fi to send the highlight?"))
+            self:sendJsonToServer(endpoint, payload, callback)
+        end, _("Connect to Wi-Fi to send data?"))
         return
     end
 
-    -- List of server URLs to try
     local server_urls = {
-        "http://192.168.50.250:5000/analyze", -- Main server
-        "http://" .. self.server .. ":" .. self.port .. "/analyze", -- Android hotspot gateway
+        "http://192.168.50.250:5000" .. endpoint,
+        "http://" .. (self and self.server or "192.168.43.1") .. ":" .. (self and self.port or "5000") .. endpoint,
     }
 
-    local tmpfile = "/tmp/koreader_send_result.json"
+    local tmpfile = "/tmp/koreader_generic_response.json"
     local curl_ok = false
     local selected_url = nil
     local curl_path = "curl"
-    if Device:isKobo() then
+    if Device and Device:isKobo() then
         curl_path = "/mnt/onboard/.niluje/usbnet/bin/curl"
     end
 
@@ -4552,19 +4542,19 @@ function PageTextInfo:sendHighlightToServer()
             json_payload:gsub("'", "'\\''"),
             tmpfile
         )
-        logger.info("SendToBot: Trying server: " .. url)
+        logger.info("sendJsonToServer: Trying server: " .. url)
         local result = os.execute(cmd)
         if result == 0 then
             curl_ok = true
             selected_url = url
             break
         else
-            logger.warn("SendToBot: Failed to contact " .. url)
+            logger.warn("sendJsonToServer: Failed to contact " .. url)
         end
     end
 
     if not curl_ok then
-        logger.err("SendToBot: All server attempts failed.")
+        logger.err("sendJsonToServer: All server attempts failed.")
         UIManager:show(InfoMessage:new{
             title = _("Send failed"),
             text = _("Could not contact any server."),
@@ -4575,7 +4565,7 @@ function PageTextInfo:sendHighlightToServer()
 
     local f = io.open(tmpfile, "r")
     if not f then
-        logger.err("SendToBot: Cannot read result file.")
+        logger.err("sendJsonToServer: Cannot read result file.")
         return
     end
     local content = f:read("*a")
@@ -4585,34 +4575,106 @@ function PageTextInfo:sendHighlightToServer()
         return JSON.decode(content)
     end)
 
-    if not success or not response or not response.words then
-        logger.err("SendToBot: Invalid server response.")
+    if not success or not response then
+        logger.err("sendJsonToServer: Invalid server response.")
         UIManager:show(InfoMessage:new{
             title = _("Error"),
-            text = _("Invalid response from local server."),
+            text = _("Invalid response from server."),
             timeout = 5,
         })
         return
     end
 
-    local lines = {}
-    for _, entry in ipairs(response.words) do
-        table.insert(lines, string.format("• %s (%s)", entry.word, entry.level or "?"))
+    -- Call user-defined handler
+    callback(response)
+end
+
+function PageTextInfo:sendHighlightToServerForMood()
+    logger.info("--- Sending highlight to /analyze via generic handler ---")
+
+    if not self.ui.highlight.selected_text or not self.ui.highlight.selected_text.text or self.ui.highlight.selected_text.text == "" then
+        logger.warn("No text selected.")
+        UIManager:show(Notification:new{ text = _("No text selected.") })
+        return
     end
 
-    if response.interpretation then
-        table.insert(lines, "")
-        table.insert(lines, "Mood: " .. (response.mood or "?"))
-        table.insert(lines, response.interpretation)
-    end
+    local util = require("util")
+    local text = util.cleanupSelectedText(self.ui.highlight.selected_text.text)
+    local book_id = self.ui.doc_props and self.ui.doc_props.title or self.ui.document:getFileName()
 
-    UIManager:show(InfoMessage:new{
-        title = _("Highlight analyzed"),
-        text = table.concat(lines, "\n"),
-        timeout = 10,
-    })
+    local payload = {
+        book_id = book_id,
+        visible_text = text,
+    }
 
-    logger.info("--- Highlight sent and processed successfully ---")
+    self:sendJsonToServer("/analyze", payload, function(response)
+        if not response.words then
+            logger.err("Analyze: Missing words in response.")
+            UIManager:show(InfoMessage:new{
+                title = _("Error"),
+                text = _("Invalid response from analyze endpoint."),
+                timeout = 5,
+            })
+            return
+        end
+
+        local lines = {}
+        for _, entry in ipairs(response.words) do
+            table.insert(lines, string.format("• %s (%s)", entry.word, entry.level or "?"))
+        end
+
+        if response.interpretation then
+            table.insert(lines, "")
+            table.insert(lines, "Mood: " .. (response.mood or "?"))
+            table.insert(lines, response.interpretation)
+        end
+
+        UIManager:show(InfoMessage:new{
+            title = _("Highlight analyzed"),
+            text = table.concat(lines, "\n"),
+            timeout = 10,
+        })
+
+        logger.info("--- Highlight analyzed successfully via /analyze ---")
+    end)
+end
+
+function PageTextInfo:sendHighlightToServerForHeatmap()
+    local text = util.cleanupSelectedText(self.ui.highlight.selected_text.text)
+    local title = self.ui.document.file:match("([^/]+)$"):gsub("^'", ""):gsub("'$", "")
+    local string_percentage  = "%0.1f"
+    local percentage = string_percentage:format(self.view.footer.progress_bar.percentage * 100)
+
+
+    local payload = {
+        book_name = title,
+        word = text,
+        percent_limit = percentage,
+    }
+
+    self:sendJsonToServer("/heatmap", payload, function(response)
+        local lines = {
+            string.format("Word: %s", response.word or "?"),
+            string.format("Progress: %s", response.progress or "?"),
+            "",
+            response.heatmap or "(no heatmap)"
+        }
+
+        if response.legend then
+            table.insert(lines, "")
+            table.insert(lines, "Legend:")
+            for k, v in pairs(response.legend) do
+                table.insert(lines, string.format(" %s = %s", k, v))
+            end
+        end
+
+        UIManager:show(InfoMessage:new{
+            title = _("Heatmap analyzed"),
+            text = table.concat(lines, "\n"),
+            face = Font:getFace("Consolas-Regular.ttf", 14),
+            timeout = 10,
+        })
+    end)
 end
 
 return PageTextInfo
