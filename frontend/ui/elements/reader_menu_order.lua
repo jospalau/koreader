@@ -181,6 +181,7 @@ local order = {
         "exporter",
         "statistics",
         "pagetextinfo",
+        "reading_ruler",
         "progress_sync",
         "move_to_archive",
         "wallabag",
