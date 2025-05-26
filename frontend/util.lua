@@ -1961,13 +1961,7 @@ function util.dump(o)
  end
 
 function util.loadCalibreData()
-    local DataStorage = require("datastorage")
-    local ffiutil = require("ffi/util")
-    if ffiutil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
-        local ok, calibre_data = pcall(dofile, DataStorage:getSettingsDir() .. "/calibre.lua")
-        return calibre_data
-    end
-    return {}
+    return  _G.calibre_data
 end
 
 function util.which(command, path)

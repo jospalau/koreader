@@ -243,10 +243,18 @@ end
 
 -- Finally I am using a global variable _G.all_files. It can be defined simply as all_files = util.getListAll()
 -- but I define it and use it explicitly prefixing _G. on the front
+local util = require("util")
 if G_reader_settings:isTrue("top_manager_infmandhistory") then
-    local util = require("util")
     _G.all_files = util.getListAll()
     util.generateStats()
+end
+
+_G.calibre_data = {}
+local DataStorage = require("datastorage")
+local ffiutil = require("ffi/util")
+if ffiutil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
+    local ok, calibre_data = pcall(dofile, DataStorage:getSettingsDir() .. "/calibre.lua")
+    _G.calibre_data = calibre_data
 end
 
 -- Start app
