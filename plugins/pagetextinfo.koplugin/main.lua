@@ -250,6 +250,7 @@ function PageTextInfo:setupLayout()
                 if been_opened then
                     doc_settings_or_file = BookList.getDocSettings(file)
                     if not book_props then
+                        local FileManagerBookInfo = require("apps/filemanager/filemanagerbookinfo")
                         local props = doc_settings_or_file:readSetting("doc_props")
                         book_props = FileManagerBookInfo.extendProps(props, file)
                         book_props.has_cover = true -- to enable "Book cover" button, we do not know if cover exists
