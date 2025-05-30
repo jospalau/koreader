@@ -260,6 +260,13 @@ function InputContainer:onKeyRepeat(key)
 end
 
 function InputContainer:onGesture(ev)
+    -- if ev.ges:match("^swipe") then
+    --     -- print("swipe")
+    --     -- print("paso " .. debug.getinfo(1).name .. " " .. debug.getinfo(2).name .. " " .. debug.getinfo(3).name)
+    --     local dump = require("dump")
+    --     -- print(dump(self._ordered_touch_zones))
+    --     print(self.name)
+    -- end
     for _, tzone in ipairs(self._ordered_touch_zones) do
         if tzone.gs_range:match(ev) and tzone.handler(ev) then
             return true

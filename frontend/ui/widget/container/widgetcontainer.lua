@@ -100,8 +100,15 @@ not be sent to other widgets.
 function WidgetContainer:handleEvent(event)
     if not self:propagateEvent(event) then
         -- call our own standard event handler
+        -- if event.handler:match("^onGesture") then
+        --     print(self.name)
+        -- end
         return Widget.handleEvent(self, event)
     else
+        -- if event.handler:match("^onGesture") then
+        --     print("true")
+        --     print(self.name)
+        -- end
         return true
     end
 end
