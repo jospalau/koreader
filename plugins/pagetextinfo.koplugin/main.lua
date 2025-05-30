@@ -1231,8 +1231,9 @@ function PageTextInfo:addToMainMenu(menu_items)
                             FileManager.setupLayout = _FileManager_setupLayout_orig
                             FileManager.updateTitleBarPath = _FileManager_updateTitleBarPath_orig
                         end
-
+                        -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/patch.lua")
                         FileManager.instance:setupLayout()
+                        FileManager.instance:updateTitleBarTitle()
                         self.settings:flush()
                         return true
                     end,
