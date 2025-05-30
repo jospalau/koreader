@@ -34,7 +34,7 @@ function FileManagerMenu:init()
         },
         -- items in top menu
         filemanager_settings = {
-            icon = "appbar.filebrowser",
+            icon = "appbar.menu2",
         },
         setting = {
             icon = "appbar.settings",
