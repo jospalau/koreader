@@ -147,9 +147,9 @@ function FileManager:updateTitleBarPath(path)
 
     -- self.title_bar.center_icon = path == (G_reader_settings:readSetting("home_dir") or filemanagerutil.getDefaultDir()) and true or false
     -- self.title_bar.title = path == (G_reader_settings:readSetting("home_dir") or filemanagerutil.getDefaultDir()) and _("KOReader") or ""
-    if self.title_bar.toggleCenterICon then
-        self.title_bar:toggleCenterICon(path ~= (G_reader_settings:readSetting("home_dir") or filemanagerutil.getDefaultDir()))
-    end
+    -- if self.title_bar.toggleCenterICon then
+    --     self.title_bar:toggleCenterICon(path ~= (G_reader_settings:readSetting("home_dir") or filemanagerutil.getDefaultDir()))
+    -- end
 end
 
 FileManager.onPathChanged = FileManager.updateTitleBarPath
@@ -166,7 +166,7 @@ function FileManager:setupLayout()
         subtitle_truncate_left = true,
         subtitle_fullwidth = true,
         button_padding = Screen:scaleBySize(5),
-        left_icon = "home",
+        left_icon = "home2",
         left_icon_size_ratio = 1,
         left_icon_tap_callback = function() self:goHome() end,
         left_icon_hold_callback = function() self:onShowFolderMenu() end,
@@ -174,7 +174,7 @@ function FileManager:setupLayout()
         right_icon_size_ratio = 1,
         right_icon_tap_callback = function() self:onShowPlusMenu() end,
         right_icon_hold_callback = false, -- propagate long-press to dispatcher
-        center_icon = true,
+        center_icon = false,
     }
 
     local file_chooser = FileChooser:new{
