@@ -234,7 +234,7 @@ FileManager.onSetRotationMode = function(self, mode)
 end
 
 -- redraw the title bar
-function FileManager:updateTitleBarTitle()
+function FileManager:updateTitleBarTitle(home)
     if self.title_bar == nil or self._suspended then return end -- guard when suspended
 
     local titlebar_texts = {}
@@ -245,7 +245,7 @@ function FileManager:updateTitleBarTitle()
         end
     end
 
-    logger.info("FileManager:updateTitleBarTitle CALLED")
+    -- logger.info("FileManager:updateTitleBarTitle CALLED")
     local font_has_changed
     local not_bold_font = self.title_bar.info_text_face
     if config.bold then
@@ -268,7 +268,11 @@ function FileManager:updateTitleBarTitle()
     local seperator = spaces .. (separators[config.separator] or "") .. spaces
     self.title_bar:setTitle(table.concat(titlebar_texts, seperator))
 
-    self:updateTitleBarPath(config.show_path and self._title_bar_path_saved or "")
+    if home then
+        self:updateTitleBarPath(G_reader_settings:readSetting("home_dir"))
+    else
+        self:updateTitleBarPath(config.show_path and self._title_bar_path_saved or "")
+    end
 
     -- autorefresh time
     UIManager:unschedule(self.updateTitleBarTitle)
@@ -299,7 +303,7 @@ FileManager.onTimeFormatChanged = FileManager.updateTitleBarTitle
 FileManager.onFrontlightStateChanged = FileManager.updateTitleBarTitle
 
 function FileManager:onPathChanged(path)
-    logger.info("FileManager:onPathChanged CALLED")
+    -- logger.info("FileManager:onPathChanged CALLED")
     if not self._title_bar_bottom_v_padding_saved then
         self._title_bar_bottom_v_padding_saved = self.title_bar.bottom_v_padding
     end
