@@ -571,6 +571,7 @@ function TopBar:init()
             -- self:toggleBar()
         end)
     end)
+    if not self.settings then self.settings = LuaSettings:open(DataStorage:getSettingsDir() .. "/topbar.lua") end
 end
 
 local getMem = function()
@@ -693,9 +694,16 @@ function TopBar:onReaderReady()
         invert = true,
     }
 
+    local font = self.settings:readSetting("font_title")
+    and self.settings:readSetting("font_title")
+    or "Consolas-Regular.ttf"
+
+    local font_size = self.settings:readSetting("font_size_title")
+    and self.settings:readSetting("font_size_title")
+    or 14
     self.title_text = TextWidget:new{
         text =  "",
-        face = Font:getFace("Consolas-Regular.ttf", 14),
+        face = Font:getFace(font, font_size),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
@@ -707,7 +715,7 @@ function TopBar:onReaderReady()
 
     self.chapter_text = TextWidget:new{
         text =  "",
-        face = Font:getFace("Consolas-Regular.ttf", 14),
+        face = Font:getFace(font, font_size),
         fgcolor = Blitbuffer.COLOR_BLACK,
         bold = true,
     }
@@ -2146,18 +2154,83 @@ function TopBar:addToMainMenu(menu_items)
     --         UIManager:broadcastEvent(Event:new("ToggleShowDoubleBar"))
     --     end
     -- }
-
-    menu_items.show_top_bar = {
-        text = _("Show top bar"),
-        checked_func = function() return G_reader_settings:isTrue("show_top_bar") end,
-        -- enabled_func = function()
-        --     local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
-        --     return file_type == "epub"
-        -- end,
-        callback = function()
-            UIManager:broadcastEvent(Event:new("ToggleShowTopBar"))
+    local FontList = require("fontlist")
+    local table_fonts = {}
+    for _, font_path in ipairs(FontList:getFontList()) do
+        if font_path:match("([^/]+%-Regular%.ttf)$") then
+            font_path = font_path:match("([^/]+%-Regular%.ttf)$")
+            table.insert(table_fonts, {
+                text = font_path,
+                checked_func = function()
+                    return self.settings:readSetting("font_title") == font_path
+                end,
+                callback = function()
+                    local face = Font:getFace(font_path, self.settings:readSetting("font_size_title")
+                    and self.settings:readSetting("font_size_title") or 14)
+                    self.title_text.face = face
+                    self.chapter_text.face = face
+                    self:toggleBar()
+                    UIManager:setDirty("all", "ui")
+                    self.settings:saveSetting("font_title", font_path)
+                    self.settings:flush()
+                    return true
+                end,
+            })
         end
-    }
+    end
+
+    menu_items.topbar = {
+        text = _("Top bar"),
+        sub_item_table = {
+            {
+                text = _("Show top bar"),
+                checked_func = function() return G_reader_settings:isTrue("show_top_bar") end,
+                callback = function()
+                    UIManager:broadcastEvent(Event:new("ToggleShowTopBar"))
+                end,
+            },
+            {
+                text = _("Title and chapter font"),
+                sub_item_table = table_fonts,
+            },
+            {
+                text = _("Title and chapter font size"),
+                sub_item_table = {
+            {
+                text_func = function()
+                    return T(_("Item font size: %1"), self.settings.font_size_title and self.settings.font_size_title or 14)
+                end,
+                callback = function(touchmenu_instance)
+                    local SpinWidget = require("ui/widget/spinwidget")
+                    local items_font = SpinWidget:new{
+                        title_text = _("Item font size"),
+                        value = self.settings.font_size_title and self.settings.font_size_title or 14,
+                        value_min = 8,
+                        value_max = 36,
+                        default_value = 14,
+                        keep_shown_on_apply = true,
+                        callback = function(spin)
+                            self.settings:saveSetting("font_size_title", spin.value)
+                            local face = Font:getFace(self.settings:readSetting("font_title")
+                            and self.settings:readSetting("font_title") or "Consolas-Regular.ttf", spin.value)
+                            self.title_text.face = face
+                            self.chapter_text.face = face
+                            self:toggleBar()
+                            UIManager:setDirty("all", "ui")
+                            self.settings:flush()
+                            touchmenu_instance:updateItems()
+
+                        end,
+                    }
+                    UIManager:show(items_font)
+                end,
+                keep_menu_open = true,
+            }
+            },
+
+            },
+        },
+}
 end
 
 function TopBar:setCollectionCollate(collate)
