@@ -2198,13 +2198,15 @@ function TopBar:addToMainMenu(menu_items)
                 sub_item_table = {
             {
                 text_func = function()
-                    return T(_("Item font size: %1"), self.settings.font_size_title and self.settings.font_size_title or 14)
+                    return T(_("Item font size: %1"), self.settings:readSetting("font_size_title") and self.settings:readSetting("font_size_title") or 14)
                 end,
                 callback = function(touchmenu_instance)
                     local SpinWidget = require("ui/widget/spinwidget")
                     local items_font = SpinWidget:new{
                         title_text = _("Item font size"),
-                        value = self.settings.font_size_title and self.settings.font_size_title or 14,
+                        value = self.settings:readSetting("font_size_title")
+                        and self.settings:readSetting("font_size_title")
+                        or 14,
                         value_min = 8,
                         value_max = 36,
                         default_value = 14,
