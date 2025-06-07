@@ -15,6 +15,7 @@ local Blitbuffer = require("ffi/blitbuffer")
 local left_container = require("ui/widget/container/leftcontainer")
 local right_container = require("ui/widget/container/rightcontainer")
 local center_container = require("ui/widget/container/centercontainer")
+local bottom_container = require("ui/widget/container/bottomcontainer")
 local Font = require("ui/font")
 local TextWidget = require("ui/widget/textwidget")
 local datetime = require("datetime")
@@ -709,7 +710,7 @@ function TopBar:onReaderReady()
 
     self.series_text = TextWidget:new{
         text =  "",
-        face = Font:getFace("Consolas-Regular.ttf", 10),
+        face = Font:getFace(font, font_size - 4),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
@@ -778,7 +779,7 @@ function TopBar:onReaderReady()
         self.book_stats_text,
     }
 
-    self.chapter_widget_container = left_container:new{
+    self.chapter_widget_container = bottom_container:new{
         dimen = Geom:new(),
         self.chapter_text,
     }
@@ -1715,8 +1716,9 @@ function TopBar:paintTo(bb, x, y)
         self.author_information_widget_container:paintTo(bb, x + Screen:scaleBySize(4), y + Screen:scaleBySize(6))
 
         -- Top center
-
-        self.title_and_series_widget_container:paintTo(bb, x + Screen:getWidth()/2 + self.title_and_series_widget_container[1][1]:getSize().w/2 - self.title_and_series_widget_container[2][1]:getSize().w/2, y + TopBar.MARGIN_TOP)
+        self.title_and_series_widget_container[1][1]:updateSize()
+        self.title_and_series_widget_container:paintTo(bb, x + Screen:getWidth()/2 + self.title_and_series_widget_container[1][1]:getSize().w/2 - self.title_and_series_widget_container[2][1]:getSize().w/2,
+        y + TopBar.MARGIN_TOP) -- + self.title_and_series_widget_container[1][1]._baseline_h * 0.3) -- Visually compensates for excess internal top spacing
         -- self.title_and_series_widget_container:paintTo(bb, x + Screen:getWidth()/2, y + 20)
 
 
@@ -1786,7 +1788,9 @@ function TopBar:paintTo(bb, x, y)
             local text_widget_container = TextWidget:new{
                 text = self.chapter_widget_container[1].text:gsub(" ", "\u{00A0}"), -- no-break-space
                 max_width = Screen:getWidth() * 40 * (1/100),
-                face = Font:getFace("myfont3", 14),
+                face = Font:getFace(self.settings:readSetting("font_title") and self.settings:readSetting("font_title") or "Consolas-Regular.ttf",
+                self.settings:readSetting("font_size_title") and self.settings:readSetting("font_size_title") or 14),
+
                 bold = true,
             }
             local fitted_text, add_ellipsis = text_widget_container:getFittedText()
@@ -1794,7 +1798,7 @@ function TopBar:paintTo(bb, x, y)
             text_widget_container:free()
 
             -- self.chapter_widget_container:paintTo(bb, x + Screen:getWidth()/2 - self.chapter_widget_container[1]:getSize().w/2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
-            self.chapter_widget_container:paintTo(bb, x + Screen:getWidth()/2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+            self.chapter_widget_container:paintTo(bb, x + Screen:getWidth()/2 + self.chapter_widget_container[1]:getSize().w/2, Screen:getHeight())
             -- end
         end
 
@@ -1802,8 +1806,6 @@ function TopBar:paintTo(bb, x, y)
         -- Use progress bar
         -- self.progress_chapter_bar_chapter_widget_container:paintTo(bb, x + Screen:getWidth() - self.progress_chapter_bar_chapter_widget_container[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
         self.progress_chapter_widget_container:paintTo(bb, x + Screen:getWidth() - self.progress_chapter_widget_container[1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
-
-
         -- Comment inverted info for the moment
         -- self.battery_widget_container[1]:setText(self.time_battery_text_text:reverse())
 
@@ -2167,7 +2169,10 @@ function TopBar:addToMainMenu(menu_items)
                 callback = function()
                     local face = Font:getFace(font_path, self.settings:readSetting("font_size_title")
                     and self.settings:readSetting("font_size_title") or 14)
+                    local face_series = Font:getFace(font_path, self.settings:readSetting("font_size_title")
+                    and self.settings:readSetting("font_size_title") - 4 or 10)
                     self.title_text.face = face
+                    self.series_text.face = face_series
                     self.chapter_text.face = face
                     self:toggleBar()
                     UIManager:setDirty("all", "ui")
@@ -2187,6 +2192,7 @@ function TopBar:addToMainMenu(menu_items)
                 checked_func = function() return G_reader_settings:isTrue("show_top_bar") end,
                 callback = function()
                     UIManager:broadcastEvent(Event:new("ToggleShowTopBar"))
+                    UIManager:setDirty("all", "ui")
                 end,
             },
             {
@@ -2215,7 +2221,10 @@ function TopBar:addToMainMenu(menu_items)
                             self.settings:saveSetting("font_size_title", spin.value)
                             local face = Font:getFace(self.settings:readSetting("font_title")
                             and self.settings:readSetting("font_title") or "Consolas-Regular.ttf", spin.value)
+                            local face_series = Font:getFace(self.settings:readSetting("font_title")
+                            and self.settings:readSetting("font_title") or "Consolas-Regular.ttf", spin.value - 4)
                             self.title_text.face = face
+                            self.series_text.face = face_series
                             self.chapter_text.face = face
                             self:toggleBar()
                             UIManager:setDirty("all", "ui")
