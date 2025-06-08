@@ -631,7 +631,7 @@ function PageTextInfo:onSwipe(_, ges)
             self.view.topbar:quickToggleOnOff(false)
         end
     elseif direction == "south" then
-        if Device:isEmulator() or Device.model == "Kobo_spaBW" or Device.model == "Kobo_goldfinch" then
+        if self.settings:isTrue("enable_ruler") and Device:isEmulator() or Device.model == "Kobo_spaBW" or Device.model == "Kobo_goldfinch" then
             local ruler_overlay = RulerOverlay:new()
             -- UIManager:show(ruler_overlay.ruler_widget)
             ruler_overlay.ruler_widget:paintTo(Screen.bb, 0, 0)
@@ -1380,6 +1380,18 @@ This is to be active only if the option flash buttons and menu items or the opti
                         local enable_extra_tweaks = not self.settings:isTrue("enable_extra_tweaks")
                         self.settings:saveSetting("enable_extra_tweaks", enable_extra_tweaks)
                         self.settings:flush()
+                        return true
+                    end,
+                },
+                {
+                    text = _("Enable ruler"),
+                    checked_func = function() return self.settings:isTrue("enable_ruler") end,
+                    help_text = _([[Enable measuring ruler to be shown when a north to south swipe is performed. Just for emulator and some devices.]]),
+                    callback = function()
+                        local enable_ruler = not self.settings:isTrue("enable_ruler")
+                        self.settings:saveSetting("enable_ruler", enable_ruler)
+                        self.settings:flush()
+
                         return true
                     end,
                 },
