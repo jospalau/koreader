@@ -46,7 +46,6 @@ local TopBar = WidgetContainer:extend{
     -- Para verlo en detalle, es mejor no poner ningún estilo en las barras de progreso
     MARGIN_TOP = Screen:scaleBySize(9),
     MARGIN_BOTTOM = Screen:scaleBySize(9),
-    MARGIN_BOTTOM_CURRENT_PAGE = Screen:scaleBySize(25),
     -- show_bar_in_top_bar = true,
 }
 
@@ -748,7 +747,7 @@ function TopBar:onReaderReady()
         self.progress_book_text,
     }
 
-    self.current_page_widget_container = left_container:new{
+    self.current_page_widget_container = bottom_container:new{
         dimen = Geom:new{ w = self.current_page_text:getSize().w, self.current_page_text:getSize().h },
         self.current_page_text,
     }
@@ -769,7 +768,7 @@ function TopBar:onReaderReady()
         }
     }
 
-    self.stats_times_widget_container = left_container:new{
+    self.stats_times_widget_container = bottom_container:new{
         dimen = Geom:new(),
         self.times_text,
     }
@@ -784,7 +783,7 @@ function TopBar:onReaderReady()
         self.chapter_text,
     }
 
-    self.progress_chapter_widget_container = left_container:new{
+    self.progress_chapter_widget_container = bottom_container:new{
         dimen = Geom:new(),
         self.progress_chapter_text,
     }
@@ -1116,7 +1115,7 @@ function TopBar:getHeight()
 end
 
 function TopBar:getBottomHeight()
-    return TopBar.MARGIN_BOTTOM_CURRENT_PAGE + self.current_page_widget_container[1].face.size
+    return self.chapter_widget_container[1]:getSize().h
 end
 
 function TopBar:resetSession()
@@ -1760,7 +1759,7 @@ function TopBar:paintTo(bb, x, y)
 
         -- if self.option == 1 then
         self.stats_times_widget_container[1]:setText(self.times_text_text)
-        self.stats_times_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+        self.stats_times_widget_container:paintTo(bb, x + self.stats_times_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES, Screen:getHeight())
         -- end
 
         -- -- Comment inverted info for the moment
@@ -1805,7 +1804,7 @@ function TopBar:paintTo(bb, x, y)
         -- Bottom right
         -- Use progress bar
         -- self.progress_chapter_bar_chapter_widget_container:paintTo(bb, x + Screen:getWidth() - self.progress_chapter_bar_chapter_widget_container[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
-        self.progress_chapter_widget_container:paintTo(bb, x + Screen:getWidth() - self.progress_chapter_widget_container[1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+        self.progress_chapter_widget_container:paintTo(bb, x + Screen:getWidth() - self.progress_chapter_widget_container[1]:getSize().w / 2 - TopBar.MARGIN_SIDES, Screen:getHeight())
         -- Comment inverted info for the moment
         -- self.battery_widget_container[1]:setText(self.time_battery_text_text:reverse())
 
@@ -2041,7 +2040,7 @@ function TopBar:paintToDisabled(bb, x, y)
     else
         self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), y + Screen:scaleBySize(6))
     end
-    self.current_page_widget_container:paintTo(bb, x + Screen:getWidth()/2  - self.current_page_widget_container[1]:getSize().w / 2,  Screen:getHeight() - TopBar.MARGIN_BOTTOM_CURRENT_PAGE)
+    self.current_page_widget_container:paintTo(bb, x + Screen:getWidth()/2  - self.current_page_widget_container[1]:getSize().w / 2,  Screen:getHeight())-- - TopBar.MARGIN_BOTTOM_CURRENT_PAGE)
 end
 
 function TopBar:onAdjustMarginsTopbar()
