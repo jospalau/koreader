@@ -655,10 +655,12 @@ function TopBar:onReaderReady()
         face = Font:getFace("myfont3"),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
-
+    local font = self.settings:readSetting("font_times_progress")
+    and self.settings:readSetting("font_times_progress")
+    or "myfont3"
     self.progress_book_text = TextWidget:new{
         text =  "",
-        face = Font:getFace("myfont3"),
+        face = Font:getFace(font, 12),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
@@ -668,9 +670,15 @@ function TopBar:onReaderReady()
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
+    self.progress_chapter_text = TextWidget:new{
+        text =  "",
+        face = Font:getFace(font, 12),
+        fgcolor = Blitbuffer.COLOR_BLACK,
+    }
+
     self.times_text = TextWidget:new{
         text =  "",
-        face = Font:getFace("myfont3", 12),
+        face = Font:getFace(font, 12),
         fgcolor = Blitbuffer.COLOR_BLACK,
         invert = false,
     }
@@ -694,7 +702,7 @@ function TopBar:onReaderReady()
         invert = true,
     }
 
-    local font = self.settings:readSetting("font_title")
+    font = self.settings:readSetting("font_title")
     and self.settings:readSetting("font_title")
     or "Consolas-Regular.ttf"
 
@@ -718,12 +726,6 @@ function TopBar:onReaderReady()
         face = Font:getFace(font, font_size),
         fgcolor = Blitbuffer.COLOR_BLACK,
         bold = true,
-    }
-
-    self.progress_chapter_text = TextWidget:new{
-        text =  "",
-        face = Font:getFace("myfont3"),
-        fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
     -- self[1] = left_container:new{
@@ -1330,8 +1332,14 @@ function TopBar:toggleBar(light_on)
         local left = self.ui.toc:getChapterPagesLeft(self.view.footer.pageno) or self.ui.document:getTotalPagesLeft(self.view.footer.pageno)
         local left_time = self.view.footer:getDataFromStatistics("", left)
 
-        self.progress_chapter_text:setText(self.view.footer:getChapterProgress(false)) -- .. " " .. left_time)
-
+        self.progress_chapter = self.view.footer:getChapterProgress(false)
+        self.progress_chapter_text:setText(self.progress_chapter) -- .. " " .. left_time)
+        self.progress_chapter_text = TextWidget:new{
+                text =  "",
+                face = Font:getFace(fonti_path, 12),
+                fgcolor = Blitbuffer.COLOR_BLACK,
+            }
+        --self.progress_chapter_text:setText(self.series)
 
         -- -- Option 1 for the three bars
         -- self.progress_bar_book:updateStyle(false, nil)
@@ -2182,7 +2190,44 @@ function TopBar:addToMainMenu(menu_items)
             })
         end
     end
-
+    local table_fonts_times_progress = {}
+    for _, font_path in ipairs(FontList:getFontList()) do
+        if font_path:match("([^/]+%-Regular%.ttf)$") then
+            font_path = font_path:match("([^/]+%-Regular%.ttf)$")
+            table.insert(table_fonts_times_progress, {
+                text = font_path,
+                checked_func = function()
+                    return self.settings:readSetting("font_times_progress") == font_path
+                end,
+                callback = function()
+                    local face = Font:getFace(font_path, 12)
+                    self.times_text = TextWidget:new{
+                        text =  "",
+                        face = face,
+                        fgcolor = Blitbuffer.COLOR_BLACK,
+                    }
+                    self.stats_times_widget_container[1] = self.times_text
+                    self.progress_book_text = TextWidget:new{
+                        text =  "",
+                        face = face,
+                        fgcolor = Blitbuffer.COLOR_BLACK,
+                    }
+                   self.progress_widget_container[1] = self.progress_book_text
+                   self.progress_chapter_text = TextWidget:new{
+                        text =  "",
+                        face = face,
+                        fgcolor = Blitbuffer.COLOR_BLACK,
+                    }
+                    self.progress_chapter_widget_container[1] = self.progress_chapter_text
+                    self:toggleBar()
+                    UIManager:setDirty("all", "ui")
+                    self.settings:saveSetting("font_times_progress", font_path)
+                    self.settings:flush()
+                    return true
+                end,
+            })
+        end
+    end
     menu_items.topbar = {
         text = _("Top bar"),
         sub_item_table = {
@@ -2235,9 +2280,12 @@ function TopBar:addToMainMenu(menu_items)
                     UIManager:show(items_font)
                 end,
                 keep_menu_open = true,
-            }
             },
-
+            },
+            },
+            {
+                text = _("Times and progress font"),
+                sub_item_table = table_fonts_times_progress,
             },
         },
 }
