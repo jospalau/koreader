@@ -631,7 +631,7 @@ function PageTextInfo:onSwipe(_, ges)
             self.view.topbar:quickToggleOnOff(false)
         end
     elseif direction == "south" then
-        if self.settings:isTrue("enable_ruler") and Device:isEmulator() or Device.model == "Kobo_spaBW" or Device.model == "Kobo_goldfinch" then
+        if self.settings:isTrue("enable_ruler") and (Device:isEmulator() or Device.model == "Kobo_spaBW" or Device.model == "Kobo_goldfinch") then
             local ruler_overlay = RulerOverlay:new()
             -- UIManager:show(ruler_overlay.ruler_widget)
             ruler_overlay.ruler_widget:paintTo(Screen.bb, 0, 0)

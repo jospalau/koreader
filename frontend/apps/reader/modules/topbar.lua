@@ -1904,7 +1904,7 @@ function TopBar:paintTo(bb, x, y)
             -- times_text_widget_container:paintTo(bb, x - times_text_widget_container:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y)
 
 
-            local books_information_widget_container = left_container:new{
+            local books_information_widget_container = bottom_container:new{
                 dimen = Geom:new(),
                 TextWidget:new{
                     text =  "",
@@ -1944,7 +1944,7 @@ function TopBar:paintTo(bb, x, y)
             else
                 books_information_widget_container[1]:setText("No stats.lua file in home dir")
             end
-            books_information_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+            books_information_widget_container:paintTo(bb, x + books_information_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES, Screen:getHeight())
 
 
             local times_widget_container =
