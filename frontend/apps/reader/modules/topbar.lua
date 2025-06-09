@@ -2050,7 +2050,7 @@ function TopBar:paintToDisabled(bb, x, y)
     else
         self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), y + Screen:scaleBySize(6))
     end
-    self.current_page_widget_container:paintTo(bb, x + math.floor(Screen:getWidth() / 2)  - math.floor(self.current_page_widget_container[1]:getSize().w / 2),  Screen:getHeight())-- - TopBar.MARGIN_BOTTOM_CURRENT_PAGE)
+    self.current_page_widget_container:paintTo(bb, x + math.floor(Screen:getWidth() / 2), Screen:getHeight())-- - TopBar.MARGIN_BOTTOM_CURRENT_PAGE)
 end
 
 function TopBar:onAdjustMarginsTopbar()
