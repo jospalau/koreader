@@ -658,9 +658,11 @@ function TopBar:onReaderReady()
     local font = self.settings:readSetting("font_times_progress")
     and self.settings:readSetting("font_times_progress")
     or "myfont3"
+    local font_size= self.settings:readSetting("font_size_times_progress")
+    and self.settings:readSetting("font_size_times_progress") or 12
     self.progress_book_text = TextWidget:new{
         text =  "",
-        face = Font:getFace(font, 12),
+        face = Font:getFace(font, font_size),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
@@ -672,13 +674,13 @@ function TopBar:onReaderReady()
 
     self.progress_chapter_text = TextWidget:new{
         text =  "",
-        face = Font:getFace(font, 12),
+        face = Font:getFace(font, font_size),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
     self.times_text = TextWidget:new{
         text =  "",
-        face = Font:getFace(font, 12),
+        face = Font:getFace(font, font_size),
         fgcolor = Blitbuffer.COLOR_BLACK,
         invert = false,
     }
@@ -706,7 +708,7 @@ function TopBar:onReaderReady()
     and self.settings:readSetting("font_title")
     or "Consolas-Regular.ttf"
 
-    local font_size = self.settings:readSetting("font_size_title")
+    font_size = self.settings:readSetting("font_size_title")
     and self.settings:readSetting("font_size_title")
     or 14
     self.title_text = TextWidget:new{
@@ -1767,7 +1769,7 @@ function TopBar:paintTo(bb, x, y)
 
         -- if self.option == 1 then
         self.stats_times_widget_container[1]:setText(self.times_text_text)
-        self.stats_times_widget_container:paintTo(bb, x + self.stats_times_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES, Screen:getHeight())
+        self.stats_times_widget_container:paintTo(bb, x + math.floor(self.stats_times_widget_container[1]:getSize().w / 2) + TopBar.MARGIN_SIDES, Screen:getHeight())
         -- end
 
         -- -- Comment inverted info for the moment
@@ -1805,14 +1807,14 @@ function TopBar:paintTo(bb, x, y)
             text_widget_container:free()
 
             -- self.chapter_widget_container:paintTo(bb, x + Screen:getWidth()/2 - self.chapter_widget_container[1]:getSize().w/2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
-            self.chapter_widget_container:paintTo(bb, x + Screen:getWidth()/2 + self.chapter_widget_container[1]:getSize().w/2, Screen:getHeight())
+            self.chapter_widget_container:paintTo(bb, x + math.floor(Screen:getWidth() / 2) + math.floor(self.chapter_widget_container[1]:getSize().w / 2), Screen:getHeight())
             -- end
         end
 
         -- Bottom right
         -- Use progress bar
         -- self.progress_chapter_bar_chapter_widget_container:paintTo(bb, x + Screen:getWidth() - self.progress_chapter_bar_chapter_widget_container[1][1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
-        self.progress_chapter_widget_container:paintTo(bb, x + Screen:getWidth() - self.progress_chapter_widget_container[1]:getSize().w / 2 - TopBar.MARGIN_SIDES, Screen:getHeight())
+        self.progress_chapter_widget_container:paintTo(bb, x + Screen:getWidth() - math.floor(self.progress_chapter_widget_container[1]:getSize().w / 2) - TopBar.MARGIN_SIDES, Screen:getHeight())
         -- Comment inverted info for the moment
         -- self.battery_widget_container[1]:setText(self.time_battery_text_text:reverse())
 
@@ -2048,7 +2050,7 @@ function TopBar:paintToDisabled(bb, x, y)
     else
         self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), y + Screen:scaleBySize(6))
     end
-    self.current_page_widget_container:paintTo(bb, x + Screen:getWidth()/2  - self.current_page_widget_container[1]:getSize().w / 2,  Screen:getHeight())-- - TopBar.MARGIN_BOTTOM_CURRENT_PAGE)
+    self.current_page_widget_container:paintTo(bb, x + math.floor(Screen:getWidth() / 2)  - math.floor(self.current_page_widget_container[1]:getSize().w / 2),  Screen:getHeight())-- - TopBar.MARGIN_BOTTOM_CURRENT_PAGE)
 end
 
 function TopBar:onAdjustMarginsTopbar()
@@ -2200,7 +2202,7 @@ function TopBar:addToMainMenu(menu_items)
                     return self.settings:readSetting("font_times_progress") == font_path
                 end,
                 callback = function()
-                    local face = Font:getFace(font_path, 12)
+                    local face = Font:getFace(font_path, self.settings:readSetting("font_size_times_progress") and self.settings:readSetting("font_size_times_progress") or 12)
                     self.times_text = TextWidget:new{
                         text =  "",
                         face = face,
@@ -2287,6 +2289,59 @@ function TopBar:addToMainMenu(menu_items)
                 text = _("Times and progress font"),
                 sub_item_table = table_fonts_times_progress,
             },
+         {
+                text = _("Times and progress font size"),
+                sub_item_table = {
+            {
+                text_func = function()
+                    return T(_("Item font size: %1"), self.settings:readSetting("font_size_times_progress") and self.settings:readSetting("font_size_times_progress") or 12)
+                end,
+                callback = function(touchmenu_instance)
+                    local SpinWidget = require("ui/widget/spinwidget")
+                    local items_font = SpinWidget:new{
+                        title_text = _("Item font size"),
+                        value = self.settings:readSetting("font_size_times_progress")
+                        and self.settings:readSetting("font_size_times_progress")
+                        or 10,
+                        value_min = 6,
+                        value_max = 18,
+                        default_value = 12,
+                        keep_shown_on_apply = true,
+                        callback = function(spin)
+                            self.settings:saveSetting("font_size_times_progress", spin.value)
+                            local face = Font:getFace(self.settings:readSetting("font_times_progress")
+                            and self.settings:readSetting("font_times_progress") or "myfont3", spin.value)
+                            self.times_text = TextWidget:new{
+                                text =  "",
+                                face = face,
+                                fgcolor = Blitbuffer.COLOR_BLACK,
+                            }
+                            self.stats_times_widget_container[1] = self.times_text
+                            self.progress_book_text = TextWidget:new{
+                                text =  "",
+                                face = face,
+                                fgcolor = Blitbuffer.COLOR_BLACK,
+                            }
+                            self.progress_widget_container[1] = self.progress_book_text
+                            self.progress_chapter_text = TextWidget:new{
+                                text =  "",
+                                face = face,
+                                fgcolor = Blitbuffer.COLOR_BLACK,
+                            }
+                            self.progress_chapter_widget_container[1] = self.progress_chapter_text
+                            self:toggleBar()
+                            UIManager:setDirty("all", "ui")
+                            self.settings:flush()
+                            touchmenu_instance:updateItems()
+
+                        end,
+                    }
+                    UIManager:show(items_font)
+                end,
+                keep_menu_open = true,
+            },
+            },
+        }
         },
 }
 end
