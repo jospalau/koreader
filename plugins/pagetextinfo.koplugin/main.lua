@@ -534,7 +534,7 @@ function RulerOverlay:init()
         },
     }
     -- widget_settings.image_disposable = true
-    if Device.model == "Kobo_spaBW" or Device.model == "Kobo_goldfinch" then
+    if Device.model == "Kobo_spaBW" or Device.model == "Kobo_goldfinch" or Device.model == "Kobo_spaColour" then
         widget_settings.file = "resources/rulerKoboClaraBW.png" -- 1072x1448
     else
         widget_settings.file = "resources/rulerEmulator.png" -- 1040x1190
@@ -631,7 +631,9 @@ function PageTextInfo:onSwipe(_, ges)
             self.view.topbar:quickToggleOnOff(false)
         end
     elseif direction == "south" then
-        if self.settings:isTrue("enable_ruler") and (Device:isEmulator() or Device.model == "Kobo_spaBW" or Device.model == "Kobo_goldfinch") then
+
+        if self.settings:isTrue("enable_ruler") and
+            (Device:isEmulator() or Device.model == "Kobo_spaBW" or Device.model == "Kobo_goldfinch" or Device.model == "Kobo_spaColour") then
             local ruler_overlay = RulerOverlay:new()
             -- UIManager:show(ruler_overlay.ruler_widget)
             ruler_overlay.ruler_widget:paintTo(Screen.bb, 0, 0)
