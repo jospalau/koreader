@@ -1336,11 +1336,6 @@ function TopBar:toggleBar(light_on)
 
         self.progress_chapter = self.view.footer:getChapterProgress(false)
         self.progress_chapter_text:setText(self.progress_chapter) -- .. " " .. left_time)
-        self.progress_chapter_text = TextWidget:new{
-                text =  "",
-                face = Font:getFace(fonti_path, 12),
-                fgcolor = Blitbuffer.COLOR_BLACK,
-            }
         --self.progress_chapter_text:setText(self.series)
 
         -- -- Option 1 for the three bars
