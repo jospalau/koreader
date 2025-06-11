@@ -1336,6 +1336,7 @@ This is to be active only if the option flash buttons and menu items or the opti
                         self.is_enabled = not self.is_enabled
                         self.settings:saveSetting("is_enabled", self.is_enabled)
                         self.settings:flush()
+                        UIManager:setDirty("all", "ui")
                         return true
                     end,
                 },
