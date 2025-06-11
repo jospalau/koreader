@@ -254,6 +254,7 @@ function ListMenuItem:update()
                     }
                     wimage:_render()
                     local image_size = wimage:getSize() -- get final widget size
+                    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
                     wleft = CenterContainer:new{
                         dimen = Geom:new{ w = wleft_width, h = wleft_height },
                         FrameContainer:new{
@@ -261,7 +262,7 @@ function ListMenuItem:update()
                             height = image_size.h + 2*border_size,
                             margin = 0,
                             padding = 0,
-                            bordersize = border_size,
+                            bordersize = (ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks")) and 0 or border_size,
                             dim = self.file_deleted,
                             wimage,
                         }
