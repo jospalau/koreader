@@ -2122,7 +2122,11 @@ function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
                     local word = self.ui.document._document:getTextFromPositions(boxes[1].x, boxes[1].y, boxes[1].x, boxes[1].y, false, false)
                     word.text = word.text:match("[A-Za-zÁÉÍÓÚÜÑáéíóúüñ']+$") or word.text
                     if (item.hyphenated and word.text:upper() == item.text:upper()) or word.text:upper() == item.text:upper() then
-                        boxes = self.document:getScreenBoxesFromPositions(item.start, word.pos1, true)
+                        if item.hyphenated and word.text:upper() == item.text:upper() then
+                            boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
+                        else
+                            boxes = self.document:getScreenBoxesFromPositions(item.start, word.pos1, true)
+                        end
                         if boxes then
                             for _, box in ipairs(boxes) do
                                 if box.h ~= 0 then
@@ -2322,7 +2326,11 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                     --     end
                     -- end
                     if (item.hyphenated and word.text:upper() == item.text:upper()) or word.text:upper() == item.text:upper() then
-                        boxes = self.document:getScreenBoxesFromPositions(item.start, word.pos1, true)
+                        if item.hyphenated and word.text:upper() == item.text:upper() then
+                            boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
+                        else
+                            boxes = self.document:getScreenBoxesFromPositions(item.start, word.pos1, true)
+                        end
                         if boxes then
                             for _, box in ipairs(boxes) do
                                 if box.h ~= 0 then
