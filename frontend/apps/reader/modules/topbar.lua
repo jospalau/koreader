@@ -1802,7 +1802,11 @@ function TopBar:paintTo(bb, x, y)
             text_widget_container:free()
 
             -- self.chapter_widget_container:paintTo(bb, x + Screen:getWidth()/2 - self.chapter_widget_container[1]:getSize().w/2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
-            self.chapter_widget_container:paintTo(bb, x + math.floor(Screen:getWidth() / 2) + math.floor(self.chapter_widget_container[1]:getSize().w / 2), Screen:getHeight())
+            if self.stats_times_widget_container[1]:getSize().w  + TopBar.MARGIN_SIDES > math.floor(Screen:getWidth() / 2) then
+                self.chapter_widget_container:paintTo(bb, x + self.stats_times_widget_container[1]:getSize().w + math.floor(self.chapter_widget_container[1]:getSize().w / 2) + TopBar.MARGIN_SIDES + 3, Screen:getHeight())
+            else
+                self.chapter_widget_container:paintTo(bb, x + math.floor(Screen:getWidth() / 2) + math.floor(self.chapter_widget_container[1]:getSize().w / 2), Screen:getHeight())
+            end
             -- end
         end
 
