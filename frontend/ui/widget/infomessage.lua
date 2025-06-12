@@ -264,6 +264,10 @@ function InfoMessage:onCloseWidget()
             local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
             if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_refreshes") then
                 UIManager:setDirty(nil, "full")
+            elseif ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+                UIManager:setDirty(self, function()
+                    return "ui", self.movable.dimen
+                end)
             end
         end
         -- return "ui", self.movable.dimen
