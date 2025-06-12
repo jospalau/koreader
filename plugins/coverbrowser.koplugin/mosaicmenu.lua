@@ -532,6 +532,11 @@ function MosaicMenuItem:update()
                 image:_render()
                 local image_size = image:getSize()
                 local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+                if ui ~= nil then
+                    pagetextinfo = ui.pagetextinfo
+                else
+                    pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
+                end
                 widget = CenterContainer:new{
                     dimen = dimen,
                     FrameContainer:new{
@@ -539,7 +544,7 @@ function MosaicMenuItem:update()
                         height = image_size.h + 2*border_size,
                         margin = 0,
                         padding = 0,
-                        bordersize = (ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks")) and 0 or border_size,
+                        bordersize = (pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks")) and 0 or border_size,
                         dim = self.file_deleted,
                         color = self.file_deleted and Blitbuffer.COLOR_DARK_GRAY or nil,
                         image,
