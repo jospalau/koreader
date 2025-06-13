@@ -1208,19 +1208,19 @@ function Dispatcher._showAsMenu(settings, exec_props)
                 -- the only one marked as Keep QuickMenu open
                 -- We do this just for this gesture
                 if keep_open_on_apply then
-                    if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.set_font and profo.set_font == ui.document._document:getFontFace() and v.text ~= "Profile Reset defaults" then
+                    if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.set_font and profo.set_font == ui.document._document:getFontFace() and v.text ~= "Profile Reset defaults" and v.text ~= "Profile Narrow" then
                         v.text = v.text .. " ✔"
                     end
 
-                    if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.font_size and profo.font_size == font_size and v.text ~= "Profile Reset defaults" then
+                    if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.font_size and profo.font_size == font_size and v.text ~= "Profile Reset defaults" and v.text ~= "Profile Narrow" then
                         v.text = v.text .. " ✔"
                     end
 
-                    if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.line_spacing and profo.line_spacing == ui.document.configurable.line_spacing and v.text ~= "Profile Reset defaults" then
+                    if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.line_spacing and profo.line_spacing == ui.document.configurable.line_spacing and v.text ~= "Profile Reset defaults" and v.text ~= "Profile Narrow" then
                         v.text = v.text .. " ✔"
                     end
 
-                    if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.b_page_margin  and profo.b_page_margin  == ui.document.configurable.b_page_margin  and v.text ~= "Profile Reset defaults" then
+                    if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.b_page_margin and profo.b_page_margin == ui.document.configurable.b_page_margin and v.text ~= "Profile Reset defaults" and v.text ~= "Profile Narrow" then
                         v.text = v.text .. " ✔"
                     end
                 end
@@ -1326,19 +1326,19 @@ function Dispatcher._showAsMenu(settings, exec_props)
 
                                 if not menu_fonts then
                                     for _,profo in pairs(data) do
-                                        if ui and buttonqm[1] and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.set_font and profo.set_font == ui.document._document:getFontFace() and buttonqm[1].text ~= "Profile Reset defaults" then
+                                        if ui and buttonqm[1] and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.set_font and profo.set_font == ui.document._document:getFontFace() and buttonqm[1].text ~= "Profile Reset defaults" and buttonqm[1].text ~= "Profile Narrow" then
                                             buttonqm[1].text = buttonqm[1].text .. " ✔"
                                         end
 
-                                        if ui and buttonqm[1] and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.font_size and profo.font_size == font_size and buttonqm[1].text ~= "Profile Reset defaults" then
+                                        if ui and buttonqm[1] and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.font_size and profo.font_size == font_size and buttonqm[1].text ~= "Profile Reset defaults" and buttonqm[1].text ~= "Profile Narrow" then
                                             buttonqm[1].text = buttonqm[1].text .. " ✔"
                                         end
 
-                                        if ui and buttonqm[1] and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.line_spacing and profo.line_spacing == ui.document.configurable.line_spacing and buttonqm[1].text ~= "Profile Reset defaults" then
+                                        if ui and buttonqm[1] and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.line_spacing and profo.line_spacing == ui.document.configurable.line_spacing and buttonqm[1].text ~= "Profile Reset defaults" and buttonqm[1].text ~= "Profile Narrow" then
                                             buttonqm[1].text = buttonqm[1].text .. " ✔"
                                         end
 
-                                        if ui and buttonqm[1] and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.b_page_margin and profo.b_page_margin == ui.document.configurable.b_page_margin and buttonqm[1].text ~= "Profile Reset defaults" then
+                                        if ui and buttonqm[1] and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.b_page_margin and profo.b_page_margin == ui.document.configurable.b_page_margin and buttonqm[1].text ~= "Profile Reset defaults" and buttonqm[1].text ~= "Profile Narrow" then
                                             buttonqm[1].text = buttonqm[1].text .. " ✔"
                                         end
 
