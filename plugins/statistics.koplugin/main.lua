@@ -1098,6 +1098,11 @@ function ReaderStatistics:checkNewDay()
         logger.info("New day " .. now_ts .. " " .. os.date("%Y-%m-%d %H:%M:%S", now_ts))
         self:insertDBSessionStats()
         self:insertDB()
+        self._initial_read_today = nil
+        self.start_current_period = now_ts
+        self._pages_turned = 0
+        self._total_pages = 0
+        self._total_words  = 0
         return true
     end
     return false
@@ -1139,11 +1144,6 @@ function ReaderStatistics:insertDBSessionStats()
     -- conn:exec('COMMIT;')
     stmt:close()
     conn:close()
-    self._initial_read_today = nil
-    self.start_current_period = now_ts
-    self._pages_turned = 0
-    self._total_pages = 0
-    self._total_words  = 0
     return true
 end
 
