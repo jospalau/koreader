@@ -34,7 +34,7 @@ local ffiUtil = require("ffi/util")
 
 local TopBar = WidgetContainer:extend{
     name = "Topbar",
-    is_enabled = G_reader_settings:isTrue("show_top_bar"),
+    --is_enabled = G_reader_settings:isTrue("show_top_bar"),
     -- start_session_time = os.time(),
     -- initial_read_today = getReadToday(),
     -- initial_read_month = getReadThisMonth(),
@@ -454,12 +454,13 @@ end
 
 function TopBar:init()
     if self.fm then return end
+    if not self.settings then self.settings = LuaSettings:open(DataStorage:getSettingsDir() .. "/topbar.lua") end
     -- This is done in readerui.lua because the topbar is started in ReaderView when the menu has not yet been started by ReaderUI
     -- if not self.fm then
     --     self.ui.menu:registerToMainMenu(self)
     -- end
     -- La inicialización del objeto ocurre una única vez pero el método init ocurre cada vez que abrimos el documento
-    TopBar.is_enabled = G_reader_settings:isTrue("show_top_bar")
+    TopBar.is_enabled = self.settings:isTrue("show_top_bar")
     -- TopBar.show_bar_in_top_bar = true
     -- TopBar.alt_bar = true
     if TopBar.preserved_start_session_time then
@@ -571,7 +572,6 @@ function TopBar:init()
             -- self:toggleBar()
         end)
     end)
-    if not self.settings then self.settings = LuaSettings:open(DataStorage:getSettingsDir() .. "/topbar.lua") end
 end
 
 local getMem = function()
@@ -921,15 +921,17 @@ function TopBar:onReaderReady()
     self.origin_book = self:getOriginBook()
 
 end
+
 function TopBar:onToggleShowTopBar()
-    local show_top_bar = G_reader_settings:isTrue("show_top_bar")
-    G_reader_settings	:saveSetting("show_top_bar", not show_top_bar)
+    local show_top_bar = self.settings:isTrue("show_top_bar")
+    self.settings:saveSetting("show_top_bar", not show_top_bar)
+    self.settings:flush()
     TopBar.is_enabled = not show_top_bar
     self:toggleBar()
 end
 
 function TopBar:showTopBar()
-    G_reader_settings:saveSetting("show_top_bar", true)
+    self.settings:saveSetting("show_top_bar", true)
     TopBar.is_enabled = true
     self:toggleBar()
 end
@@ -1092,7 +1094,7 @@ function TopBar:onSwitchTopBar()
 end
 
 function TopBar:quickToggleOnOff(put_off)
-    G_reader_settings:saveSetting("show_top_bar", put_off)
+    self.settings:saveSetting("show_top_bar", put_off)
     TopBar.is_enabled = put_off
     self:toggleBar()
     UIManager:setDirty(self.view.dialog, function()
@@ -2234,10 +2236,11 @@ function TopBar:addToMainMenu(menu_items)
         sub_item_table = {
             {
                 text = _("Show top bar"),
-                checked_func = function() return G_reader_settings:isTrue("show_top_bar") end,
+                checked_func = function() return self.settings:isTrue("show_top_bar") end,
                 callback = function()
                     UIManager:broadcastEvent(Event:new("ToggleShowTopBar"))
                     UIManager:setDirty("all", "ui")
+                    return true
                 end,
             },
             {

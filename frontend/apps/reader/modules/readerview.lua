@@ -363,7 +363,7 @@ function ReaderView:paintTo(bb, x, y)
     end
 
     if util.getFileNameSuffix(self.document.file) == "epub" then
-        if G_reader_settings:isTrue("show_top_bar") then
+        if self.topbar.settings:isTrue("show_top_bar") then
             self.topbar:paintTo(bb, x, y)
         else
             self.topbar:paintToDisabled(bb, x, y)

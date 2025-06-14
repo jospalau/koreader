@@ -189,7 +189,7 @@ function PageBrowserWidget:init()
     -- Compute settings-dependant sizes and options, and build the inner widgets
     -- (this will call self:update())
     self:updateLayout()
-    if G_reader_settings:isTrue("show_top_bar") then
+    if self.ui.topbar.settings:isTrue("show_top_bar") then
         UIManager:broadcastEvent(Event:new("ToggleShowTopBar"))
         self.ui.view.topbar.wason = true
     end

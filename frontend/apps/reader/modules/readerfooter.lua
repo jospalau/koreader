@@ -835,7 +835,7 @@ end
 function ReaderFooter:shouldBeRepainted()
     -- Since self.autoRefreshFooter() repaints also the topbar
     -- Repaint also when topbar is active even if footer is not visible
-    if not self.view.footer_visible and not G_reader_settings:isTrue("show_top_bar") then
+    if not self.view.footer_visible and not self.view.topbar.settings:isTrue("show_top_bar") then
         return false
     end
 
@@ -866,7 +866,7 @@ function ReaderFooter:rescheduleFooterAutoRefreshIfNeeded()
             local top_wg = UIManager:getTopmostVisibleWidget() or {}
             -- logger.info("ReaderFooter:shouldBeRepainted, top_wg name:", top_wg.name, "src:", debug.getinfo(top_wg.init or top_wg._init or top_wg.free or top_wg.new or top_wg.paintTo or function() end, "S").short_src,  "fs:", top_wg.covers_fullscreen, "ft:", top_wg.covers_footer)
             if top_wg.name == "ReaderUI" then
-                if self.ui.statistics and self.ui.view.topbar and G_reader_settings:isTrue("show_top_bar") then
+                if self.ui.statistics and self.ui.view.topbar and self.ui.view.topbar.settings:isTrue("show_top_bar") then
                     if self.ui.statistics:checkNewDay() then
                         self.ui.view.topbar:resetSession()
                     end
@@ -884,14 +884,14 @@ function ReaderFooter:rescheduleFooterAutoRefreshIfNeeded()
     local schedule = false
     if self.settings.auto_refresh_time then
         if self.settings.all_at_once then
-            if self.settings.time or self.settings.battery or self.settings.wifi_status or self.settings.mem_usage then
-                schedule = true
-            end
+            --if self.settings.time or self.settings.battery or self.settings.wifi_status or self.settings.mem_usage then
+            schedule = true
+            --end
         else
-            if self.mode == self.mode_list.time or self.mode == self.mode_list.battery
-                    or self.mode == self.mode_list.wifi_status or self.mode == self.mode_list.mem_usage then
-                schedule = true
-            end
+            --if self.mode == self.mode_list.time or self.mode == self.mode_list.battery
+            --        or self.mode == self.mode_list.wifi_status or self.mode == self.mode_list.mem_usage then
+            schedule = true
+            --end
         end
     end
     if schedule then
