@@ -1678,11 +1678,13 @@ function TopBar:paintTo(bb, x, y)
             -- self.stats_times_widget_container:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() -  Screen:scaleBySize(6))
             self.author_information_widget_container:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() - Screen:scaleBySize(6))
             self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), Screen:getHeight() - TopBar.MARGIN_BOTTOM)
-            battery_frame_diff:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
-            battery_frame:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
-            mem_frame_diff:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
-            mem_frame:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - mem_frame[1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
-            if self.ui.gestures.ignore_hold_corners and self.ui.gestures.ignore_hold_corners == false then
+            if self.settings:isTrue("show_battery_and_memory_info") then
+                battery_frame_diff:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
+                battery_frame:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
+                mem_frame_diff:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
+                mem_frame:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - mem_frame[1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
+            end
+            if self.ui.gestures.ignore_hold_corners and self.ui.gestures.ignore_hold_corners == false and self.settings:isTrue("show_battery_and_memory_info") then
                 battery_frame_diff:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1]:getSize().w, Screen:getHeight() - Screen:scaleBySize(8))
                 battery_frame:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w, Screen:getHeight() - Screen:scaleBySize(8))
                 mem_frame_diff:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1]:getSize().w - Screen:scaleBySize(6), Screen:getHeight() - Screen:scaleBySize(8))
@@ -1691,11 +1693,13 @@ function TopBar:paintTo(bb, x, y)
         else
             self.author_information_widget_container:paintTo(bb, x + Screen:scaleBySize(4), y + Screen:scaleBySize(6))
             self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), y + Screen:scaleBySize(6))
-            battery_frame_diff:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
-            battery_frame:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
-            mem_frame_diff:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
-            mem_frame:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - mem_frame[1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
-            if self.ui.gestures.ignore_hold_corners and self.ui.gestures.ignore_hold_corners == false then
+            if self.settings:isTrue("show_battery_and_memory_info") then
+                battery_frame_diff:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
+                battery_frame:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
+                mem_frame_diff:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
+                mem_frame:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - mem_frame[1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
+            end
+            if self.ui.gestures.ignore_hold_corners and self.ui.gestures.ignore_hold_corners == false and self.settings:isTrue("show_battery_and_memory_info") then
                 battery_frame_diff:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1]:getSize().w, y + Screen:scaleBySize(9))
                 battery_frame:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w, y + Screen:scaleBySize(9))
                 mem_frame_diff:paintTo(bb, x + Screen:getWidth() - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6) - mem_frame_diff[1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
@@ -2239,6 +2243,18 @@ function TopBar:addToMainMenu(menu_items)
                 checked_func = function() return self.settings:isTrue("show_top_bar") end,
                 callback = function()
                     UIManager:broadcastEvent(Event:new("ToggleShowTopBar"))
+                    UIManager:setDirty("all", "ui")
+                    return true
+                end,
+           },
+           {
+                text = _("Show battery and memory info"),
+                checked_func = function() return self.settings:isTrue("show_battery_and_memory_info") end,
+                callback = function()
+                    local show_battery_and_memory_info = self.settings:isTrue("show_battery_and_memory_info")
+                    self.settings:saveSetting("show_battery_and_memory_info", not show_battery_and_memory_info)
+                    self.settings:flush()
+                    self:toggleBar()
                     UIManager:setDirty("all", "ui")
                     return true
                 end,
