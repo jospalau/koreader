@@ -1286,7 +1286,10 @@ This is to be active only if the option flash buttons and menu items or the opti
 
                         local FileManager = require("apps/filemanager/filemanager").instance
                         if FileManager then
-                            FileManager:onRefresh()
+                            --FileManager:onRefresh()
+                            local path = FileManager.instance.file_chooser.path
+                            FileManager:setupLayout()
+                            FileManager.instance.file_chooser:changeToPath(path)
                         end
                         return true
                     end,
