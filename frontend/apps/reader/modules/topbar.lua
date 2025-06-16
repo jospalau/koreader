@@ -2260,15 +2260,20 @@ function TopBar:addToMainMenu(menu_items)
                 end,
             },
             {
-                text = _("Title and chapter font"),
+                text_func = function()
+                    return T(_("Title and chapter font: %1"), self.settings:readSetting("font_title") and self.settings:readSetting("font_title") or "Default: Consolas-Regular.ttf")
+                end,
                 sub_item_table = table_fonts,
             },
             {
+                text_func = function()
+                    return T(_("Title and chapter font size: %1"), self.settings:readSetting("font_size_title") and self.settings:readSetting("font_size_title") or 12)
+                end,
                 text = _("Title and chapter font size"),
                 sub_item_table = {
             {
                 text_func = function()
-                    return T(_("Item font size: %1"), self.settings:readSetting("font_size_title") and self.settings:readSetting("font_size_title") or 14)
+                    return T(_("Item font size: %1"), self.settings:readSetting("font_size_title") and self.settings:readSetting("font_size_title") or 12)
                 end,
                 callback = function(touchmenu_instance)
                     local SpinWidget = require("ui/widget/spinwidget")
@@ -2276,10 +2281,10 @@ function TopBar:addToMainMenu(menu_items)
                         title_text = _("Item font size"),
                         value = self.settings:readSetting("font_size_title")
                         and self.settings:readSetting("font_size_title")
-                        or 14,
+                        or 12,
                         value_min = 8,
                         value_max = 36,
-                        default_value = 14,
+                        default_value = 12,
                         keep_shown_on_apply = true,
                         callback = function(spin)
                             self.settings:saveSetting("font_size_title", spin.value)
@@ -2304,15 +2309,20 @@ function TopBar:addToMainMenu(menu_items)
             },
             },
             {
-                text = _("Times and progress font"),
+                text_func = function()
+                    return T(_("Times and progress font: %1"), self.settings:readSetting("font_times_progress") and self.settings:readSetting("font_times_progress") or "Default: Consolas-Regular.ttf")
+                end,
                 sub_item_table = table_fonts_times_progress,
             },
-         {
+            {
+                text_func = function()
+                    return T(_("Times and progress font size: %1"), self.settings:readSetting("font_size_times_progress") and self.settings:readSetting("font_size_times_progress") or 10)
+                end,
                 text = _("Times and progress font size"),
                 sub_item_table = {
             {
                 text_func = function()
-                    return T(_("Item font size: %1"), self.settings:readSetting("font_size_times_progress") and self.settings:readSetting("font_size_times_progress") or 12)
+                    return T(_("Item font size: %1"), self.settings:readSetting("font_size_times_progress") and self.settings:readSetting("font_size_times_progress") or 10)
                 end,
                 callback = function(touchmenu_instance)
                     local SpinWidget = require("ui/widget/spinwidget")
@@ -2323,7 +2333,7 @@ function TopBar:addToMainMenu(menu_items)
                         or 10,
                         value_min = 6,
                         value_max = 18,
-                        default_value = 12,
+                        default_value = 10,
                         keep_shown_on_apply = true,
                         callback = function(spin)
                             self.settings:saveSetting("font_size_times_progress", spin.value)
