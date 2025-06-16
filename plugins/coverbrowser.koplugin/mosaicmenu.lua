@@ -410,9 +410,9 @@ function MosaicMenuItem:update()
 
     local max_img_w = dimen.w - 2*border_size
     local max_img_h = dimen.h - 2*border_size
-    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
-        max_img_w = max_img_w + 8
-        max_img_h = max_img_h + 8
+    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_notused") then
+        max_img_w = max_img_w + 10
+        max_img_h = max_img_h + 10
     end
 
     local cover_specs = {
@@ -865,11 +865,11 @@ function MosaicMenu:_recalculateDimen()
     else
         pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
     end
-    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_notused") then
         self.others_height = self.others_height + 30
     end
     -- Set our items target size
-    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_notused") then
         self.item_margin = 0
     else
         self.item_margin = Screen:scaleBySize(12)
