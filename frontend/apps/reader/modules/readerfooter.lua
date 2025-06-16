@@ -620,7 +620,7 @@ function ReaderFooter:init()
         end
     end
 
-    self.footer_text_face = Font:getFace(self.text_font_face, self.settings.text_font_size)
+    self.footer_text_face = Font:getFace(self.settings.text_font_face and self.settings.text_font_face or self.text_font_face, self.settings.text_font_size)
     self.footer_text = TextWidget:new{
         text = "",
         face = self.footer_text_face,
@@ -1469,6 +1469,28 @@ function ReaderFooter:addToMainMenu(menu_items)
     table.insert(footer_items, getMinibarOption("custom_text"))
     table.insert(footer_items, getMinibarOption("dynamic_filler"))
 
+    local FontList = require("fontlist")
+    local table_fonts = {}
+
+    for _, font_path in ipairs(FontList:getFontList()) do
+        if font_path:match("([^/]+%-Regular%.ttf)$") then
+            font_path = font_path:match("([^/]+%-Regular%.ttf)$")
+            table.insert(table_fonts, {
+                text = font_path,
+                checked_func = function()
+                    return self.settings.text_font_face == font_path
+                end,
+                callback = function()
+                    local face = Font:getFace(font_path, self.settings.text_font_size)
+                    self.footer_text_face = face
+                    self.settings.text_font_face = font_path
+                    self:updateFooterFont()
+                    self:refreshFooter(true, true)
+                    return true
+                end,
+            })
+        end
+    end
     -- configure footer_items
     table.insert(sub_items, {
         text = _("Configure items"),
@@ -1574,6 +1596,12 @@ With this feature enabled, the current page is factored in, resulting in the cou
                     return T(_("Item font: %1%2"), self.settings.text_font_size, font_weight)
                 end,
                 sub_item_table = {
+                    {
+                        text_func = function()
+                            return T(_("Item font face: %1"), self.settings.text_font_face and self.settings.text_font_face or "Default: " .. self.text_font_face)
+                        end,
+                        sub_item_table = table_fonts,
+                    },
                     {
                         text_func = function()
                             return T(_("Item font size: %1"), self.settings.text_font_size)
@@ -2343,7 +2371,7 @@ end
 function ReaderFooter:updateFooterFont()
     self.separator_width = nil
     self.filler_space_width = nil
-    self.footer_text_face = Font:getFace(self.text_font_face, self.settings.text_font_size)
+    self.footer_text_face = Font:getFace(self.settings.text_font_face and self.settings.text_font_face or self.text_font_face, self.settings.text_font_size)
     self.footer_text:free()
     self.footer_text = TextWidget:new{
         text = self.footer_text.text,
