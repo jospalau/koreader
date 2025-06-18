@@ -2185,31 +2185,6 @@ function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
     return colorful
 end
 
-function getTranslation(self, word)
-    if self.translations[word] then
-        return self.translations[word]
-    end
-
-    local dictionaries = {}
-    local defaultDict = "Babylon English-Spanish"
-
-    local selected_dict = self.settings:readSetting("dictionary") or defaultDict
-    table.insert(dictionaries, "WordReference EN-ES")
-    table.insert(dictionaries, "Babylon English-Spanish")
-
-    local results = self.ui.dictionary:startSdcv(word, dictionaries, true, true)
-    local translation = ""
-
-    if results and results[1] and results[1].definition then
-        local dict_name = results[1].dictionary or selected_dict
-        local def = results[1].definition
-        translation = extractDefinition(def)
-    end
-
-    self.translations[word] = translation
-    return translation
-end
-
 function extractDefinition(def)
     if not def or def == "" then return "" end
 
@@ -2244,6 +2219,29 @@ function extractDefinition(def)
 
     -- Último recurso: la última línea o la definición entera
     return lines[#lines] or def
+end
+
+function getTranslation(self, word)
+    if self.translations[word] then
+        return self.translations[word]
+    end
+
+    local dictionaries = {}
+
+    table.insert(dictionaries, "WordReference_EN_ES")
+    table.insert(dictionaries, "Babylon English-Spanish")
+
+    local results = self.ui.dictionary:startSdcv(word, dictionaries, true, true)
+    local translation = ""
+
+    if results and results[1] and results[1].definition then
+        local dict_name = results[1].dictionary
+        local def = results[1].definition
+        translation = extractDefinition(def)
+    end
+
+    self.translations[word] = translation
+    return translation
 end
 
 function PageTextInfo:drawXPointerVocabulary(bb, x, y)
