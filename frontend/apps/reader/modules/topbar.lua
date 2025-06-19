@@ -1338,6 +1338,18 @@ function TopBar:toggleBar(light_on)
 
         self.progress_chapter = self.view.footer:getChapterProgress(false)
         self.progress_chapter_text:setText(self.progress_chapter) -- .. " " .. left_time)
+       local text_widget_container = TextWidget:new{
+            text = self.chapter_widget_container[1].text:gsub(" ", "\u{00A0}"), -- no-break-space
+            max_width = Screen:getWidth() * 40 * (1/100),
+            face = Font:getFace(self.settings:readSetting("font_title") and self.settings:readSetting("font_title") or "Consolas-Regular.ttf",
+            self.settings:readSetting("font_size_title") and self.settings:readSetting("font_size_title") or 14),
+
+            bold = true,
+        }
+        local fitted_text, __ = text_widget_container:getFittedText()
+        self.chapter_widget_container[1].text = fitted_text
+        text_widget_container:free()
+
         --self.progress_chapter_text:setText(self.series)
 
         -- -- Option 1 for the three bars
@@ -1790,23 +1802,6 @@ function TopBar:paintTo(bb, x, y)
         -- print(string.byte(self.chapter_widget_container [1].text, 1,-1))
         -- Bottom center
          if self.chapter_widget_container[1].text ~= "" then
-            -- if self.option == 2 then
-            -- self.chapter_widget_container[1].face = Font:getFace("myfont3", 14)
-            -- if self.chapter_widget_container[1]:getSize().w > Screen:getWidth()/3 then
-            --     self.chapter_widget_container[1].face = Font:getFace("myfont3", 12)
-            -- end
-            local text_widget_container = TextWidget:new{
-                text = self.chapter_widget_container[1].text:gsub(" ", "\u{00A0}"), -- no-break-space
-                max_width = Screen:getWidth() * 40 * (1/100),
-                face = Font:getFace(self.settings:readSetting("font_title") and self.settings:readSetting("font_title") or "Consolas-Regular.ttf",
-                self.settings:readSetting("font_size_title") and self.settings:readSetting("font_size_title") or 14),
-
-                bold = true,
-            }
-            local fitted_text, add_ellipsis = text_widget_container:getFittedText()
-            self.chapter_widget_container[1].text = fitted_text
-            text_widget_container:free()
-
             -- self.chapter_widget_container:paintTo(bb, x + Screen:getWidth()/2 - self.chapter_widget_container[1]:getSize().w/2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
             if self.stats_times_widget_container[1]:getSize().w  + TopBar.MARGIN_SIDES > math.floor(Screen:getWidth() / 2) then
                 self.chapter_widget_container:paintTo(bb, x + self.stats_times_widget_container[1]:getSize().w + math.floor(self.chapter_widget_container[1]:getSize().w / 2) + TopBar.MARGIN_SIDES + 3, Screen:getHeight())
