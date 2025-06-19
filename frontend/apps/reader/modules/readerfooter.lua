@@ -2693,6 +2693,18 @@ function ReaderFooter:DoubleTapFooter(ges)
     return true
 end
 
+function ReaderFooter:getHeight2()
+   local bar_height
+    if self.settings.progress_style_thin then
+        bar_height = self.settings.progress_style_thin_height
+    else
+        bar_height = self.settings.progress_style_thick_height
+    end
+    return self.height + self.bottom_padding
+    + bar_height + self.settings.text_font_size -- + self.footer_text:getSize().h
+
+end
+
 function ReaderFooter:onToggleFooterMode()
     if self.has_no_mode and self.settings.disable_progress_bar then return end
     if util.getFileNameSuffix(self.ui.document.file) == "epub"
@@ -2751,16 +2763,19 @@ function ReaderFooter:onToggleFooterMode()
     -- it won't be properly formatted. We need to reconfigure the footer configuration manually like we are partially doing in the commented block code calling to self.footer_text:setText(text)
     -- There is a function updateFooterText() which will be doing it as a result of calling self:onUpdateFooter(true)
     -- This function will perform afterwards the other refresh needed
-    self:onUpdateFooter(true)
+    self:onUpdateFooter(false)
     UIManager:setDirty(self.view.dialog, function()
         return self.view.currently_scrolling and "fast" or "ui",
       Geom:new{ w = Screen:getWidth(), h = self.ui.view.topbar:getHeight(), y = 0}
     end)
+    local bottom_height = self.ui.view.topbar:getBottomHeight() > self:getHeight()
+    and self.ui.view.topbar:getBottomHeight()
+    or self:getHeight2()
     UIManager:setDirty(self.view.dialog, function()
        return self.view.currently_scrolling and "fast" or "ui",
         Geom:new{ w = Screen:getWidth(),
-        h = self.ui.view.topbar:getBottomHeight(),
-        y = Screen:getHeight() - self.ui.view.topbar:getBottomHeight()}
+        h = bottom_height,
+        y = Screen:getHeight() - bottom_height}
         end)
         self:rescheduleFooterAutoRefreshIfNeeded()
     return true
