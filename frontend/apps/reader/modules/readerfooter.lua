@@ -2702,11 +2702,30 @@ function ReaderFooter:getHeight2()
             bar_height = self.settings.progress_style_thick_height
         end
     end
-    return Screen:scaleBySize(self.settings.container_bottom_padding
-    + self.settings.container_height
-    + bar_height
-    + self.settings.text_font_size) -- + self.footer_text:getSize().h)
+    local h_footer = Screen:scaleBySize(
+        self.settings.container_bottom_padding
+        + bar_height
+        + self.settings.container_height
+        + self.settings.text_font_size
+    )
 
+    -- Calculate actual refresh alignment
+    local block = 16
+    local screen_h = Screen:getHeight()
+    local y_requested = screen_h - h_footer
+    local y_aligned = y_requested - (y_requested % block)
+    local h_aligned = screen_h - y_aligned
+    local y_end = y_aligned + h_aligned
+
+    --UIManager:show(Notification:new{
+    --    text = string.format(
+    --        "Footer: y=%d height=%d → refresco real y=%d h=%d hasta=%d",
+    --        y_requested, h_footer, y_aligned, h_aligned, y_end
+    --    ),
+    --})
+
+    --return h_footer
+    return h_aligned
 end
 
 function ReaderFooter:onToggleFooterMode()
