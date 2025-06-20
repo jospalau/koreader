@@ -1344,6 +1344,19 @@ This is to be active only if the option flash buttons and menu items or the opti
                     end,
                 },
                 {
+                    text = _("Enable show footer separator"),
+                    checked_func = function()
+                        return self.settings:isTrue("show_footer_separator")
+                    end,
+                    callback = function()
+                        local show_footer_separator = not self.settings:isTrue("show_footer_separator")
+                        self.settings:saveSetting("show_footer_separator", show_footer_separator)
+                        self.settings:flush()
+                        UIManager:setDirty("all", "ui")
+                        return true
+                    end,
+                },
+                {
                     text = _("Enable devices flashes tweaks"),
                     checked_func = function() return self.settings:isTrue("enable_devices_flashes_tweaks") end,
                     help_text = _([[Some tweaks to fix the different issues for the different devices when flashing elements in the UI.
@@ -1858,6 +1871,21 @@ function PageTextInfo:paintTo(bb, x, y)
     end
 
     local total_words = 0
+    if self.settings:isTrue("show_footer_separator") then
+        LineWidget = require("ui/widget/linewidget")
+        local footer_height = self.ui.view.footer:getHeight2()
+        local separator_line = LineWidget:new{
+            dimen = Geom:new{
+                w = Screen:getWidth(),
+                h = Size.line.thick,
+            }
+        }
+        if self.ui.view.footer.settings.bar_top then
+            separator_line:paintTo(bb, x, y + footer_height)
+        else
+            separator_line:paintTo(bb, x, y + Screen:getHeight() - footer_height)
+        end
+    end
     if self.is_enabled and self.vertical_frame then
         local res = self.document:getTextFromPositions({x = 0, y = 0},
         {x = Screen:getWidth(), y = Screen:getHeight()}, true) -- do not highlight

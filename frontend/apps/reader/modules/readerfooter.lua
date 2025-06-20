@@ -2694,14 +2694,16 @@ function ReaderFooter:DoubleTapFooter(ges)
 end
 
 function ReaderFooter:getHeight2()
-   local bar_height
+    local bar_height = 0
+    if not self.settings.disable_progress_bar then
     if self.settings.progress_style_thin then
-        bar_height = self.settings.progress_style_thin_height
-    else
-        bar_height = self.settings.progress_style_thick_height
+            bar_height = self.settings.progress_style_thin_height
+        else
+            bar_height = self.settings.progress_style_thick_height
+        end
     end
     return self.height + self.bottom_padding
-    + bar_height + self.settings.text_font_size -- + self.footer_text:getSize().h
+    + bar_height + Screen:scaleBySize(self.settings.text_font_size) -- self.footer_text:getSize().h
 
 end
 
