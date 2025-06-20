@@ -2696,14 +2696,16 @@ end
 function ReaderFooter:getHeight2()
     local bar_height = 0
     if not self.settings.disable_progress_bar then
-    if self.settings.progress_style_thin then
+        if self.settings.progress_style_thin then
             bar_height = self.settings.progress_style_thin_height
         else
             bar_height = self.settings.progress_style_thick_height
         end
     end
-    return self.height + self.bottom_padding
-    + bar_height + Screen:scaleBySize(self.settings.text_font_size) -- self.footer_text:getSize().h
+    return Screen:scaleBySize(self.settings.container_bottom_padding
+    + self.settings.container_height
+    + bar_height
+    + self.settings.text_font_size) -- + self.footer_text:getSize().h)
 
 end
 
@@ -2756,9 +2758,9 @@ function ReaderFooter:onToggleFooterMode()
     --     return self.view.currently_scrolling and "fast" or "ui", self.footer_content.dimen
     -- end)
 
-    UIManager:setDirty(self.view.dialog, function()
-         return self.view.currently_scrolling and "fast" or "ui"
-    end)
+    --UIManager:setDirty(self.view.dialog, function()
+    --     return self.view.currently_scrolling and "fast" or "ui"
+    --end)
 
     -- With the following two calls we will have fast or ui (depending if we are scrolling or not) refreshes when toggling the footer mode
     -- We can do the refreshes manually like in the previous commented block but the problem is that if we hide the footer toggling it, turn a page and show it toggling it
@@ -2766,20 +2768,20 @@ function ReaderFooter:onToggleFooterMode()
     -- There is a function updateFooterText() which will be doing it as a result of calling self:onUpdateFooter(true)
     -- This function will perform afterwards the other refresh needed
     self:onUpdateFooter(false)
-    --UIManager:setDirty(self.view.dialog, function()
-    --    return self.view.currently_scrolling and "fast" or "ui",
-    --  Geom:new{ w = Screen:getWidth(), h = self.ui.view.topbar:getHeight(), y = 0}
-    --end)
-    --local bottom_height = self.ui.view.topbar:getBottomHeight() > self:getHeight()
-    --and self.ui.view.topbar:getBottomHeight()
-    --or self:getHeight2()
-    --UIManager:setDirty(self.view.dialog, function()
-    --   return self.view.currently_scrolling and "fast" or "ui",
-    --    Geom:new{ w = Screen:getWidth(),
-    --    h = bottom_height,
-    --    y = Screen:getHeight() - bottom_height}
-    --    end)
-    --    self:rescheduleFooterAutoRefreshIfNeeded()
+    UIManager:setDirty(self.view.dialog, function()
+        return self.view.currently_scrolling and "fast" or "ui",
+        Geom:new{ w = Screen:getWidth(), h = self.ui.view.topbar:getHeight(), y = 0}
+    end)
+    local bottom_height = self.ui.view.topbar:getBottomHeight() > self:getHeight2()
+    and self.ui.view.topbar:getBottomHeight()
+    or self:getHeight2()
+    UIManager:setDirty(self.view.dialog, function()
+       return self.view.currently_scrolling and "fast" or "ui",
+        Geom:new{ w = Screen:getWidth(),
+        h = bottom_height,
+        y = Screen:getHeight() - bottom_height}
+        end)
+        self:rescheduleFooterAutoRefreshIfNeeded()
     return true
 end
 
