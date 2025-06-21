@@ -2610,20 +2610,24 @@ function ReaderFooter:getHeight2()
             bar_height = self.settings.progress_style_thick_height
         end
     end
-    local h_footer = Screen:scaleBySize(
-        self.settings.container_bottom_padding
-        + bar_height
-        + self.settings.container_height
-        + self.settings.text_font_size
-    )
-
+    --local h_footer = Screen:scaleBySize(
+    --    self.settings.container_bottom_padding
+    --    + bar_height
+    --    + self.settings.container_height
+    --    + self.settings.text_font_size
+    --)
+    self:resetLayout(true)
+    h_footer = self.footer_text:getSize().h --measured
+    + bar_height -- not scaled
+    + (self.bottom_padding or 0) -- already scale
+    + Screen:scaleBySize(self.settings.container_height)
     -- Calculate actual refresh alignment
-    local block = 16
-    local screen_h = Screen:getHeight()
-    local y_requested = screen_h - h_footer
-    local y_aligned = y_requested - (y_requested % block)
-    local h_aligned = screen_h - y_aligned
-    local y_end = y_aligned + h_aligned
+    --local block = 16
+    --local screen_h = Screen:getHeight()
+    --local y_requested = screen_h - h_footer
+    --local y_aligned = y_requested - (y_requested % block)
+    --local h_aligned = screen_h - y_aligned
+    --local y_end = y_aligned + h_aligned
 
     --UIManager:show(Notification:new{
     --    text = string.format(
@@ -2703,9 +2707,10 @@ function ReaderFooter:onToggleFooterMode()
         return self.view.currently_scrolling and "fast" or "ui",
         Geom:new{ w = Screen:getWidth(), h = self.ui.view.topbar:getHeight(), y = 0}
     end)
-    local bottom_height = self.ui.view.topbar:getBottomHeight() > self:getHeight2()
+    local footer_height = self:getHeight2()
+    local bottom_height = self.ui.view.topbar:getBottomHeight() > footer_height
     and self.ui.view.topbar:getBottomHeight()
-    or self:getHeight2()
+    or footer_height
     UIManager:setDirty(self.view.dialog, function()
        return self.view.currently_scrolling and "fast" or "ui",
         Geom:new{ w = Screen:getWidth(),
