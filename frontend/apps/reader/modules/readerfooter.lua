@@ -2632,8 +2632,12 @@ function ReaderFooter:getHeight2()
     --    ),
     --})
 
-    --return h_footer
-    return h_aligned
+    -- NOTE: Although we return h_footer, in some devices (e.g. MTK with alignment_constraint = 16)
+    -- or when dithering is enabled (dither_alignment_constraint = 8), the actual refresh region
+    -- may be adjusted to start higher and cover more height to match hardware alignment blocks.
+    -- That adjustment is handled later by getBoundedRect() and fb:refresh().
+    return h_footer
+    --return h_aligned
 end
 
 function ReaderFooter:onToggleFooterMode()
