@@ -2616,8 +2616,8 @@ function ReaderFooter:getHeight2()
     --    + self.settings.container_height
     --    + self.settings.text_font_size
     --)
-    self:resetLayout(true)
-    h_footer = self.footer_text:getSize().h --measured
+    -- self:resetLayout(true) --Not needed, nothing changed
+    local h_footer = self.footer_text:getSize().h --measured
     + bar_height -- not scaled
     + (self.bottom_padding or 0) -- already scale
     + Screen:scaleBySize(self.settings.container_height)
