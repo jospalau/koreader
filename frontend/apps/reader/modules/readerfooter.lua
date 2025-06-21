@@ -2617,10 +2617,19 @@ function ReaderFooter:getHeight2()
     --    + self.settings.text_font_size
     --)
     -- self:resetLayout(true) --Not needed, nothing changed
+    -- The text is vertically centered inside a fixed-height container.
+    -- When the text overflows, it may extend both above and below the container.
+    -- To ensure the total visual height is accurate, we add:
+    --   - the actual text height (measured)
+    --   - the progress bar height (in real pixels)
+    --   - the bottom padding (already scaled)
+    --   - plus half the container height to compensate for the
+    --     vertical centering and potential overlap.
+    -- This provides a robust estimate, even in overflow scenarios.
     local h_footer = self.footer_text:getSize().h --measured
     + bar_height -- not scaled
     + (self.bottom_padding or 0) -- already scale
-    + Screen:scaleBySize(self.settings.container_height)
+    + math.floor(Screen:scaleBySize(self.settings.container_height) / 2)
     -- Calculate actual refresh alignment
     --local block = 16
     --local screen_h = Screen:getHeight()
