@@ -22,6 +22,23 @@ function RightContainer:paintTo(bb, x, y)
     end
     self.dimen.x = x
     self.dimen.y = y + math.floor((self.dimen.h - contentSize.h)/2)
+    if self.debug then
+        LineWidget = require("ui/widget/linewidget")
+        local Geom = require("ui/geometry")
+        local Screen = require("device").screen
+        local Size = require("ui/size")
+        local separator_line = LineWidget:new{
+            dimen = Geom:new{
+                w = Screen:getWidth(),
+                h = self.thin and Size.line.thin or Size.line.thick,
+            }
+        }
+        separator_line:paintTo(bb, x, y)
+        separator_line:paintTo(bb, x, y + self.dimen.h)
+        --separator_line.dimen.h = Size.line.thin
+        --separator_line:paintTo(bb, x, self.dimen.y)
+        --separator_line:paintTo(bb, x, self.dimen.y + contentSize.h)
+    end
     self[1]:paintTo(bb, self.dimen.x, self.dimen.y)
 end
 

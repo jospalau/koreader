@@ -643,6 +643,8 @@ function ReaderFooter:init()
     self.text_container = RightContainer:new{
         dimen = Geom:new{ w = 0, h = self.height },
         self.footer_text,
+        --debug = true,
+        --thin = true,
     }
 
     if self.settings.bar_top then
@@ -785,7 +787,8 @@ function ReaderFooter:updateFooterContainer()
     elseif self.settings.align == "right" then
         self.footer_container = RightContainer:new{
             dimen = Geom:new{ w = 0, h = self.height },
-            self.horizontal_group
+            self.horizontal_group,
+            --debug = true,
         }
     else
         self.footer_container = CenterContainer:new{
