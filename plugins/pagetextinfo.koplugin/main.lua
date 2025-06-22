@@ -1234,9 +1234,12 @@ function PageTextInfo:addToMainMenu(menu_items)
                             FileManager.updateTitleBarPath = _FileManager_updateTitleBarPath_orig
                         end
                         -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/patch.lua")
-                        FileManager.instance:setupLayout()
-                        FileManager.instance:updateTitleBarTitle(true)
+                        --FileManager.instance:setupLayout()
+                        --FileManager.instance:updateTitleBarTitle(true)
                         self.settings:flush()
+                        --FileManager:onClose() -- No need to close. The instance will be closed whe calling the showFiles() function
+                        local path = FileManager.instance.file_chooser.path
+                        FileManager:showFiles(path)
                         return true
                     end,
                 },
@@ -1288,7 +1291,7 @@ This is to be active only if the option flash buttons and menu items or the opti
                         if FileManager then
                             --FileManager:onRefresh()
                             local path = FileManager.instance.file_chooser.path
-                            FileManager:setupLayout()
+                            --FileManager:setupLayout()
                             FileManager.instance.file_chooser:changeToPath(path)
                         end
                         return true
