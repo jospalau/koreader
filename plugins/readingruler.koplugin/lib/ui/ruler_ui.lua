@@ -98,7 +98,8 @@ function RulerUI:updateUI()
     self.ruler_widget.background = line_props.color
     self.ruler_widget.style = line_props.style
     self.ruler_widget.dimen.h = line_props.thickness
-
+    self.ruler_widget.dimen.w = Screen:getWidth()
+    self.movable_widget.dimen.w = Screen:getWidth()
     self:repaint()
 end
 

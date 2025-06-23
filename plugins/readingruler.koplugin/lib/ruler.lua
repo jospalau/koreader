@@ -168,6 +168,10 @@ function Ruler:getRulerGeometry()
     }
 end
 
+function Ruler:refreshRulerWidth()
+    self.screen_width = Device.screen:getWidth()
+end
+
 -- Tap to move mode handling --
 function Ruler:isTapToMoveMode()
     return self.tap_to_move

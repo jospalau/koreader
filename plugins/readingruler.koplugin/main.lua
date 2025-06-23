@@ -143,6 +143,11 @@ function ReadingRuler:onPageUpdate(new_page)
     return self.ruler_ui:onPageUpdate(new_page)
 end
 
+function ReadingRuler:onSetDimensions()
+    self.ruler_ui.ruler:refreshRulerWidth()
+    self.ruler_ui:updateUI()
+end
+
 -- Gesture Events --
 function ReadingRuler:onSwipe(arg, ges)
     -- logger.info("--- ReadingRuler:onSwipe ---")
