@@ -1090,6 +1090,9 @@ function ReaderFooter:addToMainMenu(menu_items)
     local sub_items = {}
     menu_items.status_bar = {
         text = _("Status bar"),
+            enabled_func = function()
+                return self.ui.view.topbar.status_bar
+            end,
         sub_item_table = sub_items,
     }
 
