@@ -1480,8 +1480,8 @@ function ReaderFooter:addToMainMenu(menu_items)
     local table_fonts = {}
 
     for _, font_path in ipairs(FontList:getFontList()) do
-        if font_path:match("([^/]+%-Regular%.ttf)$") then
-            font_path = font_path:match("([^/]+%-Regular%.ttf)$")
+        if font_path:match("([^/]+%-Regular%.[ot]tf)$") then
+            font_path = font_path:match("([^/]+%-Regular%.[ot]tf)$")
             table.insert(table_fonts, {
                 text = font_path,
                 checked_func = function()
@@ -1600,7 +1600,9 @@ With this feature enabled, the current page is factored in, resulting in the cou
                     if self.settings.text_font_bold == true then
                         font_weight = ", " .. _("bold")
                     end
-                    return T(_("Item font: %1%2"), self.settings.text_font_size, font_weight)
+                    return T(_("Item font: %1, %2%3"),
+                        (self.settings.text_font_face and self.settings.text_font_face or self.text_font_face),
+                        self.settings.text_font_size, font_weight)
                 end,
                 sub_item_table = {
                     {

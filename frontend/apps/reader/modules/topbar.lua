@@ -2168,8 +2168,8 @@ function TopBar:addToMainMenu(menu_items)
     local FontList = require("fontlist")
     local table_fonts = {}
     for _, font_path in ipairs(FontList:getFontList()) do
-        if font_path:match("([^/]+%-Regular%.ttf)$") then
-            font_path = font_path:match("([^/]+%-Regular%.ttf)$")
+        if font_path:match("([^/]+%-Regular%.[ot]tf)$") then
+            font_path = font_path:match("([^/]+%-Regular%.[ot]tf)$")
             table.insert(table_fonts, {
                 text = font_path,
                 checked_func = function()
@@ -2194,8 +2194,8 @@ function TopBar:addToMainMenu(menu_items)
     end
     local table_fonts_times_progress = {}
     for _, font_path in ipairs(FontList:getFontList()) do
-        if font_path:match("([^/]+%-Regular%.ttf)$") then
-            font_path = font_path:match("([^/]+%-Regular%.ttf)$")
+        if font_path:match("([^/]+%-Regular%.[ot]tf)$") then
+            font_path = font_path:match("([^/]+%-Regular%.[ot]tf)$")
             table.insert(table_fonts_times_progress, {
                 text = font_path,
                 checked_func = function()
