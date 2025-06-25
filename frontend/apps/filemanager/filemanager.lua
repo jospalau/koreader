@@ -492,7 +492,6 @@ function FileManager:init()
 
 
     self:setupLayout()
-    local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/patch.lua")
 
     -- Not needed after last upstream change delaying the execution
     -- Call again to setupLayout() if hooked by any plugin

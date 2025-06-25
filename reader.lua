@@ -183,6 +183,15 @@ local UIManager = require("ui/uimanager")
 -- Apply developer patches
 userpatch.applyPatches(userpatch.late)
 
+-- Load the patches manually here
+-- The parameter userpatch.late means patches with 2- prepended to the file name:
+-- To be started after UIManager is ready (always)
+-- The patch ui-font.lua needs to be loaded first
+local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/ui-font.lua")
+local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/browser-folder-cover.lua")
+local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/filemanager-titlebar.lua")
+
+
 -- Inform once about color rendering on newly supported devices
 -- (there are some android devices that may not have a color screen,
 -- and we are not (yet?) able to guess that fact)
