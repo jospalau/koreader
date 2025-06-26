@@ -738,6 +738,7 @@ function TopBar:onReaderReady()
     self.author_text = TextWidget:new{
         text =  "",
         face = Font:getFace("myfont3", 8),
+        bold = true,
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
