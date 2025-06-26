@@ -62,7 +62,7 @@ local function patchCoverBrowser(plugin)
         if not dir_path then return end
 
         self.menu._dummy = true
-        local entries = self.menu:genItemTableFromPath(dir_path) -- sorted
+        local entries = self.menu.genItemTableFromPath and self.menu:genItemTableFromPath(dir_path) or nil -- sorted
         self.menu._dummy = false
         if not entries then return end
 
