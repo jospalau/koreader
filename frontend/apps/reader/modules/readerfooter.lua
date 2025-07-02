@@ -681,6 +681,7 @@ function ReaderFooter:init()
         buildPreset = function() return self:buildPreset() end,
         loadPreset = function(preset) self:loadPreset(preset) end,
     }
+    self.progress_bar.zero = (self.settings.progress_style_thin and self.settings.progress_style_thin_height == 0) and true or false
 end
 
 function ReaderFooter:set_custom_text(touchmenu_instance)
@@ -796,17 +797,27 @@ function ReaderFooter:updateFooterContainer()
             self.horizontal_group
         }
     end
-
+    self.progress_bar.zero = (self.settings.progress_style_thin and self.settings.progress_style_thin_height == 0) and true or false
     local vertical_span = VerticalSpan:new{width = Size.span.vertical_default}
 
     if self.settings.progress_bar_position == "above" and not self.settings.disable_progress_bar then
-        table.insert(self.vertical_frame, self.progress_bar)
-        table.insert(self.vertical_frame, vertical_span)
-        table.insert(self.vertical_frame, self.footer_container)
+        if self.progress_bar.zero then
+            table.insert(self.vertical_frame, self.progress_bar)
+            table.insert(self.vertical_frame, self.footer_container)
+        else
+            table.insert(self.vertical_frame, self.progress_bar)
+            table.insert(self.vertical_frame, vertical_span)
+            table.insert(self.vertical_frame, self.footer_container)
+        end
     elseif self.settings.progress_bar_position == "below" and not self.settings.disable_progress_bar then
-        table.insert(self.vertical_frame, self.footer_container)
-        table.insert(self.vertical_frame, vertical_span)
-        table.insert(self.vertical_frame, self.progress_bar)
+        if self.progress_bar.zero then
+            table.insert(self.vertical_frame, self.footer_container)
+            table.insert(self.vertical_frame, self.progress_bar)
+        else
+            table.insert(self.vertical_frame, self.footer_container)
+            table.insert(self.vertical_frame, vertical_span)
+            table.insert(self.vertical_frame, self.progress_bar)
+        end
     else
         table.insert(self.vertical_frame, self.footer_container)
     end
@@ -1295,7 +1306,7 @@ function ReaderFooter:addToMainMenu(menu_items)
                             if self.settings.progress_style_thin then
                                 default_value = self.default_settings.progress_style_thin_height
                                 value = self.settings.progress_style_thin_height
-                                value_min = 1
+                                value_min = 0
                                 value_max = 12
                             else
                                 default_value = self.default_settings.progress_style_thick_height
@@ -1314,6 +1325,7 @@ function ReaderFooter:addToMainMenu(menu_items)
                                 keep_shown_on_apply = true,
                                 callback = function(spin)
                                     if self.settings.progress_style_thin then
+                                        self.progress_bar.zero = spin.value == 0 and true or false
                                         self.settings.progress_style_thin_height = spin.value
                                     else
                                         self.settings.progress_style_thick_height = spin.value
