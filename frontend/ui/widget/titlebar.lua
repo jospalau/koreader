@@ -380,7 +380,7 @@ function TitleBar:init()
             height = left_icon_size,
             padding = self.button_padding,
             padding_right = 2 * left_icon_size, -- extend button tap zone
-            padding_bottom = left_icon_size,
+            padding_bottom = (pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks")) and 0 or left_icon_size,
             overlap_align = "left",
             callback = self.left_icon_tap_callback,
             hold_callback = self.left_icon_hold_callback,
