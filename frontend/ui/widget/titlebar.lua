@@ -278,6 +278,11 @@ function TitleBar:init()
         else
             table.insert(self.title_group, self.subtitle_widget)
         end
+    else
+        if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+            table.insert(self.title_group, VerticalSpan:new{width = self.title_subtitle_v_padding})
+            table.insert(self.title_group, VerticalSpan:new{width = self.title_subtitle_v_padding})
+        end
     end
     table.insert(self, self.title_group)
 
