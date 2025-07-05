@@ -35,6 +35,7 @@ local order = {
         "----------------------------",
         "language",
         "device",
+        "apply_extra_patches",
         "top_manager_infmandhistory",
         "sort_dir_number_files",
         -- end common settings

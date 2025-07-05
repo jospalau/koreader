@@ -646,6 +646,15 @@ To:
             FileChooser:refreshPath()
         end
     }
+    self.menu_items.apply_extra_patches = {
+        text = _("Apply extra patches"),
+        checked_func = function() return G_reader_settings:isTrue("apply_extra_patches") end,
+        callback = function()
+            local apply_extra_patches = G_reader_settings:isTrue("apply_extra_patches")
+            G_reader_settings:saveSetting("apply_extra_patches", not apply_extra_patches)
+            UIManager:askForRestart()
+        end
+    }
     if Device:isKobo() and not Device:isSunxi() and not Device:hasColorScreen() then
         table.insert(self.menu_items.developer_options.sub_item_table, {
             text = _("Disable forced 8-bit pixel depth"),

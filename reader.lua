@@ -187,10 +187,12 @@ userpatch.applyPatches(userpatch.late)
 -- The parameter userpatch.late means patches with 2- prepended to the file name:
 -- To be started after UIManager is ready (always)
 -- The patch ui-font.lua needs to be loaded first
-local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/ui-font.lua")
-local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/browser-folder-cover.lua")
-local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/filemanager-titlebar.lua")
-local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/screensaver-cover.lua")
+if G_reader_settings:isTrue("apply_extra_patches") then
+    local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/ui-font.lua")
+    local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/browser-folder-cover.lua")
+    local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/filemanager-titlebar.lua")
+    local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/screensaver-cover.lua")
+end
 
 -- Inform once about color rendering on newly supported devices
 -- (there are some android devices that may not have a color screen,
