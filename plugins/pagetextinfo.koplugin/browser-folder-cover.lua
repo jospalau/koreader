@@ -25,8 +25,6 @@ local Screen = Device.screen
 
 local logger = require("logger")
 
-local menu_patched = false
-
 local FolderCover = {
     name = ".cover",
     exts = { ".jpg", ".jpeg", ".png", ".webp", ".gif" },
@@ -82,11 +80,19 @@ local orig_FileChooser_getListItem = FileChooser.getListItem
 local cached_list = {}
 
 function FileChooser:getListItem(dirpath, f, fullpath, attributes, collate)
-    local key = toKey(dirpath, f, fullpath, attributes, collate)
-    cached_list[key] = cached_list[key]
-        or orig_FileChooser_getListItem(self, dirpath, f, fullpath, attributes, collate)
+    local key = toKey(dirpath, f, fullpath, attributes, collate, self.show_filter.status)
+    cached_list[key] = cached_list[key] or orig_FileChooser_getListItem(self, dirpath, f, fullpath, attributes, collate)
     return cached_list[key]
 end
+
+-- local orig_FileChooser_genItemTableFromPath = FileChooser.genItemTableFromPath
+
+-- function FileChooser:genItemTableFromPath(path)
+--     local start = os.clock()
+--     local item_table = orig_FileChooser_genItemTableFromPath(self, path)
+--     logger.info("!!!!!!! GEN", path, (os.clock() - start) * 1000)
+--     return item_table
+-- end
 
 local function capitalize(sentence)
     local words = {}
@@ -119,12 +125,12 @@ local function patchCoverBrowser(plugin)
     local BookInfoManager = userpatch.getUpValue(MosaicMenuItem.update, "BookInfoManager")
     local original_update = MosaicMenuItem.update
 
-    -- settings
+    -- setting
     function BooleanSetting(text, name, default)
         self = { text = text }
         self.get = function()
             local setting = BookInfoManager:getSetting(name)
-            if default then return not setting end
+            if default then return not setting end -- false is stored as nil, so we need or own logic for boolean default
             return setting
         end
         self.toggle = function() return BookInfoManager:toggleSetting(name) end
@@ -134,13 +140,13 @@ local function patchCoverBrowser(plugin)
     local settings = {
         crop_to_fit = BooleanSetting(_("Crop folder custom image"), "folder_crop_custom_image", true),
         name_centered = BooleanSetting(_("Folder name centered"), "folder_name_centered", true),
+        show_folder_name = BooleanSetting(_("Show folder name"), "folder_name_show", true),
     }
 
+    -- cover item
     function MosaicMenuItem:update(...)
         original_update(self, ...)
-        if self._foldercover_processed or self.menu.no_refresh_covers or not self.do_cover_image then
-            return
-        end
+        if self._foldercover_processed or self.menu.no_refresh_covers or not self.do_cover_image then return end
 
         if self.entry.is_file or self.entry.file or not self.mandatory then return end -- it's a file
         local dir_path = self.entry and self.entry.path
@@ -180,11 +186,7 @@ local function patchCoverBrowser(plugin)
                     and not bookinfo.ignore_cover
                     and not BookInfoManager.isCachedCoverInvalid(bookinfo, self.menu.cover_specs)
                 then
-                    self:_setFolderCover {
-                        data = bookinfo.cover_bb,
-                        w = bookinfo.cover_w,
-                        h = bookinfo.cover_h,
-                    }
+                    self:_setFolderCover { data = bookinfo.cover_bb, w = bookinfo.cover_w, h = bookinfo.cover_h }
                     break
                 end
             end
@@ -204,67 +206,89 @@ local function patchCoverBrowser(plugin)
             img_options.width = target.w
             img_options.height = target.h
         else
-            local _, _, scale_factor = BookInfoManager.getCachedCoverSize(img.w, img.h, target.w, target.h)
-            img_options.scale_factor = scale_factor
+            img_options.scale_factor = math.min(target.w / img.w, target.h / img.h)
         end
 
         local image = ImageWidget:new(img_options)
         local size = image:getSize()
         local dimen = { w = size.w + 2 * Folder.face.border_size, h = size.h + 2 * Folder.face.border_size }
 
+        local image_widget = FrameContainer:new {
+            padding = 0,
+            bordersize = Folder.face.border_size,
+            image,
+            overlap_align = "center",
+        }
+
         local directory, nbitems = self:_getTextBoxes { w = size.w, h = size.h }
         local size = nbitems:getSize()
         local nb_size = math.max(size.w, size.h)
 
-        local widget = VerticalGroup:new {
-            VerticalSpan:new { width = math.max(0, math.ceil((self.height - (top_h + dimen.h)) * 0.5)) },
-            LineWidget:new {
-                background = Folder.edge.color,
-                dimen = { w = math.floor(dimen.w * (Folder.edge.width ^ 2)), h = Folder.edge.thick },
-            },
-            VerticalSpan:new { width = Folder.edge.margin },
-            LineWidget:new {
-                background = Folder.edge.color,
-                dimen = { w = math.floor(dimen.w * Folder.edge.width), h = Folder.edge.thick },
-            },
-            VerticalSpan:new { width = Folder.edge.margin },
-            OverlapGroup:new {
-                dimen = { w = self.width, h = self.height - top_h },
+        local folder_name_widget
+        if settings.show_folder_name.get() then
+            folder_name_widget = (settings.name_centered.get() and CenterContainer or TopContainer):new {
+                dimen = dimen,
                 FrameContainer:new {
                     padding = 0,
                     bordersize = Folder.face.border_size,
-                    image,
-                    overlap_align = "center",
+                    AlphaContainer:new { alpha = Folder.face.alpha, directory },
                 },
-                (settings.name_centered.get() and CenterContainer or TopContainer):new {
-                    dimen = dimen,
+                overlap_align = "center",
+            }
+        else
+            folder_name_widget = VerticalSpan:new { width = 0 }
+        end
+
+        local nbitems_widget
+        if tonumber(nbitems.text) ~= 0 then
+            nbitems_widget = BottomContainer:new {
+                dimen = dimen,
+                RightContainer:new {
+                    dimen = {
+                        w = dimen.w - Folder.face.nb_items_margin,
+                        h = nb_size + Folder.face.nb_items_margin * 2 + math.ceil(nb_size * 0.125),
+                    },
                     FrameContainer:new {
                         padding = 0,
-                        bordersize = Folder.face.border_size,
-                        AlphaContainer:new { alpha = Folder.face.alpha, directory },
+                        padding_bottom = math.ceil(nb_size * 0.125),
+                        radius = math.ceil(nb_size * 0.5),
+                        background = Blitbuffer.COLOR_WHITE,
+                        CenterContainer:new { dimen = { w = nb_size, h = nb_size }, nbitems },
                     },
-                    overlap_align = "center",
                 },
-                BottomContainer:new {
-                    dimen = dimen,
-                    RightContainer:new {
-                        dimen = {
-                            w = dimen.w - Folder.face.nb_items_margin,
-                            h = nb_size + Folder.face.nb_items_margin * 2 + math.ceil(nb_size * 0.125),
-                        },
-                        FrameContainer:new {
-                            padding = 0,
-                            padding_bottom = math.ceil(nb_size * 0.125),
-                            radius = math.ceil(nb_size * 0.5),
-                            background = Blitbuffer.COLOR_WHITE,
-                            CenterContainer:new { dimen = { w = nb_size, h = nb_size }, nbitems },
-                        },
-                    },
-                    overlap_align = "center",
+                overlap_align = "center",
+            }
+        else
+            nbitems_widget = VerticalSpan:new { width = 0 }
+        end
+
+        local widget = CenterContainer:new {
+            dimen = { w = self.width, h = self.height },
+            VerticalGroup:new {
+                VerticalSpan:new { width = math.max(0, math.ceil((self.height - (top_h + dimen.h)) * 0.5)) },
+                LineWidget:new {
+                    background = Folder.edge.color,
+                    dimen = { w = math.floor(dimen.w * (Folder.edge.width ^ 2)), h = Folder.edge.thick },
+                },
+                VerticalSpan:new { width = Folder.edge.margin },
+                LineWidget:new {
+                    background = Folder.edge.color,
+                    dimen = { w = math.floor(dimen.w * Folder.edge.width), h = Folder.edge.thick },
+                },
+                VerticalSpan:new { width = Folder.edge.margin },
+                OverlapGroup:new {
+                    dimen = { w = self.width, h = self.height - top_h },
+                    image_widget,
+                    folder_name_widget,
+                    nbitems_widget,
                 },
             },
         }
-        if self._underline_container[1] then self._underline_container[1]:free(true) end
+        if self._underline_container[1] then
+            local previous_widget = self._underline_container[1]
+            previous_widget:free()
+        end
+
         self._underline_container[1] = widget
     end
 
@@ -312,20 +336,28 @@ local function patchCoverBrowser(plugin)
 
     function plugin:addToMainMenu(menu_items)
         orig_CoverBrowser_addToMainMenu(self, menu_items)
-        if menu_items.filebrowser_settings == nil or menu_patched then return end
-        menu_patched = true
+        if menu_items.filebrowser_settings == nil then return end
 
         local item = getMenuItem(menu_items.filebrowser_settings, _("Mosaic and detailed list settings"))
         if item then
-            for _, setting in pairs(settings) do
-                table.insert(item.sub_item_table, {
-                    text = setting.text,
-                    checked_func = function() return setting.get() end,
-                    callback = function()
-                        setting.toggle()
-                        self.ui.file_chooser:updateItems()
-                    end,
-                })
+            item.sub_item_table[#item.sub_item_table].separator = true
+            for i, setting in pairs(settings) do
+                if
+                    not getMenuItem( -- already exists ?
+                        menu_items.filebrowser_settings,
+                        _("Mosaic and detailed list settings"),
+                        setting.text
+                    )
+                then
+                    table.insert(item.sub_item_table, {
+                        text = setting.text,
+                        checked_func = function() return setting.get() end,
+                        callback = function()
+                            setting.toggle()
+                            self.ui.file_chooser:updateItems()
+                        end,
+                    })
+                end
             end
         end
     end
