@@ -190,7 +190,7 @@ userpatch.applyPatches(userpatch.late)
 local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/ui-font.lua")
 local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/browser-folder-cover.lua")
 local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/filemanager-titlebar.lua")
-
+local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/screensaver-cover.lua")
 
 -- Inform once about color rendering on newly supported devices
 -- (there are some android devices that may not have a color screen,
