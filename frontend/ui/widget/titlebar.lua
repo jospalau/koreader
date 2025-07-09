@@ -281,7 +281,7 @@ function TitleBar:init()
     else
         if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
             table.insert(self.title_group, VerticalSpan:new{width = self.title_subtitle_v_padding})
-            table.insert(self.title_group, VerticalSpan:new{width = self.title_subtitle_v_padding})
+            --table.insert(self.title_group, VerticalSpan:new{width = self.title_subtitle_v_padding})
         end
     end
     table.insert(self, self.title_group)
@@ -290,7 +290,11 @@ function TitleBar:init()
     -- and can overflow or underflow. Its height for its containers is
     -- the one we set as self.dimen.h.
 
-    self.titlebar_height = self.title_group:getSize().h
+    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+        self.titlebar_height = self.title_widget:getSize().h
+    else
+        self.titlebar_height = self.title_group:getSize().h --Depending on the font will be different
+    end
     if self.title_shrink_font_to_fit then
         -- Use, or store, the first title_group height we have computed,
         -- so the TitleBar geometry and the bottom line position stay stable
