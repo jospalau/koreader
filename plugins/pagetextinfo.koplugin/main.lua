@@ -1297,6 +1297,25 @@ This is to be active only if the option flash buttons and menu items or the opti
                         return true
                     end,
                 },
+               {
+                    text = _("Enable extra tweaks mosaic view"),
+                    checked_func = function() return self.settings:isTrue("enable_extra_tweaks_mosaic_view") end,
+                    help_text = _([[Extra tweaks mosaic view.]]),
+                    callback = function()
+                        local enable_extra_tweaks_mosaic_view = not self.settings:isTrue("enable_extra_tweaks_mosaic_view")
+                        self.settings:saveSetting("enable_extra_tweaks_mosaic_view", enable_extra_tweaks_mosaic_view)
+                        self.settings:flush()
+
+                        local FileManager = require("apps/filemanager/filemanager").instance
+                        if FileManager then
+                            --FileManager:onRefresh()
+                            local path = FileManager.instance.file_chooser.path
+                            --FileManager:setupLayout()
+                            FileManager.instance.file_chooser:changeToPath(path)
+                        end
+                        return true
+                    end,
+                },
             },
         }
     else

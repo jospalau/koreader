@@ -410,7 +410,7 @@ function MosaicMenuItem:update()
 
     local max_img_w = dimen.w - 2*border_size
     local max_img_h = dimen.h - 2*border_size
-    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
         max_img_w = dimen.w
         max_img_h = dimen.h
     end
@@ -540,7 +540,7 @@ function MosaicMenuItem:update()
 
 
                 local image = nil
-                if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+                if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
                     image= ImageWidget:new{
                         image = bookinfo.cover_bb,
                         --scale_factor = nil,
@@ -571,7 +571,7 @@ function MosaicMenuItem:update()
                         height = image_size.h + 2*border_size,
                         margin = 0,
                         padding = 0,
-                        bordersize = (pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks")) and 0 or border_size,
+                        bordersize = (pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view")) and 0 or border_size,
                         dim = self.file_deleted,
                         color = self.file_deleted and Blitbuffer.COLOR_DARK_GRAY or nil,
                         image,
@@ -883,14 +883,14 @@ function MosaicMenu:_recalculateDimen()
         self.others_height = self.others_height + 30
     end
     -- Set our items target size
-    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
         self.item_margin = 0
     else
         self.item_margin = Screen:scaleBySize(12)
     end
     self.item_height = math.floor((self.inner_dimen.h - self.others_height - (1+self.nb_rows)*self.item_margin) / self.nb_rows)
 
-    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
         self.item_width = math.ceil((self.inner_dimen.w - (1+self.nb_cols)*self.item_margin) / self.nb_cols)
     else
         self.item_width = math.floor((self.inner_dimen.w - (1+self.nb_cols)*self.item_margin) / self.nb_cols)
