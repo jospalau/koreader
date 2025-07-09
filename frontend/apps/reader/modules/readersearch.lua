@@ -338,9 +338,9 @@ function ReaderSearch:onShowSearchDialog(text, direction, regex, case_insensitiv
     self.ui.searching = true
     local UIManager = require("ui/uimanager")
     local Notification = require("ui/widget/notification")
-    UIManager:show(Notification:new{
-        text = _("searching"),
-    })
+    --UIManager:show(Notification:new{
+    --    text = _("searching"),
+    --})
     local function isSlowRegex(pattern)
         if pattern:find("%[") or pattern:find("%*") or pattern:find("%?") or pattern:find("%.") then
             return true
@@ -524,9 +524,9 @@ function ReaderSearch:onShowSearchDialog(text, direction, regex, case_insensitiv
             UIManager:setDirty(self.dialog, "ui")
             UIManager:close(self.input_dialog)
             self.ui.searching = false
-            UIManager:show(Notification:new{
-                text = _("close searching"),
-            })
+            --UIManager:show(Notification:new{
+            --    text = _("close searching"),
+            --})
         end,
     }
     if regex and isSlowRegex(text) then
@@ -618,9 +618,9 @@ function ReaderSearch:findAllText(search_text, untilCurrentPage)
 self.ui.searching = true
     local UIManager = require("ui/uimanager")
     local Notification = require("ui/widget/notification")
-    UIManager:show(Notification:new{
-        text = _("searching"),
-    })
+    --UIManager:show(Notification:new{
+    --    text = _("searching"),
+    --})
     local last_search_hash = (self.last_search_text or "") .. tostring(self.case_insensitive) .. tostring(self.use_regex)
     local not_cached = self.last_search_hash ~= last_search_hash
     if not_cached then
@@ -634,9 +634,9 @@ self.ui.searching = true
         end, info)
         if not completed then
             self.ui.searching = false
-            UIManager:show(Notification:new{
-                text = _("close searching"),
-            })
+            --UIManager:show(Notification:new{
+            --    text = _("close searching"),
+            --})
         end
         if not completed then return end
         UIManager:close(info)
@@ -649,9 +649,9 @@ self.ui.searching = true
     else
         UIManager:show(InfoMessage:new{ text = _("No results in the document") })
         self.ui.searching = false
-        UIManager:show(Notification:new{
-            text = _("close searching"),
-        })
+        --UIManager:show(Notification:new{
+        --    text = _("close searching"),
+        --})
     end
 end
 
@@ -742,9 +742,9 @@ function ReaderSearch:onShowFindAllResults(not_cached)
             UIManager:setDirty(self.dialog, "ui")
             UIManager:close(self.input_dialog)
             self.ui.searching = false
-            UIManager:show(Notification:new{
-                text = _("close searching"),
-            })
+            --UIManager:show(Notification:new{
+            --    text = _("close searching"),
+            --})
             UIManager:close(self.result_menu)
         end,
     }
