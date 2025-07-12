@@ -302,6 +302,27 @@ BookList.collates = {
             end, cache
         end,
     },
+    finished = {
+        text = _("Finished"),
+        menu_order = 190,
+        can_collate_mixed = false,
+        init_sort_func = function()
+            return function(a, b)
+                return a.finished_date < b.finished_date
+            end
+        end,
+        item_func = function(item)
+            local book_info = BookList.getBookInfo(item.path)
+            local summary = DocSettings:open(item.path):readSetting("summary")
+            item.opened = book_info.been_opened
+            item.finished_date = "zz"
+            --local dump = require("dump")
+            --print(dump(book_info))
+            if item.opened and book_info.status == "complete" and summary.modified then
+                item.finished_date = summary.modified
+            end
+        end,
+    },
 }
 
 function BookList:init()
