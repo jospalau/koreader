@@ -890,7 +890,10 @@ function ReaderFooter:rescheduleFooterAutoRefreshIfNeeded()
                     end
                     self.ui.view.topbar:toggleBar()
                 end
-                self:onUpdateFooter(self:shouldBeRepainted())
+                --self:onUpdateFooter(self:shouldBeRepainted())
+                if self:shouldBeRepainted() then
+                    self:refresh()
+                end
             end
             self:rescheduleFooterAutoRefreshIfNeeded() -- schedule (or not) next refresh
         end
@@ -2726,6 +2729,10 @@ function ReaderFooter:onToggleFooterMode()
     --     return self.view.currently_scrolling and "fast" or "ui"
     --end)
 
+    return self:refresh()
+end
+
+function ReaderFooter:refresh()
     -- With the following two calls we will have fast or ui (depending if we are scrolling or not) refreshes when toggling the footer mode
     -- We can do the refreshes manually like in the previous commented block but the problem is that if we hide the footer toggling it, turn a page and show it toggling it
     -- it won't be properly formatted. We need to reconfigure the footer configuration manually like we are partially doing in the commented block code calling to self.footer_text:setText(text)
@@ -2746,7 +2753,7 @@ function ReaderFooter:onToggleFooterMode()
         h = bottom_height,
         y = Screen:getHeight() - bottom_height}
         end)
-        self:rescheduleFooterAutoRefreshIfNeeded()
+    self:rescheduleFooterAutoRefreshIfNeeded()
     return true
 end
 
