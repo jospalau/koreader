@@ -933,12 +933,14 @@ end
 
 function TopBar:showTopBar()
     self.settings:saveSetting("show_top_bar", true)
+    self.settings:flush()
     TopBar.is_enabled = true
     self:toggleBar()
 end
 
 function TopBar:hideTopBar()
-    G_reader_settings:saveSetting("show_top_bar", false)
+    self.settings:saveSetting("show_top_bar", false)
+    self.settings:flush()
     TopBar.is_enabled = false
 end
 
@@ -1019,7 +1021,8 @@ end
 
 function TopBar:onSwitchTopBar()
     if not TopBar.is_enabled then
-        G_reader_settings:saveSetting("show_top_bar", true)
+        self.settings:saveSetting("show_top_bar", true)
+        self.settings:flush()
         TopBar.is_enabled = true
         TopBar.show_bar_in_top_bar = true
         TopBar.alt_bar = true
@@ -1040,7 +1043,7 @@ function TopBar:onSwitchTopBar()
         end)
         return
     end
-    if G_reader_settings:isTrue("show_top_bar") then
+    if self.settings:isTrue("show_top_bar") then
         if TopBar.show_bar_in_top_bar then
             if TopBar.option == 1 then
                 self.main_progress_bar.altbar_ticks_height = 16
@@ -1068,7 +1071,8 @@ function TopBar:onSwitchTopBar()
         -- Although we do it here. First we disable it and then
         -- we let it ready to start from the beginning
         else
-            G_reader_settings:saveSetting("show_top_bar", false)
+            self.settings:saveSetting("show_top_bar", false)
+            self.settings:flush()
             TopBar.is_enabled = false
             TopBar.show_bar_in_top_bar = true
             TopBar.alt_bar = true
@@ -1096,6 +1100,7 @@ end
 
 function TopBar:quickToggleOnOff(put_off)
     self.settings:saveSetting("show_top_bar", put_off)
+    self.settings:flush()
     TopBar.is_enabled = put_off
     self:toggleBar()
     UIManager:setDirty(self.view.dialog, function()
@@ -2056,7 +2061,7 @@ end
 
 function TopBar:onAdjustMarginsTopbar()
     local Event = require("ui/event")
-    if G_reader_settings:isTrue("show_top_bar") and not self.status_bar then
+    if self.settings:isTrue("show_top_bar") and not self.status_bar then
 
         -- local configurable = self.ui.document.configurable
         -- local margins = { TopBar.MARGIN_SIDES, TopBar.MARGIN_TOP, TopBar.MARGIN_SIDES, TopBar.MARGIN_BOTTOM}
