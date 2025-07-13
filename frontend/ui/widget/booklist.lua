@@ -315,11 +315,23 @@ BookList.collates = {
             local book_info = BookList.getBookInfo(item.path)
             local summary = DocSettings:open(item.path):readSetting("summary")
             item.opened = book_info.been_opened
-            item.finished_date = "zz"
+            item.finished_date = "zzzz"
             --local dump = require("dump")
             --print(dump(book_info))
-            if item.opened and book_info.status == "complete" and summary.modified then
-                item.finished_date = summary.modified
+            local in_history =  require("readhistory"):getIndexByFile(item.path)
+            if in_history and not item.opened then
+                item.finished_date = "zzz"
+            end
+            if item.opened then
+                if book_info.status == "complete" and summary.modified then
+                    item.finished_date = summary.modified
+                end
+               if book_info.status == "tbr" then
+                    item.finished_date = "zz"
+                end
+                if book_info.status == "reading" then
+                    item.finished_date = "z"
+                end
             end
         end,
     },
