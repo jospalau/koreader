@@ -294,7 +294,7 @@ local function patchCoverBrowser(plugin)
 
     function MosaicMenuItem:_getTextBoxes(dimen)
         local nbitems = TextWidget:new {
-            text = self.mandatory:match("(%d+) \u{F016}") or "", -- nb books
+            text = self.mandatory:match("^(%S+)") or "", -- nb books
             face = Font:getFace("cfont", Folder.face.nb_items_font_size),
             bold = true,
             padding = 0,
