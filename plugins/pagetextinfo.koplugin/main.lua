@@ -4122,7 +4122,7 @@ function PageTextInfo:onShowReadingMotive()
     widget_settings.image_disposable = true
     -- widget_settings.file = "resources/screenSaverKeepCalm.jpg"
     -- widget_settings.file = "resources/oneMoreChapter.jpg"
-    widget_settings.file = "resources/koboRules.jpg"
+    widget_settings.file = "resources/books.jpg"
     -- if Device:isKobo() then
     --     widget_settings.file = "/mnt/onboard/.adds/colores.png"
     -- elseif Device:isPocketBook() then
