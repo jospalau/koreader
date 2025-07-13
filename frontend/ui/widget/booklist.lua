@@ -315,7 +315,7 @@ BookList.collates = {
             local book_info = BookList.getBookInfo(item.path)
             local summary = DocSettings:open(item.path):readSetting("summary")
             item.opened = book_info.been_opened
-            item.finished_date = "zzzz"
+            item.finished_date = "zzzz" .. item.path
             --local dump = require("dump")
             --print(dump(book_info))
             local in_history =  require("readhistory"):getIndexByFile(item.path)
