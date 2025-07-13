@@ -240,8 +240,9 @@ function FileChooser:getListItem(dirpath, f, fullpath, attributes, collate)
         item.dim = self.ui and self.ui.selected_files and self.ui.selected_files[item.path]
         item.mandatory = self:getMenuItemMandatory(item, collate)
     else -- folder
-        local sub_dirs, dir_files = self:getList(item.path)
+        local sub_dirs, dir_files, complete = self:getList(item.path)
         item.files_no = #dir_files
+        item.files_no_finished = complete and complete or 0
         if item.text == "./." then -- added as content of an unreadable directory
             item.text = _("Current folder not readable. Some content may not be shown.")
         else
@@ -316,7 +317,11 @@ function FileChooser:genItemTable(dirs, files, path)
         if G_reader_settings:isTrue("sort_dir_number_files") and path then
             table.sort(dirs, function(a,b)
             return a.files_no > b.files_no end)
-            end
+        end
+        if G_reader_settings:isTrue("sort_dir_number_files_finished") and path then
+            table.sort(dirs, function(a,b)
+            return a.files_no_finished > b.files_no_finished end)
+        end
         table.move(dirs, 1, #dirs, 1, item_table)
         table.move(files, 1, #files, #item_table + 1, item_table)
     end

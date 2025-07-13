@@ -38,6 +38,7 @@ local order = {
         "apply_extra_patches",
         "top_manager_infmandhistory",
         "sort_dir_number_files",
+        "sort_dir_number_files_finished",
         -- end common settings
     },
     document = {

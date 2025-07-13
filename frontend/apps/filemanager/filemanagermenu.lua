@@ -640,6 +640,21 @@ To:
             local sort_dir_number_files = G_reader_settings:isTrue("sort_dir_number_files")
             G_reader_settings:saveSetting("sort_dir_number_files", not sort_dir_number_files)
             if G_reader_settings:isTrue("sort_dir_number_files") then
+                G_reader_settings:saveSetting("sort_dir_number_files_finished", false)
+                local util = require("util")
+                util.generateStats()
+            end
+            FileChooser:refreshPath()
+        end
+    }
+    self.menu_items.sort_dir_number_files_finished = {
+        text = _("Sort dirs by number of files finished"),
+        checked_func = function() return G_reader_settings:isTrue("sort_dir_number_files_finished") end,
+        callback = function()
+            local sort_dir_number_files_finished = G_reader_settings:isTrue("sort_dir_number_files_finished")
+            G_reader_settings:saveSetting("sort_dir_number_files_finished", not sort_dir_number_files_finished)
+            if G_reader_settings:isTrue("sort_dir_number_files_finished") then
+                G_reader_settings:saveSetting("sort_dir_number_files", false)
                 local util = require("util")
                 util.generateStats()
             end
