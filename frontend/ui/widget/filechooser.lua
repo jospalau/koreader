@@ -108,7 +108,11 @@ function FileChooser:getList(path, collate)
     local dirs, files = {}, {}
     -- lfs.dir directory without permission will give error
     local ok, iter, dir_obj = pcall(lfs.dir, path)
-    local complete = 0
+    local home_dir = G_reader_settings:readSetting("home_dir")
+    local complete
+    if path:find(home_dir, 1, true) and path ~= home_dir then
+        complete = 0
+    end
     if ok then
         unreadable_dir_content[path] = nil
         for f in iter, dir_obj do
@@ -129,7 +133,9 @@ function FileChooser:getList(path, collate)
                         item = self:getListItem(path, f, fullpath, attributes, collate)
                     end
                     table.insert(files, item)
-                    if _G.all_files[fullpath] and _G.all_files[fullpath].status == "complete" then
+                    if _G.all_files[fullpath]
+                        and _G.all_files[fullpath].status == "complete"
+                        and complete then
                         complete = complete + 1
                     end
                 end
@@ -359,7 +365,11 @@ function FileChooser:getMenuItemMandatory(item, collate)
         end
     else -- folder, count number of folders and files inside it
         local sub_dirs, dir_files, complete = self:getList(item.path)
-        text = T("%1/%2 \u{F016}", complete, #dir_files)
+        if complete then
+            text = T("%1/%2 \u{F016}", complete, #dir_files)
+        else
+            text = T("%1 \u{F016}", #dir_files)
+        end
         if #sub_dirs > 0 then
             text = T("%1 \u{F114} ", #sub_dirs) .. text
         end
