@@ -668,7 +668,7 @@ function TopBar:onReaderReady()
 
     self.current_page_text = TextWidget:new{
         text =  "",
-        face = Font:getFace("myfont3"),
+        face = Font:getFace(font, font_size),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
