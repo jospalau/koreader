@@ -86,12 +86,12 @@ function PageTextInfo:setupLayout()
         -- home
         left_icon = "home",
         left_icon_size_ratio = 1,
-        left_icon_tap_callback = function() self:goHome() end,
+        left_icon_tap_callback = function() self:onHome() end,
         left_icon_hold_callback = function() self:onShowFolderMenu() end,
         -- favorites
         left2_icon = "favorites",
         left2_icon_size_ratio = 1,
-        left2_icon_tap_callback = function() FileManager.instance.collections:onShowColl() end,
+        left2_icon_tap_callback = function() FileManager.instance.collections:onShowCollList() end,
         left2_icon_hold_callback = function() FileManager.instance.folder_shortcuts:onShowFolderShortcutsDialog() end,
         -- history
         left3_icon = "history",
