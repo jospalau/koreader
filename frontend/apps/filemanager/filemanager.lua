@@ -1764,6 +1764,8 @@ function FileManager:onToggleSortByMode()
     if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
         local sort_by_mode = G_reader_settings:readSetting("collate")
         if sort_by_mode == "strcoll" then
+            self:onSetSortBy("finished")
+        elseif sort_by_mode == "finished" then
             self:onSetSortBy("publication_date")
         elseif sort_by_mode == "publication_date" then
             self:onSetSortBy("word_count")

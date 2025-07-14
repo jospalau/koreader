@@ -1859,6 +1859,8 @@ function TopBar:paintTo(bb, x, y)
                 local collate_symbol = ""
                 if sort_by_mode == "strcoll" then
                     collate_symbol = "Name"
+               elseif sort_by_mode == "finished" then
+                    collate_symbol = "F"
                 elseif sort_by_mode == "publication_date" then
                     collate_symbol = "PD"
                 elseif sort_by_mode == "word_count" then
@@ -1998,6 +2000,8 @@ function TopBar:paintTo(bb, x, y)
                     local collate_symbol = ""
                     if sort_by_mode == "strcoll" then
                         collate_symbol = "Name"
+                    elseif sort_by_mode == "finished" then
+                        collate_symbol = "F"
                     elseif sort_by_mode == "publication_date" then
                         collate_symbol = "PD"
                     elseif sort_by_mode == "word_count" then

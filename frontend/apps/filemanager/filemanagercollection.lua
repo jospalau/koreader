@@ -1774,6 +1774,7 @@ function FileManagerCollection:onTapBottomRightCollection(arg, ges_ev)
         return
     end
     local DataStorage = require("datastorage")
+    local DocSettings = require("docsettings")
     if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
         local Trapper = require("ui/trapper")
         Trapper:wrap(function()
@@ -1809,6 +1810,28 @@ function FileManagerCollection:onTapBottomRightCollection(arg, ges_ev)
                             file.grvotes = 0
                             file.series = "zzzz"
                         end
+                        local book_info = BookList.getBookInfo(file.file)
+                        local summary = DocSettings:open(file.file):readSetting("summary")
+                        local filename = file.text
+                        file.opened = book_info.been_opened
+                        file.finished_date = "zzzz" .. filename
+                        --local dump = require("dump")
+                        --print(dump(book_info))
+                        local in_history = require("readhistory"):getIndexByFile(file.file)
+                        if in_history and not file.opened then
+                            file.finished_date = "zzz" .. filename
+                        end
+                        if file.opened then
+                            if book_info.status == "complete" and summary.modified then
+                                file.finished_date = summary.modified .. filename
+                            end
+                            if book_info.status == "tbr" then
+                                file.finished_date = "zz" .. filename
+                            end
+                            if book_info.status == "reading" then
+                                file.finished_date = "z" .. filename
+                            end
+                        end
                         files_with_metadata[i] = file
                     end
 
@@ -1816,6 +1839,10 @@ function FileManagerCollection:onTapBottomRightCollection(arg, ges_ev)
                         if sort_by_mode == "strcoll" then
                             table.sort(files_with_metadata, function(v1, v2)
                                 return v1.text < v2.text
+                            end)
+                        elseif sort_by_mode == "finished" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.finished_date < v2.finished_date
                             end)
                         elseif sort_by_mode == "publication_date" then
                             table.sort(files_with_metadata, function(v1, v2)
@@ -1846,6 +1873,10 @@ function FileManagerCollection:onTapBottomRightCollection(arg, ges_ev)
                         if sort_by_mode == "strcoll" then
                             table.sort(files_with_metadata, function(v1, v2)
                                 return v1.text > v2.text
+                            end)
+                        elseif sort_by_mode == "finished" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.finished_date > v2.finished_date
                             end)
                         elseif sort_by_mode == "publication_date" then
                             table.sort(files_with_metadata, function(v1, v2)
@@ -1912,9 +1943,13 @@ function FileManagerCollection:onTapBottomRightCollection(arg, ges_ev)
             -- There is no need if we use the topbar object
             local sort_by_mode = G_reader_settings:readSetting("collate")
             if sort_by_mode == "strcoll" then
-                G_reader_settings:saveSetting("collate", "publication_date")
+                G_reader_settings:saveSetting("collate", "finished")
                 self._manager.booklist_menu.topbar:setCollectionCollate("strcoll")
                 self.current_collate = "strcoll"
+            elseif sort_by_mode == "finished" then
+                G_reader_settings:saveSetting("collate", "publication_date")
+                self._manager.booklist_menu.topbar:setCollectionCollate("finished")
+                self.current_collate = "finished"
             elseif sort_by_mode == "publication_date" then
                 G_reader_settings:saveSetting("collate", "word_count")
                 self._manager.booklist_menu.topbar:setCollectionCollate("publication_date")
@@ -1965,6 +2000,7 @@ function FileManagerCollection:onDoubleTapBottomRightCollection(arg, ges_ev)
         return
     end
     local DataStorage = require("datastorage")
+    local DocSettings = require("docsettings")
     if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
         local Trapper = require("ui/trapper")
         Trapper:wrap(function()
@@ -1998,6 +2034,28 @@ function FileManagerCollection:onDoubleTapBottomRightCollection(arg, ges_ev)
                             file.grvotes = 0
                             file.series = "zzzz"
                         end
+                        local book_info = BookList.getBookInfo(file.file)
+                        local summary = DocSettings:open(file.file):readSetting("summary")
+                        local filename = file.text
+                        file.opened = book_info.been_opened
+                        file.finished_date = "zzzz" .. filename
+                        --local dump = require("dump")
+                        --print(dump(book_info))
+                        local in_history = require("readhistory"):getIndexByFile(file.file)
+                        if in_history and not file.opened then
+                            file.finished_date = "zzz" .. filename
+                        end
+                        if file.opened then
+                            if book_info.status == "complete" and summary.modified then
+                                file.finished_date = summary.modified .. filename
+                            end
+                            if book_info.status == "tbr" then
+                                file.finished_date = "zz" .. filename
+                            end
+                            if book_info.status == "reading" then
+                                file.finished_date = "z" .. filename
+                            end
+                        end
                         files_with_metadata[i] = file
                     end
 
@@ -2005,6 +2063,10 @@ function FileManagerCollection:onDoubleTapBottomRightCollection(arg, ges_ev)
                         if sort_by_mode == "strcoll" then
                             table.sort(files_with_metadata, function(v1, v2)
                                 return v1.text < v2.text
+                            end)
+                        elseif sort_by_mode == "finished" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.finished_date < v2.finished_date
                             end)
                         elseif sort_by_mode == "publication_date" then
                             table.sort(files_with_metadata, function(v1, v2)
@@ -2035,6 +2097,10 @@ function FileManagerCollection:onDoubleTapBottomRightCollection(arg, ges_ev)
                         if sort_by_mode == "strcoll" then
                             table.sort(files_with_metadata, function(v1, v2)
                                 return v1.text > v2.text
+                            end)
+                        elseif sort_by_mode == "finished" then
+                            table.sort(files_with_metadata, function(v1, v2)
+                                return v1.finished_date > v2.finished_date
                             end)
                         elseif sort_by_mode == "publication_date" then
                             table.sort(files_with_metadata, function(v1, v2)
