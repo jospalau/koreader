@@ -19,7 +19,6 @@ local bottom_container = require("ui/widget/container/bottomcontainer")
 local Font = require("ui/font")
 local TextWidget = require("ui/widget/textwidget")
 local datetime = require("datetime")
-local BottomContainer = require("ui/widget/container/bottomcontainer")
 local FrameContainer = require("ui/widget/container/framecontainer")
 local VerticalGroup = require("ui/widget/verticalgroup")
 local Math = require("optmath")
@@ -884,12 +883,6 @@ function TopBar:onReaderReady()
     --         self.progress_book_text,
     --     },
     -- }
-
-    -- self[4] = BottomContainer:new{
-    --     dimen = Screen:getSize(),
-    --     self.bottom_frame,
-    -- }
-
 
     -- self.separator_line = LineWidget:new{
     --     background = Blitbuffer.COLOR_BLACK,
@@ -1966,7 +1959,7 @@ function TopBar:paintTo(bb, x, y)
 
 
             local times_widget_container =
-            left_container:new{
+            bottom_container:new{
                 dimen = Geom:new(),
                 TextWidget:new{
                     text =  "",
@@ -1979,10 +1972,12 @@ function TopBar:paintTo(bb, x, y)
             -- times[1]:setText(time .. "|" .. batt_lvl .. "%")
             times_widget_container[1]:setText("BDB: " .. TopBar:getBooksOpened() .. ", TR: " .. TopBar:getTotalRead() .. "d")
             -- times.dimen = Geom:new{ w = times[1]:getSize().w, h = times[1].face.size }
-            times_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM - times_widget_container[1].face.size - 4)
+            times_widget_container:paintTo(bb, x + times_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES,
+            Screen:getHeight()
+            - books_information_widget_container[1]:getSize().h)
 
             local version_widget_container =
-            left_container:new{
+            bottom_container:new{
                 dimen = Geom:new(),
                 TextWidget:new{
                     text =  "aa",
@@ -1992,7 +1987,10 @@ function TopBar:paintTo(bb, x, y)
                 },
             }
             version_widget_container[1]:setText(TopBar:getDateAndVersion())
-            version_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM - times_widget_container[1].face.size - version_widget_container[1].face.size - 8)
+            version_widget_container:paintTo(bb, x + version_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES,
+            Screen:getHeight()
+            - books_information_widget_container[1]:getSize().h
+            - times_widget_container[1]:getSize().h)
 
             if self.fm and not self.history then
                 if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
