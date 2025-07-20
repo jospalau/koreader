@@ -54,20 +54,11 @@ local function saveCurrentPresetName()
     if preset_name then G_reader_settings:saveSetting(FooterCurrentPresetSetting, preset_name) end
 end
 
-local orig_ReaderFooter_refreshFooter = ReaderFooter.refreshFooter
 local orig_ReaderFooter_loadPreset = ReaderFooter.loadPreset
 
 ReaderFooter.loadPreset = function(self, preset)
-    local previous_settings = util.tableDeepCopy(self.settings)
-    ReaderFooter.refreshFooter = function(self, refresh, signal)
-        self.settings.bar_top = false
-        self.progress_bar:updateStyle(not self.settings.progress_style_thin)
-        self:setTocMarkers()
-        ReaderFooter.refresh(self)
-    end
     saveCurrentPresetName()
     orig_ReaderFooter_loadPreset(self, preset)
-    ReaderFooter.refreshFooter = orig_ReaderFooter_refreshFooter
 end
 
 local orig_ReaderFooter_buildPreset = ReaderFooter.buildPreset
