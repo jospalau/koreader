@@ -2062,7 +2062,7 @@ function ReaderHighlight:onTranslateCurrentPage()
 end
 
 function ReaderHighlight:onHoldRelease()
-    if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("enable_devices_tweaks") then
+    if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") then
         local util = require("ffi/util")
         util.usleep(350000)
     end
