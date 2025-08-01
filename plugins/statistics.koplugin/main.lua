@@ -1089,11 +1089,10 @@ function ReaderStatistics:onBookMetadataChanged(prop_updated)
 end
 
 function ReaderStatistics:checkNewDay()
-    -- Put this code here, before topbar event and works even footer off
     local now_t = os.date("*t")
-    local session_started = self.start_current_period
-    local daysdiff = now_t.day - os.date("*t", session_started).day
-    if daysdiff > 0 then
+    local last_t = os.date("*t", self.start_current_period)
+
+    if now_t.year ~= last_t.year or now_t.month ~= last_t.month or now_t.day ~= last_t.day then
         local now_ts = os.time()
         logger.info("New day " .. now_ts .. " " .. os.date("%Y-%m-%d %H:%M:%S", now_ts))
         self:insertDBSessionStats()
@@ -1106,16 +1105,6 @@ function ReaderStatistics:checkNewDay()
         return true
     end
     return false
-end
-
-function ReaderStatistics:insertSession()
-    local now_t = os.date("*t")
-    local now_ts = os.time()
-    logger.info("Timer time to insert session " .. now_ts .. " " .. os.date("%Y-%m-%d %H:%M:%S", now_ts))
-    local session_inserted = self:insertDBSessionStats()
-    if not session_inserted then return false end
-    self:insertDB()
-    return true
 end
 
 -- Keep track of sessions that have been running for at least 5 minutes
