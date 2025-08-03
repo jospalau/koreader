@@ -316,11 +316,19 @@ function FileChooser:genItemTable(dirs, files, path)
         table.sort(dirs, sorting)
         if G_reader_settings:isTrue("sort_dir_number_files") and path then
             table.sort(dirs, function(a,b)
-            return a.files_no > b.files_no end)
+                if a.files_no == b.files_no then
+                    return ffiUtil.strcoll(a.text, b.text)
+                else
+                    return a.files_no > b.files_no
+                end end)
         end
         if G_reader_settings:isTrue("sort_dir_number_files_finished") and path then
             table.sort(dirs, function(a,b)
-            return a.files_no_finished > b.files_no_finished end)
+                if a.files_no_finished == b.files_no_finished then
+                    return ffiUtil.strcoll(a.text, b.text)
+                else
+                    return a.files_no_finished > b.files_no_finished
+                end end)
         end
         table.move(dirs, 1, #dirs, 1, item_table)
         table.move(files, 1, #files, #item_table + 1, item_table)
