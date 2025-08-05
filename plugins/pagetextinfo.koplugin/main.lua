@@ -1217,6 +1217,7 @@ function PageTextInfo:addToMainMenu(menu_items)
         menu_items.pagetextinfo = {
             text = _("Page text info"),
             sub_item_table ={
+                --[[ Do not use this for the moment
                 {
                     text = _("Change bar menu"),
                     checked_func = function() return self.settings:isTrue("enable_change_bar_menu") end,
@@ -1246,6 +1247,7 @@ function PageTextInfo:addToMainMenu(menu_items)
                         return true
                     end,
                 },
+                ]]
                 {
                     text = _("Enable devices flashes tweaks"),
                     checked_func = function() return self.settings:isTrue("enable_devices_flashes_tweaks") end,
