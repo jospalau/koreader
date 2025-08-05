@@ -1217,11 +1217,10 @@ function PageTextInfo:addToMainMenu(menu_items)
         menu_items.pagetextinfo = {
             text = _("Page text info"),
             sub_item_table ={
-                --[[ Do not use this for the moment
                 {
                     text = _("Change bar menu"),
                     checked_func = function() return self.settings:isTrue("enable_change_bar_menu") end,
-                    callback = function()
+                    callback = function(touchmenu_instance)
                         local enable_change_bar_menu = not self.settings:isTrue("enable_change_bar_menu")
                         self.settings:saveSetting("enable_change_bar_menu", enable_change_bar_menu)
                         FileManager.hooked_fmSetupLayout = enable_change_bar_menu
@@ -1239,15 +1238,15 @@ function PageTextInfo:addToMainMenu(menu_items)
                         --FileManager.instance:updateTitleBarTitle(true)
                         self.settings:flush()
                         --FileManager:onClose() -- No need to close. The instance will be closed whe calling the showFiles() function
-                        --local path = FileManager.instance.file_chooser.path
+                        local path = FileManager.instance.file_chooser.path
+                        touchmenu_instance:closeMenu()
                         --self.ui.menu:onCloseFileManagerMenu()
-                        --FileManager:showFiles(path)
+                        FileManager:showFiles(path)
                         --self.ui.menu:exitOrRestart(nil, true)
-                        UIManager:restartKOReader()
+                        --UIManager:restartKOReader()
                         return true
                     end,
                 },
-                ]]
                 {
                     text = _("Enable devices flashes tweaks"),
                     checked_func = function() return self.settings:isTrue("enable_devices_flashes_tweaks") end,
