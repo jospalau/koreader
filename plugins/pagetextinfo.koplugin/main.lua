@@ -1238,8 +1238,11 @@ function PageTextInfo:addToMainMenu(menu_items)
                         --FileManager.instance:updateTitleBarTitle(true)
                         self.settings:flush()
                         --FileManager:onClose() -- No need to close. The instance will be closed whe calling the showFiles() function
-                        local path = FileManager.instance.file_chooser.path
-                        FileManager:showFiles(path)
+                        --local path = FileManager.instance.file_chooser.path
+                        --self.ui.menu:onCloseFileManagerMenu()
+                        --FileManager:showFiles(path)
+                        --self.ui.menu:exitOrRestart(nil, true)
+                        UIManager:restartKOReader()
                         return true
                     end,
                 },
