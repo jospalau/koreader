@@ -628,6 +628,7 @@ To:
             ui:onClose()
             local FileManager = require("apps/filemanager/filemanager")
             local home_dir = G_reader_settings:readSetting("home_dir") or Device.home_dir or lfs.currentdir()
+            self.ui.menu:onCloseFileManagerMenu()
             FileManager:showFiles(home_dir)
 
             -- UIManager:restartKOReader()
