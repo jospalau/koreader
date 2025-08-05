@@ -616,7 +616,7 @@ To:
     self.menu_items.top_manager_infmandhistory = {
         text = _("Topbar in fm and history"),
         checked_func = function() return G_reader_settings:isTrue("top_manager_infmandhistory") end,
-        callback = function()
+        callback = function(touchmenu_instance)
             local top_manager_infmandhistory = G_reader_settings:isTrue("top_manager_infmandhistory")
             G_reader_settings:saveSetting("top_manager_infmandhistory", not top_manager_infmandhistory)
             if G_reader_settings:isTrue("top_manager_infmandhistory") then
@@ -628,7 +628,8 @@ To:
             ui:onClose()
             local FileManager = require("apps/filemanager/filemanager")
             local home_dir = G_reader_settings:readSetting("home_dir") or Device.home_dir or lfs.currentdir()
-            self.ui.menu:onCloseFileManagerMenu()
+            --self.ui.menu:onCloseFileManagerMenu()
+            touchmenu_instance:closeMenu()
             FileManager:showFiles(home_dir)
 
             -- UIManager:restartKOReader()
