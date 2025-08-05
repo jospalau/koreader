@@ -133,7 +133,7 @@ function FileChooser:getList(path, collate)
                         item = self:getListItem(path, f, fullpath, attributes, collate)
                     end
                     table.insert(files, item)
-                    if _G.all_files[fullpath]
+                    if _G.all_files and _G.all_files[fullpath]
                         and _G.all_files[fullpath].status == "complete"
                         and complete then
                         complete = complete + 1
