@@ -2094,7 +2094,7 @@ function ReaderHighlight:onHoldRelease()
             if self.selected_text then
                 self.select_mode = false
                 self:extendSelection()
-                if default_highlight_action == "select" or not self.selected_text.is_tmp then
+                if default_highlight_action == "select" or self.selected_text.is_extended then
                     self:saveHighlight(true)
                     self:clear()
                 else
@@ -2270,7 +2270,7 @@ function ReaderHighlight:saveHighlight(extend_to_sentence)
         local index = self.ui.annotation:addItem(item)
         self.view.footer:maybeUpdateFooter()
         self.ui:handleEvent(Event:new("AnnotationsModified",
-            { item, nb_highlights_added = 1, index_modified = index, modify_datetime = not self.selected_text.is_tmp }))
+            { item, nb_highlights_added = 1, index_modified = index, modify_datetime = self.selected_text.is_extended }))
         return index
     end
 end
