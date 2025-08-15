@@ -3,8 +3,8 @@ local FileChooser = require("ui/widget/filechooser")
 local logger = require("logger")
 
 local Icon = {
-    home = "home2",
-    up = BD.mirroredUILayout() and "back.top.rtl" or "back.top2",
+    home = "home",
+    up = BD.mirroredUILayout() and "back.top.rtl" or "back.top",
 }
 
 function Setting(name, default)

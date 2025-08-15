@@ -166,7 +166,7 @@ function FileManager:setupLayout()
         subtitle_truncate_left = true,
         subtitle_fullwidth = true,
         button_padding = Screen:scaleBySize(5),
-        left_icon = "home2",
+        left_icon = "home",
         left_icon_size_ratio = 1,
         left_icon_tap_callback = function() self:onHome() end,
         left_icon_hold_callback = function() self:onShowFolderMenu() end,
