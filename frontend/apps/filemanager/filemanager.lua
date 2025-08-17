@@ -586,10 +586,22 @@ end
 
 function FileManager:onToggleSelectMode(do_refresh)
     logger.dbg("toggle select mode")
+    local plus = "plus"
+    local check = "check"
+    local pagetextinfo
+    if require("apps/filemanager/filemanager").instance then
+        pagetextinfo = require("apps/filemanager/filemanager").instance.pagetextinfo
+    else
+        pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
+    end
+    if pagetextinfo.settings:isTrue("enable_change_bar_menu") then
+        plus = "plus2"
+        check = "check2"
+    end
     FileManagerFileSearcher.search_hash = ""
     if self.selected_files then
         self.selected_files = nil
-        self.title_bar:setRightIcon("plus")
+        self.title_bar:setRightIcon(plus)
         if do_refresh then
             self.file_chooser:refreshPath()
         else
@@ -597,7 +609,7 @@ function FileManager:onToggleSelectMode(do_refresh)
         end
     else
         self.selected_files = {}
-        self.title_bar:setRightIcon("check")
+        self.title_bar:setRightIcon(check)
     end
     return true
 end

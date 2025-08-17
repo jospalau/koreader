@@ -84,7 +84,7 @@ function PageTextInfo:setupLayout()
         subtitle_fullwidth = true,
         button_padding = Screen:scaleBySize(5),
         -- home
-        left_icon = "home",
+        left_icon = "home2",
         left_icon_size_ratio = 1,
         left_icon_tap_callback = function() self:onHome() end,
         left_icon_hold_callback = function() self:onShowFolderMenu() end,
@@ -1241,9 +1241,12 @@ function PageTextInfo:addToMainMenu(menu_items)
                         local path = FileManager.instance.file_chooser.path
                         touchmenu_instance:closeMenu()
                         --self.ui.menu:onCloseFileManagerMenu()
+                        local cur_page = FileManager.instance.file_chooser.page
                         FileManager:showFiles(path)
+                        FileManager.instance.file_chooser:onGotoPage(cur_page)
                         --self.ui.menu:exitOrRestart(nil, true)
                         --UIManager:restartKOReader()
+                        --FileManager:onRefresh()
                         return true
                     end,
                 },
