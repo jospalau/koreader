@@ -236,13 +236,94 @@ function FileManagerCollection:onMenuSelect(item)
         self._manager.selected_files[item.file] = item.dim
         self:updateItems(1, true)
     else
-        self.close_callback()
         if self.ui.document then
             if self.ui.document.file ~= item.file then
-                self.ui:switchDocument(item.file)
+                if G_reader_settings:isTrue("top_manager_infmandhistory")
+                    and item.file
+                    and util.getFileNameSuffix(item.file) == "epub"
+                    and _G.all_files
+                    and _G.all_files[item.file]
+                    and (_G.all_files[item.file].status == "mbr"
+                        or _G.all_files[item.file].status == "tbr"
+                        or _G.all_files[item.file].status == "new"
+                        or _G.all_files[item.file].status == "complete") then
+                    local MultiConfirmBox = require("ui/widget/multiconfirmbox")
+                    local text = ", do you want to open it?"
+                    if _G.all_files[item.file].status == "mbr" then
+                        text = "Book in MBR" .. text
+                    elseif _G.all_files[item.file].status == "tbr" then
+                        text = "Book in TBR" .. text
+                    elseif _G.all_files[item.file].status == "new" then
+                        text = "Book not opened" .. text
+                    else
+                        text = "Book finished" .. text
+                    end
+                    local multi_box = MultiConfirmBox:new{
+                        text = text,
+                        choice1_text = _("Yes"),
+                        choice1_callback = function()
+                            if self.ui.history.booklist_menu then
+                                UIManager:close(self.ui.history.booklist_menu)
+                            end
+                            self.close_callback()
+                            self.ui:switchDocument(item.file)
+                        end,
+                        choice2_text = _("Do not open it"),
+                        choice2_callback = function()
+                        end,
+                        cancel_callback = function()
+                        end,
+                    }
+                    UIManager:show(multi_box)
+                    return true
+                else
+                    self.close_callback()
+                    self.ui:switchDocument(item.file)
+                end
             end
         else
-            self.ui:openFile(item.file)
+            if G_reader_settings:isTrue("top_manager_infmandhistory")
+                and item.file
+                and util.getFileNameSuffix(item.file) == "epub"
+                and _G.all_files
+                and _G.all_files[item.file]
+                and (_G.all_files[item.file].status == "mbr"
+                    or _G.all_files[item.file].status == "tbr"
+                    or _G.all_files[item.file].status == "new"
+                    or _G.all_files[item.file].status == "complete") then
+                local MultiConfirmBox = require("ui/widget/multiconfirmbox")
+                local text = ", do you want to open it?"
+                if _G.all_files[item.file].status == "mbr" then
+                    text = "Book in MBR" .. text
+                elseif _G.all_files[item.file].status == "tbr" then
+                    text = "Book in TBR" .. text
+                elseif _G.all_files[item.file].status == "new" then
+                    text = "Book not opened" .. text
+                else
+                    text = "Book finished" .. text
+                end
+                local multi_box = MultiConfirmBox:new{
+                    text = text,
+                    choice1_text = _("Yes"),
+                    choice1_callback = function()
+                        if self.ui.history.booklist_menu then
+                            UIManager:close(self.ui.history.booklist_menu)
+                        end
+                        self.close_callback()
+                        self.ui:openFile(item.file)
+                    end,
+                    choice2_text = _("Do not open it"),
+                    choice2_callback = function()
+                    end,
+                    cancel_callback = function()
+                    end,
+                }
+                UIManager:show(multi_box)
+                return true
+            else
+                self.close_callback()
+                self.ui:openFile(item.file)
+            end
         end
     end
 end
