@@ -263,6 +263,12 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                         util.generateStats()
                 end
                 caller_callback(file, to_status)
+                local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+                ui.history:sortHistoryByStatus()
+                if ui and ui.history and ui.history.booklist_menu then
+                    ui.history:fetchStatuses(false)
+                    ui.history:updateItemTable()
+                end
             end,
         }
     end
@@ -388,6 +394,7 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
                     -- If Add to the history as MBR is not checked, it will be removed from the history always
                     if check_button_mbr.checked then
                         require("readhistory"):addItem(file, os.time())
+                        require("apps/filemanager/filemanagerhistory"):sortHistoryByStatus()
                     else
                         require("readhistory"):removeItemByPath(file)
                     end

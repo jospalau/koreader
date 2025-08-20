@@ -247,34 +247,10 @@ function FileManagerHistory:onMenuHold(item)
     table.insert(buttons, {
         filemanagerutil.genResetSettingsButton(doc_settings_or_file, close_dialog_update_callback, is_currently_opened),
         self._manager.ui.collections:genAddToCollectionButton(file, close_dialog_callback, update_callback, item.dim),
+    })
+    table.insert(buttons, {
         {
-            text = _("Readd to history"),
-            callback = function()
-                UIManager:close(self.file_dialog)
-                local first_element_history
-                if require("readhistory").hist and require("readhistory").hist[1] and require("readhistory").hist[1].file then
-                    first_element_history = require("readhistory").hist[1].file
-                end
-
-                require("readhistory"):removeItem(item)
-                require("readhistory"):addItem(item.file,os.time())
-
-                if first_element_history then
-                    local DocSettings = require("docsettings")
-                    local doc_settings = DocSettings:open(first_element_history)
-                    local summary = doc_settings:readSetting("summary", {})
-                    if summary.status == "reading" or (self.ui and self.ui.document and self.ui.document.file == first_element_history) then
-                        require("readhistory"):removeItemByPath(first_element_history)
-                        require("readhistory"):addItem(first_element_history, os.time() + 1)
-                    end
-                end
-
-                self._manager:fetchStatuses(false)
-                self._manager:updateItemTable()
-            end,
-        },
-        {
-            text = _("Move left in history"),
+            text = _("Move left"),
             enabled = item.idx and item.idx > 1,
 
             callback = function()
@@ -299,7 +275,7 @@ function FileManagerHistory:onMenuHold(item)
             end,
         },
         {
-            text = _("Move right in history"),
+            text = _("Move right"),
             enabled = item.idx and require("readhistory").hist and item.idx < #require("readhistory").hist,
             callback = function()
                 UIManager:close(self.file_dialog)
@@ -733,51 +709,7 @@ function FileManagerHistory:showHistDialog()
             text = _("Sort history by status"),
             callback = function()
                 UIManager:close(hist_dialog)
-                local ReadHistory = require("readhistory")
-                local DocSettings = require("docsettings")
-
-                local items = ReadHistory.hist or {}
-                local reading, tbr, mbr, others = {}, {}, {}, {}
-
-                for _, entry in ipairs(items) do
-                    local doc_settings = DocSettings:open(entry.file)
-                    local summary = doc_settings:readSetting("summary", {})
-                    local status = summary.status
-
-                    if status == "reading" then
-                        table.insert(reading, entry)
-                    elseif status == "tbr" then
-                        table.insert(tbr, entry)
-                    elseif status == "mbr" then
-                        table.insert(mbr, entry)
-                    else
-                        table.insert(others, entry)
-                    end
-                end
-
-                local function get_filename(path)
-                    -- extrae solo "The Troop - Cutter, Nick.epub" de la ruta completa
-                    return path:match("^.+/(.+)$") or path
-                end
-
-                local function sort_by_file(a, b)
-                    return get_filename(a.file):lower() < get_filename(b.file):lower()
-                end
-                table.sort(reading, sort_by_file)
-                table.sort(tbr, sort_by_file)
-                table.sort(mbr, sort_by_file)
-                table.sort(others, sort_by_file)
-
-                -- reconstruir el historial en orden deseado
-                local new_hist = {}
-                for _, v in ipairs(reading) do table.insert(new_hist, v) end
-                for _, v in ipairs(tbr)     do table.insert(new_hist, v) end
-                for _, v in ipairs(mbr)     do table.insert(new_hist, v) end
-                for _, v in ipairs(others)  do table.insert(new_hist, v) end
-
-                ReadHistory.hist = new_hist
-                --ReadHistory:save()
-
+                require("apps/filemanager/filemanagerhistory"):sortHistoryByStatus()
                 self:fetchStatuses(false)
                 self:updateItemTable()
             end,
@@ -929,6 +861,79 @@ function FileManagerHistory:onBookMetadataChanged()
     if self.booklist_menu then
         self.booklist_menu:updateItems()
     end
+end
+
+function FileManagerHistory:sortHistoryByStatus()
+    local ReadHistory = require("readhistory")
+    local DocSettings = require("docsettings")
+
+    local items = ReadHistory.hist or {}
+    local reading, tbr, mbr, abandoned, others = {}, {}, {}, {}, {}
+
+    for _, entry in ipairs(items) do
+        local doc_settings = DocSettings:open(entry.file)
+        local summary = doc_settings:readSetting("summary", {})
+        local status = summary.status
+        --local status = entry.status
+        if status == nil then status = "mbr" end
+        if status == "reading" then
+            table.insert(reading, entry)
+        elseif status == "tbr" then
+            table.insert(tbr, entry)
+        elseif status == "mbr" then
+            table.insert(mbr, entry)
+        elseif status == "abandoned" then
+            table.insert(abandoned, entry)
+        else
+            table.insert(others, entry)
+        end
+    end
+
+    local function get_filename(path)
+        return path:match("^.+/(.+)$") or path
+    end
+
+    local function sort_by_file(a, b)
+        return get_filename(a.file):lower() < get_filename(b.file):lower()
+    end
+
+    table.sort(reading, sort_by_file)
+    -- No need to sort TBR items, to respect custom order
+    --table.sort(tbr, sort_by_file)
+    table.sort(mbr, sort_by_file)
+    table.sort(abandoned, sort_by_file)
+    table.sort(others, sort_by_file)
+
+    --[[
+    -- No needed
+    -- Rebuild the history with consecutive timestamps
+    local new_hist = {}
+    local next_time = os.time()        -- partir del tiempo actual
+    local increment = 1                -- segundos entre libros
+
+    local function insert_with_new_time(list)
+        for _, v in ipairs(list) do
+            next_time = next_time + increment
+            v.time = next_time
+            table.insert(new_hist, v)
+        end
+    end
+
+    insert_with_new_time(reading)
+    insert_with_new_time(tbr)
+    insert_with_new_time(mbr)
+    insert_with_new_time(abandoned)
+    insert_with_new_time(others)
+    ]]
+
+    local new_hist = {}
+    for _, v in ipairs(reading) do table.insert(new_hist, v) end
+    for _, v in ipairs(tbr)     do table.insert(new_hist, v) end
+    for _, v in ipairs(mbr)     do table.insert(new_hist, v) end
+    for _, v in ipairs(others)  do table.insert(new_hist, v) end
+    for _, v in ipairs(abandoned) do table.insert(new_hist, v) end  -- al final siempre
+    ReadHistory.hist = new_hist
+    ReadHistory:_flush()
 end
 
 return FileManagerHistory

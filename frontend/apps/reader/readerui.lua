@@ -1017,6 +1017,7 @@ function ReaderUI:onHome()
                 -- If we open the history, the cover browser plugin cover scan will stop
                 -- and won't be reactivated after closing the history
                 -- We can call require("apps/filemanager/filemanager").instance.file_chooser:refreshPath() when closing the history to reactivate it
+                FileManager.instance.history:sortHistoryByStatus()
                 FileManager.instance.history:onShowHist()
                 -- self.history:onShowHist()
 
