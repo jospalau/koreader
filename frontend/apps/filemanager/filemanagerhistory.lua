@@ -240,6 +240,11 @@ function FileManagerHistory:onMenuHold(item)
             doc_settings_or_file = file
         end
     end
+    local status = nil
+    if BookList.hasBookBeenOpened(file) then
+        status = doc_settings_or_file:readSetting("summary", {}).status
+    end
+
     if not item.dim then
         table.insert(buttons, filemanagerutil.genStatusButtonsRow(doc_settings_or_file, close_dialog_update_callback))
         table.insert(buttons, {}) -- separator
@@ -311,6 +316,7 @@ function FileManagerHistory:onMenuHold(item)
         },
         {
             text = _("Remove from history"),
+            enabled = status ~= "tbr",
             callback = function()
                 UIManager:close(self.file_dialog)
                 -- The item's idx field is tied to the current *view*, so we can only pass it as-is when there's no filtering *at all* involved.
@@ -320,6 +326,15 @@ function FileManagerHistory:onMenuHold(item)
                 end
                 require("readhistory"):removeItem(item, index)
                 self._manager:updateItemTable()
+                if _G.all_files[item.file]
+                and _G.all_files[item.file].status == "mbr" then
+                    _G.all_files[file].status = ""
+                    _G.all_files[item.file].last_modified_year = 0
+                    _G.all_files[item.file].last_modified_month = 0
+                    _G.all_files[item.file].last_modified_day = 0
+                    local util = require("util")
+                    util.generateStats()
+                end
             end,
         },
     })
