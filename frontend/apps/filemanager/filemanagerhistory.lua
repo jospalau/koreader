@@ -273,6 +273,56 @@ function FileManagerHistory:onMenuHold(item)
                 self._manager:updateItemTable()
             end,
         },
+        {
+            text = _("Move left in history"),
+            enabled = item.idx and item.idx > 1,
+
+            callback = function()
+                UIManager:close(self.file_dialog)
+                local ReadHistory = require("readhistory")
+                local items = ReadHistory.hist or {}
+                local index = item.idx  -- el índice actual del libro en la vista
+
+                if index and index > 1 then
+                    -- intercambiar con el anterior
+                    local tmp = items[index-1]
+                    items[index-1] = items[index]
+                    items[index] = tmp
+
+                    -- reasignar la tabla
+                    ReadHistory.hist = items
+
+                    -- refrescar vista
+                    self._manager:fetchStatuses(false)
+                    self._manager:updateItemTable()
+                end
+            end,
+        },
+        {
+            text = _("Move right in history"),
+            enabled = item.idx and require("readhistory").hist and item.idx < #require("readhistory").hist,
+            callback = function()
+                UIManager:close(self.file_dialog)
+                local ReadHistory = require("readhistory")
+                local items = ReadHistory.hist or {}
+                local index = item.idx  -- índice actual del libro en la vista
+
+                -- solo continuar si no es el último
+                if not index or index >= #items then return end
+
+                -- intercambiar con el siguiente
+                local tmp = items[index+1]
+                items[index+1] = items[index]
+                items[index] = tmp
+
+                -- reasignar la tabla
+                ReadHistory.hist = items
+
+                -- refrescar vista
+                self._manager:fetchStatuses(false)
+                self._manager:updateItemTable()
+            end,
+        },
     })
     table.insert(buttons, {
         {
@@ -680,11 +730,66 @@ function FileManagerHistory:showHistDialog()
     })
     table.insert(buttons, {
         {
+            text = _("Sort history by status"),
+            callback = function()
+                UIManager:close(hist_dialog)
+                local ReadHistory = require("readhistory")
+                local DocSettings = require("docsettings")
+
+                local items = ReadHistory.hist or {}
+                local reading, tbr, mbr, others = {}, {}, {}, {}
+
+                for _, entry in ipairs(items) do
+                    local doc_settings = DocSettings:open(entry.file)
+                    local summary = doc_settings:readSetting("summary", {})
+                    local status = summary.status
+
+                    if status == "reading" then
+                        table.insert(reading, entry)
+                    elseif status == "tbr" then
+                        table.insert(tbr, entry)
+                    elseif status == "mbr" then
+                        table.insert(mbr, entry)
+                    else
+                        table.insert(others, entry)
+                    end
+                end
+
+                local function get_filename(path)
+                    -- extrae solo "The Troop - Cutter, Nick.epub" de la ruta completa
+                    return path:match("^.+/(.+)$") or path
+                end
+
+                local function sort_by_file(a, b)
+                    return get_filename(a.file):lower() < get_filename(b.file):lower()
+                end
+                table.sort(reading, sort_by_file)
+                table.sort(tbr, sort_by_file)
+                table.sort(mbr, sort_by_file)
+                table.sort(others, sort_by_file)
+
+                -- reconstruir el historial en orden deseado
+                local new_hist = {}
+                for _, v in ipairs(reading) do table.insert(new_hist, v) end
+                for _, v in ipairs(tbr)     do table.insert(new_hist, v) end
+                for _, v in ipairs(mbr)     do table.insert(new_hist, v) end
+                for _, v in ipairs(others)  do table.insert(new_hist, v) end
+
+                ReadHistory.hist = new_hist
+                --ReadHistory:save()
+
+                self:fetchStatuses(false)
+                self:updateItemTable()
+            end,
+        },
+    })
+    table.insert(buttons, {
+        {
             text = _("Open random MBR file"),
             callback = function()
                 self:onOpenRandomFav(hist_dialog)
             end,
-        },
+        }
     })
     if self.count.deleted > 0 then
         table.insert(buttons, {}) -- separator
