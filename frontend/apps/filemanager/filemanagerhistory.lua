@@ -908,8 +908,31 @@ function FileManagerHistory:sortHistoryByStatus()
         return path:match("^.+/(.+)$") or path
     end
 
+    local function get_author(path)
+        local author = path:match("^.+/(.+)/[^/]+$")
+        return author or "Unknown"
+    end
+
+    local function get_author(path)
+        local author = path:match("^.+/(.+)/[^/]+$")
+        return author or "Unknown"
+    end
+
+    local function get_filename(path)
+        return path:match("^.+/(.+)$") or path
+    end
+
     local function sort_by_file(a, b)
-        return get_filename(a.file):lower() < get_filename(b.file):lower()
+        local author_a = get_author(a.file):lower()
+        local author_b = get_author(b.file):lower()
+
+        if author_a == author_b then
+            -- Si el autor es el mismo, ordenar por nombre de archivo
+            return get_filename(a.file):lower() < get_filename(b.file):lower()
+        else
+            -- Si no, ordenar por autor
+            return author_a < author_b
+        end
     end
 
     --table.sort(reading, sort_by_file)
