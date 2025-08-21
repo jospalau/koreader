@@ -912,7 +912,7 @@ function FileManagerHistory:sortHistoryByStatus()
         return get_filename(a.file):lower() < get_filename(b.file):lower()
     end
 
-    table.sort(reading, sort_by_file)
+    --table.sort(reading, sort_by_file)
     -- No need to sort TBR items, to respect custom order
     --table.sort(tbr, sort_by_file)
     table.sort(mbr, sort_by_file)
