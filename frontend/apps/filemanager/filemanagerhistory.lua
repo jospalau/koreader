@@ -768,8 +768,8 @@ end
 
 function FileManagerHistory:onOpenRandomFav(hist_dialog)
 
-    local UIManager = require("ui/uimanager")
     local Notification = require("ui/widget/notification")
+    --[[
     if self.filter ~= "mbr" then
         UIManager:show(Notification:new{
             text = _("Only allowed in MBR view"),
@@ -782,7 +782,7 @@ function FileManagerHistory:onOpenRandomFav(hist_dialog)
         })
         return
     end
-
+    ]]
 
     local ReadHistory = require("readhistory")
     local mbr_list = {}
