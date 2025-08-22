@@ -559,8 +559,8 @@ end
 
 
 function FileManagerHistory:onDoubleTapBottomLeft(arg, ges_ev)
-    local FileManager = require("apps/filemanager/filemanager")
-    FileManager:openFile("resources/arthur-conan-doyle_the-hound-of-the-baskervilles.epub")
+    --local FileManager = require("apps/filemanager/filemanager")
+    --FileManager:openFile("resources/arthur-conan-doyle_the-hound-of-the-baskervilles.epub")
     return true
 end
 
