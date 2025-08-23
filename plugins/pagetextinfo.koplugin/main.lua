@@ -2721,7 +2721,7 @@ function PageTextInfo:onPrintDurationChapterFbink()
     end
 
     local left = self.ui.toc:getChapterPagesLeft(self.view.state.page) or self.ui.document:getTotalPagesLeft(self.view.state.page)
-    left = self.ui.view.footer:getDataFromStatistics("Cur: ", left)
+    left = (self.ui.statistics and "Cur: " .. self.ui.statistics:getTimeForPages(left) or _("N/A"))
 
     local InfoMessage = require("ui/widget/infomessage")
     local rv
@@ -2774,7 +2774,7 @@ function PageTextInfo:onPrintDurationNextChapterFbink()
     if sigcap2 == nil then
         return "n/a"
     end
-    sigcap2 = self.ui.view.footer:getDataFromStatistics("Sig: ", sigcap2 - sigcap)
+    sigcap2 = (self.ui.statistics and "Sig: " .. self.ui.statistics:getTimeForPages(sigcap2 - sigcap) or _("N/A"))
     local InfoMessage = require("ui/widget/infomessage")
     local rv
     local output = ""

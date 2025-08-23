@@ -1333,7 +1333,7 @@ function TopBar:toggleBar(light_on)
 
 
         local left = self.ui.toc:getChapterPagesLeft(self.view.footer.pageno) or self.ui.document:getTotalPagesLeft(self.view.footer.pageno)
-        local left_time = self.view.footer:getDataFromStatistics("", left)
+        local left_time = (self.ui.statistics and self.ui.statistics:getTimeForPages(left) or _("N/A"))
 
         self.progress_chapter = self.view.footer:getChapterProgress(false)
         self.progress_chapter_text:setText(self.progress_chapter) -- .. " " .. left_time)

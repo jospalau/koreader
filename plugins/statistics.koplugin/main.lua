@@ -3433,15 +3433,6 @@ function ReaderStatistics:onResume()
     end
 end
 
-function ReaderFooter:onOutOfScreenSaver()
-    if not self._delayed_screensaver then
-        return
-    end
-
-    self._delayed_screensaver = nil
-    -- self.view.footer:onUpdateFooter(true,true)
-end
-
 function ReaderStatistics:onReadingPaused()
     if self:isEnabledAndNotFrozen() then
         if not self._reading_paused_ts then
