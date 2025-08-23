@@ -1317,7 +1317,7 @@ Tap a book in the search results to open it.]]),
             remember = false,
             callback = function()
                 self:onCloseFileManagerMenu()
-                self.ui:tapPlus()
+                self.ui:onShowPlusMenu()
             end,
         }
     end

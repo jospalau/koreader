@@ -212,7 +212,7 @@ function FileManager:setupLayout()
 
     function file_chooser:onFileHold(item)
         if file_manager.selected_files then
-            file_manager:tapPlus()
+            file_manager:onShowPlusMenu()
         else
             self:showFileDialog(item)
         end
@@ -579,11 +579,6 @@ function FileManager.getMenuInstance()
     return FileManager.instance.file_chooser
 end
 
-function FileManager:onShowPlusMenu()
-    self:tapPlus()
-    return true
-end
-
 function FileManager:onToggleSelectMode(do_refresh)
     logger.dbg("toggle select mode")
     local plus = "plus"
@@ -614,16 +609,15 @@ function FileManager:onToggleSelectMode(do_refresh)
     return true
 end
 
-function FileManager:tapPlus()
-    local plus_dialog
+function FileManager:getPlusDialogButtons()
     local function close_dialog_callback()
-        UIManager:close(plus_dialog)
+        UIManager:close(self.plus_dialog)
     end
 
     local title, buttons
     if self.selected_files then
         local function close_dialog_toggle_select_mode_callback()
-            UIManager:close(plus_dialog)
+            UIManager:close(self.plus_dialog)
             self:onToggleSelectMode(true)
         end
         local function toggle_select_mode_callback()
@@ -643,7 +637,7 @@ function FileManager:tapPlus()
                             text = _("Delete selected files?\nIf you delete a file, it is permanently lost."),
                             ok_text = _("Delete"),
                             ok_callback = function()
-                                UIManager:close(plus_dialog)
+                                UIManager:close(self.plus_dialog)
                                 self:deleteSelectedFiles()
                             end,
                         })
@@ -691,7 +685,7 @@ function FileManager:tapPlus()
                     text = _("Deselect all"),
                     enabled = actions_enabled,
                     callback = function()
-                        UIManager:close(plus_dialog)
+                        UIManager:close(self.plus_dialog)
                         for file in pairs (self.selected_files) do
                             self.selected_files[file] = nil
                         end
@@ -701,7 +695,7 @@ function FileManager:tapPlus()
                 {
                     text = _("Select all files in folder"),
                     callback = function()
-                        UIManager:close(plus_dialog)
+                        UIManager:close(self.plus_dialog)
                         self.file_chooser:selectAllFilesInFolder(true)
                     end,
                 },
@@ -710,7 +704,7 @@ function FileManager:tapPlus()
                 {
                     text = _("Exit select mode"),
                     callback = function()
-                        UIManager:close(plus_dialog)
+                        UIManager:close(self.plus_dialog)
                         self:onToggleSelectMode()
                     end,
                 },
@@ -718,7 +712,7 @@ function FileManager:tapPlus()
                     text = _("Show selected files list"),
                     enabled = actions_enabled,
                     callback = function()
-                        UIManager:close(plus_dialog)
+                        UIManager:close(self.plus_dialog)
                         self:showSelectedFilesList()
                     end,
                 },
@@ -728,7 +722,7 @@ function FileManager:tapPlus()
                 {
                     text = _("New folder"),
                     callback = function()
-                        UIManager:close(plus_dialog)
+                        UIManager:close(self.plus_dialog)
                         self:createFolder()
                     end,
                 },
@@ -753,7 +747,7 @@ function FileManager:tapPlus()
                 {
                     text = _("Select files"),
                     callback = function()
-                        UIManager:close(plus_dialog)
+                        UIManager:close(self.plus_dialog)
                         self:onToggleSelectMode()
                     end,
                 },
@@ -762,7 +756,7 @@ function FileManager:tapPlus()
                 {
                     text = _("New folder"),
                     callback = function()
-                        UIManager:close(plus_dialog)
+                        UIManager:close(self.plus_dialog)
                         self:createFolder()
                     end,
                 },
@@ -772,7 +766,7 @@ function FileManager:tapPlus()
                     text = _("Paste"),
                     enabled = self.clipboard and true or false,
                     callback = function()
-                        UIManager:close(plus_dialog)
+                        UIManager:close(self.plus_dialog)
                         self:pasteFileFromClipboard()
                     end,
                 },
@@ -781,7 +775,7 @@ function FileManager:tapPlus()
                 {
                     text = _("Set as HOME folder"),
                     callback = function()
-                        UIManager:close(plus_dialog)
+                        UIManager:close(self.plus_dialog)
                         self:setHome()
                     end
                 },
@@ -790,7 +784,7 @@ function FileManager:tapPlus()
                 {
                     text = _("Go to HOME folder"),
                     callback = function()
-                        UIManager:close(plus_dialog)
+                        UIManager:close(self.plus_dialog)
                         self:onHome()
                     end
                 },
@@ -799,12 +793,12 @@ function FileManager:tapPlus()
                 {
                     text = _("Open random document"),
                     callback = function()
-                        UIManager:close(plus_dialog)
+                        UIManager:close(self.plus_dialog)
                         -- any random document
                         self:openRandomFile(folder, false)
                     end,
                     hold_callback = function()
-                        UIManager:close(plus_dialog)
+                        UIManager:close(self.plus_dialog)
                         -- only previously unopened
                         self:openRandomFile(folder, true)
                     end
@@ -826,7 +820,7 @@ function FileManager:tapPlus()
                             and _("Switch to SDCard") or _("Switch to internal storage")
                     end,
                     callback = function()
-                        UIManager:close(plus_dialog)
+                        UIManager:close(self.plus_dialog)
                         if Device:isValidPath(folder) then
                             local ok, sd_path = Device:hasExternalSD()
                             if ok then
@@ -846,7 +840,7 @@ function FileManager:tapPlus()
                     text = _("Import files here"),
                     enabled = Device:isValidPath(folder),
                     callback = function()
-                        UIManager:close(plus_dialog)
+                        UIManager:close(self.plus_dialog)
                         Device.importFile(folder)
                     end,
                 },
@@ -861,12 +855,18 @@ function FileManager:tapPlus()
 
     end
 
-    plus_dialog = ButtonDialog:new{
+    return title, buttons
+end
+
+function FileManager:onShowPlusMenu()
+    local title, buttons = self:getPlusDialogButtons()
+    self.plus_dialog = ButtonDialog:new{
         title = title,
         title_align = "center",
         buttons = buttons,
     }
-    UIManager:show(plus_dialog)
+    UIManager:show(self.plus_dialog)
+    return true
 end
 
 function FileManager:reinit(path, focused_file)
