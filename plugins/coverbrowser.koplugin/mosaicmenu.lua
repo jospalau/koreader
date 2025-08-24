@@ -564,19 +564,57 @@ function MosaicMenuItem:update()
                 else
                     pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
                 end
-                widget = CenterContainer:new{
-                    dimen = dimen,
-                    FrameContainer:new{
-                        width = image_size.w + 2*border_size,
-                        height = image_size.h + 2*border_size,
-                        margin = 0,
-                        padding = 0,
-                        bordersize = (pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view")) and 0 or border_size,
-                        dim = self.file_deleted,
-                        color = self.file_deleted and Blitbuffer.COLOR_DARK_GRAY or nil,
-                        image,
+
+                if self.show_parent.title == "History" then
+                    local TextWidget = require("ui/widget/textwidget")
+                    local AlphaContainer = require("ui/widget/container/alphacontainer")
+                    local words = "N/A"
+                    if self.show_parent.calibre_data
+                        and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["words"] then
+                            words = tostring(math.floor(self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["words"]/1000)) .."kw"
+                        end
+                    widget = CenterContainer:new{
+                        dimen = dimen,
+                        FrameContainer:new{
+                            width = image_size.w + 2*border_size,
+                            height = image_size.h + 2*border_size,
+                            margin = 0,
+                            padding = 0,
+                            bordersize = (pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view")) and 0 or border_size,
+                            dim = self.file_deleted,
+                            color = self.file_deleted and Blitbuffer.COLOR_DARK_GRAY or nil,
+
+                            -- OverlapGroup para solapar imagen y texto
+                            OverlapGroup:new {
+                                dimen = { w = image_size.w + 2*border_size, h = image_size.h + 2*border_size },
+                                image,
+                                AlphaContainer:new {
+                                    alpha = 0.7,
+                                    TextWidget:new {
+                                        text = words,
+                                        face = Font:getFace("myfont3", 12),
+                                        max_width = image_size.w + 2*border_size - 8,
+                                        -- fgcolor = Blitbuffer.COLOR_WHITE,
+                                    },
+                                },
+                            },
+                        }
                     }
-                }
+                else
+                    widget = CenterContainer:new{
+                        dimen = dimen,
+                        FrameContainer:new{
+                            width = image_size.w + 2*border_size,
+                            height = image_size.h + 2*border_size,
+                            margin = 0,
+                            padding = 0,
+                            bordersize = (pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view")) and 0 or border_size,
+                            dim = self.file_deleted,
+                            color = self.file_deleted and Blitbuffer.COLOR_DARK_GRAY or nil,
+                            image,
+                        }
+                    }
+                end
                 -- Let menu know it has some item with images
                 self.menu._has_cover_images = true
                 self._has_cover_image = true
