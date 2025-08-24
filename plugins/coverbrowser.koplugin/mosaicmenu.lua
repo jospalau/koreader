@@ -572,7 +572,11 @@ function MosaicMenuItem:update()
                     if self.show_parent.calibre_data
                         and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["words"] then
                             words = tostring(math.floor(self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["words"]/1000)) .."kw"
-                        end
+                    end
+                    if self.status == "tbr" then
+                        words = "TBR " ..  self.show_parent.tbrc .. " " .. words
+                         self.show_parent.tbrc =  self.show_parent.tbrc + 1
+                    end
                     widget = CenterContainer:new{
                         dimen = dimen,
                         FrameContainer:new{
@@ -1021,6 +1025,7 @@ function MosaicMenu:_updateItemsBuildUI()
     local idx_offset = (self.page - 1) * self.perpage
     local line_layout = {}
     local select_number
+    self.show_parent.tbrc = 1
     for idx = 1, self.perpage do
         local index = idx_offset + idx
         local entry = self.item_table[index]
