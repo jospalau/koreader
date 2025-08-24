@@ -565,19 +565,21 @@ function MosaicMenuItem:update()
                     pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
                 end
 
-                if self.show_parent.title == "History" then
+                if self.show_parent.title == "Reading Planner & Tracker" then
                     local TextWidget = require("ui/widget/textwidget")
                     local AlphaContainer = require("ui/widget/container/alphacontainer")
                     local words = "N/A"
+                    local fname = self.filepath and self.filepath:match("([^/]+)$")
                     if self.show_parent.calibre_data
-                        and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["words"] then
-                            words = tostring(math.floor(self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]["words"]/1000)) .."kw"
+                    and fname
+                    and self.show_parent.calibre_data[fname]
+                    and self.show_parent.calibre_data[fname]["words"] then
+                        words = tostring(math.floor(self.show_parent.calibre_data[fname]["words"]/1000)) .. "kw"
                     end
                     if self.status == "tbr" then
-                        words = "TBR " ..  self.show_parent.tbrc .. " " .. words
-                         self.show_parent.tbrc =  self.show_parent.tbrc + 1
+                        words = words
                     end
-                    widget = CenterContainer:new{
+                    widget = LeftContainer:new{
                         dimen = dimen,
                         FrameContainer:new{
                             width = image_size.w + 2*border_size,
@@ -595,8 +597,8 @@ function MosaicMenuItem:update()
                                 AlphaContainer:new {
                                     alpha = 0.7,
                                     TextWidget:new {
-                                        text = words,
-                                        face = Font:getFace("myfont3", 12),
+                                        text = " " .. words,
+                                        face = Font:getFace("Kalam-Regular", 12),
                                         max_width = image_size.w + 2*border_size - 8,
                                         -- fgcolor = Blitbuffer.COLOR_WHITE,
                                     },
@@ -933,7 +935,8 @@ function MosaicMenu:_recalculateDimen()
     self.item_height = math.floor((self.inner_dimen.h - self.others_height - (1+self.nb_rows)*self.item_margin) / self.nb_rows)
 
     if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
-        self.item_width = math.ceil((self.inner_dimen.w - (1+self.nb_cols)*self.item_margin) / self.nb_cols)
+        -- self.item_width = self.inner_dimen.w / self.nb_cols
+        self.item_width = math.ceil(self.inner_dimen.w / self.nb_cols)
     else
         self.item_width = math.floor((self.inner_dimen.w - (1+self.nb_cols)*self.item_margin) / self.nb_cols)
     end
@@ -1025,7 +1028,6 @@ function MosaicMenu:_updateItemsBuildUI()
     local idx_offset = (self.page - 1) * self.perpage
     local line_layout = {}
     local select_number
-    self.show_parent.tbrc = 1
     for idx = 1, self.perpage do
         local index = idx_offset + idx
         local entry = self.item_table[index]

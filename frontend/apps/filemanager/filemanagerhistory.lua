@@ -15,7 +15,7 @@ local _ = require("gettext")
 local T = require("ffi/util").template
 
 local FileManagerHistory = WidgetContainer:extend{
-    title = _("History"),
+    title = _("Reading Planner & Tracker"),
 }
 
 function FileManagerHistory:init()
@@ -63,7 +63,7 @@ function FileManagerHistory:onShowHist(search_info)
     -- This may be hijacked by CoverBrowser plugin and needs to be known as booklist_menu.
     self.booklist_menu = BookList:new{
         name = "history",
-        title = "History",
+        title = "Reading Planner & Tracker",
         title_bar_left_icon = "appbar.menu",
         onLeftButtonTap = function() self:showHistDialog() end,
         onMenuChoice = self.onMenuChoice,
@@ -157,7 +157,7 @@ function FileManagerHistory:isItemMatch(item)
 end
 
 function FileManagerHistory:getBookListTitle(item_table)
-    local title = T(_("History (%1)"), #item_table)
+    local title = T(_("Reading Planner & Tracker (%1)"), #item_table)
     local subtitle = ""
     if self.search_string then
         subtitle = T(_("Query: %1"), self.search_string)
@@ -253,9 +253,11 @@ function FileManagerHistory:onMenuHold(item)
         filemanagerutil.genResetSettingsButton(doc_settings_or_file, close_dialog_update_callback, is_currently_opened),
         self._manager.ui.collections:genAddToCollectionButton(file, close_dialog_callback, update_callback, item.dim),
     })
+    local left_up = self.ui.history.booklist_menu.display_mode_type == "mosaic" and "Move left" or "Move up"
+    local right_down = self.ui.history.booklist_menu.display_mode_type == "mosaic" and "Move right" or "Move down"
     table.insert(buttons, {
         {
-            text = _("Move left"),
+            text = _(left_up),
             enabled = item.idx and item.idx > 1,
 
             callback = function()
@@ -280,7 +282,7 @@ function FileManagerHistory:onMenuHold(item)
             end,
         },
         {
-            text = _("Move right"),
+            text = _(right_down),
             enabled = item.idx and require("readhistory").hist and item.idx < #require("readhistory").hist,
             callback = function()
                 UIManager:close(self.file_dialog)

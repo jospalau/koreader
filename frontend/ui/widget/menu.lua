@@ -803,7 +803,7 @@ function Menu:init()
     local DGENERIC_ICON_SIZE = G_defaults:readSetting("DGENERIC_ICON_SIZE")
 
     -- Only make icons smaller for non Android devices and when in fm or history
-    if G_reader_settings:isTrue("top_manager_infmandhistory") and not Device:isAndroid() and (self.title == "History" or (self.title == "" and not (self.collection_name or self.search))) then
+    if G_reader_settings:isTrue("top_manager_infmandhistory") and not Device:isAndroid() and (self.title == "Reading Planner & Tracker" or (self.title == "" and not (self.collection_name or self.search))) then
         DGENERIC_ICON_SIZE = DGENERIC_ICON_SIZE / 2
     end
 
@@ -960,7 +960,7 @@ function Menu:init()
     local body = self.item_group
     local margin_bottom = nil
     -- Only change margins when in fm or history
-    if G_reader_settings:isTrue("top_manager_infmandhistory") and (self.title == "History" or (self.title == "" and not (self.collection_name or self.search))) then
+    if G_reader_settings:isTrue("top_manager_infmandhistory") and (self.title == "Reading Planner & Tracker" or (self.title == "" and not (self.collection_name or self.search))) then
             if Device:isAndroid() then
                 margin_bottom = 20
             else
