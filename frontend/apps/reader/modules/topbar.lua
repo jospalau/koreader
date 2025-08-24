@@ -2229,6 +2229,14 @@ function TopBar:addToMainMenu(menu_items)
                         fgcolor = Blitbuffer.COLOR_BLACK,
                     }
                     self.progress_chapter_widget_container[1] = self.progress_chapter_text
+
+                    self.current_page_text = TextWidget:new{
+                        text =  "",
+                        face = face,
+                        fgcolor = Blitbuffer.COLOR_BLACK,
+                    }
+                    self.current_page_widget_container[1] = self.current_page_text
+
                     self:toggleBar()
                     UIManager:setDirty("all", "ui")
                     self.settings:saveSetting("font_times_progress", font_path)
@@ -2360,6 +2368,13 @@ function TopBar:addToMainMenu(menu_items)
                                 fgcolor = Blitbuffer.COLOR_BLACK,
                             }
                             self.progress_chapter_widget_container[1] = self.progress_chapter_text
+                            self.current_page_text = TextWidget:new{
+                                text =  "",
+                                face = face,
+                                fgcolor = Blitbuffer.COLOR_BLACK,
+                            }
+                            self.current_page_widget_container[1] = self.current_page_text
+
                             self:toggleBar()
                             UIManager:setDirty("all", "ui")
                             self.settings:flush()
