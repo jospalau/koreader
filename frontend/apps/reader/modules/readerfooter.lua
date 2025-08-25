@@ -2229,20 +2229,11 @@ function ReaderFooter:setTocMarkers(reset)
 end
 
 function ReaderFooter:onUpdateFooter(force_repaint, full_repaint)
-    if type(self.pageno) ~= "number" then return end
-    if self.settings.chapter_progress_bar then
-        if self.progress_bar.initial_pos_marker then
-            if self.ui.toc:getNextChapter(self.pageno) == self.ui.toc:getNextChapter(self.initial_pageno) then
-                self.progress_bar.initial_percentage = self:getChapterProgress(true, self.initial_pageno)
-            else -- initial position is not in the current chapter
-                self.progress_bar.initial_percentage = -1 -- do not draw initial position marker
-            end
-        end
-        self.progress_bar:setPercentage(self:getChapterProgress(true))
+    if self.pageno then
+        self:updateFooterPage(force_repaint, full_repaint)
     else
-        self.progress_bar:setPercentage(self:getBookProgress())
+        self:updateFooterPos(force_repaint, full_repaint)
     end
-    self:updateFooterText(force_repaint, full_repaint)
 end
 
 function ReaderFooter:updateFooterPage(force_repaint, full_repaint)
