@@ -344,7 +344,7 @@ function ListMenuItem:update()
                         end
 
                     elseif status == "abandoned" then
-                        pages_str = T(N_("Ona hold – 1 page", "On hold – %1 pages", pages), pages)
+                        pages_str = T(N_("On hold – 1 page", "On hold – %1 pages", pages), pages)
                     else
                         pages_str = T(N_("TBR – 1 page", "TBR – %1 pages", pages), pages)
                     end
@@ -360,7 +360,14 @@ function ListMenuItem:update()
                     elseif status == "abandoned" then
                         pages_str =  _("On hold")
                     else
-                        pages_str = _("TBR")
+                        if G_reader_settings:isTrue("top_manager_infmandhistory")
+                        and _G.all_files
+                        and _G.all_files[self.filepath] then
+                            local tbr_pos = self.show_parent.ui and self.show_parent.ui.history:getTBRPosition(self.filepath) or self.show_parent.history:getTBRPosition(self.filepath)
+                            pages_str = _("TBR " .. tbr_pos)
+                        else
+                            pages_str = _("TBR ")
+                        end
                     end
                 end
             elseif percent_finished then

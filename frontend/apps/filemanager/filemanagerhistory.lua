@@ -976,4 +976,30 @@ function FileManagerHistory:sortHistoryByStatus()
     ReadHistory:_flush()
 end
 
+function FileManagerHistory:getTBRPosition(file_path)
+    local ReadHistory = require("readhistory")
+    -- local DocSettings = require("docsettings")
+
+    local items = ReadHistory.hist or {}
+    local tbr_items = {}
+
+    for _, entry in ipairs(items) do
+        -- local doc_settings = DocSettings:open(entry.file)
+        -- local summary = doc_settings:readSetting("summary", {})
+        -- local status = summary.status or "mbr"
+        local status = _G.all_files[entry.file].status
+        if status == "tbr" then
+            table.insert(tbr_items, entry)
+        end
+    end
+
+    for idx, entry in ipairs(tbr_items) do
+        if entry.file == file_path then
+            return idx
+        end
+    end
+
+    return nil
+end
+
 return FileManagerHistory
