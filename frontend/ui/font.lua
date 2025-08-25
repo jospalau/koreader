@@ -405,6 +405,10 @@ end
 -- @treturn ui.font.FontFaceObj face face to use for drawing
 -- @treturn bool bold adjusted bold properties
 function Font:getAdjustedFace(face, bold)
+    if face == nil then
+        face = Font:getFace("cfont")
+    end
+
     if face.is_real_bold then
         -- No adjustment needed: main real bold font will ensure
         -- fallback fonts use their associated bold font or
