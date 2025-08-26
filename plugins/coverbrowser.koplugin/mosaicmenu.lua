@@ -716,6 +716,7 @@ function MosaicMenuItem:paintTo(bb, x, y)
     if x ~= math.floor(x) or y ~= math.floor(y) then
         logger.err("MosaicMenuItem:paintTo() got non-integer x/y :", x, y)
     end
+    --print("MosaicMenuItem:paintTo() got non-integer x/y :", x, y)
 
     -- Original painting
     InputContainer.paintTo(self, bb, x, y)
@@ -1044,12 +1045,28 @@ function MosaicMenu:_updateItemsBuildUI()
             table.insert(self.item_group, VerticalSpan:new{ width = self.item_margin })
             cur_row = HorizontalGroup:new{}
             -- Have items on the possibly non-fully filled last row aligned to the left
+
+
+            -- local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+            -- if ui ~= nil then
+            --     pagetextinfo = ui.pagetextinfo
+            -- else
+            --     pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
+            -- end
+            -- local container
+            -- if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
+            --     container = LeftContainer
+            -- else
+            --     container = self._do_center_partial_rows and CenterContainer or LeftContainer
+            -- end
+
             local container = self._do_center_partial_rows and CenterContainer or LeftContainer
             table.insert(self.item_group, container:new{
                 dimen = Geom:new{
                     w = self.inner_dimen.w,
                     h = self.item_height
                 },
+                ignore_if_over = self._do_center_partial_rows and "width" or nil,
                 cur_row
             })
             table.insert(cur_row, HorizontalSpan:new({ width = self.item_margin }))
