@@ -396,24 +396,25 @@ function MosaicMenuItem:update()
         h = self.height,
     }
 
-    -- We'll draw a border around cover images, it may not be
-    -- needed with some covers, but it's nicer when cover is
-    -- a pure white background (like rendered text page)
-    local border_size = Size.border.thin
-
     local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
     if ui ~= nil then
         pagetextinfo = ui.pagetextinfo
     else
         pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
     end
+    -- We'll draw a border around cover images, it may not be
+    -- needed with some covers, but it's nicer when cover is
+    -- a pure white background (like rendered text page)
+    local border_size
+    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+        border_size = 0
+    else
+        border_size = Size.border.thin
+    end
+
 
     local max_img_w = dimen.w - 2*border_size
     local max_img_h = dimen.h - 2*border_size
-    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
-        max_img_w = dimen.w
-        max_img_h = dimen.h
-    end
 
     local cover_specs = {
         max_cover_w = max_img_w,
@@ -538,7 +539,6 @@ function MosaicMenuItem:update()
                 cover_bb_used = true
                 -- Let ImageWidget do the scaling and give us a bb that fit
 
-
                 local image = nil
                 if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
                     image= ImageWidget:new{
@@ -558,13 +558,6 @@ function MosaicMenuItem:update()
                 end
                 image:_render()
                 local image_size = image:getSize()
-                local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-                if ui ~= nil then
-                    pagetextinfo = ui.pagetextinfo
-                else
-                    pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
-                end
-
                 if self.show_parent.title == "Reading Planner & Tracker" then
                     local TextWidget = require("ui/widget/textwidget")
                     local AlphaContainer = require("ui/widget/container/alphacontainer")
@@ -579,14 +572,14 @@ function MosaicMenuItem:update()
                     if self.status == "tbr" then
                         words = words
                     end
-                    widget = LeftContainer:new{
+                    widget = CenterContainer:new{
                         dimen = dimen,
                         FrameContainer:new{
                             width = image_size.w + 2*border_size,
                             height = image_size.h + 2*border_size,
                             margin = 0,
                             padding = 0,
-                            bordersize = (pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view")) and 0 or border_size,
+                            bordersize = border_size,
                             dim = self.file_deleted,
                             color = self.file_deleted and Blitbuffer.COLOR_DARK_GRAY or nil,
 
@@ -614,7 +607,7 @@ function MosaicMenuItem:update()
                             height = image_size.h + 2*border_size,
                             margin = 0,
                             padding = 0,
-                            bordersize = (pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view")) and 0 or border_size,
+                            bordersize = border_size,
                             dim = self.file_deleted,
                             color = self.file_deleted and Blitbuffer.COLOR_DARK_GRAY or nil,
                             image,
