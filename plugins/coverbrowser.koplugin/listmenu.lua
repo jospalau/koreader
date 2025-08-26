@@ -105,7 +105,18 @@ function ListMenuItem:init()
     -- for compatibility with keyboard navigation
     -- (which does not seem to work well when multiple pages,
     -- even with classic menu)
-    self.underline_h = 1 -- smaller than default (3) to not shift our vertical alignment
+    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+    if ui ~= nil then
+        pagetextinfo = ui.pagetextinfo
+    else
+        pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
+    end
+
+    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+        self.underline_h = 0 -- smaller than default (3) to not shift our vertical alignment
+    else
+        self.underline_h = 1 -- smaller than default (3) to not shift our vertical alignment
+    end
     self._underline_container = UnderlineContainer:new{
         vertical_align = "top",
         padding = 0,
@@ -153,7 +164,19 @@ function ListMenuItem:update()
     -- We'll draw a border around cover images, it may not be
     -- needed with some covers, but it's nicer when cover is
     -- a pure white background (like rendered text page)
-    local border_size = Size.border.thin
+    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+    if ui ~= nil then
+        pagetextinfo = ui.pagetextinfo
+    else
+        pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
+    end
+
+    local border_size
+    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+        border_size = 0
+    else
+        border_size = Size.border.thin
+    end
     local max_img_w = dimen.h - 2*border_size -- width = height, squared
     local max_img_h = dimen.h - 2*border_size
     local cover_specs = {
@@ -267,7 +290,7 @@ function ListMenuItem:update()
                             height = image_size.h + 2*border_size,
                             margin = 0,
                             padding = 0,
-                            bordersize = (pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks")) and 0 or border_size,
+                            bordersize = border_size,
                             dim = self.file_deleted,
                             wimage,
                         }
