@@ -328,6 +328,33 @@ function TopBar:getDateAndVersion()
     return t
 end
 
+function TopBar:getTodayBookStats()
+    local now_stamp = os.time()
+    local now_t = os.date("*t")
+    local from_begin_day = now_t.hour * 3600 + now_t.min * 60 + now_t.sec
+    local start_today_time = now_stamp - from_begin_day
+    local DataStorage = require("datastorage")
+    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    local conn = SQ3.open(db_location)
+    local sql_stmt = [[
+        SELECT sum(duration), SUM(total_pages)
+        FROM   wpm_stat_data
+        WHERE  start_time >= %d
+    ]]
+    local today_duration, today_pages =  conn:rowexec(string.format(sql_stmt, start_today_time))
+    conn:close()
+    if today_pages == nil then
+        today_pages = 0
+    end
+    if today_duration == nil then
+        today_duration = 0
+    end
+    today_duration = tonumber(today_duration)
+    today_pages = tonumber(today_pages)
+
+    return today_duration, today_pages
+end
+
 function TopBar:getPublicationDateBook()
     if not self.ui then return end
     local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
@@ -2066,6 +2093,23 @@ function TopBar:paintToDisabled(bb, x, y)
     else
         self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), y + Screen:scaleBySize(6))
     end
+
+
+    local today_duration, today_pages = self:getTodayBookStats()
+    today_duration = today_duration + os.time() - self.start_session_time
+    local today_duration_number = math.floor((today_duration / 60) * 10) / 10
+    self._goal_time = 120
+    self._goal_pages = 120
+
+
+    local icons_goals = ""
+
+    if today_duration_number >= self._goal_time or today_pages >= self._goal_pages then
+        local icon_time  = (today_duration_number >= self._goal_time) and "⚑" or "⚐"
+        local icon_pages = (today_pages        >= self._goal_pages)  and "⚑" or "⚐"
+        icons_goals = " " .. icon_time .. " " .. icon_pages
+    end
+    self.current_page_text:setText(self.current_page_text.text .. icons_goals)
     self.current_page_widget_container:paintTo(bb, x + math.floor(Screen:getWidth() / 2), Screen:getHeight())-- - TopBar.MARGIN_BOTTOM_CURRENT_PAGE)
 end
 
