@@ -3796,19 +3796,18 @@ function PageTextInfo:onShowTextProperties()
     today_duration = datetime.secondsToClockDuration(user_duration_format, today_duration, true)
 
     today_pages = today_pages + (self.ui.statistics and self.ui.statistics._total_pages or 0)
-    local icon_goal_pages = "⚐"
     local icon_goal_time = "⚐"
-    self._goal_time = 120
-    self._goal_pages = 100
-    if today_pages > self._goal_pages or today_duration_number > self._goal_time then
-        if today_pages >= self._goal_pages then
-            icon_goal_pages = "⚑"
-        end
-        if today_duration_number >= self._goal_time  then
-            icon_goal_time = "⚑"
-        end
+    local icon_goal_pages = "⚐"
+    local goal_time = self.view.topbar and self.view.topbar.daily_time_goal or 120
+    local goal_pages = self.view.topbar and self.view.topbar.daily_pages_goal or 120
+
+    if today_duration_number >= goal_time then
+        icon_goal_time = "⚑"
     end
 
+    if today_pages >= goal_pages then
+        icon_goal_pages = "⚑"
+    end
 
     local this_week_duration, this_week_pages, wpm_week, words_week = getThisWeekBookStats()
     local this_month_duration, this_month_pages, wpm_month, words_month = getThisMonthBookStats()
@@ -3913,8 +3912,8 @@ function PageTextInfo:onShowTextProperties()
     -- .. "Avg wpm and wph in all sessions: " .. avg_wpm .. string.char(10)
     -- .. "Average time read last 7 days: " .. avg_last_seven_days .. "h" .. string.char(10)
     -- .. "Average time read last 30 days: " .. avg_last_thirty_days .. "h" .. string.char(10) .. string.char(10)
-    text = text .. point .. " RTRP out of " .. self._goal_pages .. ": " .. (self._goal_pages - today_pages) .. "p " .. icon_goal_pages .. string.char(10)
-    .. point .. " RTRT out of " .. self._goal_time .. ": " .. (self._goal_time - today_duration_number) .. "m " .. icon_goal_time  .. string.char(10)
+    text = text .. point .. " RTRP out of " .. goal_pages .. ": " .. (goal_pages - today_pages) .. "p " .. icon_goal_pages .. string.char(10)
+    .. point .. " RTRT out of " .. goal_time .. ": " .. (goal_time - today_duration_number) .. "m " .. icon_goal_time  .. string.char(10)
     .. point .. " This book: " .. time_reading_current_book .. string.char(10)
     .. point .. " This session: " .. duration .. "(" .. percentage_session .. "%, " .. words_session .. "w)"  .. "(" .. pages_read_session.. "p) " .. wpm_session .. "wpm" .. important .. string.char(10)
     .. point .. " Today: " .. today_duration  .. "(" .. today_pages .. "p, ".. words_today .. "w) " .. wpm_today .. "wpm" .. string.char(10)

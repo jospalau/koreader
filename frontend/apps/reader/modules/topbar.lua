@@ -48,9 +48,6 @@ local TopBar = WidgetContainer:extend{
     -- show_bar_in_top_bar = true,
 }
 
-
-
-
 function TopBar:getReadToday()
     local DataStorage = require("datastorage")
     local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
@@ -598,6 +595,9 @@ function TopBar:init()
             -- self:toggleBar()
         end)
     end)
+
+    self.daily_time_goal = self.settings:readSetting("daily_time_goal", 120)
+    self.daily_pages_goal = self.settings:readSetting("daily_pages_goal",120)
 end
 
 local getMem = function()
@@ -730,6 +730,12 @@ function TopBar:onReaderReady()
         invert = true,
     }
 
+    self.goal_text = TextWidget:new{
+        text =  "",
+        face = Font:getFace("myfont3", 12),
+        fgcolor = Blitbuffer.COLOR_BLACK,
+    }
+
     font = self.settings:readSetting("font_title")
     and self.settings:readSetting("font_title")
     or "Consolas-Regular.ttf"
@@ -781,6 +787,11 @@ function TopBar:onReaderReady()
     self.current_page_widget_container = bottom_container:new{
         dimen = Geom:new{ w = self.current_page_text:getSize().w, self.current_page_text:getSize().h },
         self.current_page_text,
+    }
+
+    self.goal_widget_container = bottom_container:new{
+        dimen = Geom:new{ w = self.goal_text:getSize().w, self.goal_text:getSize().h },
+        self.goal_text,
     }
 
     self.title_and_series_widget_container = HorizontalGroup:new{
@@ -1563,6 +1574,7 @@ function TopBar:toggleBar(light_on)
         self.session_time_text:setText("")
         self.progress_book_text:setText("")
         self.current_page_text:setText("")
+        self.goal_text:setText("")
         self.times_text:setText("")
         self.time_battery_text:setText("")
         self.title_text:setText("")
@@ -1609,6 +1621,16 @@ function TopBar:toggleBar(light_on)
             else
                 self.current_page_text:setText(("%d"):format(self.view.footer.pageno))
             end
+
+            local today_duration, __ = self:getTodayBookStats()
+            today_duration = today_duration + os.time() - self.start_session_time
+            local today_duration_number = math.floor((today_duration / 60) * 10) / 10
+            local icon_goal_time = (self.daily_time_goal - today_duration_number) .. "m"
+
+            if today_duration_number >= self.daily_time_goal then
+                icon_goal_time = "⚑"
+            end
+            self.goal_text:setText(icon_goal_time)
         end
         if self.ui.gestures.ignore_hold_corners then
             -- If page text info plugin highlight_all_words_vocabulary_builder_and_notes setting is true, then self.ui.gestures.ignore_hold_corners will be true so the corner words can be double tapped
@@ -2094,22 +2116,7 @@ function TopBar:paintToDisabled(bb, x, y)
         self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), y + Screen:scaleBySize(6))
     end
 
-
-    local today_duration, today_pages = self:getTodayBookStats()
-    today_duration = today_duration + os.time() - self.start_session_time
-    local today_duration_number = math.floor((today_duration / 60) * 10) / 10
-    self._goal_time = 120
-    self._goal_pages = 120
-
-
-    local icons_goals = ""
-
-    if today_duration_number >= self._goal_time or today_pages >= self._goal_pages then
-        local icon_time  = (today_duration_number >= self._goal_time) and "⚑" or "⚐"
-        local icon_pages = (today_pages        >= self._goal_pages)  and "⚑" or "⚐"
-        icons_goals = " " .. icon_time .. " " .. icon_pages
-    end
-    self.current_page_text:setText(self.current_page_text.text .. icons_goals)
+    self.goal_widget_container:paintTo(bb, x + self.goal_widget_container[1]:getSize().w, Screen:getHeight())
     self.current_page_widget_container:paintTo(bb, x + math.floor(Screen:getWidth() / 2), Screen:getHeight())-- - TopBar.MARGIN_BOTTOM_CURRENT_PAGE)
 end
 
@@ -2321,6 +2328,106 @@ function TopBar:addToMainMenu(menu_items)
                     UIManager:setDirty("all", "ui")
                     return true
                 end,
+            },
+            {
+                text = _("Daily goal configuration"),
+                sorting_hint = ("more_tools"),
+                sub_item_table = {
+                    {
+                        text_func = function()
+                            return T(_("Time goal: %1"), self.daily_time_goal)
+                        end,
+                        keep_menu_open = true,
+                        callback = function(touchmenu_instance)
+                            local InputDialog = require("ui/widget/inputdialog")
+                            local server_dialog
+                            daily_time_goal = InputDialog:new{
+                                title = _("Set time goal"),
+                                input = self.daily_time_goal,
+                                input_type = "number",
+                                input_hint = _("Time goal (default is 120 minutes)"),
+                                buttons =  {
+                                    {
+                                        {
+                                            text = _("Cancel"),
+                                            id = "close",
+                                            callback = function()
+                                                UIManager:close(server_dialog)
+                                            end,
+                                        },
+                                        {
+                                            text = _("OK"),
+                                            -- keep_menu_open = true,
+                                            callback = function()
+                                                local goal = daily_time_goal:getInputValue()
+                                                if goal and goal < 0 or goal > 10000 then
+                                                    goal = 120
+                                                end
+                                                if not goal then
+                                                    goal = goal
+                                                end
+                                                self.daily_time_goal = goal
+                                                self.settings:saveSetting("daily_time_goal", goal)
+                                                self.settings:flush()
+                                                UIManager:close(daily_time_goal)
+                                                touchmenu_instance:updateItems()
+                                            end,
+                                        },
+                                    },
+                                },
+                            }
+                            UIManager:show(daily_time_goal)
+                            daily_time_goal:onShowKeyboard()
+                        end,
+                    },
+                    {
+                        text_func = function()
+                            return T(_("Pages goal: %1"), self.daily_pages_goal)
+                        end,
+                        keep_menu_open = true,
+                        callback = function(touchmenu_instance)
+                            local InputDialog = require("ui/widget/inputdialog")
+                            local server_dialog
+                            daily_pages_goal = InputDialog:new{
+                                title = _("Set pages goal"),
+                                input = self.daily_pages_goal,
+                                input_type = "number",
+                                input_hint = _("Pages goal (default is 120 minutes)"),
+                                buttons =  {
+                                    {
+                                        {
+                                            text = _("Cancel"),
+                                            id = "close",
+                                            callback = function()
+                                                UIManager:close(server_dialog)
+                                            end,
+                                        },
+                                        {
+                                            text = _("OK"),
+                                            -- keep_menu_open = true,
+                                            callback = function()
+                                                local goal = daily_pages_goal:getInputValue()
+                                                if goal and goal < 0 or goal > 10000 then
+                                                    goal = 120
+                                                end
+                                                if not goal then
+                                                    goal = goal
+                                                end
+                                                self.daily_pages_goal = goal
+                                                self.settings:saveSetting("daily_pages_goal", goal)
+                                                self.settings:flush()
+                                                UIManager:close(daily_pages_goal)
+                                                touchmenu_instance:updateItems()
+                                            end,
+                                        },
+                                    },
+                                },
+                            }
+                            UIManager:show(daily_pages_goal)
+                            daily_pages_goal:onShowKeyboard()
+                        end,
+                    }
+                },
             },
             {
                 text_func = function()
