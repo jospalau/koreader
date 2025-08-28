@@ -2116,7 +2116,7 @@ function TopBar:paintToDisabled(bb, x, y)
         self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), y + Screen:scaleBySize(6))
     end
 
-    self.goal_widget_container:paintTo(bb, x + self.goal_widget_container[1]:getSize().w, Screen:getHeight())
+    self.goal_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES + self.goal_widget_container[1]:getSize().w / 2, Screen:getHeight())
     self.current_page_widget_container:paintTo(bb, x + math.floor(Screen:getWidth() / 2), Screen:getHeight())-- - TopBar.MARGIN_BOTTOM_CURRENT_PAGE)
 end
 
@@ -2371,6 +2371,8 @@ function TopBar:addToMainMenu(menu_items)
                                                 self.settings:flush()
                                                 UIManager:close(daily_time_goal)
                                                 touchmenu_instance:updateItems()
+                                                self:toggleBar()
+                                                UIManager:setDirty("all", "ui")
                                             end,
                                         },
                                     },
@@ -2418,6 +2420,8 @@ function TopBar:addToMainMenu(menu_items)
                                                 self.settings:flush()
                                                 UIManager:close(daily_pages_goal)
                                                 touchmenu_instance:updateItems()
+                                                self:toggleBar()
+                                                UIManager:setDirty("all", "ui")
                                             end,
                                         },
                                     },
