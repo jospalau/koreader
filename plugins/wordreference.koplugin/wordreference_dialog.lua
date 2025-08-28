@@ -145,7 +145,10 @@ function Dialog:makeDefinition(ui, phrase, html_content, copyright, close_callba
         show_parent = self,
     }
 
-    -- 🚩 FrameContainer sin altura forzada: crecerá con todo el VerticalGroup
+    local WidgetContainer = require("ui/widget/container/widgetcontainer")
+
+
+
     local content_container = FrameContainer:new {
         dimen = {
             x = 0,
@@ -162,25 +165,28 @@ function Dialog:makeDefinition(ui, phrase, html_content, copyright, close_callba
             #bottom_buttons > 0 and button_table or nil,
         }
     }
-
-    local centered_container = CenterContainer:new {
-        dimen = {
-            x = 0,
-            y = 0,
-            w = Screen:getWidth(),
-            h = Screen:getHeight(),
-        },
-        content_container,
-    }
-
     local w = window_w
     local h = content_container:getSize().h or window_h
     local x = math.floor((Screen:getWidth() - w)/2)
     local y = math.floor((Screen:getHeight() - h)/2)
 
+
+    local MovableContainer = require("ui/widget/container/movablecontainer")
+    local movable = MovableContainer:new {
+        --ignore_events = { "swipe","hold","hold_release","hold_pan","touch","pan","pan_release" },
+        is_movable_with_keys = false,
+        content_container,
+    }
+
+    local positioned_container = WidgetContainer:new {
+        align = "center",
+        dimen = { x = 0, y = 0, w = Screen:getWidth(), h = Screen:getHeight() },
+        movable,
+    }
+
     definition_dialog = InputContainer:new {
         dimen = { x = 0, y = 0, w = Screen:getWidth(), h = Screen:getHeight() },
-        centered_container,
+        positioned_container,
     }
 
     definition_dialog:registerTouchZones({
@@ -190,12 +196,17 @@ function Dialog:makeDefinition(ui, phrase, html_content, copyright, close_callba
             screen_zone = { ratio_x = 0, ratio_y = 0, ratio_w = 1, ratio_h = 1 },
             handler = function(ges)
                 local px, py = ges.pos.x, ges.pos.y
-                local inside_window = px >= x and px <= x + w and py >= y and py <= y + h
-                if not inside_window then
+
+                local x, y = content_container.dimen.x, content_container.dimen.y
+                local size = content_container:getSize() or { w = 0, h = 0 }
+                local w, h = size.w, size.h
+
+                if px < x or px > x + w or py < y or py > y + h then
                     UIManager:close(definition_dialog)
                     return true
                 end
-                return false -- deja que la barra reciba el tap
+
+                return false
             end,
         },
     })
