@@ -72,7 +72,7 @@ local config_default = {
     auto_refresh_clock = true,
     wifi_show_disabled = false,
     frontlight_show_off = true,
-    bold = false,
+    bold = true,
 }
 
 local function load_and_update_config()
