@@ -269,12 +269,25 @@ function ListMenuItem:update()
                 wleft_width = wleft_height -- make it squared
                 if bookinfo.has_cover and not bookinfo.ignore_cover then
                     cover_bb_used = true
-                    -- Let ImageWidget do the scaling and give us the final size
-                    local _, _, scale_factor = BookInfoManager.getCachedCoverSize(bookinfo.cover_w, bookinfo.cover_h, max_img_w, max_img_h)
-                    local wimage = ImageWidget:new{
-                        image = bookinfo.cover_bb,
-                        scale_factor = scale_factor,
-                    }
+                    local wimage = nil
+                    local _, _, scale_factor = BookInfoManager.getCachedCoverSize(bookinfo.cover_w, bookinfo.cover_h, max_img_w, max_img_h )
+                    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
+                        local w, h = bookinfo.cover_w, bookinfo.cover_h
+                        local new_h = max_img_h
+                        local new_w = math.floor(w * (new_h / h))
+                        wimage = ImageWidget:new{
+                            image = bookinfo.cover_bb,
+                            width = new_w,
+                            height = new_h,
+                        }
+                    else
+                        -- Let ImageWidget do the scaling and give us the final size
+                        local _, _, scale_factor = BookInfoManager.getCachedCoverSize(bookinfo.cover_w, bookinfo.cover_h, max_img_w, max_img_h)
+                        wimage = ImageWidget:new{
+                            image = bookinfo.cover_bb,
+                            scale_factor = scale_factor,
+                        }
+                    end
                     wimage:_render()
                     local image_size = wimage:getSize() -- get final widget size
                     local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
