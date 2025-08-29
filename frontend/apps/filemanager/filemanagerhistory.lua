@@ -255,6 +255,8 @@ function FileManagerHistory:onMenuHold(item)
     })
     local left_up = self.ui.history.booklist_menu.display_mode_type == "mosaic" and "Move left" or "Move up"
     local right_down = self.ui.history.booklist_menu.display_mode_type == "mosaic" and "Move right" or "Move down"
+    local is_being_read = (self.ui.document and self.ui.document.file and self.ui.document.file == file) and true or false
+
     table.insert(buttons, {
         {
             text = _(left_up),
@@ -283,7 +285,7 @@ function FileManagerHistory:onMenuHold(item)
         },
         {
             text = _(right_down),
-            enabled = item.idx and require("readhistory").hist and item.idx < #require("readhistory").hist,
+            enabled = item.idx and require("readhistory").hist and item.idx < #require("readhistory").hist and not is_being_read,
             callback = function()
                 UIManager:close(self.file_dialog)
                 local ReadHistory = require("readhistory")
@@ -318,7 +320,7 @@ function FileManagerHistory:onMenuHold(item)
         },
         {
             text = _("Remove from history"),
-            enabled = status ~= "tbr",
+            enabled = status ~= "tbr" and not is_being_read,
             callback = function()
                 UIManager:close(self.file_dialog)
                 -- The item's idx field is tied to the current *view*, so we can only pass it as-is when there's no filtering *at all* involved.
