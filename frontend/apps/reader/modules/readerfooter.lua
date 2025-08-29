@@ -527,6 +527,7 @@ ReaderFooter.default_settings = {
     progress_pct_format = "0",
     pages_left_includes_current_page = false,
     initial_marker = false,
+    invert_progress_direction = false,
 }
 
 function ReaderFooter:init()
@@ -2229,14 +2230,6 @@ function ReaderFooter:setTocMarkers(reset)
 end
 
 function ReaderFooter:onUpdateFooter(force_repaint, full_repaint)
-    if self.pageno then
-        self:updateFooterPage(force_repaint, full_repaint)
-    else
-        self:updateFooterPos(force_repaint, full_repaint)
-    end
-end
-
-function ReaderFooter:updateFooterPage(force_repaint, full_repaint)
     if type(self.pageno) ~= "number" then return end
     if self.settings.chapter_progress_bar then
         if self.progress_bar.initial_pos_marker then
@@ -2250,18 +2243,7 @@ function ReaderFooter:updateFooterPage(force_repaint, full_repaint)
     else
         self.progress_bar:setPercentage(self:getBookProgress())
     end
-
-    -- If the footer is on top we want to repaint it always, otherwise it will be double-painted
-    -- in certain circumstances like when changing bright or selecting a new typography configuration
-    --if self.settings.bar_top then
-    --    self:updateFooterText(true, true)
-    --else
-    --    self:updateFooterText(force_repaint, full_repaint)
-    --end
-
-    -- Full repaint always, otherwise, the status bar always covers the topbar side text which
-    -- was made visible recently
-    self:updateFooterText(force_repaint, true)
+    self:updateFooterText(force_repaint, full_repaint)
 end
 
 function ReaderFooter:updateFooterFont()
@@ -2717,6 +2699,13 @@ function ReaderFooter:onToggleChapterProgressBar()
         self.progress_bar.initial_percentage = self.initial_pageno / self.pages
     end
     self:refreshFooter(true)
+end
+
+function ReaderFooter:invertProgressBar(invert_direction)
+    if self.progress_bar then
+        self.progress_bar.invert_direction = invert_direction
+        self:maybeUpdateFooter()
+    end
 end
 
 function ReaderFooter:getBookProgress()
