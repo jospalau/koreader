@@ -1220,6 +1220,14 @@ function FileManager:showDeleteFileDialog(filepath, post_delete_callback, pre_de
             end
             if self:deleteFile(file, is_file) and post_delete_callback then
                 post_delete_callback()
+                if G_reader_settings:isTrue("top_manager_infmandhistory")
+                    and util.getFileNameSuffix(filepath) == "epub"
+                    and _G.all_files
+                    and _G.all_files[filepath] then
+                    _G.all_files[filepath] = nil
+                    local util = require("util")
+                    util.generateStats()
+                end
             end
         end,
     })
@@ -1299,6 +1307,15 @@ function FileManager:showRenameFileDialog(file, is_file)
                     if new_name ~= "" then
                         UIManager:close(dialog)
                         self:renameFile(file, new_name, is_file)
+                        if G_reader_settings:isTrue("top_manager_infmandhistory")
+                        and util.getFileNameSuffix(file) == "epub"
+                        and _G.all_files
+                        and _G.all_files[file] then
+                            _G.all_files[new_name] = _G.all_files[file]
+                            _G.all_files[file] = nil
+                            local util = require("util")
+                            util.generateStats()
+                        end
                     end
                 end,
             },

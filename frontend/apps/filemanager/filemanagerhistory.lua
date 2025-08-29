@@ -989,7 +989,7 @@ function FileManagerHistory:getTBRPosition(file_path)
         -- local doc_settings = DocSettings:open(entry.file)
         -- local summary = doc_settings:readSetting("summary", {})
         -- local status = summary.status or "mbr"
-        local status = _G.all_files[entry.file].status
+        local status = (_G.all_files and _G.all_files[entry.file] and _G.all_files[entry.file].status) and _G.all_files[entry.file].status or ""
         if status == "tbr" then
             table.insert(tbr_items, entry)
         end
