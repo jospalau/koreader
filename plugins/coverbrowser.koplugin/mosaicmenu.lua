@@ -570,7 +570,14 @@ function MosaicMenuItem:update()
                         words = tostring(math.floor(self.show_parent.calibre_data[fname]["words"]/1000)) .. "kw"
                     end
                     if self.status == "tbr" then
-                        words = words
+                        if G_reader_settings:isTrue("top_manager_infmandhistory")
+                        and _G.all_files
+                        and _G.all_files[self.filepath] then
+                            local tbr_pos = self.show_parent.ui and self.show_parent.ui.history:getTBRPosition(self.filepath) or self.show_parent.history:getTBRPosition(self.filepath)
+                            words = "TBR ".. tbr_pos .. " " .. words
+                        else
+                            words = words
+                        end
                     end
                     widget = CenterContainer:new{
                         dimen = dimen,
