@@ -147,14 +147,7 @@ function Dialog:makeDefinition(ui, phrase, html_content, copyright, close_callba
 
     local WidgetContainer = require("ui/widget/container/widgetcontainer")
 
-
-
     local content_container = FrameContainer:new {
-        dimen = {
-            x = 0,
-            y = 0,
-            w = window_w,
-        },
         radius = Size.radius.window,
         padding = 0,
         margin = 0,
@@ -165,11 +158,6 @@ function Dialog:makeDefinition(ui, phrase, html_content, copyright, close_callba
             #bottom_buttons > 0 and button_table or nil,
         }
     }
-    local w = window_w
-    local h = content_container:getSize().h or window_h
-    local x = math.floor((Screen:getWidth() - w)/2)
-    local y = math.floor((Screen:getHeight() - h)/2)
-
 
     local MovableContainer = require("ui/widget/container/movablecontainer")
     local movable = MovableContainer:new {
@@ -189,30 +177,27 @@ function Dialog:makeDefinition(ui, phrase, html_content, copyright, close_callba
         positioned_container,
     }
 
+    local function point_inside_rect(x, y, rect)
+        return x >= rect.x and x < (rect.x + rect.w)
+        and y >= rect.y and y < (rect.y + rect.h)
+    end
+
     definition_dialog:registerTouchZones({
         {
             id = "wordreference_tap_outside",
             ges = "tap",
             screen_zone = { ratio_x = 0, ratio_y = 0, ratio_w = 1, ratio_h = 1 },
             handler = function(ges)
-                local px, py = ges.pos.x, ges.pos.y
-
-                local x, y = content_container.dimen.x, content_container.dimen.y
-                local size = content_container:getSize() or { w = 0, h = 0 }
-                local w, h = size.w, size.h
-
-                if px < x or px > x + w or py < y or py > y + h then
+                if not point_inside_rect(ges.pos.x, ges.pos.y, content_container.dimen) then
                     UIManager:close(definition_dialog)
                     return true
                 end
-
                 return false
             end,
         },
     })
 
     html_widget.dialog = definition_dialog
-
     if VocabBuilder then
         ui.ui = ui
         ui.button_table = button_table
