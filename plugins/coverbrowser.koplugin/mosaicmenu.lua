@@ -558,69 +558,54 @@ function MosaicMenuItem:update()
                 end
                 image:_render()
                 local image_size = image:getSize()
-                if self.show_parent.title == "Reading Planner & Tracker" then
-                    local TextWidget = require("ui/widget/textwidget")
-                    local AlphaContainer = require("ui/widget/container/alphacontainer")
-                    local words = "N/A"
-                    local fname = self.filepath and self.filepath:match("([^/]+)$")
-                    if self.show_parent.calibre_data
-                    and fname
-                    and self.show_parent.calibre_data[fname]
-                    and self.show_parent.calibre_data[fname]["words"] then
-                        words = tostring(math.floor(self.show_parent.calibre_data[fname]["words"]/1000)) .. "kw"
+                -- if self.show_parent.title == "Reading Planner & Tracker" then
+                local TextWidget = require("ui/widget/textwidget")
+                local AlphaContainer = require("ui/widget/container/alphacontainer")
+                local words = "N/A"
+                local fname = self.filepath and self.filepath:match("([^/]+)$")
+                if self.show_parent.calibre_data
+                and fname
+                and self.show_parent.calibre_data[fname]
+                and self.show_parent.calibre_data[fname]["words"] then
+                    words = tostring(math.floor(self.show_parent.calibre_data[fname]["words"]/1000)) .. "kw"
+                end
+                if self.status == "tbr" then
+                    if G_reader_settings:isTrue("top_manager_infmandhistory")
+                    and _G.all_files
+                    and _G.all_files[self.filepath] then
+                        local tbr_pos = self.show_parent.ui and self.show_parent.ui.history:getTBRPosition(self.filepath) or self.show_parent.history:getTBRPosition(self.filepath)
+                        words = "TBR ".. tbr_pos .. " " .. words
+                    else
+                        words = words
                     end
-                    if self.status == "tbr" then
-                        if G_reader_settings:isTrue("top_manager_infmandhistory")
-                        and _G.all_files
-                        and _G.all_files[self.filepath] then
-                            local tbr_pos = self.show_parent.ui and self.show_parent.ui.history:getTBRPosition(self.filepath) or self.show_parent.history:getTBRPosition(self.filepath)
-                            words = "TBR ".. tbr_pos .. " " .. words
-                        else
-                            words = words
-                        end
-                    end
-                    widget = CenterContainer:new{
-                        dimen = dimen,
-                        FrameContainer:new{
-                            width = image_size.w + 2*border_size,
-                            height = image_size.h + 2*border_size,
-                            margin = 0,
-                            padding = 0,
-                            bordersize = border_size,
-                            dim = self.file_deleted,
-                            color = self.file_deleted and Blitbuffer.COLOR_DARK_GRAY or nil,
+                end
+                widget = CenterContainer:new{
+                    dimen = dimen,
+                    FrameContainer:new{
+                        width = image_size.w + 2*border_size,
+                        height = image_size.h + 2*border_size,
+                        margin = 0,
+                        padding = 0,
+                        bordersize = border_size,
+                        dim = self.file_deleted,
+                        color = self.file_deleted and Blitbuffer.COLOR_DARK_GRAY or nil,
 
-                            -- OverlapGroup para solapar imagen y texto
-                            OverlapGroup:new {
-                                dimen = { w = image_size.w + 2*border_size, h = image_size.h + 2*border_size },
-                                image,
-                                AlphaContainer:new {
-                                    alpha = 0.7,
-                                    TextWidget:new {
-                                        text = " " .. words,
-                                        face = Font:getFace("Kalam-Regular", 12),
-                                        max_width = image_size.w + 2*border_size - 8,
-                                        -- fgcolor = Blitbuffer.COLOR_WHITE,
-                                    },
+                        -- OverlapGroup para solapar imagen y texto
+                        OverlapGroup:new {
+                            dimen = { w = image_size.w + 2*border_size, h = image_size.h + 2*border_size },
+                            image,
+                            AlphaContainer:new {
+                                alpha = 0.7,
+                                TextWidget:new {
+                                    text = " " .. words,
+                                    face = Font:getFace("Kalam-Regular", 12),
+                                    max_width = image_size.w + 2*border_size - 8,
+                                    -- fgcolor = Blitbuffer.COLOR_WHITE,
                                 },
                             },
-                        }
+                        },
                     }
-                else
-                    widget = CenterContainer:new{
-                        dimen = dimen,
-                        FrameContainer:new{
-                            width = image_size.w + 2*border_size,
-                            height = image_size.h + 2*border_size,
-                            margin = 0,
-                            padding = 0,
-                            bordersize = border_size,
-                            dim = self.file_deleted,
-                            color = self.file_deleted and Blitbuffer.COLOR_DARK_GRAY or nil,
-                            image,
-                        }
-                    }
-                end
+                }
                 -- Let menu know it has some item with images
                 self.menu._has_cover_images = true
                 self._has_cover_image = true
