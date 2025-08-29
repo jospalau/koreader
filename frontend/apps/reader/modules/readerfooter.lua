@@ -2243,7 +2243,11 @@ function ReaderFooter:onUpdateFooter(force_repaint, full_repaint)
     else
         self.progress_bar:setPercentage(self:getBookProgress())
     end
-    self:updateFooterText(force_repaint, full_repaint)
+    -- Full repaint always, otherwise, the status bar always covers the topbar side text which
+    -- was made visible recently
+    -- Also fixes redraw issues when applying status bar settings with a transparent footer_content
+    -- self:updateFooterText(force_repaint, full_repaint)
+    self:updateFooterText(force_repaint, true)
 end
 
 function ReaderFooter:updateFooterFont()
