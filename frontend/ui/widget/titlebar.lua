@@ -278,11 +278,6 @@ function TitleBar:init()
         else
             table.insert(self.title_group, self.subtitle_widget)
         end
-    else
-        if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
-            table.insert(self.title_group, VerticalSpan:new{width = self.title_subtitle_v_padding})
-            --table.insert(self.title_group, VerticalSpan:new{width = self.title_subtitle_v_padding})
-        end
     end
     table.insert(self, self.title_group)
 
@@ -290,11 +285,20 @@ function TitleBar:init()
     -- and can overflow or underflow. Its height for its containers is
     -- the one we set as self.dimen.h.
 
-    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+    -- In Android (at least in the Boox Palma), the icons are drawn over the menu items
+    -- Instead of leaving space we use self.title_group:getSize().h for Android devices as it was for the titlebar height
+    -- if Device.isAndroid() and pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+    --     local empty_space = 20
+    --     table.insert(self.title_group, VerticalSpan:new{width = empty_space})
+    --     table.insert(self, self.title_group)
+    -- end
+
+    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") and not Device.isAndroid() then
         self.titlebar_height = self.title_widget:getSize().h
     else
         self.titlebar_height = self.title_group:getSize().h --Depending on the font will be different
     end
+
     if self.title_shrink_font_to_fit then
         -- Use, or store, the first title_group height we have computed,
         -- so the TitleBar geometry and the bottom line position stay stable
