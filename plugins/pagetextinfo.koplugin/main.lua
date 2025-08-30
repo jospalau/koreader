@@ -1289,18 +1289,17 @@ This is to be active only if the option flash buttons and menu items or the opti
                     text = _("Enable extra tweaks"),
                     checked_func = function() return self.settings:isTrue("enable_extra_tweaks") end,
                     help_text = _([[Extra tweaks to have them all gathered under a setting.]]),
-                    callback = function()
+                    callback = function(touchmenu_instance)
                         local enable_extra_tweaks = not self.settings:isTrue("enable_extra_tweaks")
                         self.settings:saveSetting("enable_extra_tweaks", enable_extra_tweaks)
                         self.settings:flush()
 
-                        local FileManager = require("apps/filemanager/filemanager").instance
-                        if FileManager then
-                            --FileManager:onRefresh()
-                            local path = FileManager.instance.file_chooser.path
-                            --FileManager:setupLayout()
-                            FileManager.instance.file_chooser:changeToPath(path)
-                        end
+                        local path = FileManager.instance.file_chooser.path
+                        touchmenu_instance:closeMenu()
+                        --self.ui.menu:onCloseFileManagerMenu()
+                        local cur_page = FileManager.instance.file_chooser.page
+                        FileManager:showFiles(path)
+                        FileManager.instance.file_chooser:onGotoPage(cur_page)
                         return true
                     end,
                 },
