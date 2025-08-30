@@ -1318,6 +1318,10 @@ end
     which item.key = value
 --]]
 function Menu:switchItemTable(new_title, new_item_table, itemnumber, itemmatch, new_subtitle)
+    -- if type(itemmatch) == "table" and itemmatch["dummy"] ~= nil then
+    --     print(">>> itemmatch con dummy detectado")
+    --     print(debug.traceback("Dummy detectado", 2))
+    -- end
     local no_recalculate_dimen = true
 
     if new_item_table then
@@ -1338,7 +1342,10 @@ function Menu:switchItemTable(new_title, new_item_table, itemnumber, itemmatch, 
     end
 
     if type(itemmatch) == "table" then
-        local key, value = next(itemmatch)
+        if itemmatch.dummy ~= nil then
+            itemmatch = nil
+        end
+        local key, value = next(itemmatch or {})
         for num, item in ipairs(self.item_table) do
             if item[key] == value then
                 itemnumber = num
