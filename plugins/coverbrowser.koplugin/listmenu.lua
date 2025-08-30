@@ -921,11 +921,25 @@ end
 
 -- As done in MenuItem
 function ListMenuItem:onFocus()
+    local filemanager = require("apps/filemanager/filemanager")
+    local ui = filemanager.instance or (require("apps/reader/readerui").instance)
+
+    local pagetextinfo = ui and ui.pagetextinfo or filemanager.pagetextinfo
+    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+        self._underline_container.linesize = 1
+    end
     self._underline_container.color = Blitbuffer.COLOR_BLACK
     return true
 end
 
 function ListMenuItem:onUnfocus()
+    local filemanager = require("apps/filemanager/filemanager")
+    local ui = filemanager.instance or (require("apps/reader/readerui").instance)
+
+    local pagetextinfo = ui and ui.pagetextinfo or filemanager.pagetextinfo
+    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+        self._underline_container.linesize = 0
+    end
     self._underline_container.color = Blitbuffer.COLOR_WHITE
     return true
 end
