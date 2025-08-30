@@ -182,6 +182,11 @@ function WordReference:showLanguageSettings(ui, close_callback)
 				if close_callback then
 					close_callback()
 				end
+				if require("apps/reader/readerui").instance then
+					-- require("apps/reader/readerui").instance.highlight:onClearHighlight()
+					UIManager:close(require("apps/reader/readerui").instance.highlight.highlight_dialog)
+					UIManager:close(require("apps/reader/readerui").instance.highlight:onShowHighlightMenu())
+				end
 			end,
 		})
 	end
