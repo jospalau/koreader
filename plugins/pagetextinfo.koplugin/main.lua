@@ -1140,6 +1140,16 @@ function PageTextInfo:onReaderReady()
     -- self.ui.menu:registerToMainMenu(self)
     self.view:registerViewModule("pagetextinfo", self)
     self.initialized = true
+
+
+    -- This is just for Android devices, at least the Boox Palma
+    -- We have self.ui.gestures.ignore_hold_corners == true
+    -- We exit from KOReader and for some reason KOReader is stopped or we stop it
+    -- When we come back to KOReader and we open a document, the top bar lock icon is on
+    -- because self.ui.gestures.ignore_hold_corners is still true so we set it always to be false when opening the document
+    if Device:isAndroid() then
+        self.ui.gestures:onIgnoreHoldCorners(false)
+    end
     -- self.insertSession = function()
     --     if self.ui.statistics then
     --         if self.ui.statistics:insertSession() and self.view.topbar.is_enabled then
