@@ -326,15 +326,14 @@ function TopBar:getDateAndVersion()
 end
 
 function TopBar:getTodayBookStats()
-    local now_stamp = os.time()
     local now_t = os.date("*t")
-    local from_begin_day = now_t.hour * 3600 + now_t.min * 60 + now_t.sec
-    local start_today_time = now_stamp - from_begin_day
+    local start_today_time = os.time{year=now_t.year, month=now_t.month, day=now_t.day, hour=0, min=0, sec=0}
+
     local DataStorage = require("datastorage")
     local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
     local conn = SQ3.open(db_location)
     local sql_stmt = [[
-        SELECT sum(duration), SUM(total_pages)
+        SELECT IFNULL(sum(duration), 0), IFNULL(sum(total_pages), 0)
         FROM   wpm_stat_data
         WHERE  start_time >= %d
     ]]
