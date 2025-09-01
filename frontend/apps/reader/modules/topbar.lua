@@ -1624,13 +1624,13 @@ function TopBar:toggleBar(light_on)
 
             local today_duration, __ = self:getTodayBookStats()
             today_duration = today_duration + os.time() - self.start_session_time
-            local today_duration_number = math.floor((today_duration / 60) * 10) / 10
-            local icon_goal_time = (self.daily_time_goal - today_duration_number) .. "m"
+            local today_duration_number = math.ceil(today_duration / 60)
+            local text = (self.daily_time_goal - today_duration_number) .. "m"
 
             if today_duration_number >= self.daily_time_goal then
-                icon_goal_time = "⚑"
+                text = "⚑ " .. (math.floor(today_duration / 60) - self.daily_time_goal) .. "m"
             end
-            self.goal_text:setText(icon_goal_time)
+            self.goal_text:setText(text)
         end
         if self.ui.gestures.ignore_hold_corners then
             -- If page text info plugin highlight_all_words_vocabulary_builder_and_notes setting is true, then self.ui.gestures.ignore_hold_corners will be true so the corner words can be double tapped
