@@ -159,6 +159,7 @@ function ReaderStatistics:init()
         ["Kobo_spaBW"] = 10, -- Clara BW
         ["Kobo_spaColour"] = 11, -- Clara Colour
         ["Kobo_monza"] = 12, -- Libra Colour
+        ["Physical book"] = 99, -- Reserved for physical book sessions
         ["Emulator"] = 100 -- Libra Colour
     }
 
