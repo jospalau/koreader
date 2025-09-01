@@ -1166,6 +1166,7 @@ function TopBar:resetSession()
     self.start_session_time = now_ts
     self.init_page = nil
     self.init_page_screens = nil
+    self:toggleBar()
 end
 
 function TopBar:classifyLeading(lf, x_height, ascender, descender)
