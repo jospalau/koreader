@@ -595,6 +595,15 @@ function RulerOverlay:onResume()
     return true
 end
 
+function PageTextInfo:onResume()
+    if Device:isAndroid() then
+        UIManager:scheduleIn(0.6, function()
+            UIManager:setDirty(nil, "full")
+        end)
+    end
+    return true
+end
+
 function PageTextInfo:onSwipe(_, ges)
     if not self.initialized then return end
     local direction = BD.flipDirectionIfMirroredUILayout(ges.direction)
