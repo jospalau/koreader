@@ -970,10 +970,11 @@ function FileManagerHistory:sortHistoryByStatus()
 
     local new_hist = {}
     for _, v in ipairs(reading) do table.insert(new_hist, v) end
+    for _, v in ipairs(abandoned) do table.insert(new_hist, v) end
     for _, v in ipairs(tbr)     do table.insert(new_hist, v) end
     for _, v in ipairs(mbr)     do table.insert(new_hist, v) end
-    for _, v in ipairs(others)  do table.insert(new_hist, v) end
-    for _, v in ipairs(abandoned) do table.insert(new_hist, v) end  -- al final siempre
+    for _, v in ipairs(others)  do table.insert(new_hist, v) end  -- al final siempre
+
     ReadHistory.hist = new_hist
     ReadHistory:_flush()
 end
