@@ -1628,7 +1628,7 @@ function TopBar:toggleBar(light_on)
             local text = (self.daily_time_goal - today_duration_number) .. "m"
 
             if today_duration_number >= self.daily_time_goal then
-                text = "⚑ " .. (math.floor(today_duration / 60) - self.daily_time_goal) .. "m"
+                text = "⚑ " .. (today_duration_number - self.daily_time_goal) .. "m"
             end
             self.goal_text:setText(text)
         end
