@@ -1298,6 +1298,10 @@ function ReaderDictionary:showDict(word, results, boxes, link, dict_close_callba
 
     self:dismissLookupInfo()
     if results and results[1] then
+        if Device.model == "Kobo_cadmus" then
+            local util = require("ffi/util")
+            util.usleep(250000)
+        end
         UIManager:show(self.dict_window)
         if not results.lookup_cancelled and self._lookup_start_time
             and (time.now() - self._lookup_start_time) > self.quick_dismiss_before_delay then
