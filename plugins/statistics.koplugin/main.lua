@@ -177,6 +177,7 @@ function ReaderStatistics:init()
         [10] = "KoCBW",
         [11] = "KoClC",
         [12] = "KoLiC",
+        [99] = "PhyB",
         [100] = "Em"
     }
 
