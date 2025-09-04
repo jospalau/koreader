@@ -2255,10 +2255,18 @@ function ReaderFooter:updateFooterFont()
     self.filler_space_width = nil
     self.footer_text_face = Font:getFace(self.settings.text_font_face and self.settings.text_font_face or self.text_font_face, self.settings.text_font_size)
     self.footer_text:free()
+    local footer_text_face = Font:getFace("NotoSans-Regular.ttf", self.settings.text_font_size)
+    local w = TextWidget:new{ text = "", face = footer_text_face, }
+    local forced_baseline = w:getBaseline()
+    local forced_height = w:getSize().h
+    w:free()
+
     self.footer_text = TextWidget:new{
         text = self.footer_text.text,
         face = self.footer_text_face,
         bold = self.settings.text_font_bold,
+        forced_baseline = forced_baseline,
+        forced_height = forced_height,
     }
     self.text_container[1] = self.footer_text
 end
