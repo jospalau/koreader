@@ -710,29 +710,35 @@ function CalendarDayView:setupView()
         end
     end
 
-        self.kv_pairs = self.reader_statistics:getBooksFromPeriod(self.day_ts, self.day_ts + 86400)
-        local seconds_books = self.reader_statistics:getReadingDurationBySecond(self.day_ts)
-        if self.reader_statistics.id_curr_book then
-            local FFIUtil = require("ffi/util")
-            local T = FFIUtil.template
-            -- if seconds_books[self.reader_statistics.id_curr_book] == nil then
-            table.insert(self.kv_pairs, {
-                self.reader_statistics.data.title,
-                -- T(N_("%1 (1 page)", "%1 (%2 pages)", tonumber(result_book[2][i])), datetime.secondsToClockDuration(user_duration_format, tonumber(result_book[3][i]), false), tonumber(result_book[2][i])),
-                T("CS %1", datetime.secondsToClockDuration(G_reader_settings:readSetting("duration_format", "classic"), os.time() - self.reader_statistics.start_current_period)),
-                book_id = self.reader_statistics.id_curr_book + 1,
-                duration = os.time() - self.reader_statistics.start_current_period,
-                -- hold_callback = function(kv_page, kv_item)
-                --     self:resetStatsForBookForPeriod(id_book, result_book[4][i], result_book[5][i], result_book[1][i], function()
-                --         kv_page:removeKeyValueItem(kv_item) -- Reset, refresh what's displayed
-                --     end)
-                -- end,
-            })
-            seconds_books[self.reader_statistics.id_curr_book + 1] = {
-                title = self.reader_statistics.data.title,
-                periods = {},
-            }
-            -- end
+    self.kv_pairs = self.reader_statistics:getBooksFromPeriod(self.day_ts, self.day_ts + 86400)
+    local seconds_books = self.reader_statistics:getReadingDurationBySecond(self.day_ts)
+
+    local day_ts = self.day_ts - (self.reader_statistics.settings.calendar_day_start_hour or 0) * 3600
+                            - (self.reader_statistics.settings.calendar_day_start_minute or 0) * 60
+    local day = os.date("%Y-%m-%d", day_ts + 10800) -- use 03:00 to determine date (summer time change)
+    local today = os.date("%Y-%m-%d")
+
+    if self.reader_statistics.id_curr_book and day == today then
+        local FFIUtil = require("ffi/util")
+        local T = FFIUtil.template
+        -- if seconds_books[self.reader_statistics.id_curr_book] == nil then
+        table.insert(self.kv_pairs, {
+            self.reader_statistics.data.title,
+            -- T(N_("%1 (1 page)", "%1 (%2 pages)", tonumber(result_book[2][i])), datetime.secondsToClockDuration(user_duration_format, tonumber(result_book[3][i]), false), tonumber(result_book[2][i])),
+            T("CS %1", datetime.secondsToClockDuration(G_reader_settings:readSetting("duration_format", "classic"), os.time() - self.reader_statistics.start_current_period)),
+            book_id = self.reader_statistics.id_curr_book + 1,
+            duration = os.time() - self.reader_statistics.start_current_period,
+            -- hold_callback = function(kv_page, kv_item)
+            --     self:resetStatsForBookForPeriod(id_book, result_book[4][i], result_book[5][i], result_book[1][i], function()
+            --         kv_page:removeKeyValueItem(kv_item) -- Reset, refresh what's displayed
+            --     end)
+            -- end,
+        })
+        seconds_books[self.reader_statistics.id_curr_book + 1] = {
+            title = self.reader_statistics.data.title,
+            periods = {},
+        }
+        -- end
         table.insert(seconds_books[self.reader_statistics.id_curr_book+1].periods, { start = self.reader_statistics.start_current_period - self.day_ts, finish = os.time() - self.day_ts, device = self.reader_statistics.devices_reversed[self.reader_statistics.devices[Device.model]] })
     end
     for _, kv in ipairs(self.kv_pairs) do
@@ -747,7 +753,10 @@ function CalendarDayView:setupView()
     --   text = _(dump(self.kv_pairs))
     -- })
     table.sort(self.kv_pairs, function(a,b) return a.duration > b.duration end) --sort by value
-    self.title = self:getTitle()
+    local total_day = 0
+    for _, pair in ipairs(self.kv_pairs) do total_day = total_day + pair.duration end
+
+    self.title = self:getTitle() .. tostring(string.format(", %02d:%02d:%02d", math.floor(total_day/3600), math.floor((total_day%3600)/60), total_day%60))
 
     self.show_page = 1
     self.title_bar:setTitle(self.title)
