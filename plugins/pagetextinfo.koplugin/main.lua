@@ -500,6 +500,7 @@ function PageTextInfo:toggleHighlightAllWordsVocabulary(toggle)
         self:updateNotes()
     end
     self.view.topbar:toggleBar()
+    self.view.doublebar:toggleBar()
     UIManager:setDirty(self.view.dialog, "ui")
     return true
 end
@@ -604,6 +605,7 @@ function PageTextInfo:onSwipe(_, ges)
             Device.input.disable_double_tap = false
             self.ui.gestures:onIgnoreHoldCorners(false)
             self.view.topbar:toggleBar()
+            self.view.doublebar:toggleBar()
             UIManager:setDirty(self.view.dialog, "ui")
             return self:toggleHighlightAllWordsVocabulary(not self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes"))
         elseif not self.ui.disable_double_tap then
@@ -612,6 +614,7 @@ function PageTextInfo:onSwipe(_, ges)
             Device.input.disable_double_tap = self.ui.disable_double_tap
             self.settings:saveSetting("highlight_all_words_vocabulary_builder_and_notes", false)
             self.view.topbar:toggleBar()
+            self.view.doublebar:toggleBar()
             UIManager:setDirty(self.view.dialog, "ui")
         elseif self.ui.disable_double_tap then
             self.ui.disable_double_tap = false
@@ -622,6 +625,7 @@ function PageTextInfo:onSwipe(_, ges)
             self.settings:saveSetting("highlight_all_words_vocabulary_builder_and_notes", false)
             self.ui.disable_double_tap = true
             self.view.topbar:toggleBar()
+            self.view.doublebar:toggleBar()
             UIManager:setDirty(self.view.dialog, "ui")
         end
     elseif direction == "north" then

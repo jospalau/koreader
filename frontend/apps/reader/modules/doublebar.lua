@@ -208,6 +208,14 @@ function DoubleBar:onReaderReady()
         padding_bottom = self.bottom_padding,
     }
 
+    self.ignore_corners_widget_container = left_container:new{
+        dimen = Geom:new(),
+        TextWidget:new{
+            text =  "",
+            face = Font:getFace("symbols", 12),
+            fgcolor = Blitbuffer.COLOR_BLACK,
+        },
+    }
 end
 
 function DoubleBar:onToggleShowDoubleBar()
@@ -306,6 +314,15 @@ function DoubleBar:toggleBar()
         -- self.progress_bar.ticks = self.ui.toc:getTocTicksFlattened()
         self.progress_bar:setPercentage(self.view.footer.pageno / self.view.footer.pages)
         self.progress_bar_chapters:setPercentage(self.view.footer:getChapterProgress(true))
+        if self.ui.gestures.ignore_hold_corners then
+            if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
+                self.ignore_corners = "\u{F0F6}"
+            else
+                self.ignore_corners = "🔒"
+            end
+        else
+            self.ignore_corners = ""
+        end
     else
         self.session_time_text:setText("")
         self.progress_text:setText("")
@@ -344,6 +361,13 @@ function DoubleBar:paintTo(bb, x, y)
         -- Bottom right
         -- self[6][1].dimen.w = self[6][1][1]:getSize().w
         -- self[6]:paintTo(bb, x + Screen:getWidth() - self[6][1]:getSize().w - DoubleBar.MARGIN_SIDES, Screen:getHeight() - DoubleBar.MARGIN_BOTTOM)
+
+        self.ignore_corners_widget_container[1]:setText(self.ignore_corners)
+        if Device:isAndroid() then
+            self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(20), y + Screen:scaleBySize(6))
+        else
+            self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), y + Screen:scaleBySize(6))
+        end
 end
 
 -- This is called after self.ui.menu:registerToMainMenu(self) in the init method
@@ -360,6 +384,8 @@ function DoubleBar:addToMainMenu(menu_items)
         -- end,
         callback = function()
             UIManager:broadcastEvent(Event:new("ToggleShowDoubleBar"))
+            UIManager:setDirty("all", "ui")
+            return true
         end
     }
 end
