@@ -252,8 +252,8 @@ function Device:init()
     }
 
     local adjust_deadzone = function(this, ev)
-
-		if android.prop.product == "boox" and ev.type == C.EV_ABS and ev.code == C.ABS_MT_POSITION_Y and ev.value <= 5 then
+		-- adb logcat --pid=$(adb shell pidof org.koreader.launcher) | grep -i ABS_MT_POSITION_Y
+		if android.prop.product == "boox" and ev.type == C.EV_ABS and ev.code == C.ABS_MT_POSITION_Y and ev.value < 12 then
 			ev.value = 31
 		end
         if android.prop.product == "boox" and ev.type == C.EV_ABS and ev.code == C.ABS_MT_POSITION_Y and ev.value >= 1640 then
