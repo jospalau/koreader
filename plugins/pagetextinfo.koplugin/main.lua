@@ -3093,7 +3093,7 @@ function PageTextInfo:onGetTextPage()
     local x_height_mm = 0
     local arcminutes_40cm = 0
     local font_weight = 0
-    if face_base == nil then
+    if face_base == nil or Device:isAndroid() then
         x_height = "N/A"
         x_height_mm = "N/A"
         arcminutes_40cm = "N/A"
