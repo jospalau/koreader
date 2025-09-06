@@ -943,7 +943,7 @@ function TopBar:onReaderReady()
             fgcolor = Blitbuffer.COLOR_BLACK,
         },
     }
-    if Device:isAndroid() then
+    if Device:isAndroid() and Device.screen:getWidth() < 1072 then
         TopBar.MARGIN_SIDES =  Screen:scaleBySize(20)
     end
     self.status_bar = self.view.footer_visible
@@ -1344,7 +1344,7 @@ function TopBar:toggleBar(light_on)
         self.progress_bar_book.height = self.progress_book_text.face.size
         self.progress_chapter_bar.height = self.chapter_text.face.size
 
-        if Device:isAndroid() then
+        if Device:isAndroid() and Device.screen:getWidth() < 1072 then
             self.progress_bar_book.width = 150
             self.progress_chapter_bar.width = 150
         else
@@ -1537,7 +1537,7 @@ function TopBar:toggleBar(light_on)
             end
         end
         if self.option == 1 or self.option == 2 or self.option == 3 then
-            if Device:isAndroid() then
+            if Device:isAndroid() and Device.screen:getWidth() < 1072 then
                 if configurable.h_page_margins[1] == 20 and configurable.t_page_margin == self.space_after_alt_bar + 9 + 6 and configurable.h_page_margins[2] == 20 and configurable.b_page_margin == 15 then
                     self.test_light_text:setText(" ● " .. self.frontlight)
                 else
@@ -1551,7 +1551,7 @@ function TopBar:toggleBar(light_on)
                 end
             end
         elseif self.option == 4 then
-            if Device:isAndroid() then
+            if Device:isAndroid() and Device.screen:getWidth() < 1072 then
                 if configurable.h_page_margins[1] == 20 and configurable.t_page_margin == 9 + 6 and configurable.h_page_margins[2] == 20 and configurable.b_page_margin == 15 then
                     self.test_light_text:setText(" ● " .. self.frontlight)
                 else
@@ -1602,7 +1602,7 @@ function TopBar:toggleBar(light_on)
         --         self.frontlight = ""
         --     end
         -- end
-        -- if Device:isAndroid() then
+        -- if Device:isAndroid() and Device.screen:getWidth() < 1072 then
         --     if configurable.h_page_margins[1] == 20 and configurable.t_page_margin == 9 + 6 and configurable.h_page_margins[2] == 20 and configurable.b_page_margin == 15 then
         --         self.test_light_text:setText(" ● " .. self.frontlight)
         --     else
@@ -1737,7 +1737,7 @@ function TopBar:paintTo(bb, x, y)
         if self.view.footer.settings.bar_top then
             -- self.stats_times_widget_container:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() -  Screen:scaleBySize(6))
             self.author_information_widget_container:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() - Screen:scaleBySize(6))
-            if Device:isAndroid() then
+            if Device:isAndroid() and Device.screen:getWidth() < 1072 then
                 self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(20), Screen:getHeight() - TopBar.MARGIN_BOTTOM)
             else
                 self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), Screen:getHeight() - TopBar.MARGIN_BOTTOM)
@@ -1756,7 +1756,7 @@ function TopBar:paintTo(bb, x, y)
             end
         else
             self.author_information_widget_container:paintTo(bb, x + Screen:scaleBySize(4), y + Screen:scaleBySize(6))
-            if Device:isAndroid() then
+            if Device:isAndroid() and Device.screen:getWidth() < 1072 then
                 self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(20), y + Screen:scaleBySize(6))
             else
                 self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), y + Screen:scaleBySize(6))
@@ -1807,7 +1807,7 @@ function TopBar:paintTo(bb, x, y)
         -- end
 
         self.ignore_corners_widget_container[1]:setText(self.ignore_corners)
-        if Device:isAndroid() then
+        if Device:isAndroid() and Device.screen:getWidth() < 1072 then
             self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(20), y + Screen:scaleBySize(6))
         else
             self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), y + Screen:scaleBySize(6))
@@ -2115,13 +2115,13 @@ end
 function TopBar:paintToDisabled(bb, x, y)
     self.ignore_corners_widget_container[1]:setText(self.ignore_corners)
     if self.status_bar and self.status_bar == true and self.view.footer.settings.bar_top then
-        if Device:isAndroid() then
+        if Device:isAndroid() and Device.screen:getWidth() < 1072 then
             self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(20), Screen:getHeight() - TopBar.MARGIN_BOTTOM)
         else
             self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), Screen:getHeight() - TopBar.MARGIN_BOTTOM)
         end
     else
-        if Device:isAndroid() then
+        if Device:isAndroid() and Device.screen:getWidth() < 1072 then
             self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(20), y + Screen:scaleBySize(6))
         else
             self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), y + Screen:scaleBySize(6))
@@ -2151,7 +2151,7 @@ function TopBar:onAdjustMarginsTopbar()
 
         local bottom_margin = 15
         local margins = {}
-        if Device:isAndroid() then
+        if Device:isAndroid() and Device.screen:getWidth() < 1072 then
             if self.show_bar_in_top_bar then
                 if self.ui.document.configurable.t_page_margin ~= self.space_after_alt_bar + 9 + 6 or
                 self.ui.document.configurable.b_page_margin ~= bottom_margin or
