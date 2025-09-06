@@ -65,7 +65,7 @@ endef
 
 # files to link from main directory
 INSTALL_FILES=reader.lua setupkoenv.lua frontend resources defaults.lua datastorage.lua \
-		l10n tools README.md COPYING
+		l10n tools README.md COPYING dateandversion
 
 OUTPUT_DIR_ARTIFACTS = $(abspath $(OUTPUT_DIR))/!(cache|cmake|data|history|staging|thirdparty)
 OUTPUT_DIR_DATAFILES = $(OUTPUT_DIR)/data/*

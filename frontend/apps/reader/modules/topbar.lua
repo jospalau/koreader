@@ -316,8 +316,7 @@ function TopBar:getBooksOpened()
 end
 
 function TopBar:getDateAndVersion()
-    local DataStorage = require("datastorage")
-    local date_and_version_file_path = DataStorage:getDataDir() .. "/dateandversion"
+    local date_and_version_file_path = "./dateandversion"
     local date_and_version = io.open(date_and_version_file_path, "r")
     if date_and_version == nil then return "No dateandversion file" end
 
