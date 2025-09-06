@@ -399,8 +399,10 @@ function ListMenuItem:update()
                         if G_reader_settings:isTrue("top_manager_infmandhistory")
                         and _G.all_files
                         and _G.all_files[self.filepath] then
-                            local tbr_pos = self.show_parent.ui and self.show_parent.ui.history:getTBRPosition(self.filepath) or self.show_parent.history:getTBRPosition(self.filepath)
-                            pages_str = _("TBR " .. tbr_pos)
+                            local tbr_pos = self.show_parent.ui and self.show_parent.ui.history:getTBRPosition(self.filepath) or (self.show_parent.history and self.show_parent.history:getTBRPosition(self.filepath))
+                            if tbr_pos ~= nil then
+                                pages_str = _("TBR " .. tbr_pos)
+                            end
                         else
                             pages_str = _("TBR ")
                         end
