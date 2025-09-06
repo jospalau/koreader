@@ -847,6 +847,7 @@ function ReaderFooter:unscheduleFooterAutoRefresh()
 end
 
 function ReaderFooter:shouldBeRepainted()
+    if self.ui and self.ui.document.file ~= "epub" then return true end
     -- Since self.autoRefreshFooter() repaints also the topbar
     -- Repaint also when topbar is active even if footer is not visible
     if not self.view.footer_visible and not self.view.topbar.settings:isTrue("show_top_bar") then

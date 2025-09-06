@@ -387,6 +387,7 @@ function FileManagerHistory.getMenuInstance()
 end
 
 function FileManagerHistory:onMultiSwipe(arg, ges_ev)
+    if require("apps/reader/readerui").instance and util.getFileNameSuffix(require("apps/reader/readerui").instance.document.file) ~= "epub" then return true end
     local Event = require("ui/event")
     if string.find("east north", ges_ev.multiswipe_directions) then
         -- UIManager:broadcastEvent(Event:new("ShowFileSearch", "", function()

@@ -368,10 +368,9 @@ function ReaderView:paintTo(bb, x, y)
         else
             self.topbar:paintToDisabled(bb, x, y)
         end
-    end
-
-    if G_reader_settings:isTrue("show_double_bar") then
-        self.doublebar:paintTo(bb, x, y)
+        if G_reader_settings:isTrue("show_double_bar") then
+            self.doublebar:paintTo(bb, x, y)
+        end
     end
 
     -- paint dogear
