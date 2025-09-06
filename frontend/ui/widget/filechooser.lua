@@ -110,7 +110,7 @@ function FileChooser:getList(path, collate)
     local ok, iter, dir_obj = pcall(lfs.dir, path)
     local home_dir = G_reader_settings:readSetting("home_dir")
     local complete
-    if path:find(home_dir, 1, true) and path ~= home_dir then
+    if home_dir and path:find(home_dir, 1, true) and path ~= home_dir then
         complete = 0
     end
     if ok then
