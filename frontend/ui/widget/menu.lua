@@ -1553,7 +1553,7 @@ function Menu:onMenuSelect(item)
             self:onMenuChoice(item)
         end
         if self.close_callback then
-            self.close_callback()
+            self.close_callback(true)
         end
     else
         -- save menu title for later resume

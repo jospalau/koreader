@@ -745,15 +745,17 @@ function ReaderSearch:onShowFindAllResults(not_cached)
             UIManager:show(InfoMessage:new{ text = text .. indent .. last })
             return true
         end,
-        close_callback = function()
+        close_callback = function(selected)
             self.findall_results_item_index = self.result_menu:getFirstVisibleItemIndex() -- save page number to reopen
             UIManager:close(self.result_menu)
             UIManager:setDirty(self.dialog, "ui")
             UIManager:close(self.input_dialog)
-            self.ui.searching = false
-            --UIManager:show(Notification:new{
-            --    text = _("close searching"),
-            --})
+            if selected == nil then
+                self.ui.searching = false
+                UIManager:show(Notification:new{
+                text = _("close searching"),
+                })
+            end
             UIManager:close(self.result_menu)
         end,
     }
@@ -936,6 +938,10 @@ function ReaderSearch:gotoResultsItem(index)
             }
         },
         tap_close_callback = function()
+            self.ui.searching = false
+            UIManager:show(Notification:new{
+                text = _("close searching"),
+            })
             self:restorePageView()
         end,
     }
