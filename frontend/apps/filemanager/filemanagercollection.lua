@@ -66,6 +66,22 @@ function FileManagerCollection:getCollectionTitle(collection_name)
          or collection_name
 end
 
+
+function FileManagerCollection:getTotalAndRead(collection_name)
+    local books = ReadCollection.coll[collection_name]
+    local count = 0
+    for _ in pairs(books) do
+        count = count + 1
+    end
+    local read = 0
+    for book_path, book_table in pairs(books) do
+        if _G.all_files[book_path] and _G.all_files[book_path] and _G.all_files[book_path].status == "complete" then
+            read = read + 1
+        end
+    end
+    return tostring(read) .. "/" .. tostring(count)
+end
+
 function FileManagerCollection:refreshFileManager()
     if self.files_updated then
         if self.ui.file_chooser then
@@ -203,7 +219,7 @@ function FileManagerCollection:getBookListTitle(item_table)
     local coll_name = self.booklist_menu.path
     local marker = self.getCollMarker(coll_name)
     local template = marker and "%1 (%2) " .. marker or "%1 (%2)"
-    local title = T(template, self:getCollectionTitle(coll_name), #item_table)
+    local title = T(template, self:getCollectionTitle(coll_name), self:getTotalAndRead(coll_name))
     local subtitle = ""
     if self.match_table then
         subtitle = {}
@@ -1095,7 +1111,7 @@ function FileManagerCollection:updateCollListItemTable(do_init, item_number, tog
             end
             table.insert(item_table, {
                 text      = self:getCollectionTitle(coll_name),
-                mandatory = mandatory,
+                mandatory = self:getTotalAndRead(coll_name),
                 name      = coll_name,
                 order     = ReadCollection.coll_settings[coll_name].order,
             })
@@ -1153,7 +1169,7 @@ function FileManagerCollection:updateSeriesListItemTable(do_init, toggle_sort)
             if ReadCollection.coll_settings[name]["series"] then
                 table.insert(item_table, {
                     text      = self:getCollectionTitle(name),
-                    mandatory = mandatory,
+                    mandatory = self:getTotalAndRead(name),
                     name      = name,
                     order     = ReadCollection.coll_settings[name].order,
                 })
