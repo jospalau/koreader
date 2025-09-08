@@ -1036,7 +1036,7 @@ function FileManagerCollection:onShowCollList(file_or_selected_collections, call
             self.coll_list = nil
         end
     end
-    self:updateCollListItemTable(true) -- init
+    self:updateCollListItemTable(true, nil, true) -- init
     UIManager:show(self.coll_list)
     return true
 end
@@ -1073,7 +1073,7 @@ function FileManagerCollection:onShowSeriesList(file_or_files, caller_callback, 
             self.coll_list = nil
         end
     end
-    self:updateSeriesListItemTable(true) -- init
+    self:updateSeriesListItemTable(true, true) -- init
     UIManager:show(self.coll_list)
     return true
 end
@@ -1855,7 +1855,8 @@ function FileManagerCollection:genAddToCollectionButton(file_or_files, caller_pr
 end
 
 function FileManagerCollection:onDoubleTapBottomRightCollections(arg, ges_ev)
-    if not self.order then self.order = true
+    if self.order == nil or self.order == true then
+        self.order = false
     else
         self.order = not self.order
     end
