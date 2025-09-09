@@ -13,12 +13,12 @@ local LuaSettings = require("luasettings")
 local DataStorage = require("datastorage")
 local Blitbuffer = require("ffi/blitbuffer")
 local left_container = require("ui/widget/container/leftcontainer")
+local bottom_container = require("ui/widget/container/bottomcontainer")
 local right_container = require("ui/widget/container/rightcontainer")
 local center_container = require("ui/widget/container/centercontainer")
 local Font = require("ui/font")
 local TextWidget = require("ui/widget/textwidget")
 local datetime = require("datetime")
-local BottomContainer = require("ui/widget/container/bottomcontainer")
 local FrameContainer = require("ui/widget/container/framecontainer")
 local VerticalGroup = require("ui/widget/verticalgroup")
 local SQ3 = require("lua-ljsqlite3/init")
@@ -55,6 +55,14 @@ function DoubleBar:init()
 end
 
 function DoubleBar:onReaderReady()
+
+    local font = self.view.topbar.settings:readSetting("font_title")
+    and self.view.topbar.settings:readSetting("font_title")
+    or "myfont3"
+
+    local font_size= self.view.topbar.settings:readSetting("font_size_title")
+    and self.view.topbar.settings:readSetting("font_size_title") or 12
+
     if Device:isAndroid() then
         DoubleBar.MARGIN_SIDES =  Screen:scaleBySize(30)
     end
@@ -72,7 +80,7 @@ function DoubleBar:onReaderReady()
 
     self.wpm_text = TextWidget:new{
         text = self.wpm_session .. "wpm",
-        face = Font:getFace("myfont4"),
+        face = Font:getFace(font, font_size),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
@@ -92,14 +100,14 @@ function DoubleBar:onReaderReady()
 
     self.title_text = TextWidget:new{
         text =  "",
-        face = Font:getFace("myfont4"),
+        face = Font:getFace(font, font_size),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
 
     self.chapter_text = TextWidget:new{
         text =  "",
-        face = Font:getFace("myfont4"),
+        face = Font:getFace(font, font_size),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
@@ -133,23 +141,16 @@ function DoubleBar:onReaderReady()
     }
 
 
-    self[3] = left_container:new{
+    self[3] = bottom_container:new{
         dimen = Geom:new{ w = self.title_text:getSize().w, self.title_text:getSize().h },
         self.title_text,
     }
 
-
-
-    self[5] = FrameContainer:new{
-        left_container:new{
-            dimen = Geom:new(),
-            self.chapter_text,
-        },
-        -- background = Blitbuffer.COLOR_WHITE,
-        bordersize = 0,
-        padding = 0,
-        padding_bottom = self.bottom_padding,
+    self[5] = bottom_container:new{
+        dimen = Geom:new{ w = self.chapter_text:getSize().w, self.chapter_text:getSize().h },
+        self.chapter_text,
     }
+
     self[6] = FrameContainer:new{
         left_container:new{
             dimen = Geom:new(),
@@ -175,7 +176,7 @@ function DoubleBar:onReaderReady()
 
 
     self[9] = FrameContainer:new{
-        left_container:new{
+        bottom_container:new{
             dimen = Geom:new(),
             self.progress_bar,
         },
@@ -198,7 +199,7 @@ function DoubleBar:onReaderReady()
 
 
     self[10] = FrameContainer:new{
-        left_container:new{
+        bottom_container:new{
             dimen = Geom:new(),
             self.progress_bar_chapters,
         },
@@ -305,8 +306,8 @@ function DoubleBar:toggleBar()
         self.chapter_text:setText(chapter)
         self.progress_chapter_text:setText(self.view.footer:getChapterProgress(false))
 
-        self.progress_bar.height = self.title_text._height
-        self.progress_bar_chapters.height = self.title_text._height
+        self.progress_bar.height = self[3][1]:getSize().h
+        self.progress_bar_chapters.height = self[3][1]:getSize().h
         self.progress_bar:updateStyle(false, nil)
         self.progress_bar_chapters:updateStyle(false, nil)
 
@@ -341,23 +342,23 @@ end
 function DoubleBar:paintTo(bb, x, y)
         if self.view.topbar.settings:isTrue("show_top_bar") or self.view.footer_visible then return end
         -- Top left with bar first
-        self[9]:paintTo(bb, x, y + DoubleBar.MARGIN_TOP)
+        self[9]:paintTo(bb, x + Screen:getWidth()/2, y + self[3][1]._height)
         -- self[1]:paintTo(bb, x + DoubleBar.MARGIN_SIDES, y + DoubleBar.MARGIN_TOP)
 
         -- Top center
-        self[3]:paintTo(bb, x + Screen:getWidth()/2 - self[3][1]:getSize().w/2, y + DoubleBar.MARGIN_TOP)
+        self[3]:paintTo(bb, x + Screen:getWidth()/2, y + self[3][1]._height)
 
         -- Top right
         -- self[2].dimen = Geom:new{ w = self[2][1]:getSize().w, self[2][1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
         -- self[2]:paintTo(bb, Screen:getWidth() - self[2]:getSize().w - DoubleBar.MARGIN_SIDES, y + DoubleBar.MARGIN_TOP)
 
         -- Bottom left with bar first
-        self[10]:paintTo(bb, x, Screen:getHeight() - DoubleBar.MARGIN_TOP)
+        self[10]:paintTo(bb, x + Screen:getWidth()/2, Screen:getHeight())
         -- self[4][1].dimen.w = self[4][1][1]:getSize().w
         -- self[4]:paintTo(bb, x + DoubleBar.MARGIN_SIDES, Screen:getHeight() - DoubleBar.MARGIN_BOTTOM)
 
         -- Bottom center
-        self[5]:paintTo(bb, x + Screen:getWidth()/2 - self[5][1][1]:getSize().w/2, Screen:getHeight() - DoubleBar.MARGIN_BOTTOM)
+        self[5]:paintTo(bb, x + Screen:getWidth()/2, Screen:getHeight())
 
         -- Bottom right
         -- self[6][1].dimen.w = self[6][1][1]:getSize().w

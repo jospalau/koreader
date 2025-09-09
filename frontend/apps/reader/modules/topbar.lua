@@ -2262,6 +2262,11 @@ function TopBar:addToMainMenu(menu_items)
                     self.series_text.face = face_series
                     self.chapter_text.face = face
                     self:toggleBar()
+                    if G_reader_settings:isTrue("show_double_bar") then
+                        self.view.doublebar.title_text.face = face
+                        self.view.doublebar.chapter_text.face = face
+                        self.view.doublebar:toggleBar()
+                    end
                     UIManager:setDirty("all", "ui")
                     self.settings:saveSetting("font_title", font_path)
                     self.settings:flush()
@@ -2306,8 +2311,22 @@ function TopBar:addToMainMenu(menu_items)
                         fgcolor = Blitbuffer.COLOR_BLACK,
                     }
                     self.current_page_widget_container[1] = self.current_page_text
-
                     self:toggleBar()
+                    if G_reader_settings:isTrue("show_double_bar") then
+                        self.view.doublebar.title_text = TextWidget:new{
+                            text =  "",
+                            face = face,
+                            fgcolor = Blitbuffer.COLOR_BLACK,
+                        }
+                        self.view.doublebar[3][1] = self.view.doublebar.title_text
+                        self.view.doublebar.chapter_text = TextWidget:new{
+                            text =  "",
+                            face = face,
+                            fgcolor = Blitbuffer.COLOR_BLACK,
+                        }
+                        self.view.doublebar[5][1] = self.view.doublebar.chapter_text
+                        self.view.doublebar:toggleBar()
+                    end
                     UIManager:setDirty("all", "ui")
                     self.settings:saveSetting("font_times_progress", font_path)
                     self.settings:flush()
@@ -2480,6 +2499,11 @@ function TopBar:addToMainMenu(menu_items)
                             self.title_text.face = face
                             self.series_text.face = face_series
                             self.chapter_text.face = face
+                            if G_reader_settings:isTrue("show_double_bar") then
+                                self.view.doublebar.title_text.face = face
+                                self.view.doublebar.chapter_text.face = face
+                                self.view.doublebar:toggleBar()
+                            end
                             self:toggleBar()
                             UIManager:setDirty("all", "ui")
                             self.settings:flush()
@@ -2550,6 +2574,21 @@ function TopBar:addToMainMenu(menu_items)
                             self.current_page_widget_container[1] = self.current_page_text
 
                             self:toggleBar()
+                            if G_reader_settings:isTrue("show_double_bar") then
+                                self.view.doublebar.title_text = TextWidget:new{
+                                    text =  "",
+                                    face = face,
+                                    fgcolor = Blitbuffer.COLOR_BLACK,
+                                }
+                                self.view.doublebar[3][1] = self.view.doublebar.title_text
+                                self.view.doublebar.chapter_text = TextWidget:new{
+                                    text =  "",
+                                    face = face,
+                                    fgcolor = Blitbuffer.COLOR_BLACK,
+                                }
+                                self.view.doublebar[5][1] = self.view.doublebar.chapter_text
+                                self.view.doublebar:toggleBar()
+                            end
                             UIManager:setDirty("all", "ui")
                             self.settings:flush()
                             touchmenu_instance:updateItems()
