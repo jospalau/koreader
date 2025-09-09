@@ -1032,6 +1032,13 @@ function CalendarDayView:refreshTimeline()
 end
 
 function CalendarDayView:generateSpan(start, finish, bgcolor, fgcolor, title, device)
+    if device == nil then
+        device = Device.model
+        if Device:isAndroid() then
+            local android = require("android")
+            device = android.prop.model
+        end
+    end
     local width = math.floor((finish - start)/3600*self.timeline_width)
     if width <= 0 then return end
     local start_hour = math.floor(start / 3600)
