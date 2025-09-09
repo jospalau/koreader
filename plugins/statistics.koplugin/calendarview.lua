@@ -1038,6 +1038,7 @@ function CalendarDayView:generateSpan(start, finish, bgcolor, fgcolor, title, de
             local android = require("android")
             device = android.prop.model
         end
+        device = self.reader_statistics.devices_reversed[self.reader_statistics.devices[device]]
     end
     local width = math.floor((finish - start)/3600*self.timeline_width)
     if width <= 0 then return end

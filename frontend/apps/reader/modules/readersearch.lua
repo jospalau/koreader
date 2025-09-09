@@ -752,9 +752,9 @@ function ReaderSearch:onShowFindAllResults(not_cached)
             UIManager:close(self.input_dialog)
             if selected == nil then
                 self.ui.searching = false
-                UIManager:show(Notification:new{
-                text = _("close searching"),
-                })
+                -- UIManager:show(Notification:new{
+                --     text = _("close searching"),
+                -- })
             end
             UIManager:close(self.result_menu)
         end,
@@ -939,9 +939,9 @@ function ReaderSearch:gotoResultsItem(index)
         },
         tap_close_callback = function()
             self.ui.searching = false
-            UIManager:show(Notification:new{
-                text = _("close searching"),
-            })
+            -- UIManager:show(Notification:new{
+            --     text = _("close searching"),
+            -- })
             self:restorePageView()
         end,
     }

@@ -339,6 +339,7 @@ function DoubleBar:onPageUpdate()
 end
 
 function DoubleBar:paintTo(bb, x, y)
+        if self.view.topbar.settings:isTrue("show_top_bar") or self.view.footer_visible then return end
         -- Top left with bar first
         self[9]:paintTo(bb, x, y + DoubleBar.MARGIN_TOP)
         -- self[1]:paintTo(bb, x + DoubleBar.MARGIN_SIDES, y + DoubleBar.MARGIN_TOP)
@@ -363,7 +364,7 @@ function DoubleBar:paintTo(bb, x, y)
         -- self[6]:paintTo(bb, x + Screen:getWidth() - self[6][1]:getSize().w - DoubleBar.MARGIN_SIDES, Screen:getHeight() - DoubleBar.MARGIN_BOTTOM)
 
         self.ignore_corners_widget_container[1]:setText(self.ignore_corners)
-        if Device:isAndroid() then
+        if Device:isAndroid() and Device.screen:getWidth() < 1072 then
             self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(20), y + Screen:scaleBySize(6))
         else
             self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), y + Screen:scaleBySize(6))
