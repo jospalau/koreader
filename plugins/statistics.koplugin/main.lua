@@ -152,13 +152,14 @@ function ReaderStatistics:init()
         ["KindlePaperWhite6"] = 4, -- Kindle Paperwhite 6
         -- ["ditingp_global"] = 5, -- Xiaomi
         ["KindleBasic5"] = 5, -- Kindle Basic
-        ["boox"] = 6,
+        ["palma"] = 6, -- Boox Palma
         ["PB700"] = 7, -- PocketBook
         -- ["ares"] = 8, -- Likebook Ares -- Reserved for physical readings
         ["Kobo_condor"] = 9, -- Kobo Elipsa 2E
         ["Kobo_spaBW"] = 10, -- Clara BW
         ["Kobo_spaColour"] = 11, -- Clara Colour
         ["Kobo_monza"] = 12, -- Libra Colour
+        ["go6"] = 98, -- Boox Go6
         ["Physical book"] = 99, -- Reserved for physical book sessions
         ["Emulator"] = 100 -- Libra Colour
     }
@@ -170,13 +171,14 @@ function ReaderStatistics:init()
         [3] = "KoCl2e",
         [4] = "KinP",
         [5] = "KinB",
-        [6] = "BooxP",
+        [6] = "Palma",
         [7] = "PocBook",
         [8] = "Phy",
         [9] = "KEli",
         [10] = "KoCBW",
         [11] = "KoClC",
         [12] = "KoLiC",
+        [98] = "Go6",
         [99] = "PhyB",
         [100] = "Em"
     }
@@ -1067,6 +1069,11 @@ end
 
 -- Keep track of sessions that have been running for at least 5 minutes
 function ReaderStatistics:insertDBSessionStats()
+    local device = Device.model
+    if Device:isAndroid() then
+        local android = require("android")
+        device = android.prop.model
+    end
     if not (self.id_curr_book and self.is_doc_not_frozen) then
         return
     end
@@ -1087,7 +1094,7 @@ function ReaderStatistics:insertDBSessionStats()
     local conn = SQ3.open(db_location)
     -- conn:exec('BEGIN;')
     local stmt = conn:prepare("INSERT INTO wpm_stat_data VALUES(?, ?, ?, ?, ?, ?, ?);")
-    stmt:reset():bind(id_book, self.start_current_period, duration_raw, self._total_pages, wpm_session, self.devices[Device.model], self.ui.document._document:getFontFace()):step()
+    stmt:reset():bind(id_book, self.start_current_period, duration_raw, self._total_pages, wpm_session, self.devices[device], self.ui.document._document:getFontFace()):step()
     -- conn:exec('COMMIT;')
     stmt:close()
     conn:close()
