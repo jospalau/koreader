@@ -437,6 +437,7 @@ function PageTextInfo:onDispatcherRegisterActions()
     Dispatcher:registerAction("increase_weight", {category="none", event="IncreaseWeightSize", title=_("Increase weight size"), rolling=true,})
     Dispatcher:registerAction("decrease_weight", {category="none", event="DecreaseWeightSize", title=_("Decrease weight size"), rolling=true,})
     Dispatcher:registerAction("toggle_sort_by_mode", {category="none", event="ToggleSortByMode", title=_("Toggle sort by mode"), general=true,})
+    Dispatcher:registerAction("toggle_double_bar", {category="none", event="ToggleDoubleBar", title=_("Toggle double bar"), reader=true, separator=true,})
 end
 
 function PageTextInfo:onPageTextInfo()
@@ -4770,6 +4771,16 @@ function PageTextInfo:sendHighlightToServerForHeatmap()
             timeout = 10,
         })
     end)
+end
+
+function PageTextInfo:onToggleDoubleBar()
+    if self.view.topbar.settings:isTrue("show_top_bar") or self.view.footer_visible then return true end
+    local show_double_bar = G_reader_settings:isTrue("show_double_bar")
+    G_reader_settings:saveSetting("show_double_bar", not show_double_bar)
+    require("apps/reader/modules/doublebar").is_enabled = not show_double_bar
+    self.view.doublebar:toggleBar()
+    UIManager:setDirty(self.view.dialog, "ui")
+    return true
 end
 
 return PageTextInfo
