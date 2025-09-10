@@ -431,6 +431,12 @@ function ListMenuItem:update()
                 pages_str = _("MBR")
             end
 
+            if self.show_parent.ui
+                and self.show_parent.ui.document
+                and self.show_parent.ui.document.file
+                and self.show_parent.ui.document.file == self.filepath then
+                    pages_str = _("Reading")
+            end
             if not BookInfoManager:getSetting("hide_file_info") then
                 if self.show_parent.calibre_data
                     and self.show_parent.calibre_data[self.filepath:match("([^/]+)$")]
