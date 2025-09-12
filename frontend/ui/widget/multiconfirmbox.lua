@@ -47,6 +47,8 @@ local MultiConfirmBox = InputContainer:extend{
     choice1_text_func = nil,
     choice2_text = _("Choice 2"),
     choice2_text_func = nil,
+    choice3_text = _("Choice 3"),
+    choice3_text_func = nil,
     cancel_text = _("Cancel"),
     choice1_callback = function() end,
     choice2_callback = function() end,
@@ -56,6 +58,7 @@ local MultiConfirmBox = InputContainer:extend{
     margin = Size.margin.default,
     padding = Size.padding.default,
     dismissable = true, -- set to false if any button callback is required
+    third_choice = third_choice,
 }
 
 function MultiConfirmBox:init()
@@ -89,43 +92,92 @@ function MultiConfirmBox:init()
             width = math.floor(math.min(Screen:getWidth(), Screen:getHeight()) * 2/3),
         }
     }
-
-    local button_table = ButtonTable:new{
-        width = content:getSize().w,
-        buttons = {
-            {
+    local button_table
+    if self.third_choice then
+        button_table = ButtonTable:new{
+            width = content:getSize().w,
+            buttons = {
                 {
-                    text = self.choice1_text,
-                    text_func = self.choice1_text_func,
-                    enabled = self.choice1_enabled,
-                    flash_button = self.flash_yes,
-                    callback = function()
-                        self.choice1_callback()
-                        UIManager:close(self)
-                    end,
-                },
-                {
-                    text = self.choice2_text,
-                    text_func = self.choice2_text_func,
-                    enabled = self.choice2_enabled,
-                    flash_button = self.flash_no,
-                    callback = function()
-                        self.choice2_callback()
-                        UIManager:close(self)
-                    end,
-                },
-                {
-                    text = self.cancel_text,
-                    callback = function()
-                        self.cancel_callback()
-                        UIManager:close(self)
-                    end,
+                    {
+                        text = self.choice1_text,
+                        text_func = self.choice1_text_func,
+                        enabled = self.choice1_enabled,
+                        flash_button = self.flash_yes,
+                        callback = function()
+                            self.choice1_callback()
+                            UIManager:close(self)
+                        end,
+                    },
+                    {
+                        text = self.choice2_text,
+                        text_func = self.choice2_text_func,
+                        enabled = self.choice2_enabled,
+                        flash_button = self.flash_no,
+                        callback = function()
+                            self.choice2_callback()
+                            UIManager:close(self)
+                        end,
+                    },
+                    {
+                        text = self.choice3_text,
+                        text_func = self.choice3_text_func,
+                        enabled = self.choice3_enabled,
+                        flash_button = self.flash_no,
+                        callback = function()
+                            self.choice3_callback()
+                            UIManager:close(self)
+                        end,
+                    },
+                    {
+                        text = self.cancel_text,
+                        callback = function()
+                            self.cancel_callback()
+                            UIManager:close(self)
+                        end,
+                    },
                 },
             },
-        },
-        zero_sep = true,
-        show_parent = self,
-    }
+            zero_sep = true,
+            show_parent = self,
+        }
+    else
+        button_table = ButtonTable:new{
+            width = content:getSize().w,
+            buttons = {
+                {
+                    {
+                        text = self.choice1_text,
+                        text_func = self.choice1_text_func,
+                        enabled = self.choice1_enabled,
+                        flash_button = self.flash_yes,
+                        callback = function()
+                            self.choice1_callback()
+                            UIManager:close(self)
+                        end,
+                    },
+                    {
+                        text = self.choice2_text,
+                        text_func = self.choice2_text_func,
+                        enabled = self.choice2_enabled,
+                        flash_button = self.flash_no,
+                        callback = function()
+                            self.choice2_callback()
+                            UIManager:close(self)
+                        end,
+                    },
+                    {
+                        text = self.cancel_text,
+                        callback = function()
+                            self.cancel_callback()
+                            UIManager:close(self)
+                        end,
+                    },
+                },
+            },
+            zero_sep = true,
+            show_parent = self,
+        }
+    end
 
     self[1] = CenterContainer:new{
         dimen = Screen:getSize(),

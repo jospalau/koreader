@@ -978,6 +978,7 @@ function ReaderUI:onHome()
         local MultiConfirmBox = require("ui/widget/multiconfirmbox")
 
         local multi_box= MultiConfirmBox:new{
+            third_choice = true,
             text = "Do you want to put the book to history without configuration?",
             choice1_text = _("Yes"),
             choice1_callback = function()
@@ -1011,6 +1012,7 @@ function ReaderUI:onHome()
                 -- UIManager:broadcastEvent(Event:new("InvalidateMetadataCache", file))
                 -- UIManager:broadcastEvent(Event:new("DocSettingsItemsChanged", file))
                 -- require("bookinfomanager"):deleteBookInfo(file)
+
                 local FileManager = require("apps/filemanager/filemanager")
                 self:showFileManager(file)
                 -- local dir = util.splitFilePathName(file)
@@ -1030,8 +1032,49 @@ function ReaderUI:onHome()
 
                 return true
             end,
-            choice2_text = _("No, just exit"),
+            choice2_text = _("No, in TBR"),
             choice2_callback = function()
+                UIManager:close(multi_box)
+                self:onClose()
+                local lfs = require("libs/libkoreader-lfs")
+                local sidecar_dir = self.doc_settings.doc_sidecar_dir
+                self.doc_settings:purge()
+                local attr = lfs.attributes(sidecar_dir)
+                if not attr or attr.mode ~= "directory" then
+                    lfs.mkdir(sidecar_dir)
+                end
+
+                local date = os.date("%Y-%m-%d")
+                local pattern = "(%d+)-(%d+)-(%d+)"
+                local ryear, rmonth, rday = date:match(pattern)
+                local f = io.open(sidecar_dir .. "/" .. self.doc_settings.sidecar_filename, "w")
+                f:write(string.format([[
+                return {
+                    ["summary"] = {
+                        ["modified"] = "%04d-%02d-%02d",
+                        ["status"] = "tbr",
+                    },
+                }
+                ]], ryear, rmonth, rday))
+                f:close()
+                require("ui/widget/booklist").resetBookInfoCache(file)
+                if G_reader_settings:isTrue("top_manager_infmandhistory")
+                    and util.getFileNameSuffix(file) == "epub"
+                    and _G.all_files[file] then
+                        _G.all_files[file].last_modified_year = ryear
+                        _G.all_files[file].last_modified_month = rmonth
+                        _G.all_files[file].last_modified_day = rday
+                        _G.all_files[file].status = "tbr"
+                        local util = require("util")
+                        util.generateStats()
+                end
+                local FileManager = require("apps/filemanager/filemanager")
+                self:showFileManager(file)
+                FileManager.instance.history:sortHistoryByStatus()
+                FileManager.instance.history:onShowHist()
+            end,
+            choice3_text = _("No, just exit"),
+            choice3_callback = function()
                 self:onClose()
                 require("ui/widget/booklist").resetBookInfoCache(file)
                 self:showFileManager(file)
