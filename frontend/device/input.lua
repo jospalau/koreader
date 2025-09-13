@@ -638,6 +638,12 @@ function Input:resetState()
     }
 end
 
+function Input:NewMisc()
+    local slot = self.cur_slot
+    local info = self.ev_slots[slot]
+    self.input.NewMisc(slot, info)
+end
+
 function Input:handleKeyBoardEv(ev)
     -- Detect loss of contact for the "snow" protocol, as we *never* get EV_ABS:ABS_MT_TRACKING_ID:-1 on those...
     -- NOTE: The same logic *could* be used on *some* ST devices to detect contact states,
