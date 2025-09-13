@@ -1302,7 +1302,7 @@ function TopBar:toggleBar(light_on)
         local x_height_with_range = "N/A"
         local line_height = 0
         local leading_factor_text = "N/A"
-        if face_base ~= nil and not Device:isAndroid() then
+        if face_base ~= nil then
             x_height = Math.round(face_base.ftsize:getXHeight() * size_px)
             x_height_mm = Math.round((x_height * (25.4 / display_dpi) * 100)) / 100
             x_height_with_range = self:getXHeightRangeLabel(size_pt, x_height_mm)
