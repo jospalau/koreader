@@ -2262,11 +2262,9 @@ function TopBar:addToMainMenu(menu_items)
                     self.series_text.face = face_series
                     self.chapter_text.face = face
                     self:toggleBar()
-                    if G_reader_settings:isTrue("show_double_bar") then
-                        self.view.doublebar.title_text.face = face
-                        self.view.doublebar.chapter_text.face = face
-                        self.view.doublebar:toggleBar()
-                    end
+                    self.view.doublebar.title_text.face = face
+                    self.view.doublebar.chapter_text.face = face
+                    self.view.doublebar:toggleBar()
                     UIManager:setDirty("all", "ui")
                     self.settings:saveSetting("font_title", font_path)
                     self.settings:flush()
@@ -2484,11 +2482,9 @@ function TopBar:addToMainMenu(menu_items)
                             self.title_text.face = face
                             self.series_text.face = face_series
                             self.chapter_text.face = face
-                            if G_reader_settings:isTrue("show_double_bar") then
-                                self.view.doublebar.title_text.face = face
-                                self.view.doublebar.chapter_text.face = face
-                                self.view.doublebar:toggleBar()
-                            end
+                            self.view.doublebar.title_text.face = face
+                            self.view.doublebar.chapter_text.face = face
+                            self.view.doublebar:toggleBar()
                             self:toggleBar()
                             UIManager:setDirty("all", "ui")
                             self.settings:flush()
