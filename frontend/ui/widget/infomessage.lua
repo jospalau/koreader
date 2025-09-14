@@ -260,16 +260,21 @@ function InfoMessage:onCloseWidget()
         -- and there is a weird flick when the document is open
         -- because there are a few messages being shown and being closed
         -- nothing bad anyway
-        if not Device:isAndroid() then
-            local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-            if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_refreshes") then
-                UIManager:setDirty(nil, "full")
-            elseif ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") then
-                UIManager:setDirty(self, function()
-                    return "ui", self.movable.dimen
-                end)
-            end
+
+        -- The flickering happened when doing the full refresh in Android devices
+        -- because the ui refreshes are explicitly promoted to full refreshes
+        -- in uimanager.lua when not G_reader_settings:isTrue("avoid_flashing_ui")
+        -- but the Avoid mandatory black flashes in UI is checked in my configuration
+        -- if not Device:isAndroid() then
+        local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+        if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_refreshes") then
+            UIManager:setDirty(nil, "full")
+        elseif ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+            UIManager:setDirty(self, function()
+                return "ui", self.movable.dimen
+            end)
         end
+        -- end
         -- return "ui", self.movable.dimen
     end)
 end
