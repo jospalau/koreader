@@ -146,8 +146,15 @@ function Device:init()
         event_map = event_map,
         handleMiscEv = function(this, ev)
             logger.dbg("Android application event", ev.code)
-                if ev.code == 7 then
+            local android = require("android")
+            local device = android.prop.model
+                if ev.code == 7 and device == "go6" then
+                    self.input.disable_double_tap = false
                     this.device.input:NewMisc()
+                    UIManager:nextTick(function()
+                        local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+                        self.input.disable_double_tap = ui.disable_double_tap
+                    end)
                 end
             if ev.code == C.APP_CMD_SAVE_STATE then
                 UIManager:broadcastEvent(Event:new("FlushSettings"))
