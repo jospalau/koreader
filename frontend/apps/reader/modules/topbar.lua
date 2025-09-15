@@ -688,7 +688,6 @@ function TopBar:onReaderReady()
         text =  "",
         face = Font:getFace(font, font_size),
         fgcolor = Blitbuffer.COLOR_BLACK,
-        no_center_vertically = 0,
     }
 
     self.current_page_text = TextWidget:new{
@@ -778,7 +777,7 @@ function TopBar:onReaderReady()
         self.test_light_text,
     }
 
-    self.progress_widget_container = left_container:new{
+    self.progress_widget_container = bottom_container:new{
         dimen = Geom:new{ w = self.progress_book_text:getSize().w, self.progress_book_text:getSize().h },
         self.progress_book_text,
     }
@@ -1065,13 +1064,13 @@ function TopBar:onSwitchTopBar()
 
         UIManager:setDirty(self.view.dialog, function()
             return self.view.currently_scrolling and "fast" or "ui",
-            Geom:new{ w = Screen:getWidth(), h = self:getHeight(), y = 0}
+            Geom:new{ w = Screen:getWidth(), h = self:getHeight(true), y = 0}
         end)
         UIManager:setDirty(self.view.dialog, function()
             return self.view.currently_scrolling and "fast" or "ui",
             Geom:new{ w = Screen:getWidth(),
             h = self:getBottomHeight(),
-            y = Screen:getHeight() - self:getBottomHeight()}
+            y = Screen:getHeight(true) - self:getBottomHeight()}
         end)
         return
     end
@@ -1119,13 +1118,13 @@ function TopBar:onSwitchTopBar()
         -- UIManager:setDirty("all", "partial")
         UIManager:setDirty(self.view.dialog, function()
             return self.view.currently_scrolling and "fast" or "ui",
-            Geom:new{ w = Screen:getWidth(), h = self:getHeight(), y = 0}
+            Geom:new{ w = Screen:getWidth(), h = self:getHeight(true), y = 0}
         end)
         UIManager:setDirty(self.view.dialog, function()
             return self.view.currently_scrolling and "fast" or "ui",
             Geom:new{ w = Screen:getWidth(),
             h = self:getBottomHeight(),
-            y = Screen:getHeight() - self:getBottomHeight()}
+            y = Screen:getHeight(true) - self:getBottomHeight()}
         end)
     end
 end
@@ -1147,15 +1146,14 @@ function TopBar:quickToggleOnOff(put_off)
     end)
 end
 
-function TopBar:getHeight()
-   -- if TopBar.show_bar_in_top_bar then
-    return Screen:scaleBySize(12)
-    + self.progress_bar_widget_container:getSize().h
-    + 15 -- self.space_after_alt_bar
-    + self.title_and_series_widget_container[1][1].face.size
-    -- else
-    --    return self.title_and_series_widget_container[1][1].face.size
-    -- end
+function TopBar:getHeight(max_height)
+   if TopBar.show_bar_in_top_bar or max_height then
+        return Screen:scaleBySize(self.space_after_alt_bar)
+        + self.progress_bar_widget_container:getSize().h
+        + self.title_and_series_widget_container[1][1]._height
+    else
+       return self.title_and_series_widget_container[1][1]._height
+    end
 end
 
 function TopBar:getBottomHeight()
@@ -1439,7 +1437,9 @@ function TopBar:toggleBar(light_on)
         self.main_progress_bar.width = self.width - 2 * TopBar.MARGIN_SIDES
         -- No scaled because margins are saved not scaled even though they are scaled
         -- when set (see onSetPageMargins() in readertypeset.lua)
-        self.space_after_alt_bar = 15
+
+        -- How far we want the tile and series widget
+        self.space_after_alt_bar = 12
         if self.alt_bar then
             -- Begin alternative progress bar
             -- This last configuration goes with the separation line. Everything is hardcoded because it is difficult to make it proportional
@@ -1540,13 +1540,13 @@ function TopBar:toggleBar(light_on)
         end
         if self.option == 1 or self.option == 2 or self.option == 3 then
             if Device:isAndroid() and Device.screen:getWidth() < 1072 then
-                if configurable.h_page_margins[1] == 20 and configurable.t_page_margin == self.space_after_alt_bar + 9 + 6 and configurable.h_page_margins[2] == 20 and configurable.b_page_margin == 15 then
+                if configurable.h_page_margins[1] == 20 and configurable.t_page_margin == Screen:unscaleBySize(self:getHeight()) and configurable.h_page_margins[2] == 20 and configurable.b_page_margin == 15 then
                     self.test_light_text:setText(" ● " .. self.frontlight)
                 else
                     self.test_light_text:setText(" ○ " .. self.frontlight)
                 end
             else
-                if configurable.h_page_margins[1] == 15 and configurable.t_page_margin == self.space_after_alt_bar + 9 + 6 and configurable.h_page_margins[2] == 15 and configurable.b_page_margin == 15 then
+                if configurable.h_page_margins[1] == 15 and configurable.t_page_margin == Screen:unscaleBySize(self:getHeight()) and configurable.h_page_margins[2] == 15 and configurable.b_page_margin == 15 then
                     self.test_light_text:setText(" ● " .. self.frontlight)
                 else
                     self.test_light_text:setText(" ○ " .. self.frontlight)
@@ -1554,13 +1554,13 @@ function TopBar:toggleBar(light_on)
             end
         elseif self.option == 4 then
             if Device:isAndroid() and Device.screen:getWidth() < 1072 then
-                if configurable.h_page_margins[1] == 20 and configurable.t_page_margin == 9 + 6 and configurable.h_page_margins[2] == 20 and configurable.b_page_margin == 15 then
+                if configurable.h_page_margins[1] == 20 and configurable.t_page_margin == Screen:unscaleBySize(self:getHeight()) and configurable.h_page_margins[2] == 20 and configurable.b_page_margin == 15 then
                     self.test_light_text:setText(" ● " .. self.frontlight)
                 else
                     self.test_light_text:setText(" ○ " .. self.frontlight)
                 end
             else
-                if configurable.h_page_margins[1] == 15 and configurable.t_page_margin == 9 + 6 and configurable.h_page_margins[2] == 15 and configurable.b_page_margin == 15 then
+                if configurable.h_page_margins[1] == 15 and configurable.t_page_margin == Screen:unscaleBySize(self:getHeight()) and configurable.h_page_margins[2] == 15 and configurable.b_page_margin == 15 then
                     self.test_light_text:setText(" ● " .. self.frontlight)
                 else
                     self.test_light_text:setText(" ○ " .. self.frontlight)
@@ -1571,12 +1571,10 @@ function TopBar:toggleBar(light_on)
             TopBar.MARGIN_TOP = Screen:scaleBySize(9) + Screen:scaleBySize(self.space_after_alt_bar)
             self.title_and_series_widget_container[1].no_center_vertically = Screen:scaleBySize(self.space_after_alt_bar)
             self.title_and_series_widget_container[2].no_center_vertically = Screen:scaleBySize(self.space_after_alt_bar) + 4
-            self.progress_widget_container[1].no_center_vertically = Screen:scaleBySize(self.space_after_alt_bar)
         else
             TopBar.MARGIN_TOP = Screen:scaleBySize(9)
             self.title_and_series_widget_container[1].no_center_vertically = 0
             self.title_and_series_widget_container[2].no_center_vertically = 4
-            self.progress_widget_container[1].no_center_vertically = 0
         end
 
     else
@@ -1808,6 +1806,25 @@ function TopBar:paintTo(bb, x, y)
         y + TopBar.MARGIN_TOP) -- + self.title_and_series_widget_container[1][1]._baseline_h * 0.3) -- Visually compensates for excess internal top spacing
         -- self.title_and_series_widget_container:paintTo(bb, x + Screen:getWidth()/2, y + 20)
 
+        --[[
+        LineWidget = require("ui/widget/linewidget")
+        local topbar_height = self:getHeight()
+        local separator_line1 = LineWidget:new{
+            dimen = Geom:new{
+                w = Screen:getWidth(),
+                h = Size.line.thick,
+            }
+        }
+        separator_line1:paintTo(bb, x, y + topbar_height)
+
+        local separator_line1 = LineWidget:new{
+            dimen = Geom:new{
+                w = Screen:getWidth(),
+                h = Size.line.thick,
+            }
+        }
+        separator_line1:paintTo(bb, x, y + Screen:scaleBySize(self.space_after_alt_bar))
+        --]]
 
         -- Top right
         -- Commented the text, using progress bar
@@ -1823,7 +1840,12 @@ function TopBar:paintTo(bb, x, y)
         end
 
         self.progress_widget_container.dimen = Geom:new{ w = self.progress_widget_container[1]:getSize().w, self.progress_widget_container[1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
-        self.progress_widget_container:paintTo(bb, Screen:getWidth() - self.progress_widget_container:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
+
+        if self.option == 1 or self.option == 2 or self.option == 3 then
+            self.progress_widget_container:paintTo(bb, Screen:getWidth() - self.progress_widget_container:getSize().w - TopBar.MARGIN_SIDES, y +  self.progress_widget_container[1]._height + Screen:scaleBySize(12))
+        else
+            self.progress_widget_container:paintTo(bb, Screen:getWidth() - self.progress_widget_container:getSize().w - TopBar.MARGIN_SIDES, y +  self.progress_widget_container[1]._height)
+        end
         -- if TopBar.show_bar_in_top_bar then
         --     self.progress_widget_container:paintTo(bb, Screen:getWidth() - self.progress_widget_container:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
         -- end
@@ -2156,73 +2178,39 @@ function TopBar:onAdjustMarginsTopbar()
         -- Adjust margin values to the topbar. Values are in pixels
         -- We add a little bit more, 12 (15, after revision) pixels hardcoded since side margins are 10 and bottom margin 9, always. Top margin value is 9 if not alternative status bar
         -- Exceptions are Android in which side margins are set to 20
-        -- And top margin when alternative status bar is on. Value is set to self.space_after_alt_bar (fixed to 15) + 9, adding a little bit more too, 6 more pixels
+        -- And top margin when alternative status bar is on. Value is set to self.space_after_alt_bar (fixed to 15) + 9, adding a little bit more too, 6 more pixels (variable TopBar.extra_pixels)
 
         local bottom_margin = 15
         local margins = {}
         if Device:isAndroid() and Device.screen:getWidth() < 1072 then
-            if self.show_bar_in_top_bar then
-                if self.ui.document.configurable.t_page_margin ~= self.space_after_alt_bar + 9 + 6 or
-                self.ui.document.configurable.b_page_margin ~= bottom_margin or
-                self.ui.document.configurable.h_page_margins[1] ~= 20 or
-                self.ui.document.configurable.h_page_margins[2] ~= 20 then
-                    local margins = { 20, self.space_after_alt_bar + 9 + 6, 20, 0}
-                    self.ui.document.configurable.t_page_margin = self.space_after_alt_bar + 9 + 6
-                    self.ui.document.configurable.b_page_margin = bottom_margin
-                    self.ui.document.configurable.h_page_margins[1] = 20
-                    self.ui.document.configurable.h_page_margins[2] = 20
-                    self.ui:handleEvent(Event:new("SetPageMargins", margins))
-                else
-                    self.ui:showBookStatus()
-                end
+            if self.ui.document.configurable.t_page_margin ~= Screen:unscaleBySize(self:getHeight()) or
+            self.ui.document.configurable.b_page_margin ~= bottom_margin or
+            self.ui.document.configurable.h_page_margins[1] ~= 20 or
+            self.ui.document.configurable.h_page_margins[2] ~= 20 then
+                local margins = { 20, Screen:unscaleBySize(self:getHeight()), 20, 0}
+                self.ui.document.configurable.t_page_margin = Screen:unscaleBySize(self:getHeight())
+                self.ui.document.configurable.b_page_margin = bottom_margin
+                self.ui.document.configurable.h_page_margins[1] = 20
+                self.ui.document.configurable.h_page_margins[2] = 20
+                self.ui:handleEvent(Event:new("SetPageMargins", margins))
             else
-                if self.ui.document.configurable.t_page_margin ~= 9 + 6 or
-                self.ui.document.configurable.b_page_margin ~= bottom_margin or
-                self.ui.document.configurable.h_page_margins[1] ~= 20 or
-                self.ui.document.configurable.h_page_margins[2] ~= 20 then
-                    local margins = { 20, 9 + 6, 20, 0}
-                    self.ui.document.configurable.t_page_margin = 9 + 6
-                    self.ui.document.configurable.b_page_margin = bottom_margin
-                    self.ui.document.configurable.h_page_margins[1] = 20
-                    self.ui.document.configurable.h_page_margins[2] = 20
-                    self.ui:handleEvent(Event:new("SetPageMargins", margins))
-                else
-                    self.ui:showBookStatus()
-                end
+                self.ui:showBookStatus()
             end
         else
-            if self.show_bar_in_top_bar then
-                if self.ui.document.configurable.t_page_margin ~= self.space_after_alt_bar + 9 + 6 or
-                self.ui.document.configurable.b_page_margin ~= bottom_margin or
-                self.ui.document.configurable.h_page_margins[1] ~= 15 or
-                self.ui.document.configurable.h_page_margins[2] ~= 15 then
-                    local margins = { 15, self.space_after_alt_bar + 9 + 6, 15, 0}
-                    self.ui.document.configurable.t_page_margin = self.space_after_alt_bar + 9 + 6
-                    self.ui.document.configurable.b_page_margin = bottom_margin
-                    self.ui.document.configurable.h_page_margins[1] = 15
-                    self.ui.document.configurable.h_page_margins[2] = 15
-                    self.ui:handleEvent(Event:new("SetPageMargins", margins))
-                else
-                    self.ui:showBookStatus()
-                end
+            if self.ui.document.configurable.t_page_margin ~= Screen:unscaleBySize(self:getHeight()) or
+            self.ui.document.configurable.b_page_margin ~= bottom_margin or
+            self.ui.document.configurable.h_page_margins[1] ~= 15 or
+            self.ui.document.configurable.h_page_margins[2] ~= 15 then
+                local margins = { 15, Screen:unscaleBySize(self:getHeight()), 15, 0}
+                self.ui.document.configurable.t_page_margin = Screen:unscaleBySize(self:getHeight())
+                self.ui.document.configurable.b_page_margin = bottom_margin
+                self.ui.document.configurable.h_page_margins[1] = 15
+                self.ui.document.configurable.h_page_margins[2] = 15
+                self.ui:handleEvent(Event:new("SetPageMargins", margins))
             else
-                if self.ui.document.configurable.t_page_margin ~= 9 + 6 or
-                self.ui.document.configurable.b_page_margin ~= bottom_margin or
-                self.ui.document.configurable.h_page_margins[1] ~= 15 or
-                self.ui.document.configurable.h_page_margins[2] ~= 15 then
-                    local margins = { 15, 9 + 6, 15, 0}
-                    self.ui.document.configurable.t_page_margin = 9 + 6
-                    self.ui.document.configurable.b_page_margin = bottom_margin
-                    self.ui.document.configurable.h_page_margins[1] = 15
-                    self.ui.document.configurable.h_page_margins[2] = 15
-                    self.ui:handleEvent(Event:new("SetPageMargins", margins))
-                else
-                    self.ui:showBookStatus()
-                end
+                self.ui:showBookStatus()
             end
         end
-
-
       --self.ui:saveSettings()
    end
 
@@ -2304,7 +2292,6 @@ function TopBar:addToMainMenu(menu_items)
                         text =  "",
                         face = face,
                         fgcolor = Blitbuffer.COLOR_BLACK,
-                        no_center_vertically = 0,
                     }
                    self.progress_widget_container[1] = self.progress_book_text
                    self.progress_chapter_text = TextWidget:new{
@@ -2550,7 +2537,6 @@ function TopBar:addToMainMenu(menu_items)
                                 text =  "",
                                 face = face,
                                 fgcolor = Blitbuffer.COLOR_BLACK,
-                                no_center_vertically = 0,
                             }
                             self.progress_widget_container[1] = self.progress_book_text
                             self.progress_chapter_text = TextWidget:new{
