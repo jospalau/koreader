@@ -2593,6 +2593,7 @@ function PageTextInfo:onPrintChapterLeftFbink()
             execute = io.popen("/mnt/ext1/applications/koreader/fbink -f -t regular=/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. left_chapter .. "\"")
         end
         output = execute:read('*a')
+        execute:close()
         -- if Device:isKobo() then
         --     execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=1150,right=50,format " .. duration)
         -- else --Kindle
@@ -2632,6 +2633,7 @@ function PageTextInfo:onPrintSessionDurationFbink()
             execute = io.popen("/mnt/ext1/applications/koreader/fbink -f -t regular=/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. duration .. "\"")
         end
         output = execute:read('*a')
+        execute:close()
         -- if Device:isKobo() then
         --     execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=1150,right=50,format " .. duration)
         -- else --Kindle
@@ -2671,6 +2673,7 @@ function PageTextInfo:onPrintProgressBookFbink()
             execute = io.popen("/mnt/ext1/applications/koreader/fbink -f -t regular=/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. percentage .. "\"")
         end
         output = execute:read('*a')
+        execute:close()
         -- if Device:isKobo() then
         --     execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=1150,right=50,format " .. duration)
         -- else --Kindle
@@ -2710,6 +2713,7 @@ function PageTextInfo:onPrintClockFbink()
         end
 
         output = execute:read('*a')
+        execute:close()
         -- if Device:isKobo() then
         --     execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=1150,right=50,format " .. duration)
         -- else --Kindle
@@ -2756,6 +2760,7 @@ function PageTextInfo:onPrintDurationChapterFbink()
 
 
         output = execute:read('*a')
+        execute:close()
         -- if Device:isKobo() then
         --     execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=1150,right=50,format " .. duration)
         -- else --Kindle
@@ -2806,6 +2811,7 @@ function PageTextInfo:onPrintDurationNextChapterFbink()
         end
 
         output = execute:read('*a')
+        execute:close()
         -- if Device:isKobo() then
         --     execute = io.popen("/mnt/onboard/.adds/koreader/fbink -t regular=/mnt/onboard/fonts/PoorRichard-Regular.ttf,size=14,top=10,bottom=500,left=1150,right=50,format " .. duration)
         -- else --Kindle
@@ -2853,6 +2859,7 @@ function PageTextInfo:onPrintWpmSessionFbink()
             execute = io.popen("/mnt/ext1/applications/koreader/fbink -f -t regular=/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf,size=14,top=10,bottom=500,left=25,right=50,format \"" .. wpm_session .. "\"")
         end
         output = execute:read('*a')
+        execute:close()
     else
         local text = wpm_session
         UIManager:show(Notification:new{
@@ -4212,8 +4219,8 @@ function PageTextInfo:onPushConfig()
         else -- PocketBook
             execute = io.popen(string.format("/mnt/ext1/scripts/pushConfig.sh %s %s && echo $? || echo $?", server, port))
         end
-
         output = execute:read('*a')
+        execute:close()
         UIManager:show(InfoMessage:new{
             text = T(_(output)),
             face = Font:getFace("myfont"),
@@ -4242,6 +4249,7 @@ function PageTextInfo:onPullConfig()
             execute = io.popen(string.format("/mnt/ext1/scripts/pullConfig.sh %s %s && echo $? || echo $?", server, port))
         end
         output = execute:read('*a')
+        execute:close()
         local save_text = _("Quit")
         if Device:canRestart() then
             save_text = _("Restart")
@@ -4266,6 +4274,7 @@ function PageTextInfo:onPullConfig()
                         execute = io.popen("/mnt/ext1/applications/koreader/fbink -mM -f -c -t regular=/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf Restarting...")
                     end
                     local output = execute:read('*a')
+                    execute:close()
                     if Device:canRestart() then
                         UIManager:restartKOReader()
                         -- The new Clara BW is so quick closing that when presing on Restart it doesn't flash
@@ -4281,11 +4290,16 @@ function PageTextInfo:onPullConfig()
                     logger.info("discard defaults")
                 end,
             })
+            UIManager:show(InfoMessage:new{
+                text = T(_(output)),
+                face = Font:getFace("myfont"),
+            })
+        else
+            UIManager:show(InfoMessage:new{
+                text = T(_("Problem synching")),
+                face = Font:getFace("myfont"),
+            })
         end
-        UIManager:show(InfoMessage:new{
-            text = T(_(output)),
-            face = Font:getFace("myfont"),
-        })
     end
     if G_reader_settings:isTrue("top_manager_infmandhistory") then
         local util = require("util")
@@ -4313,6 +4327,7 @@ function PageTextInfo:onGetLastPushingConfig()
             execute = io.popen(string.format("/mnt/ext1/scripts/getLastPushing.sh %s %s && echo $? || echo $?", server, port))
         end
         output = execute:read('*a')
+        execute:close()
         UIManager:show(InfoMessage:new{
             text = T(_(output)),
             face = Font:getFace("myfont"),
@@ -4342,7 +4357,7 @@ function PageTextInfo:onSynchronizeCode()
             execute = io.popen(string.format("/mnt/ext1/scripts/syncKOReaderCode.sh %s %s && echo $? || echo $?", server, port))
         end
         output = execute:read('*a')
-
+        execute:close()
         local save_text = _("Quit")
         if Device:canRestart() then
             save_text = _("Restart")
@@ -4366,6 +4381,7 @@ function PageTextInfo:onSynchronizeCode()
                         execute = io.popen("/mnt/ext1/applications/koreader/fbink -mM -f -c -t regular=/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf Restarting...")
                     end
                     local output = execute:read('*a')
+                    execute:close()
                     if Device:canRestart() then
                         UIManager:restartKOReader()
                         -- The new Clara BW is so quick closing that when presing on Restart it doesn't flash
@@ -4381,11 +4397,16 @@ function PageTextInfo:onSynchronizeCode()
                     logger.info("discard defaults")
                 end,
             })
+            UIManager:show(InfoMessage:new{
+                text = T(_(output)),
+                face = Font:getFace("myfont"),
+            })
+        else
+            UIManager:show(InfoMessage:new{
+                text = T(_("Problem synching")),
+                face = Font:getFace("myfont"),
+            })
         end
-        UIManager:show(InfoMessage:new{
-            text = T(_(output)),
-            face = Font:getFace("myfont"),
-        })
     end
 end
 
@@ -4400,6 +4421,7 @@ function PageTextInfo:onInstallLastVersion()
         end
         local execute = io.popen("/mnt/onboard/.adds/scripts/getKOReaderNewVersion.sh && echo $? || echo $?" )
         output = execute:read('*a')
+        execute:close()
         UIManager:show(InfoMessage:new{
             text = T(_(output)),
             face = Font:getFace("myfont"),
@@ -4465,6 +4487,7 @@ function PageTextInfo:onToggleRsyncdService()
             execute = io.popen("/mnt/ext1/scripts/launchRsyncd.sh && echo $? || echo $?" )
         end
         output = execute:read('*a')
+        execute:close()
         UIManager:show(InfoMessage:new{
             text = T(_(output)),
             face = Font:getFace("myfont"),
@@ -4487,6 +4510,7 @@ function PageTextInfo:onShowDbStats()
             execute = io.popen("(cd /mnt/ext1/scripts/statsKOReaderDB && /mnt/ext1/scripts/statsKOReaderDB/stats.sh)")
         end
         output = execute:read('*a')
+        execute:close()
         UIManager:show(InfoMessage:new{
             text = T(_(output)),
             face = Font:getFace("myfont"),
@@ -4515,6 +4539,7 @@ function PageTextInfo:onSyncBooks()
             execute = io.popen(string.format("/mnt/ext1/scripts/syncBooks.sh %s %s && echo $? || echo $?", server, port))
         end
         output = execute:read('*a')
+        execute:close()
         local save_text = _("Quit")
         if Device:canRestart() then
             save_text = _("Restart")
@@ -4539,6 +4564,7 @@ function PageTextInfo:onSyncBooks()
                         execute = io.popen("/mnt/ext1/applications/koreader/fbink -mM -f -c -t regular=/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf Restarting...")
                     end
                     local output = execute:read('*a')
+                    execute:close()
                     if Device:canRestart() then
                         UIManager:restartKOReader()
                         -- The new Clara BW is so quick closing that when presing on Restart it doesn't flash
@@ -4561,6 +4587,7 @@ function PageTextInfo:onSyncBooks()
                             execute = io.popen("/mnt/ext1/applications/koreader/fbink -mM -f -c -t regular=/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf Updating...")
                         end
                         local output = execute:read('*a')
+                        execute:close()
                         _G.all_files = util.getListAll()
                         local util = require("util")
                         -- We need to read the history file
@@ -4572,11 +4599,16 @@ function PageTextInfo:onSyncBooks()
                     end
                 end,
             })
+            UIManager:show(InfoMessage:new{
+                text = T(_(output)),
+                face = Font:getFace("myfont"),
+            })
+        else
+            UIManager:show(InfoMessage:new{
+                text = T(_("Problem synching")),
+                face = Font:getFace("myfont"),
+            })
         end
-        UIManager:show(InfoMessage:new{
-            text = T(_(output)),
-            face = Font:getFace("myfont"),
-        })
     end
 end
 
@@ -4587,6 +4619,7 @@ function PageTextInfo:onTurnOnWifiKindle()
     local NetworkMgr = require("ui/network/manager")
     local execute = io.popen("/mnt/us/scripts/connectNetwork.sh && echo $? || echo $?" )
     output = execute:read('*a')
+    execute:close()
     UIManager:show(InfoMessage:new{
         text = T(_(output)),
         face = Font:getFace("myfont"),
