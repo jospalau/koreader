@@ -2342,6 +2342,7 @@ function ReaderHighlight:onHighlightSearchFull()
         local text = util.stripPunctuation(util.cleanupSelectedText(self.selected_text.text))
         self.ui.highlight:clear()
         -- self.ui.search:onShowFulltextSearchInput(text)
+        self.ui.search.start_page = self.ui.paging and self.view.state.page or self.ui.document:getXPointer()
         self.ui.search:fullTextSearch(text)
     end
 end
