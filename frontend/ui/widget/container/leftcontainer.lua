@@ -21,6 +21,9 @@ function LeftContainer:paintTo(bb, x, y)
     end
     self.dimen.x = x
     self.dimen.y = y + math.floor((self.dimen.h - contentSize.h)/2)
+    if self.no_center_vertically then
+        self.dimen.y = self.no_center_vertically
+    end
     self[1]:paintTo(bb, self.dimen.x, self.dimen.y)
 end
 

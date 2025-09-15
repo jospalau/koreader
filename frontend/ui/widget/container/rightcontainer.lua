@@ -22,6 +22,9 @@ function RightContainer:paintTo(bb, x, y)
     end
     self.dimen.x = x
     self.dimen.y = y + math.floor((self.dimen.h - contentSize.h)/2)
+    if self.no_center_vertically then
+        self.dimen.y = self.no_center_vertically
+    end
     if self.debug then
         LineWidget = require("ui/widget/linewidget")
         local Geom = require("ui/geometry")

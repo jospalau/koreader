@@ -688,6 +688,7 @@ function TopBar:onReaderReady()
         text =  "",
         face = Font:getFace(font, font_size),
         fgcolor = Blitbuffer.COLOR_BLACK,
+        no_center_vertically = 0,
     }
 
     self.current_page_text = TextWidget:new{
@@ -800,10 +801,12 @@ function TopBar:onReaderReady()
         radius = self.is_popout and math.floor(self.dimen.w * (1/20)) or 0,
         right_container:new{
             dimen = Geom:new{ w = self.title_text:getSize().w, self.title_text:getSize().h },
+            no_center_vertically = 0,
             self.title_text,
         },
         left_container:new{
             dimen = Geom:new{ w = self.series_text:getSize().w, self.series_text:getSize().h },
+            no_center_vertically = 0,
             self.series_text,
         }
     }
@@ -1566,9 +1569,16 @@ function TopBar:toggleBar(light_on)
         end
         if TopBar.show_bar_in_top_bar then
             TopBar.MARGIN_TOP = Screen:scaleBySize(9) + Screen:scaleBySize(self.space_after_alt_bar)
+            self.title_and_series_widget_container[1].no_center_vertically = Screen:scaleBySize(self.space_after_alt_bar)
+            self.title_and_series_widget_container[2].no_center_vertically = Screen:scaleBySize(self.space_after_alt_bar) + 4
+            self.progress_widget_container[1].no_center_vertically = Screen:scaleBySize(self.space_after_alt_bar)
         else
             TopBar.MARGIN_TOP = Screen:scaleBySize(9)
+            self.title_and_series_widget_container[1].no_center_vertically = 0
+            self.title_and_series_widget_container[2].no_center_vertically = 4
+            self.progress_widget_container[1].no_center_vertically = 0
         end
+
     else
         self.session_time_text:setText("")
         self.progress_book_text:setText("")
@@ -2294,6 +2304,7 @@ function TopBar:addToMainMenu(menu_items)
                         text =  "",
                         face = face,
                         fgcolor = Blitbuffer.COLOR_BLACK,
+                        no_center_vertically = 0,
                     }
                    self.progress_widget_container[1] = self.progress_book_text
                    self.progress_chapter_text = TextWidget:new{
@@ -2539,6 +2550,7 @@ function TopBar:addToMainMenu(menu_items)
                                 text =  "",
                                 face = face,
                                 fgcolor = Blitbuffer.COLOR_BLACK,
+                                no_center_vertically = 0,
                             }
                             self.progress_widget_container[1] = self.progress_book_text
                             self.progress_chapter_text = TextWidget:new{
