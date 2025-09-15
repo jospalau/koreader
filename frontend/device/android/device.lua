@@ -146,16 +146,21 @@ function Device:init()
         event_map = event_map,
         handleMiscEv = function(this, ev)
             logger.dbg("Android application event", ev.code)
-            local android = require("android")
-            local device = android.prop.model
-                if ev.code == 7 and device == "go6" then
-                    self.input.disable_double_tap = false
-                    this.device.input:NewMisc()
-                    UIManager:nextTick(function()
-                        local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-                        self.input.disable_double_tap = ui.disable_double_tap
-                    end)
-                end
+            -- There are problems when tapping on the top of screen at least in the Boox Go6
+            -- It can happen that a tap is detected as a little swipe in the system
+            -- and this sends a miscellanious message starting to show the notification bar and stopping to send the tap up event
+            -- The tap is not reported in KOReader even though the notification bar was not shown because it was a very tiny swipe
+            -- This fixes it but I leave commented
+            -- local android = require("android")
+            -- local device = android.prop.model
+            --     if ev.code == 7 and device == "go6" then
+            --         self.input.disable_double_tap = false
+            --         this.device.input:NewMisc()
+            --         UIManager:nextTick(function()
+            --             local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+            --             self.input.disable_double_tap = ui.disable_double_tap
+            --         end)
+            --     end
             if ev.code == C.APP_CMD_SAVE_STATE then
                 UIManager:broadcastEvent(Event:new("FlushSettings"))
             elseif ev.code == C.APP_CMD_DESTROY then
@@ -261,6 +266,10 @@ function Device:init()
         end,
     }
 
+    -- The top menu icons start with y=12.
+    -- In devices with recessed screen it is difficult or impossible to tap so you always tap the icons
+    -- but in other devices with flushed screen or devices with less horizontal resolution in which icons are smaller
+    -- is easy to tap on this zone and get nothing. This fixes it.
     local adjust_deadzone = function(this, ev)
 		-- adb logcat --pid=$(adb shell pidof org.koreader.launcher) | grep -i ABS_MT_POSITION_Y
 		if android.prop.product == "boox" and ev.type == C.EV_ABS and ev.code == C.ABS_MT_POSITION_Y and ev.value < 12 then
