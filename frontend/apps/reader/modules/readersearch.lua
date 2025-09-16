@@ -965,6 +965,9 @@ function ReaderSearch:restorePageView()
         self.skim_mode = nil
         self.ui.paging:exitSkimMode()
     end
+    if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
+        self.ui.pagetextinfo:updateWordsVocabulary()
+    end
     UIManager:setDirty(self.dialog, "ui")
 end
 
