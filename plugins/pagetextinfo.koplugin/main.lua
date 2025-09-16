@@ -1779,7 +1779,7 @@ function PageTextInfo:updateWordsVocabulary()
     while true do
         local row = {}
         if not stmt:step(row) then break end
-        local word = row[1]:lower()
+        local word = row[1]
         if not word:find("%s+") then
             self.all_words[word] = ""
         end
@@ -1789,46 +1789,7 @@ function PageTextInfo:updateWordsVocabulary()
     -- Searching text without regular expressions we won't get words, we will get the position in the dom (start and end)
     -- for each of the places the text if found wether the full word or the text inside a word and we want full words to highlight them
     -- When painting in the source readerview.lua, we get the boxes from the positions and using the boxes we can get the fulls words to highlight them
-
-    -- We want to add word/verb stems
-    -- Currently this is somewhat limited because it does not handle:
-    --   * Irregular verbs
-    --   * Uncommon plurals
-
-    -- Moreover, it only works one way which is in the Lua side in which all page words are stemmed now
-    -- For example, if we search for "worked" or "working", "work" will be highlighted,
-    -- but on the CREngine side, where words are not stemmed, searching for "work" won't highlight "working"
-    -- Plurals were only matched one way: page words are stemmed,
-    -- so searching for "cats" highlighted "cat", but searching for "cat"
-    -- wouldn't highlight "cats". Although this has now been fixed by adding plurals manually
-    -- Not perfect: irregular/phrasal verbs, some compound words,
-    -- and imperfect dictionary translations aren't either handled, but it helps
     if self.all_words then
-        local stemmer = require("stem")
-        local new_stems = {}
-
-        for word, _ in pairs(self.all_words) do
-            local stem = stemmer.stem(word):lower()
-            if #stem > 3 and word ~= stem and not self.all_words[stem] then
-                new_stems[stem] = ""
-            end
-
-            if #word > 2 then
-                local s_plural = word .. "s"
-                local es_plural = word .. "es"
-                if not self.all_words[s_plural] then
-                    new_stems[s_plural] = ""
-                end
-                if not self.all_words[es_plural] then
-                    new_stems[es_plural] = ""
-                end
-            end
-        end
-
-        -- añadimos los stems a la tabla original
-        for stem, _ in pairs(new_stems) do
-            self.all_words[stem] = ""
-        end
         local res = self.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false)
         if res and res.text then
             -- print(res.pos0)
