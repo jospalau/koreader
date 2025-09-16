@@ -595,7 +595,9 @@ function TopBar:init()
     end)
 
     self.daily_time_goal = self.settings:readSetting("daily_time_goal", 120)
-    self.daily_pages_goal = self.settings:readSetting("daily_pages_goal",120)
+    self.daily_pages_goal = self.settings:readSetting("daily_pages_goal", 120)
+
+    self.space_after_alt_bar = self.settings:readSetting("space_after_alt_bar", 12)
 end
 
 local getMem = function()
@@ -792,6 +794,22 @@ function TopBar:onReaderReady()
         self.goal_text,
     }
 
+    -- Most of the container widgets used in the topbar (in fact, all currently drawn ones) are bottom containers.
+    -- These containers make their child widgets grow upwards from their y coordinate on the screen:
+    -- When bottom containers are placed at the bottom of the screen (like progress_widget_container),
+    -- they are anchored to the bottom
+    -- When bottom containers are placed at the top of the screen, we anchor them by the height of the
+    -- contained text widget down from the topbar, so they can fit properly
+
+    -- The following widget is different:
+    -- This widget has always worked like this with two text widgets wrapped
+    -- in left and right containers which center their child vertically
+    -- To make this work, the containers have been modified to accept a no_center_vertically parameter,
+    -- which shifts the y coordinate by the amount of space where we want to start drawing.
+    -- This is 0 when defined, but later adjusted with Screen:scaleBySize(self.space_after_alt_bar).
+    -- We could have used separate text widgets, since text widgets grow upwards from its y coordinate (which means downwards on the screen).
+    -- In any case, one text widget uses a font size 4px smaller than the other,
+    -- and to compensate (so it aligns with the other), we add 4px to this widget's no_center_vertically parameter
     self.title_and_series_widget_container = HorizontalGroup:new{
         background = Blitbuffer.COLOR_WHITE,
         bordersize = self.border_size,
@@ -1438,8 +1456,8 @@ function TopBar:toggleBar(light_on)
         -- No scaled because margins are saved not scaled even though they are scaled
         -- when set (see onSetPageMargins() in readertypeset.lua)
 
-        -- How far we want the tile and series widget
-        self.space_after_alt_bar = 12
+        -- How far we want the tile and series widget. There is a menu entry to set it up, default 12px
+        -- self.space_after_alt_bar = 12
         if self.alt_bar then
             -- Begin alternative progress bar
             -- This last configuration goes with the separation line. Everything is hardcoded because it is difficult to make it proportional
@@ -1806,25 +1824,25 @@ function TopBar:paintTo(bb, x, y)
         y + TopBar.MARGIN_TOP) -- + self.title_and_series_widget_container[1][1]._baseline_h * 0.3) -- Visually compensates for excess internal top spacing
         -- self.title_and_series_widget_container:paintTo(bb, x + Screen:getWidth()/2, y + 20)
 
-        --[[
-        LineWidget = require("ui/widget/linewidget")
-        local topbar_height = self:getHeight()
-        local separator_line1 = LineWidget:new{
-            dimen = Geom:new{
-                w = Screen:getWidth(),
-                h = Size.line.thick,
+        if self.settings:isTrue("show_topbar_separators") then
+            LineWidget = require("ui/widget/linewidget")
+            local topbar_height = self:getHeight()
+            local separator_line1 = LineWidget:new{
+                dimen = Geom:new{
+                    w = Screen:getWidth(),
+                    h = Size.line.thick,
+                }
             }
-        }
-        separator_line1:paintTo(bb, x, y + topbar_height)
+            separator_line1:paintTo(bb, x, y + topbar_height)
 
-        local separator_line1 = LineWidget:new{
-            dimen = Geom:new{
-                w = Screen:getWidth(),
-                h = Size.line.thick,
+            separator_line1 = LineWidget:new{
+                dimen = Geom:new{
+                    w = Screen:getWidth(),
+                    h = Size.line.thick,
+                }
             }
-        }
-        separator_line1:paintTo(bb, x, y + Screen:scaleBySize(self.space_after_alt_bar))
-        --]]
+            separator_line1:paintTo(bb, x, y + Screen:scaleBySize(self.space_after_alt_bar))
+        end
 
         -- Top right
         -- Commented the text, using progress bar
@@ -2329,6 +2347,66 @@ function TopBar:addToMainMenu(menu_items)
                 end,
            },
            {
+                text_func = function()
+                    return T(_("Space after alternative bar: %1"), self.space_after_alt_bar)
+                end,
+                keep_menu_open = true,
+                callback = function(touchmenu_instance)
+                    local InputDialog = require("ui/widget/inputdialog")
+                    local space_after_alt_bar
+                    space_after_alt_bar = InputDialog:new{
+                        title = _("Set space after alternative bar"),
+                        input = self.space_after_alt_bar,
+                        input_type = "number",
+                        input_hint = _("Pxs after alternative bar (default is 12px)"),
+                        buttons =  {
+                            {
+                                {
+                                    text = _("Cancel"),
+                                    id = "close",
+                                    callback = function()
+                                        UIManager:close(space_after_alt_bar)
+                                    end,
+                                },
+                                {
+                                    text = _("OK"),
+                                    -- keep_menu_open = true,
+                                    callback = function()
+                                        local px = space_after_alt_bar:getInputValue()
+                                        if not px or px < 0 or px > 140 then -- Max top margin value (creoptions.lua)
+                                            px = 12
+                                        end
+                                        self.space_after_alt_bar = px
+                                        self.settings:saveSetting("space_after_alt_bar", px)
+                                        self.settings:flush()
+                                        UIManager:close(space_after_alt_bar)
+                                        touchmenu_instance:updateItems()
+                                        self:toggleBar()
+                                        UIManager:setDirty("all", "ui")
+                                    end,
+                                },
+                            },
+                        },
+                    }
+                    UIManager:show(space_after_alt_bar)
+                    space_after_alt_bar:onShowKeyboard()
+                end,
+            },
+            {
+                text = _("Enable show separator lines"),
+                checked_func = function()
+                    return self.settings:isTrue("show_topbar_separators")
+                end,
+                    help_text = _([[Show space_after_alt_bar and top bar height separator lines]]),
+                callback = function()
+                    local show_topbar_separators = not self.settings:isTrue("show_topbar_separators")
+                    self.settings:saveSetting("show_topbar_separators", show_topbar_separators)
+                    self.settings:flush()
+                    UIManager:setDirty("all", "ui")
+                    return true
+                end,
+            },
+           {
                 text = _("Show battery and memory info"),
                 checked_func = function() return self.settings:isTrue("show_battery_and_memory_info") end,
                 callback = function()
@@ -2351,7 +2429,7 @@ function TopBar:addToMainMenu(menu_items)
                         keep_menu_open = true,
                         callback = function(touchmenu_instance)
                             local InputDialog = require("ui/widget/inputdialog")
-                            local server_dialog
+                            local daily_time_goal
                             daily_time_goal = InputDialog:new{
                                 title = _("Set time goal"),
                                 input = self.daily_time_goal,
@@ -2363,7 +2441,7 @@ function TopBar:addToMainMenu(menu_items)
                                             text = _("Cancel"),
                                             id = "close",
                                             callback = function()
-                                                UIManager:close(server_dialog)
+                                                UIManager:close(daily_time_goal)
                                             end,
                                         },
                                         {
@@ -2400,7 +2478,7 @@ function TopBar:addToMainMenu(menu_items)
                         keep_menu_open = true,
                         callback = function(touchmenu_instance)
                             local InputDialog = require("ui/widget/inputdialog")
-                            local server_dialog
+                            local daily_pages_goal
                             daily_pages_goal = InputDialog:new{
                                 title = _("Set pages goal"),
                                 input = self.daily_pages_goal,
@@ -2412,7 +2490,7 @@ function TopBar:addToMainMenu(menu_items)
                                             text = _("Cancel"),
                                             id = "close",
                                             callback = function()
-                                                UIManager:close(server_dialog)
+                                                UIManager:close(daily_pages_goal)
                                             end,
                                         },
                                         {
