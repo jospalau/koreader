@@ -1556,39 +1556,20 @@ function TopBar:toggleBar(light_on)
                 self.frontlight = ""
             end
         end
-        if self.option == 1 or self.option == 2 or self.option == 3 then
-            if Device:isAndroid() and Device.screen:getWidth() < 1072 then
-                if configurable.h_page_margins[1] == 20 and configurable.t_page_margin == Screen:unscaleBySize(self:getHeight()) and configurable.h_page_margins[2] == 20 and configurable.b_page_margin == 15 then
-                    self.test_light_text:setText(" ● " .. self.frontlight)
-                else
-                    self.test_light_text:setText(" ○ " .. self.frontlight)
-                end
-            else
-                if configurable.h_page_margins[1] == 15 and configurable.t_page_margin == Screen:unscaleBySize(self:getHeight()) and configurable.h_page_margins[2] == 15 and configurable.b_page_margin == 15 then
-                    self.test_light_text:setText(" ● " .. self.frontlight)
-                else
-                    self.test_light_text:setText(" ○ " .. self.frontlight)
-                end
-            end
-        elseif self.option == 4 then
-            if Device:isAndroid() and Device.screen:getWidth() < 1072 then
-                if configurable.h_page_margins[1] == 20 and configurable.t_page_margin == Screen:unscaleBySize(self:getHeight()) and configurable.h_page_margins[2] == 20 and configurable.b_page_margin == 15 then
-                    self.test_light_text:setText(" ● " .. self.frontlight)
-                else
-                    self.test_light_text:setText(" ○ " .. self.frontlight)
-                end
-            else
-                if configurable.h_page_margins[1] == 15 and configurable.t_page_margin == Screen:unscaleBySize(self:getHeight()) and configurable.h_page_margins[2] == 15 and configurable.b_page_margin == 15 then
-                    self.test_light_text:setText(" ● " .. self.frontlight)
-                else
-                    self.test_light_text:setText(" ○ " .. self.frontlight)
-                end
-            end
+        local side_margins = 15
+        if Device:isAndroid() and Device.screen:getWidth() < 1072 then
+            side_margins = 20
+        end
+        if configurable.h_page_margins[1] == side_margins and configurable.t_page_margin == Screen:unscaleBySize(self:getHeight())
+            and configurable.h_page_margins[2] == side_margins and configurable.b_page_margin == Screen:unscaleBySize(self:getBottomHeight()) then
+            self.test_light_text:setText(" ● " .. self.frontlight)
+        else
+            self.test_light_text:setText(" ○ " .. self.frontlight)
         end
         if TopBar.show_bar_in_top_bar then
             TopBar.MARGIN_TOP = Screen:scaleBySize(9) + Screen:scaleBySize(self.space_after_alt_bar)
             self.title_and_series_widget_container[1].no_center_vertically = Screen:scaleBySize(self.space_after_alt_bar)
-            self.title_and_series_widget_container[2].no_center_vertically = Screen:scaleBySize(self.space_after_alt_bar) + 4
+            self.title_and_series_widget_container[2].no_center_vertically = Screen:scaleBySize(self.space_after_alt_bar) + 4 -- Compensate de 4px for the text widget series whouse font size is 4px smaller
         else
             TopBar.MARGIN_TOP = Screen:scaleBySize(9)
             self.title_and_series_widget_container[1].no_center_vertically = 0
@@ -2198,37 +2179,23 @@ function TopBar:onAdjustMarginsTopbar()
         -- Exceptions are Android in which side margins are set to 20
         -- And top margin when alternative status bar is on. Value is set to self.space_after_alt_bar (fixed to 15) + 9, adding a little bit more too, 6 more pixels (variable TopBar.extra_pixels)
 
-        local bottom_margin = 15
-        local margins = {}
+        local side_margins = 15
         if Device:isAndroid() and Device.screen:getWidth() < 1072 then
-            if self.ui.document.configurable.t_page_margin ~= Screen:unscaleBySize(self:getHeight()) or
-            self.ui.document.configurable.b_page_margin ~= bottom_margin or
-            self.ui.document.configurable.h_page_margins[1] ~= 20 or
-            self.ui.document.configurable.h_page_margins[2] ~= 20 then
-                local margins = { 20, Screen:unscaleBySize(self:getHeight()), 20, 0}
-                self.ui.document.configurable.t_page_margin = Screen:unscaleBySize(self:getHeight())
-                self.ui.document.configurable.b_page_margin = bottom_margin
-                self.ui.document.configurable.h_page_margins[1] = 20
-                self.ui.document.configurable.h_page_margins[2] = 20
-                self.ui:handleEvent(Event:new("SetPageMargins", margins))
-            else
-                self.ui:showBookStatus()
-            end
-        else
-            if self.ui.document.configurable.t_page_margin ~= Screen:unscaleBySize(self:getHeight()) or
-            self.ui.document.configurable.b_page_margin ~= bottom_margin or
-            self.ui.document.configurable.h_page_margins[1] ~= 15 or
-            self.ui.document.configurable.h_page_margins[2] ~= 15 then
-                local margins = { 15, Screen:unscaleBySize(self:getHeight()), 15, 0}
-                self.ui.document.configurable.t_page_margin = Screen:unscaleBySize(self:getHeight())
-                self.ui.document.configurable.b_page_margin = bottom_margin
-                self.ui.document.configurable.h_page_margins[1] = 15
-                self.ui.document.configurable.h_page_margins[2] = 15
-                self.ui:handleEvent(Event:new("SetPageMargins", margins))
-            else
-                self.ui:showBookStatus()
-            end
+            side_margins = 20
         end
+        if self.ui.document.configurable.t_page_margin ~= Screen:unscaleBySize(self:getHeight()) or
+            self.ui.document.configurable.b_page_margin ~= Screen:unscaleBySize(self:getBottomHeight()) or
+            self.ui.document.configurable.h_page_margins[1] ~= side_margins or
+            self.ui.document.configurable.h_page_margins[2] ~= side_margins then
+                local margins = { side_margins, Screen:unscaleBySize(self:getHeight()), side_margins, Screen:unscaleBySize(self:getBottomHeight())}
+                self.ui.document.configurable.t_page_margin = Screen:unscaleBySize(self:getHeight())
+                self.ui.document.configurable.b_page_margin = Screen:unscaleBySize(self:getBottomHeight())
+                self.ui.document.configurable.h_page_margins[1] = side_margins
+                self.ui.document.configurable.h_page_margins[2] = side_margins
+                self.ui:handleEvent(Event:new("SetPageMargins", margins))
+            else
+                self.ui:showBookStatus()
+            end
       --self.ui:saveSettings()
    end
 
