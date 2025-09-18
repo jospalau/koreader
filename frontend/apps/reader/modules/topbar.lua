@@ -867,7 +867,7 @@ function TopBar:onReaderReady()
         padding = 0,
     }
 
-    self.author_information_widget_container = left_container:new{
+    self.author_information_widget_container = bottom_container:new{
         dimen = Geom:new{ w = self.author_text:getSize().w, self.author_text:getSize().h },
         self.author_text,
     }
@@ -1797,7 +1797,7 @@ function TopBar:paintTo(bb, x, y)
         self.light_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
 
         -- self[21].dimen = Geom:new{ w = self[21][1]:getSize().w, self[21][1]:getSize().h }
-        self.author_information_widget_container:paintTo(bb, x + Screen:scaleBySize(4), y + Screen:scaleBySize(6))
+        self.author_information_widget_container:paintTo(bb, x + self.author_information_widget_container[1]:getSize().w/2 + Screen:scaleBySize(4), y + self.author_information_widget_container[1]._height)
 
         -- Top center
         self.title_and_series_widget_container[1][1]:updateSize()
