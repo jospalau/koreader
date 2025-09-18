@@ -294,15 +294,10 @@ function TitleBar:init()
     -- end
 
     if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") and not Device.isAndroid() then
-        -- self.titlebar_height = self.title_widget:getSize().h
-        -- The height varies. Different fonts end up with different height even if we set the same size
-        -- Use instead the icon size
-        -- self.titlebar_height = self.title_widget:getSize().h
-        self.titlebar_height = math.max(left_icon_size, right_icon_size) + 2
+        self.titlebar_height = self.title_widget:getSize().h
     else
         self.titlebar_height = self.title_group:getSize().h --Depending on the font will be different
     end
-
 
     if self.title_shrink_font_to_fit then
         -- Use, or store, the first title_group height we have computed,
