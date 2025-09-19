@@ -295,6 +295,12 @@ function TitleBar:init()
 
     self.titlebar_height = self.title_group:getSize().h
 
+    -- Better to use the icon size as title bar height than self.title_widget:getSize().h
+    -- Because with the patch filemanager-titlebar allows to change the font and the height varies with the font
+    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+        self.titlebar_height = math.max(left_icon_size, right_icon_size) + self.button_padding * 2
+    end
+
     if self.title_shrink_font_to_fit then
         -- Use, or store, the first title_group height we have computed,
         -- so the TitleBar geometry and the bottom line position stay stable
@@ -345,7 +351,9 @@ function TitleBar:init()
             self.bottom_v_padding = Size.padding.large
         end
     end
-    self.titlebar_height = self.titlebar_height + self.bottom_v_padding
+    if pagetextinfo and pagetextinfo.settings:nilOrFalse("enable_extra_tweaks") then
+        self.titlebar_height = self.titlebar_height + self.bottom_v_padding
+    end
 
     if self._initial_re_init_needed then
         -- We have computed all the self._initial_ metrics needed.
@@ -374,13 +382,6 @@ function TitleBar:init()
         self.titlebar_height = filler_and_info_text:getSize().h + self.bottom_v_padding
     end
 
-    -- We do this here at the end skipping further modifications of self.titlebar_height
-    -- and we do it under the enable_extra_tweaks setting
-    -- Better to use the icon size as title bar height than self.title_widget:getSize().h
-    -- Because with the patch filemanager-titlebar allows to change the font and the height varies with the font
-    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
-        self.titlebar_height = math.max(left_icon_size, right_icon_size) + self.button_padding * 2
-    end
     self.dimen = Geom:new{
         x = 0,
         y = 0,

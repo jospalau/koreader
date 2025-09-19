@@ -1921,7 +1921,7 @@ function TopBar:paintTo(bb, x, y)
         -- text_container2:paintTo(bb, x + Screen:getWidth() - text_container2:getSize().w - 20, y + 20)
         -- text_container2:paintTo(bb, x + Screen:getWidth()/2 - text_container2:getSize().w/2, y + 20)
     else
-        local collate_widget_container = left_container:new{
+        local collate_widget_container = bottom_container:new{
             dimen = Geom:new(),
             TextWidget:new{
                 text =  "",
@@ -1929,7 +1929,7 @@ function TopBar:paintTo(bb, x, y)
                 fgcolor = Blitbuffer.COLOR_BLACK,
             },
         }
-        local reverse_collate_widget_container = left_container:new{
+        local reverse_collate_widget_container = bottom_container:new{
             dimen = Geom:new(),
             TextWidget:new{
                 text =  "",
@@ -1961,23 +1961,23 @@ function TopBar:paintTo(bb, x, y)
                     collate_symbol = "Set manual sorting"
                 else
                     collate_symbol = "Sort"
-                end
-
-                collate_widget_container[1]:setText(collate_symbol)
-                collate_widget_container:paintTo(bb, x + Screen:getWidth() - collate_widget_container[1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - collate_widget_container[1]:getSize().h )
-                local reverse_collate_mode = G_reader_settings:readSetting("reverse_collate")
-                if reverse_collate_mode == nil then
-                    reverse_collate_widget_container[1]:setText("")
-                elseif not reverse_collate_mode then
-                    reverse_collate_widget_container[1]:setText("↓")
-                else
-                    reverse_collate_widget_container[1]:setText("↑")
-                end
+            end
+            collate_widget_container[1]:setText(collate_symbol)
+            collate_widget_container:paintTo(bb, x + Screen:getWidth() - collate_widget_container[1]:getSize().w / 2 - TopBar.MARGIN_SIDES, Screen:getHeight())
+            local reverse_collate_mode = G_reader_settings:readSetting("reverse_collate")
+            if reverse_collate_mode == nil then
+                reverse_collate_widget_container[1]:setText("")
+            elseif not reverse_collate_mode then
+                reverse_collate_widget_container[1]:setText("↓")
+            else
+                reverse_collate_widget_container[1]:setText("↑")
+            end
                 -- collate_widget_container:paintTo(bb, x + Screen:getWidth() - collate_widget_container[1][1]:getSize().w - TopBar.MARGIN_SIDES, y + Screen:scaleBySize(6))
-                reverse_collate_widget_container:paintTo(bb, x + Screen:getWidth() - collate_widget_container[1]:getSize().w - reverse_collate_widget_container[1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - reverse_collate_widget_container[1]:getSize().h)
+                reverse_collate_widget_container:paintTo(bb, x + Screen:getWidth() - collate_widget_container[1]:getSize().w - reverse_collate_widget_container[1]:getSize().w / 2 - TopBar.MARGIN_SIDES, Screen:getHeight())
+
             else
                 collate_widget_container[1]:setText("?")
-                collate_widget_container:paintTo(bb, x + Screen:getWidth() - collate_widget_container[1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - collate_widget_container[1]:getSize().h )
+                collate_widget_container:paintTo(bb, x + Screen:getWidth() - TopBar.MARGIN_SIDES, Screen:getHeight())
             end
         else
             local times_text_widget_container = TextWidget:new{
@@ -2030,10 +2030,6 @@ function TopBar:paintTo(bb, x, y)
                 -- local execute2 = io.popen("find " .. G_reader_settings:readSetting("home_dir") .. " -iname '*.epub.lua' -exec ls {} + | wc -l")
                 -- books_information_widget_container[1]:setText("TB: " .. execute:read('*a') .. "TBC: " .. execute2:read('*a'))
 
-                local stats_year = TopBar:getReadThisYearSoFar()
-                if stats_year > 0 then
-                    stats_year = "+" .. stats_year
-                end
                 books_information_widget_container[1]:setText("T:" .. stats["total_books"]
                 .. " F:" .. stats["total_books_finished"]
                 .. " FTM:" .. stats["total_books_finished_this_month"]
@@ -2046,7 +2042,7 @@ function TopBar:paintTo(bb, x, y)
             else
                 books_information_widget_container[1]:setText("No stats.lua file in home dir")
             end
-            books_information_widget_container:paintTo(bb, x + books_information_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES, Screen:getHeight())
+            books_information_widget_container:paintTo(bb, x + books_information_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES, Screen:getHeight() - 10)
 
 
             local times_widget_container =
@@ -2060,8 +2056,12 @@ function TopBar:paintTo(bb, x, y)
                 },
             }
 
+            local stats_year = TopBar:getReadThisYearSoFar()
+            if stats_year > 0 then
+                stats_year = "+" .. stats_year
+            end
             -- times[1]:setText(time .. "|" .. batt_lvl .. "%")
-            times_widget_container[1]:setText("BDB: " .. TopBar:getBooksOpened() .. ", TR: " .. TopBar:getTotalRead() .. "d")
+            -- times_widget_container[1]:setText("BDB: " .. TopBar:getBooksOpened() .. ", TR: " .. TopBar:getTotalRead() .. "d" .. " ΔL " .. stats_year .. "h")
             -- times.dimen = Geom:new{ w = times[1]:getSize().w, h = times[1].face.size }
             -- times_widget_container:paintTo(bb, x + times_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES,
             -- Screen:getHeight() - books_information_widget_container[1]:getSize().h)
@@ -2076,10 +2076,10 @@ function TopBar:paintTo(bb, x, y)
                     fgcolor = Blitbuffer.COLOR_BLACK,
                 },
             }
-            version_widget_container[1]:setText(TopBar:getDateAndVersion() .. ". BDB " .. TopBar:getBooksOpened() .. " TR " .. TopBar:getTotalRead() .. "d")
+            version_widget_container[1]:setText(TopBar:getDateAndVersion() .. ". BDB " .. TopBar:getBooksOpened() .. " TR " .. TopBar:getTotalRead() .. "d" .. " ΔL " .. stats_year .. "h")
             version_widget_container:paintTo(bb, x + version_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES,
             Screen:getHeight()
-            - books_information_widget_container[1]:getSize().h)
+            - books_information_widget_container[1]:getSize().h - 10)
             -- - times_widget_container[1]:getSize().h)
 
             if self.fm and not self.history then
@@ -2105,7 +2105,7 @@ function TopBar:paintTo(bb, x, y)
                     end
                     collate_widget_container[1]:setText(collate_symbol)
                     -- collate:paintTo(bb, x + Screen:getWidth() - collate[1]:getSize().w - TopBar.MARGIN_SIDES, y + Screen:scaleBySize(6))
-                    collate_widget_container:paintTo(bb, x + Screen:getWidth() - collate_widget_container[1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+                    collate_widget_container:paintTo(bb, x + Screen:getWidth() - collate_widget_container[1]:getSize().w / 2- TopBar.MARGIN_SIDES, Screen:getHeight())
 
                     local reverse_collate_mode = G_reader_settings:readSetting("reverse_collate")
                     if reverse_collate_mode then
@@ -2114,11 +2114,11 @@ function TopBar:paintTo(bb, x, y)
                         reverse_collate_widget_container[1]:setText("↑")
                     end
                     -- collate:paintTo(bb, x + Screen:getWidth() - collate[1]:getSize().w - TopBar.MARGIN_SIDES, y + Screen:scaleBySize(6))
-                    reverse_collate_widget_container:paintTo(bb, x + Screen:getWidth() - collate_widget_container[1]:getSize().w - reverse_collate_widget_container[1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+                    reverse_collate_widget_container:paintTo(bb, x + Screen:getWidth() - collate_widget_container[1]:getSize().w - reverse_collate_widget_container[1]:getSize().w /2 - TopBar.MARGIN_SIDES, Screen:getHeight())
 
                 else
                     collate_widget_container[1]:setText("?")
-                    collate_widget_container:paintTo(bb, x + Screen:getWidth() - collate_widget_container[1]:getSize().w - TopBar.MARGIN_SIDES, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+                    collate_widget_container:paintTo(bb, x + Screen:getWidth() - collate_widget_container[1]:getSize().w / 2- TopBar.MARGIN_SIDES, Screen:getHeight())
                 end
                local ignore_double_tap_frame_widget_container = left_container:new{
                     dimen = Geom:new(),

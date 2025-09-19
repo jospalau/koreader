@@ -565,10 +565,7 @@ function MenuItem:onTapSelect(arg, ges)
         UIManager:setDirty(nil, "fast", self[1].dimen)
 
         UIManager:forceRePaint()
-
-
-        UIManager:yieldToEPDC(5000)
-
+        UIManager:yieldToEPDC()
 
         -- Unhighlight
         --
@@ -617,8 +614,7 @@ function MenuItem:onHoldSelect(arg, ges)
         -- end
         UIManager:setDirty(nil, "fast", self[1].dimen)
         UIManager:forceRePaint()
-
-        UIManager:yieldToEPDC(5000)
+        UIManager:yieldToEPDC()
 
         -- Unhighlight
         --
@@ -800,7 +796,7 @@ function Menu:init()
     local chevron_right = "chevron.right"
     local chevron_first = "chevron.first"
     local chevron_last = "chevron.last"
-    local DGENERIC_ICON_SIZE = G_defaults:readSetting("DGENERIC_ICON_SIZE")
+    -- local DGENERIC_ICON_SIZE = G_defaults:readSetting("DGENERIC_ICON_SIZE")
 
     -- Only make icons smaller for non Android devices and when in fm or history
     -- if G_reader_settings:isTrue("top_manager_infmandhistory") and (self.title == "Reading Planner & Tracker" or (self.title == "" and not (self.collection_name or self.search))) then
@@ -815,32 +811,24 @@ function Menu:init()
     end
     self.page_info_left_chev = self.page_info_left_chev or Button:new{
         icon = chevron_left,
-        icon_width = Screen:scaleBySize(DGENERIC_ICON_SIZE),
-        icon_height = Screen:scaleBySize(DGENERIC_ICON_SIZE),
         callback = function() self:onPrevPage() end,
         bordersize = 0,
         show_parent = self.show_parent,
     }
     self.page_info_right_chev = self.page_info_right_chev or Button:new{
         icon = chevron_right,
-        icon_width = Screen:scaleBySize(DGENERIC_ICON_SIZE),
-        icon_height = Screen:scaleBySize(DGENERIC_ICON_SIZE),
         callback = function() self:onNextPage() end,
         bordersize = 0,
         show_parent = self.show_parent,
     }
     self.page_info_first_chev = self.page_info_first_chev or Button:new{
         icon = chevron_first,
-        icon_width = Screen:scaleBySize(DGENERIC_ICON_SIZE),
-        icon_height = Screen:scaleBySize(DGENERIC_ICON_SIZE),
         callback = function() self:onFirstPage() end,
         bordersize = 0,
         show_parent = self.show_parent,
     }
     self.page_info_last_chev = self.page_info_last_chev or Button:new{
         icon = chevron_last,
-        icon_width = Screen:scaleBySize(DGENERIC_ICON_SIZE),
-        icon_height = Screen:scaleBySize(DGENERIC_ICON_SIZE),
         callback = function() self:onLastPage() end,
         bordersize = 0,
         show_parent = self.show_parent,
@@ -933,12 +921,9 @@ function Menu:init()
         end,
         no_window = (self.title == "" and not (self.collection_name or self.search)) and true or nil,
     }
+
+
     self.page_info = HorizontalGroup:new{
-        (pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks")) and HorizontalSpan:new{
-            width = Screen:getWidth() / 2,
-        } or HorizontalSpan:new{
-            width = 0,
-        },
         self.page_info_first_chev,
         self.page_info_spacer,
         self.page_info_left_chev,
@@ -948,11 +933,36 @@ function Menu:init()
         self.page_info_right_chev,
         self.page_info_spacer,
         self.page_info_last_chev,
-        (pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks")) and HorizontalSpan:new{
-            width = Screen:scaleBySize(40),
-        } or HorizontalSpan:new{
-            width = 0,
-        },
+    }
+
+    local page_info_geom = Geom:new {
+        w = self.name == "filesearcher" and self.screen_w * 0.98 or self.screen_w * 0.90,
+        h = self.page_info:getSize().h,
+    }
+
+    local page_info_container = RightContainer:new {
+        dimen = page_info_geom,
+        self.page_info,
+    }
+
+    local page_controls = BottomContainer:new {
+        dimen = self.inner_dimen:copy(),
+        page_info_container
+    }
+
+    local tap_indicator_geom = Geom:new {
+        w = self.screen_w * 0.98,
+        h = self.page_info:getSize().h,
+    }
+
+    local tap_indicator = BottomContainer:new {
+        dimen = self.inner_dimen:copy(),
+        RightContainer:new {
+            dimen = tap_indicator_geom,
+            TextWidget:new{
+                text = "► ",
+            },
+        }
     }
 
     -- return button
@@ -975,7 +985,7 @@ function Menu:init()
         },
         self.page_return_arrow,
     }
---
+
     local header = self.no_title and VerticalSpan:new{ width = 0 } or self.title_bar
     local body = self.item_group
     local margin_bottom = nil
@@ -988,11 +998,6 @@ function Menu:init()
     --         end
     -- end
 
-    local footer = BottomContainer:new{
-        dimen = self.inner_dimen:copy(),
-        margin_bottom = margin_bottom,
-        self.page_info,
-    }
     local page_return = BottomContainer:new{
         dimen = self.inner_dimen:copy(),
         WidgetContainer:new{
@@ -1006,10 +1011,24 @@ function Menu:init()
     }
 
     self:_recalculateDimen()
+
     self.content_group = VerticalGroup:new{
         align = "left",
         header,
         body,
+    }
+
+    if self.name == "filesearcher" then
+        tap_indicator = VerticalSpan:new{ width = 0 }
+    end
+
+    local footer = OverlapGroup:new {
+        allow_mirroring = false,
+        dimen = self.inner_dimen:copy(),
+        self.content_group,
+        page_return,
+        page_controls,
+        tap_indicator,
     }
     local content = OverlapGroup:new{
         -- This unique allow_mirroring=false looks like it's enough
@@ -1022,13 +1041,12 @@ function Menu:init()
         footer,
     }
 
-    self[1] = FrameContainer:new{
+    self[1] = FrameContainer:new {
         background = Blitbuffer.COLOR_WHITE,
-        bordersize = self.border_size,
         padding = 0,
         margin = 0,
-        radius = self.is_popout and math.floor(self.dimen.w * (1/20)) or 0,
-        content
+        bordersize = 0,
+        footer
     }
 
     ------------------------------------------
