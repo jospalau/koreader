@@ -1134,12 +1134,12 @@ function Dispatcher._showAsMenu(settings, exec_props)
     local buttons = {}
     --local dump = require("dump")
     --print(dump(exec_props))
-    local font_face_default = "myfont2"
-    local font_size_default = 14
-    if exec_props["gesture"] and exec_props["gesture"]["multiswipe_directions"] and exec_props["gesture"]["multiswipe_directions"] == "north east" then
-        font_face_default = "myfont5"
-        font_size_default = 16
-    end
+    -- local font_face_default = "myfont2"
+    -- local font_size_default = 14
+    -- if exec_props["gesture"] and exec_props["gesture"]["multiswipe_directions"] and exec_props["gesture"]["multiswipe_directions"] == "north east" then
+    --     font_face_default = "myfont5"
+    --     font_size_default = 16
+    -- end
 
     if exec_props and exec_props.qm_show then
         table.insert(buttons, {{
