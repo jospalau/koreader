@@ -1004,9 +1004,9 @@ function ListMenu:_recalculateDimen()
         pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
     end
 
-    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
-        available_height = self.inner_dimen.h - self.others_height - Size.line.thin - 15
-    end
+    -- if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+    --     available_height = self.inner_dimen.h - self.others_height - Screen:scaleBySize(15)
+    -- end
 
     if self.files_per_page == nil then -- first drawing
         -- Default perpage is computed from a base of 64px per ListMenuItem,

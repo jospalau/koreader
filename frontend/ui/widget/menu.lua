@@ -556,7 +556,7 @@ function MenuItem:onTapSelect(arg, ges)
         --
         self[1].invert = true
         UIManager:widgetInvert(self[1], self[1].dimen.x, self[1].dimen.y)
-        local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+        -- local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
         -- if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") and Device.model == "Kobo_spaBW" then -- fast is a bit glitchy in Kobo BW
         --     UIManager:setDirty(nil, "ui", self[1].dimen)
         -- else
@@ -609,7 +609,7 @@ function MenuItem:onHoldSelect(arg, ges)
         --
         self[1].invert = true
         UIManager:widgetInvert(self[1], self[1].dimen.x, self[1].dimen.y)
-        local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+        -- local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
         -- if ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_devices_flashes_tweaks") and Device.model == "Kobo_spaBW" then -- fast is a bit glitchy in Kobo BW
         --     UIManager:setDirty(nil, "ui", self[1].dimen)
         -- else
@@ -803,11 +803,11 @@ function Menu:init()
     local DGENERIC_ICON_SIZE = G_defaults:readSetting("DGENERIC_ICON_SIZE")
 
     -- Only make icons smaller for non Android devices and when in fm or history
-    if G_reader_settings:isTrue("top_manager_infmandhistory") and (self.title == "Reading Planner & Tracker" or (self.title == "" and not (self.collection_name or self.search))) then
-        if not Device:isAndroid() or (Device:isAndroid() and Device.screen:getWidth() >= 1072) then
-            DGENERIC_ICON_SIZE = DGENERIC_ICON_SIZE / 2
-        end
-    end
+    -- if G_reader_settings:isTrue("top_manager_infmandhistory") and (self.title == "Reading Planner & Tracker" or (self.title == "" and not (self.collection_name or self.search))) then
+    --     if not Device:isAndroid() or (Device:isAndroid() and Device.screen:getWidth() >= 1072) then
+    --         DGENERIC_ICON_SIZE = DGENERIC_ICON_SIZE / 2
+    --     end
+    -- end
 
     if BD.mirroredUILayout() then
         chevron_left, chevron_right = chevron_right, chevron_left
@@ -845,8 +845,16 @@ function Menu:init()
         bordersize = 0,
         show_parent = self.show_parent,
     }
+
+    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+    if ui ~= nil then
+        pagetextinfo = ui.pagetextinfo
+    else
+        pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
+    end
+
     self.page_info_spacer = HorizontalSpan:new{
-        width = Screen:scaleBySize(32),
+        width = (pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks")) and Screen:scaleBySize(0) or Screen:scaleBySize(32),
     }
     self.page_info_left_chev:hide()
     self.page_info_right_chev:hide()
@@ -926,6 +934,11 @@ function Menu:init()
         no_window = (self.title == "" and not (self.collection_name or self.search)) and true or nil,
     }
     self.page_info = HorizontalGroup:new{
+        (pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks")) and HorizontalSpan:new{
+            width = Screen:getWidth() / 2,
+        } or HorizontalSpan:new{
+            width = 0,
+        },
         self.page_info_first_chev,
         self.page_info_spacer,
         self.page_info_left_chev,
@@ -935,6 +948,11 @@ function Menu:init()
         self.page_info_right_chev,
         self.page_info_spacer,
         self.page_info_last_chev,
+        (pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks")) and HorizontalSpan:new{
+            width = Screen:scaleBySize(40),
+        } or HorizontalSpan:new{
+            width = 0,
+        },
     }
 
     -- return button
@@ -962,13 +980,14 @@ function Menu:init()
     local body = self.item_group
     local margin_bottom = nil
     -- Only change margins when in fm or history
-    if G_reader_settings:isTrue("top_manager_infmandhistory") and (self.title == "Reading Planner & Tracker" or (self.title == "" and not (self.collection_name or self.search))) then
-            if Device:isAndroid() and Device.screen:getWidth() < 1072 then
-                margin_bottom = 20
-            else
-                margin_bottom = 22
-            end
-    end
+    -- if G_reader_settings:isTrue("top_manager_infmandhistory") and (self.title == "Reading Planner & Tracker" or (self.title == "" and not (self.collection_name or self.search))) then
+    --         if Device:isAndroid() and Device.screen:getWidth() < 1072 then
+    --             margin_bottom = 20
+    --         else
+    --             margin_bottom = 22
+    --         end
+    -- end
+
     local footer = BottomContainer:new{
         dimen = self.inner_dimen:copy(),
         margin_bottom = margin_bottom,

@@ -212,8 +212,8 @@ function TitleBar:init()
             end
         end
     end
-
     self.subtitle_widget = nil
+
     if self.subtitle then
         if self.subtitle_multilines then
             self.subtitle_widget = TextBoxWidget:new{
@@ -293,11 +293,7 @@ function TitleBar:init()
     --     table.insert(self, self.title_group)
     -- end
 
-    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") and not Device.isAndroid() then
-        self.titlebar_height = self.title_widget:getSize().h
-    else
-        self.titlebar_height = self.title_group:getSize().h --Depending on the font will be different
-    end
+    self.titlebar_height = self.title_group:getSize().h
 
     if self.title_shrink_font_to_fit then
         -- Use, or store, the first title_group height we have computed,
@@ -378,6 +374,13 @@ function TitleBar:init()
         self.titlebar_height = filler_and_info_text:getSize().h + self.bottom_v_padding
     end
 
+    -- We do this here at the end skipping further modifications of self.titlebar_height
+    -- and we do it under the enable_extra_tweaks setting
+    -- Better to use the icon size as title bar height than self.title_widget:getSize().h
+    -- Because with the patch filemanager-titlebar allows to change the font and the height varies with the font
+    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+        self.titlebar_height = math.max(left_icon_size, right_icon_size) + self.button_padding * 2
+    end
     self.dimen = Geom:new{
         x = 0,
         y = 0,

@@ -2034,15 +2034,15 @@ function TopBar:paintTo(bb, x, y)
                 if stats_year > 0 then
                     stats_year = "+" .. stats_year
                 end
-                books_information_widget_container[1]:setText("B: " .. stats["total_books"]
-                .. ", BF:" .. stats["total_books_finished"]
-                .. ", BFTM:" .. stats["total_books_finished_this_month"]
-                .. ", BFTY:" .. stats["total_books_finished_this_year"]
-                .. ", BFLY:" .. stats["total_books_finished_last_year"]
-                .. ", BMBR:" .. stats["total_books_mbr"]
-                .. ", BTBR:" .. stats["total_books_tbr"]
-                .. ", LD:" .. last_days
-                .. stats_year)
+                books_information_widget_container[1]:setText("T:" .. stats["total_books"]
+                .. " F:" .. stats["total_books_finished"]
+                .. " FTM:" .. stats["total_books_finished_this_month"]
+                .. " FTY:" .. stats["total_books_finished_this_year"]
+                .. " FLY:" .. stats["total_books_finished_last_year"]
+                .. " MR:" .. stats["total_books_mbr"]
+                .. " TR:" .. stats["total_books_tbr"])
+                -- .. ", LD:" .. last_days
+                -- .. stats_year)
             else
                 books_information_widget_container[1]:setText("No stats.lua file in home dir")
             end
@@ -2063,9 +2063,8 @@ function TopBar:paintTo(bb, x, y)
             -- times[1]:setText(time .. "|" .. batt_lvl .. "%")
             times_widget_container[1]:setText("BDB: " .. TopBar:getBooksOpened() .. ", TR: " .. TopBar:getTotalRead() .. "d")
             -- times.dimen = Geom:new{ w = times[1]:getSize().w, h = times[1].face.size }
-            times_widget_container:paintTo(bb, x + times_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES,
-            Screen:getHeight()
-            - books_information_widget_container[1]:getSize().h)
+            -- times_widget_container:paintTo(bb, x + times_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES,
+            -- Screen:getHeight() - books_information_widget_container[1]:getSize().h)
 
             local version_widget_container =
             bottom_container:new{
@@ -2077,11 +2076,11 @@ function TopBar:paintTo(bb, x, y)
                     fgcolor = Blitbuffer.COLOR_BLACK,
                 },
             }
-            version_widget_container[1]:setText(TopBar:getDateAndVersion())
+            version_widget_container[1]:setText(TopBar:getDateAndVersion() .. ". BDB " .. TopBar:getBooksOpened() .. " TR " .. TopBar:getTotalRead() .. "d")
             version_widget_container:paintTo(bb, x + version_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES,
             Screen:getHeight()
-            - books_information_widget_container[1]:getSize().h
-            - times_widget_container[1]:getSize().h)
+            - books_information_widget_container[1]:getSize().h)
+            -- - times_widget_container[1]:getSize().h)
 
             if self.fm and not self.history then
                 if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then

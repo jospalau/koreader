@@ -911,9 +911,9 @@ function MosaicMenu:_recalculateDimen()
     else
         pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
     end
-    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
-        self.others_height = self.others_height + 30
-    end
+    -- if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+    --     self.others_height = self.others_height + Screen:scaleBySize(20)
+    -- end
     -- Set our items target size
     if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
         self.item_margin = 0
