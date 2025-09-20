@@ -965,6 +965,44 @@ function Menu:init()
         }
     }
 
+    local text = ""
+    if self.name == "filesearcher" then
+        text = "File searcher"
+    elseif self.name == "collections" and self.collection_name == "listall" then
+        text = "Collections"
+    elseif self.name == "collections" and self.collection_name == "series" then
+        text = "Collections"
+    elseif self.name == "collections" and self.series == true then
+        text = "Series " .. self.collection_name
+    elseif self.name == "collections" then
+        text = "Collection " .. self.collection_name
+    end
+
+    local footer_text_text = TextWidget:new {
+        text = text,
+        face = Font:getFace("NotoSans-Regular.ttf", 12),
+        max_width = (self.screen_w * 0.94) - self.page_info:getSize().w, -- pagination_width,
+        truncate_with_ellipsis = true,
+    }
+
+    local footer_text_geom = Geom:new {
+        w = self.screen_w * 0.94,
+        h = self.page_info:getSize().h,
+    }
+
+    local footer_text_container = LeftContainer:new {
+        dimen = footer_text_geom,
+        footer_text_text,
+        max_width = (self.screen_w * 0.94) - self.page_info:getSize().w, -- pagination_width,
+        truncate_with_ellipsis = true,
+        truncate_left = true,
+    }
+
+    local footer_text = BottomContainer:new {
+        dimen = self.inner_dimen:copy(),
+        footer_text_container,
+    }
+
     -- return button
     self.page_return_arrow = self.page_return_arrow or Button:new{
         icon = "back.top",
@@ -1026,10 +1064,11 @@ function Menu:init()
         allow_mirroring = false,
         dimen = self.inner_dimen:copy(),
         self.content_group,
-        page_return,
+        footer_text,
         page_controls,
         tap_indicator,
     }
+
     local content = OverlapGroup:new{
         -- This unique allow_mirroring=false looks like it's enough
         -- to have this complex Menu, and all widgets based on it,
