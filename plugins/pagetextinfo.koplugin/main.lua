@@ -376,6 +376,479 @@ if settings:isTrue("enable_change_bar_menu") then
     FileManager.hooked_fmSetupLayout = true
 end
 
+
+
+local Menu = require("ui/widget/menu")
+local orig_Menu_init = Menu.init
+
+local Button = require("ui/widget/button")
+local HorizontalGroup = require("ui/widget/horizontalgroup")
+local HorizontalSpan = require("ui/widget/horizontalspan")
+local BottomContainer = require("ui/widget/container/bottomcontainer")
+local LeftContainer = require("ui/widget/container/leftcontainer")
+local RightContainer = require("ui/widget/container/rightcontainer")
+local WidgetContainer = require("ui/widget/container/widgetcontainer")
+local OverlapGroup = require("ui/widget/overlapgroup")
+local GestureRange = require("ui/gesturerange")
+local Input = Device.input
+
+function Menu:init()
+    self.show_parent = self.show_parent or self
+    self.item_table = self.item_table or {}
+    self.item_table_stack = {}
+    self.page = 1
+
+    self.screen_w = Screen:getWidth()
+    self.screen_h = Screen:getHeight()
+    self.dimen = Geom:new{ x = 0, y = 0, w = self.width or self.screen_w, h = self.height or self.screen_h }
+    if self.dimen.h > self.screen_h then
+        self.dimen.h = self.screen_h
+    end
+
+    self.border_size = self.is_borderless and 0 or Size.border.window
+    self.inner_dimen = Geom:new{
+        w = self.dimen.w - 2 * self.border_size,
+        h = self.dimen.h - 2 * self.border_size,
+    }
+
+    self.paths = {}  -- per instance table to trace navigation path
+    self.calibre_data = util.loadCalibreData()
+    -----------------------------------
+    -- start to set up widget layout --
+    -----------------------------------
+    if self.show_path or not self.no_title then
+        if self.subtitle == nil and (self.show_path or self.title_bar_fm_style) then
+            self.subtitle = ""
+        end
+        self.title_bar = self.custom_title_bar or TitleBar:new{
+            width = self.dimen.w,
+            fullscreen = "true",
+            align = "center",
+            with_bottom_line = self.with_bottom_line,
+            bottom_line_color = self.bottom_line_color,
+            bottom_line_h_padding = self.bottom_line_h_padding,
+            title = self.title,
+            title_face = self.title_face,
+            title_multilines = self.title_multilines,
+            title_shrink_font_to_fit = self.title_shrink_font_to_fit,
+            subtitle = self.subtitle,
+            subtitle_truncate_left = self.show_path,
+            subtitle_fullwidth = self.show_path,
+            title_top_padding = self.title_bar_fm_style and Screen:scaleBySize(6),
+            button_padding = self.title_bar_fm_style and Screen:scaleBySize(5),
+            left_icon = self.title_bar_left_icon,
+            left_icon_size_ratio = self.title_bar_fm_style and 1,
+            left_icon_tap_callback = function() self:onLeftButtonTap() end,
+            left_icon_hold_callback = function() self:onLeftButtonHold() end,
+            right_icon_size_ratio = self.title_bar_fm_style and 1,
+            close_callback = function() self:onClose() end,
+            show_parent = self.show_parent or self,
+        }
+    end
+
+    -- group for items
+    self.item_group = VerticalGroup:new{}
+    -- group for page info
+    local chevron_left = "chevron.left"
+    local chevron_right = "chevron.right"
+    local chevron_first = "chevron.first"
+    local chevron_last = "chevron.last"
+    -- local DGENERIC_ICON_SIZE = G_defaults:readSetting("DGENERIC_ICON_SIZE")
+
+    -- Only make icons smaller for non Android devices and when in fm or history
+    -- if G_reader_settings:isTrue("top_manager_infmandhistory") and (self.title == "Reading Planner & Tracker" or (self.title == "" and not (self.collection_name or self.search))) then
+    --     if not Device:isAndroid() or (Device:isAndroid() and Device.screen:getWidth() >= 1072) then
+    --         DGENERIC_ICON_SIZE = DGENERIC_ICON_SIZE / 2
+    --     end
+    -- end
+
+    if BD.mirroredUILayout() then
+        chevron_left, chevron_right = chevron_right, chevron_left
+        chevron_first, chevron_last = chevron_last, chevron_first
+    end
+    self.page_info_left_chev = self.page_info_left_chev or Button:new{
+        icon = chevron_left,
+        callback = function() self:onPrevPage() end,
+        bordersize = 0,
+        show_parent = self.show_parent,
+    }
+    self.page_info_right_chev = self.page_info_right_chev or Button:new{
+        icon = chevron_right,
+        callback = function() self:onNextPage() end,
+        bordersize = 0,
+        show_parent = self.show_parent,
+    }
+    self.page_info_first_chev = self.page_info_first_chev or Button:new{
+        icon = chevron_first,
+        callback = function() self:onFirstPage() end,
+        bordersize = 0,
+        show_parent = self.show_parent,
+    }
+    self.page_info_last_chev = self.page_info_last_chev or Button:new{
+        icon = chevron_last,
+        callback = function() self:onLastPage() end,
+        bordersize = 0,
+        show_parent = self.show_parent,
+    }
+
+    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+    if ui ~= nil then
+        pagetextinfo = ui.pagetextinfo
+    else
+        pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
+    end
+
+    self.page_info_spacer = HorizontalSpan:new{
+        width = (pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks")) and Screen:scaleBySize(0) or Screen:scaleBySize(32),
+    }
+    self.page_info_left_chev:hide()
+    self.page_info_right_chev:hide()
+    self.page_info_first_chev:hide()
+    self.page_info_last_chev:hide()
+
+    local buttons = {
+        {
+            {
+                text = self.search_callback and _("Search…") or _("Search"),
+                callback = function()
+                    local search_string = self.page_info_text.input_dialog:getInputText()
+                    if self.search_callback then
+                        self.search_callback(search_string)
+                        self.page_info_text:closeInputDialog()
+                    else
+                        if search_string ~= "" then
+                            self:goToMenuItemMatching(search_string)
+                            self.page_info_text:closeInputDialog()
+                        end
+                    end
+                end,
+            },
+            {
+                text = _("Go to letter"),
+                callback = function()
+                    local search_string = self.page_info_text.input_dialog:getInputText()
+                    if search_string ~= "" then
+                        self:goToMenuItemMatching(search_string, true)
+                        self.page_info_text:closeInputDialog()
+                    end
+                end,
+            },
+        },
+        {
+            {
+                text = _("Cancel"),
+                id = "close",
+                callback = function()
+                    self.page_info_text:closeInputDialog()
+                end,
+            },
+            {
+                text = _("Go to page"),
+                callback = function()
+                    local page = tonumber(self.page_info_text.input_dialog:getInputText())
+                    if page and page >= 1 and page <= self.page_num then
+                        self:onGotoPage(page)
+                        self.page_info_text:closeInputDialog()
+                    end
+                end,
+            },
+        },
+    }
+    self.page_info_text = self.page_info_text or Button:new{
+        text = "",
+        text_font_bold = false,
+        bordersize = 0,
+        call_hold_input_on_tap = (self.title == "" and not (self.collection_name or self.search)) and false or true,
+        hold_input = not (self.title == "" and not (self.collection_name or self.search)) and {
+            title = _("Enter text, letter or page number"),
+            hint_func = function()
+                -- @translators First group is the standard range for alphabetic searches, second group is a page number range
+                return T(_("(a - z) or (1 - %1)"), self.page_num)
+            end,
+            buttons = buttons,
+        } or nil,
+        tap_input_func = (self.title == "" and not (self.collection_name or self.search)) and function()
+            local Event = require("ui/event")
+            return {
+                UIManager:sendEvent(Event:new("ShowFileSearch", "*.epub")),
+                callback = function(input)
+                    self:setCustomServer(input)
+                end,
+            } or nil
+        end,
+        no_window = (self.title == "" and not (self.collection_name or self.search)) and true or nil,
+    }
+
+
+    self.page_info = HorizontalGroup:new{
+        self.page_info_first_chev,
+        self.page_info_spacer,
+        self.page_info_left_chev,
+        self.page_info_spacer,
+        self.page_info_text,
+        self.page_info_spacer,
+        self.page_info_right_chev,
+        self.page_info_spacer,
+        self.page_info_last_chev,
+    }
+
+    local page_info_geom = Geom:new {
+        w = self.name == "filesearcher" and self.screen_w * 0.98 or self.screen_w * 0.90,
+        h = self.page_info:getSize().h,
+    }
+
+    local page_info_container = RightContainer:new {
+        dimen = page_info_geom,
+        self.page_info,
+    }
+
+    local page_controls = BottomContainer:new {
+        dimen = self.inner_dimen:copy(),
+        page_info_container
+    }
+
+    local tap_indicator_geom = Geom:new {
+        w = self.screen_w * 0.98,
+        h = self.page_info:getSize().h,
+    }
+
+    local tap_indicator = BottomContainer:new {
+        dimen = self.inner_dimen:copy(),
+        RightContainer:new {
+            dimen = tap_indicator_geom,
+            TextWidget:new{
+                text = "► ",
+            },
+        }
+    }
+
+    local text = ""
+    if self.name == "filesearcher" then
+        text = "File searcher"
+    elseif self.name == "collections" and self.collection_name == "listall" then
+        text = "Collections"
+    elseif self.name == "collections" and self.collection_name == "series" then
+        text = "Collections"
+    elseif self.name == "collections" and self.series == true then
+        text = "Series " .. self.collection_name
+    elseif self.name == "collections" then
+        text = "Collection " .. self.collection_name
+    end
+
+    local footer_text_text = TextWidget:new {
+        text = text,
+        face = Font:getFace("NotoSans-Regular.ttf", 12),
+        max_width = (self.screen_w * 0.94) - self.page_info:getSize().w, -- pagination_width,
+        truncate_with_ellipsis = true,
+    }
+
+    local footer_text_geom = Geom:new {
+        w = self.screen_w * 0.94,
+        h = self.page_info:getSize().h,
+    }
+
+    local footer_text_container = LeftContainer:new {
+        dimen = footer_text_geom,
+        footer_text_text,
+        max_width = (self.screen_w * 0.94) - self.page_info:getSize().w, -- pagination_width,
+        truncate_with_ellipsis = true,
+        truncate_left = true,
+    }
+
+    local footer_text = BottomContainer:new {
+        dimen = self.inner_dimen:copy(),
+        footer_text_container,
+    }
+
+    -- return button
+    self.page_return_arrow = self.page_return_arrow or Button:new{
+        icon = "back.top",
+        callback = function()
+            if self.onReturn then self:onReturn() end
+        end,
+        hold_callback = function()
+            if self.onHoldReturn then self:onHoldReturn() end
+        end,
+        bordersize = 0,
+        show_parent = self.show_parent,
+        readonly = self.return_arrow_propagation,
+    }
+    self.page_return_arrow:hide()
+    self.return_button = HorizontalGroup:new{
+        HorizontalSpan:new{
+            width = Size.span.horizontal_small,
+        },
+        self.page_return_arrow,
+    }
+
+    local header = self.no_title and VerticalSpan:new{ width = 0 } or self.title_bar
+    local body = self.item_group
+    local margin_bottom = nil
+    -- Only change margins when in fm or history
+    -- if G_reader_settings:isTrue("top_manager_infmandhistory") and (self.title == "Reading Planner & Tracker" or (self.title == "" and not (self.collection_name or self.search))) then
+    --         if Device:isAndroid() and Device.screen:getWidth() < 1072 then
+    --             margin_bottom = 20
+    --         else
+    --             margin_bottom = 22
+    --         end
+    -- end
+
+    local page_return = BottomContainer:new{
+        dimen = self.inner_dimen:copy(),
+        WidgetContainer:new{
+            dimen = Geom:new{
+                x = 0, y = 0,
+                w = self.screen_w,
+                h = self.page_return_arrow:getSize().h,
+            },
+            self.title ~= "History" and self.return_button or nil,
+        }
+    }
+
+    self:_recalculateDimen()
+
+    self.content_group = VerticalGroup:new{
+        align = "left",
+        header,
+        body,
+    }
+
+    if self.name == "filesearcher" then
+        tap_indicator = VerticalSpan:new{ width = 0 }
+    end
+
+    local footer = OverlapGroup:new {
+        allow_mirroring = false,
+        dimen = self.inner_dimen:copy(),
+        self.content_group,
+        footer_text,
+        page_controls,
+        tap_indicator,
+    }
+
+    local content = OverlapGroup:new{
+        -- This unique allow_mirroring=false looks like it's enough
+        -- to have this complex Menu, and all widgets based on it,
+        -- be mirrored correctly with RTL languages
+        allow_mirroring = false,
+        dimen = self.inner_dimen:copy(),
+        self.content_group,
+        page_return,
+        footer,
+    }
+
+    self[1] = FrameContainer:new {
+        background = Blitbuffer.COLOR_WHITE,
+        padding = 0,
+        margin = 0,
+        bordersize = 0,
+        footer
+    }
+
+    ------------------------------------------
+    -- start to set up input event callback --
+    ------------------------------------------
+    -- watch for outer region if it's a self contained widget
+    if self.is_popout then
+        self.ges_events.TapCloseAllMenus = {
+            GestureRange:new{
+                ges = "tap",
+                range = Geom:new{
+                    x = 0, y = 0,
+                    w = self.screen_w,
+                    h = self.screen_h,
+                }
+            }
+        }
+    end
+    -- delegate swipe gesture to GestureManager in filemanager
+   -- if not self.filemanager then
+    if self.name ~= "filemanager" then
+        self.ges_events.Swipe = {
+            GestureRange:new{
+                ges = "swipe",
+                range = self.dimen,
+            }
+        }
+        self.ges_events.MultiSwipe = {
+            GestureRange:new{
+                ges = "multiswipe",
+                range = self.dimen,
+            }
+        }
+        self.ges_events.Tap = {
+            GestureRange:new{
+                ges = "tap",
+                -- range = Geom:new{ x = 0, y = Screen:getSize().h - 100, w = 100, h = 100}, -- Boton left corner
+                range = Geom:new{ x = Screen:getSize().w - 100, y = Screen:getSize().h - 100, w = 100, h = 100}, -- Botton right corner
+            }
+        }
+        self.ges_events.DoubleTapBottomLeft = {
+            GestureRange:new{
+                ges = "double_tap",
+                range = Geom:new{ x = 0, y = Screen:getSize().h - 100, w = 100, h = 100}, -- Boton left corner
+                -- range = Geom:new{ x = Screen:getSize().w - 100, y = Screen:getSize().h - 100, w = 100, h = 100}, -- Botton right corner
+            }
+        }
+        self.ges_events.DoubleTapBottomRight = {
+            GestureRange:new{
+                ges = "double_tap",
+                -- range = Geom:new{ x = 0, y = Screen:getSize().h - 100, w = 100, h = 100}, -- Boton left corner
+                range = Geom:new{ x = Screen:getSize().w - 100, y = Screen:getSize().h - 100, w = 100, h = 100}, -- Botton right corner
+            }
+        }
+    end
+    self.ges_events.Pan = { -- (for mousewheel scrolling support)
+        GestureRange:new{
+            ges = "pan",
+            range = self.dimen,
+        }
+    }
+
+    self.ges_events.Close = self.on_close_ges
+
+    if Device:hasKeys() then
+        -- set up keyboard events
+        self.key_events.Close = { { Input.group.Back } }
+        self.key_events.LeftButtonTap = { { "Menu" } }
+        if Device:hasFewKeys() then
+            self.key_events.Close = { { "Left" } }
+        end
+        self.key_events.NextPage = { { Input.group.PgFwd } }
+        self.key_events.PrevPage = { { Input.group.PgBack } }
+        if Device:hasKeyboard() then
+            self.key_events.FirstPage = { { "Shift", { "LPgBack", "RPgBack" } } }
+            self.key_events.LastPage = { { "Shift", { "LPgFwd", "RPgFwd" } } }
+            self.key_events.ShowGotoDialog = { { "Shift", "Down" } }
+        elseif Device:hasScreenKB() then
+            self.key_events.FirstPage = { { "ScreenKB", { "LPgBack", "RPgBack" } } }
+            self.key_events.LastPage = { { "ScreenKB", { "LPgFwd", "RPgFwd" } } }
+            self.key_events.ShowGotoDialog = { { "ScreenKB", "Down" } }
+        end
+    end
+
+    if Device:hasDPad() then
+        if Device:hasFewKeys() then
+            -- we won't catch presses to "Right", leave that to MenuItem.
+            self.key_events.FocusRight = nil
+            -- add long press on "Right" key
+            self.key_events.Right = { { "Right" } }
+        end
+        -- shortcut icon is not needed for touch device
+        if self.is_enable_shortcut then
+            self.key_events.SelectByShortCut = { { self.item_shortcuts } }
+        end
+    end
+
+    if self.item_table.current then
+        self.page = self:getPageNumber(self.item_table.current)
+    end
+    if not self.path_items then -- not FileChooser
+        self:updateItems(1, true)
+    end
+end
+
+
 function PageTextInfo:onDispatcherRegisterActions()
     Dispatcher:registerAction("pagetextinfo_action", {category="none", event="PageTextInfo", title=_("Page text info widget"), general=true,})
 
