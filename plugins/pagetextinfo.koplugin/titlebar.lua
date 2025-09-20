@@ -243,7 +243,7 @@ function TitleBar:init()
         table.insert(self.title_group, self.title_widget)
     end
 
-    self.titlebar_height = self.title_group:getSize().h -- - self.subtitle_widget:getSize().h
+    self.titlebar_height = math.max(left_icon_size, right_icon_size) + self.button_padding * 2
 
     if self.with_bottom_line then
         -- Be sure we add between the text and the line at least as much padding
