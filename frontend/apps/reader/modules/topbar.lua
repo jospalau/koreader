@@ -681,9 +681,12 @@ function TopBar:onReaderReady()
         face = Font:getFace("myfont3"),
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
-    local font = self.settings:readSetting("font_times_progress")
-    and self.settings:readSetting("font_times_progress")
-    or "myfont3"
+
+
+    local font = "cfont"
+    if self.settings:nilOrFalse("use_system_font") then
+        font = self.settings:readSetting("font_times_progress")
+    end
     local font_size= self.settings:readSetting("font_size_times_progress")
     and self.settings:readSetting("font_size_times_progress") or 12
     self.progress_book_text = TextWidget:new{
@@ -736,9 +739,11 @@ function TopBar:onReaderReady()
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
-    font = self.settings:readSetting("font_title")
-    and self.settings:readSetting("font_title")
-    or "Consolas-Regular.ttf"
+
+    font = "cfont"
+    if self.settings:nilOrFalse("use_system_font") then
+        font = self.settings:readSetting("font_title")
+    end
 
     font_size = self.settings:readSetting("font_size_title")
     and self.settings:readSetting("font_size_title")
@@ -987,6 +992,122 @@ function TopBar:onReaderReady()
 
 end
 
+function TopBar:changeAllWidgetFaces()
+    local font = "cfont"
+    if self.settings:nilOrFalse("use_system_font") then
+        font = self.settings:readSetting("font_times_progress")
+    end
+    local font_size= self.settings:readSetting("font_size_times_progress")
+    and self.settings:readSetting("font_size_times_progress") or 12
+    self.progress_book_text = TextWidget:new{
+        text =  "",
+        face = Font:getFace(font, font_size),
+        fgcolor = Blitbuffer.COLOR_BLACK,
+    }
+
+    self.current_page_text = TextWidget:new{
+        text =  "",
+        face = Font:getFace(font, font_size),
+        fgcolor = Blitbuffer.COLOR_BLACK,
+    }
+
+    self.progress_chapter_text = TextWidget:new{
+        text =  "",
+        face = Font:getFace(font, font_size),
+        fgcolor = Blitbuffer.COLOR_BLACK,
+    }
+
+    self.times_text = TextWidget:new{
+        text =  "",
+        face = Font:getFace(font, font_size),
+        fgcolor = Blitbuffer.COLOR_BLACK,
+        invert = false,
+    }
+
+    self.progress_widget_container = bottom_container:new{
+        dimen = Geom:new{ w = self.progress_book_text:getSize().w, self.progress_book_text:getSize().h },
+        self.progress_book_text,
+    }
+
+    self.current_page_widget_container = bottom_container:new{
+        dimen = Geom:new{ w = self.current_page_text:getSize().w, self.current_page_text:getSize().h },
+        self.current_page_text,
+    }
+
+    self.progress_chapter_widget_container = bottom_container:new{
+        dimen = Geom:new(),
+        self.progress_chapter_text,
+    }
+
+    self.stats_times_widget_container = bottom_container:new{
+        dimen = Geom:new(),
+        self.times_text,
+    }
+
+    font = "cfont"
+    if self.settings:nilOrFalse("use_system_font") then
+        font = self.settings:readSetting("font_title")
+    end
+
+    font_size = self.settings:readSetting("font_size_title")
+    and self.settings:readSetting("font_size_title")
+    or 14
+
+    local noto_sans_text_face = Font:getFace("NotoSans-Regular.ttf", font_size)
+    local w = TextWidget:new{ text = "", face = noto_sans_text_face, }
+    local forced_baseline = w:getBaseline()
+    local forced_height = w:getSize().h
+    w:free()
+
+    self.title_text = TextWidget:new{
+        text =  "",
+        face = Font:getFace(font, font_size),
+        fgcolor = Blitbuffer.COLOR_BLACK,
+        bold = true,
+    }
+
+    self.series_text = TextWidget:new{
+        text =  "",
+        face = Font:getFace(font, font_size - 4),
+        fgcolor = Blitbuffer.COLOR_BLACK,
+        bold = true,
+    }
+
+    self.chapter_text = TextWidget:new{
+        text =  "",
+        face = Font:getFace(font, font_size),
+        fgcolor = Blitbuffer.COLOR_BLACK,
+        bold = true,
+        forced_baseline = forced_baseline,
+        forced_height = forced_height,
+    }
+    self.title_and_series_widget_container = HorizontalGroup:new{
+        background = Blitbuffer.COLOR_WHITE,
+        bordersize = self.border_size,
+        padding = 0,
+        margin = 0,
+        radius = self.is_popout and math.floor(self.dimen.w * (1/20)) or 0,
+        right_container:new{
+            dimen = Geom:new{ w = self.title_text:getSize().w, self.title_text:getSize().h },
+            no_center_vertically = 0,
+            self.title_text,
+        },
+        left_container:new{
+            dimen = Geom:new{ w = self.series_text:getSize().w, self.series_text:getSize().h },
+            no_center_vertically = 0,
+            self.series_text,
+        }
+    }
+    self.chapter_widget_container = bottom_container:new{
+        dimen = Geom:new(),
+        self.chapter_text,
+    }
+
+    self:toggleBar()
+    self.view.doublebar.title_text.face = Font:getFace(font, font_size)
+    self.view.doublebar.chapter_text.face = Font:getFace(font, font_size)
+    self.view.doublebar:toggleBar()
+end
 function TopBar:onToggleShowTopBar()
     local show_top_bar = self.settings:isTrue("show_top_bar")
     self.settings:saveSetting("show_top_bar", not show_top_bar)
@@ -2249,15 +2370,9 @@ function TopBar:addToMainMenu(menu_items)
                     and self.settings:readSetting("font_size_title") or 14)
                     local face_series = Font:getFace(font_path, self.settings:readSetting("font_size_title")
                     and self.settings:readSetting("font_size_title") - 4 or 10)
-                    self.title_text.face = face
-                    self.series_text.face = face_series
-                    self.chapter_text.face = face
-                    self:toggleBar()
-                    self.view.doublebar.title_text.face = face
-                    self.view.doublebar.chapter_text.face = face
-                    self.view.doublebar:toggleBar()
-                    UIManager:setDirty("all", "ui")
                     self.settings:saveSetting("font_title", font_path)
+                    self:changeAllWidgetFaces()
+                    UIManager:setDirty("all", "ui")
                     self.settings:flush()
                     return true
                 end,
@@ -2274,35 +2389,9 @@ function TopBar:addToMainMenu(menu_items)
                     return self.settings:readSetting("font_times_progress") == font_path
                 end,
                 callback = function()
-                    local face = Font:getFace(font_path, self.settings:readSetting("font_size_times_progress") and self.settings:readSetting("font_size_times_progress") or 12)
-                    self.times_text = TextWidget:new{
-                        text =  "",
-                        face = face,
-                        fgcolor = Blitbuffer.COLOR_BLACK,
-                    }
-                    self.stats_times_widget_container[1] = self.times_text
-                    self.progress_book_text = TextWidget:new{
-                        text =  "",
-                        face = face,
-                        fgcolor = Blitbuffer.COLOR_BLACK,
-                    }
-                   self.progress_widget_container[1] = self.progress_book_text
-                   self.progress_chapter_text = TextWidget:new{
-                        text =  "",
-                        face = face,
-                        fgcolor = Blitbuffer.COLOR_BLACK,
-                    }
-                    self.progress_chapter_widget_container[1] = self.progress_chapter_text
-
-                    self.current_page_text = TextWidget:new{
-                        text =  "",
-                        face = face,
-                        fgcolor = Blitbuffer.COLOR_BLACK,
-                    }
-                    self.current_page_widget_container[1] = self.current_page_text
-                    self:toggleBar()
-                    UIManager:setDirty("all", "ui")
                     self.settings:saveSetting("font_times_progress", font_path)
+                    self:changeAllWidgetFaces()
+                    UIManager:setDirty("all", "ui")
                     self.settings:flush()
                     return true
                 end,
@@ -2378,6 +2467,21 @@ function TopBar:addToMainMenu(menu_items)
                     self.settings:saveSetting("show_topbar_separators", show_topbar_separators)
                     self.settings:flush()
                     UIManager:setDirty("all", "ui")
+                    return true
+                end,
+            },
+            {
+                text = _("Use system font"),
+                checked_func = function()
+                    return self.settings:isTrue("use_system_font")
+                end,
+                    help_text = _([[Use the select UI System font for the top bar widgets]]),
+                callback = function()
+                    local use_system_font = not self.settings:isTrue("use_system_font")
+                    self.settings:saveSetting("use_system_font", use_system_font)
+                    self:changeAllWidgetFaces()
+                    UIManager:setDirty("all", "ui")
+                    self.settings:flush()
                     return true
                 end,
             },
@@ -2531,52 +2635,7 @@ function TopBar:addToMainMenu(menu_items)
                             and self.settings:readSetting("font_title") or "Consolas-Regular.ttf", new_font_size)
                             local face_series = Font:getFace(self.settings:readSetting("font_title")
                             and self.settings:readSetting("font_title") or "Consolas-Regular.ttf", new_font_size - 4)
-
-                            local noto_sans_text_face = Font:getFace("NotoSans-Regular.ttf", new_font_size)
-                            local w = TextWidget:new{ text = "", face = noto_sans_text_face, }
-                            local forced_baseline = w:getBaseline()
-                            local forced_height = w:getSize().h
-                            w:free()
-
-                            -- self.title_text = TextWidget:new{
-                            --     text =  "",
-                            --     face = face,
-                            --     fgcolor = Blitbuffer.COLOR_BLACK,
-                            --     bold = true,
-                            --     forced_baseline = forced_baseline,
-                            --     forced_height = forced_height,
-                            -- }
-
-                            -- self.series_text = TextWidget:new{
-                            --     text =  "",
-                            --     face = face_series,
-                            --     fgcolor = Blitbuffer.COLOR_BLACK,
-                            --     bold = true,
-                            --     forced_baseline = forced_baseline - 4,
-                            --     forced_height = forced_height,
-                            -- }
-
-                            -- self.title_and_series_widget_container[1][1] = self.title_text
-                            -- self.title_and_series_widget_container[2][1] = self.series_text
-
-
-                            self.title_text.face = face
-                            self.series_text.face = face_series
-                            self.chapter_text = TextWidget:new{
-                                text =  "",
-                                face = face,
-                                fgcolor = Blitbuffer.COLOR_BLACK,
-                                bold = true,
-                                forced_baseline = forced_baseline,
-                                forced_height = forced_height,
-                            }
-
-                            self.chapter_widget_container[1] = self.chapter_text
-
-                            self.view.doublebar.title_text.face = face
-                            self.view.doublebar.chapter_text.face = face
-                            self.view.doublebar:toggleBar()
-                            self:toggleBar()
+                            self:changeAllWidgetFaces()
                             UIManager:setDirty("all", "ui")
                             self.settings:flush()
                             touchmenu_instance:updateItems()
@@ -2618,38 +2677,10 @@ function TopBar:addToMainMenu(menu_items)
                         keep_shown_on_apply = true,
                         callback = function(spin)
                             self.settings:saveSetting("font_size_times_progress", spin.value)
-                            local face = Font:getFace(self.settings:readSetting("font_times_progress")
-                            and self.settings:readSetting("font_times_progress") or "myfont3", spin.value)
-                            self.times_text = TextWidget:new{
-                                text =  "",
-                                face = face,
-                                fgcolor = Blitbuffer.COLOR_BLACK,
-                            }
-                            self.stats_times_widget_container[1] = self.times_text
-                            self.progress_book_text = TextWidget:new{
-                                text =  "",
-                                face = face,
-                                fgcolor = Blitbuffer.COLOR_BLACK,
-                            }
-                            self.progress_widget_container[1] = self.progress_book_text
-                            self.progress_chapter_text = TextWidget:new{
-                                text =  "",
-                                face = face,
-                                fgcolor = Blitbuffer.COLOR_BLACK,
-                            }
-                            self.progress_chapter_widget_container[1] = self.progress_chapter_text
-                            self.current_page_text = TextWidget:new{
-                                text =  "",
-                                face = face,
-                                fgcolor = Blitbuffer.COLOR_BLACK,
-                            }
-                            self.current_page_widget_container[1] = self.current_page_text
-
-                            self:toggleBar()
+                            self:changeAllWidgetFaces()
                             UIManager:setDirty("all", "ui")
                             self.settings:flush()
                             touchmenu_instance:updateItems()
-
                         end,
                     }
                     UIManager:show(items_font)
