@@ -743,16 +743,29 @@ function TopBar:onReaderReady()
     font_size = self.settings:readSetting("font_size_title")
     and self.settings:readSetting("font_size_title")
     or 14
+
+    local noto_sans_text_face = Font:getFace("NotoSans-Regular.ttf", font_size)
+    local w = TextWidget:new{ text = "", face = noto_sans_text_face, }
+    local forced_baseline = w:getBaseline()
+    local forced_height = w:getSize().h
+    w:free()
+
     self.title_text = TextWidget:new{
         text =  "",
         face = Font:getFace(font, font_size),
         fgcolor = Blitbuffer.COLOR_BLACK,
+        bold = true,
+        -- forced_baseline = forced_baseline,
+        -- forced_height = forced_height,
     }
 
     self.series_text = TextWidget:new{
         text =  "",
         face = Font:getFace(font, font_size - 4),
         fgcolor = Blitbuffer.COLOR_BLACK,
+        bold = true,
+        -- forced_baseline = forced_baseline - 4,
+        -- forced_height = forced_height,
     }
 
     self.chapter_text = TextWidget:new{
@@ -760,6 +773,8 @@ function TopBar:onReaderReady()
         face = Font:getFace(font, font_size),
         fgcolor = Blitbuffer.COLOR_BLACK,
         bold = true,
+        forced_baseline = forced_baseline,
+        forced_height = forced_height,
     }
 
     -- self[1] = left_container:new{
@@ -2510,14 +2525,54 @@ function TopBar:addToMainMenu(menu_items)
                         default_value = 12,
                         keep_shown_on_apply = true,
                         callback = function(spin)
-                            self.settings:saveSetting("font_size_title", spin.value)
+                            local new_font_size = spin.value
+                            self.settings:saveSetting("font_size_title", new_font_size)
                             local face = Font:getFace(self.settings:readSetting("font_title")
-                            and self.settings:readSetting("font_title") or "Consolas-Regular.ttf", spin.value)
+                            and self.settings:readSetting("font_title") or "Consolas-Regular.ttf", new_font_size)
                             local face_series = Font:getFace(self.settings:readSetting("font_title")
-                            and self.settings:readSetting("font_title") or "Consolas-Regular.ttf", spin.value - 4)
+                            and self.settings:readSetting("font_title") or "Consolas-Regular.ttf", new_font_size - 4)
+
+                            local noto_sans_text_face = Font:getFace("NotoSans-Regular.ttf", new_font_size)
+                            local w = TextWidget:new{ text = "", face = noto_sans_text_face, }
+                            local forced_baseline = w:getBaseline()
+                            local forced_height = w:getSize().h
+                            w:free()
+
+                            -- self.title_text = TextWidget:new{
+                            --     text =  "",
+                            --     face = face,
+                            --     fgcolor = Blitbuffer.COLOR_BLACK,
+                            --     bold = true,
+                            --     forced_baseline = forced_baseline,
+                            --     forced_height = forced_height,
+                            -- }
+
+                            -- self.series_text = TextWidget:new{
+                            --     text =  "",
+                            --     face = face_series,
+                            --     fgcolor = Blitbuffer.COLOR_BLACK,
+                            --     bold = true,
+                            --     forced_baseline = forced_baseline - 4,
+                            --     forced_height = forced_height,
+                            -- }
+
+                            -- self.title_and_series_widget_container[1][1] = self.title_text
+                            -- self.title_and_series_widget_container[2][1] = self.series_text
+
+
                             self.title_text.face = face
                             self.series_text.face = face_series
-                            self.chapter_text.face = face
+                            self.chapter_text = TextWidget:new{
+                                text =  "",
+                                face = face,
+                                fgcolor = Blitbuffer.COLOR_BLACK,
+                                bold = true,
+                                forced_baseline = forced_baseline,
+                                forced_height = forced_height,
+                            }
+
+                            self.chapter_widget_container[1] = self.chapter_text
+
                             self.view.doublebar.title_text.face = face
                             self.view.doublebar.chapter_text.face = face
                             self.view.doublebar:toggleBar()
