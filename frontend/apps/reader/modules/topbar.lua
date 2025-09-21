@@ -1815,13 +1815,7 @@ function TopBar:paintTo(bb, x, y)
                 }
             }
             separator_line1:paintTo(bb, x, y + topbar_height)
-
-            separator_line1 = LineWidget:new{
-                dimen = Geom:new{
-                    w = Screen:getWidth(),
-                    h = Size.line.thick,
-                }
-            }
+            separator_line1:paintTo(bb, x, (y + Screen:scaleBySize(self.space_after_alt_bar) - y + topbar_height) / 2)
             separator_line1:paintTo(bb, x, y + Screen:scaleBySize(self.space_after_alt_bar))
         end
 
