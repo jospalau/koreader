@@ -936,7 +936,7 @@ function Menu:init()
     }
 
     local page_info_geom = Geom:new {
-        w = self.name == "filesearcher" and self.screen_w * 0.98 or self.screen_w * 0.90,
+        w = (self.name == "filesearcher" or self.search == true) and self.screen_w * 0.98 or self.screen_w * 0.90,
         h = self.page_info:getSize().h,
     }
 
@@ -976,6 +976,8 @@ function Menu:init()
         text = "Series " .. self.collection_name
     elseif self.name == "collections" then
         text = "Collection " .. self.collection_name
+    elseif self.search == true then
+        text = "Search results"
     end
 
     local footer_text_text = TextWidget:new {
@@ -1056,7 +1058,7 @@ function Menu:init()
         body,
     }
 
-    if self.name == "filesearcher" then
+    if self.name == "filesearcher" or self.search == true then
         tap_indicator = VerticalSpan:new{ width = 0 }
     end
 
