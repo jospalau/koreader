@@ -713,6 +713,7 @@ function ReaderBookmark:onShowBookmark()
     }
     local bm_menu = Menu:new{
         title = T(_("Bookmarks (%1)"), #item_table),
+        name = "bookmarks",
         item_table = item_table,
         is_borderless = true,
         is_popout = false,

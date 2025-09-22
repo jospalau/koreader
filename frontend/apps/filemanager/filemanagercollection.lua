@@ -1052,6 +1052,7 @@ function FileManagerCollection:onShowSeriesList(file_or_files, caller_callback, 
     end
     self.coll_list = Menu:new{
         subtitle = "",
+        name = "collections",
         covers_fullscreen = true,
         is_borderless = true,
         is_popout = false,

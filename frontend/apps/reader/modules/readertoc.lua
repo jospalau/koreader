@@ -836,6 +836,7 @@ function ReaderToc:onShowToc()
     local button_size = self.expand_button:getSize()
     local toc_menu = Menu:new{
         title = self:getTitle(),
+        name = "tableofcontents",
         subtitle = self.search_string and T(_("Query: %1"), self.search_string) or "",
         state_w = can_collapse and button_size.w or 0,
         ui = self.ui,

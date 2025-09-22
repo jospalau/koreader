@@ -936,7 +936,7 @@ function Menu:init()
     }
 
     local page_info_geom = Geom:new {
-        w = (self.name == "filesearcher" or self.search == true) and self.screen_w * 0.98 or self.screen_w * 0.90,
+        w = (self.name == "filesearcher" or self.search == true or self.name == "bookmarks" or self.name == "tableofcontents") and self.screen_w * 0.98 or self.screen_w * 0.90,
         h = self.page_info:getSize().h,
     }
 
@@ -955,13 +955,15 @@ function Menu:init()
         h = self.page_info:getSize().h,
     }
 
+    self.tap_indicator_text = TextWidget:new{
+        text = "► ",
+    }
+
     local tap_indicator = BottomContainer:new {
         dimen = self.inner_dimen:copy(),
         RightContainer:new {
             dimen = tap_indicator_geom,
-            TextWidget:new{
-                text = "► ",
-            },
+            self.tap_indicator_text
         }
     }
 
@@ -971,11 +973,15 @@ function Menu:init()
     elseif self.name == "collections" and self.collection_name == "listall" then
         text = "Collections"
     elseif self.name == "collections" and self.collection_name == "series" then
-        text = "Collections"
+        text = "Series"
     elseif self.name == "collections" and self.series == true then
         text = "Series " .. self.collection_name
     elseif self.name == "collections" then
         text = "Collection " .. self.collection_name
+    elseif self.name == "bookmarks" then
+        text = "Bookmarks"
+    elseif self.name == "tableofcontents" then
+        text = "Table of contents"
     elseif self.search == true then
         text = "Search results"
     end
@@ -1000,7 +1006,7 @@ function Menu:init()
         truncate_left = true,
     }
 
-    local footer_text = BottomContainer:new {
+    self.footer_text = BottomContainer:new {
         dimen = self.inner_dimen:copy(),
         footer_text_container,
     }
@@ -1058,7 +1064,7 @@ function Menu:init()
         body,
     }
 
-    if self.name == "filesearcher" or self.search == true then
+    if self.name == "filesearcher" or self.search == true or self.name == "tableofcontents" then
         tap_indicator = VerticalSpan:new{ width = 0 }
     end
 
@@ -1066,7 +1072,7 @@ function Menu:init()
         allow_mirroring = false,
         dimen = self.inner_dimen:copy(),
         self.content_group,
-        footer_text,
+        self.footer_text,
         page_controls,
         tap_indicator,
     }
@@ -1077,9 +1083,7 @@ function Menu:init()
         -- be mirrored correctly with RTL languages
         allow_mirroring = false,
         dimen = self.inner_dimen:copy(),
-        self.content_group,
         page_return,
-        footer,
     }
 
     self[1] = FrameContainer:new {
@@ -1217,7 +1221,7 @@ function Menu:updatePageInfo(select_number)
         end
         -- update page information
         self.page_info_text:setText(T(_("Page %1 of %2"), self.page, self.page_num))
-
+        self.tap_indicator_text:setText(_("► "))
         if self.title == "" and not (self.collection_name or self.search) then
             self.page_info_text:enable()
         else
@@ -1239,7 +1243,10 @@ function Menu:updatePageInfo(select_number)
         self.page_info_last_chev:enableDisable(self.page < self.page_num)
         self.page_return_arrow:enableDisable(#self.paths > 0)
     else
-        self.page_info_text:setText(_("No items"))
+
+        self.page_info_text:setText(_(""))
+        self.tap_indicator_text:setText(_("No items "))
+
         self.page_info_text:disableWithoutDimming()
 
         self.page_info_left_chev:hide()
