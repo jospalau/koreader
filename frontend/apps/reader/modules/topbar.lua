@@ -2308,20 +2308,21 @@ function TopBar:onAdjustMarginsTopbar()
         -- Exceptions are Android in which side margins are set to 20
         -- And top margin when alternative status bar is on. Value is set to self.space_after_alt_bar (fixed to 15) + 9, adding a little bit more too, 6 more pixels (variable TopBar.extra_pixels)
 
-        local side_margins = 15
+        local side_margins = {15, 15}
         if Device:isAndroid() and Device.screen:getWidth() < 1072 then
-            side_margins = 20
+            side_margins = {20, 20}
         end
         if self.ui.document.configurable.t_page_margin ~= Screen:unscaleBySize(self:getHeight()) or
             self.ui.document.configurable.b_page_margin ~= Screen:unscaleBySize(self:getBottomHeight()) or
-            self.ui.document.configurable.h_page_margins[1] ~= side_margins or
-            self.ui.document.configurable.h_page_margins[2] ~= side_margins then
-                local margins = { side_margins, Screen:unscaleBySize(self:getHeight()), side_margins, Screen:unscaleBySize(self:getBottomHeight())}
+            self.ui.document.configurable.h_page_margins[1] ~= side_margins[1] or
+            self.ui.document.configurable.h_page_margins[2] ~= side_margins[2] then
+                local margins = { side_margins[1], Screen:unscaleBySize(self:getHeight()), side_margins[2], Screen:unscaleBySize(self:getBottomHeight())}
                 self.ui.document.configurable.t_page_margin = Screen:unscaleBySize(self:getHeight())
                 self.ui.document.configurable.b_page_margin = Screen:unscaleBySize(self:getBottomHeight())
-                self.ui.document.configurable.h_page_margins[1] = side_margins
-                self.ui.document.configurable.h_page_margins[2] = side_margins
-                self.ui:handleEvent(Event:new("SetPageMargins", margins))
+                self.ui.document.configurable.h_page_margins = side_margins
+                UIManager:sendEvent(Event:new("SetPageHorizMargins", side_margins))
+                UIManager:sendEvent(Event:new("SetPageTopMargin", self:getHeight()))
+                UIManager:sendEvent(Event:new("SetPageBottomMargin", self:getBottomHeight()))
             else
                 self.ui:showBookStatus()
             end

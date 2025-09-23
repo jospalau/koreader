@@ -1194,69 +1194,32 @@ function ReaderUI:onAdjustMarginsTopbar()
             + self.view.footer.settings.progress_style_thick_height
             --local dump = require("dump")
             --print(dump(self.document.configurable))
-            if self.view.footer.settings.bar_top == true then
-                footer_height = footer_height + self.view.footer.settings.top_padding
-                if Device:isAndroid() then
-                    if self.document.configurable.t_page_margin ~= footer_height or
-                    self.document.configurable.b_page_margin ~= 0 or
-                    self.document.configurable.h_page_margins[1] ~= 20 or
-                    self.document.configurable.h_page_margins[2] ~= 20 then
-                        local margins = { 20, footer_height, 20, 0}
-                        self.document.configurable.t_page_margin = footer_height
-                        self.document.configurable.b_page_margin = 0
-                        self.document.configurable.h_page_margins[1] = 20
-                        self.document.configurable.h_page_margins[2] = 20
-                        self:handleEvent(Event:new("SetPageMargins", margins))
-                    else
-                        self:showBookStatus()
-                    end
-                else
-                    if self.document.configurable.t_page_margin ~= footer_height or
-                    self.document.configurable.b_page_margin ~= 0 or
-                    self.document.configurable.h_page_margins[1] ~= 15 or
-                    self.document.configurable.h_page_margins[2] ~= 15 then
-                        local margins = { 15, footer_height, 15, 0}
-                        self.document.configurable.t_page_margin = footer_height
-                        self.document.configurable.b_page_margin = 0
-                        self.document.configurable.h_page_margins[1] = 15
-                        self.document.configurable.h_page_margins[2] = 15
-                        self:handleEvent(Event:new("SetPageMargins", margins))
-                    else
-                        self:showBookStatus()
-                    end
-                end
-            else
-                footer_height = footer_height + self.view.footer.settings.container_bottom_padding
-                if Device:isAndroid() then
-                    if self.document.configurable.t_page_margin ~= 12 or
-                    self.document.configurable.b_page_margin ~= footer_height or
-                    self.document.configurable.h_page_margins[1] ~= 20 or
-                    self.document.configurable.h_page_margins[2] ~= 20 then
-                        local margins = { 20, 12, 20, footer_height}
-                        self.document.configurable.t_page_margin = 12
-                        self.document.configurable.b_page_margin = footer_height
-                        self.document.configurable.h_page_margins[1] = 20
-                        self.document.configurable.h_page_margins[2] = 20
-                        self:handleEvent(Event:new("SetPageMargins", margins))
-                    else
-                        self:showBookStatus()
-                    end
-                else
-                    if self.document.configurable.t_page_margin ~= 12 or
-                    self.document.configurable.b_page_margin ~= footer_height or
-                    self.document.configurable.h_page_margins[1] ~= 15 or
-                    self.document.configurable.h_page_margins[2] ~= 15 then
-                        local margins = { 15, 12, 15, footer_height}
-                        self.document.configurable.t_page_margin = 12
-                        self.document.configurable.b_page_margin = footer_height
-                        self.document.configurable.h_page_margins[1] = 15
-                        self.document.configurable.h_page_margins[2] = 15
-                        self:handleEvent(Event:new("SetPageMargins", margins))
-                    else
-                        self:showBookStatus()
-                    end
-                end
+
+            local side_margins = {15, 15}
+            if Device:isAndroid() and Device.screen:getWidth() < 1072 then
+                side_margins = {15, 15}
             end
+            local top_footer_height = 12
+            local bottom_footer_height = 0
+            if self.view.footer.settings.bar_top == true then
+                top_footer_height = footer_height + self.view.footer.settings.top_padding
+            else
+                bottom_footer_height = footer_height + self.view.footer.settings.container_bottom_padding
+            end
+            if self.document.configurable.t_page_margin ~= Screen:unscaleBySize(top_footer_height) or
+                self.document.configurable.b_page_margin ~= Screen:unscaleBySize(bottom_footer_height) or
+                self.document.configurable.h_page_margins[1] ~= side_margins[1] or
+                self.document.configurable.h_page_margins[2] ~= side_margins[2] then
+                    local margins = { side_margins[1], Screen:unscaleBySize(top_footer_height), side_margins[2], Screen:unscaleBySize(bottom_footer_height)}
+                    self.document.configurable.t_page_margin = Screen:unscaleBySize(top_footer_height)
+                    self.document.configurable.b_page_margin = Screen:unscaleBySize(bottom_footer_height)
+                    self.document.configurable.h_page_margins = side_margins
+                    UIManager:sendEvent(Event:new("SetPageHorizMargins", side_margins))
+                    UIManager:sendEvent(Event:new("SetPageTopMargin", top_footer_height))
+                    UIManager:sendEvent(Event:new("SetPageBottomMargin", bottom_footer_height))
+                else
+                    self:showBookStatus()
+                end
         else
             -- -- Adjust margin values to the topbar. Values are in pixels
             -- local margins = { 12, 12, 12, 12}
@@ -1266,16 +1229,19 @@ function ReaderUI:onAdjustMarginsTopbar()
             -- self.document.configurable.h_page_margins[2] = 12
             -- self:handleEvent(Event:new("SetPageMargins", margins))
             -- Height to width ratio to be approximately sqrt(2), 50/35 = 1.43
-            if self.document.configurable.b_page_margin ~= 50
-                or self.document.configurable.t_page_margin ~= 50
-                or self.document.configurable.h_page_margins[1] ~= 35
-                or self.document.configurable.h_page_margins[2] ~= 35  then
-                local margins = { 35, 50, 35, 50}
-                self.document.configurable.b_page_margin = 50
-                self.document.configurable.t_page_margin = 50
-                self.document.configurable.h_page_margins[1] = 35
-                self.document.configurable.h_page_margins[2] = 35
-                self:handleEvent(Event:new("SetPageMargins", margins))
+            local side_margins = {35, 35}
+            local top_margin, bottom_margin = 50, 50
+            if self.document.configurable.t_page_margin ~= top_margin or
+                self.document.configurable.b_page_margin ~= bottom_margin or
+                self.document.configurable.h_page_margins[1] ~= side_margins[1] or
+                self.document.configurable.h_page_margins[2] ~= side_margins[2] then
+                local margins = { side_margins[1], top_margin, side_margins[2], bottom_margin}
+                self.document.configurable.t_page_margin = top_margin
+                self.document.configurable.b_page_margin = bottom_margin
+                self.document.configurable.h_page_margins = side_margins
+                UIManager:sendEvent(Event:new("SetPageHorizMargins", side_margins))
+                UIManager:sendEvent(Event:new("SetPageTopMargin", top_margin))
+                UIManager:sendEvent(Event:new("SetPageBottomMargin", bottom_margin))
             else
                 self:showBookStatus()
             end
