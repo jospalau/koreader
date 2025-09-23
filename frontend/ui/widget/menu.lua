@@ -1064,7 +1064,7 @@ function Menu:init()
         body,
     }
 
-    if self.name == "filesearcher" or self.search == true or self.name == "tableofcontents" then
+    if self.name == "filesearcher" or self.search == true or self.name == "bookmarks" or self.name == "tableofcontents" then
         tap_indicator = VerticalSpan:new{ width = 0 }
     end
 
