@@ -1215,8 +1215,8 @@ function ReaderUI:onAdjustMarginsTopbar()
                     self.document.configurable.b_page_margin = Screen:unscaleBySize(bottom_footer_height)
                     self.document.configurable.h_page_margins = side_margins
                     UIManager:sendEvent(Event:new("SetPageHorizMargins", side_margins))
-                    UIManager:sendEvent(Event:new("SetPageTopMargin", top_footer_height))
-                    UIManager:sendEvent(Event:new("SetPageBottomMargin", bottom_footer_height))
+                    UIManager:sendEvent(Event:new("SetPageTopMargin", Screen:unscaleBySize(top_footer_height)))
+                    UIManager:sendEvent(Event:new("SetPageBottomMargin", Screen:unscaleBySize(bottom_footer_height)))
                 else
                     self:showBookStatus()
                 end

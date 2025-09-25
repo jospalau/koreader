@@ -2321,8 +2321,8 @@ function TopBar:onAdjustMarginsTopbar()
                 self.ui.document.configurable.b_page_margin = Screen:unscaleBySize(self:getBottomHeight())
                 self.ui.document.configurable.h_page_margins = side_margins
                 UIManager:sendEvent(Event:new("SetPageHorizMargins", side_margins))
-                UIManager:sendEvent(Event:new("SetPageTopMargin", self:getHeight()))
-                UIManager:sendEvent(Event:new("SetPageBottomMargin", self:getBottomHeight()))
+                UIManager:sendEvent(Event:new("SetPageTopMargin", Screen:unscaleBySize(self:getHeight())))
+                UIManager:sendEvent(Event:new("SetPageBottomMargin", Screen:unscaleBySize(self:getBottomHeight())))
             else
                 self.ui:showBookStatus()
             end
