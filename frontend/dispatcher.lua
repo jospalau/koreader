@@ -1215,7 +1215,8 @@ function Dispatcher._showAsMenu(settings, exec_props)
                 -- My font configuration profiles in a gesture marked as Show as QuickMenu and Keep QuickMenu open,
                 -- the only one marked as Keep QuickMenu open
                 -- We do this just for this gesture
-                if keep_open_on_apply then
+                -- The font module is not loaded for pdfs in readerui.lua
+                if keep_open_on_apply and ui.font then
                     if ui and profo.settings.name == v.text:gsub("Profile ", "") and profo.set_font and profo.set_font == ui.document._document:getFontFace() and v.text ~= "Profile Reset defaults" and v.text ~= "Profile Narrow" then
                         v.text = v.text .. " ✔"
                     end
@@ -1276,7 +1277,8 @@ function Dispatcher._showAsMenu(settings, exec_props)
                             --    UIManager:setDirty("all", "full")
                             --end)
 
-                            if ui and util.stringStartsWith(v.text, "Profile " .. ui.document._document:getFontFace()) then
+                            -- The font module is not loaded for pdfs in readerui.lua
+                            if ui and ui.font and util.stringStartsWith(v.text, "Profile " .. ui.document._document:getFontFace()) then
                                 v.text = v.text .. " ✔"
                             end
                             local font_size = 0
@@ -1332,7 +1334,8 @@ function Dispatcher._showAsMenu(settings, exec_props)
                                 local data = profiles.data
                                 -- settings.settings.order[[prof]]
 
-                                if not menu_fonts then
+                                -- The font module is not loaded for pdfs in readerui.lua
+                                if not menu_fonts and ui.font then
                                     for _,profo in pairs(data) do
                                         if ui and buttonqm[1] and profo.settings.name == buttonqm[1].text:gsub("Profile ", "") and profo.set_font and profo.set_font == ui.document._document:getFontFace() and buttonqm[1].text ~= "Profile Reset defaults" and buttonqm[1].text ~= "Profile Narrow" then
                                             buttonqm[1].text = buttonqm[1].text .. " ✔"

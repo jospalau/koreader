@@ -1102,7 +1102,10 @@ function ReaderFooter:addToMainMenu(menu_items)
     menu_items.status_bar = {
         text = _("Status bar"),
             enabled_func = function()
-                return self.ui.view.topbar.status_bar
+                -- The font module is not loaded for pdfs in readerui.lua
+                if self.ui.font then
+                    return self.ui.view.topbar.status_bar
+                end
             end,
         sub_item_table = sub_items,
     }
@@ -2488,6 +2491,7 @@ function ReaderFooter:onExitFlippingMode()
 end
 
 function ReaderFooter:TapFooter(ges)
+    if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
     if self.ui.gestures.ignore_hold_corners and self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
         return self:DoubleTapFooter(ges)
     end
@@ -2681,6 +2685,7 @@ function ReaderFooter:onToggleFooterMode()
 end
 
 function ReaderFooter:refresh()
+    if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
     -- With the following two calls we will have fast or ui (depending if we are scrolling or not) refreshes when toggling the footer mode
     -- We can do the refreshes manually like in the previous commented block but the problem is that if we hide the footer toggling it, turn a page and show it toggling it
     -- it won't be properly formatted. We need to reconfigure the footer configuration manually like we are partially doing in the commented block code calling to self.footer_text:setText(text)
