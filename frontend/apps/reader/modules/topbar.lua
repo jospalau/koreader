@@ -685,7 +685,11 @@ function TopBar:onReaderReady()
 
     local font = "cfont"
     if self.settings:nilOrFalse("use_system_font") then
-        font = self.settings:readSetting("font_times_progress")
+        if not self.settings:nilOrFalse("font_times_progress") then
+            font = self.settings:readSetting("font_times_progress")
+        else
+            font = "myfont3"
+        end
     end
     local font_size= self.settings:readSetting("font_size_times_progress")
     and self.settings:readSetting("font_size_times_progress") or 12
@@ -742,7 +746,11 @@ function TopBar:onReaderReady()
 
     font = "cfont"
     if self.settings:nilOrFalse("use_system_font") then
-        font = self.settings:readSetting("font_title")
+        if not self.settings:nilOrFalse("font_title") then
+            font = self.settings:readSetting("font_title")
+        else
+            font = "myfont3"
+        end
     end
 
     font_size = self.settings:readSetting("font_size_title")
@@ -995,8 +1003,13 @@ end
 function TopBar:changeAllWidgetFaces()
     local font = "cfont"
     if self.settings:nilOrFalse("use_system_font") then
-        font = self.settings:readSetting("font_times_progress")
+        if not self.settings:nilOrFalse("font_times_progress") then
+            font = self.settings:readSetting("font_times_progress")
+        else
+            font = "myfont3"
+        end
     end
+
     local font_size= self.settings:readSetting("font_size_times_progress")
     and self.settings:readSetting("font_size_times_progress") or 12
     self.progress_book_text = TextWidget:new{
@@ -1046,7 +1059,11 @@ function TopBar:changeAllWidgetFaces()
 
     font = "cfont"
     if self.settings:nilOrFalse("use_system_font") then
-        font = self.settings:readSetting("font_title")
+        if not self.settings:nilOrFalse("font_title") then
+            font = self.settings:readSetting("font_title")
+        else
+            font = "myfont3"
+        end
     end
 
     font_size = self.settings:readSetting("font_size_title")
