@@ -339,8 +339,8 @@ function ReaderPageMap:addToMainMenu(menu_items)
                 -- @translators This shows the <dc:source> in the EPUB that usually tells which hardcopy edition the reference page numbers refers to.
                 -- text = _("Reference source info"),
                 text_func = function()
-                  if self.ui.document:isPageMapSynthetic() then return _("Synthetic pages") end
-		  return _("Reference pages")
+                    if self.ui.document:isPageMapSynthetic() then return _("Synthetic pages") end
+                    return _("Reference pages")
                 end,
                 enabled_func = function() return self.ui.document:getPageMapSource() ~= nil end,
                 callback = function()

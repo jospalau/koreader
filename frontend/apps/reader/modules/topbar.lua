@@ -1372,7 +1372,7 @@ function TopBar:getXHeightRangeLabel(size_pt, xh_mm)
 end
 
 function TopBar:toggleBar(light_on)
-    if self.init_page == nil then
+    if self.init_page == nil and self.ui.pagemap:wantsPageLabels() then
         self.init_page = self.ui.pagemap:getCurrentPageLabel(true)
     end
 
