@@ -852,8 +852,18 @@ function BookMapWidget:init()
     -- Note: some of these could be cached in ReaderThumbnail, and discarded/updated
     -- on some events (ie. TocUpdated, PageUpdate, AddHhighlight...)
     -- Get some info that shouldn't change across calls to update()
-    self.nb_pages = self.ui.document:getPageCount()
-    self.cur_page = self.ui.toc.pageno
+
+    -- Take into account reference page numbers since
+    -- the reference total number of pages is used
+    -- for books in the book table of the statistics db
+    -- if use reference page numbers option is enabled
+    if self.ui.pagemap and self.ui.pagemap:wantsPageLabels() then
+        self.nb_pages = select(3, self.ui.pagemap:getCurrentPageLabel())
+        self.cur_page = select(2, self.ui.pagemap:getCurrentPageLabel(true))
+    else
+        self.nb_pages = self.ui.document:getPageCount()
+        self.cur_page = self.ui.toc.pageno
+    end
     -- Get read page from the statistics plugin if enabled
     self.statistics_enabled = self.ui.statistics and self.ui.statistics:isEnabled()
     self.read_pages = self.ui.statistics and self.ui.statistics:getCurrentBookReadPages()
