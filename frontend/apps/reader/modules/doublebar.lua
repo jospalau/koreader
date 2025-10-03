@@ -56,12 +56,17 @@ end
 
 function DoubleBar:onReaderReady()
 
-    local font = self.view.topbar.settings:readSetting("font_title")
-    and self.view.topbar.settings:readSetting("font_title")
-    or "myfont3"
+    local font = "cfont"
+    if self.view.topbar.settings:nilOrFalse("use_system_font") then
+        if not self.view.topbar.settings:nilOrFalse("font_title") then
+            font = self.view.topbar.settings:readSetting("font_title")
+        else
+            font = "myfont3"
+        end
+    end
 
     local font_size= self.view.topbar.settings:readSetting("font_size_title")
-    and self.view.topbar.settings:readSetting("font_size_title") or 12
+    and self.view.topbar.settings:readSetting("font_size_title") or 14
 
     if Device:isAndroid() then
         DoubleBar.MARGIN_SIDES =  Screen:scaleBySize(30)
