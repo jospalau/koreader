@@ -936,7 +936,8 @@ function Menu:init()
     }
 
     local page_info_geom = Geom:new {
-        w = (self.name == "filesearcher" or self.search == true or self.name == "bookmarks" or self.name == "tableofcontents") and self.screen_w * 0.98 or self.screen_w * 0.90,
+        w = (self.name == "filesearcher" or self.search == true or self.name == "bookmarks" or
+        self.name == "tableofcontents" or self.name == "wordreference") and self.screen_w * 0.98 or self.screen_w * 0.90,
         h = self.page_info:getSize().h,
     }
 
@@ -982,6 +983,8 @@ function Menu:init()
         text = "Bookmarks"
     elseif self.name == "tableofcontents" then
         text = "Table of contents"
+    elseif self.name == "wordreference" then
+        text = "Wordreference"
     elseif self.search == true then
         text = "Search results"
     end
@@ -1064,7 +1067,8 @@ function Menu:init()
         body,
     }
 
-    if self.name == "filesearcher" or self.search == true or self.name == "bookmarks" or self.name == "tableofcontents" then
+    if self.name == "filesearcher" or self.search == true or self.name == "bookmarks" or
+    self.name == "tableofcontents" or self.name == "wordreference" then
         tap_indicator = VerticalSpan:new{ width = 0 }
     end
 
