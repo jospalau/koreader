@@ -618,16 +618,7 @@ end
 function ReaderBookmark:getBookmarkedPages()
     local pages = {}
     for _, bm in ipairs(self.ui.annotation.annotations) do
-        local page
-        -- Take into account reference page numbers since
-        -- the reference total number of pages is used
-        -- for books in the book table of the statistics db
-        -- if use reference page numbers option is enabled
-        if self.ui.pagemap:wantsPageLabels() then
-            page = tonumber(bm.pageref)
-        else
-            page = self:getBookmarkPageNumber(bm)
-        end
+        local page = self:getBookmarkPageNumber(bm)
         local btype = self.getBookmarkType(bm)
         if not pages[page] then
             pages[page] = {}
