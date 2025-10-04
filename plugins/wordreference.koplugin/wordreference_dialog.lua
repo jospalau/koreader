@@ -309,6 +309,7 @@ function Dialog:makeQuickSettingsDropdown(ui, anchor, close_callback, changed_fo
 				touchMenu:switchMenuTab(5)
 				touchMenu.bar:switchToTab(5)
 				touchMenu:onMenuSelect(WordReference.menu_item)
+				UIManager:setDirty("all", "ui")
 			end,
 		} },
 	}
