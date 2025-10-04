@@ -2089,6 +2089,8 @@ function ReaderHighlight:onHoldRelease()
         --     text = (tostring(self.t2 - self.t1)),
         -- })
         if self.selected_text then
+            local Event = require("ui/event")
+            UIManager:broadcastEvent(Event:new("ClearLocationStack"))
             self:onHighlightSearchFull()
         end
     else
