@@ -373,11 +373,17 @@ function ReaderStatistics:onUsePageLabelsUpdated()
     self.use_pagemap_for_stats = not self.use_pagemap_for_stats
     local new_current_page
     if self.use_pagemap_for_stats then
-        new_current_page = select(2, self.ui.pagemap.getCurrentPageLabel())
+        new_current_page = select(2, self.ui.pagemap:getCurrentPageLabel())
     else
         new_current_page = self.ui:getCurrentPage()
     end
     self:onPageUpdate(new_current_page)
+    -- This is performed in the insertDB() call inside self:onDocumentRerendered()
+    -- But won't work right away since I avoid inserting in db if less than:
+    -- MIN_TIME_VALID_SESSION = 180
+    -- MIN_PAGES_VALID_SESSION = 3
+    -- The Book map needs the pages field in the book table updated so the view can retrieve data
+    self:updateBookPages()
     self:onDocumentRerendered()
 end
 
@@ -3219,7 +3225,6 @@ function ReaderStatistics:deleteBooksByTotalDuration(max_total_duration_mn)
     })
 end
 
-
 function ReaderStatistics:onPosUpdate(pos, pageno)
     local pn = pageno
     if self.use_pagemap_for_stats then
@@ -3228,6 +3233,24 @@ function ReaderStatistics:onPosUpdate(pos, pageno)
     if self.curr_page ~= pageno then
         self:onPageUpdate(pn)
     end
+end
+
+function ReaderStatistics:updateBookPages()
+    local id_book = self.id_curr_book
+    local new_pagecount
+    if self.use_pagemap_for_stats then
+        new_pagecount = select(3, self.ui.pagemap:getCurrentPageLabel())
+    else
+        new_pagecount = self.document:getPageCount()
+    end
+    local conn = SQ3.open(db_location)
+    local sql_stmt = [[
+        UPDATE book
+        SET    pages = ?
+        WHERE  id = ?;
+    ]]
+    stmt = conn:prepare(sql_stmt)
+    stmt:reset():bind(new_pagecount, id_book):step()
 end
 
 function ReaderStatistics:onPageUpdate(pageno)
@@ -3814,53 +3837,56 @@ function ReaderStatistics:getCurrentBookReadPages()
     stmt:close()
     conn:close()
 
-    -- if self.use_pagemap_for_stats then
-    --     -- Since the Bookmap and PageBrowser are tied to "screen pages",
-    --     -- keep using the "screen pages" as previously querying to the modified view here
-    --     local total_screen_pages = self.document:getPageCount()
-    --     local sql_stmt = [[
-    --         SELECT
-    --             page,
-    --             min(sum(duration), ?) AS durations,
-    --             strftime("%s", "now") - max(start_time) AS delay
-    --         FROM (
-    --             -- Not sure why I have to floor() it here, while not needed in the VIEW page_stat...
-    --             -- Because in the view all the involved columns were integers
-    --             -- But here, when SQLite sees a ? parameter, it treats it as a REAL value unless explicitly bound as an integer
-    --             SELECT floor(first_page + idx - 1) AS page, start_time, duration / (last_page - first_page + 1) AS duration
-    --             FROM (
-    --                 SELECT start_time, duration,
-    --                     -- First page_number for this page after rescaling single row
-    --                     ((page - 1) * ?) / total_pages + 1 AS first_page,
-    --                     -- Last page_number for this page after rescaling single row
-    --                     max(((page - 1) * ?) / total_pages + 1, (page * ?) / total_pages) AS last_page,
-    --                     idx
-    --                 FROM page_stat_data
-    --                 -- Duplicate rows for multiple pages as needed (as a result of rescaling)
-    --                 JOIN (SELECT number as idx FROM numbers) AS N ON idx <= (last_page - first_page + 1)
-    --                 WHERE id_book = ?
-    --             )
-    --         )
-    --         GROUP BY page
-    --         ORDER BY page;
-    --     ]]
+    if self.use_pagemap_for_stats then
+        -- Since the Bookmap and PageBrowser are tied to "screen pages",
+        -- keep using the "screen pages" as previously
+        -- This is the page_stat view modified to scale
+        -- the pages using the current screen pages instead of the book pages column
+        local total_screen_pages = self.document:getPageCount()
+        local sql_stmt = [[
+            SELECT
+                page,
+                min(sum(duration), ?) AS durations,
+                strftime("%s", "now") - max(start_time) AS delay
+            FROM (
+                -- Not sure why I have to floor() it here, while not needed in the VIEW page_stat...
+                -- Because in the view all the involved columns were integers
+                -- But here, when SQLite sees a ? parameter, it treats it as a REAL value unless explicitly bound as an integer
+                SELECT floor(first_page + idx - 1) AS page, start_time, duration / (last_page - first_page + 1) AS duration
+                FROM (
+                    SELECT start_time, duration,
+                        -- First page_number for this page after rescaling single row
+                        ((page - 1) * ?) / total_pages + 1 AS first_page,
+                        -- Last page_number for this page after rescaling single row
+                        max(((page - 1) * ?) / total_pages + 1, (page * ?) / total_pages) AS last_page,
+                        idx
+                    FROM page_stat_data
+                    -- Duplicate rows for multiple pages as needed (as a result of rescaling)
+                    JOIN (SELECT number as idx FROM numbers) AS N ON idx <= (last_page - first_page + 1)
+                    WHERE id_book = ?
+                )
+            )
+            GROUP BY page
+            ORDER BY page;
+        ]]
 
-    --     conn = SQ3.open(db_location)
-    --     stmt = conn:prepare(sql_stmt)
-    --     res, nb = stmt:reset():bind(self.settings.max_sec, total_screen_pages, total_screen_pages, total_screen_pages, self.id_curr_book):resultset("i")
-    --     -- logger.warn(res)
-    --     stmt:close()
-    --     conn:close()
-    -- end
+        conn = SQ3.open(db_location)
+        stmt = conn:prepare(sql_stmt)
+        res, nb = stmt:reset():bind(self.settings.max_sec, total_screen_pages, total_screen_pages, total_screen_pages, self.id_curr_book):resultset("i")
+        -- logger.warn(res)
+        stmt:close()
+        conn:close()
+    end
 
     local read_pages = {}
     local max_duration = 0
     for i=1, nb do
         local page, duration, delay = res[1][i], res[2][i], res[3][i]
         page = tonumber(page)
-        if self.use_pagemap_for_stats then
-            page = self.ui.document:getPageMap()[page].page
-        end
+        -- No need to do this
+        -- if self.use_pagemap_for_stats then
+        --     page = self.ui.document:getPageMap()[page].page
+        -- end
         duration = tonumber(duration)
         delay = tonumber(delay)
         read_pages[page] = {duration, delay}
@@ -3872,6 +3898,8 @@ function ReaderStatistics:getCurrentBookReadPages()
         -- Make the value a duration ratio (vs capped or max duration)
         read_pages[page][1] = info[1] / max_duration
     end
+    -- local dump = require("dump")
+    -- print(dump(read_pages))
     return read_pages
 end
 
