@@ -3839,26 +3839,21 @@ function ReaderStatistics:getCurrentBookReadPages()
 
     if self.use_pagemap_for_stats then
         -- Since the Bookmap and PageBrowser are tied to "screen pages",
-        -- keep using the "screen pages" as previously
-        -- This is the page_stat view modified to scale
-        -- the pages using the current screen pages instead of the book pages column
-        local total_screen_pages = self.document:getPageCount()
+        -- we don't want to scale the pages
+        -- Later on we will transform them using the page map
         local sql_stmt = [[
             SELECT
                 page,
                 min(sum(duration), ?) AS durations,
                 strftime("%s", "now") - max(start_time) AS delay
             FROM (
-                -- Not sure why I have to floor() it here, while not needed in the VIEW page_stat...
-                -- Because in the view all the involved columns were integers
-                -- But here, when SQLite sees a ? parameter, it treats it as a REAL value unless explicitly bound as an integer
                 SELECT floor(first_page + idx - 1) AS page, start_time, duration / (last_page - first_page + 1) AS duration
                 FROM (
                     SELECT start_time, duration,
                         -- First page_number for this page after rescaling single row
-                        ((page - 1) * ?) / total_pages + 1 AS first_page,
+                        (page - 1) + 1 AS first_page,
                         -- Last page_number for this page after rescaling single row
-                        max(((page - 1) * ?) / total_pages + 1, (page * ?) / total_pages) AS last_page,
+                        max((page - 1) + 1, page) AS last_page,
                         idx
                     FROM page_stat_data
                     -- Duplicate rows for multiple pages as needed (as a result of rescaling)
@@ -3872,7 +3867,7 @@ function ReaderStatistics:getCurrentBookReadPages()
 
         conn = SQ3.open(db_location)
         stmt = conn:prepare(sql_stmt)
-        res, nb = stmt:reset():bind(self.settings.max_sec, total_screen_pages, total_screen_pages, total_screen_pages, self.id_curr_book):resultset("i")
+        res, nb = stmt:reset():bind(self.settings.max_sec, self.id_curr_book):resultset("i")
         -- logger.warn(res)
         stmt:close()
         conn:close()
@@ -3883,10 +3878,10 @@ function ReaderStatistics:getCurrentBookReadPages()
     for i=1, nb do
         local page, duration, delay = res[1][i], res[2][i], res[3][i]
         page = tonumber(page)
-        -- No need to do this
-        -- if self.use_pagemap_for_stats then
-        --     page = self.ui.document:getPageMap()[page].page
-        -- end
+        if self.use_pagemap_for_stats and self.ui.document:getPageMap()[page] then
+            -- print(page .. " - " .. self.ui.document:getPageMap()[page].page)
+            page = self.ui.document:getPageMap()[page].page
+        end
         duration = tonumber(duration)
         delay = tonumber(delay)
         read_pages[page] = {duration, delay}
@@ -3900,6 +3895,7 @@ function ReaderStatistics:getCurrentBookReadPages()
     end
     -- local dump = require("dump")
     -- print(dump(read_pages))
+    -- print(dump(self.ui.document:getPageMap()))
     return read_pages
 end
 
