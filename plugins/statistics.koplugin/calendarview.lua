@@ -1396,8 +1396,15 @@ function CalendarView:_populateItems()
         -- When hour is unspecified, Lua defaults to noon 12h00
     })
     -- Update title
-
     local total_read_month = self.reader_statistics:getReadTodayThisMonth(self.cur_month:sub(1,4), self.cur_month:sub(6))
+    local now = os.date("*t")
+    local current_year = tostring(now.year)
+    local current_month = string.format("%02d", now.month)
+
+    if self.reader_statistics and self.reader_statistics.document and current_year == self.cur_month:sub(1,4) and current_month == self.cur_month:sub(6) then
+        total_read_month = total_read_month + (os.time() - self.reader_statistics.start_current_period)
+    end
+
     local month_text = datetime.longMonthTranslation[os.date("%B", month_start_ts)] .. os.date(" %Y", month_start_ts) .. (total_read_month > 0 and " (" .. tostring(Math.round(total_read_month*100)/100) .. "h)" or "")
     self.title_bar:setTitle(month_text)
     -- Update footer
