@@ -3799,52 +3799,11 @@ function ReaderStatistics:getCurrentBookReadPages()
     local res, nb = stmt:reset():bind(self.settings.max_sec, self.id_curr_book):resultset("i")
     stmt:close()
     conn:close()
-
-    if self.use_pagemap_for_stats then
-        -- Since the Bookmap and PageBrowser are tied to "screen pages",
-        -- we don't want to scale the pages
-        -- Later on we will transform them using the page map
-        local sql_stmt = [[
-            SELECT
-                page,
-                min(sum(duration), ?) AS durations,
-                strftime("%s", "now") - max(start_time) AS delay
-            FROM (
-                SELECT floor(first_page + idx - 1) AS page, start_time, duration / (last_page - first_page + 1) AS duration
-                FROM (
-                    SELECT start_time, duration,
-                        -- First page_number for this page after rescaling single row
-                        (page - 1) + 1 AS first_page,
-                        -- Last page_number for this page after rescaling single row
-                        max((page - 1) + 1, page) AS last_page,
-                        idx
-                    FROM page_stat_data
-                    -- Duplicate rows for multiple pages as needed (as a result of rescaling)
-                    JOIN (SELECT number as idx FROM numbers) AS N ON idx <= (last_page - first_page + 1)
-                    WHERE id_book = ?
-                )
-            )
-            GROUP BY page
-            ORDER BY page;
-        ]]
-
-        conn = SQ3.open(db_location)
-        stmt = conn:prepare(sql_stmt)
-        res, nb = stmt:reset():bind(self.settings.max_sec, self.id_curr_book):resultset("i")
-        -- logger.warn(res)
-        stmt:close()
-        conn:close()
-    end
-
     local read_pages = {}
     local max_duration = 0
     for i=1, nb do
         local page, duration, delay = res[1][i], res[2][i], res[3][i]
         page = tonumber(page)
-        if self.use_pagemap_for_stats and self.ui.document:getPageMap()[page] then
-            -- print(page .. " - " .. self.ui.document:getPageMap()[page].page)
-            page = self.ui.document:getPageMap()[page].page
-        end
         duration = tonumber(duration)
         delay = tonumber(delay)
         read_pages[page] = {duration, delay}
