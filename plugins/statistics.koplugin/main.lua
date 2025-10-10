@@ -1144,6 +1144,7 @@ function ReaderStatistics:insertDB(updated_pagecount)
     -- Something could be done in ReaderStatistics:init() so self:resetVolatileStats() is not called
     -- But it is not that important
     if duration_raw < self.min_time_valid_session or self._total_pages < self.min_pages_valid_session then
+        self:updateBookPages()
         return
     end
     -- The current page stat, having yet no duration, will be ignored
@@ -3203,12 +3204,7 @@ end
 
 function ReaderStatistics:updateBookPages()
     local id_book = self.id_curr_book
-    local new_pagecount
-    if self.use_pagemap_for_stats then
-        new_pagecount = select(3, self.ui.pagemap:getCurrentPageLabel())
-    else
-        new_pagecount = self.document:getPageCount()
-    end
+    local new_pagecount = self.document:getPageCount()
     local conn = SQ3.open(db_location)
     local sql_stmt = [[
         UPDATE book
