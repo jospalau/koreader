@@ -266,7 +266,7 @@ function TopBar:getTotalRead()
 
     local sql_stmt = [[
         SELECT sum(duration)
-        FROM wpm_stat_data
+        FROM page_stat_data
     ]]
 
     local read_total = conn:rowexec(string.format(sql_stmt))
@@ -277,10 +277,7 @@ function TopBar:getTotalRead()
         read_total = 0
     end
     read_total = tonumber(read_total)
-    local current_session_time = self.start_session_time or 0
-    if current_session_time then
-        read_total = read_total + (os.time() - current_session_time)
-    end
+
     local Math = require("optmath")
     return Math.round(read_total / 60 / 60 / 24)
 end
