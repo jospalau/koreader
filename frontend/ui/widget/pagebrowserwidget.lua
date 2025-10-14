@@ -1790,4 +1790,10 @@ function PageBrowserWidget:onThumbnailHold(page, ges)
     UIManager:show(button_dialog)
 end
 
+function PageBrowserWidget:onSetDimensions(dimen)
+    self.dimen = dimen
+    -- UIManager:close(self)
+    self:updateLayout()
+end
+
 return PageBrowserWidget
