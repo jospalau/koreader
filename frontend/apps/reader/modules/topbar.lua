@@ -241,9 +241,10 @@ function TopBar:getReadThisYearSoFar()
     end
     read_this_year = tonumber(read_this_year)
 
-
+    if self.ui and self.ui.document and self.start_session_time then
+        read_this_year = read_this_year + (os.time() - self.start_session_time)
+    end
     conn:close()
-    local Math = require("optmath")
     return math.ceil((read_this_year / 60 / 60) - (os.date("*t").yday * 2))
 
 end
