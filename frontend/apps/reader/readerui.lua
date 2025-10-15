@@ -447,6 +447,7 @@ function ReaderUI:init()
     -- koreader plugins
     for _, plugin_module in ipairs(PluginLoader:loadPlugins()) do
         if plugin_module.name == "statistics" and util.getFileNameSuffix(self.document.file) == "pdf" then goto continue end
+        if plugin_module.name == "readingruler" and util.getFileNameSuffix(self.document.file) == "pdf" then goto continue end
         local ok, plugin_or_err = PluginLoader:createPluginInstance(
             plugin_module,
             {

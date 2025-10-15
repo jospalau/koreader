@@ -144,6 +144,7 @@ function ReadingRuler:onPageUpdate(new_page)
 end
 
 function ReadingRuler:onSetDimensions()
+    if not self.settings:isEnabled() then return end
     self.ruler_ui.ruler:refreshRulerWidth()
     self.ruler_ui:updateUI()
 end
