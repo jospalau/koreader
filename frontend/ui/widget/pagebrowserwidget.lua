@@ -416,15 +416,19 @@ function PageBrowserWidget:updateLayout()
         end
     end
 
-    -- Put the focused (requested) page at some appropriate place in the grid
-    if self.nb_rows > 1 then -- Multiple rows
-        -- Show the focus page at the rightmost position in the first row
-        self.focus_page_shift = self.nb_cols - 1
-    else -- Single row
-        if self.nb_cols > 2 then -- 3+ columns: show one page behind only
-            self.focus_page_shift = 1
-        else -- 1 or 2 columns: show it first
-            self.focus_page_shift = 0
+    if Device:isEmulator() then
+        self.focus_page_shift = 0
+    else
+        -- Put the focused (requested) page at some appropriate place in the grid
+        if self.nb_rows > 1 then -- Multiple rows
+            -- Show the focus page at the rightmost position in the first row
+            self.focus_page_shift = self.nb_cols - 1
+        else -- Single row
+            if self.nb_cols > 2 then -- 3+ columns: show one page behind only
+                self.focus_page_shift = 1
+            else -- 1 or 2 columns: show it first
+                self.focus_page_shift = 0
+            end
         end
     end
 
@@ -1363,7 +1367,12 @@ end
 function PageBrowserWidget:updateFocusPage(value, relative)
     local new_focus_page
     if relative then
-        new_focus_page = self.focus_page + value
+        if Device:isEmulator() then
+            local step = (value >= 0) and 1 or -1
+            new_focus_page = self.focus_page + step
+        else
+            new_focus_page = self.focus_page + value
+        end
     else
         new_focus_page = value
     end
@@ -1791,10 +1800,12 @@ function PageBrowserWidget:onThumbnailHold(page, ges)
 end
 
 function PageBrowserWidget:onSetDimensions(dimen)
-    self.dimen = dimen
-    -- UIManager:close(self)
-    -- self:updateLayout()
-    self:init()
+    if Device:isEmulator() then
+        self.dimen = dimen
+        -- UIManager:close(self)
+        -- self:updateLayout()
+        self:init()
+    end
 end
 
 return PageBrowserWidget
