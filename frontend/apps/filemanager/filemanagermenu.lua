@@ -1410,6 +1410,7 @@ function FileManagerMenu:getSortingMenuTable()
             callback = function()
                 self.ui:onSetSortBy(k)
             end,
+            radio = true,
         })
     end
     table.sort(sub_item_table, function(a, b) return a.menu_order < b.menu_order end)
@@ -1440,6 +1441,7 @@ function FileManagerMenu:getStartWithMenuTable()
             callback = function()
                 G_reader_settings:saveSetting("start_with", v[2])
             end,
+            radio = true,
         })
     end
     return {
