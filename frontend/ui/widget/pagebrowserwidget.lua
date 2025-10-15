@@ -1793,7 +1793,8 @@ end
 function PageBrowserWidget:onSetDimensions(dimen)
     self.dimen = dimen
     -- UIManager:close(self)
-    self:updateLayout()
+    -- self:updateLayout()
+    self:init()
 end
 
 return PageBrowserWidget
