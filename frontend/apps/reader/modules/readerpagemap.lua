@@ -467,6 +467,9 @@ Since stable page numbers can start anywhere on the screen, you can choose to di
                             self.page_labels_cache = nil
                             self.ui.document:buildSyntheticPageMap(spin.value)
                             self:updateVisibleLabels()
+                            if self.ui.view.topbar then
+                                self.ui.view.topbar:toggleBar()
+                            end
                             UIManager:setDirty(self.view.dialog, "partial")
                             UIManager:broadcastEvent(Event:new("UsePageLabelsUpdated"))
                             touchmenu_instance:updateItems()
