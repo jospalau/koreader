@@ -149,6 +149,87 @@ end
 
 -- Collect ALL descendant <table> elements under the given parent (any depth).
 -- Skips WR's "report error" table. Returns concatenated HTML or nil.
+local function lift_wrtopsection(table_html)
+	if type(table_html) ~= "string" or #table_html == 0 then
+		return nil, table_html
+	end
+
+	local lifted = {}
+
+	local cleaned = table_html:gsub("(<%s*[Tt][Rr][^>]*>)([%s%S]-)(</%s*[Tt][Rr]%s*>)", function(open_tag, inner, close_tag)
+		local class_attr = open_tag:match('[Cc][Ll][Aa][Ss][Ss]%s*=%s*"([^"]*)"')
+			or open_tag:match("[Cc][Ll][Aa][Ss][Ss]%s*=%s*'([^']*)'")
+			or open_tag:match("[Cc][Ll][Aa][Ss][Ss]%s*=%s*([^%s>]+)")
+
+		if class_attr then
+			local cls = " " .. class_attr:lower():gsub("%s+", " ") .. " "
+			if cls:find(" wrtopsection ", 1, true) then
+				local attrs = open_tag:match("^<%s*[Tt][Rr]([^>]*)>")
+				local div_open = "<div" .. (attrs or "") .. ">"
+				local content = inner:gsub("<%s*[Tt][Dd]([^>]*)>", function(td_attrs)
+					local td_attr = td_attrs
+						:gsub('%s+[Cc][Oo][Ll][Ss][Pp][Aa][Nn]%s*=%s*"[^"]*"', "")
+						:gsub("%s+[Cc][Oo][Ll][Ss][Pp][Aa][Nn]%s*=%s*[^%s>]+", "")
+						:gsub('%s+[Rr][Oo][Ww][Ss][Pp][Aa][Nn]%s*=%s*"[^"]*"', "")
+						:gsub("%s+[Rr][Oo][Ww][Ss][Pp][Aa][Nn]%s*=%s*[^%s>]+", "")
+					if td_attr:match("%S") then
+						return "<div" .. td_attr .. ">"
+					end
+					return "<div>"
+				end)
+				content = content:gsub("</%s*[Tt][Dd]%s*>", "</div>")
+
+				lifted[#lifted + 1] = div_open .. content .. "</div>\n"
+				return ""
+			end
+		end
+		return open_tag .. inner .. close_tag
+	end)
+
+	cleaned = cleaned:gsub("(<%s*[Tt][Aa][Bb][Ll][Ee][^>]*>)%s*", "%1", 1)
+
+	if #lifted == 0 then
+		return nil, table_html
+	end
+
+	return table.concat(lifted, ""), cleaned
+end
+
+local function inject_width_fill_row(table_html)
+	if type(table_html) ~= "string" then
+		return table_html
+	end
+	if table_html:find("wr%-width%-fill", 1, true) then
+		return table_html
+	end
+
+	local filler_row
+	for inner in table_html:gmatch("<%s*[Tt][Rr][^>]*>(.-)</%s*[Tt][Rr]%s*>") do
+		local cells = {}
+		for cell_html in inner:gmatch("<%s*[Tt][DdHh][^>]*>(.-)</%s*[Tt][DdHh]%s*>") do
+			cells[#cells + 1] = cell_html
+		end
+		if #cells == 3 then
+			local middle = cells[2]:gsub("&nbsp;", " ")
+			if middle:gsub("%s+", "") == "" then
+				local payload = ("mmmm "):rep(18)
+				local cell = '<td class="wr-width-fill-cell"><span class="wr-width-fill-span">' ..
+					payload .. "</span></td>"
+				filler_row = '<tr class="wr-width-fill" aria-hidden="true">' ..
+					cell .. cell .. cell .. "</tr>"
+				break
+			end
+		end
+	end
+
+	if not filler_row then
+		return table_html
+	end
+
+	local replaced, count = table_html:gsub("</%s*[Tt][Aa][Bb][Ll][Ee]%s*>", filler_row .. "%0", 1)
+	return count > 0 and replaced or table_html
+end
+
 local function extract_definition_tables(html, parent_open)
 	local parent_close = find_matching_close(html, parent_open)
 	local limit = parent_close and parent_close.start or #html
@@ -165,7 +246,13 @@ local function extract_definition_tables(html, parent_open)
 				local tclose = find_matching_close(html, tag); if not tclose then break end
 				local frag = html:sub(tag.start, tclose.stop)
 				if not frag:lower():find("wrreporterror", 1, true) then
-					chunks[#chunks + 1] = frag
+					local lifted, cleaned = lift_wrtopsection(frag)
+					if lifted then
+						cleaned = inject_width_fill_row(cleaned)
+						chunks[#chunks + 1] = lifted .. cleaned
+					else
+						chunks[#chunks + 1] = inject_width_fill_row(cleaned)
+					end
 				end
 				i = tclose.stop + 1
 			else
@@ -266,6 +353,97 @@ local function strip_all_wrcopyright_tags(html)
 	return table.concat(out)
 end
 
+local function class_contains(class_attr, needle)
+	if not class_attr then return false end
+	local needle_lc = needle:lower()
+	local normalized = " " .. class_attr:lower():gsub("%s+", " ") .. " "
+	return normalized:find(" " .. needle_lc .. " ", 1, true) ~= nil
+end
+
+
+local function find_first_inflections_child(html, parent_open)
+	local parent_close = find_matching_close(html, parent_open)
+	if not parent_close then return nil end
+
+	local limit = parent_close.start
+	local i = parent_open.stop + 1
+
+	while true do
+		local lt = html:find("<", i, true)
+		if not lt or lt >= limit then break end
+		local tag = parse_tag(html, lt); if not tag then break end
+
+		if tag.type == "open" then
+			local close = tag.self_close and tag or find_matching_close(html, tag)
+			if not close then break end
+			if tag.name == "div" and class_contains(tag.class, "inflectionsSection") then
+				local inner_start = tag.stop + 1
+				local inner_stop = close.start - 1
+				local inner = inner_start <= inner_stop and html:sub(inner_start, inner_stop) or ""
+				if inner:match("%S") then
+					return html:sub(tag.start, close.stop)
+				end
+			end
+			i = close.stop + 1
+		else
+			i = tag.stop + 1
+		end
+	end
+
+	return nil
+end
+
+local function find_inflections_in_article_head(html, article_head_open)
+	local article_head_close = find_matching_close(html, article_head_open)
+	if not article_head_close then return nil end
+
+	local limit = article_head_close.start
+	local i = article_head_open.stop + 1
+
+	while true do
+		local lt = html:find("<", i, true)
+		if not lt or lt >= limit then break end
+		local tag = parse_tag(html, lt); if not tag then break end
+
+		if tag.type == "open" then
+			local close = tag.self_close and tag or find_matching_close(html, tag)
+			if not close then break end
+
+			if tag.name == "div" and class_contains(tag.class, "hw-flex-container") then
+				local section = find_first_inflections_child(html, tag)
+				if section then
+					return section
+				end
+			end
+
+			i = close.stop + 1
+		else
+			i = tag.stop + 1
+		end
+	end
+
+	return nil
+end
+
+local function get_inflections_section(html)
+	if type(html) ~= "string" then return nil end
+	local heads = find_all_elements_with_id(html, "articleHead")
+	if not heads or #heads == 0 then
+		return nil
+	end
+
+	for _, head in ipairs(heads) do
+		if head.open then
+			local section = find_inflections_in_article_head(html, head.open)
+			if section and section:match("%S") then
+				return section
+			end
+		end
+	end
+
+	return nil
+end
+
 -- Example:
 -- local html = fetch_somehow()
 -- local tag = first_wrcopyright_tag(html)
@@ -273,12 +451,13 @@ end
 
 -- Returns concatenated HTML of all definition tables and the copyright.
 -- On failure: returns nil, error_message
-function HtmlParser.parse(html)
+function HtmlParser.parse(html, include_inflections)
 	if type(html) ~= "string" or #html == 0 then
 		return nil, nil, "Empty HTML"
 	end
 
 	local copyright = get_copyright(html)
+	local inflections_html = get_inflections_section(html)
 
 	html = strip_all_wrcopyright_tags(html)
 
@@ -299,7 +478,12 @@ function HtmlParser.parse(html)
 		return nil, nil, "No <table> found under any #articleWRD"
 	end
 
-	return table.concat(parts), copyright, nil
+	local parsed_html = table.concat(parts)
+	if include_inflections and inflections_html and inflections_html:len() > 0 then
+		parsed_html = inflections_html .. "<br /><br />" .. parsed_html
+	end
+
+	return parsed_html, copyright, nil
 end
 
 return HtmlParser
