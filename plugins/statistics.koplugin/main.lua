@@ -201,6 +201,7 @@ function ReaderStatistics:init()
     -- })
 
     if self.document and self.document.is_pic then
+        self.settings = { is_enabled = false }
         return -- disable in PIC documents
     end
 
