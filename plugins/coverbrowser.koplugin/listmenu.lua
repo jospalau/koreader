@@ -424,6 +424,8 @@ function ListMenuItem:update()
             else
                 if pages then
                     pages_str = T(N_("1 page", "%1 pages", pages), pages)
+                elseif status == "reading" then
+                    pages_str =  _("Reading")
                 end
             end
 
