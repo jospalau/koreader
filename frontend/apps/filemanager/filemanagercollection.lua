@@ -1920,7 +1920,7 @@ function FileManagerCollection:onTapBottomRightCollection(arg, ges_ev)
                             and self.calibre_data[file.text]["grrating"]
                             and self.calibre_data[file.text]["grvotes"]
                             and self.calibre_data[file.text]["series"] then
-                            file.pubdate = tonumber(self.calibre_data[file.text]["pubdate"]:sub(1, 4))
+                            file.pubdate = tonumber(self.calibre_data[file.text]["pubdate"]:sub(1, 4) .. self.calibre_data[file.text]["pubdate"]:sub(6, 7))
                             file.words = tonumber(self.calibre_data[file.text]["words"])
                             file.grrating = tonumber(self.calibre_data[file.text]["grrating"])
                             file.grvotes = tonumber(self.calibre_data[file.text]["grvotes"])
@@ -2144,7 +2144,7 @@ function FileManagerCollection:onDoubleTapBottomRightCollection(arg, ges_ev)
                             and self.calibre_data[file.text]["grrating"]
                             and self.calibre_data[file.text]["grvotes"]
                             and self.calibre_data[file.text]["series"] then
-                            file.pubdate = tonumber(self.calibre_data[file.text]["pubdate"]:sub(1, 4))
+                            file.pubdate = tonumber(self.calibre_data[file.text]["pubdate"]:sub(1, 4) .. self.calibre_data[file.text]["pubdate"]:sub(6, 7))
                             file.words = tonumber(self.calibre_data[file.text]["words"])
                             file.grrating = tonumber(self.calibre_data[file.text]["grrating"])
                             file.grvotes = tonumber(self.calibre_data[file.text]["grvotes"])
