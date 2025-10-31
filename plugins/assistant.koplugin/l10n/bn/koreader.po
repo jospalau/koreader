@@ -1,0 +1,797 @@
+# কিছু বর্ণনামূলক শিরোনাম।
+# কপিরাইট (C) 2025 প্যাকেজের কপিরাইট ধারক
+# এই ফাইলটি PACKAGE প্যাকেজের একই লাইসেন্সের অধীনে বিতরণ করা হয়।
+# প্রথম লেখক <EMAIL@ADDRESS>, 2025.
+#
+msgid   ""
+msgstr  "Project-Id-Version: assistant.koplugin 1.0\n"
+        "Report-Msgid-Bugs-To: \n"
+        "POT-Creation-Date: 2025-09-26 10:22+0800\n"
+        "PO-Revision-Date: 2025-08-21 15:17:03+0800\n"
+        "Last-Translator: ChatGPT-4o <chatgpt4o@openai.com>\n"
+        "Language-Team: ChatGPT-4o <chatgpt4o@openai.com>\n"
+        "Language: Bengali (bn)\n"
+        "MIME-Version: 1.0\n"
+        "Content-Type: text/plain; charset=UTF-8\n"
+        "Content-Transfer-Encoding: 8bit\n"
+        "Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: ../_meta.lua:4 ../assistant_dialog.lua:435 ../main.lua:135 ../main.lua:477
+msgid   "AI Assistant"
+msgstr  "এআই সহকারী"
+
+#: ../_meta.lua:5
+msgid   "💡 Enhance your KOReader experience with AI"
+msgstr  "💡 এআই দিয়ে আপনার KOReader অভিজ্ঞতা উন্নত করুন"
+
+#: ../assistant_dialog.lua:103
+msgid   "(Empty message)"
+msgstr  "(খালি বার্তা)"
+
+#: ../assistant_dialog.lua:114
+msgid   "(No response)"
+msgstr  "(কোনও প্রতিক্রিয়া নেই)"
+
+#: ../assistant_dialog.lua:145 ../assistant_quicknote.lua:99
+#: ../assistant_viewer.lua:569
+msgid   "Highlighted text:"
+msgstr  "উল্লেখিত পাঠ্য:"
+
+#: ../assistant_dialog.lua:295 ../assistant_dictdialog.lua:120
+#: ../assistant_quicknote.lua:39 ../assistant_settings.lua:90
+#: ../assistant_viewer.lua:671
+msgid   "Cancel"
+msgstr  "বাতিল"
+
+#: ../assistant_dialog.lua:302 ../assistant_viewer.lua:681
+msgid   "Ask"
+msgstr  "জিজ্ঞাসা করুন"
+
+#: ../assistant_dialog.lua:315 ../assistant_viewer.lua:687
+msgid   "Enter a question before proceeding."
+msgstr  "অগ্রসর হওয়ার আগে একটি প্রশ্ন লিখুন"
+
+#: ../assistant_dialog.lua:399
+msgid   "Add this button to the Highlight Menu?"
+msgstr  "এই বাটনটি হাইলাইট মেনুতে যোগ করবেন?"
+
+#: ../assistant_dialog.lua:400
+msgid   "Add"
+msgstr  "যোগ করুন"
+
+#: ../assistant_dialog.lua:427
+msgid   "Ask a question about the highlighted text"
+msgstr  "উল্লেখিত পাঠ্য সম্পর্কে একটি প্রশ্ন জিজ্ঞাসা করুন"
+
+#: ../assistant_dialog.lua:428
+#, lua-format
+msgid   "Ask a question about this book:\n"
+        "%s by %s"
+msgstr  "এই বই সম্পর্কে একটি প্রশ্ন জিজ্ঞাসা করুন:\n"
+        "%s দ্বারা %s"
+
+#: ../assistant_dialog.lua:431
+msgid   "Type your question here..."
+msgstr  "এখানে আপনার প্রশ্ন লিখুন..."
+
+#: ../assistant_dialog.lua:432
+msgid   "Ask anything about this book..."
+msgstr  "এই বই সম্পর্কে যেকোনো কিছু জিজ্ঞাসা করুন..."
+
+#: ../assistant_dialog.lua:455
+msgid   "Use book text as context"
+msgstr  "প্রসঙ্গ হিসেবে বইয়ের পাঠ্য ব্যবহার করুন"
+
+#: ../assistant_dialog.lua:517
+msgid   "Error: No response received"
+msgstr  "ত্রুটি: কোনও প্রতিক্রিয়া পাওয়া যায়নি"
+
+#: ../assistant_dictdialog.lua:114
+msgid   "AI Dictionary"
+msgstr  "এআই অভিধান"
+
+#: ../assistant_dictdialog.lua:115
+msgid   "Enter a word to look up..."
+msgstr  "অনুসন্ধানের জন্য একটি শব্দ লিখুন..."
+
+#: ../assistant_dictdialog.lua:126
+msgid   "Look Up"
+msgstr  "অনুসন্ধান"
+
+#: ../assistant_dictdialog.lua:291 ../assistant_prompts.lua:21 ../main.lua:683
+msgid   "Term X-Ray"
+msgstr  "টার্ম এক্স-রে"
+
+#: ../assistant_dictdialog.lua:292
+msgid   "Loading Term X-Ray ..."
+msgstr  "টার্ম এক্স-রে লোড হচ্ছে..."
+
+#: ../assistant_dictdialog.lua:308 ../assistant_prompts.lua:97 ../main.lua:697
+msgid   "Dictionary"
+msgstr  "অভিধান"
+
+#: ../assistant_dictdialog.lua:309
+msgid   "Loading AI Dictionary ..."
+msgstr  "এআই অভিধান লোড হচ্ছে..."
+
+#: ../assistant_featuredialog.lua:38
+msgid   "Custom Prompt"
+msgstr  "কাস্টম প্রম্পট"
+
+#: ../assistant_featuredialog.lua:39
+msgid   "Loading..."
+msgstr  "লোড হচ্ছে..."
+
+#: ../assistant_featuredialog.lua:59
+msgid   "Recap"
+msgstr  "সারসংক্ষেপ"
+
+#: ../assistant_featuredialog.lua:60
+msgid   "Loading Recap..."
+msgstr  "সারসংক্ষেপ লোড হচ্ছে..."
+
+#: ../assistant_featuredialog.lua:65
+msgid   "X‑Ray"
+msgstr  "এক্স-রে"
+
+#: ../assistant_featuredialog.lua:66
+msgid   "Loading X-Ray..."
+msgstr  "এক্স-রে লোড হচ্ছে..."
+
+#: ../assistant_featuredialog.lua:71
+msgid   "Book Information"
+msgstr  "বইয়ের তথ্য"
+
+#: ../assistant_featuredialog.lua:72
+msgid   "Loading Book Information..."
+msgstr  "বইয়ের তথ্য লোড হচ্ছে..."
+
+#: ../assistant_featuredialog.lua:77 ../main.lua:117 ../main.lua:189
+msgid   "Highlight & Note Analysis"
+msgstr  "হাইলাইট ও নোট বিশ্লেষণ"
+
+#: ../assistant_featuredialog.lua:78
+msgid   "Loading Highlight & Note Analysis..."
+msgstr  "হাইলাইট ও নোট বিশ্লেষণ লোড হচ্ছে..."
+
+#: ../assistant_featuredialog.lua:83 ../main.lua:125 ../main.lua:200
+msgid   "Summary Using Highlights & Notes"
+msgstr  "হাইলাইট ও নোট ব্যবহার করে সারাংশ"
+
+#: ../assistant_featuredialog.lua:84
+msgid   "Loading Summary Using Highlights & Notes..."
+msgstr  "হাইলাইট ও নোট ব্যবহার করে সারাংশ লোড হচ্ছে..."
+
+#: ../assistant_featuredialog.lua:95
+#, lua-format
+msgid   "Unknown feature type: %s"
+msgstr  "অজানা ফিচার ধরন: %s"
+
+#: ../assistant_prompts.lua:24
+msgid   "This prompt creates a structured system for generating context-aware definitions of words or phrases from literature by analyzing the highlighted term within its surrounding text to provide nuanced explanations that capture both literal meaning and contextual significance."
+msgstr  "এই প্রম্পটটি সাহিত্যের শব্দ বা বাক্যাংশের প্রসঙ্গ-সচেতন সংজ্ঞা তৈরির জন্য একটি কাঠামোবদ্ধ পদ্ধতি তৈরি করে, যেখানে হাইলাইট করা শব্দটিকে আশেপাশের পাঠ্যে বিশ্লেষণ করে এর আক্ষরিক অর্থ ও প্রাসঙ্গিক তাৎপর্য উভয়ই ধরে রাখে এমন সূক্ষ্ম ব্যাখ্যা প্রদান করা হয়।"
+
+#: ../assistant_prompts.lua:98
+msgid   "This prompt acts as a dictionary for the highlighted text, to a word or phrase."
+msgstr  "এই প্রম্প্টটি উল্লেখিত পাঠ্যকে একটি শব্দ বা বাক্যাংশ হিসেবে অভিধান হিসাবে কাজ করে।"
+
+#: ../assistant_prompts.lua:104 ../assistant_quicknote.lua:101
+msgid   "Quick Note"
+msgstr  "দ্রুত নোট"
+
+#: ../assistant_prompts.lua:105
+msgid   "This button creates a quick note with highlighted text."
+msgstr  "এই বোতামটি হাইলাইট করা টেক্সট দিয়ে একটি দ্রুত নোট তৈরি করে।"
+
+#: ../assistant_prompts.lua:110
+msgid   "Vocabulary"
+msgstr  "ভোকাবুলারি"
+
+#: ../assistant_prompts.lua:113
+msgid   "This prompt analyzes the vocabulary of the highlighted text, identifying complex words and providing definitions, synonyms, and usage examples."
+msgstr  "এই প্রম্প্টটি উল্লেখিত পাঠ্যের শব্দভান্ডার বিশ্লেষণ করে, জটিল শব্দ চিহ্নিত করে এবং সংজ্ঞা, সমার্থক ও ব্যবহার উদাহরণ প্রদান করে।"
+
+#: ../assistant_prompts.lua:130
+msgid   "Grammar"
+msgstr  "ব্যাকরণ"
+
+#: ../assistant_prompts.lua:133
+msgid   "This prompt analyzes the grammar of the highlighted text, providing a detailed explanation of its structure and any grammatical errors."
+msgstr  "এই প্রম্প্টটি উল্লেখিত পাঠ্যের ব্যাকরণ বিশ্লেষণ করে, এর গঠন ও সম্ভাব্য ব্যাকরণগত ভুলের বিস্তারিত ব্যাখ্যা দেয়।"
+
+#: ../assistant_prompts.lua:149
+msgid   "Translate"
+msgstr  "অনুবাদ"
+
+#: ../assistant_prompts.lua:150
+msgid   "This prompt translates the highlighted text to another language."
+msgstr  "এই প্রম্প্টটি উল্লেখিত পাঠ্যকে অন্য ভাষায় অনুবাদ করে।"
+
+#: ../assistant_prompts.lua:171
+msgid   "Summarize"
+msgstr  "সংক্ষেপণ"
+
+#: ../assistant_prompts.lua:173
+msgid   "This prompt summarizes the highlighted text, capturing its main points and essential details."
+msgstr  "এই প্রম্প্টটি উল্লেখিত পাঠ্যকে সংক্ষেপ করে, মূল পয়েন্ট ও গুরুত্বপূর্ণ বিবরণ ধরে রাখে।"
+
+#: ../assistant_prompts.lua:182
+msgid   "Simplify"
+msgstr  "সরলীকরণ"
+
+#: ../assistant_prompts.lua:184
+msgid   "This prompt simplifies the highlighted text to make it easier to understand."
+msgstr  "এই প্রম্প্টটি উল্লেখিত পাঠ্যকে সহজ করে বোঝা সহজ করে।"
+
+#: ../assistant_prompts.lua:195
+msgid   "Key Points"
+msgstr  "মূল পয়েন্ট"
+
+#: ../assistant_prompts.lua:198
+msgid   "This prompt extracts and lists the key points from the highlighted text, ensuring clarity and organization."
+msgstr  "এই প্রম্প্টটি উল্লেখিত পাঠ্য থেকে মূল পয়েন্ট বের করে এবং তালিকাভুক্ত করে, পরিষ্কারতা ও সংগঠন নিশ্চিত করে।"
+
+#: ../assistant_prompts.lua:210
+msgid   "ELI5"
+msgstr  "৫ বছরের শিশুর জন্য ব্যাখ্যা"
+
+#: ../assistant_prompts.lua:213
+msgid   "This prompt explains the highlighted text as if to a five-year-old, simplifying complex concepts into easily understandable terms."
+msgstr  "এই প্রম্প্টটি উল্লেখিত পাঠ্যকে পাঁচ বছরের শিশুর মতো ব্যাখ্যা করে, জটিল ধারণাগুলোকে সহজভাবে বুঝতে সহায়তা করে।"
+
+#: ../assistant_prompts.lua:226
+msgid   "Explain"
+msgstr  "ব্যাখ্যা"
+
+#: ../assistant_prompts.lua:228
+msgid   "This prompt explains the highlighted text in detail, ensuring clarity and understanding."
+msgstr  "এই প্রম্প্টটি উল্লেখিত পাঠ্য বিস্তারিতভাবে ব্যাখ্যা করে, পরিষ্কারতা ও বোঝাপড়া নিশ্চিত করে।"
+
+#: ../assistant_prompts.lua:239
+msgid   "Historical Context"
+msgstr  "ঐতিহাসিক প্রেক্ষাপট"
+
+#: ../assistant_prompts.lua:242
+msgid   "This prompt provides a detailed historical context for the highlighted text, explaining its significance and background."
+msgstr  "এই প্রম্প্টটি উল্লেখিত পাঠ্যের বিস্তারিত ঐতিহাসিক প্রেক্ষাপট দেয়, এর গুরুত্ব ও পটভূমি ব্যাখ্যা করে।"
+
+#: ../assistant_prompts.lua:254 ../main.lua:668
+msgid   "Wikipedia"
+msgstr  "উইকিপিডিয়া"
+
+#: ../assistant_prompts.lua:257
+msgid   "This prompt generates a comprehensive Wikipedia-style article based on the highlighted text, ensuring factual accuracy and neutrality."
+msgstr  "এই প্রম্প্টটি উল্লেখিত পাঠ্যের ভিত্তিতে একটি বিস্তৃত উইকিপিডিয়া-ধরনের নিবন্ধ তৈরি করে, সঠিকতা ও নিরপেক্ষতা নিশ্চিত করে।"
+
+#. @translators used in the dictionary.
+#: ../assistant_prompts.lua:461
+msgid   "Conjugation"
+msgstr  "ক্রিয়ার রূপ"
+
+#: ../assistant_prompts.lua:462
+msgid   "Synonyms"
+msgstr  "সমার্থক শব্দ"
+
+#: ../assistant_prompts.lua:463
+msgid   "Meaning"
+msgstr  "অর্থ"
+
+#: ../assistant_prompts.lua:464
+msgid   "Translation"
+msgstr  "অনুবাদ"
+
+#: ../assistant_prompts.lua:465
+msgid   "Explanation"
+msgstr  "ব্যাখ্যা"
+
+#: ../assistant_prompts.lua:466
+msgid   "Example"
+msgstr  "উদাহরণ"
+
+#: ../assistant_prompts.lua:467
+msgid   "Word Origin"
+msgstr  "শব্দের উৎস"
+
+#: ../assistant_prompts.lua:479
+msgid   "You may find these topics interesting:"
+msgstr  "এই বিষয়গুলো আপনার কাছে আকর্ষণীয় মনে হতে পারে:"
+
+#: ../assistant_querier.lua:51
+msgid   "Provider settings not found for: %1. Please check your configuration.lua file."
+msgstr  "%1-এর জন্য প্রদানকারীর সেটিংস খুঁজে পাওয়া যায়নি। অনুগ্রহ করে আপনার configuration.lua ফাইলটি যাচাই করুন।"
+
+#: ../assistant_querier.lua:77
+msgid   "The handler for %1 was not found. Please ensure the handler exists in api_handlers directory."
+msgstr  "%1-এর হ্যান্ডলার পাওয়া যায়নি। অনুগ্রহ করে নিশ্চিত করুন যে এটি api_handlers ডিরেক্টরিতে বিদ্যমান।"
+
+#: ../assistant_querier.lua:110
+msgid   "API Error:\n"
+        "%1\n"
+        "\n"
+        "Try another provider in the settings dialog."
+msgstr  "API ত্রুটি:\n"
+        "%1\n"
+        "\n"
+        "সেটিংস ডায়ালগে অন্য প্রোভাইডার চেষ্টা করুন।"
+
+#: ../assistant_querier.lua:110
+msgid   "Unknown error"
+msgstr  "অজানা ত্রুটি"
+
+#: ../assistant_querier.lua:111
+msgid   "Settings"
+msgstr  "সেটিংস"
+
+#: ../assistant_querier.lua:113 ../assistant_settings.lua:201
+#: ../assistant_viewer.lua:341
+msgid   "Close"
+msgstr  "বন্ধ করুন"
+
+#: ../assistant_querier.lua:137
+msgid   "Plugin is not configured."
+msgstr  "প্লাগইন কনফিগার করা হয়নি।"
+
+#: ../assistant_querier.lua:145
+msgid   "Querying AI ..."
+msgstr  "এআইকে প্রশ্ন করছে ..."
+
+#: ../assistant_querier.lua:181
+msgid   "AI is responding"
+msgstr  "এআই উত্তর দিচ্ছে"
+
+#: ../assistant_querier.lua:200
+msgid   "⏹ Stop"
+msgstr  "⏹ বন্ধ করুন"
+
+#: ../assistant_querier.lua:233 ../assistant_querier.lua:245
+msgid   "Request cancelled by user."
+msgstr  "অনুরোধ ব্যবহারকারী বাতিল করেছেন।"
+
+#: ../assistant_querier.lua:251
+msgid   "No response received."
+msgstr  "কোনো উত্তর পাওয়া যায়নি।"
+
+#: ../assistant_querier.lua:264
+msgid   "Failed to start subprocess for request"
+msgstr  "অনুরোধের জন্য সাবপ্রসেস শুরু করতে ব্যর্থ"
+
+#: ../assistant_querier.lua:460 ../assistant_querier.lua:462
+msgid   "Deeply Thought"
+msgstr  "গভীর চিন্তা"
+
+#: ../assistant_quicknote.lua:27 ../main.lua:101 ../main.lua:226
+msgid   "Take Quick Notes"
+msgstr  "দ্রুত নোট নিন"
+
+#: ../assistant_quicknote.lua:29
+msgid   "Write quick notes here"
+msgstr  "এখানে দ্রুত নোট লিখুন"
+
+#: ../assistant_quicknote.lua:49 ../assistant_settings.lua:114
+#: ../assistant_viewer.lua:450
+msgid   "Save"
+msgstr  "সংরক্ষণ"
+
+#: ../assistant_quicknote.lua:55
+msgid   "Please enter a note before saving."
+msgstr  "সংরক্ষণের আগে অনুগ্রহ করে একটি নোট লিখুন।"
+
+#: ../assistant_quicknote.lua:100
+msgid   "User:"
+msgstr  "ব্যবহারকারী:"
+
+#: ../assistant_quicknote.lua:122
+msgid   "Quick note saved successfully"
+msgstr  "দ্রুত নোট সফলভাবে সংরক্ষিত হয়েছে"
+
+#: ../assistant_settings.lua:74
+msgid   "AI Response Language Setting"
+msgstr  "এআই প্রতিক্রিয়া ভাষা সেটিং"
+
+#: ../assistant_settings.lua:77
+msgid   "AI Response Language"
+msgstr  "AI উত্তরের ভাষা"
+
+#: ../assistant_settings.lua:79 ../assistant_settings.lua:84
+msgid   "Leave blank to use: %1"
+msgstr  "খালি রাখলে ব্যবহৃত হবে: %1"
+
+#: ../assistant_settings.lua:82
+msgid   "Dictionary Language"
+msgstr  "ডিকশনারি ভাষা"
+
+#: ../assistant_settings.lua:97
+msgid   "Clear"
+msgstr  "মুছে ফেলো"
+
+#: ../assistant_settings.lua:144
+msgid   "RTL written Language"
+msgstr  "ডান-থেকে-বাম লেখা ভাষা"
+
+#: ../assistant_settings.lua:164
+msgid   "Leave these fields blank to use the UI language: %1"
+msgstr  "UI ভাষা ব্যবহার করতে এই ঘরগুলো খালি রাখুন: %1"
+
+#: ../assistant_settings.lua:175
+msgid   "AI Provider Settings"
+msgstr  "এআই প্রদানকারীর সেটিংস"
+
+#: ../assistant_settings.lua:265
+msgid   "AI Model provider:"
+msgstr  "এআই মডেল প্রদানকারী:"
+
+#: ../assistant_settings.lua:332
+msgid   "AI Language: "
+msgstr  "এআই ভাষা: "
+
+#: ../assistant_settings.lua:344
+msgid   "AI Text Size: %1"
+msgstr  "এআই টেক্সটের আকার: %1"
+
+#: ../assistant_settings.lua:348
+msgid   "AI Response Text Font Size"
+msgstr  "এআই প্রতিক্রিয়ার টেক্সট ফন্টের আকার"
+
+#: ../assistant_settings.lua:364
+msgid   "Stream Mode Settings"
+msgstr  "স্ট্রিম মোড সেটিংস"
+
+#: ../assistant_settings.lua:367
+msgid   "Enable stream response"
+msgstr  "স্ট্রিম উত্তর চালু করুন"
+
+#: ../assistant_settings.lua:375
+msgid   "Auto scroll stream response text"
+msgstr  "স্ট্রিম প্রতিক্রিয়া লেখা স্বয়ংক্রিয়ভাবে স্ক্রোল করুন"
+
+#: ../assistant_settings.lua:384
+msgid   "Large Streaming Window"
+msgstr  "বড় স্ট্রিমিং উইন্ডো"
+
+#. @translators: functional overriding
+#: ../assistant_settings.lua:396
+msgid   "KOReader Tweaks & Overrides"
+msgstr  "KOReader টুইক ও ওভাররাইড"
+
+#. @translators: 'Translate' is a built-in function
+#: ../assistant_settings.lua:400
+msgid   "Use AI Assistant for 'Translate'"
+msgstr  "'অনুবাদ'-এর জন্য এআই সহায়ক ব্যবহার করুন"
+
+#: ../assistant_settings.lua:411
+msgid   "Auto-recap on opening long-unread books"
+msgstr  "দীর্ঘদিন না পড়া বই খোলার সময় স্বয়ংক্রিয় রিক্যাপ"
+
+#: ../assistant_settings.lua:421
+msgid   "AI Recap will be enabled the next time a long-unread book is opened."
+msgstr  "পরবর্তীবার কোনো দীর্ঘদিন না পড়া বই খোলা হলে এআই রিক্যাপ সক্রিয় হবে।"
+
+#: ../assistant_settings.lua:425
+msgid   "Show Dictionary(AI) in Dictionary Popup"
+msgstr  "ডিকশনারি পপআপে Dictionary(AI) দেখাও"
+
+#: ../assistant_settings.lua:433
+msgid   "Show Wikipedia(AI) in Dictionary Popup"
+msgstr  "ডিকশনারি পপআপে Wikipedia(AI) দেখাও"
+
+#: ../assistant_settings.lua:441
+msgid   "Show Term X-Ray(AI) in Dictionary Popup"
+msgstr  "অভিধান পপআপে টার্ম এক্স-রে(এআই) দেখান"
+
+#: ../assistant_settings.lua:449
+msgid   "Show Custom Prompts in Dictionary Popup"
+msgstr  "অভিধান পপআপে কাস্টম প্রম্পট দেখান"
+
+#: ../assistant_settings.lua:459
+msgid   "Show Follow-up Questions from AI"
+msgstr  "এআই-এর অনুসরণ প্রশ্নগুলো দেখান"
+
+#: ../assistant_settings.lua:467
+msgid   "Copy entered question to the clipboard"
+msgstr  "প্রশ্ন ক্লিপবোর্ডে কপি করো"
+
+#: ../assistant_settings.lua:475
+msgid   "Auto-save conversations to NoteBook"
+msgstr  "আলাপচারিতা স্বয়ংক্রিয়ভাবে নোটবুকে সংরক্ষণ করুন"
+
+#: ../assistant_settings.lua:483
+msgid   "Use book text for x-ray and recap"
+msgstr  "এক্স-রে এবং রিক্যাপের জন্য বইয়ের পাঠ্য ব্যবহার করুন"
+
+#: ../assistant_settings.lua:491
+msgid   "Purge the settings"
+msgstr  "সেটিংস মুছে ফেলুন"
+
+#: ../assistant_settings.lua:494 ../main.lua:597
+msgid   "Are you sure to purge the assistant plugin settings? \n"
+        "This resets the assistant plugin to the status the first time you installed it.\n"
+        "\n"
+        "configuration.lua is safe, only the settings are purged."
+msgstr  "আপনি কি নিশ্চিতভাবে সহকারী প্লাগইনের সেটিংস মুছে ফেলতে চান?\n"
+        "এটি সহকারী প্লাগইনকে আপনি প্রথম ইনস্টল করার সময়কার অবস্থায় ফিরিয়ে দেবে।\n"
+        "\n"
+        "configuration.lua নিরাপদ, কেবল সেটিংসগুলোই মুছে যাবে।"
+
+#: ../assistant_settings.lua:498 ../main.lua:601
+msgid   "Purge"
+msgstr  "মুছে ফেলুন"
+
+#: ../assistant_update_checker.lua:106
+msgid   "Checking for updates..."
+msgstr  "আপডেট যাচাই করা হচ্ছে..."
+
+#: ../assistant_update_checker.lua:143
+#, lua-format
+msgid   "A new version of the %s plugin (%s) is available. Please update!"
+msgstr  "নতুন সংস্করণ পাওয়া গেছে %s প্লাগইন (%s)। অনুগ্রহ করে আপডেট করুন!"
+
+#: ../assistant_utils.lua:136
+msgid   "Page"
+msgstr  "পৃষ্ঠা"
+
+#: ../assistant_utils.lua:160
+msgid   "Cannot access default folder for logs: %1\n"
+        "Using original location."
+msgstr  "লগের ডিফল্ট ফোল্ডারে প্রবেশ করা যাচ্ছে না: %1\n"
+        "মূল স্থান ব্যবহার করা হচ্ছে।"
+
+#: ../assistant_utils.lua:212
+msgid   "Notebook save failed. Continuing..."
+msgstr  "নোটবুক সংরক্ষণ ব্যর্থ হয়েছে। চলছে..."
+
+#. @translators button text, keep it short, like: Ask Another
+#: ../assistant_viewer.lua:301 ../assistant_viewer.lua:738
+msgid   "Ask Another Question"
+msgstr  "আরেকটি প্রশ্ন জিজ্ঞেস করুন"
+
+#: ../assistant_viewer.lua:356
+msgid   "Copy"
+msgstr  "কপি করুন"
+
+#: ../assistant_viewer.lua:361
+msgid   "Text copied to the clipboard"
+msgstr  "টেক্সট ক্লিপবোর্ডে কপি করা হয়েছে"
+
+#: ../assistant_viewer.lua:375
+msgid   "Add Note"
+msgstr  "নোট যোগ করুন"
+
+#: ../assistant_viewer.lua:382
+msgid   "Highlight functionality not available"
+msgstr  "হাইলাইট ফাংশনালিটি উপলব্ধ নয়"
+
+#: ../assistant_viewer.lua:391
+msgid   "No text to add as note"
+msgstr  "নোট যোগ করার জন্য কোনও পাঠ্য নেই"
+
+#: ../assistant_viewer.lua:420
+msgid   "No text left to add as note"
+msgstr  "অতিরিক্ত নোট যোগ করার জন্য কোনও পাঠ্য নেই"
+
+#: ../assistant_viewer.lua:433
+msgid   "Note added successfully"
+msgstr  "নোট সফলভাবে যোগ করা হয়েছে"
+
+#: ../assistant_viewer.lua:454
+msgid   "Conversation is saved to NoteBook"
+msgstr  "আলাপটি নোটবুকে সংরক্ষিত হয়েছে"
+
+#: ../assistant_viewer.lua:573
+msgid   "Book Analysis"
+msgstr  "বই বিশ্লেষণ"
+
+#: ../assistant_viewer.lua:740
+msgid   "Type your question here"
+msgstr  "এখানে আপনার প্রশ্ন লিখুন"
+
+#: ../assistant_viewer.lua:904
+msgid   "Word copied to clipboard."
+msgstr  "শব্দ কপি করা হয়েছে ক্লিপবোর্ডে।"
+
+#: ../assistant_viewer.lua:905
+msgid   "Selection copied to clipboard."
+msgstr  "নির্বাচন কপি করা হয়েছে ক্লিপবোর্ডে।"
+
+#: ../main.lua:77 ../main.lua:142
+msgid   "Ask the AI a question"
+msgstr  "এআইকে একটি প্রশ্ন জিজ্ঞাসা করুন"
+
+#: ../main.lua:85 ../main.lua:178
+msgid   "AI Recaps"
+msgstr  "এআই সারসংক্ষেপ"
+
+#: ../main.lua:93 ../main.lua:167
+msgid   "AI X-Ray"
+msgstr  "এআই এক্স-রে"
+
+#: ../main.lua:109 ../main.lua:156
+msgid   "Book Summary & Recs"
+msgstr  "বইয়ের সারাংশ ও সুপারিশ"
+
+#: ../main.lua:148
+msgid   "Enter a question to ask AI."
+msgstr  "AI-কে জিজ্ঞাসা করার জন্য একটি প্রশ্ন লিখুন।"
+
+#: ../main.lua:153
+msgid   "Book-Level Built-in Prompts"
+msgstr  "বই-স্তরের অন্তর্নির্মিত প্রম্পটসমূহ"
+
+#: ../main.lua:162
+msgid   "Summary of the book, author biography, historical context, and a list of similar book recommendations with descriptions."
+msgstr  "বইয়ের সারাংশ, লেখকের জীবনী, ঐতিহাসিক প্রেক্ষাপট এবং অনুরূপ বইয়ের সুপারিশসহ বর্ণনা।"
+
+#: ../main.lua:173
+msgid   "\"X-Ray\" summary for a book, structured into specific sections like Characters, Locations, Themes, Terms & Concepts, Timeline, and Re-immersion."
+msgstr  "বইয়ের \"X-Ray\" সারাংশ, চরিত্র, স্থান, থিম, শব্দ ও ধারণা, সময়রেখা এবং পুনঃঅভিজ্ঞতা বিভাগে সাজানো।"
+
+#: ../main.lua:184
+msgid   "A very brief, spoiler-free summary of the book up to current reading progress."
+msgstr  "বর্তমান পড়া অংশ পর্যন্ত সংক্ষিপ্ত, স্পয়লার-মুক্ত সারাংশ।"
+
+#: ../main.lua:195
+msgid   "Analysis of your highlights, notes, and notebook content from the book."
+msgstr  "বইয়ের আপনার হাইলাইট, নোট ও নোটবুক বিষয়বস্তুর বিশ্লেষণ।"
+
+#: ../main.lua:206
+msgid   "Summary of the book using your highlights and notes."
+msgstr  "আপনার হাইলাইট ও নোট ব্যবহার করে বইয়ের সারাংশ।"
+
+#: ../main.lua:213
+msgid   "Book-Level Custom Prompts"
+msgstr  "বই-স্তরের কাস্টম প্রম্পটসমূহ"
+
+#: ../main.lua:220
+msgid   "Includes user defined book level prompts from Config file"
+msgstr  "কনফিগ ফাইল থেকে ব্যবহারকারী-নির্ধারিত বই-স্তরের প্রম্পট অন্তর্ভুক্ত"
+
+#: ../main.lua:232
+msgid   "Take quick notes that will be saved to your notebook."
+msgstr  "আপনার নোটবুকে সংরক্ষিত হবে এমন দ্রুত নোট নিন।"
+
+#: ../main.lua:237
+msgid   "NoteBook (AI Conversation Log)"
+msgstr  "নোটবুক (এআই কথোপকথন লগ)"
+
+#: ../main.lua:243
+msgid   "Notebook file: \n"
+        "\n"
+msgstr  "নোটবুক ফাইল: \n"
+        "\n"
+
+#: ../main.lua:244
+msgid   "View"
+msgstr  "দেখুন"
+
+#: ../main.lua:248
+msgid   "File does not exist.\n"
+        "\n"
+        "%1"
+msgstr  "ফাইলটি নেই।\n"
+        "\n"
+        "%1"
+
+#: ../main.lua:256 ../main.lua:260
+msgid   "Delete"
+msgstr  "মুছুন"
+
+#: ../main.lua:259
+msgid   "Delete file?\n"
+        "%1\n"
+        "This operation is not reversible."
+msgstr  "ফাইল মুছবেন?\n"
+        "%1\n"
+        "এই কাজটি ফিরিয়ে আনা যাবে না।"
+
+#: ../main.lua:271
+msgid   "Edit"
+msgstr  "সম্পাদনা"
+
+#: ../main.lua:283
+msgid   "AI Provider: %1"
+msgstr  "এআই প্রদানকারী: %1"
+
+#: ../main.lua:293
+msgid   "AI Assistant Settings"
+msgstr  "এআই সহকারী সেটিংস"
+
+#: ../main.lua:338
+msgid   "This is a custom prompt"
+msgstr  "এটি একটি কাস্টম প্রম্পট"
+
+#: ../main.lua:348
+msgid   "No active custom prompt found. For details, visit the 'Configuration' wiki page on github."
+msgstr  "কোনো সক্রিয় কাস্টম প্রম্পট পাওয়া যায়নি। বিস্তারিত জানতে github-এর 'Configuration' উইকি পৃষ্ঠা দেখুন।"
+
+#: ../main.lua:423
+msgid   "No valid model provider is found in the configuration.lua"
+msgstr  "configuration.lua-তে কোনো বৈধ মডেল প্রদানকারী পাওয়া যায়নি"
+
+#: ../main.lua:441
+msgid   "Configuration Error.\n"
+        "Please set up configuration.lua."
+msgstr  "কনফিগারেশন ত্রুটি।\n"
+        "configuration.lua সেটআপ করুন।"
+
+#: ../main.lua:510
+msgid   "configuration.lua: model providers are invalid."
+msgstr  "configuration.lua: মডেল প্রদানকারীগুলো অবৈধ।"
+
+#: ../main.lua:575
+msgid   "Usage Tips\n"
+        "\n"
+        "Select:\n"
+        "Highlight text (or a word) in the book, then press [AI assistant] in the poped up menu.\n"
+        "\n"
+        "Long Press:\n"
+        "- On a Prompt Button: Add to the highlight menu.\n"
+        "- On a highlight menu button to remove it.\n"
+        "- On the Close button to go back to the book in 1 step.\n"
+        "\n"
+        "Very-Long Press (over 3 seconds):\n"
+        "On a single word in the book to show the highlight menu (instead of the dictionary).\n"
+        "\n"
+        "Multi-Swipe (e.g., ⮠, ⮡, ↺):\n"
+        "On the result dialog to close (as the Close button is far to reach).\n"
+msgstr  "ব্যবহারের টিপস\n"
+        "\n"
+        "নির্বাচন:\n"
+        "বইয়ে কোনো টেক্সট (বা শব্দ) হাইলাইট করুন, তারপর পপ-আপ মেনুতে [এআই সহকারী] চাপুন।\n"
+        "\n"
+        "দীর্ঘ চাপ:\n"
+        "- প্রম্পট বোতামে: হাইলাইট মেনুতে যোগ করুন।\n"
+        "- হাইলাইট মেনুর বোতামে: এটি সরাতে।\n"
+        "- বন্ধ বোতামে: এক ধাপেই বইয়ে ফিরে যেতে।\n"
+        "\n"
+        "অতি-দীর্ঘ চাপ (৩ সেকেন্ডের বেশি):\n"
+        "বইয়ে কোনো একক শব্দে, হাইলাইট মেনু দেখাতে (অভিধানের পরিবর্তে)।\n"
+        "\n"
+        "মাল্টি-সোয়াইপ (যেমন: ⮠, ⮡, ↺):\n"
+        "ফলাফল ডায়ালগ বন্ধ করতে (বন্ধ বোতাম দূরে থাকায়)।\n"
+
+#: ../main.lua:594
+msgid   "Purge Settings"
+msgstr  "সেটিংস মুছে ফেলুন"
+
+#: ../main.lua:648
+#, lua-format
+msgid   "Remove [%s] from Highlight Menu?"
+msgstr  "হাইলাইট মেনু থেকে [%s] মুছতে চান?"
+
+#: ../main.lua:649
+msgid   "Remove"
+msgstr  "মুছুন"
+
+#: ../main.lua:853
+msgid   "Configuration not found. Please set up configuration.lua first."
+msgstr  "কনফিগারেশন পাওয়া যায়নি। প্রথমে configuration.lua সেট আপ করুন।"
+
+#: ../main.lua:895
+msgid   "Added [%1 (AI)] to Highlight Menu."
+msgstr  "হাইলাইট মেনুতে [%1 (এআই)] যোগ করা হয়েছে।"
+
+#: ../main.lua:904
+#, lua-format
+msgid   "Removed [%s (AI)] from Highlight Menu."
+msgstr  "হাইলাইট মেনু থেকে [%s (এআই)] মুছে ফেলা হয়েছে।"
+
+#: ../main.lua:948
+msgid   "Do you want an AI Recap?\n"
+        "For %1 by %2.\n"
+        "\n"
+msgstr  "একটি এআই রিক্যাপ চান?\n"
+        "%2-এর %1 জন্য।\n"
+        "\n"
+
+#: ../main.lua:949
+msgid   "Last read an hour ago."
+msgid_plural    "Last read %1 hours ago."
+msgstr[0]       "শেষ পড়া এক ঘণ্টা আগে।"
+msgstr[1]       "শেষ পড়া %1 ঘণ্টা আগে।"
+
+#: ../main.lua:954
+msgid   "Yes"
+msgstr  "হ্যাঁ"
+
+#: ../main.lua:963
+msgid   "No"
+msgstr  "না"

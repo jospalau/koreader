@@ -1,0 +1,797 @@
+# TRADUZIONE ITALIANA PER IL PLUGIN ASSISTANT.
+# Copyright (C) 2025 IL TITOLARE DEL COPYRIGHT DEL PACCHETTO
+# Questo file è distribuito con la stessa licenza del pacchetto PACKAGE.
+# ChatGPT-4 Turbo <none>, 2025.
+#
+msgid   ""
+msgstr  "Project-Id-Version: assistant.koplugin 1.0\n"
+        "Report-Msgid-Bugs-To: \n"
+        "POT-Creation-Date: 2025-09-26 10:22+0800\n"
+        "PO-Revision-Date: 2025-06-25 12:00+0200\n"
+        "Last-Translator: ChatGPT-4 Turbo <none>\n"
+        "Language-Team: ChatGPT-4 Turbo <none>\n"
+        "Language: Italiano (it)\n"
+        "MIME-Version: 1.0\n"
+        "Content-Type: text/plain; charset=UTF-8\n"
+        "Content-Transfer-Encoding: 8bit\n"
+        "Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: ../_meta.lua:4 ../assistant_dialog.lua:435 ../main.lua:135 ../main.lua:477
+msgid   "AI Assistant"
+msgstr  "Assistente AI"
+
+#: ../_meta.lua:5
+msgid   "💡 Enhance your KOReader experience with AI"
+msgstr  "💡 Migliora l'esperienza KOReader con AI"
+
+#: ../assistant_dialog.lua:103
+msgid   "(Empty message)"
+msgstr  "(Messaggio vuoto)"
+
+#: ../assistant_dialog.lua:114
+msgid   "(No response)"
+msgstr  "(Nessuna risposta)"
+
+#: ../assistant_dialog.lua:145 ../assistant_quicknote.lua:99
+#: ../assistant_viewer.lua:569
+msgid   "Highlighted text:"
+msgstr  "Testo evidenziato:"
+
+#: ../assistant_dialog.lua:295 ../assistant_dictdialog.lua:120
+#: ../assistant_quicknote.lua:39 ../assistant_settings.lua:90
+#: ../assistant_viewer.lua:671
+msgid   "Cancel"
+msgstr  "Annulla"
+
+#: ../assistant_dialog.lua:302 ../assistant_viewer.lua:681
+msgid   "Ask"
+msgstr  "Chiedi"
+
+#: ../assistant_dialog.lua:315 ../assistant_viewer.lua:687
+msgid   "Enter a question before proceeding."
+msgstr  "Inserisci una domanda prima di procedere."
+
+#: ../assistant_dialog.lua:399
+msgid   "Add this button to the Highlight Menu?"
+msgstr  "Aggiungere questo pulsante al menu Evidenzia?"
+
+#: ../assistant_dialog.lua:400
+msgid   "Add"
+msgstr  "Aggiungi"
+
+#: ../assistant_dialog.lua:427
+msgid   "Ask a question about the highlighted text"
+msgstr  "Fai una domanda sul testo evidenziato"
+
+#: ../assistant_dialog.lua:428
+#, lua-format
+msgid   "Ask a question about this book:\n"
+        "%s by %s"
+msgstr  "Fai una domanda su questo libro:\n"
+        "%s di %s"
+
+#: ../assistant_dialog.lua:431
+msgid   "Type your question here..."
+msgstr  "Scrivi la tua domanda qui..."
+
+#: ../assistant_dialog.lua:432
+msgid   "Ask anything about this book..."
+msgstr  "Chiedi qualsiasi cosa su questo libro..."
+
+#: ../assistant_dialog.lua:455
+msgid   "Use book text as context"
+msgstr  "Usa il testo del libro come contesto"
+
+#: ../assistant_dialog.lua:517
+msgid   "Error: No response received"
+msgstr  "Errore: Nessuna risposta ricevuta"
+
+#: ../assistant_dictdialog.lua:114
+msgid   "AI Dictionary"
+msgstr  "Dizionario AI"
+
+#: ../assistant_dictdialog.lua:115
+msgid   "Enter a word to look up..."
+msgstr  "Inserisci una parola da cercare..."
+
+#: ../assistant_dictdialog.lua:126
+msgid   "Look Up"
+msgstr  "Cerca"
+
+#: ../assistant_dictdialog.lua:291 ../assistant_prompts.lua:21 ../main.lua:683
+msgid   "Term X-Ray"
+msgstr  "Radiografia del termine"
+
+#: ../assistant_dictdialog.lua:292
+msgid   "Loading Term X-Ray ..."
+msgstr  "Caricamento radiografia del termine..."
+
+#: ../assistant_dictdialog.lua:308 ../assistant_prompts.lua:97 ../main.lua:697
+msgid   "Dictionary"
+msgstr  "Dizionario"
+
+#: ../assistant_dictdialog.lua:309
+msgid   "Loading AI Dictionary ..."
+msgstr  "Caricamento dizionario AI..."
+
+#: ../assistant_featuredialog.lua:38
+msgid   "Custom Prompt"
+msgstr  "Prompt personalizzato"
+
+#: ../assistant_featuredialog.lua:39
+msgid   "Loading..."
+msgstr  "Caricamento..."
+
+#: ../assistant_featuredialog.lua:59
+msgid   "Recap"
+msgstr  "Riassunto"
+
+#: ../assistant_featuredialog.lua:60
+msgid   "Loading Recap..."
+msgstr  "Caricamento riassunto..."
+
+#: ../assistant_featuredialog.lua:65
+msgid   "X‑Ray"
+msgstr  "Analisi"
+
+#: ../assistant_featuredialog.lua:66
+msgid   "Loading X-Ray..."
+msgstr  "Caricamento X-Ray..."
+
+#: ../assistant_featuredialog.lua:71
+msgid   "Book Information"
+msgstr  "Info libro"
+
+#: ../assistant_featuredialog.lua:72
+msgid   "Loading Book Information..."
+msgstr  "Caricamento info libro..."
+
+#: ../assistant_featuredialog.lua:77 ../main.lua:117 ../main.lua:189
+msgid   "Highlight & Note Analysis"
+msgstr  "Analisi di evidenziazioni e note"
+
+#: ../assistant_featuredialog.lua:78
+msgid   "Loading Highlight & Note Analysis..."
+msgstr  "Caricamento analisi di evidenziazioni e note..."
+
+#: ../assistant_featuredialog.lua:83 ../main.lua:125 ../main.lua:200
+msgid   "Summary Using Highlights & Notes"
+msgstr  "Riepilogo tramite evidenziazioni e note"
+
+#: ../assistant_featuredialog.lua:84
+msgid   "Loading Summary Using Highlights & Notes..."
+msgstr  "Caricamento riepilogo tramite evidenziazioni e note..."
+
+#: ../assistant_featuredialog.lua:95
+#, lua-format
+msgid   "Unknown feature type: %s"
+msgstr  "Tipo funzione sconosciuto: %s"
+
+#: ../assistant_prompts.lua:24
+msgid   "This prompt creates a structured system for generating context-aware definitions of words or phrases from literature by analyzing the highlighted term within its surrounding text to provide nuanced explanations that capture both literal meaning and contextual significance."
+msgstr  "Questo prompt crea un sistema strutturato per generare definizioni contestuali di parole o frasi tratte da testi letterari, analizzando il termine evidenziato nel suo contesto circostante per fornire spiegazioni sfumate che catturano sia il significato letterale che la rilevanza contestuale."
+
+#: ../assistant_prompts.lua:98
+msgid   "This prompt acts as a dictionary for the highlighted text, to a word or phrase."
+msgstr  "Questo prompt funge da dizionario per il testo evidenziato, per una parola o frase."
+
+#: ../assistant_prompts.lua:104 ../assistant_quicknote.lua:101
+msgid   "Quick Note"
+msgstr  "Nota Rapida"
+
+#: ../assistant_prompts.lua:105
+msgid   "This button creates a quick note with highlighted text."
+msgstr  "Questo pulsante crea una nota rapida con il testo evidenziato."
+
+#: ../assistant_prompts.lua:110
+msgid   "Vocabulary"
+msgstr  "Vocabolario"
+
+#: ../assistant_prompts.lua:113
+msgid   "This prompt analyzes the vocabulary of the highlighted text, identifying complex words and providing definitions, synonyms, and usage examples."
+msgstr  "Questo prompt analizza il vocabolario del testo evidenziato, identificando parole complesse e fornendo definizioni, sinonimi ed esempi di uso."
+
+#: ../assistant_prompts.lua:130
+msgid   "Grammar"
+msgstr  "Grammatica"
+
+#: ../assistant_prompts.lua:133
+msgid   "This prompt analyzes the grammar of the highlighted text, providing a detailed explanation of its structure and any grammatical errors."
+msgstr  "Questo prompt analizza la grammatica del testo evidenziato, fornendo una spiegazione dettagliata della sua struttura e di eventuali errori grammaticali."
+
+#: ../assistant_prompts.lua:149
+msgid   "Translate"
+msgstr  "Traduci"
+
+#: ../assistant_prompts.lua:150
+msgid   "This prompt translates the highlighted text to another language."
+msgstr  "Questo prompt traduce il testo evidenziato in un'altra lingua."
+
+#: ../assistant_prompts.lua:171
+msgid   "Summarize"
+msgstr  "Riassumi"
+
+#: ../assistant_prompts.lua:173
+msgid   "This prompt summarizes the highlighted text, capturing its main points and essential details."
+msgstr  "Questo prompt riassume il testo evidenziato, catturando i punti principali e i dettagli essenziali."
+
+#: ../assistant_prompts.lua:182
+msgid   "Simplify"
+msgstr  "Semplifica"
+
+#: ../assistant_prompts.lua:184
+msgid   "This prompt simplifies the highlighted text to make it easier to understand."
+msgstr  "Questo prompt semplifica il testo evidenziato per renderlo più comprensibile."
+
+#: ../assistant_prompts.lua:195
+msgid   "Key Points"
+msgstr  "Punti Chiave"
+
+#: ../assistant_prompts.lua:198
+msgid   "This prompt extracts and lists the key points from the highlighted text, ensuring clarity and organization."
+msgstr  "Questo prompt estrae e elenca i punti chiave dal testo evidenziato, garantendo chiarezza e organizzazione."
+
+#: ../assistant_prompts.lua:210
+msgid   "ELI5"
+msgstr  "Spiega come se avessi 5 anni"
+
+#: ../assistant_prompts.lua:213
+msgid   "This prompt explains the highlighted text as if to a five-year-old, simplifying complex concepts into easily understandable terms."
+msgstr  "Questo prompt spiega il testo evidenziato come se lo spiegassi a un bambino di cinque anni, semplificando concetti complessi in termini facilmente comprensibili."
+
+#: ../assistant_prompts.lua:226
+msgid   "Explain"
+msgstr  "Spiega"
+
+#: ../assistant_prompts.lua:228
+msgid   "This prompt explains the highlighted text in detail, ensuring clarity and understanding."
+msgstr  "Questo prompt spiega il testo evidenziato in dettaglio, garantendo chiarezza e comprensione."
+
+#: ../assistant_prompts.lua:239
+msgid   "Historical Context"
+msgstr  "Contesto Storico"
+
+#: ../assistant_prompts.lua:242
+msgid   "This prompt provides a detailed historical context for the highlighted text, explaining its significance and background."
+msgstr  "Questo prompt fornisce un contesto storico dettagliato per il testo evidenziato, spiegando la sua importanza e sfondo."
+
+#: ../assistant_prompts.lua:254 ../main.lua:668
+msgid   "Wikipedia"
+msgstr  "Wikipedia"
+
+#: ../assistant_prompts.lua:257
+msgid   "This prompt generates a comprehensive Wikipedia-style article based on the highlighted text, ensuring factual accuracy and neutrality."
+msgstr  "Questo prompt genera un articolo in stile Wikipedia basato sul testo evidenziato, garantendo accuratezza e neutralità."
+
+#. @translators used in the dictionary.
+#: ../assistant_prompts.lua:461
+msgid   "Conjugation"
+msgstr  "Coniugazione"
+
+#: ../assistant_prompts.lua:462
+msgid   "Synonyms"
+msgstr  "Sinonimi"
+
+#: ../assistant_prompts.lua:463
+msgid   "Meaning"
+msgstr  "Significato"
+
+#: ../assistant_prompts.lua:464
+msgid   "Translation"
+msgstr  "Traduzione"
+
+#: ../assistant_prompts.lua:465
+msgid   "Explanation"
+msgstr  "Spiegazione"
+
+#: ../assistant_prompts.lua:466
+msgid   "Example"
+msgstr  "Esempio"
+
+#: ../assistant_prompts.lua:467
+msgid   "Word Origin"
+msgstr  "Origine della parola"
+
+#: ../assistant_prompts.lua:479
+msgid   "You may find these topics interesting:"
+msgstr  "Potresti trovare interessanti questi argomenti:"
+
+#: ../assistant_querier.lua:51
+msgid   "Provider settings not found for: %1. Please check your configuration.lua file."
+msgstr  "Impostazioni provider non trovate per: %1. Controlla il file configuration.lua."
+
+#: ../assistant_querier.lua:77
+msgid   "The handler for %1 was not found. Please ensure the handler exists in api_handlers directory."
+msgstr  "Handler per %1 non trovato. Assicurati che esista nella cartella api_handlers."
+
+#: ../assistant_querier.lua:110
+msgid   "API Error:\n"
+        "%1\n"
+        "\n"
+        "Try another provider in the settings dialog."
+msgstr  "Errore API:\n"
+        "%1\n"
+        "\n"
+        "Prova un altro provider nelle impostazioni."
+
+#: ../assistant_querier.lua:110
+msgid   "Unknown error"
+msgstr  "Errore sconosciuto"
+
+#: ../assistant_querier.lua:111
+msgid   "Settings"
+msgstr  "Impostazioni"
+
+#: ../assistant_querier.lua:113 ../assistant_settings.lua:201
+#: ../assistant_viewer.lua:341
+msgid   "Close"
+msgstr  "Chiudi"
+
+#: ../assistant_querier.lua:137
+msgid   "Plugin is not configured."
+msgstr  "Plugin non configurato."
+
+#: ../assistant_querier.lua:145
+msgid   "Querying AI ..."
+msgstr  "Richiesta AI..."
+
+#: ../assistant_querier.lua:181
+msgid   "AI is responding"
+msgstr  "AI sta rispondendo"
+
+#: ../assistant_querier.lua:200
+msgid   "⏹ Stop"
+msgstr  "⏹ Ferma"
+
+#: ../assistant_querier.lua:233 ../assistant_querier.lua:245
+msgid   "Request cancelled by user."
+msgstr  "Richiesta annullata dall’utente."
+
+#: ../assistant_querier.lua:251
+msgid   "No response received."
+msgstr  "Nessuna risposta ricevuta."
+
+#: ../assistant_querier.lua:264
+msgid   "Failed to start subprocess for request"
+msgstr  "Impossibile avviare il sottoprocesso per la richiesta"
+
+#: ../assistant_querier.lua:460 ../assistant_querier.lua:462
+msgid   "Deeply Thought"
+msgstr  "Riflessione profonda"
+
+#: ../assistant_quicknote.lua:27 ../main.lua:101 ../main.lua:226
+msgid   "Take Quick Notes"
+msgstr  "Prendi Note Rapide"
+
+#: ../assistant_quicknote.lua:29
+msgid   "Write quick notes here"
+msgstr  "Scrivi qui le note rapide"
+
+#: ../assistant_quicknote.lua:49 ../assistant_settings.lua:114
+#: ../assistant_viewer.lua:450
+msgid   "Save"
+msgstr  "Salva"
+
+#: ../assistant_quicknote.lua:55
+msgid   "Please enter a note before saving."
+msgstr  "Inserisci una nota prima di salvare."
+
+#: ../assistant_quicknote.lua:100
+msgid   "User:"
+msgstr  "Utente:"
+
+#: ../assistant_quicknote.lua:122
+msgid   "Quick note saved successfully"
+msgstr  "Nota rapida salvata con successo"
+
+#: ../assistant_settings.lua:74
+msgid   "AI Response Language Setting"
+msgstr  "Impostazione lingua risposta IA"
+
+#: ../assistant_settings.lua:77
+msgid   "AI Response Language"
+msgstr  "Lingua risposta IA"
+
+#: ../assistant_settings.lua:79 ../assistant_settings.lua:84
+msgid   "Leave blank to use: %1"
+msgstr  "Lascia vuoto per usare: %1"
+
+#: ../assistant_settings.lua:82
+msgid   "Dictionary Language"
+msgstr  "Lingua dizionario"
+
+#: ../assistant_settings.lua:97
+msgid   "Clear"
+msgstr  "Pulisci"
+
+#: ../assistant_settings.lua:144
+msgid   "RTL written Language"
+msgstr  "Lingua scritta da destra a sinistra"
+
+#: ../assistant_settings.lua:164
+msgid   "Leave these fields blank to use the UI language: %1"
+msgstr  "Lascia vuoti questi campi per usare la lingua dell’interfaccia: %1"
+
+#: ../assistant_settings.lua:175
+msgid   "AI Provider Settings"
+msgstr  "Impostazioni Provider AI"
+
+#: ../assistant_settings.lua:265
+msgid   "AI Model provider:"
+msgstr  "Fornitore modello IA:"
+
+#: ../assistant_settings.lua:332
+msgid   "AI Language: "
+msgstr  "Lingua AI: "
+
+#: ../assistant_settings.lua:344
+msgid   "AI Text Size: %1"
+msgstr  "Dimensione Testo AI: %1"
+
+#: ../assistant_settings.lua:348
+msgid   "AI Response Text Font Size"
+msgstr  "Dimensione Carattere Risposta AI"
+
+#: ../assistant_settings.lua:364
+msgid   "Stream Mode Settings"
+msgstr  "Impostazioni Modalità Streaming"
+
+#: ../assistant_settings.lua:367
+msgid   "Enable stream response"
+msgstr  "Abilita risposta in streaming"
+
+#: ../assistant_settings.lua:375
+msgid   "Auto scroll stream response text"
+msgstr  "Scorrimento automatico del testo in risposta"
+
+#: ../assistant_settings.lua:384
+msgid   "Large Streaming Window"
+msgstr  "Finestra di Streaming Grande"
+
+#. @translators: functional overriding
+#: ../assistant_settings.lua:396
+msgid   "KOReader Tweaks & Overrides"
+msgstr  "Modifiche e override di KOReader"
+
+#. @translators: 'Translate' is a built-in function
+#: ../assistant_settings.lua:400
+msgid   "Use AI Assistant for 'Translate'"
+msgstr  "Usa Assistente AI per 'Traduci'"
+
+#: ../assistant_settings.lua:411
+msgid   "Auto-recap on opening long-unread books"
+msgstr  "Riassunto automatico all'apertura di libri non letti da tempo"
+
+#: ../assistant_settings.lua:421
+msgid   "AI Recap will be enabled the next time a long-unread book is opened."
+msgstr  "Il Riassunto AI sarà abilitato al prossimo accesso a un libro non letto da tempo."
+
+#: ../assistant_settings.lua:425
+msgid   "Show Dictionary(AI) in Dictionary Popup"
+msgstr  "Mostra Dizionario(IA) nel popup Dizionario"
+
+#: ../assistant_settings.lua:433
+msgid   "Show Wikipedia(AI) in Dictionary Popup"
+msgstr  "Mostra Wikipedia(IA) nel popup Dizionario"
+
+#: ../assistant_settings.lua:441
+msgid   "Show Term X-Ray(AI) in Dictionary Popup"
+msgstr  "Mostra Radiografia del termine (AI) nel popup del dizionario"
+
+#: ../assistant_settings.lua:449
+msgid   "Show Custom Prompts in Dictionary Popup"
+msgstr  "Mostra prompt personalizzati nel popup del dizionario"
+
+#: ../assistant_settings.lua:459
+msgid   "Show Follow-up Questions from AI"
+msgstr  "Mostra Domande di Approfondimento dell'AI"
+
+#: ../assistant_settings.lua:467
+msgid   "Copy entered question to the clipboard"
+msgstr  "Copia domanda negli appunti"
+
+#: ../assistant_settings.lua:475
+msgid   "Auto-save conversations to NoteBook"
+msgstr  "Salva automaticamente le conversazioni nel NoteBook"
+
+#: ../assistant_settings.lua:483
+msgid   "Use book text for x-ray and recap"
+msgstr  "Usa il testo del libro per x-ray e riassunto"
+
+#: ../assistant_settings.lua:491
+msgid   "Purge the settings"
+msgstr  "Cancella le impostazioni"
+
+#: ../assistant_settings.lua:494 ../main.lua:597
+msgid   "Are you sure to purge the assistant plugin settings? \n"
+        "This resets the assistant plugin to the status the first time you installed it.\n"
+        "\n"
+        "configuration.lua is safe, only the settings are purged."
+msgstr  "Sei sicuro di voler cancellare le impostazioni del plugin assistente?\n"
+        "Ciò ripristinerà il plugin allo stato in cui si trovava alla prima installazione.\n"
+        "\n"
+        "configuration.lua è al sicuro, verranno eliminate solo le impostazioni."
+
+#: ../assistant_settings.lua:498 ../main.lua:601
+msgid   "Purge"
+msgstr  "Ripulisci"
+
+#: ../assistant_update_checker.lua:106
+msgid   "Checking for updates..."
+msgstr  "Ricerca aggiornamenti..."
+
+#: ../assistant_update_checker.lua:143
+#, lua-format
+msgid   "A new version of the %s plugin (%s) is available. Please update!"
+msgstr  "È disponibile una nuova versione del plugin %s (%s). Aggiorna!"
+
+#: ../assistant_utils.lua:136
+msgid   "Page"
+msgstr  "Pagina"
+
+#: ../assistant_utils.lua:160
+msgid   "Cannot access default folder for logs: %1\n"
+        "Using original location."
+msgstr  "Impossibile accedere alla cartella predefinita per i log: %1\n"
+        "Uso la posizione originale."
+
+#: ../assistant_utils.lua:212
+msgid   "Notebook save failed. Continuing..."
+msgstr  "Salvataggio del notebook fallito. Continua..."
+
+#. @translators button text, keep it short, like: Ask Another
+#: ../assistant_viewer.lua:301 ../assistant_viewer.lua:738
+msgid   "Ask Another Question"
+msgstr  "Fai un'altra domanda"
+
+#: ../assistant_viewer.lua:356
+msgid   "Copy"
+msgstr  "Copia"
+
+#: ../assistant_viewer.lua:361
+msgid   "Text copied to the clipboard"
+msgstr  "Testo copiato negli appunti"
+
+#: ../assistant_viewer.lua:375
+msgid   "Add Note"
+msgstr  "Aggiungi nota"
+
+#: ../assistant_viewer.lua:382
+msgid   "Highlight functionality not available"
+msgstr  "Funzionalità evidenziamento non disponibile"
+
+#: ../assistant_viewer.lua:391
+msgid   "No text to add as note"
+msgstr  "Nessun testo da aggiungere come nota"
+
+#: ../assistant_viewer.lua:420
+msgid   "No text left to add as note"
+msgstr  "Non ci sono testi da aggiungere come nota"
+
+#: ../assistant_viewer.lua:433
+msgid   "Note added successfully"
+msgstr  "Nota aggiunta con successo"
+
+#: ../assistant_viewer.lua:454
+msgid   "Conversation is saved to NoteBook"
+msgstr  "Conversazione salvata nel NoteBook"
+
+#: ../assistant_viewer.lua:573
+msgid   "Book Analysis"
+msgstr  "Analisi del libro"
+
+#: ../assistant_viewer.lua:740
+msgid   "Type your question here"
+msgstr  "Scrivi la tua domanda qui"
+
+#: ../assistant_viewer.lua:904
+msgid   "Word copied to clipboard."
+msgstr  "Parola copiata negli appunti."
+
+#: ../assistant_viewer.lua:905
+msgid   "Selection copied to clipboard."
+msgstr  "Selezione copiata negli appunti."
+
+#: ../main.lua:77 ../main.lua:142
+msgid   "Ask the AI a question"
+msgstr  "Fai una domanda all'AI"
+
+#: ../main.lua:85 ../main.lua:178
+msgid   "AI Recaps"
+msgstr  "Riassunti AI"
+
+#: ../main.lua:93 ../main.lua:167
+msgid   "AI X-Ray"
+msgstr  "Analisi AI"
+
+#: ../main.lua:109 ../main.lua:156
+msgid   "Book Summary & Recs"
+msgstr  "Riepilogo e consigli"
+
+#: ../main.lua:148
+msgid   "Enter a question to ask AI."
+msgstr  "Scrivi una domanda per l’AI."
+
+#: ../main.lua:153
+msgid   "Book-Level Built-in Prompts"
+msgstr  "Prompt integrati a livello libro"
+
+#: ../main.lua:162
+msgid   "Summary of the book, author biography, historical context, and a list of similar book recommendations with descriptions."
+msgstr  "Riepilogo del libro, biografia dell’autore, contesto storico e lista di libri simili con descrizioni."
+
+#: ../main.lua:173
+msgid   "\"X-Ray\" summary for a book, structured into specific sections like Characters, Locations, Themes, Terms & Concepts, Timeline, and Re-immersion."
+msgstr  "Riepilogo \"X-Ray\" del libro, suddiviso in sezioni: Personaggi, Luoghi, Temi, Termini e Concetti, Cronologia, Re-immersione."
+
+#: ../main.lua:184
+msgid   "A very brief, spoiler-free summary of the book up to current reading progress."
+msgstr  "Breve riepilogo senza spoiler fino al punto di lettura attuale."
+
+#: ../main.lua:195
+msgid   "Analysis of your highlights, notes, and notebook content from the book."
+msgstr  "Analisi delle tue evidenziazioni, note e contenuti del notebook dal libro."
+
+#: ../main.lua:206
+msgid   "Summary of the book using your highlights and notes."
+msgstr  "Riepilogo del libro utilizzando le tue evidenziazioni e note."
+
+#: ../main.lua:213
+msgid   "Book-Level Custom Prompts"
+msgstr  "Prompt personalizzati a livello libro"
+
+#: ../main.lua:220
+msgid   "Includes user defined book level prompts from Config file"
+msgstr  "Include prompt a livello libro definiti dall'utente nel file di configurazione"
+
+#: ../main.lua:232
+msgid   "Take quick notes that will be saved to your notebook."
+msgstr  "Prendi note rapide che verranno salvate nel tuo notebook."
+
+#: ../main.lua:237
+msgid   "NoteBook (AI Conversation Log)"
+msgstr  "NoteBook (registro conversazioni AI)"
+
+#: ../main.lua:243
+msgid   "Notebook file: \n"
+        "\n"
+msgstr  "File del NoteBook: \n"
+        "\n"
+
+#: ../main.lua:244
+msgid   "View"
+msgstr  "Apri"
+
+#: ../main.lua:248
+msgid   "File does not exist.\n"
+        "\n"
+        "%1"
+msgstr  "File non trovato.\n"
+        "\n"
+        "%1"
+
+#: ../main.lua:256 ../main.lua:260
+msgid   "Delete"
+msgstr  "Elimina"
+
+#: ../main.lua:259
+msgid   "Delete file?\n"
+        "%1\n"
+        "This operation is not reversible."
+msgstr  "Eliminare il file?\n"
+        "%1\n"
+        "L'operazione è irreversibile."
+
+#: ../main.lua:271
+msgid   "Edit"
+msgstr  "Modifica"
+
+#: ../main.lua:283
+msgid   "AI Provider: %1"
+msgstr  "Provider AI: %1"
+
+#: ../main.lua:293
+msgid   "AI Assistant Settings"
+msgstr  "Impostazioni dell'Assistente IA"
+
+#: ../main.lua:338
+msgid   "This is a custom prompt"
+msgstr  "Questo è un prompt personalizzato"
+
+#: ../main.lua:348
+msgid   "No active custom prompt found. For details, visit the 'Configuration' wiki page on github."
+msgstr  "Nessun prompt personalizzato attivo trovato. Per dettagli, visita la pagina wiki 'Configuration' su GitHub."
+
+#: ../main.lua:423
+msgid   "No valid model provider is found in the configuration.lua"
+msgstr  "Nessun provider di modello valido trovato in configuration.lua"
+
+#: ../main.lua:441
+msgid   "Configuration Error.\n"
+        "Please set up configuration.lua."
+msgstr  "Errore di configurazione.\n"
+        "Imposta configuration.lua."
+
+#: ../main.lua:510
+msgid   "configuration.lua: model providers are invalid."
+msgstr  "configuration.lua: i provider di modello non sono validi."
+
+#: ../main.lua:575
+msgid   "Usage Tips\n"
+        "\n"
+        "Select:\n"
+        "Highlight text (or a word) in the book, then press [AI assistant] in the poped up menu.\n"
+        "\n"
+        "Long Press:\n"
+        "- On a Prompt Button: Add to the highlight menu.\n"
+        "- On a highlight menu button to remove it.\n"
+        "- On the Close button to go back to the book in 1 step.\n"
+        "\n"
+        "Very-Long Press (over 3 seconds):\n"
+        "On a single word in the book to show the highlight menu (instead of the dictionary).\n"
+        "\n"
+        "Multi-Swipe (e.g., ⮠, ⮡, ↺):\n"
+        "On the result dialog to close (as the Close button is far to reach).\n"
+msgstr  "Suggerimenti d’uso\n"
+        "\n"
+        "Seleziona:\n"
+        "Evidenzia il testo (o una parola) nel libro, quindi premi [Assistente AI] nel menu a comparsa.\n"
+        "\n"
+        "Pressione prolungata:\n"
+        "- Su un pulsante Prompt: aggiunge al menu evidenziazioni.\n"
+        "- Su un pulsante del menu evidenziazioni per rimuoverlo.\n"
+        "- Sul pulsante Chiudi per tornare al libro in un solo passo.\n"
+        "\n"
+        "Pressione molto prolungata (oltre 3 secondi):\n"
+        "Su una singola parola nel libro per mostrare il menu evidenziazioni (invece del dizionario).\n"
+        "\n"
+        "Multi-swipe (es. ⮠, ⮡, ↺):\n"
+        "Sul dialogo dei risultati per chiudere (dato che il pulsante Chiudi è lontano).\n"
+
+#: ../main.lua:594
+msgid   "Purge Settings"
+msgstr  "Ripulisci impostazioni"
+
+#: ../main.lua:648
+#, lua-format
+msgid   "Remove [%s] from Highlight Menu?"
+msgstr  "Rimuovere [%s] dal menu Evidenzia?"
+
+#: ../main.lua:649
+msgid   "Remove"
+msgstr  "Rimuovi"
+
+#: ../main.lua:853
+msgid   "Configuration not found. Please set up configuration.lua first."
+msgstr  "Configurazione non trovata. Configura prima configuration.lua."
+
+#: ../main.lua:895
+msgid   "Added [%1 (AI)] to Highlight Menu."
+msgstr  "Aggiunto [%1 (AI)] al menu Evidenzia."
+
+#: ../main.lua:904
+#, lua-format
+msgid   "Removed [%s (AI)] from Highlight Menu."
+msgstr  "Rimosso [%s (AI)] dal menu Evidenzia."
+
+#: ../main.lua:948
+msgid   "Do you want an AI Recap?\n"
+        "For %1 by %2.\n"
+        "\n"
+msgstr  "Vuoi un riassunto IA?\n"
+        "Per %1 di %2.\n"
+        "\n"
+
+#: ../main.lua:949
+msgid   "Last read an hour ago."
+msgid_plural    "Last read %1 hours ago."
+msgstr[0]       "Ultima lettura un'ora fa."
+msgstr[1]       "Ultima lettura %1 ore fa."
+
+#: ../main.lua:954
+msgid   "Yes"
+msgstr  "Sì"
+
+#: ../main.lua:963
+msgid   "No"
+msgstr  "No"
