@@ -438,6 +438,7 @@ function PageTextInfo:onDispatcherRegisterActions()
     Dispatcher:registerAction("decrease_weight", {category="none", event="DecreaseWeightSize", title=_("Decrease weight size"), rolling=true,})
     Dispatcher:registerAction("toggle_sort_by_mode", {category="none", event="ToggleSortByMode", title=_("Toggle sort by mode"), general=true,})
     Dispatcher:registerAction("toggle_double_bar", {category="none", event="ToggleDoubleBar", title=_("Toggle double bar"), reader=true, separator=true,})
+    Dispatcher:registerAction("notebook_file_render", {category="none", event="ShowNotebookFileRender", title=_("Notebook file render"), general=true,})
 end
 
 function PageTextInfo:onPageTextInfo()
@@ -4814,6 +4815,95 @@ function PageTextInfo:onToggleDoubleBar()
     self.view.doublebar:toggleBar()
     UIManager:setDirty(self.view.dialog, "ui")
     return true
+end
+
+function PageTextInfo:onShowNotebookFileRender()
+    local FileManagerBookInfo = require("apps/filemanager/filemanagerbookinfo")
+    local notebook_file = FileManagerBookInfo:getNotebookFile(self.ui.doc_settings)
+    local file, err = io.open(notebook_file, "r")
+    if not file then
+        local UIManager = require("ui/uimanager")
+        local Notification = require("ui/widget/notification")
+        UIManager:show(Notification:new{
+            text = _("No file"),
+        })
+        return
+    end
+    local content = file:read("*a")
+    file:close()
+    local VIEWER_CSS = [[
+    @page {
+        margin: 20;
+        font-family: 'Noto Sans CJK TC', 'Noto Sans Arabic', 'Noto Sans Devanagari UI', 'Noto Sans Bengali UI', 'FreeSans', 'Noto Sans', sans-serif;
+    }
+
+    body {
+        margin: 20;
+        line-height: 1.25;
+        padding: 0;
+    }
+
+    blockquote, dd, pre {
+        margin: 0 1em;
+    }
+
+    ol, ul, menu {
+        margin: 0;
+        padding-left: 1.5em;
+    }
+
+    ul {
+        list-style-type: circle;
+    }
+
+    ul ul {
+        list-style-type: square;
+    }
+
+    ul ul ul {
+        list-style-type: disc;
+    }
+
+    ul li a {
+        display: inline-block;
+    }
+
+    table {
+        margin: 0;
+        padding: 0;
+        border-collapse: collapse;
+        border-spacing: 0;
+        font-size: 0.8em;
+    }
+
+    table td, table th {
+        border: 1px solid black;
+        padding: 0;
+    }
+    ]]
+    local parser_path = "plugins/assistant.koplugin/assistant_mdparser.lua"
+    local MD = dofile(parser_path)
+    local html_body, err = MD(content)
+    local ScrollHtmlWidget = require("ui/widget/scrollhtmlwidget")
+
+    self.scroll_text_w = ScrollHtmlWidget:new {
+        html_body = html_body,
+        css = VIEWER_CSS,
+        default_font_size = Screen:scaleBySize(20),
+        width = Screen:getWidth(),
+        height = Screen:getHeight(),
+        scroll_bar_width = 20,
+        text_scroll_span = 0,
+        dialog = self.view.dialog,
+        close_when_multiswipe = true,
+        -- onTapScrollText = function()
+        --     UIManager:close(self.scroll_text_w)
+        -- end
+    }
+
+    UIManager:show(self.scroll_text_w)
+
+
 end
 
 return PageTextInfo

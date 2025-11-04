@@ -69,6 +69,7 @@ local FileChooser = BookList:extend{
         -- Plato
         "^%.fat32%-epoch$",
         "^%.metadata%.json$",
+        "%.epub.md$",
     },
     path_items = nil, -- hash, store last browsed location (item index) for each path
 }

@@ -30,6 +30,7 @@ local ScrollHtmlWidget = InputContainer:extend{
     height = 0,
     scroll_bar_width = Screen:scaleBySize(6),
     text_scroll_span = Screen:scaleBySize(12),
+    close_when_multiswipe = false,
 }
 
 function ScrollHtmlWidget:init()
@@ -80,6 +81,14 @@ function ScrollHtmlWidget:init()
             },
         }
     end
+    if self.close_when_multiswipe then
+        self.ges_events.MultiSwipe = {
+            GestureRange:new{
+                ges = "multiswipe",
+                range = function() return self.dimen end,
+            }
+        }
+end
 
     if Device:hasKeys() then
         self.key_events = {
@@ -210,6 +219,15 @@ function ScrollHtmlWidget:onScrollDown()
     end
     -- if we couldn't scroll (because we're already at top or bottom),
     -- let it propagate up (e.g. for quickdictlookup to go to next/prev result)
+end
+
+function ScrollHtmlWidget:onMultiSwipe(arg, ges)
+    -- Swipe south (the usual shortcut for closing a full screen window)
+    -- is used for navigation. Swipe left/right are free, but a little
+    -- unusual for the purpose of closing.
+    -- So, allow for quick closing with any multiswipe.
+    UIManager:close(self)
+    return true
 end
 
 return ScrollHtmlWidget
