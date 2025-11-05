@@ -20,7 +20,6 @@ local DataStorage = require("datastorage")
 local SQ3 = require("lua-ljsqlite3/init")
 local ffiUtil = require("ffi/util")
 local util = require("util")
-local _ = require("l10n.gettext")
 local ptdbg = require("ptdbg")
 local BookInfoManager = require("bookinfomanager")
 
@@ -74,8 +73,8 @@ ptutil.grid_defaults = {
     fontsize_dec_step = 1, -- font size decrement step when adjusting to fit
 
     -- Font size ranges (nominal sizes based on 64px item height)
-    dir_font_nominal = 22, -- nominal directory font size
-    dir_font_min = 18,     -- minimum directory font size
+    dir_font_nominal = 16, -- nominal directory font size
+    dir_font_min = 12,     -- minimum directory font size
 
     -- Page item limits
     max_cols = 4,
