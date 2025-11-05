@@ -135,6 +135,219 @@ function ListMenuItem:init()
     self.init_done = true
 end
 
+function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
+      -- Query database for books in this folder with covers
+    local SQ3 = require("lua-ljsqlite3/init")
+    local DataStorage = require("datastorage")
+    local db_conn = SQ3.open(DataStorage:getSettingsDir() .. "/bookinfo_cache.sqlite3")
+    db_conn:set_busy_timeout(5000)
+
+    local query = string.format([[
+        SELECT directory, filename FROM bookinfo
+        WHERE directory = '%s/' AND has_cover = 'Y'
+        ORDER BY filename ASC LIMIT 3;
+    ]], filepath:gsub("'", "''"))
+
+    local res = db_conn:exec(query)
+    db_conn:close()
+
+    if res and res[1] and res[2] and res[1][1] then
+        local dir_ending = string.sub(res[1][1],-2,-2)
+        local num_books = #res[1]
+
+        -- Author folder or Series folder
+        local folder_type = "Series"
+        if string.sub(res[1][1],-2,-2) == "-" then folder_type = "Author" end
+
+        -- Save all covers
+        local covers = {}
+        for i = 1, num_books do
+            local fullpath = res[1][i] .. res[2][i]
+
+            if util.fileExists(fullpath) then
+                local bookinfo = BookInfoManager:getBookInfo(fullpath, true)
+                if bookinfo and bookinfo.cover_bb and bookinfo.has_cover then
+                    table.insert(covers, bookinfo)
+                end
+            end
+        end
+
+        -- Constants
+        local border_total = Size.border.thin * 2
+        -- Series
+        local offset_x = math.floor(max_w * 0.15)  -- 15% of width to the right
+        local offset_y = math.floor(max_h * 0.05)  -- 5% of height down
+        -- Author (smaller)
+        if folder_type == "Author" then
+            offset_x = math.floor(max_w * 0.25)
+            offset_y = math.floor(max_w * 0.10)
+        end
+
+        -- Scale all covers smaller to fit with offset
+        local available_w = max_w - (#covers-1)*offset_x - border_total
+        local available_h = max_h - (#covers-1)*offset_y - border_total
+        -- Deal with Series, 1 book (will want a blank book showing)
+        if folder_type == "Series" and #covers == 1 then
+            available_w = max_w - offset_x - border_total
+            available_h = max_h - offset_y - border_total
+        end
+        -- Deal with Author, multiple books (still want smaller books)
+        if folder_type == "Author" and #covers > 1 then
+            available_h = max_h - 2*offset_y - border_total
+        end
+
+        -- Make sure this isn't an empty folder
+        if #covers > 0 then
+            -- Now make the Individual cover widgets
+            local cover_widgets = {}
+            for i, bookinfo in ipairs(covers) do
+                -- figure out scale factor
+                local _, _, scale_factor = BookInfoManager.getCachedCoverSize(
+                    bookinfo.cover_w, bookinfo.cover_h,
+                    available_w, available_h
+                )
+
+                -- make the individual cover widget
+                local cover_widget = ImageWidget:new {
+                    image = bookinfo.cover_bb,
+                    scale_factor = scale_factor,
+                }
+                local cover_size = cover_widget:getSize()
+
+                table.insert(cover_widgets, {
+                    widget = FrameContainer:new {
+                        width = cover_size.w + border_total,
+                        height = cover_size.h + border_total,
+                        radius = Size.radius.default,
+                        margin = 0,
+                        padding = 0,
+                        bordersize = Size.border.thin,
+                        color = Blitbuffer.COLOR_DARK_GRAY,
+                        cover_widget,
+                    },
+                    size = cover_size
+                })
+            end
+
+            -- blank cover
+            local cover_size = cover_widgets[1].size
+            if folder_type == "Series" and #covers == 1 then
+                -- insert a blank cover
+                table.insert(cover_widgets, {
+                    widget = FrameContainer:new {
+                        width = cover_size.w + border_total,
+                        height = cover_size.h + border_total,
+                        radius = Size.radius.default,
+                        margin = 0,
+                        padding = 0,
+                        bordersize = Size.border.thin,
+                        color = Blitbuffer.COLOR_DARK_GRAY,
+                        background = Blitbuffer.COLOR_LIGHT_GRAY,
+                        HorizontalSpan:new { width = cover_size.w, height = cover_size.h },
+                    },
+                    size = cover_size
+                })
+            end
+
+            -- If Author single book, return early
+            if folder_type == "Author" and #covers == 1 then
+                return CenterContainer:new {
+                    dimen = Geom:new { w = max_w, h = max_h },
+                    cover_widgets[1].widget,
+                }
+            end
+
+            -- Make the overlap group widget (default is 2 books in series mode)
+            -- At this point, either it was Author and orig had 1 book (returned already)
+            --   or, it was Series and orig had 1 book (had a blank book inserted)
+            local total_width = cover_widgets[1].size.w + border_total + (#cover_widgets-1)*offset_x
+            local total_height = cover_widgets[1].size.h + border_total + (#cover_widgets-1)*offset_y
+            local overlap = OverlapGroup:new {
+                dimen = Geom:new { w = total_width, h = total_height },
+                -- Second cover (offset down and right)
+                FrameContainer:new {
+                    margin = 0,
+                    padding = 0,
+                    padding_left = offset_x,
+                    padding_top = offset_y,
+                    bordersize = 0,
+                    cover_widgets[2].widget,
+                },
+                -- Front cover (top-left)
+                FrameContainer:new {
+                    margin = 0,
+                    padding = 0,
+                    bordersize = 0,
+                    cover_widgets[1].widget,
+                },
+            }
+
+            -- Now for the different formats
+            if folder_type == "Series" and #cover_widgets == 3 then
+                -- overlap third cover
+                local overlap3 = OverlapGroup:new {
+                    dimen = Geom:new { w = total_width, h = total_height },
+                    FrameContainer:new {
+                        margin = 0,
+                        padding = 0,
+                        padding_left = 2*offset_x,
+                        padding_top = 2*offset_y,
+                        bordersize = 0,
+                        cover_widgets[3].widget,
+                    },
+                    overlap,
+                }
+                overlap = overlap3
+            elseif folder_type == "Author" then
+                -- rewrite overlap group
+                overlap = OverlapGroup:new {
+                    dimen = Geom:new { w = total_width, h = total_height },
+                    -- Second cover (up and right)
+                    FrameContainer:new {
+                        margin = 0,
+                        padding = 0,
+                        padding_left = offset_x,
+                        padding_top = 0,
+                        bordersize = 0,
+                        cover_widgets[2].widget,
+                    },
+                    -- Front cover (middletop-left)
+                    FrameContainer:new {
+                        margin = 0,
+                        padding = 0,
+                        padding_top = offset_y,
+                        bordersize = 0,
+                        cover_widgets[1].widget,
+                    },
+                }
+                if #cover_widgets == 3 then
+                    -- overlap third cover
+                    local overlap3 = OverlapGroup:new {
+                        dimen = Geom:new { w = total_width, h = total_height },
+                        FrameContainer:new {
+                            margin = 0,
+                            padding = 0,
+                            padding_left = 2*offset_x,
+                            padding_top = 2*offset_y,
+                            bordersize = 0,
+                            cover_widgets[3].widget,
+                        },
+                        overlap,
+                    }
+                    overlap = overlap3
+                end
+            end
+
+            -- return the center container
+            return CenterContainer:new {
+                dimen = Geom:new { w = max_w, h = max_h },
+                overlap,
+            }
+        end
+
+    end
+end
+
 function ListMenuItem:update()
     -- We will be a distinctive widget whether we are a directory,
     -- a known file with image / without image, or a not yet known file
@@ -193,37 +406,135 @@ function ListMenuItem:update()
 
     self.is_directory = not (self.entry.is_file or self.entry.file)
     if self.is_directory then
-        -- nb items on the right, directory name on the left
-        local wright = TextWidget:new{
-            text = self.mandatory or "",
-            face = Font:getFace("infont", _fontSize(14, 18)),
-        }
+            -- nb items on the right, directory name on the left
+        local wright
+        local wright_width = 0
+        local wright_items = { align = "right" }
+
+        if is_pathchooser == false then
+            -- replace the stock tiny file and folder glyphs with text
+            local folder_text = _("Folder")
+            local file_text = _("Book")
+            local mandatory_str = self.mandatory or ""
+            local folder_count = string.match(mandatory_str, "(%d+) \u{F114}")
+            local file_count = string.match(mandatory_str, "(%d+) \u{F016}")
+            wright_font_face = Font:getFace("myfont4", _fontSize(15, 19))
+
+            -- add file or folder counts as necessary with pluralization
+            if folder_count and tonumber(folder_count) > 0 then
+                if tonumber(folder_count) > 1 then folder_text =  _("Folders") end
+                local wfoldercount = TextWidget:new {
+                    text = folder_count .. " " .. folder_text,
+                    face = wright_font_face,
+                }
+                table.insert(wright_items, wfoldercount)
+            end
+            if file_count and tonumber(file_count) > 0 then
+                if tonumber(file_count) > 1 then file_text = _("Books") end
+                local wfilecount = TextWidget:new {
+                    text = file_count .. " " .. file_text,
+                    face = wright_font_face,
+                }
+                table.insert(wright_items, wfilecount)
+            end
+        else
+            local wmandatory = TextWidget:new {
+                text = self.mandatory or "",
+                face = wright_font_face,
+            }
+            table.insert(wright_items, wmandatory)
+        end
+
+        if #wright_items > 0 then
+            for _, w in ipairs(wright_items) do
+                wright_width = math.max(wright_width, w:getSize().w)
+            end
+            wright = CenterContainer:new {
+                dimen = Geom:new { w = wright_width, h = dimen.h },
+                VerticalGroup:new(wright_items),
+            }
+        end
+
         local pad_width = Screen:scaleBySize(10) -- on the left, in between, and on the right
-        local wleft_width = dimen.w - wright:getWidth() - 3*pad_width
-        local wleft = TextBoxWidget:new{
-            text = BD.directory(self.text),
-            face = Font:getFace("cfont", _fontSize(20, 24)),
+        local folder_cover
+        -- add cover-art sized icon for folders
+        local subfolder_cover_image
+        -- Add the plugin directory to package.path
+        local plugin_path = "./plugins/projecttitle.koplugin/?.lua"
+        if not package.path:find(plugin_path, 1, true) then
+            package.path = plugin_path .. ";" .. package.path
+        end
+        local success, ptutil = pcall(require, "ptutil")
+        local plugin_dir = ptutil.getPluginDir()
+        -- check for folder image
+        subfolder_cover_image = ptutil.getFolderCover(self.filepath, max_img_w * 0.82, max_img_h)
+        -- check for books with covers in the subfolder
+        if subfolder_cover_image == nil and not BookInfoManager:getSetting("disable_auto_foldercovers") then
+            subfolder_cover_image = self:getSubfolderCoverImages(self.filepath, max_img_w, max_img_h)
+        end
+        -- use stock folder icon
+        local stock_image = plugin_dir .. "/resources/folder.svg"
+        if subfolder_cover_image == nil then
+            local _, _, scale_factor = BookInfoManager.getCachedCoverSize(250, 500, max_img_w, max_img_h)
+            subfolder_cover_image = ImageWidget:new {
+                file = stock_image,
+                alpha = true,
+                scale_factor = scale_factor,
+                width = max_img_w,
+                height = max_img_h,
+                original_in_nightmode = false,
+            }
+        end
+
+        folder_cover = CenterContainer:new {
+            dimen = Geom:new { w = dimen.h, h = dimen.h },
+            margin = 0,
+            padding = padding_size,
+            color = Blitbuffer.COLOR_WHITE,
+            dim = self.file_deleted,
+            subfolder_cover_image,
+        }
+        self.menu._has_cover_images = true
+        self._has_cover_image = true
+
+        local wleft_width = dimen.w - dimen.h - wright_width - 3 * pad_width
+        local wlefttext = self.text
+        if wlefttext:match('/$') then
+            wlefttext = wlefttext:sub(1, -2)
+        end
+        wlefttext = BD.directory(wlefttext)
+
+        local folderfont = "myfont4"
+
+
+        local wleft = TextBoxWidget:new {
+            text = wlefttext,
+            face = Font:getFace(folderfont, directory_font_size),
             width = wleft_width,
             alignment = "left",
-            bold = true,
+            bold = false,
             height = dimen.h,
             height_adjust = true,
             height_overflow_show_ellipsis = true,
         }
-        widget = OverlapGroup:new{
-            dimen = dimen:copy(),
-            LeftContainer:new{
+
+        -- extra right side padding in filename only mode
+        if self.do_filename_only then pad_width = Screen:scaleBySize(20) end
+
+        widget = OverlapGroup:new {
+            LeftContainer:new {
                 dimen = dimen:copy(),
-                HorizontalGroup:new{
-                    HorizontalSpan:new{ width = pad_width },
+                HorizontalGroup:new {
+                    folder_cover,
+                    HorizontalSpan:new { width = Screen:scaleBySize(5) },
                     wleft,
                 }
             },
-            RightContainer:new{
+            RightContainer:new {
                 dimen = dimen:copy(),
-                HorizontalGroup:new{
+                HorizontalGroup:new {
                     wright,
-                    HorizontalSpan:new{ width = pad_width },
+                    HorizontalSpan:new { width = pad_width },
                 },
             },
         }
