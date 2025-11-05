@@ -135,6 +135,7 @@ function ListMenuItem:init()
     self.init_done = true
 end
 
+-- Function in VeeBui's KOReader-folder-stacks-series-author patch
 function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
       -- Query database for books in this folder with covers
     local SQ3 = require("lua-ljsqlite3/init")
@@ -156,7 +157,7 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         local num_books = #res[1]
 
         -- Author folder or Series folder
-        local folder_type = "Series"
+        local folder_type = "Author" -- By default is initialized to Series but all my folders are Author folders and the look is different
         if string.sub(res[1][1],-2,-2) == "-" then folder_type = "Author" end
 
         -- Save all covers
@@ -219,7 +220,7 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                         width = cover_size.w + border_total,
                         height = cover_size.h + border_total,
                         radius = Size.radius.default,
-                        margin = 0,
+                        margin = 10,
                         padding = 0,
                         bordersize = Size.border.thin,
                         color = Blitbuffer.COLOR_DARK_GRAY,
@@ -250,7 +251,8 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
             end
 
             -- If Author single book, return early
-            if folder_type == "Author" and #covers == 1 then
+            -- if folder_type == "Author" and #covers == 1 then
+            if #covers == 1 then
                 return CenterContainer:new {
                     dimen = Geom:new { w = max_w, h = max_h },
                     cover_widgets[1].widget,
@@ -410,41 +412,6 @@ function ListMenuItem:update()
         local wright
         local wright_width = 0
         local wright_items = { align = "right" }
-
-        if is_pathchooser == false then
-            -- replace the stock tiny file and folder glyphs with text
-            local folder_text = _("Folder")
-            local file_text = _("Book")
-            local mandatory_str = self.mandatory or ""
-            local folder_count = string.match(mandatory_str, "(%d+) \u{F114}")
-            local file_count = string.match(mandatory_str, "(%d+) \u{F016}")
-            wright_font_face = Font:getFace("myfont4", _fontSize(15, 19))
-
-            -- add file or folder counts as necessary with pluralization
-            if folder_count and tonumber(folder_count) > 0 then
-                if tonumber(folder_count) > 1 then folder_text =  _("Folders") end
-                local wfoldercount = TextWidget:new {
-                    text = folder_count .. " " .. folder_text,
-                    face = wright_font_face,
-                }
-                table.insert(wright_items, wfoldercount)
-            end
-            if file_count and tonumber(file_count) > 0 then
-                if tonumber(file_count) > 1 then file_text = _("Books") end
-                local wfilecount = TextWidget:new {
-                    text = file_count .. " " .. file_text,
-                    face = wright_font_face,
-                }
-                table.insert(wright_items, wfilecount)
-            end
-        else
-            local wmandatory = TextWidget:new {
-                text = self.mandatory or "",
-                face = wright_font_face,
-            }
-            table.insert(wright_items, wmandatory)
-        end
-
         if #wright_items > 0 then
             for _, w in ipairs(wright_items) do
                 wright_width = math.max(wright_width, w:getSize().w)
@@ -460,7 +427,7 @@ function ListMenuItem:update()
         -- add cover-art sized icon for folders
         local subfolder_cover_image
         -- Add the plugin directory to package.path
-        local plugin_path = "./plugins/projecttitle.koplugin/?.lua"
+        local plugin_path = "./plugins/pagetextinfo.koplugin/?.lua"
         if not package.path:find(plugin_path, 1, true) then
             package.path = plugin_path .. ";" .. package.path
         end
@@ -504,8 +471,8 @@ function ListMenuItem:update()
         end
         wlefttext = BD.directory(wlefttext)
 
-        local folderfont = "myfont4"
-
+        local folderfont = ptutil.good_serif
+        local directory_font_size = _fontSize(ptutil.list_defaults.directory_font_nominal, ptutil.list_defaults.directory_font_max)
 
         local wleft = TextBoxWidget:new {
             text = wlefttext,
@@ -526,7 +493,7 @@ function ListMenuItem:update()
                 dimen = dimen:copy(),
                 HorizontalGroup:new {
                     folder_cover,
-                    HorizontalSpan:new { width = Screen:scaleBySize(5) },
+                    HorizontalSpan:new { width = Screen:scaleBySize(15) },
                     wleft,
                 }
             },
