@@ -137,7 +137,7 @@ end
 
 -- Function in VeeBui's KOReader-folder-stacks-series-author patch
 function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
-      -- Query database for books in this folder with covers
+     -- Query database for books in this folder with covers
     local SQ3 = require("lua-ljsqlite3/init")
     local DataStorage = require("datastorage")
     local db_conn = SQ3.open(DataStorage:getSettingsDir() .. "/bookinfo_cache.sqlite3")
@@ -147,17 +147,17 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         SELECT directory, filename FROM bookinfo
         WHERE directory = '%s/' AND has_cover = 'Y'
         ORDER BY filename ASC LIMIT 3;
-    ]], filepath:gsub("'", "''"))
+    ]], self.filepath:gsub("'", "''"))
 
     local res = db_conn:exec(query)
     db_conn:close()
-
+    self.padding_left = 0
     if res and res[1] and res[2] and res[1][1] then
         local dir_ending = string.sub(res[1][1],-2,-2)
         local num_books = #res[1]
 
         -- Author folder or Series folder
-        local folder_type = "Author" -- By default is initialized to Series but all my folders are Author folders and the look is different
+        local folder_type = "Series"
         if string.sub(res[1][1],-2,-2) == "-" then folder_type = "Author" end
 
         -- Save all covers
@@ -176,7 +176,7 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         -- Constants
         local border_total = Size.border.thin * 2
         -- Series
-        local offset_x = math.floor(max_w * 0.15)  -- 15% of width to the right
+        local offset_x = math.floor(max_w * 0.25)  -- 25% of width to the right
         local offset_y = math.floor(max_h * 0.05)  -- 5% of height down
         -- Author (smaller)
         if folder_type == "Author" then
@@ -213,16 +213,34 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                     image = bookinfo.cover_bb,
                     scale_factor = scale_factor,
                 }
+
+                local w, h = bookinfo.cover_w, bookinfo.cover_h
+                local new_h = self.height
+                local new_w = math.floor(w * (new_h / h))
+
+                if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+                    cover_widget = ImageWidget:new {
+                        image = bookinfo.cover_bb,
+                        scale_factor = nil,
+                        width = new_w,
+                        height = new_h,
+                    }
+                end
+
                 local cover_size = cover_widget:getSize()
 
+                if new_w > available_w then
+                    self.padding_left  = math.floor((new_w - available_w) / 2)
+                end
                 table.insert(cover_widgets, {
                     widget = FrameContainer:new {
                         width = cover_size.w + border_total,
                         height = cover_size.h + border_total,
                         radius = Size.radius.default,
-                        margin = 10,
+                        margin = 0,
+                        padding_left = self.padding_left,
                         padding = 0,
-                        bordersize = Size.border.thin,
+                        bordersize = 0, --Size.border.thin,
                         color = Blitbuffer.COLOR_DARK_GRAY,
                         cover_widget,
                     },
@@ -230,29 +248,28 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                 })
             end
 
-            -- blank cover
-            local cover_size = cover_widgets[1].size
-            if folder_type == "Series" and #covers == 1 then
-                -- insert a blank cover
-                table.insert(cover_widgets, {
-                    widget = FrameContainer:new {
-                        width = cover_size.w + border_total,
-                        height = cover_size.h + border_total,
-                        radius = Size.radius.default,
-                        margin = 0,
-                        padding = 0,
-                        bordersize = Size.border.thin,
-                        color = Blitbuffer.COLOR_DARK_GRAY,
-                        background = Blitbuffer.COLOR_LIGHT_GRAY,
-                        HorizontalSpan:new { width = cover_size.w, height = cover_size.h },
-                    },
-                    size = cover_size
-                })
-            end
+            -- -- blank cover
+            -- local cover_size = cover_widgets[1].size
+            -- if folder_type == "Series" and #covers == 1 then
+            --     -- insert a blank cover
+            --     table.insert(cover_widgets, {
+            --         widget = FrameContainer:new {
+            --             width = cover_size.w + border_total,
+            --             height = cover_size.h + border_total,
+            --             radius = Size.radius.default,
+            --             margin = 0,
+            --             padding = 0,
+            --             bordersize = 0, --Size.border.thin,
+            --             color = Blitbuffer.COLOR_DARK_GRAY,
+            --             background = Blitbuffer.COLOR_LIGHT_GRAY,
+            --             HorizontalSpan:new { width = cover_size.w, height = cover_size.h },
+            --         },
+            --         size = cover_size
+            --     })
+            -- end
 
             -- If Author single book, return early
-            -- if folder_type == "Author" and #covers == 1 then
-            if #covers == 1 then
+            if  #covers == 1  then -- folder_type == "Author" and #covers == 1 then
                 return CenterContainer:new {
                     dimen = Geom:new { w = max_w, h = max_h },
                     cover_widgets[1].widget,
@@ -392,6 +409,8 @@ function ListMenuItem:update()
     else
         border_size = Size.border.thin
     end
+
+    local padding_size = Screen:scaleBySize(4)
     local max_img_w = dimen.h - 2*border_size -- width = height, squared
     local max_img_h = dimen.h - 2*border_size
     local cover_specs = {
@@ -408,10 +427,24 @@ function ListMenuItem:update()
 
     self.is_directory = not (self.entry.is_file or self.entry.file)
     if self.is_directory then
-            -- nb items on the right, directory name on the left
+        -- Add the plugin directory to package.path
+        local plugin_path = "./plugins/pagetextinfo.koplugin/?.lua"
+        if not package.path:find(plugin_path, 1, true) then
+            package.path = plugin_path .. ";" .. package.path
+        end
+        local success, ptutil = pcall(require, "ptutil")
+        -- local plugin_dir = ptutil.getPluginDir()
+        -- nb items on the right, directory name on the left
         local wright
         local wright_width = 0
         local wright_items = { align = "right" }
+
+        local wright_font_face = Font:getFace("cfont", _fontSize(15, 19))
+        local wmandatory = TextWidget:new {
+            text = self.mandatory or "",
+            face = wright_font_face,
+        }
+        table.insert(wright_items, wmandatory)
         if #wright_items > 0 then
             for _, w in ipairs(wright_items) do
                 wright_width = math.max(wright_width, w:getSize().w)
@@ -426,21 +459,15 @@ function ListMenuItem:update()
         local folder_cover
         -- add cover-art sized icon for folders
         local subfolder_cover_image
-        -- Add the plugin directory to package.path
-        local plugin_path = "./plugins/pagetextinfo.koplugin/?.lua"
-        if not package.path:find(plugin_path, 1, true) then
-            package.path = plugin_path .. ";" .. package.path
-        end
-        local success, ptutil = pcall(require, "ptutil")
-        local plugin_dir = ptutil.getPluginDir()
+
         -- check for folder image
         subfolder_cover_image = ptutil.getFolderCover(self.filepath, max_img_w * 0.82, max_img_h)
         -- check for books with covers in the subfolder
         if subfolder_cover_image == nil and not BookInfoManager:getSetting("disable_auto_foldercovers") then
-            subfolder_cover_image = self:getSubfolderCoverImages(self.filepath, max_img_w, max_img_h)
+            subfolder_cover_image, padding = self:getSubfolderCoverImages(self.filepath, max_img_w, max_img_h)
         end
         -- use stock folder icon
-        local stock_image = plugin_dir .. "/resources/folder.svg"
+        local stock_image = "./plugins/pagetextinfo.koplugin/resources/folder.svg"
         if subfolder_cover_image == nil then
             local _, _, scale_factor = BookInfoManager.getCachedCoverSize(250, 500, max_img_w, max_img_h)
             subfolder_cover_image = ImageWidget:new {
@@ -493,7 +520,7 @@ function ListMenuItem:update()
                 dimen = dimen:copy(),
                 HorizontalGroup:new {
                     folder_cover,
-                    HorizontalSpan:new { width = Screen:scaleBySize(15) },
+                    HorizontalSpan:new { width = Screen:scaleBySize(5 + self.padding_left) },
                     wleft,
                 }
             },

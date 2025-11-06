@@ -388,14 +388,7 @@ end
 
 -- Function in VeeBui's KOReader-folder-stacks-series-author patch
 function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
-    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-    if ui ~= nil then
-        pagetextinfo = ui.pagetextinfo
-    else
-        pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
-    end
-
-    -- Query database for books in this folder with covers
+     -- Query database for books in this folder with covers
     local SQ3 = require("lua-ljsqlite3/init")
     local DataStorage = require("datastorage")
     local db_conn = SQ3.open(DataStorage:getSettingsDir() .. "/bookinfo_cache.sqlite3")
@@ -405,7 +398,7 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         SELECT directory, filename FROM bookinfo
         WHERE directory = '%s/' AND has_cover = 'Y'
         ORDER BY filename ASC LIMIT 3;
-    ]], filepath:gsub("'", "''"))
+    ]], self.filepath:gsub("'", "''"))
 
     local res = db_conn:exec(query)
     db_conn:close()
@@ -415,7 +408,7 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         local num_books = #res[1]
 
         -- Author folder or Series folder
-        local folder_type = "Series" -- By default is initialized to Series but all my folders are Author folders and the look is different
+        local folder_type = "Author"
         if string.sub(res[1][1],-2,-2) == "-" then folder_type = "Author" end
 
         -- Save all covers
@@ -432,9 +425,9 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         end
 
         -- Constants
-        local border_total = Size.border.thin * 2
+        local border_total = 0 -- Size.border.thin * 2
         -- Series
-        local offset_x = math.floor(max_w * 0.15)  -- 15% of width to the right
+        local offset_x = math.floor(max_w * 0.25)  -- 25% of width to the right
         local offset_y = math.floor(max_h * 0.05)  -- 5% of height down
         -- Author (smaller)
         if folder_type == "Author" then
@@ -455,6 +448,15 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
             available_h = max_h - 2*offset_y - border_total
         end
 
+        -- local raw_offset_x = max_w * 0.25
+        -- local offset_x = math.floor(raw_offset_x)
+        -- local frac_x = raw_offset_x - offset_x
+        -- local correction_x = math.floor(frac_x * (#covers - 1) + 0.5)
+
+        -- If we expand the covers image using the enable_extra_tweaks_mosaic_view setting and there are 2 or 3 covers
+        -- there is a little gap on the right side that needs to be compensated with 2px
+        -- If we set border_total = 0 there is no need for the correction. In any case I leave the variable
+        local correction_x = 0 -- 2
         -- Make sure this isn't an empty folder
         if #covers > 0 then
             -- Now make the Individual cover widgets
@@ -471,6 +473,10 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                     image = bookinfo.cover_bb,
                     scale_factor = scale_factor,
                 }
+
+                local w, h = bookinfo.cover_w, bookinfo.cover_h
+                local new_h = self.height
+                local new_w = math.floor(w * (new_h / h))
 
                 if #covers == 1 and pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
                     cover_widget = ImageWidget:new {
@@ -508,7 +514,7 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                         radius = Size.radius.default,
                         margin = 0,
                         padding = 0,
-                        bordersize = Size.border.thin,
+                        bordersize = 0, --Size.border.thin,
                         color = Blitbuffer.COLOR_DARK_GRAY,
                         cover_widget,
                     },
@@ -516,29 +522,28 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                 })
             end
 
-            -- blank cover
-            local cover_size = cover_widgets[1].size
-            if folder_type == "Series" and #covers == 1 then
-                -- insert a blank cover
-                table.insert(cover_widgets, {
-                    widget = FrameContainer:new {
-                        width = cover_size.w + border_total,
-                        height = cover_size.h + border_total,
-                        radius = Size.radius.default,
-                        margin = 0,
-                        padding = 0,
-                        bordersize = Size.border.thin,
-                        color = Blitbuffer.COLOR_DARK_GRAY,
-                        background = Blitbuffer.COLOR_LIGHT_GRAY,
-                        HorizontalSpan:new { width = cover_size.w, height = cover_size.h },
-                    },
-                    size = cover_size
-                })
-            end
+            -- -- blank cover
+            -- local cover_size = cover_widgets[1].size
+            -- if folder_type == "Series" and #covers == 1 then
+            --     -- insert a blank cover
+            --     table.insert(cover_widgets, {
+            --         widget = FrameContainer:new {
+            --             width = cover_size.w + border_total,
+            --             height = cover_size.h + border_total,
+            --             radius = Size.radius.default,
+            --             margin = 0,
+            --             padding = 0,
+            --             bordersize = 0, --Size.border.thin,
+            --             color = Blitbuffer.COLOR_DARK_GRAY,
+            --             background = Blitbuffer.COLOR_LIGHT_GRAY,
+            --             HorizontalSpan:new { width = cover_size.w, height = cover_size.h },
+            --         },
+            --         size = cover_size
+            --     })
+            -- end
 
             -- If Author single book, return early
-            -- if folder_type == "Author" and #covers == 1 then
-            if #covers == 1 then
+            if #covers == 1 then -- folder_type == "Author" and #covers == 1 then
                 return CenterContainer:new {
                     dimen = Geom:new { w = max_w, h = max_h },
                     cover_widgets[1].widget,
@@ -556,7 +561,7 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                 FrameContainer:new {
                     margin = 0,
                     padding = 0,
-                    padding_left = offset_x,
+                    padding_left = offset_x + correction_x,
                     padding_top = offset_y,
                     bordersize = 0,
                     cover_widgets[2].widget,
@@ -578,7 +583,7 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                     FrameContainer:new {
                         margin = 0,
                         padding = 0,
-                        padding_left = 2*offset_x,
+                        padding_left = 2*offset_x + correction_x,
                         padding_top = 2*offset_y,
                         bordersize = 0,
                         cover_widgets[3].widget,
@@ -594,7 +599,7 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                     FrameContainer:new {
                         margin = 0,
                         padding = 0,
-                        padding_left = offset_x,
+                        padding_left = offset_x + correction_x,
                         padding_top = 0,
                         bordersize = 0,
                         cover_widgets[2].widget,
@@ -615,7 +620,7 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                         FrameContainer:new {
                             margin = 0,
                             padding = 0,
-                            padding_left = 2*offset_x,
+                            padding_left = 2*offset_x + correction_x,
                             padding_top = 2*offset_y,
                             bordersize = 0,
                             cover_widgets[3].widget,
@@ -714,7 +719,7 @@ function MosaicMenuItem:update()
         end
         -- use stock folder icon
         if subfolder_cover_image == nil then
-            local stock_image = plugin_dir .. "/resources/folder.svg"
+            local stock_image = "./plugins/pagetextinfo.koplugin/resources/folder.svg"
             local _, _, scale_factor = BookInfoManager.getCachedCoverSize(250, 500, max_img_w * 1.1, max_img_h * 1.1)
             subfolder_cover_image = FrameContainer:new {
                 width = dimen.w,
