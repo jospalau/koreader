@@ -81,6 +81,7 @@ function ReaderPageMap:_postInit()
         self.has_pagemap = true
         self:resetLayout()
         self.view:registerViewModule("pagemap", self)
+        self.ui.doc_settings:saveSetting("pagemap_doc_pages", select(3, self:getCurrentPageLabel()))
         if self.ui.document.is_new and self.has_pagemap_document_provided
                 and G_reader_settings:isTrue("pagemap_notify_document_provided") then
             if self.use_page_labels or self.show_page_labels then
@@ -463,7 +464,6 @@ Since stable page numbers can start anywhere on the screen, you can choose to di
                                 self.view:registerViewModule("pagemap", self)
                             end
                             self.chars_per_synthetic_page = spin.value
-                            self.ui.doc_settings:saveSetting("pagemap_chars_per_synthetic_page", spin.value)
                             self.page_labels_cache = nil
                             self.ui.document:buildSyntheticPageMap(spin.value)
                             self:updateVisibleLabels()
@@ -471,6 +471,8 @@ Since stable page numbers can start anywhere on the screen, you can choose to di
                                 self.ui.view.topbar:toggleBar()
                             end
                             UIManager:setDirty(self.view.dialog, "partial")
+                            self.ui.doc_settings:saveSetting("pagemap_chars_per_synthetic_page", spin.value)
+                            self.ui.doc_settings:saveSetting("pagemap_doc_pages", select(3, self:getCurrentPageLabel()))
                             UIManager:broadcastEvent(Event:new("UsePageLabelsUpdated"))
                             touchmenu_instance:updateItems()
                         end,
