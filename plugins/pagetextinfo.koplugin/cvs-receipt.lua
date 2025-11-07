@@ -89,7 +89,6 @@ local function buildBackgroundImageWidget(image_path)
         image_opts.scale_factor = 0
     end
 
-    image_opts._offset_x = -250
     local image_widget = ImageWidget:new(image_opts)
 
     if mode == "center" then
