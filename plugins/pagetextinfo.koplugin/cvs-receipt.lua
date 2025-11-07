@@ -89,6 +89,7 @@ local function buildBackgroundImageWidget(image_path)
         image_opts.scale_factor = 0
     end
 
+    image_opts._offset_x = -250
     local image_widget = ImageWidget:new(image_opts)
 
     if mode == "center" then
@@ -581,6 +582,23 @@ Screensaver.show = function(self)
             }
             self.screensaver_widget.modal = true
             self.screensaver_widget.dithered = true
+            -- Screen:clear()
+            local screen_w, screen_h = Screen:getWidth(), Screen:getHeight()
+            -- Screen:refreshFull(0, 0, Screen:getWidth(), Screen:getHeight())
+            Screen:refreshFull(0, 0, screen_w, screen_h)
+
+            -- On Kobo, on sunxi SoCs with a recent kernel, wait a tiny bit more to avoid weird refresh glitches...
+            if Device:isKobo() then -- and Device:isSunxi() then
+                ffiUtil.usleep(150 * 1000)
+            end
+
+            -- On Kobo Libra Colour, the full refresh that occurs when showing the screensaver widget works in ui, so there is double flash
+            -- We omit it but we still want it when in fm
+            -- if require("apps/filemanager/filemanager").instance  then
+            UIManager:tickAfterNext(function()
+                UIManager:setDirty(nil, "full")
+            end)
+            -- end
             UIManager:show(self.screensaver_widget, "full")
         else
             logger.warn("Book receipt: failed to build widget, falling back to default screensaver")
