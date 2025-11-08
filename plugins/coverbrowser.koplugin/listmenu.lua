@@ -153,19 +153,26 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
     db_conn:close()
     self.padding_left = 0
     -- Constants
+    -- Author folder or Series folder
+    local folder_type = "Series"
     local border_total = 0 -- Size.border.thin * 2
     local factor_x = 0.35 -- 35% of width to the right
     local factor_y = 0.05 -- 5% of height down
     -- Series
     local offset_x = math.floor(max_w * factor_x)
     local offset_y = math.floor(max_h * factor_y)
+    -- Author (smaller)
+    if folder_type == "Author" then
+        factor_x = 0.35
+        factor_y = 0.10
+        offset_x = math.floor(max_w * factor_x)
+        offset_y = math.floor(max_w * factor_y)
+    end
     local available_w3 = max_w - 2*offset_x - border_total
     if res and res[1] and res[2] and res[1][1] then
         local dir_ending = string.sub(res[1][1],-2,-2)
         local num_books = #res[1]
 
-        -- Author folder or Series folder
-        local folder_type = "Series"
         if string.sub(res[1][1],-2,-2) == "-" then folder_type = "Author" end
 
         -- Save all covers
@@ -181,13 +188,6 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
             end
         end
 
-        -- Author (smaller)
-        if folder_type == "Author" then
-            factor_x = 0.25
-            factor_y = 0.10
-            offset_x = math.floor(max_w * factor_x)
-            offset_y = math.floor(max_w * factor_y)
-        end
         -- Scale all covers smaller to fit with offset
         local available_w = max_w - (#covers-1)*offset_x - border_total
         local available_h = max_h - (#covers-1)*offset_y - border_total
