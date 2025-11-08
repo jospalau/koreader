@@ -183,7 +183,7 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
 
         -- Author (smaller)
         if folder_type == "Author" then
-            factor_x = 0.35
+            factor_x = 0.25
             factor_y = 0.10
             offset_x = math.floor(max_w * factor_x)
             offset_y = math.floor(max_w * factor_y)
@@ -249,12 +249,13 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                 -- end
                 if #covers == 1 then
                     padding_left = 2 * math.floor((new_w - available_w3) / 2)
+                    self.padding_left = math.floor((new_w - available_w3) / 2)
                 elseif #covers == 2 then
                     padding_left = math.floor((new_w - available_w3) / 2)
-                    self.padding_left = padding_left / 2
+                    self.padding_left = padding_left
                 else
                     padding_left = math.floor((new_w - available_w) / 2)
-                    self.padding_left  = padding_left
+                    self.padding_left = padding_left
                 end
                 table.insert(cover_widgets, {
                     widget = FrameContainer:new {
@@ -403,9 +404,9 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
     local subfolder_cover_image = ImageWidget:new {
         file = stock_image,
         alpha = true,
-        scale_factor = scale_factor,
-        width = max_w,
-        height = max_h,
+        scale_factor = nil,
+        width = new_w,
+        height = new_h,
     }
 
     local cover_size = subfolder_cover_image:getSize()
@@ -420,6 +421,7 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         color = Blitbuffer.COLOR_DARK_GRAY,
         subfolder_cover_image,
     }
+    self.padding_left = math.floor((new_w - available_w3) / 2)
     return CenterContainer:new {
         dimen = Geom:new { w = max_w, h = max_h },
         widget,
