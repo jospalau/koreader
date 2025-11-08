@@ -1311,11 +1311,12 @@ This is to be active only if the option flash buttons and menu items or the opti
                         self.settings:flush()
 
                         local path = FileManager.instance.file_chooser.path
-                        touchmenu_instance:closeMenu()
+                        -- touchmenu_instance:closeMenu()
                         --self.ui.menu:onCloseFileManagerMenu()
-                        local cur_page = FileManager.instance.file_chooser.page
-                        FileManager:showFiles(path)
-                        FileManager.instance.file_chooser:onGotoPage(cur_page)
+                        -- local cur_page = FileManager.instance.file_chooser.page
+                        -- FileManager:showFiles(path)
+                        -- FileManager.instance.file_chooser:onGotoPage(cur_page)
+                        FileManager.instance.file_chooser:changeToPath(path)
                         return true
                     end,
                 },
