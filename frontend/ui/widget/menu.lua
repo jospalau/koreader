@@ -941,11 +941,17 @@ function Menu:init()
         h = self.page_info:getSize().h,
     }
 
-    local page_info_container = RightContainer:new {
+    local page_info_container = CenterContainer:new {
         dimen = page_info_geom,
         self.page_info,
     }
 
+    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+        page_info_container = RightContainer:new {
+            dimen = page_info_geom,
+            self.page_info,
+        }
+    end
     local page_controls = BottomContainer:new {
         dimen = self.inner_dimen:copy(),
         page_info_container
