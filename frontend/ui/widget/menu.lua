@@ -842,7 +842,7 @@ function Menu:init()
     end
 
     self.page_info_spacer = HorizontalSpan:new{
-        width = (pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks")) and Screen:scaleBySize(0) or Screen:scaleBySize(32),
+        width = Screen:scaleBySize(0) --(pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks")) and Screen:scaleBySize(0) or Screen:scaleBySize(32),
     }
     self.page_info_left_chev:hide()
     self.page_info_right_chev:hide()
@@ -941,17 +941,17 @@ function Menu:init()
         h = self.page_info:getSize().h,
     }
 
-    local page_info_container = CenterContainer:new {
+    -- local page_info_container = CenterContainer:new {
+    --     dimen = page_info_geom,
+    --     self.page_info,
+    -- }
+
+    -- if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+    page_info_container = RightContainer:new {
         dimen = page_info_geom,
         self.page_info,
     }
-
-    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
-        page_info_container = RightContainer:new {
-            dimen = page_info_geom,
-            self.page_info,
-        }
-    end
+    -- end
     local page_controls = BottomContainer:new {
         dimen = self.inner_dimen:copy(),
         page_info_container
