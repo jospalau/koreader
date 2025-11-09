@@ -161,15 +161,15 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         border_size = Size.border.thin
     end
     local border_total = border_size * 2
-    local factor_x = 0.25 -- 25% of width to the right
-    local factor_y = 0.05 -- 5% of height down
+    local factor_x = 0.35 -- 35% of width to the right
+    local factor_y = 0.05 -- 5% of height down -- Use a negative values for reverse order
     -- Series
     local offset_x = math.floor(max_w * factor_x)
     local offset_y = math.floor(max_h * factor_y)
     -- Author (smaller)
     if folder_type == "Author" then
-        factor_x = 0.25
-        factor_y = 0.10
+        factor_x = 0.10
+        factor_y = 0.05 -- Use a negative values for reverse order
         offset_x = math.floor(max_w * factor_x)
         offset_y = math.floor(max_w * factor_y)
     end
@@ -215,9 +215,9 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
 
 
             if #covers == 2 then
-                cover_max_h = cover_max_h * (1 - factor_y)
+                cover_max_h = cover_max_h * (1 - math.abs(factor_y))
             elseif #covers == 3 then
-                cover_max_h = cover_max_h * (1 - (factor_y * 2))
+                cover_max_h = cover_max_h * (1 - (math.abs(factor_y) * 2))
             end
 
             for i, bookinfo in ipairs(covers) do
@@ -233,17 +233,17 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                     scale_factor = scale_factor,
                 }
 
-                -- if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
-                --     local w, h = bookinfo.cover_w, bookinfo.cover_h
-                --     local new_h = self.height
-                --     local new_w = math.floor(w * (new_h / h))
-                --     cover_widget = ImageWidget:new {
-                --         image = bookinfo.cover_bb,
-                --         scale_factor = nil,
-                --         width = new_w,
-                --         height = new_h,
-                --     }
-                -- end
+
+                if #covers == 1 and pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+                    local w, h = bookinfo.cover_w, bookinfo.cover_h
+                    local new_h = cover_max_w
+                    local new_w = math.floor(w * (new_h / h))
+                    cover_widget = ImageWidget:new{
+                        image = bookinfo.cover_bb,
+                        width = new_w,
+                        height = new_h,
+                    }
+                end
 
                 local cover_size = cover_widget:getSize()
                 -- if new_w > available_w then
@@ -412,31 +412,24 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                 end
             end
 
-            if #cover_widgets == 2 then
-                -- I need the proper real size of a cover without reduction, I take the folder image
-                local w, h = 450, 680
-                local new_h = max_h
-                local new_w = math.floor(w * (new_h / h))
-                local stock_image = "./plugins/pagetextinfo.koplugin/resources/folder.svg"
-                local subfolder_cover_image = ImageWidget:new {
-                    file = stock_image,
-                    alpha = true,
-                    scale_factor = nil,
-                    width = new_w,
-                    height = new_h,
-                }
+            -- I need the proper real size of a cover without reduction, I take the folder image
+            local w, h = 450, 680
+            local new_h = max_h
+            local new_w = math.floor(w * (new_h / h))
+            local stock_image = "./plugins/pagetextinfo.koplugin/resources/folder.svg"
+            local subfolder_cover_image = ImageWidget:new {
+                file = stock_image,
+                alpha = true,
+                scale_factor = nil,
+                width = new_w,
+                height = new_h,
+            }
 
-                local cover_size = subfolder_cover_image:getSize()
-                subfolder_cover_image:free()
-                local width = math.ceil((cover_size.w * (1 - (factor_y * 2))) + 2 * offset_x + border_total)
-                return CenterContainer:new {
-                    dimen = Geom:new { w = width, h = max_h },
-                    overlap,
-                }
-            end
-            -- return the center container
+            local cover_size = subfolder_cover_image:getSize()
+            subfolder_cover_image:free()
+            local width = math.ceil((cover_size.w * (1 - (factor_y * 2))) + 2 * offset_x + border_total)
             return CenterContainer:new {
-                dimen = Geom:new { w = total_width, h = max_h },
+                dimen = Geom:new { w = width, h = max_h },
                 overlap,
             }
         end
@@ -679,7 +672,7 @@ function ListMenuItem:update()
                     cover_bb_used = true
                     local wimage = nil
                     local _, _, scale_factor = BookInfoManager.getCachedCoverSize(bookinfo.cover_w, bookinfo.cover_h, max_img_w, max_img_h )
-                    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
+                    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
                         local w, h = bookinfo.cover_w, bookinfo.cover_h
                         local new_h = max_img_h
                         local new_w = math.floor(w * (new_h / h))
