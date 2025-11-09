@@ -158,12 +158,6 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         border_size = Size.border.thin
     end
     local border_total = border_size * 2
-    local factor_x = 0.45 -- 10% of width to the right
-    local factor_y = 0.10 -- 10% of height down -- Use a negative values for reverse order
-    -- Series
-    local offset_x = math.floor(max_w * factor_x)
-    local offset_y = math.floor(max_h * factor_y)
-
     if res and res[1] and res[2] and res[1][1] then
         local dir_ending = string.sub(res[1][1],-2,-2)
         local num_books = #res[1]
@@ -182,13 +176,13 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         end
 
         -- Scale all covers smaller to fit with offset
-        local available_w = max_w - (#covers-1)*offset_x - border_total
-        local available_h = max_h - (#covers-1)*offset_y - border_total
+        local available_w = max_w - (#covers-1)*self.offset_x - border_total
+        local available_h = max_h - (#covers-1)*self.offset_y - border_total
 
         -- Deal with Series, 1 book (will want a blank book showing)
         if #covers == 1 then
-            available_w = max_w - offset_x - border_total
-            available_h = max_h - offset_y - border_total
+            available_w = max_w - self.offset_x - border_total
+            available_h = max_h - self.offset_y - border_total
         end
 
         -- Make sure this isn't an empty folder
@@ -199,11 +193,11 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
             local cover_max_h = max_h
 
             if #covers == 2 then
-                cover_max_h = cover_max_h * (1 - math.abs(factor_y))
+                cover_max_h = cover_max_h * (1 - math.abs(self.factor_y))
             elseif #covers == 3 then
-                cover_max_h = cover_max_h * (1 - (math.abs(factor_y) * 2))
+                cover_max_h = cover_max_h * (1 - (math.abs(self.factor_y) * 2))
             elseif #covers == 4 then
-                cover_max_h = cover_max_h * (1 - (math.abs(factor_y) * 3))
+                cover_max_h = cover_max_h * (1 - (math.abs(self.factor_y) * 3))
             end
 
             for i, bookinfo in ipairs(covers) do
@@ -308,16 +302,16 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                 --     size = cover_size
                 -- })
 
-                -- The width has to be the same than the width when there are 4 covers, so we scalate it and center it
-                local width = math.floor((cover_size.w * (1 - (factor_y * 3))) + 3 * offset_x + border_total)
+                -- The width has to be the same than the width when there are 4 covers, so we escalate it and center it
+                local width = math.floor((cover_size.w * (1 - (self.factor_y * 3))) + 3 * self.offset_x + border_total)
                 return CenterContainer:new {
                     dimen = Geom:new { w = width, h = max_h },
                     cover_widgets[1].widget,
                 }
             end
 
-            local total_width = cover_widgets[1].size.w + border_total + (#cover_widgets-1)*offset_x
-            local total_height = cover_widgets[1].size.h + border_total + (#cover_widgets-1)*offset_y
+            local total_width = cover_widgets[1].size.w + border_total + (#cover_widgets-1)*self.offset_x
+            local total_height = cover_widgets[1].size.h + border_total + (#cover_widgets-1)*self.offset_y
 
             local overlap
             local children = {}
@@ -325,8 +319,8 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                 children[#children + 1] = FrameContainer:new{
                     margin = 0,
                     padding = 0,
-                    padding_left = (i - 1) * offset_x,
-                    padding_top  = (i - 1) * offset_y,
+                    padding_left = (i - 1) * self.offset_x,
+                    padding_top  = (i - 1) * self.offset_y,
                     bordersize = 0,
                     cover.widget,
                 }
@@ -364,7 +358,7 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
 
             local cover_size = subfolder_cover_image:getSize()
             subfolder_cover_image:free()
-            local width = math.ceil((cover_size.w * (1 - (factor_y * 3))) + 3 * offset_x + border_total)
+            local width = math.ceil((cover_size.w * (1 - (self.factor_y * 3))) + 3 * self.offset_x + border_total)
             return CenterContainer:new {
                 dimen = Geom:new { w = width, h = max_h },
                 overlap,
@@ -395,8 +389,8 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         color = Blitbuffer.COLOR_BLACK,
         subfolder_cover_image,
     }
-    -- The width has to be the same than the width when there are 4 covers, so we scalate it and center it
-    local width = math.floor((cover_size.w * (1 - (factor_y * 3))) + 3 * offset_x + border_total)
+    -- The width has to be the same than the width when there are 4 covers, so we escalate it and center it
+    local width = math.floor((cover_size.w * (1 - (self.factor_y * 3))) + 3 * self.offset_x + border_total)
     return CenterContainer:new {
         dimen = Geom:new { w = width, h = max_h },
         widget,
@@ -461,6 +455,10 @@ function ListMenuItem:update()
         self.menu.cover_specs = false
     end
 
+    self.factor_x = 0.10 -- 10% of width to the right
+    self.factor_y = 0.10 -- 10% of height down -- Use a negative values for reverse order
+    self.offset_x = math.floor(max_img_w * self.factor_x)
+    self.offset_y = math.floor(max_img_h * self.factor_y)
     self.is_directory = not (self.entry.is_file or self.entry.file)
     if self.is_directory then
         -- Add the plugin directory to package.path
@@ -634,8 +632,11 @@ function ListMenuItem:update()
                     else
                         pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
                     end
+
+                    local offset_x = math.floor(max_img_w * self.factor_x)
+                    local width = math.floor((image_size.w * (1 - (self.factor_y * 3))) + 3 * self.offset_x + border_size)
                     wleft = CenterContainer:new{
-                        dimen = Geom:new{ w = wleft_width, h = wleft_height },
+                        dimen = Geom:new{ w = width, h = wleft_height },
                         FrameContainer:new{
                             width = image_size.w + 2*border_size,
                             height = image_size.h + 2*border_size,
