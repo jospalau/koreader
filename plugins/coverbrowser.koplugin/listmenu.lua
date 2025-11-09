@@ -596,7 +596,7 @@ function ListMenuItem:update()
             LeftContainer:new {
                 dimen = dimen:copy(),
                 HorizontalGroup:new {
-                    HorizontalSpan:new { width = Screen:scaleBySize(5) },
+                    HorizontalSpan:new { width = Screen:scaleBySize(0) },
                     folder_cover,
                     HorizontalSpan:new { width = Screen:scaleBySize(5) },
                     wleft,
