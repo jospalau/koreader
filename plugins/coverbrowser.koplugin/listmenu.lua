@@ -151,10 +151,10 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
 
     local res = db_conn:exec(query)
     db_conn:close()
-    self.padding_left = 0
+
     -- Constants
     -- Author folder or Series folder
-    local folder_type = "Series"
+    local folder_type = "Author"
     if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
         border_size = 0
     else
@@ -168,40 +168,11 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
     local offset_y = math.floor(max_h * factor_y)
     -- Author (smaller)
     if folder_type == "Author" then
-        factor_x = 0.35
+        factor_x = 0.25
         factor_y = 0.10
         offset_x = math.floor(max_w * factor_x)
         offset_y = math.floor(max_w * factor_y)
     end
-    local available_w3 = max_w - 2*offset_x - border_total
-    local w, h = 450, 680
-    local new_h = max_h
-    local new_w = math.floor(w * (new_h / h))
-    local stock_image = "./plugins/pagetextinfo.koplugin/resources/folder.svg"
-    local subfolder_cover_image = ImageWidget:new {
-        file = stock_image,
-        alpha = true,
-        scale_factor = nil,
-        width = new_w,
-        height = new_h,
-    }
-
-    local cover_size = subfolder_cover_image:getSize()
-    local widget = FrameContainer:new {
-        width = cover_size.w + border_total,
-        height = cover_size.h + border_total,
-        -- radius = Size.radius.default,
-        margin = 0,
-        padding = 0,
-        bordersize = border_size, --Size.border.thin,
-        color = Blitbuffer.COLOR_BLACK,
-        subfolder_cover_image,
-    }
-    return CenterContainer:new {
-        dimen = Geom:new { w = max_w, h = max_h },
-        widget,
-    }
-    --[[
     if res and res[1] and res[2] and res[1][1] then
         local dir_ending = string.sub(res[1][1],-2,-2)
         local num_books = #res[1]
@@ -241,12 +212,13 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
             local cover_widgets = {}
             local cover_max_w = max_w
             local cover_max_h = max_h
-
-            if #covers == 2 then
-                cover_max_h = cover_max_h * (1 - factor_y)
-            elseif #covers == 3 then
-                cover_max_h = cover_max_h * (1 - (factor_y * 2))
-            end
+            cover_max_h = cover_max_h * (1 - (factor_y * 2))
+            -- Assuming all folders has 3 covers because we fill with blanks
+            -- if #covers == 2 then
+            --     cover_max_h = cover_max_h * (1 - factor_y)
+            -- elseif #covers == 3 then
+            --     cover_max_h = cover_max_h * (1 - (factor_y * 2))
+            -- end
 
             for i, bookinfo in ipairs(covers) do
                 -- figure out scale factor
@@ -261,11 +233,10 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                     scale_factor = scale_factor,
                 }
 
-                local w, h = bookinfo.cover_w, bookinfo.cover_h
-                local new_h = self.height
-                local new_w = math.floor(w * (new_h / h))
-
                 if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+                    local w, h = bookinfo.cover_w, bookinfo.cover_h
+                    local new_h = self.height
+                    local new_w = math.floor(w * (new_h / h))
                     cover_widget = ImageWidget:new {
                         image = bookinfo.cover_bb,
                         scale_factor = nil,
@@ -279,7 +250,6 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                 --     padding_left = math.floor((new_w - available_w) / 2)
                 --     self.padding_left = padding_left
                 -- end
-                self.padding_left = math.floor((new_w - available_w3) / 2)
                 table.insert(cover_widgets, {
                     widget = FrameContainer:new {
                         width = cover_size.w + border_total,
@@ -296,24 +266,24 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
             end
 
             -- -- blank cover
-            -- local cover_size = cover_widgets[1].size
-            -- if folder_type == "Series" and #covers == 1 then
-            --     -- insert a blank cover
-            --     table.insert(cover_widgets, {
-            --         widget = FrameContainer:new {
-            --             width = cover_size.w + border_total,
-            --             height = cover_size.h + border_total,
-            --             radius = Size.radius.default,
-            --             margin = 0,
-            --             padding = 0,
-            --             bordersize = 0, --Size.border.thin,
-            --             color = Blitbuffer.COLOR_DARK_GRAY,
-            --             background = Blitbuffer.COLOR_LIGHT_GRAY,
-            --             HorizontalSpan:new { width = cover_size.w, height = cover_size.h },
-            --         },
-            --         size = cover_size
-            --     })
-            -- end
+            local cover_size = cover_widgets[1].size
+            if #covers == 2 then -- folder_type == "Series" and #covers == 1 then
+                -- insert a blank cover
+                table.insert(cover_widgets, {
+                    widget = FrameContainer:new {
+                        width = cover_size.w + border_total,
+                        height = cover_size.h + border_total,
+                        radius = Size.radius.default,
+                        margin = 0,
+                        padding = 0,
+                        bordersize = border_size, --Size.border.thin,
+                        color = Blitbuffer.COLOR_BLACK,
+                        background = Blitbuffer.COLOR_LIGHT_GRAY,
+                        HorizontalSpan:new { width = cover_size.w, height = cover_size.h },
+                    },
+                    size = cover_size
+                })
+            end
 
             -- If Author single book, return early
             if #covers == 1  then -- folder_type == "Author" and #covers == 1 then
@@ -323,10 +293,39 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                 --         cover_widgets[1].widget,
                 --     }
                 -- end
-                return CenterContainer:new {
-                    dimen = Geom:new { w = max_w, h = max_h },
-                    cover_widgets[1].widget,
-                }
+
+                table.insert(cover_widgets, {
+                    widget = FrameContainer:new {
+                        width = cover_size.w + border_total,
+                        height = cover_size.h + border_total,
+                        radius = Size.radius.default,
+                        margin = 0,
+                        padding = 0,
+                        bordersize = border_size, --Size.border.thin,
+                        color = Blitbuffer.COLOR_BLACK,
+                        background = Blitbuffer.COLOR_LIGHT_GRAY,
+                        HorizontalSpan:new { width = cover_size.w, height = cover_size.h },
+                    },
+                    size = cover_size
+                })
+                table.insert(cover_widgets, {
+                    widget = FrameContainer:new {
+                        width = cover_size.w + border_total,
+                        height = cover_size.h + border_total,
+                        radius = Size.radius.default,
+                        margin = 0,
+                        padding = 0,
+                        bordersize = border_size, --Size.border.thin,
+                        color = Blitbuffer.COLOR_BLACK,
+                        background = Blitbuffer.COLOR_LIGHT_GRAY,
+                        HorizontalSpan:new { width = cover_size.w, height = cover_size.h },
+                    },
+                    size = cover_size
+                })
+                -- return LeftContainer:new {
+                --     dimen = Geom:new { w = max_w, h = max_h },
+                --     cover_widgets[1].widget,
+                -- }
             end
 
             -- Make the overlap group widget (default is 2 books in series mode)
@@ -411,8 +410,8 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
             end
 
             -- return the center container
-            return CenterContainer:new {
-                dimen = Geom:new { w = max_w, h = max_h },
+            return LeftContainer:new {
+                dimen = Geom:new { w = total_width, h = max_h }, -- Important to use total_width instead of max_w otherwise will overlap the folder text
                 overlap,
             }
         end
@@ -441,11 +440,12 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         color = Blitbuffer.COLOR_BLACK,
         subfolder_cover_image,
     }
-    self.padding_left = math.floor((new_w - available_w3) / 2)
+    -- The width has to be the same than the width when there are 3 covers, so we scalate it and center it
+    local width = math.floor((cover_size.w * (1 - (factor_y * 2))) + 2 * offset_x + border_total)
     return CenterContainer:new {
-        dimen = Geom:new { w = max_w, h = max_h },
+        dimen = Geom:new { w = width, h = max_h },
         widget,
-    }--]]
+    }
 end
 
 function ListMenuItem:update()
@@ -548,18 +548,22 @@ function ListMenuItem:update()
         end
         -- use stock folder icon
 
-        local folder_cover_widget = CenterContainer:new {
+        local folder_cover = FrameContainer:new {
             dimen = Geom:new { w = dimen.h, h = dimen.h },
             margin = 0,
-            padding = padding_size,
-            color = Blitbuffer.COLOR_WHITE,
+            padding = 0,
+            background = Blitbuffer.COLOR_WHITE,
+            -- background = Blitbuffer.colorFromName("orange"),
+            bordersize = 0,
             dim = self.file_deleted,
             subfolder_cover_image,
         }
-        local folder_cover = HorizontalGroup:new {
-            HorizontalSpan:new { width = self.padding_left },
-            folder_cover_widget,
-        }
+
+        -- local folder_cover = HorizontalGroup:new {
+        --     HorizontalSpan:new { width = 0 },
+        --     folder_cover_widget,
+        -- }
+
         self.menu._has_cover_images = true
         self._has_cover_image = true
 
@@ -587,12 +591,14 @@ function ListMenuItem:update()
         -- extra right side padding in filename only mode
         if self.do_filename_only then pad_width = Screen:scaleBySize(20) end
 
+
         widget = OverlapGroup:new {
             LeftContainer:new {
                 dimen = dimen:copy(),
                 HorizontalGroup:new {
+                    HorizontalSpan:new { width = Screen:scaleBySize(5) },
                     folder_cover,
-                    HorizontalSpan:new { width = Screen:scaleBySize(5 + self.padding_left) },
+                    HorizontalSpan:new { width = Screen:scaleBySize(5) },
                     wleft,
                 }
             },
