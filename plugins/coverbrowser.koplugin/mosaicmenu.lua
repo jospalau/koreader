@@ -661,7 +661,7 @@ function MosaicMenuItem:update()
     -- needed with some covers, but it's nicer when cover is
     -- a pure white background (like rendered text page)
     local border_size
-    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
         border_size = 0
     else
         border_size = Size.border.thin
