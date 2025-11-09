@@ -320,85 +320,34 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
             local total_height = cover_widgets[1].size.h + border_total + (#cover_widgets-1)*offset_y
 
             local overlap
-            if #covers == 2 then
-                overlap = OverlapGroup:new {
-                    dimen = Geom:new { w = total_width, h = total_height },
-                    FrameContainer:new {
-                        margin = 0,
-                        padding = 0,
-                        bordersize = 0,
-                        cover_widgets[1].widget,
-                    },
-                    FrameContainer:new {
-                        margin = 0,
-                        padding = 0,
-                        padding_left = offset_x,
-                        padding_top = offset_y,
-                        bordersize = 0,
-                        cover_widgets[2].widget,
-                    },
-                }
-            elseif #covers == 3 then
-                overlap = OverlapGroup:new {
-                    dimen = Geom:new { w = total_width, h = total_height },
-                    FrameContainer:new {
-                        margin = 0,
-                        padding = 0,
-                        bordersize = 0,
-                        cover_widgets[1].widget,
-                    },
-                    FrameContainer:new {
-                        margin = 0,
-                        padding = 0,
-                        padding_left = offset_x,
-                        padding_top = offset_y,
-                        bordersize = 0,
-                        cover_widgets[2].widget,
-                    },
-                    FrameContainer:new {
-                        margin = 0,
-                        padding = 0,
-                        padding_left = 2*offset_x,
-                        padding_top = 2*offset_y,
-                        bordersize = 0,
-                        cover_widgets[3].widget,
-                    },
-                }
-            else
-                overlap = OverlapGroup:new {
-                    dimen = Geom:new { w = total_width, h = total_height },
-                    FrameContainer:new {
-                        margin = 0,
-                        padding = 0,
-                        bordersize = 0,
-                        cover_widgets[1].widget,
-                    },
-                    FrameContainer:new {
-                        margin = 0,
-                        padding = 0,
-                        padding_left = offset_x,
-                        padding_top = offset_y,
-                        bordersize = 0,
-                        cover_widgets[2].widget,
-                    },
-                    FrameContainer:new {
-                        margin = 0,
-                        padding = 0,
-                        padding_left = 2*offset_x,
-                        padding_top = 2*offset_y,
-                        bordersize = 0,
-                        cover_widgets[3].widget,
-                    },
-                    FrameContainer:new {
-                        margin = 0,
-                        padding = 0,
-                        padding_left = 3*offset_x,
-                        padding_top = 3*offset_y,
-                        bordersize = 0,
-                        cover_widgets[4].widget,
-                    },
+            local children = {}
+            for i, cover in ipairs(cover_widgets) do
+                children[#children + 1] = FrameContainer:new{
+                    margin = 0,
+                    padding = 0,
+                    padding_left = (i - 1) * offset_x,
+                    padding_top  = (i - 1) * offset_y,
+                    bordersize = 0,
+                    cover.widget,
                 }
             end
+
+            -- Reverse order
+            -- for i = #cover_widgets, 1, -1 do
+            --     local idx = (#cover_widgets - i)
+            --     children[#children + 1] = FrameContainer:new{
+            --         margin = 0,
+            --         padding = 0,
+            --         padding_left = (i - 1) * offset_x,
+            --         padding_top  = (i - 1) * offset_y,
+            --         bordersize = 0,
+            --         cover_widgets[i].widget,
+            --     }
+            -- end
+            overlap = OverlapGroup:new {
+                dimen = Geom:new { w = total_width, h = total_height },
+                table.unpack(children),
+            }
 
             -- I need the proper real size of a cover without reduction, I take the folder image
             local w, h = 450, 680
