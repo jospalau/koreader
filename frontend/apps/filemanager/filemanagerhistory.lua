@@ -173,7 +173,8 @@ function FileManagerHistory:getBookListTitle(item_table)
             collections = table.concat(collections, ", ")
         end
         subtitle = T(_("Collections: %1"), collections)
-    elseif self.filter ~= "all" then
+    -- elseif self.filter ~= "all" then
+    else
         subtitle = BookList.getBookStatusString(self.filter, true)
     end
     return title, subtitle
