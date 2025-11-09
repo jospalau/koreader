@@ -927,12 +927,21 @@ function MosaicMenuItem:update()
                 local TextWidget = require("ui/widget/textwidget")
                 local AlphaContainer = require("ui/widget/container/alphacontainer")
                 local words = "N/A"
+                local pubdate = "N/A"
+                local grvotes = "N/A"
+                local grrating = "N/A"
                 local fname = self.filepath and self.filepath:match("([^/]+)$")
                 if self.show_parent.calibre_data
                 and fname
                 and self.show_parent.calibre_data[fname]
-                and self.show_parent.calibre_data[fname]["words"] then
+                and self.show_parent.calibre_data[fname]["words"]
+                and self.show_parent.calibre_data[fname]["pubdate"]
+                and self.show_parent.calibre_data[fname]["grvotes"]
+                and self.show_parent.calibre_data[fname]["grrating"] then
                     words = tostring(math.floor(self.show_parent.calibre_data[fname]["words"]/1000)) .. "kw"
+                    pubdate = self.show_parent.calibre_data[fname]["pubdate"]:sub(1, 4)
+                    grvotes = self.show_parent.calibre_data[fname]["grvotes"]
+                    grrating = self.show_parent.calibre_data[fname]["grrating"]
                 end
                 if self.status == "tbr" then
                     if G_reader_settings:isTrue("top_manager_infmandhistory")
@@ -946,6 +955,42 @@ function MosaicMenuItem:update()
                         words = words
                     end
                 end
+
+                local tww = TextWidget:new{
+                    text = words,
+                    face = Font:getFace("cfont", 12),
+                }
+
+                local sizew = tww:getSize()
+                tww:free()
+
+                local twpd = TextWidget:new{
+                    text = pubdate,
+                    face = Font:getFace("cfont", 12),
+                }
+
+                local sizepd = twpd:getSize()
+                twpd:free()
+
+                local twgrv = TextWidget:new{
+                    text = grvotes,
+                    face = Font:getFace("cfont", 12),
+                }
+
+                local sizegrv = twgrv:getSize()
+                twgrv:free()
+
+                local twgrr = TextWidget:new{
+                    text = grrating,
+                    face = Font:getFace("cfont", 12),
+                }
+
+                local sizegrr = twgrr:getSize()
+                twgrr:free()
+
+                local RightContainer = require("ui/widget/container/rightcontainer")
+                local TopContainer = require("ui/widget/container/topcontainer")
+                local BottomContainer = require("ui/widget/container/bottomcontainer")
                 widget = CenterContainer:new{
                     dimen = dimen,
                     FrameContainer:new{
@@ -961,15 +1006,73 @@ function MosaicMenuItem:update()
                         OverlapGroup:new {
                             dimen = { w = image_size.w + 2*border_size, h = image_size.h + 2*border_size },
                             image,
-                            AlphaContainer:new {
-                                alpha = 0.7,
-                                TextWidget:new {
-                                    text = " " .. words,
-                                    face = Font:getFace("Kalam-Regular", 12),
-                                    max_width = image_size.w + 2*border_size - 8,
-                                    -- fgcolor = Blitbuffer.COLOR_WHITE,
+                            TopContainer:new {
+                                dimen = { w = image_size.w, h = image_size.h },
+                                AlphaContainer:new {
+                                    alpha = 0.7,
+                                    VerticalGroup:new{
+                                        LeftContainer:new {
+                                            dimen = { w = sizew.w, h = sizew.h },
+                                            TextWidget:new {
+                                                text = words,
+                                                face = Font:getFace("cfont", 12),
+                                                -- fgcolor = Blitbuffer.COLOR_WHITE,
+                                            },
+                                        },
+                                        -- HorizontalSpan:new({ width = 2 }),
+                                        LeftContainer:new {
+                                            dimen = { w = sizepd.w, h = sizepd.h },
+                                            TextWidget:new {
+                                                text = pubdate,
+                                                face = Font:getFace("cfont", 12),
+                                                -- fgcolor = Blitbuffer.COLOR_WHITE,
+                                            },
+                                        },
+                                        LeftContainer:new {
+                                            dimen = { w = sizegrv.w, h = sizegrv.h },
+                                            TextWidget:new {
+                                                text = grvotes,
+                                                face = Font:getFace("cfont", 12),
+                                                -- fgcolor = Blitbuffer.COLOR_WHITE,
+                                            },
+                                        },
+                                        -- HorizontalSpan:new({ width = 2 }),
+                                        LeftContainer:new {
+                                            dimen = { w = sizegrr.w, h = sizegrr.h },
+                                            TextWidget:new {
+                                                text = grrating,
+                                                face = Font:getFace("cfont", 12),
+                                                -- fgcolor = Blitbuffer.COLOR_WHITE,
+                                            },
+                                        },
+                                    },
                                 },
                             },
+                            -- BottomContainer:new {
+                            --     dimen = { w = image_size.w, h = image_size.h },
+                            --     AlphaContainer:new {
+                            --         alpha = 0.7,
+                            --         VerticalGroup:new{
+                            --             LeftContainer:new {
+                            --                 dimen = { w = sizegrv.w, h = sizegrv.h },
+                            --                 TextWidget:new {
+                            --                     text = grvotes,
+                            --                     face = Font:getFace("cfont", 12),
+                            --                     -- fgcolor = Blitbuffer.COLOR_WHITE,
+                            --                 },
+                            --             },
+                            --             -- HorizontalSpan:new({ width = 2 }),
+                            --             LeftContainer:new {
+                            --                 dimen = { w = sizegrr.w, h = sizegrr.h },
+                            --                 TextWidget:new {
+                            --                     text = grrating,
+                            --                     face = Font:getFace("cfont", 12),
+                            --                     -- fgcolor = Blitbuffer.COLOR_WHITE,
+                            --                 },
+                            --             },
+                            --         },
+                            --     },
+                            -- },
                         },
                     }
                 }
