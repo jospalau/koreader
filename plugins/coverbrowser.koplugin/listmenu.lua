@@ -174,6 +174,34 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         offset_y = math.floor(max_w * factor_y)
     end
     local available_w3 = max_w - 2*offset_x - border_total
+    local w, h = 450, 680
+    local new_h = max_h
+    local new_w = math.floor(w * (new_h / h))
+    local stock_image = "./plugins/pagetextinfo.koplugin/resources/folder.svg"
+    local subfolder_cover_image = ImageWidget:new {
+        file = stock_image,
+        alpha = true,
+        scale_factor = nil,
+        width = new_w,
+        height = new_h,
+    }
+
+    local cover_size = subfolder_cover_image:getSize()
+    local widget = FrameContainer:new {
+        width = cover_size.w + border_total,
+        height = cover_size.h + border_total,
+        -- radius = Size.radius.default,
+        margin = 0,
+        padding = 0,
+        bordersize = border_size, --Size.border.thin,
+        color = Blitbuffer.COLOR_BLACK,
+        subfolder_cover_image,
+    }
+    return CenterContainer:new {
+        dimen = Geom:new { w = max_w, h = max_h },
+        widget,
+    }
+    --[[
     if res and res[1] and res[2] and res[1][1] then
         local dir_ending = string.sub(res[1][1],-2,-2)
         local num_books = #res[1]
@@ -417,7 +445,7 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
     return CenterContainer:new {
         dimen = Geom:new { w = max_w, h = max_h },
         widget,
-    }
+    }--]]
 end
 
 function ListMenuItem:update()
