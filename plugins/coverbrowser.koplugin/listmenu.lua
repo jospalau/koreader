@@ -146,38 +146,27 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
     local query = string.format([[
         SELECT directory, filename FROM bookinfo
         WHERE directory = '%s/' AND has_cover = 'Y'
-        ORDER BY filename ASC LIMIT 3;
+        ORDER BY filename ASC LIMIT 4;
     ]], self.filepath:gsub("'", "''"))
 
     local res = db_conn:exec(query)
     db_conn:close()
 
-    -- Constants
-    -- Author folder or Series folder
-    local folder_type = "Series"
     if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
         border_size = 0
     else
         border_size = Size.border.thin
     end
     local border_total = border_size * 2
-    local factor_x = 0.35 -- 35% of width to the right
-    local factor_y = 0.05 -- 5% of height down -- Use a negative values for reverse order
+    local factor_x = 0.45 -- 10% of width to the right
+    local factor_y = 0.10 -- 10% of height down -- Use a negative values for reverse order
     -- Series
     local offset_x = math.floor(max_w * factor_x)
     local offset_y = math.floor(max_h * factor_y)
-    -- Author (smaller)
-    if folder_type == "Author" then
-        factor_x = 0.10
-        factor_y = 0.05 -- Use a negative values for reverse order
-        offset_x = math.floor(max_w * factor_x)
-        offset_y = math.floor(max_w * factor_y)
-    end
+
     if res and res[1] and res[2] and res[1][1] then
         local dir_ending = string.sub(res[1][1],-2,-2)
         local num_books = #res[1]
-
-        if string.sub(res[1][1],-2,-2) == "-" then folder_type = "Author" end
 
         -- Save all covers
         local covers = {}
@@ -197,13 +186,9 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         local available_h = max_h - (#covers-1)*offset_y - border_total
 
         -- Deal with Series, 1 book (will want a blank book showing)
-        if folder_type == "Series" and #covers == 1 then
+        if #covers == 1 then
             available_w = max_w - offset_x - border_total
             available_h = max_h - offset_y - border_total
-        end
-        -- Deal with Author, multiple books (still want smaller books)
-        if folder_type == "Author" and #covers > 1 then
-            available_h = max_h - 2*offset_y - border_total
         end
 
         -- Make sure this isn't an empty folder
@@ -213,11 +198,12 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
             local cover_max_w = max_w
             local cover_max_h = max_h
 
-
             if #covers == 2 then
                 cover_max_h = cover_max_h * (1 - math.abs(factor_y))
             elseif #covers == 3 then
                 cover_max_h = cover_max_h * (1 - (math.abs(factor_y) * 2))
+            elseif #covers == 4 then
+                cover_max_h = cover_max_h * (1 - (math.abs(factor_y) * 3))
             end
 
             for i, bookinfo in ipairs(covers) do
@@ -285,8 +271,7 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
             --     })
             -- end
 
-            -- If Author single book, return early
-            if #covers == 1  then -- folder_type == "Author" and #covers == 1 then
+            if #covers == 1  then
                 -- if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
                 --     return LeftContainer:new {
                 --         dimen = Geom:new { w = max_w, h = max_h },
@@ -323,44 +308,53 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                 --     size = cover_size
                 -- })
 
-                -- The width has to be the same than the width when there are 3 covers, so we scalate it and center it
-                local width = math.floor((cover_size.w * (1 - (factor_y * 2))) + 2 * offset_x + border_total)
+                -- The width has to be the same than the width when there are 4 covers, so we scalate it and center it
+                local width = math.floor((cover_size.w * (1 - (factor_y * 3))) + 3 * offset_x + border_total)
                 return CenterContainer:new {
                     dimen = Geom:new { w = width, h = max_h },
                     cover_widgets[1].widget,
                 }
             end
 
-            -- Make the overlap group widget (default is 2 books in series mode)
-            -- At this point, either it was Author and orig had 1 book (returned already)
-            --   or, it was Series and orig had 1 book (had a blank book inserted)
             local total_width = cover_widgets[1].size.w + border_total + (#cover_widgets-1)*offset_x
             local total_height = cover_widgets[1].size.h + border_total + (#cover_widgets-1)*offset_y
-            local overlap = OverlapGroup:new {
-                dimen = Geom:new { w = total_width, h = total_height },
-                -- Second cover (offset down and right)
-                FrameContainer:new {
-                    margin = 0,
-                    padding = 0,
-                    padding_left = offset_x,
-                    padding_top = offset_y,
-                    bordersize = 0,
-                    cover_widgets[2].widget,
-                },
-                -- Front cover (top-left)
-                FrameContainer:new {
-                    margin = 0,
-                    padding = 0,
-                    bordersize = 0,
-                    cover_widgets[1].widget,
-                },
-            }
 
-            -- Now for the different formats
-            if folder_type == "Series" and #cover_widgets == 3 then
-                -- overlap third cover
-                local overlap3 = OverlapGroup:new {
+            local overlap
+            if #covers == 2 then
+                overlap = OverlapGroup:new {
                     dimen = Geom:new { w = total_width, h = total_height },
+                    FrameContainer:new {
+                        margin = 0,
+                        padding = 0,
+                        bordersize = 0,
+                        cover_widgets[1].widget,
+                    },
+                    FrameContainer:new {
+                        margin = 0,
+                        padding = 0,
+                        padding_left = offset_x,
+                        padding_top = offset_y,
+                        bordersize = 0,
+                        cover_widgets[2].widget,
+                    },
+                }
+            elseif #covers == 3 then
+                overlap = OverlapGroup:new {
+                    dimen = Geom:new { w = total_width, h = total_height },
+                    FrameContainer:new {
+                        margin = 0,
+                        padding = 0,
+                        bordersize = 0,
+                        cover_widgets[1].widget,
+                    },
+                    FrameContainer:new {
+                        margin = 0,
+                        padding = 0,
+                        padding_left = offset_x,
+                        padding_top = offset_y,
+                        bordersize = 0,
+                        cover_widgets[2].widget,
+                    },
                     FrameContainer:new {
                         margin = 0,
                         padding = 0,
@@ -369,47 +363,41 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                         bordersize = 0,
                         cover_widgets[3].widget,
                     },
-                    overlap,
                 }
-                overlap = overlap3
-            elseif folder_type == "Author" then
-                -- rewrite overlap group
+            else
                 overlap = OverlapGroup:new {
                     dimen = Geom:new { w = total_width, h = total_height },
-                    -- Second cover (up and right)
+                    FrameContainer:new {
+                        margin = 0,
+                        padding = 0,
+                        bordersize = 0,
+                        cover_widgets[1].widget,
+                    },
                     FrameContainer:new {
                         margin = 0,
                         padding = 0,
                         padding_left = offset_x,
-                        padding_top = 0,
+                        padding_top = offset_y,
                         bordersize = 0,
                         cover_widgets[2].widget,
                     },
-                    -- Front cover (middletop-left)
                     FrameContainer:new {
                         margin = 0,
                         padding = 0,
-                        padding_top = offset_y,
+                        padding_left = 2*offset_x,
+                        padding_top = 2*offset_y,
                         bordersize = 0,
-                        cover_widgets[1].widget,
+                        cover_widgets[3].widget,
+                    },
+                    FrameContainer:new {
+                        margin = 0,
+                        padding = 0,
+                        padding_left = 3*offset_x,
+                        padding_top = 3*offset_y,
+                        bordersize = 0,
+                        cover_widgets[4].widget,
                     },
                 }
-                if #cover_widgets == 3 then
-                    -- overlap third cover
-                    local overlap3 = OverlapGroup:new {
-                        dimen = Geom:new { w = total_width, h = total_height },
-                        FrameContainer:new {
-                            margin = 0,
-                            padding = 0,
-                            padding_left = 2*offset_x,
-                            padding_top = 2*offset_y,
-                            bordersize = 0,
-                            cover_widgets[3].widget,
-                        },
-                        overlap,
-                    }
-                    overlap = overlap3
-                end
             end
 
             -- I need the proper real size of a cover without reduction, I take the folder image
@@ -427,7 +415,7 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
 
             local cover_size = subfolder_cover_image:getSize()
             subfolder_cover_image:free()
-            local width = math.ceil((cover_size.w * (1 - (factor_y * 2))) + 2 * offset_x + border_total)
+            local width = math.ceil((cover_size.w * (1 - (factor_y * 3))) + 3 * offset_x + border_total)
             return CenterContainer:new {
                 dimen = Geom:new { w = width, h = max_h },
                 overlap,
@@ -458,8 +446,8 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         color = Blitbuffer.COLOR_BLACK,
         subfolder_cover_image,
     }
-    -- The width has to be the same than the width when there are 3 covers, so we scalate it and center it
-    local width = math.floor((cover_size.w * (1 - (factor_y * 2))) + 2 * offset_x + border_total)
+    -- The width has to be the same than the width when there are 4 covers, so we scalate it and center it
+    local width = math.floor((cover_size.w * (1 - (factor_y * 3))) + 3 * offset_x + border_total)
     return CenterContainer:new {
         dimen = Geom:new { w = width, h = max_h },
         widget,
