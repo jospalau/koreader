@@ -34,6 +34,64 @@ local Screen = Device.screen
 local T = ffiUtil.template
 local BOOK_RECEIPT_BG_SETTING = "book_receipt_screensaver_background"
 local BOOK_RECEIPT_BG_IMAGE_MODE_SETTING = "book_receipt_bg_image_mode"
+local BOOK_RECEIPT_CONTENT_MODE_SETTING = "book_receipt_content_mode"
+
+local MAX_HIGHLIGHT_SIZE = 500
+local HIDE_COVER_FOR_LARGE_HIGHLIGHTS = 300
+
+local CONTENT_MODE_BOOK_RECEIPT = "book_receipt"
+local CONTENT_MODE_HIGHLIGHT_PROGRESS = "highlight_progress"
+local CONTENT_MODE_RANDOM = "random"
+
+local function utf8TrimToLength(str, max_chars)
+    if not str or max_chars <= 0 then
+        return "", 0, str ~= nil and str ~= ""
+    end
+    local len = #str
+    local index = 1
+    local char_count = 0
+    local cut_index
+    while index <= len do
+        local byte = string.byte(str, index)
+        if not byte then break end
+        local char_len = 1
+        if byte >= 0xF0 then
+            char_len = 4
+        elseif byte >= 0xE0 then
+            char_len = 3
+        elseif byte >= 0xC0 then
+            char_len = 2
+        end
+        char_count = char_count + 1
+        index = index + char_len
+        if not cut_index and char_count == max_chars + 1 then
+            cut_index = index - char_len
+        end
+    end
+    if cut_index then
+        return str:sub(1, cut_index - 1), char_count, true
+    end
+    return str, char_count, false
+end
+
+local function getRandomHighlightAnnotation(ui)
+    if not ui or not ui.annotation or not ui.annotation.annotations then
+        return nil
+    end
+    local candidates = {}
+    for _, item in ipairs(ui.annotation.annotations) do
+        if item.drawer and item.text then
+            local trimmed = util.trim(item.text)
+            if trimmed ~= "" then
+                table.insert(candidates, item)
+            end
+        end
+    end
+    if #candidates == 0 then
+        return nil
+    end
+    return candidates[math.random(#candidates)]
+end
 
 local function getBookReceiptBackgroundDir()
     local base_dir = DataStorage:getDataDir()
@@ -62,8 +120,8 @@ local function pickRandomReceiptBackgroundImage()
     return files[math.random(#files)]
 end
 
-local function buildBackgroundImageWidget(image_path)
-    if not image_path then
+local function buildBackgroundImageWidget(image_source)
+    if not image_source then
         return nil
     end
 
@@ -75,10 +133,15 @@ local function buildBackgroundImageWidget(image_path)
     local screen_size = Screen:getSize()
     local screen_w, screen_h = screen_size.w, screen_size.h
     local image_opts = {
-        file = image_path,
         alpha = true,
         file_do_cache = false,
     }
+
+    if type(image_source) == "string" then
+        image_opts.file = image_source
+    else
+        image_opts.image = image_source
+    end
 
     if mode == "stretch" then
         image_opts.width = screen_w
@@ -101,7 +164,14 @@ local function buildBackgroundImageWidget(image_path)
     return image_widget
 end
 
-local function getReceiptBackground()
+local function getActiveDocumentCover(ui)
+    if not ui or not ui.document or not ui.bookinfo then
+        return nil
+    end
+    return ui.bookinfo:getCoverImage(ui.document)
+end
+
+local function getReceiptBackground(ui)
     local choice = G_reader_settings:readSetting(BOOK_RECEIPT_BG_SETTING) or "white"
 
     if choice == "transparent" then
@@ -117,6 +187,16 @@ local function getReceiptBackground()
             end
         end
         logger.warn("Book receipt: no background image found, falling back to transparent")
+        return nil, nil
+    elseif choice == "book_cover" then
+        local cover_bb = getActiveDocumentCover(ui)
+        if cover_bb then
+            local widget = buildBackgroundImageWidget(cover_bb)
+            if widget then
+                return nil, widget
+            end
+        end
+        logger.warn("Book receipt: no cover available for background, falling back to transparent")
         return nil, nil
     end
 
@@ -209,32 +289,49 @@ local function buildReceipt(ui, state)
     end
 
     local doc_settings = ui.doc_settings and ui.doc_settings.data or {}
-    local page_no = (state and state.page) or 1
-    local page_total = doc_settings.doc_pages or 1
-    -- stable page numbers
-	if ui.pagemap and ui.pagemap:wantsPageLabels() then
-		page_no = ui.pagemap:getCurrentPageLabel(true)
-		page_total = ui.pagemap:getLastPageLabel(true)
-		page_no = tonumber(page_no)
-		page_total = tonumber(page_total)
-	end
-    if page_total <= 0 then page_total = 1 end
-    if page_no < 1 then page_no = 1 end
-    if page_no > page_total then page_no = page_total end
+    local doc_page_no = (state and state.page) or 1
+    local doc_page_total = doc_settings.doc_pages or 1
+    if doc_page_total <= 0 then doc_page_total = 1 end
+    if doc_page_no < 1 then doc_page_no = 1 end
+    if doc_page_no > doc_page_total then doc_page_no = doc_page_total end
 
-    local page_left = math.max(page_total - page_no, 0)
+    local page_no_numeric = doc_page_no
+    local page_total_numeric = doc_page_total
+    local page_no_display = tostring(page_no_numeric)
+    local page_total_display = tostring(page_total_numeric)
+
+    if ui.pagemap and ui.pagemap:wantsPageLabels() then
+        local label, idx, count = ui.pagemap:getCurrentPageLabel(true)
+        local last_label = ui.pagemap:getLastPageLabel(true)
+        if idx and count then
+            page_no_numeric = idx
+            page_total_numeric = count
+        end
+        if label and label ~= "" then
+            page_no_display = label
+        else
+            page_no_display = tostring(page_no_numeric)
+        end
+        if last_label and last_label ~= "" then
+            page_total_display = last_label
+        else
+            page_total_display = tostring(page_total_numeric)
+        end
+    end
+
+    local page_left = math.max(page_total_numeric - page_no_numeric, 0)
     local toc = ui.toc
     local chapter_title = ""
-    local chapter_total = page_total
+    local chapter_total = page_total_numeric
     local chapter_left = 0
     local chapter_done = 0
     if toc then
-        chapter_title = toc:getTocTitleByPage(page_no) or ""
-        chapter_total = toc:getChapterPageCount(page_no) or chapter_total
-        chapter_left = toc:getChapterPagesLeft(page_no) or 0
-        chapter_done = toc:getChapterPagesDone(page_no) or 0
+        chapter_title = toc:getTocTitleByPage(doc_page_no) or ""
+        chapter_total = toc:getChapterPageCount(doc_page_no) or chapter_total
+        chapter_left = toc:getChapterPagesLeft(doc_page_no) or 0
+        chapter_done = toc:getChapterPagesDone(doc_page_no) or 0
     end
-    chapter_total = chapter_total > 0 and chapter_total or page_total
+    chapter_total = chapter_total > 0 and chapter_total or page_total_numeric
     chapter_done = math.max(chapter_done + 1, 1)
 
     local statistics = ui.statistics
@@ -287,29 +384,57 @@ local function buildReceipt(ui, state)
     local db_padding = 20
     local db_padding_internal = 8
 
-    local function databox(typename, itemname, pages_done, pages_total, time_left_text)
-        local denom = pages_total > 0 and pages_total or 1
-        local percentage_value = math.max(math.min(pages_done / denom, 1), 0)
+    local message_text
+    if Device.screen_saver_mode and G_reader_settings:isTrue("screensaver_show_message") then
+        local configured_message = G_reader_settings:readSetting("screensaver_message")
+        configured_message = configured_message and util.trim(configured_message)
+        if configured_message and configured_message ~= "" then
+            if ui and ui.bookinfo and ui.bookinfo.expandString then
+                message_text = ui.bookinfo:expandString(configured_message) or configured_message
+            else
+                message_text = configured_message
+            end
+            if message_text then
+                message_text = util.trim(message_text)
+                if message_text == "" then
+                    message_text = nil
+                end
+            end
+        end
+    end
 
-        local boxtitle = TextWidget:new{
-            text = typename,
-            face = Font:getFace("cfont", db_font_size_big),
-            bold = true,
-            fgcolor = db_font_color,
-            padding = 0,
-        }
+    local function databox(typename, itemname, pages_done, pages_total, time_left_text, pages_done_display, pages_total_display, options)
+        options = options or {}
+        local pages_done_num = tonumber(pages_done) or 0
+        local pages_total_num = tonumber(pages_total) or 0
+        local denom = pages_total_num > 0 and pages_total_num or 1
+        local percentage_value = math.max(math.min(pages_done_num / denom, 1), 0)
+        local display_done = pages_done_display or pages_done
+        local display_total = pages_total_display or pages_total
 
-        local item_name_widget = TextBoxWidget:new{
+        local elements = {}
+        if not options.hide_title then
+            table.insert(elements, TextWidget:new{
+                text = typename,
+                face = Font:getFace("cfont", db_font_size_big),
+                bold = true,
+                fgcolor = db_font_color,
+                padding = 0,
+            })
+            table.insert(elements, VerticalSpan:new{ width = db_padding_internal })
+        end
+
+        table.insert(elements, TextBoxWidget:new{
             face = Font:getFace(db_font_face, db_font_size_mid),
             text = itemname,
             width = widget_width,
             fgcolor = db_font_color,
-        }
+        })
 
         local progressbarwidth = widget_width
         local progress_bar = ProgressWidget:new{
             width = progressbarwidth,
-            height = Screen:scaleBySize(2),
+            height = Screen:scaleBySize(5),
             percentage = percentage_value,
             margin_v = 0,
             margin_h = 0,
@@ -320,7 +445,7 @@ local function buildReceipt(ui, state)
         }
 
         local page_progress = TextWidget:new{
-            text = string.format("page %i of %i", pages_done, pages_total),
+            text = string.format("page %s of %s", display_done, display_total),
             face = Font:getFace("cfont", db_font_size_small),
             bold = false,
             fgcolor = db_font_color_lighter,
@@ -337,34 +462,31 @@ local function buildReceipt(ui, state)
             align = "right",
         }
 
-        local progressmodule = VerticalGroup:new{
+        table.insert(elements, VerticalSpan:new{ width = db_padding_internal })
+        table.insert(elements, VerticalGroup:new{
             progress_bar,
             HorizontalGroup:new{
                 page_progress,
                 HorizontalSpan:new{ width = progressbarwidth - page_progress:getSize().w - percentage_display:getSize().w },
                 percentage_display,
             },
-        }
+        })
 
-        local time_left_display = TextWidget:new{
-            text = string.format("%s left in %s", time_left_text, typename),
-            face = Font:getFace(db_font_face_italics, db_font_size_small),
-            bold = false,
-            fgcolor = db_font_color,
-            padding = 0,
-            align = "right",
-        }
+        if not options.hide_time and time_left_text then
+            table.insert(elements, VerticalSpan:new{ width = db_padding_internal })
+            table.insert(elements, TextWidget:new{
+                text = string.format("%s left in %s", time_left_text, typename),
+                face = Font:getFace(db_font_face_italics, db_font_size_small),
+                bold = false,
+                fgcolor = db_font_color,
+                padding = 0,
+                align = "right",
+            })
+        end
 
-        return VerticalGroup:new{
-            boxtitle,
-            VerticalSpan:new{ width = db_padding_internal },
-            item_name_widget,
-            VerticalSpan:new{ width = db_padding_internal },
-            progressmodule,
-            VerticalSpan:new{ width = db_padding_internal },
-            time_left_display,
-            VerticalSpan:new{ width = db_padding_internal },
-        }
+        table.insert(elements, VerticalSpan:new{ width = db_padding_internal })
+
+        return VerticalGroup:new(elements)
     end
 
     local batt_pct_box = TextWidget:new{
@@ -391,11 +513,22 @@ local function buildReceipt(ui, state)
     }
 
     local bookboxtitle = string.format("%s - %s", book_title, book_author)
-    local bookbox = databox("Book", bookboxtitle, page_no, page_total, book_time_left)
-    local chapterbox = databox("Chapter", chapter_title, chapter_done, chapter_total, chapter_time_left)
+    local content_mode_setting = G_reader_settings:readSetting(BOOK_RECEIPT_CONTENT_MODE_SETTING) or CONTENT_MODE_BOOK_RECEIPT
+    local content_mode = content_mode_setting
+    if content_mode_setting == CONTENT_MODE_RANDOM then
+        local candidates = { CONTENT_MODE_BOOK_RECEIPT, CONTENT_MODE_HIGHLIGHT_PROGRESS }
+        content_mode = candidates[math.random(#candidates)]
+    end
+    local bookbox = databox("Book", bookboxtitle, page_no_numeric, page_total_numeric, book_time_left, page_no_display, page_total_display, {
+        hide_title = content_mode == CONTENT_MODE_HIGHLIGHT_PROGRESS,
+        hide_time = content_mode == CONTENT_MODE_HIGHLIGHT_PROGRESS,
+    })
+    local chapterbox = content_mode ~= CONTENT_MODE_HIGHLIGHT_PROGRESS and databox("Chapter", chapter_title, chapter_done, chapter_total, chapter_time_left) or nil
 
+    local bg_choice = G_reader_settings:readSetting(BOOK_RECEIPT_BG_SETTING)
+    local show_cover = not (Device.screen_saver_mode and bg_choice == "book_cover")
     local cover_widget
-    if ui.bookinfo and ui.document then
+    if show_cover and ui.bookinfo and ui.document then
         local cover_bb = ui.bookinfo:getCoverImage(ui.document)
         if cover_bb then
             local cover_width = cover_bb:getWidth()
@@ -418,13 +551,114 @@ local function buildReceipt(ui, state)
     end
 
     local content_children = {}
-    if cover_widget then
+    local highlight_widgets
+    local highlight_length = 0
+    if content_mode == CONTENT_MODE_HIGHLIGHT_PROGRESS then
+        local highlight_item = getRandomHighlightAnnotation(ui)
+        if highlight_item then
+            local highlight_text = util.trim(highlight_item.text or "")
+            if highlight_text ~= "" then
+                local truncated_text, char_count, was_truncated = utf8TrimToLength(highlight_text, MAX_HIGHLIGHT_SIZE)
+                highlight_length = char_count
+                if was_truncated then
+                    truncated_text = truncated_text .. "..."
+                end
+
+                local meta_parts = {}
+                if highlight_item.chapter and highlight_item.chapter ~= "" then
+                    table.insert(meta_parts, highlight_item.chapter)
+                end
+                local highlight_page = highlight_item.pageref or highlight_item.pageno
+                if not highlight_page and highlight_item.page and type(highlight_item.page) == "string" and ui.document and ui.document.getPageFromXPointer then
+                    local ok, page_from_xp = pcall(ui.document.getPageFromXPointer, ui.document, highlight_item.page)
+                    if ok then
+                        highlight_page = page_from_xp
+                    end
+                end
+                if highlight_page then
+                    local page_label
+                    if type(highlight_page) == "number" then
+                        page_label = string.format("%s %s", _("Page"), tostring(highlight_page))
+                    else
+                        page_label = highlight_page
+                    end
+                    table.insert(meta_parts, page_label)
+                end
+                if #meta_parts > 0 then
+                    highlight_widgets = {
+                        TextBoxWidget:new{
+                            face = Font:getFace("cfont", db_font_size_big),
+                            text = truncated_text,
+                            width = widget_width,
+                            fgcolor = db_font_color,
+                            bold = true,
+                            alignment = "center",
+                        },
+                        VerticalSpan:new{ width = db_padding_internal },
+                        TextWidget:new{
+                            text = string.format("(%s)", table.concat(meta_parts, ", ")),
+                            face = Font:getFace("cfont", db_font_size_small),
+                            bold = false,
+                            fgcolor = db_font_color_lighter,
+                            padding = 0,
+                            align = "center",
+                        },
+                    }
+                else
+                    highlight_widgets = {
+                        TextBoxWidget:new{
+                            face = Font:getFace("cfont", db_font_size_big),
+                            text = truncated_text,
+                            width = widget_width,
+                            fgcolor = db_font_color,
+                            bold = true,
+                            alignment = "center",
+                        },
+                    }
+                end
+            end
+        end
+        if not highlight_widgets then
+            content_mode = CONTENT_MODE_BOOK_RECEIPT
+        end
+    end
+
+    if content_mode == CONTENT_MODE_BOOK_RECEIPT then
+        show_cover = not (Device.screen_saver_mode and bg_choice == "book_cover")
+    else
+        if bg_choice == "book_cover" or highlight_length > HIDE_COVER_FOR_LARGE_HIGHLIGHTS then
+            show_cover = false
+        end
+    end
+
+    if cover_widget and show_cover then
         table.insert(content_children, cover_widget)
         table.insert(content_children, VerticalSpan:new{ width = db_padding_internal })
     end
-    table.insert(content_children, chapterbox)
-    table.insert(content_children, VerticalSpan:new{ width = db_padding_internal })
+    if content_mode ~= CONTENT_MODE_HIGHLIGHT_PROGRESS and chapterbox then
+        table.insert(content_children, chapterbox)
+        table.insert(content_children, VerticalSpan:new{ width = db_padding_internal })
+    end
     table.insert(content_children, bookbox)
+
+    if content_mode == CONTENT_MODE_HIGHLIGHT_PROGRESS and highlight_widgets then
+        table.insert(content_children, VerticalSpan:new{ width = db_padding_internal })
+        util.arrayAppend(content_children, highlight_widgets)
+    end
+    if message_text then
+        table.insert(content_children, VerticalSpan:new{ width = db_padding_internal })
+        table.insert(content_children, VerticalGroup:new{
+            TextBoxWidget:new{
+                face = Font:getFace(db_font_face, db_font_size_mid),
+                text = message_text,
+                width = widget_width,
+                fgcolor = db_font_color,
+                bold = true,
+                alignment = "center",
+            },
+            VerticalSpan:new{ width = db_padding_internal },
+        })
+    end
     table.insert(content_children, VerticalSpan:new{ width = db_padding_internal })
     table.insert(content_children, bottom_bar)
 
@@ -433,7 +667,7 @@ local function buildReceipt(ui, state)
         bordersize = 2,
         padding_top = math.floor(db_padding / 2),
         padding_right = db_padding,
-        padding_bottom = 0,
+        padding_bottom = db_padding,
         padding_left = db_padding,
         background = Blitbuffer.COLOR_WHITE,
         VerticalGroup:new(content_children),
@@ -448,6 +682,7 @@ end
 local quicklookbox = InputContainer:extend{
     modal = true,
     name = "quick_look_box",
+    covers_fullscreen = true,
 }
 
 function quicklookbox:init()
@@ -525,12 +760,16 @@ Dispatcher:registerAction("quicklookbox_action", {
 							reader=true,})
 
 function ReaderUI:onQuickLook()
-    local widget = quicklookbox:new{
-        ui = self,
-        document = self.document,
-        state = self.view and self.view.state,
-    }
-    UIManager:show(widget)
+    local ui = self
+    UIManager:nextTick(function()
+        if not ui then return end
+        local widget = quicklookbox:new{
+            ui = ui,
+            document = ui.document,
+            state = ui.view and ui.view.state,
+        }
+        UIManager:show(widget)
+    end)
 end
 
 -- Screensaver integration
@@ -563,7 +802,7 @@ Screensaver.show = function(self)
         local receipt_widget = buildReceipt(ui, state)
 
         if receipt_widget then
-            local background_color, background_widget = getReceiptBackground()
+            local background_color, background_widget = getReceiptBackground(ui)
             local widget_to_show = receipt_widget
 
             if background_widget then
@@ -639,24 +878,27 @@ _G.dofile = function(filepath)
                 }
             end
 
+            local function isBookReceiptEnabled()
+                return G_reader_settings:readSetting("screensaver_type") == "book_receipt"
+            end
+
             table.insert(wallpaper_submenu, 6,
                 genMenuItem(_("Show book receipt on sleep screen"), "screensaver_type", "book_receipt")
             )
 
-            table.insert(wallpaper_submenu, 7, {
-                text = _("Book receipt background"),
-                enabled_func = function()
-                    return G_reader_settings:readSetting("screensaver_type") == "book_receipt"
-                end,
+            local background_menu = {
+                text = _("Background"),
                 sub_item_table = {
                     genMenuItem(_("White fill"), BOOK_RECEIPT_BG_SETTING, "white"),
                     genMenuItem(_("Transparent"), BOOK_RECEIPT_BG_SETTING, "transparent"),
                     genMenuItem(_("Black fill"), BOOK_RECEIPT_BG_SETTING, "black"),
                     genMenuItem(_("Random image"), BOOK_RECEIPT_BG_SETTING, "random_image"),
+                    genMenuItem(_("Book cover"), BOOK_RECEIPT_BG_SETTING, "book_cover"),
                     {
-                        text = _("Random image placement"),
+                        text = _("Background image placement"),
                         enabled_func = function()
-                            return G_reader_settings:readSetting(BOOK_RECEIPT_BG_SETTING) == "random_image"
+                            local value = G_reader_settings:readSetting(BOOK_RECEIPT_BG_SETTING)
+                            return value == "random_image" or value == "book_cover"
                         end,
                         sub_item_table = {
                             genMenuItem(_("Fit to screen"), BOOK_RECEIPT_BG_IMAGE_MODE_SETTING, "fit"),
@@ -664,6 +906,50 @@ _G.dofile = function(filepath)
                             genMenuItem(_("Center without scaling"), BOOK_RECEIPT_BG_IMAGE_MODE_SETTING, "center"),
                         },
                     },
+                },
+            }
+
+            local function isContentMode(value)
+                local current = G_reader_settings:readSetting(BOOK_RECEIPT_CONTENT_MODE_SETTING) or CONTENT_MODE_BOOK_RECEIPT
+                return current == value
+            end
+
+            local content_menu = {
+                text = _("Content"),
+                sub_item_table = {
+                    {
+                        text = _("Book receipt (default)"),
+                        checked_func = function() return isContentMode(CONTENT_MODE_BOOK_RECEIPT) end,
+                        callback = function()
+                            G_reader_settings:saveSetting(BOOK_RECEIPT_CONTENT_MODE_SETTING, CONTENT_MODE_BOOK_RECEIPT)
+                        end,
+                        radio = true,
+                    },
+                    {
+                        text = _("Highlight + progress"),
+                        checked_func = function() return isContentMode(CONTENT_MODE_HIGHLIGHT_PROGRESS) end,
+                        callback = function()
+                            G_reader_settings:saveSetting(BOOK_RECEIPT_CONTENT_MODE_SETTING, CONTENT_MODE_HIGHLIGHT_PROGRESS)
+                        end,
+                        radio = true,
+                    },
+                    {
+                        text = _("Random"),
+                        checked_func = function() return isContentMode(CONTENT_MODE_RANDOM) end,
+                        callback = function()
+                            G_reader_settings:saveSetting(BOOK_RECEIPT_CONTENT_MODE_SETTING, CONTENT_MODE_RANDOM)
+                        end,
+                        radio = true,
+                    },
+                },
+            }
+
+            table.insert(wallpaper_submenu, 7, {
+                text = _("Book receipt settings"),
+                enabled_func = isBookReceiptEnabled,
+                sub_item_table = {
+                    background_menu,
+                    content_menu,
                 },
             })
         end
