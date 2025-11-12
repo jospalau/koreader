@@ -85,13 +85,13 @@ ptutil.grid_defaults = {
     default_rows = 3,
 }
 
-ptutil.title_serif = "source/SourceSerif4-BoldIt.ttf"
-ptutil.good_serif = "source/SourceSerif4-Regular.ttf"
-ptutil.good_serif_it = "source/SourceSerif4-It.ttf"
-ptutil.good_serif_bold = "source/SourceSerif4-Bold.ttf"
-ptutil.good_sans = "source/SourceSans3-Regular.ttf"
-ptutil.good_sans_it = "source/SourceSans4-It.ttf"
-ptutil.good_sans_bold = "source/SourceSans4-Bold.ttf"
+ptutil.title_serif = "SourceSerif4-BoldIt.ttf"
+ptutil.good_serif = "SourceSerif4-Regular.ttf"
+ptutil.good_serif_it = "SourceSerif4-It.ttf"
+ptutil.good_serif_bold = "SourceSerif4-Bold.ttf"
+ptutil.good_sans = "SourceSans3-Regular.ttf"
+ptutil.good_sans_it = "SourceSans4-It.ttf"
+ptutil.good_sans_bold = "SourceSans4-Bold.ttf"
 
 -- a non-standard space is used here because it looks nicer
 ptutil.separator = {
@@ -122,9 +122,9 @@ function ptutil.installFonts()
     local fonts_path = ptutil.koreader_dir .. "/fonts"
     local function checkfonts()
         logger.info(ptdbg.logprefix, "Checking for fonts")
-        if util.fileExists(fonts_path .. "/source/SourceSans3-Regular.ttf") and
-            util.fileExists(fonts_path .. "/source/SourceSerif4-Regular.ttf") and
-            util.fileExists(fonts_path .. "/source/SourceSerif4-BoldIt.ttf") then
+        if util.fileExists(fonts_path .. "SourceSans3-Regular.ttf") and
+            util.fileExists(fonts_path .. "SourceSerif4-Regular.ttf") and
+            util.fileExists(fonts_path .. "SourceSerif4-BoldIt.ttf") then
             logger.info(ptdbg.logprefix, "Fonts found")
             return true
         else
