@@ -924,6 +924,8 @@ function MosaicMenuItem:update()
                 end
                 image:_render()
                 local image_size = image:getSize()
+                self.cover_width = image_size.w
+                self.cover_height = image_size.h
                 -- if self.show_parent.title == "Reading Planner & Tracker" then
                 local TextWidget = require("ui/widget/textwidget")
                 local AlphaContainer = require("ui/widget/container/alphacontainer")
@@ -1319,9 +1321,61 @@ function MosaicMenuItem:paintTo(bb, x, y)
         bb:paintBorder(target.dimen.x+ix, target.dimen.y+iy, d_w, d_h, 1)
 
     end
-    if not self.is_directory and pagetextinfo and pagetextinfo.settings:isTrue("enable_rounded_corners") then
-        local corners = IconWidget:new{ icon = "rounded.corners", alpha = true, width = self.cover_width, height = self.cover_height }
-        corners:paintTo(bb, x, y)
+    if not self.is_directory and pagetextinfo and pagetextinfo.settings:isTrue("enable_rounded_corners") and
+        self.cover_width and self.cover_height then
+        local function generateRoundedSVGDynamic(path_out, target_width, target_height)
+            local scale_x = target_width / 450
+            local scale_y = target_height / 680
+            local rx = math.floor(70 * ((scale_x + scale_y) / 2)) -- esquinas escaladas
+
+            local svg_content = string.format([[
+        <svg width="%d" height="%d" viewBox="0 0 %d %d" xmlns="http://www.w3.org/2000/svg">
+            <!-- Fondo blanco con hueco central recortado -->
+            <path d="
+                M0,0 h%d v%d h-%d z
+                M2,%d
+                a%d,%d 0 0 1 %d,-%d
+                h%d
+                a%d,%d 0 0 1 %d,%d
+                v%d
+                a%d,%d 0 0 1 -%d,%d
+                h-%d
+                a%d,%d 0 0 1 -%d,-%d
+                z
+            " fill="white" fill-rule="evenodd"></path>
+
+            <!-- Marco dibujado encima -->
+            <rect x="2" y="2" width="%d" height="%d" rx="%d" ry="%d" fill="none" stroke="black" stroke-width="1"/>
+        </svg>
+            ]],
+                target_width, target_height, target_width, target_height,
+                target_width, target_height, target_width,
+                math.floor(70*scale_y), rx, rx, math.floor(70*scale_x), math.floor(70*scale_y),
+                math.floor(306*scale_x),
+                rx, rx, math.floor(70*scale_x), math.floor(70*scale_y),
+                math.floor(536*scale_y),
+                rx, rx, math.floor(70*scale_x), math.floor(70*scale_y),
+                math.floor(306*scale_x),
+                rx, rx, math.floor(70*scale_x), math.floor(70*scale_y),
+                target_width-4, target_height-4, rx, rx
+            )
+
+            local f = io.open(path_out, "w")
+            f:write(svg_content)
+            f:close()
+        end
+
+
+        local temp_svg = "resources/icons/mdlight/rounded.corners.svg"
+        if pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
+            generateRoundedSVGDynamic(temp_svg, self.cover_width, self.cover_height)
+        else
+            generateRoundedSVGDynamic(temp_svg, target.dimen.w, target.dimen.h)
+        end
+
+        -- local corners = IconWidget:new{ icon = "rounded.corners", alpha = true, width = self.show_parent.width, height = self.show_parent.height }
+        local corners = IconWidget:new{ icon = "rounded.corners", alpha = true, width = target.dimen.w, height = target.dimen.h }
+        corners:paintTo(bb, target.dimen.x,  target.dimen.y)
     end
 end
 
