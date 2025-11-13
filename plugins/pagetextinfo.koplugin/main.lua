@@ -1338,6 +1338,25 @@ This is to be active only if the option flash buttons and menu items or the opti
                         return true
                     end,
                 },
+               {
+                    text = _("Enable rounded corners mosaic view"),
+                    checked_func = function() return self.settings:isTrue("enable_rounded_corners") end,
+                    help_text = _([[Rounded coreners in mosaic view.]]),
+                    callback = function()
+                        local enable_rounded_corners = not self.settings:isTrue("enable_rounded_corners")
+                        self.settings:saveSetting("enable_rounded_corners", enable_rounded_corners)
+                        self.settings:flush()
+
+                        local FileManager = require("apps/filemanager/filemanager").instance
+                        if FileManager then
+                            --FileManager:onRefresh()
+                            local path = FileManager.instance.file_chooser.path
+                            --FileManager:setupLayout()
+                            FileManager.instance.file_chooser:changeToPath(path)
+                        end
+                        return true
+                    end,
+                },
             },
         }
     else

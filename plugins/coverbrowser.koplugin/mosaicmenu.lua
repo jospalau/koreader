@@ -661,7 +661,8 @@ function MosaicMenuItem:update()
     -- needed with some covers, but it's nicer when cover is
     -- a pure white background (like rendered text page)
     local border_size
-    if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
+    if pagetextinfo and (pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view")
+        or pagetextinfo.settings:isTrue("enable_rounded_corners")) then
         border_size = 0
     else
         border_size = Size.border.thin
@@ -991,6 +992,11 @@ function MosaicMenuItem:update()
                 local RightContainer = require("ui/widget/container/rightcontainer")
                 local TopContainer = require("ui/widget/container/topcontainer")
                 local BottomContainer = require("ui/widget/container/bottomcontainer")
+                if pagetextinfo and pagetextinfo.settings:isTrue("enable_rounded_corners")
+                    and not pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
+                    self.cover_width = max_img_w
+                    self.cover_height = max_img_h
+                end
                 widget = CenterContainer:new{
                     dimen = dimen,
                     FrameContainer:new{
@@ -1312,6 +1318,10 @@ function MosaicMenuItem:paintTo(bb, x, y)
         local iy = 0
         bb:paintBorder(target.dimen.x+ix, target.dimen.y+iy, d_w, d_h, 1)
 
+    end
+    if not self.is_directory and pagetextinfo and pagetextinfo.settings:isTrue("enable_rounded_corners") then
+        local corners = IconWidget:new{ icon = "rounded.corners", alpha = true, width = self.cover_width, height = self.cover_height }
+        corners:paintTo(bb, x, y)
     end
 end
 
