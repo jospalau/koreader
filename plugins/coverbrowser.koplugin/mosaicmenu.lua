@@ -924,8 +924,6 @@ function MosaicMenuItem:update()
                 end
                 image:_render()
                 local image_size = image:getSize()
-                self.cover_width = image_size.w
-                self.cover_height = image_size.h
                 -- if self.show_parent.title == "Reading Planner & Tracker" then
                 local TextWidget = require("ui/widget/textwidget")
                 local AlphaContainer = require("ui/widget/container/alphacontainer")
@@ -994,11 +992,6 @@ function MosaicMenuItem:update()
                 local RightContainer = require("ui/widget/container/rightcontainer")
                 local TopContainer = require("ui/widget/container/topcontainer")
                 local BottomContainer = require("ui/widget/container/bottomcontainer")
-                if pagetextinfo and pagetextinfo.settings:isTrue("enable_rounded_corners")
-                    and not pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
-                    self.cover_width = max_img_w
-                    self.cover_height = max_img_h
-                end
                 widget = CenterContainer:new{
                     dimen = dimen,
                     FrameContainer:new{
@@ -1321,12 +1314,21 @@ function MosaicMenuItem:paintTo(bb, x, y)
         bb:paintBorder(target.dimen.x+ix, target.dimen.y+iy, d_w, d_h, 1)
 
     end
-    if not self.is_directory and pagetextinfo and pagetextinfo.settings:isTrue("enable_rounded_corners") and
-        self.cover_width and self.cover_height then
-        local function generateRoundedSVGDynamic(path_out, target_width, target_height)
+    if not self.is_directory and pagetextinfo and pagetextinfo.settings:isTrue("enable_rounded_corners") then
+        local function generateRoundedSVGDynamic(path_out, target_width, target_height, base_radius)
+            base_radius = base_radius or 70  -- radio de esquina por defecto
+
             local scale_x = target_width / 450
             local scale_y = target_height / 680
-            local rx = math.floor(70 * ((scale_x + scale_y) / 2)) -- esquinas escaladas
+            local rx = math.floor(base_radius * ((scale_x + scale_y) / 2)) -- esquinas escaladas
+
+            -- Hueco interno ajustado según rx
+            local dx = rx
+            local dy = rx
+            local inner_w  = math.max(10, target_width - 4) - 2*rx
+            local inner_h  = math.max(10, target_height - 4) - 2*rx
+            local offset_x = 2 + rx
+            local offset_y = 2 + rx
 
             local svg_content = string.format([[
         <svg width="%d" height="%d" viewBox="0 0 %d %d" xmlns="http://www.w3.org/2000/svg">
@@ -1350,13 +1352,13 @@ function MosaicMenuItem:paintTo(bb, x, y)
             ]],
                 target_width, target_height, target_width, target_height,
                 target_width, target_height, target_width,
-                math.floor(70*scale_y), rx, rx, math.floor(70*scale_x), math.floor(70*scale_y),
-                math.floor(306*scale_x),
-                rx, rx, math.floor(70*scale_x), math.floor(70*scale_y),
-                math.floor(536*scale_y),
-                rx, rx, math.floor(70*scale_x), math.floor(70*scale_y),
-                math.floor(306*scale_x),
-                rx, rx, math.floor(70*scale_x), math.floor(70*scale_y),
+                dy, rx, rx, dx, dy,
+                inner_w,
+                rx, rx, dx, dy,
+                inner_h,
+                rx, rx, dx, dy,
+                inner_w,
+                rx, rx, dx, dy,
                 target_width-4, target_height-4, rx, rx
             )
 
@@ -1365,12 +1367,11 @@ function MosaicMenuItem:paintTo(bb, x, y)
             f:close()
         end
 
-
         local temp_svg = "resources/icons/mdlight/rounded.corners.svg"
         if pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
-            generateRoundedSVGDynamic(temp_svg, self.cover_width, self.cover_height)
+            generateRoundedSVGDynamic(temp_svg, target.dimen.w, target.dimen.h, 40)
         else
-            generateRoundedSVGDynamic(temp_svg, target.dimen.w, target.dimen.h)
+            generateRoundedSVGDynamic(temp_svg, target.dimen.w, target.dimen.h, 200)
         end
 
         -- local corners = IconWidget:new{ icon = "rounded.corners", alpha = true, width = self.show_parent.width, height = self.show_parent.height }
