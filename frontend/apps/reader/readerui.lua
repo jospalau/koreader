@@ -521,6 +521,7 @@ function ReaderUI:init()
     -- CREngine only reports correct page count after rendering is done
     -- Need the same event for PDF document
     self:handleEvent(Event:new("ReaderReady", self.doc_settings))
+    self.doc_settings:saveSetting("doc_pages", self.document:getPageCount())
 
     -- if util.getFileNameSuffix(self.document.file) == "epub" then
     --     -- There is a small delay when manipulating the cover in the coverimage plugin
@@ -1154,8 +1155,10 @@ function ReaderUI:onAnnotationsModified()
 end
 
 function ReaderUI:onDocumentRerendered()
+    local pages = self.document:getPageCount()
+    self.doc_settings:saveSetting("doc_pages", pages)
     if self.doc_settings:nilOrFalse("pagemap_use_page_labels") then
-        BookList.setBookInfoCacheProperty(self.document.file, "pages", self.document:getPageCount())
+        BookList.setBookInfoCacheProperty(self.document.file, "pages", pages)
     end
 end
 
