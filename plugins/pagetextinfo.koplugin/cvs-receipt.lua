@@ -12,6 +12,7 @@ local DataStorage = require("datastorage")
 local DocumentRegistry = require("document/documentregistry")
 local ImageWidget = require("ui/widget/imagewidget")
 local InputContainer = require("ui/widget/container/inputcontainer")
+local InputDialog = require("ui/widget/inputdialog")
 local ProgressWidget = require("ui/widget/progresswidget")
 local ReaderUI = require("apps/reader/readerui")
 local RenderImage = require("ui/renderimage")
@@ -36,10 +37,11 @@ local T = ffiUtil.template
 local BOOK_RECEIPT_BG_SETTING = "book_receipt_screensaver_background"
 local BOOK_RECEIPT_BG_IMAGE_MODE_SETTING = "book_receipt_bg_image_mode"
 local BOOK_RECEIPT_CONTENT_MODE_SETTING = "book_receipt_content_mode"
+local BOOK_RECEIPT_COVER_SCALE_SETTING = "book_receipt_cover_scale"
 
 local MAX_HIGHLIGHT_SIZE = 500
 local HIDE_COVER_FOR_LARGE_HIGHLIGHTS = 300
-local BOOK_RECEIPT_COVER_SCALE = 1
+
 local STATISTICS_DB_PATH = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
 
 local CONTENT_MODE_BOOK_RECEIPT = "book_receipt"
@@ -272,7 +274,6 @@ local function getReceiptBackground(ui)
                 return nil, widget
             end
         end
-        logger.warn("Book receipt: no background image found, falling back to transparent")
         return nil, nil
     elseif choice == "book_cover" then
         local cover_bb = getActiveDocumentCover(ui)
@@ -282,7 +283,6 @@ local function getReceiptBackground(ui)
                 return nil, widget
             end
         end
-        logger.warn("Book receipt: no cover available for background, falling back to transparent")
         return nil, nil
     end
 
@@ -321,7 +321,6 @@ end
 
 local function showFallbackScreensaver(self, orig_show)
     local fallback_type = getBookReceiptFallbackType()
-    logger.dbg("Book receipt: using fallback screensaver", fallback_type)
 
     local original_type = self.screensaver_type
     local event = getEventFromPrefix(self.prefix)
@@ -654,10 +653,11 @@ local function buildReceipt(ui, state)
     if show_cover and ui.bookinfo and ui.document then
         local cover_bb = ui.bookinfo:getCoverImage(ui.document)
         if cover_bb then
+			local cover_scale = G_reader_settings:readSetting(BOOK_RECEIPT_COVER_SCALE_SETTING) or 1
             local cover_width = cover_bb:getWidth()
             local cover_height = cover_bb:getHeight()
-            local max_width = math.floor(widget_width * BOOK_RECEIPT_COVER_SCALE)
-            local max_height = math.floor(Screen:getHeight() / 3 * BOOK_RECEIPT_COVER_SCALE)
+            local max_width = math.floor(widget_width * cover_scale)
+            local max_height = math.floor(Screen:getHeight() / 3 * cover_scale)
             local scale = math.min(1, max_width / cover_width, max_height / cover_height)
             if scale < 1 then
                 local scaled_w = math.max(1, math.floor(cover_width * scale))
@@ -813,7 +813,6 @@ function quicklookbox:init()
     if receipt_widget then
         self[1] = receipt_widget
     else
-        logger.warn("Book receipt: failed to build quick look widget")
         self[1] = CenterContainer:new{
             dimen = Screen:getSize(),
             TextWidget:new{
@@ -902,47 +901,53 @@ local Screensaver = require("ui/screensaver")
 local orig_screensaver_show = Screensaver.show
 
 Screensaver.show = function(self)
-    if self.screensaver_type == "book_receipt" then
-        logger.dbg("Book receipt: screensaver activated")
+    if self.screensaver_type ~= "book_receipt" then
+        return orig_screensaver_show(self)
+    end
 
-        if self.screensaver_widget then
-            UIManager:close(self.screensaver_widget)
-            self.screensaver_widget = nil
-        end
+    local ui = self.ui or ReaderUI.instance
+    if not hasActiveDocument(ui) then
+        showFallbackScreensaver(self, orig_screensaver_show)
+        return
+    end
 
-        Device.screen_saver_mode = true
+    if self.screensaver_widget then
+        UIManager:close(self.screensaver_widget)
+        self.screensaver_widget = nil
+    end
 
-        local rotation_mode = Screen:getRotationMode()
-        Device.orig_rotation_mode = rotation_mode
-        if bit.band(rotation_mode, 1) == 1 then
-            Screen:setRotationMode(Screen.DEVICE_ROTATED_UPRIGHT)
-        else
-            Device.orig_rotation_mode = nil
-        end
+    Device.screen_saver_mode = true
 
-        local ui = self.ui or ReaderUI.instance
-        local state = ui and ui.view and ui.view.state
-        local receipt_widget = buildReceipt(ui, state)
+    local rotation_mode = Screen:getRotationMode()
+    Device.orig_rotation_mode = rotation_mode
+    if bit.band(rotation_mode, 1) == 1 then
+        Screen:setRotationMode(Screen.DEVICE_ROTATED_UPRIGHT)
+    else
+        Device.orig_rotation_mode = nil
+    end
 
-        if receipt_widget then
-            local background_color, background_widget = getReceiptBackground(ui)
-            local widget_to_show = receipt_widget
+    local state = ui and ui.view and ui.view.state
+    local receipt_widget = buildReceipt(ui, state)
 
-            if background_widget then
-                widget_to_show = OverlapGroup:new{
-                    dimen = Screen:getSize(),
-                    background_widget,
-                    receipt_widget,
-                }
-            end
+    if receipt_widget then
+        local background_color, background_widget = getReceiptBackground(ui)
+        local widget_to_show = receipt_widget
 
-            self.screensaver_widget = ScreenSaverWidget:new{
-                widget = widget_to_show,
-                background = background_color,
-                covers_fullscreen = true,
+        if background_widget then
+            widget_to_show = OverlapGroup:new{
+                dimen = Screen:getSize(),
+                background_widget,
+                receipt_widget,
             }
-            self.screensaver_widget.modal = true
-            self.screensaver_widget.dithered = true
+        end
+
+        self.screensaver_widget = ScreenSaverWidget:new{
+            widget = widget_to_show,
+            background = background_color,
+            covers_fullscreen = true,
+        }
+        self.screensaver_widget.modal = true
+        self.screensaver_widget.dithered = true
             -- Screen:clear()
             local screen_w, screen_h = Screen:getWidth(), Screen:getHeight()
             -- Screen:refreshFull(0, 0, Screen:getWidth(), Screen:getHeight())
@@ -960,17 +965,11 @@ Screensaver.show = function(self)
                 UIManager:setDirty(nil, "full")
             end)
             -- end
-            UIManager:show(self.screensaver_widget, "full")
-        else
-            logger.warn("Book receipt: failed to build widget, falling back to default screensaver")
-            showFallbackScreensaver(self, orig_screensaver_show)
-        end
-
-        return
+        UIManager:show(self.screensaver_widget, "full")
+    else
+        logger.warn("Book receipt: failed to build widget, falling back to default screensaver")
+        showFallbackScreensaver(self, orig_screensaver_show)
     end
-
-    logger.dbg("Book receipt: no active document, using fallback screensaver")
-    showFallbackScreensaver(self, orig_screensaver_show)
 end
 
 -- Add screensaver menu option
@@ -981,7 +980,6 @@ _G.dofile = function(filepath)
     local result = orig_dofile(filepath)
 
     if filepath and filepath:match("screensaver_menu%.lua$") then
-        logger.dbg("Book receipt: patching screensaver menu")
 
         if result and result[1] and result[1].sub_item_table then
             local wallpaper_submenu = result[1].sub_item_table
@@ -1063,6 +1061,45 @@ _G.dofile = function(filepath)
                             G_reader_settings:saveSetting(BOOK_RECEIPT_CONTENT_MODE_SETTING, CONTENT_MODE_RANDOM)
                         end,
                         radio = true,
+                    },
+                    {
+                        text = _("Cover scale"),
+                        keep_menu_open = true,
+                        callback = function(touchmenu_instance)
+                            local current_value = G_reader_settings:readSetting(BOOK_RECEIPT_COVER_SCALE_SETTING) or 1
+                            local input_dialog
+                            input_dialog = InputDialog:new{
+                                title = _("Cover scale (default: 1.0)\nSet to 0 to hide cover"),
+								input = tostring(current_value),
+                                input_type = "number",
+                                buttons = {
+                                    {
+                                        {
+                                            text = _("Cancel"),
+                                            id = "close",
+                                            callback = function()
+                                                UIManager:close(input_dialog)
+                                            end,
+                                        },
+										{
+											text = _("Set"),
+											is_enter_default = true,
+											callback = function()
+												local input_text = input_dialog:getInputText()
+												input_text = input_text:gsub(",", ".")
+												local new_value = tonumber(input_text)
+												if new_value and new_value > 0 then
+													G_reader_settings:saveSetting(BOOK_RECEIPT_COVER_SCALE_SETTING, new_value)
+													UIManager:close(input_dialog)
+												end
+											end,
+										},
+                                    },
+                                },
+                            }
+                            UIManager:show(input_dialog)
+                            input_dialog:onShowKeyboard()
+                        end,
                     },
                 },
             }
