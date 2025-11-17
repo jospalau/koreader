@@ -394,11 +394,22 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
     local db_conn = SQ3.open(DataStorage:getSettingsDir() .. "/bookinfo_cache.sqlite3")
     db_conn:set_busy_timeout(5000)
 
-    local query = string.format([[
-        SELECT directory, filename FROM bookinfo
-        WHERE directory = '%s/' AND has_cover = 'Y'
-        ORDER BY filename ASC LIMIT 3;
+    local query = ""
+    if not filepath:match("✪ Collections") then
+        query = string.format([[
+            SELECT directory, filename FROM bookinfo
+            WHERE directory = '%s/' AND has_cover = 'Y'
+            ORDER BY filename ASC LIMIT 3;
     ]], self.filepath:gsub("'", "''"))
+
+    else
+        local collection = filepath:match("([^/\\]+)$")
+        query = string.format([[
+            SELECT directory, filename FROM bookinfo
+            WHERE series = '%s' AND has_cover = 'Y'
+            ORDER BY filename ASC LIMIT 3;
+        ]], collection:gsub("'", "''"))
+    end
 
     local res = db_conn:exec(query)
     db_conn:close()

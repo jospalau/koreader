@@ -30,7 +30,7 @@ local function patchProjectTitleCollections()
     local COLLECTIONS_SEGMENT = COLLECTIONS_SYMBOL .. " " .. _("Collections")
     local custom_icon_path = DataStorage:getDataDir() .. "/icons/folder.collections.svg"
     local custom_icon_exists = util.fileExists(custom_icon_path)
-    
+
     -- Set to false to hide the built-in Favorites collection from the Collections view
     local SHOW_FAVORITES_COLLECTION = false
 
@@ -302,6 +302,14 @@ local function patchProjectTitleCollections()
         end
         return orig_changeToPath(self, path, focused_path)
     end
+
+    -- local userpatch = require("userpatch")
+    -- local ListMenu = require("listmenu")
+    -- local ListMenuItem = userpatch.getUpValue(ListMenu._updateItemsBuildUI, "ListMenuItem")
+    -- local orig_getSubfolderCoverImages = ListMenuItem.getSubfolderCoverImages
+    -- function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
+    --     return orig_getSubfolderCoverImages(self, filepath, max_w, max_h)
+    -- end
 
     logger.info("Project: Title collections view patch applied")
 end
