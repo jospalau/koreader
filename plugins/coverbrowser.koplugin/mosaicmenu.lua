@@ -1325,8 +1325,8 @@ function MosaicMenuItem:paintTo(bb, x, y)
             -- Hueco interno ajustado según rx
             local dx = rx
             local dy = rx
-            local inner_w  = math.max(10, target_width - 4) - 2*rx
-            local inner_h  = math.max(10, target_height - 4) - 2*rx
+            local inner_w  = math.max(10, target_width - 2) - 2*rx
+            local inner_h  = math.max(10, target_height - 2) - 2*rx
             local offset_x = 2 + rx
             local offset_y = 2 + rx
 
