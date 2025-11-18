@@ -112,7 +112,7 @@ function ListMenuItem:init()
     end
 
     if self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks") then
-        self.underline_h = 0 -- smaller than default (3) to not shift our vertical alignment
+        self.underline_h = 0
     else
         self.underline_h = 1 -- smaller than default (3) to not shift our vertical alignment
     end
@@ -167,7 +167,7 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
     else
         border_size = Size.border.thin
     end
-    local border_total = border_size * 2
+    local border_total = 2*border_size
     if res and res[1] and res[2] and res[1][1] then
         local dir_ending = string.sub(res[1][1],-2,-2)
         local num_books = #res[1]
@@ -254,7 +254,7 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
             if self.blanks then
                 for i = 1, blanks do
                     local cover_size = cover_widgets[num_covers].size
-                    table.insert(cover_widgets, 1, { -- To insert blank coverts at the beginning
+                    table.insert(cover_widgets, 1, { -- To insert blank covers at the beginning
                         widget = FrameContainer:new {
                             width = cover_size.w + border_total,
                             height = cover_size.h + border_total,
@@ -353,6 +353,8 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
     local new_h = max_h
     local new_w = math.floor(w * (new_h / h))
     local stock_image = "./plugins/pagetextinfo.koplugin/resources/folder.svg"
+    -- local RenderImage = require("ui/renderimage")
+    -- local cover_bb = RenderImage:renderImageFile(stock_image, false, nil, nil)
     local subfolder_cover_image = ImageWidget:new {
         file = stock_image,
         alpha = true,
@@ -368,7 +370,7 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         -- radius = Size.radius.default,
         margin = 0,
         padding = 0,
-        bordersize = border_size, --Size.border.thin,
+        bordersize = border_size,
         color = Blitbuffer.COLOR_BLACK,
         subfolder_cover_image,
     }
@@ -482,7 +484,7 @@ function ListMenuItem:update()
             dimen = Geom:new { w = dimen.h, h = dimen.h },
             margin = 0,
             padding = 0,
-            background = Blitbuffer.COLOR_WHITE,
+            -- background = Blitbuffer.COLOR_WHITE, -- Make it transparent so _underline_container can be visible always
             -- background = Blitbuffer.colorFromName("orange"),
             bordersize = 0,
             dim = self.file_deleted,
@@ -527,7 +529,7 @@ function ListMenuItem:update()
                 dimen = dimen:copy(),
                 HorizontalGroup:new {
                     HorizontalSpan:new { width = Screen:scaleBySize(0) },
-                    folder_cover,
+                    folder_cover,  -- Comment line to have directory names
                     HorizontalSpan:new { width = Screen:scaleBySize(5) },
                     wleft,
                 }
