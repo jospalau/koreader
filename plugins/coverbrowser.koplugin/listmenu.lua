@@ -193,11 +193,11 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
 
             local num_covers = #covers
             if num_covers > 1 then
-                cover_max_h = math.floor(max_h * (1 - (math.abs(self.factor_y) * (num_covers - 1))))
+                cover_max_h = math.ceil(max_h * (1 - (math.abs(self.factor_y) * (num_covers - 1))))
             end
 
             if self.blanks then
-                cover_max_h = math.floor(max_h * (1 - (math.abs(self.factor_y) * 3)))
+                cover_max_h = math.ceil(max_h * (1 - (math.abs(self.factor_y) * 3)))
             end
 
             for i, bookinfo in ipairs(covers) do
@@ -216,7 +216,7 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                 if #covers == 1 and self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks") then
                     local w, h = bookinfo.cover_w, bookinfo.cover_h
                     local new_h = cover_max_w
-                    local new_w = math.floor(w * (new_h / h))
+                    local new_w = math.ceil(w * (new_h / h))
                     cover_widget = ImageWidget:new{
                         image = bookinfo.cover_bb,
                         width = new_w,
@@ -340,7 +340,7 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
             -- I need the proper real size of a cover without reduction, I take the folder image
             local base_w, base_h = 450, 680
             local new_h = max_h
-            local new_w = math.floor(base_w * (new_h / base_h))
+            local new_w = math.ceil(base_w * (new_h / base_h))
             local width = math.ceil((new_w* (1 - (self.factor_y * 3))) + 3 * self.offset_x + border_total)
             return CenterContainer:new {
                 dimen = Geom:new { w = width, h = max_h }, -- Center container to have whole width
@@ -351,7 +351,7 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
 
     local w, h = 450, 680
     local new_h = max_h
-    local new_w = math.floor(w * (new_h / h))
+    local new_w = math.ceil(w * (new_h / h))
     local stock_image = "./plugins/pagetextinfo.koplugin/resources/folder.svg"
     -- local RenderImage = require("ui/renderimage")
     -- local cover_bb = RenderImage:renderImageFile(stock_image, false, nil, nil)
@@ -375,10 +375,16 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         subfolder_cover_image,
     }
     -- The width has to be the same than the width when there are 4 covers, so we escalate it and center it
-    local width = math.floor((cover_size.w * (1 - (self.factor_y * 3))) + 3 * self.offset_x + border_total)
+    local width = math.ceil((cover_size.w * (1 - (self.factor_y * 3))) + 3 * self.offset_x + border_total)
     return CenterContainer:new {
         dimen = Geom:new { w = width, h = max_h },
+        FrameContainer:new {
+        margin = 0,
+        padding = 0,
+        bordersize = 0,
+        color = Blitbuffer.COLOR_BLACK,
         widget,
+    },
     }
 end
 
@@ -1391,7 +1397,6 @@ function ListMenu:_updateItemsBuildUI()
             item_shortcut = self.item_shortcuts[idx]
             shortcut_style = (idx < 11 or idx > 20) and "square" or "grey_square"
         end
-
         local item_tmp = ListMenuItem:new{
                 height = self.item_height,
                 width = self.item_width,
