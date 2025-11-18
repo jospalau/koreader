@@ -1311,6 +1311,9 @@ This is to be active only if the option flash buttons and menu items or the opti
                         self.settings:flush()
 
                         local path = FileManager.instance.file_chooser.path
+                        if path:match("✪ Collections") then
+                            path = G_reader_settings:readSetting("home_dir")
+                        end
                         touchmenu_instance:closeMenu()
                         --self.ui.menu:onCloseFileManagerMenu()
                         local cur_page = FileManager.instance.file_chooser.page
