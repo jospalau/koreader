@@ -418,7 +418,6 @@ function ListMenuItem:update()
         border_size = Size.border.thin
     end
 
-    local padding_size = Screen:scaleBySize(4)
     local max_img_w = dimen.h - 2*border_size -- width = height, squared
     local max_img_h = dimen.h - 2*border_size
     local cover_specs = {
@@ -470,26 +469,26 @@ function ListMenuItem:update()
 
         local pad_width = Screen:scaleBySize(10) -- on the left, in between, and on the right
         -- add cover-art sized icon for folders
-        local subfolder_cover_image
+        local folder_cover
 
         -- check for folder image
-        subfolder_cover_image = ptutil.getFolderCover(self.filepath, max_img_w * 0.82, max_img_h)
+        folder_cover = ptutil.getFolderCover(self.filepath, max_img_w * 0.82, max_img_h)
         -- check for books with covers in the subfolder
-        if subfolder_cover_image == nil and not BookInfoManager:getSetting("disable_auto_foldercovers") then
-            subfolder_cover_image = self:getSubfolderCoverImages(self.filepath, max_img_w, max_img_h)
+        if folder_cover == nil and not BookInfoManager:getSetting("disable_auto_foldercovers") then
+            folder_cover = self:getSubfolderCoverImages(self.filepath, max_img_w, max_img_h)
         end
         -- use stock folder icon
 
-        local folder_cover = FrameContainer:new {
-            dimen = Geom:new { w = dimen.h, h = dimen.h },
-            margin = 0,
-            padding = 0,
-            -- background = Blitbuffer.COLOR_WHITE, -- Make it transparent so _underline_container can be visible always
-            -- background = Blitbuffer.colorFromName("orange"),
-            bordersize = 0,
-            dim = self.file_deleted,
-            subfolder_cover_image,
-        }
+        -- local folder_cover = FrameContainer:new {
+        --     dimen = Geom:new { w = dimen.h, h = dimen.h },
+        --     margin = 0,
+        --     padding = 0,
+        --     -- background = Blitbuffer.COLOR_WHITE, -- Make it transparent so _underline_container can be visible always
+        --     -- background = Blitbuffer.colorFromName("orange"),
+        --     bordersize = 0,
+        --     dim = self.file_deleted,
+        --     subfolder_cover_image,
+        -- }
 
         -- local folder_cover = HorizontalGroup:new {
         --     HorizontalSpan:new { width = 0 },
