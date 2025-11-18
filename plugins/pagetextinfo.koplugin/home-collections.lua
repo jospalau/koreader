@@ -298,6 +298,8 @@ local function patchProjectTitleCollections()
                 self.focused_path = focused_path
             end
             self:refreshPath()
+            local Event = require("ui/event")
+            self.ui:handleEvent(Event:new("PathChanged", path))
             return
         end
         return orig_changeToPath(self, path, focused_path)

@@ -1008,6 +1008,13 @@ function FileManager:cutFile(file)
 end
 
 function FileManager:pasteFileFromClipboard(file)
+    if self.file_chooser.path:match("✪ Collections") then
+        local Notification = require("ui/widget/notification")
+        UIManager:show(Notification:new{
+            text = _("Can't copy into a collection"),
+        })
+        return
+    end
     local orig_file = ffiUtil.realpath(self.clipboard)
     local orig_name = ffiUtil.basename(orig_file)
     local dest_path = ffiUtil.realpath(file or self.file_chooser.path)
