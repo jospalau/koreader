@@ -419,7 +419,7 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         local num_books = #res[1]
 
         -- Author folder or Series folder
-        local folder_type = "Author"
+        local folder_type = "Series"
         if string.sub(res[1][1],-2,-2) == "-" then folder_type = "Author" end
 
         -- Save all covers
@@ -438,7 +438,7 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         -- Constants
         local border_total = 0 -- Size.border.thin * 2
         -- Series
-        local offset_x = math.floor(max_w * 0.25)  -- 25% of width to the right
+        local offset_x = math.floor(max_w * 0.10)  -- 25% of width to the right
         local offset_y = math.floor(max_h * 0.05)  -- 5% of height down
         -- Author (smaller)
         if folder_type == "Author" then
@@ -652,6 +652,72 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
     end
 end
 
+local AlphaContainer = require("ui/widget/container/alphacontainer")
+local RightContainer = require("ui/widget/container/rightcontainer")
+local TextWidget = require("ui/widget/textwidget")
+local Folder = {
+    edge = {
+        thick = Screen:scaleBySize(2.5),
+        margin = Size.line.medium,
+        color = Blitbuffer.COLOR_GRAY_4,
+        width = 0.97,
+    },
+    face = {
+        border_size = Size.border.thick,
+        alpha = 0.75,
+        nb_items_font_size = 20,
+        nb_items_margin = Screen:scaleBySize(5),
+        dir_max_font_size = 25,
+    },
+}
+
+local function capitalize(sentence)
+    local words = {}
+    for word in sentence:gmatch("%S+") do
+        table.insert(words, word:sub(1, 1):upper() .. word:sub(2):lower())
+    end
+    return table.concat(words, " ")
+end
+
+function MosaicMenuItem:_getTextBoxes(dimen)
+    local nbitems = TextWidget:new {
+        text = self.mandatory and self.mandatory:match("^(%S+)") or "", -- nb books
+        face = Font:getFace("cfont", Folder.face.nb_items_font_size),
+        bold = true,
+        padding = 0,
+    }
+
+    local text = self.text
+    if text:match("/$") then text = text:sub(1, -2) end -- remove "/"
+    text = BD.directory(capitalize(text))
+    local available_height = dimen.h - 2 * nbitems:getSize().h
+    local dir_font_size = Folder.face.dir_max_font_size
+    local directory
+
+    while true do
+        if directory then directory:free(true) end
+        directory = TextBoxWidget:new {
+            text = text,
+            face = Font:getFace("cfont", dir_font_size),
+            width = dimen.w,
+            alignment = "center",
+            bold = true,
+        }
+        if directory:getSize().h <= available_height then break end
+        dir_font_size = dir_font_size - 1
+        if dir_font_size < 10 then -- don't go too low
+            directory:free()
+            directory.height = available_height
+            directory.height_adjust = true
+            directory.height_overflow_show_ellipsis = true
+            directory:init()
+            break
+        end
+    end
+
+    return directory, nbitems
+end
+
 function MosaicMenuItem:update()
     -- We will be a distinctive widget whether we are a directory,
     -- a known file with image / without image, or a not yet known file
@@ -796,80 +862,151 @@ function MosaicMenuItem:update()
             directory_frame,
         }
 
-        -- -- use non-alpha styling when focus indicator is involved
-        -- if not Device:isTouchDevice() or BookInfoManager:getSetting("force_focus_indicator") then
-        --     directory = FrameContainer:new {
-        --         bordersize = 0,
-        --         padding = 0,
-        --         margin = 0,
-        --         background = Blitbuffer.COLOR_WHITE,
-        --         directory_frame,
-        --     }
-        -- end
+        -- -- -- use non-alpha styling when focus indicator is involved
+        -- -- if not Device:isTouchDevice() or BookInfoManager:getSetting("force_focus_indicator") then
+        -- --     directory = FrameContainer:new {
+        -- --         bordersize = 0,
+        -- --         padding = 0,
+        -- --         margin = 0,
+        -- --         background = Blitbuffer.COLOR_WHITE,
+        -- --         directory_frame,
+        -- --     }
+        -- -- end
 
-        local nbitems_text = TextWidget:new {
-            text = " " .. nbitems_string .. " ",
-            face = Font:getFace("infont", 15),
-            max_width = dimen.w,
-            alignment = "center",
-            padding = Size.padding.tiny,
-        }
-        local nbitems_frame = UnderlineContainer:new {
-            linesize = Screen:scaleBySize(1),
-            color = Blitbuffer.COLOR_BLACK,
-            bordersize = 0,
+        -- local nbitems_text = TextWidget:new {
+        --     text = " " .. nbitems_string .. " ",
+        --     face = Font:getFace("infont", 15),
+        --     max_width = dimen.w,
+        --     alignment = "center",
+        --     padding = Size.padding.tiny,
+        -- }
+        -- local nbitems_frame = UnderlineContainer:new {
+        --     linesize = Screen:scaleBySize(1),
+        --     color = Blitbuffer.COLOR_BLACK,
+        --     bordersize = 0,
+        --     padding = 0,
+        --     margin = 0,
+        --     HorizontalGroup:new {
+        --         nbitems_text,
+        --         LineWidget:new {
+        --             dimen = Geom:new { w = Screen:scaleBySize(1), h = directory_text:getSize().h, },
+        --             background = Blitbuffer.COLOR_BLACK,
+        --         },
+        --     },
+        -- }
+        -- local nbitems_frame_container = AlphaContainer:new {
+        --     alpha = alpha_level,
+        --     nbitems_frame,
+        -- }
+
+        -- -- -- use non-alpha styling when focus indicator is involved
+        -- -- if not Device:isTouchDevice() or BookInfoManager:getSetting("force_focus_indicator") then
+        -- --     nbitems_frame_container = FrameContainer:new {
+        -- --         bordersize = 0,
+        -- --         padding = 0,
+        -- --         margin = 0,
+        -- --         background = Blitbuffer.COLOR_WHITE,
+        -- --         nbitems_frame,
+        -- --     }
+        -- -- end
+
+        -- local nbitems = HorizontalGroup:new {
+        --     dimen = dimen,
+        --     HorizontalSpan:new {
+        --         width = dimen.w - nbitems_frame:getSize().w - Size.padding.small
+        --     },
+        --     nbitems_frame_container
+        -- }
+
+        -- local widget_parts = OverlapGroup:new {
+        --     dimen = dimen,
+        --     CenterContainer:new { dimen = dimen, subfolder_cover_image },
+        -- }
+        -- -- if BookInfoManager:getSetting("show_name_grid_folders") then
+        -- table.insert(widget_parts, TopContainer:new { dimen = dimen, directory })
+        -- -- table.insert(widget_parts, LeftContainer:new { dimen = dimen, directory })
+        -- table.insert(widget_parts, BottomContainer:new { dimen = dimen, nbitems })
+        -- end
+        -- widget = FrameContainer:new {
+        --     width = dimen.w,
+        --     height = dimen.h,
+        --     margin = 0,
+        --     padding = 0,
+        --     bordersize = 0,
+        --     radius = nil,
+        --     widget_parts,
+        -- }
+
+
+    local size = subfolder_cover_image:getSize()
+    local directory, nbitems = self:_getTextBoxes { w = size.w, h = size.h }
+    local size = nbitems:getSize()
+    local nb_size = math.max(size.w, size.h)
+
+    local folder_name_widget
+    folder_name_widget = CenterContainer:new {
+        dimen = dimen,
+        FrameContainer:new {
             padding = 0,
-            margin = 0,
-            HorizontalGroup:new {
-                nbitems_text,
-                LineWidget:new {
-                    dimen = Geom:new { w = Screen:scaleBySize(1), h = directory_text:getSize().h, },
-                    background = Blitbuffer.COLOR_BLACK,
+            bordersize = Folder.face.border_size,
+            AlphaContainer:new { alpha = Folder.face.alpha, directory },
+        },
+        overlap_align = "center",
+    }
+    local nbitems_widget
+    if tonumber(nbitems.text) ~= 0 then
+        local pad = math.ceil(nb_size * 0.05)
+        nbitems_widget = BottomContainer:new {
+            dimen = dimen,
+            RightContainer:new {
+                dimen = {
+                    w = dimen.w - Folder.face.nb_items_margin,
+                    h = nb_size + Folder.face.nb_items_margin * 2 + math.ceil(nb_size * 0.125),
+                },
+                FrameContainer:new {
+                    padding = 0,
+                    padding_bottom = pad,
+                    radius = math.ceil(nb_size * 0.5),
+                    background = Blitbuffer.COLOR_WHITE,
+                    CenterContainer:new { dimen = { w = nb_size, h = nb_size }, nbitems },
                 },
             },
+            overlap_align = "center",
         }
-        local nbitems_frame_container = AlphaContainer:new {
-            alpha = alpha_level,
-            nbitems_frame,
-        }
+    else
+        nbitems_widget = VerticalSpan:new { width = 0 }
+    end
 
-        -- -- use non-alpha styling when focus indicator is involved
-        -- if not Device:isTouchDevice() or BookInfoManager:getSetting("force_focus_indicator") then
-        --     nbitems_frame_container = FrameContainer:new {
-        --         bordersize = 0,
-        --         padding = 0,
-        --         margin = 0,
-        --         background = Blitbuffer.COLOR_WHITE,
-        --         nbitems_frame,
-        --     }
-        -- end
+    local top_h = 2 * (Folder.edge.thick + Folder.edge.margin)
+    local nb_widget
 
-        local nbitems = HorizontalGroup:new {
-            dimen = dimen,
-            HorizontalSpan:new {
-                width = dimen.w - nbitems_frame:getSize().w - Size.padding.small
+    if directory_string:match("✪ Collections") or directory_string:match("%(%d+%)") then
+        nb_widget = nil
+    else
+        nb_widget = nbitems_widget
+    end
+    widget = CenterContainer:new {
+        dimen = { w = self.width, h = self.height },
+        VerticalGroup:new {
+            -- VerticalSpan:new { width = math.max(0, math.ceil((self.height - (top_h + dimen.h)) * 0.5)) },
+            -- LineWidget:new {
+            --     background = Folder.edge.color,
+            --     dimen = { w = math.floor(dimen.w * (Folder.edge.width ^ 2)), h = Folder.edge.thick },
+            -- },
+            -- VerticalSpan:new { width = Folder.edge.margin },
+            -- LineWidget:new {
+            --     background = Folder.edge.color,
+            --     dimen = { w = math.floor(dimen.w * Folder.edge.width), h = Folder.edge.thick },
+            -- },
+            -- VerticalSpan:new { width = Folder.edge.margin },
+            OverlapGroup:new {
+                dimen = { w = self.width, h = self.height - top_h },
+                subfolder_cover_image,
+                folder_name_widget,
+                nb_widget,
             },
-            nbitems_frame_container
-        }
-
-        local widget_parts = OverlapGroup:new {
-            dimen = dimen,
-            CenterContainer:new { dimen = dimen, subfolder_cover_image },
-        }
-        -- if BookInfoManager:getSetting("show_name_grid_folders") then
-        table.insert(widget_parts, TopContainer:new { dimen = dimen, directory })
-        -- table.insert(widget_parts, LeftContainer:new { dimen = dimen, directory })
-        table.insert(widget_parts, BottomContainer:new { dimen = dimen, nbitems })
-        -- end
-        widget = FrameContainer:new {
-            width = dimen.w,
-            height = dimen.h,
-            margin = 0,
-            padding = 0,
-            bordersize = 0,
-            radius = nil,
-            widget_parts,
-        }
+        },
+    }
     else -- file
         self.file_deleted = self.entry.dim -- entry with deleted file from History or selected file from FM
 
