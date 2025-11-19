@@ -399,7 +399,7 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         query = string.format([[
             SELECT directory, filename FROM bookinfo
             WHERE directory = '%s/' AND has_cover = 'Y'
-            ORDER BY filename ASC LIMIT 3;
+            ORDER BY filename ASC LIMIT 4;
     ]], self.filepath:gsub("'", "''"))
 
     else
@@ -407,7 +407,7 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         query = string.format([[
             SELECT directory, filename FROM bookinfo
             WHERE series = '%s' AND has_cover = 'Y'
-            ORDER BY filename ASC LIMIT 3;
+            ORDER BY filename ASC LIMIT 4;
         ]], collection:gsub("'", "''"))
     end
 
@@ -419,8 +419,6 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         local num_books = #res[1]
 
         -- Author folder or Series folder
-        local folder_type = "Series"
-        if string.sub(res[1][1],-2,-2) == "-" then folder_type = "Author" end
 
         -- Save all covers
         local covers = {}
@@ -436,33 +434,11 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         end
 
         -- Constants
-        local border_total = 0 -- Size.border.thin * 2
-        -- Series
-        local offset_x = math.floor(max_w * 0.10)  -- 25% of width to the right
-        local offset_y = math.floor(max_h * 0.05)  -- 5% of height down
-        -- Author (smaller)
-        if folder_type == "Author" then
-            offset_x = math.floor(max_w * 0.25)
-            offset_y = math.floor(max_w * 0.10)
-        end
+        local border_total = Size.border.thin * 2
 
         -- Scale all covers smaller to fit with offset
-        local available_w = max_w - (#covers-1)*offset_x - border_total
-        local available_h = max_h - (#covers-1)*offset_y - border_total
-        -- Deal with Series, 1 book (will want a blank book showing)
-        if folder_type == "Series" and #covers == 1 then
-            available_w = max_w - offset_x - border_total
-            available_h = max_h - offset_y - border_total
-        end
-        -- Deal with Author, multiple books (still want smaller books)
-        if folder_type == "Author" and #covers > 1 then
-            available_h = max_h - 2*offset_y - border_total
-        end
-
-        -- local raw_offset_x = max_w * 0.25
-        -- local offset_x = math.floor(raw_offset_x)
-        -- local frac_x = raw_offset_x - offset_x
-        -- local correction_x = math.floor(frac_x * (#covers - 1) + 0.5)
+        local available_w = max_w - (#covers-1)*self.offset_x - border_total
+        local available_h = max_h - (#covers-1)*self.offset_y - border_total
 
         -- If we expand the covers image using the enable_extra_tweaks_mosaic_view setting and there are 2 or 3 covers
         -- there is a little gap on the right side that needs to be compensated with 2px
@@ -470,13 +446,22 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         local correction_x = 0 -- 2
         -- Make sure this isn't an empty folder
         if #covers > 0 then
-            -- Now make the Individual cover widgets
             local cover_widgets = {}
+            local num_covers = #covers
+            local cover_max_w = max_w
+            if num_covers > 1 then
+                cover_max_h = math.ceil(max_h * (1 - (math.abs(self.factor_y) * (num_covers - 1))))
+            end
+
+            if self.blanks then
+                cover_max_h = math.ceil(max_h * (1 - (math.abs(self.factor_y) * 3)))
+            end
+            -- Now make the Individual cover widgets
             for i, bookinfo in ipairs(covers) do
                 -- figure out scale factor
                 local _, _, scale_factor = BookInfoManager.getCachedCoverSize(
                     bookinfo.cover_w, bookinfo.cover_h,
-                    available_w, available_h
+                    cover_max_w, cover_max_h
                 )
 
                 -- make the individual cover widget
@@ -502,8 +487,8 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                     cover_widget = ImageWidget:new {
                         image = bookinfo.cover_bb,
                         scale_factor = nil,
-                        width = self.width - offset_x,
-                        height = self.height - offset_y,
+                        width = self.width - self.offset_x,
+                        height = self.height - self.offset_y,
                     }
                 end
 
@@ -511,8 +496,8 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                     cover_widget = ImageWidget:new {
                         image = bookinfo.cover_bb,
                         scale_factor = nil,
-                        width = self.width - offset_x * 2,
-                        height = self.height - offset_y * 2,
+                        width = self.width - self.offset_x * 2,
+                        height = self.height - self.offset_y * 2,
                     }
                 end
 
@@ -525,36 +510,63 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                         radius = Size.radius.default,
                         margin = 0,
                         padding = 0,
-                        bordersize = 0, --Size.border.thin,
-                        color = Blitbuffer.COLOR_DARK_GRAY,
+                        bordersize =  Size.border.thin,
+                        color = Blitbuffer.COLOR_BLACK,
                         cover_widget,
                     },
                     size = cover_size
                 })
             end
 
-            -- -- blank cover
-            -- local cover_size = cover_widgets[1].size
-            -- if folder_type == "Series" and #covers == 1 then
-            --     -- insert a blank cover
-            --     table.insert(cover_widgets, {
-            --         widget = FrameContainer:new {
-            --             width = cover_size.w + border_total,
-            --             height = cover_size.h + border_total,
-            --             radius = Size.radius.default,
-            --             margin = 0,
-            --             padding = 0,
-            --             bordersize = 0, --Size.border.thin,
-            --             color = Blitbuffer.COLOR_DARK_GRAY,
-            --             background = Blitbuffer.COLOR_LIGHT_GRAY,
-            --             HorizontalSpan:new { width = cover_size.w, height = cover_size.h },
-            --         },
-            --         size = cover_size
-            --     })
-            -- end
+            local num_covers = #covers
+            local blanks = 0
+            if num_covers == 3 then
+                blanks = 1
+            elseif num_covers == 2 then
+                blanks = 2
+            elseif num_covers == 1 then
+                blanks = 3
+            end
+            -- blank covers
+            if self.blanks then
+                for i = 1, blanks do
+                    local cover_size = cover_widgets[num_covers].size
+                    table.insert(cover_widgets, 1, { -- To insert blank covers at the beginning
+                        widget = FrameContainer:new {
+                            width = cover_size.w + border_total,
+                            height = cover_size.h + border_total,
+                            radius = Size.radius.default,
+                            margin = 0,
+                            padding = 0,
+                            bordersize = Size.border.thin, -- Always border for blank covers
+                            color = Blitbuffer.COLOR_BLACK,
+                            background = Blitbuffer.COLOR_LIGHT_GRAY,
+                            HorizontalSpan:new { width = cover_size.w, height = cover_size.h },
+                        },
+                        size = cover_size
+                    })
+                end
+                -- Reverse order
+                -- for i = 1, blanks do
+                --     local cover_size = cover_widgets[num_covers].size
+                --     table.insert(cover_widgets, 1, {
+                --         widget = FrameContainer:new {
+                --             width = cover_size.w + border_total,
+                --             height = cover_size.h + border_total,
+                --             radius = Size.radius.default,
+                --             margin = 0,
+                --             padding = 0,
+                --             bordersize = Size.border.thin,
+                --             color = Blitbuffer.COLOR_BLACK,
+                --             background = Blitbuffer.COLOR_LIGHT_GRAY,
+                --             HorizontalSpan:new { width = cover_size.w, height = cover_size.h },
+                --         },
+                --         size = cover_size
+                --     })
+                -- end
+            end
 
-            -- If Author single book, return early
-            if #covers == 1 then -- folder_type == "Author" and #covers == 1 then
+            if #covers == 1 then
                 return CenterContainer:new {
                     dimen = Geom:new { w = max_w, h = max_h },
                     cover_widgets[1].widget,
@@ -564,92 +576,92 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
             -- Make the overlap group widget (default is 2 books in series mode)
             -- At this point, either it was Author and orig had 1 book (returned already)
             --   or, it was Series and orig had 1 book (had a blank book inserted)
-            local total_width = cover_widgets[1].size.w + border_total + (#cover_widgets-1)*offset_x
-            local total_height = cover_widgets[1].size.h + border_total + (#cover_widgets-1)*offset_y
+            local total_width = cover_widgets[1].size.w + border_total + (#cover_widgets-1)*self.offset_x
+            local total_height = cover_widgets[1].size.h + border_total + (#cover_widgets-1)*self.offset_y
+            local children = {}
+
+            local total_width, total_height = 0, 0
+            for i, cover in ipairs(cover_widgets) do
+                total_width = math.max(total_width, cover.size.w + (i-1)*self.offset_x)
+                total_height = math.max(total_height, cover.size.h + (i-1)*self.offset_y)
+            end
+
+            -- calcular desplazamiento para centrar
+            local start_x = math.floor((max_w - total_width)/2)
+            local start_y = math.floor((max_h - total_height)/2)
+
+            -- crear FrameContainer de cada portada con offset + centrado
+            local children = {}
+            for i, cover in ipairs(cover_widgets) do
+                children[#children+1] = FrameContainer:new{
+                    margin = 0,
+                    padding = 0,
+                    padding_left = (i - 1) * self.offset_x,
+                    padding_top  = (i - 1) * self.offset_y,
+                    bordersize = 0,
+                    cover.widget,
+                }
+            end
+            -- -- Reverse order
+            -- for i = #cover_widgets, 1, -1 do
+            --     local idx = (#cover_widgets - i)
+            --     children[#children + 1] = FrameContainer:new{
+            --         margin = 0,
+            --         padding = 0,
+            --         padding_left = start_x + (i-1)*offset_x,
+            --         padding_top  = start_y + (i-1)*offset_y,
+            --         bordersize = 0,
+            --         cover_widgets[i].widget,
+            --     }
+            -- end
+
             local overlap = OverlapGroup:new {
                 dimen = Geom:new { w = total_width, h = total_height },
-                -- Second cover (offset down and right)
-                FrameContainer:new {
-                    margin = 0,
-                    padding = 0,
-                    padding_left = offset_x + correction_x,
-                    padding_top = offset_y,
-                    bordersize = 0,
-                    cover_widgets[2].widget,
-                },
-                -- Front cover (top-left)
-                FrameContainer:new {
-                    margin = 0,
-                    padding = 0,
-                    bordersize = 0,
-                    cover_widgets[1].widget,
-                },
+                table.unpack(children),
             }
-
-            -- Now for the different formats
-            if folder_type == "Series" and #cover_widgets == 3 then
-                -- overlap third cover
-                local overlap3 = OverlapGroup:new {
-                    dimen = Geom:new { w = total_width, h = total_height },
-                    FrameContainer:new {
-                        margin = 0,
-                        padding = 0,
-                        padding_left = 2*offset_x + correction_x,
-                        padding_top = 2*offset_y,
-                        bordersize = 0,
-                        cover_widgets[3].widget,
-                    },
-                    overlap,
-                }
-                overlap = overlap3
-            elseif folder_type == "Author" then
-                -- rewrite overlap group
-                overlap = OverlapGroup:new {
-                    dimen = Geom:new { w = total_width, h = total_height },
-                    -- Second cover (up and right)
-                    FrameContainer:new {
-                        margin = 0,
-                        padding = 0,
-                        padding_left = offset_x + correction_x,
-                        padding_top = 0,
-                        bordersize = 0,
-                        cover_widgets[2].widget,
-                    },
-                    -- Front cover (middletop-left)
-                    FrameContainer:new {
-                        margin = 0,
-                        padding = 0,
-                        padding_top = offset_y,
-                        bordersize = 0,
-                        cover_widgets[1].widget,
-                    },
-                }
-                if #cover_widgets == 3 then
-                    -- overlap third cover
-                    local overlap3 = OverlapGroup:new {
-                        dimen = Geom:new { w = total_width, h = total_height },
-                        FrameContainer:new {
-                            margin = 0,
-                            padding = 0,
-                            padding_left = 2*offset_x + correction_x,
-                            padding_top = 2*offset_y,
-                            bordersize = 0,
-                            cover_widgets[3].widget,
-                        },
-                        overlap,
-                    }
-                    overlap = overlap3
-                end
-            end
 
             -- return the center container
             return CenterContainer:new {
-                dimen = Geom:new { w = max_w, h = max_h },
+                dimen = Geom:new { w = total_width, h = total_height },
                 overlap,
             }
         end
-
     end
+    local w, h = 450, 680
+    local new_h = max_h
+    local new_w = math.ceil(w * (new_h / h))
+    local stock_image = "./plugins/pagetextinfo.koplugin/resources/folder.svg"
+    -- local RenderImage = require("ui/renderimage")
+    -- local cover_bb = RenderImage:renderImageFile(stock_image, false, nil, nil)
+    local subfolder_cover_image = ImageWidget:new {
+        file = stock_image,
+        alpha = true,
+        scale_factor = nil,
+        width = new_w,
+        height = new_h,
+    }
+
+    local cover_size = subfolder_cover_image:getSize()
+    local widget = FrameContainer:new {
+        width = cover_size.w,
+        height = cover_size.h,
+        -- radius = Size.radius.default,
+        margin = 0,
+        padding = 0,
+        bordersize = 0,
+        color = Blitbuffer.COLOR_BLACK,
+        subfolder_cover_image,
+    }
+    return CenterContainer:new {
+        dimen = Geom:new { w = max_w, h = max_h },
+        FrameContainer:new {
+            margin = 0,
+            padding = 0,
+            bordersize = 0,
+            color = Blitbuffer.COLOR_BLACK,
+            widget,
+        },
+    }
 end
 
 local AlphaContainer = require("ui/widget/container/alphacontainer")
@@ -761,6 +773,11 @@ function MosaicMenuItem:update()
         self.menu.cover_specs = false
     end
 
+    self.blanks = false
+    self.factor_x = 0.10 -- 10% of width to the right
+    self.factor_y = 0.05 -- 10% of height down -- Use a negative values for reverse order, ideally 0.05 or -0,05
+    self.offset_x = math.floor(max_img_w * self.factor_x)
+    self.offset_y = math.floor(max_img_h * self.factor_y)
     self.is_directory = not (self.entry.is_file or self.entry.file)
     if self.is_directory then
         local AlphaContainer = require("ui/widget/container/alphacontainer")
@@ -794,28 +811,6 @@ function MosaicMenuItem:update()
         -- check for books with covers in the subfolder
         if subfolder_cover_image == nil and not BookInfoManager:getSetting("disable_auto_foldercovers") then
             subfolder_cover_image = self:getSubfolderCoverImages(self.filepath, max_img_w, max_img_h)
-        end
-        -- use stock folder icon
-        if subfolder_cover_image == nil then
-            local stock_image = "./plugins/pagetextinfo.koplugin/resources/folder.svg"
-            local _, _, scale_factor = BookInfoManager.getCachedCoverSize(250, 500, max_img_w * 1.1, max_img_h * 1.1)
-            subfolder_cover_image = FrameContainer:new {
-                width = dimen.w,
-                height = dimen.h,
-                margin = 0,
-                padding = 0,
-                color = Blitbuffer.COLOR_WHITE,
-                bordersize = 0,
-                dim = self.file_deleted,
-                ImageWidget:new({
-                    file = stock_image,
-                    alpha = true,
-                    scale_factor = scale_factor,
-                    width = max_img_w,
-                    height = max_img_h,
-                    original_in_nightmode = false,
-                }),
-            }
         end
 
         -- build final widget with whatever we assembled from above
@@ -862,151 +857,74 @@ function MosaicMenuItem:update()
             directory_frame,
         }
 
-        -- -- -- use non-alpha styling when focus indicator is involved
-        -- -- if not Device:isTouchDevice() or BookInfoManager:getSetting("force_focus_indicator") then
-        -- --     directory = FrameContainer:new {
-        -- --         bordersize = 0,
-        -- --         padding = 0,
-        -- --         margin = 0,
-        -- --         background = Blitbuffer.COLOR_WHITE,
-        -- --         directory_frame,
-        -- --     }
-        -- -- end
+        local size = subfolder_cover_image:getSize()
+        local directory, nbitems = self:_getTextBoxes { w = size.w, h = size.h }
+        local size = nbitems:getSize()
+        local nb_size = math.max(size.w, size.h)
 
-        -- local nbitems_text = TextWidget:new {
-        --     text = " " .. nbitems_string .. " ",
-        --     face = Font:getFace("infont", 15),
-        --     max_width = dimen.w,
-        --     alignment = "center",
-        --     padding = Size.padding.tiny,
-        -- }
-        -- local nbitems_frame = UnderlineContainer:new {
-        --     linesize = Screen:scaleBySize(1),
-        --     color = Blitbuffer.COLOR_BLACK,
-        --     bordersize = 0,
-        --     padding = 0,
-        --     margin = 0,
-        --     HorizontalGroup:new {
-        --         nbitems_text,
-        --         LineWidget:new {
-        --             dimen = Geom:new { w = Screen:scaleBySize(1), h = directory_text:getSize().h, },
-        --             background = Blitbuffer.COLOR_BLACK,
-        --         },
-        --     },
-        -- }
-        -- local nbitems_frame_container = AlphaContainer:new {
-        --     alpha = alpha_level,
-        --     nbitems_frame,
-        -- }
-
-        -- -- -- use non-alpha styling when focus indicator is involved
-        -- -- if not Device:isTouchDevice() or BookInfoManager:getSetting("force_focus_indicator") then
-        -- --     nbitems_frame_container = FrameContainer:new {
-        -- --         bordersize = 0,
-        -- --         padding = 0,
-        -- --         margin = 0,
-        -- --         background = Blitbuffer.COLOR_WHITE,
-        -- --         nbitems_frame,
-        -- --     }
-        -- -- end
-
-        -- local nbitems = HorizontalGroup:new {
-        --     dimen = dimen,
-        --     HorizontalSpan:new {
-        --         width = dimen.w - nbitems_frame:getSize().w - Size.padding.small
-        --     },
-        --     nbitems_frame_container
-        -- }
-
-        -- local widget_parts = OverlapGroup:new {
-        --     dimen = dimen,
-        --     CenterContainer:new { dimen = dimen, subfolder_cover_image },
-        -- }
-        -- -- if BookInfoManager:getSetting("show_name_grid_folders") then
-        -- table.insert(widget_parts, TopContainer:new { dimen = dimen, directory })
-        -- -- table.insert(widget_parts, LeftContainer:new { dimen = dimen, directory })
-        -- table.insert(widget_parts, BottomContainer:new { dimen = dimen, nbitems })
-        -- end
-        -- widget = FrameContainer:new {
-        --     width = dimen.w,
-        --     height = dimen.h,
-        --     margin = 0,
-        --     padding = 0,
-        --     bordersize = 0,
-        --     radius = nil,
-        --     widget_parts,
-        -- }
-
-
-    local size = subfolder_cover_image:getSize()
-    local directory, nbitems = self:_getTextBoxes { w = size.w, h = size.h }
-    local size = nbitems:getSize()
-    local nb_size = math.max(size.w, size.h)
-
-    local folder_name_widget
-    folder_name_widget = CenterContainer:new {
-        dimen = dimen,
-        FrameContainer:new {
-            padding = 0,
-            bordersize = Folder.face.border_size,
-            AlphaContainer:new { alpha = Folder.face.alpha, directory },
-        },
-        overlap_align = "center",
-    }
-    local nbitems_widget
-    if tonumber(nbitems.text) ~= 0 then
-        local pad = math.ceil(nb_size * 0.05)
-        nbitems_widget = BottomContainer:new {
+        local folder_name_widget
+        folder_name_widget = CenterContainer:new {
             dimen = dimen,
-            RightContainer:new {
-                dimen = {
-                    w = dimen.w - Folder.face.nb_items_margin,
-                    h = nb_size + Folder.face.nb_items_margin * 2 + math.ceil(nb_size * 0.125),
-                },
-                FrameContainer:new {
-                    padding = 0,
-                    padding_bottom = pad,
-                    radius = math.ceil(nb_size * 0.5),
-                    background = Blitbuffer.COLOR_WHITE,
-                    CenterContainer:new { dimen = { w = nb_size, h = nb_size }, nbitems },
-                },
+            FrameContainer:new {
+                padding = 0,
+                bordersize = Folder.face.border_size,
+                AlphaContainer:new { alpha = Folder.face.alpha, directory },
             },
             overlap_align = "center",
         }
-    else
-        nbitems_widget = VerticalSpan:new { width = 0 }
-    end
+        local nbitems_widget
+        if tonumber(nbitems.text) ~= 0 then
+            local pad = math.ceil(nb_size * 0.05)
+            nbitems_widget = BottomContainer:new {
+                dimen = dimen,
+                RightContainer:new {
+                    dimen = {
+                        w = dimen.w - Folder.face.nb_items_margin,
+                        h = nb_size + Folder.face.nb_items_margin * 2 + math.ceil(nb_size * 0.125),
+                    },
+                    FrameContainer:new {
+                        padding = 0,
+                        padding_bottom = pad,
+                        radius = math.ceil(nb_size * 0.5),
+                        background = Blitbuffer.COLOR_WHITE,
+                        CenterContainer:new { dimen = { w = nb_size, h = nb_size }, nbitems },
+                    },
+                },
+                overlap_align = "center",
+            }
+        else
+            nbitems_widget = VerticalSpan:new { width = 0 }
+        end
 
-    local top_h = 2 * (Folder.edge.thick + Folder.edge.margin)
-    local nb_widget
+        local nb_widget
 
-    if directory_string:match("✪ Collections") or directory_string:match("%(%d+%)") then
-        nb_widget = nil
-    else
-        nb_widget = nbitems_widget
-    end
-    widget = CenterContainer:new {
-        dimen = { w = self.width, h = self.height },
-        VerticalGroup:new {
-            -- VerticalSpan:new { width = math.max(0, math.ceil((self.height - (top_h + dimen.h)) * 0.5)) },
-            -- LineWidget:new {
-            --     background = Folder.edge.color,
-            --     dimen = { w = math.floor(dimen.w * (Folder.edge.width ^ 2)), h = Folder.edge.thick },
-            -- },
-            -- VerticalSpan:new { width = Folder.edge.margin },
-            -- LineWidget:new {
-            --     background = Folder.edge.color,
-            --     dimen = { w = math.floor(dimen.w * Folder.edge.width), h = Folder.edge.thick },
-            -- },
-            -- VerticalSpan:new { width = Folder.edge.margin },
-            OverlapGroup:new {
-                dimen = { w = self.width, h = self.height - top_h },
-                subfolder_cover_image,
-                folder_name_widget,
-                nb_widget,
+        if directory_string:match("✪ Collections") or directory_string:match("%(%d+%)") then
+            nb_widget = nil
+        else
+            nb_widget = nbitems_widget
+        end
+        widget = CenterContainer:new {
+            dimen = { w = self.width, h = self.height },
+            VerticalGroup:new {
+                -- VerticalSpan:new { width = math.max(0, math.ceil((self.height - (top_h + dimen.h)) * 0.5)) },
+                -- LineWidget:new {
+                --     background = Folder.edge.color,
+                --     dimen = { w = math.floor(dimen.w * (Folder.edge.width ^ 2)), h = Folder.edge.thick },
+                -- },
+                -- VerticalSpan:new { width = Folder.edge.margin },
+                -- LineWidget:new {
+                --     background = Folder.edge.color,
+                --     dimen = { w = math.floor(dimen.w * Folder.edge.width), h = Folder.edge.thick },
+                -- },
+                -- VerticalSpan:new { width = Folder.edge.margin },
+                OverlapGroup:new {
+                    dimen = { w = self.width, h = self.height },
+                    subfolder_cover_image,
+                    folder_name_widget,
+                    nb_widget,
+                },
             },
-        },
-    }
+        }
     else -- file
         self.file_deleted = self.entry.dim -- entry with deleted file from History or selected file from FM
 
