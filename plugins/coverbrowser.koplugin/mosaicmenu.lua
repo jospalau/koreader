@@ -414,11 +414,11 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
     local res = db_conn:exec(query)
     db_conn:close()
 
+    -- Constants
+    local border_total = Size.border.thin * 2
     if res and res[1] and res[2] and res[1][1] then
         local dir_ending = string.sub(res[1][1],-2,-2)
         local num_books = #res[1]
-
-        -- Author folder or Series folder
 
         -- Save all covers
         local covers = {}
@@ -433,36 +433,28 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
             end
         end
 
-        -- Constants
-        local border_total = Size.border.thin * 2
-
         -- Scale all covers smaller to fit with offset
         local available_w = max_w - (#covers-1)*self.offset_x - border_total
         local available_h = max_h - (#covers-1)*self.offset_y - border_total
-
-        -- If we expand the covers image using the enable_extra_tweaks_mosaic_view setting and there are 2 or 3 covers
-        -- there is a little gap on the right side that needs to be compensated with 2px
-        -- If we set border_total = 0 there is no need for the correction. In any case I leave the variable
-        local correction_x = 0 -- 2
-        -- Make sure this isn't an empty folder
         if #covers > 0 then
             local cover_widgets = {}
             local num_covers = #covers
-            local cover_max_w = max_w
-            if num_covers > 1 then
-                cover_max_h = math.ceil(max_h * (1 - (math.abs(self.factor_y) * (num_covers - 1))))
-            end
-
-            if self.blanks then
-                cover_max_h = math.ceil(max_h * (1 - (math.abs(self.factor_y) * 3)))
-            end
-            -- Now make the Individual cover widgets
             for i, bookinfo in ipairs(covers) do
                 -- figure out scale factor
-                local _, _, scale_factor = BookInfoManager.getCachedCoverSize(
-                    bookinfo.cover_w, bookinfo.cover_h,
-                    cover_max_w, cover_max_h
-                )
+                local scale_factor
+                if self.blanks then
+                    available_w = max_w - 3*self.offset_x - border_total
+                    available_h = max_h - 3*self.offset_y - border_total
+                    _, _, scale_factor = BookInfoManager.getCachedCoverSize(
+                        bookinfo.cover_w, bookinfo.cover_h,
+                        available_w, available_h
+                    )
+                else
+                    _, _, scale_factor = BookInfoManager.getCachedCoverSize(
+                        bookinfo.cover_w, bookinfo.cover_h,
+                        available_w, available_h
+                    )
+                end
 
                 -- make the individual cover widget
                 local cover_widget = ImageWidget:new {
@@ -566,12 +558,24 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                 -- end
             end
 
-            if #covers == 1 then
-                return CenterContainer:new {
-                    dimen = Geom:new { w = max_w, h = max_h },
-                    cover_widgets[1].widget,
-                }
-            end
+            -- if #covers == 1 then
+            --     local start_x = math.floor((max_w - cover_widgets[1].widget.width)/2)
+            --     local start_y = math.floor((max_h - cover_widgets[1].widget.height)/2)
+
+            --     local WidgetContainer = require("ui/widget/container/widgetcontainer")
+            --     return WidgetContainer:new{
+            --         dimen = Geom:new { w = cover_widgets[1].widget.width, h = cover_widgets[1].widget.height },
+            --         FrameContainer:new{
+            --             margin = 0,
+            --             padding = 0,
+            --             bordersize = 0,
+            --             color = Blitbuffer.COLOR_BLACK,
+            --             padding_left = start_x,
+            --             padding_top = start_y,
+            --             cover_widgets[1].widget,
+            --         },
+            --     }
+            -- end
 
             -- Make the overlap group widget (default is 2 books in series mode)
             -- At this point, either it was Author and orig had 1 book (returned already)
@@ -596,8 +600,8 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                 children[#children+1] = FrameContainer:new{
                     margin = 0,
                     padding = 0,
-                    padding_left = (i - 1) * self.offset_x,
-                    padding_top  = (i - 1) * self.offset_y,
+                    padding_left = start_x + (i - 1) * self.offset_x - Size.border.thin,
+                    padding_top  = start_y + (i - 1) * self.offset_y,
                     bordersize = 0,
                     cover.widget,
                 }
@@ -608,59 +612,66 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
             --     children[#children + 1] = FrameContainer:new{
             --         margin = 0,
             --         padding = 0,
-            --         padding_left = start_x + (i-1)*offset_x,
-            --         padding_top  = start_y + (i-1)*offset_y,
+            --         padding_left = start_x + (i - 1) * self.offset_x,
+            --         padding_top  = start_y + (i - 1) * self.offset_y,
             --         bordersize = 0,
             --         cover_widgets[i].widget,
             --     }
             -- end
 
             local overlap = OverlapGroup:new {
-                dimen = Geom:new { w = total_width, h = total_height },
+                dimen = Geom:new { w = total_width, h = total_height},
                 table.unpack(children),
             }
 
             -- return the center container
             return CenterContainer:new {
-                dimen = Geom:new { w = total_width, h = total_height },
-                overlap,
+                dimen = Geom:new { w = total_width, h = total_height},
+                FrameContainer:new {
+                    width = total_width,
+                    height = total_height,
+                    -- radius = Size.radius.default,
+                    margin = 0,
+                    padding = 0,
+                    -- background = Blitbuffer.colorFromName("orange"),
+                    bordersize = 0,
+                    color = Blitbuffer.COLOR_BLACK,
+                    overlap,
+                },
             }
         end
     end
     local w, h = 450, 680
-    local new_h = max_h
-    local new_w = math.ceil(w * (new_h / h))
     local stock_image = "./plugins/pagetextinfo.koplugin/resources/folder.svg"
-    -- local RenderImage = require("ui/renderimage")
-    -- local cover_bb = RenderImage:renderImageFile(stock_image, false, nil, nil)
+
+    -- Calcula el scale_factor como haces con las portadas
+    local _, _, scale_factor = BookInfoManager.getCachedCoverSize(
+        w, h,
+        max_w, max_h
+    )
+
     local subfolder_cover_image = ImageWidget:new {
         file = stock_image,
         alpha = true,
         scale_factor = nil,
-        width = new_w,
-        height = new_h,
+        width = max_w,
     }
 
     local cover_size = subfolder_cover_image:getSize()
     local widget = FrameContainer:new {
-        width = cover_size.w,
+        width = cover_size.w + 2*Size.border.thin,
         height = cover_size.h,
-        -- radius = Size.radius.default,
         margin = 0,
         padding = 0,
         bordersize = 0,
         color = Blitbuffer.COLOR_BLACK,
         subfolder_cover_image,
     }
-    return CenterContainer:new {
+
+    -- Centra el widget dentro de max_w x max_h
+    return CenterContainer:new{
         dimen = Geom:new { w = max_w, h = max_h },
-        FrameContainer:new {
-            margin = 0,
-            padding = 0,
-            bordersize = 0,
-            color = Blitbuffer.COLOR_BLACK,
-            widget,
-        },
+        widget
     }
 end
 
@@ -679,7 +690,7 @@ local Folder = {
         alpha = 0.75,
         nb_items_font_size = 20,
         nb_items_margin = Screen:scaleBySize(5),
-        dir_max_font_size = 25,
+        dir_max_font_size = 14,
     },
 }
 
@@ -702,6 +713,9 @@ function MosaicMenuItem:_getTextBoxes(dimen)
     local text = self.text
     if text:match("/$") then text = text:sub(1, -2) end -- remove "/"
     text = BD.directory(capitalize(text))
+    if not text:match("✪ Collections") and not text:match("%(%d+%)") then
+        text = text .. " (" .. self.mandatory:match("%d+/%d+") .. ")"
+    end
     local available_height = dimen.h - 2 * nbitems:getSize().h
     local dir_font_size = Folder.face.dir_max_font_size
     local directory
@@ -857,9 +871,11 @@ function MosaicMenuItem:update()
             directory_frame,
         }
 
+        -- local directory, nbitems = self:_getTextBoxes { w = max_img_w, h = max_img_h }
         local size = subfolder_cover_image:getSize()
+
         local directory, nbitems = self:_getTextBoxes { w = size.w, h = size.h }
-        local size = nbitems:getSize()
+        size = nbitems:getSize()
         local nb_size = math.max(size.w, size.h)
 
         local folder_name_widget
@@ -867,7 +883,7 @@ function MosaicMenuItem:update()
             dimen = dimen,
             FrameContainer:new {
                 padding = 0,
-                bordersize = Folder.face.border_size,
+                bordersize = 0,
                 AlphaContainer:new { alpha = Folder.face.alpha, directory },
             },
             overlap_align = "center",
@@ -921,7 +937,7 @@ function MosaicMenuItem:update()
                     dimen = { w = self.width, h = self.height },
                     subfolder_cover_image,
                     folder_name_widget,
-                    nb_widget,
+                    -- nb_widget,
                 },
             },
         }
@@ -1437,7 +1453,7 @@ function MosaicMenuItem:paintTo(bb, x, y)
         if pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
             generateRoundedSVGDynamic(temp_svg, target.dimen.w, target.dimen.h, 40)
         else
-            generateRoundedSVGDynamic(temp_svg, target.dimen.w, target.dimen.h, 200)
+            generateRoundedSVGDynamic(temp_svg, target.dimen.w, target.dimen.h, 60) -- 200)
         end
 
         -- local corners = IconWidget:new{ icon = "rounded.corners", alpha = true, width = self.show_parent.width, height = self.show_parent.height }
