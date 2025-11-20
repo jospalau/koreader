@@ -607,7 +607,7 @@ function ListMenuItem:update()
                     -- so we need the same width as when there are 4 covers
                     local image_size = wimage:getSize() -- get final widget size
                     local offset_x = math.floor(max_img_w * self.factor_x)
-                    local width = math.ceil((image_size.w * (1 - (self.factor_y * 3))) + 3 * self.offset_x + border_size)
+                    local width = math.ceil((image_size.w * (1 - (self.factor_y * 3))) + 3 * self.offset_x + 2*border_size)
                     local total_width = image_size.w + 2*border_size
                     wleft = CenterContainer:new{
                         dimen = Geom:new{ w = width, h = wleft_height },
