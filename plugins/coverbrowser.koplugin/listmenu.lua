@@ -288,7 +288,7 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                 --     })
                 -- end
             end
-            -- if #covers == 1  then
+            -- if #covers == 1 and not self.blanks then
             --     -- if self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks") then
             --     --     return LeftContainer:new {
             --     --         dimen = Geom:new { w = max_w, h = max_h },
@@ -297,12 +297,12 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
             --     -- end
 
             --     -- The width has to be the same than the width when there are 4 covers, so we escalate it and center it
-            --     -- local cover_size = cover_widgets[1].size
-            --     -- local width = math.floor((cover_size.w * (1 - (self.factor_y * 3))) + 3 * self.offset_x + border_total)
-            --     -- return CenterContainer:new {
-            --     --     dimen = Geom:new { w = width, h = max_h },
-            --     --     cover_widgets[1].widget,
-            --     -- }
+            --     local cover_size = cover_widgets[1].size
+            --     local width = math.floor((cover_size.w * (1 - (self.factor_y * 3))) + 3 * self.offset_x + border_total)
+            --     return CenterContainer:new {
+            --         dimen = Geom:new { w = width, h = max_h },
+            --         cover_widgets[1].widget,
+            --     }
             -- end
 
             local total_width = cover_widgets[1].size.w + border_total + (#cover_widgets-1)*self.offset_x
@@ -351,7 +351,7 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
 
     local w, h = 450, 680
     local new_h = max_h
-    local new_w = math.ceil(w * (new_h / h))
+    local new_w = math.floor(w * (new_h / h))
     local stock_image = "./plugins/pagetextinfo.koplugin/resources/folder.svg"
     -- local RenderImage = require("ui/renderimage")
     -- local cover_bb = RenderImage:renderImageFile(stock_image, false, nil, nil)
@@ -375,16 +375,10 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         subfolder_cover_image,
     }
     -- The width has to be the same than the width when there are 4 covers, so we escalate it and center it
-    local width = math.ceil((cover_size.w * (1 - (self.factor_y * 3))) + 3 * self.offset_x + border_total)
+    local width = math.floor((cover_size.w * (1 - (self.factor_y * 3))) + 3 * self.offset_x + border_total)
     return CenterContainer:new {
         dimen = Geom:new { w = width, h = max_h },
-        FrameContainer:new {
-        margin = 0,
-        padding = 0,
-        bordersize = 0,
-        color = Blitbuffer.COLOR_BLACK,
         widget,
-    },
     }
 end
 
@@ -613,12 +607,12 @@ function ListMenuItem:update()
                     -- so we need the same width as when there are 4 covers
                     local image_size = wimage:getSize() -- get final widget size
                     local offset_x = math.floor(max_img_w * self.factor_x)
-                    local width = math.floor((image_size.w * (1 - (self.factor_y * 3))) + 3 * self.offset_x + border_size)
-                    wleft_width = width
+                    local width = math.ceil((image_size.w * (1 - (self.factor_y * 3))) + 3 * self.offset_x + border_size)
+                    local total_width = image_size.w + 2*border_size
                     wleft = CenterContainer:new{
                         dimen = Geom:new{ w = width, h = wleft_height },
                         FrameContainer:new{
-                            width = image_size.w + 2*border_size,
+                            width = total_width,
                             height = image_size.h + 2*border_size,
                             margin = 0,
                             padding = 0,
