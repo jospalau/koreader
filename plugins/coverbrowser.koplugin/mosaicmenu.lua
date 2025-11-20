@@ -440,8 +440,8 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
         end
 
         -- Scale all covers smaller to fit with offset
-        local available_w = max_w - (#covers-1)*self.offset_x - border_total
-        local available_h = max_h - (#covers-1)*self.offset_y - border_total
+        local available_w = max_w - (#covers-1)*self.offset_x
+        local available_h = max_h - (#covers-1)*self.offset_y
         if #covers > 0 then
             local cover_widgets = {}
             local num_covers = #covers
@@ -449,8 +449,8 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                 -- figure out scale factor
                 local scale_factor
                 if self.blanks then
-                    available_w = max_w - 3*self.offset_x - border_total
-                    available_h = max_h - 3*self.offset_y - border_total
+                    available_w = max_w - 3*self.offset_x
+                    available_h = max_h - 3*self.offset_y
                     _, _, scale_factor = BookInfoManager.getCachedCoverSize(
                         bookinfo.cover_w, bookinfo.cover_h,
                         available_w, available_h
@@ -694,7 +694,7 @@ local Folder = {
     },
     face = {
         border_size = Size.border.thick,
-        alpha = 0.75,
+        alpha = 0.4,
         nb_items_font_size = 20,
         nb_items_margin = Screen:scaleBySize(5),
         dir_max_font_size = 14,
@@ -914,7 +914,7 @@ function MosaicMenuItem:update()
             dimen = dimen,
             FrameContainer:new {
                 padding = 0,
-                bordersize = 0, --1
+                bordersize = 0, -- border_size,
                 AlphaContainer:new { alpha = Folder.face.alpha, directory },
             },
             overlap_align = "center",
@@ -1109,6 +1109,8 @@ function MosaicMenuItem:update()
                     w = dir_size.w,
                     h = dir_size.h,
                 }
+
+                local container = self.pagetextinfo.settings:isTrue("enable_rounded_corners") and LeftContainer or CenterContainer
                 widget = CenterContainer:new{
                     dimen = dimen,
                     FrameContainer:new{
@@ -1125,16 +1127,16 @@ function MosaicMenuItem:update()
                             OverlapGroup:new {
                                 dimen = { w = image_size.w, h = image_size.h},
                                 image,
-                                LeftContainer:new {
+                                container:new {
                                     dimen = { w = image_size.w, h = image_size.h},
                                     FrameContainer:new {
                                         margin = 0,
                                         padding = 0,
-                                        bordersize = 0, --1
+                                        bordersize = 0, -- border_size,
                                         AlphaContainer:new {
-                                            alpha = 0.7,
+                                            alpha = 0.4,
                                             -- VerticalGroup:new{
-                                                LeftContainer:new {
+                                                container:new {
                                                     dimen = container_size,
                                                     directory,
                                                 -- },
