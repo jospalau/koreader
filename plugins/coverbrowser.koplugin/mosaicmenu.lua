@@ -694,7 +694,7 @@ local Folder = {
     },
     face = {
         border_size = Size.border.thick,
-        alpha = 0.4,
+        alpha = 0.6,
         nb_items_font_size = 20,
         nb_items_margin = Screen:scaleBySize(5),
         dir_max_font_size = 14,
@@ -1134,7 +1134,7 @@ function MosaicMenuItem:update()
                                         padding = 0,
                                         bordersize = 0, -- border_size,
                                         AlphaContainer:new {
-                                            alpha = 0.4,
+                                            alpha = 0.6,
                                             -- VerticalGroup:new{
                                                 container:new {
                                                     dimen = container_size,
