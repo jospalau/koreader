@@ -468,39 +468,20 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                     scale_factor = scale_factor,
                 }
 
-                local w, h = bookinfo.cover_w, bookinfo.cover_h
-                local new_h = self.height
-                local new_w = math.floor(w * (new_h / h))
+                if self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
+                    local n = math.min(#covers, 4)
+                    local w = self.width - self.offset_x * (n - 1)
+                    local h = self.height - self.offset_y * (n - 1)
 
-                if #covers == 1 and self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
                     cover_widget = ImageWidget:new {
                         image = bookinfo.cover_bb,
                         scale_factor = nil,
-                        width = self.width,
-                        height = self.height,
-                    }
-                end
-
-                if #covers == 2 and self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
-                    cover_widget = ImageWidget:new {
-                        image = bookinfo.cover_bb,
-                        scale_factor = nil,
-                        width = self.width - self.offset_x,
-                        height = self.height - self.offset_y,
-                    }
-                end
-
-                if #covers == 3 and self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
-                    cover_widget = ImageWidget:new {
-                        image = bookinfo.cover_bb,
-                        scale_factor = nil,
-                        width = self.width - self.offset_x * 2,
-                        height = self.height - self.offset_y * 2,
+                        width = w,
+                        height = h,
                     }
                 end
 
                 local cover_size = cover_widget:getSize()
-
                 table.insert(cover_widgets, {
                     widget = FrameContainer:new {
                         width = cover_size.w + border_total,
@@ -651,7 +632,6 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
     local w, h = 450, 680
     local stock_image = "./plugins/pagetextinfo.koplugin/resources/folder.svg"
 
-    -- Calcula el scale_factor como haces con las portadas
     local _, _, scale_factor = BookInfoManager.getCachedCoverSize(
         w, h,
         max_w, max_h
@@ -660,14 +640,14 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
     local subfolder_cover_image = ImageWidget:new {
         file = stock_image,
         alpha = true,
-        scale_factor = nil,
-        width = max_w,
+        scale_factor = scale_factor,
     }
 
     local cover_size = subfolder_cover_image:getSize()
+
     local widget = FrameContainer:new {
-        width = cover_size.w + 2*Size.border.thin,
-        height = cover_size.h,
+        width = cover_size.w + border_total,
+        height = cover_size.h + border_total,
         margin = 0,
         padding = 0,
         bordersize = 0,
@@ -1556,7 +1536,7 @@ function MosaicMenu:_recalculateDimen()
             self.others_height = self.others_height + self.title_bar.dimen.h
         end
         if self.page_info then
-            self.others_height = self.others_height + self.page_info:getSize().h
+            self.others_height = self.others_height + math.max(self.page_return_arrow:getSize().h, self.page_info_text:getSize().h) + Size.padding.button
         end
     end
 
