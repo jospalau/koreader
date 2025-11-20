@@ -1913,9 +1913,7 @@ function util.generateStats()
                 ["total_books_tbr"] = #files_tbr,
                 ["total_books_mbr"] = #files_mbr,
                 ["stats_last_days"] = stats_last_days}
-    if G_reader_settings:readSetting("home_dir") then
-        util.writeToFile(dump(stats), G_reader_settings:readSetting("home_dir") .. "/stats.lua", true, true)
-    end
+    util.writeToFile(dump(stats), require("datastorage"):getSettingsDir() .. "/stats.lua", true, true)
 end
 
 -- Like util.splitWords(), but not capturing space and punctuations

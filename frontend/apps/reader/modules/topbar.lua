@@ -2168,8 +2168,8 @@ function TopBar:paintTo(bb, x, y)
             -- local _, files = self:getList("*.epub")
             -- books_information_widget_container[1]:setText("TF: " .. tostring(#files))
 
-            if G_reader_settings:readSetting("home_dir") and ffiUtil.realpath(G_reader_settings:readSetting("home_dir") .. "/stats.lua") then
-                local ok, stats = pcall(dofile, G_reader_settings:readSetting("home_dir") .. "/stats.lua")
+            if ffiUtil.realpath(require("datastorage"):getSettingsDir() .. "/stats.lua") then
+                local ok, stats = pcall(dofile, require("datastorage"):getSettingsDir() .. "/stats.lua")
                 local last_days = ""
                 for k, v in pairs(stats["stats_last_days"]) do
                     last_days = v > 0 and last_days .. " ● " or last_days .. " ○ "
