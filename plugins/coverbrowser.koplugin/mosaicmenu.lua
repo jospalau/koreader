@@ -355,8 +355,14 @@ function MosaicMenuItem:init()
         },
     }
 
-    -- We now build the minimal widget container that won't change after update()
+     local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+    if ui ~= nil then
+        self.pagetextinfo = ui.pagetextinfo
+    else
+        self.pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
+    end
 
+    -- We now build the minimal widget container that won't change after update()
     -- As done in MenuItem
     -- for compatibility with keyboard navigation
     -- (which does not seem to work well when multiple pages,
@@ -466,7 +472,7 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                 local new_h = self.height
                 local new_w = math.floor(w * (new_h / h))
 
-                if #covers == 1 and pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
+                if #covers == 1 and self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
                     cover_widget = ImageWidget:new {
                         image = bookinfo.cover_bb,
                         scale_factor = nil,
@@ -475,7 +481,7 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                     }
                 end
 
-                if #covers == 2 and pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
+                if #covers == 2 and self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
                     cover_widget = ImageWidget:new {
                         image = bookinfo.cover_bb,
                         scale_factor = nil,
@@ -484,7 +490,7 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                     }
                 end
 
-                if #covers == 3 and pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
+                if #covers == 3 and self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
                     cover_widget = ImageWidget:new {
                         image = bookinfo.cover_bb,
                         scale_factor = nil,
@@ -499,7 +505,6 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                     widget = FrameContainer:new {
                         width = cover_size.w + border_total,
                         height = cover_size.h + border_total,
-                        radius = Size.radius.default,
                         margin = 0,
                         padding = 0,
                         bordersize =  Size.border.thin,
@@ -527,7 +532,6 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                         widget = FrameContainer:new {
                             width = cover_size.w + border_total,
                             height = cover_size.h + border_total,
-                            radius = Size.radius.default,
                             margin = 0,
                             padding = 0,
                             bordersize = Size.border.thin, -- Always border for blank covers
@@ -545,7 +549,6 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                 --         widget = FrameContainer:new {
                 --             width = cover_size.w + border_total,
                 --             height = cover_size.h + border_total,
-                --             radius = Size.radius.default,
                 --             margin = 0,
                 --             padding = 0,
                 --             bordersize = Size.border.thin,
@@ -596,11 +599,16 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
 
             -- crear FrameContainer de cada portada con offset + centrado
             local children = {}
+            local border_adjustment = 0
+                if self.pagetextinfo and (self.pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view")
+                    or self.pagetextinfo.settings:isTrue("enable_rounded_corners")) then
+                    border_adjustment = Size.border.thin
+            end
             for i, cover in ipairs(cover_widgets) do
                 children[#children+1] = FrameContainer:new{
                     margin = 0,
                     padding = 0,
-                    padding_left = start_x + (i - 1) * self.offset_x - Size.border.thin,
+                    padding_left = start_x + (i - 1) * self.offset_x - border_adjustment,
                     padding_top  = start_y + (i - 1) * self.offset_y,
                     bordersize = 0,
                     cover.widget,
@@ -630,7 +638,6 @@ function MosaicMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
                 FrameContainer:new {
                     width = total_width,
                     height = total_height,
-                    -- radius = Size.radius.default,
                     margin = 0,
                     padding = 0,
                     -- background = Blitbuffer.colorFromName("orange"),
@@ -744,6 +751,36 @@ function MosaicMenuItem:_getTextBoxes(dimen)
     return directory, nbitems
 end
 
+function MosaicMenuItem:getDirectoryTextWidget(dimen, text)
+
+    local available_height = dimen.h
+    local dir_font_size = Folder.face.dir_max_font_size
+    local directory
+
+    while true do
+        if directory then directory:free(true) end
+        directory = TextBoxWidget:new {
+            text = text,
+            face = Font:getFace("cfont", dir_font_size),
+            width = dimen.w,
+            alignment = "center",
+            bold = true,
+        }
+        if directory:getSize().h <= available_height then break end
+        dir_font_size = dir_font_size - 1
+        if dir_font_size < 10 then -- don't go too low
+            directory:free()
+            directory.height = available_height
+            directory.height_adjust = true
+            directory.height_overflow_show_ellipsis = true
+            directory:init()
+            break
+        end
+    end
+
+    return directory
+end
+
 function MosaicMenuItem:update()
     -- We will be a distinctive widget whether we are a directory,
     -- a known file with image / without image, or a not yet known file
@@ -754,18 +791,12 @@ function MosaicMenuItem:update()
         h = self.height,
     }
 
-    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-    if ui ~= nil then
-        pagetextinfo = ui.pagetextinfo
-    else
-        pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
-    end
     -- We'll draw a border around cover images, it may not be
     -- needed with some covers, but it's nicer when cover is
     -- a pure white background (like rendered text page)
     local border_size
-    if pagetextinfo and (pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view")
-        or pagetextinfo.settings:isTrue("enable_rounded_corners")) then
+    if self.pagetextinfo and (self.pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view")
+        or self.pagetextinfo.settings:isTrue("enable_rounded_corners")) then
         border_size = 0
     else
         border_size = Size.border.thin
@@ -883,7 +914,7 @@ function MosaicMenuItem:update()
             dimen = dimen,
             FrameContainer:new {
                 padding = 0,
-                bordersize = 0,
+                bordersize = 0, --1
                 AlphaContainer:new { alpha = Folder.face.alpha, directory },
             },
             overlap_align = "center",
@@ -988,7 +1019,7 @@ function MosaicMenuItem:update()
                 -- Let ImageWidget do the scaling and give us a bb that fit
 
                 local image = nil
-                if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
+                if self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
                     image= ImageWidget:new{
                         image = bookinfo.cover_bb,
                         --scale_factor = nil,
@@ -1047,33 +1078,37 @@ function MosaicMenuItem:update()
                 local sizew = tww:getSize()
                 tww:free()
 
-                local twpd = TextWidget:new{
-                    text = pubdate,
-                    face = Font:getFace("cfont", 12),
+                -- local twpd = TextWidget:new{
+                --     text = pubdate,
+                --     face = Font:getFace("cfont", 12),
+                -- }
+
+                -- local sizepd = twpd:getSize()
+                -- twpd:free()
+
+                -- local twgrv = TextWidget:new{
+                --     text = grvotes,
+                --     face = Font:getFace("cfont", 12),
+                -- }
+
+                -- local sizegrv = twgrv:getSize()
+                -- twgrv:free()
+
+                -- local twgrr = TextWidget:new{
+                --     text = grrating,
+                --     face = Font:getFace("cfont", 12),
+                -- }
+
+                -- local sizegrr = twgrr:getSize()
+                -- twgrr:free()
+
+                local all_metadata_text = string.format("%s %s %s %s", words, pubdate, grvotes, grrating)
+                local directory = self:getDirectoryTextWidget({ w = image_size.w, h = image_size.h }, all_metadata_text)
+                local dir_size = directory:getSize()
+                local container_size = {
+                    w = dir_size.w,
+                    h = dir_size.h,
                 }
-
-                local sizepd = twpd:getSize()
-                twpd:free()
-
-                local twgrv = TextWidget:new{
-                    text = grvotes,
-                    face = Font:getFace("cfont", 12),
-                }
-
-                local sizegrv = twgrv:getSize()
-                twgrv:free()
-
-                local twgrr = TextWidget:new{
-                    text = grrating,
-                    face = Font:getFace("cfont", 12),
-                }
-
-                local sizegrr = twgrr:getSize()
-                twgrr:free()
-
-                local RightContainer = require("ui/widget/container/rightcontainer")
-                local TopContainer = require("ui/widget/container/topcontainer")
-                local BottomContainer = require("ui/widget/container/bottomcontainer")
                 widget = CenterContainer:new{
                     dimen = dimen,
                     FrameContainer:new{
@@ -1086,51 +1121,54 @@ function MosaicMenuItem:update()
                         color = self.file_deleted and Blitbuffer.COLOR_DARK_GRAY or nil,
 
                         -- OverlapGroup para solapar imagen y texto
-                        OverlapGroup:new {
-                            dimen = { w = image_size.w + 2*border_size, h = image_size.h + 2*border_size },
-                            image,
-                            TopContainer:new {
-                                dimen = { w = image_size.w, h = image_size.h },
-                                AlphaContainer:new {
-                                    alpha = 0.7,
-                                    VerticalGroup:new{
-                                        LeftContainer:new {
-                                            dimen = { w = sizew.w, h = sizew.h },
-                                            TextWidget:new {
-                                                text = words,
-                                                face = Font:getFace("cfont", 12),
-                                                -- fgcolor = Blitbuffer.COLOR_WHITE,
-                                            },
-                                        },
-                                        -- HorizontalSpan:new({ width = 2 }),
-                                        LeftContainer:new {
-                                            dimen = { w = sizepd.w, h = sizepd.h },
-                                            TextWidget:new {
-                                                text = pubdate,
-                                                face = Font:getFace("cfont", 12),
-                                                -- fgcolor = Blitbuffer.COLOR_WHITE,
-                                            },
-                                        },
-                                        LeftContainer:new {
-                                            dimen = { w = sizegrv.w, h = sizegrv.h },
-                                            TextWidget:new {
-                                                text = grvotes,
-                                                face = Font:getFace("cfont", 12),
-                                                -- fgcolor = Blitbuffer.COLOR_WHITE,
-                                            },
-                                        },
-                                        -- HorizontalSpan:new({ width = 2 }),
-                                        LeftContainer:new {
-                                            dimen = { w = sizegrr.w, h = sizegrr.h },
-                                            TextWidget:new {
-                                                text = grrating,
-                                                face = Font:getFace("cfont", 12),
-                                                -- fgcolor = Blitbuffer.COLOR_WHITE,
+                        VerticalGroup:new{
+                            OverlapGroup:new {
+                                dimen = { w = image_size.w, h = image_size.h},
+                                image,
+                                LeftContainer:new {
+                                    dimen = { w = image_size.w, h = image_size.h},
+                                    FrameContainer:new {
+                                        margin = 0,
+                                        padding = 0,
+                                        bordersize = 0, --1
+                                        AlphaContainer:new {
+                                            alpha = 0.7,
+                                            -- VerticalGroup:new{
+                                                LeftContainer:new {
+                                                    dimen = container_size,
+                                                    directory,
+                                                -- },
+                                                -- -- HorizontalSpan:new({ width = 2 }),
+                                                -- LeftContainer:new {
+                                                --     dimen = { w = sizepd.w, h = sizepd.h },
+                                                --     TextWidget:new {
+                                                --         text = pubdate,
+                                                --         face = Font:getFace("cfont", 12),
+                                                --         -- fgcolor = Blitbuffer.COLOR_WHITE,
+                                                --     },
+                                                -- },
+                                                -- LeftContainer:new {
+                                                --     dimen = { w = sizegrv.w, h = sizegrv.h },
+                                                --     TextWidget:new {
+                                                --         text = grvotes,
+                                                --         face = Font:getFace("cfont", 12),
+                                                --         -- fgcolor = Blitbuffer.COLOR_WHITE,
+                                                --     },
+                                                -- },
+                                                -- -- HorizontalSpan:new({ width = 2 }),
+                                                -- LeftContainer:new {
+                                                --     dimen = { w = sizegrr.w, h = sizegrr.h },
+                                                --     TextWidget:new {
+                                                --         text = grrating,
+                                                --         face = Font:getFace("cfont", 12),
+                                                --         -- fgcolor = Blitbuffer.COLOR_WHITE,
+                                                --     },
+                                                -- },
                                             },
                                         },
                                     },
                                 },
-                            },
+                            }
                             -- BottomContainer:new {
                             --     dimen = { w = image_size.w, h = image_size.h },
                             --     AlphaContainer:new {
@@ -1396,7 +1434,7 @@ function MosaicMenuItem:paintTo(bb, x, y)
         bb:paintBorder(target.dimen.x+ix, target.dimen.y+iy, d_w, d_h, 1)
 
     end
-    if not self.is_directory and pagetextinfo and pagetextinfo.settings:isTrue("enable_rounded_corners") then
+    if not self.is_directory and self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_rounded_corners") then
         local function generateRoundedSVGDynamic(path_out, target_width, target_height, base_radius)
             base_radius = base_radius or 70  -- radio de esquina por defecto
 
@@ -1429,7 +1467,7 @@ function MosaicMenuItem:paintTo(bb, x, y)
             " fill="white" fill-rule="evenodd"></path>
 
             <!-- Marco dibujado encima -->
-            <rect x="2" y="2" width="%d" height="%d" rx="%d" ry="%d" fill="none" stroke="black" stroke-width="1"/>
+            <rect x="2" y="2" width="%d" height="%d" rx="%d" ry="%d" fill="none" stroke="black" stroke-width="1.5"/>
         </svg>
             ]],
                 target_width, target_height, target_width, target_height,
@@ -1450,7 +1488,7 @@ function MosaicMenuItem:paintTo(bb, x, y)
         end
 
         local temp_svg = "resources/icons/mdlight/rounded.corners.svg"
-        if pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
+        if self.pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
             generateRoundedSVGDynamic(temp_svg, target.dimen.w, target.dimen.h, 40)
         else
             generateRoundedSVGDynamic(temp_svg, target.dimen.w, target.dimen.h, 60) -- 200)
