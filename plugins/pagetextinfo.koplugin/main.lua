@@ -3,6 +3,7 @@
 -- end
 
 local BD = require("ui/bidi")
+local CenterContainer = require("ui/widget/container/centercontainer")
 local Dispatcher = require("dispatcher")  -- luacheck:ignore
 local InfoMessage = require("ui/widget/infomessage")
 local Notification = require("ui/widget/notification")
@@ -10,6 +11,9 @@ local UIManager = require("ui/uimanager")
 local InputContainer = require("ui/widget/container/inputcontainer")
 local Font = require("ui/font")
 local TextWidget = require("ui/widget/textwidget")
+local HorizontalGroup = require("ui/widget/horizontalgroup")
+local HorizontalSpan = require("ui/widget/horizontalspan")
+local OverlapGroup = require("ui/widget/overlapgroup")
 local VerticalGroup = require("ui/widget/verticalgroup")
 local VerticalSpan = require("ui/widget/verticalspan")
 local LineWidget = require("ui/widget/linewidget")
@@ -1322,7 +1326,7 @@ This is to be active only if the option flash buttons and menu items or the opti
                         return true
                     end,
                 },
-               {
+                {
                     text = _("Enable extra tweaks mosaic view"),
                     checked_func = function() return self.settings:isTrue("enable_extra_tweaks_mosaic_view") end,
                     help_text = _([[Extra tweaks mosaic view.]]),
@@ -1341,13 +1345,51 @@ This is to be active only if the option flash buttons and menu items or the opti
                         return true
                     end,
                 },
-               {
+                {
                     text = _("Enable rounded corners mosaic view"),
                     checked_func = function() return self.settings:isTrue("enable_rounded_corners") end,
-                    help_text = _([[Rounded coreners in mosaic view.]]),
+                    help_text = _([[Rounded corners in mosaic view.]]),
                     callback = function()
                         local enable_rounded_corners = not self.settings:isTrue("enable_rounded_corners")
                         self.settings:saveSetting("enable_rounded_corners", enable_rounded_corners)
+                        self.settings:flush()
+
+                        local FileManager = require("apps/filemanager/filemanager").instance
+                        if FileManager then
+                            --FileManager:onRefresh()
+                            local path = FileManager.instance.file_chooser.path
+                            --FileManager:setupLayout()
+                            FileManager.instance.file_chooser:changeToPath(path)
+                        end
+                        return true
+                    end,
+                },
+                {
+                    text = _("Covers in folders"),
+                    checked_func = function() return self.settings:isTrue("covers_in_folders") end,
+                    help_text = _([[Covers in folders.]]),
+                    callback = function()
+                        local covers_in_folders = not self.settings:isTrue("covers_in_folders")
+                        self.settings:saveSetting("covers_in_folders", covers_in_folders)
+                        self.settings:flush()
+
+                        local FileManager = require("apps/filemanager/filemanager").instance
+                        if FileManager then
+                            --FileManager:onRefresh()
+                            local path = FileManager.instance.file_chooser.path
+                            --FileManager:setupLayout()
+                            FileManager.instance.file_chooser:changeToPath(path)
+                        end
+                        return true
+                    end,
+                },
+                {
+                    text = _("Covers in grid mode"),
+                    checked_func = function() return self.settings:isTrue("covers_grid_mode") end,
+                    help_text = _([[Covers in grid mode.]]),
+                    callback = function()
+                        local covers_grid_mode = not self.settings:isTrue("covers_grid_mode")
+                        self.settings:saveSetting("covers_grid_mode", covers_grid_mode)
                         self.settings:flush()
 
                         local FileManager = require("apps/filemanager/filemanager").instance
@@ -4924,8 +4966,559 @@ function PageTextInfo:onShowNotebookFileRender()
     }
 
     UIManager:show(self.scroll_text_w)
+end
+
+function PageTextInfo:getCovers(filepath, max_w, max_h)
+    local ReadCollection = require("readcollection")
+    local BookInfoManager = require("bookinfomanager")
+    -- Query database for books in this folder with covers
+    local SQ3 = require("lua-ljsqlite3/init")
+    local DataStorage = require("datastorage")
+    local db_conn = SQ3.open(DataStorage:getSettingsDir() .. "/bookinfo_cache.sqlite3")
+    db_conn:set_busy_timeout(5000)
 
 
+    local res
+    if not filepath:match("✪ Collections") then
+            local query = string.format([[
+                SELECT directory, filename FROM bookinfo
+                WHERE directory = '%s/' AND has_cover = 'Y'
+                ORDER BY filename ASC LIMIT 4;
+        ]], filepath:gsub("'", "''"))
+        res = db_conn:exec(query)
+        db_conn:close()
+    elseif filepath:match("✪ Collections$") then
+        res = nil
+    else
+        local candidates = {}
+        if filepath then
+            local coll = ReadCollection.coll[filepath:match("([^/]+)$")]
+            if coll then
+                for _, book in pairs(coll) do
+                    if book.file then table.insert(candidates, book.file) end
+                end
+            end
+        else
+            for _, coll in pairs(ReadCollection.coll) do
+                for _, book in pairs(coll) do
+                    if book.file then table.insert(candidates, book.file) end
+                end
+            end
+        end
+        local covers = {}
+        local dirs = {}
+        local files = {}
+        while #dirs < 4 and #candidates > 0 do
+            local rand_idx = math.random(1, #candidates)
+            local fullpath = candidates[rand_idx]
+            table.remove(candidates, rand_idx)
+
+            if fullpath and util.fileExists(fullpath) then
+                local bookinfo = BookInfoManager:getBookInfo(fullpath, true)
+                table.insert(dirs, fullpath:match("(.*/)"))
+                table.insert(files, fullpath:match("([^/]+)$"))
+            end
+        end
+        res = {
+            dirs,
+            files,
+        }
+    end
+    return res
+end
+
+-- Function in VeeBui's KOReader-folder-stacks-series-author patch
+function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, factor_y, offset_x, offset_y, mosaic)
+    local ImageWidget = require("ui/widget/imagewidget")
+    local BookInfoManager = require("bookinfomanager")
+    local res = self:getCovers(filepath, max_w, max_h)
+    if self.settings:isTrue("enable_extra_tweaks") then
+        border_size = 0
+    else
+        border_size = Size.border.thin
+    end
+    local border_total = 2*border_size
+    if res and res[1] and res[2] and res[1][1] then
+        local dir_ending = string.sub(res[1][1],-2,-2)
+        local num_books = #res[1]
+
+        -- Save all covers
+        local covers = {}
+        for i = 1, num_books do
+            local fullpath = res[1][i] .. res[2][i]
+
+            if util.fileExists(fullpath) then
+                local bookinfo = BookInfoManager:getBookInfo(fullpath, true)
+                if bookinfo and bookinfo.cover_bb and bookinfo.has_cover then
+                    table.insert(covers, bookinfo)
+                end
+            end
+        end
+        -- Make sure this isn't an empty folder
+        if #covers > 0 then
+            -- Now make the Individual cover widgets
+            local cover_widgets = {}
+            local cover_max_w = max_w
+            local cover_max_h = max_h
+
+            local num_covers = #covers
+            if num_covers > 1 then
+                cover_max_h = math.ceil(max_h * (1 - (math.abs(factor_y) * (num_covers - 1))))
+            end
+
+            if self.blanks then
+                cover_max_h = math.ceil(max_h * (1 - (math.abs(factor_y) * 3)))
+            end
+
+            for i, bookinfo in ipairs(covers) do
+                -- figure out scale factor
+                local _, _, scale_factor = BookInfoManager.getCachedCoverSize(
+                    bookinfo.cover_w, bookinfo.cover_h,
+                    cover_max_w, cover_max_h
+                )
+
+                -- make the individual cover widget
+                local cover_widget = ImageWidget:new {
+                    image = bookinfo.cover_bb,
+                    scale_factor = scale_factor,
+                }
+
+                if #covers == 1 and self.settings:isTrue("enable_extra_tweaks") then
+                    local w, h = bookinfo.cover_w, bookinfo.cover_h
+                    local new_h = cover_max_w
+                    local new_w = math.ceil(w * (new_h / h))
+                    cover_widget = ImageWidget:new{
+                        image = bookinfo.cover_bb,
+                        width = new_w,
+                        height = new_h,
+                    }
+                end
+
+                local cover_size = cover_widget:getSize()
+                table.insert(cover_widgets, {
+                    widget = FrameContainer:new {
+                        width = cover_size.w + border_total,
+                        height = cover_size.h + border_total,
+                        -- radius = Size.radius.default,
+                        margin = 0,
+                        padding = 0,
+                        bordersize = border_size,
+                        color = Blitbuffer.COLOR_BLACK,
+                        cover_widget,
+                    },
+                    size = cover_size
+                })
+            end
+
+            local num_covers = #covers
+            local blanks = 0
+            if num_covers == 3 then
+                blanks = 1
+            elseif num_covers == 2 then
+                blanks = 2
+            elseif num_covers == 1 then
+                blanks = 3
+            end
+
+            -- blank covers
+            if self.blanks then
+                for i = 1, blanks do
+                    local cover_size = cover_widgets[num_covers].size
+                    table.insert(cover_widgets, 1, { -- To insert blank covers at the beginning
+                        widget = FrameContainer:new {
+                            width = cover_size.w + border_total,
+                            height = cover_size.h + border_total,
+                            radius = Size.radius.default,
+                            margin = 0,
+                            padding = 0,
+                            bordersize = Size.border.thin, -- Always border for blank covers
+                            color = Blitbuffer.COLOR_BLACK,
+                            background = Blitbuffer.COLOR_LIGHT_GRAY,
+                            HorizontalSpan:new { width = cover_size.w, height = cover_size.h },
+                        },
+                        size = cover_size
+                    })
+                end
+                -- Reverse order
+                -- for i = 1, blanks do
+                --     local cover_size = cover_widgets[num_covers].size
+                --     table.insert(cover_widgets, 1, {
+                --         widget = FrameContainer:new {
+                --             width = cover_size.w + border_total,
+                --             height = cover_size.h + border_total,
+                --             radius = Size.radius.default,
+                --             margin = 0,
+                --             padding = 0,
+                --             bordersize = Size.border.thin,
+                --             color = Blitbuffer.COLOR_BLACK,
+                --             background = Blitbuffer.COLOR_LIGHT_GRAY,
+                --             HorizontalSpan:new { width = cover_size.w, height = cover_size.h },
+                --         },
+                --         size = cover_size
+                --     })
+                -- end
+            end
+            -- if #covers == 1 and not self.blanks then
+            --     -- if self.settings:isTrue("enable_extra_tweaks") then
+            --     --     return LeftContainer:new {
+            --     --         dimen = Geom:new { w = max_w, h = max_h },
+            --     --         cover_widgets[1].widget,
+            --     --     }
+            --     -- end
+
+            --     -- The width has to be the same than the width when there are 4 covers, so we escalate it and center it
+            --     local cover_size = cover_widgets[1].size
+            --     local width = math.floor((cover_size.w * (1 - (self.factor_y * 3))) + 3 * self.offset_x + border_total)
+            --     return CenterContainer:new {
+            --         dimen = Geom:new { w = width, h = max_h },
+            --         cover_widgets[1].widget,
+            --     }
+            -- end
+
+            local total_width = cover_widgets[1].size.w + border_total + (#cover_widgets-1)*offset_x
+            local total_height = cover_widgets[1].size.h + border_total + (#cover_widgets-1)*offset_y
+
+            if mosaic then
+                local total_width, total_height = 0, 0
+                for i, cover in ipairs(cover_widgets) do
+                    total_width = math.max(total_width, cover.size.w + (i-1)*offset_x)
+                    total_height = math.max(total_height, cover.size.h + (i-1)*offset_y)
+                end
+
+                -- calcular desplazamiento para centrar
+                local start_x = math.floor((max_w - total_width)/2)
+                local start_y = math.floor((max_h - total_height)/2)
+
+                -- crear FrameContainer de cada portada con offset + centrado
+                local children = {}
+                local border_adjustment = 0
+                    if self.settings:isTrue("enable_extra_tweaks_mosaic_view")
+                        or self.settings:isTrue("enable_rounded_corners") then
+                        border_adjustment = Size.border.thin
+                end
+                for i, cover in ipairs(cover_widgets) do
+                    children[#children+1] = FrameContainer:new{
+                        margin = 0,
+                        padding = 0,
+                        padding_left = start_x + (i - 1) * offset_x - border_adjustment,
+                        padding_top  = start_y + (i - 1) * offset_y,
+                        bordersize = 0,
+                        cover.widget,
+                    }
+                end
+                local overlap = OverlapGroup:new {
+                    dimen = Geom:new { w = total_width, h = total_height},
+                    table.unpack(children),
+                }
+
+                -- return the center container
+                return CenterContainer:new {
+                    dimen = Geom:new { w = total_width, h = total_height},
+                    FrameContainer:new {
+                        width = total_width,
+                        height = total_height,
+                        margin = 0,
+                        padding = 0,
+                        -- background = Blitbuffer.colorFromName("orange"),
+                        bordersize = 0,
+                        color = Blitbuffer.COLOR_BLACK,
+                        overlap,
+                    },
+                }
+            else
+                local overlap
+                local children = {}
+                for i, cover in ipairs(cover_widgets) do
+                    children[#children + 1] = FrameContainer:new{
+                        margin = 0,
+                        padding = 0,
+                        padding_left = (i - 1) * offset_x,
+                        padding_top  = (i - 1) * offset_y,
+                        bordersize = 0,
+                        cover.widget,
+                    }
+                end
+                -- Reverse order
+                -- for i = #cover_widgets, 1, -1 do
+                --     local idx = (#cover_widgets - i)
+                --     children[#children + 1] = FrameContainer:new{
+                --         margin = 0,
+                --         padding = 0,
+                --         padding_left = (i - 1) * self.offset_x,
+                --         padding_top  = (i - 1) * self.offset_y,
+                --         bordersize = 0,
+                --         cover_widgets[i].widget,
+                --     }
+                -- end
+                overlap = OverlapGroup:new {
+                    dimen = Geom:new { w = total_width, h = total_height },
+                    table.unpack(children),
+                }
+
+                -- I need the proper real size of a cover without reduction, I take the folder image
+                local base_w, base_h = 450, 680
+                local new_h = max_h
+                local new_w = math.ceil(base_w * (new_h / base_h))
+                local width = math.ceil((new_w* (1 - (factor_y * 3))) + 3 * offset_x + border_total)
+                return CenterContainer:new {
+                    dimen = Geom:new { w = width, h = max_h }, -- Center container to have whole width
+                    overlap,
+                }
+            end
+        end
+    end
+
+    if mosaic then
+        local w, h = 450, 680
+        local stock_image = "./plugins/pagetextinfo.koplugin/resources/folder.svg"
+
+        local _, _, scale_factor = BookInfoManager.getCachedCoverSize(
+            w, h,
+            max_w, max_h
+        )
+
+        local subfolder_cover_image = ImageWidget:new {
+            file = stock_image,
+            alpha = true,
+            scale_factor = scale_factor,
+        }
+
+        local cover_size = subfolder_cover_image:getSize()
+
+        local widget = FrameContainer:new {
+            width = cover_size.w + border_total,
+            height = cover_size.h + border_total,
+            margin = 0,
+            padding = 0,
+            bordersize = 0,
+            color = Blitbuffer.COLOR_BLACK,
+            subfolder_cover_image,
+        }
+
+        -- Centra el widget dentro de max_w x max_h
+        return CenterContainer:new{
+            dimen = Geom:new { w = max_w, h = max_h },
+            widget
+        }
+    else
+        local w, h = 450, 680
+        local new_h = max_h
+        local new_w = math.floor(w * (new_h / h))
+        local stock_image = "./plugins/pagetextinfo.koplugin/resources/folder.svg"
+        -- local RenderImage = require("ui/renderimage")
+        -- local cover_bb = RenderImage:renderImageFile(stock_image, false, nil, nil)
+        local subfolder_cover_image = ImageWidget:new {
+            file = stock_image,
+            alpha = true,
+            scale_factor = nil,
+            width = new_w,
+            height = new_h,
+        }
+
+        local cover_size = subfolder_cover_image:getSize()
+        local widget = FrameContainer:new {
+            width = cover_size.w + border_total,
+            height = cover_size.h + border_total,
+            -- radius = Size.radius.default,
+            margin = 0,
+            padding = 0,
+            bordersize = border_size,
+            color = Blitbuffer.COLOR_BLACK,
+            subfolder_cover_image,
+        }
+        -- The width has to be the same than the width when there are 4 covers, so we escalate it and center it
+        local width = math.floor((cover_size.w * (1 - (factor_y * 3))) + 3 * offset_x + border_total)
+        return CenterContainer:new {
+            dimen = Geom:new { w = width, h = max_h },
+            widget,
+        }
+    end
+end
+
+function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h)
+    local ImageWidget = require("ui/widget/imagewidget")
+    local BookInfoManager = require("bookinfomanager")
+    local res = self:getCovers(filepath, max_w, max_h)
+    if self.settings:isTrue("enable_extra_tweaks") then
+        border_size = 0
+    else
+        border_size = Size.border.thin
+    end
+    local border_total = 2*border_size
+
+    local function create_blank_cover(width, height, background_idx)
+        local backgrounds = {
+            Blitbuffer.COLOR_LIGHT_GRAY,
+            Blitbuffer.COLOR_GRAY_D,
+            Blitbuffer.COLOR_GRAY_E,
+        }
+        local max_img_w = width - (Size.border.thin * 2)
+        local max_img_h = height - (Size.border.thin * 2)
+        return FrameContainer:new {
+            width = width,
+            height = height,
+            -- radius = Size.radius.default,
+            margin = 0,
+            padding = 0,
+            bordersize = Size.border.thin,
+            color = Blitbuffer.COLOR_DARK_GRAY,
+            background = backgrounds[background_idx],
+            CenterContainer:new {
+                dimen = Geom:new { w = max_img_w, h = max_img_h },
+                HorizontalSpan:new { width = max_img_w, height = max_img_h },
+            }
+        }
+    end
+
+    local function get_stack_grid_size(max_w, max_h)
+        local max_img_w = 0
+        local max_img_h = 0
+        max_img_w = math.floor((max_w - (Size.border.thin * 2)) / 2)
+        max_img_h = math.floor((max_h - (Size.border.thin * 2)) / 2)
+        if max_img_w < 10 then max_img_w = max_w * 0.8 end
+        if max_img_h < 10 then max_img_h = max_h * 0.8 end
+        return max_img_w, max_img_h
+    end
+
+    local function get_empty_folder_cover()
+        local w, h = 450, 680
+        local new_h = max_h
+        local new_w = math.floor(w * (new_h / h))
+        local stock_image = "./plugins/pagetextinfo.koplugin/resources/folder.svg"
+        -- local RenderImage = require("ui/renderimage")
+        -- local cover_bb = RenderImage:renderImageFile(stock_image, false, nil, nil)
+        local subfolder_cover_image = ImageWidget:new {
+            file = stock_image,
+            alpha = true,
+            scale_factor = nil,
+            width = new_w,
+            height = new_h,
+        }
+
+        local cover_size = subfolder_cover_image:getSize()
+        local widget = FrameContainer:new {
+            width = cover_size.w + border_total,
+            height = cover_size.h + border_total,
+            -- radius = Size.radius.default,
+            margin = 0,
+            padding = 0,
+            bordersize = border_size,
+            color = Blitbuffer.COLOR_BLACK,
+            subfolder_cover_image,
+        }
+        return CenterContainer:new {
+            dimen = Geom:new { w = max_w, h = max_h },
+            wide = new_w - 2*Size.border.thin,
+            widget,
+        }
+    end
+
+    local max_img_w, max_img_h = get_stack_grid_size(max_w, max_h)
+    if res and res[1] and res[2] and res[1][1] then
+        -- print("cover final entro")
+        local dir_ending = string.sub(res[1][1],-2,-2)
+        local num_books = #res[1]
+
+        if num_books > 0 then
+            -- Save all covers
+            local images = {}
+            local w, h = 0, 0
+            for i = 1, num_books do
+                local fullpath = res[1][i] .. res[2][i]
+
+                if util.fileExists(fullpath) then
+                    local bookinfo = BookInfoManager:getBookInfo(fullpath, true)
+                    if bookinfo and bookinfo.cover_bb and bookinfo.has_cover then
+                        local border_total = (Size.border.thin * 2)
+                        local _, _, scale_factor = BookInfoManager.getCachedCoverSize(
+                            bookinfo.cover_w, bookinfo.cover_h, max_img_w, max_img_h)
+                        local wimage = ImageWidget:new {
+                            image = bookinfo.cover_bb,
+                            scale_factor = scale_factor,
+                        }
+                        -- if i == 1 then
+                        -- Images sizes may varied depending the cached size
+                        -- This is not noticed in stack view
+                        w = math.floor((bookinfo.cover_w * scale_factor) + border_total)
+                        h = math.floor((bookinfo.cover_h * scale_factor) + border_total)
+                        -- end
+                        -- print("cover final: ", w, h)
+                        table.insert(images, FrameContainer:new {
+                            width = w,
+                            height = h,
+                            margin = 0,
+                            padding = 0,
+                            -- radius = Size.radius.default,
+                            bordersize = Size.border.thin,
+                            color = Blitbuffer.COLOR_GRAY_3,
+                            background = Blitbuffer.COLOR_GRAY_3,
+                            wimage,
+                        })
+                    end
+                end
+            end
+            if #images == 0 then
+                return get_empty_folder_cover()
+            end
+            local row1 = HorizontalGroup:new {}
+            local row2 = HorizontalGroup:new {}
+            local layout = VerticalGroup:new {}
+
+            if #images == 3 then
+                local w3, h3 = images[3]:getSize().w, images[3]:getSize().h
+                table.insert(images, 2, create_blank_cover(w3, h3, 3))
+            elseif #images == 2 then
+                local w1, h1 = images[1]:getSize().w, images[1]:getSize().h
+                local w2, h2 = images[2]:getSize().w, images[2]:getSize().h
+                table.insert(images, 2, create_blank_cover(w1, h1, 3))
+                table.insert(images, 3, create_blank_cover(w2, h2, 2))
+            elseif #images == 1 then
+                local w1, h1 = images[1]:getSize().w, images[1]:getSize().h
+                table.insert(images, 1, create_blank_cover(w1, h1, 3))
+                table.insert(images, 2, create_blank_cover(w1, h1, 2))
+                table.insert(images, 4, create_blank_cover(w1, h1, 3))
+            end
+
+            for i, img in ipairs(images) do
+                if i < 3 then
+                    table.insert(row1, img)
+                else
+                    table.insert(row2, img)
+                end
+                if i == 1 and not self.settings:isTrue("enable_extra_tweaks_mosaic_view") and not self.settings:isTrue("enable_extra_tweaks") then
+                    table.insert(row1, HorizontalSpan:new { width = Size.padding.small })
+                elseif i == 3 and not self.settings:isTrue("enable_extra_tweaks_mosaic_view") and not self.settings:isTrue("enable_extra_tweaks") then
+                    table.insert(row2, HorizontalSpan:new { width = Size.padding.small })
+                end
+            end
+
+            table.insert(layout, row1)
+            if not self.settings:isTrue("enable_extra_tweaks_mosaic_view") and not self.settings:isTrue("enable_extra_tweaks") then
+                table.insert(layout, VerticalSpan:new { width = Size.padding.small })
+            end
+            table.insert(layout, row2)
+            -- return layout
+
+            return CenterContainer:new {
+                dimen = Geom:new { w = max_w, h = max_h},
+                wide = layout:getSize().w - 2*Size.border.thin,
+                FrameContainer:new {
+                    width = max_w,
+                    height = max_h,
+                    margin = 0,
+                    padding = 0,
+                    -- background = Blitbuffer.colorFromName("orange"),
+                    bordersize = 0,
+                    color = Blitbuffer.COLOR_BLACK,
+                    layout,
+                },
+            }
+        else
+            return get_empty_folder_cover()
+        end
+    else
+        return get_empty_folder_cover()
+    end
 end
 
 return PageTextInfo

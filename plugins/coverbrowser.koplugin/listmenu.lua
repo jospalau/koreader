@@ -135,280 +135,7 @@ function ListMenuItem:init()
     self.init_done = true
 end
 
--- Function in VeeBui's KOReader-folder-stacks-series-author patch
-function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
-     -- Query database for books in this folder with covers
-    local SQ3 = require("lua-ljsqlite3/init")
-    local DataStorage = require("datastorage")
-    local db_conn = SQ3.open(DataStorage:getSettingsDir() .. "/bookinfo_cache.sqlite3")
-    db_conn:set_busy_timeout(5000)
 
-       local res
-    if not filepath:match("✪ Collections") then
-            local query = string.format([[
-                SELECT directory, filename FROM bookinfo
-                WHERE directory = '%s/' AND has_cover = 'Y'
-                ORDER BY filename ASC LIMIT 4;
-        ]], self.filepath:gsub("'", "''"))
-        res = db_conn:exec(query)
-        db_conn:close()
-    elseif filepath:match("✪ Collections$") then
-        res = nil
-    else
-        local candidates = {}
-        if filepath then
-            local coll = ReadCollection.coll[filepath:match("([^/]+)$")]
-            if coll then
-                for _, book in pairs(coll) do
-                    if book.file then table.insert(candidates, book.file) end
-                end
-            end
-        else
-            for _, coll in pairs(ReadCollection.coll) do
-                for _, book in pairs(coll) do
-                    if book.file then table.insert(candidates, book.file) end
-                end
-            end
-        end
-        local covers = {}
-        local dirs = {}
-        local files = {}
-        while #dirs < 4 and #candidates > 0 do
-            local rand_idx = math.random(1, #candidates)
-            local fullpath = candidates[rand_idx]
-            table.remove(candidates, rand_idx)
-
-            if fullpath and util.fileExists(fullpath) then
-                local bookinfo = BookInfoManager:getBookInfo(fullpath, true)
-                table.insert(dirs, fullpath:match("(.*/)"))
-                table.insert(files, fullpath:match("([^/]+)$"))
-            end
-        end
-        res = {
-            dirs,
-            files,
-        }
-    end
-
-    if self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks") then
-        border_size = 0
-    else
-        border_size = Size.border.thin
-    end
-    local border_total = 2*border_size
-    if res and res[1] and res[2] and res[1][1] then
-        local dir_ending = string.sub(res[1][1],-2,-2)
-        local num_books = #res[1]
-
-        -- Save all covers
-        local covers = {}
-        for i = 1, num_books do
-            local fullpath = res[1][i] .. res[2][i]
-
-            if util.fileExists(fullpath) then
-                local bookinfo = BookInfoManager:getBookInfo(fullpath, true)
-                if bookinfo and bookinfo.cover_bb and bookinfo.has_cover then
-                    table.insert(covers, bookinfo)
-                end
-            end
-        end
-        -- Make sure this isn't an empty folder
-        if #covers > 0 then
-            -- Now make the Individual cover widgets
-            local cover_widgets = {}
-            local cover_max_w = max_w
-            local cover_max_h = max_h
-
-            local num_covers = #covers
-            if num_covers > 1 then
-                cover_max_h = math.ceil(max_h * (1 - (math.abs(self.factor_y) * (num_covers - 1))))
-            end
-
-            if self.blanks then
-                cover_max_h = math.ceil(max_h * (1 - (math.abs(self.factor_y) * 3)))
-            end
-
-            for i, bookinfo in ipairs(covers) do
-                -- figure out scale factor
-                local _, _, scale_factor = BookInfoManager.getCachedCoverSize(
-                    bookinfo.cover_w, bookinfo.cover_h,
-                    cover_max_w, cover_max_h
-                )
-
-                -- make the individual cover widget
-                local cover_widget = ImageWidget:new {
-                    image = bookinfo.cover_bb,
-                    scale_factor = scale_factor,
-                }
-
-                if #covers == 1 and self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks") then
-                    local w, h = bookinfo.cover_w, bookinfo.cover_h
-                    local new_h = cover_max_w
-                    local new_w = math.ceil(w * (new_h / h))
-                    cover_widget = ImageWidget:new{
-                        image = bookinfo.cover_bb,
-                        width = new_w,
-                        height = new_h,
-                    }
-                end
-
-                local cover_size = cover_widget:getSize()
-                table.insert(cover_widgets, {
-                    widget = FrameContainer:new {
-                        width = cover_size.w + border_total,
-                        height = cover_size.h + border_total,
-                        -- radius = Size.radius.default,
-                        margin = 0,
-                        padding = 0,
-                        bordersize = border_size,
-                        color = Blitbuffer.COLOR_BLACK,
-                        cover_widget,
-                    },
-                    size = cover_size
-                })
-            end
-
-            local num_covers = #covers
-            local blanks = 0
-            if num_covers == 3 then
-                blanks = 1
-            elseif num_covers == 2 then
-                blanks = 2
-            elseif num_covers == 1 then
-                blanks = 3
-            end
-
-            -- blank covers
-            if self.blanks then
-                for i = 1, blanks do
-                    local cover_size = cover_widgets[num_covers].size
-                    table.insert(cover_widgets, 1, { -- To insert blank covers at the beginning
-                        widget = FrameContainer:new {
-                            width = cover_size.w + border_total,
-                            height = cover_size.h + border_total,
-                            radius = Size.radius.default,
-                            margin = 0,
-                            padding = 0,
-                            bordersize = Size.border.thin, -- Always border for blank covers
-                            color = Blitbuffer.COLOR_BLACK,
-                            background = Blitbuffer.COLOR_LIGHT_GRAY,
-                            HorizontalSpan:new { width = cover_size.w, height = cover_size.h },
-                        },
-                        size = cover_size
-                    })
-                end
-                -- Reverse order
-                -- for i = 1, blanks do
-                --     local cover_size = cover_widgets[num_covers].size
-                --     table.insert(cover_widgets, 1, {
-                --         widget = FrameContainer:new {
-                --             width = cover_size.w + border_total,
-                --             height = cover_size.h + border_total,
-                --             radius = Size.radius.default,
-                --             margin = 0,
-                --             padding = 0,
-                --             bordersize = Size.border.thin,
-                --             color = Blitbuffer.COLOR_BLACK,
-                --             background = Blitbuffer.COLOR_LIGHT_GRAY,
-                --             HorizontalSpan:new { width = cover_size.w, height = cover_size.h },
-                --         },
-                --         size = cover_size
-                --     })
-                -- end
-            end
-            -- if #covers == 1 and not self.blanks then
-            --     -- if self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks") then
-            --     --     return LeftContainer:new {
-            --     --         dimen = Geom:new { w = max_w, h = max_h },
-            --     --         cover_widgets[1].widget,
-            --     --     }
-            --     -- end
-
-            --     -- The width has to be the same than the width when there are 4 covers, so we escalate it and center it
-            --     local cover_size = cover_widgets[1].size
-            --     local width = math.floor((cover_size.w * (1 - (self.factor_y * 3))) + 3 * self.offset_x + border_total)
-            --     return CenterContainer:new {
-            --         dimen = Geom:new { w = width, h = max_h },
-            --         cover_widgets[1].widget,
-            --     }
-            -- end
-
-            local total_width = cover_widgets[1].size.w + border_total + (#cover_widgets-1)*self.offset_x
-            local total_height = cover_widgets[1].size.h + border_total + (#cover_widgets-1)*self.offset_y
-
-            local overlap
-            local children = {}
-            for i, cover in ipairs(cover_widgets) do
-                children[#children + 1] = FrameContainer:new{
-                    margin = 0,
-                    padding = 0,
-                    padding_left = (i - 1) * self.offset_x,
-                    padding_top  = (i - 1) * self.offset_y,
-                    bordersize = 0,
-                    cover.widget,
-                }
-            end
-            -- Reverse order
-            -- for i = #cover_widgets, 1, -1 do
-            --     local idx = (#cover_widgets - i)
-            --     children[#children + 1] = FrameContainer:new{
-            --         margin = 0,
-            --         padding = 0,
-            --         padding_left = (i - 1) * self.offset_x,
-            --         padding_top  = (i - 1) * self.offset_y,
-            --         bordersize = 0,
-            --         cover_widgets[i].widget,
-            --     }
-            -- end
-            overlap = OverlapGroup:new {
-                dimen = Geom:new { w = total_width, h = total_height },
-                table.unpack(children),
-            }
-
-            -- I need the proper real size of a cover without reduction, I take the folder image
-            local base_w, base_h = 450, 680
-            local new_h = max_h
-            local new_w = math.ceil(base_w * (new_h / base_h))
-            local width = math.ceil((new_w* (1 - (self.factor_y * 3))) + 3 * self.offset_x + border_total)
-            return CenterContainer:new {
-                dimen = Geom:new { w = width, h = max_h }, -- Center container to have whole width
-                overlap,
-            }
-        end
-    end
-
-    local w, h = 450, 680
-    local new_h = max_h
-    local new_w = math.floor(w * (new_h / h))
-    local stock_image = "./plugins/pagetextinfo.koplugin/resources/folder.svg"
-    -- local RenderImage = require("ui/renderimage")
-    -- local cover_bb = RenderImage:renderImageFile(stock_image, false, nil, nil)
-    local subfolder_cover_image = ImageWidget:new {
-        file = stock_image,
-        alpha = true,
-        scale_factor = nil,
-        width = new_w,
-        height = new_h,
-    }
-
-    local cover_size = subfolder_cover_image:getSize()
-    local widget = FrameContainer:new {
-        width = cover_size.w + border_total,
-        height = cover_size.h + border_total,
-        -- radius = Size.radius.default,
-        margin = 0,
-        padding = 0,
-        bordersize = border_size,
-        color = Blitbuffer.COLOR_BLACK,
-        subfolder_cover_image,
-    }
-    -- The width has to be the same than the width when there are 4 covers, so we escalate it and center it
-    local width = math.floor((cover_size.w * (1 - (self.factor_y * 3))) + 3 * self.offset_x + border_total)
-    return CenterContainer:new {
-        dimen = Geom:new { w = width, h = max_h },
-        widget,
-    }
-end
 
 function ListMenuItem:update()
     -- We will be a distinctive widget whether we are a directory,
@@ -503,7 +230,15 @@ function ListMenuItem:update()
         folder_cover = ptutil.getFolderCover(self.filepath, max_img_w * 0.82, max_img_h)
         -- check for books with covers in the subfolder
         if folder_cover == nil and not BookInfoManager:getSetting("disable_auto_foldercovers") then
-            folder_cover = self:getSubfolderCoverImages(self.filepath, max_img_w, max_img_h)
+            if self.pagetextinfo and self.pagetextinfo.settings:isTrue("covers_in_folders") then
+                if self.pagetextinfo.settings:isTrue("covers_grid_mode") then
+                    folder_cover = self.pagetextinfo:getSubfolderCoverGrid(self.filepath, max_img_w, max_img_h,
+                                                                        self.factor_x, self.factor_y, self.offset_x, self.offset_y)
+                else
+                    folder_cover = self.pagetextinfo:getSubfolderCoverStack(self.filepath, max_img_w, max_img_h,
+                                                                        self.factor_x, self.factor_y, self.offset_x, self.offset_y)
+                end
+            end
         end
         -- use stock folder icon
 
@@ -549,26 +284,44 @@ function ListMenuItem:update()
 
         -- extra right side padding in filename only mode
         if self.do_filename_only then pad_width = Screen:scaleBySize(20) end
-
-
-        widget = OverlapGroup:new {
-            LeftContainer:new {
-                dimen = dimen:copy(),
-                HorizontalGroup:new {
-                    HorizontalSpan:new { width = Screen:scaleBySize(0) },
-                    folder_cover,  -- Comment line to have directory names
-                    HorizontalSpan:new { width = Screen:scaleBySize(5) },
-                    wleft,
-                }
-            },
-            RightContainer:new {
-                dimen = dimen:copy(),
-                HorizontalGroup:new {
-                    wright,
-                    HorizontalSpan:new { width = pad_width },
+        if not self.pagetextinfo or not self.pagetextinfo.settings:isTrue("covers_in_folders") then
+            widget = OverlapGroup:new {
+                LeftContainer:new {
+                    dimen = dimen:copy(),
+                    HorizontalGroup:new {
+                        HorizontalSpan:new { width = Screen:scaleBySize(0) },
+                        HorizontalSpan:new { width = Screen:scaleBySize(5) },
+                        wleft,
+                    }
                 },
-            },
-        }
+                RightContainer:new {
+                    dimen = dimen:copy(),
+                    HorizontalGroup:new {
+                        wright,
+                        HorizontalSpan:new { width = pad_width },
+                    },
+                },
+            }
+        else
+            widget = OverlapGroup:new {
+                LeftContainer:new {
+                    dimen = dimen:copy(),
+                    HorizontalGroup:new {
+                        HorizontalSpan:new { width = Screen:scaleBySize(0) },
+                        folder_cover,  -- Comment line to have directory names
+                        HorizontalSpan:new { width = Screen:scaleBySize(5) },
+                        wleft,
+                    }
+                },
+                RightContainer:new {
+                    dimen = dimen:copy(),
+                    HorizontalGroup:new {
+                        wright,
+                        HorizontalSpan:new { width = pad_width },
+                    },
+                },
+            }
+        end
     else -- file
         self.file_deleted = self.entry.dim -- entry with deleted file from History or selected file from FM
         local fgcolor = self.file_deleted and Blitbuffer.COLOR_DARK_GRAY or nil
