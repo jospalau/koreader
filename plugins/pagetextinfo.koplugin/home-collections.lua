@@ -325,10 +325,11 @@ local function patchProjectTitleCollections()
             local item_path = appendPath(path, encodeSegment(name))
             local entry = self:getListItem(nil, display, item_path, fake_attributes, collate)
             entry.is_directory = true
+            entry.count = count
             table.insert(dirs, entry)
             ::continue::
         end
-        table.sort(dirs, function(a, b) return a.text:lower() < b.text:lower() end)
+        -- table.sort(dirs, function(a, b) return a.text:lower() < b.text:lower() end)
         return dirs
     end
 

@@ -315,6 +315,7 @@ function FileChooser:genItemTable(dirs, files, path)
             sorting = self:getSortingFunction(self.collates.strcoll)
         end
         table.sort(dirs, sorting)
+
         if G_reader_settings:isTrue("sort_dir_number_files") and path then
             table.sort(dirs, function(a,b)
                 if a.files_no == b.files_no then
@@ -330,6 +331,15 @@ function FileChooser:genItemTable(dirs, files, path)
                 else
                     return a.files_no_finished > b.files_no_finished
                 end end)
+        end
+
+        if path:match("✪ Collections") then
+            table.sort(dirs, function(a, b)
+                if a.count == b.count then
+                    return a.text:lower() > b.text:lower()
+                end
+                return a.count > b.count
+            end)
         end
         table.move(dirs, 1, #dirs, 1, item_table)
         table.move(files, 1, #files, #item_table + 1, item_table)
