@@ -236,7 +236,7 @@ function ListMenuItem:update()
                                                                         self.factor_x, self.factor_y, self.offset_x, self.offset_y)
                 else
                     folder_cover = self.pagetextinfo:getSubfolderCoverStack(self.filepath, max_img_w, max_img_h,
-                                                                        self.factor_x, self.factor_y, self.offset_x, self.offset_y)
+                                                                        self.factor_x, self.factor_y, self.offset_x, self.offset_y, false, self.width, self.height)
                 end
             end
         end

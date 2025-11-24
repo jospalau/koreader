@@ -5028,7 +5028,7 @@ function PageTextInfo:getCovers(filepath, max_w, max_h)
 end
 
 -- Function in VeeBui's KOReader-folder-stacks-series-author patch
-function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, factor_y, offset_x, offset_y, mosaic)
+function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, factor_y, offset_x, offset_y, mosaic, width, height)
     local ImageWidget = require("ui/widget/imagewidget")
     local BookInfoManager = require("bookinfomanager")
     local res = self:getCovers(filepath, max_w, max_h)
@@ -5054,6 +5054,8 @@ function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, f
                 end
             end
         end
+        local available_w = max_w - (#covers-1)*offset_x
+        local available_h = max_h - (#covers-1)*offset_y
         -- Make sure this isn't an empty folder
         if #covers > 0 then
             -- Now make the Individual cover widgets
@@ -5062,38 +5064,76 @@ function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, f
             local cover_max_h = max_h
 
             local num_covers = #covers
-            if num_covers > 1 then
-                cover_max_h = math.ceil(max_h * (1 - (math.abs(factor_y) * (num_covers - 1))))
-            end
+            -- if num_covers > 1 then
+            --     cover_max_h = math.ceil(max_h * (1 - (math.abs(factor_y) * (num_covers - 1))))
+            -- end
 
-            if self.blanks then
-                cover_max_h = math.ceil(max_h * (1 - (math.abs(factor_y) * 3)))
-            end
+            -- if self.blanks then
+            --     cover_max_h = math.ceil(max_h * (1 - (math.abs(factor_y) * 3)))
+            -- end
 
             for i, bookinfo in ipairs(covers) do
                 -- figure out scale factor
-                local _, _, scale_factor = BookInfoManager.getCachedCoverSize(
-                    bookinfo.cover_w, bookinfo.cover_h,
-                    cover_max_w, cover_max_h
-                )
+                 local scale_factor
+                if self.blanks then
+                    available_w = max_w - 3*offset_x
+                    available_h = max_h - 3*offset_y
+                    __, __, scale_factor = BookInfoManager.getCachedCoverSize(
+                        bookinfo.cover_w, bookinfo.cover_h,
+                        available_w, available_h
+                    )
+                else
+                    __, __, scale_factor = BookInfoManager.getCachedCoverSize(
+                        bookinfo.cover_w, bookinfo.cover_h,
+                        available_w, available_h
+                    )
+                end
+                -- if #covers == 1 and self.settings:isTrue("enable_extra_tweaks") then
+                --     local w, h = bookinfo.cover_w, bookinfo.cover_h
+                --     local new_h = cover_max_w
+                --     local new_w = math.ceil(w * (new_h / h))
+                --     cover_widget = ImageWidget:new{
+                --         image = bookinfo.cover_bb,
+                --         width = new_w,
+                --         height = new_h,
+                --     }
+                -- end
 
-                -- make the individual cover widget
                 local cover_widget = ImageWidget:new {
                     image = bookinfo.cover_bb,
                     scale_factor = scale_factor,
                 }
 
-                if #covers == 1 and self.settings:isTrue("enable_extra_tweaks") then
-                    local w, h = bookinfo.cover_w, bookinfo.cover_h
-                    local new_h = cover_max_w
-                    local new_w = math.ceil(w * (new_h / h))
-                    cover_widget = ImageWidget:new{
+                if mosaic and self.settings:isTrue("enable_extra_tweaks_mosaic_view") then
+                    local n = math.min(#covers, 4)
+                    local w = width - offset_x * (n - 1)
+                    local h = height - offset_y * (n - 1)
+
+                    cover_widget = ImageWidget:new {
                         image = bookinfo.cover_bb,
-                        width = new_w,
+                        scale_factor = nil,
+                        width = w,
+                        height = h,
+                    }
+                end
+                if not mosaic and self.settings:isTrue("enable_extra_tweaks") then
+                    local n = math.min(#covers, 4)
+
+                    -- altura fina, exacta
+                    local new_h = height - offset_y * (n - 1)
+
+                    -- mantener aspecto: ancho proporcional a la nueva altura
+                    local orig_w = bookinfo.cover_w
+                    local orig_h = bookinfo.cover_h
+                    local new_w  = math.floor(orig_w * (new_h / orig_h))
+
+                    cover_widget = ImageWidget:new {
+                        image = bookinfo.cover_bb,
+                        scale_factor = nil,  -- MUY importante para no ignorar width/height
+                        width  = new_w,
                         height = new_h,
                     }
                 end
-
                 local cover_size = cover_widget:getSize()
                 table.insert(cover_widgets, {
                     widget = FrameContainer:new {

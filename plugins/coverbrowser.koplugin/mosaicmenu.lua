@@ -571,7 +571,7 @@ function MosaicMenuItem:update()
                                                                             self.factor_x, self.factor_y, self.offset_x, self.offset_y, true)
                 else
                     subfolder_cover_image = self.pagetextinfo:getSubfolderCoverStack(self.filepath, max_img_w, max_img_h,
-                                                                            self.factor_x, self.factor_y, self.offset_x, self.offset_y, true)
+                                                                            self.factor_x, self.factor_y, self.offset_x, self.offset_y, true, self.width, self.height)
                 end
             end
         end
