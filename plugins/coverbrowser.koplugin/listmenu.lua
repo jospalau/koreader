@@ -15,6 +15,7 @@ local LeftContainer = require("ui/widget/container/leftcontainer")
 local LineWidget = require("ui/widget/linewidget")
 local Math = require("optmath")
 local OverlapGroup = require("ui/widget/overlapgroup")
+local ReadCollection = require("readcollection")
 local RightContainer = require("ui/widget/container/rightcontainer")
 local Size = require("ui/size")
 local TextBoxWidget = require("ui/widget/textboxwidget")
@@ -142,25 +143,52 @@ function ListMenuItem:getSubfolderCoverImages(filepath, max_w, max_h)
     local db_conn = SQ3.open(DataStorage:getSettingsDir() .. "/bookinfo_cache.sqlite3")
     db_conn:set_busy_timeout(5000)
 
-    local query = ""
+       local res
     if not filepath:match("✪ Collections") then
-        query = string.format([[
-            SELECT directory, filename FROM bookinfo
-            WHERE directory = '%s/' AND has_cover = 'Y'
-            ORDER BY filename ASC LIMIT 4;
-    ]], self.filepath:gsub("'", "''"))
-
+            local query = string.format([[
+                SELECT directory, filename FROM bookinfo
+                WHERE directory = '%s/' AND has_cover = 'Y'
+                ORDER BY filename ASC LIMIT 4;
+        ]], self.filepath:gsub("'", "''"))
+        res = db_conn:exec(query)
+        db_conn:close()
+    elseif filepath:match("✪ Collections$") then
+        res = nil
     else
-        local collection = filepath:match("([^/\\]+)$")
-        query = string.format([[
-            SELECT directory, filename FROM bookinfo
-            WHERE series = '%s' AND has_cover = 'Y'
-            ORDER BY filename ASC LIMIT 4;
-        ]], collection:gsub("'", "''"))
-    end
+        local candidates = {}
+        if filepath then
+            local coll = ReadCollection.coll[filepath:match("([^/]+)$")]
+            if coll then
+                for _, book in pairs(coll) do
+                    if book.file then table.insert(candidates, book.file) end
+                end
+            end
+        else
+            for _, coll in pairs(ReadCollection.coll) do
+                for _, book in pairs(coll) do
+                    if book.file then table.insert(candidates, book.file) end
+                end
+            end
+        end
+        local covers = {}
+        local dirs = {}
+        local files = {}
+        while #dirs < 4 and #candidates > 0 do
+            local rand_idx = math.random(1, #candidates)
+            local fullpath = candidates[rand_idx]
+            table.remove(candidates, rand_idx)
 
-    local res = db_conn:exec(query)
-    db_conn:close()
+            if fullpath and util.fileExists(fullpath) then
+                local bookinfo = BookInfoManager:getBookInfo(fullpath, true)
+                table.insert(dirs, fullpath:match("(.*/)"))
+                table.insert(files, fullpath:match("([^/]+)$"))
+            end
+        end
+        res = {
+            dirs,
+            files,
+        }
+    end
 
     if self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks") then
         border_size = 0

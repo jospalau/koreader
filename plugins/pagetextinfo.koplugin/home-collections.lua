@@ -560,77 +560,77 @@ local function patchProjectTitleCollections()
         wrapCoverMenuGenItemTable()
     end)
 
-    if not ptutil._collections_icon_patch_applied then
-        ptutil._collections_icon_patch_applied = true
-        local orig_getFolderCover = ptutil.getFolderCover
+    -- if not ptutil._collections_icon_patch_applied then
+    --     ptutil._collections_icon_patch_applied = true
+    --     local orig_getFolderCover = ptutil.getFolderCover
 
-        ptutil.getFolderCover = function(filepath, max_img_w, max_img_h)
-            if filepath and filepath:find("/" .. COLLECTIONS_SEGMENT_PATTERN) then
-                local found_icon = nil
-                local is_png = false
+    --     ptutil.getFolderCover = function(filepath, max_img_w, max_img_h)
+    --         if filepath and filepath:find("/" .. COLLECTIONS_SEGMENT_PATTERN) then
+    --             local found_icon = nil
+    --             local is_png = false
 
-                if isCollectionsRoot(filepath) then
-                    if util.fileExists(root_icon_svg_path) then
-                        found_icon = root_icon_svg_path
-                        is_png = false
-                    elseif util.fileExists(root_icon_png_path) then
-                        found_icon = root_icon_png_path
-                        is_png = true
-                    end
-                else
-                    local coll_name = getCollectionFromPath(filepath)
-                    if coll_name then
-                        local svg_path = DataStorage:getDataDir() .. "/icons/" .. coll_name .. ".folder.svg"
-                        local png_path = DataStorage:getDataDir() .. "/icons/" .. coll_name .. ".folder.png"
+    --             if isCollectionsRoot(filepath) then
+    --                 if util.fileExists(root_icon_svg_path) then
+    --                     found_icon = root_icon_svg_path
+    --                     is_png = false
+    --                 elseif util.fileExists(root_icon_png_path) then
+    --                     found_icon = root_icon_png_path
+    --                     is_png = true
+    --                 end
+    --             else
+    --                 local coll_name = getCollectionFromPath(filepath)
+    --                 if coll_name then
+    --                     local svg_path = DataStorage:getDataDir() .. "/icons/" .. coll_name .. ".folder.svg"
+    --                     local png_path = DataStorage:getDataDir() .. "/icons/" .. coll_name .. ".folder.png"
 
-                        if util.fileExists(svg_path) then
-                            found_icon = svg_path
-                            is_png = false
-                        elseif util.fileExists(png_path) then
-                            found_icon = png_path
-                            is_png = true
-                        end
-                    end
-                end
+    --                     if util.fileExists(svg_path) then
+    --                         found_icon = svg_path
+    --                         is_png = false
+    --                     elseif util.fileExists(png_path) then
+    --                         found_icon = png_path
+    --                         is_png = true
+    --                     end
+    --                 end
+    --             end
 
-                if found_icon then
-                    local w, h = get_single_icon_size(max_img_w, max_img_h)
+    --             if found_icon then
+    --                 local w, h = get_single_icon_size(max_img_w, max_img_h)
 
-                    local icon_widget = ImageWidget:new {
-                        file = found_icon,
-                        alpha = true,
-                        width = w,
-                        height = h,
-                        resize = is_png,
-                        scale_factor = is_png and nil or 0,
-                        center_x_ratio = 0.5,
-                        center_y_ratio = 0.5,
-                        original_in_nightmode = false,
-                    }
-                    return FrameContainer:new {
-                        width = max_img_w,
-                        height = max_img_h,
-                        margin = 0,
-                        padding = 0,
-                        bordersize = 0,
-                        icon_widget,
-                    }
-                end
+    --                 local icon_widget = ImageWidget:new {
+    --                     file = found_icon,
+    --                     alpha = true,
+    --                     width = w,
+    --                     height = h,
+    --                     resize = is_png,
+    --                     scale_factor = is_png and nil or 0,
+    --                     center_x_ratio = 0.5,
+    --                     center_y_ratio = 0.5,
+    --                     original_in_nightmode = false,
+    --                 }
+    --                 return FrameContainer:new {
+    --                     width = max_img_w,
+    --                     height = max_img_h,
+    --                     margin = 0,
+    --                     padding = 0,
+    --                     bordersize = 0,
+    --                     icon_widget,
+    --                 }
+    --             end
 
-                local coll_name_for_stack = getCollectionFromPath(filepath)
-                local images = get_collection_cover_widgets(max_img_w, max_img_h, coll_name_for_stack)
+    --             local coll_name_for_stack = getCollectionFromPath(filepath)
+    --             local images = get_collection_cover_widgets(max_img_w, max_img_h, coll_name_for_stack)
 
-                if #images > 0 then
-                    if BookInfoManager:getSetting("use_stacked_foldercovers") then
-                        return build_diagonal_stack(images, max_img_w, max_img_h)
-                    else
-                        return build_grid(images, max_img_w, max_img_h)
-                    end
-                end
-            end
-            return orig_getFolderCover(filepath, max_img_w, max_img_h)
-        end
-    end
+    --             if #images > 0 then
+    --                 if BookInfoManager:getSetting("use_stacked_foldercovers") then
+    --                     return build_diagonal_stack(images, max_img_w, max_img_h)
+    --                 else
+    --                     return build_grid(images, max_img_w, max_img_h)
+    --                 end
+    --             end
+    --         end
+    --         return orig_getFolderCover(filepath, max_img_w, max_img_h)
+    --     end
+    -- end
 
     local orig_changeToPath = FileChooser.changeToPath
     function FileChooser:changeToPath(path, focused_path)
