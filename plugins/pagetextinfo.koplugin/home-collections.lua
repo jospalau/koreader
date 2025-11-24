@@ -76,7 +76,7 @@ local function patchProjectTitleCollections()
         return FrameContainer:new {
             width = width,
             height = height,
-            radius = Size.radius.default,
+            -- radius = Size.radius.default,
             margin = 0,
             padding = 0,
             bordersize = Size.border.thin,
@@ -163,7 +163,22 @@ local function patchProjectTitleCollections()
         table.insert(layout, row1)
         table.insert(layout, VerticalSpan:new { width = Size.padding.small })
         table.insert(layout, row2)
-        return layout
+        -- return layout
+
+        return CenterContainer:new {
+            dimen = Geom:new { w = max_w, h = max_h},
+            wide = layout:getSize().w - 2*Size.border.thin,
+            FrameContainer:new {
+                width = max_w,
+                height = max_h,
+                margin = 0,
+                padding = 0,
+                -- background = Blitbuffer.colorFromName("orange"),
+                bordersize = 0,
+                color = Blitbuffer.COLOR_BLACK,
+                layout,
+            },
+        }
     end
 
     local function get_collection_cover_widgets(max_w, max_h, specific_collection_name)
@@ -205,11 +220,11 @@ local function patchProjectTitleCollections()
                     }
 
                     table.insert(covers, FrameContainer:new {
-                        width = math.floor((bookinfo.cover_w * scale_factor) + border_total),
-                        height = math.floor((bookinfo.cover_h * scale_factor) + border_total),
+                        width = math.ceil((bookinfo.cover_w * scale_factor) + border_total),
+                        height = math.ceil((bookinfo.cover_h * scale_factor) + border_total),
                         margin = 0,
                         padding = 0,
-                        radius = Size.radius.default,
+                        -- radius = Size.radius.default,
                         bordersize = Size.border.thin,
                         color = Blitbuffer.COLOR_GRAY_3,
                         background = Blitbuffer.COLOR_GRAY_3,

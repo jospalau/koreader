@@ -885,7 +885,7 @@ function MosaicMenuItem:update()
         -- local directory, nbitems = self:_getTextBoxes { w = max_img_w, h = max_img_h }
         local size = subfolder_cover_image:getSize()
 
-        local directory, nbitems = self:_getTextBoxes { w = size.w, h = size.h }
+        local directory, nbitems = self:_getTextBoxes { w = subfolder_cover_image.wide and subfolder_cover_image.wide or size.w, h = size.h }
         size = nbitems:getSize()
         local nb_size = math.max(size.w, size.h)
 
