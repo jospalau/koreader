@@ -700,7 +700,7 @@ function MosaicMenuItem:_getTextBoxes(dimen)
     local text = self.text
     if text:match("/$") then text = text:sub(1, -2) end -- remove "/"
     text = BD.directory(capitalize(text))
-    if not text:match("✪ Collections") and not text:match("%(%d+%)") then
+    if not text:match("✪ Collections") and not text:match("%(%d+%)") and self.mandatory:match("%d+/%d+") then
         text = text .. " (" .. self.mandatory:match("%d+/%d+") .. ")"
     end
     local available_height = dimen.h - 2 * nbitems:getSize().h
