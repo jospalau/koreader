@@ -5027,16 +5027,54 @@ function PageTextInfo:getCovers(filepath, max_w, max_h)
     return res
 end
 
+function PageTextInfo:get_empty_folder_cover(max_h, max_w, border_total, mosaic)
+    local ImageWidget = require("ui/widget/imagewidget")
+    local w, h = 450, 680
+    local new_h = max_h
+    local new_w = math.floor(w * (new_h / h))
+    local stock_image = "./plugins/pagetextinfo.koplugin/resources/folder.svg"
+    -- local RenderImage = require("ui/renderimage")
+    -- local cover_bb = RenderImage:renderImageFile(stock_image, false, nil, nil)
+    local subfolder_cover_image = ImageWidget:new {
+        file = stock_image,
+        alpha = true,
+        scale_factor = nil,
+        width = new_w,
+        height = new_h,
+    }
+
+    local cover_size = subfolder_cover_image:getSize()
+    local widget = FrameContainer:new {
+        width = cover_size.w + border_total,
+        height = cover_size.h + border_total,
+        -- radius = Size.radius.default,
+        margin = 0,
+        padding = 0,
+        bordersize = (mosaic and self.settings:isTrue("enable_extra_tweaks_mosaic_view")) and 0 or Size.border.thin,
+        color = Blitbuffer.COLOR_BLACK,
+        subfolder_cover_image,
+    }
+    local border_adjustment = 0
+    if not self.settings:isTrue("enable_rounded_corners") then
+        border_adjustment = 2*Size.border.thin
+    end
+    return CenterContainer:new {
+        dimen = Geom:new { w = max_w + border_adjustment, h = max_h },
+        wide = new_w - 2*Size.border.thin,
+        widget,
+    }
+end
+
 -- Function in VeeBui's KOReader-folder-stacks-series-author patch
-function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, factor_y, offset_x, offset_y, mosaic, width, height)
+function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, factor_y, offset_x, offset_y, blanks, mosaic, width, height)
     local ImageWidget = require("ui/widget/imagewidget")
     local BookInfoManager = require("bookinfomanager")
     local res = self:getCovers(filepath, max_w, max_h)
-    if self.settings:isTrue("enable_extra_tweaks") then
+    local border_size = Size.border.thin
+    if not mosaic and self.settings:isTrue("enable_extra_tweaks") then
         border_size = 0
-    else
-        border_size = Size.border.thin
     end
+    border_size = Size.border.thin
     local border_total = 2*border_size
     if res and res[1] and res[2] and res[1][1] then
         local dir_ending = string.sub(res[1][1],-2,-2)
@@ -5074,8 +5112,8 @@ function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, f
 
             for i, bookinfo in ipairs(covers) do
                 -- figure out scale factor
-                 local scale_factor
-                if self.blanks then
+                local scale_factor
+                if blanks then
                     available_w = max_w - 3*offset_x
                     available_h = max_h - 3*offset_y
                     __, __, scale_factor = BookInfoManager.getCachedCoverSize(
@@ -5151,18 +5189,18 @@ function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, f
             end
 
             local num_covers = #covers
-            local blanks = 0
+            local blanks_no = 0
             if num_covers == 3 then
-                blanks = 1
+                blanks_no = 1
             elseif num_covers == 2 then
-                blanks = 2
+                blanks_no = 2
             elseif num_covers == 1 then
-                blanks = 3
+                blanks_no = 3
             end
 
             -- blank covers
-            if self.blanks then
-                for i = 1, blanks do
+            if blanks then
+                for i = 1, blanks_no do
                     local cover_size = cover_widgets[num_covers].size
                     table.insert(cover_widgets, 1, { -- To insert blank covers at the beginning
                         widget = FrameContainer:new {
@@ -5179,8 +5217,8 @@ function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, f
                         size = cover_size
                     })
                 end
-                -- Reverse order
-                -- for i = 1, blanks do
+                -- -- Reverse order
+                -- for i = 1, blanks_no do
                 --     local cover_size = cover_widgets[num_covers].size
                 --     table.insert(cover_widgets, 1, {
                 --         widget = FrameContainer:new {
@@ -5278,14 +5316,14 @@ function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, f
                         cover.widget,
                     }
                 end
-                -- Reverse order
+                -- -- Reverse order
                 -- for i = #cover_widgets, 1, -1 do
                 --     local idx = (#cover_widgets - i)
                 --     children[#children + 1] = FrameContainer:new{
                 --         margin = 0,
                 --         padding = 0,
-                --         padding_left = (i - 1) * self.offset_x,
-                --         padding_top  = (i - 1) * self.offset_y,
+                --         padding_left = (i - 1) * offset_x,
+                --         padding_top  = (i - 1) * offset_y,
                 --         bordersize = 0,
                 --         cover_widgets[i].widget,
                 --     }
@@ -5309,37 +5347,7 @@ function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, f
     end
 
     if mosaic then
-        local w, h = 450, 680
-        local stock_image = "./plugins/pagetextinfo.koplugin/resources/folder.svg"
-
-        local _, _, scale_factor = BookInfoManager.getCachedCoverSize(
-            w, h,
-            max_w, max_h
-        )
-
-        local subfolder_cover_image = ImageWidget:new {
-            file = stock_image,
-            alpha = true,
-            scale_factor = scale_factor,
-        }
-
-        local cover_size = subfolder_cover_image:getSize()
-
-        local widget = FrameContainer:new {
-            width = cover_size.w + border_total,
-            height = cover_size.h + border_total,
-            margin = 0,
-            padding = 0,
-            bordersize = 0,
-            color = Blitbuffer.COLOR_BLACK,
-            subfolder_cover_image,
-        }
-
-        -- Centra el widget dentro de max_w x max_h
-        return CenterContainer:new{
-            dimen = Geom:new { w = max_w, h = max_h },
-            widget
-        }
+        return self:get_empty_folder_cover(max_h, max_w, border_total, mosaic)
     else
         local w, h = 450, 680
         local new_h = max_h
@@ -5375,7 +5383,7 @@ function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, f
     end
 end
 
-function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h)
+function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
     local ImageWidget = require("ui/widget/imagewidget")
     local BookInfoManager = require("bookinfomanager")
     local res = self:getCovers(filepath, max_w, max_h)
@@ -5419,40 +5427,6 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h)
         if max_img_h < 10 then max_img_h = max_h * 0.8 end
         return max_img_w, max_img_h
     end
-
-    local function get_empty_folder_cover()
-        local w, h = 450, 680
-        local new_h = max_h
-        local new_w = math.floor(w * (new_h / h))
-        local stock_image = "./plugins/pagetextinfo.koplugin/resources/folder.svg"
-        -- local RenderImage = require("ui/renderimage")
-        -- local cover_bb = RenderImage:renderImageFile(stock_image, false, nil, nil)
-        local subfolder_cover_image = ImageWidget:new {
-            file = stock_image,
-            alpha = true,
-            scale_factor = nil,
-            width = new_w,
-            height = new_h,
-        }
-
-        local cover_size = subfolder_cover_image:getSize()
-        local widget = FrameContainer:new {
-            width = cover_size.w + border_total,
-            height = cover_size.h + border_total,
-            -- radius = Size.radius.default,
-            margin = 0,
-            padding = 0,
-            bordersize = border_size,
-            color = Blitbuffer.COLOR_BLACK,
-            subfolder_cover_image,
-        }
-        return CenterContainer:new {
-            dimen = Geom:new { w = max_w, h = max_h },
-            wide = new_w - 2*Size.border.thin,
-            widget,
-        }
-    end
-
     local max_img_w, max_img_h = get_stack_grid_size(max_w, max_h)
     if res and res[1] and res[2] and res[1][1] then
         -- print("cover final entro")
@@ -5479,8 +5453,24 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h)
                         -- if i == 1 then
                         -- Images sizes may varied depending the cached size
                         -- This is not noticed in stack view
-                        w = math.floor((bookinfo.cover_w * scale_factor) + border_total)
-                        h = math.floor((bookinfo.cover_h * scale_factor) + border_total)
+                        local w = math.floor((bookinfo.cover_w * scale_factor) + border_total)
+                        local h = math.floor((bookinfo.cover_h * scale_factor) + border_total)
+
+                        if (mosaic and self.settings:isTrue("enable_extra_tweaks_mosaic_view"))
+                        or (not mosaic and self.settings:isTrue("enable_extra_tweaks")) then
+                            local final_w = max_img_w
+                            local final_h = max_img_h
+
+                            wimage = ImageWidget:new {
+                            image = bookinfo.cover_bb,
+                            width = final_w,
+                            height = final_h,
+                            scale_factor = nil,
+                            }
+
+                            w = final_w + border_total
+                            h = final_h + border_total
+                        end
                         -- end
                         -- print("cover final: ", w, h)
                         table.insert(images, FrameContainer:new {
@@ -5498,7 +5488,7 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h)
                 end
             end
             if #images == 0 then
-                return get_empty_folder_cover()
+                return self:get_empty_folder_cover(max_h, max_w, border_total, true)
             end
             local row1 = HorizontalGroup:new {}
             local row2 = HorizontalGroup:new {}
@@ -5519,28 +5509,33 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h)
                 table.insert(images, 4, create_blank_cover(w1, h1, 3))
             end
 
+            local gaps = (mosaic and not self.settings:isTrue("enable_extra_tweaks_mosaic_view"))
+                        or (not mosaic and not self.settings:isTrue("enable_extra_tweaks"))
             for i, img in ipairs(images) do
                 if i < 3 then
                     table.insert(row1, img)
                 else
                     table.insert(row2, img)
                 end
-                if i == 1 and not self.settings:isTrue("enable_extra_tweaks_mosaic_view") and not self.settings:isTrue("enable_extra_tweaks") then
+                if i == 1 and gaps then
                     table.insert(row1, HorizontalSpan:new { width = Size.padding.small })
-                elseif i == 3 and not self.settings:isTrue("enable_extra_tweaks_mosaic_view") and not self.settings:isTrue("enable_extra_tweaks") then
+                elseif i == 3 and gaps then
                     table.insert(row2, HorizontalSpan:new { width = Size.padding.small })
                 end
             end
 
             table.insert(layout, row1)
-            if not self.settings:isTrue("enable_extra_tweaks_mosaic_view") and not self.settings:isTrue("enable_extra_tweaks") then
+            if gaps then
                 table.insert(layout, VerticalSpan:new { width = Size.padding.small })
             end
             table.insert(layout, row2)
             -- return layout
-
+            local border_adjustment = 0
+            if not self.settings:isTrue("enable_rounded_corners") then
+                border_adjustment = 2*Size.border.thin
+            end
             return CenterContainer:new {
-                dimen = Geom:new { w = max_w, h = max_h},
+                dimen = Geom:new { w = max_w + border_adjustment, h = max_h},
                 wide = layout:getSize().w - 2*Size.border.thin,
                 FrameContainer:new {
                     width = max_w,
@@ -5554,10 +5549,10 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h)
                 },
             }
         else
-            return get_empty_folder_cover()
+            return self:get_empty_folder_cover(max_h, max_w, border_total, true)
         end
     else
-        return get_empty_folder_cover()
+        return self:get_empty_folder_cover(max_h, max_w, border_total, true)
     end
 end
 

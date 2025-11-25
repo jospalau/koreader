@@ -232,11 +232,10 @@ function ListMenuItem:update()
         if folder_cover == nil and not BookInfoManager:getSetting("disable_auto_foldercovers") then
             if self.pagetextinfo and self.pagetextinfo.settings:isTrue("covers_in_folders") then
                 if self.pagetextinfo.settings:isTrue("covers_grid_mode") then
-                    folder_cover = self.pagetextinfo:getSubfolderCoverGrid(self.filepath, max_img_w, max_img_h,
-                                                                        self.factor_x, self.factor_y, self.offset_x, self.offset_y)
+                    folder_cover = self.pagetextinfo:getSubfolderCoverGrid(self.filepath, max_img_w, max_img_h, false)
                 else
                     folder_cover = self.pagetextinfo:getSubfolderCoverStack(self.filepath, max_img_w, max_img_h,
-                                                                        self.factor_x, self.factor_y, self.offset_x, self.offset_y, false, self.width, self.height)
+                                                                        self.factor_x, self.factor_y, self.offset_x, self.offset_y, self.blanks, false, self.width, self.height)
                 end
             end
         end
@@ -386,15 +385,24 @@ function ListMenuItem:update()
                     wimage:_render()
                     -- The cover will be aligned to look the same as the folder covers with one file
                     -- so we need the same width as when there are 4 covers
-                    local image_size = wimage:getSize() -- get final widget size
-                    local offset_x = math.floor(max_img_w * self.factor_x)
-                    local width = math.ceil((image_size.w * (1 - (self.factor_y * 3))) + 3 * self.offset_x + 2*border_size)
-                    local total_width = image_size.w + 2*border_size
+
+                    local total_width = wleft_width
+                    local height = wleft_height
+                    local image_size = wimage:getSize()
+                    local width = image_size.w
+                    if self.pagetextinfo and self.pagetextinfo.settings:isTrue("covers_in_folders")
+                    and not self.pagetextinfo.settings:isTrue("covers_grid_mode") then
+                        height = image_size.h
+                        local offset_x = math.floor(max_img_w * self.factor_x)
+                        total_width = math.ceil((image_size.w * (1 - (self.factor_y * 3))) + 3 * self.offset_x + 2*border_size)
+                        width = image_size.w + 2*border_size
+                    end
+
                     wleft = CenterContainer:new{
-                        dimen = Geom:new{ w = width, h = wleft_height },
+                        dimen = Geom:new{ w = total_width, h = wleft_height },
                         FrameContainer:new{
-                            width = total_width,
-                            height = image_size.h + 2*border_size,
+                            width = image_size.w,
+                            height = height + 2*border_size,
                             margin = 0,
                             padding = 0,
                             bordersize = border_size,

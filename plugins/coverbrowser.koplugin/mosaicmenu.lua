@@ -567,11 +567,10 @@ function MosaicMenuItem:update()
         if subfolder_cover_image == nil and not BookInfoManager:getSetting("disable_auto_foldercovers") then
             if self.pagetextinfo and self.pagetextinfo.settings:isTrue("covers_in_folders") then
                 if self.pagetextinfo.settings:isTrue("covers_grid_mode") then
-                    subfolder_cover_image = self.pagetextinfo:getSubfolderCoverGrid(self.filepath, max_img_w, max_img_h,
-                                                                            self.factor_x, self.factor_y, self.offset_x, self.offset_y, true)
+                    subfolder_cover_image = self.pagetextinfo:getSubfolderCoverGrid(self.filepath, max_img_w, max_img_h, true)
                 else
                     subfolder_cover_image = self.pagetextinfo:getSubfolderCoverStack(self.filepath, max_img_w, max_img_h,
-                                                                            self.factor_x, self.factor_y, self.offset_x, self.offset_y, true, self.width, self.height)
+                                                                            self.factor_x, self.factor_y, self.offset_x, self.offset_y, self.blanks, true, self.width, self.height)
                 end
             end
         end
@@ -620,7 +619,6 @@ function MosaicMenuItem:update()
                 alpha = alpha_level,
                 directory_frame,
             }
-
             -- local directory, nbitems = self:_getTextBoxes { w = max_img_w, h = max_img_h }
             local size = subfolder_cover_image:getSize()
 
