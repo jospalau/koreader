@@ -631,7 +631,7 @@ function MosaicMenuItem:update()
                 dimen = dimen,
                 FrameContainer:new {
                     padding = 0,
-                    bordersize = 0, --border_size,
+                    bordersize = (self.pagetextinfo and self.pagetextinfo.settings:isTrue("draw_borders_mosaic_overlays")) and Size.border.thin or 0,
                     AlphaContainer:new { alpha = Folder.face.alpha, directory },
                 },
                 overlap_align = "center",
@@ -888,9 +888,10 @@ function MosaicMenuItem:update()
                 -- twgrr:free()
 
                 local border_adjustment = 0
-                if self.pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
-                    border_adjustment = 2*Size.border.thin
-                end
+
+                -- if self.pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
+                --     border_adjustment = 2*Size.border.thin
+                -- end
                 if self.pagetextinfo.settings:isTrue("enable_rounded_corners") then
                     border_adjustment = 3*Size.border.thin
                 end
@@ -924,7 +925,8 @@ function MosaicMenuItem:update()
                                     FrameContainer:new {
                                         margin = 0,
                                         padding = 0,
-                                        bordersize = 0, --border_size,
+                                        bordersize = (self.pagetextinfo and self.pagetextinfo.settings:isTrue("draw_borders_mosaic_overlays")) and Size.border.thin or 0,
+                                        -- bordersize = self.pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") and Size.border.thin or 0,
                                         AlphaContainer:new {
                                             alpha = 0.6,
                                             -- VerticalGroup:new{

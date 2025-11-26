@@ -224,17 +224,17 @@ function ListMenuItem:update()
 
         local pad_width = Screen:scaleBySize(10) -- on the left, in between, and on the right
         -- add cover-art sized icon for folders
-        local folder_cover
+        local subfolder_cover_image
 
         -- check for folder image
-        folder_cover = ptutil.getFolderCover(self.filepath, max_img_w * 0.82, max_img_h)
+        subfolder_cover_image = ptutil.getFolderCover(self.filepath, max_img_w * 0.82, max_img_h)
         -- check for books with covers in the subfolder
-        if folder_cover == nil and not BookInfoManager:getSetting("disable_auto_foldercovers") then
+        if subfolder_cover_image == nil and not BookInfoManager:getSetting("disable_auto_foldercovers") then
             if self.pagetextinfo and self.pagetextinfo.settings:isTrue("covers_in_folders") then
                 if self.pagetextinfo.settings:isTrue("covers_grid_mode") then
-                    folder_cover = self.pagetextinfo:getSubfolderCoverGrid(self.filepath, max_img_w, max_img_h, false)
+                    subfolder_cover_image = self.pagetextinfo:getSubfolderCoverGrid(self.filepath, max_img_w, max_img_h, false)
                 else
-                    folder_cover = self.pagetextinfo:getSubfolderCoverStack(self.filepath, max_img_w, max_img_h,
+                    subfolder_cover_image = self.pagetextinfo:getSubfolderCoverStack(self.filepath, max_img_w, max_img_h,
                                                                         self.factor_x, self.factor_y, self.offset_x, self.offset_y, self.blanks, false, self.width, self.height)
                 end
             end
@@ -283,7 +283,7 @@ function ListMenuItem:update()
 
         -- extra right side padding in filename only mode
         if self.do_filename_only then pad_width = Screen:scaleBySize(20) end
-        if not self.pagetextinfo or not self.pagetextinfo.settings:isTrue("covers_in_folders") then
+        if not subfolder_cover_image or not self.pagetextinfo or not self.pagetextinfo.settings:isTrue("covers_in_folders") then
             widget = OverlapGroup:new {
                 LeftContainer:new {
                     dimen = dimen:copy(),
@@ -306,8 +306,8 @@ function ListMenuItem:update()
                 LeftContainer:new {
                     dimen = dimen:copy(),
                     HorizontalGroup:new {
-                        HorizontalSpan:new { width = Screen:scaleBySize(0) },
-                        folder_cover,  -- Comment line to have directory names
+                        self.pagetextinfo.settings:isTrue("covers_grid_mode") and HorizontalSpan:new { width = Screen:scaleBySize(0)} or HorizontalSpan:new { width = Screen:scaleBySize(5) }, -- Leave a bit of left margin that we compesate for regular covers with the extra_shift variable
+                        subfolder_cover_image,  -- Comment line to have directory names
                         HorizontalSpan:new { width = Screen:scaleBySize(5) },
                         wleft,
                     }
@@ -387,21 +387,20 @@ function ListMenuItem:update()
                     -- so we need the same width as when there are 4 covers
 
                     local total_width = wleft_width
-                    local height = wleft_height
                     local image_size = wimage:getSize()
                     local width = image_size.w + 2*border_size
                     if self.pagetextinfo and self.pagetextinfo.settings:isTrue("covers_in_folders")
                     and not self.pagetextinfo.settings:isTrue("covers_grid_mode") then
-                        height = image_size.h
                         local offset_x = math.floor(max_img_w * self.factor_x)
-                        total_width = math.ceil((image_size.w * (1 - (self.factor_y * 3))) + 3 * self.offset_x + 2*border_size)
+                        local extra_shift = self.pagetextinfo.settings:isTrue("covers_grid_mode") and 0 or Screen:scaleBySize(5)
+                        total_width = math.ceil((image_size.w * (1 - (self.factor_y * 3))) + 3 * self.offset_x + 2*border_size + 2*extra_shift)
                     end
 
                     wleft = CenterContainer:new{
                         dimen = Geom:new{ w = total_width, h = wleft_height },
                         FrameContainer:new{
                             width = width,
-                            height = height + 2*border_size,
+                            height = image_size.h + 2*border_size,
                             margin = 0,
                             padding = 0,
                             bordersize = border_size,

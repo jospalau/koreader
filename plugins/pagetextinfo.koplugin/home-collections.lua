@@ -41,7 +41,7 @@ local function patchProjectTitleCollections()
     local root_icon_png_path = DataStorage:getDataDir() .. "/icons/folder.collections.png"
     local root_icon_svg_path = DataStorage:getDataDir() .. "/icons/folder.collections.svg"
 
-    local SHOW_FAVORITES_COLLECTION = false
+    local SHOW_FAVORITES_COLLECTION = true
 
     local function get_single_icon_size(max_w, max_h)
         local border_size = Size.border.thin
