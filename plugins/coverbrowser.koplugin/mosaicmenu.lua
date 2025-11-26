@@ -631,7 +631,7 @@ function MosaicMenuItem:update()
                 dimen = dimen,
                 FrameContainer:new {
                     padding = 0,
-                    bordersize = 0, -- border_size,
+                    bordersize = 0, --border_size,
                     AlphaContainer:new { alpha = Folder.face.alpha, directory },
                 },
                 overlap_align = "center",
@@ -887,8 +887,15 @@ function MosaicMenuItem:update()
                 -- local sizegrr = twgrr:getSize()
                 -- twgrr:free()
 
+                local border_adjustment = 0
+                if self.pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
+                    border_adjustment = 2*Size.border.thin
+                end
+                if self.pagetextinfo.settings:isTrue("enable_rounded_corners") then
+                    border_adjustment = 3*Size.border.thin
+                end
                 local all_metadata_text = string.format("%s %s %s %s", words, pubdate, grvotes, grrating)
-                local directory = self:getDirectoryTextWidget({ w = image_size.w, h = image_size.h }, all_metadata_text)
+                local directory = self:getDirectoryTextWidget({ w = image_size.w - border_adjustment, h = image_size.h }, all_metadata_text)
                 local dir_size = directory:getSize()
                 local container_size = {
                     w = dir_size.w,
@@ -917,7 +924,7 @@ function MosaicMenuItem:update()
                                     FrameContainer:new {
                                         margin = 0,
                                         padding = 0,
-                                        bordersize = 0, -- border_size,
+                                        bordersize = 0, --border_size,
                                         AlphaContainer:new {
                                             alpha = 0.6,
                                             -- VerticalGroup:new{

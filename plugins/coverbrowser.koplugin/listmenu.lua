@@ -389,19 +389,18 @@ function ListMenuItem:update()
                     local total_width = wleft_width
                     local height = wleft_height
                     local image_size = wimage:getSize()
-                    local width = image_size.w
+                    local width = image_size.w + 2*border_size
                     if self.pagetextinfo and self.pagetextinfo.settings:isTrue("covers_in_folders")
                     and not self.pagetextinfo.settings:isTrue("covers_grid_mode") then
                         height = image_size.h
                         local offset_x = math.floor(max_img_w * self.factor_x)
                         total_width = math.ceil((image_size.w * (1 - (self.factor_y * 3))) + 3 * self.offset_x + 2*border_size)
-                        width = image_size.w + 2*border_size
                     end
 
                     wleft = CenterContainer:new{
                         dimen = Geom:new{ w = total_width, h = wleft_height },
                         FrameContainer:new{
-                            width = image_size.w,
+                            width = width,
                             height = height + 2*border_size,
                             margin = 0,
                             padding = 0,

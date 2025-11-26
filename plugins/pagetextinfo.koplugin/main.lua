@@ -5027,7 +5027,8 @@ function PageTextInfo:getCovers(filepath, max_w, max_h)
     return res
 end
 
-function PageTextInfo:get_empty_folder_cover(max_h, max_w, border_total, mosaic)
+function PageTextInfo:get_empty_folder_cover(max_h, max_w)
+    local border_total = 2*Size.border.thin
     local ImageWidget = require("ui/widget/imagewidget")
     local BookInfoManager = require("bookinfomanager")
 
@@ -5047,23 +5048,86 @@ function PageTextInfo:get_empty_folder_cover(max_h, max_w, border_total, mosaic)
         original_in_nightmode = false,
     }
 
-    return CenterContainer:new {
-        dimen = Geom:new { w = max_w, h = max_h },
+    local cover_size = subfolder_cover_image:getSize()
+    local frame_width = cover_size.w + border_total
+    local frame_height = cover_size.h + border_total
+
+    local widget = FrameContainer:new {
+        width = frame_width,
+        height = frame_height,
+        -- radius = Size.radius.default,
+        margin = 0,
+        padding = 0,
+        bordersize = 0, -- ((require("ui/widget/filechooser").display_mode_type == "mosaic" and self.settings:isTrue("enable_extra_tweaks_mosaic_view"))) and 0 or Size.border.thin,
+        color = Blitbuffer.COLOR_BLACK,
         subfolder_cover_image,
     }
-end
+
+    local border_adjustment = 0
+    if self.settings:isTrue("enable_extra_tweaks_mosaic_view")
+        or self.settings:isTrue("enable_rounded_corners") then
+        border_adjustment = border_total
+        if self.settings:isTrue("enable_extra_tweaks_mosaic_view") then
+            max_w = max_w - border_total
+        end
+    end
+
+    return CenterContainer:new {
+        dimen = Geom:new { w = frame_width - border_adjustment, h = max_h },
+        wide = max_w,
+        widget,
+    }
+    end
+--     if self.settings:isTrue("covers_grid_mode") and require("ui/widget/filechooser").display_mode_type == "list" then
+--         local w, h = 450, 680
+--         local new_h = max_h
+--         local new_w = math.floor(w * (new_h / h))
+--         local stock_image = "./plugins/pagetextinfo.koplugin/resources/folder.svg"
+
+--         local subfolder_cover_image = ImageWidget:new {
+--             file = stock_image,
+--             alpha = true,
+--             scale_factor = nil,
+--             width = new_w,
+--             height = new_h,
+--         }
+--         local cover_size = subfolder_cover_image:getSize()
+--         local widget = FrameContainer:new {
+--             width = cover_size.w + border_total,
+--             height = cover_size.h + border_total,
+--             -- radius = Size.radius.default,
+--             margin = 0,
+--             padding = 0,
+--             bordersize = border_size,
+--             color = Blitbuffer.COLOR_BLACK,
+--             subfolder_cover_image,
+--         }
+--         local width = math.floor(cover_size.w * 1.5 + border_total)
+--         return CenterContainer:new {
+--             dimen = Geom:new { w = width, h = max_h },
+--             widget,
+--         }
+--     else
+--         return CenterContainer:new {
+--             dimen = Geom:new { w = frame_width - border_adjustment, h = max_h },
+--             wide = max_w,
+--             widget,
+--         }
+--     end
+
+--     -- return CenterContainer:new {
+--     --     dimen = Geom:new { w = max_w, h = max_h },
+--     --     wide = math.floor(450 * (max_h / 680)),
+--     --     subfolder_cover_image,
+--     -- }
+-- end
 
 -- Function in VeeBui's KOReader-folder-stacks-series-author patch
 function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, factor_y, offset_x, offset_y, blanks, mosaic, width, height)
     local ImageWidget = require("ui/widget/imagewidget")
     local BookInfoManager = require("bookinfomanager")
     local res = self:getCovers(filepath, max_w, max_h)
-    local border_size = Size.border.thin
-    if not mosaic and self.settings:isTrue("enable_extra_tweaks") then
-        border_size = 0
-    end
-    border_size = Size.border.thin
-    local border_total = 2*border_size
+    local border_total = 2*Size.border.thin
     if res and res[1] and res[2] and res[1][1] then
         local dir_ending = string.sub(res[1][1],-2,-2)
         local num_books = #res[1]
@@ -5168,7 +5232,7 @@ function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, f
                         -- radius = Size.radius.default,
                         margin = 0,
                         padding = 0,
-                        bordersize = border_size,
+                        bordersize = Size.border.thin,
                         color = Blitbuffer.COLOR_BLACK,
                         cover_widget,
                     },
@@ -5258,7 +5322,7 @@ function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, f
                 -- crear FrameContainer de cada portada con offset + centrado
                 local children = {}
                 local border_adjustment = 0
-                    if self.settings:isTrue("enable_extra_tweaks_mosaic_view")
+                if self.settings:isTrue("enable_extra_tweaks_mosaic_view")
                         or self.settings:isTrue("enable_rounded_corners") then
                         border_adjustment = Size.border.thin
                 end
@@ -5335,7 +5399,7 @@ function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, f
     end
 
     if mosaic then
-        return self:get_empty_folder_cover(max_h, max_w, border_total, mosaic)
+        return self:get_empty_folder_cover(max_h, max_w)
     else
         local w, h = 450, 680
         local new_h = max_h
@@ -5375,28 +5439,27 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
     local ImageWidget = require("ui/widget/imagewidget")
     local BookInfoManager = require("bookinfomanager")
     local res = self:getCovers(filepath, max_w, max_h)
-    if self.settings:isTrue("enable_extra_tweaks") then
-        border_size = 0
-    else
-        border_size = Size.border.thin
-    end
-    local border_total = 2*border_size
 
     local function create_blank_cover(width, height, background_idx)
+        local border_size = Size.border.thin
+        if (mosaic and self.settings:isTrue("enable_extra_tweaks_mosaic_view"))
+        or (not mosaic and self.settings:isTrue("enable_extra_tweaks")) then
+            border_size = 0
+        end
         local backgrounds = {
             Blitbuffer.COLOR_LIGHT_GRAY,
             Blitbuffer.COLOR_GRAY_D,
             Blitbuffer.COLOR_GRAY_E,
         }
-        local max_img_w = width - (Size.border.thin * 2)
-        local max_img_h = height - (Size.border.thin * 2)
+        local max_img_w = width - (border_size * 2)
+        local max_img_h = height - (border_size * 2)
         return FrameContainer:new {
             width = width,
             height = height,
             -- radius = Size.radius.default,
             margin = 0,
             padding = 0,
-            bordersize = self.settings:isTrue("enable_extra_tweaks_mosaic_view") and 0 or Size.border.thin,
+            bordersize = border_size,
             color = Blitbuffer.COLOR_DARK_GRAY,
             background = backgrounds[background_idx],
             CenterContainer:new {
@@ -5444,6 +5507,7 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
                         local w = math.floor((bookinfo.cover_w * scale_factor) + border_total)
                         local h = math.floor((bookinfo.cover_h * scale_factor) + border_total)
 
+                        local border_size = Size.border.thin
                         if (mosaic and self.settings:isTrue("enable_extra_tweaks_mosaic_view"))
                         or (not mosaic and self.settings:isTrue("enable_extra_tweaks")) then
                             local final_w = max_img_w + 2*Size.border.thin
@@ -5458,6 +5522,7 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
 
                             w = final_w
                             h = final_h
+                            border_size = 0
                         end
                         -- end
                         -- print("cover final: ", w, h)
@@ -5467,7 +5532,7 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
                             margin = 0,
                             padding = 0,
                             -- radius = Size.radius.default,
-                            bordersize = self.settings:isTrue("enable_extra_tweaks_mosaic_view") and 0 or Size.border.thin,
+                            bordersize = border_size,
                             color = Blitbuffer.COLOR_GRAY_3,
                             background = Blitbuffer.COLOR_GRAY_3,
                             wimage,
@@ -5476,7 +5541,7 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
                 end
             end
             if #images == 0 then
-                return self:get_empty_folder_cover(max_h, max_w, border_total, true)
+                return self:get_empty_folder_cover(max_h, max_w)
             end
             local row1 = HorizontalGroup:new {}
             local row2 = HorizontalGroup:new {}
@@ -5497,8 +5562,10 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
                 table.insert(images, 4, create_blank_cover(w1, h1, 3))
             end
 
-            local gaps = (mosaic and not self.settings:isTrue("enable_extra_tweaks_mosaic_view"))
-                        or (not mosaic and not self.settings:isTrue("enable_extra_tweaks"))
+            local gaps = true
+            if (mosaic and self.settings:isTrue("enable_extra_tweaks_mosaic_view")) or (not mosaic and self.settings:isTrue("enable_extra_tweaks")) then
+                gaps = false
+            end
             for i, img in ipairs(images) do
                 if i < 3 then
                     table.insert(row1, img)
@@ -5518,10 +5585,11 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
             end
             table.insert(layout, row2)
             -- return layout
-            local border_adjustment = 0
-            if not self.settings:isTrue("enable_rounded_corners") then
-                border_adjustment = 2*Size.border.thin
+            local border_adjustment = 2*Size.border.thin
+            if self.settings:isTrue("enable_rounded_corners") then
+                border_adjustment = 0
             end
+
             return CenterContainer:new {
                 dimen = Geom:new { w = max_w + border_adjustment, h = max_h},
                 wide = layout:getSize().w - 2*Size.border.thin,
@@ -5537,10 +5605,10 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
                 },
             }
         else
-            return self:get_empty_folder_cover(max_h, max_w, border_total, true)
+            return self:get_empty_folder_cover(max_h, max_w)
         end
     else
-        return self:get_empty_folder_cover(max_h, max_w, border_total, true)
+        return self:get_empty_folder_cover(max_h, max_w)
     end
 end
 
