@@ -422,14 +422,17 @@ local function patchProjectTitleCollections()
                         local normalized = normalizeVirtualPath(current_path)
                         local is_home = isHomePath(normalized)
 
-                        if is_home then
-                            -- Use changeToPath to ensure proper path handling
-                            if fc.changeToPath then
-                                fc:changeToPath(current_path)
-                            elseif fc.refreshPath then
-                                fc:refreshPath()
-                            end
-                        end
+                        -- This call to change to path is executed after the FileChooser onFolderUp() function
+                        -- which also changes the path. The fist execution focus the container (focusmanager.lua)
+                        -- and this execution unfocuses it so we loose the mark
+                        -- if is_home then
+                        --     -- Use changeToPath to ensure proper path handling
+                        --     if fc.changeToPath then
+                        --         fc:changeToPath(current_path)
+                        --     elseif fc.refreshPath then
+                        --         fc:refreshPath()
+                        --     end
+                        -- end
                     end
                 end
             end)
