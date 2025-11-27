@@ -1327,6 +1327,27 @@ This is to be active only if the option flash buttons and menu items or the opti
                     end,
                 },
                 {
+                    text = _("Enable extra tweaks list menu view"),
+                    checked_func = function() return self.settings:isTrue("enable_extra_tweaks_list_menu_view") end,
+                    help_text = _([[Extra tweaks list menu view.]]),
+                    callback = function(touchmenu_instance)
+                        local enable_extra_tweaks_list_menu_view = not self.settings:isTrue("enable_extra_tweaks_list_menu_view")
+                        self.settings:saveSetting("enable_extra_tweaks_list_menu_view", enable_extra_tweaks_list_menu_view)
+                        self.settings:flush()
+
+                        local path = FileManager.instance.file_chooser.path
+                        if path:match("✪ Collections") then
+                            path = G_reader_settings:readSetting("home_dir")
+                        end
+                        touchmenu_instance:closeMenu()
+                        --self.ui.menu:onCloseFileManagerMenu()
+                        local cur_page = FileManager.instance.file_chooser.page
+                        FileManager:showFiles(path)
+                        FileManager.instance.file_chooser:onGotoPage(cur_page)
+                        return true
+                    end,
+                },
+                {
                     text = _("Enable extra tweaks mosaic view"),
                     checked_func = function() return self.settings:isTrue("enable_extra_tweaks_mosaic_view") end,
                     help_text = _([[Extra tweaks mosaic view.]]),
@@ -5150,7 +5171,7 @@ function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, f
                         available_w, available_h
                     )
                 end
-                -- if #covers == 1 and self.settings:isTrue("enable_extra_tweaks") then
+                -- if #covers == 1 and self.settings:isTrue("enable_extra_tweaks_list_menu_view") then
                 --     local w, h = bookinfo.cover_w, bookinfo.cover_h
                 --     local new_h = cover_max_w
                 --     local new_w = math.ceil(w * (new_h / h))
@@ -5178,7 +5199,7 @@ function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, f
                         height = h,
                     }
                 end
-                if not mosaic and self.settings:isTrue("enable_extra_tweaks") then
+                if not mosaic and self.settings:isTrue("enable_extra_tweaks_list_menu_view") then
                     local n = math.min(#covers, 4)
 
                     -- altura fina, exacta
@@ -5261,7 +5282,7 @@ function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, f
                 -- end
             end
             -- if #covers == 1 and not self.blanks then
-            --     -- if self.settings:isTrue("enable_extra_tweaks") then
+            --     -- if self.settings:isTrue("enable_extra_tweaks_list_menu_view") then
             --     --     return LeftContainer:new {
             --     --         dimen = Geom:new { w = max_w, h = max_h },
             --     --         cover_widgets[1].widget,
@@ -5385,7 +5406,7 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
     local function create_blank_cover(width, height, background_idx)
         local border_size = Size.border.thin
         if (mosaic and self.settings:isTrue("enable_extra_tweaks_mosaic_view"))
-        or (not mosaic and self.settings:isTrue("enable_extra_tweaks")) then
+        or (not mosaic and self.settings:isTrue("enable_extra_tweaks_list_menu_view")) then
             border_size = 0
         end
         local backgrounds = {
@@ -5414,7 +5435,7 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
     local function get_stack_grid_size(max_w, max_h)
         local border = Size.border.thin
         -- local gap    = Size.padding.small
-        local gap    = ((mosaic and self.settings:isTrue("enable_extra_tweaks_mosaic_view") or (not mosaic and self.settings:isTrue("enable_extra_tweaks")))) and 0 or Size.padding.small
+        local gap    = ((mosaic and self.settings:isTrue("enable_extra_tweaks_mosaic_view") or (not mosaic and self.settings:isTrue("enable_extra_tweaks_list_menu_view")))) and 0 or Size.padding.small
         local max_img_w = math.ceil((max_w - (border * 4) - gap) / 2)
         local max_img_h = math.ceil((max_h - (border * 4) - gap) / 2)
         if max_img_w < 10 then max_img_w = max_w * 0.8 end
@@ -5455,7 +5476,7 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
 
                         local border_size = Size.border.thin
                         if (mosaic and self.settings:isTrue("enable_extra_tweaks_mosaic_view"))
-                        or (not mosaic and self.settings:isTrue("enable_extra_tweaks")) then
+                        or (not mosaic and self.settings:isTrue("enable_extra_tweaks_list_menu_view")) then
                             local final_w = max_img_w + 2*Size.border.thin
                             local final_h = max_img_h + 2*Size.border.thin
 
@@ -5509,7 +5530,7 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
             end
 
             local gaps = true
-            if (mosaic and self.settings:isTrue("enable_extra_tweaks_mosaic_view")) or (not mosaic and self.settings:isTrue("enable_extra_tweaks")) then
+            if (mosaic and self.settings:isTrue("enable_extra_tweaks_mosaic_view")) or (not mosaic and self.settings:isTrue("enable_extra_tweaks_list_menu_view")) then
                 gaps = false
             end
             for i, img in ipairs(images) do
@@ -5532,7 +5553,7 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
             table.insert(layout, row2)
             -- return layout
             local border_adjustment = 2*Size.border.thin
-            if self.settings:isTrue("enable_rounded_corners") or (not mosaic and self.settings:isTrue("enable_extra_tweaks")) or self.settings:isTrue("enable_extra_tweaks_mosaic_view") then
+            if self.settings:isTrue("enable_rounded_corners") or (not mosaic and self.settings:isTrue("enable_extra_tweaks_list_menu_view")) or self.settings:isTrue("enable_extra_tweaks_mosaic_view") then
                 border_adjustment = 0
             end
 

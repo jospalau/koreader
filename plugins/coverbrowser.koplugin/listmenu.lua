@@ -112,7 +112,7 @@ function ListMenuItem:init()
         self.pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
     end
 
-    if self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+    if self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks_list_menu_view") then
         self.underline_h = 0
     else
         self.underline_h = 1 -- smaller than default (3) to not shift our vertical alignment
@@ -167,7 +167,7 @@ function ListMenuItem:update()
     -- needed with some covers, but it's nicer when cover is
     -- a pure white background (like rendered text page)
     local border_size
-    if self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+    if self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks_list_menu_view") then
         border_size = 0
     else
         border_size = Size.border.thin
@@ -365,7 +365,7 @@ function ListMenuItem:update()
                     cover_bb_used = true
                     local wimage = nil
                     local _, _, scale_factor = BookInfoManager.getCachedCoverSize(bookinfo.cover_w, bookinfo.cover_h, max_img_w, max_img_h )
-                    if self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+                    if self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks_list_menu_view") then
                         local w, h = bookinfo.cover_w, bookinfo.cover_h
                         local new_h = max_img_h
                         local new_w = math.floor(w * (new_h / h))
@@ -1031,7 +1031,7 @@ end
 
 -- As done in MenuItem
 function ListMenuItem:onFocus()
-    if self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+    if self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks_list_menu_view") then
         self._underline_container.linesize = 1
     end
     self._underline_container.color = Blitbuffer.COLOR_BLACK
@@ -1039,7 +1039,7 @@ function ListMenuItem:onFocus()
 end
 
 function ListMenuItem:onUnfocus()
-    if self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+    if self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks_list_menu_view") then
         self._underline_container.linesize = 0
     end
     self._underline_container.color = Blitbuffer.COLOR_WHITE
@@ -1092,7 +1092,7 @@ function ListMenu:_recalculateDimen()
     end
     local available_height = self.inner_dimen.h - self.others_height - Size.line.thin
 
-    -- if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
+    -- if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_list_menu_view") then
     --     available_height = self.inner_dimen.h - self.others_height - Screen:scaleBySize(15)
     -- end
 
@@ -1158,7 +1158,7 @@ function ListMenu:_updateItemsBuildUI()
     local FileManager = require("apps/filemanager/filemanager")
     -- Build our list
     local line_widget = LineWidget:new{
-        dimen = Geom:new{ w = self.width or self.screen_w, h = (FileManager and FileManager.pagetextinfo and FileManager.pagetextinfo.settings:isTrue("enable_extra_tweaks")) and 0 or Size.line.thin },
+        dimen = Geom:new{ w = self.width or self.screen_w, h = (FileManager and FileManager.pagetextinfo and FileManager.pagetextinfo.settings:isTrue("enable_extra_tweaks_list_menu_view")) and 0 or Size.line.thin },
         background = Blitbuffer.COLOR_DARK_GRAY,
     }
     table.insert(self.item_group, line_widget)
