@@ -5553,7 +5553,7 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
             table.insert(layout, row2)
             -- return layout
             local border_adjustment = 2*Size.border.thin
-            if self.settings:isTrue("enable_rounded_corners") or (not mosaic and self.settings:isTrue("enable_extra_tweaks_list_menu_view")) or self.settings:isTrue("enable_extra_tweaks_mosaic_view") then
+            if (mosaic and self.settings:isTrue("enable_rounded_corners")) or (not mosaic and self.settings:isTrue("enable_extra_tweaks_list_menu_view")) or self.settings:isTrue("enable_extra_tweaks_mosaic_view") then
                 border_adjustment = 0
             end
 
