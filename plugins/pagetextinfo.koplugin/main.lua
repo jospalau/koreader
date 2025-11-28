@@ -1259,6 +1259,9 @@ function PageTextInfo:addToMainMenu(menu_items)
                         self.settings:flush()
                         --FileManager:onClose() -- No need to close. The instance will be closed whe calling the showFiles() function
                         local path = FileManager.instance.file_chooser.path
+                        if path:match("✪ Collections") then
+                            path = G_reader_settings:readSetting("home_dir")
+                        end
                         touchmenu_instance:closeMenu()
                         --self.ui.menu:onCloseFileManagerMenu()
                         local cur_page = FileManager.instance.file_chooser.page

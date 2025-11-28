@@ -333,7 +333,7 @@ function FileChooser:genItemTable(dirs, files, path)
                 end end)
         end
 
-        if path:match("✪ Collections") then
+        if path and path:match("✪ Collections") then
             table.sort(dirs, function(a, b)
                 if a.count == b.count then
                     return a.text:lower() > b.text:lower()
