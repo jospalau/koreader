@@ -502,9 +502,11 @@ function ListMenuItem:update()
                             local tbr_pos = self.show_parent.ui and self.show_parent.ui.history:getTBRPosition(self.filepath) or (self.show_parent.history and self.show_parent.history:getTBRPosition(self.filepath))
                             if tbr_pos ~= nil then
                                 pages_str = _("TBR " .. tbr_pos)
+                            else
+                                pages_str = _("TBR")
                             end
                         else
-                            pages_str = _("TBR ")
+                            pages_str = _("TBR")
                         end
                     end
                 end
