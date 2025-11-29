@@ -13,9 +13,11 @@ local Font = require("ui/font")
 local TextWidget = require("ui/widget/textwidget")
 local HorizontalGroup = require("ui/widget/horizontalgroup")
 local HorizontalSpan = require("ui/widget/horizontalspan")
+local MovableContainer = require("ui/widget/container/movablecontainer")
 local OverlapGroup = require("ui/widget/overlapgroup")
 local VerticalGroup = require("ui/widget/verticalgroup")
 local VerticalSpan = require("ui/widget/verticalspan")
+local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local LineWidget = require("ui/widget/linewidget")
 local Blitbuffer = require("ffi/blitbuffer")
 local left_container = require("ui/widget/container/leftcontainer")
@@ -5008,7 +5010,56 @@ function PageTextInfo:onShowNotebookFileRender()
         -- end
     }
 
-    UIManager:show(self.scroll_text_w)
+    local w = Screen:getWidth()
+    local h = Screen:getHeight()
+
+    local framed = FrameContainer:new{
+        padding = 0,
+        margin = 0,
+        background = Blitbuffer.COLOR_WHITE,
+        self.scroll_text_w,
+    }
+    local centered = CenterContainer:new{
+        dimen = Geom:new{
+            w = w,
+            h = h,
+        },
+        framed,
+    }
+
+    local movable = MovableContainer:new{
+        centered,
+    }
+
+    local widget = WidgetContainer:new{
+        dimen = Geom:new{
+            w = w,
+            h = h,
+        },
+        movable,
+    }
+
+    local fc = InputContainer:new{
+        width = w,
+        height = h,
+        widget,
+    }
+
+    self.scroll_text_w.dialog = fc
+
+    -- fc:registerTouchZones({
+    --     {
+    --         id = "close_multiswipe",
+    --         ges = "multi_swipe",
+    --         handler = function(ges)
+    --             UIManager:close(fc, "full")
+    --             return true
+    --         end,
+    --         screen_zone = { ratio_x = 0, ratio_y = 0, ratio_w = 1, ratio_h = 1 },
+    --     }
+    -- })
+
+    UIManager:show(fc)
 end
 
 function PageTextInfo:getCovers(filepath, max_w, max_h)

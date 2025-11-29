@@ -226,7 +226,7 @@ function ScrollHtmlWidget:onMultiSwipe(arg, ges)
     -- is used for navigation. Swipe left/right are free, but a little
     -- unusual for the purpose of closing.
     -- So, allow for quick closing with any multiswipe.
-    UIManager:close(self)
+    UIManager:close(self.dialog)
     return true
 end
 
