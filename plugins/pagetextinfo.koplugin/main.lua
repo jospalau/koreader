@@ -1466,6 +1466,25 @@ This is to be active only if the option flash buttons and menu items or the opti
                         return true
                     end,
                 },
+                {
+                    text = _("Custom covers for collections"),
+                    checked_func = function() return self.settings:isTrue("custom_covers_collections") end,
+                    help_text = _([[Custom covefrs for collections.]]),
+                    callback = function()
+                        local custom_covers_collections = not self.settings:isTrue("custom_covers_collections")
+                        self.settings:saveSetting("custom_covers_collections", custom_covers_collections)
+                        self.settings:flush()
+
+                        local FileManager = require("apps/filemanager/filemanager").instance
+                        if FileManager then
+                            --FileManager:onRefresh()
+                            local path = FileManager.instance.file_chooser.path
+                            --FileManager:setupLayout()
+                            FileManager.instance.file_chooser:changeToPath(path)
+                        end
+                        return true
+                    end,
+                },
             },
         }
     else
@@ -5112,7 +5131,7 @@ function PageTextInfo:getCovers(filepath, max_w, max_h)
         local image = DataStorage:getDataDir() .. "/resources/icons/folder." .. last .. ".png"
 
         local fake_cover ={}
-        if util.fileExists(image) then
+        if util.fileExists(image) and self.settings:isTrue("custom_covers_collections") then
             local RenderImage = require("ui/renderimage")
             local bb = RenderImage:renderImageFile(image, false, nil, nil)
             if bb then
