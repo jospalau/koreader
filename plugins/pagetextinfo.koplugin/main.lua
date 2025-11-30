@@ -5073,7 +5073,7 @@ function PageTextInfo:getCovers(filepath, max_w, max_h)
 
 
     local res
-    if not filepath:match("✪ Collections") then
+    if not filepath:match("✪ Collections") and not filepath:match(" Metadata") then
             local query = string.format([[
                 SELECT directory, filename FROM bookinfo
                 WHERE directory = '%s/' AND has_cover = 'Y'
