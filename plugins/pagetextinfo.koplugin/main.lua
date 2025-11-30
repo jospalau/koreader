@@ -5443,6 +5443,7 @@ function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, f
                 -- return the center container
                 return CenterContainer:new {
                     dimen = Geom:new { w = total_width, h = total_height},
+                    dont_draw = fake_cover and true or false,
                     FrameContainer:new {
                         width = total_width,
                         height = total_height,
@@ -5512,7 +5513,7 @@ end
 function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
     local ImageWidget = require("ui/widget/imagewidget")
     local BookInfoManager = require("bookinfomanager")
-    local res = self:getCovers(filepath, max_w, max_h)
+    local res, fake_cover = self:getCovers(filepath, max_w, max_h)
 
     local function create_blank_cover(width, height, background_idx)
         local border_size = Size.border.thin
@@ -5559,6 +5560,43 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
         return max_img_w, max_img_h
     end
 
+    if fake_cover then
+        local bb = res.cover_bb
+
+        local border_total = 2 * Size.border.thin
+
+        -- Usar todo el espacio disponible del hueco (max_w x max_h)
+        local scale_w = (max_w - border_total) / res.cover_w
+        local scale_h = (max_h - border_total) / res.cover_h
+        local scale = math.min(scale_w, scale_h)
+
+        local final_w = math.floor(res.cover_w * scale)
+        local final_h = math.floor(res.cover_h * scale)
+
+        local img = ImageWidget:new {
+            image = res.cover_bb,
+            width = final_w,
+            height = final_h,
+            scale_factor = nil,
+        }
+
+        local border_adjustment = border_total
+            if mosaic and (self.settings:isTrue("enable_rounded_corners") or self.settings:isTrue("enable_extra_tweaks_mosaic_view")) then
+                border_adjustment = 0
+            end
+        return CenterContainer:new {
+            dimen = Geom:new { w = max_w + border_adjustment, h = max_h },
+            wide = final_w,
+            dont_draw = fake_cover and true or false,
+            FrameContainer:new {
+                margin = 0,
+                padding = 0,
+                bordersize = Size.border.thin,
+                color = Blitbuffer.COLOR_BLACK,
+                img,
+            },
+        }
+    end
 
     local max_img_w, max_img_h = get_stack_grid_size(max_w, max_h)
     if res and res[1] and res[2] and res[1][1] then
@@ -5622,9 +5660,7 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
                     end
                 end
             end
-            if #images == 0 then
-                return self:get_empty_folder_cover(max_w, max_h)
-            end
+
             local row1 = HorizontalGroup:new {}
             local row2 = HorizontalGroup:new {}
             local layout = VerticalGroup:new {}
@@ -5671,7 +5707,6 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
             if (mosaic and self.settings:isTrue("enable_rounded_corners")) or (not mosaic and self.settings:isTrue("enable_extra_tweaks_list_menu_view")) or self.settings:isTrue("enable_extra_tweaks_mosaic_view") then
                 border_adjustment = 0
             end
-
             return CenterContainer:new {
                 dimen = Geom:new { w = max_w + border_adjustment, h = max_h},
                 wide = self.settings:isTrue("enable_extra_tweaks_mosaic_view") and layout:getSize().w or layout:getSize().w - 2*Size.border.thin,

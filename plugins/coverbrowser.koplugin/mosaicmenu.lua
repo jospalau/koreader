@@ -622,50 +622,54 @@ function MosaicMenuItem:update()
             -- local directory, nbitems = self:_getTextBoxes { w = max_img_w, h = max_img_h }
             local size = subfolder_cover_image:getSize()
 
-            local directory, nbitems = self:_getTextBoxes { w = subfolder_cover_image.wide and subfolder_cover_image.wide or size.w, h = size.h }
-            size = nbitems:getSize()
-            local nb_size = math.max(size.w, size.h)
+            local folder_name_widget = nil
+            if subfolder_cover_image.dont_draw then
+                folder_name_widget = nil
+            else
+                local directory, nbitems = self:_getTextBoxes { w = subfolder_cover_image.wide and subfolder_cover_image.wide or size.w, h = size.h }
+                size = nbitems:getSize()
+                local nb_size = math.max(size.w, size.h)
 
-            local folder_name_widget
-            folder_name_widget = CenterContainer:new {
-                dimen = dimen,
-                FrameContainer:new {
-                    padding = 0,
-                    bordersize = (self.pagetextinfo and self.pagetextinfo.settings:isTrue("draw_borders_mosaic_overlays")) and Size.border.thin or 0,
-                    AlphaContainer:new { alpha = Folder.face.alpha, directory },
-                },
-                overlap_align = "center",
-            }
-            local nbitems_widget
-            if tonumber(nbitems.text) ~= 0 then
-                local pad = math.ceil(nb_size * 0.05)
-                nbitems_widget = BottomContainer:new {
+                folder_name_widget = CenterContainer:new {
                     dimen = dimen,
-                    RightContainer:new {
-                        dimen = {
-                            w = dimen.w - Folder.face.nb_items_margin,
-                            h = nb_size + Folder.face.nb_items_margin * 2 + math.ceil(nb_size * 0.125),
-                        },
-                        FrameContainer:new {
-                            padding = 0,
-                            padding_bottom = pad,
-                            radius = math.ceil(nb_size * 0.5),
-                            background = Blitbuffer.COLOR_WHITE,
-                            CenterContainer:new { dimen = { w = nb_size, h = nb_size }, nbitems },
-                        },
+                    FrameContainer:new {
+                        padding = 0,
+                        bordersize = (self.pagetextinfo and self.pagetextinfo.settings:isTrue("draw_borders_mosaic_overlays")) and Size.border.thin or 0,
+                        AlphaContainer:new { alpha = Folder.face.alpha, directory },
                     },
                     overlap_align = "center",
                 }
-            else
-                nbitems_widget = VerticalSpan:new { width = 0 }
-            end
+                local nbitems_widget
+                if tonumber(nbitems.text) ~= 0 then
+                    local pad = math.ceil(nb_size * 0.05)
+                    nbitems_widget = BottomContainer:new {
+                        dimen = dimen,
+                        RightContainer:new {
+                            dimen = {
+                                w = dimen.w - Folder.face.nb_items_margin,
+                                h = nb_size + Folder.face.nb_items_margin * 2 + math.ceil(nb_size * 0.125),
+                            },
+                            FrameContainer:new {
+                                padding = 0,
+                                padding_bottom = pad,
+                                radius = math.ceil(nb_size * 0.5),
+                                background = Blitbuffer.COLOR_WHITE,
+                                CenterContainer:new { dimen = { w = nb_size, h = nb_size }, nbitems },
+                            },
+                        },
+                        overlap_align = "center",
+                    }
+                else
+                    nbitems_widget = VerticalSpan:new { width = 0 }
+                end
 
-            local nb_widget
+                local nb_widget
 
-            if directory_string:match("✪ Collections") or directory_string:match("%(%d+%)") then
-                nb_widget = nil
-            else
-                nb_widget = nbitems_widget
+                if directory_string:match("✪ Collections") or directory_string:match("%(%d+%)") then
+                    nb_widget = nil
+                else
+                    nb_widget = nbitems_widget
+                end
             end
             if not self.pagetextinfo or not self.pagetextinfo.settings:isTrue("covers_in_folders") then
                 widget = CenterContainer:new {
