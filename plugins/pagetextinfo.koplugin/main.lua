@@ -1428,13 +1428,32 @@ This is to be active only if the option flash buttons and menu items or the opti
                         return true
                     end,
                 },
-{
+                {
                     text = _("Draw borders on mosaic cover overlays"),
                     checked_func = function() return self.settings:isTrue("draw_borders_mosaic_overlays") end,
                     help_text = _([[Draw borders on mosaic cover overlays.]]),
                     callback = function()
                         local draw_borders_mosaic_overlays = not self.settings:isTrue("draw_borders_mosaic_overlays")
                         self.settings:saveSetting("draw_borders_mosaic_overlays", draw_borders_mosaic_overlays)
+                        self.settings:flush()
+
+                        local FileManager = require("apps/filemanager/filemanager").instance
+                        if FileManager then
+                            --FileManager:onRefresh()
+                            local path = FileManager.instance.file_chooser.path
+                            --FileManager:setupLayout()
+                            FileManager.instance.file_chooser:changeToPath(path)
+                        end
+                        return true
+                    end,
+                },
+                {
+                    text = _("Invert covers stack"),
+                    checked_func = function() return self.settings:isTrue("invert_covers_stack") end,
+                    help_text = _([[Invert covers stack.]]),
+                    callback = function()
+                        local invert_covers_stack = not self.settings:isTrue("invert_covers_stack")
+                        self.settings:saveSetting("invert_covers_stack", invert_covers_stack)
                         self.settings:flush()
 
                         local FileManager = require("apps/filemanager/filemanager").instance
@@ -5373,11 +5392,18 @@ function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, f
                         or self.settings:isTrue("enable_rounded_corners") then
                         border_adjustment = Size.border.thin
                 end
+
                 for i, cover in ipairs(cover_widgets) do
+                    local padding_left = start_x + (i - 1) * offset_x - border_adjustment
+                    if self.settings:isTrue("invert_covers_stack") then
+                        local cw = cover.size.w
+                        local x = (total_width - cw) - ((i - 1) * offset_x)
+                        padding_left = start_x + x - border_adjustment
+                    end
                     children[#children+1] = FrameContainer:new{
                         margin = 0,
                         padding = 0,
-                        padding_left = start_x + (i - 1) * offset_x - border_adjustment,
+                        padding_left = padding_left,
                         padding_top  = start_y + (i - 1) * offset_y,
                         bordersize = 0,
                         cover.widget,
@@ -5406,10 +5432,15 @@ function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, f
                 local overlap
                 local children = {}
                 for i, cover in ipairs(cover_widgets) do
+                    local padding_left = (i - 1) * offset_x
+                    if self.settings:isTrue("invert_covers_stack") then
+                        local cw = cover.size.w + border_total
+                        padding_left  = (total_width - cw) - ((i - 1) * offset_x)
+                    end
                     children[#children + 1] = FrameContainer:new{
                         margin = 0,
                         padding = 0,
-                        padding_left = (i - 1) * offset_x,
+                        padding_left = padding_left,
                         padding_top  = (i - 1) * offset_y,
                         bordersize = 0,
                         cover.widget,

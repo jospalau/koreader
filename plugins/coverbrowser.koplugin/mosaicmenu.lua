@@ -530,7 +530,7 @@ function MosaicMenuItem:update()
 
     self.blanks = false
     self.factor_x = 0.10 -- 10% of width to the right
-    self.factor_y = 0.05 -- 10% of height down -- Use a negative values for reverse order, ideally 0.05 or -0,05
+    self.factor_y = 0.05 -- 10% of height down
     self.offset_x = math.floor(max_img_w * self.factor_x)
     self.offset_y = math.floor(max_img_h * self.factor_y)
     self.is_directory = not (self.entry.is_file or self.entry.file)
