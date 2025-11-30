@@ -5592,6 +5592,11 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
         local final_w = math.floor(res.cover_w * scale)
         local final_h = math.floor(res.cover_h * scale)
 
+         if (mosaic and self.settings:isTrue("enable_extra_tweaks_mosaic_view"))
+            or (not mosaic and self.settings:isTrue("enable_extra_tweaks_list_menu_view")) then
+            final_w = max_w
+            final_h = max_h
+            end
         local img = ImageWidget:new {
             image = res.cover_bb,
             width = final_w,
