@@ -5092,6 +5092,7 @@ function PageTextInfo:getCovers(filepath, max_w, max_h)
 
 
     local res
+    local special_cover = nil
     if not filepath:match("✪ Collections") and not filepath:match(" Metadata") then
             local query = string.format([[
                 SELECT directory, filename FROM bookinfo
@@ -5102,20 +5103,42 @@ function PageTextInfo:getCovers(filepath, max_w, max_h)
         db_conn:close()
     else
         local candidates = {}
-        if filepath then
-            local coll = ReadCollection.coll[filepath:match("([^/]+)$")]
-            if filepath:match("✪ Collections$") then
-                coll = ReadCollection.coll["favorites"]
-            end
-            if coll then
-                for _, book in pairs(coll) do
-                    if book.file then table.insert(candidates, book.file) end
-                end
+        local DataStorage = require("datastorage")
+        local last = filepath
+        if filepath:match("✪ Collections$") then
+            last = filepath:gsub("✪ Collections",("Collections"))
+        end
+        last = last:gsub("/+$", ""):match("([^/]+)$")
+        local image = DataStorage:getDataDir() .. "/resources/icons/folder." .. last .. ".png"
+
+        local fake_cover ={}
+        if util.fileExists(image) then
+            local RenderImage = require("ui/renderimage")
+            local bb = RenderImage:renderImageFile(image, false, nil, nil)
+            if bb then
+                fake_cover.cover_bb = bb
+                fake_cover.cover_w  = bb.w
+                fake_cover.cover_h  = bb.h
+                fake_cover.has_cover = true
+
+                return fake_cover, true
             end
         else
-            for _, coll in pairs(ReadCollection.coll) do
-                for _, book in pairs(coll) do
-                    if book.file then table.insert(candidates, book.file) end
+            if filepath then
+                local coll = ReadCollection.coll[filepath:match("([^/]+)$")]
+                if filepath:match("✪ Collections$") then
+                    coll = ReadCollection.coll["favorites"]
+                end
+                if coll then
+                    for _, book in pairs(coll) do
+                        if book.file then table.insert(candidates, book.file) end
+                    end
+                end
+            else
+                for _, coll in pairs(ReadCollection.coll) do
+                    for _, book in pairs(coll) do
+                        if book.file then table.insert(candidates, book.file) end
+                    end
                 end
             end
         end
@@ -5192,21 +5215,24 @@ function PageTextInfo:get_empty_folder_cover(max_w, max_h)
 function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, factor_y, offset_x, offset_y, blanks, mosaic, width, height)
     local ImageWidget = require("ui/widget/imagewidget")
     local BookInfoManager = require("bookinfomanager")
-    local res = self:getCovers(filepath, max_w, max_h)
+    local res, fake_cover = self:getCovers(filepath, max_w, max_h)
     local border_total = 2*Size.border.thin
-    if res and res[1] and res[2] and res[1][1] then
-        local dir_ending = string.sub(res[1][1],-2,-2)
-        local num_books = #res[1]
-
-        -- Save all covers
+    if (res and res[1] and res[2] and res[1][1]) or fake_cover then
         local covers = {}
-        for i = 1, num_books do
-            local fullpath = res[1][i] .. res[2][i]
+        if fake_cover then
+            table.insert(covers, res)
+        else
+            local dir_ending = string.sub(res[1][1],-2,-2)
+            local num_books = #res[1]
+            -- Save all covers
+            for i = 1, num_books do
+                local fullpath = res[1][i] .. res[2][i]
 
-            if util.fileExists(fullpath) then
-                local bookinfo = BookInfoManager:getBookInfo(fullpath, true)
-                if bookinfo and bookinfo.cover_bb and bookinfo.has_cover then
-                    table.insert(covers, bookinfo)
+                if util.fileExists(fullpath) then
+                    local bookinfo = BookInfoManager:getBookInfo(fullpath, true)
+                    if bookinfo and bookinfo.cover_bb and bookinfo.has_cover then
+                        table.insert(covers, bookinfo)
+                    end
                 end
             end
         end
