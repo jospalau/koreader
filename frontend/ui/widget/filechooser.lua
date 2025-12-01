@@ -336,9 +336,17 @@ function FileChooser:genItemTable(dirs, files, path)
         if path and path:match("✪ Collections") then
             table.sort(dirs, function(a, b)
                 if a.count == b.count then
-                    return a.text:lower() > b.text:lower()
+                    if G_reader_settings:isTrue("reverse_collate") then
+                        return a.text:lower() > b.text:lower()
+                    else
+                        return a.text:lower() <= b.text:lower()
+                    end
                 end
-                return a.count > b.count
+                if G_reader_settings:isTrue("reverse_collate") then
+                    return a.count > b.count
+                else
+                    return a.count <= b.count
+                end
             end)
         end
         table.move(dirs, 1, #dirs, 1, item_table)
