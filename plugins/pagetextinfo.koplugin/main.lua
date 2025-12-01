@@ -5128,9 +5128,11 @@ function PageTextInfo:getCovers(filepath, max_w, max_h)
             last = filepath:gsub("✪ Collections",("Collections"))
         end
         last = last:gsub("/+$", ""):match("([^/]+)$")
-        local image = DataStorage:getDataDir() .. "/resources/icons/folder." .. last .. ".png"
+        local image = "resources/icons/folder." .. last .. ".png"
 
         local fake_cover ={}
+        -- local android = require("android")
+        -- android.LOGW("paso " .. image)
         if util.fileExists(image) and self.settings:isTrue("custom_covers_collections") then
             local RenderImage = require("ui/renderimage")
             local bb = RenderImage:renderImageFile(image, false, nil, nil)
