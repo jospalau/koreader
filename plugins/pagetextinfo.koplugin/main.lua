@@ -5173,8 +5173,10 @@ function PageTextInfo:getCovers(filepath, max_w, max_h)
 
             if fullpath and util.fileExists(fullpath) then
                 local bookinfo = BookInfoManager:getBookInfo(fullpath, true)
-                table.insert(dirs, fullpath:match("(.*/)"))
-                table.insert(files, fullpath:match("([^/]+)$"))
+                if bookinfo then
+                    table.insert(dirs, fullpath:match("(.*/)"))
+                    table.insert(files, fullpath:match("([^/]+)$"))
+                end
             end
         end
         res = {
@@ -5629,8 +5631,8 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
         -- print("cover final entro")
         local dir_ending = string.sub(res[1][1],-2,-2)
         local num_books = #res[1]
-
         if num_books > 0 then
+
             -- Save all covers
             local images = {}
             local w, h = 0, 0
