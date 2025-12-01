@@ -5619,7 +5619,7 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
             FrameContainer:new {
                 margin = 0,
                 padding = 0,
-                bordersize = Size.border.thin,
+                bordersize = (not mosaic and self.settings:isTrue("enable_extra_tweaks_list_menu_view")) and 0 or Size.border.thin,
                 color = Blitbuffer.COLOR_BLACK,
                 img,
             },
