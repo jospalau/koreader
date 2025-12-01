@@ -5575,8 +5575,8 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
         elseif not mosaic and self.settings:isTrue("enable_extra_tweaks_list_menu_view") then
             gap = -2*border -- -2*border compensantes local border_size = Size.border.thin in listmenu.lua
         end
-        local max_img_w = math.ceil((max_w - (border * 4) - gap) / 2)
-        local max_img_h = math.ceil((max_h - (border * 4) - gap) / 2)
+        local max_img_w = math.floor((max_w - (border * 4) - gap) / 2)
+        local max_img_h = math.floor((max_h - (border * 4) - gap) / 2)
         if max_img_w < 10 then max_img_w = max_w * 0.8 end
         if max_img_h < 10 then max_img_h = max_h * 0.8 end
 
@@ -5600,7 +5600,7 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
             or (not mosaic and self.settings:isTrue("enable_extra_tweaks_list_menu_view")) then
             final_w = max_w
             final_h = max_h
-            end
+        end
         local img = ImageWidget:new {
             image = res.cover_bb,
             width = final_w,
