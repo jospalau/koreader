@@ -5570,13 +5570,17 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
     local function get_stack_grid_size(max_w, max_h)
         local border = Size.border.thin
         local gap    = Size.padding.small
-        if mosaic and self.settings:isTrue("enable_extra_tweaks_mosaic_view") then
+        if ((mosaic and self.settings:isTrue("enable_extra_tweaks_mosaic_view"))
+            or (not mosaic and self.settings:isTrue("enable_extra_tweaks_list_menu_view"))) then
             gap = 0
-        elseif not mosaic and self.settings:isTrue("enable_extra_tweaks_list_menu_view") then
-            gap = -2*border -- -2*border compensantes local border_size = Size.border.thin in listmenu.lua
         end
         local max_img_w = math.floor((max_w - (border * 4) - gap) / 2)
         local max_img_h = math.floor((max_h - (border * 4) - gap) / 2)
+
+        if not mosaic and self.settings:isTrue("enable_extra_tweaks_list_menu_view") then
+            max_img_w = math.ceil((max_w - (border * 4) - gap) / 2)
+            max_img_h = math.ceil((max_h - (border * 4) - gap) / 2)
+        end
         if max_img_w < 10 then max_img_w = max_w * 0.8 end
         if max_img_h < 10 then max_img_h = max_h * 0.8 end
 
@@ -5596,11 +5600,12 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
         local final_w = math.floor(res.cover_w * scale)
         local final_h = math.floor(res.cover_h * scale)
 
-         if (mosaic and self.settings:isTrue("enable_extra_tweaks_mosaic_view"))
+        if (mosaic and self.settings:isTrue("enable_extra_tweaks_mosaic_view"))
             or (not mosaic and self.settings:isTrue("enable_extra_tweaks_list_menu_view")) then
             final_w = max_w
             final_h = max_h
         end
+
         local img = ImageWidget:new {
             image = res.cover_bb,
             width = final_w,
@@ -5609,9 +5614,9 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
         }
 
         local border_adjustment = border_total
-            if mosaic and (self.settings:isTrue("enable_rounded_corners") or self.settings:isTrue("enable_extra_tweaks_mosaic_view")) then
-                border_adjustment = 0
-            end
+        if (mosaic and (self.settings:isTrue("enable_rounded_corners") or self.settings:isTrue("enable_extra_tweaks_mosaic_view")) or not mosaic) then
+            border_adjustment = 0
+        end
         return CenterContainer:new {
             dimen = Geom:new { w = max_w + border_adjustment, h = max_h },
             wide = final_w,
@@ -5662,10 +5667,10 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
                             local final_h = max_img_h + 2*Size.border.thin
 
                             wimage = ImageWidget:new {
-                            image = bookinfo.cover_bb,
-                            width = final_w,
-                            height = final_h,
-                            scale_factor = nil,
+                                image = bookinfo.cover_bb,
+                                width = final_w,
+                                height = final_h,
+                                scale_factor = nil,
                             }
 
                             w = final_w
@@ -5732,7 +5737,7 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
             table.insert(layout, row2)
             -- return layout
             local border_adjustment = 2*Size.border.thin
-            if (mosaic and self.settings:isTrue("enable_rounded_corners")) or (not mosaic and self.settings:isTrue("enable_extra_tweaks_list_menu_view")) or self.settings:isTrue("enable_extra_tweaks_mosaic_view") then
+            if (mosaic and (self.settings:isTrue("enable_rounded_corners") or self.settings:isTrue("enable_extra_tweaks_mosaic_view"))) or not mosaic then
                 border_adjustment = 0
             end
             return CenterContainer:new {

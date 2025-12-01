@@ -167,11 +167,12 @@ function ListMenuItem:update()
     -- needed with some covers, but it's nicer when cover is
     -- a pure white background (like rendered text page)
     local border_size = Size.border.thin
-    -- if self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_extra_tweaks_list_menu_view") then
-    --     border_size = 0
-    -- else
-    --     border_size = Size.border.thin
-    -- end
+    if self.pagetextinfo and self.pagetextinfo.settings:isTrue("covers_grid_mode")
+        and self.pagetextinfo.settings:isTrue("enable_extra_tweaks_list_menu_view") then
+        border_size = 0
+    else
+        border_size = Size.border.thin
+    end
 
     local max_img_w = dimen.h - 2*border_size -- width = height, squared
     local max_img_h = dimen.h - 2*border_size
