@@ -1469,7 +1469,7 @@ This is to be active only if the option flash buttons and menu items or the opti
                 {
                     text = _("Custom covers for collections"),
                     checked_func = function() return self.settings:isTrue("custom_covers_collections") end,
-                    help_text = _([[Custom covefrs for collections.]]),
+                    help_text = _([[Custom covers for collections.]]),
                     callback = function()
                         local custom_covers_collections = not self.settings:isTrue("custom_covers_collections")
                         self.settings:saveSetting("custom_covers_collections", custom_covers_collections)
