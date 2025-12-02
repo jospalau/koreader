@@ -5646,6 +5646,11 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
 
                 if util.fileExists(fullpath) then
                     local bookinfo = BookInfoManager:getBookInfo(fullpath, true)
+                    -- local FileManagerBookInfo = require("apps/filemanager/filemanagerbookinfo")
+                    -- local image = FileManagerBookInfo:getCoverImage(nil, fullpath)
+                    -- bookinfo.cover_bb = image
+                    -- bookinfo.cover_w = 450
+                    -- bookinfo.cover_h = 680
                     if bookinfo and bookinfo.cover_bb and bookinfo.has_cover then
                         local border_total = (Size.border.thin * 2)
                         local _, _, scale_factor = BookInfoManager.getCachedCoverSize(
