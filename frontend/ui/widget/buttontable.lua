@@ -170,9 +170,8 @@ function ButtonTable:init()
 end
 
 function ButtonTable:addVerticalSpan()
-    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
     table.insert(self.container, VerticalSpan:new{
-        width = (ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") and self.quickmenu) and 0 or Size.span.vertical_default,
+        width = Size.span.vertical_default,
     })
 end
 
