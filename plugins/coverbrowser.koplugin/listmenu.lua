@@ -273,7 +273,7 @@ function ListMenuItem:update()
 
         local wleft = TextBoxWidget:new {
             text = wlefttext,
-            face = Font:getFace(folderfont, directory_font_size),
+            face = Font:getFace("cfont", _fontSize(20, 24)),
             width = wleft_width,
             alignment = "left",
             bold = false,

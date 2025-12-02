@@ -5655,10 +5655,15 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
                         local border_total = (Size.border.thin * 2)
                         local _, _, scale_factor = BookInfoManager.getCachedCoverSize(
                             bookinfo.cover_w, bookinfo.cover_h, max_img_w, max_img_h)
-                        local wimage = ImageWidget:new {
+                        local wimage = ImageWidget:new{
                             image = bookinfo.cover_bb,
-                            scale_factor = scale_factor,
+                            width  = max_img_w,
+                            height = max_img_h,
+                            scale_factor = nil,
                         }
+
+                        w = max_img_w
+                        h = max_img_h
                         -- if i == 1 then
                         -- Images sizes may varied depending the cached size
                         -- This is not noticed in stack view
@@ -5685,8 +5690,8 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
                         -- end
                         -- print("cover final: ", w, h)
                         table.insert(images, FrameContainer:new {
-                            width = w,
-                            height = h,
+                            width = max_img_w + (border_size * 2),
+                            height = max_img_h + (border_size * 2),
                             margin = 0,
                             padding = 0,
                             -- radius = Size.radius.default,
