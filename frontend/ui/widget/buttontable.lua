@@ -31,6 +31,7 @@ local ButtonTable = FocusManager:extend{
 }
 
 function ButtonTable:init()
+    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
     self.width = self.width or math.floor(math.min(Screen:getWidth(), Screen:getHeight()) * 0.9)
     self.buttons_layout = {}
     self.button_by_id = {}
@@ -86,7 +87,7 @@ function ButtonTable:init()
                 is_quickmenu_button = btn_entry.is_quickmenu_button,
                 flash_button = btn_entry.flash_button,
                 width = btn_entry.width or default_button_width,
-                height = btn_entry.height,
+                height = (ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") and self.quickmenu) and 6 or btn_entry.height,
                 bordersize = 0,
                 margin = 0,
                 padding = Size.padding.buttontable, -- a bit taller than standalone buttons, for easier tap
