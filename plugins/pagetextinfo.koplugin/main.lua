@@ -5577,7 +5577,7 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
         local max_img_w = math.floor((max_w - (border * 4) - gap) / 2)
         local max_img_h = math.floor((max_h - (border * 4) - gap) / 2)
 
-        if not mosaic and self.settings:isTrue("enable_extra_tweaks_list_menu_view") then
+        if not mosaic then
             max_img_w = math.ceil((max_w - (border * 4) - gap) / 2)
             max_img_h = math.ceil((max_h - (border * 4) - gap) / 2)
         end
