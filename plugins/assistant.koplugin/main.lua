@@ -72,20 +72,20 @@ local updateMessageShown = false
 function Assistant:onDispatcherRegisterActions()
   -- Register main AI ask action
   Dispatcher:registerAction("ai_ask_question", {
-    category = "none", 
-    event = "AskAIQuestion", 
-    title = _("Ask the AI a question"), 
+    category = "none",
+    event = "AskAIQuestion",
+    title = _("Ask the AI a question"),
     general = true
   })
-  
+
   -- Register AI recap action
   Dispatcher:registerAction("ai_recap", {
-    category = "none", 
-    event = "AskAIRecap", 
-    title = _("AI Recaps"), 
+    category = "none",
+    event = "AskAIRecap",
+    title = _("AI Recaps"),
     general = true
   })
-  
+
   -- Register AI X-Ray action (available for gesture binding)
   Dispatcher:registerAction("ai_xray", {
     category = "none",
@@ -96,9 +96,9 @@ function Assistant:onDispatcherRegisterActions()
 
   -- Register Quick Notes action (available for gesture binding)
   Dispatcher:registerAction("ai_quick_note", {
-    category = "none", 
-    event = "AskAIQuickNote", 
-    title = _("Take Quick Notes"), 
+    category = "none",
+    event = "AskAIQuickNote",
+    title = _("Take Quick Notes"),
     general = true
   })
 
@@ -522,7 +522,7 @@ function Assistant:getModelProvider()
       setting_provider = find_setting_provider(function(key, tab)
         return FrontendUtil.tableGetValue(tab, "default") == true
       end)
-      
+
       -- still invalid (none of them defined `default`)
       if not setting_provider then
         setting_provider = find_setting_provider()
@@ -565,7 +565,7 @@ function Assistant:isConfigured()
       UIManager:show(InfoMessage:new{ icon = "notice-warning", text = err_text })
       return nil
     end
-  
+
     return true
 end
 
@@ -648,17 +648,17 @@ function Assistant:init()
 
 
   self.assistant_dialog = AssistantDialog:new(self, CONFIGURATION)
-  
+
   -- Ensure custom prompts from configuration are merged before building menus
   -- so that `show_on_main_popup` and `visible` overrides take effect.
   Prompts.getMergedCustomPrompts(FrontendUtil.tableGetValue(CONFIGURATION, "features", "prompts"))
-  
+
   if self.ui.document then
     -- Reader specific
     -- Auto Recap Feature (hook before a book is opened)
-    if self.settings:readSetting("enable_auto_recap", false) then
-      self:_hookRecap()
-    end
+    -- if self.settings:readSetting("enable_auto_recap", false) then
+    --   self:_hookRecap()
+    -- end
 
     -- Add Custom buttons to main select popup menu
     local showOnMain = Prompts.getSortedCustomPrompts(function (prompt, idx)
@@ -711,7 +711,7 @@ On the result dialog to close (as the Close button is far to reach).
         ok_text = _("Purge Settings"),
         ok_callback = function()
           UIManager:show(ConfirmBox:new{
-            text = _([[Are you sure to purge the assistant plugin settings? 
+            text = _([[Are you sure to purge the assistant plugin settings?
 This resets the assistant plugin to the status the first time you installed it.
 
 configuration.lua is safe, only the settings are purged.]]),
@@ -869,7 +869,7 @@ end
     if not self:isConfigured() then
       return
     end
-    
+
     NetworkMgr:runWhenOnline(function()
       -- Show dialog without highlighted text
       Trapper:wrap(function()
@@ -1034,7 +1034,7 @@ function Assistant:_hookRecap()
   local ReaderUI    = require("apps/reader/readerui")
   -- avoid recurive overrides here
   -- pulgin is loaded on every time file opened
-  if not ReaderUI._original_doShowReader then 
+  if not ReaderUI._original_doShowReader then
 
     -- Save a reference to the original doShowReader method.
     ReaderUI._original_doShowReader = ReaderUI.doShowReader
@@ -1042,29 +1042,29 @@ function Assistant:_hookRecap()
     local assistant = self -- reference to the Assistant instance
     local lfs         = require("libs/libkoreader-lfs")   -- for file attributes
     local DocSettings = require("docsettings")			      -- for document progress
-  
+
     -- Override to hook into the reader's doShowReader method.
     function ReaderUI:doShowReader(file, provider, seamless)
 
       -- Get file metadata; here we use the file's "access" attribute.
       local attr = lfs.attributes(file)
       local lastAccess = attr and attr.access or nil
-  
+
       if lastAccess and lastAccess > 0 then -- Has been opened
         local doc_settings = DocSettings:open(file)
         local percent_finished = doc_settings:readSetting("percent_finished") or 0
         local timeDiffHours = math.floor((os.time() - lastAccess) / 3600)
-  
+
         -- More than 28hrs since last open and less than 95% complete
         -- percent = 0 may means the book is not started yet, the docsettings maybe empty
-        if timeDiffHours >= 28 and percent_finished > 0 and percent_finished <= 0.95 then 
+        if timeDiffHours >= 28 and percent_finished > 0 and percent_finished <= 0.95 then
           -- Construct the message to display.
           local doc_props = doc_settings:child("doc_props")
           local title = doc_props:readSetting("title", "Unknown Title")
           local authors = doc_props:readSetting("authors", "Unknown Author")
           local message = T(_("Do you want an AI Recap?\nFor %1 by %2.\n\n"), title, authors)
                     .. T(N_("Last read an hour ago.", "Last read %1 hours ago.", timeDiffHours), timeDiffHours)
-  
+
           -- Display the request popup using ConfirmBox.
           UIManager:show(ConfirmBox:new{
             text            = message,
