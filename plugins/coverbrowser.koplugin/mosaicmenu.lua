@@ -893,6 +893,10 @@ function MosaicMenuItem:update()
 
                 local border_adjustment = 0
 
+                -- This adjusts the alpha overlayed rectangle drawn on top of the cover when enable_extra_tweaks_mosaic_view is enabled
+                -- But when the tweak is enabled the covers are expanded with no borders and the gaps of the lateral borders of the rectangle not covered can be seen.
+                -- Uncomenting it, the rectangle will be shifted 2 pixels to the right of the cover but since the borders are removed
+                -- it will not be seen and the sides of the rectangle will be covered grayed due to the alpha channel
                 -- if self.pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
                 --     border_adjustment = 2*Size.border.thin
                 -- end
