@@ -554,6 +554,9 @@ local function patchProjectTitleCollections()
     -- Wrap original FileChooser.genItemTable as fallback
     local orig_genItemTable = FileChooser.genItemTable
     function FileChooser:genItemTable(dirs, files, path)
+        if path == nil then
+            return orig_genItemTable(self, dirs, files, path)
+        end
         local item_table = orig_genItemTable(self, dirs, files, path)
         return injectCollectionsFolder(self, dirs, files, path, item_table)
     end
