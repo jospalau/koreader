@@ -1,19 +1,19 @@
-        <svg width="149" height="261" viewBox="0 0 149 261" xmlns="http://www.w3.org/2000/svg">
+        <svg width="318" height="317" viewBox="0 0 318 317" xmlns="http://www.w3.org/2000/svg">
             <!-- Fondo blanco con hueco central recortado -->
             <path d="
-                M0,0 h149 v261 h-149 z
-                M2,14
-                a14,14 0 0 1 14,-14
-                h119
-                a14,14 0 0 1 14,14
-                v231
-                a14,14 0 0 1 -14,14
-                h-119
-                a14,14 0 0 1 -14,-14
+                M0,0 h318 v317 h-318 z
+                M2,35
+                a35,35 0 0 1 35,-35
+                h246
+                a35,35 0 0 1 35,35
+                v245
+                a35,35 0 0 1 -35,35
+                h-246
+                a35,35 0 0 1 -35,-35
                 z
             " fill="white" fill-rule="evenodd"></path>
 
             <!-- Marco dibujado encima -->
-            <rect x="2" y="2" width="145" height="257" rx="14" ry="14" fill="none" stroke="black" stroke-width="1.5"/>
+            <rect x="2" y="2" width="314" height="313" rx="35" ry="35" fill="none" stroke="black" stroke-width="1.5"/>
         </svg>
             

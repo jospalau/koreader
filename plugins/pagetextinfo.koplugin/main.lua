@@ -5127,7 +5127,7 @@ function PageTextInfo:getCovers(filepath, max_w, max_h)
         if filepath:match("✪ Collections$") then
             last = filepath:gsub("✪ Collections",("Collections"))
         end
-        last = last:gsub("/+$", ""):match("([^/]+)$")
+        last = last:gsub("/+$", ""):gsub(" ", ""):match("([^/]+)$")
         local image = "resources/icons/folder." .. last .. ".png"
 
         local fake_cover ={}
