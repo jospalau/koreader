@@ -1103,7 +1103,7 @@ function MosaicMenuItem:paintTo(bb, x, y)
     if x ~= math.floor(x) or y ~= math.floor(y) then
         logger.err("MosaicMenuItem:paintTo() got non-integer x/y :", x, y)
     end
-    --print("MosaicMenuItem:paintTo() got non-integer x/y :", x, y)
+    -- print("MosaicMenuItem:paintTo() got non-integer x/y :", x, y)
 
     -- Original painting
     InputContainer.paintTo(self, bb, x, y)
@@ -1497,27 +1497,21 @@ function MosaicMenu:_updateItemsBuildUI()
             cur_row = HorizontalGroup:new{}
             -- Have items on the possibly non-fully filled last row aligned to the left
 
+            -- When self._do_center_partial_rows == true (it is true by default in history, searches and collections, set in
+            -- getUpdateItemTableFunc() function in thecover browser main.lua source),
+            -- if the last row of covers is not completed the covers are centered
+            -- and what happens is that the first cover left margin for each row starts a few pixels shifted to the left
+            -- We can disable this so the cover are not centered:
+            -- self._do_center_partial_rows = false
 
-            -- local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-            -- if ui ~= nil then
-            --     pagetextinfo = ui.pagetextinfo
-            -- else
-            --     pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
-            -- end
-            -- local container
-            -- if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
-            --     container = LeftContainer
-            -- else
-            --     container = self._do_center_partial_rows and CenterContainer or LeftContainer
-            -- end
-
+            -- Or we can add the parameter ignore width to the container (CenterContainer in this case)
             local container = self._do_center_partial_rows and CenterContainer or LeftContainer
             table.insert(self.item_group, container:new{
                 dimen = Geom:new{
                     w = self.inner_dimen.w,
                     h = self.item_height
                 },
-                ignore_if_over = self._do_center_partial_rows and "width" or nil,
+                ignore = self._do_center_partial_rows and "width" or nil,
                 cur_row
             })
             table.insert(cur_row, HorizontalSpan:new({ width = self.item_margin }))
