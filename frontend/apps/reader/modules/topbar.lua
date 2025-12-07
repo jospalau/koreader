@@ -634,7 +634,7 @@ function TopBar:onReaderReady()
     self.title = self.ui.document._document:getDocumentProps().title
     self.series = self.ui.document._document:getDocumentProps().series
     if self.series ~= "" then
-        self.series = "(" .. TextWidget.PTF_BOLD_START .. self.series .. TextWidget.PTF_BOLD_END .. ")"
+        self.series = " ⋅ " .. TextWidget.PTF_BOLD_START .. self.series .. TextWidget.PTF_BOLD_END
     end
 
     -- if self.title:find('%[%d?.%d]') then
@@ -775,7 +775,7 @@ function TopBar:onReaderReady()
 
     self.series_text = TextWidget:new{
         text =  "",
-        face = Font:getFace(font, font_size - 4),
+        face = Font:getFace(font, font_size - 8),
         fgcolor = Blitbuffer.COLOR_BLACK,
         bold = true,
         -- forced_baseline = forced_baseline - 4,
@@ -1086,7 +1086,7 @@ function TopBar:changeAllWidgetFaces()
 
     self.series_text = TextWidget:new{
         text =  "",
-        face = Font:getFace(font, font_size - 4),
+        face = Font:getFace(font, font_size - 8),
         fgcolor = Blitbuffer.COLOR_BLACK,
         bold = true,
     }
@@ -1100,6 +1100,7 @@ function TopBar:changeAllWidgetFaces()
         forced_height = forced_height,
     }
     self.title_and_series_widget_container = HorizontalGroup:new{
+        -- align = "top",
         background = Blitbuffer.COLOR_WHITE,
         bordersize = self.border_size,
         padding = 0,
@@ -1720,14 +1721,39 @@ function TopBar:toggleBar(light_on)
         else
             self.test_light_text:setText(" ○ " .. self.frontlight)
         end
+
+
+        local face_big = Font:getFace(
+            self.settings:readSetting("font_title") or "Consolas-Regular.ttf",
+            self.settings:readSetting("font_size_title") or 14
+        )
+
+        local face_small = Font:getFace(
+            self.settings:readSetting("font_title") or "Consolas-Regular.ttf",
+            (self.settings:readSetting("font_size_title") or 14) - 8
+        )
+
+        -- BIG
+        local w = TextWidget:new{ text = "A", face = face_big }  -- usa una letra que tenga ascender
+        local baseline_big = w:getBaseline()
+        local height_big = w:getSize().h
+        w:free()
+
+        -- SMALL  ← AQUÍ ESTABA TU ERROR
+        w = TextWidget:new{ text = "A", face = face_small }
+        local baseline_small = w:getBaseline()
+        local height_small = w:getSize().h
+        w:free()
+
+        local baseline_diff = baseline_big - baseline_small
         if TopBar.show_bar_in_top_bar then
             TopBar.MARGIN_TOP = Screen:scaleBySize(9) + Screen:scaleBySize(self.space_after_alt_bar)
             self.title_and_series_widget_container[1].no_center_vertically = Screen:scaleBySize(self.space_after_alt_bar)
-            self.title_and_series_widget_container[2].no_center_vertically = Screen:scaleBySize(self.space_after_alt_bar) + 4 -- Compensate de 4px for the text widget series whouse font size is 4px smaller
+            self.title_and_series_widget_container[2].no_center_vertically = Screen:scaleBySize(self.space_after_alt_bar) + baseline_diff -- Compensate de 4px for the text widget series whouse font size is 4px smaller
         else
             TopBar.MARGIN_TOP = Screen:scaleBySize(9)
             self.title_and_series_widget_container[1].no_center_vertically = 0
-            self.title_and_series_widget_container[2].no_center_vertically = 4
+            self.title_and_series_widget_container[2].no_center_vertically = baseline_diff
         end
 
     else
@@ -2388,7 +2414,7 @@ function TopBar:addToMainMenu(menu_items)
                     local face = Font:getFace(font_path, self.settings:readSetting("font_size_title")
                     and self.settings:readSetting("font_size_title") or 14)
                     local face_series = Font:getFace(font_path, self.settings:readSetting("font_size_title")
-                    and self.settings:readSetting("font_size_title") - 4 or 10)
+                    and self.settings:readSetting("font_size_title") - 8 or 6)
                     self.settings:saveSetting("font_title", font_path)
                     self:changeAllWidgetFaces()
                     UIManager:setDirty("all", "ui")
@@ -2653,7 +2679,7 @@ function TopBar:addToMainMenu(menu_items)
                             local face = Font:getFace(self.settings:readSetting("font_title")
                             and self.settings:readSetting("font_title") or "Consolas-Regular.ttf", new_font_size)
                             local face_series = Font:getFace(self.settings:readSetting("font_title")
-                            and self.settings:readSetting("font_title") or "Consolas-Regular.ttf", new_font_size - 4)
+                            and self.settings:readSetting("font_title") or "Consolas-Regular.ttf", new_font_size - 8)
                             self:changeAllWidgetFaces()
                             UIManager:setDirty("all", "ui")
                             self.settings:flush()
