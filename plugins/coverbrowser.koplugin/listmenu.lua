@@ -784,26 +784,30 @@ function ListMenuItem:update()
                 -- Don't go too low, and get out of this loop.
                 if fixed_font_size or fontsize_title <= 12 or fontsize_authors <= 10 then
                     local title_height = wtitle:getSize().h
-                    -- With the ui-font patch applied and a font other than Noto Sans selected, and with
-                    -- "shrink item font size to fit more text" disabled in the detailed list settings,
-                    -- text may overflow the allocated row height.
+                    -- With the ui-font patch applied and with "shrink item font size to fit more text"
+                    -- disabled in the detailed list settings, text may overflow vertically when fonts
+                    -- report inconsistent internal metrics.
                     --
-                    -- Using getLineHeight() directly is unreliable because different fonts define
-                    -- ascent, descent, and lineGap inconsistently. Some fonts (e.g. NotoSans) provide
-                    -- clean and coherent metrics, but many others report inflated or irregular values.
-                    -- This causes KOReader to miscalculate the usable line height and minimum block
-                    -- height, which in turn prevents the trimming logic from removing the last line
-                    -- even when it visually exceeds the available space.
+                    -- Many fonts define ascent, descent, and lineGap in irregular or exaggerated ways.
+                    -- As a consequence, getLineHeight() often returns values that do not match the actual
+                    -- vertical space used when the text is rendered. This causes KOReader to miscalculate
+                    -- the usable line height and the minimum block height, which can prevent the trimming
+                    -- logic from removing the last line even when it visibly exceeds the available space.
                     --
-                    -- To make all fonts behave consistently, we replace the font-reported line height
-                    -- with a normalized synthetic value proportional to the font size. This yields
-                    -- stable layout behavior across all fonts and mimics the predictable line-height
-                    -- model used in CSS.
+                    -- Instead of relying on font-reported metrics, we use Screen:scaleBySize(fontsize)
+                    -- to compute a line-height baseline. This uses the exact same scaling that KOReader
+                    -- applies when rendering text, ensuring that layout calculations stay consistent
+                    -- across devices and fonts regardless of their internal metrics.
+                    --
+                    -- Two lines of title text therefore require:
+                    --     2 * Screen:scaleBySize(fontsize_title)
+                    -- which guarantees that the title block reserves enough vertical space for two
+                    -- rendered lines under all supported fonts.
                     -- units-per-em
-                    local title_line_height = fontsize_title * 1.25 -- synthetic, stable across all fonts
-                    local title_min_height = 2 * title_line_height  -- minimum height = space for 2 lines
+                    local title_line_height = Screen:scaleBySize(fontsize_title) -- wtitle:getLineHeight() is self.line_height_px = Math.round( (1 + self.line_height) * self.face.size ) in testboxwidget.lua
+                    local title_min_height = 2 * title_line_height
                     local authors_height = authors and wauthors:getSize().h or 0
-                    local authors_line_height = authors and (fontsize_authors * 1.25) or 0
+                    local authors_line_height = authors and Screen:scaleBySize(fontsize_authors) or 0
                     local authors_min_height = 2 * authors_line_height
                     -- Chop lines, starting with authors, until
                     -- both labels fit in the allocated space.
