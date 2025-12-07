@@ -901,7 +901,7 @@ function MosaicMenuItem:update()
                 --     border_adjustment = 2*Size.border.thin
                 -- end
                 if self.pagetextinfo.settings:isTrue("enable_rounded_corners") then
-                    border_adjustment = 3*Size.border.thin
+                    border_adjustment = 2*Size.border.thin
                 end
                 local all_metadata_text = string.format("%s %s %s %s", words, pubdate, grvotes, grrating)
                 local directory = self:getDirectoryTextWidget({ w = image_size.w - border_adjustment, h = image_size.h }, all_metadata_text)
@@ -1240,23 +1240,37 @@ function MosaicMenuItem:paintTo(bb, x, y)
     end
     if not self.is_directory and self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_rounded_corners") then
         local function generateRoundedSVGDynamic(path_out, target_width, target_height, base_radius)
-            base_radius = base_radius or 70  -- radio de esquina por defecto
+            base_radius = base_radius or 70  -- default corner radius
 
+            -- Scale radius
             local scale_x = target_width / 450
             local scale_y = target_height / 680
-            local rx = math.floor(base_radius * ((scale_x + scale_y) / 2)) -- esquinas escaladas
+            local rx = math.floor(base_radius * ((scale_x + scale_y) / 2))
 
-            -- Hueco interno ajustado según rx
+            -- Inner hole positioning
             local dx = rx
             local dy = rx
-            local inner_w  = math.max(10, target_width - 2) - 2*rx
+            local inner_w  = math.max(10, target_width  - 2) - 2*rx
             local inner_h  = math.max(10, target_height - 2) - 2*rx
             local offset_x = 2 + rx
             local offset_y = 2 + rx
 
+            -- ---- FIX DEL BORDE EXTERIOR ----
+            -- Para que el borde toque *exactamente* los límites exteriores del cover,
+            -- hay que compensar el stroke-width (1.5 px).
+            -- Medio grosor = 0.75 px → colocamos el rect en (0.75, 0.75)
+            -- y su tamaño es W - 1.5 y H - 1.5.
+            local stroke = 2
+            local inset  = stroke / 2
+            local rect_x = inset
+            local rect_y = inset
+            local rect_w = target_width  - stroke
+            local rect_h = target_height - stroke
+
             local svg_content = string.format([[
         <svg width="%d" height="%d" viewBox="0 0 %d %d" xmlns="http://www.w3.org/2000/svg">
-            <!-- Fondo blanco con hueco central recortado -->
+
+            <!-- Fondo blanco con hueco interior -->
             <path d="
                 M0,0 h%d v%d h-%d z
                 M2,%d
@@ -1270,12 +1284,23 @@ function MosaicMenuItem:paintTo(bb, x, y)
                 z
             " fill="white" fill-rule="evenodd"></path>
 
-            <!-- Marco dibujado encima -->
-            <rect x="2" y="2" width="%d" height="%d" rx="%d" ry="%d" fill="none" stroke="black" stroke-width="1.5"/>
+            <!-- Marco exterior corregido (perfectamente alineado) -->
+            <rect x="%.2f" y="%.2f"
+                width="%.2f" height="%.2f"
+                rx="%d" ry="%d"
+                fill="none"
+                stroke="black"
+                stroke-width="%.2f"/>
+
         </svg>
             ]],
+                -- SVG SIZE
                 target_width, target_height, target_width, target_height,
+
+                -- Outer frame cut
                 target_width, target_height, target_width,
+
+                -- Inner hole
                 dy, rx, rx, dx, dy,
                 inner_w,
                 rx, rx, dx, dy,
@@ -1283,7 +1308,12 @@ function MosaicMenuItem:paintTo(bb, x, y)
                 rx, rx, dx, dy,
                 inner_w,
                 rx, rx, dx, dy,
-                target_width-4, target_height-4, rx, rx
+
+                -- Rect FIX values
+                rect_x, rect_y,
+                rect_w, rect_h,
+                rx, rx,
+                stroke
             )
 
             local f = io.open(path_out, "w")
