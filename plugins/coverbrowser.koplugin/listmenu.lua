@@ -784,11 +784,27 @@ function ListMenuItem:update()
                 -- Don't go too low, and get out of this loop.
                 if fixed_font_size or fontsize_title <= 12 or fontsize_authors <= 10 then
                     local title_height = wtitle:getSize().h
-                    local title_line_height = wtitle:getLineHeight()
-                    local title_min_height = 2 * title_line_height -- unscaled_size_check: ignore
+                    -- With the ui-font patch applied and a font other than Noto Sans selected, and with
+                    -- "shrink item font size to fit more text" disabled in the detailed list settings,
+                    -- text may overflow the allocated row height.
+                    --
+                    -- Using getLineHeight() directly is unreliable because different fonts define
+                    -- ascent, descent, and lineGap inconsistently. Some fonts (e.g. NotoSans) provide
+                    -- clean and coherent metrics, but many others report inflated or irregular values.
+                    -- This causes KOReader to miscalculate the usable line height and minimum block
+                    -- height, which in turn prevents the trimming logic from removing the last line
+                    -- even when it visually exceeds the available space.
+                    --
+                    -- To make all fonts behave consistently, we replace the font-reported line height
+                    -- with a normalized synthetic value proportional to the font size. This yields
+                    -- stable layout behavior across all fonts and mimics the predictable line-height
+                    -- model used in CSS.
+                    -- units-per-em
+                    local title_line_height = fontsize_title * 1.25 -- synthetic, stable across all fonts
+                    local title_min_height = 2 * title_line_height  -- minimum height = space for 2 lines
                     local authors_height = authors and wauthors:getSize().h or 0
-                    local authors_line_height = authors and wauthors:getLineHeight() or 0
-                    local authors_min_height = 2 * authors_line_height -- unscaled_size_check: ignore
+                    local authors_line_height = authors and (fontsize_authors * 1.25) or 0
+                    local authors_min_height = 2 * authors_line_height
                     -- Chop lines, starting with authors, until
                     -- both labels fit in the allocated space.
                     while title_height + authors_height > dimen.h do
