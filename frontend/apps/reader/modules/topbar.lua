@@ -1745,11 +1745,17 @@ function TopBar:toggleBar(light_on)
         local height_small = w:getSize().h
         w:free()
 
-        local baseline_diff = baseline_big - baseline_small
+        local size_big = self.settings:readSetting("font_size_title") or 14
+        local size_small = size_big - 8
+
+        local x_height_big = face_big.ftsize:getXHeight() * size_big
+        local x_height_small = face_small.ftsize:getXHeight() * size_small
+        local baseline_diff = baseline_big - baseline_small - math.floor(x_height_big - x_height_small + 0.5) -- Same baseline for both texts and then center x-heights
+        -- local baseline_diff = baseline_big - baseline_small - math.floor(x_height_big)
         if TopBar.show_bar_in_top_bar then
             TopBar.MARGIN_TOP = Screen:scaleBySize(9) + Screen:scaleBySize(self.space_after_alt_bar)
             self.title_and_series_widget_container[1].no_center_vertically = Screen:scaleBySize(self.space_after_alt_bar)
-            self.title_and_series_widget_container[2].no_center_vertically = Screen:scaleBySize(self.space_after_alt_bar) + baseline_diff -- Compensate de 4px for the text widget series whouse font size is 4px smaller
+            self.title_and_series_widget_container[2].no_center_vertically = Screen:scaleBySize(self.space_after_alt_bar) + baseline_diff -- compensation
         else
             TopBar.MARGIN_TOP = Screen:scaleBySize(9)
             self.title_and_series_widget_container[1].no_center_vertically = 0
