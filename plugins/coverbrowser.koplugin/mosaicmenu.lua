@@ -900,9 +900,12 @@ function MosaicMenuItem:update()
                 -- if self.pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
                 --     border_adjustment = 2*Size.border.thin
                 -- end
-                if self.pagetextinfo.settings:isTrue("enable_rounded_corners") then
-                    border_adjustment = 2*Size.border.thin
-                end
+                -- if self.pagetextinfo.settings:isTrue("enable_rounded_corners") then
+                    -- border_adjustment = Size.border.thin
+                    if self.pagetextinfo.settings:isTrue("enable_rounded_corners") and self.pagetextinfo.settings:isTrue("draw_borders_mosaic_overlays") then
+                        border_adjustment = 2 * Size.border.thin
+                    end
+                -- end
                 local all_metadata_text = string.format("%s %s %s %s", words, pubdate, grvotes, grrating)
                 local directory = self:getDirectoryTextWidget({ w = image_size.w - border_adjustment, h = image_size.h }, all_metadata_text)
                 local dir_size = directory:getSize()
@@ -911,7 +914,7 @@ function MosaicMenuItem:update()
                     h = dir_size.h,
                 }
 
-                local container = self.pagetextinfo.settings:isTrue("enable_rounded_corners") and LeftContainer or CenterContainer
+                local container = CenterContainer
                 widget = CenterContainer:new{
                     dimen = dimen,
                     FrameContainer:new{
