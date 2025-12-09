@@ -45,7 +45,9 @@ function ButtonTable:init()
     local row_cnt = #self.buttons
     local table_min_needed_width = -1
     for i = 1, row_cnt do
-        self:addVerticalSpan()
+        if not (ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") and self.quickmenu) or i == 1 then
+            self:addVerticalSpan()
+        end
         local buttons_layout_line = {}
         local horizontal_group = HorizontalGroup:new{}
         local row = self.buttons[i]
@@ -87,10 +89,10 @@ function ButtonTable:init()
                 is_quickmenu_button = btn_entry.is_quickmenu_button,
                 flash_button = btn_entry.flash_button,
                 width = btn_entry.width or default_button_width,
-                height = (ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") and self.quickmenu) and 6 or btn_entry.height,
+                height = (ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") and self.quickmenu) and Screen:scaleBySize(20) or btn_entry.height, -- 20 is default text_font_size in button.lua
                 bordersize = 0,
                 margin = 0,
-                padding = Size.padding.buttontable, -- a bit taller than standalone buttons, for easier tap
+                padding = (ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") and self.quickmenu) and 0 or Size.padding.buttontable, -- a bit taller than standalone buttons, for easier tap
                 padding_h = btn_entry.align == "left" and Size.padding.large or Size.padding.button,
                     -- allow text to take more of the horizontal space if centered
                 avoid_text_truncation = btn_entry.avoid_text_truncation,
@@ -133,7 +135,9 @@ function ButtonTable:init()
             end
         end -- end for each button
         table.insert(self.container, horizontal_group)
-        self:addVerticalSpan()
+        if not (ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") and self.quickmenu) or i == row_cnt then
+            self:addVerticalSpan()
+        end
         if i < row_cnt then
             self:addVerticalSeparator()
         end
@@ -170,7 +174,7 @@ function ButtonTable:init()
     end
 end
 
-function ButtonTable:addVerticalSpan()
+function ButtonTable:addVerticalSpan(no_space)
     table.insert(self.container, VerticalSpan:new{
         width = Size.span.vertical_default,
     })
