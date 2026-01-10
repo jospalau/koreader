@@ -43,6 +43,7 @@ local Screen = Device.screen
 local UIManager = require("ui/uimanager")
 local util = require("util")
 local _ = require("gettext")
+local C_ = _.pgettext
 local NC_ = _.npgettext
 local T = require("ffi/util").template
 
@@ -86,6 +87,7 @@ local settingsList = {
     exit = {category="none", event="Exit", title=_("Exit KOReader"), device=true, separator=true},
     ----
     toggle_hold_corners = {category="none", event="IgnoreHoldCorners", title=_("Toggle long-press on corners"), device=true, condition=Device:isTouchDevice()},
+    ignore_hold_corners = {category="absolutenumber", event="IgnoreHoldCornersTime", default=10, min=5, max=30, unit=C_("Time", "s"), title=_("Ignore long-press on corners"), device=true, separator=true, condition=Device:isTouchDevice()},
     touch_input_on = {category="none", event="IgnoreTouchInput", arg=false, title=_("Enable touch input"), device=true, condition=Device:isTouchDevice()},
     touch_input_off = {category="none", event="IgnoreTouchInput", arg=true, title=_("Disable touch input"), device=true, condition=Device:isTouchDevice()},
     toggle_touch_input = {category="none", event="IgnoreTouchInput", title=_("Toggle touch input"), device=true, separator=true, condition=Device:isTouchDevice()},
@@ -335,6 +337,7 @@ local dispatcher_menu_order = {
     "exit",
     ----
     "toggle_hold_corners",
+    "ignore_hold_corners",
     "touch_input_on",
     "touch_input_off",
     "toggle_touch_input",
@@ -870,6 +873,7 @@ function Dispatcher:_addItem(caller, menu, location, settings, section)
                         end
                         local items = SpinWidget:new{
                             value = location[settings] ~= nil and location[settings][k] or settingsList[k].default or settingsList[k].min,
+                            default_value = settingsList[k].default,
                             value_min = settingsList[k].min,
                             value_step = settingsList[k].step,
                             precision = precision,
