@@ -700,10 +700,18 @@ function TopBar:onReaderReady()
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
+    local text_face = Font:getFace("NotoSans-Regular.ttf", font_size)
+    local w = TextWidget:new{ text = "", face = text_face, }
+    local forced_baseline = w:getBaseline()
+    local forced_height = w:getSize().h
+    w:free()
+
     self.current_page_text = TextWidget:new{
         text =  "",
         face = Font:getFace(font, font_size),
         fgcolor = Blitbuffer.COLOR_BLACK,
+        forced_baseline = forced_baseline,
+        forced_height = forced_height,
     }
 
     self.progress_chapter_text = TextWidget:new{
@@ -1019,10 +1027,18 @@ function TopBar:changeAllWidgetFaces()
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
+    local text_face = Font:getFace("NotoSans-Regular.ttf", font_size)
+    local w = TextWidget:new{ text = "", face = text_face, }
+    local forced_baseline = w:getBaseline()
+    local forced_height = w:getSize().h
+    w:free()
+
     self.current_page_text = TextWidget:new{
         text =  "",
         face = Font:getFace(font, font_size),
         fgcolor = Blitbuffer.COLOR_BLACK,
+        forced_baseline = forced_baseline,
+        forced_height = forced_height,
     }
 
     self.progress_chapter_text = TextWidget:new{
