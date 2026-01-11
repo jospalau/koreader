@@ -2355,6 +2355,67 @@ function TopBar:paintToDisabled(bb, x, y)
 
     self.goal_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES + self.goal_widget_container[1]:getSize().w / 2, Screen:getHeight())
     self.current_page_widget_container:paintTo(bb, x + math.floor(Screen:getWidth() / 2), Screen:getHeight())-- - TopBar.MARGIN_BOTTOM_CURRENT_PAGE)
+
+    local font = "cfont"
+    if self.settings:nilOrFalse("use_system_font") then
+        font = self.settings:readSetting("font_times_progress") or "myfont3"
+    end
+
+    local font_size = self.settings:readSetting("font_size_times_progress")
+    and self.settings:readSetting("font_size_times_progress") or 12
+
+
+    local face_big = Font:getFace(
+        font,
+        font_size
+    )
+
+    local face_small = Font:getFace(
+        font,
+        font_size - 6
+    )
+
+    local size_big = font_size
+    local size_small = size_big - 6
+
+    local function get_metrics_px(face)
+        local xh, asc, desc = face.ftsize:getAscDesc()
+        local px = face.size -- tamaño real en píxeles
+        return
+            xh  * px,
+            asc * px,
+            desc * px
+    end
+
+    local xh_big, asc_big = get_metrics_px(face_big)
+    local xh_small, asc_small = get_metrics_px(face_small)
+
+    local center_big = asc_big - xh_big / 2
+    local center_small = asc_small - xh_small / 2
+
+    local center_offset = math.floor(center_big - center_small + 0.5)
+
+    local chapter_pages_left_widget = bottom_container:new{
+        dimen = Geom:new(),
+            TextWidget:new{
+            -- text =  " ⋅ " .. self.ui.toc:getChapterPagesLeft(self.view.footer.pageno) or self.ui.document:getTotalPagesLeft(self.view.footer.pageno),
+            text = "\u{200A}" .. self.ui.toc:getChapterPagesLeft(self.view.footer.pageno) or self.ui.document:getTotalPagesLeft(self.view.footer.pageno),
+            face = Font:getFace(font, size_small),
+            fgcolor = Blitbuffer.COLOR_BLACK,
+            -- forced_baseline = self.current_page_widget_container[1].forced_baseline - size_big,
+            -- forced_baseline = self.current_page_widget_container[1].forced_baseline + size_small,
+            -- forced_baseline = self.current_page_widget_container[1].forced_baseline - center_offset,
+            forced_baseline = self.current_page_widget_container[1].forced_baseline,
+            forced_height = self.current_page_widget_container[1].forced_height,
+        }
+    }
+
+    local parent_width =  math.floor(self.current_page_widget_container[1]:getSize().w / 2)
+    local parent_x = x + math.floor(Screen:getWidth() / 2)
+    local x_pos = parent_x + parent_width + math.floor(chapter_pages_left_widget[1]:getSize().w / 2)
+    local y_pos = Screen:getHeight()
+
+    chapter_pages_left_widget:paintTo(bb, x_pos, y_pos)
 end
 
 function TopBar:onAdjustMarginsTopbar()
