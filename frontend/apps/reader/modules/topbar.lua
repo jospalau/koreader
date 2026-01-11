@@ -2355,6 +2355,63 @@ function TopBar:paintToDisabled(bb, x, y)
 
     self.goal_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES + self.goal_widget_container[1]:getSize().w / 2, Screen:getHeight())
     self.current_page_widget_container:paintTo(bb, x + math.floor(Screen:getWidth() / 2), Screen:getHeight())-- - TopBar.MARGIN_BOTTOM_CURRENT_PAGE)
+
+    local font = "cfont"
+    if self.settings:nilOrFalse("use_system_font") then
+        font = self.settings:readSetting("font_times_progress") or "myfont3"
+    end
+
+    local font_size = self.settings:readSetting("font_size_times_progress")
+    and self.settings:readSetting("font_size_times_progress") or 12
+
+
+    local face_big = Font:getFace(
+        font,
+        font_size
+    )
+
+    local face_small = Font:getFace(
+        font,
+        font_size - 6
+    )
+
+    -- BIG
+    local w = TextWidget:new{ text = "A", face = face_big }  -- usa una letra que tenga ascender
+    local baseline_big = w:getBaseline()
+    local height_big = w:getSize().h
+    w:free()
+
+    -- SMALL  ← AQUÍ ESTABA TU ERROR
+    w = TextWidget:new{ text = "A", face = face_small }
+    local baseline_small = w:getBaseline()
+    local height_small = w:getSize().h
+    w:free()
+    local size_big = font_size
+    local size_small = size_big - 6
+
+    local x_height_big = face_big.ftsize:getXHeight() * size_big
+    local x_height_small = face_small.ftsize:getXHeight() * size_small
+    local baseline_diff = baseline_big - baseline_small - math.floor(x_height_big - x_height_small + 0.5)
+
+
+
+    font_size = font_size - 6
+
+    local pages_left_widget = bottom_container:new{
+        dimen = Geom:new(),
+            TextWidget:new{
+            text =  " ⋅ " .. self.ui.toc:getChapterPagesLeft(self.view.footer.pageno) or self.ui.document:getTotalPagesLeft(self.view.footer.pageno),
+            face = Font:getFace(font, font_size),
+            fgcolor = Blitbuffer.COLOR_BLACK,
+        }
+    }
+
+    local parent_width =  math.floor(self.current_page_widget_container[1]:getSize().w / 2)
+    local parent_x = x + math.floor(Screen:getWidth() / 2)
+    local x_pos = parent_x + parent_width + math.floor(pages_left_widget[1]:getSize().w / 2)
+    local y_pos = Screen:getHeight() - baseline_diff --- math.floor(pages_left_widget[1]:getSize().h / 2)
+
+    pages_left_widget:paintTo(bb, x_pos, y_pos)
 end
 
 function TopBar:onAdjustMarginsTopbar()
