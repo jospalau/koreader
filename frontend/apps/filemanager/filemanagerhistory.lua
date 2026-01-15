@@ -321,7 +321,7 @@ function FileManagerHistory:onMenuHold(item)
         },
         {
             text = _("Remove from history"),
-            enabled = status ~= "tbr" and not is_being_read,
+            enabled = (status ~= "tbr" and not is_being_read) or not require("util").fileExists(file),
             callback = function()
                 UIManager:close(self.file_dialog)
                 -- The item's idx field is tied to the current *view*, so we can only pass it as-is when there's no filtering *at all* involved.
