@@ -45,7 +45,7 @@ function ButtonTable:init()
     local row_cnt = #self.buttons
     local table_min_needed_width = -1
     for i = 1, row_cnt do
-        if not (ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") and self.quickmenu) or i == 1 then
+        if not (ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") and self.quickmenu) then
             self:addVerticalSpan()
         end
         local buttons_layout_line = {}
@@ -89,7 +89,7 @@ function ButtonTable:init()
                 is_quickmenu_button = btn_entry.is_quickmenu_button,
                 flash_button = btn_entry.flash_button,
                 width = btn_entry.width or default_button_width,
-                height = (ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") and self.quickmenu) and Screen:scaleBySize(20) or btn_entry.height, -- 20 is default text_font_size in button.lua
+                height = (ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") and self.quickmenu) and Screen:scaleBySize(24) or btn_entry.height, -- 20 is default text_font_size in button.lua
                 bordersize = 0,
                 margin = 0,
                 padding = (ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") and self.quickmenu) and 0 or Size.padding.buttontable, -- a bit taller than standalone buttons, for easier tap
@@ -135,7 +135,7 @@ function ButtonTable:init()
             end
         end -- end for each button
         table.insert(self.container, horizontal_group)
-        if not (ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") and self.quickmenu) or i == row_cnt then
+        if not (ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") and self.quickmenu) then
             self:addVerticalSpan()
         end
         if i < row_cnt then
@@ -195,9 +195,13 @@ function ButtonTable:setupGridScrollBehaviour()
     -- So that the last row get the same height as all others,
     -- we add an invisible separator below it
     self.container:resetLayout()
-    table.insert(self.container, VerticalSpan:new{
-        width = self.sep_width,
-    })
+
+    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+    if not (ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") and self.quickmenu) then
+        table.insert(self.container, VerticalSpan:new{
+            width = self.sep_width,
+        })
+    end
     self.container:getSize() -- have it recompute its offsets and size
 
     -- Generate self.step_scroll_grid (so that what we add next is not part of it)
@@ -222,9 +226,55 @@ function ButtonTable:setupGridScrollBehaviour()
     table.insert(self.container._offsets, { x=self.width, y=self.container._size.h + self.sep_width })
 end
 
-
 function ButtonTable:getStepScrollGrid()
-    if not self.step_scroll_grid then
+    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+    if self.step_scroll_grid then
+        return self.step_scroll_grid
+    end
+
+    if ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") and self.quickmenu then
+        local step_rows = {}
+        local offsets = self.container._offsets
+        local last_vspan_idx = nil
+        local row_num = 1
+
+        for i = 1, #self.container do
+            local widget = self.container[i]
+
+            if widget._type == "verticalspan" then
+                last_vspan_idx = i
+            end
+
+            if getmetatable(widget) == HorizontalGroup then
+                local top_idx = last_vspan_idx or i
+                local bottom_idx = i
+
+                -- busca hasta el siguiente span o separador
+                for j = i + 1, #self.container do
+                    local w = self.container[j]
+                    if w._type == "verticalspan" or getmetatable(w) == LineWidget then
+                        bottom_idx = j
+                    else
+                        break
+                    end
+                end
+
+                local row = {
+                    row_num = row_num,
+                    top = offsets[top_idx].y,
+                    content_top = offsets[i].y,
+                    content_bottom = offsets[i].y + widget:getSize().h - 1,
+                    bottom = offsets[bottom_idx].y + self.container[bottom_idx]:getSize().h - 1,
+                }
+
+                table.insert(step_rows, row)
+                row_num = row_num + 1
+            end
+        end
+
+        self.step_scroll_grid = step_rows
+    else
+        -- ---- Versión antigua (como estaba antes) ----
         local step_rows = {}
         local offsets = self.container._offsets
         local idx = self.zero_sep and 2 or 1

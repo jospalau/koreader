@@ -226,6 +226,14 @@ function ButtonDialog:init()
             self.cropping_widget,
             VerticalSpan:new{ width=Size.padding.buttontable },
         }
+    else
+        local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+        if ui and ui.pagetextinfo and ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") and self.quickmenu then
+            local bt = self.buttontable
+            table.insert(bt.container, 1, VerticalSpan:new{ width = Size.span.vertical_default })
+            table.insert(bt.container, VerticalSpan:new{ width = Size.span.vertical_default })
+            bt.container:resetLayout()
+        end
     end
     local separator
     if self.title or self._added_widgets then
