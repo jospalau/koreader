@@ -4059,11 +4059,13 @@ function PageTextInfo:onShowTextProperties()
         end
     end
     text = text .. line
-    text = text .. "Total pages (screens): " .. self.ui.document:getPageCount() .. string.char(10) ..
-    "Total pages (1767cpp): " .. self.ui.pagemap:getLastPageLabel(true) .. string.char(10) ..
+    text = text .. "Total pages (screens): " .. self.ui.document:getPageCount() .. string.char(10)
+    if self.ui.pagemap:wantsPageLabels() then
+        text = text .. "Stable pages: " .. self.ui.pagemap:getLastPageLabel(true) .. string.char(10)
+    end
 
     --"Total pages assuming 1767 cpp: " .. tostring(total_pages) .. string.char(10) ..
-    "Total characters: " .. tostring(total_characters) .. string.char(10) ..
+     text = text .. "Total characters: " .. tostring(total_characters) .. string.char(10) ..
     "Total words: " .. tostring(total_words) .. string.char(10) ..
     -- Dividing characters between 5.7
     "Total words (total chars/5.7): " .. tostring(math.ceil(total_characters/5.7)) .. string.char(10) -- Dividing characters between 5.7
