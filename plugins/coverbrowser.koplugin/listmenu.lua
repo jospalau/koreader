@@ -390,6 +390,7 @@ function ListMenuItem:update()
                     local total_width = wleft_width
                     local image_size = wimage:getSize()
                     local width = image_size.w + 2*border_size
+                    -- This is so the file covers match the folder cover left margin when the cover just have one book
                     if self.pagetextinfo and self.pagetextinfo.settings:isTrue("covers_in_folders")
                     and not self.pagetextinfo.settings:isTrue("covers_grid_mode") then
                         local offset_x = math.floor(max_img_w * self.factor_x)
