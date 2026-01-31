@@ -726,12 +726,16 @@ function TopBar:onReaderReady()
         text =  "",
         face = Font:getFace(font, font_size),
         fgcolor = Blitbuffer.COLOR_BLACK,
+        forced_baseline = forced_baseline,
+        forced_height = forced_height,
     }
 
     self.times_text = TextWidget:new{
         text =  "",
         face = Font:getFace(font, font_size),
         fgcolor = Blitbuffer.COLOR_BLACK,
+        forced_baseline = forced_baseline,
+        forced_height = forced_height,
         invert = false,
     }
 
@@ -1058,12 +1062,16 @@ function TopBar:changeAllWidgetFaces()
         text =  "",
         face = Font:getFace(font, font_size),
         fgcolor = Blitbuffer.COLOR_BLACK,
+        forced_baseline = forced_baseline,
+        forced_height = forced_height,
     }
 
     self.times_text = TextWidget:new{
         text =  "",
         face = Font:getFace(font, font_size),
         fgcolor = Blitbuffer.COLOR_BLACK,
+        forced_baseline = forced_baseline,
+        forced_height = forced_height,
         invert = false,
     }
 
