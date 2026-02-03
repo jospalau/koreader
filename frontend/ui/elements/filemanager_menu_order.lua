@@ -185,6 +185,7 @@ local order = {
         "----------------------------",
         "favorites",
         "collections",
+        "bookmark_browser",
         "series",
         "generate_favorites",
         "generate_font_profiles",

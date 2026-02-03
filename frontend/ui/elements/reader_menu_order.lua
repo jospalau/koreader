@@ -238,6 +238,7 @@ local order = {
         "----------------------------",
         "favorites",
         "collections",
+        "bookmark_browser",
         "series",
         "generate_favorites",
         -- "open_random_favorite",

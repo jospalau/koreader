@@ -50,6 +50,12 @@ function FileManagerCollection:addToMainMenu(menu_items)
             self:onShowCollList()
         end,
     }
+    menu_items.bookmark_browser = {
+        text = _("Bookmark browser"),
+        callback = function()
+            self:onShowBookmarkBrowser()
+        end,
+    }
     menu_items.series = {
         text = self.title2,
         callback = function()
@@ -381,15 +387,17 @@ function FileManagerCollection:onMenuHold(item)
     local is_currently_opened = file == (self.ui.document and self.ui.document.file)
 
     local buttons = {}
-    local doc_settings_or_file
+    local been_opened, doc_settings_or_file
     if is_currently_opened then
+        been_opened = true
         doc_settings_or_file = self.ui.doc_settings
         if not book_props then
             book_props = self.ui.doc_props
             book_props.has_cover = true
         end
     else
-        if BookList.hasBookBeenOpened(file) then
+        been_opened = BookList.hasBookBeenOpened(file)
+        if been_opened then
             doc_settings_or_file = BookList.getDocSettings(file)
             if not book_props then
                 local props = doc_settings_or_file:readSetting("doc_props")
@@ -429,6 +437,12 @@ function FileManagerCollection:onMenuHold(item)
             end,
         },
     })
+    if been_opened and #doc_settings_or_file:readSetting("annotations") > 0 then
+        table.insert(buttons, {
+            self._manager:genExportHighlightsButton({ [file] = true }, close_dialog_callback),
+            self._manager:genBookmarkBrowserButton({ [file] = true }, close_dialog_callback),
+        })
+    end
     table.insert(buttons, {
         filemanagerutil.genShowFolderButton(file, close_dialog_menu_callback2),
         filemanagerutil.genBookInformationButton(doc_settings_or_file, book_props, close_dialog_callback),
@@ -2303,6 +2317,38 @@ function FileManagerCollection:onDoubleTapBottomRightCollection(arg, ges_ev)
         end)
     end
     return
+end
+
+function FileManagerCollection:genExportHighlightsButton(files, caller_pre_callback, button_disabled)
+    return {
+        text = _("Export highlights"),
+        enabled = self.ui.exporter and not button_disabled,
+        callback = function()
+            if caller_pre_callback then
+                caller_pre_callback()
+            end
+            self.ui.exporter:exportFilesNotes(files)
+        end,
+    }
+end
+
+function FileManagerCollection:genBookmarkBrowserButton(files, caller_pre_callback, button_disabled)
+    return {
+        text = _("Bookmarks"),
+        enabled = not button_disabled,
+        callback = function()
+            if caller_pre_callback then
+                caller_pre_callback()
+            end
+            local BookmarkBrowser = require("ui/widget/bookmarkbrowser")
+            BookmarkBrowser:show(files, self.ui)
+        end,
+    }
+end
+
+function FileManagerCollection:onShowBookmarkBrowser()
+    local BookmarkBrowser = require("ui/widget/bookmarkbrowser")
+    BookmarkBrowser:showSourceDialog(self.ui)
 end
 
 return FileManagerCollection
