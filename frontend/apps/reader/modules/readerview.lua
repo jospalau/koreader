@@ -1654,14 +1654,21 @@ function ReaderView:getCurrentPageLineWordCounts()
             {x = Screen:getWidth(), y = Screen:getHeight()}, true) -- do not highlight
         if res then
             lines_nb = #self.document:getScreenBoxesFromPositions(res.pos0, res.pos1, true)
-            for word in util.gsplit(res.text, "[%s%p]+", false) do
-                if util.hasCJKChar(word) then
-                    for char in util.gsplit(word, "[\192-\255][\128-\191]+", true) do
-                        words_nb = words_nb + 1
-                    end
-                else
-                    words_nb = words_nb + 1
-                end
+            local text = res.text
+            -- smart quotes
+            text = text:gsub("\226\128\152", "")   -- ‘
+            text = text:gsub("\226\128\156", "")   -- “
+            text = text:gsub("\226\128\157", "")   -- ”
+            text = text:gsub("\226\128\153", "'")  -- ’ -> '
+
+            -- dashes / ellipsis
+            text = text:gsub("\226\128\148", " ")  -- —
+            text = text:gsub("\226\128\147", " ")  -- –
+            text = text:gsub("\226\128\166", " ")  -- …
+
+            text = text:gsub("[!\"#%$%%&%(%)%*%+,%-%./:;<=>%?@%[%]%^_`{|}~]", " ")
+            for word in text:gmatch("[%w\194-\244]+['’]?[%w\194-\244]*") do
+                words_nb = words_nb + 1
             end
         end
     else

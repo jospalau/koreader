@@ -2094,17 +2094,25 @@ function PageTextInfo:paintTo(bb, x, y)
                         --     fgcolor = Blitbuffer.COLOR_BLACK,
                         -- }
                         -- t:paintTo(bb, x, box.y)
-                            local text_line = self.ui.document._document:getTextFromPositions(box.x, box.y, Screen:getWidth(), box.y, false, false).text
+                            -- text line
+                            local text = self.ui.document._document:getTextFromPositions(box.x, box.y, Screen:getWidth(), box.y, false, false).text
                             -- text_line = text_line:gsub("’", ""):gsub("‘", ""):gsub("–", ""):gsub("— ", ""):gsub(" ", ""):gsub("”", ""):gsub("“", ""):gsub("”", "…")
+                            -- smart quotes
+                            text = text:gsub("\226\128\152", "")   -- ‘
+                            text = text:gsub("\226\128\156", "")   -- “
+                            text = text:gsub("\226\128\157", "")   -- ”
+                            text = text:gsub("\226\128\153", "'")  -- ’ -> '
+
+                            -- dashes / ellipsis
+                            text = text:gsub("\226\128\148", " ")  -- —
+                            text = text:gsub("\226\128\147", " ")  -- –
+                            text = text:gsub("\226\128\166", " ")  -- …
+
+                            text = text:gsub("[!\"#%$%%&%(%)%*%+,%-%./:;<=>%?@%[%]%^_`{|}~]", " ")
                             local words_nb = 0
-                            for word in util.gsplit(text_line, "[%s%p]+", false) do
-                                if util.hasCJKChar(word) then
-                                    for char in util.gsplit(word, "[\192-\255][\128-\191]+", true) do
-                                        words_nb = words_nb + 1
-                                    end
-                                else
-                                    words_nb = words_nb + 1
-                                end
+
+                            for word in text:gmatch("[%w\194-\244]+['’]?[%w\194-\244]*") do
+                                words_nb = words_nb + 1
                             end
                             -- for i = #wordst, 1, -1 do
                             --     if wordst[i] == "’" or wordst[i] == "–" or wordst[i] == " " or wordst[i] == "”" or wordst[i] == "…" or wordst[i] == "…’" then
