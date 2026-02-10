@@ -551,9 +551,20 @@ function FileManager:onSwipeFM(ges)
     elseif direction == "east" then
         self.file_chooser:onPrevPage()
     elseif direction == "north" then
-            self.disable_double_tap = not self.disable_double_tap
-            Device.input.disable_double_tap = self.disable_double_tap
-            UIManager:setDirty(self, "ui")
+        local x = ges.pos and ges.pos.x or (ges.start_pos and ges.start_pos.x)
+        local w = Screen:getWidth()
+
+        -- Ignore vertical swipes that start too close to the left or right edges (10% of screen width)
+        -- We avoid this to be triggered when firing one-finger swipes on the edges of the screen
+        -- This is even worse for devices like the Kobo Libra 2 in which tearing/papercut glitches occur
+        -- because the clash of different kind of refreshes in notifications and here
+        local border = math.floor(w * 0.10)
+        if x and (x < border or x > (w - border)) then
+            return false
+        end
+        self.disable_double_tap = not self.disable_double_tap
+        Device.input.disable_double_tap = self.disable_double_tap
+        UIManager:setDirty(self, "ui")
     end
     return true
 end
