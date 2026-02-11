@@ -1965,7 +1965,7 @@ function TopBar:paintTo(bb, x, y)
                 fgcolor = Blitbuffer.COLOR_GRAY,
             }
         }
-        if self.view.footer.settings.bar_top then
+        if self.view.footer.settings.bar_top or self.view.dogear_visible then
             -- self.stats_times_widget_container:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() -  Screen:scaleBySize(6))
             self.author_information_widget_container:paintTo(bb, x + self.author_information_widget_container[1]:getSize().w/2 + Screen:scaleBySize(4), y + Screen:getHeight() )
             if Device:isAndroid() and Device.screen:getWidth() < 1072 then
@@ -2051,10 +2051,18 @@ function TopBar:paintTo(bb, x, y)
         -- end
 
         self.ignore_corners_widget_container[1]:setText(self.ignore_corners)
-        if Device:isAndroid() and Device.screen:getWidth() < 1072 then
-            self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(20), y + Screen:scaleBySize(6))
+        if self.view.dogear_visible then
+            if Device:isAndroid() and Device.screen:getWidth() < 1072 then
+                self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(20), Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+            else
+                self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+            end
         else
-            self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), y + Screen:scaleBySize(6))
+            if Device:isAndroid() and Device.screen:getWidth() < 1072 then
+                self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(20), y + Screen:scaleBySize(6))
+            else
+                self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), y + Screen:scaleBySize(6))
+            end
         end
 
         self.progress_widget_container.dimen = Geom:new{ w = self.progress_widget_container[1]:getSize().w, self.progress_widget_container[1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
@@ -2064,6 +2072,7 @@ function TopBar:paintTo(bb, x, y)
         else
             self.progress_widget_container:paintTo(bb, Screen:getWidth() - self.progress_widget_container:getSize().w - TopBar.MARGIN_SIDES, y +  self.progress_widget_container[1]._height)
         end
+
         -- if TopBar.show_bar_in_top_bar then
         --     self.progress_widget_container:paintTo(bb, Screen:getWidth() - self.progress_widget_container:getSize().w - TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
         -- end
@@ -2362,7 +2371,7 @@ end
 
 function TopBar:paintToDisabled(bb, x, y)
     self.ignore_corners_widget_container[1]:setText(self.ignore_corners)
-    if self.status_bar and self.status_bar == true and self.view.footer.settings.bar_top then
+    if (self.status_bar and self.status_bar == true and self.view.footer.settings.bar_top) or self.view.dogear_visible then
         if Device:isAndroid() and Device.screen:getWidth() < 1072 then
             self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(20), Screen:getHeight() - TopBar.MARGIN_BOTTOM)
         else
