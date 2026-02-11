@@ -2250,12 +2250,12 @@ function TopBar:paintTo(bb, x, y)
                 -- books_information_widget_container[1]:setText("TB: " .. execute:read('*a') .. "TBC: " .. execute2:read('*a'))
 
                 books_information_widget_container[1]:setText("T:" .. stats["total_books"]
-                .. " F:" .. stats["total_books_finished"]
-                .. " FTM:" .. stats["total_books_finished_this_month"]
-                .. " FTY:" .. stats["total_books_finished_this_year"]
-                .. " FLY:" .. stats["total_books_finished_last_year"]
-                .. " MR:" .. stats["total_books_mbr"]
-                .. " TR:" .. stats["total_books_tbr"])
+                .. "·F:" .. stats["total_books_finished"]
+                .. "·FTM:" .. stats["total_books_finished_this_month"]
+                .. "·FTY:" .. stats["total_books_finished_this_year"]
+                .. "·FLY:" .. stats["total_books_finished_last_year"]
+                .. "·MR:" .. stats["total_books_mbr"]
+                .. "·TR:" .. stats["total_books_tbr"])
                 -- .. ", LD:" .. last_days
                 -- .. stats_year)
             else
@@ -2295,7 +2295,7 @@ function TopBar:paintTo(bb, x, y)
                     fgcolor = Blitbuffer.COLOR_BLACK,
                 },
             }
-            version_widget_container[1]:setText(TopBar:getDateAndVersion() .. ". BDB " .. TopBar:getBooksOpened() .. " TR " .. TopBar:getTotalRead() .. "d" .. " ΔL " .. stats_year .. "h")
+            version_widget_container[1]:setText(TopBar:getDateAndVersion() .. ". BDB:" .. TopBar:getBooksOpened() .. "·TR:" .. TopBar:getTotalRead() .. "d" .. "·ΔL:" .. stats_year .. "h")
             version_widget_container:paintTo(bb, x + version_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES,
             Screen:getHeight()
             - books_information_widget_container[1]:getSize().h - 10)
