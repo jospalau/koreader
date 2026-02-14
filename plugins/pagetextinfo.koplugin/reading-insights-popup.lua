@@ -1,5 +1,5 @@
---[ reading insights popup v1.0.37 ] 
---added:help text
+--[ reading insights popup v1.0.43 ] 
+--added: total pages read to bookList view
 
 -- ABOUT:
 -- this is a modified version of the 'reading insights popup' userpatch made by u/quanganhdo.
@@ -96,10 +96,18 @@ local PATCH_L10N = {
         ["minutes read"] = "minutes read",
         ["hour read"] = "hour read",
         ["hours read"] = "hours read",
+		["book"] = "book",
+		["books"] = "books",
+		["day"] = "day",
+		["days"] = "days",
+		["daily record"] = "daily record",
         ["day read"] = "day read",
         ["days read"] = "days read",
         ["page read"] = "page read",
         ["pages read"] = "pages read",
+		["week"] = "week",
+		["weeks"] = "weeks",
+		["weekly record"] = "weekly record",
         ["week in a row"] = "week in a row",
         ["weeks in a row"] = "weeks in a row",
         ["day in a row"] = "day in a row",
@@ -152,10 +160,18 @@ local PATCH_L10N = {
         ["minutes read"] = "phút đã đọc",
         ["hour read"] = "giờ đã đọc",
         ["hours read"] = "giờ đã đọc",
+		["book"] = "book",
+		["books"] = "books",
+		["day"] = "day",
+		["days"] = "days",
+		["daily record"] = "daily record",
         ["day read"] = "ngày đã đọc",
         ["days read"] = "ngày đã đọc",
         ["page read"] = "trang đã đọc",
         ["pages read"] = "trang đã đọc",
+		["week"] = "week",
+		["weeks"] = "weeks",
+		["weekly record"] = "weekly record",
         ["week in a row"] = "tuần liên tiếp",
         ["weeks in a row"] = "tuần liên tiếp",
         ["day in a row"] = "ngày liên tiếp",
@@ -263,18 +279,18 @@ local insightsCache = G_reader_settings:readSetting("readingInsights_cache") or 
 				monthlyReadingHours = nil,
 }
 local cache_timestamps = G_reader_settings:readSetting("readingInsights_cacheTimestamps") or { 
-				partialClear = 0,	-- last local db update (pulled from lfs)
-				fullClear = 0, 		-- cached stats sync timestamp (recorded via stats plugin patch)
-				statsSynced = 0,	-- latest stats sync timestamp (recorded via stats plugin patch)
-				lastRefreshed = 0,	-- latest cache modified timestamp (recorded bwith os.time(), used to 
-									-- manage refreshOnlyOncePerDay)
+				partialClear = 1262304000,	-- last local db update aka cache partially cleared (pulled from lfs)
+				fullClear = 1262304000, 	-- cached stats sync timestamp aka cache fully cleared (recorded via stats plugin patch)
+				statsSynced = 1262304000,	-- latest stats sync timestamp (recorded via stats plugin patch)
+				lastRefreshed = 1262304000,	-- latest cache modified timestamp (recorded bwith os.time(), used to 
+											-- manage refreshOnlyOncePerDay)
 }
 local cachedLayout = nil
 local function uploadCacheTimestampsTogreader()
 	G_reader_settings:saveSetting("readingInsights_cacheTimestamps", cache_timestamps)
 end
-local function uploadInsightsCacheToGReader()
-	logger.info("READING-INSIGHTS-POPUP: UPLOADING CACHE")
+local function uploadInsightsCacheToGReader(item)
+	logger.info("READING-INSIGHTS-POPUP: UPLOADING CACHE: ", item)
 	G_reader_settings:saveSetting("readingInsights_cache", insightsCache)
 end
 local function set_cache_partialClear_timestamp(timestamp)
@@ -362,14 +378,14 @@ local fallbackTable = {
 				days = 	{
 							current = 0,
 							best = 0,
-							best_start = 0,
-							best_end = 0,							
+							best_start = 1,
+							best_end = 1,							
 						},
 				weeks = {
 							current = 0,
 							best = 0,
-							best_start = 0,
-							best_end = 0,								
+							best_start = 1,
+							best_end = 1,								
 						},
     },
 	yearRange = { min_year = 0000, max_year = 0000 },
@@ -407,9 +423,22 @@ local function withStatement(conn, sql, fn)
 end
 
 local function computeStreaks(entries_desc, is_consecutive, is_current_start, weeksOrDays)
+	local a = {
+				current = 0,
+				best = 0,
+				best_start = 0,
+				best_end = 0,							
+	}
     if #entries_desc == 0 then
-        return 0, 0
+        return a
+	elseif #entries_desc == 1 then
+		a.best = 1
+		if is_current_start(entries_desc[1][1]) then 
+			a.current = 1 			
+		end
+		return a
     end
+	a = nil
 
     local current = 0
     if is_current_start(entries_desc[1][1]) then
@@ -1038,7 +1067,7 @@ local function buildMonthlyChart(popup_self, monthly_data, layout, fonts)
             table.insert(bars_row, tappable_bar)
 
             local month_label_widget = TextWidget:new{
-                text = string.lower(m.label),
+                text = string.lower(_(m.label)),
                 face = font_small,
             }
             table.insert(month_labels_row, CenterContainer:new{
@@ -1112,7 +1141,7 @@ end
 
 local function buildCurrentStreakWidget(streaks_dimen, value, weeksOrDays, fonts, streaks_colors)
 
-	local heading_text = weeksOrDays == 0 and "weeks in a row" or "days in a row"
+	local heading_text = weeksOrDays == 0 and _("weeks in a row") or _("days in a row")
 	local heading_text_widget = TextWidget:new{
 								text = heading_text,
 								padding = 0,
@@ -1148,7 +1177,7 @@ end
 local function buildBestStreakWidget(streaks, streaks_dimen, fonts, streaks_colors)
 
 	local function buildBestModule(value, weekOrDay, isLongest, ts_start, ts_end)
-		local heading_text = weekOrDay == 0 and "weekly record" or "daily record" 
+		local heading_text = weekOrDay == 0 and _("weekly record") or _("daily record") 
 		if isLongest then heading_text = heading_text .. " ★" end
 		local heading_text_widget = TextBoxWidget:new{
 								width = streaks_dimen.box_width - Screen:scaleBySize(10),
@@ -1158,8 +1187,8 @@ local function buildBestStreakWidget(streaks, streaks_dimen, fonts, streaks_colo
 								fgcolor = streaks_colors.midGray,
 		}
 		
-		local value_text = weekOrDay == 0 and N_(" week", " weeks", streaks.best_weeks) or N_(" day", " days", streaks.best_days)		
-		local value_text = value .. value_text
+		local value_text = weekOrDay == 0 and N_("week", "weeks", streaks.weeks.best) or N_("day", "days", streaks.days.best)		
+		local value_text = value .. " " .. value_text
 		local value_widget = TextBoxWidget:new{
 									width = streaks_dimen.box_width - Screen:scaleBySize(10),
 									padding = 0,
@@ -1175,9 +1204,9 @@ local function buildBestStreakWidget(streaks, streaks_dimen, fonts, streaks_colo
 					value_widget,
 		} 
 		
-		if  value > 1 and ts_start and ts_end then 	
-			local startDay =  os.date("%-d %b '%y", ts_start) 		--old: "%-d %b '%y"
-			local endDay = os.date("%-d %b '%y", ts_end)
+		if  (value > 1 and ts_start and ts_end) or (ts_start >= 1 and ts_end >=1)then 
+			local startDay =  os.date("%-d " .._(os.date("%b", ts_start)) .. " '%y", ts_start)
+			local endDay = os.date("%-d " .._(os.date("%b", ts_end)) .. " '%y", ts_end)
 			local startEndWidget_txt = string.upper(startDay .. " - " .. endDay)
 			local startEndWidget = TextBoxWidget:new{
 									width = streaks_dimen.box_width - Screen:scaleBySize(10),
@@ -1197,6 +1226,17 @@ local function buildBestStreakWidget(streaks, streaks_dimen, fonts, streaks_colo
 	local isLongest_w = (streaks.weeks.best > 1) and (streaks.weeks.best == streaks.weeks.current) and true or false	
 	local isLongest_d = (streaks.days.best > 1) and (streaks.days.best == streaks.days.current) and true or false	
 	
+	local bestBlock = VerticalGroup:new{
+							buildBestModule(streaks.weeks.best, 0, isLongest_w, streaks.weeks.best_start, streaks.weeks.best_end),
+							VerticalSpan:new{width = Screen:scaleBySize(5)},
+							buildBestModule(streaks.days.best, 1, isLongest_d, streaks.days.best_start, streaks.days.best_end),
+	}
+	
+	local bestBlock_dimen = bestBlock:getSize()
+	if bestBlock_dimen.h > streaks_dimen.box_height then 
+		streaks_dimen.box_height = bestBlock_dimen.h + Screen:scaleBySize(6)
+	end
+	
 	return FrameContainer:new{
 			padding = 0,
 			bordersize = Screen:scaleBySize(1),
@@ -1207,11 +1247,7 @@ local function buildBestStreakWidget(streaks, streaks_dimen, fonts, streaks_colo
                 dimen = Geom:new{ w = streaks_dimen.box_width, h = streaks_dimen.box_height },
 				HorizontalGroup:new{
 					HorizontalSpan:new{width = Screen:scaleBySize(9)},
-					VerticalGroup:new{
-							buildBestModule(streaks.weeks.best, 0, isLongest_w, streaks.weeks.best_start, streaks.weeks.best_end),
-							VerticalSpan:new{width = Screen:scaleBySize(5)},
-							buildBestModule(streaks.days.best, 1, isLongest_d, streaks.days.best_start, streaks.days.best_end),
-					},
+					bestBlock
 				},
 			}
 	}
@@ -1245,10 +1281,10 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, yearRang
 	elseif maxCurrentStreak > 199 then 
 		fonts.streakValue = Font:getFace("NotoSerif-Regular.ttf", 55)	
 	end	
-	
+
+	local bestStreakWidget = buildBestStreakWidget(streaks, streaks_dimen, fonts, streaks_colors)	
 	local streaks_weekWidget = buildCurrentStreakWidget(streaks_dimen, streaks.weeks.current, 0, fonts, streaks_colors)
 	local streaks_dayWidget = buildCurrentStreakWidget(streaks_dimen, streaks.days.current, 1, fonts, streaks_colors)
-	local bestStreakWidget = buildBestStreakWidget(streaks, streaks_dimen, fonts, streaks_colors)
 	local streaksBlock = HorizontalGroup:new{
 								streaks_weekWidget, 
 								HorizontalSpan:new{ width = Size.padding.large},
@@ -1334,7 +1370,7 @@ function ReadingInsightsPopup:calculateStreaks()
 		]]  
 		withStatement(conn, sql, function(stmt)  
 			for row in stmt:rows() do  
-				table.insert(dates, {  row[1], row[2] }) -- { date, timestamp}
+				table.insert(dates, { row[1], tonumber(row[2]) }) -- { date, timestamp}
 			end  
 		end)
 
@@ -1356,7 +1392,7 @@ function ReadingInsightsPopup:calculateStreaks()
             local expected_prev = os.date("%Y-%m-%d", prev_time - 86400)
             return curr_date == expected_prev
         end
-
+				
         streaks.days = computeStreaks(dates, isConsecutiveDay, isCurrentDayStart, 1)
 
 		local weeks = {}
@@ -1397,7 +1433,7 @@ function ReadingInsightsPopup:calculateStreaks()
         streaks.weeks = computeStreaks(weeks, isConsecutiveWeek, isCurrentWeekStart, 0)
 		
 		insightsCache.streaks = streaks
-		uploadInsightsCacheToGReader()
+		if streaks then uploadInsightsCacheToGReader("streaks") end
         return streaks
     end)
 end
@@ -1436,7 +1472,7 @@ function ReadingInsightsPopup:getMonthlyReadingDays(year)
 		
 		insightsCache.monthlyReadingDays = insightsCache.monthlyReadingDays or {}
 		insightsCache.monthlyReadingDays[year] = months
-		uploadInsightsCacheToGReader()
+		if months then uploadInsightsCacheToGReader("MonthlyReadingDays") end
         return months
     end)
 end
@@ -1485,7 +1521,7 @@ function ReadingInsightsPopup:getMonthlyReadingHours(year)
 		
 		insightsCache.monthlyReadingHours = insightsCache.monthlyReadingHours or {}
 		insightsCache.monthlyReadingHours[year] = months
-		uploadInsightsCacheToGReader()
+		if months then uploadInsightsCacheToGReader("MonthlyReadingHours") end
         return months
     end)
 end
@@ -1535,6 +1571,7 @@ function ReadingInsightsPopup:getYearlyStats(year)
 		
 		insightsCache.yearlyStats = insightsCache.yearlyStats or {}
 		insightsCache.yearlyStats[year] = stats
+		if stats then uploadInsightsCacheToGReader("YearlyStats") end
         return stats
     end)
 end
@@ -1556,14 +1593,15 @@ function ReadingInsightsPopup:getYearRange()
         end)
 
 		insightsCache.yearRange = range
-		uploadInsightsCacheToGReader()
+		if range then uploadInsightsCacheToGReader("YearRange") end
         return range
     end)
 end
 
 local function getBooksForPeriod(period_format, period_value)
     local books = {}
-    return withStatsDb(books, function(conn)
+	local pagesTotal = 0
+    local result = withStatsDb(books, function(conn)
         -- Count distinct pages per book for the period (ignore rereads of the same page).
         local sql = string.format([[
             SELECT book.title, book.authors, COUNT(DISTINCT page_stat.page) as pages_read
@@ -1576,16 +1614,18 @@ local function getBooksForPeriod(period_format, period_value)
 
         withStatement(conn, sql, function(stmt)
             for row in stmt:rows() do
+				local pages_curr = tonumber(row[3]) or 0
                 table.insert(books, {
                     title = row[1] or _("Unknown"),
                     authors = row[2] or "",
-                    pages = tonumber(row[3]) or 0,
+                    pages = pages_curr,
                 })
+				pagesTotal = pagesTotal + pages_curr
             end
         end)
-
-        return books
+        return {books, pagesTotal}
     end)
+	return result[1], result[2]
 end
 
 -- Get list of books read in a given month (year_month format: "2025-01")
@@ -1649,18 +1689,20 @@ local function showBooksForPeriod(popup_self, books, empty_text, title)
 
     showBookList(
         title,
-        books
+        books,
+		pages
     )
 end
 
 -- month_label_full should be "January 2025" format
 function ReadingInsightsPopup:showBooksForMonth(year_month, month_label_full)
-    local books = self:getBooksForMonth(year_month)
+    local books, pages = self:getBooksForMonth(year_month)
+	local bookCount = #books
     showBooksForPeriod(
         self,
-        books,
+        books, 
         T(_("No books read in %1"), month_label_full),
-        T(N_("%1 - Book Read (%2)", "%1 - Books Read (%2)", #books), month_label_full, #books)
+        T(("%1 - %2 " .. N_("book", "books", bookCount).." (%3 ".. N_("page", "pages", pages)..")"), month_label_full, bookCount, pages)
     )
 end
 
@@ -1669,17 +1711,18 @@ function ReadingInsightsPopup:getBooksForYear(year)
 end
 
 function ReadingInsightsPopup:showBooksForYear(year)
-    local books = self:getBooksForYear(year)
+    local books, pages = self:getBooksForYear(year)
+	local bookCount = #books
     showBooksForPeriod(
         self,
         books,
         _("No books read in ") .. year,
-        T(N_("%1 - Book Read (%2)", "%1 - Books Read (%2)", #books), year, #books)
+		T(("%1 - %2 " .. N_("book", "books", bookCount).." (%3 ".. N_("page", "pages", pages)..")"), year, bookCount, pages)
     )
 end
 
 local function populateEverything(popup_self, year, yearRange)
-	logger.info("READING-INSIGHTS-POPUP: POPULATE EVERYTHING()")
+	logger.info("READING-INSIGHTS-POPUP: POPULATE EVERYTHING CALLED")
 	local a = {
 		yearRange = yearRange,
 		streaks = insightsCache.streaks or popup_self:calculateStreaks(),   
@@ -1688,15 +1731,6 @@ local function populateEverything(popup_self, year, yearRange)
         monthlyReadingHours = insightsCache.monthlyReadingHours and insightsCache.monthlyReadingHours[year] or popup_self:getMonthlyReadingHours(year),
 	}	
 	return a
-end
-
-function refreshDataAndRepaint(popup_self, year, yearRange, loading) 
-	--recalculates data for selected_year and updates widget.
-	
-	logger.info("READING-INSIGHTS-POPUP: REFRESH AND REPAINT")       
-    populateEverything(popup_self, year, yearRange)              
-	popup_self:update(popup_self, year, popup_self.mode)
-	UIManager:close(loading)
 end
 
 local function yearExistsInCache(year)
@@ -1773,14 +1807,8 @@ function ReadingInsightsPopup:init()
         }
     }	
 	
-	local loading = InfoMessage:new{text = "Loading insights for " .. self.selected_year .. "..."}  
     if everything.isPlaceholder then 
-	--calls refreshDataAndRepaint() if widget is showing placeHolderArray data.
-	
-		UIManager:show(loading)
-        UIManager:tickAfterNext(function() 
-			refreshDataAndRepaint(self, self.selected_year, yearRange, loading) 
-        end)  
+		self:onGoToPrevYear(self, self.selected_year) 
     end  
 
     self.dimen = Geom:new{ w = screen_w, h = screen_h }
