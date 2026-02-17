@@ -1235,19 +1235,33 @@ Tap a book in the search results to open it.]]),
                 ["profile_exec_Palatino"] = true,
             }
             else
-
+                gestures["multiswipe_north_east_west"] = {}
+                gestures["multiswipe_north_east"] = {}
                 local all_fonts = {}
+                local all_fonts_wp = {}
                 -- print(dump(all_fonts))
                 for _, font_name in ipairs(face_list) do
-                    if font_name:sub(1, 3) == "WP " then goto continue end
                     if not font_name:find("Noto Sans") then
-                        table.insert(all_fonts, "profile_exec_" .. font_name)
-                        gestures["multiswipe_north_east"]["profile_exec_" .. font_name] = true
+                        if font_name:sub(1, 3) == "WP " then
+                            table.insert(all_fonts_wp, "profile_exec_" .. font_name)
+                            gestures["multiswipe_north_east_west"]["profile_exec_" .. font_name] = true
+                        else
+                            table.insert(all_fonts, "profile_exec_" .. font_name)
+                            gestures["multiswipe_north_east"]["profile_exec_" .. font_name] = true
+                        end
                     end
-                    ::continue::
                 end
                 --print(dump(all_fonts))
+                gestures["multiswipe_north_east_west"]["settings"] = {}
+                gestures["multiswipe_north_east_west"]["settings"]["order"] = all_fonts_wp
+                gestures["multiswipe_north_east_west"].settings["show_as_quickmenu"] = true
+                gestures["multiswipe_north_east_west"].settings["keep_open_on_apply"] = true
+                gestures["multiswipe_north_east_west"].settings["anchor_quickmenu"] = false
+                gestures["multiswipe_north_east"]["settings"] = {}
                 gestures["multiswipe_north_east"]["settings"]["order"] = all_fonts
+                gestures["multiswipe_north_east"].settings["show_as_quickmenu"] = true
+                gestures["multiswipe_north_east"].settings["keep_open_on_apply"] = true
+                gestures["multiswipe_north_east"].settings["anchor_quickmenu"] = false
             end
             local data_ordered = {}
             for k, v in ffiUtil.orderedPairs(data) do
