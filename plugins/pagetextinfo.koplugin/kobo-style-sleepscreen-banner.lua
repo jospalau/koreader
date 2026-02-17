@@ -147,7 +147,7 @@ local function addQuotesIfReq(text)
 	return text
 end
 
-local function parseFooterText(text, index)
+local function parseFooterText(hl_array, text, index)
 	if not text or not index or text == "" then
 		return text, index
 	end
@@ -155,7 +155,7 @@ local function parseFooterText(text, index)
 	local hl_time, hl_date, hl_chapter = "", "", ""
 	local hl_pageno, bk_author, bk_title = 0, "", ""
 
-	local hl_array = Sidecar and Sidecar:readSetting("annotations")
+    -- local hl_array = Sidecar and Sidecar:readSetting("annotations")
 	hl_array = hl_array and hl_array[index] or {}
 	hl_chapter = hl_array.chapter or "N/A"
 	hl_pageno = Sidecar:isTrue("pagemap_use_page_labels") and hl_array.pageref or
@@ -415,7 +415,7 @@ function UIManager:show(widget, ...)
 									footer_color
 			)
 			hl_footer_widget = buildTextField(
-									parseFooterText(HL_SETT.hl_footer_text , random_highlight_index),
+									parseFooterText(highlights_list, HL_SETT.hl_footer_text , random_highlight_index),
 									font_.footer_font,
 									max_height - title_dimen.h - stats_dimen.h,
 									max_wid - hyphen_wid:getSize().w,
