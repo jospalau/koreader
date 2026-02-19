@@ -296,6 +296,7 @@ Dispatcher:registerAction("show_reading_hours_daily", {
 })
 
 function ReaderUI:onShowReadingHoursDaily()
+	self.statistics:insertDB()
 	local widget = ReadingHoursWindow:new()
 	UIManager:show(widget, "ui", widget.dimen)
 end
