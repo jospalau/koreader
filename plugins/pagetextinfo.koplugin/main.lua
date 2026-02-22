@@ -3304,13 +3304,18 @@ function PageTextInfo:onGetTextPage()
     -- end
 
 
+    local device = Device.model
+    if Device:isAndroid() then
+        local android = require("android")
+        device = android.prop.model
+    end
     local sessions, avg_wpm, avg_last_seven_days, avg_last_thirty_days, avg_last_sixty_days, avg_last_ninety_days, avg_last_hundred_and_eighty_days = getSessionsInfo(self.ui.view.footer)
     avg_wpm = math.floor(avg_wpm) .. "wpm" .. ", " .. math.floor(avg_wpm*60) .. "wph"
 
     local text = "Font: " .. font_face .. " (" .. readability .. ")" .. string.char(10) ..
     "Font size: " .. font_size .. "px, " .. font_size_pt .. "pt" .. font_size_pt_koreader .. ", " .. font_size_mm .. "mm" .. string.char(10) ..
     "Font weight: " .. font_weight .. string.char(10) ..
-    "Device resolution: " .. Screen:getWidth() .. "x" .. Screen:getHeight() .. ", " .. display_dpi .. "ppi" .. string.char(10) ..
+    "Device (" .. device .. ") resolution: " .. Screen:getWidth() .. "x" .. Screen:getHeight() .. ", " .. display_dpi .. "ppi" .. string.char(10) ..
     "Font x-height: " .. x_height .. ", " .. x_height_mm .. " (" .. arcminutes_40cm .. ")" .. string.char(10) ..
     " • ~20′ is ideal for effortless reading" .. string.char(10) ..
     " • <15′ may strain the eyes without good contrast" .. string.char(10) ..
