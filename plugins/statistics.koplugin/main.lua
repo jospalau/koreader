@@ -155,7 +155,6 @@ function ReaderStatistics:init()
         ["Kobo_cadmus"] = 2, -- Kobo Sage
         ["Kobo_goldfinch"] = 3, -- Kobo Clara 2E
         ["KindlePaperWhite6"] = 4, -- Kindle Paperwhite 6
-        -- ["ditingp_global"] = 5, -- Xiaomi
         ["KindleBasic5"] = 5, -- Kindle Basic
         ["palma"] = 6, -- Boox Palma
         ["PB700"] = 7, -- PocketBook
@@ -164,6 +163,7 @@ function ReaderStatistics:init()
         ["Kobo_spaBW"] = 10, -- Clara BW
         ["Kobo_spaColour"] = 11, -- Clara Colour
         ["Kobo_monza"] = 12, -- Libra Colour
+        ["2407fpn8eg"] = 97, -- Xiaomi 14T Pro
         ["go6"] = 98, -- Boox Go6
         ["Physical book"] = 99, -- Reserved for physical book sessions
         ["Emulator"] = 100 -- Libra Colour
@@ -183,6 +183,7 @@ function ReaderStatistics:init()
         [10] = "KoCBW",
         [11] = "KoClC",
         [12] = "KoLiC",
+        [97] = "Phone",
         [98] = "Go6",
         [99] = "PhyB",
         [100] = "Em"
