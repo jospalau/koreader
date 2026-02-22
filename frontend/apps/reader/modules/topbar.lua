@@ -1966,8 +1966,23 @@ function TopBar:paintTo(bb, x, y)
             }
         }
         if self.view.footer.settings.bar_top or self.view.dogear_visible then
+            if Device:isAndroid() then
+                self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(20), Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+            else
+                self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), Screen:getHeight() - TopBar.MARGIN_BOTTOM)
+            end
+        else
+            if Device:isAndroid() then
+                self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(20), y + Screen:scaleBySize(6))
+            else
+                self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), y + Screen:scaleBySize(6))
+            end
+        end
+        if self.view.footer.settings.bar_top then
             -- self.stats_times_widget_container:paintTo(bb, x + Screen:scaleBySize(4), Screen:getHeight() -  Screen:scaleBySize(6))
-            self.author_information_widget_container:paintTo(bb, x + self.author_information_widget_container[1]:getSize().w/2 + Screen:scaleBySize(4), y + Screen:getHeight() )
+            self.author_information_widget_container:paintTo(bb, x + self.author_information_widget_container[1]:getSize().w/2 + Screen:scaleBySize(4), y + Screen:getHeight())
+
+
             if Device:isAndroid() then
                 self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(20), Screen:getHeight() - TopBar.MARGIN_BOTTOM)
             else
@@ -1987,11 +2002,6 @@ function TopBar:paintTo(bb, x, y)
             end
         else
             self.author_information_widget_container:paintTo(bb, x + self.author_information_widget_container[1]:getSize().w/2 + Screen:scaleBySize(4), y + self.author_information_widget_container[1]._height)
-            if Device:isAndroid() then
-                self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(20), y + Screen:scaleBySize(6))
-            else
-                self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), y + Screen:scaleBySize(6))
-            end
             if self.settings:isTrue("show_battery_and_memory_info") then
                 battery_frame_diff:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
                 battery_frame:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - battery_frame_diff[1]:getSize().w - Screen:scaleBySize(6) - battery_frame[1]:getSize().w - Screen:scaleBySize(6), y + Screen:scaleBySize(9))
