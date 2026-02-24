@@ -1861,7 +1861,8 @@ function TopBar:toggleBar(light_on)
                 text = "⚑ " .. (today_duration_number - self.daily_time_goal) .. "m"
             end
             self.goal_text:setText(text)
-            self.chapter_pages_left_text:setText("\u{200A}" .. self.ui.toc:getChapterPagesLeft(self.view.footer.pageno) or self.ui.document:getTotalPagesLeft(self.view.footer.pageno))
+            local chapter_pages_left = self.ui.toc:getChapterPagesLeft(self.view.footer.pageno) or self.ui.document:getTotalPagesLeft(self.view.footer.pageno)
+            self.chapter_pages_left_text:setText("\u{200A}" .. chapter_pages_left)
         end
         if self.ui.gestures.ignore_hold_corners then
             -- If page text info plugin highlight_all_words_vocabulary_builder_and_notes setting is true, then self.ui.gestures.ignore_hold_corners will be true so the corner words can be double tapped
