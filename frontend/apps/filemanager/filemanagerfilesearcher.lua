@@ -139,7 +139,7 @@ function FileSearcher:onShowFileSearchLists(recent, search_string)
     FileSearcher.search_path = G_reader_settings:readSetting("home_dir")
     FileSearcher.search_string = search_string
     if FileSearcher.search_string == nil then
-        FileSearcher.search_string = "*.epub"
+        FileSearcher.search_string = "epub"
     end
     local filemanagerutil = require("apps/filemanager/filemanagerutil")
     self.path = G_reader_settings:readSetting("home_dir") or filemanagerutil.getDefaultDir()
@@ -157,7 +157,7 @@ end
 
 function FileSearcher:onShowFileSearchAllCompleted()
     FileSearcher.search_path = G_reader_settings:readSetting("home_dir")
-    FileSearcher.search_string = "*.epub"
+    FileSearcher.search_string = "epub"
     local filemanagerutil = require("apps/filemanager/filemanagerutil")
     self.path = G_reader_settings:readSetting("home_dir") or filemanagerutil.getDefaultDir()
     self.case_sensitive = false
