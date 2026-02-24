@@ -287,8 +287,7 @@ function FileManagerCollection:onMenuSelect(item)
                             if self.ui.history.booklist_menu then
                                 UIManager:close(self.ui.history.booklist_menu)
                             end
-                            self.close_callback()
-                            self.ui:switchDocument(item.file)
+                            filemanagerutil.openFile(self.ui, item.file, self.close_callback)
                         end,
                         choice2_text = _("Do not open it"),
                         choice2_callback = function()
@@ -299,8 +298,7 @@ function FileManagerCollection:onMenuSelect(item)
                     UIManager:show(multi_box)
                     return true
                 else
-                    self.close_callback()
-                    self.ui:switchDocument(item.file)
+                    filemanagerutil.openFile(self.ui, item.file, self.close_callback)
                 end
             end
         else
@@ -331,8 +329,7 @@ function FileManagerCollection:onMenuSelect(item)
                         if self.ui.history.booklist_menu then
                             UIManager:close(self.ui.history.booklist_menu)
                         end
-                        self.close_callback()
-                        self.ui:openFile(item.file)
+                        filemanagerutil.openFile(self.ui, item.file, self.close_callback)
                     end,
                     choice2_text = _("Do not open it"),
                     choice2_callback = function()
@@ -343,8 +340,7 @@ function FileManagerCollection:onMenuSelect(item)
                 UIManager:show(multi_box)
                 return true
             else
-                self.close_callback()
-                self.ui:openFile(item.file)
+                filemanagerutil.openFile(self.ui, item.file, self.close_callback)
             end
         end
     end
