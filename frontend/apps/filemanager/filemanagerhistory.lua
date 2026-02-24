@@ -183,7 +183,48 @@ function FileManagerHistory:onSetDimensions(dimen)
 end
 
 function FileManagerHistory:onMenuSelect(item)
-    filemanagerutil.openFile(self.ui, item.file, self.close_callback)
+    if G_reader_settings:isTrue("top_manager_infmandhistory")
+        and item.file
+        and util.getFileNameSuffix(item.file) == "epub"
+        and _G.all_files
+        and _G.all_files[item.file]
+        and (_G.all_files[item.file].status == "mbr"
+            or _G.all_files[item.file].status == "tbr"
+            or _G.all_files[item.file].status == "new"
+            or _G.all_files[item.file].status == "complete") then
+        local MultiConfirmBox = require("ui/widget/multiconfirmbox")
+        local text = ", do you want to open it?"
+            if _G.all_files[item.file].status == "mbr" then
+                text = "Book in MBR" .. text
+            elseif _G.all_files[item.file].status == "tbr" then
+                text = "Book in TBR" .. text
+            elseif _G.all_files[item.file].status == "new" then
+                text = "Book not opened" .. text
+            else
+                text = "Book finished" .. text
+            end
+        local multi_box= MultiConfirmBox:new{
+            text = text,
+            choice1_text = _("Yes"),
+            choice1_callback = function()
+                if self.ui.history.booklist_menu then
+                    UIManager:close(self.ui.history.booklist_menu)
+                end
+                filemanagerutil.openFile(self.ui, item.file, self.close_callback)
+            end,
+            choice2_text = _("Do not open it"),
+            choice2_callback = function()
+                return
+            end,
+            cancel_callback = function()
+                return
+            end,
+        }
+        UIManager:show(multi_box)
+        return false
+    else
+        filemanagerutil.openFile(self.ui, item.file, self.close_callback)
+    end
 end
 
 function FileManagerHistory:onMenuHold(item)
@@ -598,13 +639,6 @@ function FileManagerHistory:fetchStatusesOut(count)
     self.statuses_fetched = true
 end
 
-function FileManagerHistory:onMenuSelect(item)
-    local FileManager = require("apps/filemanager/filemanager")
-
-    FileManager:openFile(item.file)
-    return true
-end
-
 function FileManagerHistory:onShowHistMBR()
     local ReadHistory = require("readhistory")
     -- ReadHistory.hist = {}
@@ -618,7 +652,7 @@ function FileManagerHistory:onShowHistMBR()
         title = "MBR",
         -- item and book cover thumbnail dimensions in Mosaic and Detailed list display modes
         -- must be equal in File manager, History and Collection windows to avoid image scaling
-        onMenuChoice = self.onMenuSelect,
+        onMenuSelect = self.onMenuSelect,
         _manager = self,
     }
 
@@ -653,7 +687,7 @@ function FileManagerHistory:onShowHistTBR()
         title = "TBR",
         -- item and book cover thumbnail dimensions in Mosaic and Detailed list display modes
         -- must be equal in File manager, History and Collection windows to avoid image scaling
-        onMenuChoice = self.onMenuSelect,
+        onMenuSelect = self.onMenuSelect,
         _manager = self,
     }
 

@@ -139,7 +139,7 @@ function FileSearcher:onShowFileSearchLists(recent, search_string)
     FileSearcher.search_path = G_reader_settings:readSetting("home_dir")
     FileSearcher.search_string = search_string
     if FileSearcher.search_string == nil then
-        FileSearcher.search_string = "epub"
+        FileSearcher.search_string = "*.epub"
     end
     local filemanagerutil = require("apps/filemanager/filemanagerutil")
     self.path = G_reader_settings:readSetting("home_dir") or filemanagerutil.getDefaultDir()
@@ -157,7 +157,7 @@ end
 
 function FileSearcher:onShowFileSearchAllCompleted()
     FileSearcher.search_path = G_reader_settings:readSetting("home_dir")
-    FileSearcher.search_string = "epub"
+    FileSearcher.search_string = "*.epub"
     local filemanagerutil = require("apps/filemanager/filemanagerutil")
     self.path = G_reader_settings:readSetting("home_dir") or filemanagerutil.getDefaultDir()
     self.case_sensitive = false
@@ -323,6 +323,9 @@ function FileSearcher:getList()
     end
     -- local calibre_data = util.loadCalibreData()
     if search_string ~= "*" then -- one * to show all files
+        if not self.case_sensitive then
+            search_string = util.stringLower(search_string)
+        end
         -- replace '.' with '%.'
         search_string = search_string:gsub("%.","%%%.")
         -- replace '*' with '.*'
@@ -366,13 +369,12 @@ function FileSearcher:getList()
                                 if title:find("%(") then
                                     title = title:sub(1, title:find("%(") - 2)
                                 end
-                                -- local author = word:sub(word:find("-") + 2, word:len()):gsub(".epub", "")
                                 if fullpath:find(title) then
                                     table.insert(dirs, { f, fullpath, attributes })
                                 end
                             end
                         else
-                            print(fullpath)
+                            -- print(fullpath)
                             if self:isFileMatch(f, fullpath, search_string, true) then
                                 table.insert(dirs, { f, fullpath, attributes })
                                 -- local file = FileChooser:getListItem(nil, f, fullpath, attributes, collate)
@@ -394,7 +396,10 @@ function FileSearcher:isFileMatch(filename, fullpath, search_string, is_file)
     if search_string == "*" then
         return true
     end
-    if util.stringSearch(filename, search_string, self.case_sensitive) ~= 0 then
+    if not self.case_sensitive then
+        filename = util.stringLower(filename)
+    end
+    if string.find(filename, search_string) then
         return true
     end
     if self.include_metadata and is_file and DocumentRegistry:hasProvider(fullpath) then
