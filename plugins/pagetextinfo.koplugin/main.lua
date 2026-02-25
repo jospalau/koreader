@@ -3324,7 +3324,8 @@ function PageTextInfo:onGetTextPage()
     " • 2.1–2.6 mm (18–22′) optimal · effortless reading" .. string.char(10) ..
     " • 1.7–1.85 mm (14.6–15.9′) compact yet comfortable · preferred aesthetic range" .. string.char(10) ..
     " • <1.7 mm (<14.6′) low/demanding · needs good contrast & sharp rendering" .. string.char(10) ..
-    " • >2.6 mm (>22.3′) too large · disrupts flow and density" .. string.char(10) .. string.char(10) ..
+    " • >2.6 mm (>22.3′) too large · disrupts flow and density" .. string.char(10) ..
+    "While the guidelines suggest larger text, a typical printed book uses an x-height of 1.5 mm to 1.8 mm" .. string.char(10) .. string.char(10) ..
     "Applied tweaks: " .. self.ui.tweaks_no .. string.char(10) ..
     self.ui.tweaks .. string.char(10) ..
     text_properties
