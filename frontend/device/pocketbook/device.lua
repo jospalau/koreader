@@ -722,7 +722,7 @@ local PocketBook700 = PocketBook:extend{
     hasNaturalLight = yes,
     -- c.f., https://github.com/koreader/koreader/issues/9556
     inkview_translates_buttons = true,
-    needs_orientation_sync_after_resume = true,
+    needs_orientation_sync_after_resume = false,
 }
 
 -- PocketBook Era Color (PB700K3)
