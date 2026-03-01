@@ -1668,7 +1668,7 @@ function FileManager:showOpenWithDialog(file)
                         ok_text = _("Always"),
                         ok_callback = function()
                             DocumentRegistry:setProvider(file, provider, false)
-                            self:openFile(file, provider)
+                            FileManager.openFile(self, file, provider)
                             UIManager:close(dialog)
                         end,
                     })
@@ -1678,12 +1678,12 @@ function FileManager:showOpenWithDialog(file)
                         ok_text = _("Always"),
                         ok_callback = function()
                             DocumentRegistry:setProvider(file, provider, true)
-                            self:openFile(file, provider)
+                            FileManager.openFile(self, file, provider)
                             UIManager:close(dialog)
                         end,
                     })
                 else -- open just once
-                    self:openFile(file, provider)
+                    FileManager.openFile(self, file, provider)
                     UIManager:close(dialog)
                 end
             end,
