@@ -370,10 +370,18 @@ function DoubleBar:paintTo(bb, x, y)
         -- self[6]:paintTo(bb, x + Screen:getWidth() - self[6][1]:getSize().w - DoubleBar.MARGIN_SIDES, Screen:getHeight() - DoubleBar.MARGIN_BOTTOM)
 
         self.ignore_corners_widget_container[1]:setText(self.ignore_corners)
-        if Device:isAndroid() and Device.screen:getWidth() < 1072 then
-            self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(20), y + Screen:scaleBySize(6))
+        if self.view.dogear_visible then
+            if Device:isAndroid() then
+                self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(20), Screen:getHeight() - DoubleBar.MARGIN_BOTTOM)
+            else
+                self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), Screen:getHeight() - DoubleBar.MARGIN_BOTTOM)
+            end
         else
-            self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), y + Screen:scaleBySize(6))
+            if Device:isAndroid() then
+                self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(20), y + Screen:scaleBySize(6))
+            else
+                self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), y + Screen:scaleBySize(6))
+            end
         end
 end
 
