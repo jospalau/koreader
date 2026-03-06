@@ -233,9 +233,16 @@ function ReadingHoursWindow:init()
         local ui = require("apps/reader/readerui").instance
         local user_duration_format = "modern"
         read_book = ui.view.topbar.initial_total_time_book + (os.time() - ui.view.topbar.start_session_time)
+
+        local percentage_read = ui.view.footer.pageno / ui.view.footer.pages
+        local Math = require("optmath")
+        local words_read = Math.round(ui.view.topbar.total_words * percentage_read)
+        local wpm =  math.floor(words_read / (read_book/60))
+
         read_book = read_book > 86400 and math.floor(read_book/60/60/24 * 100)/100 .. "d" or datetime.secondsToClockDuration(user_duration_format, read_book, false)
+
         local time_text = TextWidget:new{
-            text = datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")) .. " - " .. read_book,
+            text = datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")) .. " - " .. read_book .. " - " .. wpm .. "wpm",
             face = Font:getFace("cfont", 16),
             bold = false,
         }
