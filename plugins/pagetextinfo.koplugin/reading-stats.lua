@@ -52,7 +52,7 @@ function ReadingHoursWindow:init()
 
 	local w_padding = {
 		internal = Screen:scaleBySize(10),
-		external = Screen:scaleBySize(20),
+		external = Screen:scaleBySize(10),
 	}
 
 	local function vertical_spacing(h)
@@ -238,24 +238,23 @@ function ReadingHoursWindow:init()
         local Math = require("optmath")
         local words_read = Math.round(ui.view.topbar.total_words * percentage_read)
         local wpm =  math.floor(words_read / (read_book/60))
-
         read_book = read_book > 86400 and math.floor(read_book/60/60/24 * 100)/100 .. "d" or datetime.secondsToClockDuration(user_duration_format, read_book, false)
 
-        local time_text = TextWidget:new{
-            text = datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")) .. " - " .. read_book .. " - " .. wpm .. "wpm",
-            face = Font:getFace("cfont", 16),
-            bold = false,
+        local title_text = TextWidget:new{
+            text = ui.view.topbar.title,
+            face = Font:getFace("cfont", 18),
+            bold = true,
         }
         local icons_width = center_icons:getSize().w
 		local toggle_width = toggle_button:getSize().w
 		-- local total_content = icons_width + toggle_width
 		-- local left_spacer = (content_width - total_content) / 2
 
-		local total_content = time_text:getSize().w
+		local total_content = title_text:getSize().w
 		local left_spacer = content_width - total_content
 		local title = HorizontalGroup:new({
-            time_text,
-			-- HorizontalSpan:new({ width = left_spacer - time_text:getSize().w + center_icons:getSize().w / 2}),
+            title_text,
+			-- HorizontalSpan:new({ width = left_spacer - title_text:getSize().w + center_icons:getSize().w / 2}),
 			-- center_icons,
 			HorizontalSpan:new({ width = left_spacer }),
 			toggle_button,
@@ -279,8 +278,22 @@ function ReadingHoursWindow:init()
 			rows,
 		})
 
+        local info = HorizontalGroup:new({
+            align = "center",
+            LeftContainer:new({
+                dimen = Geom:new({ w = scrollable:getSize().w, h = Screen:scaleBySize(20) }),
+                TextWidget:new{
+                    text = datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")) .. " - " .. read_book .. " - " .. wpm .. "wpm",
+                    face = Font:getFace("cfont", 16),
+                    bold = false,
+                },
+                -- HorizontalSpan:new({ width = scrollable:getSize().w }),
+            }),
+        })
+
 		return VerticalGroup:new({
 			title,
+            info,
 			vertical_spacing(),
 			scrollable,
 		})
