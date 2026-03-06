@@ -228,13 +228,25 @@ function ReadingHoursWindow:init()
 			icon2,
 		})
 
-		local icons_width = center_icons:getSize().w
+        local datetime = require("datetime")
+        local read_book = ""
+        local ui = require("apps/reader/readerui").instance
+        local user_duration_format = "modern"
+        read_book = ui.view.topbar.initial_total_time_book + (os.time() - ui.view.topbar.start_session_time)
+        read_book = read_book > 86400 and math.floor(read_book/60/60/24 * 100)/100 .. "d" or datetime.secondsToClockDuration(user_duration_format, read_book, false)
+        local time_text = TextWidget:new{
+            text = datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")) .. " - " .. read_book,
+            face = Font:getFace("cfont", 16),
+            bold = false,
+        }
+        local icons_width = center_icons:getSize().w
 		local toggle_width = toggle_button:getSize().w
 		local total_content = icons_width + toggle_width
 		local left_spacer = (content_width - total_content) / 2
 
 		local title = HorizontalGroup:new({
-			HorizontalSpan:new({ width = left_spacer }),
+            time_text,
+			HorizontalSpan:new({ width = left_spacer - time_text:getSize().w + center_icons:getSize().w / 2}),
 			center_icons,
 			HorizontalSpan:new({ width = left_spacer }),
 			toggle_button,
