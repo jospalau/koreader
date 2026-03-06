@@ -241,13 +241,15 @@ function ReadingHoursWindow:init()
         }
         local icons_width = center_icons:getSize().w
 		local toggle_width = toggle_button:getSize().w
-		local total_content = icons_width + toggle_width
-		local left_spacer = (content_width - total_content) / 2
+		-- local total_content = icons_width + toggle_width
+		-- local left_spacer = (content_width - total_content) / 2
 
+		local total_content = time_text:getSize().w
+		local left_spacer = content_width - total_content
 		local title = HorizontalGroup:new({
             time_text,
-			HorizontalSpan:new({ width = left_spacer - time_text:getSize().w + center_icons:getSize().w / 2}),
-			center_icons,
+			-- HorizontalSpan:new({ width = left_spacer - time_text:getSize().w + center_icons:getSize().w / 2}),
+			-- center_icons,
 			HorizontalSpan:new({ width = left_spacer }),
 			toggle_button,
 		})
