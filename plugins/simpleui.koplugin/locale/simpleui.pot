@@ -1,0 +1,911 @@
+# Simple UI — KOReader Plugin
+# Copyright (C) 2024 Simple UI Contributors
+# This file is distributed under the same license as the Simple UI package.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: simpleui\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-03-16 21:54+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+
+msgid "  Physical Books  (%d in %s)"
+msgstr ""
+
+msgid "  Set Goal  (%d books in %s)"
+msgstr ""
+
+msgid "  Set Goal  (%d min/day)"
+msgstr ""
+
+msgid "  Set Goal  (%s)"
+msgstr ""
+
+msgid "  Set Goal  (disabled)"
+msgstr ""
+
+msgid "%d books"
+msgstr ""
+
+msgid "%d%% Read"
+msgstr ""
+
+msgid "%d/%d books"
+msgstr ""
+
+msgid "%s TO GO"
+msgstr ""
+
+msgid "%s read"
+msgstr ""
+
+msgid "Add at least 2 actions to arrange."
+msgstr ""
+
+msgid "Add at least 2 stats to arrange."
+msgstr ""
+
+msgid "All time — Books"
+msgstr ""
+
+msgid "All time — Time"
+msgstr ""
+
+msgid "Annual Goal"
+msgstr ""
+
+msgid "Annual Reading Goal"
+msgstr ""
+
+msgid "Arrange"
+msgstr ""
+
+msgid "Arrange %s"
+msgstr ""
+
+msgid "Arrange Collections"
+msgstr ""
+
+msgid "Arrange Items"
+msgstr ""
+
+msgid "Arrange Modules"
+msgstr ""
+
+msgid "Arrange Reading Stats"
+msgstr ""
+
+msgid "Arrange tabs"
+msgstr ""
+
+msgid "Auto (first book)"
+msgstr ""
+
+msgid "Battery"
+msgstr ""
+
+msgid "Book Info"
+msgstr ""
+
+msgid "Books to read in %s:"
+msgstr ""
+
+msgid "Bottom Bar"
+msgstr ""
+
+msgid "Bottom Bar will be %s after restart.\n\nRestart now?"
+msgstr ""
+
+msgid "Brightness"
+msgstr ""
+
+msgid "Cancel"
+msgstr ""
+
+msgid "Clock"
+msgstr ""
+
+msgid "Collection"
+msgstr ""
+
+msgid "Collection is empty."
+msgstr ""
+
+msgid "Collection not available: %s"
+msgstr ""
+
+msgid "Collections"
+msgstr ""
+
+msgid "Collections not available."
+msgstr ""
+
+msgid "Compact"
+msgstr ""
+
+msgid "Continue"
+msgstr ""
+
+msgid "Create Quick Action"
+msgstr ""
+
+msgid "Currently Reading"
+msgstr ""
+
+msgid "Custom"
+msgstr ""
+
+msgid "Custom Text"
+msgstr ""
+
+msgid "Daily Goal"
+msgstr ""
+
+msgid "Daily Reading Goal"
+msgstr ""
+
+msgid "Daily avg — Pages"
+msgstr ""
+
+msgid "Daily avg — Time"
+msgstr ""
+
+msgid "Date"
+msgstr ""
+
+msgid "Default"
+msgstr ""
+
+msgid "Default (Folder)"
+msgstr ""
+
+msgid "Default (Plugin)"
+msgstr ""
+
+msgid "Default (System)"
+msgstr ""
+
+msgid "Delete"
+msgstr ""
+
+msgid "Dictionary Lookup"
+msgstr ""
+
+msgid "Digital Goal  (%s)"
+msgstr ""
+
+msgid "Digital: %d books in %s"
+msgstr ""
+
+msgid "Disk Usage"
+msgstr ""
+
+msgid "Dispatcher not available."
+msgstr ""
+
+msgid "Edit"
+msgstr ""
+
+msgid "Edit Quick Action"
+msgstr ""
+
+msgid "Enable at least 2 modules to arrange."
+msgstr ""
+
+msgid "Extra Small"
+msgstr ""
+
+msgid "Favorites"
+msgstr ""
+
+msgid "Favorites not available."
+msgstr ""
+
+msgid "File Search"
+msgstr ""
+
+msgid "Folder"
+msgstr ""
+
+msgid "Folder Shortcuts"
+msgstr ""
+
+msgid "Folder not found:\n%s"
+msgstr ""
+
+msgid "Frontlight not available on this device."
+msgstr ""
+
+msgid "Header"
+msgstr ""
+
+msgid "Header Text"
+msgstr ""
+
+msgid "History"
+msgstr ""
+
+msgid "History not available."
+msgstr ""
+
+msgid "Home"
+msgstr ""
+
+msgid "Home Screen"
+msgstr ""
+
+msgid "Homescreen"
+msgstr ""
+
+msgid "Homescreen not available."
+msgstr ""
+
+msgid "Icon"
+msgstr ""
+
+msgid "Icon: Default"
+msgstr ""
+
+msgid "Icons"
+msgstr ""
+
+msgid "Icons only"
+msgstr ""
+
+msgid "Invalid arrangement.\nKeep items between the Left and Right separators."
+msgstr ""
+
+msgid "Items"
+msgstr ""
+
+msgid "Large"
+msgstr ""
+
+msgid "Later"
+msgstr ""
+
+msgid "Left"
+msgstr ""
+
+msgid "Library"
+msgstr ""
+
+msgid "Maximum %d actions per module reached. Remove one first."
+msgstr ""
+
+msgid "Maximum %d modules active. Disable one first."
+msgstr ""
+
+msgid "Maximum %d quick actions reached. Delete one first."
+msgstr ""
+
+msgid "Maximum %d stats per row. Remove one first."
+msgstr ""
+
+msgid "Maximum %d tabs reached. Remove one first."
+msgstr ""
+
+msgid "Maximum 5 collections. Remove one first."
+msgstr ""
+
+msgid "Minimum 2 tabs required. Select another tab first."
+msgstr ""
+
+msgid "Minutes per day:"
+msgstr ""
+
+msgid "Module Settings"
+msgstr ""
+
+msgid "Module limit disabled. Enabling too many modules may slow down the homescreen significantly and modules may be clipped at the bottom of the page."
+msgstr ""
+
+msgid "Modules  (%d — no limit)"
+msgstr ""
+
+msgid "Modules  (%d/%d — %d left)"
+msgstr ""
+
+msgid "Modules  (%d/%d — at limit)"
+msgstr ""
+
+msgid "Name"
+msgstr ""
+
+msgid "Network manager unavailable."
+msgstr ""
+
+msgid "New Quick Action"
+msgstr ""
+
+msgid "No Module Limit  ⚠ not recommended"
+msgstr ""
+
+msgid "No book in history."
+msgstr ""
+
+msgid "No books opened yet"
+msgstr ""
+
+msgid "No collections found."
+msgstr ""
+
+msgid "No collections selected"
+msgstr ""
+
+msgid "No folder, collection or plugin configured.\nGo to Simple UI → Settings → Quick Actions to set one."
+msgstr ""
+
+msgid "No icons found in:"
+msgstr ""
+
+msgid "No plugins found."
+msgstr ""
+
+msgid "No quotes found."
+msgstr ""
+
+msgid "No stats selected"
+msgstr ""
+
+msgid "No system actions found."
+msgstr ""
+
+msgid "OK"
+msgstr ""
+
+msgid "Off"
+msgstr ""
+
+msgid "On"
+msgstr ""
+
+msgid "Open a book to get started"
+msgstr ""
+
+msgid "Pagination Bar"
+msgstr ""
+
+msgid "Pagination bar size will change after restart.\n\nRestart now?"
+msgstr ""
+
+msgid "Pagination bar will be %s after restart.\n\nRestart now?"
+msgstr ""
+
+msgid "Path is not a folder:\n%s"
+msgstr ""
+
+msgid "Physical Books — %s"
+msgstr ""
+
+msgid "Physical books read this year:"
+msgstr ""
+
+msgid "Physical: %d books in %s"
+msgstr ""
+
+msgid "Plugin"
+msgstr ""
+
+msgid "Plugin error: %s"
+msgstr ""
+
+msgid "Plugin not available: %s"
+msgstr ""
+
+msgid "Power"
+msgstr ""
+
+msgid "Quick Actions"
+msgstr ""
+
+msgid "Quick Actions  (%d/%d — %d left)"
+msgstr ""
+
+msgid "Quick Actions  (%d/%d — at limit)"
+msgstr ""
+
+msgid "Quick Actions %d"
+msgstr ""
+
+msgid "Quit"
+msgstr ""
+
+msgid "Quote of the Day"
+msgstr ""
+
+msgid "RAM Usage"
+msgstr ""
+
+msgid "Reading Goals"
+msgstr ""
+
+msgid "Reading Stats"
+msgstr ""
+
+msgid "Recent Books"
+msgstr ""
+
+msgid "Restart"
+msgstr ""
+
+msgid "Right"
+msgstr ""
+
+msgid "Save"
+msgstr ""
+
+msgid "Select at least 2 collections to arrange."
+msgstr ""
+
+msgid "Settings"
+msgstr ""
+
+msgid "Show Labels"
+msgstr ""
+
+msgid "Simple UI"
+msgstr ""
+
+msgid "Simple UI will be %s after restart.\n\nRestart now?"
+msgstr ""
+
+msgid "Size"
+msgstr ""
+
+msgid "Small"
+msgstr ""
+
+msgid "Start with"
+msgstr ""
+
+msgid "Start with Home Screen"
+msgstr ""
+
+msgid "Statistics plugin not available."
+msgstr ""
+
+msgid "Stats"
+msgstr ""
+
+msgid "Streak"
+msgstr ""
+
+msgid "Swipe Indicator"
+msgstr ""
+
+msgid "System Actions"
+msgstr ""
+
+msgid "System action error: %s"
+msgstr ""
+
+msgid "Tabs  (%d/%d — %d left)"
+msgstr ""
+
+msgid "Tabs  (%d/%d — at limit)"
+msgstr ""
+
+msgid "Text"
+msgstr ""
+
+msgid "Text only"
+msgstr ""
+
+msgid "Today"
+msgstr ""
+
+msgid "Today — Pages"
+msgstr ""
+
+msgid "Today — Time"
+msgstr ""
+
+msgid "Top Bar"
+msgstr ""
+
+msgid "Top Bar will be %s after restart.\n\nRestart now?"
+msgstr ""
+
+msgid "Type"
+msgstr ""
+
+msgid "Wi-Fi"
+msgstr ""
+
+msgid "Wi-Fi off"
+msgstr ""
+
+msgid "WiFi"
+msgstr ""
+
+msgid "WiFi not available on this device."
+msgstr ""
+
+msgid "Wikipedia Lookup"
+msgstr ""
+
+msgid "books finished"
+msgstr ""
+
+msgid "daily avg (7 days)"
+msgstr ""
+
+msgid "day streak"
+msgstr ""
+
+msgid "days streak"
+msgstr ""
+
+msgid "disabled"
+msgstr ""
+
+msgid "e.g. Books…"
+msgstr ""
+
+msgid "e.g. My Library"
+msgstr ""
+
+msgid "e.g. Rakuyomi…"
+msgstr ""
+
+msgid "e.g. Sci-Fi…"
+msgstr ""
+
+msgid "e.g. Sleep, Refresh…"
+msgstr ""
+
+msgid "enabled"
+msgstr ""
+
+msgid "hidden"
+msgstr ""
+
+msgid "not configured"
+msgstr ""
+
+msgid "of reading today"
+msgstr ""
+
+msgid "of reading, all time"
+msgstr ""
+
+msgid "pages read today"
+msgstr ""
+
+msgid "pages/day (7 days)"
+msgstr ""
+
+msgid "visible"
+msgstr ""
+
+msgid "Arrange Buttons"
+msgstr ""
+
+msgid "Back"
+msgstr ""
+
+msgid "Button Size"
+msgstr ""
+
+msgid "Close"
+msgstr ""
+
+msgid "Custom Title Bar"
+msgstr ""
+
+msgid "Custom Title Bar will be %s after restart.\n\nRestart now?"
+msgstr ""
+
+msgid "Library Buttons"
+msgstr ""
+
+msgid "Menu"
+msgstr ""
+
+msgid "More Options"
+msgstr ""
+
+msgid "Sub-pages Buttons"
+msgstr ""
+
+msgid "Title"
+msgstr ""
+
+msgid "Title Bar"
+msgstr ""
+
+msgid "Search"
+msgstr ""
+
+msgid "Delete quick action \"%s\"?"
+msgstr ""
+
+msgid "Show Date"
+msgstr ""
+
+msgid "Show Battery"
+msgstr ""
+
+msgid "Cards"
+msgstr ""
+
+msgid "List"
+msgstr ""
+
+msgid "Cover for \"%s\""
+msgstr ""
+
+msgid "    Size"
+msgstr ""
+
+msgid "Apply"
+msgstr ""
+
+msgid "Bookmark browser"
+msgstr ""
+
+msgid "Bookmark browser not available."
+msgstr ""
+
+msgid "Bookmarks"
+msgstr ""
+
+msgid "Bottom"
+msgstr ""
+
+msgid "Bottom Bar Size"
+msgstr ""
+
+msgid "Change Icons"
+msgstr ""
+
+msgid "Cover size"
+msgstr ""
+
+msgid "Cover size  —  %d%%"
+msgstr ""
+
+msgid "Fetching bookmarks…"
+msgstr ""
+
+msgid "Global scale for all modules.\nIndividual overrides in Module Settings take precedence.\n100% is the default size."
+msgstr ""
+
+msgid "Height of the bottom navigation bar.\n100% is the default size."
+msgstr ""
+
+msgid "Height of the top status bar.\n100% is the default size."
+msgstr ""
+
+msgid "Hidden"
+msgstr ""
+
+msgid "Home folder"
+msgstr ""
+
+msgid "Home folder + subfolders"
+msgstr ""
+
+msgid "Label Scale"
+msgstr ""
+
+msgid "Labels  —  %d%%"
+msgstr ""
+
+msgid "Minimum 1 tab required in navpager mode."
+msgstr ""
+
+msgid "Module Scale"
+msgstr ""
+
+msgid "Modules  —  %d%%"
+msgstr ""
+
+msgid "Navigation Bar"
+msgstr ""
+
+msgid "Navpager"
+msgstr ""
+
+msgid "Navpager will be %s after restart.\n\nRestart now?"
+msgstr ""
+
+msgid "New name…"
+msgstr ""
+
+msgid "Next"
+msgstr ""
+
+msgid "No highlights found. Open a book and highlight some passages."
+msgstr ""
+
+msgid "Page %1 of %2"
+msgstr ""
+
+msgid "Page number in title bar"
+msgstr ""
+
+msgid "Prev"
+msgstr ""
+
+msgid "Rename"
+msgstr ""
+
+msgid "Replaces the pagination bar with Prev/Next arrows at the edges of the bottom bar.\nThe arrows dim when there is no previous or next page.\nWith navpager active, as few as 1 tab and at most 4 tabs can be configured."
+msgstr ""
+
+msgid "Reset"
+msgstr ""
+
+msgid "Reset all scales to default (100%)? This cannot be undone."
+msgstr ""
+
+msgid "Reset to Default Scale"
+msgstr ""
+
+msgid "Scale"
+msgstr ""
+
+msgid "Scale  —  %d%%"
+msgstr ""
+
+msgid "Scale  —  %d%% / %d%%"
+msgstr ""
+
+
+msgid "Scale for the collection thumbnails only.\nThe label text follows the module scale.\n100% is the default size."
+msgstr ""
+
+msgid "Scales all modules and labels together.\n100% is the default size."
+msgstr ""
+
+msgid "Scales the section label text above each module.\n100% is the default size."
+msgstr ""
+
+msgid "Simple UI was updated (%s → %s).\n\nA restart is recommended to apply all changes cleanly."
+msgstr ""
+
+msgid "Size  —  %d%%"
+msgstr ""
+
+msgid "Status Bar"
+msgstr ""
+
+msgid "Top"
+msgstr ""
+
+msgid "Top Bar Size"
+msgstr ""
+
+msgid "Top separator"
+msgstr ""
+
+msgid "Visible"
+msgstr ""
+
+msgid "Your highlights"
+msgstr ""
+
+
+
+msgid "Lock Scale"
+msgstr ""
+
+msgid "Disable \"Lock Scale\" first to set a per-module scale."
+msgstr ""
+
+msgid "Disable \"Lock Scale\" first to set a custom label scale."
+msgstr ""
+
+msgid "Text Size"
+msgstr ""
+
+msgid "Modules"
+msgstr ""
+
+msgid "Labels"
+msgstr ""
+
+msgid "Scale for this module.\n100% is the default size."
+msgstr ""
+
+msgid "Scale for the collection name text.\n100% is the default size."
+msgstr ""
+
+msgid "Scale for the cover thumbnail only.\n100% is the default size."
+msgstr ""
+
+msgid "Scale for all text elements (title, author, progress, time).\n100% is the default size."
+msgstr ""
+
+msgid "Scale for the button label text.\n100% is the default size."
+msgstr ""
+
+msgid "Scale for the cover thumbnails only.\nText and progress bar follow the module scale.\n100% is the default size."
+msgstr ""
+
+msgid "Scale for the percentage read text.\n100% is the default size."
+msgstr ""
+
+msgid "Source"
+msgstr ""
+
+msgid "Default Quotes"
+msgstr ""
+
+msgid "My Highlights"
+msgstr ""
+
+msgid "Quotes + My Highlights"
+msgstr ""
+
+msgid "default"
+msgstr ""
+
+msgid "Shows \"Page X of Y\" in the title bar subtitle when browsing the library, history or collections.\nNavpager enables this automatically.\nNot available when Navpager is active."
+msgstr ""
+
+msgid "Icon Size"
+msgstr ""
+
+msgid "Icon Size — %d%%"
+msgstr ""
+
+msgid "Label Size"
+msgstr ""
+
+msgid "Label Size — %d%%"
+msgstr ""
+
+msgid "Size of the tab icons.\n100% is the default size."
+msgstr ""
+
+msgid "Size of the tab label text.\n100% is the default size."
+msgstr ""
+
+msgid "Folder Covers"
+msgstr ""
+
+msgid "Folder cover"
+msgstr ""
+
+msgid "Set folder cover…"
+msgstr ""
+
+msgid "No books found in this folder."
+msgstr ""
+
+msgid "Badge"
+msgstr ""
+
+msgid "Center"
+msgstr ""
+
+msgid "Label"
+msgstr ""
+
+msgid "Show label"
+msgstr ""
+
+msgid "Transparent"
+msgstr ""
+
+msgid "Hide selection underline"
+msgstr ""
+
+msgid "Author"
+msgstr ""
+
+msgid "Progress bar"
+msgstr ""
+
+msgid "Percentage read"
+msgstr ""
