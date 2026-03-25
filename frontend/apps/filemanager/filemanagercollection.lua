@@ -1254,17 +1254,17 @@ function FileManagerCollection:refreshCollList(item)
 end
 
 function FileManagerCollection.getCollListItemMandatory(coll_name)
-    local marker = {}
-    if coll_settings.default then
-        table.insert(marker, "★")
-    end
+    local marker = FileManagerCollection.getCollMarker(coll_name)
     local coll_nb = util.tableSize(ReadCollection.coll[coll_name])
     return marker and marker .. " " .. coll_nb or coll_nb
 end
 
 function FileManagerCollection.getCollMarker(coll_name)
     local coll_settings = ReadCollection.coll_settings[coll_name]
-    local marker
+    local marker = {}
+    if coll_settings.default then
+        table.insert(marker, "★")
+    end
     if coll_settings.folders then
         table.insert(marker, "\u{F114}")
     end
