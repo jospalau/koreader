@@ -186,6 +186,7 @@ local order = {
         "topbar",
         "reading_ruler",
         "progress_sync",
+        "cloudstorage",
         "move_to_archive",
         "wallabag",
         "news_downloader",

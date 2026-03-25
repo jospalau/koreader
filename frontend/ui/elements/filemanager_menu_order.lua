@@ -129,6 +129,7 @@ local order = {
         "statistics",
         "pagetextinfo",
         "cloud_storage",
+        "cloudstorage",
         "move_to_archive",
         "wallabag",
         "news_downloader",
