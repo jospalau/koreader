@@ -194,8 +194,8 @@ userpatch.applyPatches(userpatch.late)
 -- To be started after UIManager is ready (always)
 -- The patch ui-font.lua needs to be loaded first
 if G_reader_settings:isTrue("apply_extra_patches") then
-    --local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/ui-font.lua")
-    local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/custom-ui-fonts.lua")
+    local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/ui-font.lua")
+    --local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/custom-ui-fonts.lua")
     -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/browser-folder-cover.lua") -- Different approach which works quicker adapted in mosaicmenu.lua
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/filemanager-titlebar.lua")
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/browser-up-folder.lua")
