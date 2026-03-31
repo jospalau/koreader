@@ -248,8 +248,12 @@ local function _tick()
 
     -- Do not update while suspended — some platforms fire pending timers
     -- during the suspend transition before the scheduler pauses.
+    -- Crucially: do NOT reschedule here. Rescheduling would create a new timer
+    -- that onSuspend can no longer cancel (it already ran), causing a 60s loop
+    -- that keeps firing throughout the entire suspend period.
+    -- HomescreenWidget:onResume calls ClockMod.scheduleRefresh() to restart the
+    -- chain on wakeup — no action needed here.
     if hs._simpleui_suspended or hs._suspended then
-        M.scheduleRefresh(hs)   -- reschedule so we resume on wakeup
         return
     end
 
