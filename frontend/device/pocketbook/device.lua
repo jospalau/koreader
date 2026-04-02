@@ -419,10 +419,6 @@ function PocketBook:initNetworkManager(NetworkMgr)
     end
 end
 
-function PocketBook:getSoftwareVersion()
-    return ffi.string(inkview.GetSoftwareVersion())
-end
-
 function PocketBook:getDeviceModel()
     return ffi.string(inkview.GetDeviceModel())
 end
@@ -867,8 +863,6 @@ local PocketBook1040 = PocketBook:extend{
     usingForcedRotation = landscape_ccw,
     hasNaturalLight = yes,
 }
-
-logger.info('SoftwareVersion: ', PocketBook:getSoftwareVersion())
 
 local full_codename = PocketBook:getDeviceModel()
 
