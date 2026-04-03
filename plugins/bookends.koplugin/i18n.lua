@@ -67,7 +67,7 @@ local function install()
     if _installed then return end
 
     local lang = detectLang()
-    if lang == "en" or lang:match("^en_") then return end
+    if lang == "en" or lang == "en_US" then return end
 
     -- Try loading translation file
     local translations

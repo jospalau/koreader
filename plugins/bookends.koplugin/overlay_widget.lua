@@ -14,6 +14,60 @@ local function textWidgetOpts(t)
     return t
 end
 
+-- Cache for italic font variant lookups (face_name -> italic_path or false)
+local _italic_cache = {}
+
+--- Find the italic variant of a font by searching for common naming patterns.
+-- Searches installed fonts for variants matching patterns like Regular->Italic.
+-- Results are cached per face_name.
+-- @param face_name string: path/name of the base font
+-- @return string or false: path to italic variant, or false if not found
+function OverlayWidget.findItalicVariant(face_name)
+    if _italic_cache[face_name] ~= nil then
+        return _italic_cache[face_name] -- may be false (no variant found)
+    end
+
+    local ok, FontList = pcall(require, "fontlist")
+    if not ok then
+        _italic_cache[face_name] = false
+        return false
+    end
+    local all_fonts = FontList:getFontList()
+
+    local dir = face_name:match("^(.*/)") or ""
+    local basename = face_name:match("([^/]+)$") or face_name
+    local name_no_ext = (basename:gsub("%.[^.]+$", ""))
+
+    local candidates = {}
+    if name_no_ext:match("[Rr]egular") then
+        table.insert(candidates, (name_no_ext:gsub("[Rr]egular", "Italic")))
+        table.insert(candidates, (name_no_ext:gsub("[Rr]egular", "italic")))
+    end
+    if name_no_ext:match("[Bb]old") and not name_no_ext:match("[Ii]talic") then
+        table.insert(candidates, (name_no_ext:gsub("[Bb]old", "BoldItalic")))
+        table.insert(candidates, (name_no_ext:gsub("[Bb]old", "Bolditalic")))
+    end
+    table.insert(candidates, name_no_ext .. "-Italic")
+    table.insert(candidates, name_no_ext .. "Italic")
+    table.insert(candidates, name_no_ext .. " Italic")
+    table.insert(candidates, name_no_ext .. "-italic")
+
+    for _, candidate in ipairs(candidates) do
+        local pattern = candidate:lower()
+        for _, font_path in ipairs(all_fonts) do
+            local font_name = font_path:match("([^/]+)$") or ""
+            local font_no_ext = font_name:gsub("%.[^.]+$", "")
+            if font_no_ext:lower() == pattern then
+                _italic_cache[face_name] = font_path
+                return font_path
+            end
+        end
+    end
+
+    _italic_cache[face_name] = false
+    return false
+end
+
 --- Simple multi-line widget that paints TextWidgets stacked vertically.
 -- Avoids VerticalGroup to ensure reliable rendering on e-ink devices.
 local MultiLineWidget = {}
@@ -71,141 +125,9 @@ function BarWidget:getSize()
 end
 
 function BarWidget:paintTo(bb, x, y)
-    local w, h = self.width, self.height
-    if w < 1 or h < 1 then return end
-
-    if self.style == "metro" then
-        -- Metro style: start ring, trunk line, position dot, ticks above/below
-        local line_thick = math.max(3, math.floor(h * 0.2))
-        local start_r = math.floor(h / 2)  -- full height circle
-        local dot_r = math.max(4, math.floor(h * 0.35))
-        local line_y = y + math.floor((h - line_thick) / 2)
-
-        -- Inset line so start/end circles don't clip
-        local inset = start_r
-        local line_x = x + inset
-        local line_w = w - 2 * inset
-        if line_w < 1 then line_w = w; line_x = x; inset = 0 end
-
-        local fill_w = math.floor(line_w * self.fraction)
-
-        -- Background line + filled line
-        bb:paintRect(line_x, line_y, line_w, line_thick, Blitbuffer.COLOR_GRAY)
-        if fill_w > 0 then
-            bb:paintRect(line_x, line_y, fill_w, line_thick, Blitbuffer.COLOR_DARK_GRAY)
-        end
-
-        -- Chapter ticks: depth 1 above line (connected to trunk), depth 2 below
-        for _, tick in ipairs(self.ticks) do
-            local tick_frac = type(tick) == "table" and tick[1] or tick
-            local tick_w = type(tick) == "table" and tick[2] or 1
-            local tick_depth = type(tick) == "table" and tick[3] or 1
-            local tick_x = math.floor(line_w * tick_frac)
-            if tick_x > 0 and tick_x < line_w then
-                if tick_depth <= 1 then
-                    -- From top of bar down through trunk
-                    bb:paintRect(line_x + tick_x, y, line_thick, line_y + line_thick - y, Blitbuffer.COLOR_DARK_GRAY)
-                else
-                    -- Below trunk (same thickness as trunk)
-                    local below_y = line_y + line_thick
-                    local below_h = y + h - below_y
-                    if below_h > 0 then
-                        bb:paintRect(line_x + tick_x, below_y, line_thick, below_h, Blitbuffer.COLOR_DARK_GRAY)
-                    end
-                end
-            end
-        end
-
-        -- Start circle (empty ring, trunk colour)
-        local start_cx = line_x - start_r
-        bb:paintRoundedRect(start_cx, y, start_r * 2, start_r * 2, Blitbuffer.COLOR_DARK_GRAY, start_r)
-        local ring_border = line_thick
-        local inner_r = start_r - ring_border
-        if inner_r > 0 then
-            bb:paintRoundedRect(start_cx + ring_border, y + ring_border,
-                inner_r * 2, inner_r * 2, Blitbuffer.COLOR_WHITE, inner_r)
-        end
-
-        -- End circle (filled, trunk colour, same size as start)
-        local end_cx = line_x + line_w - start_r
-        bb:paintRoundedRect(end_cx, y, start_r * 2, start_r * 2, Blitbuffer.COLOR_DARK_GRAY, start_r)
-
-        -- Current position dot (filled black, smaller)
-        local dot_x = line_x + fill_w - dot_r
-        local dot_y = y + math.floor((h - dot_r * 2) / 2)
-        bb:paintRoundedRect(dot_x, dot_y, dot_r * 2, dot_r * 2, Blitbuffer.COLOR_BLACK, dot_r)
-
-    elseif self.style == "solid" then
-        -- Solid style: flat, no border, gray background + darker fill
-        bb:paintRect(x, y, w, h, Blitbuffer.COLOR_GRAY)
-        local fill_w = math.floor(w * self.fraction)
-        if fill_w > 0 then
-            bb:paintRect(x, y, fill_w, h, Blitbuffer.COLOR_GRAY_5)
-        end
-        -- Chapter ticks: white on filled portion, black on unfilled
-        for _, tick in ipairs(self.ticks) do
-            local tick_frac = type(tick) == "table" and tick[1] or tick
-            local tick_w = type(tick) == "table" and tick[2] or 1
-            local tick_x = math.floor(w * tick_frac)
-            if tick_x > 0 and tick_x < w then
-                local tick_color = tick_x < fill_w and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK
-                bb:paintRect(x + tick_x, y, tick_w, h, tick_color)
-            end
-        end
-    else
-        -- Bordered / Rounded: white bg + dark gray fill + black border
-        local border = 1
-        local radius = self.style == "rounded" and math.floor(h / 2) or 0
-        if radius > 0 then
-            -- Layer 1: fill color as full rounded rect
-            bb:paintRoundedRect(x, y, w, h, Blitbuffer.COLOR_DARK_GRAY, radius)
-            -- Layer 2: white over unfilled portion (straight left edge, border masks right corners)
-            local inner_x = x + border + 1
-            local inner_y = y + border + 1
-            local inner_w = w - 2 * (border + 1)
-            local inner_h = h - 2 * (border + 1)
-            if inner_w > 0 and inner_h > 0 then
-                local fill_w = math.floor(inner_w * self.fraction)
-                local unfilled = inner_w - fill_w
-                if unfilled > 0 then
-                    bb:paintRect(inner_x + fill_w, inner_y, unfilled, inner_h, Blitbuffer.COLOR_WHITE)
-                end
-            end
-            -- Layer 3: border on top to mask any corner artifacts
-            bb:paintBorder(x, y, w, h, border, Blitbuffer.COLOR_BLACK, radius)
-        else
-            bb:paintRect(x, y, w, h, Blitbuffer.COLOR_WHITE)
-            local inner_x = x + border + 1
-            local inner_y = y + border + 1
-            local inner_w = w - 2 * (border + 1)
-            local inner_h = h - 2 * (border + 1)
-            if inner_w > 0 and inner_h > 0 then
-                local fill_w = math.floor(inner_w * self.fraction)
-                if fill_w > 0 then
-                    bb:paintRect(inner_x, inner_y, fill_w, inner_h, Blitbuffer.COLOR_DARK_GRAY)
-                end
-            end
-            bb:paintRect(x, y, w, border, Blitbuffer.COLOR_BLACK) -- top
-            bb:paintRect(x, y + h - border, w, border, Blitbuffer.COLOR_BLACK) -- bottom
-            bb:paintRect(x, y, border, h, Blitbuffer.COLOR_BLACK) -- left
-            bb:paintRect(x + w - border, y, border, h, Blitbuffer.COLOR_BLACK) -- right
-        end
-        -- Chapter ticks
-        local tick_x0 = x + border + 1
-        local tick_y0 = y + border + 1
-        local tick_area_w = w - 2 * (border + 1)
-        local tick_area_h = h - 2 * (border + 1)
-        if tick_area_w > 0 and tick_area_h > 0 then
-            for _, tick in ipairs(self.ticks) do
-                local tick_frac = type(tick) == "table" and tick[1] or tick
-                local tick_w = type(tick) == "table" and tick[2] or 1
-                local tick_x = math.floor(tick_area_w * tick_frac)
-                if tick_x > 0 and tick_x < tick_area_w then
-                    bb:paintRect(tick_x0 + tick_x, tick_y0, tick_w, tick_area_h, Blitbuffer.COLOR_BLACK)
-                end
-            end
-        end
-    end
+    -- Delegate to paintProgressBar for consistent color handling
+    OverlayWidget.paintProgressBar(bb, x, y, self.width, self.height,
+        self.fraction, self.ticks, self.style, nil, false, self.colors)
 end
 
 function BarWidget:free()
@@ -297,7 +219,7 @@ local function buildBarLine(text, cfg, available_w, max_width)
     addTextSegment(before)
 
     -- Bar (placeholder slot)
-    local bar_manual_w = cfg.bar_width or 0
+    local bar_manual_w = (bar_info and bar_info.width) or 0
     local bar_slot = #segments + 1  -- remember where to insert bar
 
     -- After text
@@ -338,6 +260,7 @@ local function buildBarLine(text, cfg, available_w, max_width)
         fraction = bar_info.pct or 0,
         ticks = bar_info.ticks or {},
         style = bar_style,
+        colors = cfg.bar_colors,
     }
 
     table.insert(segments, bar_slot, { widget = bar_widget, w = bar_w, h = bar_h })
@@ -379,9 +302,17 @@ function OverlayWidget.buildTextWidget(text, line_configs, h_anchor, max_width, 
 
     if #lines == 1 then
         local cfg = getConfig(1)
+        -- Try styled segments (BBCode tags or bar placeholder)
+        local segments, has_tags = OverlayWidget.parseStyledSegments(
+            lines[1], cfg.bold, cfg.italic or false, cfg.uppercase)
+        if segments then
+            return OverlayWidget.buildStyledLine(segments, cfg, available_w or Screen:getWidth(), max_width)
+        end
+        -- Bar line without tags
         if cfg.bar then
             return buildBarLine(lines[1], cfg, available_w or Screen:getWidth(), max_width)
         end
+        -- Plain text — fast path
         local display_text = cfg.uppercase and lines[1]:upper() or lines[1]
         local tw = TextWidget:new(textWidgetOpts{
             text = display_text,
@@ -407,7 +338,12 @@ function OverlayWidget.buildTextWidget(text, line_configs, h_anchor, max_width, 
     for i, line in ipairs(lines) do
         local cfg = getConfig(i)
         local widget, w, h
-        if cfg.bar then
+        -- Try styled segments (BBCode tags or bar placeholder)
+        local segments, has_tags = OverlayWidget.parseStyledSegments(
+            line, cfg.bold, cfg.italic or false, cfg.uppercase)
+        if segments then
+            widget, w, h = OverlayWidget.buildStyledLine(segments, cfg, available_w or Screen:getWidth(), max_width)
+        elseif cfg.bar then
             widget, w, h = buildBarLine(line, cfg, available_w or Screen:getWidth(), max_width)
         else
             local display_text = cfg.uppercase and line:upper() or line
@@ -470,6 +406,248 @@ function OverlayWidget.measureTextWidth(text, line_configs)
         end
     end
     return max_w
+end
+
+--- Apply per-token pixel-width limits encoded as \x01N\x02value\x03 markers.
+-- Measures each marked value with the given font; if wider than N pixels,
+-- truncates to the longest UTF-8 prefix that fits and appends "...".
+-- @param text string: text potentially containing markers
+-- @param face table: font face for measurement
+-- @param bold boolean: bold flag for measurement
+-- @param uppercase boolean: whether text will be rendered uppercase
+-- @return string: text with markers replaced by (possibly truncated) values
+function OverlayWidget.applyTokenLimits(text, face, bold, uppercase)
+    if not text:find("\x01") then return text end
+    local util = require("util")
+    return text:gsub("\x01(%d+)\x02(.-)\x03", function(limit_str, value)
+        local max_px = tonumber(limit_str)
+        if not max_px or max_px <= 0 or value == "" then return value end
+        local display = uppercase and value:upper() or value
+        -- Measure full value
+        local tw = TextWidget:new(textWidgetOpts{
+            text = display, face = face, bold = bold,
+        })
+        local w = tw:getSize().w
+        tw:free()
+        if w <= max_px then return value end
+        -- Need to truncate — measure ellipsis width
+        local ellipsis = "\xE2\x80\xA6" -- U+2026 …
+        local ew = TextWidget:new(textWidgetOpts{
+            text = ellipsis, face = face, bold = bold,
+        })
+        local ellipsis_w = ew:getSize().w
+        ew:free()
+        local target_px = max_px - ellipsis_w
+        if target_px <= 0 then return ellipsis end
+        -- Split into UTF-8 characters and binary search for max fitting prefix
+        local chars = util.splitToChars(display)
+        local lo, hi = 0, #chars
+        while lo < hi do
+            local mid = math.ceil((lo + hi) / 2)
+            local sub = table.concat(chars, "", 1, mid)
+            local stw = TextWidget:new(textWidgetOpts{
+                text = sub, face = face, bold = bold,
+            })
+            local sw = stw:getSize().w
+            stw:free()
+            if sw <= target_px then
+                lo = mid
+            else
+                hi = mid - 1
+            end
+        end
+        if lo == 0 then return ellipsis end
+        -- If uppercase was applied for measurement, we need to return the
+        -- original-case prefix (same char count) so buildTextWidget can
+        -- apply uppercase again without double-transforming.
+        local orig_chars = util.splitToChars(value)
+        return table.concat(orig_chars, "", 1, lo) .. ellipsis
+    end)
+end
+
+--- Parse BBCode-style formatting tags into styled text segments.
+-- Supports [b], [i], [u] tags with proper nesting via a style stack.
+-- Bar placeholder characters become special bar segments.
+-- If tags are improperly nested or unclosed, returns nil (render as plain text).
+-- @param text string: text potentially containing [b], [i], [u] tags and bar placeholder
+-- @param base_bold boolean: base bold state from line config
+-- @param base_italic boolean: base italic state from line config
+-- @param base_uppercase boolean: base uppercase state from line config
+-- @return table or nil: array of segments, or nil if no valid tags found
+-- @return boolean: true if tags were found and parsed
+function OverlayWidget.parseStyledSegments(text, base_bold, base_italic, base_uppercase)
+    -- Quick check: no tags present
+    if not text:find("%[") then
+        return nil, false
+    end
+
+    local segments = {}
+    local stack = {}  -- style stack: each entry is "b", "i", or "u"
+    local pos = 1
+    local pending = ""  -- accumulates text between tags
+    local found_tags = false
+
+    -- Current style: base style when stack is empty, stack-derived when inside tags.
+    -- Tags override base (not combine): [i] inside a Bold line = italic only.
+    local function currentStyle()
+        if #stack == 0 then
+            return base_bold, base_italic, base_uppercase
+        end
+        local bold, italic, uppercase = false, false, false
+        for _, tag in ipairs(stack) do
+            if tag == "b" then bold = true
+            elseif tag == "i" then italic = true
+            elseif tag == "u" then uppercase = true
+            end
+        end
+        return bold, italic, uppercase
+    end
+
+    local function flushPending()
+        if pending == "" then return end
+        local bold, italic, uppercase = currentStyle()
+        table.insert(segments, { text = pending, bold = bold, italic = italic, uppercase = uppercase })
+        pending = ""
+    end
+
+    local len = #text
+    while pos <= len do
+        -- Check for bar placeholder (3-byte UTF-8: \xEF\xBF\xBC)
+        if text:sub(pos, pos + 2) == BAR_PLACEHOLDER then
+            flushPending()
+            table.insert(segments, { bar = true })
+            pos = pos + 3
+        -- Check for closing tag [/b], [/i], [/u]
+        elseif text:match("^%[/[biu]%]", pos) then
+            local tag = text:sub(pos + 2, pos + 2)  -- the letter after /
+            if #stack > 0 and stack[#stack] == tag then
+                flushPending()
+                table.remove(stack)
+                found_tags = true
+                pos = pos + 4  -- [/b] = 4 chars
+            else
+                -- Mismatched close — render entire line as plain text
+                return nil, false
+            end
+        -- Check for opening tag [b], [i], [u]
+        elseif text:match("^%[[biu]%]", pos) then
+            flushPending()
+            local tag = text:sub(pos + 1, pos + 1)  -- the letter
+            table.insert(stack, tag)
+            found_tags = true
+            pos = pos + 3  -- [b] = 3 chars
+        else
+            pending = pending .. text:sub(pos, pos)
+            pos = pos + 1
+        end
+    end
+
+    flushPending()
+
+    -- Unclosed tags — return nil to signal: render entire line as plain text
+    if #stack > 0 then
+        return nil, false
+    end
+
+    if not found_tags then
+        return nil, false
+    end
+
+    return segments, true
+end
+
+--- Build a HorizontalRowWidget from styled segments (text and bar).
+-- Replaces both buildBarLine and single-TextWidget path for styled lines.
+-- @param segments table: array from parseStyledSegments
+-- @param cfg table: line config with .face, .face_name, .font_size, .bold, .bar, .bar_height, .bar_style, .bar_colors
+-- @param available_w number: total available width
+-- @param max_width number or nil: truncation limit for the whole line
+-- @return widget, width, height
+function OverlayWidget.buildStyledLine(segments, cfg, available_w, max_width)
+    local effective_w = max_width or available_w
+    local widgets = {}
+    local total_w = 0
+    local text_total_w = 0
+    local max_h = 0
+    local bar_slot = nil  -- index where bar widget should be inserted
+
+    for _, seg in ipairs(segments) do
+        if seg.bar then
+            -- Remember bar position, insert later after measuring text
+            bar_slot = #widgets + 1
+        else
+            local display = seg.uppercase and seg.text:upper() or seg.text
+            if display ~= "" then
+                -- Resolve font face for this segment
+                local seg_face = cfg.face
+                if seg.italic and cfg.face_name then
+                    local italic_face = OverlayWidget.findItalicVariant(cfg.face_name)
+                    if italic_face then
+                        seg_face = Font:getFace(italic_face, cfg.font_size)
+                    end
+                end
+
+                local tw = TextWidget:new(textWidgetOpts{
+                    text = display,
+                    face = seg_face,
+                    bold = seg.bold,
+                })
+                local size = tw:getSize()
+                table.insert(widgets, { widget = tw, w = size.w, h = size.h })
+                total_w = total_w + size.w
+                text_total_w = text_total_w + size.w
+                if size.h > max_h then max_h = size.h end
+            end
+        end
+    end
+
+    -- Ensure row height from font even if no text segments
+    if text_total_w == 0 and cfg.face then
+        local ref_tw = TextWidget:new(textWidgetOpts{ text = " ", face = cfg.face, bold = cfg.bold })
+        local ref_h = ref_tw:getSize().h
+        ref_tw:free()
+        if ref_h > max_h then max_h = ref_h end
+    end
+
+    -- Handle bar segment if present
+    if bar_slot and cfg.bar then
+        local bar_info = cfg.bar
+        local bar_h = cfg.bar_height or (cfg.face and cfg.face.size) or 5
+        local bar_style = cfg.bar_style or "bordered"
+        local bar_manual_w = (bar_info and bar_info.width) or 0
+
+        local bar_w
+        if bar_manual_w > 0 then
+            bar_w = math.min(bar_manual_w, math.max(0, effective_w - text_total_w))
+        else
+            bar_w = math.max(0, effective_w - text_total_w)
+        end
+
+        if bar_w >= 1 then
+            local bar_widget = BarWidget:new{
+                width = bar_w,
+                height = bar_h,
+                fraction = bar_info.pct or 0,
+                ticks = bar_info.ticks or {},
+                style = bar_style,
+                colors = cfg.bar_colors,
+            }
+            table.insert(widgets, bar_slot, { widget = bar_widget, w = bar_w, h = bar_h })
+            total_w = total_w + bar_w
+            if bar_h > max_h then max_h = bar_h end
+        end
+    end
+
+    if #widgets == 0 then
+        return nil, 0, 0
+    end
+
+    local row = HorizontalRowWidget:new{
+        segments = widgets,
+        width = total_w,
+        height = max_h,
+    }
+    return row, total_w, max_h
 end
 
 --- Calculate max_width for each position in a row, applying overlap prevention.
@@ -586,10 +764,17 @@ end
 --- Paint a progress bar directly to a blitbuffer.
 -- @param orientation "horizontal" (default) or "vertical"
 -- @param reverse boolean: flip fill direction
-function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, orientation, reverse)
+-- @param colors table or nil: { fill = Blitbuffer color, bg = Blitbuffer color }
+function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, orientation, reverse, colors)
     if w < 1 or h < 1 then return end
     fraction = math.max(0, math.min(1, fraction or 0))
     local vertical = orientation == "vertical"
+    -- Custom colors
+    local custom_fill = colors and colors.fill
+    local custom_bg = colors and colors.bg
+    local custom_track = colors and colors.track
+    local custom_tick = colors and colors.tick
+    local invert_read_ticks = colors and colors.invert_read_ticks
 
     -- Helper: paint a rect, swapping axes for vertical
     local function pr(rx, ry, rw, rh, color)
@@ -622,12 +807,10 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
         local line_fill = math.floor(line_len * fraction)
         local line_fill_start = reverse and (line_len - line_fill) or 0
 
-        -- Background line (lighter)
-        pr(line_ox, line_y, line_len, line_thick, Blitbuffer.COLOR_GRAY)
-        -- Filled line (darker)
-        if line_fill > 0 then
-            pr(line_ox + line_fill_start, line_y, line_fill, line_thick, Blitbuffer.COLOR_DARK_GRAY)
-        end
+        local metro_track = custom_track or Blitbuffer.COLOR_DARK_GRAY
+        local metro_fill = custom_fill or Blitbuffer.COLOR_DARK_GRAY
+        -- Track line (uniform colour — progress shown by dot only)
+        pr(line_ox, line_y, line_len, line_thick, metro_track)
 
         -- Chapter ticks: depth 1 above line (connected to trunk), depth 2 below
         for _, tick in ipairs(ticks or {}) do
@@ -639,13 +822,13 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
             if tick_pos > 0 and tick_pos < line_len then
                 if tick_depth <= 1 then
                     -- From top of bar down through trunk
-                    pr(line_ox + tick_pos, oy, line_thick, line_y + line_thick - oy, Blitbuffer.COLOR_DARK_GRAY)
+                    pr(line_ox + tick_pos, oy, line_thick, line_y + line_thick - oy, metro_track)
                 else
                     -- Below trunk (same thickness as trunk)
                     local below_y = line_y + line_thick
                     local below_h = oy + thickness - below_y
                     if below_h > 0 then
-                        pr(line_ox + tick_pos, below_y, line_thick, below_h, Blitbuffer.COLOR_DARK_GRAY)
+                        pr(line_ox + tick_pos, below_y, line_thick, below_h, metro_track)
                     end
                 end
             end
@@ -662,7 +845,7 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
 
         -- Start circle (empty ring, trunk colour)
         local start_cx = reverse and (line_ox + line_len - start_r) or (line_ox - start_r)
-        paintCircle(start_cx, oy, start_r, Blitbuffer.COLOR_DARK_GRAY)
+        paintCircle(start_cx, oy, start_r, metro_track)
         local ring_border = line_thick
         local inner_r = start_r - ring_border
         if inner_r > 0 then
@@ -671,20 +854,22 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
 
         -- End circle (filled, trunk colour, same size as start)
         local end_cx = reverse and (line_ox - start_r) or (line_ox + line_len - start_r)
-        paintCircle(end_cx, oy, start_r, Blitbuffer.COLOR_DARK_GRAY)
+        paintCircle(end_cx, oy, start_r, metro_track)
 
-        -- Current position dot (filled black, smaller)
+        -- Current position dot (uses tick colour, default black)
         local pos_on_line = reverse and (line_len - line_fill) or line_fill
         local dot_cx = line_ox + pos_on_line - dot_r
         local dot_cy = oy + math.floor((thickness - dot_r * 2) / 2)
-        paintCircle(dot_cx, dot_cy, dot_r, Blitbuffer.COLOR_BLACK)
+        paintCircle(dot_cx, dot_cy, dot_r, custom_tick or Blitbuffer.COLOR_BLACK)
 
     elseif style == "solid" then
-        pr(ox, oy, length, thickness, Blitbuffer.COLOR_GRAY)
+        local solid_fill = custom_fill or Blitbuffer.COLOR_GRAY_5
+        local solid_bg = custom_bg or Blitbuffer.COLOR_GRAY
+        pr(ox, oy, length, thickness, solid_bg)
         local fill_len = math.floor(length * fraction)
         local fill_start = reverse and (length - fill_len) or 0
         if fill_len > 0 then
-            pr(ox + fill_start, oy, fill_len, thickness, Blitbuffer.COLOR_GRAY_5)
+            pr(ox + fill_start, oy, fill_len, thickness, solid_fill)
         end
         for _, tick in ipairs(ticks or {}) do
             local tick_frac = type(tick) == "table" and tick[1] or tick
@@ -693,24 +878,36 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
             local tick_pos = math.floor(length * tick_frac)
             if tick_pos > 0 and tick_pos < length then
                 local in_fill = tick_pos >= fill_start and tick_pos < fill_start + fill_len
-                local tick_color = in_fill and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK
+                local base_tick = custom_tick or Blitbuffer.COLOR_BLACK
+                local tick_color
+                if invert_read_ticks ~= false and in_fill then
+                    tick_color = Blitbuffer.COLOR_WHITE
+                else
+                    tick_color = base_tick
+                end
                 pr(ox + tick_pos, oy, tick_w, thickness, tick_color)
             end
         end
     else
+        local border_fill = custom_fill or Blitbuffer.COLOR_DARK_GRAY
+        local border_bg = custom_bg or Blitbuffer.COLOR_WHITE
         local border = 1
+        local margin_h = math.max(3, math.floor(thickness * 0.2))
+        local margin_v = math.max(1, math.floor(thickness * 0.1))
         local min_dim = vertical and w or h
         local radius = style == "rounded" and math.floor(min_dim / 2) or 0
         -- Background + border (use real coordinates for rounded rect API)
         if radius > 0 then
-            bb:paintRoundedRect(x, y, w, h, Blitbuffer.COLOR_DARK_GRAY, radius)
+            bb:paintRoundedRect(x, y, w, h, border_fill, radius)
         else
-            bb:paintRect(x, y, w, h, Blitbuffer.COLOR_WHITE)
+            bb:paintRect(x, y, w, h, border_bg)
         end
-        local inner_ox = ox + border + 1
-        local inner_oy = oy + border + 1
-        local inner_len = length - 2 * (border + 1)
-        local inner_thick = thickness - 2 * (border + 1)
+        local h_inset = radius > 0 and radius or (border + margin_h)
+        local v_inset = border + margin_v
+        local inner_ox = ox + h_inset
+        local inner_oy = oy + v_inset
+        local inner_len = length - 2 * h_inset
+        local inner_thick = thickness - 2 * v_inset
         if inner_len > 0 and inner_thick > 0 then
             local fill_len = math.floor(inner_len * fraction)
             if radius > 0 then
@@ -718,18 +915,18 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
                 local unfilled = inner_len - fill_len
                 if unfilled > 0 then
                     if reverse then
-                        pr(inner_ox, inner_oy, unfilled, inner_thick, Blitbuffer.COLOR_WHITE)
+                        pr(inner_ox, inner_oy, unfilled, inner_thick, border_bg)
                     else
-                        pr(inner_ox + fill_len, inner_oy, unfilled, inner_thick, Blitbuffer.COLOR_WHITE)
+                        pr(inner_ox + fill_len, inner_oy, unfilled, inner_thick, border_bg)
                     end
                 end
             else
                 -- Bordered: paint fill on white background
                 if fill_len > 0 then
                     if reverse then
-                        pr(inner_ox + inner_len - fill_len, inner_oy, fill_len, inner_thick, Blitbuffer.COLOR_DARK_GRAY)
+                        pr(inner_ox + inner_len - fill_len, inner_oy, fill_len, inner_thick, border_fill)
                     else
-                        pr(inner_ox, inner_oy, fill_len, inner_thick, Blitbuffer.COLOR_DARK_GRAY)
+                        pr(inner_ox, inner_oy, fill_len, inner_thick, border_fill)
                     end
                 end
             end
@@ -745,13 +942,23 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
         end
         -- Chapter ticks
         if inner_len > 0 and inner_thick > 0 then
+            local fill_len = math.floor(inner_len * fraction)
+            local fill_start = reverse and (inner_len - fill_len) or 0
             for _, tick in ipairs(ticks or {}) do
                 local tick_frac = type(tick) == "table" and tick[1] or tick
                 local tick_w = type(tick) == "table" and tick[2] or 1
                 if reverse then tick_frac = 1 - tick_frac end
                 local tick_pos = math.floor(inner_len * tick_frac)
                 if tick_pos > 0 and tick_pos < inner_len then
-                    pr(inner_ox + tick_pos, inner_oy, tick_w, inner_thick, Blitbuffer.COLOR_BLACK)
+                    local base_tick = custom_tick or Blitbuffer.COLOR_BLACK
+                    local tick_color
+                    if invert_read_ticks ~= false then
+                        local in_fill = tick_pos >= fill_start and tick_pos < fill_start + fill_len
+                        tick_color = in_fill and border_bg or base_tick
+                    else
+                        tick_color = base_tick
+                    end
+                    pr(inner_ox + tick_pos, inner_oy, tick_w, inner_thick, tick_color)
                 end
             end
         end

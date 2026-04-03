@@ -101,6 +101,9 @@ msgstr "Livre+"
 msgid "Book++"
 msgstr "Livre++"
 
+msgid "Book+++"
+msgstr "Livre+++"
+
 msgid "Bookends"
 msgstr "Bookends"
 
@@ -172,6 +175,9 @@ msgstr "% du chapitre lu"
 
 msgid "Chapter ticks: Off"
 msgstr "Repères chapitre : désactivés"
+
+msgid "Chapter ticks: All levels"
+msgstr "Repères de chapitre : Tous les niveaux"
 
 msgid "Chapter ticks: Top 2 levels"
 msgstr "Repères chapitre : 2 premiers niveaux"
@@ -787,3 +793,42 @@ msgstr "Icône Wi-Fi (dynamique)"
 
 msgid "Wi-Fi is not enabled."
 msgstr "Le Wi-Fi n'est pas activé."
+
+msgid "black"
+msgstr "noir"
+
+msgid "default"
+msgstr "défaut"
+
+msgid "Invert tick color on read portion"
+msgstr "Inverser la couleur des repères sur la partie lue"
+
+msgid "Metro track color"
+msgstr "Couleur de voie Métro"
+
+msgid "Metro track color (% black)"
+msgstr "Couleur de voie Métro (% noir)"
+
+msgid "Progress bar colors"
+msgstr "Couleurs des barres de progression"
+
+msgid "Read color"
+msgstr "Couleur de lecture"
+
+msgid "Read color (% black)"
+msgstr "Couleur de lecture (% noir)"
+
+msgid "Reset all to defaults"
+msgstr "Tout réinitialiser"
+
+msgid "Tick color"
+msgstr "Couleur des repères"
+
+msgid "Tick color (% black)"
+msgstr "Couleur des repères (% noir)"
+
+msgid "Unread color"
+msgstr "Couleur non lu"
+
+msgid "Unread color (% black)"
+msgstr "Couleur non lu (% noir)"

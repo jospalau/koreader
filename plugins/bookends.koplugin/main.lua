@@ -240,7 +240,7 @@ function Bookends:loadSettings()
     self.progress_bars = {}
     for i = 1, 4 do
         local default = util.tableDeepCopy(bar_defaults)
-        if i == 1 then default.chapter_ticks = "level1" end
+        if i == 1 then default.chapter_ticks = "all" end
         if i == 2 then default.type = "chapter" end
         self.progress_bars[i] = self.settings:readSetting("progress_bar_" .. i, default)
     end
@@ -359,7 +359,7 @@ function Bookends:_computeTickCache()
     local ticks = {}
     -- Use page-based fractions (matches KOReader's footer progress bar)
     for depth, pages in ipairs(toc_ticks) do
-        local tick_w = math.max(1, max_depth - depth + 1)
+        local tick_w = math.max(1, (max_depth - depth + 1) * 2 - 1)
         for _, page in ipairs(pages) do
             if page > 1 then
                 local tick_frac = page / raw_total
@@ -381,70 +381,13 @@ Bookends.STYLE_LABELS = {
     bolditalic = _("Bold Italic"),
 }
 
--- Cache for italic font variant lookups
-local _italic_cache = {}
-
--- Find the italic variant of a font by searching for common naming patterns
-local function findItalicVariant(face_name)
-    if _italic_cache[face_name] ~= nil then
-        return _italic_cache[face_name] -- may be false (no variant found)
-    end
-
-    local ok, FontList = pcall(require, "fontlist")
-    if not ok then
-        _italic_cache[face_name] = false
-        return false
-    end
-    local all_fonts = FontList:getFontList()
-
-    -- Extract the directory and base name without extension
-    local dir = face_name:match("^(.*/)") or ""
-    local basename = face_name:match("([^/]+)$") or face_name
-    local name_no_ext = (basename:gsub("%.[^.]+$", ""))
-
-    -- Common patterns: "Regular" -> "Italic", "Bold" -> "BoldItalic",
-    -- or just append "Italic" / "-Italic" / " Italic"
-    local candidates = {}
-    -- Replace Regular/regular with Italic/italic
-    if name_no_ext:match("[Rr]egular") then
-        table.insert(candidates, (name_no_ext:gsub("[Rr]egular", "Italic")))
-        table.insert(candidates, (name_no_ext:gsub("[Rr]egular", "italic")))
-    end
-    -- Replace Bold with BoldItalic
-    if name_no_ext:match("[Bb]old") and not name_no_ext:match("[Ii]talic") then
-        table.insert(candidates, (name_no_ext:gsub("[Bb]old", "BoldItalic")))
-        table.insert(candidates, (name_no_ext:gsub("[Bb]old", "Bolditalic")))
-    end
-    -- Append -Italic, Italic, _Italic, " Italic"
-    table.insert(candidates, name_no_ext .. "-Italic")
-    table.insert(candidates, name_no_ext .. "Italic")
-    table.insert(candidates, name_no_ext .. " Italic")
-    table.insert(candidates, name_no_ext .. "-italic")
-
-    -- Search available fonts
-    for _, candidate in ipairs(candidates) do
-        local pattern = candidate:lower()
-        for _, font_path in ipairs(all_fonts) do
-            local font_name = font_path:match("([^/]+)$") or ""
-            local font_no_ext = font_name:gsub("%.[^.]+$", "")
-            if font_no_ext:lower() == pattern then
-                _italic_cache[face_name] = font_path
-                return font_path
-            end
-        end
-    end
-
-    _italic_cache[face_name] = false
-    return false
-end
-
 function Bookends:resolveLineConfig(face_name, font_size, style)
     style = style or "regular"
     local bold = (style == "bold" or style == "bolditalic")
     local resolved_face = face_name
 
     if style == "italic" or style == "bolditalic" then
-        local italic = findItalicVariant(face_name)
+        local italic = OverlayWidget.findItalicVariant(face_name)
         if italic then
             resolved_face = italic
         end
@@ -452,11 +395,12 @@ function Bookends:resolveLineConfig(face_name, font_size, style)
 
     -- Apply font scale
     local scale = self.defaults.font_scale or 100
-    local scaled_size = math.max(6, math.floor(font_size * scale / 100 + 0.5))
+    local scaled_size = math.max(1, math.floor(font_size * scale / 100 + 0.5))
 
     return {
         face = Font:getFace(resolved_face, scaled_size),
         bold = bold,
+        italic = (style == "italic" or style == "bolditalic"),
     }
 end
 
@@ -523,6 +467,19 @@ function Bookends:paintTo(bb, x, y)
     if self.dirty then
         self._tick_cache = nil
     end
+    -- Progress bar colors from settings
+    local bar_colors
+    local bc = self.settings:readSetting("bar_colors")
+    if bc then
+        local Blitbuffer = require("ffi/blitbuffer")
+        bar_colors = {
+            fill = bc.fill and Blitbuffer.Color8(bc.fill) or nil,
+            bg = bc.bg and Blitbuffer.Color8(bc.bg) or nil,
+            track = bc.track and Blitbuffer.Color8(bc.track) or nil,
+            tick = bc.tick and Blitbuffer.Color8(bc.tick) or nil,
+            invert_read_ticks = bc.invert_read_ticks,
+        }
+    end
     for bar_idx, bar_cfg in ipairs(self.progress_bars or {}) do
         if bar_cfg.enabled then
             local anchor = bar_cfg.v_anchor or "bottom"
@@ -560,25 +517,18 @@ function Bookends:paintTo(bb, x, y)
                 local is_cre = self.ui.rolling ~= nil
 
                 if bar_cfg.type == "book" then
-                    if is_cre and doc.getCurrentPos then
-                        local pos = doc:getCurrentPos()
-                        local height = doc.info and doc.info.doc_height or 0
-                        if height > 0 then
-                            pct = math.max(0, math.min(1, pos / height))
+                    -- Use page-based progress to match KOReader's footer bar
+                    local raw_total = doc:getPageCount()
+                    if raw_total and raw_total > 0 then
+                        if doc:hasHiddenFlows() then
+                            local flow = doc:getPageFlow(pageno_local)
+                            local flow_total = doc:getTotalPagesInFlow(flow)
+                            local flow_page = doc:getPageNumberInFlow(pageno_local)
+                            pct = flow_total > 0 and (flow_page / flow_total) or 0
+                        else
+                            pct = pageno_local / raw_total
                         end
-                    else
-                        local raw_total = doc:getPageCount()
-                        if raw_total and raw_total > 0 then
-                            if doc:hasHiddenFlows() then
-                                local flow = doc:getPageFlow(pageno_local)
-                                local flow_total = doc:getTotalPagesInFlow(flow)
-                                local flow_page = doc:getPageNumberInFlow(pageno_local)
-                                pct = flow_total > 0 and (flow_page / flow_total) or 0
-                            else
-                                pct = pageno_local / raw_total
-                            end
-                            pct = math.max(0, math.min(1, pct))
-                        end
+                        pct = math.max(0, math.min(1, pct))
                     end
                     -- Chapter tick marks (cached — static for the document)
                     local tick_level = bar_cfg.chapter_ticks
@@ -590,22 +540,29 @@ function Bookends:paintTo(bb, x, y)
                         if not self._tick_cache then
                             self._tick_cache = self:_computeTickCache()
                         end
-                        local max_tick_depth = tick_level == "level2" and 2 or 1
-                        ticks = {}
-                        for _, tick in ipairs(self._tick_cache or {}) do
-                            if type(tick) == "table" and tick[3] and tick[3] <= max_tick_depth then
-                                table.insert(ticks, tick)
+                        if tick_level == "all" then
+                            ticks = self._tick_cache or {}
+                        else
+                            local max_tick_depth = tick_level == "level2" and 2 or 1
+                            ticks = {}
+                            for _, tick in ipairs(self._tick_cache or {}) do
+                                if type(tick) == "table" and tick[3] and tick[3] <= max_tick_depth then
+                                    table.insert(ticks, tick)
+                                end
                             end
                         end
                     end
                 elseif bar_cfg.type == "chapter" then
                     if is_cre and doc.getCurrentPos and self.ui.toc then
                         local cur_pos = doc:getCurrentPos()
-                        local prev_chapter = self.ui.toc:getPreviousChapter(pageno_local)
+                        local chapter_start = self.ui.toc:getPreviousChapter(pageno_local)
+                        if self.ui.toc:isChapterStart(pageno_local) then
+                            chapter_start = pageno_local
+                        end
                         local next_chapter = self.ui.toc:getNextChapter(pageno_local)
-                        if prev_chapter then
-                            local prev_xp = doc:getPageXPointer(prev_chapter)
-                            local start_pos = prev_xp and doc:getPosFromXPointer(prev_xp) or 0
+                        if chapter_start then
+                            local start_xp = doc:getPageXPointer(chapter_start)
+                            local start_pos = start_xp and doc:getPosFromXPointer(start_xp) or 0
                             local end_pos
                             if next_chapter then
                                 local next_xp = doc:getPageXPointer(next_chapter)
@@ -631,7 +588,7 @@ function Bookends:paintTo(bb, x, y)
                 local paint_vertical = direction == "ttb" or direction == "btt"
                 local paint_reverse = direction == "rtl" or direction == "btt"
                 OverlayWidget.paintProgressBar(bb, bar_x, bar_y, bar_w, bar_h, pct, ticks,
-                    bar_cfg.style or "solid", paint_vertical and "vertical" or nil, paint_reverse)
+                    bar_cfg.style or "solid", paint_vertical and "vertical" or nil, paint_reverse, bar_colors)
             end
         end
     end
@@ -737,6 +694,8 @@ function Bookends:paintTo(bb, x, y)
             local style = (pos_settings.line_style and pos_settings.line_style[i])
                 or "regular"
             local cfg = self:resolveLineConfig(face_name, font_size, style)
+            cfg.face_name = face_name
+            cfg.font_size = math.max(1, math.floor(font_size * (self.defaults.font_scale or 100) / 100 + 0.5))
             cfg.v_nudge = (pos_settings.line_v_nudge and pos_settings.line_v_nudge[i]) or 0
             cfg.h_nudge = (pos_settings.line_h_nudge and pos_settings.line_h_nudge[i]) or 0
             cfg.uppercase = (pos_settings.line_uppercase and pos_settings.line_uppercase[i]) or false
@@ -745,8 +704,10 @@ function Bookends:paintTo(bb, x, y)
             if bar_data[key] and bar_data[key][expanded_idx] then
                 local all_bars = bar_data[key][expanded_idx]
                 local bar_type = (pos_settings.line_bar_type and pos_settings.line_bar_type[i]) or "chapter"
-                if bar_type == "book_ticks" or bar_type == "book_ticks2" then
-                    -- Filter ticks by depth: Book+ = depth 1 only, Book++ = depth 1-2
+                if bar_type == "book_ticks_all" then
+                    local book = all_bars.book
+                    cfg.bar = { kind = book.kind, pct = book.pct, ticks = book.ticks }
+                elseif bar_type == "book_ticks" or bar_type == "book_ticks2" then
                     local max_tick_depth = bar_type == "book_ticks" and 1 or 2
                     local book = all_bars.book
                     local filtered_ticks = {}
@@ -760,11 +721,15 @@ function Bookends:paintTo(bb, x, y)
                     local book = all_bars.book
                     cfg.bar = { kind = book.kind, pct = book.pct, ticks = {} }
                 else
-                    cfg.bar = all_bars.chapter
+                    local ch = all_bars.chapter
+                    cfg.bar = { kind = ch.kind, pct = ch.pct, ticks = ch.ticks }
+                end
+                if all_bars.width then
+                    cfg.bar.width = all_bars.width
                 end
                 cfg.bar_height = (pos_settings.line_bar_height and pos_settings.line_bar_height[i]) or nil
-                cfg.bar_width = (pos_settings.line_bar_width and pos_settings.line_bar_width[i]) or nil
                 cfg.bar_style = (pos_settings.line_bar_style and pos_settings.line_bar_style[i]) or nil
+                cfg.bar_colors = bar_colors
             end
             table.insert(line_configs, cfg)
         end
@@ -774,11 +739,26 @@ function Bookends:paintTo(bb, x, y)
             if p.key == key then pos_def = p; break end
         end
 
+        -- Apply per-token pixel limits (markers from tokens.lua) using resolved font.
+        -- Must happen before widget building so text is clean.
+        local limited_text = text
+        if text:find("\x01") then
+            local limited_lines = {}
+            local li = 0
+            for line in text:gmatch("([^\n]+)") do
+                li = li + 1
+                local cfg = line_configs[li] or line_configs[#line_configs]
+                local cleaned = OverlayWidget.applyTokenLimits(line, cfg.face, cfg.bold, cfg.uppercase)
+                table.insert(limited_lines, cleaned)
+            end
+            limited_text = table.concat(limited_lines, "\n")
+        end
+
         -- Build without truncation to measure natural text width.
         -- For bar positions, Phase 4 will rebuild with the correct row-aware available_w.
         local pos_available_w = screen_w
-        local widget, w, h = OverlayWidget.buildTextWidget(text, line_configs, pos_def.h_anchor, nil, pos_available_w)
-        pre_built[key] = { widget = widget, w = w, h = h, line_configs = line_configs, pos_def = pos_def }
+        local widget, w, h = OverlayWidget.buildTextWidget(limited_text, line_configs, pos_def.h_anchor, nil, pos_available_w)
+        pre_built[key] = { widget = widget, w = w, h = h, line_configs = line_configs, pos_def = pos_def, text = limited_text }
     end
 
     -- Phase 3: Calculate overlap limits per row
@@ -798,7 +778,7 @@ function Bookends:paintTo(bb, x, y)
             local pb = pre_built[key]
             if not pb then return nil end
             if bar_data[key] then
-                return OverlayWidget.measureTextWidth(expanded[key], pb.line_configs)
+                return OverlayWidget.measureTextWidth(pb.text, pb.line_configs)
             end
             return pb.w
         end
@@ -833,7 +813,7 @@ function Bookends:paintTo(bb, x, y)
                     -- Truncation needed: free pre-built widget and rebuild with limit
                     if pb.widget and pb.widget.free then pb.widget:free() end
                     widget, w, h = OverlayWidget.buildTextWidget(
-                        expanded[key], pb.line_configs, pb.pos_def.h_anchor, max_width, max_width)
+                        pb.text, pb.line_configs, pb.pos_def.h_anchor, max_width, max_width)
                 elseif bar_data[key] then
                     -- Bar position without truncation: rebuild with row-aware available width
                     -- so auto-fill bars don't exceed the space overlap prevention would allow
@@ -885,7 +865,7 @@ function Bookends:paintTo(bb, x, y)
                         end
                     end
                     widget, w, h = OverlayWidget.buildTextWidget(
-                        expanded[key], pb.line_configs, pb.pos_def.h_anchor, nil, bar_avail)
+                        pb.text, pb.line_configs, pb.pos_def.h_anchor, nil, bar_avail)
                 else
                     -- No truncation: reuse pre-built widget
                     widget, w, h = pb.widget, pb.w, pb.h
@@ -1001,6 +981,7 @@ function Bookends:buildMainMenu()
                     table.insert(previews, (Tokens.expandPreview(line, self.ui, session_elapsed, session_pages)))
                 end
                 local preview = table.concat(previews, " \xC2\xB7 ")
+                preview = preview:gsub("%s+", " "):match("^%s*(.-)%s*$")
                 if #preview > 38 then
                     preview = truncateUtf8(preview, 35)
                 end
@@ -1111,6 +1092,13 @@ function Bookends:buildMainMenu()
                     separator = true,
                 },
                 {
+                    text = _("Progress bar colors"),
+                    sub_item_table_func = function()
+                        return self:buildBarColorsMenu()
+                    end,
+                    separator = true,
+                },
+                {
                     text = _("Check for updates"),
                     keep_menu_open = true,
                     callback = function()
@@ -1197,6 +1185,7 @@ function Bookends:buildSingleBarMenu(bar_idx, bar_cfg)
                 end
                 local labels = {
                     off = _("Chapter ticks: Off"),
+                    all = _("Chapter ticks: All levels"),
                     level1 = _("Chapter ticks: Top level"),
                     level2 = _("Chapter ticks: Top 2 levels"),
                 }
@@ -1205,7 +1194,7 @@ function Bookends:buildSingleBarMenu(bar_idx, bar_cfg)
             enabled_func = function() return bar_cfg.enabled and bar_cfg.type == "book" end,
             keep_menu_open = true,
             callback = function(touchmenu_instance)
-                local cycle = { "off", "level1", "level2" }
+                local cycle = { "off", "level1", "level2", "all" }
                 local cur = bar_cfg.chapter_ticks or "off"
                 for idx, v in ipairs(cycle) do
                     if v == cur then
@@ -1450,6 +1439,119 @@ function Bookends:showBarMarginAdjuster(bar_cfg, bar_idx)
     UIManager:show(margin_dialog)
 end
 
+function Bookends:buildBarColorsMenu()
+    local bc = self.settings:readSetting("bar_colors") or {}
+
+    local function saveColors()
+        if not bc.fill and not bc.bg and not bc.track and not bc.tick and bc.invert_read_ticks == nil then
+            self.settings:delSetting("bar_colors")
+        else
+            self.settings:saveSetting("bar_colors", bc)
+        end
+        self:markDirty()
+    end
+
+    local function colorSpinner(title, field, default_pct, touchmenu_instance)
+        UIManager:show(SpinWidget:new{
+            title_text = title,
+            value = bc[field] and math.floor((0xFF - bc[field]) * 100 / 0xFF + 0.5) or default_pct,
+            value_min = 0,
+            value_max = 100,
+            default_value = default_pct,
+            unit = "% " .. _("black"),
+            callback = function(spin)
+                bc[field] = 0xFF - math.floor(spin.value * 0xFF / 100 + 0.5)
+                saveColors()
+                if touchmenu_instance then touchmenu_instance:updateItems() end
+            end,
+        })
+    end
+
+    local function pctLabel(field, default_pct)
+        if bc[field] then
+            return math.floor((0xFF - bc[field]) * 100 / 0xFF + 0.5) .. "%"
+        end
+        return _("default") .. " (" .. default_pct .. "%)"
+    end
+
+    return {
+        {
+            text_func = function()
+                return _("Read color") .. ": " .. pctLabel("fill", 75)
+            end,
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                colorSpinner(_("Read color (% black)"), "fill", 75, touchmenu_instance)
+            end,
+            hold_callback = function(touchmenu_instance)
+                bc.fill = nil; saveColors()
+                if touchmenu_instance then touchmenu_instance:updateItems() end
+            end,
+        },
+        {
+            text_func = function()
+                return _("Unread color") .. ": " .. pctLabel("bg", 25)
+            end,
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                colorSpinner(_("Unread color (% black)"), "bg", 25, touchmenu_instance)
+            end,
+            hold_callback = function(touchmenu_instance)
+                bc.bg = nil; saveColors()
+                if touchmenu_instance then touchmenu_instance:updateItems() end
+            end,
+        },
+        {
+            text_func = function()
+                return _("Metro track color") .. ": " .. pctLabel("track", 75)
+            end,
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                colorSpinner(_("Metro track color (% black)"), "track", 75, touchmenu_instance)
+            end,
+            hold_callback = function(touchmenu_instance)
+                bc.track = nil; saveColors()
+                if touchmenu_instance then touchmenu_instance:updateItems() end
+            end,
+        },
+        {
+            text_func = function()
+                return _("Tick color") .. ": " .. pctLabel("tick", 100)
+            end,
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                colorSpinner(_("Tick color (% black)"), "tick", 100, touchmenu_instance)
+            end,
+            hold_callback = function(touchmenu_instance)
+                bc.tick = nil; saveColors()
+                if touchmenu_instance then touchmenu_instance:updateItems() end
+            end,
+        },
+        {
+            text = _("Invert tick color on read portion"),
+            checked_func = function() return bc.invert_read_ticks ~= false end,
+            callback = function()
+                if bc.invert_read_ticks == false then
+                    bc.invert_read_ticks = nil
+                else
+                    bc.invert_read_ticks = false
+                end
+                saveColors()
+            end,
+        },
+        {
+            text = _("Reset all to defaults"),
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                bc = {}
+                self.settings:delSetting("bar_colors")
+                self:markDirty()
+                if touchmenu_instance then touchmenu_instance:updateItems() end
+            end,
+        },
+    }
+end
+
 function Bookends:buildPositionMenu(pos)
     local is_corner = pos.h_anchor ~= "center"
     local menu = {}
@@ -1481,6 +1583,7 @@ function Bookends:buildPositionMenu(pos)
                 if filter == "odd" then tag = " [odd]"
                 elseif filter == "even" then tag = " [even]" end
                 local preview = (Tokens.expandPreview(ps.lines[i] or "", self.ui, self:getSessionElapsed(), math.max(0, (self.session_max_page or 0) - (self.session_start_page or 0))))
+                preview = preview:gsub("%s+", " "):match("^%s*(.-)%s*$")
                 if #preview > 42 then
                     preview = truncateUtf8(preview, 39)
                 end
@@ -1695,7 +1798,6 @@ function Bookends:editLineString(pos, line_idx)
     pos_settings.line_page_filter = pos_settings.line_page_filter or {}
     pos_settings.line_bar_type = pos_settings.line_bar_type or {}
     pos_settings.line_bar_height = pos_settings.line_bar_height or {}
-    pos_settings.line_bar_width = pos_settings.line_bar_width or {}
     pos_settings.line_bar_style = pos_settings.line_bar_style or {}
 
     -- Snapshot for cancel/restore
@@ -1710,7 +1812,6 @@ function Bookends:editLineString(pos, line_idx)
     local line_page_filter = pos_settings.line_page_filter[line_idx] -- nil = all pages
     local line_bar_type = pos_settings.line_bar_type[line_idx] -- nil = "chapter"
     local line_bar_height = pos_settings.line_bar_height[line_idx] -- nil = use font size
-    local line_bar_width = pos_settings.line_bar_width[line_idx] -- nil/0 = auto-fill
     local line_bar_style = pos_settings.line_bar_style[line_idx] -- nil = "bordered"
 
     -- Live preview: write current local state to settings and repaint
@@ -1724,7 +1825,6 @@ function Bookends:editLineString(pos, line_idx)
         pos_settings.line_page_filter[line_idx] = line_page_filter
         pos_settings.line_bar_type[line_idx] = line_bar_type
         pos_settings.line_bar_height[line_idx] = line_bar_height
-        pos_settings.line_bar_width[line_idx] = line_bar_width
         pos_settings.line_bar_style[line_idx] = line_bar_style
         self:markDirty()
     end
@@ -1801,8 +1901,8 @@ function Bookends:editLineString(pos, line_idx)
         return t and t:find("%%bar") ~= nil
     end
 
-    local BAR_TYPE_CYCLE = { "chapter", "book", "book_ticks", "book_ticks2" }
-    local BAR_TYPE_LABELS = { chapter = _("Chapter"), book = _("Book"), book_ticks = _("Book+"), book_ticks2 = _("Book++") }
+    local BAR_TYPE_CYCLE = { "chapter", "book", "book_ticks", "book_ticks2", "book_ticks_all" }
+    local BAR_TYPE_LABELS = { chapter = _("Chapter"), book = _("Book"), book_ticks = _("Book+"), book_ticks2 = _("Book++"), book_ticks_all = _("Book+++") }
 
     local bar_insert_button = {
         text_func = function()
@@ -1899,7 +1999,7 @@ function Bookends:editLineString(pos, line_idx)
         local current = line_size or self:getPositionSetting(pos.key, "font_size")
         UIManager:show(SpinWidget:new{
             value = current,
-            value_min = 8,
+            value_min = 1,
             value_max = 36,
             default_value = self:getPositionSetting(pos.key, "font_size"),
             title_text = _("Font size for line") .. " " .. line_idx,
@@ -2035,7 +2135,6 @@ function Bookends:editLineString(pos, line_idx)
                         sparseRemove(pos_settings.line_page_filter, line_idx)
                         sparseRemove(pos_settings.line_bar_type, line_idx)
                         sparseRemove(pos_settings.line_bar_height, line_idx)
-                        sparseRemove(pos_settings.line_bar_width, line_idx)
                         sparseRemove(pos_settings.line_bar_style, line_idx)
                     else
                         pos_settings.lines[line_idx] = new_text
@@ -2092,7 +2191,6 @@ function Bookends:showLineManageDialog(pos, line_idx, touchmenu_instance)
         sparseRemove(ps.line_page_filter, line_idx)
         sparseRemove(ps.line_bar_type, line_idx)
         sparseRemove(ps.line_bar_height, line_idx)
-        sparseRemove(ps.line_bar_width, line_idx)
         sparseRemove(ps.line_bar_style, line_idx)
         self:savePositionSetting(pos.key)
         self:markDirty()
@@ -2127,9 +2225,6 @@ function Bookends:showLineManageDialog(pos, line_idx, touchmenu_instance)
         end
         if ps.line_bar_height then
             ps.line_bar_height[a], ps.line_bar_height[b] = ps.line_bar_height[b], ps.line_bar_height[a]
-        end
-        if ps.line_bar_width then
-            ps.line_bar_width[a], ps.line_bar_width[b] = ps.line_bar_width[b], ps.line_bar_width[a]
         end
         if ps.line_bar_style then
             ps.line_bar_style[a], ps.line_bar_style[b] = ps.line_bar_style[b], ps.line_bar_style[a]
@@ -2173,7 +2268,6 @@ function Bookends:showLineManageDialog(pos, line_idx, touchmenu_instance)
         target.line_uppercase = target.line_uppercase or {}
         target.line_bar_type = target.line_bar_type or {}
         target.line_bar_height = target.line_bar_height or {}
-        target.line_bar_width = target.line_bar_width or {}
         target.line_bar_style = target.line_bar_style or {}
 
         -- Append to target
@@ -2187,7 +2281,6 @@ function Bookends:showLineManageDialog(pos, line_idx, touchmenu_instance)
         target.line_uppercase[ti] = ps.line_uppercase and ps.line_uppercase[line_idx] or nil
         target.line_bar_type[ti] = ps.line_bar_type and ps.line_bar_type[line_idx] or nil
         target.line_bar_height[ti] = ps.line_bar_height and ps.line_bar_height[line_idx] or nil
-        target.line_bar_width[ti] = ps.line_bar_width and ps.line_bar_width[line_idx] or nil
         target.line_bar_style[ti] = ps.line_bar_style and ps.line_bar_style[line_idx] or nil
 
         -- Remove from source

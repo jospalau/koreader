@@ -3,11 +3,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: bookends\n"
-"Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-04-02 00:00+0000\n"
-"PO-Revision-Date: 2026-04-02 00:00+0000\n"
-"Last-Translator: \n"
-"Language-Team: \n"
+"POT-Creation-Date: 2026-04-03 00:00+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -88,6 +84,9 @@ msgstr ""
 msgid "Battery level"
 msgstr ""
 
+msgid "black"
+msgstr ""
+
 msgid "Bold"
 msgstr ""
 
@@ -104,6 +103,9 @@ msgid "Book+"
 msgstr ""
 
 msgid "Book++"
+msgstr ""
+
+msgid "Book+++"
 msgstr ""
 
 msgid "Bookends"
@@ -173,6 +175,9 @@ msgid "Chapter"
 msgstr ""
 
 msgid "Chapter percentage read"
+msgstr ""
+
+msgid "Chapter ticks: All levels"
 msgstr ""
 
 msgid "Chapter ticks: Off"
@@ -251,6 +256,9 @@ msgid "Date numeric (28/03/2026)"
 msgstr ""
 
 msgid "Date short (28 Mar)"
+msgstr ""
+
+msgid "default"
 msgstr ""
 
 msgid "Default font"
@@ -430,6 +438,9 @@ msgstr ""
 msgid "Installed: "
 msgstr ""
 
+msgid "Invert tick color on read portion"
+msgstr ""
+
 msgid "Italic"
 msgstr ""
 
@@ -467,6 +478,12 @@ msgid "Metadata"
 msgstr ""
 
 msgid "Metro"
+msgstr ""
+
+msgid "Metro track color"
+msgstr ""
+
+msgid "Metro track color (% black)"
 msgstr ""
 
 msgid "Middle dot"
@@ -553,6 +570,9 @@ msgstr ""
 msgid "- Progress bar"
 msgstr ""
 
+msgid "Progress bar colors"
+msgstr ""
+
 msgid "Progress bar (configure type in line editor)"
 msgstr ""
 
@@ -560,6 +580,12 @@ msgid "Progress Bars"
 msgstr ""
 
 msgid "RAM used %"
+msgstr ""
+
+msgid "Read color"
+msgstr ""
+
+msgid "Read color (% black)"
 msgstr ""
 
 msgid "Reading"
@@ -572,6 +598,9 @@ msgid "Regular"
 msgstr ""
 
 msgid "Reset"
+msgstr ""
+
+msgid "Reset all to defaults"
 msgstr ""
 
 msgid "Restart"
@@ -682,6 +711,12 @@ msgstr ""
 msgid "Thickness"
 msgstr ""
 
+msgid "Tick color"
+msgstr ""
+
+msgid "Tick color (% black)"
+msgstr ""
+
 msgid "Tilde"
 msgstr ""
 
@@ -749,6 +784,12 @@ msgid "Truncation gap between regions (px)"
 msgstr ""
 
 msgid "Type"
+msgstr ""
+
+msgid "Unread color"
+msgstr ""
+
+msgid "Unread color (% black)"
 msgstr ""
 
 msgid "Update and restart"
