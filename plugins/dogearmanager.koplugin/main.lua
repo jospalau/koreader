@@ -65,6 +65,34 @@ local SUPPORTED_EXTENSIONS = {
     [".jpeg"] = true,
 }
 
+--- Strip fill-opacity and opacity attributes from an SVG so it always renders
+--- at 100% opacity, regardless of how the file was exported.
+--- Returns a path to a processed copy in KOReader's cache dir for SVG files,
+--- or the original path unchanged for raster formats.
+local function normalizeSvgOpacity(src_path)
+    if not src_path:lower():match("%.svg$") then
+        return src_path
+    end
+    local f = io.open(src_path, "r")
+    if not f then return src_path end
+    local content = f:read("*a")
+    f:close()
+
+    content = content:gsub('%s+fill%-opacity%s*=%s*"[^"]*"', "")
+    content = content:gsub("%s+fill%-opacity%s*=%s*'[^']*'", "")
+    content = content:gsub('%s+opacity%s*=%s*"[^"]*"', "")
+    content = content:gsub("%s+opacity%s*=%s*'[^']*'", "")
+
+    local cache_dir = DataStorage:getDataDir() .. "/cache"
+    pcall(lfs.mkdir, cache_dir)
+    local out_path = cache_dir .. "/dogear_icon_processed.svg"
+    local fw = io.open(out_path, "w")
+    if not fw then return src_path end
+    fw:write(content)
+    fw:close()
+    return out_path
+end
+
 --- Compute pixel step size for margins based on current screen.
 -- Both top and right use the same step so one increment moves equally.
 -- @return step_px, step_px
@@ -572,46 +600,58 @@ function DogearManager:patchReaderDogear()
             local orig_resetLayout = ReaderDogear.resetLayout
 
             local function applyMarginOffset(rd_self)
-                local mt_steps = G_reader_settings:readSetting(S_MARGIN_TOP) or 0
-                local mr_steps = G_reader_settings:readSetting(S_MARGIN_RIGHT) or 0
-                local mt = topStepsToPx(mt_steps)
-                local mr = rightStepsToPx(mr_steps)
-
+                -- Guard: essential widget fields must exist
                 if not (rd_self.vgroup and rd_self.icon and rd_self.top_pad) then return end
+                -- Guard: dogear_size may be nil during document reflow (e.g. after a
+                -- page-margin change triggers resetLayout/updateDogearOffset before
+                -- orig_setupDogear has re-computed the size).  Attempting arithmetic on
+                -- a nil dogear_size produces a Lua error that propagates to the C event
+                -- loop and causes a SIGABRT crash when the widget is next painted.
+                if not rd_self.dogear_size or rd_self.dogear_size <= 0 then return end
 
-                -- Update main container dimensions
-                if rd_self[1] and rd_self[1].dimen then
-                    rd_self[1].dimen.w = Screen:getWidth()
-                    rd_self[1].dimen.h = (rd_self.dogear_y_offset or 0) + rd_self.dogear_size + mt
-                end
+                local ok, err = pcall(function()
+                    local mt_steps = G_reader_settings:readSetting(S_MARGIN_TOP) or 0
+                    local mr_steps = G_reader_settings:readSetting(S_MARGIN_RIGHT) or 0
+                    local mt = topStepsToPx(mt_steps)
+                    local mr = rightStepsToPx(mr_steps)
 
-                -- Apply top margin (VerticalSpan uses .width for its size)
-                rd_self.top_pad.width = (rd_self.dogear_y_offset or 0) + mt
-
-                -- Apply right margin
-                if mr > 0 then
-                    -- Detach icon from old wrapper before freeing to avoid invalidation
-                    if rd_self._dm_wrapper then
-                        rd_self._dm_wrapper[1] = nil
-                        rd_self._dm_wrapper:free()
+                    -- Update main container dimensions
+                    if rd_self[1] and rd_self[1].dimen then
+                        rd_self[1].dimen.w = Screen:getWidth()
+                        rd_self[1].dimen.h = (rd_self.dogear_y_offset or 0) + rd_self.dogear_size + mt
                     end
 
-                    rd_self._dm_wrapper = HorizontalGroup:new{
-                        align = "top",
-                        rd_self.icon,
-                        HorizontalSpan:new{ width = mr },
-                    }
-                    rd_self.vgroup[2] = rd_self._dm_wrapper
-                else
-                    if rd_self._dm_wrapper then
-                        rd_self._dm_wrapper[1] = nil
-                        rd_self._dm_wrapper:free()
-                        rd_self._dm_wrapper = nil
-                    end
-                    rd_self.vgroup[2] = rd_self.icon
-                end
+                    -- Apply top margin (VerticalSpan uses .width for its size)
+                    rd_self.top_pad.width = (rd_self.dogear_y_offset or 0) + mt
 
-                rd_self.vgroup:resetLayout()
+                    -- Apply right margin
+                    if mr > 0 then
+                        -- Detach icon from old wrapper before freeing to avoid invalidation
+                        if rd_self._dm_wrapper then
+                            rd_self._dm_wrapper[1] = nil
+                            rd_self._dm_wrapper:free()
+                        end
+
+                        rd_self._dm_wrapper = HorizontalGroup:new{
+                            align = "top",
+                            rd_self.icon,
+                            HorizontalSpan:new{ width = mr },
+                        }
+                        rd_self.vgroup[2] = rd_self._dm_wrapper
+                    else
+                        if rd_self._dm_wrapper then
+                            rd_self._dm_wrapper[1] = nil
+                            rd_self._dm_wrapper:free()
+                            rd_self._dm_wrapper = nil
+                        end
+                        rd_self.vgroup[2] = rd_self.icon
+                    end
+
+                    rd_self.vgroup:resetLayout()
+                end)
+                if not ok then
+                    logger.warn("DogearManager: applyMarginOffset failed:", err)
+                end
             end
 
             ReaderDogear.setupDogear = function(rd_self, new_dogear_size)
@@ -645,12 +685,20 @@ function DogearManager:patchReaderDogear()
 
                 if icon_path and lfs.attributes(icon_path, "mode") == "file" and rd_self.icon then
                     rd_self.icon:free()
-                    rd_self.icon = ImageWidget:new{
-                        file   = icon_path,
-                        width  = rd_self.dogear_size,
-                        height = rd_self.dogear_size,
-                        alpha  = true,
+                    -- is_icon=true tells ImageWidget to skip pre-inversion so
+                    -- KOReader's global night-mode framebuffer inversion handles
+                    -- dark mode automatically (same as the built-in IconWidget).
+                    -- normalizeSvgOpacity strips fill-opacity/opacity attributes
+                    -- so custom SVGs always render at 100% black (or white in
+                    -- night mode after inversion).
+                    local new_icon = ImageWidget:new{
+                        file    = normalizeSvgOpacity(icon_path),
+                        width   = rd_self.dogear_size,
+                        height  = rd_self.dogear_size,
+                        alpha   = true,
+                        is_icon = true,
                     }
+                    rd_self.icon = new_icon
                     rd_self._dm_custom_icon = rd_self.icon
                 end
 
