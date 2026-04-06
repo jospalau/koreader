@@ -652,7 +652,7 @@ function PageTextInfo:onSwipe(_, ges)
             UIManager:show(ruler_overlay)
         else
             -- UIManager:broadcastEvent(Event:new("ShowReadingInsightsPopup"))
-            UIManager:broadcastEvent(Event:new("ShowReadingHoursDaily"))
+            UIManager:broadcastEvent(Event:new("ShowReadingHistoryPopupTablePlusV1"))
         end
     elseif direction == "east" then
         -- local doc_settings = DocSettings:open(doc_path)
