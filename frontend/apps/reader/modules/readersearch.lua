@@ -649,6 +649,10 @@ self.ui.searching = true
         local info = InfoMessage:new{ text = _("Searching… (tap to cancel)") }
         UIManager:show(info)
         UIManager:forceRePaint()
+        if Device.model == "Kobo_spaColour" then
+            local util = require("ffi/util")
+            util.usleep(150000)
+        end
         local completed, res = Trapper:dismissableRunInSubprocess(function()
             return self.ui.document:findAllText(search_text,
                 self.case_insensitive, self.findall_nb_context_words, self.findall_max_hits, self.use_regex, untilCurrentPage)
