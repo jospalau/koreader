@@ -1,7 +1,8 @@
-local Font = require("ui/font")
-local TextWidget = require("ui/widget/textwidget")
 local Blitbuffer = require("ffi/blitbuffer")
 local Device = require("device")
+local Font = require("ui/font")
+local TextWidget = require("ui/widget/textwidget")
+local Utf8Proc = require("ffi/utf8proc")
 local Screen = Device.screen
 
 local OverlayWidget = {}
@@ -202,7 +203,7 @@ local function buildBarLine(text, cfg, available_w, max_width)
 
     local function addTextSegment(t)
         if t == "" then return end
-        local display = cfg.uppercase and t:upper() or t
+        local display = cfg.uppercase and Utf8Proc.uppercase_dumb(t) or t
         local tw = TextWidget:new(textWidgetOpts{
             text = display,
             face = cfg.face,
@@ -313,7 +314,7 @@ function OverlayWidget.buildTextWidget(text, line_configs, h_anchor, max_width, 
             return buildBarLine(lines[1], cfg, available_w or Screen:getWidth(), max_width)
         end
         -- Plain text — fast path
-        local display_text = cfg.uppercase and lines[1]:upper() or lines[1]
+        local display_text = cfg.uppercase and Utf8Proc.uppercase_dumb(lines[1]) or lines[1]
         local tw = TextWidget:new(textWidgetOpts{
             text = display_text,
             face = cfg.face,
@@ -346,7 +347,7 @@ function OverlayWidget.buildTextWidget(text, line_configs, h_anchor, max_width, 
         elseif cfg.bar then
             widget, w, h = buildBarLine(line, cfg, available_w or Screen:getWidth(), max_width)
         else
-            local display_text = cfg.uppercase and line:upper() or line
+            local display_text = cfg.uppercase and Utf8Proc.uppercase_dumb(line) or line
             widget = TextWidget:new(textWidgetOpts{
                 text = display_text,
                 face = cfg.face,
@@ -396,7 +397,7 @@ function OverlayWidget.measureTextWidth(text, line_configs)
             measure_text = line:gsub(BAR_PLACEHOLDER, "")
         end
         if measure_text ~= "" then
-            local display_text = cfg.uppercase and measure_text:upper() or measure_text
+            local display_text = cfg.uppercase and Utf8Proc.uppercase_dumb(measure_text) or measure_text
             local tw = TextWidget:new(textWidgetOpts{
                 text = display_text, face = cfg.face, bold = cfg.bold,
             })
@@ -422,7 +423,7 @@ function OverlayWidget.applyTokenLimits(text, face, bold, uppercase)
     return text:gsub("\x01(%d+)\x02(.-)\x03", function(limit_str, value)
         local max_px = tonumber(limit_str)
         if not max_px or max_px <= 0 or value == "" then return value end
-        local display = uppercase and value:upper() or value
+        local display = uppercase and Utf8Proc.uppercase_dumb(value) or value
         -- Measure full value
         local tw = TextWidget:new(textWidgetOpts{
             text = display, face = face, bold = bold,
@@ -576,7 +577,7 @@ function OverlayWidget.buildStyledLine(segments, cfg, available_w, max_width)
             -- Remember bar position, insert later after measuring text
             bar_slot = #widgets + 1
         else
-            local display = seg.uppercase and seg.text:upper() or seg.text
+            local display = seg.uppercase and Utf8Proc.uppercase_dumb(seg.text) or seg.text
             if display ~= "" then
                 -- Resolve font face for this segment
                 local seg_face = cfg.face
@@ -769,15 +770,27 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
     if w < 1 or h < 1 then return end
     fraction = math.max(0, math.min(1, fraction or 0))
     local vertical = orientation == "vertical"
-    -- Custom colors
+    -- Custom colors: nil = not set (use default), false = transparent (skip paint)
     local custom_fill = colors and colors.fill
     local custom_bg = colors and colors.bg
     local custom_track = colors and colors.track
     local custom_tick = colors and colors.tick
     local invert_read_ticks = colors and colors.invert_read_ticks
+    local tick_height_pct = colors and colors.tick_height_pct or 100
 
-    -- Helper: paint a rect, swapping axes for vertical
+    -- Resolve custom color: false → nil (transparent/skip), nil → default, else custom.
+    -- Must use type() checks to avoid triggering Blitbuffer's __eq metamethod.
+    local function resolveColor(custom, default)
+        local t = type(custom)
+        if t == "nil" then return default end      -- not set: use default
+        if t == "boolean" then return nil end      -- false = transparent
+        return custom                               -- Color8 value
+    end
+
+    -- Helper: paint a rect, swapping axes for vertical.
+    -- Skips painting if color is nil (transparent).
     local function pr(rx, ry, rw, rh, color)
+        if not color then return end
         if vertical then
             bb:paintRect(ry, rx, rh, rw, color)
         else
@@ -797,6 +810,10 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
         local start_r = math.floor(thickness / 2)  -- full height circle
         local dot_r = math.max(4, math.floor(thickness * 0.35))
         local line_y = oy + math.floor((thickness - line_thick) / 2)
+        -- Metro ticks default shorter — the thin trunk looks better with
+        -- compact ticks.  Scale the user's tick_height_pct relative to 60%
+        -- so 100% (default) → 60%, 200% → 120%, etc.
+        tick_height_pct = math.floor(tick_height_pct * 0.35)
 
         -- Inset the line so start/end circles don't clip
         local inset = start_r
@@ -807,12 +824,14 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
         local line_fill = math.floor(line_len * fraction)
         local line_fill_start = reverse and (line_len - line_fill) or 0
 
-        local metro_track = custom_track or Blitbuffer.COLOR_DARK_GRAY
-        local metro_fill = custom_fill or Blitbuffer.COLOR_DARK_GRAY
+        local metro_track = resolveColor(custom_track, Blitbuffer.COLOR_DARK_GRAY)
+        local metro_fill = resolveColor(custom_fill, Blitbuffer.COLOR_DARK_GRAY)
         -- Track line (uniform colour — progress shown by dot only)
         pr(line_ox, line_y, line_len, line_thick, metro_track)
 
         -- Chapter ticks: depth 1 above line (connected to trunk), depth 2 below
+        -- When reversed, flip tick sides so the visual hierarchy mirrors the direction
+        local metro_tick_h = math.max(1, math.floor(thickness * tick_height_pct / 100))
         for _, tick in ipairs(ticks or {}) do
             local tick_frac = type(tick) == "table" and tick[1] or tick
             local tick_w = type(tick) == "table" and tick[2] or 1
@@ -820,22 +839,25 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
             if reverse then tick_frac = 1 - tick_frac end
             local tick_pos = math.floor(line_len * tick_frac)
             if tick_pos > 0 and tick_pos < line_len then
-                if tick_depth <= 1 then
-                    -- From top of bar down through trunk
-                    pr(line_ox + tick_pos, oy, line_thick, line_y + line_thick - oy, metro_track)
+                local tick_above
+                if reverse then
+                    tick_above = tick_depth > 1
                 else
-                    -- Below trunk (same thickness as trunk)
-                    local below_y = line_y + line_thick
-                    local below_h = oy + thickness - below_y
-                    if below_h > 0 then
-                        pr(line_ox + tick_pos, below_y, line_thick, below_h, metro_track)
-                    end
+                    tick_above = tick_depth <= 1
+                end
+                -- Vertical (side-anchored) bars: flip tick sides
+                if vertical then tick_above = not tick_above end
+                if tick_above then
+                    pr(line_ox + tick_pos, line_y - metro_tick_h, line_thick, metro_tick_h, metro_track)
+                else
+                    pr(line_ox + tick_pos, line_y + line_thick, line_thick, metro_tick_h, metro_track)
                 end
             end
         end
 
         -- Helper for circles
         local function paintCircle(cx, cy, r, color)
+            if not color then return end
             if vertical then
                 bb:paintRoundedRect(cy, cx, r * 2, r * 2, color, r)
             else
@@ -860,11 +882,11 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
         local pos_on_line = reverse and (line_len - line_fill) or line_fill
         local dot_cx = line_ox + pos_on_line - dot_r
         local dot_cy = oy + math.floor((thickness - dot_r * 2) / 2)
-        paintCircle(dot_cx, dot_cy, dot_r, custom_tick or Blitbuffer.COLOR_BLACK)
+        paintCircle(dot_cx, dot_cy, dot_r, resolveColor(custom_tick, Blitbuffer.COLOR_BLACK))
 
     elseif style == "solid" then
-        local solid_fill = custom_fill or Blitbuffer.COLOR_GRAY_5
-        local solid_bg = custom_bg or Blitbuffer.COLOR_GRAY
+        local solid_fill = resolveColor(custom_fill, Blitbuffer.COLOR_GRAY_5)
+        local solid_bg = resolveColor(custom_bg, Blitbuffer.COLOR_GRAY)
         pr(ox, oy, length, thickness, solid_bg)
         local fill_len = math.floor(length * fraction)
         local fill_start = reverse and (length - fill_len) or 0
@@ -878,56 +900,90 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
             local tick_pos = math.floor(length * tick_frac)
             if tick_pos > 0 and tick_pos < length then
                 local in_fill = tick_pos >= fill_start and tick_pos < fill_start + fill_len
-                local base_tick = custom_tick or Blitbuffer.COLOR_BLACK
-                local tick_color
-                if invert_read_ticks ~= false and in_fill then
-                    tick_color = Blitbuffer.COLOR_WHITE
-                else
-                    tick_color = base_tick
+                local base_tick = resolveColor(custom_tick, Blitbuffer.COLOR_BLACK)
+                if base_tick then
+                    local tick_color
+                    if invert_read_ticks ~= false and in_fill then
+                        tick_color = Blitbuffer.COLOR_WHITE
+                    else
+                        tick_color = base_tick
+                    end
+                    local th = math.max(1, math.floor(thickness * tick_height_pct / 100))
+                    local t_oy = oy + math.floor((thickness - th) / 2)
+                    pr(ox + tick_pos, t_oy, tick_w, th, tick_color)
                 end
-                pr(ox + tick_pos, oy, tick_w, thickness, tick_color)
             end
         end
     else
-        local border_fill = custom_fill or Blitbuffer.COLOR_DARK_GRAY
-        local border_bg = custom_bg or Blitbuffer.COLOR_WHITE
+        local border_fill = resolveColor(custom_fill, Blitbuffer.COLOR_DARK_GRAY)
+        local border_bg = resolveColor(custom_bg, Blitbuffer.COLOR_WHITE)
         local border = 1
-        local margin_h = math.max(3, math.floor(thickness * 0.2))
-        local margin_v = math.max(1, math.floor(thickness * 0.1))
         local min_dim = vertical and w or h
         local radius = style == "rounded" and math.floor(min_dim / 2) or 0
-        -- Background + border (use real coordinates for rounded rect API)
+        -- Background (use real coordinates for rounded rect API)
         if radius > 0 then
-            bb:paintRoundedRect(x, y, w, h, border_fill, radius)
+            if border_bg then
+                bb:paintRoundedRect(x, y, w, h, border_bg, radius)
+            end
         else
-            bb:paintRect(x, y, w, h, border_bg)
+            if border_bg then
+                bb:paintRect(x, y, w, h, border_bg)
+            end
         end
-        local h_inset = radius > 0 and radius or (border + margin_h)
-        local v_inset = border + margin_v
+        local h_inset, v_inset
+        if radius > 0 then
+            -- Rounded: paint fill as a rounded rect, then overpaint the unfilled
+            -- portion with a background rounded rect so both ends keep curved edges.
+            v_inset = border
+            h_inset = border
+            local padding = math.max(1, math.floor(thickness * 0.1))
+            local inset = border + padding
+            local inner_r = math.max(0, radius - inset)
+            local inner_x = x + inset
+            local inner_y = y + inset
+            local inner_w = w - 2 * inset
+            local inner_h = h - 2 * inset
+            if inner_w > 0 and inner_h > 0 then
+                local inner_len = vertical and inner_h or inner_w
+                local fill_len = math.floor(inner_len * fraction)
+                -- Background (unfilled) first as full rounded rect
+                if border_bg then
+                    bb:paintRoundedRect(inner_x, inner_y, inner_w, inner_h, border_bg, inner_r)
+                end
+                -- Fill (read portion) on top — its rounded corners overlay the background
+                if fill_len > 0 and border_fill then
+                    if vertical then
+                        if reverse then
+                            bb:paintRoundedRect(inner_x, inner_y + inner_h - fill_len, inner_w, fill_len, border_fill, inner_r)
+                        else
+                            bb:paintRoundedRect(inner_x, inner_y, inner_w, fill_len, border_fill, inner_r)
+                        end
+                    else
+                        if reverse then
+                            bb:paintRoundedRect(inner_x + inner_w - fill_len, inner_y, fill_len, inner_h, border_fill, inner_r)
+                        else
+                            bb:paintRoundedRect(inner_x, inner_y, fill_len, inner_h, border_fill, inner_r)
+                        end
+                    end
+                end
+            end
+        else
+            local padding = math.max(1, math.floor(thickness * 0.1))
+            h_inset = border + padding
+            v_inset = border + padding
+        end
         local inner_ox = ox + h_inset
         local inner_oy = oy + v_inset
         local inner_len = length - 2 * h_inset
         local inner_thick = thickness - 2 * v_inset
-        if inner_len > 0 and inner_thick > 0 then
+        if inner_len > 0 and inner_thick > 0 and radius == 0 then
+            -- Bordered (non-rounded): rectangular fill
             local fill_len = math.floor(inner_len * fraction)
-            if radius > 0 then
-                -- Rounded: fill already painted as background, erase unfilled
-                local unfilled = inner_len - fill_len
-                if unfilled > 0 then
-                    if reverse then
-                        pr(inner_ox, inner_oy, unfilled, inner_thick, border_bg)
-                    else
-                        pr(inner_ox + fill_len, inner_oy, unfilled, inner_thick, border_bg)
-                    end
-                end
-            else
-                -- Bordered: paint fill on white background
-                if fill_len > 0 then
-                    if reverse then
-                        pr(inner_ox + inner_len - fill_len, inner_oy, fill_len, inner_thick, border_fill)
-                    else
-                        pr(inner_ox, inner_oy, fill_len, inner_thick, border_fill)
-                    end
+            if fill_len > 0 then
+                if reverse then
+                    pr(inner_ox + inner_len - fill_len, inner_oy, fill_len, inner_thick, border_fill)
+                else
+                    pr(inner_ox, inner_oy, fill_len, inner_thick, border_fill)
                 end
             end
         end
@@ -950,15 +1006,19 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
                 if reverse then tick_frac = 1 - tick_frac end
                 local tick_pos = math.floor(inner_len * tick_frac)
                 if tick_pos > 0 and tick_pos < inner_len then
-                    local base_tick = custom_tick or Blitbuffer.COLOR_BLACK
-                    local tick_color
-                    if invert_read_ticks ~= false then
-                        local in_fill = tick_pos >= fill_start and tick_pos < fill_start + fill_len
-                        tick_color = in_fill and border_bg or base_tick
-                    else
-                        tick_color = base_tick
+                    local base_tick = resolveColor(custom_tick, Blitbuffer.COLOR_BLACK)
+                    if base_tick then
+                        local tick_color
+                        if invert_read_ticks ~= false then
+                            local in_fill = tick_pos >= fill_start and tick_pos < fill_start + fill_len
+                            tick_color = in_fill and border_bg or base_tick
+                        else
+                            tick_color = base_tick
+                        end
+                        local th = math.max(1, math.floor(inner_thick * tick_height_pct / 100))
+                        local t_oy = inner_oy + math.floor((inner_thick - th) / 2)
+                        pr(inner_ox + tick_pos, t_oy, tick_w, th, tick_color)
                     end
-                    pr(inner_ox + tick_pos, inner_oy, tick_w, inner_thick, tick_color)
                 end
             end
         end

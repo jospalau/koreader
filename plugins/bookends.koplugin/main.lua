@@ -1,20 +1,55 @@
--- i18n must be installed before any module captures require("gettext")
-require("i18n").install()
-
+local ConfirmBox = require("ui/widget/confirmbox")
 local Device = require("device")
 local Font = require("ui/font")
+local InfoMessage = require("ui/widget/infomessage")
+local InputDialog = require("ui/widget/inputdialog")
+local OverlayWidget = require("overlay_widget")
+local Tokens = require("tokens")
 local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
-local _ = require("gettext")
-local T = require("ffi/util").template
-local Screen = Device.screen
-local Tokens = require("tokens")
-local OverlayWidget = require("overlay_widget")
-local InputDialog = require("ui/widget/inputdialog")
-local SpinWidget = require("ui/widget/spinwidget")
-local InfoMessage = require("ui/widget/infomessage")
-local ConfirmBox = require("ui/widget/confirmbox")
 local util = require("util")
+local _ = require("i18n").gettext
+local Screen = Device.screen
+local T = require("ffi/util").template
+
+--- Show an error on-screen and log it, instead of crashing.
+local _error_dialog_shown = false
+local function bookends_error(context, err)
+    local tb = debug.traceback(tostring(err), 2)
+    local msg = "Bookends error in " .. context .. ":\n" .. tb
+    -- Log to stderr (appears in crash.log on next launch)
+    io.stderr:write(msg .. "\n")
+    -- Show only one error dialog at a time
+    if _error_dialog_shown then return end
+    _error_dialog_shown = true
+    UIManager:scheduleIn(0, function()
+        UIManager:show(ConfirmBox:new{
+            text = msg,
+            icon = "notice-warning",
+            ok_text = _("Restart"),
+            cancel_text = _("Dismiss"),
+            ok_callback = function()
+                UIManager:restartKOReader()
+            end,
+            cancel_callback = function()
+                _error_dialog_shown = false
+            end,
+            other_buttons_first = true,
+        })
+    end)
+end
+
+--- Wrap a function with error handling; on error show message instead of crash.
+local function safe(context, fn)
+    return function(...)
+        local ok, result = xpcall(fn, debug.traceback, ...)
+        if not ok then
+            bookends_error(context, result)
+            return true  -- still consume the event to prevent propagation
+        end
+        return result
+    end
+end
 
 --- Remove an index from a sparse table, shifting higher indices down.
 -- Unlike table.remove, this works correctly when the table has gaps.
@@ -66,25 +101,47 @@ Bookends.POSITIONS = {
 }
 
 function Bookends:init()
+    -- Install custom icons (chevron.down) into KOReader's user icons dir
+    local DataStorage = require("datastorage")
+    local lfs = require("libs/libkoreader-lfs")
+    local icons_dst = DataStorage:getDataDir() .. "/icons"
+    if lfs.attributes(icons_dst, "mode") ~= "directory" then
+        lfs.mkdir(icons_dst)
+    end
+    local plugin_icons = self.path .. "/icons"
+    if lfs.attributes(plugin_icons, "mode") == "directory" then
+        for f in lfs.dir(plugin_icons) do
+            if f:match("%.svg$") then
+                local src = plugin_icons .. "/" .. f
+                local dst = icons_dst .. "/" .. f
+                if lfs.attributes(dst, "mode") ~= "file" then
+                    local fin = io.open(src, "r")
+                    if fin then
+                        local fout = io.open(dst, "w")
+                        if fout then
+                            fout:write(fin:read("*a"))
+                            fout:close()
+                        end
+                        fin:close()
+                    end
+                end
+            end
+        end
+    end
+
     self:openSettings()
     self:loadSettings()
     self.ui.menu:registerToMainMenu(self)
     self.ui.view:registerViewModule("bookends", self)
     self.session_elapsed = 0
     self.session_resume_time = os.time()
-    self.session_start_page = nil -- raw page, set on first onPageUpdate
-    self.session_max_page = nil   -- highest raw page reached
+    self.session_start_page = nil -- set on first onPageUpdate (stable or raw per setting)
+    self.session_max_page = nil   -- highest page reached (stable or raw per setting)
     self.dirty = true
     self.position_cache = {}
 
-    -- Preset system
-    local Presets = require("ui/presets")
-    self.preset_obj = {
-        presets = self.settings:readSetting("presets", {}),
-        dispatcher_name = "load_bookends_preset",
-        buildPreset = function() return self:buildPreset() end,
-        loadPreset = function(preset) self:loadPreset(preset) end,
-    }
+    -- Migrate embedded presets to individual files (one-time)
+    self:migratePresetsToFiles()
 
     -- Register gesture/dispatcher actions
     self:onDispatcherRegisterActions()
@@ -129,25 +186,26 @@ function Bookends:onSetBookends(new_state)
 end
 
 function Bookends:onCycleBookendsPreset()
-    local presets = self.preset_obj.presets
-    local names = {}
-    for name in pairs(presets) do
-        table.insert(names, name)
-    end
-    if #names == 0 then return true end
-    table.sort(names)
+    local presets = self:readPresetFiles()
+    if #presets == 0 then return true end
+
     local idx = 1
     local last = self.settings:readSetting("last_cycled_preset")
     if last then
-        for i, name in ipairs(names) do
-            if name == last then
-                idx = (i % #names) + 1
+        for i, entry in ipairs(presets) do
+            if entry.name == last then
+                idx = (i % #presets) + 1
                 break
             end
         end
     end
-    self.settings:saveSetting("last_cycled_preset", names[idx])
-    self:loadPreset(presets[names[idx]])
+
+    self.settings:saveSetting("last_cycled_preset", presets[idx].name)
+    local ok, err = pcall(self.loadPreset, self, presets[idx].preset)
+    if not ok then
+        local Notification = require("ui/widget/notification")
+        Notification:notify(T(_("Preset error: %1"), tostring(err)))
+    end
     self:markDirty()
     return true
 end
@@ -187,7 +245,6 @@ end
 function Bookends:loadSettings()
     local footer_settings = self.ui.view.footer.settings
     self.enabled = self.settings:readSetting("enabled", false)
-
     self.defaults = {
         font_face = self.settings:readSetting("font_face", Font.fontmap["ffont"]),
         font_size = self.settings:readSetting("font_size", footer_settings.text_font_size),
@@ -253,10 +310,15 @@ function Bookends:buildPreset()
         defaults = util.tableDeepCopy(self.defaults),
         positions = {},
     }
+    -- Exclude default font so presets adapt to the user's installed font
+    preset.defaults.font_face = nil
     for _, pos in ipairs(self.POSITIONS) do
         preset.positions[pos.key] = util.tableDeepCopy(self.positions[pos.key])
     end
     preset.progress_bars = util.tableDeepCopy(self.progress_bars)
+    preset.bar_colors = self.settings:readSetting("bar_colors")
+    preset.tick_width_multiplier = self.settings:readSetting("tick_width_multiplier")
+    preset.tick_height_pct = self.settings:readSetting("tick_height_pct")
     return preset
 end
 
@@ -271,6 +333,8 @@ function Bookends:loadPreset(preset)
         -- Ignore old v_offset/h_offset keys from pre-v2 presets
         pd.v_offset = nil
         pd.h_offset = nil
+        -- Never override the user's default font from a preset
+        pd.font_face = nil
         -- Reset margins before applying preset values
         self.defaults.margin_top = 10
         self.defaults.margin_bottom = 25
@@ -298,24 +362,291 @@ function Bookends:loadPreset(preset)
             end
         end
     end
+    local bar_defaults = {
+        enabled = false, type = "book", style = "solid", height = 20,
+        v_anchor = "bottom", margin_v = 0, margin_left = 0, margin_right = 0,
+        chapter_ticks = "off",
+    }
     if preset.progress_bars then
         self.progress_bars = util.tableDeepCopy(preset.progress_bars)
     else
-        -- Reset progress bars when loading presets that don't include them
-        local bar_defaults = {
-            enabled = false, type = "book", style = "solid", height = 20,
-            v_anchor = "bottom", margin_v = 0, margin_left = 0, margin_right = 0,
-            chapter_ticks = "off",
-        }
         self.progress_bars = {}
-        for i = 1, 4 do
+    end
+    -- Always ensure exactly 4 bar slots exist
+    for i = 1, 4 do
+        if not self.progress_bars[i] then
             self.progress_bars[i] = util.tableDeepCopy(bar_defaults)
         end
     end
     for i = 1, 4 do
         self.settings:saveSetting("progress_bar_" .. i, self.progress_bars[i])
     end
+    if preset.bar_colors then
+        self.settings:saveSetting("bar_colors", preset.bar_colors)
+    else
+        self.settings:delSetting("bar_colors")
+    end
+    if preset.tick_width_multiplier then
+        self.settings:saveSetting("tick_width_multiplier", preset.tick_width_multiplier)
+    else
+        self.settings:delSetting("tick_width_multiplier")
+    end
+    if preset.tick_height_pct then
+        self.settings:saveSetting("tick_height_pct", preset.tick_height_pct)
+    else
+        self.settings:delSetting("tick_height_pct")
+    end
+    self._tick_cache = nil
     self:markDirty()
+end
+
+function Bookends:presetDir()
+    if not self._preset_dir then
+        local DataStorage = require("datastorage")
+        self._preset_dir = DataStorage:getSettingsDir() .. "/bookends_presets"
+    end
+    return self._preset_dir
+end
+
+function Bookends:sanitizePresetFilename(name)
+    local sanitized = name:lower()
+        :gsub("[^%w_]", "_")
+        :gsub("_+", "_")
+        :gsub("^_", "")
+        :gsub("_$", "")
+    if sanitized == "" then sanitized = "preset" end
+    return sanitized .. ".lua"
+end
+
+function Bookends.serializeTable(tbl, indent)
+    indent = indent or ""
+    local next_indent = indent .. "    "
+    local parts = {}
+    table.insert(parts, "{\n")
+
+    local int_keys = {}
+    local str_keys = {}
+    for k in pairs(tbl) do
+        if type(k) == "number" and k == math.floor(k) and k >= 1 then
+            table.insert(int_keys, k)
+        else
+            table.insert(str_keys, tostring(k))
+        end
+    end
+    table.sort(int_keys)
+    table.sort(str_keys)
+
+    local function serializeValue(v)
+        if type(v) == "table" then
+            return Bookends.serializeTable(v, next_indent)
+        elseif type(v) == "string" then
+            return string.format("%q", v)
+        elseif type(v) == "boolean" then
+            return tostring(v)
+        elseif type(v) == "number" then
+            return tostring(v)
+        else
+            return string.format("%q", tostring(v))
+        end
+    end
+
+    -- Detect sparse integer arrays (gaps in keys) — must use explicit [N] = syntax
+    local is_contiguous = #int_keys > 0 and int_keys[#int_keys] == #int_keys
+    for _, k in ipairs(int_keys) do
+        if is_contiguous then
+            table.insert(parts, next_indent .. serializeValue(tbl[k]) .. ",\n")
+        else
+            table.insert(parts, next_indent .. "[" .. k .. "] = " .. serializeValue(tbl[k]) .. ",\n")
+        end
+    end
+    for _, k in ipairs(str_keys) do
+        local key_str
+        if k:match("^[%a_][%w_]*$") then
+            key_str = k
+        else
+            key_str = string.format("[%q]", k)
+        end
+        table.insert(parts, next_indent .. key_str .. " = " .. serializeValue(tbl[k]) .. ",\n")
+    end
+
+    table.insert(parts, indent .. "}")
+    return table.concat(parts)
+end
+
+function Bookends:ensurePresetDir()
+    local lfs = require("libs/libkoreader-lfs")
+    local dir = self:presetDir()
+    if lfs.attributes(dir, "mode") ~= "directory" then
+        lfs.mkdir(dir)
+    end
+    return dir
+end
+
+--- Load a preset .lua file in a sandboxed environment.
+--- The file can only return a plain data table — no access to os, io, require, etc.
+function Bookends.loadPresetFile(path)
+    local fn, err = loadfile(path)
+    if not fn then return nil, "parse error: " .. tostring(err) end
+
+    -- Sandbox: empty environment — only basic value types and table constructors work
+    setfenv(fn, {})
+
+    local ok, result = pcall(fn)
+    if not ok then return nil, "runtime error: " .. tostring(result) end
+    if type(result) ~= "table" then return nil, "expected table, got " .. type(result) end
+    return result
+end
+
+--- Validate that a preset table has the expected structure.
+--- Returns the (possibly cleaned) table, or nil + error string.
+function Bookends.validatePreset(data)
+    -- Allow only known top-level keys (ignore unknown ones silently for forward compat)
+    local EXPECTED_TYPES = {
+        name = "string",
+        enabled = "boolean",
+        defaults = "table",
+        positions = "table",
+        progress_bars = "table",
+        bar_colors = "table",
+        tick_width_multiplier = "number",
+        tick_height_pct = "number",
+    }
+
+    for key, val in pairs(data) do
+        local expected = EXPECTED_TYPES[key]
+        if expected and type(val) ~= expected then
+            return nil, "field '" .. key .. "' should be " .. expected .. ", got " .. type(val)
+        end
+    end
+
+    -- Validate positions keys if present
+    if data.positions then
+        local VALID_POS = { tl=true, tc=true, tr=true, bl=true, bc=true, br=true }
+        for key, val in pairs(data.positions) do
+            if not VALID_POS[key] then
+                return nil, "unknown position key: " .. tostring(key)
+            end
+            if type(val) ~= "table" then
+                return nil, "position '" .. key .. "' should be table, got " .. type(val)
+            end
+            -- Each position must have a lines array
+            if val.lines and type(val.lines) ~= "table" then
+                return nil, "position '" .. key .. "'.lines should be table"
+            end
+        end
+    end
+
+    return data
+end
+
+function Bookends:readPresetFiles()
+    local lfs = require("libs/libkoreader-lfs")
+    local logger = require("logger")
+    local dir = self:presetDir()
+    local presets = {}
+
+    if lfs.attributes(dir, "mode") ~= "directory" then
+        return presets
+    end
+
+    for f in lfs.dir(dir) do
+        if f:match("%.lua$") then
+            local path = dir .. "/" .. f
+            local data, err = Bookends.loadPresetFile(path)
+            if not data then
+                logger.warn("bookends: skipping preset", f, "—", err)
+            else
+                data, err = Bookends.validatePreset(data)
+                if not data then
+                    logger.warn("bookends: invalid preset", f, "—", err)
+                else
+                    local name = data.name or f:gsub("%.lua$", ""):gsub("_", " ")
+                    table.insert(presets, {
+                        name = name,
+                        filename = f,
+                        preset = data,
+                    })
+                end
+            end
+        end
+    end
+
+    table.sort(presets, function(a, b) return a.name < b.name end)
+    return presets
+end
+
+function Bookends:writePresetFile(name, preset_data)
+    local dir = self:ensurePresetDir()
+    local lfs = require("libs/libkoreader-lfs")
+
+    preset_data.name = name
+
+    local base = self:sanitizePresetFilename(name)
+    local filename = base
+    local counter = 2
+    while lfs.attributes(dir .. "/" .. filename, "mode") == "file" do
+        filename = base:gsub("%.lua$", "_" .. counter .. ".lua")
+        counter = counter + 1
+    end
+
+    local path = dir .. "/" .. filename
+    local fout = io.open(path, "w")
+    if fout then
+        fout:write("-- Bookends preset: " .. name .. "\n")
+        fout:write("return " .. Bookends.serializeTable(preset_data) .. "\n")
+        fout:close()
+    end
+    return filename
+end
+
+function Bookends:deletePresetFile(filename)
+    local path = self:presetDir() .. "/" .. filename
+    os.remove(path)
+end
+
+function Bookends:renamePresetFile(old_filename, new_name)
+    local dir = self:presetDir()
+    local old_path = dir .. "/" .. old_filename
+
+    local data = Bookends.loadPresetFile(old_path)
+    if not data then return nil end
+
+    local new_filename = self:writePresetFile(new_name, data)
+
+    if new_filename ~= old_filename then
+        os.remove(old_path)
+    end
+
+    return new_filename
+end
+
+function Bookends:updatePresetFile(filename, name)
+    local dir = self:presetDir()
+    local path = dir .. "/" .. filename
+    local preset_data = self:buildPreset()
+    preset_data.name = name
+
+    local fout = io.open(path, "w")
+    if fout then
+        fout:write("-- Bookends preset: " .. name .. "\n")
+        fout:write("return " .. Bookends.serializeTable(preset_data) .. "\n")
+        fout:close()
+    end
+end
+
+function Bookends:migratePresetsToFiles()
+    local embedded = self.settings:readSetting("presets")
+    if not embedded or not next(embedded) then return end
+
+    self:ensurePresetDir()
+
+    for name, preset_data in pairs(embedded) do
+        self:writePresetFile(name, preset_data)
+    end
+
+    self.settings:delSetting("presets")
+    self.settings:delSetting("last_cycled_preset")
+    self.settings:flush()
 end
 
 function Bookends:savePositionSetting(key)
@@ -342,10 +673,24 @@ function Bookends:isPositionActive(key)
     return self.enabled and #self.positions[key].lines > 0 and not self.positions[key].disabled
 end
 
-function Bookends:markDirty()
+function Bookends:markDirty(refresh_mode)
     self.dirty = true
     self._tick_cache = nil
-    UIManager:setDirty(self.ui, "ui")
+    if not self._error_disabled then
+        self.enabled = self.settings:isTrue("enabled")
+    end
+    -- Debounce: coalesce multiple markDirty calls within the same tick.
+    -- Skip if a KOReader paint cycle already consumed the dirty flag.
+    if not self._repaint_scheduled then
+        self._repaint_scheduled = true
+        local mode = refresh_mode or "ui"
+        UIManager:nextTick(function()
+            self._repaint_scheduled = false
+            if self.dirty then
+                UIManager:setDirty(self.ui, mode)
+            end
+        end)
+    end
 end
 
 --- Compute chapter tick fractions for book progress bars (cached per dirty cycle).
@@ -359,7 +704,8 @@ function Bookends:_computeTickCache()
     local ticks = {}
     -- Use page-based fractions (matches KOReader's footer progress bar)
     for depth, pages in ipairs(toc_ticks) do
-        local tick_w = math.max(1, (max_depth - depth + 1) * 2 - 1)
+        local tick_m = self.settings:readSetting("tick_width_multiplier", 2)
+        local tick_w = math.max(1, (max_depth - depth + 1) * tick_m - 1)
         for _, page in ipairs(pages) do
             if page > 1 then
                 local tick_frac = page / raw_total
@@ -378,7 +724,7 @@ Bookends.STYLE_LABELS = {
     regular = _("Regular"),
     bold = _("Bold"),
     italic = _("Italic"),
-    bolditalic = _("Bold Italic"),
+    bolditalic = _("Bold italic"),
 }
 
 function Bookends:resolveLineConfig(face_name, font_size, style)
@@ -406,7 +752,7 @@ end
 
 -- Event handlers
 function Bookends:onPageUpdate()
-    local current = self.ui.view.state.page
+    local current = self:getSessionPageNumber()
     if current then
         if not self.session_start_page then
             self.session_start_page = current
@@ -415,16 +761,40 @@ function Bookends:onPageUpdate()
             self.session_max_page = current
         end
     end
-    self:markDirty()
+    -- Re-enable after paint error disable
+    if self._error_disabled then
+        self._error_disabled = false
+        self.enabled = self.settings:isTrue("enabled")
+    end
+    -- Mark dirty but don't request a repaint — KOReader's own page-turn
+    -- paint cycle will call our paintTo, which picks up the dirty flag.
+    -- Calling setDirty here would cause a second e-ink refresh (visible flicker).
+    self.dirty = true
+    self._tick_cache = nil
 end
-function Bookends:onPosUpdate() self:markDirty() end
-function Bookends:onReaderFooterVisibilityChange() self:markDirty() end
+function Bookends:onPosUpdate()
+    self.dirty = true
+    self._tick_cache = nil
+end
+function Bookends:onReaderFooterVisibilityChange()
+    -- Just set dirty; KOReader's own paint cycle for the visibility change
+    -- will call our paintTo.  Avoid markDirty() which requests a full-screen
+    -- "ui" e-ink refresh that causes a visible flash in dark mode.
+    self.dirty = true
+    self._tick_cache = nil
+end
 function Bookends:onSetDimensions() self:markDirty() end
 
--- Repaint after events that cause the footer to refresh over us
+-- Repaint after events that cause the stock footer to refresh over us.
+-- Only needed when the stock footer is actually visible.
+-- Like onReaderFooterVisibilityChange, we avoid markDirty() (which triggers
+-- a full-screen "ui" e-ink refresh) and instead just set the dirty flag so
+-- the event's own paint cycle picks up our changes without a second flash.
 function Bookends:delayedRepaint()
+    if not self.ui.view.footer_visible then return end
     UIManager:nextTick(function()
-        self:markDirty()
+        self.dirty = true
+        self._tick_cache = nil
     end)
 end
 Bookends.onFrontlightStateChanged = Bookends.delayedRepaint
@@ -433,6 +803,20 @@ Bookends.onNotCharging            = Bookends.delayedRepaint
 Bookends.onNetworkConnected       = Bookends.delayedRepaint
 Bookends.onNetworkDisconnected    = Bookends.delayedRepaint
 Bookends.onAnnotationsModified = Bookends.delayedRepaint
+function Bookends:getSessionPageNumber()
+    local pageno = self.ui.view.state.page
+    if not pageno then return nil end
+    -- Use stable page numbers when available (pagemap index or flow-aware)
+    if self.ui.pagemap and self.ui.pagemap:wantsPageLabels() then
+        local _label, idx, _count = self.ui.pagemap:getCurrentPageLabel(true)
+        if idx then return idx end
+    end
+    local doc = self.ui.document
+    if doc and doc:hasHiddenFlows() then
+        return doc:getPageNumberInFlow(pageno)
+    end
+    return pageno
+end
 function Bookends:getSessionElapsed()
     local elapsed = self.session_elapsed or 0
     if self.session_resume_time then
@@ -450,13 +834,38 @@ function Bookends:onResume()
     self.session_start_page = self.session_max_page
     self:markDirty()
     -- Repaint after the footer's async resume refresh paints over us
-    UIManager:scheduleIn(1.5, function()
-        self:markDirty()
-    end)
+    -- (only needed when the stock footer is visible)
+    if self.ui.view.footer_visible then
+        UIManager:scheduleIn(1.5, function()
+            self:markDirty()
+        end)
+    end
 end
 
 function Bookends:paintTo(bb, x, y)
     if not self.enabled then return end
+    local ok, err = xpcall(self._paintToInner, debug.traceback, self, bb, x, y)
+    if not ok then
+        self._paint_error_count = (self._paint_error_count or 0) + 1
+        if self._paint_error_count >= 3 then
+            -- Disable rendering to break error loop; re-enabled on next page turn
+            self.enabled = false
+            self._error_disabled = true
+            self._paint_error_count = 0
+            bookends_error("paintTo (disabled until page turn)", err)
+        else
+            local now = os.time()
+            if not self._last_paint_error or (now - self._last_paint_error) >= 10 then
+                self._last_paint_error = now
+                bookends_error("paintTo", err)
+            end
+        end
+    else
+        self._paint_error_count = 0
+    end
+end
+
+function Bookends:_paintToInner(bb, x, y)
 
     local screen_size = Screen:getSize()
     local screen_w = screen_size.w
@@ -467,18 +876,28 @@ function Bookends:paintTo(bb, x, y)
     if self.dirty then
         self._tick_cache = nil
     end
+    local function resolveColors(bc)
+        local Blitbuffer = require("ffi/blitbuffer")
+        local function colorOrTransparent(v)
+            if not v then return nil end
+            if v >= 0xFF then return false end
+            return Blitbuffer.Color8(v)
+        end
+        return {
+            fill = colorOrTransparent(bc.fill),
+            bg = colorOrTransparent(bc.bg),
+            track = colorOrTransparent(bc.track),
+            tick = colorOrTransparent(bc.tick),
+            invert_read_ticks = bc.invert_read_ticks,
+            tick_height_pct = bc.tick_height_pct,
+        }
+    end
     -- Progress bar colors from settings
     local bar_colors
-    local bc = self.settings:readSetting("bar_colors")
-    if bc then
-        local Blitbuffer = require("ffi/blitbuffer")
-        bar_colors = {
-            fill = bc.fill and Blitbuffer.Color8(bc.fill) or nil,
-            bg = bc.bg and Blitbuffer.Color8(bc.bg) or nil,
-            track = bc.track and Blitbuffer.Color8(bc.track) or nil,
-            tick = bc.tick and Blitbuffer.Color8(bc.tick) or nil,
-            invert_read_ticks = bc.invert_read_ticks,
-        }
+    local bc = self.settings:readSetting("bar_colors") or {}
+    bc.tick_height_pct = bc.tick_height_pct or self.settings:readSetting("tick_height_pct")
+    if bc.fill or bc.bg or bc.track or bc.tick or bc.invert_read_ticks ~= nil or bc.tick_height_pct then
+        bar_colors = resolveColors(bc)
     end
     for bar_idx, bar_cfg in ipairs(self.progress_bars or {}) do
         if bar_cfg.enabled then
@@ -552,6 +971,18 @@ function Bookends:paintTo(bb, x, y)
                             end
                         end
                     end
+                    -- Per-bar tick width override: recompute widths if this bar has a custom multiplier
+                    local per_bar_tw = bar_cfg.colors and bar_cfg.colors.tick_width_multiplier
+                    if per_bar_tw and ticks and #ticks > 0 then
+                        local max_depth = self.ui.toc and self.ui.toc:getMaxDepth() or 1
+                        local remapped = {}
+                        for _, tick in ipairs(ticks) do
+                            local d = type(tick) == "table" and tick[3] or 1
+                            local tw = math.max(1, (max_depth - d + 1) * per_bar_tw - 1)
+                            table.insert(remapped, { tick[1], tw, d })
+                        end
+                        ticks = remapped
+                    end
                 elseif bar_cfg.type == "chapter" then
                     if is_cre and doc.getCurrentPos and self.ui.toc then
                         local cur_pos = doc:getCurrentPos()
@@ -584,11 +1015,12 @@ function Bookends:paintTo(bb, x, y)
                     end
                 end
 
-                local direction = bar_cfg.direction or "ltr"
+                local direction = bar_cfg.direction or (vertical and "ttb" or "ltr")
                 local paint_vertical = direction == "ttb" or direction == "btt"
                 local paint_reverse = direction == "rtl" or direction == "btt"
+                local colors = bar_cfg.colors and resolveColors(bar_cfg.colors) or bar_colors
                 OverlayWidget.paintProgressBar(bb, bar_x, bar_y, bar_w, bar_h, pct, ticks,
-                    bar_cfg.style or "solid", paint_vertical and "vertical" or nil, paint_reverse, bar_colors)
+                    bar_cfg.style or "solid", paint_vertical and "vertical" or nil, paint_reverse, colors)
             end
         end
     end
@@ -621,7 +1053,8 @@ function Bookends:paintTo(bb, x, y)
                 local final_indices = {}
                 local position_bars = {}
                 for j, line in ipairs(visible_lines) do
-                    local result, is_empty, line_bar = Tokens.expand(line, self.ui, session_elapsed, session_pages)
+                    local result, is_empty, line_bar = Tokens.expand(line, self.ui, session_elapsed, session_pages,
+                        nil, self.settings:readSetting("tick_width_multiplier", 2))
                     if not is_empty then
                         table.insert(expanded_lines, result)
                         table.insert(final_indices, visible_indices[j])
@@ -947,7 +1380,9 @@ function Bookends:addToMainMenu(menu_items)
     menu_items.bookends = {
         text = _("Bookends"),
         sorting_hint = "typeset",
-        sub_item_table = self:buildMainMenu(),
+        sub_item_table_func = function()
+            return self:buildMainMenu()
+        end,
     }
 end
 
@@ -978,7 +1413,8 @@ function Bookends:buildMainMenu()
                 local session_pages = math.max(0, (self.session_max_page or 0) - (self.session_start_page or 0))
                 local previews = {}
                 for _, line in ipairs(lines) do
-                    table.insert(previews, (Tokens.expandPreview(line, self.ui, session_elapsed, session_pages)))
+                    table.insert(previews, (Tokens.expandPreview(line, self.ui, session_elapsed, session_pages,
+                        self.settings:readSetting("tick_width_multiplier", 2))))
                 end
                 local preview = table.concat(previews, " \xC2\xB7 ")
                 preview = preview:gsub("%s+", " "):match("^%s*(.-)%s*$")
@@ -1035,9 +1471,24 @@ function Bookends:buildMainMenu()
                         return _("Default font") .. " (" .. name .. ")"
                     end,
                     callback = function()
+                        -- Remember which positions are using the current default
+                        local inheriting = {}
+                        for _, p in ipairs(self.POSITIONS) do
+                            local ps = self.positions[p.key]
+                            if ps.font_face == nil or ps.font_face == self.defaults.font_face then
+                                inheriting[p.key] = true
+                            end
+                        end
                         self:showFontPicker(self.defaults.font_face, function(face)
                             self.defaults.font_face = face
                             self.settings:saveSetting("font_face", face)
+                            -- Cascade: clear per-position font_face for positions that were inheriting
+                            for _, p in ipairs(self.POSITIONS) do
+                                if inheriting[p.key] then
+                                    self.positions[p.key].font_face = nil
+                                    self:savePositionSetting(p.key)
+                                end
+                            end
                             self:markDirty()
                         end, Font.fontmap["ffont"])
                     end,
@@ -1046,8 +1497,16 @@ function Bookends:buildMainMenu()
                     text_func = function()
                         return _("Font scale") .. " (" .. self.defaults.font_scale .. "%)"
                     end,
-                    callback = function()
-                        self:showFontScaleDialog()
+                    keep_menu_open = true,
+                    callback = function(touchmenu_instance)
+                        self:showNudgeDialog(_("Font scale"), self.defaults.font_scale, 25, 300, 100, "%",
+                            function(val)
+                                self.defaults.font_scale = val
+                                self:markDirty()
+                            end,
+                            function()
+                                self.settings:saveSetting("font_scale", self.defaults.font_scale)
+                            end, nil, nil, touchmenu_instance)
                     end,
                 },
                 {
@@ -1055,8 +1514,9 @@ function Bookends:buildMainMenu()
                         local m = self.defaults
                         return _("Adjust margins") .. " (" .. m.margin_top .. "/" .. m.margin_bottom .. "/" .. m.margin_left .. "/" .. m.margin_right .. ")"
                     end,
-                    callback = function()
-                        self:showMarginAdjuster()
+                    keep_menu_open = true,
+                    callback = function(touchmenu_instance)
+                        self:showMarginAdjuster(touchmenu_instance)
                     end,
                 },
                 {
@@ -1065,13 +1525,13 @@ function Bookends:buildMainMenu()
                     end,
                     keep_menu_open = true,
                     callback = function(touchmenu_instance)
-                        self:showSpinner(_("Truncation gap between regions (px)"), self.defaults.overlap_gap, 0, 999, 50,
+                        self:showNudgeDialog(_("Truncation gap"), self.defaults.overlap_gap, 0, 999, 50, "px",
                             function(val)
                                 self.defaults.overlap_gap = val
                                 self.settings:saveSetting("overlap_gap", val)
                                 self:markDirty()
-                                if touchmenu_instance then touchmenu_instance:updateItems() end
-                            end)
+                            end,
+                            nil, nil, nil, touchmenu_instance)
                     end,
                 },
                 {
@@ -1089,14 +1549,37 @@ function Bookends:buildMainMenu()
                         self.settings:saveSetting("truncation_priority", self.defaults.truncation_priority)
                         self:markDirty()
                     end,
-                    separator = true,
                 },
                 {
-                    text = _("Progress bar colors"),
+                    text = _("Progress bar colours and tick marks"),
                     sub_item_table_func = function()
                         return self:buildBarColorsMenu()
                     end,
                     separator = true,
+                },
+                {
+                    text_func = function()
+                        if self.ui.view.footer_visible then
+                            return _("Disable stock status bar") .. " (" .. _("recommended") .. ")"
+                        end
+                        return _("Disable stock status bar")
+                    end,
+                    keep_menu_open = true,
+                    help_text = _("Hides KOReader's built-in status bar. This simplifies the render pipeline and can reduce e-ink flicker on some devices. All status bar features are available as Bookends tokens."),
+                    checked_func = function()
+                        return not self.ui.view.footer_visible
+                    end,
+                    callback = function()
+                        local footer = self.ui.view.footer
+                        if self.ui.view.footer_visible then
+                            footer:applyFooterMode(footer.mode_list.off)
+                            G_reader_settings:saveSetting("reader_footer_mode", footer.mode_list.off)
+                        else
+                            footer:applyFooterMode(footer.mode_list.page_progress)
+                            G_reader_settings:saveSetting("reader_footer_mode", footer.mode_list.page_progress)
+                        end
+                        self:markDirty()
+                    end,
                 },
                 {
                     text = _("Check for updates"),
@@ -1184,10 +1667,10 @@ function Bookends:buildSingleBarMenu(bar_idx, bar_cfg)
                     bar_cfg.show_chapter_ticks = nil
                 end
                 local labels = {
-                    off = _("Chapter ticks: Off"),
-                    all = _("Chapter ticks: All levels"),
-                    level1 = _("Chapter ticks: Top level"),
-                    level2 = _("Chapter ticks: Top 2 levels"),
+                    off = _("Chapter ticks: off"),
+                    all = _("Chapter ticks: all levels"),
+                    level1 = _("Chapter ticks: top level"),
+                    level2 = _("Chapter ticks: top 2 levels"),
                 }
                 return labels[bar_cfg.chapter_ticks or "off"]
             end,
@@ -1258,24 +1741,42 @@ function Bookends:buildSingleBarMenu(bar_idx, bar_cfg)
         {
             text_func = function()
                 local labels = {
-                    ltr = _("Fill: Left to right"),
-                    rtl = _("Fill: Right to left"),
-                    ttb = _("Fill: Top to bottom"),
-                    btt = _("Fill: Bottom to top"),
+                    ltr = _("Fill: left to right"),
+                    rtl = _("Fill: right to left"),
+                    ttb = _("Fill: top to bottom"),
+                    btt = _("Fill: bottom to top"),
                 }
-                return labels[bar_cfg.direction or "ltr"]
+                local is_side = bar_cfg.v_anchor == "left" or bar_cfg.v_anchor == "right"
+                local default_dir = is_side and "ttb" or "ltr"
+                return labels[bar_cfg.direction or default_dir]
             end,
             enabled_func = isEnabled,
             keep_menu_open = true,
             callback = function(touchmenu_instance)
-                local cycle = { "ltr", "rtl", "ttb", "btt" }
-                local cur = bar_cfg.direction or "ltr"
+                local is_side = bar_cfg.v_anchor == "left" or bar_cfg.v_anchor == "right"
+                local is_metro = (bar_cfg.style or "solid") == "metro"
+                local cycle
+                if is_metro and is_side then
+                    cycle = { "ttb", "btt" }
+                elseif is_metro then
+                    cycle = { "ltr", "rtl" }
+                else
+                    cycle = { "ltr", "rtl", "ttb", "btt" }
+                end
+                local default_dir = is_side and "ttb" or "ltr"
+                local cur = bar_cfg.direction or default_dir
+                local found = false
                 for idx, v in ipairs(cycle) do
                     if v == cur then
                         local next_dir = cycle[(idx % #cycle) + 1]
-                        bar_cfg.direction = next_dir ~= "ltr" and next_dir or nil
+                        bar_cfg.direction = next_dir ~= default_dir and next_dir or nil
+                        found = true
                         break
                     end
+                end
+                if not found then
+                    -- Stale direction not in allowed cycle — snap to default
+                    bar_cfg.direction = nil
                 end
                 saveBar()
                 if touchmenu_instance then touchmenu_instance:updateItems() end
@@ -1288,12 +1789,12 @@ function Bookends:buildSingleBarMenu(bar_idx, bar_cfg)
             enabled_func = isEnabled,
             keep_menu_open = true,
             callback = function(touchmenu_instance)
-                self:showSpinner(_("Bar thickness (px)"), bar_cfg.height or 20, 1, 60, 20,
+                self:showNudgeDialog(_("Bar thickness"), bar_cfg.height or 20, 1, 60, 20, "px",
                     function(val)
                         bar_cfg.height = val
                         saveBar()
-                        if touchmenu_instance then touchmenu_instance:updateItems() end
-                    end)
+                    end,
+                    nil, nil, nil, touchmenu_instance)
             end,
         },
         {
@@ -1304,65 +1805,128 @@ function Bookends:buildSingleBarMenu(bar_idx, bar_cfg)
                     (bar_cfg.margin_right or 0) .. ")"
             end,
             enabled_func = isEnabled,
-            callback = function()
-                self:showBarMarginAdjuster(bar_cfg, bar_idx)
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                self:showBarMarginAdjuster(bar_cfg, bar_idx, touchmenu_instance)
             end,
         },
-    }
-end
-
-function Bookends:showBarNudgeDialog(title, initial_value, on_change)
-    local value = initial_value
-    local dialog
-
-    local function update(delta)
-        value = math.max(0, value + delta)
-        on_change(value)
-        dialog:reinit()
-    end
-
-    local function setDirect()
-        UIManager:show(SpinWidget:new{
-            value = value,
-            value_min = 0,
-            value_max = 2000,
-            default_value = 0,
-            title_text = title .. " (px)",
-            ok_text = _("Set"),
-            callback = function(spin)
-                value = spin.value
-                on_change(value)
-                dialog:reinit()
+        {
+            text_func = function()
+                if bar_cfg.colors then
+                    return _("Custom colours and tick marks") .. " (\u{2713})"
+                end
+                return _("Custom colours and tick marks")
             end,
-        })
-    end
+            enabled_func = isEnabled,
+            sub_item_table_func = function()
+                local custom_items = {}
 
-    local ButtonDialog = require("ui/widget/buttondialog")
-    dialog = ButtonDialog:new{
-        title = title .. ": " .. value .. "px",
-        buttons = {
-            {
-                { text = "-10", callback = function() update(-10) end },
-                { text = "-1",  callback = function() update(-1) end },
-                { text_func = function() return tostring(value) end, callback = setDirect },
-                { text = "+1",  callback = function() update(1) end },
-                { text = "+10", callback = function() update(10) end },
-            },
-            {
-                { text = _("Reset"), callback = function() value = 0; on_change(0); dialog:reinit() end },
-                {
-                    text = _("Close"),
+                -- Toggle
+                table.insert(custom_items, {
+                    text = _("Use custom colors"),
+                    checked_func = function() return bar_cfg.colors ~= nil end,
                     callback = function()
-                        UIManager:close(dialog)
+                        if bar_cfg.colors then
+                            bar_cfg.colors = nil
+                        else
+                            bar_cfg.colors = {}
+                        end
+                        saveBar()
                     end,
-                },
-            },
+                    separator = true,
+                })
+
+                -- Color items (only functional when custom colors enabled)
+                local bc = bar_cfg.colors or {}
+                local color_items = self:_buildColorItems(bc, function()
+                    bar_cfg.colors = bc
+                    saveBar()
+                end)
+                for _, item in ipairs(color_items) do
+                    local orig_enabled = item.enabled_func
+                    item.enabled_func = function()
+                        if not bar_cfg.colors then return false end
+                        return orig_enabled == nil or orig_enabled()
+                    end
+                    table.insert(custom_items, item)
+                end
+
+                -- Per-bar tick height override
+                table.insert(custom_items, {
+                    text_func = function()
+                        return _("Tick height") .. ": " .. (bc.tick_height_pct or 100) .. "%"
+                    end,
+                    enabled_func = function() return bar_cfg.colors ~= nil end,
+                    keep_menu_open = true,
+                    callback = function(touchmenu_instance)
+                        self:showNudgeDialog(_("Tick height"), bc.tick_height_pct or 100, 1, 400, 100, "%",
+                            function(val)
+                                bc.tick_height_pct = val ~= 100 and val or nil
+                                bar_cfg.colors = bc
+                                saveBar()
+                            end,
+                            nil, nil, nil, touchmenu_instance)
+                    end,
+                    hold_callback = function(touchmenu_instance)
+                        bc.tick_height_pct = nil
+                        bar_cfg.colors = bc
+                        saveBar()
+                        if touchmenu_instance then touchmenu_instance:updateItems() end
+                    end,
+                })
+
+                -- Per-bar tick width override
+                table.insert(custom_items, {
+                    text_func = function()
+                        local m = bc.tick_width_multiplier
+                        if m then
+                            return _("Tick width") .. ": " .. m .. "x"
+                        end
+                        return _("Tick width") .. ": " .. _("default") .. " (" .. self.settings:readSetting("tick_width_multiplier", 2) .. "x)"
+                    end,
+                    enabled_func = function() return bar_cfg.colors ~= nil end,
+                    keep_menu_open = true,
+                    callback = function(touchmenu_instance)
+                        local current = bc.tick_width_multiplier or self.settings:readSetting("tick_width_multiplier", 2)
+                        self:showNudgeDialog(_("Tick width"), current, 1, 5, self.settings:readSetting("tick_width_multiplier", 2), "x",
+                            function(val)
+                                bc.tick_width_multiplier = val
+                                bar_cfg.colors = bc
+                                self._tick_cache = nil
+                                saveBar()
+                            end,
+                            nil, 1, false, touchmenu_instance)
+                    end,
+                    hold_callback = function(touchmenu_instance)
+                        bc.tick_width_multiplier = nil
+                        bar_cfg.colors = bc
+                        self._tick_cache = nil
+                        saveBar()
+                        if touchmenu_instance then touchmenu_instance:updateItems() end
+                    end,
+                })
+
+                -- Reset custom to defaults
+                table.insert(custom_items, {
+                    text = _("Reset custom to defaults"),
+                    enabled_func = function() return bar_cfg.colors ~= nil end,
+                    keep_menu_open = true,
+                    callback = function(touchmenu_instance)
+                        bar_cfg.colors = {}
+                        self._tick_cache = nil
+                        saveBar()
+                        if touchmenu_instance then touchmenu_instance:updateItems() end
+                    end,
+                })
+
+                return custom_items
+            end,
         },
     }
-    UIManager:show(dialog)
 end
 
-function Bookends:showBarMarginAdjuster(bar_cfg, bar_idx)
+function Bookends:showBarMarginAdjuster(bar_cfg, bar_idx, touchmenu_instance)
+    local restoreMenu = self:hideMenu(touchmenu_instance)
     local original = {
         margin_v = bar_cfg.margin_v or 0,
         margin_left = bar_cfg.margin_left or 0,
@@ -1397,7 +1961,16 @@ function Bookends:showBarMarginAdjuster(bar_cfg, bar_idx)
 
     local ButtonDialog = require("ui/widget/buttondialog")
     margin_dialog = ButtonDialog:new{
+        dismissable = false,
         title = _("Adjust margins"),
+        tap_close_callback = function()
+            for k, v in pairs(original) do
+                bar_cfg[k] = v
+            end
+            self.settings:saveSetting("progress_bar_" .. bar_idx, bar_cfg)
+            self:markDirty()
+            restoreMenu()
+        end,
         buttons = {
             makeRow(edge_label, "margin_v"),
             makeRow(start_label, "margin_left"),
@@ -1412,10 +1985,11 @@ function Bookends:showBarMarginAdjuster(bar_cfg, bar_idx)
                         self.settings:saveSetting("progress_bar_" .. bar_idx, bar_cfg)
                         self:markDirty()
                         UIManager:close(margin_dialog)
+                        restoreMenu()
                     end,
                 },
                 {
-                    text = _("Reset"),
+                    text = _("Default") .. " 0",
                     callback = function()
                         bar_cfg.margin_v = 0
                         bar_cfg.margin_left = 0
@@ -1426,11 +2000,12 @@ function Bookends:showBarMarginAdjuster(bar_cfg, bar_idx)
                     end,
                 },
                 {
-                    text = _("Save"),
+                    text = _("Apply"),
                     is_enter_default = true,
                     callback = function()
                         self.settings:saveSetting("progress_bar_" .. bar_idx, bar_cfg)
                         UIManager:close(margin_dialog)
+                        restoreMenu()
                     end,
                 },
             },
@@ -1439,37 +2014,105 @@ function Bookends:showBarMarginAdjuster(bar_cfg, bar_idx)
     UIManager:show(margin_dialog)
 end
 
-function Bookends:buildBarColorsMenu()
-    local bc = self.settings:readSetting("bar_colors") or {}
+--- Hide the touch menu so the user can see live changes on the page,
+--- then return a function that re-shows it at the same position.
+function Bookends:hideMenu(touchmenu_instance)
+    if not touchmenu_instance then return function() end end
+    -- The UIManager stack holds show_parent (a CenterContainer), not the TouchMenu itself.
+    local container = touchmenu_instance.show_parent or touchmenu_instance
+    UIManager:close(container, "ui")
+    return function()
+        UIManager:show(container)
+        touchmenu_instance:updateItems()
+    end
+end
 
-    local function saveColors()
-        if not bc.fill and not bc.bg and not bc.track and not bc.tick and bc.invert_read_ticks == nil then
-            self.settings:delSetting("bar_colors")
-        else
-            self.settings:saveSetting("bar_colors", bc)
-        end
-        self:markDirty()
+function Bookends:showNudgeDialog(title, value, min_val, max_val, default_val, unit, on_change, on_close, small_step, large_step, touchmenu_instance)
+    local ButtonDialog = require("ui/widget/buttondialog")
+    local restoreMenu = self:hideMenu(touchmenu_instance)
+    local orig_on_close = on_close
+    on_close = function()
+        restoreMenu()
+        if orig_on_close then orig_on_close() end
+    end
+    local dialog
+    local original_value = value
+    small_step = small_step or 1
+    if large_step == nil then large_step = 10 end
+
+    local function update(delta)
+        value = math.max(min_val, math.min(max_val, value + delta))
+        on_change(value)
+        dialog:reinit()
     end
 
-    local function colorSpinner(title, field, default_pct, touchmenu_instance)
-        UIManager:show(SpinWidget:new{
-            title_text = title,
-            value = bc[field] and math.floor((0xFF - bc[field]) * 100 / 0xFF + 0.5) or default_pct,
-            value_min = 0,
-            value_max = 100,
-            default_value = default_pct,
-            unit = "% " .. _("black"),
-            callback = function(spin)
-                bc[field] = 0xFF - math.floor(spin.value * 0xFF / 100 + 0.5)
+    local nudge_buttons = {}
+    if large_step then
+        table.insert(nudge_buttons, { text = "-" .. large_step, callback = function() update(-large_step) end })
+    end
+    table.insert(nudge_buttons, { text = "-" .. small_step, callback = function() update(-small_step) end })
+    table.insert(nudge_buttons, { text_func = function() return tostring(value) .. unit end, enabled = false })
+    table.insert(nudge_buttons, { text = "+" .. small_step, callback = function() update(small_step) end })
+    if large_step then
+        table.insert(nudge_buttons, { text = "+" .. large_step, callback = function() update(large_step) end })
+    end
+
+    dialog = ButtonDialog:new{
+        dismissable = false,
+        title = title .. ": " .. value .. unit,
+        tap_close_callback = function()
+            -- Revert to original value on tap-outside
+            if value ~= original_value then
+                value = original_value
+                on_change(value)
+            end
+            if on_close then on_close() end
+        end,
+        buttons = {
+            nudge_buttons,
+            {
+                {
+                    text = _("Cancel"),
+                    callback = function()
+                        if value ~= original_value then
+                            value = original_value
+                            on_change(value)
+                        end
+                        UIManager:close(dialog)
+                        if on_close then on_close() end
+                    end,
+                },
+                { text = _("Default") .. " " .. default_val .. unit, callback = function() value = default_val; on_change(value); dialog:reinit() end },
+                {
+                    text = _("Apply"),
+                    is_enter_default = true,
+                    callback = function()
+                        UIManager:close(dialog)
+                        if on_close then on_close() end
+                    end,
+                },
+            },
+        },
+    }
+    UIManager:show(dialog)
+end
+
+function Bookends:_buildColorItems(bc, saveColors)
+    local function colorNudge(title, field, default_pct, touchmenu_instance)
+        local current = bc[field] and math.floor((0xFF - bc[field]) * 100 / 0xFF + 0.5) or default_pct
+        self:showNudgeDialog(title, current, 0, 100, default_pct, "%",
+            function(val)
+                bc[field] = 0xFF - math.floor(val * 0xFF / 100 + 0.5)
                 saveColors()
-                if touchmenu_instance then touchmenu_instance:updateItems() end
             end,
-        })
+            nil, nil, nil, touchmenu_instance)
     end
 
     local function pctLabel(field, default_pct)
         if bc[field] then
-            return math.floor((0xFF - bc[field]) * 100 / 0xFF + 0.5) .. "%"
+            local pct = math.floor((0xFF - bc[field]) * 100 / 0xFF + 0.5)
+            if pct == 0 then return _("transparent") end
+            return pct .. "%"
         end
         return _("default") .. " (" .. default_pct .. "%)"
     end
@@ -1481,7 +2124,7 @@ function Bookends:buildBarColorsMenu()
             end,
             keep_menu_open = true,
             callback = function(touchmenu_instance)
-                colorSpinner(_("Read color (% black)"), "fill", 75, touchmenu_instance)
+                colorNudge(_("Read color (% black)"), "fill", 75, touchmenu_instance)
             end,
             hold_callback = function(touchmenu_instance)
                 bc.fill = nil; saveColors()
@@ -1494,7 +2137,7 @@ function Bookends:buildBarColorsMenu()
             end,
             keep_menu_open = true,
             callback = function(touchmenu_instance)
-                colorSpinner(_("Unread color (% black)"), "bg", 25, touchmenu_instance)
+                colorNudge(_("Unread color (% black)"), "bg", 25, touchmenu_instance)
             end,
             hold_callback = function(touchmenu_instance)
                 bc.bg = nil; saveColors()
@@ -1507,7 +2150,7 @@ function Bookends:buildBarColorsMenu()
             end,
             keep_menu_open = true,
             callback = function(touchmenu_instance)
-                colorSpinner(_("Metro track color (% black)"), "track", 75, touchmenu_instance)
+                colorNudge(_("Metro track color (% black)"), "track", 75, touchmenu_instance)
             end,
             hold_callback = function(touchmenu_instance)
                 bc.track = nil; saveColors()
@@ -1520,7 +2163,7 @@ function Bookends:buildBarColorsMenu()
             end,
             keep_menu_open = true,
             callback = function(touchmenu_instance)
-                colorSpinner(_("Tick color (% black)"), "tick", 100, touchmenu_instance)
+                colorNudge(_("Tick color (% black)"), "tick", 100, touchmenu_instance)
             end,
             hold_callback = function(touchmenu_instance)
                 bc.tick = nil; saveColors()
@@ -1539,17 +2182,89 @@ function Bookends:buildBarColorsMenu()
                 saveColors()
             end,
         },
-        {
-            text = _("Reset all to defaults"),
-            keep_menu_open = true,
-            callback = function(touchmenu_instance)
-                bc = {}
-                self.settings:delSetting("bar_colors")
-                self:markDirty()
-                if touchmenu_instance then touchmenu_instance:updateItems() end
-            end,
-        },
     }
+end
+
+function Bookends:buildBarColorsMenu()
+    local bc = self.settings:readSetting("bar_colors") or {}
+
+    local function saveColors()
+        if not bc.fill and not bc.bg and not bc.track and not bc.tick and bc.invert_read_ticks == nil and not bc.tick_height_pct then
+            self.settings:delSetting("bar_colors")
+        else
+            self.settings:saveSetting("bar_colors", bc)
+        end
+        self:markDirty()
+    end
+
+    local items = self:_buildColorItems(bc, saveColors)
+
+    -- Tick width multiplier
+    table.insert(items, {
+        text_func = function()
+            local m = self.settings:readSetting("tick_width_multiplier", 2)
+            return _("Tick width") .. ": " .. m .. "x"
+        end,
+        keep_menu_open = true,
+        callback = function(touchmenu_instance)
+            self:showNudgeDialog(_("Tick width"), self.settings:readSetting("tick_width_multiplier", 2), 1, 5, 2, "x",
+                function(val)
+                    self.settings:saveSetting("tick_width_multiplier", val)
+                    self._tick_cache = nil
+                    self:markDirty()
+                end,
+                nil, 1, false, touchmenu_instance)
+        end,
+        hold_callback = function(touchmenu_instance)
+            self.settings:delSetting("tick_width_multiplier")
+            self._tick_cache = nil
+            self:markDirty()
+            if touchmenu_instance then touchmenu_instance:updateItems() end
+        end,
+    })
+
+    -- Tick height
+    table.insert(items, {
+        text_func = function()
+            local h = self.settings:readSetting("tick_height_pct", 100)
+            return _("Tick height") .. ": " .. h .. "%"
+        end,
+        keep_menu_open = true,
+        callback = function(touchmenu_instance)
+            self:showNudgeDialog(_("Tick height"), self.settings:readSetting("tick_height_pct", 100), 1, 400, 100, "%",
+                function(val)
+                    if val == 100 then
+                        self.settings:delSetting("tick_height_pct")
+                    else
+                        self.settings:saveSetting("tick_height_pct", val)
+                    end
+                    self:markDirty()
+                end,
+                nil, nil, nil, touchmenu_instance)
+        end,
+        hold_callback = function(touchmenu_instance)
+            self.settings:delSetting("tick_height_pct")
+            self:markDirty()
+            if touchmenu_instance then touchmenu_instance:updateItems() end
+        end,
+    })
+
+    -- Reset all
+    table.insert(items, {
+        text = _("Reset all to defaults"),
+        keep_menu_open = true,
+        callback = function(touchmenu_instance)
+            bc = {}
+            self.settings:delSetting("bar_colors")
+            self.settings:delSetting("tick_width_multiplier")
+            self.settings:delSetting("tick_height_pct")
+            self._tick_cache = nil
+            self:markDirty()
+            if touchmenu_instance then touchmenu_instance:updateItems() end
+        end,
+    })
+
+    return items
 end
 
 function Bookends:buildPositionMenu(pos)
@@ -1573,7 +2288,7 @@ function Bookends:buildPositionMenu(pos)
         })
     end
 
-    -- Line entries (no keep_menu_open so menu refreshes after editing)
+    -- Line entries
     for i, line in ipairs(lines) do
         table.insert(menu, {
             text_func = function()
@@ -1582,15 +2297,17 @@ function Bookends:buildPositionMenu(pos)
                 local tag = ""
                 if filter == "odd" then tag = " [odd]"
                 elseif filter == "even" then tag = " [even]" end
-                local preview = (Tokens.expandPreview(ps.lines[i] or "", self.ui, self:getSessionElapsed(), math.max(0, (self.session_max_page or 0) - (self.session_start_page or 0))))
+                local preview = (Tokens.expandPreview(ps.lines[i] or "", self.ui, self:getSessionElapsed(), math.max(0, (self.session_max_page or 0) - (self.session_start_page or 0)),
+                    self.settings:readSetting("tick_width_multiplier", 2)))
                 preview = preview:gsub("%s+", " "):match("^%s*(.-)%s*$")
                 if #preview > 42 then
                     preview = truncateUtf8(preview, 39)
                 end
                 return _("Line") .. " " .. i .. tag .. ": " .. preview
             end,
-            callback = function()
-                self:editLineString(pos, i)
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                self:editLineString(pos, i, touchmenu_instance)
             end,
             hold_callback = function(touchmenu_instance)
                 self:showLineManageDialog(pos, i, touchmenu_instance)
@@ -1601,11 +2318,12 @@ function Bookends:buildPositionMenu(pos)
     -- Add line
     table.insert(menu, {
         text = "+ " .. _("Add line") .. "  (" .. _("long press lines to manage") .. ")",
-        callback = function()
+        keep_menu_open = true,
+        callback = function(touchmenu_instance)
             local idx = #self.positions[pos.key].lines + 1
             table.insert(self.positions[pos.key].lines, "")
             self:savePositionSetting(pos.key)
-            self:editLineString(pos, idx)
+            self:editLineString(pos, idx, touchmenu_instance)
         end,
         separator = true,
     })
@@ -1619,8 +2337,17 @@ function Bookends:buildPositionMenu(pos)
             if val then return v_label .. " (" .. val .. ")" end
             return v_label
         end,
-        callback = function()
-            self:showNudgeDialog(pos, "v_offset", v_label)
+        keep_menu_open = true,
+        callback = function(touchmenu_instance)
+            local ps = self.positions[pos.key]
+            self:showNudgeDialog(v_label, ps.v_offset or 0, 0, 999, 0, "px",
+                function(val)
+                    ps.v_offset = val > 0 and val or nil
+                    self:markDirty()
+                end,
+                function()
+                    self:savePositionSetting(pos.key)
+                end, nil, nil, touchmenu_instance)
         end,
     })
 
@@ -1633,8 +2360,17 @@ function Bookends:buildPositionMenu(pos)
                 if val then return h_label .. " (" .. val .. ")" end
                 return h_label
             end,
-            callback = function()
-                self:showNudgeDialog(pos, "h_offset", h_label)
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                local ps = self.positions[pos.key]
+                self:showNudgeDialog(h_label, ps.h_offset or 0, 0, 999, 0, "px",
+                    function(val)
+                        ps.h_offset = val > 0 and val or nil
+                        self:markDirty()
+                    end,
+                    function()
+                        self:savePositionSetting(pos.key)
+                    end, nil, nil, touchmenu_instance)
             end,
         })
     end
@@ -1762,26 +2498,202 @@ function Bookends:buildPresetsMenu()
     end
     items[#items].separator = true
 
-    -- Custom presets submenu (fully managed by Presets module)
+    -- Custom presets (file-based)
     table.insert(items, {
         text = _("Custom presets"),
         sub_item_table_func = function()
-            local Presets = require("ui/presets")
-            local user_items = Presets.genPresetMenuItemTable(self.preset_obj)
-            table.insert(user_items, {
-                text = _("Long press presets to edit"),
-                enabled_func = function() return false end,
-            })
-            return user_items
+            return self:buildCustomPresetsMenu()
         end,
     })
 
     return items
 end
 
+function Bookends:buildCustomPresetsMenu()
+    local items = {
+        {
+            text = _("Save current as preset…"),
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                local restoreMenu = self:hideMenu(touchmenu_instance)
+                local input_dialog
+                input_dialog = InputDialog:new{
+                    title = _("Enter preset name"),
+                    buttons = {
+                        {
+                            {
+                                text = _("Cancel"),
+                                id = "close",
+                                callback = function()
+                                    UIManager:close(input_dialog)
+                                    restoreMenu()
+                                end,
+                            },
+                            {
+                                text = _("Save"),
+                                is_enter_default = true,
+                                callback = function()
+                                    local name = input_dialog:getInputText()
+                                    if name == "" or name:match("^%s*$") then
+                                        UIManager:show(InfoMessage:new{
+                                            text = _("Please enter a name for the preset."),
+                                            timeout = 2,
+                                        })
+                                        return
+                                    end
+                                    local preset_data = self:buildPreset()
+                                    self:writePresetFile(name, preset_data)
+                                    UIManager:close(input_dialog)
+                                    restoreMenu()
+                                    UIManager:show(InfoMessage:new{
+                                        text = T(_("Preset '%1' saved."), name),
+                                        timeout = 2,
+                                    })
+                                end,
+                            },
+                        },
+                    },
+                }
+                UIManager:show(input_dialog)
+                input_dialog:onShowKeyboard()
+            end,
+            separator = true,
+        },
+    }
+
+    -- Load preset files from directory
+    local presets = self:readPresetFiles()
+    for _i, entry in ipairs(presets) do
+        table.insert(items, {
+            text = entry.name,
+            keep_menu_open = true,
+            callback = function()
+                local load_ok, load_err = pcall(self.loadPreset, self, entry.preset)
+                if not load_ok then
+                    UIManager:show(InfoMessage:new{
+                        text = T(_("Failed to load preset '%1':\n%2"), entry.name, tostring(load_err)),
+                    })
+                    return
+                end
+                UIManager:show(InfoMessage:new{
+                    text = T(_("Preset '%1' loaded."), entry.name),
+                    timeout = 2,
+                })
+            end,
+            hold_callback = function(touchmenu_instance)
+                self:showPresetEditDialog(entry, touchmenu_instance)
+            end,
+        })
+    end
+
+    if #presets > 0 then
+        table.insert(items, {
+            text = _("Long press presets to edit"),
+            enabled_func = function() return false end,
+        })
+    end
+
+    -- Show presets folder path
+    table.insert(items, {
+        text = _("Open presets folder"),
+        keep_menu_open = true,
+        callback = function()
+            self:ensurePresetDir()
+            UIManager:show(InfoMessage:new{
+                text = T(_("Preset files are stored in:\n%1\n\nCopy .lua files here to import presets from other users."), self:presetDir()),
+            })
+        end,
+        separator = true,
+    })
+
+    return items
+end
+
+function Bookends:showPresetEditDialog(entry, touchmenu_instance)
+    UIManager:show(ConfirmBox:new{
+        text = T(_("What would you like to do with preset '%1'?"), entry.name),
+        icon = "notice-question",
+        ok_text = _("Update"),
+        ok_callback = function()
+            UIManager:show(ConfirmBox:new{
+                text = T(_("Overwrite preset '%1' with current settings?"), entry.name),
+                ok_callback = function()
+                    self:updatePresetFile(entry.filename, entry.name)
+                    UIManager:show(InfoMessage:new{
+                        text = T(_("Preset '%1' updated."), entry.name),
+                        timeout = 2,
+                    })
+                end,
+            })
+        end,
+        other_buttons_first = true,
+        other_buttons = {
+            {
+                {
+                    text = _("Delete"),
+                    callback = function()
+                        UIManager:show(ConfirmBox:new{
+                            text = T(_("Delete preset '%1'? This cannot be undone."), entry.name),
+                            ok_text = _("Delete"),
+                            ok_callback = function()
+                                self:deletePresetFile(entry.filename)
+                                UIManager:show(InfoMessage:new{
+                                    text = T(_("Preset '%1' deleted."), entry.name),
+                                    timeout = 2,
+                                })
+                            end,
+                        })
+                    end,
+                },
+                {
+                    text = _("Rename"),
+                    callback = function()
+                        local input_dialog
+                        input_dialog = InputDialog:new{
+                            title = _("Enter new preset name"),
+                            input = entry.name,
+                            buttons = {
+                                {
+                                    {
+                                        text = _("Cancel"),
+                                        id = "close",
+                                        callback = function()
+                                            UIManager:close(input_dialog)
+                                        end,
+                                    },
+                                    {
+                                        text = _("Rename"),
+                                        is_enter_default = true,
+                                        callback = function()
+                                            local new_name = input_dialog:getInputText()
+                                            if new_name == "" or new_name:match("^%s*$") or new_name == entry.name then
+                                                UIManager:close(input_dialog)
+                                                return
+                                            end
+                                            self:renamePresetFile(entry.filename, new_name)
+                                            UIManager:close(input_dialog)
+                                            UIManager:show(InfoMessage:new{
+                                                text = T(_("Preset renamed to '%1'."), new_name),
+                                                timeout = 2,
+                                            })
+                                        end,
+                                    },
+                                },
+                            },
+                        }
+                        UIManager:show(input_dialog)
+                        input_dialog:onShowKeyboard()
+                    end,
+                },
+            },
+        },
+    })
+end
+
 -- ─── Line editing ────────────────────────────────────────
 
-function Bookends:editLineString(pos, line_idx)
+function Bookends:editLineString(pos, line_idx, touchmenu_instance)
+    local restoreMenu = self:hideMenu(touchmenu_instance)
     local IconPicker = require("icon_picker")
 
     local pos_settings = self.positions[pos.key]
@@ -1814,7 +2726,7 @@ function Bookends:editLineString(pos, line_idx)
     local line_bar_height = pos_settings.line_bar_height[line_idx] -- nil = use font size
     local line_bar_style = pos_settings.line_bar_style[line_idx] -- nil = "bordered"
 
-    -- Live preview: write current local state to settings and repaint
+    -- Live preview: write current local state to settings and repaint.
     local function applyLivePreview()
         pos_settings.line_style[line_idx] = line_style ~= "regular" and line_style or nil
         pos_settings.line_font_size[line_idx] = line_size
@@ -1997,19 +2909,15 @@ function Bookends:editLineString(pos, line_idx)
     size_button.callback = function()
         format_dialog:onCloseKeyboard()
         local current = line_size or self:getPositionSetting(pos.key, "font_size")
-        UIManager:show(SpinWidget:new{
-            value = current,
-            value_min = 1,
-            value_max = 36,
-            default_value = self:getPositionSetting(pos.key, "font_size"),
-            title_text = _("Font size for line") .. " " .. line_idx,
-            ok_text = _("Set"),
-            callback = function(spin)
-                line_size = spin.value
+        self:showNudgeDialog(_("Font size") .. " " .. _("line") .. " " .. line_idx,
+            current, 1, 36, self:getPositionSetting(pos.key, "font_size"), "px",
+            function(val)
+                line_size = val
                 applyLivePreview()
-                format_dialog:reinit()
             end,
-        })
+            function()
+                format_dialog:reinit()
+            end, 1, false)
     end
 
     font_button.callback = function()
@@ -2028,19 +2936,19 @@ function Bookends:editLineString(pos, line_idx)
     -- Nudge buttons (1px per tap)
     local nudge_step = 1
     local nudge_up = {
-        text = "\xE2\x96\xB2",  -- ▲
+        icon = "chevron.up",
         callback = function() end,
     }
     local nudge_down = {
-        text = "\xE2\x96\xBC",  -- ▼
+        icon = "chevron.down",
         callback = function() end,
     }
     local nudge_left = {
-        text = "\xE2\x97\x80",  -- ◀
+        icon = "chevron.left",
         callback = function() end,
     }
     local nudge_right = {
-        text = "\xE2\x96\xB6",  -- ▶
+        icon = "chevron.right",
         callback = function() end,
     }
     local nudge_label = {
@@ -2053,30 +2961,24 @@ function Bookends:editLineString(pos, line_idx)
         callback = function() end,  -- reset, wired below
     }
 
-    nudge_up.callback = function()
+    local function doNudge(axis, delta)
         format_dialog:onCloseKeyboard()
-        line_v_nudge = line_v_nudge - nudge_step
+        if axis == "v" then
+            line_v_nudge = line_v_nudge + delta
+        else
+            line_h_nudge = line_h_nudge + delta
+        end
         applyLivePreview()
         format_dialog:reinit()
     end
-    nudge_down.callback = function()
-        format_dialog:onCloseKeyboard()
-        line_v_nudge = line_v_nudge + nudge_step
-        applyLivePreview()
-        format_dialog:reinit()
-    end
-    nudge_left.callback = function()
-        format_dialog:onCloseKeyboard()
-        line_h_nudge = line_h_nudge - nudge_step
-        applyLivePreview()
-        format_dialog:reinit()
-    end
-    nudge_right.callback = function()
-        format_dialog:onCloseKeyboard()
-        line_h_nudge = line_h_nudge + nudge_step
-        applyLivePreview()
-        format_dialog:reinit()
-    end
+    nudge_up.callback = function() doNudge("v", -1) end
+    nudge_up.hold_callback = function() doNudge("v", -10) end
+    nudge_down.callback = function() doNudge("v", 1) end
+    nudge_down.hold_callback = function() doNudge("v", 10) end
+    nudge_left.callback = function() doNudge("h", -1) end
+    nudge_left.hold_callback = function() doNudge("h", -10) end
+    nudge_right.callback = function() doNudge("h", 1) end
+    nudge_right.hold_callback = function() doNudge("h", 10) end
     nudge_label.callback = function()
         format_dialog:onCloseKeyboard()
         line_v_nudge = 0
@@ -2099,10 +3001,14 @@ function Bookends:editLineString(pos, line_idx)
                     self:savePositionSetting(pos.key)
                     UIManager:close(format_dialog)
                     self:markDirty()
+                    if touchmenu_instance then
+                        touchmenu_instance.item_table = self:buildPositionMenu(pos)
+                    end
+                    restoreMenu()
                 end,
             },
             {
-                text = _("Icons"),
+                text = _("Symbols"),
                 callback = function()
                     format_dialog:onCloseKeyboard()
                     IconPicker:show(function(value)
@@ -2143,6 +3049,10 @@ function Bookends:editLineString(pos, line_idx)
                     self:savePositionSetting(pos.key)
                     UIManager:close(format_dialog)
                     self:markDirty()
+                    if touchmenu_instance then
+                        touchmenu_instance.item_table = self:buildPositionMenu(pos)
+                    end
+                    restoreMenu()
                 end,
             },
         })
@@ -2158,13 +3068,69 @@ function Bookends:editLineString(pos, line_idx)
             local live_text = format_dialog:getInputText()
             if live_text and live_text ~= "" then
                 pos_settings.lines[line_idx] = live_text
-                self:markDirty()
+                -- Mark dirty and request repaint immediately (not via nextTick)
+                -- so it merges into the InputDialog's own paint cycle.  A deferred
+                -- repaint causes a *separate* e-ink refresh that briefly flashes
+                -- book text through the Bookends area.
+                self.dirty = true
+                self._tick_cache = nil
+                UIManager:setDirty(self.ui, "fast")
             end
         end,
         buttons = buildDialogButtons(),
     }
+    -- Allow tap-outside to hide keyboard, but never close dialog
+    function format_dialog:onTap(arg, ges)
+        if self:isKeyboardVisible() then
+            if self._input_widget.keyboard and self._input_widget.keyboard.dimen
+                    and ges.pos:notIntersectWith(self._input_widget.keyboard.dimen) then
+                self:onCloseKeyboard()
+            end
+        end
+        -- Never close the dialog on tap-outside
+    end
+    -- Always report keyboard as visible so dialog layout stays in upper portion.
+    -- But track real keyboard state to avoid reopening it on reinit.
+    local real_kb_visible = false
+    local orig_isKeyboardVisible = format_dialog.isKeyboardVisible
+    function format_dialog:isKeyboardVisible()
+        return true  -- layout always reserves keyboard space
+    end
+    local orig_onShowKeyboard = format_dialog.onShowKeyboard
+    function format_dialog:onShowKeyboard(...)
+        real_kb_visible = true
+        return orig_onShowKeyboard(self, ...)
+    end
+    local orig_onCloseKeyboard = format_dialog.onCloseKeyboard
+    function format_dialog:onCloseKeyboard(...)
+        real_kb_visible = false
+        return orig_onCloseKeyboard(self, ...)
+    end
+    local orig_reinit = format_dialog.reinit
+    function format_dialog:reinit(...)
+        -- reinit checks isKeyboardVisible (returns true for layout),
+        -- then calls onShowKeyboard if true. Suppress that when kb was actually hidden.
+        local was_visible = real_kb_visible
+        orig_reinit(self, ...)
+        if not was_visible then
+            self._input_widget:onCloseKeyboard()
+            real_kb_visible = false
+        end
+        if self.movable then
+            self.movable.ges_events.MovableHold = nil
+            self.movable.ges_events.MovableHoldPan = nil
+            self.movable.ges_events.MovableHoldRelease = nil
+        end
+    end
+    if format_dialog.movable then
+        format_dialog.movable.ges_events.MovableHold = nil
+        format_dialog.movable.ges_events.MovableHoldPan = nil
+        format_dialog.movable.ges_events.MovableHoldRelease = nil
+    end
     UIManager:show(format_dialog)
-    format_dialog:onShowKeyboard()
+    -- Hide keyboard after show — dialog is already positioned for keyboard-open,
+    -- so it stays in the upper portion of screen, clear of the keyboard when reopened.
+    format_dialog:onCloseKeyboard()
 end
 
 function Bookends:showLineManageDialog(pos, line_idx, touchmenu_instance)
@@ -2317,58 +3283,379 @@ function Bookends:showLineManageDialog(pos, line_idx, touchmenu_instance)
 end
 
 function Bookends:showFontPicker(current_face, on_select, default_face)
-    -- Try KOReader's FontChooser (available since v2026.03)
-    local ok, FontChooser = pcall(require, "ui/widget/fontchooser")
-    if ok and FontChooser then
-        UIManager:show(FontChooser:new{
-            title = _("Select font"),
-            font_file = current_face,
-            default_font_file = default_face,
-            keep_shown_on_apply = true,
-            callback = function(file)
-                on_select(file)
-            end,
-        })
-        return
-    end
-
-    -- Fallback for older KOReader versions
-    local Menu = require("ui/widget/menu")
-    local cre = require("document/credocument"):engineInit()
+    local Blitbuffer = require("ffi/blitbuffer")
+    local Button = require("ui/widget/button")
+    local ButtonTable = require("ui/widget/buttontable")
+    local CenterContainer = require("ui/widget/container/centercontainer")
+    local FrameContainer = require("ui/widget/container/framecontainer")
+    local Geom = require("ui/geometry")
+    local GestureRange = require("ui/gesturerange")
+    local HorizontalGroup = require("ui/widget/horizontalgroup")
+    local HorizontalSpan = require("ui/widget/horizontalspan")
+    local InputContainer = require("ui/widget/container/inputcontainer")
+    local LeftContainer = require("ui/widget/container/leftcontainer")
+    local LineWidget = require("ui/widget/linewidget")
+    local Size = require("ui/size")
+    local TextWidget = require("ui/widget/textwidget")
+    local TopContainer = require("ui/widget/container/topcontainer")
+    local VerticalGroup = require("ui/widget/verticalgroup")
+    local VerticalSpan = require("ui/widget/verticalspan")
     local FontList = require("fontlist")
-    local face_list = cre.getFontFaces()
-    local items = {}
-    for _, face_name in ipairs(face_list) do
-        local font_filename, font_faceindex = cre.getFontFaceFilenameAndFaceIndex(face_name)
-        if not font_filename then
-            font_filename, font_faceindex = cre.getFontFaceFilenameAndFaceIndex(face_name, nil, true)
-        end
-        if font_filename then
-            local display_name = FontList:getLocalizedFontName(font_filename, font_faceindex) or face_name
-            local prefix = (font_filename == current_face) and "\xE2\x9C\x93 " or "   "
-            table.insert(items, {
-                text = prefix .. display_name,
-                font_filename = font_filename,
-            })
+    local ffiUtil = require("ffi/util")
+
+    -- Build sorted font list from FontList.fontinfo (same source as FontChooser)
+    local fonts = {}
+    local font_display_names = {} -- file → display name lookup
+    for font_file, font_info in pairs(FontList.fontinfo) do
+        local info = font_info and font_info[1]
+        if info then
+            local name = FontList:getLocalizedFontName(font_file, 0) or info.name
+            local display = name
+            if info.bold then display = display .. " " .. _("bold") end
+            if info.italic then display = display .. " " .. _("italic") end
+            table.insert(fonts, { file = font_file, name = name, display = display })
+            font_display_names[font_file] = display
         end
     end
+    table.sort(fonts, function(a, b)
+        if a.name ~= b.name then return ffiUtil.strcoll(a.name, b.name) end
+        return ffiUtil.strcoll(a.display, b.display)
+    end)
 
-    local menu
-    menu = Menu:new{
-        title = _("Select font"),
-        item_table = items,
-        width = math.floor(Screen:getWidth() * 0.8),
-        height = math.floor(Screen:getHeight() * 0.8),
-        onMenuChoice = function(_, item)
-            UIManager:close(menu)
-            if item.font_filename then
-                on_select(item.font_filename)
-            end
-        end,
+    local original_face = current_face
+    local selected = current_face
+    local per_page = 10
+    local page = 1
+
+    -- Find initial page for current font
+    for i, f in ipairs(fonts) do
+        if f.file == current_face then
+            page = math.ceil(i / per_page)
+            break
+        end
+    end
+    local total_pages = math.max(1, math.ceil(#fonts / per_page))
+
+    local screen_w, screen_h = Screen:getWidth(), Screen:getHeight()
+    local width = math.floor(math.min(screen_w, screen_h) * 0.9)
+    local font_size = 22
+    local title_font_size = 22
+    local row_height = Screen:scaleBySize(42)
+    local left_pad = Size.padding.large
+
+    local picker -- forward declaration
+
+    local function buildPage()
+        -- Custom title row: "Select font — FontName" with font name in its typeface
+        local selected_name = selected and font_display_names[selected] or _("Default")
+        local selected_face = selected and Font:getFace(selected, title_font_size)
+                              or Font:getFace("cfont", title_font_size)
+        local title_face = Font:getFace("infofont", title_font_size)
+        local title_prefix = _("Select font") .. ": "
+        local title_text = TextWidget:new{
+            text = title_prefix,
+            face = title_face,
+            fgcolor = Blitbuffer.COLOR_BLACK,
+            bold = true,
+        }
+        local title_text_width = title_text:getWidth()
+        local font_name_widget = TextWidget:new{
+            text = selected_name,
+            face = selected_face,
+            max_width = width - title_text_width - 2 * left_pad,
+            fgcolor = Blitbuffer.COLOR_BLACK,
+        }
+        local title_row_height = Screen:scaleBySize(48)
+        -- Use forced_height/baseline so both fonts share the same baseline
+        title_text.forced_height = title_row_height
+        title_text.forced_baseline = math.floor(title_row_height * 0.7)
+        font_name_widget.forced_height = title_row_height
+        font_name_widget.forced_baseline = math.floor(title_row_height * 0.7)
+        local title_row = LeftContainer:new{
+            dimen = Geom:new{ w = width, h = title_row_height },
+            HorizontalGroup:new{
+                HorizontalSpan:new{ width = left_pad },
+                title_text,
+                font_name_widget,
+            },
+        }
+        local title_line = LineWidget:new{
+            background = Blitbuffer.COLOR_BLACK,
+            dimen = Geom:new{ w = width, h = Size.line.thick },
+        }
+
+        local list_group = VerticalGroup:new{ align = "left" }
+        local start_idx = (page - 1) * per_page + 1
+        local end_idx = math.min(start_idx + per_page - 1, #fonts)
+
+        for i = start_idx, end_idx do
+            local f = fonts[i]
+            local is_selected = (f.file == selected)
+            local is_default = (f.file == default_face)
+            local face = Font:getFace(f.file, font_size)
+
+            local suffix = is_default and "  \xE2\x98\x85" or ""
+            local label = f.display .. suffix
+
+            -- Checkmark in a fixed-width area, then the font name
+            local baseline = math.floor(row_height * 0.65)
+            local check_w = TextWidget:new{
+                text = is_selected and "\xE2\x9C\x93 " or "",
+                face = Font:getFace("cfont", font_size),
+                forced_height = row_height,
+                forced_baseline = baseline,
+                fgcolor = Blitbuffer.COLOR_BLACK,
+                bold = true,
+            }
+            local check_width = Screen:scaleBySize(30)
+
+            local text_w = TextWidget:new{
+                text = label,
+                face = face,
+                forced_height = row_height,
+                forced_baseline = baseline,
+                max_width = width - 2 * left_pad - check_width,
+                fgcolor = Blitbuffer.COLOR_BLACK,
+                bold = is_selected,
+            }
+
+            local row_group = HorizontalGroup:new{
+                HorizontalSpan:new{ width = left_pad },
+                CenterContainer:new{
+                    dimen = Geom:new{ w = check_width, h = row_height },
+                    check_w,
+                },
+                text_w,
+            }
+
+            local item_container = InputContainer:new{
+                dimen = Geom:new{ w = width, h = row_height },
+                row_group,
+            }
+            item_container.ges_events = {
+                TapSelect = { GestureRange:new{ ges = "tap", range = item_container.dimen } },
+            }
+            local font_file = f.file
+            item_container.onTapSelect = safe("fontPicker:select", function()
+                selected = font_file
+                on_select(font_file)
+                picker:rebuild()
+                return true
+            end)
+
+            table.insert(list_group, item_container)
+        end
+
+        -- Page navigation row using icon buttons (matching KOReader style)
+        local page_info_text = Button:new{
+            text = T(_("Page %1 of %2"), page, total_pages),
+            text_font_size = 16,
+            text_font_bold = false,
+            callback = function() end,
+            bordersize = 0,
+            show_parent = picker,
+        }
+        local page_first = Button:new{
+            icon = "chevron.first",
+            callback = function()
+                page = 1
+                picker:rebuild()
+            end,
+            bordersize = 0,
+            enabled = page > 1,
+            show_parent = picker,
+        }
+        local page_info_left = Button:new{
+            icon = "chevron.left",
+            callback = function()
+                page = page - 1
+                picker:rebuild()
+            end,
+            bordersize = 0,
+            enabled = page > 1,
+            show_parent = picker,
+        }
+        local page_info_right = Button:new{
+            icon = "chevron.right",
+            callback = function()
+                page = page + 1
+                picker:rebuild()
+            end,
+            bordersize = 0,
+            enabled = page < total_pages,
+            show_parent = picker,
+        }
+        local page_last = Button:new{
+            icon = "chevron.last",
+            callback = function()
+                page = total_pages
+                picker:rebuild()
+            end,
+            bordersize = 0,
+            enabled = page < total_pages,
+            show_parent = picker,
+        }
+
+        local nav_spacing = HorizontalSpan:new{ width = Screen:scaleBySize(8) }
+        local page_nav = HorizontalGroup:new{
+            align = "center",
+            page_first,
+            nav_spacing,
+            page_info_left,
+            HorizontalSpan:new{ width = Screen:scaleBySize(16) },
+            page_info_text,
+            HorizontalSpan:new{ width = Screen:scaleBySize(16) },
+            page_info_right,
+            nav_spacing,
+            page_last,
+        }
+
+        local hairline = CenterContainer:new{
+            dimen = Geom:new{ w = width, h = Size.line.thin },
+            LineWidget:new{
+                background = Blitbuffer.COLOR_DARK_GRAY,
+                dimen = Geom:new{ w = width - 2 * Size.padding.default, h = Size.line.thin },
+            },
+        }
+
+        -- Bottom action buttons
+        local action_buttons = ButtonTable:new{
+            width = width - 2 * Size.padding.default,
+            buttons = {{
+                {
+                    text = _("Close"),
+                    callback = function()
+                        -- Revert to original font
+                        if selected ~= original_face then
+                            on_select(original_face)
+                        end
+                        UIManager:close(picker)
+                    end,
+                },
+                {
+                    text = _("Reset"),
+                    enabled = selected ~= default_face,
+                    callback = function()
+                        selected = default_face
+                        on_select(default_face)
+                        UIManager:close(picker)
+                    end,
+                },
+                {
+                    text = _("Set font"),
+                    is_enter_default = true,
+                    callback = function()
+                        UIManager:close(picker)
+                    end,
+                },
+            }},
+            zero_sep = true,
+            show_parent = picker,
+        }
+
+        local list_height = per_page * row_height
+        local content = VerticalGroup:new{
+            align = "center",
+            title_row,
+            title_line,
+            TopContainer:new{
+                dimen = Geom:new{ w = width, h = list_height },
+                list_group,
+            },
+            hairline,
+            VerticalSpan:new{ width = Size.span.vertical_default },
+            CenterContainer:new{
+                dimen = Geom:new{ w = width, h = page_nav:getSize().h },
+                page_nav,
+            },
+            VerticalSpan:new{ width = Size.span.vertical_default },
+            CenterContainer:new{
+                dimen = Geom:new{ w = width, h = action_buttons:getSize().h },
+                action_buttons,
+            },
+        }
+
+        return FrameContainer:new{
+            radius = Size.radius.window,
+            bordersize = Size.border.window,
+            padding = 0,
+            margin = 0,
+            background = Blitbuffer.COLOR_WHITE,
+            content,
+        }
+    end
+
+    picker = InputContainer:new{
+        ges_events = {
+            TapClose = {
+                GestureRange:new{
+                    ges = "tap",
+                    range = Geom:new{ w = screen_w, h = screen_h },
+                },
+            },
+            Swipe = {
+                GestureRange:new{
+                    ges = "swipe",
+                    range = Geom:new{ w = screen_w, h = screen_h },
+                },
+            },
+        },
     }
-    local x = math.floor((Screen:getWidth() - menu.dimen.w) / 2)
-    local y = math.floor((Screen:getHeight() - menu.dimen.h) / 2)
-    UIManager:show(menu, nil, nil, x, y)
+
+    function picker:rebuild()
+        local ok, frame = xpcall(buildPage, debug.traceback)
+        if not ok then
+            bookends_error("fontPicker:buildPage", frame)
+            UIManager:close(self)
+            return
+        end
+        self[1] = CenterContainer:new{
+            dimen = Geom:new{ w = screen_w, h = screen_h },
+            frame,
+        }
+        self.frame = frame
+        UIManager:setDirty(self, "ui")
+    end
+
+    function picker:onSwipe(_, ges_ev)
+        local dir = ges_ev.direction
+        if dir == "west" or dir == "north" then
+            if page < total_pages then
+                page = page + 1
+                self:rebuild()
+            end
+        elseif dir == "east" or dir == "south" then
+            if page > 1 then
+                page = page - 1
+                self:rebuild()
+            end
+        end
+        return true
+    end
+
+    function picker:onTapClose(_, ges_ev)
+        if self.frame and ges_ev.pos and not ges_ev.pos:intersectWith(self.frame.dimen) then
+            -- Revert to original font on tap-outside
+            if selected ~= original_face then
+                on_select(original_face)
+            end
+            UIManager:close(self)
+            return true
+        end
+        return false
+    end
+
+    function picker:onShow()
+        UIManager:setDirty(self, "ui")
+        return true
+    end
+
+    function picker:onCloseWidget()
+        UIManager:setDirty(nil, "ui")
+    end
+
+    picker:rebuild()
+    UIManager:show(picker)
 end
 
 -- ─── Token picker ────────────────────────────────────────
@@ -2386,7 +3673,7 @@ Bookends.TOKEN_CATALOG = {
         { "%Q", _("Number of notes") },
         { "%x", _("Number of bookmarks") },
     }},
-    { _("Page / Progress"), {
+    { _("Page / progress"), {
         { "%c", _("Current page number") },
         { "%t", _("Total pages") },
         { "%p", _("Book percentage read") },
@@ -2396,10 +3683,10 @@ Bookends.TOKEN_CATALOG = {
         { "%l", _("Pages left in chapter") },
         { "%L", _("Pages left in book") },
     }},
-    { _("Progress Bars"), {
+    { _("Progress bars"), {
         { "%bar", _("Progress bar (configure type in line editor)") },
     }},
-    { _("Time / Date"), {
+    { _("Time / date"), {
         { "%k", _("12-hour clock") },
         { "%K", _("24-hour clock") },
         { "%d", _("Date short (28 Mar)") },
@@ -2424,10 +3711,24 @@ Bookends.TOKEN_CATALOG = {
         { "%F", _("Frontlight warmth") },
         { "%m", _("RAM used %") },
     }},
+    { _("Snippets"), {
+        { "\xE2\x80\x94 Page %c of %t \xE2\x80\x94", "" },
+        { "%T \xE2\x8B\xAE [i]%A[/i]", "" },
+        { "%x Bookmark(s)", "" },
+        { "%q Highlight(s)", "" },
+        { "\xE2\x8C\x9B %R \xC2\xBB %s page session", "" },
+    }},
 }
 
 function Bookends:showTokenPicker(on_select)
     local Menu = require("ui/widget/menu")
+    local Size = require("ui/size")
+    local Tokens = require("tokens")
+
+    -- Resolve current values for each token
+    local session_elapsed = self:getSessionElapsed()
+    local session_pages = math.max(0, (self.session_max_page or 0) - (self.session_start_page or 0))
+
     local items = {}
     for _, category in ipairs(self.TOKEN_CATALOG) do
         local label = category[1]
@@ -2438,9 +3739,24 @@ function Bookends:showTokenPicker(on_select)
             callback = function() end,
         })
         for _, token_entry in ipairs(tokens) do
+            local token = token_entry[1]
+            local desc = token_entry[2]
+            -- Expand the token to get its current value
+            local current = ""
+            if self.ui then
+                local expanded = Tokens.expand(token, self.ui, session_elapsed, session_pages,
+                    nil, self.settings:readSetting("tick_width_multiplier", 2))
+                if expanded and expanded ~= "" and expanded ~= token then
+                    current = expanded
+                end
+            end
+            local display = token .. "  " .. desc
+            if current ~= "" then
+                display = display .. "  \xE2\x86\x92 " .. current  -- → arrow
+            end
             table.insert(items, {
-                text = token_entry[1] .. "  " .. token_entry[2],
-                insert_value = token_entry[1],
+                text = display,
+                insert_value = token,
             })
         end
     end
@@ -2459,6 +3775,8 @@ function Bookends:showTokenPicker(on_select)
             end
         end,
     }
+    -- Override popout corner radius and page text size to match font picker
+    if menu[1] then menu[1].radius = Size.radius.window end
     local x = math.floor((Screen:getWidth() - menu.dimen.w) / 2)
     local y = math.floor((Screen:getHeight() - menu.dimen.h) / 2)
     UIManager:show(menu, nil, nil, x, y)
@@ -2467,11 +3785,30 @@ end
 -- ─── Helpers ─────────────────────────────────────────────
 
 
+function Bookends:_offerReleasesPage(message)
+    local url = "https://github.com/AndyHazz/bookends.koplugin/releases"
+    if Device:canOpenLink() then
+        UIManager:show(ConfirmBox:new{
+            text = message .. "\n\n" .. _("Open the releases page in a browser?"),
+            ok_text = _("Open"),
+            ok_callback = function()
+                Device:openLink(url)
+            end,
+        })
+    else
+        UIManager:show(InfoMessage:new{
+            text = message,
+            timeout = 3,
+        })
+    end
+end
+
 function Bookends:checkForUpdates()
 
     local DataStorage = require("datastorage")
-    local meta = dofile("plugins/bookends.koplugin/_meta.lua")
-    local installed_version = meta and meta.version or "unknown"
+    local meta_path = DataStorage:getDataDir() .. "/plugins/bookends.koplugin/_meta.lua"
+    local ok_meta, meta = pcall(dofile, meta_path)
+    local installed_version = (ok_meta and meta and meta.version) or "unknown"
 
     local NetworkMgr = require("ui/network/manager")
     if not NetworkMgr:isWifiOn() then
@@ -2488,29 +3825,53 @@ function Bookends:checkForUpdates()
     })
 
     UIManager:scheduleIn(0.1, function()
-        local http = require("socket/http")
-        local ltn12 = require("ltn12")
-        local socket = require("socket")
-        local socketutil = require("socketutil")
         local json = require("json")
 
-        local function githubGet(url)
-            local body = {}
-            socketutil:set_timeout(socketutil.LARGE_BLOCK_TIMEOUT, socketutil.LARGE_TOTAL_TIMEOUT)
-            local code = socket.skip(1, http.request({
-                url = url,
-                method = "GET",
-                headers = {
-                    ["User-Agent"] = "KOReader-Bookends/" .. installed_version,
-                    ["Accept"] = "application/vnd.github.v3+json",
-                },
-                sink = ltn12.sink.table(body),
-                redirect = true,
-            }))
-            socketutil:reset_timeout()
-            if code ~= 200 then return nil end
-            local ok, data = pcall(json.decode, table.concat(body))
-            return ok and data or nil
+        -- Try LuaSocket first, fall back to curl for platforms where SSL crashes
+        local function httpGetJSON(url)
+            local ok_require, http, ltn12, socket, socketutil =
+                pcall(function()
+                    return require("socket/http"),
+                           require("ltn12"),
+                           require("socket"),
+                           require("socketutil")
+                end)
+            if ok_require then
+                local body = {}
+                local ok_req, code = pcall(function()
+                    socketutil:set_timeout(socketutil.LARGE_BLOCK_TIMEOUT, socketutil.LARGE_TOTAL_TIMEOUT)
+                    local c = socket.skip(1, http.request({
+                        url = url,
+                        method = "GET",
+                        headers = {
+                            ["User-Agent"] = "KOReader-Bookends/" .. installed_version,
+                            ["Accept"] = "application/vnd.github.v3+json",
+                        },
+                        sink = ltn12.sink.table(body),
+                        redirect = true,
+                    }))
+                    socketutil:reset_timeout()
+                    return c
+                end)
+                if ok_req and code == 200 then
+                    local ok, data = pcall(json.decode, table.concat(body))
+                    if ok then return data end
+                end
+                pcall(function() socketutil:reset_timeout() end)
+            end
+            -- Fallback: curl (available on Android, desktop)
+            local handle = io.popen(string.format(
+                "curl -s -L -H 'User-Agent: KOReader-Bookends' -H 'Accept: application/vnd.github.v3+json' %q",
+                url))
+            if handle then
+                local body = handle:read("*a")
+                handle:close()
+                if body and body ~= "" then
+                    local ok, data = pcall(json.decode, body)
+                    if ok then return data end
+                end
+            end
+            return nil
         end
 
         local function parseVersion(v)
@@ -2531,12 +3892,9 @@ function Bookends:checkForUpdates()
         end
 
         -- Fetch all releases to gather notes between installed and latest
-        local releases = githubGet("https://api.github.com/repos/AndyHazz/bookends.koplugin/releases")
+        local releases = httpGetJSON("https://api.github.com/repos/AndyHazz/bookends.koplugin/releases")
         if not releases or #releases == 0 then
-            UIManager:show(InfoMessage:new{
-                text = _("Could not check for updates."),
-                timeout = 3,
-            })
+            self:_offerReleasesPage(_("Could not check for updates."))
             return
         end
 
@@ -2636,11 +3994,6 @@ function Bookends:installUpdate(zip_url, old_version, new_version)
     })
 
     UIManager:scheduleIn(0.1, function()
-        local http = require("socket/http")
-        local ltn12 = require("ltn12")
-        local socket = require("socket")
-        local socketutil = require("socketutil")
-
         -- Download ZIP to temp location
         local cache_dir = DataStorage:getSettingsDir() .. "/bookends_cache"
         if lfs.attributes(cache_dir, "mode") ~= "directory" then
@@ -2648,33 +4001,48 @@ function Bookends:installUpdate(zip_url, old_version, new_version)
         end
         local zip_path = cache_dir .. "/bookends.koplugin.zip"
 
-        local file = io.open(zip_path, "wb")
-        if not file then
-            UIManager:show(InfoMessage:new{
-                text = _("Could not save download."),
-                timeout = 3,
-            })
-            return
+        -- Try LuaSocket first, fall back to curl
+        local downloaded = false
+        local ok_require, http, ltn12, socket, socketutil =
+            pcall(function()
+                return require("socket/http"),
+                       require("ltn12"),
+                       require("socket"),
+                       require("socketutil")
+            end)
+        if ok_require then
+            local file = io.open(zip_path, "wb")
+            if file then
+                local ok_dl, code = pcall(function()
+                    socketutil:set_timeout(socketutil.FILE_BLOCK_TIMEOUT, socketutil.FILE_TOTAL_TIMEOUT)
+                    local c = socket.skip(1, http.request({
+                        url = zip_url,
+                        method = "GET",
+                        headers = {
+                            ["User-Agent"] = "KOReader-Bookends/" .. old_version,
+                        },
+                        sink = ltn12.sink.file(file),
+                        redirect = true,
+                    }))
+                    socketutil:reset_timeout()
+                    return c
+                end)
+                if not ok_dl then
+                    pcall(function() socketutil:reset_timeout() end)
+                end
+                downloaded = ok_dl and code == 200
+            end
         end
-
-        socketutil:set_timeout(socketutil.FILE_BLOCK_TIMEOUT, socketutil.FILE_TOTAL_TIMEOUT)
-        local code = socket.skip(1, http.request({
-            url = zip_url,
-            method = "GET",
-            headers = {
-                ["User-Agent"] = "KOReader-Bookends/" .. old_version,
-            },
-            sink = ltn12.sink.file(file),
-            redirect = true,
-        }))
-        socketutil:reset_timeout()
-
-        if code ~= 200 then
+        -- Fallback: curl (available on Android, desktop)
+        if not downloaded then
             pcall(os.remove, zip_path)
-            UIManager:show(InfoMessage:new{
-                text = _("Download failed."),
-                timeout = 3,
-            })
+            local ret = os.execute(string.format(
+                "curl -s -L -o %q %q", zip_path, zip_url))
+            downloaded = ret == 0 or ret == true
+        end
+        if not downloaded then
+            pcall(os.remove, zip_path)
+            self:_offerReleasesPage(_("Download failed."))
             return
         end
 
@@ -2704,105 +4072,9 @@ function Bookends:installUpdate(zip_url, old_version, new_version)
     end)
 end
 
-function Bookends:showNudgeDialog(pos, field, label)
-    local pos_settings = self.positions[pos.key]
-    local original = pos_settings[field]
-    local dialog
-
-    local function nudge(delta)
-        local val = math.max(0, (pos_settings[field] or 0) + delta)
-        pos_settings[field] = val > 0 and val or nil
-        self:markDirty()
-        dialog:reinit()
-    end
-
-    local ButtonDialog = require("ui/widget/buttondialog")
-    dialog = ButtonDialog:new{
-        title = label,
-        buttons = {
-            {
-                { text = "-10", callback = function() nudge(-10) end },
-                { text = "-1", callback = function() nudge(-1) end },
-                { text_func = function() return tostring(pos_settings[field] or 0) end, enabled = false },
-                { text = "+1", callback = function() nudge(1) end },
-                { text = "+10", callback = function() nudge(10) end },
-            },
-            {
-                {
-                    text = _("Cancel"),
-                    callback = function()
-                        pos_settings[field] = original
-                        self:markDirty()
-                        UIManager:close(dialog)
-                    end,
-                },
-                {
-                    text = _("Save"),
-                    is_enter_default = true,
-                    callback = function()
-                        self:savePositionSetting(pos.key)
-                        UIManager:close(dialog)
-                    end,
-                },
-            },
-        },
-    }
-    UIManager:show(dialog)
-end
-
-function Bookends:showFontScaleDialog()
-    local original = self.defaults.font_scale
-    local dialog
-
-    local function nudge(delta)
-        self.defaults.font_scale = math.max(25, math.min(300, self.defaults.font_scale + delta))
-        self:markDirty()
-        dialog:reinit()
-    end
-
-    local ButtonDialog = require("ui/widget/buttondialog")
-    dialog = ButtonDialog:new{
-        title = _("Font scale"),
-        buttons = {
-            {
-                { text = "-10", callback = function() nudge(-10) end },
-                { text = "-1", callback = function() nudge(-1) end },
-                { text_func = function() return self.defaults.font_scale .. "%" end, enabled = false },
-                { text = "+1", callback = function() nudge(1) end },
-                { text = "+10", callback = function() nudge(10) end },
-            },
-            {
-                {
-                    text = _("Cancel"),
-                    callback = function()
-                        self.defaults.font_scale = original
-                        self:markDirty()
-                        UIManager:close(dialog)
-                    end,
-                },
-                {
-                    text = _("Reset"),
-                    callback = function()
-                        self.defaults.font_scale = 100
-                        self:markDirty()
-                        dialog:reinit()
-                    end,
-                },
-                {
-                    text = _("Save"),
-                    is_enter_default = true,
-                    callback = function()
-                        self.settings:saveSetting("font_scale", self.defaults.font_scale)
-                        UIManager:close(dialog)
-                    end,
-                },
-            },
-        },
-    }
-    UIManager:show(dialog)
-end
 
 function Bookends:showMarginAdjuster(touchmenu_instance)
+    local restoreMenu = self:hideMenu(touchmenu_instance)
     local original = {
         margin_top = self.defaults.margin_top,
         margin_bottom = self.defaults.margin_bottom,
@@ -2844,10 +4116,11 @@ function Bookends:showMarginAdjuster(touchmenu_instance)
                     end
                     self:markDirty()
                     UIManager:close(margin_dialog)
+                    restoreMenu()
                 end,
             },
             {
-                text = _("Reset"),
+                text = _("Default"),
                 callback = function()
                     self.defaults.margin_top = 10
                     self.defaults.margin_bottom = 25
@@ -2858,7 +4131,7 @@ function Bookends:showMarginAdjuster(touchmenu_instance)
                 end,
             },
             {
-                text = _("Save"),
+                text = _("Apply"),
                 is_enter_default = true,
                 callback = function()
                     self.settings:saveSetting("margin_top", self.defaults.margin_top)
@@ -2866,6 +4139,7 @@ function Bookends:showMarginAdjuster(touchmenu_instance)
                     self.settings:saveSetting("margin_left", self.defaults.margin_left)
                     self.settings:saveSetting("margin_right", self.defaults.margin_right)
                     UIManager:close(margin_dialog)
+                    restoreMenu()
                 end,
             },
         },
@@ -2873,24 +4147,11 @@ function Bookends:showMarginAdjuster(touchmenu_instance)
 
     local ButtonDialog = require("ui/widget/buttondialog")
     margin_dialog = ButtonDialog:new{
+        dismissable = false,
         title = _("Adjust margins"),
         buttons = buttons,
     }
     UIManager:show(margin_dialog)
-end
-
-function Bookends:showSpinner(title, value, min, max, default, on_set)
-    UIManager:show(SpinWidget:new{
-        value = value,
-        value_min = min,
-        value_max = max,
-        default_value = default,
-        title_text = title,
-        ok_text = _("Set"),
-        callback = function(spin)
-            on_set(spin.value)
-        end,
-    })
 end
 
 return Bookends

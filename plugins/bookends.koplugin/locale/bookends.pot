@@ -90,7 +90,7 @@ msgstr ""
 msgid "Bold"
 msgstr ""
 
-msgid "Bold Italic"
+msgid "Bold italic"
 msgstr ""
 
 msgid "book"
@@ -177,16 +177,16 @@ msgstr ""
 msgid "Chapter percentage read"
 msgstr ""
 
-msgid "Chapter ticks: All levels"
+msgid "Chapter ticks: all levels"
 msgstr ""
 
-msgid "Chapter ticks: Off"
+msgid "Chapter ticks: off"
 msgstr ""
 
-msgid "Chapter ticks: Top 2 levels"
+msgid "Chapter ticks: top 2 levels"
 msgstr ""
 
-msgid "Chapter ticks: Top level"
+msgid "Chapter ticks: top level"
 msgstr ""
 
 msgid "Chapter title"
@@ -354,16 +354,16 @@ msgstr ""
 msgid "File name"
 msgstr ""
 
-msgid "Fill: Bottom to top"
+msgid "Fill: bottom to top"
 msgstr ""
 
-msgid "Fill: Left to right"
+msgid "Fill: left to right"
 msgstr ""
 
-msgid "Fill: Right to left"
+msgid "Fill: right to left"
 msgstr ""
 
-msgid "Fill: Top to bottom"
+msgid "Fill: top to bottom"
 msgstr ""
 
 msgid "Flag"
@@ -414,7 +414,7 @@ msgstr ""
 msgid "Hourglass (filled)"
 msgstr ""
 
-msgid "Icons"
+msgid "Symbols"
 msgstr ""
 
 msgid "Infinity"
@@ -426,7 +426,7 @@ msgstr ""
 msgid "Inline progress bars can be added via the line editor"
 msgstr ""
 
-msgid "Insert icon"
+msgid "Insert symbol"
 msgstr ""
 
 msgid "Insert token"
@@ -531,7 +531,7 @@ msgstr ""
 msgid "on"
 msgstr ""
 
-msgid "Page / Progress"
+msgid "Page / progress"
 msgstr ""
 
 msgid "Pages left in book"
@@ -576,7 +576,7 @@ msgstr ""
 msgid "Progress bar (configure type in line editor)"
 msgstr ""
 
-msgid "Progress Bars"
+msgid "Progress bars"
 msgstr ""
 
 msgid "RAM used %"
@@ -723,7 +723,7 @@ msgstr ""
 msgid "Time"
 msgstr ""
 
-msgid "Time / Date"
+msgid "Time / date"
 msgstr ""
 
 msgid "Time left in book"
@@ -832,4 +832,46 @@ msgid "Wi-Fi icon (dynamic)"
 msgstr ""
 
 msgid "Wi-Fi is not enabled."
+msgstr ""
+
+msgid "Save current as preset…"
+msgstr ""
+
+msgid "Enter preset name"
+msgstr ""
+
+msgid "Please enter a name for the preset."
+msgstr ""
+
+msgid "Preset '%1' saved."
+msgstr ""
+
+msgid "Open presets folder"
+msgstr ""
+
+msgid "Preset files are stored in:\n%1\n\nCopy .lua files here to import presets from other users."
+msgstr ""
+
+msgid "Preset '%1' updated."
+msgstr ""
+
+msgid "Overwrite preset '%1' with current settings?"
+msgstr ""
+
+msgid "Delete preset '%1'? This cannot be undone."
+msgstr ""
+
+msgid "Preset '%1' deleted."
+msgstr ""
+
+msgid "Enter new preset name"
+msgstr ""
+
+msgid "Preset renamed to '%1'."
+msgstr ""
+
+msgid "What would you like to do with preset '%1'?"
+msgstr ""
+
+msgid "Failed to load preset '%1':\n%2"
 msgstr ""
