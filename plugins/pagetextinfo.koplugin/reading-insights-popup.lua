@@ -1,5 +1,5 @@
---[ reading insights popup v1.0.44 ] 
---cache writes to separate lua file
+--[ reading insights popup v1.0.46 ]
+--inf_loop_guard
 
 -- ABOUT:
 -- this is a modified version of the 'reading insights popup' userpatch made by u/quanganhdo.
@@ -18,9 +18,9 @@
 -- non touch devices can move between years using page turn buttons.
 -- all devices can open year selector by tapping or clicking on the current year label.
 -- long press on the year label to find options to force reload data.
--- by default, this patch refreshes the displayed data only once per day. all subsequent 
--- changes for the day will be updated on the following day's refresh. if you want to change 
--- this behaviour and have it refresh every time new data is added to the statistics sql, 
+-- by default, this patch refreshes the displayed data only once per day. all subsequent
+-- changes for the day will be updated on the following day's refresh. if you want to change
+-- this behaviour and have it refresh every time new data is added to the statistics sql,
 -- set the 'refreshOnlyOncePerDay' flag below to 'false'.
 
 local refreshOnlyOncePerDay = true
@@ -63,6 +63,8 @@ local Screen = Device.screen
 local gettext = require("gettext")
 local T = require("ffi/util").template
 local util = require("util")
+
+local inf_loop_guard = 0
 
 -- User patch localization: add your language overrides here.
 local PATCH_L10N = {
@@ -283,11 +285,11 @@ local insightsCache = ReadingInsightsDatabase:readSetting("readingInsights_cache
 				monthlyReadingDays = nil,
 				monthlyReadingHours = nil,
 }
-local cache_timestamps = ReadingInsightsDatabase:readSetting("readingInsights_cacheTimestamps") or { 
+local cache_timestamps = ReadingInsightsDatabase:readSetting("readingInsights_cacheTimestamps") or {
 				partialClear = 1262304000,	-- last local db update aka cache partially cleared (pulled from lfs)
 				fullClear = 1262304000, 	-- cached stats sync timestamp aka cache fully cleared (recorded via stats plugin patch)
 				statsSynced = 1262304000,	-- latest stats sync timestamp (recorded via stats plugin patch)
-				lastRefreshed = 1262304000,	-- latest cache modified timestamp (recorded bwith os.time(), used to 
+				lastRefreshed = 1262304000,	-- latest cache modified timestamp (recorded bwith os.time(), used to
 											-- manage refreshOnlyOncePerDay)
 }
 local cachedLayout = nil
@@ -308,19 +310,19 @@ local function set_cache_fullClear_timestamp(timestamp)
 	cache_timestamps.fullClear = timestamp
 	writeCacheTimestampsToDisk()
 end
-local function getDbModTime() 
+local function getDbModTime()
 	--finds out when stats sql was last modified.
-	
-    local lfs = require("libs/libkoreader-lfs")  
-    local attr = lfs.attributes(db_path, "modification")  
-    return attr and attr or 0  
-end  
 
-local function clearCache(year)		
-	if year then 
+    local lfs = require("libs/libkoreader-lfs")
+    local attr = lfs.attributes(db_path, "modification")
+    return attr and attr or 0
+end
+
+local function clearCache(year)
+	if year then
 		logger.info("READING-INSIGHTS-POPUP: ERASING CACHE FOR YEAR", year)
 		insightsCache.streaks = nil
-		insightsCache.yearRange = nil		
+		insightsCache.yearRange = nil
 		insightsCache.yearlyStats = insightsCache.yearlyStats or {}
 		insightsCache.yearlyStats[year] = nil
 		insightsCache.monthlyReadingDays = insightsCache.monthlyReadingDays or {}
@@ -340,29 +342,29 @@ local function clearCacheIfRequired() -- checks and calls clearCache() as per re
     t.min = 0
     t.sec = 0
     local ts_midnight_today = os.time(t)
-	
-    latest_db_mod_timestamp = getDbModTime() 
 
-	if refreshOnlyOncePerDay and (cache_timestamps.lastRefreshed > ts_midnight_today) then return end	
-	
-	if (cache_timestamps.statsSynced > cache_timestamps.fullClear) then --if stats db was modified via sync		
+    latest_db_mod_timestamp = getDbModTime()
+
+	if refreshOnlyOncePerDay and (cache_timestamps.lastRefreshed > ts_midnight_today) then return end
+
+	if (cache_timestamps.statsSynced > cache_timestamps.fullClear) then --if stats db was modified via sync
 		set_cache_fullClear_timestamp(cache_timestamps.statsSynced)
 		set_cache_partialClear_timestamp(latest_db_mod_timestamp)
 		cache_timestamps.lastRefreshed = ts_now
-		return clearCache()	
+		return clearCache()
 	end
-	
-	if (latest_db_mod_timestamp > cache_timestamps.partialClear) then --if stats db was modified locally		
+
+	if (latest_db_mod_timestamp > cache_timestamps.partialClear) then --if stats db was modified locally
 		for i = tonumber(os.date("%Y", cache_timestamps.partialClear)), tonumber(os.date("%Y", latest_db_mod_timestamp)) do
 			clearCache(i)
-		end	
+		end
 		cache_timestamps.lastRefreshed = ts_now
 		return set_cache_partialClear_timestamp(latest_db_mod_timestamp)
-    end  
-	
+    end
+
 	if latest_db_mod_timestamp < (ts_midnight_today - 86400) and 	--if stats db was last modified more than two midnights ago and
 		(insightsCache.streaks.current_days) and 					--current day streak hasn't been reset to 0
-		(insightsCache.streaks.current_days ~= 0) then 				
+		(insightsCache.streaks.current_days ~= 0) then
 			logger.info("READING-INSIGHTS-POPUP: CLEARING CACHED STREAKS")
 			insightsCache.streaks = nil
 	end
@@ -386,13 +388,13 @@ local fallbackTable = {
 							current = 0,
 							best = 0,
 							best_start = 1,
-							best_end = 1,							
+							best_end = 1,
 						},
 				weeks = {
 							current = 0,
 							best = 0,
 							best_start = 1,
-							best_end = 1,								
+							best_end = 1,
 						},
     },
 	yearRange = { min_year = 0000, max_year = 0000 },
@@ -434,14 +436,14 @@ local function computeStreaks(entries_desc, is_consecutive, is_current_start, we
 				current = 0,
 				best = 0,
 				best_start = 0,
-				best_end = 0,							
+				best_end = 0,
 	}
     if #entries_desc == 0 then
         return a
 	elseif #entries_desc == 1 then
 		a.best = 1
-		if is_current_start(entries_desc[1][1]) then 
-			a.current = 1 			
+		if is_current_start(entries_desc[1][1]) then
+			a.current = 1
 		end
 		return a
     end
@@ -461,8 +463,8 @@ local function computeStreaks(entries_desc, is_consecutive, is_current_start, we
 
     local best = 1
     local run = 1
-	local best_start = 0
-	local best_end = 0
+	local best_start = 1
+	local best_end = 1
 	local best_end_temp = 0 --temporary
     for i = 2, #entries_desc do
         if is_consecutive(entries_desc[i - 1][1], entries_desc[i][1]) then
@@ -477,20 +479,35 @@ local function computeStreaks(entries_desc, is_consecutive, is_current_start, we
             run = 1
         end
     end
-	
+
 	if weeksOrDays == 1 then -- days
-		best_start = tonumber(entries_desc[best_start][2])
-		best_end = tonumber(entries_desc[best_end][2])
+		best_start = entries_desc and
+						entries_desc[best_start] and
+						entries_desc[best_start][2] and
+						tonumber(entries_desc[best_start][2]) or 0
+
+		best_end = entries_desc and
+						entries_desc[best_end] and
+						entries_desc[best_end][2] and
+						tonumber(entries_desc[best_end][2]) or 0
+
 	else
-		best_start = tonumber(entries_desc[best_start][1]) 	--first timestamp of first week
-		best_end = tonumber(entries_desc[best_end][2])		--last timestamp of last week
+		best_start = entries_desc and
+					entries_desc[best_start] and
+					entries_desc[best_start][1] and
+					tonumber(entries_desc[best_start][1]) or 0 --first timestamp of first week
+
+		best_end = entries_desc and
+					entries_desc[best_end] and
+					entries_desc[best_end][2] and
+					tonumber(entries_desc[best_end][2])	or 0	--last timestamp of last week
 	end
-	
+
 	return{
 		current = current,
 		best = best,
 		best_start = best_start,
-		best_end = best_end,							
+		best_end = best_end,
 	}
 end
 
@@ -512,25 +529,25 @@ end
 local function formatHoursRead(seconds)
 	local value = 0
 	local unit = ""
-	
-	if (not seconds) or (seconds < 60) then 
+
+	if (not seconds) or (seconds < 60) then
 		return 0, "hours read"
 	end
-	
+
 	local h = math.floor(seconds / 3600)
 	local h_unit = N_("hour read", "hours read", h)
-	
-	if h == 0 then 
+
+	if h == 0 then
 		h = math.floor((seconds / 3600) * 10) / 10
 		return h, "hours read"
 	end
-	
-	return h, h_unit	
+
+	return h, h_unit
 end
 
 local function buildSerifFonts()
 		return {
-			section = Font:getFace("NotoSans-Regular.ttf", 22),	
+			section = Font:getFace("NotoSans-Regular.ttf", 22),
 			value = Font:getFace("NotoSans-Bold.ttf", 32),
 			label = Font:getFace("NotoSans-Regular.ttf", 20),
 			small = Font:getFace("NotoSans-Regular.ttf", 18),
@@ -538,7 +555,7 @@ local function buildSerifFonts()
 			streakLabel = Font:getFace("NotoSans-Regular.ttf", 17),
 			streaRecordValue = Font:getFace("NotoSerif-Regular.ttf", 22),
 			streakStartEndWidget = Font:getFace("NotoSans-Regular.ttf", 10),
-		}	
+		}
 end
 
 local function buildLayout(max_widget_width, padding_h, column_gap)
@@ -575,16 +592,16 @@ local function buildValueLine(font_value, font_label, column_gap, value, unit)
 							text = unit,
 							face = font_label,
 	}
-	
+
 	-- -- match baselines
 	-- unit_widget.forced_height = value_dimen.h
 	-- local value_baseline = value_widget:getBaseline()
 	-- local unit_baseline = unit_widget:getBaseline()
 	-- local baseline_diff = value_baseline - unit_baseline
 	-- unit_widget.forced_baseline = unit_baseline + baseline_diff
-	
+
     return HorizontalGroup:new{
-        HorizontalSpan:new{ width = column_gap },		
+        HorizontalSpan:new{ width = column_gap },
         value_widget,
         HorizontalSpan:new{ width = Size.padding.large },
 		unit_widget,
@@ -595,53 +612,53 @@ local function buildYearHeader(popup_self, font_section, layout, yearRange)
     local selected_year = popup_self.selected_year
     local prev_enabled = selected_year > yearRange.min_year
     local next_enabled = selected_year < yearRange.max_year
-	
+
 
     local sample_nav = TextWidget:new{ text = "0000", face = font_section }
 	local icon_width = Screen:scaleBySize(15)
     local nav_width = sample_nav:getSize().w + icon_width
     sample_nav:free()
-	
+
 	local year_button_tap_dialog
-	local tap_buttons = {}	
+	local tap_buttons = {}
 	local yearCount = popup_self.yearRange.max_year - popup_self.yearRange.min_year
 	if yearCount >= 1 then
-		for i = popup_self.yearRange.min_year, popup_self.yearRange.max_year do 
-			local a = {					
+		for i = popup_self.yearRange.min_year, popup_self.yearRange.max_year do
+			local a = {
 						text = i,
-						callback = function() 
+						callback = function()
 							UIManager:close(year_button_tap_dialog)
-							popup_self:onGoToPrevYear(popup_self, i) 
+							popup_self:onGoToPrevYear(popup_self, i)
 						end,
 			}
-					
-			table.insert(tap_buttons, {a})	
-		end	
+
+			table.insert(tap_buttons, {a})
+		end
 	end
 
 	year_button_tap_dialog = ButtonDialog:new{
 		    shrink_unneeded_width = true,
 			modal = true,
 			buttons = tap_buttons
-	}		
-	year_button_tap_dialog.onCloseWidget = function(self)  
-		UIManager:setDirty(nil, function()  
-			return "ui", self.movable.dimen  
-		end)  
-	end 
-	
+	}
+	year_button_tap_dialog.onCloseWidget = function(self)
+		UIManager:setDirty(nil, function()
+			return "ui", self.movable.dimen
+		end)
+	end
+
 	local hold_buttons = {
 							{
 								{
 									text = "Check for new stats",
 									align = "left",
-									callback = function() 
+									callback = function()
 										UIManager:close(year_button_hold_dialog)
 										local orig_refreshOnlyOncePerDay = refreshOnlyOncePerDay
 										refreshOnlyOncePerDay = false
 										clearCacheIfRequired()
 										refreshOnlyOncePerDay = orig_refreshOnlyOncePerDay
-										popup_self:onGoToPrevYear(popup_self, popup_self.selected_year) 
+										popup_self:onGoToPrevYear(popup_self, popup_self.selected_year)
 										return true
 									end,
 								},
@@ -650,7 +667,7 @@ local function buildYearHeader(popup_self, font_section, layout, yearRange)
 								{
 									text = "Force reload streaks",
 									align = "left",
-									callback = function() 
+									callback = function()
 										local confirm = ConfirmBox:new{
 												text = _("Reload streaks?"),
 												ok_text = _("Reload"),
@@ -660,7 +677,7 @@ local function buildYearHeader(popup_self, font_section, layout, yearRange)
 													insightsCache.streaks = nil
 													popup_self:onGoToPrevYear(popup_self, popup_self.selected_year)
 												end,
-										}										
+										}
 										return UIManager:show(confirm)
 									end,
 								},
@@ -669,7 +686,7 @@ local function buildYearHeader(popup_self, font_section, layout, yearRange)
 								{
 									text = "Force reload " .. popup_self.selected_year .. " insights",
 									align = "left",
-									callback = function() 
+									callback = function()
 										local confirm = ConfirmBox:new{
 												text = _("Reload " .. popup_self.selected_year .. " insights?"),
 												ok_text = _("Reload"),
@@ -677,10 +694,10 @@ local function buildYearHeader(popup_self, font_section, layout, yearRange)
 												ok_callback = function()
 													UIManager:close(year_button_hold_dialog)
 													clearCache(popup_self.selected_year)
-													popup_self:onGoToPrevYear(popup_self, popup_self.selected_year)		
+													popup_self:onGoToPrevYear(popup_self, popup_self.selected_year)
 												end,
-										}										
-										return UIManager:show(confirm) 
+										}
+										return UIManager:show(confirm)
 									end,
 								},
 							},
@@ -688,7 +705,7 @@ local function buildYearHeader(popup_self, font_section, layout, yearRange)
 								{
 									text = "Force reload all insights",
 									align = "left",
-									callback = function() 
+									callback = function()
 										local confirm = ConfirmBox:new{
 												text = _("Reload all insights?"),
 												ok_text = _("Reload"),
@@ -698,25 +715,25 @@ local function buildYearHeader(popup_self, font_section, layout, yearRange)
 													clearCache()
 													popup_self:onGoToPrevYear(popup_self, popup_self.selected_year)
 												end,
-										}										
+										}
 										return UIManager:show(confirm)
 									end,
 								},
 							},
-	
+
 	}
-	
+
 	year_button_hold_dialog = ButtonDialog:new{
 		    shrink_unneeded_width = true,
 			modal = true,
 			buttons = hold_buttons
-	}		
-	year_button_hold_dialog.onCloseWidget = function(self)  
-		UIManager:setDirty(nil, function()  
-			return "ui", self.movable.dimen  
-		end)  
-	end 
-	
+	}
+	year_button_hold_dialog.onCloseWidget = function(self)
+		UIManager:setDirty(nil, function()
+			return "ui", self.movable.dimen
+		end)
+	end
+
     local year_label = TextWidget:new{
         text = tostring(selected_year),
         face = font_section,
@@ -724,25 +741,25 @@ local function buildYearHeader(popup_self, font_section, layout, yearRange)
 	year_label = HorizontalGroup:new{
 		HorizontalSpan:new{width = Size.padding.large},
 		year_label,
-		HorizontalSpan:new{width = Size.padding.large},		
+		HorizontalSpan:new{width = Size.padding.large},
 	}
 	year_label = FrameContainer:new{
-		bordersize = Screen:scaleBySize(1),  
+		bordersize = Screen:scaleBySize(1),
 		color = Blitbuffer.COLOR_GRAY_E,
 		radius = Screen:scaleBySize(7),
-		margin = 0,  
-		padding = 0,  
-		focusable = true,  
-		focus_border_size = Screen:scaleBySize(1),  
-		focus_border_color = Blitbuffer.COLOR_BLACK, 
+		margin = 0,
+		padding = 0,
+		focusable = true,
+		focus_border_size = Screen:scaleBySize(1),
+		focus_border_color = Blitbuffer.COLOR_BLACK,
 		year_label
 	}
-	local year_dimen = year_label:getSize()	
+	local year_dimen = year_label:getSize()
 	local tappable_year_label = InputContainer:new{
 		dimen = Geom:new{ w = year_dimen.w, h = year_dimen.h },
 		year_label,
 		focusable = true,
-	}	
+	}
     tappable_year_label.ges_events = {
         Tap = {
             GestureRange:new{
@@ -762,15 +779,15 @@ local function buildYearHeader(popup_self, font_section, layout, yearRange)
 			UIManager:show(year_button_tap_dialog, "ui")
 		end
 		return true
-    end	
+    end
     function tappable_year_label:onHold()
 		UIManager:show(year_button_hold_dialog)
-    end	
-	
+    end
+
 	--FocusManager
 	table.insert(popup_self.layout, 1,  tappable_year_label)
 
-    local function navButton(text, target_year, prevOrNext)	
+    local function navButton(text, target_year, prevOrNext)
         local text_button = Button:new{
             text = text,
             bordersize = 0,
@@ -782,9 +799,9 @@ local function buildYearHeader(popup_self, font_section, layout, yearRange)
             text_font_bold = false,
 			focusable = true,
             callback = function()
-                if prevOrNext == 0 then 
+                if prevOrNext == 0 then
 					popup_self:onGoToPrevYear(popup_self)
-				else 
+				else
 					popup_self:onGoToNextYear(popup_self)
 				end
             end,
@@ -805,9 +822,9 @@ local function buildYearHeader(popup_self, font_section, layout, yearRange)
 				is_icon = true,
 			}
 		end
-		if prevOrNext == 0 then 
+		if prevOrNext == 0 then
 			return HorizontalGroup:new{getLeftIcon(), text_button}
-		else 
+		else
 			return HorizontalGroup:new{text_button, getRightIcon()}
 		end
     end
@@ -851,7 +868,7 @@ local function buildYearHeader(popup_self, font_section, layout, yearRange)
 		padding_bottom = Screen:scaleBySize(2),
 		margin = 0,
         year_header_content,
-    }	
+    }
 end
 
 local function buildYearlyRow(popup_self, yearly_stats, fonts, layout)
@@ -882,34 +899,34 @@ local function buildYearlyRow(popup_self, yearly_stats, fonts, layout)
 
     local selected_year_for_tap = popup_self.selected_year
 
-	--FocusManager	
-	local left_focusable = FrameContainer:new{  
+	--FocusManager
+	local left_focusable = FrameContainer:new{
 				bordersize = Screen:scaleBySize(1),
-				radius = Screen:scaleBySize(7),				
+				radius = Screen:scaleBySize(7),
 				color = Blitbuffer.COLOR_WHITE,
 				--dimen = Geom:new{ w = layout.col_width, h = left_line_dimen.h + 2 },
-				margin = 0,  
-				padding = 0,  
-				focusable = true,  
-				focus_border_size = Screen:scaleBySize(1),  
-				focus_border_color = Blitbuffer.COLOR_BLACK, 
+				margin = 0,
+				padding = 0,
+				focusable = true,
+				focus_border_size = Screen:scaleBySize(1),
+				focus_border_color = Blitbuffer.COLOR_BLACK,
 				LeftContainer:new{
 					dimen = Geom:new{ w = layout.col_width, h = left_line_dimen.h + 2 },
 					left_line,
 				}
-    }  	
+    }
 	local left_focusable_dimen = left_focusable:getSize()
-    local left_cell = InputContainer:new{  
-        dimen = Geom:new{ w = left_focusable_dimen.w, h = left_focusable_dimen.h + 2 },  
-        left_focusable,  
-    }  	
+    local left_cell = InputContainer:new{
+        dimen = Geom:new{ w = left_focusable_dimen.w, h = left_focusable_dimen.h + 2 },
+        left_focusable,
+    }
     left_cell.ges_events = {
         Tap = {
             GestureRange:new{
                 ges = "tap",
                 range = function() return left_cell.dimen end,
             }
-        }, 		
+        },
     }
     function left_cell:onTap()
         popup_self:toggleInsightsMode(popup_self)
@@ -917,25 +934,25 @@ local function buildYearlyRow(popup_self, yearly_stats, fonts, layout)
     end
 
 	--FocusManager
-    local right_focusable = FrameContainer:new{  
-		bordersize = 1,  
+    local right_focusable = FrameContainer:new{
+		bordersize = 1,
 		radius = Screen:scaleBySize(7),
 		color = Blitbuffer.COLOR_WHITE,
-		margin = 0,  
-        padding = 0,  
-        focusable = true,  
-        focus_border_size = 1,  
-        focus_border_color = Blitbuffer.COLOR_BLACK,  
+		margin = 0,
+        padding = 0,
+        focusable = true,
+        focus_border_size = 1,
+        focus_border_color = Blitbuffer.COLOR_BLACK,
 		LeftContainer:new{
 				dimen = Geom:new{ w = layout.col_width, h = pages_val_dimen.h + 2 },
-				pages_val, 
+				pages_val,
 		}
-    } 
-	local right_focusable_dimen = left_focusable:getSize()	
-    local right_cell = InputContainer:new{  
-        dimen = Geom:new{ w = right_focusable_dimen.w, h = right_focusable:getSize().h + 2 },  
-        right_focusable,  
-    }	
+    }
+	local right_focusable_dimen = left_focusable:getSize()
+    local right_cell = InputContainer:new{
+        dimen = Geom:new{ w = right_focusable_dimen.w, h = right_focusable:getSize().h + 2 },
+        right_focusable,
+    }
     right_cell.ges_events = {
         Tap = {
             GestureRange:new{
@@ -948,23 +965,23 @@ local function buildYearlyRow(popup_self, yearly_stats, fonts, layout)
         popup_self:showBooksForYear(selected_year_for_tap)
         return true
     end
-	
+
 	--FocusManager
 	local foc_mgr_secondRow = {}
 	table.insert(foc_mgr_secondRow, left_cell)
 	table.insert(foc_mgr_secondRow, right_cell)
-	table.insert(popup_self.layout , foc_mgr_secondRow)		
-	
+	table.insert(popup_self.layout , foc_mgr_secondRow)
+
 	local columnSeparator = buildColumnSeparator(left_focusable_dimen.h)
 
     --local yearly_row = buildTwoColRow(left_cell, right_cell, layout)
-	
+
 	local yearly_row = HorizontalGroup:new{
 						left_cell,
 						columnSeparator,
-						right_cell,				
+						right_cell,
 	}
-		
+
     return FrameContainer:new{
         bordersize = 0,
         padding = 0,
@@ -995,8 +1012,8 @@ local function buildMonthlyChart(popup_self, monthly_data, layout, fonts)
     sample_label:free()
 
     local current_year = tonumber(os.date("%Y"))
-    local current_month = os.date("%Y-%m")	
-			
+    local current_month = os.date("%Y-%m")
+
     local function createBarRow(data_slice)
         local bars_row = HorizontalGroup:new{ align = "bottom" }
         local month_labels_row = HorizontalGroup:new{ align = "top" }
@@ -1040,18 +1057,18 @@ local function buildMonthlyChart(popup_self, monthly_data, layout, fonts)
                 dimen = Geom:new{ w = bar_width, h = total_bar_height },
                 bar_column,
             }
-			
-			local focusable_bar = FrameContainer:new{  
-						bordersize = 1,  
+
+			local focusable_bar = FrameContainer:new{
+						bordersize = 1,
 						color = Blitbuffer.COLOR_WHITE,
-						margin = 0,  
-						padding = 0,  
-						focus_border_size = 1,  
-						focus_border_color = Blitbuffer.COLOR_BLACK, 
-						bar_container,  
+						margin = 0,
+						padding = 0,
+						focus_border_size = 1,
+						focus_border_color = Blitbuffer.COLOR_BLACK,
+						bar_container,
 						focusable = true,
-			}  
-			
+			}
+
             local tappable_bar = InputContainer:new{
                 dimen = Geom:new{ w = bar_width, h = total_bar_height },
                 focusable_bar,
@@ -1069,7 +1086,7 @@ local function buildMonthlyChart(popup_self, monthly_data, layout, fonts)
             function tappable_bar:onTap()
                 popup_self:showBooksForMonth(month_data.month, month_year_label)
                 return true
-            end			
+            end
 
             table.insert(bars_row, tappable_bar)
 
@@ -1087,7 +1104,7 @@ local function buildMonthlyChart(popup_self, monthly_data, layout, fonts)
                 table.insert(month_labels_row, HorizontalSpan:new{ width = bar_gap })
             end
         end
-			
+
         return VerticalGroup:new{
             align = "center",
             bars_row,
@@ -1095,25 +1112,25 @@ local function buildMonthlyChart(popup_self, monthly_data, layout, fonts)
             month_labels_row,
         }
     end
-	
-	--FocusManager		
+
+	--FocusManager
 	local foc_mgr_thirdRow = {}
 	local foc_mgr_fourthRow = {}
-	
+
     local chart = VerticalGroup:new{
         align = "center",
     }
     local row_index = 0
     for i = 1, #monthly_data, 6 do
-        local row_data = {}	
+        local row_data = {}
 		local nonZeroMonths = {} --FocusManager
         for j = i, math.min(i + 5, #monthly_data) do
-            table.insert(row_data, monthly_data[j])	
+            table.insert(row_data, monthly_data[j])
 
 			--FocusManager
 			--we only want to add months with non zero values to FocusManager
-			local target_value = popup_self.mode == INSIGHTS_MODE_HOURS and "hours" or "days"			
-			if monthly_data[j][target_value] ~= 0 then 
+			local target_value = popup_self.mode == INSIGHTS_MODE_HOURS and "hours" or "days"
+			if monthly_data[j][target_value] ~= 0 then
 				table.insert(nonZeroMonths, j)
 			end
         end
@@ -1122,9 +1139,9 @@ local function buildMonthlyChart(popup_self, monthly_data, layout, fonts)
                 table.insert(chart, VerticalSpan:new{ height = Size.padding.default })
             end
 			local bar_row = createBarRow(row_data)
-			
+
 			--FocusManager
-			for idx, month_num in ipairs(nonZeroMonths) do		
+			for idx, month_num in ipairs(nonZeroMonths) do
 				if month_num <=6 then
 					month_num = (month_num * 2) - 1 --because bar_row has HorizontalSpan widgets b/w each bar
 					table.insert(foc_mgr_thirdRow, bar_row[1][month_num])
@@ -1133,12 +1150,12 @@ local function buildMonthlyChart(popup_self, monthly_data, layout, fonts)
 					table.insert(foc_mgr_fourthRow, bar_row[1][month_num])
 				end
 			end
-			
+
             table.insert(chart, bar_row)
             row_index = row_index + 1
         end
     end
-	
+
 	--FocusManager
 	if #foc_mgr_thirdRow > 0 then table.insert(popup_self.layout, foc_mgr_thirdRow) end
 	if #foc_mgr_fourthRow > 0 then table.insert(popup_self.layout, foc_mgr_fourthRow) end
@@ -1153,20 +1170,20 @@ local function buildCurrentStreakWidget(streaks_dimen, value, weeksOrDays, fonts
 								text = heading_text,
 								padding = 0,
 								face = fonts.streakLabel,
-								fgcolor = weeksOrDays == 0 and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK,	
+								fgcolor = weeksOrDays == 0 and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK,
 	}
 	local value_widget = TextWidget:new{
 								text = value,
 								padding = 0,
 								face = fonts.streakValue,
-								fgcolor = weeksOrDays == 0 and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK,	
+								fgcolor = weeksOrDays == 0 and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK,
 	}
-	
+
 	local boxContents = VerticalGroup:new{
 							heading_text_widget,
-							value_widget,	
+							value_widget,
 	}
-	
+
 	return FrameContainer:new{
 			padding = 0,
 			bordersize = Screen:scaleBySize(1),
@@ -1184,7 +1201,7 @@ end
 local function buildBestStreakWidget(streaks, streaks_dimen, fonts, streaks_colors)
 
 	local function buildBestModule(value, weekOrDay, isLongest, ts_start, ts_end)
-		local heading_text = weekOrDay == 0 and _("weekly record") or _("daily record") 
+		local heading_text = weekOrDay == 0 and _("weekly record") or _("daily record")
 		if isLongest then heading_text = heading_text .. " ★" end
 		local heading_text_widget = TextBoxWidget:new{
 								width = streaks_dimen.box_width - Screen:scaleBySize(10),
@@ -1193,8 +1210,8 @@ local function buildBestStreakWidget(streaks, streaks_dimen, fonts, streaks_colo
 								face = fonts.streakLabel,
 								fgcolor = streaks_colors.midGray,
 		}
-		
-		local value_text = weekOrDay == 0 and N_("week", "weeks", streaks.weeks.best) or N_("day", "days", streaks.days.best)		
+
+		local value_text = weekOrDay == 0 and N_("week", "weeks", streaks.weeks.best) or N_("day", "days", streaks.days.best)
 		local value_text = value .. " " .. value_text
 		local value_widget = TextBoxWidget:new{
 									width = streaks_dimen.box_width - Screen:scaleBySize(10),
@@ -1202,16 +1219,16 @@ local function buildBestStreakWidget(streaks, streaks_dimen, fonts, streaks_colo
 									line_height = 0,
 									text = value_text,
 									face = fonts.streaRecordValue,
-									fgcolor = streaks_colors.black,	
-		}		
-		
+									fgcolor = streaks_colors.black,
+		}
+
 		local widget = VerticalGroup:new{
 					heading_text_widget,
 					VerticalSpan:new{width = -Screen:scaleBySize(3)},
 					value_widget,
-		} 
-		
-		if  (value > 1 and ts_start and ts_end) or (ts_start >= 1 and ts_end >=1)then 
+		}
+
+		if  value > 1 and ts_start and ts_end and ts_start >= 1 and ts_end >=1 then
 			local startDay =  os.date("%-d " .._(os.date("%b", ts_start)) .. " '%y", ts_start)
 			local endDay = os.date("%-d " .._(os.date("%b", ts_end)) .. " '%y", ts_end)
 			local startEndWidget_txt = string.upper(startDay .. " - " .. endDay)
@@ -1222,28 +1239,28 @@ local function buildBestStreakWidget(streaks, streaks_dimen, fonts, streaks_colo
 									face = fonts.streakStartEndWidget,
 									fgcolor = streaks_colors.black,
 			}
-			
+
 			table.insert(widget, startEndWidget)
 		end
-		
+
 		return widget
 	end
-	
+
 	-- for adding "*" if currently on the longest streak
-	local isLongest_w = (streaks.weeks.best > 1) and (streaks.weeks.best == streaks.weeks.current) and true or false	
-	local isLongest_d = (streaks.days.best > 1) and (streaks.days.best == streaks.days.current) and true or false	
-	
+	local isLongest_w = (streaks.weeks.best > 1) and (streaks.weeks.best == streaks.weeks.current) and true or false
+	local isLongest_d = (streaks.days.best > 1) and (streaks.days.best == streaks.days.current) and true or false
+
 	local bestBlock = VerticalGroup:new{
 							buildBestModule(streaks.weeks.best, 0, isLongest_w, streaks.weeks.best_start, streaks.weeks.best_end),
 							VerticalSpan:new{width = Screen:scaleBySize(5)},
 							buildBestModule(streaks.days.best, 1, isLongest_d, streaks.days.best_start, streaks.days.best_end),
 	}
-	
+
 	local bestBlock_dimen = bestBlock:getSize()
-	if bestBlock_dimen.h > streaks_dimen.box_height then 
+	if bestBlock_dimen.h > streaks_dimen.box_height then
 		streaks_dimen.box_height = bestBlock_dimen.h + Screen:scaleBySize(6)
 	end
-	
+
 	return FrameContainer:new{
 			padding = 0,
 			bordersize = Screen:scaleBySize(1),
@@ -1261,41 +1278,41 @@ local function buildBestStreakWidget(streaks, streaks_dimen, fonts, streaks_colo
 
 end
 
-local function buildInsightsSections(popup_self, streaks, yearly_stats, yearRange, monthly_data, fonts, layout, year)	
+local function buildInsightsSections(popup_self, streaks, yearly_stats, yearRange, monthly_data, fonts, layout, year)
 	--FocusManager
-	popup_self.layout = {} 
-	
+	popup_self.layout = {}
+
     local sections = VerticalGroup:new{
         align = "left",
     }
-	
-	-- STREAKS	
+
+	-- STREAKS
 	local streakBoxWidth = math.floor((layout.full_width - (2 * Size.padding.large) - 3*Screen:scaleBySize(2))/3)
 	local streaks_dimen = {
 				box_width = streakBoxWidth,
-				box_height =  streakBoxWidth,	
+				box_height =  streakBoxWidth,
 	}
 	local streaks_colors = {
 					lightGray = Blitbuffer.COLOR_GRAY_E,
 					darkGray = Blitbuffer.COLOR_GRAY_4,
 					midGray = Blitbuffer.COLOR_GRAY_7,
 					black = Blitbuffer.COLOR_BLACK,
-	}	
-	
-	local maxCurrentStreak = math.max(streaks.days.current, streaks.weeks.current)
-	if maxCurrentStreak > 1999 then 
-		fonts.streakValue = Font:getFace("NotoSerif-Regular.ttf", 50)
-	elseif maxCurrentStreak > 199 then 
-		fonts.streakValue = Font:getFace("NotoSerif-Regular.ttf", 55)	
-	end	
+	}
 
-	local bestStreakWidget = buildBestStreakWidget(streaks, streaks_dimen, fonts, streaks_colors)	
+	local maxCurrentStreak = math.max(streaks.days.current, streaks.weeks.current)
+	if maxCurrentStreak > 1999 then
+		fonts.streakValue = Font:getFace("NotoSerif-Regular.ttf", 50)
+	elseif maxCurrentStreak > 199 then
+		fonts.streakValue = Font:getFace("NotoSerif-Regular.ttf", 55)
+	end
+
+	local bestStreakWidget = buildBestStreakWidget(streaks, streaks_dimen, fonts, streaks_colors)
 	local streaks_weekWidget = buildCurrentStreakWidget(streaks_dimen, streaks.weeks.current, 0, fonts, streaks_colors)
 	local streaks_dayWidget = buildCurrentStreakWidget(streaks_dimen, streaks.days.current, 1, fonts, streaks_colors)
 	local streaksBlock = HorizontalGroup:new{
-								streaks_weekWidget, 
+								streaks_weekWidget,
 								HorizontalSpan:new{ width = Size.padding.large},
-								streaks_dayWidget, 
+								streaks_dayWidget,
 								HorizontalSpan:new{ width = Size.padding.large},
 								bestStreakWidget,
 	}
@@ -1303,14 +1320,14 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, yearRang
 								streaksBlock,
 								VerticalSpan:new{ width = Size.padding.large},
 	}
-	
+
 	-- YEAR DATA BLOCK
-    local year_header = buildYearHeader(popup_self, fonts.section, layout, yearRange)	
+    local year_header = buildYearHeader(popup_self, fonts.section, layout, yearRange)
     local yearly_row = buildYearlyRow(popup_self, yearly_stats, fonts, layout)
 
     local chart = buildMonthlyChart(popup_self, monthly_data, layout, fonts)
 	local yearDataBlock
-    if chart and year_header and yearly_row then	
+    if chart and year_header and yearly_row then
 		yearDataBlock = VerticalGroup:new{
 						year_header,
 						yearly_row,
@@ -1326,8 +1343,8 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, yearRang
 						radius = Screen:scaleBySize(7),
 						yearDataBlock,
 		}
-    end		
-	table.insert(sections, streaksBlock)	
+    end
+	table.insert(sections, streaksBlock)
 	table.insert(sections, yearDataBlock)
     return sections
 end
@@ -1356,29 +1373,29 @@ function ReadingInsightsPopup:calculateStreaks()
 							current = 0,
 							best = 0,
 							best_start = 0,
-							best_end = 0,							
+							best_end = 0,
 						},
 				weeks = {
 							current = 0,
 							best = 0,
 							best_start = 0,
-							best_end = 0,								
+							best_end = 0,
 						},
     }
 
     return withStatsDb(streaks, function(conn)
-		local dates = {}  
-		local sql = [[  
-			SELECT date(start_time, 'unixepoch', 'localtime') as d,  
-				   min(start_time) as timestamp  
-			FROM page_stat   
-			GROUP BY d   
-			ORDER BY d DESC  
-		]]  
-		withStatement(conn, sql, function(stmt)  
-			for row in stmt:rows() do  
+		local dates = {}
+		local sql = [[
+			SELECT date(start_time, 'unixepoch', 'localtime') as d,
+				   min(start_time) as timestamp
+			FROM page_stat
+			GROUP BY d
+			ORDER BY d DESC
+		]]
+		withStatement(conn, sql, function(stmt)
+			for row in stmt:rows() do
 				table.insert(dates, { row[1], tonumber(row[2]) }) -- { date, timestamp}
-			end  
+			end
 		end)
 
         local today = os.date("%Y-%m-%d")
@@ -1399,23 +1416,23 @@ function ReadingInsightsPopup:calculateStreaks()
             local expected_prev = os.date("%Y-%m-%d", prev_time - 86400)
             return curr_date == expected_prev
         end
-				
+
         streaks.days = computeStreaks(dates, isConsecutiveDay, isCurrentDayStart, 1)
 
 		local weeks = {}
-		local sql_weeks = [[  
-			SELECT   
-				strftime('%G-%V', start_time, 'unixepoch', 'localtime') as week,  
-				MIN(start_time) as first_timestamp,  
-				MAX(start_time) as last_timestamp  
-			FROM page_stat   
-			GROUP BY week   
-			ORDER BY week DESC  
-		]]  
-		withStatement(conn, sql_weeks, function(stmt_weeks)  
-			for row in stmt_weeks:rows() do  
+		local sql_weeks = [[
+			SELECT
+				strftime('%G-%V', start_time, 'unixepoch', 'localtime') as week,
+				MIN(start_time) as first_timestamp,
+				MAX(start_time) as last_timestamp
+			FROM page_stat
+			GROUP BY week
+			ORDER BY week DESC
+		]]
+		withStatement(conn, sql_weeks, function(stmt_weeks)
+			for row in stmt_weeks:rows() do
 				table.insert(weeks, {tonumber(row[2]), tonumber(row[3])}) --{first timestamp, last timestamp }
-			end  
+			end
 		end)
 
         local current_week = os.date("%G-%V")
@@ -1432,13 +1449,13 @@ function ReadingInsightsPopup:calculateStreaks()
             if not prev_year_wk or not curr_year_wk then
                 return false
             end
-			
-			local expected_curr_year_wk = os.date("%G-%V", prev_week_stamp - (7 * 86400))			
+
+			local expected_curr_year_wk = os.date("%G-%V", prev_week_stamp - (7 * 86400))
 			return curr_year_wk == expected_curr_year_wk
         end
 
         streaks.weeks = computeStreaks(weeks, isConsecutiveWeek, isCurrentWeekStart, 0)
-		
+
 		insightsCache.streaks = streaks
 		if streaks then writeInsightsCacheToDisk("streaks") end
         return streaks
@@ -1476,7 +1493,7 @@ function ReadingInsightsPopup:getMonthlyReadingDays(year)
 				month_num = month_num
             })
         end
-		
+
 		insightsCache.monthlyReadingDays = insightsCache.monthlyReadingDays or {}
 		insightsCache.monthlyReadingDays[year] = months
 		if months then writeInsightsCacheToDisk("MonthlyReadingDays") end
@@ -1525,7 +1542,7 @@ function ReadingInsightsPopup:getMonthlyReadingHours(year)
 				month_num = month_num
             })
         end
-		
+
 		insightsCache.monthlyReadingHours = insightsCache.monthlyReadingHours or {}
 		insightsCache.monthlyReadingHours[year] = months
 		if months then writeInsightsCacheToDisk("MonthlyReadingHours") end
@@ -1575,7 +1592,7 @@ function ReadingInsightsPopup:getYearlyStats(year)
                 stats.duration = tonumber(row[1]) or 0
             end
         end)
-		
+
 		insightsCache.yearlyStats = insightsCache.yearlyStats or {}
 		insightsCache.yearlyStats[year] = stats
 		if stats then writeInsightsCacheToDisk("YearlyStats") end
@@ -1707,7 +1724,7 @@ function ReadingInsightsPopup:showBooksForMonth(year_month, month_label_full)
 	local bookCount = #books
     showBooksForPeriod(
         self,
-        books, 
+        books,
         T(_("No books read in %1"), month_label_full),
         T(("%1 - %2 " .. N_("book", "books", bookCount).." (%3 ".. N_("page", "pages", pages)..")"), month_label_full, bookCount, pages)
     )
@@ -1732,16 +1749,22 @@ local function populateEverything(popup_self, year, yearRange)
 	logger.info("READING-INSIGHTS-POPUP: POPULATE EVERYTHING CALLED")
 	local a = {
 		yearRange = yearRange,
-		streaks = insightsCache.streaks or popup_self:calculateStreaks(),   
+		streaks = insightsCache.streaks or popup_self:calculateStreaks(),
         yearlyStats = insightsCache.yearlyStats and insightsCache.yearlyStats[year] or popup_self:getYearlyStats(year),
-        monthlyReadingDays = insightsCache.monthlyReadingDays and insightsCache.monthlyReadingDays[year] or popup_self:getMonthlyReadingDays(year), 
+        monthlyReadingDays = insightsCache.monthlyReadingDays and insightsCache.monthlyReadingDays[year] or popup_self:getMonthlyReadingDays(year),
         monthlyReadingHours = insightsCache.monthlyReadingHours and insightsCache.monthlyReadingHours[year] or popup_self:getMonthlyReadingHours(year),
-	}	
+	}
 	return a
 end
 
 local function yearExistsInCache(year)
-	if insightsCache and insightsCache.yearlyStats and insightsCache.yearlyStats[year] then
+	if insightsCache and
+	insightsCache.yearlyStats and
+	insightsCache.yearlyStats[year] and
+	insightsCache.monthlyReadingDays and
+	insightsCache.monthlyReadingDays[year] and
+	insightsCache.monthlyReadingHours and
+	insightsCache.monthlyReadingHours[year] then
 		return true
 	end
 	return false
@@ -1750,37 +1773,37 @@ end
 local function getDataToBeDisplayed(popup_self)
 	--sets yearRange and selected_year.
 	--returns year data if available, else returns fallbackTable.
-	
-	clearCacheIfRequired()	
+
+	clearCacheIfRequired()
     local yearRange = insightsCache.yearRange or popup_self:getYearRange()
     popup_self.yearRange = yearRange
     if not popup_self.selected_year then
         popup_self.selected_year = yearRange.max_year
-    end			
-	if (not yearExistsInCache(popup_self.selected_year)) or (not insightsCache.streaks) then 
+    end
+	if (not yearExistsInCache(popup_self.selected_year)) or (not insightsCache.streaks) then
 		popup_self.modal = false
 		logger.info("READING-INSIGHTS-POPUP: RETURNING FALLBACK ARRAY")
-		return fallbackTable		
-	end 	
-	
+		return fallbackTable
+	end
+
 	return populateEverything(popup_self, popup_self.selected_year, yearRange)
 end
 
 function ReadingInsightsPopup:init()
     local screen_w = Screen:getWidth()
     local screen_h = Screen:getHeight()
-	local max_widget_width = screen_w * 5/6	
+	local max_widget_width = screen_w * 5/6
 	if screen_w > screen_h then
 		max_widget_width = math.floor(max_widget_width * screen_h / screen_w)
-	end	
-    self.mode = normalizeInsightsMode(self.mode or readInsightsMode())	
-	local everything =  getDataToBeDisplayed(self)	
+	end
+    self.mode = normalizeInsightsMode(self.mode or readInsightsMode())
+	local everything =  getDataToBeDisplayed(self)
 	local yearRange = self.yearRange
 	local streaks = everything.streaks
     local yearly_stats = everything.yearlyStats
     local monthly_data
     if self.mode == INSIGHTS_MODE_HOURS then
-        monthly_data = everything.monthlyReadingHours 
+        monthly_data = everything.monthlyReadingHours
     else
         monthly_data = everything.monthlyReadingDays
     end
@@ -1794,9 +1817,9 @@ function ReadingInsightsPopup:init()
         yearRange,
         monthly_data,
         fonts,
-        widget_layout, 
+        widget_layout,
 		self.selected_year
-    )	
+    )
 
     self.popup_frame = FrameContainer:new{
         background = Blitbuffer.COLOR_WHITE,
@@ -1805,18 +1828,26 @@ function ReadingInsightsPopup:init()
         padding = Screen:scaleBySize(15),
         sections,
     }
-		
-    self[1] =	
+
+    self[1] =
         CenterContainer:new {
         dimen = Screen:getSize(),
         VerticalGroup:new {
             self.popup_frame
         }
-    }	
-	
-    if everything.isPlaceholder then 
-		self:onGoToPrevYear(self, self.selected_year) 
-    end  
+    }
+
+    if everything.isPlaceholder then
+		if inf_loop_guard == 0 then
+			inf_loop_guard = 1
+			self:onGoToPrevYear(self, self.selected_year)
+		else
+			local loading = InfoMessage:new{text = "Unable to load insights", timeout = 2}
+			UIManager:show(loading)
+		end
+	else
+		inf_loop_guard = 0
+    end
 
     self.dimen = Geom:new{ w = screen_w, h = screen_h }
 
@@ -1833,20 +1864,20 @@ function ReadingInsightsPopup:init()
                 range = function()
                     return self.dimen
                 end
-            }	
+            }
 		}
     end
 
     if Device:hasKeys() then
 		self.key_events.AnyKeyPressed = {{{ "RPgBack", "LPgBack", "RPgFwd", "LPgFwd", "Back", "Home", }}}
-    end		
+    end
 end
 
 function ReadingInsightsPopup:update(popup_self, selected_year, mode)
 	popup_self.selected_year = selected_year
 	popup_self.mode = mode
-	popup_self:free()  
-	popup_self:init()  
+	popup_self:free()
+	popup_self:init()
 	UIManager:setDirty(popup_self, "ui", popup_self.dimen)
 end
 
@@ -1860,20 +1891,20 @@ end
 local function buildAndShowTargetYear(popup_self, target_year)
 	--builds and shows new widget when new year requested.
 	--we do it this way because we don't prefer placeholder widgets when moving b/w years.
-	
-		if (not yearExistsInCache(target_year)) or (not insightsCache.streaks) then 	
+
+		if (not yearExistsInCache(target_year)) or (not insightsCache.streaks) then
 			local txt
 			if not yearExistsInCache(target_year) then
 				txt = "Loading insights for " .. target_year .. "..."
 			elseif not insightsCache.streaks then
 				txt = "Loading streaks..."
 		end
-		
-		local loading = InfoMessage:new{text = txt}  
+
+		local loading = InfoMessage:new{text = txt}
 		UIManager:show(loading)
-		UIManager:tickAfterNext(function() 
-									populateEverything(popup_self, target_year, popup_self.yearRange) 
-									UIManager:tickAfterNext( function() 
+		UIManager:tickAfterNext(function()
+									populateEverything(popup_self, target_year, popup_self.yearRange)
+									UIManager:tickAfterNext( function()
 											UIManager:close(loading)
 											popup_self:update(popup_self, target_year, popup_self.mode)
 									end)
@@ -1881,19 +1912,17 @@ local function buildAndShowTargetYear(popup_self, target_year)
 		return true
 	end
 	popup_self:update(popup_self, target_year, popup_self.mode)
-	
-
 end
 
 function ReadingInsightsPopup:onGoToPrevYear(popup_self, forced_year)
-	--pass forced_year arg. to repurpose this function to 
+	--pass forced_year arg. to repurpose this function to
 	--change years using year selector.
-	
+
 	local target_year = nil
-	if forced_year then 
+	if forced_year then
         target_year = forced_year
 	end
-    if not forced_year then 
+    if not forced_year then
 		if self.selected_year > self.yearRange.min_year then
         target_year = self.selected_year - 1
 		end
@@ -1942,7 +1971,7 @@ end
 
 
 function ReadingInsightsPopup:onTapClose(arg, ges)
-    if ges.pos:notIntersectWith(self.popup_frame.dimen) then  
+    if ges.pos:notIntersectWith(self.popup_frame.dimen) then
 		UIManager:close(self)
 	end
     return true
@@ -1974,15 +2003,15 @@ end
 -- Patch stats plugin to record last sync timestamp
 local userpatch = require("userpatch")
 
-local function saveLastSyncTimestamp(plugin)	
+local function saveLastSyncTimestamp(plugin)
 	local original_plugin_onSyncBookStats = plugin.onSyncBookStats
-	
+
 	function plugin:onSyncBookStats()
 		local now = os.time()
 		cache_timestamps.statsSynced = now
-		writeCacheTimestampsToDisk()		
-		return original_plugin_onSyncBookStats(self)		
+		writeCacheTimestampsToDisk()
+		return original_plugin_onSyncBookStats(self)
 	end
-       
+
 end
 userpatch.registerPatchPluginFunc("statistics", saveLastSyncTimestamp)
