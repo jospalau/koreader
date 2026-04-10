@@ -217,25 +217,33 @@ function M.patchFileManagerClass(plugin)
             if this._navbar_already_shown then return end
             this._navbar_already_shown = true
 
-            -- First genuine show: reset the active tab to "home" and navigate to home_dir.
+            -- First genuine show: reset the active tab to "home" and navigate to
+            -- home_dir, unless "Return to book folder" is enabled — in that case
+            -- the FM was already positioned at the book's folder by showFileManager()
+            -- (native KOReader behaviour) and we should not override that.
             if this._navbar_container then
                 local t = Config.loadTabConfig()
-                plugin.active_action = "home"
-                local home = G_reader_settings:readSetting("home_dir")
-                if home and this.file_chooser then
-                    -- Suppress onPathChanged: replaceBar below covers the bar update.
-                    this._navbar_suppress_path_change = true
-                    this.file_chooser:changeToPath(home)
-                    this._navbar_suppress_path_change = nil
-                    -- updateTitleBarPath is skipped when onPathChanged is suppressed,
-                    -- so call it explicitly to clear the subtitle at the home folder.
-                    -- Pass force_home=true so the function treats this as "at home"
-                    -- even when item_table is not yet populated (avoids stale subtitle).
-                    if this.updateTitleBarPath then
-                        this:updateTitleBarPath(home, true)
+                local return_to_folder = G_reader_settings:isTrue("navbar_hs_return_to_book_folder")
+                if not return_to_folder then
+                    plugin.active_action = "home"
+                    local home = G_reader_settings:readSetting("home_dir")
+                    if home and this.file_chooser then
+                        -- Suppress onPathChanged: replaceBar below covers the bar update.
+                        this._navbar_suppress_path_change = true
+                        this.file_chooser:changeToPath(home)
+                        this._navbar_suppress_path_change = nil
+                        -- updateTitleBarPath is skipped when onPathChanged is suppressed,
+                        -- so call it explicitly to clear the subtitle at the home folder.
+                        -- Pass force_home=true so the function treats this as "at home"
+                        -- even when item_table is not yet populated (avoids stale subtitle).
+                        if this.updateTitleBarPath then
+                            this:updateTitleBarPath(home, true)
+                        end
                     end
                 end
-                Bottombar.replaceBar(this, Bottombar.buildBarWidget("home", t), t)
+                local active = return_to_folder and M._resolveTabForPath(
+                    this.file_chooser and this.file_chooser.path, t) or "home"
+                Bottombar.replaceBar(this, Bottombar.buildBarWidget(active, t), t)
                 UIManager:setDirty(this, "ui")
             end
         end
@@ -421,7 +429,10 @@ function M.patchFileManagerClass(plugin)
                 if action then
                     local FM2 = package.loaded["apps/filemanager/filemanager"]
                     local fm2 = FM2 and FM2.instance
-                    if fm2 then plugin:_navigate(action, fm2, t2, false) end
+                    if fm2 then
+                        local target = M._getNavbarTarget and M._getNavbarTarget(fm2) or fm2
+                        plugin:_navigate(action, target, t2, false)
+                    end
                 end
                 return true
             end
@@ -437,13 +448,13 @@ function M.patchFileManagerClass(plugin)
         -- Down at the last item enters navbar keyboard focus instead of wrapping.
         if _Device2:hasDPad() and fm_self.file_chooser then
             local fc = fm_self.file_chooser
-            if fc._wrapAroundY == nil then  -- only patch once
-                local _origWrapY = _FocusManager._wrapAroundY
+            if rawget(fc, "_wrapAroundY") == nil then  -- only patch once
+                local _origWrapY = fc._wrapAroundY
                 fc._wrapAroundY = function(self_fc, dy)
-                    if dy > 0 then
+                    if dy > 0 and self_fc.page == (self_fc.total_pages or 1) then
                         _enterNavbarKbFocus()
                     else
-                        _origWrapY(self_fc, dy)
+                        return _origWrapY(self_fc, dy)
                     end
                 end
             end
@@ -1003,6 +1014,26 @@ function M.patchUIManagerShow(plugin)
         local rb = widget.return_button
         if rb and rb[1] then rb[1].width = UI.SIDE_M() end
 
+        -- Override _wrapAroundY so pressing Down at the last item enters navbar keyboard focus.
+        if require("device"):hasDPad() then
+            if rawget(widget, "_wrapAroundY") == nil and type(widget._wrapAroundY) == "function" then
+                local _origWrapY = widget._wrapAroundY
+                widget._wrapAroundY = function(self_w, dy)
+                    if dy > 0 and self_w.page == (self_w.total_pages or 1) then
+                        M.enterNavbarKbFocus(function()
+                            if self_w.layout and self_w.moveFocusTo then
+                                local FocusM = require("ui/widget/focusmanager")
+                                self_w:moveFocusTo(1, #self_w.layout, FocusM.FORCED_FOCUS)
+                            end
+                        end)
+                        return true
+                    else
+                        return _origWrapY(self_w, dy)
+                    end
+                end
+            end
+        end
+
         Bottombar.resizePaginationButtons(widget, Bottombar.getPaginationIconSize())
 
         if n_extra > 0 then
@@ -1214,6 +1245,7 @@ function M.patchUIManagerClose(plugin)
                 and widget.name ~= "homescreen"
                 and not widget_is_fm
                 and not widget._navbar_closing_intentionally
+                and not (widget._manager and widget._manager.folder_shortcuts)
                 and UIManager._exit_code == nil then
             local FM2 = package.loaded["apps/filemanager/filemanager"]
             local fm  = FM2 and FM2.instance
@@ -1232,7 +1264,25 @@ function M.patchUIManagerClose(plugin)
                     -- to the FM (tearing_down is nil). When tearing_down=true the
                     -- reader is closing to open a *new* book — do NOT open the HS.
                     if not widget.tearing_down then
-                        _hs_pending_after_reader = true
+                        -- When "Return to Book Folder" is enabled, skip the HS
+                        -- re-open entirely — native KOReader behaviour takes over
+                        -- and the FM lands on the book's folder directly.
+                        local return_to_folder = G_reader_settings:isTrue("navbar_hs_return_to_book_folder")
+                        if not return_to_folder then
+                            _hs_pending_after_reader = true
+                        end
+                        -- Refresh the FM's file list lazily so that sort order and
+                        -- cover status reflect any changes made during the reading
+                        -- session (e.g. marking a book as finished). scheduleIn(0)
+                        -- defers the work until after the HS has opened (or the FM
+                        -- has appeared), avoiding any delay on the transition.
+                        UIManager:scheduleIn(0, function()
+                            local FM_ref = package.loaded["apps/filemanager/filemanager"]
+                            local fm_ref = FM_ref and FM_ref.instance
+                            if fm_ref and fm_ref.file_chooser then
+                                fm_ref.file_chooser:refreshPath()
+                            end
+                        end)
                     end
                 else
                     UIManager:scheduleIn(0, function()
@@ -1381,19 +1431,48 @@ function M.patchMenuForNavpager(plugin)
     -- and from the FM updateTitleBarPath hook below.
     -- Only runs when the navpager is enabled; no-ops otherwise.
     -- ---------------------------------------------------------------------------
+    -- Single source of truth for the FM title-bar subtitle.
+    -- _fm_path_base: the raw path string last written by updateTitleBarPath
+    -- (empty string at home).  Always set before calling _setPageSubtitle.
+    local _fm_path_base = ""
+
+    -- _setSubtitleUnified: the ONE place that calls tb:setSubTitle in the FM.
+    -- Combines path (if any) with page indicator (if enabled and multi-page).
+    local function _setSubtitleUnified(tb, path_base, page, page_num)
+        if not tb or not tb.subtitle_widget then return end
+        local parts = {}
+        if path_base and path_base ~= "" then
+            parts[#parts + 1] = path_base
+        end
+        if _subtitleEnabled() and page_num and page_num > 1 then
+            local T = require("ffi/util").template
+            parts[#parts + 1] = T(_("Page %1 of %2"), page, page_num)
+        end
+        tb:setSubTitle(table.concat(parts, "  ·  "), true)
+    end
+
     local function _setPageSubtitle(tb, page, page_num)
         if not tb or not tb.subtitle_widget then return end
-        if not _subtitleEnabled() then return end
-        local T = require("ffi/util").template
-        if page_num > 1 then
-            tb:setSubTitle(T(_("Page %1 of %2"), page, page_num), true)
-        else
-            -- Single page or unknown — clear our addition, restore empty subtitle.
-            tb:setSubTitle("", true)
-        end
+        _setSubtitleUnified(tb, _fm_path_base, page, page_num)
     end
     -- Expose so the FM hook (defined below) can reuse it.
     M._setPageSubtitle = _setPageSubtitle
+
+    -- Setter so other modules (e.g. sui_foldercovers) can update the path
+    -- base when entering a virtual folder that never calls updateTitleBarPath.
+    function M.setFMPathBase(text, fm_self)
+        _fm_path_base = text or ""
+        -- Immediately repaint the unified subtitle if we have a FM reference.
+        if fm_self then
+            local tb3 = fm_self.title_bar
+            local fc2 = fm_self.file_chooser
+            if tb3 and tb3.subtitle_widget then
+                local pg     = fc2 and (fc2.page     or 0) or 0
+                local pg_num = fc2 and (fc2.page_num or 0) or 0
+                _setSubtitleUnified(tb3, _fm_path_base, pg, pg_num)
+            end
+        end
+    end
 
     Menu.updatePageInfo = function(menu_self, select_number)
         orig_updatePageInfo(menu_self, select_number)
@@ -1534,31 +1613,26 @@ function M.patchMenuForNavpager(plugin)
             UIManager:setDirty(tb.show_parent or fm_self, "ui", tb.dimen)
         end
 
+        -- Determine the path text for the subtitle.
+        -- At home we want an empty base; in a subfolder we call the original
+        -- (which writes the path into the subtitle) then immediately read it
+        -- back so _setSubtitleUnified can combine path + page in one write.
         if at_home then
-            -- At home: clear the path text (title "Library" is enough).
-            if tb and tb.subtitle_widget then tb:setSubTitle("") end
+            _fm_path_base = ""
         else
-            -- In a subfolder: let the original write the path.
+            -- Let the original write the path first so we can read it back.
             orig_updateTitleBarPath(fm_self, path)
+            local tb2 = fm_self.title_bar
+            _fm_path_base = (tb2 and tb2.subtitle_widget and tb2.subtitle_widget.text) or ""
         end
 
-        -- Append page pagination if enabled.
-        if not _subtitleEnabled() then return end
-        local fc = fm_self.file_chooser
-        if not fc then return end
-        tb = fm_self.title_bar
-        if not tb or not tb.subtitle_widget then return end
-        local page     = fc.page     or 0
-        local page_num = fc.page_num or 0
-        if page_num > 1 then
-            local T        = require("ffi/util").template
-            local base     = tb.subtitle_widget.text or ""
-            local page_str = T(_("Page %1 of %2"), page, page_num)
-            if base ~= "" then
-                tb:setSubTitle(base .. "  ·  " .. page_str)
-            else
-                tb:setSubTitle(page_str)
-            end
+        -- Now write the unified subtitle (path + page if enabled).
+        local fc2 = fm_self.file_chooser
+        local tb3 = fm_self.title_bar
+        if tb3 and tb3.subtitle_widget then
+            local pg     = fc2 and (fc2.page     or 0) or 0
+            local pg_num = fc2 and (fc2.page_num or 0) or 0
+            _setSubtitleUnified(tb3, _fm_path_base, pg, pg_num)
         end
     end
 end
@@ -1577,6 +1651,8 @@ end
 --   • UIManager is not in quit/exit state
 --
 -- Called from SimpleUIPlugin:onResume() in main.lua.
+-- ---------------------------------------------------------------------------
+
 -- Reuses the already-installed _doShowHS closure from patchUIManagerClose
 -- by looking up the live FM instance the same way that function does.
 -- scheduleIn(0) defers until the event loop has finished processing the
@@ -1724,6 +1800,7 @@ function M.teardownAll(plugin)
         plugin._orig_initGesListener       = nil
         FileManager._simpleui_ges_patched  = nil
     end
+
     if FileManager and plugin._orig_fm_setup then
         FileManager.setupLayout = plugin._orig_fm_setup; plugin._orig_fm_setup = nil
     end
@@ -1782,19 +1859,40 @@ do
             if not (HS and HS._instance) then
                 return orig_execute(self, settings, exec_props)
             end
-            -- Homescreen is active: redirect sendEvent → broadcastEvent so FM
-            -- module handlers (collections, history, search) receive the event.
-            local UIManager = require("ui/uimanager")
-            local orig_send = UIManager.sendEvent
-            UIManager.sendEvent = function(um, ev) return UIManager:broadcastEvent(ev) end
+            -- Homescreen is active: sink HS to the bottom of the window stack so
+            -- that FM and its plugins sit on top and receive sendEvent normally.
+            -- This mirrors what _executeInPlace does for bottombar QA actions, and
+            -- fixes overlays (e.g. Reading Statistics: Show Progress) that were
+            -- invisible when triggered via a QuickMenu because the old
+            -- sendEvent→broadcastEvent redirect caused delivery ordering issues.
+            local UIManager_ref = require("ui/uimanager")
+            local stack   = UIManager_ref._window_stack
+            local hs_inst = HS._instance
+            local hs_idx  = nil
+            for i, entry in ipairs(stack) do
+                if entry.widget == hs_inst then hs_idx = i; break end
+            end
+            if hs_idx and hs_idx > 1 then
+                local entry = table.remove(stack, hs_idx)
+                table.insert(stack, 1, entry)
+            end
             local ok2, err = pcall(orig_execute, self, settings, exec_props)
-            UIManager.sendEvent = orig_send
+            -- Restore HS to its original position regardless of success/failure.
+            if hs_idx and hs_idx > 1 then
+                for i, entry in ipairs(stack) do
+                    if entry.widget == hs_inst then
+                        local e = table.remove(stack, i)
+                        table.insert(stack, hs_idx, e)
+                        break
+                    end
+                end
+            end
             if not ok2 then
-                logger.warn("simpleui: Dispatcher:execute (hs broadcast):", err)
+                logger.warn("simpleui: Dispatcher:execute (hs sink):", err)
             end
         end
         Dispatcher._simpleui_execute_patched = true
-        logger.dbg("simpleui: Dispatcher:execute patched for homescreen broadcastEvent")
+        logger.dbg("simpleui: Dispatcher:execute patched for homescreen stack-sink")
     end
 end
 

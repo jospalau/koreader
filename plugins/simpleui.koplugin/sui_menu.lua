@@ -712,6 +712,18 @@ SimpleUIPlugin.addToMainMenu = function(self, menu_items)
                 end,
             },
             { text = _("Items"), sub_item_table_func = makeTopbarItemsMenu },
+            {
+                text         = _("Settings on Long Tap"),
+                help_text    = _("When enabled, long-pressing the top bar opens its settings menu.\nDisable this to prevent the settings menu from appearing on long tap."),
+                checked_func = function()
+                    return G_reader_settings:nilOrTrue("navbar_topbar_settings_on_hold")
+                end,
+                keep_menu_open = true,
+                callback = function()
+                    local on = G_reader_settings:nilOrTrue("navbar_topbar_settings_on_hold")
+                    G_reader_settings:saveSetting("navbar_topbar_settings_on_hold", not on)
+                end,
+            },
         }
     end
 
@@ -869,6 +881,18 @@ SimpleUIPlugin.addToMainMenu = function(self, menu_items)
                     return string.format(_("Tabs  (%d/%d — %d left)"), n, limit, remaining)
                 end,
                 sub_item_table_func = makeTabsMenu,
+            },
+            {
+                text         = _("Settings on Long Tap"),
+                help_text    = _("When enabled, long-pressing the bottom bar opens its settings menu.\nDisable this to prevent the settings menu from appearing on long tap."),
+                checked_func = function()
+                    return G_reader_settings:nilOrTrue("navbar_bottombar_settings_on_hold")
+                end,
+                keep_menu_open = true,
+                callback = function()
+                    local on = G_reader_settings:nilOrTrue("navbar_bottombar_settings_on_hold")
+                    G_reader_settings:saveSetting("navbar_bottombar_settings_on_hold", not on)
+                end,
             },
         }
     end
@@ -1558,6 +1582,33 @@ SimpleUIPlugin.addToMainMenu = function(self, menu_items)
                     local on = G_reader_settings:readSetting("start_with", "filemanager") == "homescreen_simpleui"
                     G_reader_settings:saveSetting("start_with", on and "filemanager" or "homescreen_simpleui")
                 end,
+            },
+            {
+                text         = _("Return to Book Folder"),
+                help_text    = _("When enabled, opening the file browser after finishing or closing a book navigates to the folder the book is in, matching native KOReader behaviour.\nWhen disabled (default), SimpleUI always returns to the library root."),
+                enabled_func = function()
+                    return G_reader_settings:readSetting("start_with", "filemanager") == "homescreen_simpleui"
+                end,
+                checked_func = function()
+                    return G_reader_settings:isTrue("navbar_hs_return_to_book_folder")
+                end,
+                keep_menu_open = true,
+                callback = function()
+                    local on = G_reader_settings:isTrue("navbar_hs_return_to_book_folder")
+                    G_reader_settings:saveSetting("navbar_hs_return_to_book_folder", not on)
+                end,
+            },
+            {
+                text         = _("Settings on Long Tap"),
+                help_text    = _("When enabled, long-pressing a section opens its settings menu.\nDisable this to prevent the settings menu from appearing on long tap."),
+                checked_func = function()
+                    return G_reader_settings:nilOrTrue("navbar_homescreen_settings_on_hold")
+                end,
+                keep_menu_open = true,
+                callback = function()
+                    local on = G_reader_settings:nilOrTrue("navbar_homescreen_settings_on_hold")
+                    G_reader_settings:saveSetting("navbar_homescreen_settings_on_hold", not on)
+                end,
                 separator = true,
             },
             {
@@ -1695,7 +1746,12 @@ SimpleUIPlugin.addToMainMenu = function(self, menu_items)
                                     local FM = package.loaded["apps/filemanager/filemanager"]
                                     local fm = FM and FM.instance
                                     if fm and fm.file_chooser then
-                                        fm.file_chooser:updateItems()
+                                        -- refreshPath rebuilds the item list from scratch and
+                                        -- passes it through switchItemTable, which is where the
+                                        -- series-grouping hook (_sgProcessItemTable) runs.
+                                        -- updateItems alone skips that hook, so grouping would
+                                        -- only appear after a manual refresh.
+                                        fm.file_chooser:refreshPath()
                                     end
                                 end
                                 return {
@@ -1716,6 +1772,16 @@ SimpleUIPlugin.addToMainMenu = function(self, menu_items)
                                             else
                                                 pcall(FC.uninstall)
                                             end
+                                            _refreshFC()
+                                        end,
+                                    },
+                                    {
+                                        text           = _("Group Books by Series"),
+                                        checked_func   = function() return FC.getSeriesGrouping() end,
+                                        keep_menu_open = true,
+                                        callback       = function()
+                                            FC.setSeriesGrouping(not FC.getSeriesGrouping())
+                                            FC.invalidateCache()
                                             _refreshFC()
                                         end,
                                     },
@@ -1760,6 +1826,12 @@ SimpleUIPlugin.addToMainMenu = function(self, menu_items)
                                                 checked_func   = function() return FC.getOverlayPages() end,
                                                 keep_menu_open = true,
                                                 callback       = function() FC.setOverlayPages(not FC.getOverlayPages()); FC.invalidateCache(); _refreshFC() end,
+                                            },
+                                            {
+                                                text           = _("Series Index"),
+                                                checked_func   = function() return FC.getOverlaySeries() end,
+                                                keep_menu_open = true,
+                                                callback       = function() FC.setOverlaySeries(not FC.getOverlaySeries()); FC.invalidateCache(); _refreshFC() end,
                                             },
                                             {
                                                 text         = _("Folder Name"),
@@ -1846,7 +1918,7 @@ SimpleUIPlugin.addToMainMenu = function(self, menu_items)
                                         end,
                                     },
                                     {
-                                        text           = _("  Scan subfolders for cover"),
+                                        text           = _("Scan subfolders for cover"),
                                         checked_func   = function() return FC.getRecursiveCover() end,
                                         enabled_func   = function() return FC.isEnabled() and FC.getSubfolderCover() end,
                                         keep_menu_open = true,
@@ -1857,6 +1929,47 @@ SimpleUIPlugin.addToMainMenu = function(self, menu_items)
                                         end,
                                     },
                                 }
+                            end,
+                        },
+                    }
+                end,
+            },
+            -- -----------------------------------------------------------------
+            -- About submenu
+            -- -----------------------------------------------------------------
+            {
+                text                = _("About"),
+                separator           = true,
+                sub_item_table_func = function()
+                    local _plugin_dir = (debug.getinfo(1, "S").source or ""):match("^@(.+)/[^/]+$")
+                    local ok, Meta = pcall(dofile, _plugin_dir .. "/_meta.lua")
+                    if not ok or type(Meta) ~= "table" then
+                        local rok, rmeta = pcall(require, "_meta")
+                        Meta = (rok and rmeta) or {}
+                    end
+                    return {
+                        {
+                            text           = string.format(_("Version: %s"), Meta.version or "?"),
+                            keep_menu_open = true,
+                            callback       = function() end,
+                        },
+                        {
+                            text           = string.format(_("Author: %s"), Meta.author or "?"),
+                            keep_menu_open = true,
+                            callback       = function() end,
+                        },
+                        {
+                            text      = _("Check for Updates"),
+                            callback  = function()
+                                local ok, Updater = pcall(require, "sui_updater")
+                                if not ok then
+                                    UIManager:show(InfoMessage():new{
+                                        text    = _("Updater module not found."),
+                                        timeout = 4,
+                                    })
+                                    return
+                                end
+                                Updater.checkForUpdates()
                             end,
                         },
                     }

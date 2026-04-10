@@ -87,6 +87,36 @@ function SimpleUIPlugin:init()
         self.ui.menu:registerToMainMenu(self)
         if G_reader_settings:nilOrTrue("simpleui_enabled") then
             Patches.installAll(self)
+            -- Regista o botão TBR no diálogo de hold da Library (livro individual).
+            -- addFileDialogButtons é a API oficial do KOReader para isso.
+            -- O botão para seleção múltipla é injectado via patchGetPlusDialogButtons
+            -- em sui_patches.lua → patchFileManagerClass.
+            UIManager:scheduleIn(0, function()
+                local ok_fm, FM = pcall(require, "apps/filemanager/filemanager")
+                if not (ok_fm and FM and FM.instance) then return end
+                local ok_tbr, TBR = pcall(require, "desktop_modules/module_tbr")
+                if not (ok_tbr and TBR) then return end
+                FM.instance:addFileDialogButtons("sui_tbr", function(file, is_file, _book_props)
+                    if not is_file then return nil end
+                    -- Only show the button for files that are books
+                    -- (have a provider or have been opened before).
+                    local ok_dr, DR = pcall(require, "document/documentregistry")
+                    local ok_bl, BL = pcall(require, "ui/widget/booklist")
+                    local is_book = (ok_dr and DR and DR:hasProvider(file))
+                        or (ok_bl and BL and BL.hasBookBeenOpened(file))
+                    if not is_book then return nil end
+                    -- After toggling TBR, close the dialog and refresh the file list,
+                    -- matching the same behaviour as "On Hold", "Reading", etc.
+                    -- Note: file_dialog is a property of file_chooser, not FM.instance.
+                    local close_refresh = function()
+                        local fc = FM.instance and FM.instance.file_chooser
+                        local dlg = fc and fc.file_dialog
+                        if dlg then UIManager:close(dlg) end
+                        if fc then fc:refreshPath() end
+                    end
+                    return { TBR.genTBRButton(file, close_refresh) }
+                end)
+            end)
             if G_reader_settings:nilOrTrue("navbar_topbar_enabled") then
                 Topbar.scheduleRefresh(self, 0)
             end
@@ -113,7 +143,7 @@ end
 local _PLUGIN_MODULES = {
     "sui_i18n", "sui_config", "sui_core", "sui_bottombar", "sui_topbar",
     "sui_patches", "sui_menu", "sui_titlebar", "sui_quickactions",
-    "sui_homescreen", "sui_foldercovers",
+    "sui_homescreen", "sui_foldercovers", "sui_updater",
     "desktop_modules/moduleregistry",
     "desktop_modules/module_books_shared",
     "desktop_modules/module_clock",
@@ -125,6 +155,7 @@ local _PLUGIN_MODULES = {
     "desktop_modules/module_reading_stats",
     "desktop_modules/module_stats_provider",
     "desktop_modules/module_recent",
+    "desktop_modules/module_tbr",
     "desktop_modules/quotes",
 }
 
@@ -141,6 +172,15 @@ function SimpleUIPlugin:onTeardown()
     local mod_recent = package.loaded["desktop_modules/module_recent"]
     if mod_recent and type(mod_recent.reset) == "function" then
         pcall(mod_recent.reset)
+    end
+    local mod_tbr = package.loaded["desktop_modules/module_tbr"]
+    if mod_tbr and type(mod_tbr.reset) == "function" then
+        pcall(mod_tbr.reset)
+    end
+    -- Remove o botão TBR do diálogo da Library.
+    local FM = package.loaded["apps/filemanager/filemanager"]
+    if FM and FM.instance and FM.instance.removeFileDialogButtons then
+        pcall(function() FM.instance:removeFileDialogButtons("sui_tbr") end)
     end
     local mod_rg = package.loaded["desktop_modules/module_reading_goals"]
     if mod_rg and type(mod_rg.reset) == "function" then
@@ -172,8 +212,14 @@ end
 function SimpleUIPlugin:onNetworkConnected()
     if self._simpleui_suspended then return end
     local RUI = package.loaded["apps/reader/readerui"]
-    if RUI and RUI.instance then
+    -- If this event was fired by doWifiToggle itself, wifi_optimistic is already
+    -- set correctly and the bars are already rebuilt. Skip the reset so the
+    -- optimistic icon is preserved (on Kindle isWifiOn() may lag behind).
+    -- Still call _refreshCurrentView to rebuild homescreen QA icons.
+    if not Config.wifi_broadcast_self then
         Config.wifi_optimistic = nil
+    end
+    if RUI and RUI.instance then
         self:_rebuildAllNavbars()
     else
         Bottombar.refreshWifiIcon(self)
@@ -183,8 +229,11 @@ end
 function SimpleUIPlugin:onNetworkDisconnected()
     if self._simpleui_suspended then return end
     local RUI = package.loaded["apps/reader/readerui"]
-    if RUI and RUI.instance then
+    -- Same rationale as onNetworkConnected above.
+    if not Config.wifi_broadcast_self then
         Config.wifi_optimistic = nil
+    end
+    if RUI and RUI.instance then
         self:_rebuildAllNavbars()
     else
         Bottombar.refreshWifiIcon(self)

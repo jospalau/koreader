@@ -780,14 +780,16 @@ function HomescreenWidget:init()
         self.key_events.HSKbPress    = { { "Press" } }
     end
     if Device:hasKeys() then
-        self.key_events.HSOpenMenu   = { { "Menu"  } }
+        self.key_events.HSOpenMenu = { { "Menu"  } }
+        self.key_events.PrevPage   = { { Device.input.group.PgBack } }
+        self.key_events.NextPage   = { { Device.input.group.PgFwd } }
     end
 
     -- Menu key → open the KOReader top settings menu (same as swipe-from-top).
     function self:onHSOpenMenu()
         local FileManager = require("apps/filemanager/filemanager")
         local fm = FileManager.instance
-        if fm and fm.showFileManagerMenu then fm:showFileManagerMenu() end
+        if fm and fm.menu then fm.menu:onTapShowMenu() end
         return true
     end
 
@@ -1561,6 +1563,12 @@ end
 -- per-page-turn closure allocation that the old inline approach caused.
 -- ---------------------------------------------------------------------------
 function HomescreenWidget:_onHoldModRelease(wrapper)
+    -- Honour the "Settings on Long Tap" toggle.
+    -- When the setting is explicitly false the hold gesture is silently consumed
+    -- (returns true to prevent propagation) without opening the menu.
+    if not G_reader_settings:nilOrTrue("navbar_homescreen_settings_on_hold") then
+        return true
+    end
     local mod      = wrapper._sui_mod   -- set on the wrapper InputContainer
     local hs       = wrapper._sui_hs    -- back-reference to HomescreenWidget
     if not mod or not hs then return true end
@@ -1639,7 +1647,12 @@ function HomescreenWidget:_makeModWrapper(mod, widget, inner_w)
         -- onHoldMod just consumes the event so hold doesn't propagate.
         -- onHoldModRelease delegates to the shared method on HomescreenWidget
         -- via the _sui_hs back-reference — zero new closures per page turn.
-        function w:onHoldMod() return true end
+        function w:onHoldMod()
+            if not G_reader_settings:nilOrTrue("navbar_homescreen_settings_on_hold") then
+                return  -- do not consume; hold_release will not fire on this wrapper
+            end
+            return true
+        end
         function w:onHoldModRelease() return self._sui_hs:_onHoldModRelease(self) end
         pool[mod.id] = w
     end
