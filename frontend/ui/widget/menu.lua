@@ -856,9 +856,16 @@ function Menu:init()
         pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
     end
 
-    self.page_info_spacer = HorizontalSpan:new{
-        width = Screen:scaleBySize(0) --(pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks")) and Screen:scaleBySize(0) or Screen:scaleBySize(32),
-    }
+
+    if not G_reader_settings:isTrue("simpleui_enabled") then
+        self.page_info_spacer = HorizontalSpan:new{
+            width = Screen:scaleBySize(0) --(pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks")) and Screen:scaleBySize(0) or Screen:scaleBySize(32),
+        }
+    else
+        self.page_info_spacer = HorizontalSpan:new{
+            width = Screen:scaleBySize(32)
+        }
+    end
     self.page_info_left_chev:hide()
     self.page_info_right_chev:hide()
     self.page_info_first_chev:hide()
@@ -1093,32 +1100,65 @@ function Menu:init()
         tap_indicator = VerticalSpan:new{ width = 0 }
     end
 
-    local footer = OverlapGroup:new {
-        allow_mirroring = false,
-        dimen = self.inner_dimen:copy(),
-        self.content_group,
-        self.footer_text,
-        page_controls,
-        tap_indicator,
-    }
+    local footer
+    if not G_reader_settings:isTrue("simpleui_enabled") then
+        footer = OverlapGroup:new {
+            allow_mirroring = false,
+            dimen = self.inner_dimen:copy(),
+            self.content_group,
+            self.footer_text,
+            page_controls,
+            tap_indicator,
+        }
+    else
+        footer = BottomContainer:new{
+            dimen = self.inner_dimen:copy(),
+            self.page_info,
+        }
+    end
 
-    local content = OverlapGroup:new{
-        -- This unique allow_mirroring=false looks like it's enough
-        -- to have this complex Menu, and all widgets based on it,
-        -- be mirrored correctly with RTL languages
-        allow_mirroring = false,
-        dimen = self.inner_dimen:copy(),
-        page_return,
-    }
+    local content
 
-    self[1] = FrameContainer:new {
-        background = Blitbuffer.COLOR_WHITE,
-        padding = 0,
-        margin = 0,
-        bordersize = 0,
-        footer
-    }
+    if not G_reader_settings:isTrue("simpleui_enabled") then
+        content = OverlapGroup:new{
+            -- This unique allow_mirroring=false looks like it's enough
+            -- to have this complex Menu, and all widgets based on it,
+            -- be mirrored correctly with RTL languages
+            allow_mirroring = false,
+            dimen = self.inner_dimen:copy(),
+            page_return,
+        }
+    else
+        content = OverlapGroup:new{
+            -- This unique allow_mirroring=false looks like it's enough
+            -- to have this complex Menu, and all widgets based on it,
+            -- be mirrored correctly with RTL languages
+            allow_mirroring = false,
+            dimen = self.inner_dimen:copy(),
+            self.content_group,
+            page_return,
+            footer,
+        }
+    end
 
+    if not G_reader_settings:isTrue("simpleui_enabled") then
+        self[1] = FrameContainer:new {
+            background = Blitbuffer.COLOR_WHITE,
+            padding = 0,
+            margin = 0,
+            bordersize = 0,
+            footer
+        }
+    else
+        self[1] = FrameContainer:new{
+            background = Blitbuffer.COLOR_WHITE,
+            bordersize = self.border_size,
+            padding = 0,
+            margin = 0,
+            radius = self.is_popout and math.floor(self.dimen.w * (1/20)) or 0,
+            content
+        }
+    end
     ------------------------------------------
     -- start to set up input event callback --
     ------------------------------------------

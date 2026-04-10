@@ -2281,7 +2281,11 @@ function TopBar:paintTo(bb, x, y)
             else
                 books_information_widget_container[1]:setText("No stats.lua file in home dir")
             end
-            books_information_widget_container:paintTo(bb, x + books_information_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES, Screen:getHeight() - 10)
+
+            local fm = require("apps/filemanager/filemanager").instance
+            if not G_reader_settings:isTrue("simpleui_enabled") then
+                books_information_widget_container:paintTo(bb, x + books_information_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES, Screen:getHeight() - 10)
+            end
 
 
             local times_widget_container =
@@ -2316,11 +2320,12 @@ function TopBar:paintTo(bb, x, y)
                 },
             }
             version_widget_container[1]:setText(TopBar:getDateAndVersion() .. ". BDB:" .. TopBar:getBooksOpened() .. "·TR:" .. TopBar:getTotalRead() .. "d" .. "·ΔL:" .. stats_year .. "h")
-            version_widget_container:paintTo(bb, x + version_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES,
-            Screen:getHeight()
-            - books_information_widget_container[1]:getSize().h - 10)
-            -- - times_widget_container[1]:getSize().h)
-
+            if not G_reader_settings:isTrue("simpleui_enabled") then
+                version_widget_container:paintTo(bb, x + version_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES,
+                Screen:getHeight()
+                - books_information_widget_container[1]:getSize().h - 10)
+                -- - times_widget_container[1]:getSize().h)
+            end
             if self.fm and not self.history then
                 if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
                     local sort_by_mode = G_reader_settings:readSetting("collate")

@@ -1806,6 +1806,10 @@ function FileManager:onToggleReverseSorting()
         self:onSetReverseSorting(not G_reader_settings:isTrue("reverse_collate"))
         self.file_chooser:onGotoPage(1)
     end
+    if G_reader_settings:isTrue("simpleui_enabled") then
+        UIManager:setDirty(self.topbar, "ui")
+    end
+
     return true
 end
 
@@ -1833,6 +1837,10 @@ function FileManager:onToggleSortByMode()
         end
         self.file_chooser:onGotoPage(1)
     end
+    if G_reader_settings:isTrue("simpleui_enabled") then
+        UIManager:setDirty(self.topbar, "ui")
+    end
+
     return true
 end
 

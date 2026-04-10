@@ -121,9 +121,9 @@ function M.patchFileManagerClass(plugin)
                 ges         = "swipe",
                 screen_zone = { ratio_x = 0, ratio_y = 0, ratio_w = 1, ratio_h = 1 },
                 handler = function(ges)
-                    if ges.direction == "south" or ges.direction == "north" then
-                        return false
-                    end
+                    -- if ges.direction == "south" or ges.direction == "north" then
+                    --     return false
+                    -- end
                     fm_self:onSwipeFM(ges)
                     return true
                 end,

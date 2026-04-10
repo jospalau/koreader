@@ -196,8 +196,12 @@ userpatch.applyPatches(userpatch.late)
 if G_reader_settings:isTrue("apply_extra_patches") then
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/ui-font.lua")
     -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/browser-folder-cover.lua") -- Different approach which works quicker adapted in mosaicmenu.lua
-    local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/filemanager-titlebar.lua")
-    local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/browser-up-folder.lua")
+    if not G_reader_settings:isTrue("simpleui_enabled") then
+        local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/filemanager-titlebar.lua")
+    end
+    if not G_reader_settings:isTrue("simpleui_enabled") then
+        local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/browser-up-folder.lua")
+    end
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/cvs-receipt.lua") -- requires book_receipt_background folder inside main koreader folder
     -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/sleep-overlay.lua") -- requires sleepoverlays folder inside main koreader folder
     --local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/statusbar-cycle-presets.lua")
@@ -336,7 +340,9 @@ else
         -- Always open FM modules on top of filemanager, so closing 'em doesn't result in an exit
         -- because of an empty widget stack, and so they can interact with the FM instance as expected.
         if start_with == "history" then
-            FileManager.instance.history:onShowHist()
+            if not G_reader_settings:isTrue("simpleui_enabled") then
+                FileManager.instance.history:onShowHist()
+            end
         elseif start_with == "favorites" then
             FileManager.instance.collections:onShowColl()
         elseif start_with == "folder_shortcuts" then
