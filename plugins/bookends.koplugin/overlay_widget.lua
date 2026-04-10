@@ -15,58 +15,101 @@ local function textWidgetOpts(t)
     return t
 end
 
--- Cache for italic font variant lookups (face_name -> italic_path or false)
-local _italic_cache = {}
+-- Cache for font variant lookups (face_name:style -> path or false)
+local _variant_cache = {}
 
---- Find the italic variant of a font by searching for common naming patterns.
--- Searches installed fonts for variants matching patterns like Regular->Italic.
--- Results are cached per face_name.
+--- Find a style variant (bold, italic, bolditalic) of a font by filename patterns.
+-- Searches installed fonts for variants matching common naming conventions.
+-- Results are cached per (face_name, style) pair.
 -- @param face_name string: path/name of the base font
--- @return string or false: path to italic variant, or false if not found
-function OverlayWidget.findItalicVariant(face_name)
-    if _italic_cache[face_name] ~= nil then
-        return _italic_cache[face_name] -- may be false (no variant found)
+-- @param style string: "bold", "italic", or "bolditalic"
+-- @return string or false: path to variant font, or false if not found
+function OverlayWidget.findFontVariant(face_name, style)
+    local cache_key = face_name .. "\0" .. style
+    if _variant_cache[cache_key] ~= nil then
+        return _variant_cache[cache_key]
     end
 
     local ok, FontList = pcall(require, "fontlist")
     if not ok then
-        _italic_cache[face_name] = false
+        _variant_cache[cache_key] = false
         return false
     end
     local all_fonts = FontList:getFontList()
 
-    local dir = face_name:match("^(.*/)") or ""
     local basename = face_name:match("([^/]+)$") or face_name
     local name_no_ext = (basename:gsub("%.[^.]+$", ""))
 
     local candidates = {}
-    if name_no_ext:match("[Rr]egular") then
-        table.insert(candidates, (name_no_ext:gsub("[Rr]egular", "Italic")))
-        table.insert(candidates, (name_no_ext:gsub("[Rr]egular", "italic")))
+    if style == "italic" then
+        if name_no_ext:match("[Rr]egular") then
+            table.insert(candidates, (name_no_ext:gsub("[Rr]egular", "Italic")))
+        end
+        if name_no_ext:match("[Bb]old") and not name_no_ext:match("[Ii]talic") then
+            table.insert(candidates, (name_no_ext:gsub("[Bb]old", "BoldItalic")))
+            table.insert(candidates, (name_no_ext:gsub("[Bb]old", "Bold Italic")))
+        end
+        table.insert(candidates, name_no_ext .. "-Italic")
+        table.insert(candidates, name_no_ext .. " Italic")
+        table.insert(candidates, name_no_ext .. "Italic")
+    elseif style == "bold" then
+        if name_no_ext:match("[Rr]egular") then
+            table.insert(candidates, (name_no_ext:gsub("[Rr]egular", "Bold")))
+        end
+        table.insert(candidates, name_no_ext .. "-Bold")
+        table.insert(candidates, name_no_ext .. " Bold")
+        table.insert(candidates, name_no_ext .. "Bold")
+    elseif style == "bolditalic" then
+        if name_no_ext:match("[Rr]egular") then
+            table.insert(candidates, (name_no_ext:gsub("[Rr]egular", "Bold Italic")))
+            table.insert(candidates, (name_no_ext:gsub("[Rr]egular", "BoldItalic")))
+            table.insert(candidates, (name_no_ext:gsub("[Rr]egular", "Bold-Italic")))
+        end
+        table.insert(candidates, name_no_ext .. "-Bold Italic")
+        table.insert(candidates, name_no_ext .. "-BoldItalic")
+        table.insert(candidates, name_no_ext .. " Bold Italic")
+        table.insert(candidates, name_no_ext .. " BoldItalic")
+        table.insert(candidates, name_no_ext .. "BoldItalic")
     end
-    if name_no_ext:match("[Bb]old") and not name_no_ext:match("[Ii]talic") then
-        table.insert(candidates, (name_no_ext:gsub("[Bb]old", "BoldItalic")))
-        table.insert(candidates, (name_no_ext:gsub("[Bb]old", "Bolditalic")))
-    end
-    table.insert(candidates, name_no_ext .. "-Italic")
-    table.insert(candidates, name_no_ext .. "Italic")
-    table.insert(candidates, name_no_ext .. " Italic")
-    table.insert(candidates, name_no_ext .. "-italic")
 
+    -- First try: filename pattern matching (handles standard naming conventions)
     for _, candidate in ipairs(candidates) do
         local pattern = candidate:lower()
         for _, font_path in ipairs(all_fonts) do
             local font_name = font_path:match("([^/]+)$") or ""
             local font_no_ext = font_name:gsub("%.[^.]+$", "")
             if font_no_ext:lower() == pattern then
-                _italic_cache[face_name] = font_path
+                _variant_cache[cache_key] = font_path
                 return font_path
             end
         end
     end
 
-    _italic_cache[face_name] = false
+    -- Second try: fontinfo metadata (handles non-standard naming like LinBiolinum_R/_RI/_RB)
+    FontList:getFontList() -- ensure fontinfo is populated
+    local base_info = FontList.fontinfo[face_name]
+    if base_info and base_info[1] then
+        local base_name = base_info[1].name
+        local want_bold = (style == "bold" or style == "bolditalic")
+        local want_italic = (style == "italic" or style == "bolditalic")
+        for file, info_arr in pairs(FontList.fontinfo) do
+            local info = info_arr[1]
+            if info and info.name == base_name
+               and (info.bold == want_bold) and (info.italic == want_italic)
+               and file ~= face_name then
+                _variant_cache[cache_key] = file
+                return file
+            end
+        end
+    end
+
+    _variant_cache[cache_key] = false
     return false
+end
+
+--- Backward-compatible wrapper.
+function OverlayWidget.findItalicVariant(face_name)
+    return OverlayWidget.findFontVariant(face_name, "italic")
 end
 
 --- Simple multi-line widget that paints TextWidgets stacked vertically.
@@ -173,6 +216,7 @@ end
 
 -- U+FFFC OBJECT REPLACEMENT CHARACTER — placeholder for bar position in text
 local BAR_PLACEHOLDER = "\xEF\xBF\xBC"
+OverlayWidget.BAR_PLACEHOLDER = BAR_PLACEHOLDER
 
 --- Build a HorizontalRowWidget for a line that contains a bar token.
 -- Text is split on the BAR_PLACEHOLDER to preserve before/after segments.
@@ -579,19 +623,41 @@ function OverlayWidget.buildStyledLine(segments, cfg, available_w, max_width)
         else
             local display = seg.uppercase and Utf8Proc.uppercase_dumb(seg.text) or seg.text
             if display ~= "" then
-                -- Resolve font face for this segment
+                -- Resolve font face and synthetic bold for this segment
                 local seg_face = cfg.face
-                if seg.italic and cfg.face_name then
-                    local italic_face = OverlayWidget.findItalicVariant(cfg.face_name)
-                    if italic_face then
-                        seg_face = Font:getFace(italic_face, cfg.font_size)
+                local seg_synthetic_bold = false
+                if cfg.face_name and (seg.bold or seg.italic) then
+                    local style = (seg.bold and seg.italic and "bolditalic")
+                        or (seg.bold and "bold") or "italic"
+                    local variant = OverlayWidget.findFontVariant(cfg.face_name, style)
+                    if variant then
+                        seg_face = Font:getFace(variant, cfg.font_size)
+                    elseif style == "bolditalic" then
+                        -- Fallback: italic file + synthetic bold
+                        local italic = OverlayWidget.findFontVariant(cfg.face_name, "italic")
+                        if italic then
+                            seg_face = Font:getFace(italic, cfg.font_size)
+                        end
+                        seg_synthetic_bold = true
+                    elseif seg.bold then
+                        seg_synthetic_bold = true
                     end
+                end
+
+                -- If a truncation limit is set, cap this segment to remaining space
+                local seg_max_width = nil
+                if max_width then
+                    local remaining = max_width - total_w
+                    if remaining <= 0 then break end
+                    seg_max_width = remaining
                 end
 
                 local tw = TextWidget:new(textWidgetOpts{
                     text = display,
                     face = seg_face,
-                    bold = seg.bold,
+                    bold = seg_synthetic_bold,
+                    max_width = seg_max_width,
+                    truncate_with_ellipsis = seg_max_width ~= nil,
                 })
                 local size = tw:getSize()
                 table.insert(widgets, { widget = tw, w = size.w, h = size.h })
@@ -930,14 +996,13 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
                 bb:paintRect(x, y, w, h, border_bg)
             end
         end
-        local h_inset, v_inset
+        local padding = math.max(1, math.floor(thickness * 0.1))
+        local h_inset = border + padding
+        local v_inset = border + padding
         if radius > 0 then
             -- Rounded: paint fill as a rounded rect, then overpaint the unfilled
             -- portion with a background rounded rect so both ends keep curved edges.
-            v_inset = border
-            h_inset = border
-            local padding = math.max(1, math.floor(thickness * 0.1))
-            local inset = border + padding
+            local inset = h_inset
             local inner_r = math.max(0, radius - inset)
             local inner_x = x + inset
             local inner_y = y + inset
@@ -967,10 +1032,6 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
                     end
                 end
             end
-        else
-            local padding = math.max(1, math.floor(thickness * 0.1))
-            h_inset = border + padding
-            v_inset = border + padding
         end
         local inner_ox = ox + h_inset
         local inner_oy = oy + v_inset
@@ -1000,6 +1061,8 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
         if inner_len > 0 and inner_thick > 0 then
             local fill_len = math.floor(inner_len * fraction)
             local fill_start = reverse and (inner_len - fill_len) or 0
+            -- For rounded bars, compute the inner radius for tick clipping
+            local clip_r = radius > 0 and math.max(0, radius - h_inset) or 0
             for _, tick in ipairs(ticks or {}) do
                 local tick_frac = type(tick) == "table" and tick[1] or tick
                 local tick_w = type(tick) == "table" and tick[2] or 1
@@ -1016,8 +1079,20 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
                             tick_color = base_tick
                         end
                         local th = math.max(1, math.floor(inner_thick * tick_height_pct / 100))
-                        local t_oy = inner_oy + math.floor((inner_thick - th) / 2)
-                        pr(inner_ox + tick_pos, t_oy, tick_w, th, tick_color)
+                        -- Clip tick height near rounded ends so ticks don't exceed the curve
+                        if clip_r > 0 then
+                            local dist_from_left = tick_pos
+                            local dist_from_right = inner_len - tick_pos
+                            local dist_from_edge = math.min(dist_from_left, dist_from_right)
+                            if dist_from_edge < clip_r then
+                                local avail = 2 * math.floor(math.sqrt(math.max(0, clip_r * clip_r - (clip_r - dist_from_edge) * (clip_r - dist_from_edge))))
+                                th = math.min(th, avail)
+                            end
+                        end
+                        if th > 0 then
+                            local t_oy = inner_oy + math.floor((inner_thick - th) / 2)
+                            pr(inner_ox + tick_pos, t_oy, tick_w, th, tick_color)
+                        end
                     end
                 end
             end
