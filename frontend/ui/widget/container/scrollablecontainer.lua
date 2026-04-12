@@ -502,6 +502,17 @@ function ScrollableContainer:onScrollableSwipe(_, ges)
         return false
     end
     logger.dbg("ScrollableContainer:onScrollableSwipe", ges)
+
+    -- Ignore diagonal/horizontal swipes towards the vertical scrollbar.
+    -- They may start in the content and end over the scrollbar, causing
+    -- unintended large jumps when both container swipe and scrollbar interact.
+    if self._v_scroll_bar then
+        if ges.direction == "east"
+            or ges.direction == "northeast"
+            or ges.direction == "southeast" then
+            return true
+        end
+    end
     if not ges.pos:intersectWith(self.dimen) then
         -- with swipe, ges.pos is swipe's start position, which should
         -- be on us to consider it
