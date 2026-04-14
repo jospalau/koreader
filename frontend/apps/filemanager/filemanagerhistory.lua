@@ -563,16 +563,20 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
         end
         UIManager:broadcastEvent(Event:new("ShowFileSearchLists", true, files))
     elseif string.find("east south", ges_ev.multiswipe_directions) then
-        self._manager.filter = "all"
-        self._manager.search_string = nil
-        self._manager.selected_colections = nil
-        self._manager:updateItemTable()
-        self._manager.booklist_menu:onGotoPage(1)
-        local UIManager = require("ui/uimanager")
-        local Notification = require("ui/widget/notification")
-        UIManager:show(Notification:new{
-            text = _("Showing all books in history."),
-        })
+        -- self._manager.filter = "all"
+        -- self._manager.search_string = nil
+        -- self._manager.selected_colections = nil
+        -- self._manager:updateItemTable()
+        -- self._manager.booklist_menu:onGotoPage(1)
+        -- local UIManager = require("ui/uimanager")
+        -- local Notification = require("ui/widget/notification")
+        -- UIManager:show(Notification:new{
+        --     text = _("Showing all books in history."),
+        -- })
+        local ui = require("apps/reader/readerui").instance
+        if ui then
+            UIManager:broadcastEvent(Event:new("ShowFileSearchLists", true, ui.document._document:getDocumentProps().authors))
+        end
     -- elseif string.find("east south west", ges_ev.multiswipe_directions) and require("apps/reader/readerui").instance == nil then
     --     local FileManager = require("apps/filemanager/filemanager")
     --     FileManager:openFile("resources/Forthcoming_Books.pdf")
