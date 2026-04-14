@@ -135,7 +135,7 @@ function FileSearcher:onShowFileSearch(search_string, callbackfunc)
     return true
 end
 
-function FileSearcher:onShowFileSearchLists(recent, search_string)
+function FileSearcher:onShowFileSearchLists(recent, search_string, sort)
     FileSearcher.search_path = G_reader_settings:readSetting("home_dir")
     FileSearcher.search_string = search_string
     if FileSearcher.search_string == nil then
@@ -151,7 +151,7 @@ function FileSearcher:onShowFileSearchLists(recent, search_string)
     -- self:onSearchSortCompleted(false, recent, page, nil, sorted_size)
     local Trapper = require("ui/trapper")
     Trapper:wrap(function()
-        self:doSearchCompleted(false, recent)
+        self:doSearchCompleted(false, recent, sort)
     end)
 end
 
@@ -241,7 +241,7 @@ function FileSearcher:showSearchResultsComplete(results, callback)
     end
 end
 
-function FileSearcher:doSearchCompleted(show_complete, show_recent)
+function FileSearcher:doSearchCompleted(show_complete, show_recent, sort)
     local search_hash = self.path .. (FileSearcher.search_string or "") ..
         tostring(self.case_sensitive) .. tostring(self.include_subfolders) .. tostring(self.include_metadata) .. select(2, FileChooser:getCollate())
     local not_cached = true -- FileSearcher.search_hash ~= search_hash I don't want to cache for this case
@@ -293,6 +293,15 @@ function FileSearcher:doSearchCompleted(show_complete, show_recent)
         else
             if show_recent then
                 table.sort(FileSearcher.search_results, function(a, b) return a.attr.modification > b.attr.modification end)
+            end
+            local calibre = self.ui.history.calibre_data
+
+            if sort then
+                table.sort(FileSearcher.search_results, function(a, b)
+                    local da = tonumber((calibre[a.text] and calibre[a.text].pubdate or ""):sub(1,4)) or 0
+                    local db = tonumber((calibre[b.text] and calibre[b.text].pubdate or ""):sub(1,4)) or 0
+                    return db > da
+                end)
             end
         end
     end
