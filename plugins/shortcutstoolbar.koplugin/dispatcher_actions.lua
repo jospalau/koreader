@@ -56,8 +56,6 @@ function M.list()
 end
 
 function M.execute(action_id)
-    local UIManager = require("ui/uimanager")
-    UIManager:close(UIManager:getTopmostVisibleWidget())
     local ok_dispatcher, Dispatcher = pcall(require, "dispatcher")
     if not ok_dispatcher or not Dispatcher then
         return false, _("Dispatcher not available.")
