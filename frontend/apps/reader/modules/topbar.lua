@@ -2259,6 +2259,37 @@ function TopBar:paintTo(bb, x, y)
             -- local _, files = self:getList("*.epub")
             -- books_information_widget_container[1]:setText("TF: " .. tostring(#files))
 
+           local stats_year = TopBar:getReadThisYearSoFar()
+            if stats_year > 0 then
+                stats_year = "+" .. stats_year
+            end
+            -- times[1]:setText(time .. "|" .. batt_lvl .. "%")
+            -- times_widget_container[1]:setText("BDB: " .. TopBar:getBooksOpened() .. ", TR: " .. TopBar:getTotalRead() .. "d" .. " ΔL " .. stats_year .. "h")
+            -- times.dimen = Geom:new{ w = times[1]:getSize().w, h = times[1].face.size }
+            -- times_widget_container:paintTo(bb, x + times_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES,
+            -- Screen:getHeight() - books_information_widget_container[1]:getSize().h)
+
+            local version_widget_container =
+            bottom_container:new{
+                dimen = Geom:new(),
+                TextWidget:new{
+                    text =  "aa",
+                    face = Font:getFace("myfont3", 12),
+                    bold = true,
+                    fgcolor = Blitbuffer.COLOR_BLACK,
+                },
+            }
+            version_widget_container[1]:setText(TopBar:getDateAndVersion() .. ". BDB:" .. TopBar:getBooksOpened() .. "·TR:" .. TopBar:getTotalRead() .. "d" .. "·ΔL:" .. stats_year .. "h")
+            if not G_reader_settings:isTrue("simpleui_enabled") then
+                version_widget_container:paintTo(bb, x + version_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES,
+                Screen:getHeight()
+                - books_information_widget_container[1]:getSize().h - 10)
+                -- - times_widget_container[1]:getSize().h)
+            else
+                version_widget_container:paintTo(bb, x + version_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES,
+                Screen:getHeight())
+                -- - times_widget_container[1]:getSize().h)
+            end
             if ffiUtil.realpath(require("datastorage"):getSettingsDir() .. "/stats.lua") then
                 local ok, stats = pcall(dofile, require("datastorage"):getSettingsDir() .. "/stats.lua")
                 local last_days = ""
@@ -2285,6 +2316,9 @@ function TopBar:paintTo(bb, x, y)
             local fm = require("apps/filemanager/filemanager").instance
             if not G_reader_settings:isTrue("simpleui_enabled") then
                 books_information_widget_container:paintTo(bb, x + books_information_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES, Screen:getHeight() - 10)
+            else
+                books_information_widget_container:paintTo(bb, x + version_widget_container[1]:getSize().w
+                + books_information_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES, Screen:getHeight())
             end
 
 
@@ -2298,34 +2332,6 @@ function TopBar:paintTo(bb, x, y)
                     fgcolor = Blitbuffer.COLOR_BLACK,
                 },
             }
-
-            local stats_year = TopBar:getReadThisYearSoFar()
-            if stats_year > 0 then
-                stats_year = "+" .. stats_year
-            end
-            -- times[1]:setText(time .. "|" .. batt_lvl .. "%")
-            -- times_widget_container[1]:setText("BDB: " .. TopBar:getBooksOpened() .. ", TR: " .. TopBar:getTotalRead() .. "d" .. " ΔL " .. stats_year .. "h")
-            -- times.dimen = Geom:new{ w = times[1]:getSize().w, h = times[1].face.size }
-            -- times_widget_container:paintTo(bb, x + times_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES,
-            -- Screen:getHeight() - books_information_widget_container[1]:getSize().h)
-
-            local version_widget_container =
-            bottom_container:new{
-                dimen = Geom:new(),
-                TextWidget:new{
-                    text =  "aa",
-                    face = Font:getFace("myfont3", 12),
-                    bold = true,
-                    fgcolor = Blitbuffer.COLOR_BLACK,
-                },
-            }
-            version_widget_container[1]:setText(TopBar:getDateAndVersion() .. ". BDB:" .. TopBar:getBooksOpened() .. "·TR:" .. TopBar:getTotalRead() .. "d" .. "·ΔL:" .. stats_year .. "h")
-            if not G_reader_settings:isTrue("simpleui_enabled") then
-                version_widget_container:paintTo(bb, x + version_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES,
-                Screen:getHeight()
-                - books_information_widget_container[1]:getSize().h - 10)
-                -- - times_widget_container[1]:getSize().h)
-            end
             if self.fm and not self.history then
                 if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
                     local sort_by_mode = G_reader_settings:readSetting("collate")
