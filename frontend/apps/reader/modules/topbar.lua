@@ -170,7 +170,7 @@ function TopBar:getReadTodayThisMonth(title)
         SELECT sum(duration)
         FROM wpm_stat_data
             WHERE DATE(start_time, 'unixepoch', 'localtime')
-            BETWEEN DATE('now', 'localtime', 'start of month', "-1 month")
+            BETWEEN DATE('now', 'localtime', 'start of month', '-1 month')
             AND DATE('now', 'localtime', 'start of month')
     ]]
 
