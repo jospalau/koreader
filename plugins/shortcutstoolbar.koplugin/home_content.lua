@@ -49,6 +49,7 @@ local VerticalSpan    = require("ui/widget/verticalspan")
 
 local time_btn_ref = nil
 local battery_btn_ref = nil
+local wifi_btn_ref = nil
 -- ==========================================================================
 -- Helpers
 -- ==========================================================================
@@ -454,6 +455,9 @@ local function createShortcutsBar(menu, config, reset_fn, reserved_left)
                         })
                     end,
                 }
+                if key == "wifi" then
+                    wifi_btn_ref = btn
+                end
                 -- If shortcuts_data provides a bundled SVG path, swap the inner
                 -- IconWidget for a file-based one after init.
                 local icon_file = data and data.icon_file
@@ -520,7 +524,7 @@ local function createShortcutsBar(menu, config, reset_fn, reserved_left)
     return vg
 end
 
-function M.refreshTimeBatteryOnly()
+function M.refreshTimeBatteryWifiOnly()
     if time_btn_ref then
         time_btn_ref:setText(getTimeText())
         UIManager:setDirty(time_btn_ref, "ui")
@@ -529,6 +533,12 @@ function M.refreshTimeBatteryOnly()
     if battery_btn_ref then
         battery_btn_ref:setText(getBatteryText())
         UIManager:setDirty(battery_btn_ref, "ui")
+    end
+
+     if wifi_btn_ref then
+        local icon = NetworkMgr:isWifiOn() and "wifi" or "wifi.open.0"
+        wifi_btn_ref:setIcon(icon)
+        UIManager:setDirty(wifi_btn_ref, "ui")
     end
 end
 

@@ -474,7 +474,15 @@ function ShortcutsToolbar:addToMainMenu(menu_items)
 end
 
 function ShortcutsToolbar:onResume()
-    HomeContent.refreshTimeBatteryOnly()
+    HomeContent.refreshTimeBatteryWifiOnly()
+end
+
+function ShortcutsToolbar:onNetworkConnected()
+    HomeContent.refreshTimeBatteryWifiOnly()
+end
+
+function ShortcutsToolbar:onNetworkDisconnected()
+    HomeContent.refreshTimeBatteryWifiOnly()
 end
 
 return ShortcutsToolbar
