@@ -47,6 +47,8 @@ local RightContainer  = require("ui/widget/container/rightcontainer")
 local VerticalGroup   = require("ui/widget/verticalgroup")
 local VerticalSpan    = require("ui/widget/verticalspan")
 
+local time_btn_ref = nil
+local battery_btn_ref = nil
 -- ==========================================================================
 -- Helpers
 -- ==========================================================================
@@ -76,7 +78,7 @@ end
 
 --- Shared time button used by both the top-right widget and the shortcuts bar.
 local function createTimeButton(padding_h)
-    return Button:new{
+    local btn = Button:new{
         text           = getTimeText(),
         face           = Font:getFace("ffont"),
         text_font_bold = false,
@@ -88,11 +90,14 @@ local function createTimeButton(padding_h)
             })
         end,
     }
+
+    time_btn_ref = btn
+    return btn
 end
 
 --- Shared battery button used by both the top-right widget and the shortcuts bar.
 local function createBatteryButton(padding_h)
-    return Button:new{
+    local btn = Button:new{
         text           = getBatteryText(),
         face           = Font:getFace("ffont"),
         text_font_bold = false,
@@ -102,6 +107,9 @@ local function createBatteryButton(padding_h)
             UIManager:broadcastEvent(Event:new("ShowBatteryStatistics"))
         end,
     }
+
+    battery_btn_ref = btn
+    return btn
 end
 
 --- Build an OverlapGroup row with an optional left widget and optional right widget.
@@ -510,6 +518,18 @@ local function createShortcutsBar(menu, config, reset_fn, reserved_left)
     end
     table.insert(vg, VerticalSpan:new{ width = v_pad })
     return vg
+end
+
+function M.refreshTimeBatteryOnly()
+    if time_btn_ref then
+        time_btn_ref:setText(getTimeText())
+        UIManager:setDirty(time_btn_ref, "ui")
+    end
+
+    if battery_btn_ref then
+        battery_btn_ref:setText(getBatteryText())
+        UIManager:setDirty(battery_btn_ref, "ui")
+    end
 end
 
 -- ==========================================================================

@@ -177,7 +177,7 @@ function ShortcutsToolbar:init()
         ToolbarSettings.refreshInto(fb_config, "fb")
     end
 
-    -- Set up SimpleUI integration (if available) so that the shortcuts bar 
+    -- Set up SimpleUI integration (if available) so that the shortcuts bar
     -- can also be added as a module on the homescreen.
     SimpleUIIntegration.install()
 
@@ -471,6 +471,10 @@ function ShortcutsToolbar:addToMainMenu(menu_items)
             },
         },
     }
+end
+
+function ShortcutsToolbar:onResume()
+    HomeContent.refreshTimeBatteryOnly()
 end
 
 return ShortcutsToolbar
