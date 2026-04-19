@@ -267,6 +267,10 @@ function Device:init()
                 if FileManager.instance then
                     FileManager.instance:reinit(FileManager.instance.path,
                         FileManager.instance.focused_file)
+                    if FileManager.instance.shortcutstoolbar then
+                        FileManager.instance.shortcutstoolbar._shortcutstoolbar_patched = false
+                        FileManager.instance.shortcutstoolbar:init()
+                    end
                 end
 
                 -- make sure dialogs are displayed
