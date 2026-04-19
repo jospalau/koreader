@@ -213,6 +213,9 @@ if G_reader_settings:isTrue("apply_extra_patches") then
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/reading-stats.lua")
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/Reading_History_Popup_Table_Plus.lua")
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/other_books_author.lua")
+    -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/real-books.lua")
+    -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/mosaic-vertical-label-left.lua")
+    -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/folder-cover-stack-left-spine-label-top.lua")
 end
 
 -- Inform once about color rendering on newly supported devices
