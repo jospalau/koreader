@@ -561,7 +561,7 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
             })
             return
         end
-        UIManager:broadcastEvent(Event:new("ShowFileSearchLists", false, files))
+        UIManager:broadcastEvent(Event:new("ShowFileSearchLists", nil, files, true))
     elseif string.find("east south", ges_ev.multiswipe_directions) then
         -- self._manager.filter = "all"
         -- self._manager.search_string = nil
@@ -575,7 +575,7 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
         -- })
         local ui = require("apps/reader/readerui").instance
         if ui then
-            UIManager:broadcastEvent(Event:new("ShowFileSearchLists", true, ui.document._document:getDocumentProps().authors:gsub("%.", "_"), true))
+            UIManager:broadcastEvent(Event:new("ShowFileSearchLists", nil, ui.document._document:getDocumentProps().authors:gsub("%.", "_"), true))
         end
     -- elseif string.find("east south west", ges_ev.multiswipe_directions) and require("apps/reader/readerui").instance == nil then
     --     local FileManager = require("apps/filemanager/filemanager")

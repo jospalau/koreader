@@ -296,7 +296,7 @@ function FileSearcher:doSearchCompleted(show_complete, show_recent, sort)
             end
             local calibre = self.ui.history.calibre_data
 
-            if sort then
+            if sort and not show_recent then
                 table.sort(FileSearcher.search_results, function(a, b)
                     local da = tonumber((calibre[a.text] and calibre[a.text].pubdate or ""):sub(1,4)) or 0
                     local db = tonumber((calibre[b.text] and calibre[b.text].pubdate or ""):sub(1,4)) or 0
