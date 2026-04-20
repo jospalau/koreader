@@ -1,6 +1,6 @@
 local Device = require("device")
 local datetime = require("datetime")
-local BAR_PLACEHOLDER = require("overlay_widget").BAR_PLACEHOLDER
+local BAR_PLACEHOLDER = require("bookends_overlay_widget").BAR_PLACEHOLDER
 
 local Tokens = {}
 
@@ -114,7 +114,12 @@ local function processConditionals(format_str, state)
 end
 
 --- Build a state table of raw values for conditional evaluation.
-function Tokens.buildConditionState(ui, session_elapsed, session_pages_read)
+--- If paint_ctx is provided and already has a cached state, returns it
+--- (shared across all expand() calls within one paint cycle).
+function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, paint_ctx)
+    if paint_ctx and paint_ctx._condition_state then
+        return paint_ctx._condition_state
+    end
     local state = {}
 
     -- WiFi
@@ -131,6 +136,15 @@ function Tokens.buildConditionState(ui, session_elapsed, session_pages_read)
         state.charging = (powerd:isCharging() or powerd:isCharged()) and "yes" or "no"
         state.light = powerd:frontlightIntensity() > 0 and "on" or "off"
     end
+
+    -- Page-turn direction (any of: global key inversion flags, per-book reading order)
+    local G = G_reader_settings
+    local page_turn_inverted =
+           G:isTrue("input_invert_page_turn_keys")
+        or G:isTrue("input_invert_left_page_turn_keys")
+        or G:isTrue("input_invert_right_page_turn_keys")
+        or (ui.view and ui.view.inverse_reading_order)
+    state.invert = page_turn_inverted and "yes" or "no"
 
     -- Page-based state
     local pageno = ui.view and ui.view.state and ui.view.state.page
@@ -202,18 +216,23 @@ function Tokens.buildConditionState(ui, session_elapsed, session_pages_read)
     end
     state.speed = state.speed or 0
 
+    if paint_ctx then
+        paint_ctx._condition_state = state
+    end
     return state
 end
 
-function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, preview_mode, tick_width_multiplier)
+function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, preview_mode, tick_width_multiplier, symbol_color, paint_ctx)
     -- Fast path: no tokens or conditionals
     if not format_str:find("%%") and not format_str:find("%[if:") then
         return format_str
     end
 
-    -- Process conditionals before token expansion (skip in preview mode)
+    -- Process conditionals before token expansion (skip in preview mode).
+    -- buildConditionState will reuse paint_ctx._condition_state if present,
+    -- so multiple lines with [if:...] in the same paint share one build.
     if not preview_mode and format_str:find("%[if:") then
-        local state = Tokens.buildConditionState(ui, session_elapsed, session_pages_read)
+        local state = Tokens.buildConditionState(ui, session_elapsed, session_pages_read, paint_ctx)
         format_str = processConditionals(format_str, state)
         -- After stripping false branches, check if anything remains to expand
         if not format_str:find("%%") then
@@ -233,16 +252,39 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     -- Builds a table of per-occurrence limits keyed by a running counter per token,
     -- and strips {N} from the format string so existing expansion works unchanged.
     local token_limits = {}  -- { ["%C"] = { [1] = 200 }, ["%T"] = { [1] = 300 } }
-    local bar_limit_w = nil  -- pixel width for %bar{N}, stored separately
-    local has_limits = format_str:find("{%d+}")
-    if has_limits then
-        -- Extract %bar{N} first (before single-char tokens, to avoid %b matching)
-        format_str = format_str:gsub("%%bar{(%d+)}", function(n)
+    local bar_limit_w = nil  -- pixel width from %bar{N} or %bar{Nv…}
+    local bar_limit_h = nil  -- pixel height from %bar{v…}
+    -- Bar syntax (always evaluated so it handles non-numeric contents like {v10}):
+    --   %bar               auto width, default height
+    --   %bar{100}          100px wide, default height
+    --   %bar{v10}          auto width, 10px tall
+    --   %bar{100v10}       100px wide, 10px tall
+    format_str = format_str:gsub("%%bar{([^}]+)}", function(spec)
+        local w = spec:match("^(%d+)")
+        local h = spec:match("v(%d+)")
+        if w then
+            local px = tonumber(w)
+            if px and px > 0 then bar_limit_w = px end
+        end
+        if h then
+            local px = tonumber(h)
+            if px and px > 0 then bar_limit_h = px end
+        end
+        return "%bar"
+    end)
+    -- Other tokens still use {N} numeric-only for pixel-width limits.
+    if format_str:find("{%d+}") then
+        -- Extract %C<depth>{N} (depth-specific chapter title with width limit)
+        format_str = format_str:gsub("%%C(%d){(%d+)}", function(depth, n)
             local px = tonumber(n)
             if px and px > 0 then
-                bar_limit_w = px
+                local key = "%C" .. depth
+                if not token_limits[key] then
+                    token_limits[key] = {}
+                end
+                table.insert(token_limits[key], px)
             end
-            return "%bar"
+            return "%C" .. depth
         end)
         -- Extract %X{N} for single-char tokens
         format_str = format_str:gsub("(%%%a){(%d+)}", function(token, n)
@@ -272,8 +314,10 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
             ["%S"] = "[series]", ["%C"] = "[chapter]",
             ["%N"] = "[file]", ["%i"] = "[lang]",
             ["%o"] = "[format]", ["%q"] = "[highlights]", ["%Q"] = "[notes]", ["%x"] = "[bookmarks]",
+            ["%X"] = "[annotations]",
             ["%r"] = "[pg/hr]", ["%E"] = "[total]",
             ["%b"] = "[batt]", ["%B"] = "[batt]", ["%W"] = "[wifi]",
+            ["%V"] = "[invert]",
             ["%f"] = "[light]", ["%F"] = "[warmth]",
             ["%m"] = "[mem]", ["%M"] = "[rss]",
             ["%v"] = "[disk]",
@@ -285,6 +329,13 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
             return preview["%bar"] .. "{<=" .. n .. "}"
         end)
         r = r:gsub("%%bar", preview["%bar"])
+        -- Handle %C<depth>{N} and %C<depth> before generic patterns
+        r = r:gsub("%%C(%d){(%d+)}", function(depth, n)
+            return "{ch." .. depth .. "<=" .. n .. "}"
+        end)
+        r = r:gsub("%%C(%d)", function(depth)
+            return "[ch." .. depth .. "]"
+        end)
         r = r:gsub("(%%%a){(%d+)}", function(token, n)
             local label = preview[token]
             if label then
@@ -369,6 +420,7 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     local chapter_pages_left = ""
     local chapter_total_pages = ""
     local chapter_title = ""
+    local chapter_titles_by_depth = {}  -- { [1] = "Part II", [2] = "Chapter 1", ... }
     if needs("P", "g", "G", "l", "C") and pageno and ui.toc then
         -- Raw page calculation for %P (percentage)
         local chapter_start = ui.toc:getPreviousChapter(pageno)
@@ -399,6 +451,18 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
         if left then chapter_pages_left = math.max(0, left) end
         local title = ui.toc:getTocTitleByPage(pageno)
         if title and title ~= "" then chapter_title = title end
+        -- Depth-specific chapter titles for %C1, %C2, etc.
+        -- getTocTitleByPage above ensures the TOC is populated.
+        if format_str:find("%%C%d") then
+            local full_toc = ui.toc.toc
+            if full_toc then
+                for _, entry in ipairs(full_toc) do
+                    if entry.page and entry.page <= pageno and entry.depth then
+                        chapter_titles_by_depth[entry.depth] = entry.title or ""
+                    end
+                end
+            end
+        end
     end
 
     -- Bar token data (parallel channel — not embedded in text)
@@ -450,6 +514,9 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
         bar_info.chapter = { kind = "chapter", pct = ch_pct, ticks = {} }
         if bar_limit_w then
             bar_info.width = bar_limit_w
+        end
+        if bar_limit_h then
+            bar_info.height = bar_limit_h
         end
     end
 
@@ -691,6 +758,30 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
         end
     end
 
+    -- Page-turn direction indicator
+    -- Shows ⇄ when any page-turn direction is inverted; empty otherwise.
+    -- Matches stock readerfooter page_turning_inverted logic (OR of four flags).
+    local page_turn_symbol = ""
+    if needs("V") then
+        local G = G_reader_settings
+        local inverted =
+               G:isTrue("input_invert_page_turn_keys")
+            or G:isTrue("input_invert_left_page_turn_keys")
+            or G:isTrue("input_invert_right_page_turn_keys")
+            or (ui.view and ui.view.inverse_reading_order)
+        if inverted then
+            page_turn_symbol = "\xE2\x87\x84" -- U+21C4
+        end
+    end
+
+    -- Total annotations (bookmarks + highlights + notes, matching stock bookmark_count)
+    local total_annotations = ""
+    if needs("X") then
+        if ui.annotation and ui.annotation.getNumberOfAnnotations then
+            total_annotations = tostring(ui.annotation:getNumberOfAnnotations() or 0)
+        end
+    end
+
     -- Replace bar tokens with a placeholder so buildBarLine knows where to insert the bar.
     local result_str = format_str
     if has_bar then
@@ -730,6 +821,7 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
         ["%q"] = highlights_count,
         ["%Q"] = notes_count,
         ["%x"] = bookmarks_count,
+        ["%X"] = total_annotations,
         -- Statistics
         ["%r"] = reading_speed,
         ["%E"] = total_book_time,
@@ -742,7 +834,9 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
         ["%m"] = tostring(mem_usage),
         ["%M"] = ram_mb,
         ["%v"] = disk_avail,
+        ["%V"] = page_turn_symbol,
     }
+    -- (symbol_color wrapping happens after token expansion — see below)
     -- Track whether all tokens in the string resolved to empty or "0"
     local has_token = false
     local all_empty = true
@@ -755,7 +849,24 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     }
     -- Per-token occurrence counters for matching limits
     local token_occurrence = {}
-    local result = result_str:gsub("(%%%a)", function(token)
+    -- Expand depth-specific chapter tokens (%C1, %C2, …) before single-char tokens,
+    -- so that %C2 isn't partially consumed as %C + literal "2".
+    local result = result_str:gsub("%%C(%d)", function(depth_str)
+        local d = tonumber(depth_str)
+        has_token = true
+        local val = chapter_titles_by_depth[d] or ""
+        if val ~= "" then all_empty = false end
+        local key = "%C" .. depth_str
+        if token_limits[key] then
+            token_occurrence[key] = (token_occurrence[key] or 0) + 1
+            local px = token_limits[key][token_occurrence[key]]
+            if px then
+                return "\x01" .. tostring(px) .. "\x02" .. val .. "\x03"
+            end
+        end
+        return val
+    end)
+    result = result:gsub("(%%%a)", function(token)
         local val = replace[token]
         if val == nil then return token end -- unknown token, leave as-is
         has_token = true
@@ -779,13 +890,24 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
         return num == "1" and num .. between or num .. between .. "s"
     end)
 
+    -- Wrap Private Use Area characters (U+E000-U+F8FF) with symbol colour.
+    -- These are icon font glyphs (Nerd Fonts, FontAwesome) — never regular text.
+    -- Detection is by UTF-8 byte pattern: 0xEE xx xx = U+E000-U+EFFF,
+    -- 0xEF [0x80-0xA3] xx = U+F000-U+F8FF.
+    if symbol_color and symbol_color.grey then
+        local pct = math.floor((0xFF - symbol_color.grey) * 100 / 0xFF + 0.5)
+        local wrap = "[c=" .. pct .. "]%1[/c]"
+        result = result:gsub("(\xEE[\x80-\xBF][\x80-\xBF])", wrap)
+        result = result:gsub("(\xEF[\x80-\xA3][\x80-\xBF])", wrap)
+    end
+
     -- A line with a bar token is never considered empty
     local is_empty = has_token and all_empty and not bar_info
     return result, is_empty, bar_info
 end
 
-function Tokens.expandPreview(format_str, ui, session_elapsed, session_pages_read, tick_width_multiplier)
-    return Tokens.expand(format_str, ui, session_elapsed, session_pages_read, true, tick_width_multiplier)
+function Tokens.expandPreview(format_str, ui, session_elapsed, session_pages_read, tick_width_multiplier, symbol_color)
+    return Tokens.expand(format_str, ui, session_elapsed, session_pages_read, true, tick_width_multiplier, symbol_color)
 end
 
 return Tokens
