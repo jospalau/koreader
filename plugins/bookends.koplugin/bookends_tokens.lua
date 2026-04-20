@@ -4,6 +4,11 @@ local BAR_PLACEHOLDER = require("bookends_overlay_widget").BAR_PLACEHOLDER
 
 local Tokens = {}
 
+-- Set by main.lua from the bookends settings file. When true, %L and %l
+-- include the current page in their count (e.g. 'n→1' instead of 'n−1→0').
+-- Default false matches stock KOReader's default behaviour.
+Tokens.pages_left_includes_current = false
+
 -- Map KOReader UI language to a system locale for localized date strings.
 -- Caches per language to avoid repeated locale probing.
 local _date_locale_cache = {} -- lang -> locale string or false
@@ -305,6 +310,7 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
             ["%c"] = "[page]", ["%t"] = "[total]", ["%p"] = "[%]",
             ["%P"] = "[ch%]", ["%g"] = "[ch.read]", ["%G"] = "[ch.total]",
             ["%l"] = "[ch.left]", ["%L"] = "[left]",
+            ["%j"] = "[ch.num]", ["%J"] = "[ch.count]",
             ["%h"] = "[ch.time]", ["%H"] = "[time]",
             ["%k"] = "[12h]", ["%K"] = "[24h]",
             ["%d"] = "[date]", ["%D"] = "[date.long]",
@@ -369,6 +375,7 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     local totalpages = ""
     local percent = ""
     local pages_left_book = ""
+    local pages_left_offset = Tokens.pages_left_includes_current and 1 or 0
     -- Numeric page indices for arithmetic (separate from display labels)
     local page_idx = nil   -- numeric current page position
     local page_count = nil -- numeric total pages
@@ -407,9 +414,12 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
                 percent = math.floor(pageno / raw_total * 100 + 0.5) .. "%"
             end
         end
-        -- Pages left in book: stable page count
+        -- Pages left in book: stable page count. Offset controlled by the
+        -- Bookends `pages_left_includes_current` setting so users don't need
+        -- to rummage through the stock status bar's configuration (which we
+        -- recommend disabling).
         if page_idx and page_count and page_count > 0 then
-            pages_left_book = math.max(0, page_count - page_idx)
+            pages_left_book = math.max(0, page_count - page_idx + pages_left_offset)
         end
     end
 
@@ -420,8 +430,10 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     local chapter_pages_left = ""
     local chapter_total_pages = ""
     local chapter_title = ""
+    local chapter_num = ""      -- 1-indexed position of current chapter in TOC
+    local chapter_count = ""    -- total number of entries in TOC
     local chapter_titles_by_depth = {}  -- { [1] = "Part II", [2] = "Chapter 1", ... }
-    if needs("P", "g", "G", "l", "C") and pageno and ui.toc then
+    if needs("P", "g", "G", "l", "C", "j", "J") and pageno and ui.toc then
         -- Raw page calculation for %P (percentage)
         local chapter_start = ui.toc:getPreviousChapter(pageno)
         if ui.toc:isChapterStart(pageno) then
@@ -448,9 +460,31 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
             chapter_total_pages = total
         end
         local left = ui.toc:getChapterPagesLeft(pageno)
-        if left then chapter_pages_left = math.max(0, left) end
+        if left then
+            chapter_pages_left = math.max(0, left + pages_left_offset)
+        end
         local title = ui.toc:getTocTitleByPage(pageno)
         if title and title ~= "" then chapter_title = title end
+
+        -- Chapter number / total count, from the flat TOC.
+        -- "Chapter number" = the 1-indexed position of the deepest entry that
+        -- covers the current page. A book with nested Parts/Chapters/Sections
+        -- counts every entry, so the number reflects flat reading order rather
+        -- than the structural "Chapter N" in the book's own numbering — an
+        -- approximation that works well for most e-books without TOC hierarchy.
+        local full_toc = ui.toc.toc
+        if full_toc then
+            chapter_count = #full_toc
+            local idx = 0
+            for i, entry in ipairs(full_toc) do
+                if entry.page and entry.page <= pageno then
+                    idx = i
+                else
+                    break
+                end
+            end
+            if idx > 0 then chapter_num = idx end
+        end
         -- Depth-specific chapter titles for %C1, %C2, etc.
         -- getTocTitleByPage above ensures the TOC is populated.
         if format_str:find("%%C%d") then
@@ -798,6 +832,8 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
         ["%G"] = tostring(chapter_total_pages),
         ["%l"] = tostring(chapter_pages_left),
         ["%L"] = tostring(pages_left_book),
+        ["%j"] = tostring(chapter_num),
+        ["%J"] = tostring(chapter_count),
         -- Time/Reading
         ["%h"] = tostring(time_left_chapter),
         ["%H"] = tostring(time_left_doc),
@@ -844,6 +880,7 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     local always_content = {
         ["%c"] = true, ["%t"] = true, ["%p"] = true, ["%L"] = true,
         ["%P"] = true, ["%g"] = true, ["%G"] = true, ["%l"] = true,
+        ["%j"] = true, ["%J"] = true,
         ["%h"] = true, ["%H"] = true, ["%k"] = true, ["%K"] = true,
         ["%R"] = true, ["%s"] = true, ["%r"] = true,
     }

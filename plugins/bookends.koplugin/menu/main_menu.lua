@@ -308,6 +308,20 @@ function Bookends:buildBookendsSettingsMenu()
             separator = true,
         },
         {
+            text = _("Include current page in pages-left tokens"),
+            help_text = _("Affects %L (pages left in book) and %l (pages left in chapter). Off (default): 'n−1 → 0'. On: 'n → 1'."),
+            checked_func = function()
+                return self.settings:isTrue("pages_left_includes_current")
+            end,
+            callback = function()
+                local val = not self.settings:isTrue("pages_left_includes_current")
+                self.settings:saveSetting("pages_left_includes_current", val)
+                Tokens.pages_left_includes_current = val
+                self:markDirty()
+            end,
+            separator = true,
+        },
+        {
             text = _("Notify on wake when update available"),
             checked_func = function()
                 return self.check_updates

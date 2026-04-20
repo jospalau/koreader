@@ -258,7 +258,15 @@ function Bookends:runPresetManagerMigration()
         self.settings:saveSetting("preset_cycle", cycle)
     end
 
-    -- 3. First-run: provision Basic bookends if bookends_presets/ is empty
+    -- 3. First-run provisioning. Two distinct cases:
+    --    (a) Brand-new user — empty presets dir AND no existing layout →
+    --        provision Basic bookends and make it active.
+    --    (b) v3.x upgrader — empty presets dir BUT has a customised layout
+    --        in settings → snapshot their layout as a preset called
+    --        "My setup" and make THAT active. This preserves the v4
+    --        "everything is a preset" invariant, so autosave / cycle /
+    --        Preset menu all have something real to hook into.
+    -- In both cases Basic bookends lands in the library as a reference.
     self:ensurePresetDir()
     local dir = self:presetDir()
     local has_any = false
@@ -266,6 +274,17 @@ function Bookends:runPresetManagerMigration()
         if f:match("%.lua$") then has_any = true; break end
     end
     if not has_any then
+        -- Detect an existing v3.x layout: any position with configured lines.
+        local has_existing_layout = false
+        for _, pos in ipairs(self.POSITIONS) do
+            local saved = self.settings:readSetting("pos_" .. pos.key)
+            if saved and saved.lines and #saved.lines > 0 then
+                has_existing_layout = true
+                break
+            end
+        end
+
+        -- Always copy Basic bookends into the library as a reference.
         local DataStorage = require("datastorage")
         local source = DataStorage:getDataDir() .. "/plugins/bookends.koplugin/basic_bookends.lua"
         local dest = dir .. "/basic_bookends.lua"
@@ -275,18 +294,77 @@ function Bookends:runPresetManagerMigration()
             if dst_file then
                 dst_file:write(src_file:read("*a"))
                 dst_file:close()
-                if not self.settings:readSetting("active_preset_filename") then
-                    self.settings:saveSetting("active_preset_filename", "basic_bookends.lua")
-                end
-                local cycle = self.settings:readSetting("preset_cycle") or {}
-                table.insert(cycle, "basic_bookends.lua")
-                self.settings:saveSetting("preset_cycle", cycle)
             end
             src_file:close()
         end
+
+        local cycle = self.settings:readSetting("preset_cycle") or {}
+        table.insert(cycle, "basic_bookends.lua")
+
+        if has_existing_layout then
+            -- Snapshot the user's v3.x layout as a preset and make it active.
+            local ok, data = pcall(self.buildPreset, self)
+            if ok and data then
+                data.name = _("My setup")
+                data.description = _("Imported from your earlier Bookends settings")
+                local ok_write, user_filename = pcall(self.writePresetFile, self, data.name, data)
+                if ok_write and user_filename then
+                    self.settings:saveSetting("active_preset_filename", user_filename)
+                    table.insert(cycle, user_filename)
+                end
+            end
+        elseif not self.settings:readSetting("active_preset_filename") then
+            -- Genuine first-run: Basic bookends becomes active.
+            self.settings:saveSetting("active_preset_filename", "basic_bookends.lua")
+        end
+
+        self.settings:saveSetting("preset_cycle", cycle)
     end
 
     self.settings:saveSetting("preset_manager_migration_done", true)
+
+    -- Recovery migration for users who went through v4.0.0–v4.0.2's
+    -- provisioning path and ended up in "detached state" — a customised
+    -- layout in settings but no active_preset_filename, because the
+    -- earlier migration either (a) wiped their layout onto Basic bookends
+    -- and they restored from backup without re-applying a preset, or
+    -- (b) v4.0.2 skipped setting active but didn't snapshot their layout.
+    -- Idempotent via its own flag; only runs once.
+    if not self.settings:isTrue("detached_state_recovery_done") then
+        if not self:getActivePresetFilename() then
+            local has_layout = false
+            for _, pos in ipairs(self.POSITIONS) do
+                local saved = self.settings:readSetting("pos_" .. pos.key)
+                if saved and saved.lines and #saved.lines > 0 then
+                    has_layout = true
+                    break
+                end
+            end
+            if has_layout then
+                local ok, data = pcall(self.buildPreset, self)
+                if ok and data then
+                    data.name = _("My setup")
+                    data.description = _("Imported from your earlier Bookends settings")
+                    local ok_write, fn = pcall(self.writePresetFile, self, data.name, data)
+                    if ok_write and fn then
+                        self.settings:saveSetting("active_preset_filename", fn)
+                        local cycle = self.settings:readSetting("preset_cycle") or {}
+                        -- Only add if not already there
+                        local already_in = false
+                        for _, f in ipairs(cycle) do
+                            if f == fn then already_in = true; break end
+                        end
+                        if not already_in then
+                            table.insert(cycle, fn)
+                            self.settings:saveSetting("preset_cycle", cycle)
+                        end
+                    end
+                end
+            end
+        end
+        self.settings:saveSetting("detached_state_recovery_done", true)
+    end
+
     self.settings:flush()
 end
 
@@ -459,6 +537,9 @@ function Bookends:loadSettings()
     self.skim_on_hold = self.settings:readSetting("skim_on_hold", true)
     self.check_updates = self.settings:readSetting("check_updates", false)
     self.stock_bar_disabled = self.settings:readSetting("stock_bar_disabled", false)
+    -- Mirror to the Tokens module so %L / %l can read without a settings
+    -- handle. main.lua owns the settings; Tokens just consults the flag.
+    Tokens.pages_left_includes_current = self.settings:isTrue("pages_left_includes_current")
 
     -- Per-position settings
     self.positions = {}
@@ -1524,13 +1605,29 @@ function Bookends:showFontPicker(current_face, on_select, default_face)
             families[name] = entry
         end
     end
+    -- Filter out fonts that freetype can't actually load. Users with older
+    -- CFF-format OTFs or damaged font files would otherwise see them in the
+    -- picker, select one, and end up with a crashing overlay. Validation
+    -- calls Font:getFace (which caches); subsequent picker opens are fast.
+    -- Skipped fonts are tracked so we can report the count in the footer.
+    local skipped_count = 0
     for _, entry in pairs(families) do
-        table.insert(fonts, { file = entry.file, name = entry.name, display = entry.name })
-        font_display_names[entry.file] = entry.name
+        local ok_face = Font:getFace(entry.file, 12)
+        if ok_face then
+            table.insert(fonts, { file = entry.file, name = entry.name, display = entry.name })
+            font_display_names[entry.file] = entry.name
+        else
+            skipped_count = skipped_count + 1
+        end
     end
     table.sort(fonts, function(a, b)
         return ffiUtil.strcoll(a.name, b.name)
     end)
+    if skipped_count > 0 then
+        require("logger").info(string.format(
+            "bookends: font picker skipped %d font(s) that freetype couldn't load",
+            skipped_count))
+    end
 
     -- Prepend family entries (page 1 only, before the specific-font list)
     local family_entries = {}
@@ -1607,8 +1704,11 @@ function Bookends:showFontPicker(current_face, on_select, default_face)
         local selected_face
         if selected then
             local sel_resolved = Utils.resolveFontFace(selected, nil)
+            -- Font load can fail (unsupported file, freetype errors).
+            -- Fall back to cfont if the resolved face returns nil.
             if sel_resolved then
                 selected_face = Font:getFace(sel_resolved, title_font_size)
+                             or Font:getFace("cfont", title_font_size)
             else
                 selected_face = Font:getFace("cfont", title_font_size)
             end
@@ -1753,7 +1853,12 @@ function Bookends:showFontPicker(current_face, on_select, default_face)
             local f = fonts[i]
             local is_selected = (f.file == selected)
             local is_default = (f.file == default_face)
+            -- Font load can fail for unsupported files (e.g. some .otf files
+            -- with non-Latin1 filenames, parentheses in paths, or glyph tables
+            -- freetype can't handle). Fall back to cfont so the picker row
+            -- still renders (just in the default font instead of its own).
             local face = Font:getFace(f.file, font_size)
+                      or Font:getFace("cfont", font_size)
 
             local suffix = is_default and "  \xE2\x98\x85" or ""
             local label = f.display .. suffix

@@ -14,6 +14,8 @@ Bookends.TOKEN_CATALOG = {
         { "%C1", _("Chapter title at depth 1") },
         { "%C2", _("Chapter title at depth 2") },
         { "%C3", _("Chapter title at depth 3") },
+        { "%j", _("Current chapter number") },
+        { "%J", _("Total chapter count") },
         { "%N", _("File name") },
         { "%i", _("Book language") },
         { "%o", _("Document format (EPUB, PDF, etc.)") },
