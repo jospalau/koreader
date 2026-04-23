@@ -485,4 +485,9 @@ function ShortcutsToolbar:onNetworkDisconnected()
     HomeContent.refreshTimeBatteryWifiOnly()
 end
 
+function ShortcutsToolbar:onSetDimensions()
+    self._shortcutstoolbar_patched = false
+    self:init()
+end
+
 return ShortcutsToolbar
