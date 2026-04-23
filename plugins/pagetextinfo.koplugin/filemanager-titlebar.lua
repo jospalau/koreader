@@ -233,6 +233,14 @@ FileManager.onSetRotationMode = function(self, mode)
     self:updateTitleBarTitle()
 end
 
+-- handle reinit
+local orig_reinit = FileManager.reinit
+
+FileManager.reinit = function(self, path, focused_file)
+    result = orig_reinit(self, path, focused_file)
+    self:updateTitleBarTitle()
+end
+
 -- redraw the title bar
 function FileManager:updateTitleBarTitle(home)
     if self.title_bar == nil or self._suspended then return end -- guard when suspended
