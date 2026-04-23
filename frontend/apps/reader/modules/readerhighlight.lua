@@ -2132,7 +2132,7 @@ function ReaderHighlight:onHoldRelease()
         return true
     end
     self.t2 = os.time()
-    if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("enable_extra_tweaks") and self.t1 and self.t2 and self.t2 - self.t1 < 2 then
+    if self.ui.pagetextinfo and self.t1 and self.t2 and self.t2 - self.t1 < 2 then -- and self.ui.pagetextinfo.settings:isTrue("enable_extra_tweaks")
         -- local UIManager = require("ui/uimanager")
         -- local Notification = require("ui/widget/notification")
         -- UIManager:show(Notification:new{
