@@ -92,7 +92,7 @@ function InputContainer:paintTo(bb, x, y)
     -- if self.topbar then
     --     self.topbar:paintTo(bb, x, y)
     -- end
-    if G_reader_settings:isTrue("top_manager_infmandhistory") and (self.title == "KOReader" or self.title == "Reading Planner & Tracker" or self.title == "Collection") then
+    if G_reader_settings:isTrue("top_manager_infmandhistory") and (self.title == "KOReader" or self.title == "Reading Planner & Tracker" or self.title == "Collection" or self.name == "homescreen") then
         self.topbar:paintTo(bb, x, y)
     end
 end

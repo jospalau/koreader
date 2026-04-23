@@ -35,6 +35,7 @@ local TextWidget       = require("ui/widget/textwidget")
 local TitleBar         = require("ui/widget/titlebar")
 local UIManager        = require("ui/uimanager")
 local HorizontalGroup  = require("ui/widget/horizontalgroup")
+local Topbar            = require("apps/reader/modules/topbar")
 local VerticalGroup    = require("ui/widget/verticalgroup")
 local VerticalSpan     = require("ui/widget/verticalspan")
 local logger           = require("logger")
@@ -439,6 +440,11 @@ local HomescreenWidget = InputContainer:extend{
     _on_goal_tap      = nil,
 }
 
+HomescreenWidget.topbar = Topbar:new{
+    view = nil,
+    ui = nil,
+    fm = true,
+}
 function HomescreenWidget:init()
     local sw = Screen:getWidth()
     local sh = Screen:getHeight()
