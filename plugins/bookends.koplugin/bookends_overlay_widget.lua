@@ -1,9 +1,56 @@
+local ffi = require("ffi")
 local Blitbuffer = require("ffi/blitbuffer")
+local Colour = require("bookends_colour")
 local Device = require("device")
 local Font = require("ui/font")
 local TextWidget = require("ui/widget/textwidget")
 local Utf8Proc = require("ffi/utf8proc")
 local Screen = Device.screen
+
+local ColorRGB32_t = ffi.typeof("ColorRGB32")
+
+-- Helper: resolve a text/symbol colour table ({grey=N} or {hex=H}) to a
+-- Blitbuffer colour object on the current screen. Returns nil when v is
+-- nil/false. Uses `not v` rather than `v == nil` because under LuaJIT an
+-- ffi.metatype equality check routes through __eq, and Blitbuffer's __eq
+-- indexes the other operand unconditionally — so `bb_color == nil` would
+-- crash. `not v` never calls __eq.
+local function resolveTextColor(v)
+    if not v then return nil end
+    return Colour.parseColorValue(v, Screen:isColorEnabled())
+end
+
+-- Blitbuffer's plain paintRect / paintRoundedRect / paintBorder always flatten
+-- their colour argument to luminance via getColor8(), so painting a ColorRGB32
+-- through them renders as grey on a colour buffer. KOReader exposes parallel
+-- *RGB32 variants for true-colour fills; these wrappers dispatch by colour
+-- type so all the call-sites in paintProgressBar can stay shape-agnostic.
+local function bbPaintRect(bb, x, y, w, h, c)
+    if not c then return end
+    if ffi.istype(ColorRGB32_t, c) then
+        bb:paintRectRGB32(x, y, w, h, c)
+    else
+        bb:paintRect(x, y, w, h, c)
+    end
+end
+
+local function bbPaintRoundedRect(bb, x, y, w, h, c, r)
+    if not c then return end
+    if ffi.istype(ColorRGB32_t, c) then
+        bb:paintRoundedRectRGB32(x, y, w, h, c, r)
+    else
+        bb:paintRoundedRect(x, y, w, h, c, r)
+    end
+end
+
+local function bbPaintBorder(bb, x, y, w, h, bw, c, r)
+    if not c then return end
+    if ffi.istype(ColorRGB32_t, c) then
+        bb:paintBorderRGB32(x, y, w, h, bw, c, r)
+    else
+        bb:paintBorder(x, y, w, h, bw, c, r)
+    end
+end
 
 local OverlayWidget = {}
 
@@ -255,7 +302,7 @@ local function buildBarLine(text, cfg, available_w, max_width)
     local function addTextSegment(t)
         if t == "" then return end
         local display = cfg.uppercase and Utf8Proc.uppercase_dumb(t) or t
-        local text_fgcolor = cfg.text_color and Blitbuffer.Color8(cfg.text_color.grey) or nil
+        local text_fgcolor = resolveTextColor(cfg.text_color)
         local tw = TextWidget:new(textWidgetOpts({
             text = display,
             face = cfg.face,
@@ -292,6 +339,10 @@ local function buildBarLine(text, cfg, available_w, max_width)
         bar_w = math.min(bar_manual_w, math.max(0, effective_w - text_total_w))
     else
         bar_w = math.max(0, effective_w - text_total_w)
+    end
+    -- Radial bars are circular — clamp width to height so they stay square
+    if bar_style == "radial" or bar_style == "radial_hollow" then
+        bar_w = math.min(bar_w, bar_h)
     end
 
     if bar_w < 1 then
@@ -348,16 +399,21 @@ function OverlayWidget.buildTextWidget(text, line_configs, h_anchor, max_width, 
         return nil, 0, 0
     end
 
-    -- Get config for line i (fall back to last config if fewer configs than lines)
+    -- Get config for line i (fall back to last config if fewer configs than lines).
+    -- Last-ditch fallback uses cfont explicitly: TextWidget crashes in
+    -- font.lua's getAdjustedFace if face is nil, which has bitten us when
+    -- a user's configured font failed to load at freetype level.
     local function getConfig(i)
-        return line_configs[i] or line_configs[#line_configs] or { face = nil, bold = false }
+        return line_configs[i] or line_configs[#line_configs]
+            or { face = Font:getFace("cfont"), bold = false }
     end
 
     if #lines == 1 then
         local cfg = getConfig(1)
         -- Try styled segments (BBCode tags or bar placeholder)
         local segments, has_tags = OverlayWidget.parseStyledSegments(
-            lines[1], cfg.bold, cfg.italic or false, cfg.uppercase)
+            lines[1], cfg.bold, cfg.italic or false, cfg.uppercase,
+            cfg.symbol_color)
         if segments then
             return OverlayWidget.buildStyledLine(segments, cfg, available_w or Screen:getWidth(), max_width)
         end
@@ -367,7 +423,7 @@ function OverlayWidget.buildTextWidget(text, line_configs, h_anchor, max_width, 
         end
         -- Plain text — fast path
         local display_text = cfg.uppercase and Utf8Proc.uppercase_dumb(lines[1]) or lines[1]
-        local text_fgcolor = cfg.text_color and Blitbuffer.Color8(cfg.text_color.grey) or nil
+        local text_fgcolor = resolveTextColor(cfg.text_color)
         local tw = TextWidget:new(textWidgetOpts({
             text = display_text,
             face = cfg.face,
@@ -394,14 +450,15 @@ function OverlayWidget.buildTextWidget(text, line_configs, h_anchor, max_width, 
         local widget, w, h
         -- Try styled segments (BBCode tags or bar placeholder)
         local segments, has_tags = OverlayWidget.parseStyledSegments(
-            line, cfg.bold, cfg.italic or false, cfg.uppercase)
+            line, cfg.bold, cfg.italic or false, cfg.uppercase,
+            cfg.symbol_color)
         if segments then
             widget, w, h = OverlayWidget.buildStyledLine(segments, cfg, available_w or Screen:getWidth(), max_width)
         elseif cfg.bar then
             widget, w, h = buildBarLine(line, cfg, available_w or Screen:getWidth(), max_width)
         else
             local display_text = cfg.uppercase and Utf8Proc.uppercase_dumb(line) or line
-            local text_fgcolor = cfg.text_color and Blitbuffer.Color8(cfg.text_color.grey) or nil
+            local text_fgcolor = resolveTextColor(cfg.text_color)
             widget = TextWidget:new(textWidgetOpts({
                 text = display_text,
                 face = cfg.face,
@@ -444,7 +501,8 @@ function OverlayWidget.measureTextWidth(text, line_configs)
     local i = 0
     for line in text:gmatch("([^\n]+)") do
         i = i + 1
-        local cfg = line_configs[i] or line_configs[#line_configs] or { face = nil, bold = false }
+        local cfg = line_configs[i] or line_configs[#line_configs]
+            or { face = Font:getFace("cfont"), bold = false }
         -- For bar lines, measure only the text portions (strip placeholder)
         local measure_text = line
         if cfg.bar then
@@ -530,15 +588,18 @@ end
 -- @param base_uppercase boolean: base uppercase state from line config
 -- @return table or nil: array of segments, or nil if no valid tags found
 -- @return boolean: true if tags were found and parsed
-function OverlayWidget.parseStyledSegments(text, base_bold, base_italic, base_uppercase)
-    -- Quick check: no tags present
-    if not text:find("%[") then
+function OverlayWidget.parseStyledSegments(text, base_bold, base_italic, base_uppercase, symbol_color)
+    -- Fast path: no BBCode tags AND no icon-colour to apply -> caller renders
+    -- the whole line as plain text with base style.  When symbol_color is set
+    -- we still walk the string so PUA icon glyphs can be emitted as their own
+    -- colour-bearing segments (see emitPua below).
+    if not text:find("%[") and not symbol_color then
         return nil, false
     end
 
     local segments = {}
     local stack = {}  -- style stack: each entry is "b", "i", or "u"
-    local color_stack = {}  -- color stack: each entry is a {grey=N} table
+    local color_stack = {}  -- color stack: each entry is a {grey=N} or {hex=H} table
     local pos = 1
     local pending = ""  -- accumulates text between tags
     local found_tags = false
@@ -572,6 +633,27 @@ function OverlayWidget.parseStyledSegments(text, base_bold, base_italic, base_up
         if clr then seg.color = clr end
         table.insert(segments, seg)
         pending = ""
+    end
+
+    -- Emit a single PUA (Nerd Font / FontAwesome icon) glyph as its own
+    -- segment, using either the active user-authored [c=...] colour or the
+    -- global icon colour (symbol_color). This is the replacement for the
+    -- old Tokens.expand [c=…]PUA[/c] auto-wrap: by deciding per-segment at
+    -- parse time, no ghost tags exist in any intermediate string that might
+    -- be rendered if the line has an unclosed user tag and the parser
+    -- falls back to plain-text.
+    local function emitPua(pua)
+        flushPending()
+        local bold, italic, uppercase = currentStyle()
+        local seg = { text = pua, bold = bold, italic = italic, uppercase = uppercase }
+        local clr = currentColor()
+        if clr then
+            seg.color = clr
+        elseif symbol_color then
+            seg.color = symbol_color
+            found_tags = true  -- parser applied meaningful colouring, not just plain text
+        end
+        table.insert(segments, seg)
     end
 
     local len = #text
@@ -611,7 +693,31 @@ function OverlayWidget.parseStyledSegments(text, base_bold, base_italic, base_up
                 -- Mismatched close — render entire line as plain text
                 return nil, false
             end
-        -- Check for opening colour tag [c=N] where N is 0-100
+        -- Check for opening hex colour tag [c=#RRGGBB] or short [c=#RGB].
+        -- Store the normalised long form on color_stack so downstream
+        -- consumers (parseColorValue, getting the segment colour) see a
+        -- single canonical shape regardless of which form the user typed.
+        elseif text:match("^%[c=#%x%x%x%x%x%x%]", pos) or text:match("^%[c=#%x%x%x%]", pos) then
+            local raw, end_pos = text:match("^%[c=(#%x%x%x%x%x%x)()%]", pos)
+            if not raw then
+                raw, end_pos = text:match("^%[c=(#%x%x%x)()%]", pos)
+            end
+            if raw then
+                local hex = require("bookends_colour").normaliseHex(raw)
+                if hex then
+                    flushPending()
+                    table.insert(color_stack, { hex = hex })
+                    found_tags = true
+                    pos = end_pos + 1  -- skip past the ']'
+                else
+                    pending = pending .. text:sub(pos, pos)
+                    pos = pos + 1
+                end
+            else
+                pending = pending .. text:sub(pos, pos)
+                pos = pos + 1
+            end
+        -- Check for opening colour tag [c=N] where N is 0-100 (greyscale percent)
         elseif text:match("^%[c=%d+%]", pos) then
             local val_str, end_pos = text:match("^%[c=(%d+)()%]", pos)
             if val_str then
@@ -631,8 +737,27 @@ function OverlayWidget.parseStyledSegments(text, base_bold, base_italic, base_up
                 pos = pos + 1
             end
         else
-            pending = pending .. text:sub(pos, pos)
-            pos = pos + 1
+            -- PUA icon glyph? 0xEE[80-BF][80-BF] covers U+E000-U+EFFF;
+            -- 0xEF[80-A3][80-BF] covers U+F000-U+F8FF (Nerd Fonts land
+            -- in both ranges, FontAwesome sits in the second). If one is
+            -- found AND we're not already inside a user-authored [c=...],
+            -- emit it as its own coloured segment so the icon colour
+            -- applies without needing to exist as a [c=...] tag in the
+            -- expanded line.
+            local b1 = text:byte(pos)
+            local pua
+            if b1 == 0xEE then
+                pua = text:match("^\xEE[\x80-\xBF][\x80-\xBF]", pos)
+            elseif b1 == 0xEF then
+                pua = text:match("^\xEF[\x80-\xA3][\x80-\xBF]", pos)
+            end
+            if pua then
+                emitPua(pua)
+                pos = pos + 3
+            else
+                pending = pending .. text:sub(pos, pos)
+                pos = pos + 1
+            end
         end
     end
 
@@ -707,9 +832,9 @@ function OverlayWidget.buildStyledLine(segments, cfg, available_w, max_width)
                 -- Resolve segment colour: BBCode [c] tag → global text_color → nil (book colour)
                 local seg_fgcolor = nil
                 if seg.color then
-                    seg_fgcolor = Blitbuffer.Color8(seg.color.grey)
+                    seg_fgcolor = resolveTextColor(seg.color)
                 elseif cfg.text_color then
-                    seg_fgcolor = Blitbuffer.Color8(cfg.text_color.grey)
+                    seg_fgcolor = resolveTextColor(cfg.text_color)
                 end
 
                 local tw = TextWidget:new(textWidgetOpts({
@@ -749,6 +874,10 @@ function OverlayWidget.buildStyledLine(segments, cfg, available_w, max_width)
             bar_w = math.min(bar_manual_w, math.max(0, effective_w - text_total_w))
         else
             bar_w = math.max(0, effective_w - text_total_w)
+        end
+        -- Radial bars are circular — clamp width to height so they stay square
+        if bar_style == "radial" or bar_style == "radial_hollow" then
+            bar_w = math.min(bar_w, bar_h)
         end
 
         if bar_w >= 1 then
@@ -906,6 +1035,7 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
     local tick_height_pct = colors and colors.tick_height_pct or 100
     local custom_border = colors and colors.border
     local custom_invert = colors and colors.invert
+    local custom_metro_fill = colors and colors.metro_fill
 
     -- Resolve custom color: false → nil (transparent/skip), nil → default, else custom.
     -- Must use type() checks to avoid triggering Blitbuffer's __eq metamethod.
@@ -921,9 +1051,9 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
     local function pr(rx, ry, rw, rh, color)
         if not color then return end
         if vertical then
-            bb:paintRect(ry, rx, rh, rw, color)
+            bbPaintRect(bb, ry, rx, rh, rw, color)
         else
-            bb:paintRect(rx, ry, rw, rh, color)
+            bbPaintRect(bb, rx, ry, rw, rh, color)
         end
     end
 
@@ -954,14 +1084,19 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
         local line_fill_start = reverse and (line_len - line_fill) or 0
 
         local metro_track = resolveColor(custom_track, Blitbuffer.COLOR_DARK_GRAY)
-        local metro_fill = resolveColor(custom_fill, Blitbuffer.COLOR_DARK_GRAY)
-        -- Track line (uniform colour — progress shown by dot only)
+        -- metro_fill: nil when user has not set a distinct fill (or set it to false/transparent)
+        local metro_fill = resolveColor(custom_metro_fill, nil)
+        -- Track line full length
         pr(line_ox, line_y, line_len, line_thick, metro_track)
+        -- Optional fill overlay on the read portion
+        if metro_fill then
+            pr(line_ox + line_fill_start, line_y, line_fill, line_thick, metro_fill)
+        end
 
         -- Chapter ticks: depth 1 above line (connected to trunk), depth 2 below
         -- When reversed, flip tick sides so the visual hierarchy mirrors the direction
         local metro_tick_h = math.max(1, math.floor(thickness * tick_height_pct / 100))
-        for _, tick in ipairs(ticks or {}) do
+        for _i, tick in ipairs(ticks or {}) do
             local tick_frac = type(tick) == "table" and tick[1] or tick
             local tick_w = type(tick) == "table" and tick[2] or 1
             local tick_depth = type(tick) == "table" and tick[3] or 1
@@ -976,10 +1111,18 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
                 end
                 -- Vertical (side-anchored) bars: flip tick sides
                 if vertical then tick_above = not tick_above end
-                if tick_above then
-                    pr(line_ox + tick_pos, line_y - metro_tick_h, line_thick, metro_tick_h, metro_track)
+                -- Tick recolouring: ticks within the read portion paint in metro_fill
+                local is_read
+                if reverse then
+                    is_read = tick_pos >= line_len - line_fill
                 else
-                    pr(line_ox + tick_pos, line_y + line_thick, line_thick, metro_tick_h, metro_track)
+                    is_read = tick_pos <= line_fill
+                end
+                local tick_color = (metro_fill and is_read) and metro_fill or metro_track
+                if tick_above then
+                    pr(line_ox + tick_pos, line_y - metro_tick_h, line_thick, metro_tick_h, tick_color)
+                else
+                    pr(line_ox + tick_pos, line_y + line_thick, line_thick, metro_tick_h, tick_color)
                 end
             end
         end
@@ -988,15 +1131,15 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
         local function paintCircle(cx, cy, r, color)
             if not color then return end
             if vertical then
-                bb:paintRoundedRect(cy, cx, r * 2, r * 2, color, r)
+                bbPaintRoundedRect(bb, cy, cx, r * 2, r * 2, color, r)
             else
-                bb:paintRoundedRect(cx, cy, r * 2, r * 2, color, r)
+                bbPaintRoundedRect(bb, cx, cy, r * 2, r * 2, color, r)
             end
         end
 
-        -- Start circle (empty ring, trunk colour)
+        -- Start circle (empty ring; read colour when set, else trunk colour)
         local start_cx = reverse and (line_ox + line_len - start_r) or (line_ox - start_r)
-        paintCircle(start_cx, oy, start_r, metro_track)
+        paintCircle(start_cx, oy, start_r, metro_fill or metro_track)
         local ring_border = line_thick
         local inner_r = start_r - ring_border
         if inner_r > 0 then
@@ -1017,7 +1160,10 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
         -- Wavy ribbon: the entire bar follows a sine wave path.
         -- Two-toned fill with a position dot riding the curve.
         local wave_fill = resolveColor(custom_fill, Blitbuffer.COLOR_DARK_GRAY)
-        local wave_track = resolveColor(custom_track, Blitbuffer.COLOR_GRAY)
+        -- wavy's "unread" ribbon historically used `track` only; accept `bg`
+        -- as a higher-priority override so the global "Unread color" menu item
+        -- also affects wavy (matches the semantics of every other bar style).
+        local wave_track = resolveColor(custom_bg, resolveColor(custom_track, Blitbuffer.COLOR_GRAY))
         local wave_dot = resolveColor(custom_tick, Blitbuffer.COLOR_BLACK)
 
         local amplitude = math.floor(thickness * 0.35)
@@ -1053,9 +1199,9 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
             local rx, ry = cx - cap_r, cy - cap_r
             local d = cap_r * 2
             if vertical then
-                bb:paintRoundedRect(ry, rx, d, d, color, cap_r)
+                bbPaintRoundedRect(bb, ry, rx, d, d, color, cap_r)
             else
-                bb:paintRoundedRect(rx, ry, d, d, color, cap_r)
+                bbPaintRoundedRect(bb, rx, ry, d, d, color, cap_r)
             end
         end
         paintCap(ox, wave_y(0), start_color)
@@ -1069,9 +1215,9 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
             local color = in_fill and wave_fill or wave_track
             if color then
                 if vertical then
-                    bb:paintRect(ry, ox + i, ribbon_h, 1, color)
+                    bbPaintRect(bb, ry, ox + i, ribbon_h, 1, color)
                 else
-                    bb:paintRect(ox + i, ry, 1, ribbon_h, color)
+                    bbPaintRect(bb, ox + i, ry, 1, ribbon_h, color)
                 end
             end
         end
@@ -1096,9 +1242,9 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
                         tick_color = base_tick
                     end
                     if vertical then
-                        bb:paintRect(ty, ox + tick_pos, th, tick_w, tick_color)
+                        bbPaintRect(bb, ty, ox + tick_pos, th, tick_w, tick_color)
                     else
-                        bb:paintRect(ox + tick_pos, ty, tick_w, th, tick_color)
+                        bbPaintRect(bb, ox + tick_pos, ty, tick_w, th, tick_color)
                     end
                 end
             end
@@ -1113,9 +1259,118 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
             local dot_cx = ox + pos_i - dot_r
             local dot_dy = dot_cy - dot_r
             if vertical then
-                bb:paintRoundedRect(dot_dy, dot_cx, dot_r * 2, dot_r * 2, wave_dot, dot_r)
+                bbPaintRoundedRect(bb, dot_dy, dot_cx, dot_r * 2, dot_r * 2, wave_dot, dot_r)
             else
-                bb:paintRoundedRect(dot_cx, dot_dy, dot_r * 2, dot_r * 2, wave_dot, dot_r)
+                bbPaintRoundedRect(bb, dot_cx, dot_dy, dot_r * 2, dot_r * 2, wave_dot, dot_r)
+            end
+        end
+
+    elseif style == "radial" or style == "radial_hollow" then
+        -- Radial (pie-chart) style: a circle filled clockwise from 12 o'clock.
+        local diameter = math.min(vertical and h or w, vertical and w or h)
+        local radius = math.floor(diameter / 2)
+        if radius < 2 then radius = 2 end
+        -- Center the circle in the allocated rectangle
+        local cx = x + math.floor(w / 2)
+        local cy = y + math.floor(h / 2)
+
+        local radial_bg = resolveColor(custom_bg, Blitbuffer.COLOR_GRAY)
+        local radial_fill = resolveColor(custom_fill, Blitbuffer.COLOR_DARK_GRAY)
+        local radial_tick = resolveColor(custom_tick, Blitbuffer.COLOR_BLACK)
+        local radial_border_color = resolveColor(custom_border, Blitbuffer.COLOR_BLACK)
+
+        local r2 = radius * radius
+        local hollow = style == "radial_hollow"
+        local inner_radius = hollow and math.floor(radius * 0.55) or 0
+        local inner_r2 = inner_radius * inner_radius
+        local two_pi = 2 * math.pi
+
+        -- Paint the pie circle pixel by pixel.
+        -- Angle 0 = 12 o'clock (top), increasing clockwise.
+        for py = -radius, radius - 1 do
+            for px = -radius, radius - 1 do
+                -- Offset to pixel center for smoother circle
+                local dx = px + 0.5
+                local dy = py + 0.5
+                local d2 = dx * dx + dy * dy
+                if d2 <= r2 and d2 > inner_r2 then
+                    -- Compute angle from top, clockwise: atan2(dx, -dy) mapped to [0, 2π)
+                    local angle = math.atan2(dx, -dy)
+                    if angle < 0 then angle = angle + two_pi end
+                    local pixel_frac = angle / two_pi
+
+                    local in_fill = pixel_frac <= fraction
+                    local color = in_fill and radial_fill or radial_bg
+                    if color then
+                        bbPaintRect(bb, cx + px, cy + py, 1, 1, color)
+                    end
+                end
+            end
+        end
+
+        -- Chapter tick marks: radial lines from center to edge at each chapter boundary
+        for _, tick in ipairs(ticks or {}) do
+            local tick_frac = type(tick) == "table" and tick[1] or tick
+            local tick_w = type(tick) == "table" and tick[2] or 1
+
+            local tick_angle = tick_frac * two_pi - math.pi / 2  -- 0 = top (12 o'clock)
+            -- Adjusted: tick at fraction 0 points up. tick_angle measured from 3 o'clock.
+            -- Recalculate: from 12 o'clock clockwise
+            tick_angle = tick_frac * two_pi
+            local cos_a = math.cos(tick_angle - math.pi / 2)
+            local sin_a = math.sin(tick_angle - math.pi / 2)
+
+            -- Draw tick as a line from 60% of radius to the edge
+            local inner_r = math.floor(radius * (1 - tick_height_pct / 100))
+            if inner_r < inner_radius then inner_r = inner_radius end
+            for t = inner_r, radius do
+                local lx = cx + math.floor(t * cos_a)
+                local ly = cy + math.floor(t * sin_a)
+                -- Determine if this tick position is in the filled region
+                local pix_angle = math.atan2(t * cos_a, -(t * sin_a))
+                if pix_angle < 0 then pix_angle = pix_angle + two_pi end
+                local pix_frac = pix_angle / two_pi
+                local in_fill = pix_frac <= fraction
+                local tick_color
+                if invert_read_ticks ~= false and in_fill then
+                    tick_color = resolveColor(custom_invert, Blitbuffer.COLOR_WHITE)
+                else
+                    tick_color = radial_tick
+                end
+                if tick_color then
+                    bbPaintRect(bb, lx, ly, tick_w, tick_w, tick_color)
+                end
+            end
+        end
+
+        -- Optional border circle (1px ring at the outer edge)
+        if radial_border_color then
+            local border_r2_outer = radius * radius
+            local border_r2_inner = (radius - 1) * (radius - 1)
+            for py = -radius, radius - 1 do
+                for px = -radius, radius - 1 do
+                    local dx = px + 0.5
+                    local dy = py + 0.5
+                    local d2 = dx * dx + dy * dy
+                    if d2 <= border_r2_outer and d2 > border_r2_inner then
+                        bbPaintRect(bb, cx + px, cy + py, 1, 1, radial_border_color)
+                    end
+                end
+            end
+            -- Inner border ring for hollow variant
+            if hollow then
+                local ib_r2_outer = inner_radius * inner_radius
+                local ib_r2_inner = (inner_radius - 1) * (inner_radius - 1)
+                for py = -inner_radius, inner_radius - 1 do
+                    for px = -inner_radius, inner_radius - 1 do
+                        local dx = px + 0.5
+                        local dy = py + 0.5
+                        local d2 = dx * dx + dy * dy
+                        if d2 <= ib_r2_outer and d2 > ib_r2_inner then
+                            bbPaintRect(bb, cx + px, cy + py, 1, 1, radial_border_color)
+                        end
+                    end
+                end
             end
         end
 
@@ -1160,11 +1415,11 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
         -- Background (use real coordinates for rounded rect API)
         if radius > 0 then
             if border_bg then
-                bb:paintRoundedRect(x, y, w, h, border_bg, radius)
+                bbPaintRoundedRect(bb, x, y, w, h, border_bg, radius)
             end
         else
             if border_bg then
-                bb:paintRect(x, y, w, h, border_bg)
+                bbPaintRect(bb, x, y, w, h, border_bg)
             end
         end
         local padding = math.max(1, math.floor(thickness * 0.1))
@@ -1184,21 +1439,21 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
                 local fill_len = math.floor(inner_len * fraction)
                 -- Background (unfilled) first as full rounded rect
                 if border_bg then
-                    bb:paintRoundedRect(inner_x, inner_y, inner_w, inner_h, border_bg, inner_r)
+                    bbPaintRoundedRect(bb, inner_x, inner_y, inner_w, inner_h, border_bg, inner_r)
                 end
                 -- Fill (read portion) on top — its rounded corners overlay the background
                 if fill_len > 0 and border_fill then
                     if vertical then
                         if reverse then
-                            bb:paintRoundedRect(inner_x, inner_y + inner_h - fill_len, inner_w, fill_len, border_fill, inner_r)
+                            bbPaintRoundedRect(bb, inner_x, inner_y + inner_h - fill_len, inner_w, fill_len, border_fill, inner_r)
                         else
-                            bb:paintRoundedRect(inner_x, inner_y, inner_w, fill_len, border_fill, inner_r)
+                            bbPaintRoundedRect(bb, inner_x, inner_y, inner_w, fill_len, border_fill, inner_r)
                         end
                     else
                         if reverse then
-                            bb:paintRoundedRect(inner_x + inner_w - fill_len, inner_y, fill_len, inner_h, border_fill, inner_r)
+                            bbPaintRoundedRect(bb, inner_x + inner_w - fill_len, inner_y, fill_len, inner_h, border_fill, inner_r)
                         else
-                            bb:paintRoundedRect(inner_x, inner_y, fill_len, inner_h, border_fill, inner_r)
+                            bbPaintRoundedRect(bb, inner_x, inner_y, fill_len, inner_h, border_fill, inner_r)
                         end
                     end
                 end
@@ -1223,14 +1478,14 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
         local border_color = resolveColor(custom_border, Blitbuffer.COLOR_BLACK)
         if radius > 0 then
             if border_color then
-                bb:paintBorder(x, y, w, h, border, border_color, radius)
+                bbPaintBorder(bb, x, y, w, h, border, border_color, radius)
             end
         else
             if border_color then
-                bb:paintRect(x, y, w, border, border_color)
-                bb:paintRect(x, y + h - border, w, border, border_color)
-                bb:paintRect(x, y, border, h, border_color)
-                bb:paintRect(x + w - border, y, border, h, border_color)
+                bbPaintRect(bb, x, y, w, border, border_color)
+                bbPaintRect(bb, x, y + h - border, w, border, border_color)
+                bbPaintRect(bb, x, y, border, h, border_color)
+                bbPaintRect(bb, x + w - border, y, border, h, border_color)
             end
         end
         -- Chapter ticks
@@ -1248,9 +1503,11 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
                     local base_tick = resolveColor(custom_tick, Blitbuffer.COLOR_BLACK)
                     if base_tick then
                         local tick_color
-                        if invert_read_ticks ~= false then
-                            local in_fill = tick_pos >= fill_start and tick_pos < fill_start + fill_len
-                            tick_color = in_fill and border_bg or base_tick
+                        local in_fill = tick_pos >= fill_start and tick_pos < fill_start + fill_len
+                        if invert_read_ticks ~= false and in_fill then
+                            -- Use `invert` if set, otherwise fall back to `bg`
+                            -- (the legacy bordered behaviour — preserves pre-v4.3 presets).
+                            tick_color = resolveColor(custom_invert, border_bg)
                         else
                             tick_color = base_tick
                         end

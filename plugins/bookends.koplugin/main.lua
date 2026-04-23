@@ -20,6 +20,8 @@ do
     end
 end
 
+local Blitbuffer = require("ffi/blitbuffer")
+local Geom = require("ui/geometry")
 local Config = require("bookends_config")
 local ConfirmBox = require("ui/widget/confirmbox")
 local DialogHelpers = require("bookends_dialog_helpers")
@@ -82,6 +84,60 @@ local Bookends = WidgetContainer:extend{
     is_doc_only = true,
 }
 
+-- Toast overlay that paints a page-coloured halo behind ReaderFlipping's
+-- top-left indicator (CRe re-render, page-flip, highlight-mode icons) and
+-- re-paints the icon on top. Lives on UIManager._window_stack so it paints
+-- after every ReaderView pass — the in-ReaderView attempt was clobbered by
+-- whichever view module happened to iterate last. invisible=true keeps it
+-- out of getTopmostVisibleWidget so it can't block ReaderRolling's reload
+-- gate (the bug we fixed by gutting the old dogear overlay).
+local FlippingHaloOverlay = WidgetContainer:extend{
+    name = "BookendsFlippingHalo",
+    toast = true,
+    invisible = true,
+    covers_fullscreen = false,
+}
+
+function FlippingHaloOverlay:init()
+    self.dimen = Geom:new{ x = 0, y = 0, w = 0, h = 0 }
+end
+
+function FlippingHaloOverlay:paintTo(bb, x, y)
+    local b = self._bookends
+    if not b or not b.enabled then return end
+    if not b:_flippingWillPaintIcon() then return end
+    -- Suppress if the topmost widget above ReaderUI has a dimen that covers
+    -- the icon corner (TouchMenu, TOC, etc). Small dialogs with centred
+    -- dimens don't reach the corner, so they pass. ButtonDialog does this
+    -- correctly on its own; widgets wrapping a CenterContainer need to
+    -- override paintTo to report the inner frame's dimen (see the preset
+    -- library modal).
+    local icon_size = Screen:scaleBySize(32)
+    local top = UIManager:getTopmostVisibleWidget()
+    if top and top.name ~= "ReaderUI" and top.dimen then
+        local d, px, py = top.dimen, x + icon_size / 2, y + icon_size / 2
+        if px >= d.x and px < d.x + d.w and py >= d.y and py < d.y + d.h then
+            return
+        end
+    end
+
+    local view = b.ui.view
+    local flipping = view.flipping
+    local icon_size = Screen:scaleBySize(32)
+    local halo_pad = Screen:scaleBySize(6)
+    local halo_radius = math.floor(icon_size / 2) + halo_pad
+    local halo_color = view.page_bgcolor or Blitbuffer.COLOR_WHITE
+    local border_color = Blitbuffer.gray(0.65) -- medium-light grey
+    local border_width = math.max(1, Screen:scaleBySize(1))
+    local cx = x + math.floor(icon_size / 2)
+    local cy = y + math.floor(icon_size / 2)
+    -- Filled halo in page colour, then a thin grey outline to keep it
+    -- reading as an intentional shape where it crops nearby content.
+    bb:paintCircle(cx, cy, halo_radius, halo_color, halo_radius)
+    bb:paintCircle(cx, cy, halo_radius, border_color, border_width)
+    flipping:paintTo(bb, x, y)
+end
+
 -- Position keys and their properties
 Bookends.POSITIONS = {
     { key = "tl", label = _("Top-left"),      row = "top",    h_anchor = "left",   v_anchor = "top" },
@@ -104,6 +160,8 @@ require("menu.main_menu")(Bookends)
 require("menu.position_menu")(Bookends)
 require("menu.progress_bar_menu")(Bookends)
 require("menu.token_picker")(Bookends)
+require("bookends_colour_palette").attach(Bookends)
+require("bookends_textwidget_patch")  -- TextWidget: paint ColorRGB32 fgcolor as true colour
 
 function Bookends:init()
     -- Install custom icons (chevron.down) into KOReader's user icons dir
@@ -184,6 +242,19 @@ function Bookends:init()
 
     -- Background update check on book open (opt-in only, throttled to once/hour)
     self:backgroundUpdateCheck()
+
+    -- Register the flipping-halo toast overlay (see FlippingHaloOverlay above).
+    if not self._flipping_halo then
+        self._flipping_halo = FlippingHaloOverlay:new{ _bookends = self }
+        UIManager:show(self._flipping_halo)
+    end
+end
+
+function Bookends:onCloseDocument()
+    if self._flipping_halo then
+        UIManager:close(self._flipping_halo)
+        self._flipping_halo = nil
+    end
 end
 
 function Bookends:onDispatcherRegisterActions()
@@ -797,6 +868,18 @@ function Bookends:onReaderFooterVisibilityChange()
 end
 function Bookends:onSetDimensions() self:markDirty() end
 
+--- KOReader broadcasts ColorRenderingUpdate when the user toggles colour
+--- rendering in Settings → Screen (screen_color_menu_table.lua, single
+--- broadcast site).  Flush the hex cache so the next paint reconstructs
+--- Blitbuffer values in the new mode, then mark the overlay dirty so it
+--- repaints.  The defensive auto-flush in parseColorValue is a belt-and-
+--- braces fallback in case the event fires before our handler is registered
+--- or a future KOReader refactor moves the broadcast site.
+function Bookends:onColorRenderingUpdate()
+    require("bookends_colour").flushCache()
+    self:markDirty()
+end
+
 -- Repaint after system events that change token values (battery, frontlight, etc.).
 -- These events don't trigger a ReaderView repaint on their own, so we need
 -- markDirty() to request one.  Use a nextTick to avoid interrupting the
@@ -858,6 +941,26 @@ function Bookends:onResume()
     self:backgroundUpdateCheck()
 end
 
+-- Mirror ReaderFlipping:paintTo's visibility conditions so we know whether
+-- an icon would be drawn at this frame. Used to gate the halo repaint below.
+function Bookends:_flippingWillPaintIcon()
+    local ui = self.ui
+    local view = ui and ui.view
+    if not view or not view.flipping then return false end
+    if ui.paging and view.flipping_visible then return true end
+    if ui.highlight then
+        if ui.highlight.select_mode then return true end
+        if ui.highlight.long_hold_reached then return true end
+    end
+    if ui.rolling and ui.rolling.rendering_state then
+        local f = view.flipping
+        if f.getRollingRenderingStateIconWidget then
+            return f:getRollingRenderingStateIconWidget() ~= nil
+        end
+    end
+    return false
+end
+
 function Bookends:paintTo(bb, x, y)
     if not self.enabled then return end
     local ok, err = xpcall(self._paintToInner, debug.traceback, self, bb, x, y)
@@ -881,29 +984,22 @@ function Bookends:paintTo(bb, x, y)
     end
 end
 
---- Convert a settings-stored color value (number grey, {grey=N}, or nil) to a
---- Blitbuffer Color8 or false (fully transparent). Returns nil if not set.
+--- Convert a settings-stored color value (number, {grey=N}, {hex="#RRGGBB"},
+--- false, or nil) to a Blitbuffer colour object (or false for transparent).
+--- Delegates per-value parsing + memoisation to bookends_colour so hex → RGB
+--- and greyscale-fallback are consistent with text_color / symbol_color.
 local function resolveBarColors(bc)
-    local Blitbuffer = require("ffi/blitbuffer")
-    local function colorOrTransparent(v)
-        if not v then return nil end
-        if type(v) == "table" then
-            if v.grey then
-                if v.grey >= 0xFF then return false end
-                return Blitbuffer.Color8(v.grey)
-            end
-            return nil
-        end
-        if v >= 0xFF then return false end
-        return Blitbuffer.Color8(v)
-    end
+    local Colour = require("bookends_colour")
+    local is_color_enabled = Screen:isColorEnabled()
+    local function cv(v) return Colour.parseColorValue(v, is_color_enabled) end
     return {
-        fill = colorOrTransparent(bc.fill),
-        bg = colorOrTransparent(bc.bg),
-        track = colorOrTransparent(bc.track),
-        tick = colorOrTransparent(bc.tick),
-        border = colorOrTransparent(bc.border),
-        invert = colorOrTransparent(bc.invert),
+        fill = cv(bc.fill),
+        bg = cv(bc.bg),
+        track = cv(bc.track),
+        tick = cv(bc.tick),
+        border = cv(bc.border),
+        invert = cv(bc.invert),
+        metro_fill = cv(bc.metro_fill),
         invert_read_ticks = bc.invert_read_ticks,
         tick_height_pct = bc.tick_height_pct,
         border_thickness = bc.border_thickness,
@@ -1000,7 +1096,8 @@ end
 local function computeBarRect(bar_cfg, x, y, screen_w, screen_h)
     local anchor = bar_cfg.v_anchor or "bottom"
     local vertical = anchor == "left" or anchor == "right"
-    local bar_thickness = bar_cfg.height or 20
+    local is_radial = (bar_cfg.style or "solid") == "radial" or bar_cfg.style == "radial_hollow"
+    local bar_thickness = bar_cfg.height or (is_radial and 60 or 20)
     if vertical then
         -- margin_left/right reinterpreted as top/bottom insets
         local bar_h = screen_h - (bar_cfg.margin_left or 0) - (bar_cfg.margin_right or 0)
@@ -1011,6 +1108,12 @@ local function computeBarRect(bar_cfg, x, y, screen_w, screen_h)
         else
             bar_x = x + screen_w - bar_thickness - (bar_cfg.margin_v or 0)
         end
+        -- Radial: shrink to a square centered along the long axis
+        if is_radial then
+            local side = math.min(bar_thickness, bar_h)
+            bar_y = bar_y + math.floor((bar_h - side) / 2)
+            bar_h = side
+        end
         return bar_x, bar_y, bar_thickness, bar_h, vertical
     else
         local bar_w = screen_w - (bar_cfg.margin_left or 0) - (bar_cfg.margin_right or 0)
@@ -1020,6 +1123,12 @@ local function computeBarRect(bar_cfg, x, y, screen_w, screen_h)
             bar_y = y + (bar_cfg.margin_v or 0)
         else
             bar_y = y + screen_h - bar_thickness - (bar_cfg.margin_v or 0)
+        end
+        -- Radial: shrink to a square centered along the long axis
+        if is_radial then
+            local side = math.min(bar_w, bar_thickness)
+            bar_x = bar_x + math.floor((bar_w - side) / 2)
+            bar_w = side
         end
         return bar_x, bar_y, bar_w, bar_thickness, vertical
     end
@@ -1039,7 +1148,7 @@ function Bookends:_renderProgressBars(bb, x, y, screen_w, screen_h)
     local bc = self.settings:readSetting("bar_colors") or {}
     bc.tick_height_pct = global_tick_height_pct or bc.tick_height_pct
     local bar_colors
-    if bc.fill or bc.bg or bc.track or bc.tick or bc.invert_read_ticks ~= nil or bc.tick_height_pct or bc.border or bc.invert or bc.border_thickness then
+    if bc.fill or bc.bg or bc.track or bc.tick or bc.invert_read_ticks ~= nil or bc.tick_height_pct or bc.border or bc.invert or bc.border_thickness or bc.metro_fill then
         bar_colors = resolveBarColors(bc)
     end
 
@@ -1195,6 +1304,7 @@ function Bookends:_paintToInner(bb, x, y)
             cfg.h_nudge = (pos_settings.line_h_nudge and pos_settings.line_h_nudge[i]) or 0
             cfg.uppercase = (pos_settings.line_uppercase and pos_settings.line_uppercase[i]) or false
             cfg.text_color = text_color
+            cfg.symbol_color = symbol_color
             -- Bar data (keyed by expanded line index, same order as line_configs)
             local expanded_idx = #line_configs + 1
             if bar_data[key] and bar_data[key][expanded_idx] then
@@ -1401,10 +1511,11 @@ function Bookends:_paintToInner(bb, x, y)
         self.position_cache[key] = text
     end
 
-    -- Repaint the bookmark dog-ear on top of Bookends so it isn't hidden
-    if self.ui.view.dogear_visible and self.ui.view.dogear then
-        self.ui.view.dogear:paintTo(bb, x, y)
-    end
+    -- Dogear and flipping-icon halo both paint from toast overlays
+    -- registered on UIManager, above the ReaderView paint pipeline.
+    -- An in-paintTo repaint here would be lost if this function errored
+    -- partway through, which has happened (see font.lua paintTo traces),
+    -- and could also be clobbered by later view modules.
 
     self.dirty = false
     self:startRefreshTimer()

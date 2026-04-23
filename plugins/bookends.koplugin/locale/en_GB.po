@@ -32,6 +32,12 @@ msgstr "Metro track colour"
 msgid "Metro track color (% black)"
 msgstr "Metro track colour (% black)"
 
+msgid "Metro read color"
+msgstr "Metro read colour"
+
+msgid "Metro read color (% black)"
+msgstr "Metro read colour (% black)"
+
 msgid "Prioritise left/right and truncate long center text"
 msgstr "Prioritise left/right and truncate long centre text"
 
@@ -79,3 +85,33 @@ msgstr "Unread colour (% black)"
 
 msgid "Use custom colors"
 msgstr "Use custom colours"
+
+msgid "Applies to Nerd Font and FontAwesome icon glyphs (the Private Use Area range, e.g. %W, %B, %k). Unicode symbols in the regular text ranges (like the hourglass \"⌛\") follow the text colour instead.\n\nAn inline [c=#RRGGBB]…[/c] tag in a line overrides the icon colour for any glyphs inside it."
+msgstr "Applies to Nerd Font and FontAwesome icon glyphs (the Private Use Area range, e.g. %W, %B, %k). Unicode symbols in the regular text ranges (like the hourglass \"⌛\") follow the text colour instead.\n\nAn inline [c=#RRGGBB]…[/c] tag in a line overrides the icon colour for any glyphs inside it."
+
+msgid "Diameter"
+msgstr ""
+
+msgid "Fill: clockwise"
+msgstr ""
+
+msgid "Hex:"
+msgstr ""
+
+msgid "Hollow"
+msgstr ""
+
+msgid "Icon color"
+msgstr "Icon colour"
+
+msgid "Invalid hex colour (use #RGB or #RRGGBB)"
+msgstr ""
+
+msgid "Pick a color"
+msgstr "Pick a colour"
+
+msgid "Radial"
+msgstr ""
+
+msgid "Radial hollow"
+msgstr ""
