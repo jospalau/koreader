@@ -61,6 +61,9 @@ function XRayPlugin:init()
     self.locations = {}
     self.timeline = {}
     self.historical_figures = {}
+    
+    -- Track dismissed language suggestions for the current session
+    self.suggestion_dismissed = {}
 
     -- Modular lookup logic for text selection
     local LookupManager = require("xray_lookupmanager")
@@ -125,6 +128,14 @@ function XRayPlugin:onReaderReady()
     self.chapters_fetched = {}
     self.bg_fetch_pending = false
 
+    -- Initialize language based on logic (auto, book, or manual)
+    self:applyLanguageLogic()
+    
+    -- Suggest switching to book language if appropriate
+    UIManager:scheduleIn(5, function()
+        self:checkBookLanguageMatch()
+    end)
+    
     -- Weekly silent update check
     UIManager:scheduleIn(10, function()
         self:checkWeeklyUpdate()
@@ -434,11 +445,11 @@ function XRayPlugin:getSubMenuItems()
             separator = true,
         },
         {
-            text = "Settings",
+            text = self.loc:t("menu_settings") or "Settings",
             keep_menu_open = true,
             sub_item_table = {
                 {
-                    text = "Spoiler Settings",
+                    text = self.loc:t("spoiler_preference_title") or "Spoiler Settings",
                     keep_menu_open = true,
                     callback = function() self:showSpoilerSettings() end,
                 },
@@ -462,12 +473,12 @@ function XRayPlugin:getSubMenuItems()
                     keep_menu_open = true,
                     sub_item_table = {
                         {
-                            text = "Primary AI Model",
+                            text = self.loc:t("menu_primary_ai_model") or "Primary AI Model",
                             keep_menu_open = true,
                             sub_item_table_func = function() return self:getAIModelSelectionMenu("primary") end
                         },
                         {
-                            text = "Secondary AI Model",
+                            text = self.loc:t("menu_secondary_ai_model") or "Secondary AI Model",
                             keep_menu_open = true,
                             sub_item_table_func = function() return self:getAIModelSelectionMenu("secondary") end,
                             separator = true,
@@ -485,7 +496,7 @@ function XRayPlugin:getSubMenuItems()
                             separator = true,
                         },
                         {
-                            text = "View All Config Values", 
+                            text = self.loc:t("menu_view_config") or "View All Config Values", 
                             keep_menu_open = true,
                             callback = function() self:showConfigSummary() end,
                         },
@@ -494,7 +505,7 @@ function XRayPlugin:getSubMenuItems()
             }
         },
         {
-            text = "Maintenance",
+            text = self.loc:t("menu_maintenance") or "Maintenance",
             keep_menu_open = true,
             sub_item_table = {
                 {
@@ -633,39 +644,190 @@ function XRayPlugin:showLanguageSelection()
     local ButtonDialog = require("ui/widget/buttondialog")
     local InfoMessage = require("ui/widget/infomessage")
     
-    local current_lang = "en"
-    if self.loc and self.loc.getLanguage then
-        current_lang = self.loc:getLanguage()
-    end
+    local settings_lang = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings.language or "auto"
     
     local function changeLang(lang_code)
         UIManager:close(self.ldlg)
-        if self.loc and self.loc.setLanguage then
-            self.loc:setLanguage(lang_code)
-            if self.ai_helper then
-                self.ai_helper:saveSettings({ language = lang_code })
-            end
+        self.ldlg = nil
+        
+        if self.ai_helper then
+            self.ai_helper:saveSettings({ language = lang_code })
         end
         
-        local msg = (self.loc and self.loc:t("language_changed")) or "Language changed"
-        local restart_msg = (self.loc and self.loc:t("please_restart")) or "Please close and reopen the book."
+        -- Apply the new setting immediately
+        self:applyLanguageLogic()
+        
+        local msg = (self.loc and self.loc:t("language_changed_reopen")) or "Language changed. Reopen the menu to see the changes."
+        
+        -- Use the standard Reader event to close menus safely
+        if self.ui then
+            local Event = require("ui/event")
+            self.ui:handleEvent(Event:new("CloseMenu"))
+        end
+        
+        -- Ensure the standalone menu is also closed
+        if self.xray_menu then
+            UIManager:close(self.xray_menu)
+            self.xray_menu = nil
+        end
         
         UIManager:show(InfoMessage:new{
-            text = "[OK] " .. msg .. "\n\n" .. restart_msg,
-            timeout = 4 
+            text = "[OK] " .. msg,
+            timeout = 3
         })
     end
     
     local buttons = {
-        {{ text = "English" .. (current_lang == "en" and " [OK]" or ""), callback = function() changeLang("en") end }},
-        {{ text = "Türkçe" .. (current_lang == "tr" and " [OK]" or ""), callback = function() changeLang("tr") end }},
-        {{ text = "Português" .. (current_lang == "pt_br" and " [OK]" or ""), callback = function() changeLang("pt_br") end }},
-        {{ text = "Español" .. (current_lang == "es" and " [OK]" or ""), callback = function() changeLang("es") end }},
+        {
+            { text = (self.loc:t("lang_follow_system") or "Automatic (Follow System)") .. (settings_lang == "auto" and " [OK]" or ""), callback = function() changeLang("auto") end },
+            { text = (self.loc:t("lang_follow_book") or "Automatic (Follow Book)") .. (settings_lang == "book" and " [OK]" or ""), callback = function() changeLang("book") end },
+        },
+        {{ text = "English" .. (settings_lang == "en" and " [OK]" or ""), callback = function() changeLang("en") end }},
+        {{ text = "Deutsch" .. (settings_lang == "de" and " [OK]" or ""), callback = function() changeLang("de") end }},
+        {{ text = "Français" .. (settings_lang == "fr" and " [OK]" or ""), callback = function() changeLang("fr") end }},
+        {{ text = "Русский" .. (settings_lang == "ru" and " [OK]" or ""), callback = function() changeLang("ru") end }},
+        {{ text = "简体中文" .. (settings_lang == "zh_CN" and " [OK]" or ""), callback = function() changeLang("zh_CN") end }},
+        {{ text = "Türkçe" .. (settings_lang == "tr" and " [OK]" or ""), callback = function() changeLang("tr") end }},
+        {{ text = "Português" .. (settings_lang == "pt_br" and " [OK]" or ""), callback = function() changeLang("pt_br") end }},
+        {{ text = "Español" .. (settings_lang == "es" and " [OK]" or ""), callback = function() changeLang("es") end }},
     }
     
     local dialog_title = (self.loc and self.loc:t("menu_language")) or "Language Selection"
     self.ldlg = ButtonDialog:new{title = dialog_title, buttons = buttons}
     UIManager:show(self.ldlg)
+end
+
+function XRayPlugin:resolveLanguage(code)
+    local supported = { en=1, de=1, fr=1, ru=1, zh_CN=1, tr=1, pt_br=1, es=1 }
+    
+    if code == "auto" or not code then
+        local gettext = require("gettext")
+        local ko_lang = gettext.getLanguage and gettext.getLanguage()
+        
+        -- Fallback to G_reader_settings if gettext doesn't provide it
+        if not ko_lang and G_reader_settings then
+            ko_lang = G_reader_settings:readSetting("language")
+        end
+        
+        if ko_lang then
+            local lang = ko_lang:sub(1, 2):lower()
+            if ko_lang:lower():find("zh_cn") or ko_lang:lower():find("zh-cn") then lang = "zh_CN"
+            elseif ko_lang:lower():find("pt_br") or ko_lang:lower():find("pt-br") then lang = "pt_br" end
+            if supported[lang] then return lang end
+        end
+        return "en"
+    elseif code == "book" then
+        if self.ui and self.ui.document then
+            local props = self.ui.document:getProps()
+            local book_lang = props.language
+            if book_lang then
+                local lang = book_lang:sub(1, 2):lower()
+                if book_lang:lower():find("zh") then lang = "zh_CN"
+                elseif book_lang:lower():find("pt") then lang = "pt_br" end
+                if supported[lang] then return lang end
+            end
+        end
+        return self:resolveLanguage("auto")
+    end
+    return code or "en"
+end
+
+function XRayPlugin:applyLanguageLogic()
+    local settings_lang = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings.language or "auto"
+    local resolved = self:resolveLanguage(settings_lang)
+    
+    self:log("XRayPlugin: Applying language logic. Settings: " .. tostring(settings_lang) .. ", Resolved: " .. tostring(resolved))
+    
+    if self.loc and self.loc.setLanguage then
+        self.loc:setLanguage(resolved)
+    end
+    
+    if self.ai_helper then
+        self.ai_helper.current_language = resolved
+        self.ai_helper:loadLanguage()
+    end
+end
+
+function XRayPlugin:checkBookLanguageMatch()
+    local settings_lang = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings.language or "auto"
+    -- Only suggest if we are NOT in "Follow Book" mode already
+    if settings_lang == "book" then return end
+    
+    if not self.ui or not self.ui.document then return end
+    local props = self.ui.document:getProps()
+    local book_lang = props.language
+    if not book_lang or book_lang == "" then return end
+    
+    local lang = book_lang:sub(1, 2):lower()
+    if book_lang:find("zh") then lang = "zh_CN"
+    elseif book_lang:find("pt") then lang = "pt_br" end
+    
+    local supported = { 
+        en = "English", de = "Deutsch", fr = "Français", 
+        ru = "Русский", zh_CN = "简体中文", tr = "Türkçe", 
+        pt_br = "Português", es = "Español" 
+    }
+    
+    if not supported[lang] then return end
+    
+    local current_lang = self.loc:getLanguage()
+    if lang == current_lang then return end
+    
+    if self.suggestion_dismissed[self.ui.document.file] then return end
+    
+    -- Check if we should ignore this book (from cache)
+    if not self.cache_manager then self.cache_manager = require("xray_cachemanager"):new() end
+    local cache = self.cache_manager:loadCache(self.ui.document.file)
+    if cache and cache.ignore_lang_mismatch then return end
+
+    -- Show prompt
+    local lang_name = supported[lang]
+    local msg = string.format(self.loc:t("msg_suggest_lang") or "This book is in %s. Switch X-Ray language to match?", lang_name)
+    
+    local ButtonDialog = require("ui/widget/buttondialog")
+    local mismatch_dialog
+    mismatch_dialog = ButtonDialog:new{
+        title = self.loc:t("lang_mismatch_title") or "Language Mismatch",
+        text = msg,
+        buttons = {
+            {
+                {
+                    text = self.loc:t("yes") or "Yes",
+                    is_enter_default = true,
+                    callback = function()
+                        if self.ai_helper then
+                            self.ai_helper:saveSettings({ language = lang })
+                            self:applyLanguageLogic()
+                            UIManager:close(mismatch_dialog)
+                            UIManager:show(InfoMessage:new{
+                                text = self.loc:t("language_changed_reopen") or "Language changed.",
+                                timeout = 3
+                            })
+                        end
+                    end
+                },
+                {
+                    text = self.loc:t("no") or "No",
+                    callback = function()
+                        self.suggestion_dismissed[self.ui.document.file] = true
+                        UIManager:close(mismatch_dialog)
+                    end
+                }
+            },
+            {
+                {
+                    text = self.loc:t("dont_ask_again") or "Don't ask again",
+                    callback = function()
+                        local current_cache = self.cache_manager:loadCache(self.ui.document.file) or {}
+                        current_cache.ignore_lang_mismatch = true
+                        self.cache_manager:saveCache(self.ui.document.file, current_cache)
+                        UIManager:close(mismatch_dialog)
+                    end
+                }
+            }
+        }
+    }
+    UIManager:show(mismatch_dialog)
 end
 
 function XRayPlugin:showCharacters()
@@ -703,7 +865,15 @@ function XRayPlugin:showCharacters()
 end
 
 function XRayPlugin:showCharacterDetails(character)
-    local lines = { "NAME: " .. (character.name or "???"), "ROLE: " .. (character.role or "---"), "GENDER: " .. (character.gender or "---"), "OCCUPATION: " .. (character.occupation or "---"), "", "DESCRIPTION:", character.description or "---" }
+    local lines = { 
+        (self.loc:t("label_name") or "NAME") .. ": " .. (character.name or "???"), 
+        (self.loc:t("label_role") or "ROLE") .. ": " .. (character.role or "---"), 
+        (self.loc:t("label_gender") or "GENDER") .. ": " .. (character.gender or "---"), 
+        (self.loc:t("label_occupation") or "OCCUPATION") .. ": " .. (character.occupation or "---"), 
+        "", 
+        (self.loc:t("label_description") or "DESCRIPTION") .. ":", 
+        character.description or "---" 
+    }
     UIManager:show(InfoMessage:new{ text = table.concat(lines, "\n") })
 end
 
@@ -752,7 +922,7 @@ function XRayPlugin:showAutoUpdateSettings()
         
         info_dialog = ButtonDialog:new{
             title = self.loc:t("menu_auto_update_frequency") or "Auto X-Ray Settings",
-            text = "Background fetching frequency:",
+            text = self.loc:t("auto_update_freq_label") or "Background fetching frequency:",
             buttons = {
                 {
                     {
@@ -844,7 +1014,7 @@ function XRayPlugin:showSpoilerSettings()
         
         info_dialog = ButtonDialog:new{
             title = self.loc:t("spoiler_preference_title") or "Spoiler Settings",
-            text = "Select your spoiler preference for X-Ray data:",
+            text = self.loc:t("spoiler_preference_desc") or "Select your spoiler preference for X-Ray data:",
             buttons = {
                 {
                     {
@@ -1203,7 +1373,7 @@ function XRayPlugin:continueWithFetch(reading_percent, is_update, last_fetch_pag
             if (not book_text or #book_text < 10) and not samples then
                 if wait_msg then UIManager:close(wait_msg) end
                 if not is_silent then
-                    UIManager:show(InfoMessage:new{ text = "Error: Could not extract book text.", timeout = 5 })
+                    UIManager:show(InfoMessage:new{ text = self.loc:t("error_extract_text") or "Error: Could not extract book text.", timeout = 5 })
                 end
                 self:log("XRayPlugin: Text extraction failed" .. (is_silent and " (silent)" or ""))
                 return
@@ -1450,11 +1620,14 @@ function XRayPlugin:finalizeXRayData(final_book_data, title, author, book_text, 
             #self.characters, #self.locations, #self.timeline,
             cache_saved and "saved" or "failed"))
         -- Testing notification: brief toast
-        UIManager:show(InfoMessage:new{ text = "✓ X-Ray background update complete.", timeout = 2 })
+        UIManager:show(InfoMessage:new{ text = self.loc:t("bg_update_complete") or "✓ X-Ray background update complete.", timeout = 2 })
     else
-        local summary = string.format("AI Fetch Complete!\n\nCharacters: %d\nLocations: %d\nEvents: %d\n\n%s", 
-            #self.characters, #self.locations, #self.timeline,
-            cache_saved and "✓ Cache updated." or "✗ Cache failed.")
+        local fetch_complete = self.loc:t("ai_fetch_complete_msg") or "AI Fetch Complete!"
+        local cache_success = self.loc:t("cache_save_success") or "✓ Cache updated."
+        local cache_fail = self.loc:t("cache_save_failed") or "✗ Cache failed."
+        local summary = string.format("%s\n\nCharacters: %d\nLocations: %d\nEvents: %d\n\n%s", 
+            fetch_complete, #self.characters, #self.locations, #self.timeline,
+            cache_saved and cache_success or cache_fail)
 
         local success_dialog
         local ButtonDialog = require("ui/widget/buttondialog")
@@ -1491,7 +1664,7 @@ function XRayPlugin:fetchMoreCharacters()
 
         local wait_msg
         local is_cancelled = false
-        wait_msg = InfoMessage:new{ text = (self.loc:t("fetching_ai") or "Fetching from %s...") .. "\n\n" .. title .. "\n\nExtracting additional characters...", timeout = 120 }
+        wait_msg = InfoMessage:new{ text = (self.loc:t("fetching_ai") or "Fetching from %s...") .. "\n\n" .. title .. "\n\n" .. (self.loc:t("extracting_more_characters") or "Extracting additional characters..."), timeout = 120 }
         UIManager:show(wait_msg)
         
         UIManager:scheduleIn(0.5, function()
@@ -1602,7 +1775,8 @@ function XRayPlugin:fetchMoreCharacters()
             }
             self.cache_manager:saveCache(self.ui.document.file, updated_data)
             
-            UIManager:show(InfoMessage:new{ text = string.format("Added %d new characters!", new_count), timeout = 3 })
+            local added_msg = string.format(self.loc:t("msg_added_characters") or "Added %d new characters!", new_count)
+            UIManager:show(InfoMessage:new{ text = added_msg, timeout = 3 })
 
             -- Close the old menu using the captured local reference, which is immune
             -- to close_callback having nilled self.char_menu during the wait.
@@ -1653,7 +1827,7 @@ function XRayPlugin:fetchAuthorInfo()
         end
         self.author_info = { 
             name = sanitizeMetadata(author_data.author or author), 
-            description = sanitizeMetadata(author_data.author_bio or "No biography available."), 
+            description = sanitizeMetadata(author_data.author_bio or self.loc:t("msg_no_bio") or "No biography available."), 
             birthDate = sanitizeMetadata(author_data.author_birth or "---"), 
             deathDate = sanitizeMetadata(author_data.author_death or "---") 
         }
@@ -1667,7 +1841,7 @@ function XRayPlugin:fetchAuthorInfo()
 end
 
 function XRayPlugin:showAuthorInfo()
-    if not self.author_info or not self.author_info.description or self.author_info.description == "" or self.author_info.description == "No biography available." then
+    if not self.author_info or not self.author_info.description or self.author_info.description == "" or self.author_info.description == (self.loc:t("msg_no_bio") or "No biography available.") then
         local ButtonDialog = require("ui/widget/buttondialog")
         local ask_dialog
         ask_dialog = ButtonDialog:new{ title = self.loc:t("menu_fetch_author") or "Fetch Author Info", text = self.loc:t("no_author_data_fetch"), buttons = {{{ text = self.loc:t("cancel"), callback = function() UIManager:close(ask_dialog) end }, { text = self.loc:t("fetch_button") or "Fetch", is_enter_default = true, callback = function() UIManager:close(ask_dialog); UIManager:nextTick(function() self:fetchAuthorInfo() end) end }}} }
@@ -1711,7 +1885,7 @@ function XRayPlugin:showAbout()
     local meta = dofile(self.path .. "/_meta.lua")
     local ConfirmBox = require("ui/widget/confirmbox")
     local version = meta.version or "?.?.?"
-    local description = tostring(meta.description or "")
+    local description = self.loc:t("plugin_description") or tostring(meta.description or "")
 
     local body = (meta.fullname or "X-Ray") .. " v" .. version .. "\n\n" .. description
 
@@ -1844,7 +2018,7 @@ function XRayPlugin:getAPIKeySelectionMenu(provider, provider_name)
             end
         },
         {
-            text = "Enter UI override key: " .. ((self.ai_helper and self.ai_helper.settings and self.ai_helper.settings[provider .. "_api_key"]) or "(Not set)"),
+            text = (self.loc:t("menu_enter_ui_key") or "Enter UI override key: ") .. ((self.ai_helper and self.ai_helper.settings and self.ai_helper.settings[provider .. "_api_key"]) or "(Not set)"),
             checked_func = function() 
                 if not self.ai_helper or not self.ai_helper.providers or not self.ai_helper.providers[provider] then return false end
                 return self.ai_helper.providers[provider].ui_key_active 
@@ -1889,11 +2063,11 @@ end
 
 function XRayPlugin:getAIModelSelectionMenu(setting_type)
     local models = {
-        { name = "Gemini Flash (gemini-2.5-flash) - free", provider = "gemini", id = "gemini-2.5-flash" },
-        { name = "Gemini Flash-Lite (gemini-2.5-flash-lite) - free", provider = "gemini", id = "gemini-2.5-flash-lite" },
-        { name = "Gemini Pro (gemini-1.5-pro) - paid", provider = "gemini", id = "gemini-1.5-pro" },
-        { name = "ChatGPT Mini (gpt-4o-mini) - paid", provider = "chatgpt", id = "gpt-4o-mini" },
-        { name = "ChatGPT (gpt-4o) - paid", provider = "chatgpt", id = "gpt-4o" },
+        { name = "Gemini Flash (gemini-2.5-flash) - " .. (self.loc:t("model_free") or "free"), provider = "gemini", id = "gemini-2.5-flash" },
+        { name = "Gemini Flash-Lite (gemini-2.5-flash-lite) - " .. (self.loc:t("model_free") or "free"), provider = "gemini", id = "gemini-2.5-flash-lite" },
+        { name = "Gemini Pro (gemini-2.5-pro) - " .. (self.loc:t("model_paid") or "paid"), provider = "gemini", id = "gemini-2.5-pro" },
+        { name = "ChatGPT Mini (gpt-4o-mini) - " .. (self.loc:t("model_paid") or "paid"), provider = "chatgpt", id = "gpt-4o-mini" },
+        { name = "ChatGPT (gpt-4o) - " .. (self.loc:t("model_paid") or "paid"), provider = "chatgpt", id = "gpt-4o" },
     }
     
     local menu_items = {}
@@ -1916,16 +2090,16 @@ function XRayPlugin:getAIModelSelectionMenu(setting_type)
         end
     end
     table.insert(menu_items, {
-        text = "Enter custom model...",
+        text = self.loc:t("menu_enter_custom_model") or "Enter custom model...",
         keep_menu_open = true,
         callback = function()
             local InputDialog = require("ui/widget/inputdialog")
             local input_dialog
             local current = (self.ai_helper and self.ai_helper.settings) and (setting_type == "primary" and self.ai_helper.settings.primary_ai or self.ai_helper.settings.secondary_ai) or nil
             input_dialog = InputDialog:new{
-                title = "Custom " .. setting_type:gsub("^%l", string.upper) .. " Model",
+                title = (self.loc:t("menu_custom_model_title") or "Custom %s Model"):format(setting_type:gsub("^%l", string.upper)),
                 input = current and current.model or "",
-                input_hint = "e.g., gemini-1.5-pro",
+                input_hint = "e.g., gemini-2.5-pro",
                 buttons = {
                     {
                         {
@@ -1979,20 +2153,37 @@ function XRayPlugin:showCharacterSearch()
 end
 
 function XRayPlugin:showConfigSummary()
-    local text = "--- Current Configuration ---\n\n"
+    local text = (self.loc:t("menu_config_header") or "--- Current Configuration ---") .. "\n\n"
     
     local primary = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings.primary_ai or nil
     local secondary = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings.secondary_ai or nil
     
-    text = text .. "Primary AI:\n"
-    if primary then text = text .. "  Provider: " .. primary.provider .. "\n  Model: " .. primary.model .. "\n\n" else text = text .. "  Default (Gemini)\n\n" end
+    local primary_label = self.loc:t("menu_primary_ai_model") or "Primary AI Model"
+    local secondary_label = self.loc:t("menu_secondary_ai_model") or "Secondary AI Model"
+    local provider_label = self.loc:t("config_provider") or "  Provider: "
+    local model_label = self.loc:t("config_model") or "  Model: "
+    local default_label = self.loc:t("config_default_gemini") or "  Default (Gemini)"
+    local set_label = self.loc:t("config_status_set") or "SET"
+    local not_set_label = self.loc:t("config_status_not_set") or "NOT SET"
+
+    text = text .. primary_label .. ":\n"
+    if primary then 
+        text = text .. provider_label .. primary.provider .. "\n" .. model_label .. primary.model .. "\n\n" 
+    else 
+        text = text .. default_label .. "\n\n" 
+    end
     
-    text = text .. "Secondary AI:\n"
-    if secondary then text = text .. "  Provider: " .. secondary.provider .. "\n  Model: " .. secondary.model .. "\n\n" else text = text .. "  Default (Gemini)\n\n" end
+    text = text .. secondary_label .. ":\n"
+    if secondary then 
+        text = text .. provider_label .. secondary.provider .. "\n" .. model_label .. secondary.model .. "\n\n" 
+    else 
+        text = text .. default_label .. "\n\n" 
+    end
     
     local function add(p, n)
         local c = self.ai_helper.providers[p]
-        text = text .. n .. " API Key: " .. (c.api_key and "SET" or "NOT SET") .. "\n"
+        local key_label = (self.loc:t("config_api_key_label") or "%s API Key: "):format(n)
+        text = text .. key_label .. (c.api_key and set_label or not_set_label) .. "\n"
     end
     add("gemini", "Google Gemini"); add("chatgpt", "ChatGPT")
     

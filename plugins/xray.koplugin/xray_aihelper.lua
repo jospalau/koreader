@@ -538,6 +538,33 @@ function AIHelper:loadSettings()
     end
     
     self.settings = settings
+    
+    -- If no language is set, default to KOReader's system language
+    if not settings.language then
+        local gettext = require("gettext")
+        local ko_lang = gettext.getLanguage and gettext.getLanguage()
+        if not ko_lang and G_reader_settings then
+            ko_lang = G_reader_settings:readSetting("language")
+        end
+        
+        if ko_lang then
+            -- Normalize language code
+            local lang = ko_lang:sub(1, 2):lower()
+            if ko_lang:lower():find("zh_cn") or ko_lang:lower():find("zh-cn") then
+                lang = "zh_CN"
+            elseif ko_lang:lower():find("pt_br") or ko_lang:lower():find("pt-br") then
+                lang = "pt_br"
+            end
+            
+            -- Only auto-set if it's one of our supported languages
+            local supported = { en=1, de=1, fr=1, ru=1, zh_CN=1, tr=1, pt_br=1, es=1 }
+            if supported[lang] then
+                settings.language = lang
+                migrated = true
+            end
+        end
+    end
+
     self.current_language = settings.language or "en"
     
     if settings.gemini_api_key then 

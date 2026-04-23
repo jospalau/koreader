@@ -1,0 +1,397 @@
+msgid ""
+msgstr ""
+"Language-Team: French\n"
+"Language: fr\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "ai_fetch_complete"
+msgstr "Récupéré avec succès de %s !\n\nLivre : %s\nAuteur : %s\n\nPersonnages : %d\nLieux : %d\nThèmes : %d\nÉvénements : %d\nPersonnes historiques : %d\n\n%s\n\nRÉSUMÉ :\n%s"
+
+msgid "ai_fetch_complete_msg"
+msgstr "Récupération IA terminée !"
+
+msgid "auto_update_aggressive"
+msgstr "Agressif : vérifie chaque nouveau chapitre"
+
+msgid "auto_update_balanced"
+msgstr "Équilibré : vérifie max toutes les 5 min"
+
+msgid "auto_update_disabled"
+msgstr "Désactivé"
+
+msgid "auto_update_economical"
+msgstr "Économique : vérifie max toutes les 15 min"
+
+msgid "auto_update_freq_about"
+msgstr "La mise à jour automatique vérifie les nouvelles données de chapitre en arrière-plan pendant que vous lisez.\n\nLIMITES ET PERFORMANCE\nLes requêtes fréquentes en arrière-plan peuvent vider la BATTERIE et atteindre les LIMITES DE TAUX du fournisseur IA.\n\nMODES\n• Désactivé : Pas de requêtes en arrière-plan\n• Agressif : Vérifie chaque fois que vous entrez dans un nouveau chapitre\n• Équilibré : Vérifie au plus toutes les 5 minutes (recommandé)\n• Économique : Vérifie au plus toutes les 15 minutes\n• Clairsemé : Vérifie au plus toutes les 30 minutes\n\nNote : Si un chapitre est sauté en raison des limites de fréquence, X-Ray l'inclura automatiquement dans la prochaine récupération en arrière-plan."
+
+msgid "auto_update_freq_label"
+msgstr "Fréquence de récupération en arrière-plan :"
+
+msgid "auto_update_sparse"
+msgstr "Clairsemé : vérifie max toutes les 30 min"
+
+msgid "bg_update_complete"
+msgstr "✓ Mise à jour X-Ray en arrière-plan terminée."
+
+msgid "cache_cleared"
+msgstr "Cache vidé !\n\nVous pouvez maintenant récupérer de nouvelles données :\nMenu → X-Ray → Récupérer les données IA"
+
+msgid "cache_save_failed"
+msgstr "Échec de l'enregistrement dans le cache"
+
+msgid "cache_save_success"
+msgstr "✓ Cache mis à jour."
+
+msgid "cache_saved"
+msgstr "Enregistré dans le cache !"
+
+msgid "cancel"
+msgstr "Annuler"
+
+msgid "character_not_found"
+msgstr "Aucun personnage trouvé correspondant à '%s'"
+
+msgid "close"
+msgstr "Fermer"
+
+msgid "config_api_key_label"
+msgstr "Clé API %s : "
+
+msgid "config_default_gemini"
+msgstr "  Par défaut (Gemini)"
+
+msgid "config_model"
+msgstr "  Modèle : "
+
+msgid "config_provider"
+msgstr "  Fournisseur : "
+
+msgid "config_status_not_set"
+msgstr "NON CONFIGURÉ"
+
+msgid "config_status_set"
+msgstr "CONFIGURÉ"
+
+msgid "current_language"
+msgstr "en"
+
+msgid "dont_ask_again"
+msgstr "Ne plus demander pour ce livre"
+
+msgid "error_author_fetch_desc"
+msgstr "Échec de la récupération des infos auteur."
+
+msgid "error_author_fetch_title"
+msgstr "Échec de la récupération de l'auteur"
+
+msgid "error_extract_text"
+msgstr "Erreur : Impossible d'extraire le texte du livre."
+
+msgid "error_fetch_desc"
+msgstr "Échec de la récupération des données X-Ray. Veuillez vérifier votre clé API et votre connexion."
+
+msgid "error_fetch_title"
+msgstr "Échec de la récupération"
+
+msgid "extracting_more_characters"
+msgstr "Extraction de personnages supplémentaires..."
+
+msgid "fetch_button"
+msgstr "Récupérer"
+
+msgid "fetch_successful"
+msgstr "Récupération réussie"
+
+msgid "fetching_ai"
+msgstr "Analyse du livre pour générer les données X-Ray..."
+
+msgid "fetching_author"
+msgstr "Récupération des infos auteur depuis %s..."
+
+msgid "fetching_wait"
+msgstr "⏳ Veuillez patienter...\nCe processus peut prendre 10 à 50 secondes."
+
+msgid "full_book_option"
+msgstr "Mode Livre Complet"
+
+msgid "label_description"
+msgstr "DÉTAILS"
+
+msgid "label_gender"
+msgstr "GENRE"
+
+msgid "label_name"
+msgstr "NOM"
+
+msgid "label_occupation"
+msgstr "PROFESSION"
+
+msgid "label_role"
+msgstr "RÔLE"
+
+msgid "lang_follow_book"
+msgstr "Automatique (Suivre le livre)"
+
+msgid "lang_follow_system"
+msgstr "Automatique (Suivre le système)"
+
+msgid "lang_mismatch_title"
+msgstr "Langue Incorrecte"
+
+msgid "language_changed_reopen"
+msgstr "Langue modifiée. Rouvrez le menu pour voir les changements."
+
+msgid "logs_cleared"
+msgstr "Logs effacés !"
+
+msgid "menu_about"
+msgstr "À propos"
+
+msgid "menu_ai_settings"
+msgstr "Paramètres IA"
+
+msgid "menu_author_info"
+msgstr "Infos Auteur"
+
+msgid "menu_auto_update_frequency"
+msgstr "Paramètres Auto X-Ray"
+
+msgid "menu_characters"
+msgstr "Personnages"
+
+msgid "menu_chatgpt_key"
+msgstr "Clé API ChatGPT"
+
+msgid "menu_clear_cache"
+msgstr "Vider le cache"
+
+msgid "menu_clear_logs"
+msgstr "Effacer les logs"
+
+msgid "menu_config_header"
+msgstr "--- Configuration actuelle ---"
+
+msgid "menu_custom_model_title"
+msgstr "Modèle %s personnalisé"
+
+msgid "menu_enter_custom_model"
+msgstr "Entrer un modèle personnalisé..."
+
+msgid "menu_enter_ui_key"
+msgstr "Entrer la clé d'override UI : "
+
+msgid "menu_fetch_author"
+msgstr "Récupérer Infos Auteur (IA)"
+
+msgid "menu_fetch_more_chars"
+msgstr "Récupérer plus de personnages"
+
+msgid "menu_fetch_xray"
+msgstr "Récupérer les données X-Ray"
+
+msgid "menu_gemini_key"
+msgstr "Clé API Google Gemini"
+
+msgid "menu_historical_figures"
+msgstr "Figures Historiques"
+
+msgid "menu_language"
+msgstr "Langue"
+
+msgid "menu_locations"
+msgstr "Lieux"
+
+msgid "menu_maintenance"
+msgstr "Maintenance"
+
+msgid "menu_primary_ai_model"
+msgstr "Modèle IA principal"
+
+msgid "menu_secondary_ai_model"
+msgstr "Modèle IA secondaire"
+
+msgid "menu_settings"
+msgstr "Paramètres"
+
+msgid "menu_timeline"
+msgstr "Chronologie"
+
+msgid "menu_update_xray"
+msgstr "Mettre à jour les données X-Ray (Fusion)"
+
+msgid "menu_view_config"
+msgstr "Voir toutes les valeurs de configuration"
+
+msgid "menu_xray"
+msgstr "X-Ray"
+
+msgid "menu_xray_mode"
+msgstr "Paramètres du mode X-Ray"
+
+msgid "model_free"
+msgstr "gratuit"
+
+msgid "model_paid"
+msgstr "payant"
+
+msgid "msg_added_characters"
+msgstr "%d nouveaux personnages ajoutés !"
+
+msgid "msg_no_bio"
+msgstr "Aucune biographie disponible."
+
+msgid "msg_suggest_lang"
+msgstr "Ce livre est en %s. Changer la langue d'X-Ray ?"
+
+msgid "multiple_matches"
+msgstr "Plusieurs correspondances pour '%s'. Lequel vouliez-vous dire ?"
+
+msgid "no"
+msgstr "Non"
+
+msgid "no_api_key"
+msgstr "Clé API IA non définie !\n\nEntrez la clé dans :\nMenu → X-Ray → Paramètres IA"
+
+msgid "no_author_data_fetch"
+msgstr "Aucune info auteur disponible.\n\nSouhaitez-vous les récupérer via l'IA ?"
+
+msgid "no_character_data"
+msgstr "Pas encore de données sur les personnages.\n\nVeuillez d'abord 'Récupérer les données X-Ray'."
+
+msgid "no_data_prompt"
+msgstr "Aucune donnée X-Ray trouvée pour ce livre. Souhaitez-vous les récupérer via l'IA maintenant ?"
+
+msgid "no_historical_data"
+msgstr "Pas encore de données sur les figures historiques.\n\nVeuillez d'abord 'Récupérer les données X-Ray'.\n\nL'IA détectera les personnages historiques réels mentionnés dans le livre."
+
+msgid "no_location_data"
+msgstr "Pas encore de données sur les lieux. Veuillez d'abord 'Récupérer les données X-Ray'."
+
+msgid "no_timeline_data"
+msgstr "Pas encore de données sur la chronologie.\n\nVeuillez d'abord 'Récupérer les données X-Ray'.\n\nL'IA affichera les événements clés dans l'ordre chronologique."
+
+msgid "ok"
+msgstr "OK"
+
+msgid "path"
+msgstr "plugins/xray.koplugin"
+
+msgid "plugin_description"
+msgstr "Transformez votre expérience de lecture avec l'analyse de livre assistée par l'IA, tout comme Amazon Kindle X-Ray !"
+
+msgid "quick_menu_title"
+msgstr "Accès Rapide X-Ray"
+
+msgid "save"
+msgstr "Enregistrer"
+
+msgid "search_button"
+msgstr "Rechercher"
+
+msgid "search_character"
+msgstr "Rechercher des personnages..."
+
+msgid "search_character_title"
+msgstr "Recherche de personnages"
+
+msgid "search_hint"
+msgstr "Entrez le nom du personnage"
+
+msgid "spoiler_free_about"
+msgstr "Le mode sans spoiler limite l'extraction de l'IA aux pages que vous avez déjà lues (jusqu'à votre page actuelle), évitant ainsi les spoilers des chapitres futurs.\n\nLe mode Livre Complet analyse l'ensemble du livre, ce qui peut contenir des spoilers."
+
+msgid "spoiler_free_menu_option"
+msgstr "Sans spoiler"
+
+msgid "spoiler_free_option"
+msgstr "Mode sans spoiler (Jusqu'à %d%% du livre)"
+
+msgid "spoiler_preference_desc"
+msgstr "Sélectionnez votre préférence de spoiler pour les données X-Ray :"
+
+msgid "spoiler_preference_title"
+msgstr "Préférence Spoiler"
+
+msgid "this_chapter"
+msgstr "Ce chapitre"
+
+msgid "this_page"
+msgstr "Cette page"
+
+msgid "updater_available_header"
+msgstr "X-Ray %s est disponible !\nVous avez la version %s."
+
+msgid "updater_btn_cancel"
+msgstr "Annuler"
+
+msgid "updater_btn_download"
+msgstr "Télécharger et installer"
+
+msgid "updater_btn_later"
+msgstr "Plus tard"
+
+msgid "updater_btn_open_browser"
+msgstr "Ouvrir dans le navigateur"
+
+msgid "updater_btn_restart"
+msgstr "Redémarrer"
+
+msgid "updater_cancelled_check"
+msgstr "Recherche de mise à jour annulée."
+
+msgid "updater_cancelled_update"
+msgstr "Mise à jour annulée."
+
+msgid "updater_check"
+msgstr "Vérifier les mises à jour"
+
+msgid "updater_checking"
+msgstr "Vérification des mises à jour..."
+
+msgid "updater_download_prompt"
+msgstr "\n\nTélécharger et installer maintenant ?"
+
+msgid "updater_downloading"
+msgstr "Téléchargement de X-Ray %s..."
+
+msgid "updater_err_download"
+msgstr "Erreur de téléchargement : %s"
+
+msgid "updater_err_extract"
+msgstr "Erreur d'extraction : %s"
+
+msgid "updater_error_checking"
+msgstr "Erreur lors de la vérification des mises à jour."
+
+msgid "updater_error_checking_detail"
+msgstr "Erreur lors de la vérification des mises à jour : %s"
+
+msgid "updater_no_asset"
+msgstr "Aucun fichier de mise à jour automatique n'a été trouvé.\n\nOuvrir la page des versions sur GitHub ?"
+
+msgid "updater_success_restart"
+msgstr "X-Ray %s installé avec succès.\n\nRedémarrer KOReader pour appliquer la mise à jour ?"
+
+msgid "updater_up_to_date"
+msgstr "X-Ray est à jour (%s)."
+
+msgid "updater_whats_new"
+msgstr "Quoi de neuf :"
+
+msgid "updating_ai"
+msgstr "Mise à jour des données X-Ray..."
+
+msgid "xray_disabled_label"
+msgstr "Désactivé"
+
+msgid "xray_enabled_label"
+msgstr "Activé"
+
+msgid "xray_mode_desc"
+msgstr "Ajoute un bouton 'X-Ray' aux menus de dictionnaire et de sélection pour des recherches instantanées."
+
+msgid "yes"
+msgstr "Oui"
+

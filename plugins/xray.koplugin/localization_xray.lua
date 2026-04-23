@@ -228,6 +228,13 @@ function Localization:t(key, ...)
             search_button = "Search",
             character_not_found = "No character found matching '%s'",
             multiple_matches = "Multiple matches for '%s'. Which did you mean?",
+            label_name = "NAME",
+            label_role = "ROLE",
+            label_gender = "GENDER",
+            label_occupation = "OCCUPATION",
+            label_description = "DESCRIPTION",
+            msg_added_characters = "Added %d new characters!",
+            msg_no_bio = "No biography available.",
         }
         translation = fallbacks[key] or key
     end

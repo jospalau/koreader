@@ -1,0 +1,397 @@
+msgid ""
+msgstr ""
+"Language-Team: Russian\n"
+"Language: ru\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "ai_fetch_complete"
+msgstr "Успешно получено от %s!\n\nКнига: %s\nАвтор: %s\n\nПерсонажи: %d\nЛокации: %d\nТемы: %d\nСобытия: %d\nИст. личности: %d\n\n%s\n\nОБЗОР:\n%s"
+
+msgid "ai_fetch_complete_msg"
+msgstr "Получение данных ИИ завершено!"
+
+msgid "auto_update_aggressive"
+msgstr "Агрессивный: проверка в каждой главе"
+
+msgid "auto_update_balanced"
+msgstr "Сбалансированный: раз в 5 мин"
+
+msgid "auto_update_disabled"
+msgstr "Выключено"
+
+msgid "auto_update_economical"
+msgstr "Экономный: раз в 15 мин"
+
+msgid "auto_update_freq_about"
+msgstr "Автообновление проверяет наличие новых данных о главах в фоновом режиме во время чтения.\n\nЛИМИТЫ И ПРОИЗВОДИТЕЛЬНОСТЬ\nЧастые фоновые запросы могут разряжать БАТАРЕЮ и привести к достижению ЛИМИТОВ API.\n\nРЕЖИМЫ\n• Выключено: фоновые запросы не выполняются\n• Агрессивный: проверка при входе в каждую новую главу\n• Сбалансированный: проверка не чаще чем раз в 5 минут (рекомендуется)\n• Экономный: проверка не чаще чем раз в 15 минут\n• Редкий: проверка не чаще чем раз в 30 минут\n\nПримечание: если глава была пропущена из-за лимитов частоты, X-Ray автоматически включит её в следующее фоновое обновление."
+
+msgid "auto_update_freq_label"
+msgstr "Частота фонового получения:"
+
+msgid "auto_update_sparse"
+msgstr "Редкий: раз в 30 мин"
+
+msgid "bg_update_complete"
+msgstr "✓ Фоновое обновление X-Ray завершено."
+
+msgid "cache_cleared"
+msgstr "Кэш очищен!\n\nТеперь вы можете получить новые данные:\nМеню → X-Ray → Получить данные ИИ"
+
+msgid "cache_save_failed"
+msgstr "Не удалось сохранить кэш"
+
+msgid "cache_save_success"
+msgstr "✓ Кэш обновлен."
+
+msgid "cache_saved"
+msgstr "Сохранено в кэш!"
+
+msgid "cancel"
+msgstr "Отмена"
+
+msgid "character_not_found"
+msgstr "Персонаж, соответствующий '%s', не найден"
+
+msgid "close"
+msgstr "Закрыть"
+
+msgid "config_api_key_label"
+msgstr "API ключ %s: "
+
+msgid "config_default_gemini"
+msgstr "  По умолчанию (Gemini)"
+
+msgid "config_model"
+msgstr "  Модель: "
+
+msgid "config_provider"
+msgstr "  Провайдер: "
+
+msgid "config_status_not_set"
+msgstr "НЕ УСТАНОВЛЕН"
+
+msgid "config_status_set"
+msgstr "УСТАНОВЛЕН"
+
+msgid "current_language"
+msgstr "ru"
+
+msgid "dont_ask_again"
+msgstr "Больше не спрашивать для этой книги"
+
+msgid "error_author_fetch_desc"
+msgstr "Не удалось получить информацию об авторе."
+
+msgid "error_author_fetch_title"
+msgstr "Ошибка получения данных автора"
+
+msgid "error_extract_text"
+msgstr "Ошибка: Не удалось извлечь текст книги."
+
+msgid "error_fetch_desc"
+msgstr "Не удалось получить данные X-Ray. Пожалуйста, проверьте API-ключ и соединение."
+
+msgid "error_fetch_title"
+msgstr "Ошибка получения данных"
+
+msgid "extracting_more_characters"
+msgstr "Извлечение дополнительных персонажей..."
+
+msgid "fetch_button"
+msgstr "Получить"
+
+msgid "fetch_successful"
+msgstr "Данные успешно получены"
+
+msgid "fetching_ai"
+msgstr "Анализ книги для генерации данных X-Ray..."
+
+msgid "fetching_author"
+msgstr "Получение информации об авторе из %s..."
+
+msgid "fetching_wait"
+msgstr "⏳ Пожалуйста, подождите...\nЭтот процесс может занять 10-50 секунд."
+
+msgid "full_book_option"
+msgstr "Режим всей книги"
+
+msgid "label_description"
+msgstr "ОПИСАНИЕ"
+
+msgid "label_gender"
+msgstr "ПОЛ"
+
+msgid "label_name"
+msgstr "ИМЯ"
+
+msgid "label_occupation"
+msgstr "РОД ЗАНЯТИЙ"
+
+msgid "label_role"
+msgstr "РОЛЬ"
+
+msgid "lang_follow_book"
+msgstr "Автоматически (По книге)"
+
+msgid "lang_follow_system"
+msgstr "Автоматически (По системе)"
+
+msgid "lang_mismatch_title"
+msgstr "Несоответствие языка"
+
+msgid "language_changed_reopen"
+msgstr "Язык изменен. Откройте меню снова, чтобы увидеть изменения."
+
+msgid "logs_cleared"
+msgstr "Логи очищены!"
+
+msgid "menu_about"
+msgstr "О плагине"
+
+msgid "menu_ai_settings"
+msgstr "Настройки ИИ"
+
+msgid "menu_author_info"
+msgstr "Информация об авторе"
+
+msgid "menu_auto_update_frequency"
+msgstr "Автообновление X-Ray"
+
+msgid "menu_characters"
+msgstr "Персонажи"
+
+msgid "menu_chatgpt_key"
+msgstr "API-ключ ChatGPT"
+
+msgid "menu_clear_cache"
+msgstr "Очистить кэш"
+
+msgid "menu_clear_logs"
+msgstr "Очистить логи"
+
+msgid "menu_config_header"
+msgstr "--- Текущая конфигурация ---"
+
+msgid "menu_custom_model_title"
+msgstr "Пользовательская модель %s"
+
+msgid "menu_enter_custom_model"
+msgstr "Введите свою модель..."
+
+msgid "menu_enter_ui_key"
+msgstr "Введите ключ переопределения интерфейса: "
+
+msgid "menu_fetch_author"
+msgstr "Получить инфо об авторе (ИИ)"
+
+msgid "menu_fetch_more_chars"
+msgstr "Загрузить больше персонажей"
+
+msgid "menu_fetch_xray"
+msgstr "Получить данные X-Ray"
+
+msgid "menu_gemini_key"
+msgstr "API-ключ Google Gemini"
+
+msgid "menu_historical_figures"
+msgstr "Исторические личности"
+
+msgid "menu_language"
+msgstr "Язык"
+
+msgid "menu_locations"
+msgstr "Места"
+
+msgid "menu_maintenance"
+msgstr "Обслуживание"
+
+msgid "menu_primary_ai_model"
+msgstr "Основная модель ИИ"
+
+msgid "menu_secondary_ai_model"
+msgstr "Вторичная модель ИИ"
+
+msgid "menu_settings"
+msgstr "Настройки"
+
+msgid "menu_timeline"
+msgstr "Хронология"
+
+msgid "menu_update_xray"
+msgstr "Обновить данные X-Ray (Слияние)"
+
+msgid "menu_view_config"
+msgstr "Просмотр всей конфигурации"
+
+msgid "menu_xray"
+msgstr "X-Ray"
+
+msgid "menu_xray_mode"
+msgstr "Настройки режима X-Ray"
+
+msgid "model_free"
+msgstr "бесплатно"
+
+msgid "model_paid"
+msgstr "платно"
+
+msgid "msg_added_characters"
+msgstr "Добавлено %d новых персонажей!"
+
+msgid "msg_no_bio"
+msgstr "Биография отсутствует."
+
+msgid "msg_suggest_lang"
+msgstr "Эта книга на языке: %s. Изменить язык X-Ray?"
+
+msgid "multiple_matches"
+msgstr "Найдено несколько совпадений для '%s'. Кого вы имели в виду?"
+
+msgid "no"
+msgstr "Нет"
+
+msgid "no_api_key"
+msgstr "API-ключ ИИ не установлен!\n\nВведите ключ в:\nМеню → X-Ray → Настройки ИИ"
+
+msgid "no_author_data_fetch"
+msgstr "Информация об авторе отсутствует.\n\nХотите получить её через ИИ?"
+
+msgid "no_character_data"
+msgstr "Данных о персонажах пока нет.\n\nПожалуйста, сначала используйте 'Получить данные X-Ray'."
+
+msgid "no_data_prompt"
+msgstr "Данные X-Ray для этой книги не найдены. Хотите получить их через ИИ сейчас?"
+
+msgid "no_historical_data"
+msgstr "Данных об исторических личностях пока нет.\n\nПожалуйста, сначала используйте 'Получить данные X-Ray'.\n\nИИ обнаружит реальных исторических личностей, упомянутых в книге."
+
+msgid "no_location_data"
+msgstr "Данных о местах пока нет. Пожалуйста, сначала используйте 'Получить данные X-Ray'."
+
+msgid "no_timeline_data"
+msgstr "Данных хронологии пока нет.\n\nПожалуйста, сначала используйте 'Получить данные X-Ray'.\n\nИИ покажет ключевые события в хронологическом порядке."
+
+msgid "ok"
+msgstr "ОК"
+
+msgid "path"
+msgstr "plugins/xray.koplugin"
+
+msgid "plugin_description"
+msgstr "Улучшите чтение с помощью анализа книг на базе ИИ, как в Kindle X-Ray!"
+
+msgid "quick_menu_title"
+msgstr "Быстрый доступ X-Ray"
+
+msgid "save"
+msgstr "Сохранить"
+
+msgid "search_button"
+msgstr "Поиск"
+
+msgid "search_character"
+msgstr "Поиск персонажей..."
+
+msgid "search_character_title"
+msgstr "Поиск персонажа"
+
+msgid "search_hint"
+msgstr "Введите имя персонажа"
+
+msgid "spoiler_free_about"
+msgstr "Режим без спойлеров ограничивает анализ ИИ страницами, которые вы уже прочитали (до вашей текущей страницы), предотвращая спойлеры из будущих глав.\n\nРежим всей книги анализирует всю книгу целиком, что может содержать спойлеры."
+
+msgid "spoiler_free_menu_option"
+msgstr "Без спойлеров"
+
+msgid "spoiler_free_option"
+msgstr "Режим без спойлеров (до %d%% книги)"
+
+msgid "spoiler_preference_desc"
+msgstr "Выберите настройки спойлеров для данных X-Ray:"
+
+msgid "spoiler_preference_title"
+msgstr "Настройки спойлеров"
+
+msgid "this_chapter"
+msgstr "Эта глава"
+
+msgid "this_page"
+msgstr "Эта страница"
+
+msgid "updater_available_header"
+msgstr "Доступен X-Ray %s!\nУ вас установлена %s."
+
+msgid "updater_btn_cancel"
+msgstr "Отмена"
+
+msgid "updater_btn_download"
+msgstr "Скачать и установить"
+
+msgid "updater_btn_later"
+msgstr "Позже"
+
+msgid "updater_btn_open_browser"
+msgstr "Открыть в браузере"
+
+msgid "updater_btn_restart"
+msgstr "Перезапуск"
+
+msgid "updater_cancelled_check"
+msgstr "Проверка обновлений отменена."
+
+msgid "updater_cancelled_update"
+msgstr "Обновление отменено."
+
+msgid "updater_check"
+msgstr "Проверить обновления"
+
+msgid "updater_checking"
+msgstr "Проверка обновлений..."
+
+msgid "updater_download_prompt"
+msgstr "\n\nСкачать и установить сейчас?"
+
+msgid "updater_downloading"
+msgstr "Загрузка X-Ray %s..."
+
+msgid "updater_err_download"
+msgstr "Ошибка загрузки: %s"
+
+msgid "updater_err_extract"
+msgstr "Ошибка распаковки: %s"
+
+msgid "updater_error_checking"
+msgstr "Ошибка при проверке обновлений."
+
+msgid "updater_error_checking_detail"
+msgstr "Ошибка при проверке обновлений: %s"
+
+msgid "updater_no_asset"
+msgstr "Файл автоматического обновления не найден.\n\nОткрыть страницу релизов на GitHub?"
+
+msgid "updater_success_restart"
+msgstr "X-Ray %s успешно установлен.\n\nПерезапустить KOReader, чтобы применить обновление?"
+
+msgid "updater_up_to_date"
+msgstr "Установлена последняя версия X-Ray (%s)."
+
+msgid "updater_whats_new"
+msgstr "Что нового:"
+
+msgid "updating_ai"
+msgstr "Обновление данных X-Ray..."
+
+msgid "xray_disabled_label"
+msgstr "Выключено"
+
+msgid "xray_enabled_label"
+msgstr "Включено"
+
+msgid "xray_mode_desc"
+msgstr "Добавляет кнопку 'X-Ray' в меню словаря и выделения для мгновенного поиска."
+
+msgid "yes"
+msgstr "Да"
+

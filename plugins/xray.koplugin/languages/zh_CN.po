@@ -1,0 +1,397 @@
+msgid ""
+msgstr ""
+"Language-Team: Chinese (Simplified)\n"
+"Language: zh_CN\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+msgid "ai_fetch_complete"
+msgstr "已成功从 %s 获取！\n\n书名：%s\n作者：%s\n\n角色数：%d\n地点数：%d\n主题数：%d\n时间线事件：%d\n历史人物：%d\n\n%s\n\n摘要：\n%s"
+
+msgid "ai_fetch_complete_msg"
+msgstr "AI 获取完成！"
+
+msgid "auto_update_aggressive"
+msgstr "激进：每章都检查"
+
+msgid "auto_update_balanced"
+msgstr "平衡：最多每 5 分钟"
+
+msgid "auto_update_disabled"
+msgstr "已禁用"
+
+msgid "auto_update_economical"
+msgstr "经济：最多每 15 分钟"
+
+msgid "auto_update_freq_about"
+msgstr "自动更新功能会在您阅读时自动在后台检查新章节的数据。\n\n限制与性能\n频繁的后台请求会消耗电池寿命，并可能触及 AI 服务商的频率限制（尤其是 Pro 模型）。\n\n模式\n• 已禁用：不进行后台请求\n• 激进：进入新章节时即检查\n• 平衡：最多每 5 分钟检查一次（推荐）\n• 经济：最多每 15 分钟检查一次\n• 稀疏：最多每 30 分钟检查一次\n\n注意：如果因频率限制跳过了某个章节，X-Ray 将在下次后台获取时自动包含它。"
+
+msgid "auto_update_freq_label"
+msgstr "后台获取频率："
+
+msgid "auto_update_sparse"
+msgstr "稀疏：最多每 30 分钟"
+
+msgid "bg_update_complete"
+msgstr "✓ X-Ray 后台更新完成。"
+
+msgid "cache_cleared"
+msgstr "缓存已清除！\n\n现在可以获取新数据：\n菜单 → X-Ray → 获取 AI 数据"
+
+msgid "cache_save_failed"
+msgstr "保存缓存失败"
+
+msgid "cache_save_success"
+msgstr "✓ 缓存已更新。"
+
+msgid "cache_saved"
+msgstr "已保存到缓存！"
+
+msgid "cancel"
+msgstr "取消"
+
+msgid "character_not_found"
+msgstr "未找到匹配“%s”的角色"
+
+msgid "close"
+msgstr "关闭"
+
+msgid "config_api_key_label"
+msgstr "%s API 密钥："
+
+msgid "config_default_gemini"
+msgstr "  默认 (Gemini)"
+
+msgid "config_model"
+msgstr "  模型："
+
+msgid "config_provider"
+msgstr "  服务商："
+
+msgid "config_status_not_set"
+msgstr "未设置"
+
+msgid "config_status_set"
+msgstr "已设置"
+
+msgid "current_language"
+msgstr "zh_CN"
+
+msgid "dont_ask_again"
+msgstr "不再询问此书"
+
+msgid "error_author_fetch_desc"
+msgstr "无法获取作者信息。"
+
+msgid "error_author_fetch_title"
+msgstr "作者信息获取失败"
+
+msgid "error_extract_text"
+msgstr "错误：无法提取书籍文本。"
+
+msgid "error_fetch_desc"
+msgstr "无法获取 X-Ray 数据。请检查 API 密钥和网络连接。"
+
+msgid "error_fetch_title"
+msgstr "获取数据失败"
+
+msgid "extracting_more_characters"
+msgstr "正在提取更多角色..."
+
+msgid "fetch_button"
+msgstr "获取"
+
+msgid "fetch_successful"
+msgstr "获取成功"
+
+msgid "fetching_ai"
+msgstr "正在通过 %s 分析书籍以生成 X-Ray 数据..."
+
+msgid "fetching_author"
+msgstr "正在从 %s 获取作者信息..."
+
+msgid "fetching_wait"
+msgstr "⏳ 请稍候...\n此过程可能需要 10-50 秒。"
+
+msgid "full_book_option"
+msgstr "整本书模式"
+
+msgid "label_description"
+msgstr "描述"
+
+msgid "label_gender"
+msgstr "性别"
+
+msgid "label_name"
+msgstr "姓名"
+
+msgid "label_occupation"
+msgstr "职业"
+
+msgid "label_role"
+msgstr "身份/角色"
+
+msgid "lang_follow_book"
+msgstr "自动 (跟随书籍)"
+
+msgid "lang_follow_system"
+msgstr "自动 (跟随系统)"
+
+msgid "lang_mismatch_title"
+msgstr "语言不匹配"
+
+msgid "language_changed_reopen"
+msgstr "语言已更改。重新打开菜单以查看更改。"
+
+msgid "logs_cleared"
+msgstr "日志已清除！"
+
+msgid "menu_about"
+msgstr "关于"
+
+msgid "menu_ai_settings"
+msgstr "AI 设置"
+
+msgid "menu_author_info"
+msgstr "作者信息"
+
+msgid "menu_auto_update_frequency"
+msgstr "自动 X-Ray 设置"
+
+msgid "menu_characters"
+msgstr "角色"
+
+msgid "menu_chatgpt_key"
+msgstr "ChatGPT API 密钥"
+
+msgid "menu_clear_cache"
+msgstr "清除缓存"
+
+msgid "menu_clear_logs"
+msgstr "清除日志"
+
+msgid "menu_config_header"
+msgstr "--- 当前配置 ---"
+
+msgid "menu_custom_model_title"
+msgstr "自定义 %s 模型"
+
+msgid "menu_enter_custom_model"
+msgstr "输入自定义模型..."
+
+msgid "menu_enter_ui_key"
+msgstr "输入 UI 覆盖密钥："
+
+msgid "menu_fetch_author"
+msgstr "获取作者信息 (AI)"
+
+msgid "menu_fetch_more_chars"
+msgstr "获取更多角色"
+
+msgid "menu_fetch_xray"
+msgstr "获取 X-Ray 数据"
+
+msgid "menu_gemini_key"
+msgstr "Google Gemini API 密钥"
+
+msgid "menu_historical_figures"
+msgstr "历史人物"
+
+msgid "menu_language"
+msgstr "语言"
+
+msgid "menu_locations"
+msgstr "地点"
+
+msgid "menu_maintenance"
+msgstr "维护"
+
+msgid "menu_primary_ai_model"
+msgstr "主位 AI 模型"
+
+msgid "menu_secondary_ai_model"
+msgstr "次位 AI 模型"
+
+msgid "menu_settings"
+msgstr "设置"
+
+msgid "menu_timeline"
+msgstr "时间线"
+
+msgid "menu_update_xray"
+msgstr "更新 X-Ray 数据 (合并)"
+
+msgid "menu_view_config"
+msgstr "查看所有配置"
+
+msgid "menu_xray"
+msgstr "X-Ray"
+
+msgid "menu_xray_mode"
+msgstr "X-Ray 模式设置"
+
+msgid "model_free"
+msgstr "免费"
+
+msgid "model_paid"
+msgstr "付费"
+
+msgid "msg_added_characters"
+msgstr "已添加 %d 个新角色！"
+
+msgid "msg_no_bio"
+msgstr "暂无传记。"
+
+msgid "msg_suggest_lang"
+msgstr "本书语言为 %s。是否切换 X-Ray 语言以匹配？"
+
+msgid "multiple_matches"
+msgstr "找到多个“%s”的匹配项。您指的是哪一个？"
+
+msgid "no"
+msgstr "否"
+
+msgid "no_api_key"
+msgstr "未设置 AI API 密钥！\n\n请在以下路径输入密钥：\n菜单 → X-Ray → AI 设置"
+
+msgid "no_author_data_fetch"
+msgstr "暂无作者信息。\n\n是否要通过 AI 获取？"
+
+msgid "no_character_data"
+msgstr "暂无角色数据。\n\n请先使用“获取 X-Ray 数据”。"
+
+msgid "no_data_prompt"
+msgstr "未找到此书的 X-Ray 数据。是否现在通过 AI 获取？"
+
+msgid "no_historical_data"
+msgstr "暂无历史人物数据。\n\n请先使用“获取 X-Ray 数据”。\n\nAI 将自动检测书中提及的真实历史人物。"
+
+msgid "no_location_data"
+msgstr "暂无地点数据。请先使用“获取 X-Ray 数据”。"
+
+msgid "no_timeline_data"
+msgstr "暂无时间线数据。\n\n请先使用“获取 X-Ray 数据”。\n\nAI 将按时间顺序显示关键事件。"
+
+msgid "ok"
+msgstr "确定"
+
+msgid "path"
+msgstr "plugins/xray.koplugin"
+
+msgid "plugin_description"
+msgstr "使用 AI 驱动的书籍分析提升您的阅读体验，就像 Kindle X-Ray 一样！"
+
+msgid "quick_menu_title"
+msgstr "X-Ray 快速访问"
+
+msgid "save"
+msgstr "保存"
+
+msgid "search_button"
+msgstr "搜索"
+
+msgid "search_character"
+msgstr "搜索角色..."
+
+msgid "search_character_title"
+msgstr "角色搜索"
+
+msgid "search_hint"
+msgstr "输入名称"
+
+msgid "spoiler_free_about"
+msgstr "无剧透模式将 AI 提取范围限制在您已阅读的页面（截止到当前页），防止剧透后续章节。\n\n整本书模式将分析整本书，可能包含剧透。"
+
+msgid "spoiler_free_menu_option"
+msgstr "无剧透"
+
+msgid "spoiler_free_option"
+msgstr "无剧透模式（截至 %d%%）"
+
+msgid "spoiler_preference_desc"
+msgstr "选择 X-Ray 数据的剧透偏好："
+
+msgid "spoiler_preference_title"
+msgstr "剧透偏好"
+
+msgid "this_chapter"
+msgstr "本章"
+
+msgid "this_page"
+msgstr "当前页"
+
+msgid "updater_available_header"
+msgstr "X-Ray %s 已发布！\n您当前的版本是 %s。"
+
+msgid "updater_btn_cancel"
+msgstr "Cancel"
+
+msgid "updater_btn_download"
+msgstr "下载并安装"
+
+msgid "updater_btn_later"
+msgstr "稍后"
+
+msgid "updater_btn_open_browser"
+msgstr "在浏览器中打开"
+
+msgid "updater_btn_restart"
+msgstr "重启"
+
+msgid "updater_cancelled_check"
+msgstr "已取消更新检查。"
+
+msgid "updater_cancelled_update"
+msgstr "已取消更新。"
+
+msgid "updater_check"
+msgstr "检查更新"
+
+msgid "updater_checking"
+msgstr "正在检查更新..."
+
+msgid "updater_download_prompt"
+msgstr "\n\n现在下载并安装？"
+
+msgid "updater_downloading"
+msgstr "正在下载 X-Ray %s..."
+
+msgid "updater_err_download"
+msgstr "下载错误：%s"
+
+msgid "updater_err_extract"
+msgstr "解压错误：%s"
+
+msgid "updater_error_checking"
+msgstr "检查更新时出错。"
+
+msgid "updater_error_checking_detail"
+msgstr "检查更新时出错：%s"
+
+msgid "updater_no_asset"
+msgstr "未找到自动更新文件。\n\n是否在 GitHub 上打开发布页面？"
+
+msgid "updater_success_restart"
+msgstr "X-Ray %s 已成功安装。\n\n是否重启 KOReader 以应用更新？"
+
+msgid "updater_up_to_date"
+msgstr "X-Ray 已是最新版本 (%s)。"
+
+msgid "updater_whats_new"
+msgstr "更新内容："
+
+msgid "updating_ai"
+msgstr "正在更新 X-Ray 数据..."
+
+msgid "xray_disabled_label"
+msgstr "已禁用"
+
+msgid "xray_enabled_label"
+msgstr "已启用"
+
+msgid "xray_mode_desc"
+msgstr "在字典和选择菜单中添加“X-Ray”按钮，实现即时查询。"
+
+msgid "yes"
+msgstr "是"
+
