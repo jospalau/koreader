@@ -991,7 +991,7 @@ function ReaderUI:onHome()
 
         local multi_box= MultiConfirmBox:new{
             third_choice = true,
-            text = "Do you want to put the book to history without configuration?",
+            text = "Add to history and reset settings?",
             choice1_text = _("Yes"),
             choice1_callback = function()
                 UIManager:close(multi_box)
@@ -1044,7 +1044,7 @@ function ReaderUI:onHome()
 
                 return true
             end,
-            choice2_text = _("No, in TBR"),
+            choice2_text = _("TBR"),
             choice2_callback = function()
                 UIManager:close(multi_box)
                 self:onClose()
@@ -1085,7 +1085,7 @@ function ReaderUI:onHome()
                 FileManager.instance.history:sortHistoryByStatus()
                 FileManager.instance.history:onShowHist()
             end,
-            choice3_text = _("No, just exit"),
+            choice3_text = _("Just exit"),
             choice3_callback = function()
                 self:onClose()
                 require("ui/widget/booklist").resetBookInfoCache(file)
