@@ -4,6 +4,7 @@
 -- Swipe gestures for page navigation still work.
 
 local Menu = require("ui/widget/menu")
+local Font = require("ui/font")
 
 local hide_pagination_names = {
     filemanager = true,
@@ -22,15 +23,20 @@ function Menu:init()
         return
     end
 
-    -- self[1] is FrameContainer, self[1][1] is the content OverlapGroup
+    local face = Font:getFace("myfont3", 12)
+    local bottom_height = face.size * 2 + 20
+    -- bottom_height = 0
+
+    -- remove paginator widgets
     local content = self[1] and self[1][1]
-    if not content then return end
+    if content then
 
     -- The OverlapGroup contains: content_group, page_return, footer
     -- Remove page_return and footer but keep content_group
-    for i = #content, 1, -1 do
-        if content[i] ~= self.content_group then
-            table.remove(content, i)
+        for i = #content, 1, -1 do
+            if content[i] ~= self.content_group then
+                table.remove(content, i)
+            end
         end
     end
 
@@ -47,14 +53,24 @@ function Menu:init()
         local saved_arrow = self_inner.page_return_arrow
         local saved_text = self_inner.page_info_text
         local saved_info = self_inner.page_info
+
+        -- hide paginator
         self_inner.page_return_arrow = nil
         self_inner.page_info_text = nil
-        self_inner.page_info = nil
-        -- Temporarily remove instance override to call the current class method
+
+        -- self_inner.page_info = nil
+        -- fake page_info height
+        self_inner.page_info = {
+            getSize = function()
+                return { w = 0, h = bottom_height }
+            end
+        }
+
         local instance_fn = self_inner._recalculateDimen
         self_inner._recalculateDimen = nil
         self_inner:_recalculateDimen(no_recalculate_dimen)
         self_inner._recalculateDimen = instance_fn
+
         self_inner.page_return_arrow = saved_arrow
         self_inner.page_info_text = saved_text
         self_inner.page_info = saved_info

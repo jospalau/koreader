@@ -103,10 +103,11 @@ end
 -- === Layout constants ===
 
 local function getBarFont()
-    if config.bold_text then
-        return Font:getFace("NotoSans-Bold.ttf", Font.sizemap["xx_smallinfofont"])
+    local tb = FileManager.instance and FileManager.instance.title_bar
+    if tb and tb.cfont then
+        return tb.cfont
     end
-    return Font:getFace("xx_smallinfofont")
+    return Font:getFace("cfont", Font.sizemap["xx_smallinfofont"])
 end
 local h_padding = Screen:scaleBySize(10)
 
@@ -284,6 +285,7 @@ local function createStatusRow()
     local left_text = TextWidget:new{
         text = getDeviceName(),
         face = getBarFont(),
+        bold = true,
     }
 
     local sep = getSeparator()

@@ -1390,7 +1390,7 @@ function MosaicMenu:_recalculateDimen()
         if not self.no_title then
             self.others_height = self.others_height + self.title_bar.dimen.h
         end
-        if self.page_info then
+        if self.page_info and self.page_return_arrow and self.page_info_text then
             self.others_height = self.others_height + math.max(self.page_return_arrow:getSize().h, self.page_info_text:getSize().h) + Size.padding.button
         end
     end
