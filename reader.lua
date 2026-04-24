@@ -198,6 +198,7 @@ if G_reader_settings:isTrue("apply_extra_patches") then
     -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/browser-folder-cover.lua") -- Different approach which works quicker adapted in mosaicmenu.lua
     if not G_reader_settings:isTrue("simpleui_enabled") then
         local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/filemanager-titlebar.lua")
+        -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/custom-titlebar.lua")
     end
     if not G_reader_settings:isTrue("simpleui_enabled") then
         local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/browser-up-folder.lua")
@@ -216,6 +217,9 @@ if G_reader_settings:isTrue("apply_extra_patches") then
     -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/real-books.lua")
     -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/mosaic-vertical-label-left.lua")
     -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/folder-cover-stack-left-spine-label-top.lua")
+    -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/pageno-in-subtitle.lua")
+    -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/hide-pagination.lua")
+    -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/quick-settings.lua")
 end
 
 -- Inform once about color rendering on newly supported devices
