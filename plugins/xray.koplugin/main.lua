@@ -237,8 +237,6 @@ function XRayPlugin:onPageUpdate(pageno)
 
     -- Wait 2s for the reader to settle on the new chapter before fetching
     UIManager:scheduleIn(2, function()
-        if not self.ui then return end
-        if not self.ui.document then return end
         self.bg_fetch_pending = false
         self:triggerBackgroundMergeFetch(chapter_title)
     end)
@@ -267,6 +265,9 @@ function XRayPlugin:triggerBackgroundMergeFetch(chapter_title)
         end
         self.last_bg_fetch_time = now
 
+        local ui = self.ui
+        local doc = ui and ui.document
+        if not self._alive or not ui or not doc then return end
         local current_page = self.ui:getCurrentPage()
         local total_pages = self.ui.document:getPageCount()
         if not total_pages or total_pages == 0 then return end
@@ -2210,6 +2211,10 @@ function XRayPlugin:checkWeeklyUpdate()
             self:log("XRayPlugin: Skipping weekly update check (offline)")
         end
     end
+end
+
+function XRayPlugin:onClose()
+    self._alive = false
 end
 
 return XRayPlugin
