@@ -60,11 +60,11 @@ function Menu:init()
 
         -- self_inner.page_info = nil
         -- fake page_info height
-        self_inner.page_info = {
-            getSize = function()
-                return { w = 0, h = bottom_height }
-            end
-        }
+        -- self_inner.page_info = {
+        --     getSize = function()
+        --         return { w = 0, h = bottom_height }
+        --     end
+        -- }
 
         local instance_fn = self_inner._recalculateDimen
         self_inner._recalculateDimen = nil
