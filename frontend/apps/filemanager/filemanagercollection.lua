@@ -83,7 +83,7 @@ function FileManagerCollection:getTotalAndRead(collection_name)
     end
     local read = 0
     for book_path, book_table in pairs(books) do
-        if _G.all_files[book_path] and _G.all_files[book_path] and _G.all_files[book_path].status == "complete" then
+        if  _G.all_files and _G.all_files[book_path] and _G.all_files[book_path] and _G.all_files[book_path].status == "complete" then
             read = read + 1
         end
     end
