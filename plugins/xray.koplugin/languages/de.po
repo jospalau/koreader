@@ -32,9 +32,6 @@ msgstr "Hintergrund-Abrufhäufigkeit:"
 msgid "auto_update_sparse"
 msgstr "Selten: prüft max. alle 30 Min."
 
-msgid "bg_update_complete"
-msgstr "✓ X-Ray Hintergrund-Update abgeschlossen."
-
 msgid "cache_cleared"
 msgstr "Cache geleert!\n\nSie können jetzt neue Daten abrufen:\nMenü → X-Ray → KI-Daten abrufen"
 
@@ -80,6 +77,9 @@ msgstr "de"
 msgid "dont_ask_again"
 msgstr "Für dieses Buch nicht mehr fragen"
 
+msgid "entity_not_found"
+msgstr "'%s' wurde nicht als Charakter oder Ort gefunden."
+
 msgid "error_author_fetch_desc"
 msgstr "Autor-Info konnte nicht abgerufen werden."
 
@@ -100,6 +100,9 @@ msgstr "Extrahiere zusätzliche Charaktere..."
 
 msgid "fetch_button"
 msgstr "Abrufen"
+
+msgid "fetch_single_word_prompt"
+msgstr "Keine X-Ray-Daten für '%s' gefunden. Möchten Sie sie suchen?"
 
 msgid "fetch_successful"
 msgstr "Abruf erfolgreich"
@@ -145,6 +148,9 @@ msgstr "Sprache geändert. Öffnen Sie das Menü erneut, um die Änderungen zu s
 
 msgid "logs_cleared"
 msgstr "Logs gelöscht!"
+
+msgid "looking_up_msg"
+msgstr "Suche nach '%s'..."
 
 msgid "menu_about"
 msgstr "Über"

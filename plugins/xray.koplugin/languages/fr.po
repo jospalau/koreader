@@ -32,9 +32,6 @@ msgstr "Fréquence de récupération en arrière-plan :"
 msgid "auto_update_sparse"
 msgstr "Clairsemé : vérifie max toutes les 30 min"
 
-msgid "bg_update_complete"
-msgstr "✓ Mise à jour X-Ray en arrière-plan terminée."
-
 msgid "cache_cleared"
 msgstr "Cache vidé !\n\nVous pouvez maintenant récupérer de nouvelles données :\nMenu → X-Ray → Récupérer les données IA"
 
@@ -80,6 +77,9 @@ msgstr "en"
 msgid "dont_ask_again"
 msgstr "Ne plus demander pour ce livre"
 
+msgid "entity_not_found"
+msgstr "'%s' n'a pas été trouvé comme personnage ou lieu."
+
 msgid "error_author_fetch_desc"
 msgstr "Échec de la récupération des infos auteur."
 
@@ -100,6 +100,9 @@ msgstr "Extraction de personnages supplémentaires..."
 
 msgid "fetch_button"
 msgstr "Récupérer"
+
+msgid "fetch_single_word_prompt"
+msgstr "Aucune donnée X-Ray trouvée pour '%s'. Voulez-vous la rechercher ?"
 
 msgid "fetch_successful"
 msgstr "Récupération réussie"
@@ -145,6 +148,9 @@ msgstr "Langue modifiée. Rouvrez le menu pour voir les changements."
 
 msgid "logs_cleared"
 msgstr "Logs effacés !"
+
+msgid "looking_up_msg"
+msgstr "Recherche de '%s'..."
 
 msgid "menu_about"
 msgstr "À propos"

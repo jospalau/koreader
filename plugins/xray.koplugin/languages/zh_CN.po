@@ -32,9 +32,6 @@ msgstr "后台获取频率："
 msgid "auto_update_sparse"
 msgstr "稀疏：最多每 30 分钟"
 
-msgid "bg_update_complete"
-msgstr "✓ X-Ray 后台更新完成。"
-
 msgid "cache_cleared"
 msgstr "缓存已清除！\n\n现在可以获取新数据：\n菜单 → X-Ray → 获取 AI 数据"
 
@@ -80,6 +77,9 @@ msgstr "zh_CN"
 msgid "dont_ask_again"
 msgstr "不再询问此书"
 
+msgid "entity_not_found"
+msgstr "未发现 '%s' 为角色或地点。"
+
 msgid "error_author_fetch_desc"
 msgstr "无法获取作者信息。"
 
@@ -100,6 +100,9 @@ msgstr "正在提取更多角色..."
 
 msgid "fetch_button"
 msgstr "获取"
+
+msgid "fetch_single_word_prompt"
+msgstr "未发现 '%s' 的 X-Ray 数据。是否要查询？"
 
 msgid "fetch_successful"
 msgstr "获取成功"
@@ -145,6 +148,9 @@ msgstr "语言已更改。重新打开菜单以查看更改。"
 
 msgid "logs_cleared"
 msgstr "日志已清除！"
+
+msgid "looking_up_msg"
+msgstr "正在查询 '%s'..."
 
 msgid "menu_about"
 msgstr "关于"

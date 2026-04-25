@@ -32,9 +32,6 @@ msgstr "Background fetching frequency:"
 msgid "auto_update_sparse"
 msgstr "Seyrek: en fazla 30 dk'da bir kontrol eder"
 
-msgid "bg_update_complete"
-msgstr "✓ Arka plan X-Ray güncellemesi tamamlandı."
-
 msgid "cache_cleared"
 msgstr "Önbellek temizlendi!\n\nŞimdi yeni verileri çekebilirsiniz:\nMenü → X-Ray → AI Verilerini Çek"
 
@@ -80,6 +77,9 @@ msgstr "en"
 msgid "dont_ask_again"
 msgstr "Bu kitap için bir daha sorma"
 
+msgid "entity_not_found"
+msgstr "'%s' bir karakter veya konum olarak bulunamadı."
+
 msgid "error_author_fetch_desc"
 msgstr "Yazar bilgisi alınamadı."
 
@@ -100,6 +100,9 @@ msgstr "Extracting additional characters..."
 
 msgid "fetch_button"
 msgstr "Çek"
+
+msgid "fetch_single_word_prompt"
+msgstr "'%s' için X-Ray verisi bulunamadı. Aramak ister misiniz?"
 
 msgid "fetch_successful"
 msgstr "Veri çekme başarılı"
@@ -145,6 +148,9 @@ msgstr "Dil değiştirildi. Değişiklikleri görmek için menüyü tekrar açı
 
 msgid "logs_cleared"
 msgstr "Günlükler temizlendi!"
+
+msgid "looking_up_msg"
+msgstr "'%s' aranıyor..."
 
 msgid "menu_about"
 msgstr "Hakkında"
