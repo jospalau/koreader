@@ -4,6 +4,13 @@ local Config = {}
 
 Config.MAX_BARS = 8
 
+--- Schema version for persisted preset / position data. Bumped when the
+--- stored form changes (e.g. v5 token rename from single-letter to
+--- descriptive names). Startup migration uses this to decide whether to
+--- canonicaliseLegacy against `self.positions` and on-disk preset files.
+--- Once bumped on disk, migration is skipped — one-time cost per upgrade.
+Config.SCHEMA_VERSION = 5
+
 Config.DEFAULT_MARGINS = {
     margin_top = 10, margin_bottom = 25,
     margin_left = 18, margin_right = 18,
@@ -20,12 +27,12 @@ Config.BAR_DEFAULTS = {
 
 --- First-run default positions. Loaded only when no saved config exists.
 Config.DEFAULT_POSITIONS = {
-    tl = { lines = { "%A \xE2\x8B\xAE %T" }, line_font_size = { [1] = 12 } },
-    tc = { lines = { "%k \xC2\xB7 %a %d" }, line_font_size = { [1] = 14 }, line_style = { [1] = "bold" } },
-    tr = { lines = { "%C" }, line_style = { [1] = "bold" } },
-    bl = { lines = { "\xE2\x8F\xB3 %R session" } },
-    bc = { lines = { "Page %c of %t" }, line_font_size = { [1] = 16 } },
-    br = { lines = { "%B %W" }, line_font_size = { [1] = 10 } },
+    tl = { lines = { "%author \xE2\x8B\xAE %title" }, line_font_size = { [1] = 12 } },
+    tc = { lines = { "%time_12h \xC2\xB7 %weekday_short %date" }, line_font_size = { [1] = 14 }, line_style = { [1] = "bold" } },
+    tr = { lines = { "%chap_title" }, line_style = { [1] = "bold" } },
+    bl = { lines = { "\xE2\x8F\xB3 %session_time session" } },
+    bc = { lines = { "Page %page_num of %page_count" }, line_font_size = { [1] = 16 } },
+    br = { lines = { "%batt_icon %wifi" }, line_font_size = { [1] = 10 } },
 }
 
 --- Per-line attribute field names. Used anywhere per-line metadata is

@@ -2,12 +2,11 @@
 # Translation template
 msgid ""
 msgstr ""
-"Project-Id-Version: bookends\n"
-"POT-Creation-Date: 2026-04-22 23:59+0000\n"
+"Project-Id-Version: bookends 5.0.0\n"
+"POT-Creation-Date: 2026-04-24 20:00+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-
 
 msgid "%1 presets in the approval queue"
 msgstr ""
@@ -15,7 +14,16 @@ msgstr ""
 msgid "%1, line %2"
 msgstr ""
 
-msgid "'%1' already exists in your library.\n\nReplacing it will overwrite your local copy with the current gallery version. Any local edits will be lost.\n\nInstall under a new name to keep both."
+msgid ""
+"'%1' already exists in your library.\n"
+"\n"
+"Replacing it will overwrite your local copy with the current gallery "
+"version. Any local edits will be lost.\n"
+"\n"
+"Install under a new name to keep both."
+msgstr ""
+
+msgid "+ New blank preset"
 msgstr ""
 
 msgid "+ Progress bar"
@@ -33,13 +41,22 @@ msgstr ""
 msgid "24-hour clock"
 msgstr ""
 
-msgid "A preset called '%1' is already in the gallery. Rename your preset (Manage… → Rename…) before submitting, so it doesn't collide with the existing entry."
+msgid "@key = another field's value (chap_title_1!=@title)"
 msgstr ""
 
-msgid "A preset called '%1' is already in the gallery. Rename your preset (Manage… → Rename…) before submitting."
+msgid ""
+"A preset called '%1' is already in the gallery. Rename your preset (Manage… "
+"→ Rename…) before submitting, so it doesn't collide with the existing entry."
 msgstr ""
 
-msgid "A submission for '%1' is already awaiting review. Wait for that one to be reviewed, or rename your preset to submit under a different name."
+msgid ""
+"A preset called '%1' is already in the gallery. Rename your preset (Manage… "
+"→ Rename…) before submitting."
+msgstr ""
+
+msgid ""
+"A submission for '%1' is already awaiting review. Wait for that one to be "
+"reviewed, or rename your preset to submit under a different name."
 msgstr ""
 
 msgid "Add line"
@@ -51,10 +68,9 @@ msgstr ""
 msgid "Adjust margins"
 msgstr ""
 
-msgid "Affects %L (pages left in book) and %l (pages left in chapter). Off (default): 'n−1 → 0'. On: 'n → 1'."
-msgstr ""
-
-msgid "After 10pm"
+msgid ""
+"Affects %L (pages left in book) and %l (pages left in chapter). Off "
+"(default): 'n−1 → 0'. On: 'n → 1'."
 msgstr ""
 
 msgid "All pg"
@@ -63,10 +79,16 @@ msgstr ""
 msgid "Anchor"
 msgstr ""
 
-msgid "Apply"
+msgid ""
+"Applies to Nerd Font and FontAwesome icon glyphs (the Private Use Area "
+"range, e.g. %W, %B, %k). Unicode symbols in the regular text ranges (like "
+"the hourglass \"⌛\") follow the text color instead.\n"
+"\n"
+"An inline [c=#RRGGBB]…[/c] tag in a line overrides the icon colour for any "
+"glyphs inside it."
 msgstr ""
 
-msgid "Applies to Nerd Font and FontAwesome icon glyphs (the Private Use Area range, e.g. %W, %B, %k). Unicode symbols in the regular text ranges (like the hourglass \"⌛\") follow the text color instead.\n\nAn inline [c=#RRGGBB]…[/c] tag in a line overrides the icon color for any glyphs inside it."
+msgid "Apply"
 msgstr ""
 
 msgid "Arrow down"
@@ -117,6 +139,9 @@ msgstr ""
 msgid "Arrow up then right"
 msgstr ""
 
+msgid "Arrow when page-turn flipped"
+msgstr ""
+
 msgid "Arrowhead right"
 msgstr ""
 
@@ -124,9 +149,6 @@ msgid "Arrows"
 msgstr ""
 
 msgid "Arrows left-right"
-msgstr ""
-
-msgid "Arrows when page-turn direction is flipped"
 msgstr ""
 
 msgid "Author(s)"
@@ -147,6 +169,9 @@ msgstr ""
 msgid "Battery (changes with level)"
 msgstr ""
 
+msgid "Battery 0–100"
+msgstr ""
+
 msgid "Battery icon (dynamic)"
 msgstr ""
 
@@ -159,7 +184,7 @@ msgstr ""
 msgid "Bold italic"
 msgstr ""
 
-msgid "Bolt icon when charging"
+msgid "Bolt when charging"
 msgstr ""
 
 msgid "Book"
@@ -169,6 +194,9 @@ msgid "Book language"
 msgstr ""
 
 msgid "Book percentage read"
+msgstr ""
+
+msgid "Book progress 0–100"
 msgstr ""
 
 msgid "Book+"
@@ -213,12 +241,6 @@ msgstr ""
 msgid "Bookmark (outline)"
 msgstr ""
 
-msgid "Books not in a series"
-msgstr ""
-
-msgid "Books with many chapters"
-msgstr ""
-
 msgid "Border"
 msgstr ""
 
@@ -249,7 +271,10 @@ msgstr ""
 msgid "Bottom-right"
 msgstr ""
 
-msgid "Browse presets others have shared, preview them on your own status bar, and install the ones you like. Once installed, you can edit each preset freely on the My presets tab."
+msgid ""
+"Browse presets others have shared, preview them on your own status bar, and "
+"install the ones you like. Once installed, you can edit each preset freely "
+"on the My presets tab."
 msgstr ""
 
 msgid "Bullet"
@@ -273,6 +298,9 @@ msgstr ""
 msgid "Chapter percentage read"
 msgstr ""
 
+msgid "Chapter progress 0–100"
+msgstr ""
+
 msgid "Chapter ticks: all levels"
 msgstr ""
 
@@ -291,10 +319,16 @@ msgstr ""
 msgid "Chapter title at depth 1"
 msgstr ""
 
+msgid "Chapter title at depth 1/2/3"
+msgstr ""
+
 msgid "Chapter title at depth 2"
 msgstr ""
 
 msgid "Chapter title at depth 3"
+msgstr ""
+
+msgid "Chapter title only when different from book title"
 msgstr ""
 
 msgid "Check"
@@ -327,10 +361,17 @@ msgstr ""
 msgid "Cog"
 msgstr ""
 
-msgid "Compare:  =  <  >     Boolean:  and  or  not  ( )"
+msgid "Compare:  =  !=  <  >     Boolean:  and  or  not  ( )"
 msgstr ""
 
-msgid "Configure what happens when you tap the centre of the status bar area, and whether long-pressing a progress bar opens the skim dialog."
+msgid ""
+"Configurable text overlays at screen corners and edges with token expansion "
+"and icon support."
+msgstr ""
+
+msgid ""
+"Configure what happens when you tap the centre of the status bar area, and "
+"whether long-pressing a progress bar opens the skim dialog."
 msgstr ""
 
 msgid "Copyright"
@@ -351,10 +392,16 @@ msgstr ""
 msgid "Cross mark"
 msgstr ""
 
+msgid "Current HH:MM (24h)"
+msgstr ""
+
 msgid "Current chapter number"
 msgstr ""
 
 msgid "Current page number"
+msgstr ""
+
+msgid "Current time (24h, same as %time_24h)"
 msgstr ""
 
 msgid "Cursive"
@@ -364,6 +411,9 @@ msgid "Curved back arrow"
 msgstr ""
 
 msgid "Custom colors and tick marks"
+msgstr ""
+
+msgid "Custom date/time format (strftime spec)"
 msgstr ""
 
 msgid "Custom fonts in this preset:"
@@ -399,22 +449,19 @@ msgstr ""
 msgid "Device"
 msgstr ""
 
+msgid "Diameter"
+msgstr ""
+
 msgid "Diamond"
 msgstr ""
 
 msgid "Diamond suit"
 msgstr ""
 
-msgid "Different content on odd/even pages"
-msgstr ""
-
 msgid "Disable stock status bar"
 msgstr ""
 
 msgid "Discover more presets"
-msgstr ""
-
-msgid "Diameter"
 msgstr ""
 
 msgid "Dismiss"
@@ -471,6 +518,9 @@ msgstr ""
 msgid "Dynamic"
 msgstr ""
 
+msgid "EPUB / PDF / CBZ / …"
+msgstr ""
+
 msgid "Edge"
 msgstr ""
 
@@ -525,6 +575,9 @@ msgstr ""
 msgid "Eye (hidden)"
 msgstr ""
 
+msgid "Fall back to shallower chapter"
+msgstr ""
+
 msgid "Fantasy"
 msgstr ""
 
@@ -573,10 +626,13 @@ msgstr ""
 msgid "Fraction slash"
 msgstr ""
 
+msgid "Free disk space"
+msgstr ""
+
 msgid "Frontlight brightness"
 msgstr ""
 
-msgid "Frontlight status"
+msgid "Frontlight on/off label"
 msgstr ""
 
 msgid "Frontlight warmth"
@@ -589,9 +645,6 @@ msgid "Gallery"
 msgstr ""
 
 msgid "HDD / disk"
-msgstr ""
-
-msgid "Half-hour window (AND operator)"
 msgstr ""
 
 msgid "Heart"
@@ -609,10 +662,16 @@ msgstr ""
 msgid "Hex:"
 msgstr ""
 
-msgid "Hides KOReader's built-in status bar. This simplifies the render pipeline and can reduce e-ink flicker on some devices. All status bar features are available as Bookends tokens."
+msgid ""
+"Hides KOReader's built-in status bar. This simplifies the render pipeline "
+"and can reduce e-ink flicker on some devices. All status bar features are "
+"available as Bookends tokens."
 msgstr ""
 
 msgid "High voltage"
+msgstr ""
+
+msgid "Hollow"
 msgstr ""
 
 msgid "Horizontal ellipsis"
@@ -627,7 +686,34 @@ msgstr ""
 msgid "Hourglass (filled)"
 msgstr ""
 
-msgid "Hollow"
+msgid "Icon color"
+msgstr ""
+
+msgid "If Wi-Fi is on"
+msgstr ""
+
+msgid "If book has author"
+msgstr ""
+
+msgid "If book has title"
+msgstr ""
+
+msgid "If book in series"
+msgstr ""
+
+msgid "If chapter has title"
+msgstr ""
+
+msgid "If charging"
+msgstr ""
+
+msgid "If connected"
+msgstr ""
+
+msgid "If frontlight on"
+msgstr ""
+
+msgid "If page-turn flipped"
 msgstr ""
 
 msgid "If/Else conditional tokens"
@@ -643,9 +729,6 @@ msgid "Infinity"
 msgstr ""
 
 msgid "Info"
-msgstr ""
-
-msgid "Icon color"
 msgstr ""
 
 msgid "Inline progress bars can be added via the line editor"
@@ -678,13 +761,19 @@ msgstr ""
 msgid "Installed: "
 msgstr ""
 
+msgid "Invalid hex colour (use #RGB or #RRGGBB)"
+msgstr ""
+
 msgid "Invert tick color on read portion"
 msgstr ""
 
 msgid "Italic"
 msgstr ""
 
-msgid "Invalid hex colour (use #RGB or #RRGGBB)"
+msgid "Late-night reading"
+msgstr ""
+
+msgid "Latest"
 msgstr ""
 
 msgid "Latest: "
@@ -717,13 +806,21 @@ msgstr ""
 msgid "Long arrow right"
 msgstr ""
 
+msgid "Long books (20+ chapters)"
+msgstr ""
+
 msgid "Long press to change render order"
 msgstr ""
 
 msgid "Long-press progress bars to skim document"
 msgstr ""
 
-msgid "Made something worth sharing? Submit it with the Manage button while viewing one of your own presets."
+msgid "Low-battery warning"
+msgstr ""
+
+msgid ""
+"Made something worth sharing? Submit it with the Manage button while viewing "
+"one of your own presets."
 msgstr ""
 
 msgid "Manage…"
@@ -732,19 +829,10 @@ msgstr ""
 msgid "Memory chip"
 msgstr ""
 
-msgid "Message near end of book"
-msgstr ""
-
 msgid "Metadata"
 msgstr ""
 
 msgid "Metro"
-msgstr ""
-
-msgid "Metro track color"
-msgstr ""
-
-msgid "Metro track color (% black)"
 msgstr ""
 
 msgid "Metro read color"
@@ -753,13 +841,25 @@ msgstr ""
 msgid "Metro read color (% black)"
 msgstr ""
 
+msgid "Metro track color"
+msgstr ""
+
+msgid "Metro track color (% black)"
+msgstr ""
+
 msgid "Middle dot"
+msgstr ""
+
+msgid "Minutes this session"
 msgstr ""
 
 msgid "Mobile"
 msgstr ""
 
 msgid "Monospace"
+msgstr ""
+
+msgid "Mon–Sun"
 msgstr ""
 
 msgid "Moon"
@@ -780,7 +880,13 @@ msgstr ""
 msgid "My setup"
 msgstr ""
 
+msgid "Near end of book"
+msgstr ""
+
 msgid "No download available for this release."
+msgstr ""
+
+msgid "Non-series books"
 msgstr ""
 
 msgid "Notify on wake when update available"
@@ -801,16 +907,19 @@ msgstr ""
 msgid "Odd pg"
 msgstr ""
 
-msgid "Offline — connect to preview this preset."
+msgid "Odd/even variations"
 msgstr ""
 
-msgid "Offline — connect to refresh"
+msgid "Offline — connect and tap a sort to retry"
+msgstr ""
+
+msgid "Offline — connect to preview this preset."
 msgstr ""
 
 msgid "One-line description of this preset"
 msgstr ""
 
-msgid "Only show for PDF documents"
+msgid "Only for PDFs"
 msgstr ""
 
 msgid "Open"
@@ -822,7 +931,9 @@ msgstr ""
 msgid "Open the releases page in a browser?"
 msgstr ""
 
-msgid "Opens the skim dialog when you long-press on a full-width progress bar. Replaces the stock status bar's long-press to skim feature."
+msgid ""
+"Opens the skim dialog when you long-press on a full-width progress bar. "
+"Replaces the stock status bar's long-press to skim feature."
 msgstr ""
 
 msgid "Page %1 of %2"
@@ -831,7 +942,7 @@ msgstr ""
 msgid "Page / progress"
 msgstr ""
 
-msgid "Page-turn direction \xE2\x87\x84 (shows when inverted)"
+msgid "Page-turn direction ⇄ (shows when inverted)"
 msgstr ""
 
 msgid "Pages left in book"
@@ -840,7 +951,13 @@ msgstr ""
 msgid "Pages left in chapter"
 msgstr ""
 
+msgid "Pages per hour"
+msgstr ""
+
 msgid "Pages read in chapter"
+msgstr ""
+
+msgid "Pages this session"
 msgstr ""
 
 msgid "Paper aeroplane"
@@ -865,6 +982,9 @@ msgid "Pointing right (black)"
 msgstr ""
 
 msgid "Pointing up"
+msgstr ""
+
+msgid "Popular"
 msgstr ""
 
 msgid "Position"
@@ -936,10 +1056,7 @@ msgstr ""
 msgid "Reference"
 msgstr ""
 
-msgid "Refresh"
-msgstr ""
-
-msgid "Refresh failed — tap Refresh to retry"
+msgid "Refresh failed — tap a sort to retry"
 msgstr ""
 
 msgid "Refreshing…"
@@ -990,7 +1107,7 @@ msgstr ""
 msgid "Save"
 msgstr ""
 
-msgid "Save as new preset…"
+msgid "Save current as new preset…"
 msgstr ""
 
 msgid "Save preset"
@@ -1008,10 +1125,19 @@ msgstr ""
 msgid "Separators"
 msgstr ""
 
-msgid "Series with index"
+msgid "Series name only"
+msgstr ""
+
+msgid "Series number only"
+msgstr ""
+
+msgid "Series with index (combined)"
 msgstr ""
 
 msgid "Serif"
+msgstr ""
+
+msgid "Session / reading"
 msgstr ""
 
 msgid "Session pages read"
@@ -1020,16 +1146,13 @@ msgstr ""
 msgid "Session reading time"
 msgstr ""
 
-msgid "Session time, hidden at start"
+msgid "Session time after start"
 msgstr ""
 
 msgid "Set"
 msgstr ""
 
 msgid "Set font"
-msgstr ""
-
-msgid "Show wifi icon when connected"
 msgstr ""
 
 msgid "Single angle left"
@@ -1056,7 +1179,7 @@ msgstr ""
 msgid "Spade"
 msgstr ""
 
-msgid "Speed, hidden until calculated"
+msgid "Speed once calculated"
 msgstr ""
 
 msgid "Star (filled)"
@@ -1068,6 +1191,9 @@ msgstr ""
 msgid "Star = include in preset cycle gesture"
 msgstr ""
 
+msgid "Starred"
+msgstr ""
+
 msgid "Status"
 msgstr ""
 
@@ -1075,9 +1201,6 @@ msgid "Stopwatch"
 msgstr ""
 
 msgid "Style"
-msgstr ""
-
-msgid "Sub-chapter title when present"
 msgstr ""
 
 msgid "Submission failed — details in the KOReader log."
@@ -1089,7 +1212,8 @@ msgstr ""
 msgid "Submit"
 msgstr ""
 
-msgid "Submit '%1' by %2 to the gallery? A pull request will be opened for review."
+msgid ""
+"Submit '%1' by %2 to the gallery? A pull request will be opened for review."
 msgstr ""
 
 msgid "Submit anyway"
@@ -1113,13 +1237,16 @@ msgstr ""
 msgid "Tachometer"
 msgstr ""
 
-msgid "Tap Refresh above to load the gallery."
+msgid "Tap Latest or Popular above to load the gallery."
 msgstr ""
 
 msgid "Text color"
 msgstr ""
 
-msgid "Thanks! Your submission is PR #%1.\n\nThe maintainer will review it before it appears in the Gallery."
+msgid ""
+"Thanks! Your submission is PR #%1.\n"
+"\n"
+"The maintainer will review it before it appears in the Gallery."
 msgstr ""
 
 msgid "Thickness"
@@ -1128,7 +1255,10 @@ msgstr ""
 msgid "This preset appears invalid; skipping."
 msgstr ""
 
-msgid "This preset uses specific fonts that won't exist on other devices. These overrides will be stripped from your submission so other users see their own default font."
+msgid ""
+"This preset uses specific fonts that won't exist on other devices. These "
+"overrides will be stripped from your submission so other users see their own "
+"default font."
 msgstr ""
 
 msgid "Tick color"
@@ -1164,7 +1294,12 @@ msgstr ""
 msgid "Time left in chapter"
 msgstr ""
 
-msgid "Tip: for portable presets, pick a Font-family font (Serif, Sans-serif, etc.) instead of a specific one — those adapt to each user's font settings."
+msgid "Time window"
+msgstr ""
+
+msgid ""
+"Tip: for portable presets, pick a Font-family font (Serif, Sans-serif, etc.) "
+"instead of a specific one — those adapt to each user's font settings."
 msgstr ""
 
 msgid "Toggle bookends"
@@ -1189,6 +1324,9 @@ msgid "Total annotations (bookmarks + highlights + notes)"
 msgstr ""
 
 msgid "Total chapter count"
+msgstr ""
+
+msgid "Total chapters"
 msgstr ""
 
 msgid "Total pages"
@@ -1236,6 +1374,9 @@ msgstr ""
 msgid "Unread color (% black)"
 msgstr ""
 
+msgid "Untitled"
+msgstr ""
+
 msgid "Update and restart"
 msgstr ""
 
@@ -1263,9 +1404,6 @@ msgstr ""
 msgid "Warning"
 msgstr ""
 
-msgid "Warning when battery below 20%"
-msgstr ""
-
 msgid "Watch"
 msgstr ""
 
@@ -1278,7 +1416,7 @@ msgstr ""
 msgid "Weekday short (Fri)"
 msgstr ""
 
-msgid "Weekend days (OR operator)"
+msgid "Weekends"
 msgstr ""
 
 msgid "Who should we credit as the author?"
@@ -1293,6 +1431,9 @@ msgstr ""
 msgid "Wi-Fi icon (dynamic)"
 msgstr ""
 
+msgid "Wi-Fi icon when connected"
+msgstr ""
+
 msgid "Wi-Fi is not enabled."
 msgstr ""
 
@@ -1302,16 +1443,7 @@ msgstr ""
 msgid "[if:key=value]show when true[/if]"
 msgstr ""
 
-msgid "author — author name"
-msgstr ""
-
-msgid "batt — 0 to 100"
-msgstr ""
-
 msgid "book"
-msgstr ""
-
-msgid "book_pct — 0 to 100 (book progress)"
 msgstr ""
 
 msgid "bottom"
@@ -1323,49 +1455,16 @@ msgstr ""
 msgid "chapter"
 msgstr ""
 
-msgid "chapter — current chapter number"
-msgstr ""
-
-msgid "chapter_pct — 0 to 100 (chapter progress)"
-msgstr ""
-
-msgid "chapter_title — current chapter title"
-msgstr ""
-
-msgid "chapter_title_1/2/3 — title at depth 1/2/3"
-msgstr ""
-
-msgid "chapters — total chapter count"
-msgstr ""
-
-msgid "charging — yes / no"
-msgstr ""
-
-msgid "connected — yes / no"
-msgstr ""
-
 msgid "copy"
 msgstr ""
 
 msgid "cycle presets"
 msgstr ""
 
-msgid "day — Mon Tue Wed Thu Fri Sat Sun"
-msgstr ""
-
 msgid "default"
 msgstr ""
 
-msgid "format — EPUB / PDF / CBZ etc."
-msgstr ""
-
-msgid "invert — yes / no (page-turn direction)"
-msgstr ""
-
 msgid "left"
-msgstr ""
-
-msgid "light — on / off"
 msgstr ""
 
 msgid "line"
@@ -1374,13 +1473,13 @@ msgstr ""
 msgid "long press lines to manage"
 msgstr ""
 
+msgid "odd / even"
+msgstr ""
+
 msgid "off"
 msgstr ""
 
 msgid "on"
-msgstr ""
-
-msgid "page — odd / even"
 msgstr ""
 
 msgid "per style"
@@ -1398,25 +1497,7 @@ msgstr ""
 msgid "right"
 msgstr ""
 
-msgid "series — series + index, empty when standalone"
-msgstr ""
-
-msgid "session — minutes reading"
-msgstr ""
-
-msgid "session_pages — pages read this session"
-msgstr ""
-
-msgid "speed — pages per hour"
-msgstr ""
-
 msgid "text"
-msgstr ""
-
-msgid "time — use HH:MM (24h)"
-msgstr ""
-
-msgid "title — book title (empty string is falsy)"
 msgstr ""
 
 msgid "toggle bookends"
@@ -1426,7 +1507,4 @@ msgid "top"
 msgstr ""
 
 msgid "transparent"
-msgstr ""
-
-msgid "wifi — on / off"
 msgstr ""

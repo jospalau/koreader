@@ -6,6 +6,7 @@ local Config = require("bookends_config")
 local Device = require("device")
 local Font = require("ui/font")
 local InputDialog = require("ui/widget/inputdialog")
+local Tokens = require("bookends_tokens")
 local UIManager = require("ui/uimanager")
 local Utils = require("bookends_utils")
 local util = require("util")
@@ -42,6 +43,9 @@ function LineEditor.attach(Bookends)
 
         local pos_settings = self.positions[pos.key]
 
+        -- Stored text is guaranteed to be on the current schema (v5) because
+        -- migrateSchemaIfNeeded ran at startup. No per-open canonicalise
+        -- needed; the editor just shows whatever is stored.
         local current_text = pos_settings.lines[line_idx] or ""
 
         -- Per-line style state
@@ -56,7 +60,9 @@ function LineEditor.attach(Bookends)
         pos_settings.line_bar_height = pos_settings.line_bar_height or {}
         pos_settings.line_bar_style = pos_settings.line_bar_style or {}
 
-        -- Snapshot for cancel/restore
+        -- Snapshot for cancel/restore (style / font / nudge / etc.; the
+        -- canonicalise migration above is already baked into this snapshot
+        -- on purpose, so Cancel keeps it).
         local original_settings = util.tableDeepCopy(pos_settings)
 
         local line_style = pos_settings.line_style[line_idx] or "regular"
@@ -317,6 +323,8 @@ function LineEditor.attach(Bookends)
                 {
                     text = _("Cancel"),
                     callback = function()
+                        self._live_edit_position = nil
+                        self._live_edit_line_idx = nil
                         self.positions[pos.key] = util.tableDeepCopy(original_settings)
                         self:savePositionSetting(pos.key)
                         UIManager:close(format_dialog)
@@ -349,6 +357,8 @@ function LineEditor.attach(Bookends)
                     text = _("Save"),
                     is_enter_default = true,
                     callback = function()
+                        self._live_edit_position = nil
+                        self._live_edit_line_idx = nil
                         local new_text = format_dialog:getInputText()
                         if new_text == "" then
                             table.remove(pos_settings.lines, line_idx)
@@ -382,6 +392,8 @@ function LineEditor.attach(Bookends)
         local input_text_height = measure:getLineHeight() * 2
         measure:free(true)
 
+        self._live_edit_position = pos.key
+        self._live_edit_line_idx = line_idx
         format_dialog = InputDialog:new{
             title = pos.label .. " \xE2\x80\x94 " .. _("Line") .. " " .. line_idx,
             input = current_text,
