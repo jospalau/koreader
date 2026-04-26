@@ -208,8 +208,13 @@ function Bookends:buildBookendsSettingsMenu()
             callback = function()
                 local footer = self.ui.view.footer
                 footer:applyFooterMode(footer.mode_list.off)
-                if self.ui.view.topbar.status_bar then
+                if self.ui.view.topbar and self.ui.view.topbar.status_bar then
                     self.ui.view.topbar.status_bar = false
+                end
+                if self.view.doublebar and G_reader_settings:isTrue("show_double_bar") then
+                    G_reader_settings:saveSetting("show_double_bar", false)
+                        -- require("apps/reader/modules/doublebar").is_enabled = false
+                        self.view.doublebar:toggleBar()
                 end
                 self.enabled = not self.enabled
                 self.settings:saveSetting("enabled", self.enabled)
