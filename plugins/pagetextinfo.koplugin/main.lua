@@ -4996,11 +4996,12 @@ function PageTextInfo:onToggleDoubleBar()
     if self.view.footer_visible then return end
     if self.view.topbar.settings:isTrue("show_top_bar")
     or (self.ui.bookends and self.ui.bookends.enabled) then
-        local footer = self.ui.view.footer
-        self.ui.bookends.stock_bar_disabled = true
-        self.ui.bookends.settings:saveSetting("stock_bar_disabled", true)
-        footer:applyFooterMode(footer.mode_list.off)
-        self.view.footer_visible = false
+        self.view.topbar:quickToggleOnOff(true)
+        -- local footer = self.ui.view.footer
+        -- footer:applyFooterMode(footer.mode_list.off)
+        -- self.ui.bookends.stock_bar_disabled = true
+        -- self.ui.bookends.settings:saveSetting("stock_bar_disabled", true)
+        -- self.view.footer_visible = false
         self.ui.bookends.enabled = not self.ui.bookends.enabled
         self.ui.bookends.settings:saveSetting("enabled", self.ui.bookends.enabled)
     else
