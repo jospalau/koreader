@@ -38,12 +38,12 @@ function XRayPlugin:init()
     self.loc:init(self.path)
 
     XRayLogger:init(self.path)
-    
+
     local AIHelper = require("xray_aihelper")
     self.ai_helper = AIHelper
     self.ai_helper:init(self.path)
     self.ai_provider = self.ai_helper.default_provider or "gemini"
-    
+
     self.xray_mode_enabled = true
     if self.ai_helper.settings and self.ai_helper.settings.xray_mode_enabled ~= nil then
         self.xray_mode_enabled = self.ai_helper.settings.xray_mode_enabled
@@ -61,17 +61,17 @@ function XRayPlugin:init()
     self.locations = {}
     self.timeline = {}
     self.historical_figures = {}
-    
+
     -- Track dismissed language suggestions for the current session
     self.suggestion_dismissed = {}
 
     -- Modular lookup logic for text selection
     local LookupManager = require("xray_lookupmanager")
     self.lookup_manager = LookupManager:new(self)
-    
+
     self:log("XRayPlugin: Initialized with language: " .. self.loc:getLanguage())
     self:onDispatcherRegisterActions()
-    
+
     if self.ui then
         self.ui:registerKeyEvents({
             ShowXRayMenu = {
@@ -94,14 +94,14 @@ function XRayPlugin:init()
             end)
         end
     end
-    
+
     logger.info("XRayPlugin: Initialized with language:", self.loc:getLanguage())
 end
 
 -- Hook for Dictionary/Selection Popup (single word)
 function XRayPlugin:onDictButtonsReady(dict_popup, dict_buttons)
     if not self.xray_mode_enabled then return end
-    
+
     local xray_button = {
         text = "X-Ray",
         callback = function()
@@ -131,12 +131,12 @@ function XRayPlugin:onReaderReady()
 
     -- Initialize language based on logic (auto, book, or manual)
     self:applyLanguageLogic()
-    
+
     -- Suggest switching to book language if appropriate
     UIManager:scheduleIn(5, function()
         self:checkBookLanguageMatch()
     end)
-    
+
     -- Weekly silent update check
     UIManager:scheduleIn(10, function()
         self:checkWeeklyUpdate()
@@ -147,7 +147,7 @@ function XRayPlugin:onPageUpdate(pageno)
     self:log("XRayPlugin: onPageUpdate for pageno " .. tostring(pageno))
     self.last_pageno = pageno
     if not self.auto_fetch_enabled then return end
-    
+
     self:log("XRayPlugin: onPageUpdate for pageno " .. tostring(pageno))
     if not self.ui or not self.ui.document then return end
 
@@ -177,12 +177,12 @@ function XRayPlugin:onPageUpdate(pageno)
     local unique_id = chapter_title .. "_" .. tostring(chapter_page)
 
     -- Skip non-narrative chapters (Frontmatter/Backmatter)
-    if self:isNonNarrativeChapter(chapter_title) then 
+    if self:isNonNarrativeChapter(chapter_title) then
         if not self.chapters_fetched[unique_id] then
             self:log("XRayPlugin: Skipping non-narrative chapter: " .. tostring(chapter_title) .. " (page " .. tostring(chapter_page) .. ")")
             self.chapters_fetched[unique_id] = true
         end
-        return 
+        return
     end
 
     -- Check if it's already populated in the timeline data
@@ -220,9 +220,9 @@ function XRayPlugin:onPageUpdate(pageno)
     if not self.auto_fetch_enabled then return end
 
     -- Already fetched this chapter this session?
-    if self.chapters_fetched[unique_id] then 
+    if self.chapters_fetched[unique_id] then
         self:log("XRayPlugin: Already fetched chapter this session: " .. tostring(unique_id))
-        return 
+        return
     end
 
     -- Same chapter as before (no change)?
@@ -230,9 +230,9 @@ function XRayPlugin:onPageUpdate(pageno)
     self.last_auto_chapter = unique_id
 
     -- Debounce: ignore if a fetch is already scheduled
-    if self.bg_fetch_pending or self.bg_fetch_active then 
+    if self.bg_fetch_pending or self.bg_fetch_active then
         self:log("XRayPlugin: Fetch already pending/active. Skipping trigger for " .. tostring(chapter_title))
-        return 
+        return
     end
     self.bg_fetch_pending = true
 
@@ -266,18 +266,21 @@ function XRayPlugin:triggerBackgroundMergeFetch(chapter_title)
         end
         self.last_bg_fetch_time = now
 
+        local ui = self.ui
+        local doc = ui and ui.document
+        if not self._alive or not ui or not doc then return end
         local current_page = self.ui:getCurrentPage()
         local total_pages = self.ui.document:getPageCount()
         if not total_pages or total_pages == 0 then return end
         local reading_percent = math.floor((current_page / total_pages) * 100)
-        
+
         local spoiler_setting = self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
         if spoiler_setting == "full_book" then
             reading_percent = 100
         end
-        
+
         local last_fetch_page = self.book_data and self.book_data.last_fetch_page
-        
+
         local is_update = true
         if not self.timeline or #self.timeline == 0 then
             is_update = false
@@ -285,7 +288,7 @@ function XRayPlugin:triggerBackgroundMergeFetch(chapter_title)
         else
             self:log("XRayPlugin: Auto-merge fetch for chapter: " .. tostring(chapter_title))
         end
-        
+
         self.fetch_attempts = self.fetch_attempts or {}
         self.fetch_attempts[chapter_title] = (self.fetch_attempts[chapter_title] or 0) + 1
         self:continueWithFetch(reading_percent, is_update, last_fetch_page, true) -- is_silent=true
@@ -327,12 +330,12 @@ function XRayPlugin:autoLoadCache()
         local CacheManager = require("xray_cachemanager")
         self.cache_manager = CacheManager:new()
     end
-    
+
     local book_path = self.ui.document.file
     logger.info("XRayPlugin: Auto-loading cache for:", book_path)
     self:log("XRayPlugin: Auto-loading cache for: " .. tostring(book_path))
     local cached_data = self.cache_manager:loadCache(book_path)
-    
+
     if cached_data then
         self:log("XRayPlugin: Cache loaded successfully")
         -- Set raw data immediately so the reader can render first.
@@ -485,19 +488,19 @@ function XRayPlugin:getSubMenuItems()
                             separator = true,
                         },
                         {
-                            text = self.loc:t("menu_gemini_key"), 
+                            text = self.loc:t("menu_gemini_key"),
                             keep_menu_open = true,
                             sub_item_table_func = function() return self:getAPIKeySelectionMenu("gemini", "Google Gemini") end,
                             separator = true,
                         },
                         {
-                            text = self.loc:t("menu_chatgpt_key"), 
+                            text = self.loc:t("menu_chatgpt_key"),
                             keep_menu_open = true,
                             sub_item_table_func = function() return self:getAPIKeySelectionMenu("chatgpt", "ChatGPT") end,
                             separator = true,
                         },
                         {
-                            text = self.loc:t("menu_view_config") or "View All Config Values", 
+                            text = self.loc:t("menu_view_config") or "View All Config Values",
                             keep_menu_open = true,
                             callback = function() self:showConfigSummary() end,
                         },
@@ -535,7 +538,7 @@ function XRayPlugin:getSubMenuItems()
             callback = function() self:showAbout() end,
         },
     }
-    
+
     return self.current_xray_menu_table
 end
 
@@ -644,40 +647,40 @@ end
 function XRayPlugin:showLanguageSelection()
     local ButtonDialog = require("ui/widget/buttondialog")
     local InfoMessage = require("ui/widget/infomessage")
-    
+
     local settings_lang = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings.language or "auto"
-    
+
     local function changeLang(lang_code)
         UIManager:close(self.ldlg)
         self.ldlg = nil
-        
+
         if self.ai_helper then
             self.ai_helper:saveSettings({ language = lang_code })
         end
-        
+
         -- Apply the new setting immediately
         self:applyLanguageLogic()
-        
+
         local msg = (self.loc and self.loc:t("language_changed_reopen")) or "Language changed. Reopen the menu to see the changes."
-        
+
         -- Use the standard Reader event to close menus safely
         if self.ui then
             local Event = require("ui/event")
             self.ui:handleEvent(Event:new("CloseMenu"))
         end
-        
+
         -- Ensure the standalone menu is also closed
         if self.xray_menu then
             UIManager:close(self.xray_menu)
             self.xray_menu = nil
         end
-        
+
         UIManager:show(InfoMessage:new{
             text = "[OK] " .. msg,
             timeout = 3
         })
     end
-    
+
     local buttons = {
         {
             { text = (self.loc:t("lang_follow_system") or "Automatic (Follow System)") .. (settings_lang == "auto" and " [OK]" or ""), callback = function() changeLang("auto") end },
@@ -692,7 +695,7 @@ function XRayPlugin:showLanguageSelection()
         {{ text = "Português" .. (settings_lang == "pt_br" and " [OK]" or ""), callback = function() changeLang("pt_br") end }},
         {{ text = "Español" .. (settings_lang == "es" and " [OK]" or ""), callback = function() changeLang("es") end }},
     }
-    
+
     local dialog_title = (self.loc and self.loc:t("menu_language")) or "Language Selection"
     self.ldlg = ButtonDialog:new{title = dialog_title, buttons = buttons}
     UIManager:show(self.ldlg)
@@ -700,16 +703,16 @@ end
 
 function XRayPlugin:resolveLanguage(code)
     local supported = { en=1, de=1, fr=1, ru=1, zh_CN=1, tr=1, pt_br=1, es=1 }
-    
+
     if code == "auto" or not code then
         local gettext = require("gettext")
         local ko_lang = gettext.getLanguage and gettext.getLanguage()
-        
+
         -- Fallback to G_reader_settings if gettext doesn't provide it
         if not ko_lang and G_reader_settings then
             ko_lang = G_reader_settings:readSetting("language")
         end
-        
+
         if ko_lang then
             local lang = ko_lang:sub(1, 2):lower()
             if ko_lang:lower():find("zh_cn") or ko_lang:lower():find("zh-cn") then lang = "zh_CN"
@@ -736,13 +739,13 @@ end
 function XRayPlugin:applyLanguageLogic()
     local settings_lang = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings.language or "auto"
     local resolved = self:resolveLanguage(settings_lang)
-    
+
     self:log("XRayPlugin: Applying language logic. Settings: " .. tostring(settings_lang) .. ", Resolved: " .. tostring(resolved))
-    
+
     if self.loc and self.loc.setLanguage then
         self.loc:setLanguage(resolved)
     end
-    
+
     if self.ai_helper then
         self.ai_helper.current_language = resolved
         self.ai_helper:loadLanguage()
@@ -753,29 +756,29 @@ function XRayPlugin:checkBookLanguageMatch()
     local settings_lang = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings.language or "auto"
     -- Only suggest if we are NOT in "Follow Book" mode already
     if settings_lang == "book" then return end
-    
+
     if not self.ui or not self.ui.document then return end
     local props = self.ui.document:getProps()
     local book_lang = props.language
     if not book_lang or book_lang == "" then return end
-    
+
     local lang = book_lang:sub(1, 2):lower()
     if book_lang:find("zh") then lang = "zh_CN"
     elseif book_lang:find("pt") then lang = "pt_br" end
-    
-    local supported = { 
-        en = "English", de = "Deutsch", fr = "Français", 
-        ru = "Русский", zh_CN = "简体中文", tr = "Türkçe", 
-        pt_br = "Português", es = "Español" 
+
+    local supported = {
+        en = "English", de = "Deutsch", fr = "Français",
+        ru = "Русский", zh_CN = "简体中文", tr = "Türkçe",
+        pt_br = "Português", es = "Español"
     }
-    
+
     if not supported[lang] then return end
-    
+
     local current_lang = self.loc:getLanguage()
     if lang == current_lang then return end
-    
+
     if self.suggestion_dismissed[self.ui.document.file] then return end
-    
+
     -- Check if we should ignore this book (from cache)
     if not self.cache_manager then self.cache_manager = require("xray_cachemanager"):new() end
     local cache = self.cache_manager:loadCache(self.ui.document.file)
@@ -784,7 +787,7 @@ function XRayPlugin:checkBookLanguageMatch()
     -- Show prompt
     local lang_name = supported[lang]
     local msg = string.format(self.loc:t("msg_suggest_lang") or "This book is in %s. Switch X-Ray language to match?", lang_name)
-    
+
     local ButtonDialog = require("ui/widget/buttondialog")
     local mismatch_dialog
     mismatch_dialog = ButtonDialog:new{
@@ -866,24 +869,24 @@ function XRayPlugin:showCharacters()
 end
 
 function XRayPlugin:showCharacterDetails(character)
-    local lines = { 
-        (self.loc:t("label_name") or "NAME") .. ": " .. (character.name or "???"), 
-        (self.loc:t("label_role") or "ROLE") .. ": " .. (character.role or "---"), 
-        (self.loc:t("label_gender") or "GENDER") .. ": " .. (character.gender or "---"), 
-        (self.loc:t("label_occupation") or "OCCUPATION") .. ": " .. (character.occupation or "---"), 
-        "", 
-        (self.loc:t("label_description") or "DESCRIPTION") .. ":", 
-        character.description or "---" 
+    local lines = {
+        (self.loc:t("label_name") or "NAME") .. ": " .. (character.name or "???"),
+        (self.loc:t("label_role") or "ROLE") .. ": " .. (character.role or "---"),
+        (self.loc:t("label_gender") or "GENDER") .. ": " .. (character.gender or "---"),
+        (self.loc:t("label_occupation") or "OCCUPATION") .. ": " .. (character.occupation or "---"),
+        "",
+        (self.loc:t("label_description") or "DESCRIPTION") .. ":",
+        character.description or "---"
     }
     UIManager:show(InfoMessage:new{ text = table.concat(lines, "\n") })
 end
 
 function XRayPlugin:fetchFromAI()
-    require("ui/network/manager"):runWhenOnline(function() 
+    require("ui/network/manager"):runWhenOnline(function()
         local current_page = self.ui:getCurrentPage()
         local reading_percent = math.floor((current_page / self.ui.document:getPageCount()) * 100)
         local spoiler_setting = self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
-        
+
         if spoiler_setting == "full_book" then
             self:continueWithFetch(100)
         else
@@ -893,17 +896,17 @@ function XRayPlugin:fetchFromAI()
 end
 
 function XRayPlugin:updateFromAI()
-    require("ui/network/manager"):runWhenOnline(function() 
+    require("ui/network/manager"):runWhenOnline(function()
         local current_page = self.ui:getCurrentPage()
         local reading_percent = math.floor((current_page / self.ui.document:getPageCount()) * 100)
         local spoiler_setting = self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
-        
+
         local last_fetch_page = nil
         if self.book_data and self.book_data.last_fetch_page then
             last_fetch_page = self.book_data.last_fetch_page
         end
         self:log("XRayPlugin: updateFromAI - last_fetch_page=" .. tostring(last_fetch_page))
-        
+
         if spoiler_setting == "full_book" then
             self:continueWithFetch(100, true)
         else
@@ -915,12 +918,12 @@ end
 function XRayPlugin:showAutoUpdateSettings()
     local ButtonDialog = require("ui/widget/buttondialog")
     local info_dialog
-    
+
     local function showSettings()
         if info_dialog then UIManager:close(info_dialog) end
         local is_enabled = self.auto_fetch_enabled
         local current_cooldown = self.ai_helper.settings and self.ai_helper.settings.auto_fetch_cooldown or 300
-        
+
         info_dialog = ButtonDialog:new{
             title = self.loc:t("menu_auto_update_frequency") or "Auto X-Ray Settings",
             text = self.loc:t("auto_update_freq_label") or "Background fetching frequency:",
@@ -1001,18 +1004,18 @@ function XRayPlugin:showAutoUpdateSettings()
         }
         UIManager:show(info_dialog)
     end
-    
+
     showSettings()
 end
 
 function XRayPlugin:showSpoilerSettings()
     local ButtonDialog = require("ui/widget/buttondialog")
     local info_dialog
-    
+
     local function showSettings()
         if info_dialog then UIManager:close(info_dialog) end
         local current_setting = self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
-        
+
         info_dialog = ButtonDialog:new{
             title = self.loc:t("spoiler_preference_title") or "Spoiler Settings",
             text = self.loc:t("spoiler_preference_desc") or "Select your spoiler preference for X-Ray data:",
@@ -1056,7 +1059,7 @@ function XRayPlugin:showSpoilerSettings()
         }
         UIManager:show(info_dialog)
     end
-    
+
     showSettings()
 end
 
@@ -1099,14 +1102,14 @@ function XRayPlugin:normalizeChapterName(name)
     -- Strip common prefixes like "chapter" so "chapter 13" and "13" both become "13"
     s = s:gsub("^chapter%s*", ""):gsub("^ch%.?%s*", "")
     s = s:gsub("^part%s*", ""):gsub("^book%s*", "")
-    
+
     -- Try to convert Roman numerals if the remaining string is a valid Roman numeral
     -- We only do this if it's not already a digit
     if not s:match("^%d+$") and s:match("^[ivxlcdm]+$") then
         local dec = romanToDecimal(s)
         if dec then s = tostring(dec) end
     end
-    
+
     return s
 end
 
@@ -1250,24 +1253,24 @@ end
 -- so no TOC re-lookup is needed here. Events without a page sort to the end.
 function XRayPlugin:sortTimelineByTOC(timeline)
     if not timeline or #timeline == 0 then return end
-    
+
     -- Store original index for a stable sort (prevents shuffling events on the same page)
     for i, ev in ipairs(timeline) do ev._sort_idx = i end
-    
+
     table.sort(timeline, function(a, b)
         -- Primary key: Page number (must be numeric)
         local ap = tonumber(a.page) or 999999
         local bp = tonumber(b.page) or 999999
-        
+
         if ap ~= bp then
             return ap < bp
         end
-        
+
         -- Secondary key: Original AI response order (stability)
         -- NOTHING about the chapter title is used for sorting here.
         return (a._sort_idx or 0) < (b._sort_idx or 0)
     end)
-    
+
     -- Clean up temporary index
     for _, ev in ipairs(timeline) do ev._sort_idx = nil end
 end
@@ -1283,7 +1286,7 @@ function XRayPlugin:fetchSingleWord(text, pos0, pos1)
         local current_page = self.ui:getCurrentPage()
         local reading_percent = math.floor((current_page / (self.ui.document:getPageCount() or 1)) * 100)
         local spoiler_setting = self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
-        
+
         local limit_percent = reading_percent
         if spoiler_setting == "full_book" then limit_percent = 100 end
 
@@ -1295,22 +1298,22 @@ function XRayPlugin:fetchSingleWord(text, pos0, pos1)
 
         UIManager:scheduleIn(0.5, function()
             if not self.chapter_analyzer then self.chapter_analyzer = require("xray_chapteranalyzer"):new() end
-            
+
             -- 1. Distributed chapter samples (Start/Mid/End of each chapter up to current)
             -- We use a moderate budget (60k) to balance context depth with fetch speed.
             local samples, chapter_titles = self.chapter_analyzer:getDetailedChapterSamples(self.ui, 100, 60000, limit_percent == 100)
-            
+
             -- 2. Recent book text (Up to the highlighted word if pos1 is available)
             local start_context_page = math.max(1, current_page - 15)
             local book_text = self.chapter_analyzer:getTextForAnalysis(self.ui, 20000, nil, current_page + 1, start_context_page, pos1)
-            
+
             -- Fallback injection if the extraction completely missed the word due to DOM/Chapter boundaries
             if book_text and text and not book_text:lower():find(text:lower(), 1, true) then
                 book_text = book_text .. "\n\n[CURRENT PAGE HIGHLIGHT]: " .. text
             end
-            
+
             self:log("fetchSingleWord: extracted book_text length: " .. tostring(book_text and #book_text or 0))
-            
+
             local context = {
                 reading_percent = limit_percent,
                 chapter_samples = samples,
@@ -1328,7 +1331,7 @@ function XRayPlugin:fetchSingleWord(text, pos0, pos1)
             if result.is_valid then
                 local item = result.item
                 local item_type = result.type
-                
+
                 -- Merge into our tables
                 local target_list
                 if item_type == "character" then
@@ -1351,11 +1354,11 @@ function XRayPlugin:fetchSingleWord(text, pos0, pos1)
                         end
                     end
                     if not found then table.insert(target_list, item) end
-                    
+
                     -- Sort and save cache
                     self:sortDataByFrequency(target_list, book_text, "name")
                     if not self.cache_manager then self.cache_manager = require("xray_cachemanager"):new() end
-                    
+
                     -- Prepare data for cache save
                     local book_data = {
                         characters = self.characters,
@@ -1366,7 +1369,7 @@ function XRayPlugin:fetchSingleWord(text, pos0, pos1)
                         last_fetch_page = self.book_data and self.book_data.last_fetch_page
                     }
                     self.cache_manager:saveCache(self.ui.document.file, book_data)
-                    
+
                     -- Show result
                     self.lookup_manager:showResult(item, item_type)
                 end
@@ -1392,26 +1395,26 @@ function XRayPlugin:continueWithFetch(reading_percent, is_update, last_fetch_pag
     local author = sanitizeMetadata(props.authors)
     local wait_msg
     local is_cancelled = false
-    
+
     if not is_silent then
         local fetch_text = is_update and self.loc:t("updating_ai", self.ai_provider or "AI") or self.loc:t("fetching_ai", self.ai_provider or "AI")
         wait_msg = InfoMessage:new{ text = fetch_text .. "\n\n" .. title .. "\n\n" .. self.loc:t("fetching_wait"), timeout = 120 }
         UIManager:show(wait_msg)
     end
-    
+
     UIManager:scheduleIn(0.5, function()
         if is_cancelled then return end
         if not self.chapter_analyzer then self.chapter_analyzer = require("xray_chapteranalyzer"):new() end
 
         -- 1a. Lightweight prep: resolve current page and find first missing page
         local current_page = self.ui:getCurrentPage()
-        
+
         -- Find the earliest missing narrative chapter to ensure we recover it (Repair logic)
         local first_missing_page = last_fetch_page
         if is_update then
             local toc = self.ui.document:getToc() or {}
-            
-            -- OMNIBUS OPTIMIZATION: Instead of checking the whole book, 
+
+            -- OMNIBUS OPTIMIZATION: Instead of checking the whole book,
             -- find the 3 most recent narrative chapters before the current page.
             local candidate_chapters = {}
             for i = #toc, 1, -1 do
@@ -1423,7 +1426,7 @@ function XRayPlugin:continueWithFetch(reading_percent, is_update, last_fetch_pag
                     end
                 end
             end
-            
+
             for _, entry in ipairs(candidate_chapters) do
                 local norm = self:normalizeChapterName(entry.title)
                 local found = false
@@ -1448,7 +1451,7 @@ function XRayPlugin:continueWithFetch(reading_percent, is_update, last_fetch_pag
 
         -- 1b. First heavy extraction: recent book text (for context / frequency scoring)
         local book_text = self.chapter_analyzer:getTextForAnalysis(self.ui, 20000, nil, current_page, first_missing_page)
-        
+
         -- Build set of already-known chapters for smart sampling
         local known_chapters = {}
         if is_update and self.timeline then
@@ -1458,7 +1461,7 @@ function XRayPlugin:continueWithFetch(reading_percent, is_update, last_fetch_pag
                 end
             end
         end
-        
+
         -- Yield to the UI between the two heavy extraction calls.
         -- getDetailedChapterSamples iterates every TOC chapter (200+ on an omnibus)
         -- and calls getTextFromXPointer per chapter, which can take several seconds.
@@ -1470,7 +1473,7 @@ function XRayPlugin:continueWithFetch(reading_percent, is_update, last_fetch_pag
             -- 1c. Second heavy extraction: per-chapter samples for AI prompt
             local samples, chapter_titles = self.chapter_analyzer:getDetailedChapterSamples(self.ui, 200, 150000, reading_percent == 100, first_missing_page, known_chapters)
             local annots = self.chapter_analyzer:getAnnotationsForAnalysis(self.ui)
-        
+
             if (not book_text or #book_text < 10) and not samples then
                 if wait_msg then UIManager:close(wait_msg) end
                 if not is_silent then
@@ -1479,22 +1482,22 @@ function XRayPlugin:continueWithFetch(reading_percent, is_update, last_fetch_pag
                 self:log("XRayPlugin: Text extraction failed" .. (is_silent and " (silent)" or ""))
                 return
             end
-        
-            local context = { 
-                reading_percent = reading_percent, 
-                spoiler_free = reading_percent < 100, 
-                filename = self.ui.document.file:match("([^/\\]+)$"), 
-                series = props.series or props.Series, 
-                chapter_samples = samples, 
+
+            local context = {
+                reading_percent = reading_percent,
+                spoiler_free = reading_percent < 100,
+                filename = self.ui.document.file:match("([^/\\]+)$"),
+                series = props.series or props.Series,
+                chapter_samples = samples,
                 chapter_titles = chapter_titles,
-                annotations = annots, 
+                annotations = annots,
                 book_text = book_text,
                 -- For merge fetches, pass existing data so AI only returns new information
                 existing_characters = is_update and self.characters or nil,
                 existing_locations = is_update and self.locations or nil,
                 existing_historical_figures = is_update and self.historical_figures or nil,
             }
-            
+
             -- 2. AI Request
             if is_silent then
                 local req_params, err_code, err_msg = self.ai_helper:buildComprehensiveRequest(title, author, context)
@@ -1503,7 +1506,7 @@ function XRayPlugin:continueWithFetch(reading_percent, is_update, last_fetch_pag
                     self.bg_fetch_active = false
                     return
                 end
-                
+
                 local DataStorage = require("datastorage")
                 local result_file = DataStorage:getSettingsDir() .. "/xray/bg_fetch_" .. tostring(os.time()) .. ".json"
                 local started = self.ai_helper:makeRequestAsync(req_params, result_file)
@@ -1549,7 +1552,7 @@ function XRayPlugin:pollBackgroundFetch(result_file, title, author, book_text, i
 
         poll_count = poll_count + 1
         local data, err_code, err_msg = self.ai_helper:checkAsyncResult(result_file)
-        
+
         if data == nil then
             -- Still pending
             if poll_count < 120 then -- 4 minutes max for background
@@ -1710,7 +1713,7 @@ function XRayPlugin:finalizeXRayData(final_book_data, title, author, book_text, 
         author_info = self.author_info,
         last_fetch_page = current_page
     }
-    
+
     self.book_data = updated_data
 
     if not self.cache_manager then self.cache_manager = require("xray_cachemanager"):new() end
@@ -1724,21 +1727,21 @@ function XRayPlugin:finalizeXRayData(final_book_data, title, author, book_text, 
         local fetch_complete = self.loc:t("ai_fetch_complete_msg") or "AI Fetch Complete!"
         local cache_success = self.loc:t("cache_save_success") or "✓ Cache updated."
         local cache_fail = self.loc:t("cache_save_failed") or "✗ Cache failed."
-        local summary = string.format("%s\n\nCharacters: %d\nLocations: %d\nEvents: %d\n\n%s", 
+        local summary = string.format("%s\n\nCharacters: %d\nLocations: %d\nEvents: %d\n\n%s",
             fetch_complete, #self.characters, #self.locations, #self.timeline,
             cache_saved and cache_success or cache_fail)
 
         local success_dialog
         local ButtonDialog = require("ui/widget/buttondialog")
-        success_dialog = ButtonDialog:new{ title = self.loc:t("fetch_successful") or "Fetch successful", text = summary, buttons = {{{ text = self.loc:t("ok"), callback = function() 
-            UIManager:close(success_dialog) 
+        success_dialog = ButtonDialog:new{ title = self.loc:t("fetch_successful") or "Fetch successful", text = summary, buttons = {{{ text = self.loc:t("ok"), callback = function()
+            UIManager:close(success_dialog)
         end }}} }
         UIManager:show(success_dialog)
     end
 end
 
 function XRayPlugin:fetchMoreCharacters()
-    require("ui/network/manager"):runWhenOnline(function() 
+    require("ui/network/manager"):runWhenOnline(function()
         if not self.ai_helper then
             local AIHelper = require("xray_aihelper")
             self.ai_helper = AIHelper
@@ -1750,11 +1753,11 @@ function XRayPlugin:fetchMoreCharacters()
         local current_page = self.ui:getCurrentPage()
         local reading_percent = math.floor((current_page / self.ui.document:getPageCount()) * 100)
         local spoiler_setting = self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
-        
+
         if spoiler_setting == "full_book" then
             reading_percent = 100
         end
-        
+
         -- Capture the current menu widget NOW, before the async fetch starts.
         -- self.char_menu may be nilled by close_callback when wait_msg appears on top,
         -- so we need a local reference to close the old menu reliably at the end.
@@ -1765,42 +1768,42 @@ function XRayPlugin:fetchMoreCharacters()
         local is_cancelled = false
         wait_msg = InfoMessage:new{ text = (self.loc:t("fetching_ai") or "Fetching from %s...") .. "\n\n" .. title .. "\n\n" .. (self.loc:t("extracting_more_characters") or "Extracting additional characters..."), timeout = 120 }
         UIManager:show(wait_msg)
-        
+
         UIManager:scheduleIn(0.5, function()
             if is_cancelled then return end
             if not self.chapter_analyzer then self.chapter_analyzer = require("xray_chapteranalyzer"):new() end
-            
+
             -- EVEN SAMPLING: Divide the readable range into equal segments
             -- and sample one window from each, covering the whole book uniformly
             local current_page = self.ui:getCurrentPage()
             local pages_per_sample = 20
             local chars_per_sample = 10000
             local num_samples = 6
-            
+
             -- Track call count to shift windows on each invocation
             self.more_chars_call_count = (self.more_chars_call_count or 0) + 1
             local call_num = self.more_chars_call_count
             local offset = (call_num - 1) * pages_per_sample
             self:log("XRayPlugin: More chars call #" .. call_num .. " (offset: " .. offset .. " pages)")
-            
+
             -- Divide readable range into equal segments
             local readable_pages = math.max(1, current_page)
             local segment_size = math.floor(readable_pages / num_samples)
             if segment_size < pages_per_sample then segment_size = pages_per_sample end
-            
+
             local text_parts = {}
             for i = 0, num_samples - 1 do
                 local segment_start = i * segment_size
                 local sample_start = math.min(segment_start + offset, readable_pages - pages_per_sample)
                 sample_start = math.max(1, sample_start)
-                
+
                 -- Wrap around within the segment if the offset pushes past the segment boundary
                 local segment_end = (i + 1) * segment_size
                 if sample_start >= segment_end and i < num_samples - 1 then
                     sample_start = segment_start + ((offset) % segment_size)
                     sample_start = math.max(1, math.min(sample_start, readable_pages - pages_per_sample))
                 end
-                
+
                 if sample_start <= current_page then
                     local end_page = math.min(sample_start + pages_per_sample, current_page)
                     local sample = self.chapter_analyzer:getTextFromPageRange(self.ui, sample_start, end_page, chars_per_sample)
@@ -1811,27 +1814,27 @@ function XRayPlugin:fetchMoreCharacters()
                 end
             end
             local book_text = table.concat(text_parts, "\n\n---\n\n")
-            
+
             local exclude_list = {}
             for _, char in ipairs(self.characters or {}) do
                 table.insert(exclude_list, char.name)
             end
-            
-            local context = { 
-                reading_percent = reading_percent, 
-                filename = self.ui.document.file:match("([^/\\]+)$"), 
-                series = props.series or props.Series, 
+
+            local context = {
+                reading_percent = reading_percent,
+                filename = self.ui.document.file:match("([^/\\]+)$"),
+                series = props.series or props.Series,
                 book_text = book_text,
                 exclude_characters = table.concat(exclude_list, ", ")
             }
-            
+
             self.ai_helper:setTrapWidget(wait_msg)
             local more_data, error_code, error_msg = self.ai_helper:getMoreCharacters(title, author, nil, context)
             self.ai_helper:resetTrapWidget()
-            
+
             if wait_msg then UIManager:close(wait_msg) end
             if is_cancelled or error_code == "USER_CANCELLED" then return end
-            
+
             if not more_data or not more_data.characters then
                 local error_dialog
                 local ButtonDialog = require("ui/widget/buttondialog")
@@ -1839,7 +1842,7 @@ function XRayPlugin:fetchMoreCharacters()
                 UIManager:show(error_dialog)
                 return
             end
-            
+
             local new_count = 0
             for _, new_char in ipairs(more_data.characters) do
                 local found = false
@@ -1854,12 +1857,12 @@ function XRayPlugin:fetchMoreCharacters()
                     new_count = new_count + 1
                 end
             end
-            
+
             -- Re-sort by frequency based on the newly extracted samples
             if book_text and #book_text > 0 then
                 self:sortDataByFrequency(self.characters, book_text, "name")
             end
-            
+
             -- Save to cache
             if not self.cache_manager then self.cache_manager = require("xray_cachemanager"):new() end
             local existing_cache = self.cache_manager:loadCache(self.ui.document.file) or {}
@@ -1873,7 +1876,7 @@ function XRayPlugin:fetchMoreCharacters()
                 author_info = self.author_info or existing_cache.author_info
             }
             self.cache_manager:saveCache(self.ui.document.file, updated_data)
-            
+
             local added_msg = string.format(self.loc:t("msg_added_characters") or "Added %d new characters!", new_count)
             UIManager:show(InfoMessage:new{ text = added_msg, timeout = 3 })
 
@@ -1902,18 +1905,18 @@ function XRayPlugin:fetchAuthorInfo()
     UIManager:show(wait_msg)
     UIManager:scheduleIn(0.5, function()
         if is_cancelled then return end
-        
+
         if not self.chapter_analyzer then
             local ChapterAnalyzer = require("xray_chapteranalyzer")
             self.chapter_analyzer = ChapterAnalyzer:new()
         end
         local book_text = self.chapter_analyzer:getTextForAnalysis(self.ui, 1000, nil, self.ui:getCurrentPage())
         local context = { book_text = book_text }
-        
+
         self.ai_helper:setTrapWidget(wait_msg)
         local author_data, error_code, error_msg = self.ai_helper:getAuthorData(title, author, nil, context)
         self.ai_helper:resetTrapWidget()
-        
+
         if wait_msg then UIManager:close(wait_msg) end
         if is_cancelled or error_code == "USER_CANCELLED" then return end
 
@@ -1924,11 +1927,11 @@ function XRayPlugin:fetchAuthorInfo()
             UIManager:show(error_dialog)
             return
         end
-        self.author_info = { 
-            name = sanitizeMetadata(author_data.author or author), 
-            description = sanitizeMetadata(author_data.author_bio or self.loc:t("msg_no_bio") or "No biography available."), 
-            birthDate = sanitizeMetadata(author_data.author_birth or "---"), 
-            deathDate = sanitizeMetadata(author_data.author_death or "---") 
+        self.author_info = {
+            name = sanitizeMetadata(author_data.author or author),
+            description = sanitizeMetadata(author_data.author_bio or self.loc:t("msg_no_bio") or "No biography available."),
+            birthDate = sanitizeMetadata(author_data.author_birth or "---"),
+            deathDate = sanitizeMetadata(author_data.author_death or "---")
         }
         if not self.cache_manager then self.cache_manager = require("xray_cachemanager"):new() end
         local cache = self.cache_manager:loadCache(self.ui.document.file) or {}
@@ -1951,32 +1954,32 @@ function XRayPlugin:showAuthorInfo()
 end
 
 function XRayPlugin:showLocations()
-    if not self.locations or #self.locations == 0 then 
+    if not self.locations or #self.locations == 0 then
         UIManager:show(InfoMessage:new{ text = self.loc:t("no_location_data"), timeout = 3 })
-        return 
+        return
     end
     local items = {}
-    for _, loc in ipairs(self.locations) do 
+    for _, loc in ipairs(self.locations) do
         if type(loc) == "table" then
             local name = loc.name or "???"
             local desc = loc.description or ""
-            table.insert(items, { 
-                text = name, 
-                callback = function() 
-                    UIManager:show(InfoMessage:new{ 
-                        text = name .. "\n\n" .. desc, 
-                        timeout = 10 
-                    }) 
-                end 
+            table.insert(items, {
+                text = name,
+                callback = function()
+                    UIManager:show(InfoMessage:new{
+                        text = name .. "\n\n" .. desc,
+                        timeout = 10
+                    })
+                end
             })
         end
     end
-    
+
     if #items == 0 then
         UIManager:show(InfoMessage:new{ text = self.loc:t("no_location_data"), timeout = 3 })
         return
     end
-    
+
     UIManager:show(Menu:new{ title = self.loc:t("menu_locations"), item_table = items, is_borderless = true, width = Screen:getWidth(), height = Screen:getHeight() })
 end
 
@@ -2015,7 +2018,7 @@ end
 function XRayPlugin:toggleXRayMode()
     local ButtonDialog = require("ui/widget/buttondialog")
     local info_dialog
-    
+
     local function showSettings()
         if info_dialog then UIManager:close(info_dialog) end
         info_dialog = ButtonDialog:new{
@@ -2063,7 +2066,7 @@ function XRayPlugin:toggleXRayMode()
         }
         UIManager:show(info_dialog)
     end
-    
+
     showSettings()
 end
 
@@ -2090,25 +2093,25 @@ end
 function XRayPlugin:showQuickXRayMenu() self:showFullXRayMenu() end
 function XRayPlugin:showFullXRayMenu()
     if self.xray_menu then UIManager:close(self.xray_menu); self.xray_menu = nil end
-    self.xray_menu = Menu:new{ 
-        title = self.loc:t("menu_xray") or "X-Ray", 
-        item_table = self:getSubMenuItems(), 
-        is_borderless = true, 
-        width = Screen:getWidth(), 
-        height = Screen:getHeight() 
+    self.xray_menu = Menu:new{
+        title = self.loc:t("menu_xray") or "X-Ray",
+        item_table = self:getSubMenuItems(),
+        is_borderless = true,
+        width = Screen:getWidth(),
+        height = Screen:getHeight()
     }
-    UIManager:show(self.xray_menu) 
+    UIManager:show(self.xray_menu)
 end
 
 function XRayPlugin:getAPIKeySelectionMenu(provider, provider_name)
     local config_key = (self.ai_helper and self.ai_helper.config_keys) and self.ai_helper.config_keys[provider] or nil
-    
+
     local menu_items = {
         {
             text = "Use key from config.lua: " .. (config_key and #config_key > 0 and config_key or "(Not set)"),
-            checked_func = function() 
+            checked_func = function()
                 if not self.ai_helper or not self.ai_helper.providers or not self.ai_helper.providers[provider] then return false end
-                return not self.ai_helper.providers[provider].ui_key_active 
+                return not self.ai_helper.providers[provider].ui_key_active
             end,
             callback = function()
                 self.ai_helper:saveSettings({ [provider .. "_use_ui_key"] = false })
@@ -2118,13 +2121,13 @@ function XRayPlugin:getAPIKeySelectionMenu(provider, provider_name)
         },
         {
             text = (self.loc:t("menu_enter_ui_key") or "Enter UI override key: ") .. ((self.ai_helper and self.ai_helper.settings and self.ai_helper.settings[provider .. "_api_key"]) or "(Not set)"),
-            checked_func = function() 
+            checked_func = function()
                 if not self.ai_helper or not self.ai_helper.providers or not self.ai_helper.providers[provider] then return false end
-                return self.ai_helper.providers[provider].ui_key_active 
+                return self.ai_helper.providers[provider].ui_key_active
             end,
             callback = function()
                 local ui_key = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings[provider .. "_api_key"] or nil
-                
+
                 -- If we have a UI key but it's not currently active, let's just activate it
                 if ui_key and #ui_key > 0 and not self.ai_helper.providers[provider].ui_key_active then
                     self.ai_helper:saveSettings({ [provider .. "_use_ui_key"] = true })
@@ -2168,7 +2171,7 @@ function XRayPlugin:getAIModelSelectionMenu(setting_type)
         { name = "ChatGPT Mini (gpt-4o-mini) - " .. (self.loc:t("model_paid") or "paid"), provider = "chatgpt", id = "gpt-4o-mini" },
         { name = "ChatGPT (gpt-4o) - " .. (self.loc:t("model_paid") or "paid"), provider = "chatgpt", id = "gpt-4o" },
     }
-    
+
     local menu_items = {}
     for i, m in ipairs(models) do
         table.insert(menu_items, {
@@ -2226,7 +2229,7 @@ function XRayPlugin:getAIModelSelectionMenu(setting_type)
             input_dialog:onShowKeyboard()
         end
     })
-    
+
     return menu_items
 end
 
@@ -2253,10 +2256,10 @@ end
 
 function XRayPlugin:showConfigSummary()
     local text = (self.loc:t("menu_config_header") or "--- Current Configuration ---") .. "\n\n"
-    
+
     local primary = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings.primary_ai or nil
     local secondary = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings.secondary_ai or nil
-    
+
     local primary_label = self.loc:t("menu_primary_ai_model") or "Primary AI Model"
     local secondary_label = self.loc:t("menu_secondary_ai_model") or "Secondary AI Model"
     local provider_label = self.loc:t("config_provider") or "  Provider: "
@@ -2266,36 +2269,36 @@ function XRayPlugin:showConfigSummary()
     local not_set_label = self.loc:t("config_status_not_set") or "NOT SET"
 
     text = text .. primary_label .. ":\n"
-    if primary then 
-        text = text .. provider_label .. primary.provider .. "\n" .. model_label .. primary.model .. "\n\n" 
-    else 
-        text = text .. default_label .. "\n\n" 
+    if primary then
+        text = text .. provider_label .. primary.provider .. "\n" .. model_label .. primary.model .. "\n\n"
+    else
+        text = text .. default_label .. "\n\n"
     end
-    
+
     text = text .. secondary_label .. ":\n"
-    if secondary then 
-        text = text .. provider_label .. secondary.provider .. "\n" .. model_label .. secondary.model .. "\n\n" 
-    else 
-        text = text .. default_label .. "\n\n" 
+    if secondary then
+        text = text .. provider_label .. secondary.provider .. "\n" .. model_label .. secondary.model .. "\n\n"
+    else
+        text = text .. default_label .. "\n\n"
     end
-    
+
     local function add(p, n)
         local c = self.ai_helper.providers[p]
         local key_label = (self.loc:t("config_api_key_label") or "%s API Key: "):format(n)
         text = text .. key_label .. (c.api_key and set_label or not_set_label) .. "\n"
     end
     add("gemini", "Google Gemini"); add("chatgpt", "ChatGPT")
-    
+
     UIManager:show(InfoMessage:new{ text = text, timeout = 15 })
 end
 
 function XRayPlugin:checkWeeklyUpdate()
     if not self.ai_helper or not self.ai_helper.settings then return end
-    
+
     local last_check = self.ai_helper.settings.last_update_check or 0
     local now = os.time()
     local week_seconds = 7 * 24 * 60 * 60
-    
+
     if (now - last_check) > week_seconds then
         local NetworkMgr = require("ui/network/manager")
         if NetworkMgr:isOnline() then
