@@ -115,6 +115,17 @@ local STATE_ALIAS = {
     pages           = "session_pages", -- pre-v4.1 gallery compat
 }
 
+-- Split KOReader's newline-separated authors string into a list. Drops empties
+-- because KOReader can yield trailing "\n" or "\n\n" runs from messy metadata.
+local function splitAuthors(authors_raw)
+    local list = {}
+    if not authors_raw or authors_raw == "" then return list end
+    for a in (authors_raw .. "\n"):gmatch("([^\n]*)\n") do
+        if a ~= "" then table.insert(list, a) end
+    end
+    return list
+end
+
 -- Map KOReader UI language to a system locale for localized date strings.
 -- Caches per language to avoid repeated locale probing.
 local _date_locale_cache = {} -- lang -> locale string or false
@@ -229,12 +240,18 @@ end
 local function evaluateCondition(cond_str, state)
     -- Try operator: key=value, key!=value, key<value, key>value
     -- Key pattern allows underscores ([%w_]+) to support names like book_pct.
-    -- Operator pattern matches =, !=, <, >.
-    local key, op, value = cond_str:match("^([%w_]+)(!=)(.+)$")
-    if not key then
-        key, op, value = cond_str:match("^([%w_]+)([=<>])(.+)$")
-    end
+    -- Operator pattern matches =, !=, <, >, <=, >=.
+    -- Two-char operators are tried first so the longer match wins.
+    local key, op, value = cond_str:match("^([%w_]+)(>=)(.+)$")
+    if not key then key, op, value = cond_str:match("^([%w_]+)(<=)(.+)$") end
+    if not key then key, op, value = cond_str:match("^([%w_]+)(!=)(.+)$") end
+    if not key then key, op, value = cond_str:match("^([%w_]+)([=<>])(.+)$") end
     if key and op and value then
+        -- Strip surrounding double quotes from the RHS so users can match
+        -- multi-word string values (e.g. [if:author="J.R.R. Tolkien"]).
+        if #value >= 2 and value:sub(1, 1) == '"' and value:sub(-1) == '"' then
+            value = value:sub(2, -2)
+        end
         -- Try the key as-is first; fall back to aliased key if not found.
         -- This allows both old and new state-key names to work simultaneously.
         local state_val = state[key]
@@ -274,8 +291,10 @@ local function evaluateCondition(cond_str, state)
             return tostring(state_val) ~= tostring(value)
         end
         if not num_state or not num_val then return false end
-        if op == "<" then return num_state < num_val end
-        if op == ">" then return num_state > num_val end
+        if op == "<"  then return num_state <  num_val end
+        if op == ">"  then return num_state >  num_val end
+        if op == "<=" then return num_state <= num_val end
+        if op == ">=" then return num_state >= num_val end
         return false
     end
     -- No operator: truthy check
@@ -297,6 +316,8 @@ end
 --- Tokenise a conditional-expression string into keyword / paren / atom tokens.
 -- Whitespace separates tokens. "(" and ")" are always single tokens.
 -- The words "and", "or", "not" (lowercase, exact match) are keywords.
+-- Double-quoted runs ("...") are kept inside the current atom so RHS values
+-- can contain spaces (e.g. author="J.R.R. Tolkien").
 -- Everything else is an atom, passed verbatim to evaluateCondition.
 local function tokeniseExpression(cond_str)
     local tokens = {}
@@ -310,9 +331,14 @@ local function tokeniseExpression(cond_str)
             i = i + 1
         else
             local j = i
+            local in_quote = false
             while j <= len do
                 local cj = cond_str:sub(j, j)
-                if cj == " " or cj == "\t" or cj == "(" or cj == ")" then break end
+                if cj == '"' then
+                    in_quote = not in_quote
+                elseif not in_quote and (cj == " " or cj == "\t" or cj == "(" or cj == ")") then
+                    break
+                end
                 j = j + 1
             end
             local word = cond_str:sub(i, j - 1)
@@ -455,6 +481,9 @@ function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, pai
         state.batt = powerd:getCapacity() or 0
         state.charging = (powerd:isCharging() or powerd:isCharged()) and "yes" or "no"
         state.light = powerd:frontlightIntensity() > 0 and "on" or "off"
+        if Device:hasNaturalLight() and powerd.frontlightWarmth then
+            state.warmth = powerd:toNativeWarmth(powerd:frontlightWarmth())
+        end
     end
 
     -- Page-turn direction (any of: global key inversion flags, per-book reading order)
@@ -499,9 +528,13 @@ function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, pai
             local left = page_count_val - state.page_num
             if Tokens.pages_left_includes_current then left = left + 1 end
             state.pages_left = math.max(0, left)
+            -- Time-left in book, in minutes (numeric so [if:book_time_left>30] works).
+            if ui.statistics and ui.statistics.avg_time and ui.statistics.avg_time > 0 then
+                state.book_time_left = math.floor(state.pages_left * ui.statistics.avg_time / 60)
+            end
         end
 
-        -- Chapter percent
+        -- Chapter percent + chapter page counts (read / total / left)
         if ui.toc then
             local chapter_start = ui.toc:getPreviousChapter(pageno)
             if ui.toc:isChapterStart(pageno) then
@@ -517,21 +550,57 @@ function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, pai
                     state.chap_pct = 100
                 end
             end
+            -- chap_pct fallback to book_pct when no chapter info (mirrors token-side
+            -- fallback and stock's getChapterProgress get_percentage path).
+            if state.chap_pct == nil and state.book_pct ~= nil then
+                state.chap_pct = state.book_pct
+            end
+            local pages_left_offset = Tokens.pages_left_includes_current and 1 or 0
+            local done = ui.toc:getChapterPagesDone(pageno)
+            local total = ui.toc:getChapterPageCount(pageno)
+            if done and total and total > 0 then
+                state.chap_read = math.max(0, done + 1)
+                state.chap_pages = total
+            elseif state.page_num and state.page_count then
+                -- Fallback: treat whole book as one chapter (matches stock readerfooter)
+                state.chap_read  = state.page_num
+                state.chap_pages = state.page_count
+            end
+            local left = ui.toc:getChapterPagesLeft(pageno)
+            if left then
+                state.chap_pages_left = math.max(0, left + pages_left_offset)
+            elseif state.pages_left then
+                state.chap_pages_left = state.pages_left
+            end
+            -- Time-left in chapter, in minutes (for [if:chap_time_left>15]
+            -- and bareword "is data available?" tests). Uses statistics
+            -- avg_time directly to keep this a pure numeric, vs the token
+            -- form which renders a formatted duration string. Falls back to
+            -- whole-book time-left when chapter pages-left isn't available.
+            if state.chap_pages_left and ui.statistics and ui.statistics.avg_time
+                and ui.statistics.avg_time > 0 then
+                state.chap_time_left = math.floor(state.chap_pages_left * ui.statistics.avg_time / 60)
+            end
         end
 
         -- Chapter number / total count — match %chap_num / %chap_count tokens.
+        -- Always assign (including 0) so [if:chap_count=0] works for chapterless
+        -- books and [if:chap_count] reads as the natural "has chapters?" test
+        -- (the truthy check excludes 0).
         local titles = Tokens.getChapterTitlesByDepth(ui, pageno)
-        if titles.chapter_num  > 0 then state.chap_num   = titles.chapter_num  end
-        if titles.chapter_count > 0 then state.chap_count = titles.chapter_count end
+        state.chap_num   = titles.chapter_num
+        state.chap_count = titles.chapter_count
 
         -- Odd/even page
         state.page = (pageno % 2 == 1) and "odd" or "even"
     end
 
-    -- Document format
+    -- Document format and filename (extension stripped, matches %filename token)
     local doc = ui.document
     if doc and doc.file then
         state.format = (doc.file:match("%.([^.]+)$") or ""):upper()
+        local name = doc.file:match("([^/]+)$") or ""
+        state.filename = (name:gsub("%.[^.]+$", ""))
     end
 
     -- Book metadata (mirrors %T / %A / %S derivation in Tokens.expand)
@@ -540,13 +609,25 @@ function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, pai
         local ok, props = pcall(doc.getProps, doc)
         if not ok then props = {} end
         state.title  = doc_props.display_title or props.title   or ""
-        state.author = doc_props.authors       or props.authors or ""
-        local series = doc_props.series        or props.series  or ""
+        local authors_raw = doc_props.authors  or props.authors or ""
+        local authors_list = splitAuthors(authors_raw)
+        state.author   = authors_list[1] or ""
+        state.author_1 = authors_list[1] or ""
+        state.author_2 = authors_list[2] or ""
+        state.author_3 = authors_list[3] or ""
+        state.author_4 = authors_list[4] or ""
+        state.author_5 = authors_list[5] or ""
+        state.authors  = #authors_list
+        local series_name = doc_props.series        or props.series  or ""
         local series_index = doc_props.series_index or props.series_index
+        state.series_name = series_name
+        state.series_num  = series_index and tostring(series_index) or ""
+        local series = series_name
         if series ~= "" and series_index then
             series = series .. " #" .. series_index
         end
         state.series = series
+        state.lang = doc_props.language or props.language or ""
     end
 
     -- Chapter titles (reuses the helper already called for state.chap_num/chap_count)
@@ -568,6 +649,7 @@ function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, pai
 
     -- Session
     state.session = session_elapsed and math.floor(session_elapsed / 60) or 0
+    state.session_time = state.session  -- alias matching the %session_time token name
     state.session_pages = math.max(0, session_pages_read or 0)
 
     -- Reading speed (pages/hr)
@@ -581,6 +663,23 @@ function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, pai
     end
     state.speed = state.speed or 0
 
+    -- Total book reading time (minutes), from statistics plugin
+    if ui.statistics and ui.statistics.book_read_time and ui.statistics.book_read_time > 0 then
+        state.book_read_time = math.floor(ui.statistics.book_read_time / 60)
+    end
+
+    -- Annotation counts
+    if ui.annotation then
+        local h, n = ui.annotation:getNumberOfHighlightsAndNotes()
+        state.highlights = h or 0
+        state.notes = n or 0
+        local bm = 0
+        for _, item in ipairs(ui.annotation.annotations or {}) do
+            if not item.drawer then bm = bm + 1 end
+        end
+        state.bookmarks = bm
+    end
+
     if paint_ctx then
         paint_ctx._condition_state = state
     end
@@ -591,8 +690,8 @@ end
 -- Walks each opener's predicate via tokeniseExpression, rewrites the KEY
 -- portion of each atom (the leading [%w_]+ run before any operator), leaves
 -- literal values untouched but rewrites any @ref RHS via the same alias map.
--- Handles =, !=, <, > operators; Boolean operators (and/or/not/parens) pass
--- through unchanged.
+-- Handles =, !=, <, >, <=, >= operators; Boolean operators (and/or/not/parens)
+-- pass through unchanged.
 local function rewriteConditionalKeys(s)
     return (s:gsub("%[if:([^%]]-)%]", function(pred)
         local toks = tokeniseExpression(pred)
@@ -600,11 +699,12 @@ local function rewriteConditionalKeys(s)
         for _i, tok in ipairs(toks) do
             if tok.kind == "atom" then
                 -- atom = "key", "key=value", "key!=value", "key<value",
-                -- "key>value". Try != first (two-char), then single-char ops.
-                local key, op, rest = tok.value:match("^([%w_]+)(!=)(.*)$")
-                if not key then
-                    key, op, rest = tok.value:match("^([%w_]+)([=<>])(.*)$")
-                end
+                -- "key>value", "key<=value", "key>=value". Try two-char
+                -- operators first so the longer match wins.
+                local key, op, rest = tok.value:match("^([%w_]+)(>=)(.*)$")
+                if not key then key, op, rest = tok.value:match("^([%w_]+)(<=)(.*)$") end
+                if not key then key, op, rest = tok.value:match("^([%w_]+)(!=)(.*)$") end
+                if not key then key, op, rest = tok.value:match("^([%w_]+)([=<>])(.*)$") end
                 if key and op then
                     -- Rewrite @key references on the RHS too.
                     if rest:sub(1, 1) == "@" then
@@ -639,6 +739,36 @@ function Tokens.canonicaliseLegacy(format_str)
     local s = rewriteLegacyTokens(format_str)
     s = rewriteConditionalKeys(s)
     return s
+end
+
+--- Walk the footer's additional_footer_content list and join non-empty
+-- callback returns with the footer's own separator. If `filter` is set,
+-- only callbacks whose source file lives under `<filter>.koplugin/`
+-- contribute. Owner is identified via debug.getinfo on the closure's
+-- source path — KOReader plugins all live in `<name>.koplugin/`, so the
+-- directory basename is a stable public identifier.
+local function gatherPluginContent(ui, filter)
+    local footer = ui and ui.view and ui.view.footer
+    local funcs = footer and footer.additional_footer_content
+    if not funcs or #funcs == 0 then return "" end
+    local parts = {}
+    for _, fn in ipairs(funcs) do
+        local include = true
+        if filter and filter ~= "" then
+            local info = debug.getinfo(fn, "S")
+            local source = info and info.source or ""
+            local owner = source:match("/([^/]+)%.koplugin/")
+            include = (owner == filter)
+        end
+        if include then
+            local val = fn()
+            if val and val ~= "" then
+                parts[#parts + 1] = val
+            end
+        end
+    end
+    if #parts == 0 then return "" end
+    return table.concat(parts, footer:genSeparator())
 end
 
 function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, preview_mode, tick_width_multiplier, symbol_color, paint_ctx, opts)
@@ -689,6 +819,11 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     local token_limits = {}  -- { ["%author"] = { [1] = 200 }, ... }
     local bar_limit_w = nil
     local bar_limit_h = nil
+    -- Per-occurrence filter list for %plugin_content{<plugin>}. Each braced
+    -- occurrence rewrites to a synthetic ident (%__pcfilterN) so multiple
+    -- filters in one format string each get their own resolved value, and
+    -- the existing bareword auto-hide path applies unchanged.
+    local plugin_content_filters = {}
 
     format_str = format_str:gsub("%%([%a_][%w_]*)(%b{})", function(name, brace)
         local content = brace:sub(2, -2)  -- strip { and }
@@ -704,6 +839,12 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
                 if px and px > 0 then bar_limit_h = px end
             end
             return "%bar"
+        end
+        if name == "plugin_content" then
+            -- Stash filter, rewrite to synthetic ident so the bareword
+            -- expander handles it (auto-hide via the standard path).
+            plugin_content_filters[#plugin_content_filters + 1] = content
+            return "%__pcfilter" .. #plugin_content_filters
         end
         if name == "datetime" then
             -- Strftime escape hatch. Respect device locale (see getDateLocale).
@@ -756,6 +897,7 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
             bookmarks = "[bookmarks]", annotations = "[annotations]",
             speed = "[pg/hr]", book_read_time = "[total]",
             batt = "[batt]", batt_icon = "[batt]", wifi = "[wifi]",
+            plugin_content = "[plugins]",
             invert = "[invert]",
             light = "[light]", warmth = "[warmth]",
             mem = "[mem]", ram = "[rss]",
@@ -780,6 +922,11 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
             local formatted = os.date(content) or ""
             if saved_locale then os.setlocale(saved_locale, "time") end
             return formatted
+        end)
+        -- %plugin_content{<plugin>} preview label, before generic {N}
+        r = r:gsub("%%plugin_content(%b{})", function(brace)
+            local filter = brace:sub(2, -2)
+            return "[plugins:" .. filter .. "]"
         end)
         -- Depth-specific chapter-title before bareword tokens
         r = r:gsub("%%chap_title_(%d){(%d+)}", function(depth, n)
@@ -907,16 +1054,31 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
                 end
             end
         end
-        -- Stable page counts for %g (done), %G (total), %l (left)
+        -- Stable page counts for %chap_read / %chap_pages / %chap_pages_left.
+        -- Match stock readerfooter's "treat whole book as one chapter" fallback
+        -- when the TOC API returns nil (chapterless books, last chapter of any
+        -- book): %chap_read falls back to current page, %chap_pages to total
+        -- pages, %chap_pages_left to whole-book pages-left. See
+        -- ReaderFooter:getChapterProgress and the pages_left footer item.
         local done = ui.toc:getChapterPagesDone(pageno)
         local total = ui.toc:getChapterPageCount(pageno)
         if done and total and total > 0 then
             chapter_pages_done = math.max(0, done + 1)
             chapter_total_pages = total
+        elseif page_idx and page_count and page_count > 0 then
+            chapter_pages_done = page_idx
+            chapter_total_pages = page_count
         end
         local left = ui.toc:getChapterPagesLeft(pageno)
         if left then
             chapter_pages_left = math.max(0, left + pages_left_offset)
+        elseif pages_left_book ~= "" then
+            chapter_pages_left = pages_left_book
+        end
+        -- chap_pct fallback: when the chapter API didn't yield a value,
+        -- use book percent (matches stock's getChapterProgress get_percentage path).
+        if chapter_pct == "" and percent ~= "" then
+            chapter_pct = percent
         end
         local titles = Tokens.getChapterTitlesByDepth(ui, pageno)
         if titles.chapter_title ~= "" then chapter_title = titles.chapter_title end
@@ -983,12 +1145,17 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     -- Session pages read
     local session_pages = math.max(0, session_pages_read or 0)
 
-    -- Time left in chapter / document (via statistics plugin)
+    -- Time left in chapter / document (via statistics plugin).
+    -- chap_time_left falls back to whole-book pages-left when no chapter info,
+    -- matching stock readerfooter's chapter_time_to_read fallback.
     local time_left_chapter = ""
     local time_left_doc = ""
     if needs("chap_time_left", "book_time_left") and pageno and ui.statistics and ui.statistics.getTimeForPages then
         if needs("chap_time_left") then
             local ch_left = ui.toc and ui.toc:getChapterPagesLeft(pageno, true)
+            if not ch_left then
+                ch_left = doc:getTotalPagesLeft(pageno)
+            end
             if ch_left then
                 ch_left = math.max(0, ch_left)
                 if ch_left > 0 then
@@ -1055,16 +1222,23 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     -- Document metadata
     local title = ""
     local authors = ""
+    local first_author = ""
+    local authors_list = {}
     local series = ""
     local series_name = ""
     local series_num = ""
     local book_language = ""
-    if needs("title", "author", "series", "series_name", "series_num", "lang") then
+    if needs("title", "author", "authors",
+             "author_1", "author_2", "author_3", "author_4", "author_5",
+             "series", "series_name", "series_num", "lang") then
         local doc_props = ui.doc_props or {}
         local ok, props = pcall(doc.getProps, doc)
         if not ok then props = {} end
         title = doc_props.display_title or props.title or ""
-        authors = doc_props.authors or props.authors or ""
+        local authors_raw = doc_props.authors or props.authors or ""
+        authors_list = splitAuthors(authors_raw)
+        first_author = authors_list[1] or ""
+        authors = table.concat(authors_list, ", ")
         series_name = doc_props.series or props.series or ""
         local series_index = doc_props.series_index or props.series_index
         series_num = series_index and tostring(series_index) or ""
@@ -1144,18 +1318,30 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
         end
     end
 
-    -- Wi-Fi
+    -- Wi-Fi: always renders. The bundled symbol font ships only two wifi
+    -- glyphs (U+ECA8 wifi, U+ECA9 wifi-off), so "off" and "enabled-but-no-link"
+    -- share the wifi-off glyph — both communicate "no working connection".
+    -- Use [if:wifi=on]%wifi[/if] to hide on disabled, or [if:connected=yes] for
+    -- connected-only.
     local wifi_symbol = ""
     if needs("wifi") then
         local NetworkMgr = require("ui/network/manager")
-        if NetworkMgr:isWifiOn() then
-            if NetworkMgr:isConnected() then
-                wifi_symbol = "\xEE\xB2\xA8" -- U+ECA8 wifi connected
-            else
-                wifi_symbol = "\xEE\xB2\xA9" -- U+ECA9 wifi enabled, not connected
-            end
-        -- else: wifi disabled, leave as "" (hidden)
+        if NetworkMgr:isWifiOn() and NetworkMgr:isConnected() then
+            wifi_symbol = "\xEE\xB2\xA8" -- U+ECA8 wifi connected
+        else
+            wifi_symbol = "\xEE\xB2\xA9" -- U+ECA9 wifi-off (off or no link)
         end
+    end
+
+    -- Aggregate output from plugins that register with KOReader's footer
+    -- extension API (ReaderFooter:addAdditionalFooterContent at
+    -- readerfooter.lua:2076). Examples: kobo.koplugin (Bluetooth icon),
+    -- readtimer.koplugin (countdown). Bare %plugin_content joins all
+    -- registered callbacks; %plugin_content{<plugin>} restricts to one
+    -- plugin's contribution (filter pre-stashed by the brace handler).
+    local plugin_content = ""
+    if needs("plugin_content") then
+        plugin_content = gatherPluginContent(ui, nil)
     end
 
     -- Frontlight
@@ -1279,7 +1465,13 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
         session_pages = tostring(session_pages),
         -- Metadata
         title       = tostring(title),
-        author      = tostring(authors),
+        author      = first_author,
+        authors     = authors,
+        author_1    = authors_list[1] or "",
+        author_2    = authors_list[2] or "",
+        author_3    = authors_list[3] or "",
+        author_4    = authors_list[4] or "",
+        author_5    = authors_list[5] or "",
         series      = tostring(series),
         series_name = tostring(series_name or ""),   -- populated in Task 10
         series_num  = tostring(series_num or ""),    -- populated in Task 10
@@ -1298,6 +1490,7 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
         batt      = tostring(batt_lvl),
         batt_icon = tostring(batt_symbol),
         wifi      = wifi_symbol,
+        plugin_content = plugin_content,
         light     = fl_intensity,
         warmth    = fl_warmth,
         mem       = tostring(mem_usage),
@@ -1305,6 +1498,12 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
         disk      = disk_avail,
         invert    = page_turn_symbol,
     }
+    -- Populate synthetic %__pcfilterN idents stashed by the brace handler.
+    -- Each one resolves to gatherPluginContent for that filter; empty
+    -- results auto-hide via the standard bareword path.
+    for i = 1, #plugin_content_filters do
+        replace["__pcfilter" .. i] = gatherPluginContent(ui, plugin_content_filters[i])
+    end
     -- (symbol_color wrapping happens after token expansion — see below)
     -- Track whether all tokens in the string resolved to empty or "0"
     local has_token = false

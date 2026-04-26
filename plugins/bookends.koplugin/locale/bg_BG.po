@@ -176,8 +176,20 @@ msgstr "Стрелки"
 msgid "Arrows left-right"
 msgstr "Стрелки наляво-надясно"
 
-msgid "Author(s)"
-msgstr "Автор(и)"
+msgid "All authors"
+msgstr "Всички автори"
+
+msgid "Author with et al. for multi-author"
+msgstr "Автор с et al. за много автори"
+
+msgid "First author"
+msgstr "Първи автор"
+
+msgid "If book has 2+ authors"
+msgstr "Ако книгата има 2+ автори"
+
+msgid "Second author (empty if none)"
+msgstr "Втори автор (празно, ако няма)"
 
 msgid "Bar"
 msgstr "Лента"
@@ -302,7 +314,7 @@ msgid ""
 "on the My presets tab."
 msgstr ""
 "Разглеждайте споделените от другите предварителни настройки, преглеждайте ги "
-"на собствената си лента за състоянието и инсталирайте тези, които харесвате. "
+"на собствената си лента на състоянието и инсталирайте тези, които харесвате. "
 "След инсталиране можете да редактирате всяка настройка свободно в раздела "
 "„Моите настройки“."
 
@@ -493,7 +505,7 @@ msgid "Diamond suit"
 msgstr "Каро"
 
 msgid "Disable stock status bar"
-msgstr "Изключване на вградената лента за състоянието"
+msgstr "Изключване на вградената лента на състоянието"
 
 msgid "Discover more presets"
 msgstr "Открийте още настройки"
@@ -503,6 +515,9 @@ msgstr "Затваряне"
 
 msgid "Division slash"
 msgstr "Наклонена черта за деление"
+
+msgid "Do nothing"
+msgstr "Без действие"
 
 msgid "Document format (EPUB, PDF, etc.)"
 msgstr "Формат на документа (EPUB, PDF и др.)"
@@ -534,8 +549,8 @@ msgstr "Двойни стрелки надясно"
 msgid "Double dagger"
 msgstr "Двоен кинжал"
 
-msgid "Double slash"
-msgstr "Двойна наклонена черта"
+msgid "Double fraction slash"
+msgstr "Двойна дробна наклонена черта"
 
 msgid "Download failed."
 msgstr "Изтеглянето е неуспешно."
@@ -701,7 +716,7 @@ msgid ""
 "and can reduce e-ink flicker on some devices. All status bar features are "
 "available as Bookends tokens."
 msgstr ""
-"Скрива вградената лента за състоянието на KOReader. Това опростява процеса "
+"Скрива вградената лента на състоянието на KOReader. Това опростява процеса "
 "на изобразяване и може да намали трептенето на е-мастилото на някои "
 "устройства. Всички функции на лентата за състоянието са достъпни като токени "
 "на Bookends."
@@ -979,7 +994,7 @@ msgid ""
 msgstr ""
 "Отваря диалога за прелистване при продължено натискане на лента за напредъка "
 "на цяла ширина. Замества функцията за прелистване с продължено натискане на "
-"вградената лента за състоянието."
+"вградената лента на състоянието."
 
 msgid "Page %1 of %2"
 msgstr "Страница %1 от %2"
@@ -1013,6 +1028,9 @@ msgstr "Избор на цвят"
 
 msgid "Pilcrow / paragraph"
 msgstr "Пилкроу / абзац"
+
+msgid "Plugin content (dynamic)"
+msgstr "Съдържание от плъгин (динамично)"
 
 msgid "Pointing down"
 msgstr "Сочещ надолу"
@@ -1310,7 +1328,7 @@ msgid ""
 "default font."
 msgstr ""
 "Тази настройка използва конкретни шрифтове, които може да не съществуват на "
-"други устройства. Тези замени ще бъдат премахнати от вашата заявка, така че "
+"други устройства. Тези презаписвания ще бъдат премахнати от вашата заявка, така че "
 "другите потребители да виждат собствения си шрифт по подразбиране."
 
 msgid "Tick color"
@@ -1486,8 +1504,8 @@ msgstr "Wi-Fi (променя се според статуса)"
 msgid "Wi-Fi icon (dynamic)"
 msgstr "Икона на Wi-Fi (динамична)"
 
-msgid "Wi-Fi icon when connected"
-msgstr "Икона на Wi-Fi, когато е свързан"
+msgid "Wi-Fi icon only when Wi-Fi enabled"
+msgstr "Икона на Wi-Fi само когато Wi-Fi е включен"
 
 msgid "Wi-Fi is not enabled."
 msgstr "Wi-Fi не е включен."
@@ -1563,6 +1581,46 @@ msgstr "горе"
 
 msgid "transparent"
 msgstr "прозрачен"
+
+msgid "Advanced"
+msgstr "Разширени"
+
+msgid "Branch name (leave empty for stable)"
+msgstr "Име на клон (оставете празно за стабилна версия)"
+
+msgid "Check for updates"
+msgstr "Проверка за актуализации"
+
+msgid "Could not fetch latest release."
+msgstr "Последната версия не можа да бъде изтеглена."
+
+msgid "Could not install branch:"
+msgstr "Клонът не можа да бъде инсталиран:"
+
+msgid "Development branch"
+msgstr "Клон за разработка"
+
+msgid "Downloading latest release..."
+msgstr "Изтегляне на последната версия..."
+
+msgid "Install branch"
+msgstr "Инсталиране на клон"
+
+msgid "Installed: v"
+msgstr "Инсталиран: v"
+
+msgid "Latest release has no downloadable zip."
+msgstr "Последната версия няма zip файл за изтегляне."
+
+msgid "Reset to latest stable release"
+msgstr "Нулиране до последната стабилна версия"
+
+msgid ""
+"This will clear the development branch setting and install the latest stable "
+"release of Bookends, then restart KOReader. Continue?"
+msgstr ""
+"Това ще изчисти настройките на клона за разработка и ще инсталира последната "
+"стабилна версия на Bookends, след което ще рестартира KOReader. Продължаване?"
 
 #~ msgid "+ New preset"
 #~ msgstr "+ Нова предварителна настройка"

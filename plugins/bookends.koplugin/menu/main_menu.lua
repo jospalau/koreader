@@ -297,6 +297,14 @@ function Bookends:buildBookendsSettingsMenu()
                 end
                 return {
                     {
+                        text = _("Do nothing"),
+                        checked_func = function()
+                            return not self.settings:readSetting("bottom_center_tap_action")
+                        end,
+                        callback = function() setTapAction(nil) end,
+                        radio = true,
+                    },
+                    {
                         text = _("Toggle bookends"),
                         checked_func = function()
                             return self.settings:readSetting("bottom_center_tap_action") == "toggle"
@@ -382,15 +390,72 @@ function Bookends:buildBookendsSettingsMenu()
             text_func = function()
                 local current = Updater.getInstalledVersion()
                 local available = Updater.getAvailableUpdate()
-                if available then
-                    return _("Update available") .. ": v" .. current .. " \xE2\x86\x92 v" .. available
+                local source = self.last_install_source or "release"
+                local source_suffix = ""
+                if source ~= "release" then
+                    local branch = source:match("^branch:(.+)$") or source
+                    source_suffix = " (branch: " .. branch .. ")"
                 end
-                return _("Installed version") .. ": v" .. current
+                if available then
+                    return _("Update available") .. ": v" .. current .. source_suffix .. " \xE2\x86\x92 v" .. available
+                end
+                return _("Installed version") .. ": v" .. current .. source_suffix
             end,
             keep_menu_open = true,
             callback = function()
                 self:checkForUpdates()
             end,
+        },
+        {
+            text = _("Advanced"),
+            sub_item_table = {
+                {
+                    text_func = function()
+                        local b = self.dev_branch or ""
+                        if b == "" then
+                            return _("Development branch")
+                        end
+                        return _("Development branch") .. ": " .. b
+                    end,
+                    keep_menu_open = true,
+                    callback = function(touchmenu_instance)
+                        self:editDevBranch(touchmenu_instance)
+                    end,
+                },
+                {
+                    text_func = function()
+                        local b = self.dev_branch or ""
+                        if b == "" then
+                            return _("Check for updates")
+                        end
+                        return _("Install branch") .. ": " .. b
+                    end,
+                    keep_menu_open = true,
+                    callback = function()
+                        self:checkForUpdates()
+                    end,
+                },
+                {
+                    text = _("Reset to latest stable release"),
+                    keep_menu_open = true,
+                    callback = function()
+                        self:resetToStableRelease()
+                    end,
+                },
+                {
+                    text_func = function()
+                        local current = Updater.getInstalledVersion()
+                        local source = self.last_install_source or "release"
+                        if source == "release" then
+                            return _("Installed: v") .. current .. " (release)"
+                        end
+                        local branch = source:match("^branch:(.+)$") or source
+                        return _("Installed: v") .. current .. " (branch: " .. branch .. ")"
+                    end,
+                    enabled_func = function() return false end,
+                    keep_menu_open = true,
+                },
+            },
         },
     }
 end

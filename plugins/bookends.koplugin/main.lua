@@ -451,11 +451,11 @@ function Bookends:setupTouchZones()
                 ratio_w = DTAP_ZONE_MINIBAR.w, ratio_h = DTAP_ZONE_MINIBAR.h,
             },
             handler = function(ges)
-                local action = self.settings:readSetting("bottom_center_tap_action")
                 -- If any of the actions is selected and the plugin is not enabled
                 -- will prevent the tap event in the footer from being triggered
                 -- return false to signal is not handled
                 if not self.enabled then return false end
+                local action = self.settings:readSetting("bottom_center_tap_action")
                 if action == "toggle" then
                     self:onToggleBookends()
                     return true
@@ -611,6 +611,8 @@ function Bookends:loadSettings()
 
     self.skim_on_hold = self.settings:readSetting("skim_on_hold", true)
     self.check_updates = self.settings:readSetting("check_updates", false)
+    self.dev_branch = self.settings:readSetting("dev_branch", "")
+    self.last_install_source = self.settings:readSetting("last_install_source", "release")
     self.stock_bar_disabled = self.settings:readSetting("stock_bar_disabled", false)
     -- Mirror to the Tokens module so %L / %l can read without a settings
     -- handle. main.lua owns the settings; Tokens just consults the flag.
@@ -817,22 +819,38 @@ function Bookends:isPositionActive(key)
     return self.enabled and #self.positions[key].lines > 0 and not self.positions[key].disabled
 end
 
-function Bookends:markDirty(refresh_mode)
+--- Returns true if any active line's format string references one of the
+--- given v5 bareword tokens (e.g. {"light", "warmth"}). Mirrors the
+--- non-ident word-boundary rule used by Tokens.expand's `needs()` helper.
+function Bookends:anyActiveLineUses(token_names)
+    if not self.enabled then return false end
+    for _, pos in ipairs(self.POSITIONS) do
+        if self:isPositionActive(pos.key) then
+            for _, line in ipairs(self.positions[pos.key].lines) do
+                for _, name in ipairs(token_names) do
+                    if line:find("%%" .. name .. "[^%w_]") or line:match("%%" .. name .. "$") then
+                        return true
+                    end
+                end
+            end
+        end
+    end
+    return false
+end
+
+-- Shared dirty-flag bookkeeping + nextTick debounce. Callers supply the
+-- dispatcher that decides which setDirty calls to actually issue.
+function Bookends:_scheduleRepaint(dispatcher)
     self.dirty = true
     self._tick_cache = nil
     if not self._error_disabled then
         self.enabled = self.settings:isTrue("enabled")
     end
-    -- Debounce: coalesce multiple markDirty calls within the same tick.
-    -- Skip if a KOReader paint cycle already consumed the dirty flag.
     if not self._repaint_scheduled then
         self._repaint_scheduled = true
-        local mode = refresh_mode or "ui"
         UIManager:nextTick(function()
             self._repaint_scheduled = false
-            if self.dirty then
-                UIManager:setDirty(self.ui, mode)
-            end
+            if self.dirty then dispatcher() end
         end)
     end
 
@@ -849,6 +867,37 @@ function Bookends:markDirty(refresh_mode)
         pcall(self.autosaveActivePreset, self)
     end
     UIManager:scheduleIn(2, self._pending_autosave)
+end
+
+function Bookends:markDirty(refresh_mode)
+    local mode = refresh_mode or "ui"
+    self:_scheduleRepaint(function()
+        UIManager:setDirty(self.ui, mode)
+    end)
+end
+
+-- Targeted refresh of just the overlay regions populated by the last paint.
+-- Used by value-tick repaints (heartbeat timer, gated system events) where
+-- the overlay's geometry hasn't changed — only the rendered content has.
+-- Two benefits:
+--   1. The setDirty calls carry a region, so user patches that hook _refresh
+--      and look for "ui" + nil-region (e.g. 2-dim-during-refresh.lua) won't
+--      treat our refresh as a flashing one and won't dim the frontlight.
+--   2. Smaller dirty area = smaller nightmode flash and less battery.
+-- Falls back to the full markDirty path until the first paint has populated
+-- the region cache (chicken-and-egg: we don't know the dimen pre-paint).
+function Bookends:markOverlayDirty()
+    if not self._top_paint_rect and not self._bottom_paint_rect then
+        return self:markDirty()
+    end
+    self:_scheduleRepaint(function()
+        if self._top_paint_rect then
+            UIManager:setDirty(self.ui, "ui", self._top_paint_rect)
+        end
+        if self._bottom_paint_rect then
+            UIManager:setDirty(self.ui, "ui", self._bottom_paint_rect)
+        end
+    end)
 end
 
 --- Compute chapter tick fractions for book progress bars (cached per dirty cycle).
@@ -965,12 +1014,41 @@ function Bookends:delayedRepaint()
         self:markDirty()
     end)
 end
-Bookends.onFrontlightStateChanged = Bookends.delayedRepaint
-Bookends.onCharging               = Bookends.delayedRepaint
-Bookends.onNotCharging            = Bookends.delayedRepaint
-Bookends.onNetworkConnected       = Bookends.delayedRepaint
-Bookends.onNetworkDisconnected    = Bookends.delayedRepaint
-Bookends.onToggleReadingOrder     = Bookends.delayedRepaint
+
+-- Token-gated, optionally debounced repaint. Skips entirely when no active
+-- line uses any of the given tokens — both an efficiency win and, for
+-- frontlight events, the cure for a feedback loop with user patches like
+-- 2-dim-during-refresh.lua: that patch calls setIntensity() inside its
+-- _refresh hook, which broadcasts FrontlightStateChanged, which used to
+-- schedule another "ui" refresh here, which the patch would then dim again.
+-- The debounce coalesces the patch's dim/restore pair so any repaint we
+-- do schedule lands outside the patch's 0.17 s `restoring` window.
+function Bookends:gatedRepaint(token_names, debounce)
+    if not self:anyActiveLineUses(token_names) then return end
+    if debounce and debounce > 0 then
+        if self._gated_repaint_pending then
+            UIManager:unschedule(self._gated_repaint_pending)
+        end
+        self._gated_repaint_pending = function()
+            self._gated_repaint_pending = nil
+            self:markOverlayDirty()
+        end
+        UIManager:scheduleIn(debounce, self._gated_repaint_pending)
+    else
+        UIManager:nextTick(function() self:markOverlayDirty() end)
+    end
+end
+
+local FRONTLIGHT_TOKENS = { "light", "warmth" }
+local BATTERY_TOKENS    = { "batt", "batt_icon" }
+local WIFI_TOKENS       = { "wifi" }
+
+function Bookends:onFrontlightStateChanged() self:gatedRepaint(FRONTLIGHT_TOKENS, 1.0) end
+function Bookends:onCharging()               self:gatedRepaint(BATTERY_TOKENS) end
+function Bookends:onNotCharging()            self:gatedRepaint(BATTERY_TOKENS) end
+function Bookends:onNetworkConnected()       self:gatedRepaint(WIFI_TOKENS) end
+function Bookends:onNetworkDisconnected()    self:gatedRepaint(WIFI_TOKENS) end
+Bookends.onToggleReadingOrder = Bookends.delayedRepaint
 function Bookends:onAnnotationsModified()
     self:markDirty()
 end
@@ -1593,6 +1671,39 @@ function Bookends:_paintToInner(bb, x, y)
         self.position_cache[key] = text
     end
 
+    -- Cache top/bottom-row paint regions for markOverlayDirty. Vertical bars
+    -- (full-height) are folded into both rows so any value-tick refresh still
+    -- covers them. Each Geom is a union of rects whose centre falls in that
+    -- half of the screen.
+    local function unionRect(target, r)
+        if not target then return Geom:new{ x = r.x, y = r.y, w = r.w, h = r.h } end
+        local x1 = math.min(target.x, r.x)
+        local y1 = math.min(target.y, r.y)
+        local x2 = math.max(target.x + target.w, r.x + r.w)
+        local y2 = math.max(target.y + target.h, r.y + r.h)
+        target.x, target.y, target.w, target.h = x1, y1, x2 - x1, y2 - y1
+        return target
+    end
+    local top_rect, bot_rect
+    for key, entry in pairs(self.widget_cache) do
+        local size = entry.widget.getSize and entry.widget:getSize() or { w = 0, h = 0 }
+        local rect = { x = x + entry.x, y = y + entry.y, w = size.w, h = size.h }
+        if key:sub(1, 1) == "t" then top_rect = unionRect(top_rect, rect)
+        else                          bot_rect = unionRect(bot_rect, rect) end
+    end
+    for _, r in ipairs(self._hold_rects) do
+        if r.h > screen_h * 0.5 then
+            top_rect = unionRect(top_rect, r)
+            bot_rect = unionRect(bot_rect, r)
+        elseif (r.y + r.h * 0.5) < screen_h * 0.5 then
+            top_rect = unionRect(top_rect, r)
+        else
+            bot_rect = unionRect(bot_rect, r)
+        end
+    end
+    self._top_paint_rect = top_rect
+    self._bottom_paint_rect = bot_rect
+
     -- Dogear and flipping-icon halo both paint from toast overlays
     -- registered on UIManager, above the ReaderView paint pipeline.
     -- An in-paintTo repaint here would be lost if this function errored
@@ -1609,6 +1720,8 @@ function Bookends:onCloseWidget()
         OverlayWidget.freeWidgets(self.widget_cache)
         self.widget_cache = nil
     end
+    self._top_paint_rect = nil
+    self._bottom_paint_rect = nil
     if self.settings then
         self.settings:flush()
     end
@@ -1623,12 +1736,26 @@ function Bookends:onFlushSettings()
     end
 end
 
+-- Tokens whose displayed value changes purely with wall-clock time (no event
+-- fires — they need the 60s heartbeat to stay current). Battery percent is
+-- here because charging/uncharging events handle the icon state change but
+-- the numeric % only drifts as time passes.
+local TIMER_TOKENS = {
+    "time", "time_12h", "time_24h",
+    "date", "date_long", "date_numeric", "weekday", "weekday_short",
+    "session_time", "book_time_left", "chap_time_left",
+    "speed", "book_read_time",
+    "batt", "batt_icon",
+}
+
 function Bookends:startRefreshTimer()
     if self.refresh_timer_active then return end
     self.refresh_timer_active = true
     self.refresh_timer_func = function()
         if not self.refresh_timer_active then return end
-        self:markDirty()
+        if self:anyActiveLineUses(TIMER_TOKENS) then
+            self:markOverlayDirty()
+        end
         UIManager:scheduleIn(60, self.refresh_timer_func)
     end
     UIManager:scheduleIn(60, self.refresh_timer_func)
@@ -2326,7 +2453,64 @@ end
 -- ─── Token picker ────────────────────────────────────────
 
 function Bookends:checkForUpdates()
-    Updater.check()
+    local settings = self.settings
+    local dev_branch = self.dev_branch or ""
+    if dev_branch ~= "" then
+        Updater.installBranch(dev_branch, function()
+            settings:saveSetting("last_install_source", "branch:" .. dev_branch)
+            settings:flush()
+        end)
+    else
+        Updater.check(function()
+            settings:saveSetting("last_install_source", "release")
+            settings:flush()
+        end)
+    end
+end
+
+function Bookends:editDevBranch(touchmenu_instance)
+    local InputDialogMod = require("ui/widget/inputdialog")
+    local UIManagerMod = require("ui/uimanager")
+    local dlg
+    dlg = InputDialogMod:new{
+        title = _("Development branch"),
+        input = self.dev_branch or "",
+        input_hint = _("Branch name (leave empty for stable)"),
+        buttons = {{
+            { text = _("Cancel"), id = "close",
+              callback = function() UIManagerMod:close(dlg) end },
+            { text = _("Save"), is_enter_default = true, callback = function()
+                local raw = dlg:getInputText() or ""
+                local trimmed = raw:gsub("^%s+", ""):gsub("%s+$", "")
+                self.dev_branch = trimmed
+                self.settings:saveSetting("dev_branch", trimmed)
+                self.settings:flush()
+                UIManagerMod:close(dlg)
+                if touchmenu_instance then touchmenu_instance:updateItems() end
+            end },
+        }},
+    }
+    UIManagerMod:show(dlg)
+    dlg:onShowKeyboard()
+end
+
+function Bookends:resetToStableRelease()
+    local ConfirmBoxMod = require("ui/widget/confirmbox")
+    local UIManagerMod = require("ui/uimanager")
+    UIManagerMod:show(ConfirmBoxMod:new{
+        text = _("This will clear the development branch setting and install the latest stable release of Bookends, then restart KOReader. Continue?"),
+        ok_text = _("Reset"),
+        ok_callback = function()
+            self.dev_branch = ""
+            self.settings:saveSetting("dev_branch", "")
+            self.settings:flush()
+            local settings = self.settings
+            Updater.installLatestStable(function()
+                settings:saveSetting("last_install_source", "release")
+                settings:flush()
+            end)
+        end,
+    })
 end
 
 function Bookends:backgroundUpdateCheck()

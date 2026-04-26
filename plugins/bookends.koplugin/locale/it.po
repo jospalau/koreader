@@ -172,8 +172,20 @@ msgstr "Frecce"
 msgid "Arrows left-right"
 msgstr "Frecce sinistra-destra"
 
-msgid "Author(s)"
-msgstr "Autore/i"
+msgid "All authors"
+msgstr "Tutti gli autori"
+
+msgid "Author with et al. for multi-author"
+msgstr "Autore con et al. per più autori"
+
+msgid "First author"
+msgstr "Primo autore"
+
+msgid "If book has 2+ authors"
+msgstr "Se il libro ha 2+ autori"
+
+msgid "Second author (empty if none)"
+msgstr "Secondo autore (vuoto se assente)"
 
 msgid "Bar"
 msgstr "Barra"
@@ -499,6 +511,9 @@ msgstr "Chiudi"
 msgid "Division slash"
 msgstr "Barra divisione"
 
+msgid "Do nothing"
+msgstr "Nessuna azione"
+
 msgid "Document format (EPUB, PDF, etc.)"
 msgstr "Formato documento (EPUB, PDF, ecc.)"
 
@@ -529,8 +544,8 @@ msgstr "Doppie frecce destra"
 msgid "Double dagger"
 msgstr "Doppia croce"
 
-msgid "Double slash"
-msgstr "Doppia barra"
+msgid "Double fraction slash"
+msgstr "Doppia barra frazionaria"
 
 msgid "Download failed."
 msgstr "Download fallito."
@@ -1007,6 +1022,9 @@ msgstr "Scegli un colore"
 msgid "Pilcrow / paragraph"
 msgstr "Pilcrow / paragrafo"
 
+msgid "Plugin content (dynamic)"
+msgstr "Contenuto plugin (dinamico)"
+
 msgid "Pointing down"
 msgstr "Rivolto verso il basso"
 
@@ -1480,8 +1498,8 @@ msgstr "Wi-Fi (dinamico)"
 msgid "Wi-Fi icon (dynamic)"
 msgstr "Icona Wi-Fi (dinamica)"
 
-msgid "Wi-Fi icon when connected"
-msgstr "Icona Wi-Fi quando connesso"
+msgid "Wi-Fi icon only when Wi-Fi enabled"
+msgstr "Icona Wi-Fi solo quando Wi-Fi attivo"
 
 msgid "Wi-Fi is not enabled."
 msgstr "Wi-Fi non attivo."
@@ -1558,6 +1576,47 @@ msgstr "alto"
 msgid "transparent"
 msgstr "trasparente"
 
+msgid "Advanced"
+msgstr "Avanzate"
+
+msgid "Branch name (leave empty for stable)"
+msgstr "Nome branch (lascia vuoto per lo stabile)"
+
+msgid "Check for updates"
+msgstr "Cerca aggiornamenti"
+
+msgid "Could not fetch latest release."
+msgstr "Impossibile recuperare l'ultima versione."
+
+msgid "Could not install branch:"
+msgstr "Impossibile installare il branch:"
+
+msgid "Development branch"
+msgstr "Branch di sviluppo"
+
+msgid "Downloading latest release..."
+msgstr "Download dell'ultima versione in corso..."
+
+msgid "Install branch"
+msgstr "Installa branch"
+
+msgid "Installed: v"
+msgstr "Installato: v"
+
+msgid "Latest release has no downloadable zip."
+msgstr "L'ultima versione non ha un file zip scaricabile."
+
+msgid "Reset to latest stable release"
+msgstr "Ripristina all'ultima versione stabile"
+
+msgid ""
+"This will clear the development branch setting and install the latest stable "
+"release of Bookends, then restart KOReader. Continue?"
+msgstr ""
+"Questa operazione rimuoverà l'impostazione del branch di sviluppo e "
+"installerà l'ultima versione stabile di Bookends, quindi riavvierà "
+"KOReader. Continuare?"
+
 #~ msgid "+ New preset"
 #~ msgstr "+ Nuovo preset"
 
@@ -1578,9 +1637,6 @@ msgstr "trasparente"
 
 #~ msgid "Built-in presets"
 #~ msgstr "Preset predefiniti"
-
-#~ msgid "Check for updates"
-#~ msgstr "Cerca aggiornamenti"
 
 #~ msgid "Classic alternating"
 #~ msgstr "Alternato classico"

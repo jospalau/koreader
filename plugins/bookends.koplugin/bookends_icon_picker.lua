@@ -9,8 +9,8 @@ local IconPicker = {}
 -- All icons are from KOReader's bundled Nerd Fonts symbols.ttf or basic Unicode
 IconPicker.CATALOG = {
     { _("Dynamic"), {
-        { "\xEE\x9E\x90", _("Battery (changes with level)"), "%B" },     -- U+E790
-        { "\xEE\xB2\xA8", _("Wi-Fi (changes with status)"), "%W" },      -- U+ECA8
+        { "\xEE\x9E\x90", _("Battery (changes with level)"), "%batt_icon" }, -- U+E790
+        { "\xEE\xB2\xA8", _("Wi-Fi (changes with status)"), "%wifi" },       -- U+ECA8
     }},
     { _("Device"), {
         { "\xEF\x83\xAB", _("Lightbulb") },             -- U+F0EB fa-lightbulb-o
@@ -123,6 +123,18 @@ IconPicker.CATALOG = {
         { "\xE2\x98\x9D", _("Pointing up") },           -- U+261D
         { "\xE2\x98\x9F", _("Pointing down") },         -- U+261F
     }},
+    { _("Progress blocks"), {
+        { "\xE2\x96\xB0", _("Slant block") },           -- U+25B0 BLACK PARALLELOGRAM
+        { "\xE2\x96\xB1", _("Slant block (empty)") },   -- U+25B1 WHITE PARALLELOGRAM
+        { "\xE2\x96\xAE", _("Vertical block") },        -- U+25AE BLACK VERTICAL RECTANGLE
+        { "\xE2\x96\xAF", _("Vertical block (empty)") },-- U+25AF WHITE VERTICAL RECTANGLE
+        { "\xE2\x96\xA0", _("Square (filled)") },       -- U+25A0 BLACK SQUARE
+        { "\xE2\x96\xA1", _("Square (empty)") },        -- U+25A1 WHITE SQUARE
+        { "\xE2\x96\x88", _("Block (full)") },          -- U+2588 FULL BLOCK
+        { "\xE2\x96\x93", _("Block (dark)") },          -- U+2593 DARK SHADE
+        { "\xE2\x96\x92", _("Block (medium)") },        -- U+2592 MEDIUM SHADE
+        { "\xE2\x96\x91", _("Block (light)") },         -- U+2591 LIGHT SHADE
+    }},
     { _("Separators"), {
         { "|",             _("Vertical bar") },          -- U+007C
         { "\xE2\x80\xA2", _("Bullet") },                -- U+2022
@@ -135,7 +147,7 @@ IconPicker.CATALOG = {
         { "/",             _("Slash") },                 -- U+002F
         { "\xE2\x88\x95", _("Division slash") },        -- U+2215
         { "\xE2\x81\x84", _("Fraction slash") },        -- U+2044
-        { "//",            _("Double slash") },
+        { "\xE2\x81\x84\xE2\x81\x84", _("Double fraction slash") }, -- U+2044 ×2 (matches stock chapter progress)
         { "~",             _("Tilde") },                 -- U+007E
         { "\xE2\x80\xA3", _("Triangular bullet") },     -- U+2023
     }},

@@ -11,7 +11,9 @@ return function(Bookends)
 Bookends.TOKEN_CATALOG = {
     { _("Metadata"), {
         { "%title", _("Document title") },
-        { "%author", _("Author(s)") },
+        { "%author", _("First author") },
+        { "%authors", _("All authors") },
+        { "%author_2", _("Second author (empty if none)") },
         { "%series", _("Series with index (combined)") },
         { "%series_name", _("Series name only") },
         { "%series_num", _("Series number only") },
@@ -68,6 +70,7 @@ Bookends.TOKEN_CATALOG = {
         { "%batt", _("Battery level") },
         { "%batt_icon", _("Battery icon (dynamic)") },
         { "%wifi", _("Wi-Fi icon (dynamic)") },
+        { "%plugin_content", _("Plugin content (dynamic)") },
         { "%invert", _("Page-turn direction \xE2\x87\x84 (shows when inverted)") },
         { "%light", _("Frontlight brightness") },
         { "%warmth", _("Frontlight warmth") },
@@ -108,9 +111,11 @@ Bookends.CONDITIONAL_CATALOG = {
         { "[if:series]...[/if]", _("If book in series") },
         { "[if:chap_title]...[/if]", _("If chapter has title") },
         { "[if:chap_title_2]...[/if]", _("Chapter title at depth 1/2/3") },
+        { "[if:authors>1]...[/if]", _("If book has 2+ authors") },
     }},
     { _("Examples"), {
-        { "[if:wifi=on]%wifi[/if]", _("Wi-Fi icon when connected") },
+        { "[if:authors>1]%author, et al.[else]%author[/if]", _("Author with et al. for multi-author") },
+        { "[if:wifi=on]%wifi[/if]", _("Wi-Fi icon only when Wi-Fi enabled") },
         { "[if:batt<20]LOW %batt[/if]", _("Low-battery warning") },
         { "[if:charging=yes]\xE2\x9A\xA1[/if] %batt", _("Bolt when charging") },
         { "[if:invert=yes]\xE2\x87\x84[/if]", _("Arrow when page-turn flipped") },

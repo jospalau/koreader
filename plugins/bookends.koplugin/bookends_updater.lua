@@ -38,6 +38,18 @@ local function isNewer(v1, v2)
     return false
 end
 
+--- Compose the GitHub branch-archive URL for a given branch name.
+-- Branch path is URL-encoded except for alnum, dash, underscore, dot, tilde
+-- and forward slash (so feature/foo keeps its slash).
+function Updater.composeBranchUrl(branch)
+    local encoded = branch:gsub("[^%w%-_/.~]", function(c)
+        return string.format("%%%02X", c:byte())
+    end)
+    return string.format(
+        "https://github.com/AndyHazz/bookends.koplugin/archive/refs/heads/%s.zip",
+        encoded)
+end
+
 --- Try LuaSocket first, fall back to curl for platforms where SSL crashes.
 local function httpGetJSON(url, user_agent)
     local json = require("json")
@@ -159,7 +171,7 @@ function Updater.checkBackground(on_update_found)
     end)
 end
 
-function Updater.check()
+function Updater.check(on_success)
 
     local installed_version = Updater.getInstalledVersion()
 
@@ -267,7 +279,7 @@ function Updater.check()
                             })
                             return
                         end
-                        Updater.install(latest_zip_url, installed_version, latest_version)
+                        Updater.install(latest_zip_url, installed_version, latest_version, on_success)
                     end,
                 },
             },
@@ -284,7 +296,7 @@ function Updater.check()
     end)
 end
 
-function Updater.install(zip_url, old_version, new_version)
+function Updater.install(zip_url, old_version, new_version, on_success, error_label)
 
     local DataStorage = require("datastorage")
     local lfs = require("libs/libkoreader-lfs")
@@ -334,16 +346,26 @@ function Updater.install(zip_url, old_version, new_version)
                 downloaded = ok_dl and code == 200
             end
         end
-        -- Fallback: curl (available on Android, desktop)
+        -- Fallback: curl (available on Android, desktop). The -f flag makes
+        -- curl exit non-zero on HTTP errors (e.g. 404 for a missing branch);
+        -- without it, curl would write the 404 HTML body to the zip file and
+        -- the unpack step would surface a misleading "extracting failed".
         if not downloaded then
             pcall(os.remove, zip_path)
             local ret = os.execute(string.format(
-                "curl -s -L -o %q %q", zip_path, zip_url))
+                "curl -sfL -o %q %q", zip_path, zip_url))
             downloaded = ret == 0 or ret == true
         end
         if not downloaded then
             pcall(os.remove, zip_path)
-            Updater.offerReleasesPage(_("Download failed."))
+            if error_label then
+                UIManager:show(InfoMessage:new{
+                    text = error_label,
+                    timeout = 3,
+                })
+            else
+                Updater.offerReleasesPage(_("Download failed."))
+            end
             return
         end
 
@@ -354,10 +376,19 @@ function Updater.install(zip_url, old_version, new_version)
 
         if not ok then
             UIManager:show(InfoMessage:new{
-                text = _("Installation failed: ") .. tostring(err),
+                text = error_label or (_("Installation failed: ") .. tostring(err)),
                 timeout = 5,
             })
             return
+        end
+
+        -- Stamp install context (e.g. last_install_source) before the restart
+        -- prompt fires; runs only when unpack succeeded.
+        if on_success then
+            local ok_cb = pcall(on_success)
+            if not ok_cb then
+                -- Don't let a misbehaving callback abort the restart prompt.
+            end
         end
 
         -- Restart KOReader to load the new version
@@ -369,6 +400,74 @@ function Updater.install(zip_url, old_version, new_version)
                 UIManager:restartKOReader()
             end,
         })
+    end)
+end
+
+--- Install from a GitHub branch's archive zip.
+-- Same install pipeline as the release path; just composes a different URL.
+-- @param branch string: branch name (e.g. "feature/v5.2-test")
+-- @param on_success function or nil: fired after successful unpack
+function Updater.installBranch(branch, on_success)
+    local NetworkMgr = require("ui/network/manager")
+    if not NetworkMgr:isWifiOn() then
+        UIManager:show(InfoMessage:new{
+            text = _("Wi-Fi is not enabled."),
+            timeout = 3,
+        })
+        return
+    end
+
+    local installed_version = Updater.getInstalledVersion()
+    local zip_url = Updater.composeBranchUrl(branch)
+    local error_label = _("Could not install branch:") .. " " .. branch
+    Updater.install(zip_url, installed_version, "branch:" .. branch, on_success, error_label)
+end
+
+--- Install the latest stable (non-prerelease) release, regardless of installed version.
+-- Used by the "Reset to latest stable release" entry: even when on a branch whose
+-- _meta.lua reports a higher version than the current release, we still want to
+-- pull the release zip and re-stamp last_install_source = "release".
+-- @param on_success function or nil: fired after successful unpack
+function Updater.installLatestStable(on_success)
+    local NetworkMgr = require("ui/network/manager")
+    if not NetworkMgr:isWifiOn() then
+        UIManager:show(InfoMessage:new{
+            text = _("Wi-Fi is not enabled."),
+            timeout = 3,
+        })
+        return
+    end
+
+    UIManager:show(InfoMessage:new{
+        text = _("Downloading latest release..."),
+        timeout = 1,
+    })
+
+    UIManager:scheduleIn(0.1, function()
+        local installed_version = Updater.getInstalledVersion()
+        local user_agent = "KOReader-Bookends/" .. installed_version
+        local release = httpGetJSON(
+            "https://api.github.com/repos/AndyHazz/bookends.koplugin/releases/latest",
+            user_agent)
+        if not release or not release.tag_name or release.draft or release.prerelease then
+            Updater.offerReleasesPage(_("Could not fetch latest release."))
+            return
+        end
+        local zip_url
+        if release.assets then
+            for _, asset in ipairs(release.assets) do
+                if asset.name:match("%.zip$") then
+                    zip_url = asset.browser_download_url
+                    break
+                end
+            end
+        end
+        if not zip_url then
+            Updater.offerReleasesPage(_("Latest release has no downloadable zip."))
+            return
+        end
+        local new_version = release.tag_name:gsub("^v", "")
+        Updater.install(zip_url, installed_version, new_version, on_success)
     end)
 end
 
