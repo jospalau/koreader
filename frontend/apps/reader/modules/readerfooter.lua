@@ -2598,6 +2598,7 @@ function ReaderFooter:onExitFlippingMode()
 end
 
 function ReaderFooter:TapFooter(ges)
+    -- if self.ui and self.ui.bookends and self.ui.bookends.enabled then return true end
     if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
     if self.ui.gestures.ignore_hold_corners and self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
         return self:DoubleTapFooter(ges)
@@ -2736,6 +2737,7 @@ function ReaderFooter:getHeight2()
 end
 
 function ReaderFooter:onToggleFooterMode()
+    if self.ui and self.ui.bookends and self.ui.bookends.enabled then return end
     if self.has_no_mode and self.settings.disable_progress_bar then return end
     if util.getFileNameSuffix(self.ui.document.file) == "epub"
         and (self.settings.all_at_once or self.has_no_mode) then
@@ -3063,6 +3065,7 @@ function ReaderFooter:onSwitchStatusBarText()
 end
 
 function ReaderFooter:onMoveStatusBar()
+    if self.ui and self.ui.bookends and self.ui.bookends.enabled then return true end
     local text = ""
     if self.settings.bar_top then
         self.bottom_padding = self.old_bottom_padding

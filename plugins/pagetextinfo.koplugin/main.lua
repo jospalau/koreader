@@ -637,6 +637,7 @@ function PageTextInfo:onSwipe(_, ges)
             UIManager:setDirty(self.view.dialog, "ui")
         end
     elseif direction == "north" then
+        if self.ui and self.ui.bookends and self.ui.bookends.enabled then return end
         if self.view.topbar.is_enabled == nil or self.view.topbar.is_enabled == false then
             self.view.topbar:quickToggleOnOff(true)
         else
@@ -4992,6 +4993,7 @@ function PageTextInfo:sendHighlightToServerForHeatmap()
 end
 
 function PageTextInfo:onToggleDoubleBar()
+    if self.ui and self.ui.bookends and self.ui.bookends.enabled then return end
     if self.view.topbar.settings:isTrue("show_top_bar") or self.view.footer_visible then return true end
     local show_double_bar = G_reader_settings:isTrue("show_double_bar")
     G_reader_settings:saveSetting("show_double_bar", not show_double_bar)

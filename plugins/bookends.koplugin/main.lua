@@ -452,6 +452,10 @@ function Bookends:setupTouchZones()
             },
             handler = function(ges)
                 local action = self.settings:readSetting("bottom_center_tap_action")
+                -- If any of the actions is selected and the plugin is not enabled
+                -- will prevent the tap event in the footer from being triggered
+                -- return false to signal is not handled
+                if not self.enabled then return false end
                 if action == "toggle" then
                     self:onToggleBookends()
                     return true

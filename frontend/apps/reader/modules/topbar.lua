@@ -1893,6 +1893,7 @@ function TopBar:onPosUpdate(new_pos)
 end
 
 function TopBar:paintTo(bb, x, y)
+    if self.ui and self.ui.bookends and self.ui.bookends.enabled then return end
     if self.status_bar and self.status_bar == true then
         -- self.battery_widget_container[1]:setText(self.time_battery_text_text:reverse())
         -- self.battery_widget_container:paintTo(bb, x - self.battery_widget_container[1]:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
@@ -2392,6 +2393,7 @@ function TopBar:paintTo(bb, x, y)
 end
 
 function TopBar:paintToDisabled(bb, x, y)
+    if self.ui.bookends and self.ui.bookends.enabled then return end
     self.ignore_corners_widget_container[1]:setText(self.ignore_corners)
     if (self.status_bar and self.status_bar == true and self.view.footer.settings.bar_top) or self.view.dogear_visible then
         if Device:isAndroid() then
