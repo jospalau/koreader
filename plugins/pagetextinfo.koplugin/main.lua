@@ -4993,14 +4993,24 @@ function PageTextInfo:sendHighlightToServerForHeatmap()
 end
 
 function PageTextInfo:onToggleDoubleBar()
-    if self.ui and self.ui.bookends and self.ui.bookends.enabled then return end
-    if self.view.topbar.settings:isTrue("show_top_bar") or self.view.footer_visible then return true end
-    local show_double_bar = G_reader_settings:isTrue("show_double_bar")
-    G_reader_settings:saveSetting("show_double_bar", not show_double_bar)
-    require("apps/reader/modules/doublebar").is_enabled = not show_double_bar
-    self.view.doublebar:toggleBar()
-    UIManager:setDirty(self.view.dialog, "ui")
-    return true
+    if self.view.footer_visible then return end
+    if self.view.topbar.settings:isTrue("show_top_bar")
+    or (self.ui.bookends and self.ui.bookends.enabled) then
+        local footer = self.ui.view.footer
+        self.ui.bookends.stock_bar_disabled = true
+        self.ui.bookends.settings:saveSetting("stock_bar_disabled", true)
+        footer:applyFooterMode(footer.mode_list.off)
+        self.view.footer_visible = false
+        self.ui.bookends.enabled = not self.ui.bookends.enabled
+        self.ui.bookends.settings:saveSetting("enabled", self.ui.bookends.enabled)
+    else
+        if self.ui and self.ui.bookends and self.ui.bookends.enabled then return end
+        local show_double_bar = G_reader_settings:isTrue("show_double_bar")
+        G_reader_settings:saveSetting("show_double_bar", not show_double_bar)
+        require("apps/reader/modules/doublebar").is_enabled = not show_double_bar
+        self.view.doublebar:toggleBar()
+    end
+    return UIManager:setDirty(self.view.dialog, "ui")
 end
 
 function PageTextInfo:onShowNotebookFileRender()

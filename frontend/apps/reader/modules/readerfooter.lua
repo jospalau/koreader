@@ -2737,7 +2737,7 @@ function ReaderFooter:getHeight2()
 end
 
 function ReaderFooter:onToggleFooterMode()
-    if self.ui and self.ui.bookends and self.ui.bookends.enabled then return end
+    --if self.ui and self.ui.bookends and self.ui.bookends.enabled then return end
     if self.has_no_mode and self.settings.disable_progress_bar then return end
     if util.getFileNameSuffix(self.ui.document.file) == "epub"
         and (self.settings.all_at_once or self.has_no_mode) then

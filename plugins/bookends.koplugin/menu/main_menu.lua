@@ -208,6 +208,11 @@ function Bookends:buildBookendsSettingsMenu()
             callback = function()
                 self.enabled = not self.enabled
                 self.settings:saveSetting("enabled", self.enabled)
+                local footer = self.ui.view.footer
+                footer:onToggleFooterMode()
+                self.stock_bar_disabled = true
+                self.settings:saveSetting("stock_bar_disabled", true)
+                footer:applyFooterMode(footer.mode_list.off)
                 self:markDirty()
             end,
         },
