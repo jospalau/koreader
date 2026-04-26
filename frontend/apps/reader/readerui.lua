@@ -1214,22 +1214,22 @@ end
 
 function ReaderUI:onAdjustMarginsTopbar()
     if self.bookends and self.bookends.enabled then
-            local side_margins = {35, 35}
-            local top_margin, bottom_margin = 50, 50
-            if self.document.configurable.t_page_margin ~= top_margin or
-            self.document.configurable.b_page_margin ~= bottom_margin or
-            self.document.configurable.h_page_margins[1] ~= side_margins[1] or
-            self.document.configurable.h_page_margins[2] ~= side_margins[2] then
-                local margins = { side_margins[1], top_margin, side_margins[2], bottom_margin}
-                self.document.configurable.t_page_margin = top_margin
-                self.document.configurable.b_page_margin = bottom_margin
-                self.document.configurable.h_page_margins = side_margins
-                UIManager:sendEvent(Event:new("SetPageHorizMargins", side_margins))
-                UIManager:sendEvent(Event:new("SetPageTopMargin", top_margin))
-                UIManager:sendEvent(Event:new("SetPageBottomMargin", bottom_margin))
-            else
-                self:showBookStatus()
-            end
+        local side_margins = {35, 35}
+        local top_margin, bottom_margin = 50, 50
+        if self.document.configurable.t_page_margin ~= top_margin or
+        self.document.configurable.b_page_margin ~= bottom_margin or
+        self.document.configurable.h_page_margins[1] ~= side_margins[1] or
+        self.document.configurable.h_page_margins[2] ~= side_margins[2] then
+            local margins = { side_margins[1], top_margin, side_margins[2], bottom_margin}
+            self.document.configurable.t_page_margin = top_margin
+            self.document.configurable.b_page_margin = bottom_margin
+            self.document.configurable.h_page_margins = side_margins
+            UIManager:sendEvent(Event:new("SetPageHorizMargins", side_margins))
+            UIManager:sendEvent(Event:new("SetPageTopMargin", top_margin))
+            UIManager:sendEvent(Event:new("SetPageBottomMargin", bottom_margin))
+        else
+            self:showBookStatus()
+        end
         return true
     end
     if util.getFileNameSuffix(self.document.file) ~= "epub" then return end

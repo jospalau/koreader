@@ -2484,6 +2484,7 @@ function TopBar:paintToDisabled(bb, x, y)
 end
 
 function TopBar:onAdjustMarginsTopbar()
+    if self.ui and self.ui.bookends and self.ui.bookends.enabled then return end
     local Event = require("ui/event")
     if self.settings:isTrue("show_top_bar") and not self.status_bar then
 
