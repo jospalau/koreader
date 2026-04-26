@@ -1213,7 +1213,7 @@ function ReaderUI:showBookStatus()
 end
 
 function ReaderUI:onAdjustMarginsTopbar()
-    if self.ui and self.ui.bookends and self.ui.bookends.enabled then
+    if self.bookends and self.bookends.enabled then
             local side_margins = {35, 35}
             local top_margin, bottom_margin = 50, 50
             if self.document.configurable.t_page_margin ~= top_margin or
