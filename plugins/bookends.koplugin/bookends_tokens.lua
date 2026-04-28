@@ -1182,7 +1182,8 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     local time_12h = ""
     local time_24h = ""
     if needs("time_12h") then
-        time_12h = os.date("%I:%M %p"):gsub("^0", "")
+        -- time_12h = os.date("%I:%M %p"):gsub("^0", "")
+        time_12h = os.date("%H:%M")
     end
     if needs("time_24h", "time") then
         time_24h = os.date("%H:%M")
