@@ -13,11 +13,11 @@ local function sanitizeMetadata(val)
 end
 
 function M:fetchFromAI()
-    require("ui/network/manager"):runWhenOnline(function() 
+    require("ui/network/manager"):runWhenOnline(function()
         local current_page = self.ui:getCurrentPage()
         local reading_percent = math.floor((current_page / self.ui.document:getPageCount()) * 100)
         local spoiler_setting = self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
-        
+
         if spoiler_setting == "full_book" then
             self:continueWithFetch(100)
         else
@@ -27,17 +27,17 @@ function M:fetchFromAI()
 end
 
 function M:updateFromAI()
-    require("ui/network/manager"):runWhenOnline(function() 
+    require("ui/network/manager"):runWhenOnline(function()
         local current_page = self.ui:getCurrentPage()
         local reading_percent = math.floor((current_page / self.ui.document:getPageCount()) * 100)
         local spoiler_setting = self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
-        
+
         local last_fetch_page = nil
         if self.book_data and self.book_data.last_fetch_page then
             last_fetch_page = self.book_data.last_fetch_page
         end
         self:log("XRayPlugin: updateFromAI - last_fetch_page=" .. tostring(last_fetch_page))
-        
+
         if spoiler_setting == "full_book" then
             self:continueWithFetch(100, true)
         else
@@ -51,7 +51,7 @@ function M:fetchSingleWord(text, pos0, pos1)
         local current_page = self.ui:getCurrentPage()
         local reading_percent = math.floor((current_page / (self.ui.document:getPageCount() or 1)) * 100)
         local spoiler_setting = self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
-        
+
         local limit_percent = reading_percent
         if spoiler_setting == "full_book" then limit_percent = 100 end
 
@@ -63,22 +63,22 @@ function M:fetchSingleWord(text, pos0, pos1)
 
         UIManager:scheduleIn(0.5, function()
             if not self.chapter_analyzer then self.chapter_analyzer = require("xray_chapteranalyzer"):new() end
-            
+
             -- 1. Distributed chapter samples (Start/Mid/End of each chapter up to current)
             -- We use a moderate budget (60k) to balance context depth with fetch speed.
             local samples, chapter_titles = self.chapter_analyzer:getDetailedChapterSamples(self.ui, 100, 60000, limit_percent == 100)
-            
+
             -- 2. Recent book text (Up to the highlighted word if pos1 is available)
             local start_context_page = math.max(1, current_page - 15)
             local book_text = self.chapter_analyzer:getTextForAnalysis(self.ui, 20000, nil, current_page + 1, start_context_page, pos1)
-            
+
             -- Fallback injection if the extraction completely missed the word due to DOM/Chapter boundaries
             if book_text and text and not book_text:lower():find(text:lower(), 1, true) then
                 book_text = book_text .. "\n\n[CURRENT PAGE HIGHLIGHT]: " .. text
             end
-            
+
             self:log("fetchSingleWord: extracted book_text length: " .. tostring(book_text and #book_text or 0))
-            
+
             local context = {
                 reading_percent = limit_percent,
                 chapter_samples = samples,
@@ -96,7 +96,7 @@ function M:fetchSingleWord(text, pos0, pos1)
             if result.is_valid then
                 local item = result.item
                 local item_type = result.type
-                
+
                 -- Merge into our tables
                 local target_list
                 if item_type == "character" then
@@ -119,11 +119,11 @@ function M:fetchSingleWord(text, pos0, pos1)
                         end
                     end
                     if not found then table.insert(target_list, item) end
-                    
+
                     -- Sort and save cache
                     self:sortDataByFrequency(target_list, book_text, "name")
                     if not self.cache_manager then self.cache_manager = require("xray_cachemanager"):new() end
-                    
+
                     -- Prepare data for cache save
                     local book_data = {
                         characters = self.characters,
@@ -134,7 +134,7 @@ function M:fetchSingleWord(text, pos0, pos1)
                         last_fetch_page = self.book_data and self.book_data.last_fetch_page
                     }
                     self.cache_manager:saveCache(self.ui.document.file, book_data)
-                    
+
                     -- Show result
                     self.lookup_manager:showResult(item, item_type)
                 end
@@ -160,26 +160,27 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
     local author = sanitizeMetadata(props.authors)
     local wait_msg
     local is_cancelled = false
-    
+
     if not is_silent then
         local fetch_text = is_update and self.loc:t("updating_ai", self.ai_provider or "AI") or self.loc:t("fetching_ai", self.ai_provider or "AI")
         wait_msg = InfoMessage:new{ text = fetch_text .. "\n\n" .. title .. "\n\n" .. self.loc:t("fetching_wait"), timeout = 120 }
         UIManager:show(wait_msg)
     end
-    
+
     UIManager:scheduleIn(0.5, function()
         if is_cancelled then return end
         if not self.chapter_analyzer then self.chapter_analyzer = require("xray_chapteranalyzer"):new() end
+        if not self.ui.document then return end
 
         -- 1a. Lightweight prep: resolve current page and find first missing page
         local current_page = self.ui:getCurrentPage()
-        
+
         -- Find the earliest missing narrative chapter to ensure we recover it (Repair logic)
         local first_missing_page = last_fetch_page
         if is_update then
             local toc = self.ui.document:getToc() or {}
-            
-            -- OMNIBUS OPTIMIZATION: Instead of checking the whole book, 
+
+            -- OMNIBUS OPTIMIZATION: Instead of checking the whole book,
             -- find the 3 most recent narrative chapters before the current page.
             local candidate_chapters = {}
             for i = #toc, 1, -1 do
@@ -191,7 +192,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
                     end
                 end
             end
-            
+
             for _, entry in ipairs(candidate_chapters) do
                 local norm = self:normalizeChapterName(entry.title)
                 local found = false
@@ -216,7 +217,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
 
         -- 1b. First heavy extraction: recent book text (for context / frequency scoring)
         local book_text = self.chapter_analyzer:getTextForAnalysis(self.ui, 20000, nil, current_page, first_missing_page)
-        
+
         -- Build set of already-known chapters for smart sampling
         local known_chapters = {}
         if is_update and self.timeline then
@@ -226,7 +227,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
                 end
             end
         end
-        
+
         -- Yield to the UI between the two heavy extraction calls.
         UIManager:scheduleIn(0, function()
             if is_cancelled then return end
@@ -235,7 +236,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
             -- 1c. Second heavy extraction: per-chapter samples for AI prompt
             local samples, chapter_titles = self.chapter_analyzer:getDetailedChapterSamples(self.ui, 200, 150000, reading_percent == 100, first_missing_page, known_chapters)
             local annots = self.chapter_analyzer:getAnnotationsForAnalysis(self.ui)
-        
+
             if (not book_text or #book_text < 10) and not samples then
                 if wait_msg then UIManager:close(wait_msg) end
                 if not is_silent then
@@ -244,22 +245,22 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
                 self:log("XRayPlugin: Text extraction failed" .. (is_silent and " (silent)" or ""))
                 return
             end
-        
-            local context = { 
-                reading_percent = reading_percent, 
-                spoiler_free = reading_percent < 100, 
-                filename = self.ui.document.file:match("([^/\\]+)$"), 
-                series = props.series or props.Series, 
-                chapter_samples = samples, 
+
+            local context = {
+                reading_percent = reading_percent,
+                spoiler_free = reading_percent < 100,
+                filename = self.ui.document.file:match("([^/\\]+)$"),
+                series = props.series or props.Series,
+                chapter_samples = samples,
                 chapter_titles = chapter_titles,
-                annotations = annots, 
+                annotations = annots,
                 book_text = book_text,
                 -- For merge fetches, pass existing data so AI only returns new information
                 existing_characters = is_update and self.characters or nil,
                 existing_locations = is_update and self.locations or nil,
                 existing_historical_figures = is_update and self.historical_figures or nil,
             }
-            
+
             -- 2. AI Request
             if is_silent then
                 local req_params, err_code, err_msg = self.ai_helper:buildComprehensiveRequest(title, author, context)
@@ -268,7 +269,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
                     self.bg_fetch_active = false
                     return
                 end
-                
+
                 local DataStorage = require("datastorage")
                 local result_file = DataStorage:getSettingsDir() .. "/xray/bg_fetch_" .. tostring(os.time()) .. ".json"
                 local started = self.ai_helper:makeRequestAsync(req_params, result_file)
@@ -314,7 +315,7 @@ function M:pollBackgroundFetch(result_file, title, author, book_text, is_update,
 
         poll_count = poll_count + 1
         local data, err_code, err_msg = self.ai_helper:checkAsyncResult(result_file)
-        
+
         if data == nil then
             -- Still pending
             if poll_count < 120 then -- 4 minutes max for background
@@ -470,7 +471,7 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
         author_info = self.author_info,
         last_fetch_page = current_page
     }
-    
+
     self.book_data = updated_data
 
     if not self.cache_manager then self.cache_manager = require("xray_cachemanager"):new() end
@@ -484,14 +485,14 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
         local fetch_complete = self.loc:t("ai_fetch_complete_msg") or "AI Fetch Complete!"
         local cache_success = self.loc:t("cache_save_success") or "✓ Cache updated."
         local cache_fail = self.loc:t("cache_save_failed") or "✗ Cache failed."
-        local summary = string.format("%s\n\nCharacters: %d\nLocations: %d\nEvents: %d\n\n%s", 
+        local summary = string.format("%s\n\nCharacters: %d\nLocations: %d\nEvents: %d\n\n%s",
             fetch_complete, #self.characters, #self.locations, #self.timeline,
             cache_saved and cache_success or cache_fail)
 
         local success_dialog
         local ButtonDialog = require("ui/widget/buttondialog")
-        success_dialog = ButtonDialog:new{ title = self.loc:t("fetch_successful") or "Fetch successful", text = summary, buttons = {{{ text = self.loc:t("ok"), callback = function() 
-            UIManager:close(success_dialog) 
+        success_dialog = ButtonDialog:new{ title = self.loc:t("fetch_successful") or "Fetch successful", text = summary, buttons = {{{ text = self.loc:t("ok"), callback = function()
+            UIManager:close(success_dialog)
         end }}} }
         UIManager:show(success_dialog)
     end
@@ -503,7 +504,7 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
 end
 
 function M:fetchMoreCharacters()
-    require("ui/network/manager"):runWhenOnline(function() 
+    require("ui/network/manager"):runWhenOnline(function()
         if not self.ai_helper then
             local AIHelper = require("xray_aihelper")
             self.ai_helper = AIHelper
@@ -515,11 +516,11 @@ function M:fetchMoreCharacters()
         local current_page = self.ui:getCurrentPage()
         local reading_percent = math.floor((current_page / self.ui.document:getPageCount()) * 100)
         local spoiler_setting = self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
-        
+
         if spoiler_setting == "full_book" then
             reading_percent = 100
         end
-        
+
         local menu_to_close = self.char_menu
         self.char_menu = nil
 
@@ -527,41 +528,41 @@ function M:fetchMoreCharacters()
         local is_cancelled = false
         wait_msg = InfoMessage:new{ text = (self.loc:t("fetching_ai") or "Fetching from %s...") .. "\n\n" .. title .. "\n\n" .. (self.loc:t("extracting_more_characters") or "Extracting additional characters..."), timeout = 120 }
         UIManager:show(wait_msg)
-        
+
         UIManager:scheduleIn(0.5, function()
             if is_cancelled then return end
             if not self.chapter_analyzer then self.chapter_analyzer = require("xray_chapteranalyzer"):new() end
-            
+
             -- EVEN SAMPLING: Divide the readable range into equal segments
             local current_page = self.ui:getCurrentPage()
             local pages_per_sample = 20
             local chars_per_sample = 10000
             local num_samples = 6
-            
+
             -- Track call count to shift windows on each invocation
             self.more_chars_call_count = (self.more_chars_call_count or 0) + 1
             local call_num = self.more_chars_call_count
             local offset = (call_num - 1) * pages_per_sample
             self:log("XRayPlugin: More chars call #" .. call_num .. " (offset: " .. offset .. " pages)")
-            
+
             -- Divide readable range into equal segments
             local readable_pages = math.max(1, current_page)
             local segment_size = math.floor(readable_pages / num_samples)
             if segment_size < pages_per_sample then segment_size = pages_per_sample end
-            
+
             local text_parts = {}
             for i = 0, num_samples - 1 do
                 local segment_start = i * segment_size
                 local sample_start = math.min(segment_start + offset, readable_pages - pages_per_sample)
                 sample_start = math.max(1, sample_start)
-                
+
                 -- Wrap around within the segment if the offset pushes past the segment boundary
                 local segment_end = (i + 1) * segment_size
                 if sample_start >= segment_end and i < num_samples - 1 then
                     sample_start = segment_start + ((offset) % segment_size)
                     sample_start = math.max(1, math.min(sample_start, readable_pages - pages_per_sample))
                 end
-                
+
                 if sample_start <= current_page then
                     local end_page = math.min(sample_start + pages_per_sample, current_page)
                     local sample = self.chapter_analyzer:getTextFromPageRange(self.ui, sample_start, end_page, chars_per_sample)
@@ -572,27 +573,27 @@ function M:fetchMoreCharacters()
                 end
             end
             local book_text = table.concat(text_parts, "\n\n---\n\n")
-            
+
             local exclude_list = {}
             for _, char in ipairs(self.characters or {}) do
                 table.insert(exclude_list, char.name)
             end
-            
-            local context = { 
-                reading_percent = reading_percent, 
-                filename = self.ui.document.file:match("([^/\\]+)$"), 
-                series = props.series or props.Series, 
+
+            local context = {
+                reading_percent = reading_percent,
+                filename = self.ui.document.file:match("([^/\\]+)$"),
+                series = props.series or props.Series,
                 book_text = book_text,
                 exclude_characters = table.concat(exclude_list, ", ")
             }
-            
+
             self.ai_helper:setTrapWidget(wait_msg)
             local more_data, error_code, error_msg = self.ai_helper:getMoreCharacters(title, author, nil, context)
             self.ai_helper:resetTrapWidget()
-            
+
             if wait_msg then UIManager:close(wait_msg) end
             if is_cancelled or error_code == "USER_CANCELLED" then return end
-            
+
             if not more_data or not more_data.characters then
                 local error_dialog
                 local ButtonDialog = require("ui/widget/buttondialog")
@@ -600,7 +601,7 @@ function M:fetchMoreCharacters()
                 UIManager:show(error_dialog)
                 return
             end
-            
+
             local new_count = 0
             for _, new_char in ipairs(more_data.characters) do
                 local found = false
@@ -615,12 +616,12 @@ function M:fetchMoreCharacters()
                     new_count = new_count + 1
                 end
             end
-            
+
             -- Re-sort by frequency based on the newly extracted samples
             if book_text and #book_text > 0 then
                 self:sortDataByFrequency(self.characters, book_text, "name")
             end
-            
+
             -- Save to cache
             if not self.cache_manager then self.cache_manager = require("xray_cachemanager"):new() end
             local existing_cache = self.cache_manager:loadCache(self.ui.document.file) or {}
@@ -634,7 +635,7 @@ function M:fetchMoreCharacters()
                 author_info = self.author_info or existing_cache.author_info
             }
             self.cache_manager:saveCache(self.ui.document.file, updated_data)
-            
+
             local added_msg = string.format(self.loc:t("msg_added_characters") or "Added %d new characters!", new_count)
             UIManager:show(InfoMessage:new{ text = added_msg, timeout = 3 })
 
@@ -661,18 +662,18 @@ function M:fetchAuthorInfo()
     UIManager:show(wait_msg)
     UIManager:scheduleIn(0.5, function()
         if is_cancelled then return end
-        
+
         if not self.chapter_analyzer then
             local ChapterAnalyzer = require("xray_chapteranalyzer")
             self.chapter_analyzer = ChapterAnalyzer:new()
         end
         local book_text = self.chapter_analyzer:getTextForAnalysis(self.ui, 1000, nil, self.ui:getCurrentPage())
         local context = { book_text = book_text }
-        
+
         self.ai_helper:setTrapWidget(wait_msg)
         local author_data, error_code, error_msg = self.ai_helper:getAuthorData(title, author, nil, context)
         self.ai_helper:resetTrapWidget()
-        
+
         if wait_msg then UIManager:close(wait_msg) end
         if is_cancelled or error_code == "USER_CANCELLED" then return end
 
@@ -683,11 +684,11 @@ function M:fetchAuthorInfo()
             UIManager:show(error_dialog)
             return
         end
-        self.author_info = { 
-            name = sanitizeMetadata(author_data.author or author), 
-            description = sanitizeMetadata(author_data.author_bio or self.loc:t("msg_no_bio") or "No biography available."), 
-            birthDate = sanitizeMetadata(author_data.author_birth or "---"), 
-            deathDate = sanitizeMetadata(author_data.author_death or "---") 
+        self.author_info = {
+            name = sanitizeMetadata(author_data.author or author),
+            description = sanitizeMetadata(author_data.author_bio or self.loc:t("msg_no_bio") or "No biography available."),
+            birthDate = sanitizeMetadata(author_data.author_birth or "---"),
+            deathDate = sanitizeMetadata(author_data.author_death or "---")
         }
         if not self.cache_manager then self.cache_manager = require("xray_cachemanager"):new() end
         local cache = self.cache_manager:loadCache(self.ui.document.file) or {}
@@ -700,11 +701,11 @@ end
 
 function M:checkWeeklyUpdate()
     if not self.ai_helper or not self.ai_helper.settings then return end
-    
+
     local last_check = self.ai_helper.settings.last_update_check or 0
     local now = os.time()
     local week_seconds = 7 * 24 * 60 * 60
-    
+
     if (now - last_check) > week_seconds then
         local NetworkMgr = require("ui/network/manager")
         if NetworkMgr:isOnline() then
