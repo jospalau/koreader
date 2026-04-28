@@ -99,6 +99,7 @@ function ChapterAnalyzer:getReflowableText(ui)
         if success and result and #result > 100 then
             text = result
             logger.info("ChapterAnalyzer: Got", #text, "characters from positions")
+            collectgarbage("collect") -- Force cleanup after large string allocation
             return text, chapter_title
         end
     end
@@ -112,6 +113,7 @@ function ChapterAnalyzer:getReflowableText(ui)
         if success and result and #result > 100 then
             text = result
             logger.info("ChapterAnalyzer: Got", #text, "characters from xpointer")
+            collectgarbage("collect") -- Force cleanup after large string allocation
             return text, chapter_title
         end
     end
@@ -119,6 +121,7 @@ function ChapterAnalyzer:getReflowableText(ui)
     -- Method 3: Get visible text (fallback)
     text = self:getVisibleTextReflowable(ui)
     logger.info("ChapterAnalyzer: Using visible text fallback")
+    collectgarbage("collect")
     
     return text, chapter_title
 end
@@ -778,6 +781,230 @@ function ChapterAnalyzer:countMentions(text, name)
     end
     
     return count
+end
+
+-- Extract a sentence-aware snippet around a match position in raw text.
+-- Returns: ONLY the sentence containing the match,
+-- capped at max_len characters.
+local function extractSentenceSnippet(text, match_pos, max_len)
+    max_len = max_len or 300
+    if not text or not match_pos then return "" end
+
+    -- Use pattern matching to find boundaries, which is much faster than byte loops in Lua
+    local before = text:sub(1, match_pos - 1)
+    local sent_start = 1
+    -- Find the last sentence-ending character before the match
+    local b_start, b_end = before:find("[.!?\n][^.!?\n]*$")
+    if b_start then
+        sent_start = b_start + 1
+    end
+
+    local after = text:sub(match_pos)
+    local sent_end = #text
+    -- Find the first sentence-ending character after the match
+    local a_start, a_end = after:find("[.!?\n]")
+    if a_start then
+        sent_end = match_pos + a_start - 1
+    end
+
+    -- Trim to max_len if still too long
+    if (sent_end - sent_start) > max_len then
+        local half = math.floor(max_len / 2)
+        sent_start = math.max(sent_start, match_pos - half)
+        sent_end = math.min(sent_end, match_pos + half)
+    end
+
+    return text:sub(sent_start, sent_end):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+
+-- Scan a single TOC entry for occurrences of `name`.
+-- Returns a list of { chapter, page, snippet } tables.
+function ChapterAnalyzer:findMentionsInChapter(ui, entity, toc_entry, next_toc_entry, yield_fn)
+    if not ui or not ui.document or not entity or not entity.name or not toc_entry then return {} end
+    if not toc_entry.xpointer then return {} end
+
+    local name = entity.name
+    local name_lower = name:lower()
+    
+    -- Prepare search terms
+    local terms = { { s = name_lower, l = #name_lower } }
+    
+    -- Fallback: auto-generate first and last name aliases
+    local first_name = name:match("^(%S+)")
+    local last_name  = name:match("(%S+)$")
+    if first_name and #first_name > 2 and first_name ~= name then
+        local fl = first_name:lower()
+        table.insert(terms, { s = fl, l = #fl })
+    end
+    if last_name and #last_name > 2 and last_name ~= first_name and last_name ~= name then
+        local ll = last_name:lower()
+        table.insert(terms, { s = ll, l = #ll })
+    end
+
+    -- Add AI aliases if available
+    if entity.aliases and type(entity.aliases) == "table" then
+        for _, alias in ipairs(entity.aliases) do
+            if type(alias) == "string" and #alias > 2 then
+                local al = alias:lower()
+                local exists = false
+                for _, t in ipairs(terms) do
+                    if t.s == al then exists = true; break end
+                end
+                if not exists then
+                    table.insert(terms, { s = al, l = #al })
+                end
+            end
+        end
+    end
+    
+    local chapter_mentions = {}
+
+    local ok, raw_text = pcall(function()
+        return ui.document:getTextFromXPointer(toc_entry.xpointer) or ""
+    end)
+    if not ok or not raw_text or #raw_text < 10 then return {} end
+
+    local text_lower = raw_text:lower()
+    local pos = 1
+    
+    -- Optimization: Pre-calculate the first match for each term.
+    -- This avoids re-scanning the entire text for every term on every iteration.
+    for _, t in ipairs(terms) do
+        t.next_p = text_lower:find(t.s, pos, true)
+    end
+
+    local last_yield = os.clock()
+    
+    while true do
+        local min_p = math.huge
+        local best_term = nil
+        
+        for _, t in ipairs(terms) do
+            if t.next_p and t.next_p < min_p then
+                min_p = t.next_p
+                best_term = t
+            end
+        end
+        
+        if not best_term then
+            break
+        end
+        
+        local match_pos = min_p
+
+        local start_page = tonumber(toc_entry.page) or 1
+        local end_page = next_toc_entry and tonumber(next_toc_entry.page) or (ui.document.getTotalPages and ui.document:getTotalPages()) or start_page
+        if end_page < start_page then end_page = start_page end
+        
+        local est_page = start_page
+        local total_chars = #raw_text
+        if total_chars > 0 and end_page > start_page then
+            local fraction = match_pos / total_chars
+            est_page = math.floor(start_page + ((end_page - start_page) * fraction))
+        end
+
+        table.insert(chapter_mentions, {
+            chapter = toc_entry.title or "???",
+            page    = est_page,
+            snippet = extractSentenceSnippet(raw_text, match_pos, 300),
+        })
+        
+        pos = match_pos + best_term.l
+        
+        -- Update ONLY the term we just found. Others are still valid if their next_p >= pos.
+        for _, t in ipairs(terms) do
+            if not t.next_p or t.next_p < pos then
+                t.next_p = text_lower:find(t.s, pos, true)
+            end
+        end
+
+        -- Yield every 100ms to keep UI alive
+        if yield_fn and (os.clock() - last_yield > 0.1) then
+            yield_fn()
+            last_yield = os.clock()
+        end
+    end
+    return chapter_mentions
+end
+
+function ChapterAnalyzer:scanMentionsAsync(ui, entity, toc, max_page, on_progress, on_complete)
+    if not ui or not ui.document or not entity or not entity.name or not toc or #toc == 0 then 
+        if on_complete then on_complete({}) end
+        return { cancel = function() end } 
+    end
+
+    local UIManager = require("ui/uimanager")
+    local XRayConfig = require("xray_config")
+    local cancel_handle = { _cancelled = false }
+    function cancel_handle:cancel()
+        self._cancelled = true
+    end
+
+    local mentions = {}
+    local total_chapters = #toc
+    
+    -- Cooperative multitasking using Coroutines
+    local scan_co = coroutine.create(function()
+        for i = 1, total_chapters do
+            if cancel_handle._cancelled then break end
+
+            local entry = toc[i]
+            local next_entry = toc[i + 1]
+            
+            local start_p = tonumber(entry.page)
+            if start_p and max_page and start_p > max_page then
+                -- Reached spoiler limit
+                break
+            end
+
+            -- We pass a yield function that will pause the coroutine
+            local chapter_mentions = self:findMentionsInChapter(ui, entity, entry, next_entry, function()
+                coroutine.yield()
+            end)
+            
+            -- Filter out mentions that pass max_page
+            for _, m in ipairs(chapter_mentions) do
+                if not (max_page and m.page and m.page > max_page) then
+                    table.insert(mentions, m)
+                end
+            end
+
+            if on_progress then
+                on_progress(mentions, i, total_chapters)
+            end
+
+            -- Force GC every chapter to keep memory pressure low
+            collectgarbage("collect")
+            
+            -- Yield after each chapter
+            coroutine.yield()
+        end
+        
+        if on_complete then on_complete(mentions) end
+    end)
+
+    local function resumeScan()
+        if cancel_handle._cancelled then return end
+        
+        local ok, err = coroutine.resume(scan_co)
+        if not ok then
+            logger.error("XRayPlugin: Mentions scan error:", err)
+            if on_complete then on_complete(mentions) end
+            return
+        end
+
+        if coroutine.status(scan_co) ~= "dead" then
+            -- Schedule next chunk
+            local delay = XRayConfig.isLowPowerDevice and 0.1 or 0.01
+            UIManager:scheduleIn(delay, resumeScan)
+        end
+    end
+
+    -- Start the scan
+    UIManager:scheduleIn(XRayConfig.isLowPowerDevice and 0.2 or 0, resumeScan)
+    
+    return cancel_handle
 end
 
 return ChapterAnalyzer

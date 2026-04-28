@@ -116,8 +116,14 @@ msgstr "Получение информации об авторе из %s..."
 msgid "fetching_wait"
 msgstr "⏳ Пожалуйста, подождите...\nЭтот процесс может занять 10-50 секунд."
 
+msgid "find_mentions"
+msgstr "Найти упоминания"
+
 msgid "full_book_option"
 msgstr "Режим всей книги"
+
+msgid "label_aliases"
+msgstr "ПСЕВДОНИМЫ"
 
 msgid "label_description"
 msgstr "ОПИСАНИЕ"
@@ -151,6 +157,36 @@ msgstr "Логи очищены!"
 
 msgid "looking_up_msg"
 msgstr "Поиск '%s'..."
+
+msgid "mentions_disabled"
+msgstr "Выключено"
+
+msgid "mentions_enabled"
+msgstr "Включено"
+
+msgid "mentions_none"
+msgstr "Упоминаний для '%s' пока не найдено."
+
+msgid "mentions_preference_desc"
+msgstr "Выберите предпочтения для упоминаний персонажей и мест:"
+
+msgid "mentions_refresh"
+msgstr "Обновить упоминания"
+
+msgid "mentions_scanning"
+msgstr "Сканирование... %1 из %2 глав"
+
+msgid "mentions_setting_desc"
+msgstr "Сканирование упоминаний позволяет найти каждое появление персонажа или места в книге. Это происходит автоматически в фоновом режиме, чтобы интерфейс оставался отзывчивым.\n\nОтключение скроет кнопку 'Найти упоминания'."
+
+msgid "mentions_setting_title"
+msgstr "Настройки упоминаний"
+
+msgid "mentions_title"
+msgstr "Упоминания: %s"
+
+msgid "mentions_wait_scan"
+msgstr "Подождите завершения сканирования перед навигацией..."
 
 msgid "menu_about"
 msgstr "О плагине"
@@ -211,6 +247,9 @@ msgstr "Места"
 
 msgid "menu_maintenance"
 msgstr "Обслуживание"
+
+msgid "menu_mentions_settings"
+msgstr "Настройки упоминаний"
 
 msgid "menu_primary_ai_model"
 msgstr "Основная модель ИИ"

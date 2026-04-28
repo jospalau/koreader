@@ -116,8 +116,14 @@ msgstr "Récupération des infos auteur depuis %s..."
 msgid "fetching_wait"
 msgstr "⏳ Veuillez patienter...\nCe processus peut prendre 10 à 50 secondes."
 
+msgid "find_mentions"
+msgstr "Find Mentions"
+
 msgid "full_book_option"
 msgstr "Mode Livre Complet"
+
+msgid "label_aliases"
+msgstr "ALIASES"
 
 msgid "label_description"
 msgstr "DÉTAILS"
@@ -151,6 +157,36 @@ msgstr "Logs effacés !"
 
 msgid "looking_up_msg"
 msgstr "Recherche de '%s'..."
+
+msgid "mentions_disabled"
+msgstr "Disabled"
+
+msgid "mentions_enabled"
+msgstr "Enabled"
+
+msgid "mentions_none"
+msgstr "No mentions found for '%s' yet."
+
+msgid "mentions_preference_desc"
+msgstr "Select your preference for character and location mentions:"
+
+msgid "mentions_refresh"
+msgstr "Refresh Mentions"
+
+msgid "mentions_scanning"
+msgstr "Scanning... %1 of %2 chapters"
+
+msgid "mentions_setting_desc"
+msgstr "Mentions scanning allows you to find every occurrence of a character or location in the book. This happens automatically in the background to ensure the reader stays responsive.\n\nDisabling this will hide the 'Find Mentions' button."
+
+msgid "mentions_setting_title"
+msgstr "Mentions Settings"
+
+msgid "mentions_title"
+msgstr "Mentions: %s"
+
+msgid "mentions_wait_scan"
+msgstr "Wait for scan to finish before navigating..."
 
 msgid "menu_about"
 msgstr "À propos"
@@ -211,6 +247,9 @@ msgstr "Lieux"
 
 msgid "menu_maintenance"
 msgstr "Maintenance"
+
+msgid "menu_mentions_settings"
+msgstr "Mentions Settings"
 
 msgid "menu_primary_ai_model"
 msgstr "Modèle IA principal"
