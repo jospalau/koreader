@@ -637,7 +637,9 @@ function PageTextInfo:onSwipe(_, ges)
             UIManager:setDirty(self.view.dialog, "ui")
         end
     elseif direction == "north" then
-        if self.ui and self.ui.bookends and self.ui.bookends.enabled then return end
+        if self.ui and self.ui.bookends and self.ui.bookends.enabled then
+            return UIManager:broadcastEvent(Event:new("OpenPresetManager"))
+        end
         if self.view.topbar.is_enabled == nil or self.view.topbar.is_enabled == false then
             self.view.topbar:quickToggleOnOff(true)
         else
