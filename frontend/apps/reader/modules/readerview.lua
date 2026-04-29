@@ -363,7 +363,7 @@ function ReaderView:paintTo(bb, x, y)
     end
 
     if util.getFileNameSuffix(self.document.file) == "epub" then
-        if self.topbar.settings:isTrue("show_top_bar") then
+        if self.topbar.settings:isTrue("show_top_bar") and not (self.ui.bookends and self.ui.bookends.enabled) then
             self.topbar:paintTo(bb, x, y)
         else
             self.topbar:paintToDisabled(bb, x, y)

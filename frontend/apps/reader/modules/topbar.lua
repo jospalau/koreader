@@ -2393,7 +2393,6 @@ function TopBar:paintTo(bb, x, y)
 end
 
 function TopBar:paintToDisabled(bb, x, y)
-    if self.ui.bookends and self.ui.bookends.enabled then return end
     self.ignore_corners_widget_container[1]:setText(self.ignore_corners)
     if (self.status_bar and self.status_bar == true and self.view.footer.settings.bar_top) or self.view.dogear_visible then
         if Device:isAndroid() then
@@ -2408,9 +2407,10 @@ function TopBar:paintToDisabled(bb, x, y)
             self.ignore_corners_widget_container:paintTo(bb, x + Screen:getWidth() - self.ignore_corners_widget_container[1]:getSize().w - Screen:scaleBySize(2), y + Screen:scaleBySize(6))
         end
     end
-
-    self.goal_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES + self.goal_widget_container[1]:getSize().w / 2, Screen:getHeight())
-    self.current_page_widget_container:paintTo(bb, x + math.floor(Screen:getWidth() / 2), Screen:getHeight())-- - TopBar.MARGIN_BOTTOM_CURRENT_PAGE)
+    if not (self.ui.bookends and self.ui.bookends.enabled) then
+        self.goal_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES + self.goal_widget_container[1]:getSize().w / 2, Screen:getHeight())
+        self.current_page_widget_container:paintTo(bb, x + math.floor(Screen:getWidth() / 2), Screen:getHeight())-- - TopBar.MARGIN_BOTTOM_CURRENT_PAGE)
+    end
 
     local font = "cfont"
     if self.settings:nilOrFalse("use_system_font") then
