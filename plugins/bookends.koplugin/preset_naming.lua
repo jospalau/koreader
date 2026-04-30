@@ -1,5 +1,5 @@
 -- Preset-name generator for the "+ New preset" tile.
--- Pure Lua, no KOReader dependencies — unit-testable via _test_preset_naming.lua.
+-- Pure Lua, no KOReader dependencies — unit-testable via tests/_test_preset_naming.lua.
 
 local PresetNaming = {}
 

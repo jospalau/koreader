@@ -478,7 +478,77 @@ function Tokens.computeTickFractions(doc, toc, tick_width_multiplier, current_pa
     return ticks
 end
 
+--- Parse a leading chapter-number prefix from a title.
+-- Recognises "1 Title", "1. Title", "1: Title", "1) Title" — number, optional
+-- single separator, mandatory whitespace, mandatory non-empty rest. Rejects
+-- bare-numeric titles ("1"), decimal/section numbers ("1.1 Background"), and
+-- numbers with no separator ("1Title").
+-- @return number, rest_string on match; nil otherwise.
+local function parseChapNumPrefix(title)
+    if type(title) ~= "string" then return nil end
+    local n_str, rest = title:match("^%s*(%d+)[%.%):]?%s+(.+)$")
+    if not n_str then return nil end
+    if rest:match("^%s*$") then return nil end
+    return tonumber(n_str), rest
+end
+
+--- Decide per TOC depth whether stripping leading chapter numbers is safe.
+-- A depth is safe iff:
+--   1. Parsed leading numbers form a strict 1..N sequence (no gaps, no
+--      duplicates, no zero-start) with N >= 2. Entries without a parseable
+--      prefix at the depth are ignored (so "Foreword"/"Epilogue" don't
+--      break a 1..N sequence).
+--   2. The post-strip "rest" strings are all distinct. This guards against
+--      cases like "1 Chapter, 2 Chapter, 3 Chapter" where the leading number
+--      is the only differentiator and removing it would collapse all titles
+--      to the same string.
+-- @param toc array of TOC entries with .title and .depth fields
+-- @return { [depth] = true|false, ... }
+local function computeStripPrefixByDepth(toc)
+    local result = {}
+    if type(toc) ~= "table" then return result end
+
+    local by_depth = {}
+    for _, entry in ipairs(toc) do
+        local depth = entry.depth or 1
+        local num, rest = parseChapNumPrefix(entry.title)
+        if num then
+            local bucket = by_depth[depth] or { nums = {}, rests = {} }
+            table.insert(bucket.nums, num)
+            table.insert(bucket.rests, rest)
+            by_depth[depth] = bucket
+        end
+    end
+
+    for depth, bucket in pairs(by_depth) do
+        local ok = #bucket.nums >= 2
+        if ok then
+            for i, n in ipairs(bucket.nums) do
+                if n ~= i then ok = false; break end
+            end
+        end
+        if ok then
+            local seen = {}
+            for _, rest in ipairs(bucket.rests) do
+                local key = rest:match("^%s*(.-)%s*$") or rest
+                if seen[key] then ok = false; break end
+                seen[key] = true
+            end
+        end
+        result[depth] = ok
+    end
+    return result
+end
+
+-- Per-TOC cache of strip-prefix decisions. Weak-keyed by the TOC array
+-- reference so cache entries are reclaimed when the document closes and
+-- KOReader drops the TOC.
+local _strip_cache = setmetatable({}, { __mode = "k" })
+
 --- Walk the TOC once and return a table of chapter-title data derived from it.
+-- Chapter titles have leading numbers stripped when the TOC at that depth
+-- has a clean 1..N chapter-numbering sequence (e.g. "1 Title", "2 Title", ...).
+-- See parseChapNumPrefix and computeStripPrefixByDepth for the rule.
 -- @param ui     KOReader ReaderUI instance (must have .toc)
 -- @param pageno current page number (1-indexed)
 -- @return table with keys:
@@ -496,27 +566,51 @@ function Tokens.getChapterTitlesByDepth(ui, pageno)
     }
     if not ui or not ui.toc or not pageno then return out end
 
-    local title = ui.toc:getTocTitleByPage(pageno)
-    if title and title ~= "" then out.chapter_title = title end
-
     local full_toc = ui.toc.toc
-    if not full_toc then return out end
+    if not full_toc then
+        local title = ui.toc:getTocTitleByPage(pageno)
+        if title and title ~= "" then out.chapter_title = title end
+        return out
+    end
+
+    local strip_by_depth = _strip_cache[full_toc]
+    if not strip_by_depth then
+        strip_by_depth = computeStripPrefixByDepth(full_toc)
+        _strip_cache[full_toc] = strip_by_depth
+    end
+
+    local function maybe_strip(t, depth)
+        if not t or t == "" or not strip_by_depth[depth] then return t end
+        local _n, rest = parseChapNumPrefix(t)
+        return rest or t
+    end
 
     out.chapter_count = #full_toc
     local idx = 0
+    local deepest_depth = 0
+    local deepest_title = ""
     for i, entry in ipairs(full_toc) do
         if entry.page and entry.page <= pageno then
             idx = i
+            if entry.depth then
+                local stripped = maybe_strip(entry.title or "", entry.depth)
+                out.chapter_titles_by_depth[entry.depth] = stripped
+                if entry.depth >= deepest_depth then
+                    deepest_depth = entry.depth
+                    deepest_title = stripped
+                end
+            end
         else
             break
         end
     end
     if idx > 0 then out.chapter_num = idx end
 
-    for _, entry in ipairs(full_toc) do
-        if entry.page and entry.page <= pageno and entry.depth then
-            out.chapter_titles_by_depth[entry.depth] = entry.title or ""
-        end
+    if deepest_title and deepest_title ~= "" then
+        out.chapter_title = deepest_title
+    else
+        local title = ui.toc:getTocTitleByPage(pageno)
+        if title and title ~= "" then out.chapter_title = title end
     end
     return out
 end
@@ -1635,7 +1729,7 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     local time_12h = ""
     local time_24h = ""
     if needs("time_12h") then
-        time_12h = os.date("%H:%M")
+        time_12h = os.date("%I:%M %p"):gsub("^0", "")
     end
     if needs("time_24h", "time") then
         time_24h = os.date("%H:%M")
@@ -2277,11 +2371,13 @@ function Tokens.expandPreview(format_str, ui, session_elapsed, session_pages_rea
 end
 
 -- Test-only internal exports. Underscore prefix marks these as private —
--- they are exposed solely so _test_conditionals.lua can exercise the parser
+-- they are exposed solely so tests/_test_conditionals.lua can exercise the parser
 -- without needing a running KOReader. Not stable API; may change without notice.
 Tokens._processConditionals = processConditionals
 Tokens._evaluateCondition   = evaluateCondition
 Tokens._evaluateExpression  = evaluateExpression
 Tokens._rewriteLegacyTokens = rewriteLegacyTokens
+Tokens._parseChapNumPrefix       = parseChapNumPrefix
+Tokens._computeStripPrefixByDepth = computeStripPrefixByDepth
 
 return Tokens

@@ -117,6 +117,16 @@ function LibraryModal:onCloseWidget()
     UIManager:setDirty("all", "ui")
 end
 
+-- Stub for InputText's parent contract. Upstream inputtext.lua:157 calls
+-- self.parent:getFocusableWidgetXY(self) inside `if Device:hasDPad() then`,
+-- which is true on desktop SDL (arrow keys), Kindle Keyboard, some Kobos with
+-- hardware buttons, and certain Android configs. Without this, the search
+-- field crashes on first tap on those devices. We don't use FocusManager grid
+-- navigation here, so returning nothing matches FocusManager's own behaviour
+-- when self.layout is unset (focusmanager.lua:551) and the upstream
+-- `if x and y then moveFocusTo(...)` branch correctly no-ops.
+function LibraryModal:getFocusableWidgetXY() end
+
 function LibraryModal:_dismissKeyboard()
     local input = self._search_input
     if not input then return end
