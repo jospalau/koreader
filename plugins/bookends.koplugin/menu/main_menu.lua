@@ -206,46 +206,36 @@ function Bookends:buildBookendsSettingsMenu()
             text = _("Enable bookends"),
             checked_func = function() return self.enabled end,
             callback = function()
-                local footer = self.ui.view.footer
-                footer:applyFooterMode(footer.mode_list.off)
-                if self.ui.view.topbar and self.ui.view.topbar.status_bar then
-                    self.ui.view.topbar.status_bar = false
-                end
-                if self.view.doublebar and G_reader_settings:isTrue("show_double_bar") then
-                    G_reader_settings:saveSetting("show_double_bar", false)
-                        -- require("apps/reader/modules/doublebar").is_enabled = false
-                        self.view.doublebar:toggleBar()
-                end
                 self.enabled = not self.enabled
                 self.settings:saveSetting("enabled", self.enabled)
                 self:markDirty()
             end,
         },
-        -- {
-        --     text_func = function()
-        --         if not self.stock_bar_disabled then
-        --             return _("Disable stock status bar") .. " (" .. _("recommended") .. ")"
-        --         end
-        --         return _("Disable stock status bar")
-        --     end,
-        --     keep_menu_open = true,
-        --     help_text = _("Hides KOReader's built-in status bar. This simplifies the render pipeline and can reduce e-ink flicker on some devices. All status bar features are available as Bookends tokens."),
-        --     checked_func = function()
-        --         return self.stock_bar_disabled
-        --     end,
-        --     callback = function()
-        --         local footer = self.ui.view.footer
-        --         self.stock_bar_disabled = not self.stock_bar_disabled
-        --         self.settings:saveSetting("stock_bar_disabled", self.stock_bar_disabled)
-        --         if self.stock_bar_disabled then
-        --             footer:applyFooterMode(footer.mode_list.off)
-        --         else
-        --             footer:applyFooterMode(footer.mode_list.page_progress)
-        --         end
-        --         self:markDirty()
-        --     end,
-        --     separator = true,
-        -- },
+        {
+            text_func = function()
+                if not self.stock_bar_disabled then
+                    return _("Disable stock status bar") .. " (" .. _("recommended") .. ")"
+                end
+                return _("Disable stock status bar")
+            end,
+            keep_menu_open = true,
+            help_text = _("Hides KOReader's built-in status bar. This simplifies the render pipeline and can reduce e-ink flicker on some devices. All status bar features are available as Bookends tokens."),
+            checked_func = function()
+                return self.stock_bar_disabled
+            end,
+            callback = function()
+                local footer = self.ui.view.footer
+                self.stock_bar_disabled = not self.stock_bar_disabled
+                self.settings:saveSetting("stock_bar_disabled", self.stock_bar_disabled)
+                if self.stock_bar_disabled then
+                    footer:applyFooterMode(footer.mode_list.off)
+                else
+                    footer:applyFooterMode(footer.mode_list.page_progress)
+                end
+                self:markDirty()
+            end,
+            separator = true,
+        },
         {
             text_func = function()
                 local fam = Utils.getFontFamilyLabel(self.defaults.font_face)

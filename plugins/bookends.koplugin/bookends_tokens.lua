@@ -115,6 +115,282 @@ local STATE_ALIAS = {
     pages           = "session_pages", -- pre-v4.1 gallery compat
 }
 
+-- Read pages/duration for the current reading session from KOReader's
+-- ReaderStatistics plugin. Returns { pages = N, duration = secs } when the
+-- plugin is available and the call succeeds; nil otherwise. The caller
+-- falls back to bookends' own session counters.
+--
+-- The DB query only sees pages that have been flushed via insertDB, so we
+-- add the in-memory mem_read_pages / mem_read_time counters on top —
+-- those track skip-aware reads since the last flush. Together they reflect
+-- what the user has actually read this session, with no extra disk writes.
+function Tokens._readStatsBookSession(ui, cache)
+    if cache and cache.session ~= nil then
+        if cache.session == false then return nil end
+        return cache.session
+    end
+    if not ui or not ui.statistics or type(ui.statistics.getCurrentBookStats) ~= "function" then
+        if cache then cache.session = false end
+        return nil
+    end
+    local ok, dur, pages = pcall(function()
+        return ui.statistics:getCurrentBookStats()
+    end)
+    if not ok then
+        if cache then cache.session = false end
+        return nil
+    end
+    local mem_pages = tonumber(ui.statistics.mem_read_pages) or 0
+    local mem_time = tonumber(ui.statistics.mem_read_time) or 0
+    local result = {
+        duration = (tonumber(dur) or 0) + mem_time,
+        pages    = (tonumber(pages) or 0) + mem_pages,
+    }
+    if cache then cache.session = result end
+    return result
+end
+
+-- Read pages/duration for everything read today across all books from
+-- ReaderStatistics. Same nil-on-failure contract as _readStatsBookSession.
+--
+-- KOReader only flushes its in-memory page-stats to the DB every 50 page
+-- turns (MAX_PAGETURNS_BEFORE_FLUSH). To avoid showing stale "today"
+-- counts between flushes, we add the current book's in-memory deltas
+-- (mem_read_pages / mem_read_time) on top of the DB query result. For
+-- single-book reading sessions the math is exact; for multi-book sessions
+-- it can slightly over-count if the previous book's deltas haven't flushed
+-- — small and bounded, and still better than reporting frozen counts.
+function Tokens._readStatsToday(ui, cache)
+    if cache and cache.today ~= nil then
+        if cache.today == false then return nil end
+        return cache.today
+    end
+    if not ui or not ui.statistics or type(ui.statistics.getTodayBookStats) ~= "function" then
+        if cache then cache.today = false end
+        return nil
+    end
+    local ok, dur, pages = pcall(function()
+        return ui.statistics:getTodayBookStats()
+    end)
+    if not ok then
+        if cache then cache.today = false end
+        return nil
+    end
+    local mem_pages = tonumber(ui.statistics.mem_read_pages) or 0
+    local mem_time = tonumber(ui.statistics.mem_read_time) or 0
+    local result = {
+        duration = (tonumber(dur) or 0) + mem_time,
+        pages    = (tonumber(pages) or 0) + mem_pages,
+    }
+    if cache then cache.today = result end
+    return result
+end
+
+-- Cache of book-first-open timestamps keyed by ReaderStatistics' id_curr_book.
+-- Populated lazily by _readBookFirstOpen on first access; tests can pre-populate
+-- it directly to avoid needing real SQLite during pure-Lua test runs.
+Tokens._first_open_cache = {}
+
+-- Return the unix timestamp of the first stats-recorded page view for the
+-- current book, or nil if unavailable. Caches per-book so the SQL fires at
+-- most once per book per process.
+function Tokens._readBookFirstOpen(ui)
+    if not ui or not ui.statistics or not ui.statistics.id_curr_book then return nil end
+    local id_book = ui.statistics.id_curr_book
+    local cached = Tokens._first_open_cache[id_book]
+    if cached ~= nil then
+        if cached == false then return nil end
+        return cached
+    end
+    local ok, ts = pcall(function()
+        local SQ3 = require("lua-ljsqlite3/init")
+        local DataStorage = require("datastorage")
+        local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+        local conn = SQ3.open(db_location)
+        local sql = string.format(
+            "SELECT min(start_time) FROM page_stat WHERE id_book = %d;", id_book)
+        local stmt = conn:prepare(sql)
+        local rows, nrows = stmt:reset():resultset("i")
+        stmt:close()
+        conn:close()
+        if not nrows or nrows == 0 then return nil end
+        return tonumber(rows[1][1])
+    end)
+    if not ok or not ts then
+        Tokens._first_open_cache[id_book] = false
+        return nil
+    end
+    Tokens._first_open_cache[id_book] = ts
+    return ts
+end
+
+-- Per-book stats over a time range. Returns { duration, pages } or nil. duration
+-- is seconds, pages is count of distinct rescaled pages read in the range.
+-- Adds the current-book in-memory deltas (mem_read_pages/mem_read_time) since
+-- KOReader doesn't flush every page-turn (MAX_PAGETURNS_BEFORE_FLUSH = 50).
+-- cache_key gates per-paint-cycle caching alongside the existing stats helpers.
+function Tokens._readStatsBookRange(ui, cache, since_ts, cache_key)
+    if cache and cache[cache_key] ~= nil then
+        if cache[cache_key] == false then return nil end
+        return cache[cache_key]
+    end
+    if not ui or not ui.statistics or not ui.statistics.id_curr_book then
+        if cache then cache[cache_key] = false end
+        return nil
+    end
+    local id_book = ui.statistics.id_curr_book
+    local ok, result = pcall(function()
+        local SQ3 = require("lua-ljsqlite3/init")
+        local DataStorage = require("datastorage")
+        local conn = SQ3.open(DataStorage:getSettingsDir() .. "/statistics.sqlite3")
+        -- page_stat is a view that rescales to current page count, so per-page
+        -- deduplication reflects the user's current page numbering. The view's
+        -- triple JOIN is heavier than page_stat_data alone but mirrors what
+        -- KOReader's own getTodayBookStats does, keeping the page count
+        -- semantically consistent with %pages_today.
+        local sql = string.format([[
+            SELECT count(*), sum(sum_duration)
+            FROM (SELECT sum(duration) AS sum_duration
+                  FROM page_stat
+                  WHERE id_book = %d AND start_time >= %d
+                  GROUP BY page);
+        ]], id_book, since_ts)
+        local stmt = conn:prepare(sql)
+        -- resultset("i") returns column-major data: rows[col][row]. Mirrors
+        -- KOReader's own usage in getBookStat (res[1][i], res[2][i], ...).
+        local rows, nrows = stmt:reset():resultset("i")
+        stmt:close()
+        conn:close()
+        local pages = (nrows and nrows > 0) and tonumber(rows[1][1]) or 0
+        local dur   = (nrows and nrows > 0) and tonumber(rows[2][1]) or 0
+        return { pages = pages or 0, duration = dur or 0 }
+    end)
+    if not ok or not result then
+        if cache then cache[cache_key] = false end
+        return nil
+    end
+    local mem_pages = tonumber(ui.statistics.mem_read_pages) or 0
+    local mem_time  = tonumber(ui.statistics.mem_read_time) or 0
+    result.pages = result.pages + mem_pages
+    result.duration = result.duration + mem_time
+    if cache then cache[cache_key] = result end
+    return result
+end
+
+-- Reading streak: consecutive calendar days with activity, ending today
+-- (counted) or yesterday (counted; today still has time to qualify). If
+-- id_book is non-nil, restricts to that book; otherwise across all books.
+-- Bounded to 366 days lookback so the query stays fast on large databases
+-- (the start_time index keeps the page_stat_data scan tight).
+function Tokens._readStreak(ui, cache, id_book, cache_key)
+    if cache and cache[cache_key] ~= nil then
+        if cache[cache_key] == false then return nil end
+        return cache[cache_key]
+    end
+    if not ui or not ui.statistics then
+        if cache then cache[cache_key] = false end
+        return nil
+    end
+    local ok, result = pcall(function()
+        local SQ3 = require("lua-ljsqlite3/init")
+        local DataStorage = require("datastorage")
+        local conn = SQ3.open(DataStorage:getSettingsDir() .. "/statistics.sqlite3")
+        local lookback = os.time() - 366 * 86400
+        local where = id_book
+            and string.format("WHERE id_book = %d AND start_time >= %d", id_book, lookback)
+            or string.format("WHERE start_time >= %d", lookback)
+        -- Query page_stat_data directly (raw rows, no rescaling join) since
+        -- we only need distinct calendar dates. Much cheaper than page_stat.
+        local sql = string.format([[
+            SELECT DISTINCT date(start_time, 'unixepoch', 'localtime') AS dt
+            FROM page_stat_data %s
+            ORDER BY dt DESC
+            LIMIT 366;
+        ]], where)
+        local stmt = conn:prepare(sql)
+        -- resultset("i") is column-major: rows[col][row]. With one column,
+        -- rows[1] is the date array indexed by row number.
+        local rows, nrows = stmt:reset():resultset("i")
+        stmt:close()
+        conn:close()
+        if not nrows or nrows == 0 then return 0 end
+        local dates = rows[1]
+        local now_t = os.date("*t")
+        local today_str = string.format("%04d-%02d-%02d", now_t.year, now_t.month, now_t.day)
+        local yest_str  = os.date("%Y-%m-%d", os.time() - 86400)
+        if dates[1] ~= today_str and dates[1] ~= yest_str then
+            return 0
+        end
+        local streak = 1
+        local prev = dates[1]
+        for i = 2, nrows do
+            local cur = dates[i]
+            local y, m, d = prev:match("(%d+)-(%d+)-(%d+)")
+            -- Anchor at noon to dodge DST-transition off-by-one when adding 86400s.
+            local prev_t = os.time({ year=tonumber(y), month=tonumber(m), day=tonumber(d), hour=12, min=0, sec=0 })
+            local prev_minus_one = os.date("%Y-%m-%d", prev_t - 86400)
+            if cur == prev_minus_one then
+                streak = streak + 1
+                prev = cur
+            else
+                break
+            end
+        end
+        return streak
+    end)
+    if not ok or not result then
+        if cache then cache[cache_key] = false end
+        return nil
+    end
+    if cache then cache[cache_key] = result end
+    return result
+end
+
+-- Single-row aggregation over the (small) book table. Returns total lifetime
+-- read time in seconds and finished-book count. Adds the current book's
+-- in-memory mem_read_time delta to total so the value updates between flushes.
+-- "Finished" is heuristic: total_read_pages >= pages, as KOReader doesn't
+-- store an explicit completed flag in the stats DB.
+function Tokens._readStatsBookSummary(ui, cache)
+    if cache and cache.book_summary ~= nil then
+        if cache.book_summary == false then return nil end
+        return cache.book_summary
+    end
+    local ok, result = pcall(function()
+        local SQ3 = require("lua-ljsqlite3/init")
+        local DataStorage = require("datastorage")
+        local conn = SQ3.open(DataStorage:getSettingsDir() .. "/statistics.sqlite3")
+        local sql = [[
+            SELECT
+                COALESCE(SUM(total_read_time), 0),
+                COALESCE(SUM(CASE WHEN pages > 0 AND total_read_pages >= pages THEN 1 ELSE 0 END), 0)
+            FROM book;
+        ]]
+        local stmt = conn:prepare(sql)
+        -- resultset("i") is column-major: rows[col][row].
+        local rows, nrows = stmt:reset():resultset("i")
+        stmt:close()
+        conn:close()
+        if not nrows or nrows == 0 then return { total_time = 0, finished_count = 0 } end
+        return {
+            total_time = tonumber(rows[1][1]) or 0,
+            finished_count = tonumber(rows[2][1]) or 0,
+        }
+    end)
+    if not ok or not result then
+        if cache then cache.book_summary = false end
+        return nil
+    end
+    -- Roll the current book's in-memory delta into the lifetime total so the
+    -- value increments live alongside %book_read_time rather than only at flush.
+    if ui and ui.statistics then
+        local mem_time = tonumber(ui.statistics.mem_read_time) or 0
+        result.total_time = result.total_time + mem_time
+    end
+    if cache then cache.book_summary = result end
+    return result
+end
+
 -- Split KOReader's newline-separated authors string into a list. Drops empties
 -- because KOReader can yield trailing "\n" or "\n\n" runs from messy metadata.
 local function splitAuthors(authors_raw)
@@ -158,7 +434,7 @@ local function getDateLocale()
 end
 
 --- Compute chapter tick fractions as {fraction, width, depth} triples.
-function Tokens.computeTickFractions(doc, toc, tick_width_multiplier)
+function Tokens.computeTickFractions(doc, toc, tick_width_multiplier, current_pageno)
     if not doc or not toc then return {} end
     local raw_total = doc:getPageCount()
     if not raw_total or raw_total <= 0 then return {} end
@@ -166,12 +442,34 @@ function Tokens.computeTickFractions(doc, toc, tick_width_multiplier)
     local max_depth = toc:getMaxDepth() or 1
     local tick_m = tick_width_multiplier or 2
     local ticks = {}
+
+    -- When KOReader's "Custom flows" feature is in use, the bar fill
+    -- percentage is computed flow-relative (getPageNumberInFlow over
+    -- getTotalPagesInFlow). Ticks have to follow the same convention,
+    -- otherwise they get spaced as fractions of the whole document while
+    -- the bar represents only the active flow, and chapter boundaries
+    -- stop lining up with the fill.
+    local has_flows = current_pageno and doc.hasHiddenFlows and doc:hasHiddenFlows()
+    local active_flow, active_flow_total
+    if has_flows then
+        active_flow = doc:getPageFlow(current_pageno) or 0
+        active_flow_total = doc:getTotalPagesInFlow(active_flow) or 0
+    end
+
     for depth, pages in ipairs(toc_ticks) do
         local tick_w = math.max(1, (max_depth - depth + 1) * tick_m - 1)
         for _, page in ipairs(pages) do
             if page > 1 then
-                local tick_frac = page / raw_total
-                if tick_frac > 0 and tick_frac < 1 then
+                local tick_frac
+                if has_flows then
+                    if doc:getPageFlow(page) == active_flow and active_flow_total > 0 then
+                        local page_in_flow = doc:getPageNumberInFlow(page) or page
+                        tick_frac = page_in_flow / active_flow_total
+                    end
+                else
+                    tick_frac = page / raw_total
+                end
+                if tick_frac and tick_frac > 0 and tick_frac < 1 then
                     table.insert(ticks, { tick_frac, tick_w, depth })
                 end
             end
@@ -462,7 +760,7 @@ end
 --- Build a state table of raw values for conditional evaluation.
 --- If paint_ctx is provided and already has a cached state, returns it
 --- (shared across all expand() calls within one paint cycle).
-function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, paint_ctx)
+function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, paint_ctx, stats_cache)
     if paint_ctx and paint_ctx._condition_state then
         return paint_ctx._condition_state
     end
@@ -481,8 +779,19 @@ function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, pai
         state.batt = powerd:getCapacity() or 0
         state.charging = (powerd:isCharging() or powerd:isCharged()) and "yes" or "no"
         state.light = powerd:frontlightIntensity() > 0 and "on" or "off"
+        if powerd.fl_max and powerd.fl_max > 0 then
+            -- 0-100 percentage of frontlight intensity; the device-native
+            -- range varies (Kindle 0-24, Kobo 0-100, generic 0-10), so
+            -- normalise via fl_max for cross-device conditionals.
+            state.light_pct = math.floor(
+                powerd:frontlightIntensity() / powerd.fl_max * 100 + 0.5)
+        end
         if Device:hasNaturalLight() and powerd.frontlightWarmth then
+            -- state.warmth keeps the device-native value (0-24 on Kindle)
+            -- for users with conditionals tied to that scale; warmth_pct
+            -- is the normalised 0-100 frontlightWarmth() return value.
             state.warmth = powerd:toNativeWarmth(powerd:frontlightWarmth())
+            state.warmth_pct = math.floor(powerd:frontlightWarmth() + 0.5)
         end
     end
 
@@ -494,6 +803,11 @@ function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, pai
         or G:isTrue("input_invert_right_page_turn_keys")
         or (ui.view and ui.view.inverse_reading_order)
     state.invert = page_turn_inverted and "yes" or "no"
+
+    -- Night mode (driven by KOReader's persistent "night_mode" setting,
+    -- toggled via the Toggle night mode action — same source as
+    -- ToggleNightMode handlers in devicelistener.lua).
+    state.night = G_reader_settings:isTrue("night_mode") and "on" or "off"
 
     -- Page-based state
     local pageno = ui.view and ui.view.state and ui.view.state.page
@@ -523,6 +837,9 @@ function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, pai
                 state.page_count = raw_total
                 page_count_val = raw_total
             end
+        end
+        if state.book_pct ~= nil then
+            state.book_pct_left = math.max(0, math.min(100, 100 - state.book_pct))
         end
         if page_count_val and state.page_num then
             local left = page_count_val - state.page_num
@@ -554,6 +871,9 @@ function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, pai
             -- fallback and stock's getChapterProgress get_percentage path).
             if state.chap_pct == nil and state.book_pct ~= nil then
                 state.chap_pct = state.book_pct
+            end
+            if state.chap_pct ~= nil then
+                state.chap_pct_left = math.max(0, math.min(100, 100 - state.chap_pct))
             end
             local pages_left_offset = Tokens.pages_left_includes_current and 1 or 0
             local done = ui.toc:getChapterPagesDone(pageno)
@@ -647,10 +967,107 @@ function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, pai
     local weekdays = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"}
     state.day = weekdays[now.wday]
 
-    -- Session
-    state.session = session_elapsed and math.floor(session_elapsed / 60) or 0
-    state.session_time = state.session  -- alias matching the %session_time token name
-    state.session_pages = math.max(0, session_pages_read or 0)
+    -- Session (prefer ReaderStatistics' skip-aware values; fall back to
+    -- our wall-clock measurement and max-page counter when stats is disabled).
+    do
+        local stats_session = Tokens._readStatsBookSession(ui, stats_cache)
+        if stats_session then
+            state.session = math.floor(stats_session.duration / 60)
+            state.session_pages = math.max(0, stats_session.pages)
+        else
+            state.session = session_elapsed and math.floor(session_elapsed / 60) or 0
+            state.session_pages = math.max(0, session_pages_read or 0)
+        end
+        state.session_time = state.session
+    end
+
+    -- Today's reading totals (across all books) from ReaderStatistics.
+    -- pages_today is an integer; time_today is integer minutes (raw seconds
+    -- get formatted at render time).
+    do
+        local stats_today = Tokens._readStatsToday(ui, stats_cache)
+        if stats_today then
+            state.pages_today = math.max(0, stats_today.pages)
+            state.time_today = math.floor(stats_today.duration / 60)
+        else
+            state.pages_today = 0
+            state.time_today = 0
+        end
+    end
+
+    -- Today's reading totals (current book only). Mirrors pages_today/time_today
+    -- but with id_book scoping so a user reading a second book today doesn't
+    -- inflate the count for the book they're currently reading.
+    do
+        local now_t = os.date("*t")
+        local start_today = os.time() - (now_t.hour * 3600 + now_t.min * 60 + now_t.sec)
+        local s = Tokens._readStatsBookRange(ui, stats_cache, start_today, "book_today")
+        state.pages_today_book = s and math.max(0, s.pages) or 0
+        state.time_today_book = s and math.floor(s.duration / 60) or 0
+    end
+
+    -- Current book over the last 7 days (rolling window, not calendar week).
+    do
+        local since = os.time() - 7 * 86400
+        local s = Tokens._readStatsBookRange(ui, stats_cache, since, "book_week")
+        state.pages_week_book = s and math.max(0, s.pages) or 0
+        state.time_week_book = s and math.floor(s.duration / 60) or 0
+    end
+
+    -- Reading streaks (consecutive calendar days). nil id_book = any-book streak.
+    state.streak = Tokens._readStreak(ui, stats_cache, nil, "streak") or 0
+    if ui and ui.statistics and ui.statistics.id_curr_book then
+        state.book_streak = Tokens._readStreak(ui, stats_cache, ui.statistics.id_curr_book, "book_streak") or 0
+    else
+        state.book_streak = 0
+    end
+
+    -- Lifetime aggregates over the book table (single SQL, two values).
+    do
+        local s = Tokens._readStatsBookSummary(ui, stats_cache)
+        state.total_read_time = s and math.floor(s.total_time / 60) or 0
+        state.books_finished = s and s.finished_count or 0
+    end
+
+    -- Lifetime stats for the current book (instance fields on ui.statistics).
+    if ui.statistics and tonumber(ui.statistics.book_read_pages) and ui.statistics.book_read_pages > 0 then
+        state.book_pages_read = math.floor(ui.statistics.book_read_pages)
+    else
+        state.book_pages_read = 0
+    end
+    if ui.statistics and tonumber(ui.statistics.avg_time) and ui.statistics.avg_time > 0 then
+        state.avg_page_time = math.floor(ui.statistics.avg_time)
+    else
+        state.avg_page_time = 0
+    end
+
+    -- Skip-aware book completion percentage (complement of position-based book_pct).
+    do
+        local read = state.book_pages_read or 0
+        local total = (ui.document and tonumber(ui.document:getPageCount())) or 0
+        if total > 0 and read > 0 then
+            state.book_pct_read = math.min(100, math.floor((read / total) * 100))
+        else
+            state.book_pct_read = 0
+        end
+    end
+
+    -- Days since first open of this book + derived per-day pace.
+    do
+        local first_open = Tokens._readBookFirstOpen(ui)
+        if first_open and first_open > 0 then
+            state.days_reading_book = math.max(0, math.floor((os.time() - first_open) / 86400))
+        else
+            state.days_reading_book = 0
+        end
+        local read = state.book_pages_read or 0
+        local days = math.max(state.days_reading_book, 1)
+        if read > 0 then
+            state.pages_per_day = math.floor(read / days)
+        else
+            state.pages_per_day = 0
+        end
+    end
 
     -- Reading speed (pages/hr)
     if session_elapsed and session_elapsed > 60 and (session_pages_read or 0) > 0 then
@@ -773,6 +1190,12 @@ end
 
 function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, preview_mode, tick_width_multiplier, symbol_color, paint_ctx, opts)
     opts = opts or {}
+    -- Optional caller-supplied cache for SQL-backed stats reads. Lets a caller
+    -- iterating many tokens (e.g. the token picker building its catalog
+    -- preview) share the result of getCurrentBookStats / getTodayBookStats
+    -- across calls instead of re-querying SQLite per token. When omitted,
+    -- helpers fall through to fresh reads, matching pre-cache behaviour.
+    local stats_cache = opts.stats_cache
     -- Fast path: no tokens or conditionals
     if not format_str:find("%%") and not format_str:find("%[if:") then
         return format_str
@@ -790,7 +1213,7 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     -- buildConditionState will reuse paint_ctx._condition_state if present,
     -- so multiple lines with [if:...] in the same paint share one build.
     if not preview_mode and format_str:find("%[if:") then
-        local state = Tokens.buildConditionState(ui, session_elapsed, session_pages_read, paint_ctx)
+        local state = Tokens.buildConditionState(ui, session_elapsed, session_pages_read, paint_ctx, stats_cache)
         format_str = processConditionals(format_str, state)
         -- After stripping false branches, check if anything remains to expand
         if not format_str:find("%%") then
@@ -878,7 +1301,8 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     if preview_mode then
         local preview = {
             page_num = "[page]", page_count = "[total]",
-            book_pct = "[%]", chap_pct = "[ch%]",
+            book_pct = "[%]", book_pct_left = "[%left]",
+            chap_pct = "[ch%]", chap_pct_left = "[ch%left]",
             chap_read = "[ch.read]", chap_pages = "[ch.total]",
             chap_pages_left = "[ch.left]", pages_left = "[left]",
             chap_num = "[ch.num]", chap_count = "[ch.count]",
@@ -896,10 +1320,16 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
             highlights = "[highlights]", notes = "[notes]",
             bookmarks = "[bookmarks]", annotations = "[annotations]",
             speed = "[pg/hr]", book_read_time = "[total]",
+            pages_today_book = "[pages.book]", time_today_book = "[time.book]",
+            pages_week_book = "[pages.wk]", time_week_book = "[time.wk]",
+            streak = "[streak]", book_streak = "[bk.streak]",
+            total_read_time = "[lifetime]", books_finished = "[done]",
             batt = "[batt]", batt_icon = "[batt]", wifi = "[wifi]",
             plugin_content = "[plugins]",
             invert = "[invert]",
-            light = "[light]", warmth = "[warmth]",
+            light = "[light]", light_icon = "[light]", light_pct = "[light]",
+            warmth = "[warmth]", warmth_pct = "[warmth]", warmth_icon = "[warmth]",
+            nightmode = "[night]",
             mem = "[mem]", ram = "[rss]",
             disk = "[disk]",
             bar = "\xE2\x96\xB0\xE2\x96\xB0\xE2\x96\xB1\xE2\x96\xB1",  -- ▰▰▱▱
@@ -976,12 +1406,13 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     local currentpage = ""
     local totalpages = ""
     local percent = ""
+    local percent_left = ""
     local pages_left_book = ""
     local pages_left_offset = Tokens.pages_left_includes_current and 1 or 0
     -- Numeric page indices for arithmetic (separate from display labels)
     local page_idx = nil   -- numeric current page position
     local page_count = nil -- numeric total pages
-    if needs("page_num", "page_count", "book_pct", "pages_left") then
+    if needs("page_num", "page_count", "book_pct", "book_pct_left", "pages_left") then
         if ui.pagemap and ui.pagemap:wantsPageLabels() then
             local label, idx, count = ui.pagemap:getCurrentPageLabel(true)
             currentpage = label or ""
@@ -1002,19 +1433,26 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
             page_count = tonumber(totalpages)
         end
 
-        -- Book percent: flow-aware when hidden flows active, raw pages otherwise
+        -- Book percent: flow-aware when hidden flows active, raw pages otherwise.
+        -- percent_left is derived from the same integer to keep "X% read" + "Y% left"
+        -- summing to exactly 100 at the displayed precision.
+        local percent_int
         if pageno and doc:hasHiddenFlows() then
             local flow = doc:getPageFlow(pageno)
             local flow_page = doc:getPageNumberInFlow(pageno)
             local flow_total = doc:getTotalPagesInFlow(flow)
             if flow_total and flow_total > 0 then
-                percent = math.floor(flow_page / flow_total * 100 + 0.5) .. "%"
+                percent_int = math.floor(flow_page / flow_total * 100 + 0.5)
             end
         else
             local raw_total = doc:getPageCount()
             if pageno and raw_total and raw_total > 0 then
-                percent = math.floor(pageno / raw_total * 100 + 0.5) .. "%"
+                percent_int = math.floor(pageno / raw_total * 100 + 0.5)
             end
+        end
+        if percent_int then
+            percent = percent_int .. "%"
+            percent_left = math.max(0, math.min(100, 100 - percent_int)) .. "%"
         end
         -- Pages left in book: stable page count. Offset controlled by the
         -- Bookends `pages_left_includes_current` setting so users don't need
@@ -1028,6 +1466,7 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     -- Chapter progress: raw pages for %P (per-flip accuracy),
     -- stable pages for %g, %G, %l (display values matching page numbers)
     local chapter_pct = ""
+    local chapter_pct_left = ""
     local chapter_pages_done = ""
     local chapter_pages_left = ""
     local chapter_total_pages = ""
@@ -1035,7 +1474,7 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     local chapter_num = ""      -- 1-indexed position of current chapter in TOC
     local chapter_count = ""    -- total number of entries in TOC
     local chapter_titles_by_depth = {}  -- { [1] = "Part II", [2] = "Chapter 1", ... }
-    if needs("chap_pct", "chap_read", "chap_pages", "chap_pages_left", "chap_title", "chap_num", "chap_count") and pageno and ui.toc then
+    if needs("chap_pct", "chap_pct_left", "chap_read", "chap_pages", "chap_pages_left", "chap_title", "chap_num", "chap_count") and pageno and ui.toc then
         -- Raw page calculation for %P (percentage)
         local chapter_start = ui.toc:getPreviousChapter(pageno)
         if ui.toc:isChapterStart(pageno) then
@@ -1047,11 +1486,14 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
             local raw_total = chapter_end - chapter_start
             if raw_total > 0 then
                 local raw_done = pageno - chapter_start
+                local pct_int
                 if raw_total > 1 then
-                    chapter_pct = math.floor(raw_done / (raw_total - 1) * 100) .. "%"
+                    pct_int = math.floor(raw_done / (raw_total - 1) * 100)
                 else
-                    chapter_pct = "100%"
+                    pct_int = 100
                 end
+                chapter_pct = pct_int .. "%"
+                chapter_pct_left = math.max(0, math.min(100, 100 - pct_int)) .. "%"
             end
         end
         -- Stable page counts for %chap_read / %chap_pages / %chap_pages_left.
@@ -1079,6 +1521,7 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
         -- use book percent (matches stock's getChapterProgress get_percentage path).
         if chapter_pct == "" and percent ~= "" then
             chapter_pct = percent
+            chapter_pct_left = percent_left
         end
         local titles = Tokens.getChapterTitlesByDepth(ui, pageno)
         if titles.chapter_title ~= "" then chapter_title = titles.chapter_title end
@@ -1109,8 +1552,9 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
             end
         end
 
-        -- Chapter tick positions as {fraction, width, depth} — page-based to match KOReader footer
-        local ticks = Tokens.computeTickFractions(bar_doc, ui.toc, tick_width_multiplier)
+        -- Chapter tick positions as {fraction, width, depth} — page-based to match KOReader footer.
+        -- Pass bar_pageno so flow-aware tick fractions line up with the flow-relative book_pct above.
+        local ticks = Tokens.computeTickFractions(bar_doc, ui.toc, tick_width_multiplier, bar_pageno)
 
         bar_info.book = { kind = "book", pct = book_pct or 0, ticks = ticks }
 
@@ -1142,8 +1586,17 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
         end
     end
 
-    -- Session pages read
-    local session_pages = math.max(0, session_pages_read or 0)
+    -- Session pages read (skip-aware via ReaderStatistics with fallback to
+    -- bookends' own max-page counter when stats is disabled or absent).
+    local session_pages
+    do
+        local stats_session = Tokens._readStatsBookSession(ui, stats_cache)
+        if stats_session then
+            session_pages = math.max(0, stats_session.pages)
+        else
+            session_pages = math.max(0, session_pages_read or 0)
+        end
+    end
 
     -- Time left in chapter / document (via statistics plugin).
     -- chap_time_left falls back to whole-book pages-left when no chapter info,
@@ -1182,8 +1635,7 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     local time_12h = ""
     local time_24h = ""
     if needs("time_12h") then
-        -- time_12h = os.date("%I:%M %p"):gsub("^0", "")
-        time_12h = os.date("%H:%M")
+        time_12h = os.date("%I:%M %p"):gsub("^0", "")
     end
     if needs("time_24h", "time") then
         time_24h = os.date("%H:%M")
@@ -1213,11 +1665,156 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
         end
     end
 
-    -- Session reading time
+    -- Session reading time (skip-aware via ReaderStatistics with fallback
+    -- to wall-clock when stats is disabled). Always renders — a zero
+    -- duration formats as "0m"/"00:00"/"0'" rather than blanking, so the
+    -- containing line stays visible while time accrues. Output respects
+    -- duration_format (Settings → Device → Time and date).
     local session_time = ""
-    if needs("session_time") and session_elapsed then
+    if needs("session_time") then
+        local stats_session = Tokens._readStatsBookSession(ui, stats_cache)
+        local secs
+        if stats_session then
+            secs = stats_session.duration or 0
+        else
+            secs = session_elapsed or 0
+        end
         local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
-        session_time = datetime.secondsToClockDuration(user_duration_format, session_elapsed, true)
+        session_time = datetime.secondsToClockDuration(user_duration_format, secs, true)
+    end
+
+    -- Today's totals (across all books) from ReaderStatistics. Single
+    -- call covers both pages_today and time_today; gate is needs(...)
+    -- on either token. Always renders zeros so the line stays visible
+    -- before any reading has been logged today.
+    local pages_today_str = ""
+    local time_today_str = ""
+    if needs("pages_today", "time_today") then
+        local stats_today = Tokens._readStatsToday(ui, stats_cache)
+        local today_pages = (stats_today and tonumber(stats_today.pages)) or 0
+        local today_dur   = (stats_today and tonumber(stats_today.duration)) or 0
+        if needs("pages_today") then
+            pages_today_str = tostring(math.floor(today_pages))
+        end
+        if needs("time_today") then
+            local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
+            time_today_str = datetime.secondsToClockDuration(user_duration_format, today_dur, true)
+        end
+    end
+
+    -- Today, current book only. Same shape as pages_today/time_today but
+    -- id_book-scoped so multi-book readers see only the book they're in.
+    local pages_today_book_str = ""
+    local time_today_book_str = ""
+    if needs("pages_today_book", "time_today_book") then
+        local now_t = os.date("*t")
+        local start_today = os.time() - (now_t.hour * 3600 + now_t.min * 60 + now_t.sec)
+        local s = Tokens._readStatsBookRange(ui, stats_cache, start_today, "book_today")
+        local p = (s and tonumber(s.pages)) or 0
+        local d = (s and tonumber(s.duration)) or 0
+        if needs("pages_today_book") then
+            pages_today_book_str = tostring(math.floor(p))
+        end
+        if needs("time_today_book") then
+            local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
+            time_today_book_str = datetime.secondsToClockDuration(user_duration_format, d, true)
+        end
+    end
+
+    -- Last 7 days, current book. Rolling window from now.
+    local pages_week_book_str = ""
+    local time_week_book_str = ""
+    if needs("pages_week_book", "time_week_book") then
+        local since = os.time() - 7 * 86400
+        local s = Tokens._readStatsBookRange(ui, stats_cache, since, "book_week")
+        local p = (s and tonumber(s.pages)) or 0
+        local d = (s and tonumber(s.duration)) or 0
+        if needs("pages_week_book") then
+            pages_week_book_str = tostring(math.floor(p))
+        end
+        if needs("time_week_book") then
+            local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
+            time_week_book_str = datetime.secondsToClockDuration(user_duration_format, d, true)
+        end
+    end
+
+    -- Reading streaks: consecutive calendar days. Zero auto-hides the line
+    -- on a fresh install or after a missed day.
+    local streak_str = ""
+    if needs("streak") then
+        local n = Tokens._readStreak(ui, stats_cache, nil, "streak") or 0
+        if n > 0 then streak_str = tostring(n) end
+    end
+    local book_streak_str = ""
+    if needs("book_streak") then
+        local id_book = ui.statistics and ui.statistics.id_curr_book
+        if id_book then
+            local n = Tokens._readStreak(ui, stats_cache, id_book, "book_streak") or 0
+            if n > 0 then book_streak_str = tostring(n) end
+        end
+    end
+
+    -- Lifetime aggregates from the book table (one SQL, two values).
+    local total_read_time_str = ""
+    local books_finished_str = ""
+    if needs("total_read_time", "books_finished") then
+        local s = Tokens._readStatsBookSummary(ui, stats_cache)
+        if s then
+            if needs("total_read_time") and s.total_time > 0 then
+                local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
+                total_read_time_str = datetime.secondsToClockDuration(user_duration_format, s.total_time, true)
+            end
+            if needs("books_finished") and s.finished_count > 0 then
+                books_finished_str = tostring(s.finished_count)
+            end
+        end
+    end
+
+    -- Lifetime stats for the current book (instance fields, no SQL).
+    local book_pages_read_str = ""
+    local avg_page_time_str = ""
+    if needs("book_pages_read") and ui.statistics
+       and tonumber(ui.statistics.book_read_pages)
+       and ui.statistics.book_read_pages > 0 then
+        book_pages_read_str = tostring(math.floor(ui.statistics.book_read_pages))
+    end
+    if needs("avg_page_time") and ui.statistics
+       and tonumber(ui.statistics.avg_time)
+       and ui.statistics.avg_time > 0 then
+        local user_duration_format = G_reader_settings:readSetting("duration_format", "classic")
+        -- Pass withoutSeconds=false so per-page averages keep their second-level
+        -- resolution (typical values are 30-90s; rounding to whole minutes loses
+        -- meaningful precision unlike the longer session/today durations).
+        avg_page_time_str = datetime.secondsToClockDuration(user_duration_format, ui.statistics.avg_time, false)
+    end
+
+    local book_pct_read_str = ""
+    if needs("book_pct_read") then
+        local read = (ui.statistics and tonumber(ui.statistics.book_read_pages)) or 0
+        local total = (doc and tonumber(doc:getPageCount())) or 0
+        if total > 0 and read > 0 then
+            local pct = math.min(100, math.floor((read / total) * 100))
+            book_pct_read_str = tostring(pct)
+        end
+    end
+
+    local days_reading_str = ""
+    local pages_per_day_str = ""
+    if needs("days_reading_book", "pages_per_day") then
+        local first_open = Tokens._readBookFirstOpen(ui)
+        local days = 0
+        if first_open and first_open > 0 then
+            days = math.max(0, math.floor((os.time() - first_open) / 86400))
+        end
+        if needs("days_reading_book") and days > 0 then
+            days_reading_str = tostring(days)
+        end
+        if needs("pages_per_day") then
+            local read = (ui.statistics and tonumber(ui.statistics.book_read_pages)) or 0
+            if read > 0 then
+                pages_per_day_str = tostring(math.floor(read / math.max(days, 1)))
+            end
+        end
     end
 
     -- Document metadata
@@ -1334,6 +1931,69 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
         end
     end
 
+    -- Frontlight on/off icon (dynamic). Lightbulb-on glyph (rays) when
+    -- frontlight is on, lightbulb-outline (empty) when off.
+    local light_symbol = ""
+    if needs("light_icon") then
+        local powerd = Device:getPowerDevice()
+        if powerd and powerd:frontlightIntensity() > 0 then
+            light_symbol = "\xEE\xB7\xA6" -- U+EDE6 lightbulb-on
+        else
+            light_symbol = "\xEE\xA8\xB5" -- U+EA35 lightbulb-outline
+        end
+    end
+
+    -- Night mode icon (dynamic). Moon glyph when night mode is active,
+    -- sun glyph otherwise. Driven by KOReader's "night_mode" setting.
+    local night_symbol = ""
+    if needs("nightmode") then
+        if G_reader_settings:isTrue("night_mode") then
+            night_symbol = "\xEE\xB2\x93" -- U+EC93 weather-night
+        else
+            night_symbol = "\xEE\xB2\x98" -- U+EC98 weather-sunny
+        end
+    end
+
+    -- Frontlight intensity as a 0-100 percentage. Returns just the
+    -- number (no "%" suffix) to match the %book_pct convention.
+    local fl_intensity_pct = ""
+    if needs("light_pct") then
+        local pwd = Device:getPowerDevice()
+        if pwd and pwd.fl_max and pwd.fl_max > 0 then
+            fl_intensity_pct = tostring(math.floor(
+                pwd:frontlightIntensity() / pwd.fl_max * 100 + 0.5))
+        end
+    end
+
+    -- Frontlight warmth as a 0-100 percentage. frontlightWarmth() is
+    -- already in the KOReader 0-100 scale (powerd.lua:243), so no
+    -- division is needed.
+    local fl_warmth_pct = ""
+    if needs("warmth_pct") then
+        local pwd = Device:getPowerDevice()
+        if pwd and Device:hasNaturalLight() then
+            fl_warmth_pct = tostring(math.floor(pwd:frontlightWarmth() + 0.5))
+        end
+    end
+
+    -- Warmth icon (dynamic). Three-step ramp: thermometer-low for cool
+    -- (<34%), thermometer for mid (34-66%), thermometer-high for warm
+    -- (≥67%). Empty when the device has no natural-light hardware.
+    local warmth_symbol = ""
+    if needs("warmth_icon") then
+        local pwd = Device:getPowerDevice()
+        if pwd and Device:hasNaturalLight() then
+            local pct = pwd:frontlightWarmth()
+            if pct < 34 then
+                warmth_symbol = "\xEE\x88\x8C" -- U+E20C thermometer-low
+            elseif pct < 67 then
+                warmth_symbol = "\xEE\x88\x8A" -- U+E20A thermometer
+            else
+                warmth_symbol = "\xEE\x88\x8B" -- U+E20B thermometer-high
+            end
+        end
+    end
+
     -- Aggregate output from plugins that register with KOReader's footer
     -- extension API (ReaderFooter:addAdditionalFooterContent at
     -- readerfooter.lua:2076). Examples: kobo.koplugin (Bluetooth icon),
@@ -1444,7 +2104,9 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
         page_num   = tostring(currentpage),
         page_count = tostring(totalpages),
         book_pct   = tostring(percent),
+        book_pct_left = tostring(percent_left),
         chap_pct   = tostring(chapter_pct),
+        chap_pct_left = tostring(chapter_pct_left),
         chap_read  = tostring(chapter_pages_done),
         chap_pages = tostring(chapter_total_pages),
         chap_pages_left = tostring(chapter_pages_left),
@@ -1464,6 +2126,21 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
         weekday_short = date_weekday_short,
         session_time  = session_time,
         session_pages = tostring(session_pages),
+        pages_today      = pages_today_str,
+        time_today       = time_today_str,
+        pages_today_book = pages_today_book_str,
+        time_today_book  = time_today_book_str,
+        pages_week_book  = pages_week_book_str,
+        time_week_book   = time_week_book_str,
+        streak           = streak_str,
+        book_streak      = book_streak_str,
+        total_read_time  = total_read_time_str,
+        books_finished   = books_finished_str,
+        book_pages_read   = book_pages_read_str,
+        avg_page_time     = avg_page_time_str,
+        book_pct_read     = book_pct_read_str,
+        days_reading_book = days_reading_str,
+        pages_per_day     = pages_per_day_str,
         -- Metadata
         title       = tostring(title),
         author      = first_author,
@@ -1493,7 +2170,12 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
         wifi      = wifi_symbol,
         plugin_content = plugin_content,
         light     = fl_intensity,
+        light_icon = light_symbol,
+        light_pct = fl_intensity_pct,
         warmth    = fl_warmth,
+        warmth_pct = fl_warmth_pct,
+        warmth_icon = warmth_symbol,
+        nightmode = night_symbol,
         mem       = tostring(mem_usage),
         ram       = ram_mb,
         disk      = disk_avail,
@@ -1511,8 +2193,8 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     local all_empty = true
     -- Tokens that always count as content (page/chapter/time info is meaningful at zero)
     local always_content = {
-        page_num = true, page_count = true, book_pct = true, pages_left = true,
-        chap_pct = true, chap_read = true, chap_pages = true, chap_pages_left = true,
+        page_num = true, page_count = true, book_pct = true, book_pct_left = true, pages_left = true,
+        chap_pct = true, chap_pct_left = true, chap_read = true, chap_pages = true, chap_pages_left = true,
         chap_num = true, chap_count = true,
         chap_time_left = true, book_time_left = true, time_12h = true, time_24h = true,
         time = true,

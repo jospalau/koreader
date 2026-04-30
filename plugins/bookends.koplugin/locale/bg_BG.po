@@ -3,7 +3,7 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: bookends\n"
-"POT-Creation-Date: 2026-04-24 20:00+0000\n"
+"POT-Creation-Date: 2026-04-29 00:00+0000\n"
 "PO-Revision-Date: 2026-04-21 14:00+0000\n"
 "Language-Team: Bulgarian\n"
 "Language: bg_BG\n"
@@ -12,79 +12,1129 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=n != 1;\n"
 
-msgid "%1 presets in the approval queue"
-msgstr "%1 предварителни настройки в опашката за одобрение"
+#: bookends_updater.lua:105
+msgid "Open the releases page in a browser?"
+msgstr "Отваряне на страницата с версиите в браузър?"
 
-msgid "%1, line %2"
-msgstr "%1, ред %2"
+#: bookends_updater.lua:106
+msgid "Open"
+msgstr "Отваряне"
 
-msgid ""
-"'%1' already exists in your library.\n"
-"\n"
-"Replacing it will overwrite your local copy with the current gallery "
-"version. Any local edits will be lost.\n"
-"\n"
-"Install under a new name to keep both."
-msgstr ""
-"„%1“ вече съществува в библиотеката ви.\n"
-"\n"
-"Замяната ще презапише локалното копие с текущата версия от галерията. Всички "
-"локални промени ще бъдат изгубени.\n"
-"\n"
-"Инсталирайте под ново име, за да запазите и двете."
+#: bookends_updater.lua:181 bookends_updater.lua:414 bookends_updater.lua:435
+msgid "Wi-Fi is not enabled."
+msgstr "Wi-Fi не е включен."
 
-msgid "+ New blank preset"
-msgstr "+ Нова празна настройка"
+#: bookends_updater.lua:188
+msgid "Checking for updates..."
+msgstr "Проверка за актуализации..."
 
-msgid "+ Progress bar"
-msgstr "+ Лента за напредъка"
+#: bookends_updater.lua:200
+msgid "Could not check for updates."
+msgstr "Неуспешна проверка за актуализации."
 
+#: bookends_updater.lua:237
+msgid "Bookends is up to date."
+msgstr "Bookends е актуален."
+
+#: bookends_updater.lua:238
+msgid "Version: "
+msgstr "Версия: "
+
+#: bookends_updater.lua:266 main.lua:2318 menu/tokens_library.lua:276
+#: menu/icons_library.lua:318 menu/preset_manager_modal.lua:536
+msgid "Close"
+msgstr "Затваряне"
+
+#: bookends_updater.lua:272
+msgid "Update and restart"
+msgstr "Актуализиране и рестартиране"
+
+#: bookends_updater.lua:277
+msgid "No download available for this release."
+msgstr "Няма наличен файл за изтегляне за тази версия."
+
+#: bookends_updater.lua:288
+msgid "Update available!"
+msgstr "Налична е актуализация!"
+
+#: bookends_updater.lua:289
+msgid "Installed: "
+msgstr "Инсталиран: "
+
+#: bookends_updater.lua:290
+msgid "Latest: "
+msgstr "Последна: "
+
+#: bookends_updater.lua:305
+msgid "Downloading update..."
+msgstr "Изтегляне на актуализацията..."
+
+#: bookends_updater.lua:367
+msgid "Download failed."
+msgstr "Изтеглянето е неуспешно."
+
+#: bookends_updater.lua:379
+msgid "Installation failed: "
+msgstr "Инсталирането е неуспешно: "
+
+#: bookends_updater.lua:396
+msgid "Bookends updated to v"
+msgstr "Bookends е актуализиран до v"
+
+#: bookends_updater.lua:397
+msgid "Restart KOReader now?"
+msgstr "Рестартиране на KOReader сега?"
+
+#: bookends_updater.lua:398 main.lua:57
+msgid "Restart"
+msgstr "Рестартиране"
+
+#: bookends_updater.lua:422
+msgid "Could not install branch:"
+msgstr "Клонът не можа да бъде инсталиран:"
+
+#: bookends_updater.lua:442
+msgid "Downloading latest release..."
+msgstr "Изтегляне на последната версия..."
+
+#: bookends_updater.lua:453
+msgid "Could not fetch latest release."
+msgstr "Последната версия не можа да бъде изтеглена."
+
+#: bookends_updater.lua:466
+msgid "Latest release has no downloadable zip."
+msgstr "Последната версия няма zip файл за изтегляне."
+
+#: bookends_line_editor.lua:97 main.lua:889
+msgid "Regular"
+msgstr "Обикновен"
+
+#: bookends_line_editor.lua:103
+msgid "Size"
+msgstr "Размер"
+
+#: bookends_line_editor.lua:110
+msgid "Font"
+msgstr "Шрифт"
+
+#: bookends_line_editor.lua:112
+msgid "Font..."
+msgstr "Шрифт..."
+
+#: bookends_line_editor.lua:124
+msgid "Odd pg"
+msgstr "Нечетни стр."
+
+#: bookends_line_editor.lua:125
+msgid "Even pg"
+msgstr "Четни стр."
+
+#: bookends_line_editor.lua:126
+msgid "All pg"
+msgstr "Всички стр."
+
+#: bookends_line_editor.lua:161 menu/progress_bar_menu.lua:109
+msgid "Chapter"
+msgstr "Глава"
+
+#: bookends_line_editor.lua:161 menu/tokens_catalogue.lua:21
+#: menu/progress_bar_menu.lua:109
+msgid "Book"
+msgstr "Книга"
+
+#: bookends_line_editor.lua:161
+msgid "Book+"
+msgstr "Книга+"
+
+#: bookends_line_editor.lua:161
+msgid "Book++"
+msgstr "Книга++"
+
+#: bookends_line_editor.lua:161
+msgid "Book+++"
+msgstr "Книга+++"
+
+#: bookends_line_editor.lua:165
 msgid "- Progress bar"
 msgstr "- Лента за напредъка"
 
-msgid "1 preset in the approval queue"
-msgstr "1 предварителна настройка в опашката за одобрение"
+#: bookends_line_editor.lua:165
+msgid "+ Progress bar"
+msgstr "+ Лента за напредъка"
 
-msgid "12-hour clock"
-msgstr "12-часов часовник"
+#: bookends_line_editor.lua:172
+msgid "Ch."
+msgstr "Гл."
 
-msgid "24-hour clock"
-msgstr "24-часов часовник"
+#: bookends_line_editor.lua:180 bookends_line_editor.lua:181
+msgid "Border"
+msgstr "Рамка"
 
-msgid "@key = another field's value (chap_title_1!=@title)"
-msgstr "@ключ = стойност на друго поле (chap_title_1!=@title)"
+#: bookends_line_editor.lua:180 menu/progress_bar_menu.lua:141
+#: menu/progress_bar_menu.lua:142
+msgid "Solid"
+msgstr "Плътна"
 
+#: bookends_line_editor.lua:180
+msgid "Round"
+msgstr "Закръглен"
+
+#: bookends_line_editor.lua:180 menu/progress_bar_menu.lua:141
+msgid "Metro"
+msgstr "Метро"
+
+#: bookends_line_editor.lua:180 menu/progress_bar_menu.lua:141
+msgid "Wave"
+msgstr "Вълна"
+
+#: bookends_line_editor.lua:180 menu/progress_bar_menu.lua:141
+msgid "Radial"
+msgstr "Радиален"
+
+#: bookends_line_editor.lua:180
+msgid "Hollow"
+msgstr "Кух"
+
+#: bookends_line_editor.lua:239
+msgid "Font size"
+msgstr "Размер на шрифта"
+
+#: bookends_line_editor.lua:239
+msgid "line"
+msgstr "ред"
+
+#: bookends_line_editor.lua:302
+msgid "Position"
+msgstr "Позиция"
+
+#: bookends_line_editor.lua:343 bookends_line_editor.lua:595
+#: bookends_colour_palette.lua:294 main.lua:1823 main.lua:2480
+#: bookends_dialog_helpers.lua:88 menu/main_menu.lua:32 menu/main_menu.lua:72
+#: menu/progress_bar_menu.lua:62 menu/preset_manager_modal.lua:1070
+#: menu/preset_manager_modal.lua:1191 menu/preset_manager_modal.lua:1232
+#: menu/preset_manager_modal.lua:1333 menu/preset_manager_modal.lua:1377
+#: menu/preset_manager_modal.lua:1479 menu/preset_manager_modal.lua:1546
+#: menu/preset_manager_modal.lua:1641 menu/preset_manager_modal.lua:1665
+#: menu/preset_manager_modal.lua:1689
+msgid "Cancel"
+msgstr "Отказ"
+
+#: bookends_line_editor.lua:358
+msgid "Icons"
+msgstr "Икони"
+
+#: bookends_line_editor.lua:367
+msgid "Tokens"
+msgstr "Токени"
+
+#: bookends_line_editor.lua:377 main.lua:2482 menu/main_menu.lua:34
+#: menu/preset_manager_modal.lua:1074 menu/preset_manager_modal.lua:1233
+#: menu/preset_manager_modal.lua:1334
+msgid "Save"
+msgstr "Запазване"
+
+#: bookends_line_editor.lua:418 menu/position_menu.lua:44
+msgid "Line"
+msgstr "Ред"
+
+#: bookends_line_editor.lua:523 menu/progress_bar_menu.lua:44
+msgid "Move up"
+msgstr "Преместване нагоре"
+
+#: bookends_line_editor.lua:533 menu/progress_bar_menu.lua:53
+msgid "Move down"
+msgstr "Преместване надолу"
+
+#: bookends_line_editor.lua:579
+msgid "Move to"
+msgstr "Преместване в"
+
+#: bookends_line_editor.lua:589
+msgid "Line %1: %2"
+msgstr "Ред %1: %2"
+
+#: bookends_line_editor.lua:591 menu/preset_manager_modal.lua:1176
+#: menu/preset_manager_modal.lua:1565
+msgid "Delete"
+msgstr "Изтриване"
+
+#: bookends_utils.lua:8 bookends_utils.lua:174
+msgid "UI font"
+msgstr "Шрифт на интерфейса"
+
+#: bookends_utils.lua:9
+msgid "Serif"
+msgstr "Със засечки"
+
+#: bookends_utils.lua:10
+msgid "Sans-serif"
+msgstr "Без засечки"
+
+#: bookends_utils.lua:11
+msgid "Monospace"
+msgstr "Моноширочинен"
+
+#: bookends_utils.lua:12
+msgid "Cursive"
+msgstr "Ръкописен"
+
+#: bookends_utils.lua:13
+msgid "Fantasy"
+msgstr "Фантазия"
+
+#: _meta.lua:4 menu/main_menu.lua:12
+msgid "Bookends"
+msgstr "Bookends"
+
+#: _meta.lua:5
 msgid ""
-"A preset called '%1' is already in the gallery. Rename your preset (Manage… "
-"→ Rename…) before submitting, so it doesn't collide with the existing entry."
+"Configurable text overlays at screen corners and edges with token expansion "
+"and icon support."
 msgstr ""
-"Предварителна настройка с името „%1“ вече съществува в галерията. "
-"Преименувайте я (Управление… → Преименуване…) преди да я изпратите, за да не "
-"се застъпва с вече съществуващата."
+"Конфигурируеми текстови слоеве по ъглите и ръбовете на екрана с разширяване "
+"на токени и поддръжка на икони."
 
+#: bookends_colour_palette.lua:296 main.lua:1833 main.lua:2023
+#: bookends_dialog_helpers.lua:96 menu/colours_menu.lua:66
+#: menu/colours_menu.lua:362 menu/progress_bar_menu.lua:395
+msgid "Default"
+msgstr "По подразбиране"
+
+#: bookends_colour_palette.lua:298 main.lua:1843
+#: bookends_dialog_helpers.lua:103 menu/preset_manager_modal.lua:562
+msgid "Apply"
+msgstr "Прилагане"
+
+#: bookends_colour_palette.lua:320 bookends_colour_palette.lua:435
+msgid "Pick a color"
+msgstr "Избор на цвят"
+
+#: bookends_colour_palette.lua:404
+msgid "Invalid hex colour (use #RGB or #RRGGBB)"
+msgstr "Невалиден хекс цвят (използвайте #RGB или #RRGGBB)"
+
+#: main.lua:58
+msgid "Dismiss"
+msgstr "Затваряне"
+
+#: main.lua:143
+msgid "Top-left"
+msgstr "Горе вляво"
+
+#: main.lua:144
+msgid "Top-center"
+msgstr "Горе в центъра"
+
+#: main.lua:145
+msgid "Top-right"
+msgstr "Горе вдясно"
+
+#: main.lua:146
+msgid "Bottom-left"
+msgstr "Долу вляво"
+
+#: main.lua:147
+msgid "Bottom-center"
+msgstr "Долу в центъра"
+
+#: main.lua:148
+msgid "Bottom-right"
+msgstr "Долу вдясно"
+
+#: main.lua:241
+msgid "Bookends: toggle visibility"
+msgstr "Bookends: превключване на видимостта"
+
+#: main.lua:247
+msgid "Bookends: cycle preset"
+msgstr "Bookends: следваща предварителна настройка"
+
+#: main.lua:253
+msgid "Bookends: set visibility"
+msgstr "Bookends: задаване на видимост"
+
+#: main.lua:256
+msgid "on"
+msgstr "вкл."
+
+#: main.lua:256
+msgid "off"
+msgstr "изкл."
+
+#: main.lua:261
+msgid "Bookends: open preset library"
+msgstr "Bookends: отваряне на библиотека с настройки"
+
+#: main.lua:350 main.lua:388 menu/preset_manager_modal.lua:1440
+msgid "My setup"
+msgstr "Моята конфигурация"
+
+#: main.lua:351 main.lua:389 menu/preset_manager_modal.lua:1444
+msgid "Imported from your earlier Bookends settings"
+msgstr "Импортирано от предишните ви настройки на Bookends"
+
+#: main.lua:533
+msgid "Preset error: %1"
+msgstr "Грешка в настройката: %1"
+
+#: main.lua:542
+msgid "Preset: %1"
+msgstr "Предварителна настройка: %1"
+
+#: main.lua:890
+msgid "Bold"
+msgstr "Удебелен"
+
+#: main.lua:891
+msgid "Italic"
+msgstr "Курсив"
+
+#: main.lua:892
+msgid "Bold italic"
+msgstr "Удебелен курсив"
+
+#: main.lua:2039
+msgid "Select font"
+msgstr "Избор на шрифт"
+
+#: main.lua:2080
+msgid "Font-family fonts"
+msgstr "Шрифтове по семейство"
+
+#: main.lua:2145
+msgid "Fonts"
+msgstr "Шрифтове"
+
+#: main.lua:2239 menu/library_modal.lua:734
+msgid "Page %1 of %2"
+msgstr "Страница %1 от %2"
+
+#: main.lua:2328 main.lua:2502
+msgid "Reset"
+msgstr "Нулиране"
+
+#: main.lua:2337
+msgid "Set font"
+msgstr "Задаване на шрифт"
+
+#: main.lua:2476 menu/main_menu.lua:416 menu/main_menu.lua:418
+msgid "Development branch"
+msgstr "Клон за разработка"
+
+#: main.lua:2478
+msgid "Branch name (leave empty for stable)"
+msgstr "Име на клон (оставете празно за стабилна версия)"
+
+#: main.lua:2501
 msgid ""
-"A preset called '%1' is already in the gallery. Rename your preset (Manage… "
-"→ Rename…) before submitting."
+"This will clear the development branch setting and install the latest stable "
+"release of Bookends, then restart KOReader. Continue?"
 msgstr ""
-"Предварителна настройка с името „%1“ вече съществува в галерията. "
-"Преименувайте я (Управление… → Преименуване…) преди да я изпратите."
+"Това ще изчисти настройките на клона за разработка и ще инсталира последната "
+"стабилна версия на Bookends, след което ще рестартира KOReader. Продължаване?"
 
-msgid ""
-"A submission for '%1' is already awaiting review. Wait for that one to be "
-"reviewed, or rename your preset to submit under a different name."
-msgstr ""
-"Заявка за „%1“ вече очаква преглед. Изчакайте тя да бъде прегледана или "
-"преименувайте настройката си, за да я изпратите под различно име."
+#: main.lua:2520
+msgid "Bookends update available: v"
+msgstr "Налична актуализация на Bookends: v"
 
-msgid "Add line"
-msgstr "Добавяне на ред"
-
-msgid "Adjust / contrast"
-msgstr "Настройка / контраст"
-
+#: main.lua:2528 menu/main_menu.lua:522 menu/progress_bar_menu.lua:245
+#: menu/progress_bar_menu.lua:379
 msgid "Adjust margins"
 msgstr "Настройване на полета"
 
+#: main.lua:2530 menu/progress_bar_menu.lua:156 menu/progress_bar_menu.lua:382
+msgid "Top"
+msgstr "Горе"
+
+#: main.lua:2531 menu/progress_bar_menu.lua:156 menu/progress_bar_menu.lua:383
+msgid "Bottom"
+msgstr "Долу"
+
+#: main.lua:2532 menu/progress_bar_menu.lua:156 menu/progress_bar_menu.lua:382
+msgid "Left"
+msgstr "Ляво"
+
+#: main.lua:2533 menu/progress_bar_menu.lua:156 menu/progress_bar_menu.lua:383
+msgid "Right"
+msgstr "Дясно"
+
+#: menu/position_menu.lua:16
+msgid "Enabled"
+msgstr "Включен"
+
+#: menu/position_menu.lua:58
+msgid "Add line"
+msgstr "Добавяне на ред"
+
+#: menu/position_menu.lua:58
+msgid "long press lines to manage"
+msgstr "продължено натискане на редовете за управление"
+
+#: menu/position_menu.lua:71
+msgid "Extra top margin"
+msgstr "Допълнително горно поле"
+
+#: menu/position_menu.lua:71
+msgid "Extra bottom margin"
+msgstr "Допълнително долно поле"
+
+#: menu/position_menu.lua:94
+msgid "Extra left margin"
+msgstr "Допълнително ляво поле"
+
+#: menu/position_menu.lua:94
+msgid "Extra right margin"
+msgstr "Допълнително дясно поле"
+
+#: menu/tokens_catalogue.lua:20 menu/icons_catalogue.lua:24
+msgid "All"
+msgstr "Всички"
+
+#: menu/tokens_catalogue.lua:22
+msgid "Progress"
+msgstr "Напредък"
+
+#: menu/tokens_catalogue.lua:23 menu/icons_catalogue.lua:28
+msgid "Time"
+msgstr "Час"
+
+#: menu/tokens_catalogue.lua:24
+msgid "Session"
+msgstr "Сесия"
+
+#: menu/tokens_catalogue.lua:25 menu/icons_catalogue.lua:26
+msgid "Device"
+msgstr "Устройство"
+
+#: menu/tokens_catalogue.lua:26
+msgid "If/else"
+msgstr "If/else"
+
+#: menu/tokens_catalogue.lua:27
+msgid "Templates"
+msgstr "Шаблони"
+
+#: menu/tokens_catalogue.lua:31
+msgid "Document title"
+msgstr "Заглавие на документа"
+
+#: menu/tokens_catalogue.lua:32
+msgid "First author"
+msgstr "Първи автор"
+
+#: menu/tokens_catalogue.lua:33
+msgid "All authors"
+msgstr "Всички автори"
+
+#: menu/tokens_catalogue.lua:34
+msgid "Second author (empty if none)"
+msgstr "Втори автор (празно, ако няма)"
+
+#: menu/tokens_catalogue.lua:35
+msgid "Series with index (combined)"
+msgstr "Поредица с номер (комбинирано)"
+
+#: menu/tokens_catalogue.lua:36
+msgid "Series name only"
+msgstr "Само името на поредицата"
+
+#: menu/tokens_catalogue.lua:37
+msgid "Series number only"
+msgstr "Само номерът на поредицата"
+
+#: menu/tokens_catalogue.lua:38
+msgid "Chapter title (deepest)"
+msgstr "Заглавие на главата (най-дълбоко)"
+
+#: menu/tokens_catalogue.lua:39
+msgid "Chapter title at depth 1"
+msgstr "Заглавие на главата на ниво 1"
+
+#: menu/tokens_catalogue.lua:40
+msgid "Chapter title at depth 2"
+msgstr "Заглавие на главата на ниво 2"
+
+#: menu/tokens_catalogue.lua:41
+msgid "Chapter title at depth 3"
+msgstr "Заглавие на главата на ниво 3"
+
+#: menu/tokens_catalogue.lua:42 menu/tokens_catalogue.lua:121
+msgid "Current chapter number"
+msgstr "Номер на текущата глава"
+
+#: menu/tokens_catalogue.lua:43
+msgid "Chapter count"
+msgstr "Брой глави"
+
+#: menu/tokens_catalogue.lua:44
+msgid "File name"
+msgstr "Име на файла"
+
+#: menu/tokens_catalogue.lua:45
+msgid "Book language"
+msgstr "Език на книгата"
+
+#: menu/tokens_catalogue.lua:46
+msgid "Document format (EPUB, PDF, etc.)"
+msgstr "Формат на документа (EPUB, PDF и др.)"
+
+#: menu/tokens_catalogue.lua:47
+msgid "Highlights count"
+msgstr "Брой маркирания"
+
+#: menu/tokens_catalogue.lua:48
+msgid "Notes count"
+msgstr "Брой бележки"
+
+#: menu/tokens_catalogue.lua:49
+msgid "Bookmarks count"
+msgstr "Брой отметки"
+
+#: menu/tokens_catalogue.lua:50
+msgid "Annotations count (bookmarks + highlights + notes)"
+msgstr "Брой анотации (отметки + маркирания + бележки)"
+
+#: menu/tokens_catalogue.lua:51
+msgid "Current page number"
+msgstr "Номер на текущата страница"
+
+#: menu/tokens_catalogue.lua:52
+msgid "Total pages"
+msgstr "Общ брой страници"
+
+#: menu/tokens_catalogue.lua:53
+msgid "Book percentage read"
+msgstr "Прочетен процент от книгата"
+
+#: menu/tokens_catalogue.lua:54
+msgid "Book percentage left"
+msgstr "Оставащ процент от книгата"
+
+#: menu/tokens_catalogue.lua:55
+msgid "Chapter percentage read"
+msgstr "Прочетен процент от главата"
+
+#: menu/tokens_catalogue.lua:56
+msgid "Chapter percentage left"
+msgstr "Оставащ процент от главата"
+
+#: menu/tokens_catalogue.lua:57
+msgid "Pages read in chapter"
+msgstr "Прочетени страници в главата"
+
+#: menu/tokens_catalogue.lua:58
+msgid "Total pages in chapter"
+msgstr "Общ брой страници в главата"
+
+#: menu/tokens_catalogue.lua:59
+msgid "Pages left in chapter"
+msgstr "Оставащи страници в главата"
+
+#: menu/tokens_catalogue.lua:60
+msgid "Pages left in book"
+msgstr "Оставащи страници в книгата"
+
+#: menu/tokens_catalogue.lua:61
+msgid "Progress bar (configure type in line editor)"
+msgstr "Лента за напредъка (настройте вида в редактора на редове)"
+
+#: menu/tokens_catalogue.lua:62
+msgid "Fixed-width progress bar (100px)"
+msgstr "Лента за напредъка с фиксирана ширина (100px)"
+
+#: menu/tokens_catalogue.lua:63
+msgid "Progress bar, 10px tall"
+msgstr "Лента за напредъка, 10px висока"
+
+#: menu/tokens_catalogue.lua:64
+msgid "Progress bar, 200px wide and 4px tall"
+msgstr "Лента за напредъка, 200px широка и 4px висока"
+
+#: menu/tokens_catalogue.lua:65
+msgid "Current time (24h, same as %time_24h)"
+msgstr "Текущ час (24 ч., същото като %time_24h)"
+
+#: menu/tokens_catalogue.lua:66
+msgid "12-hour clock"
+msgstr "12-часов часовник"
+
+#: menu/tokens_catalogue.lua:67
+msgid "24-hour clock"
+msgstr "24-часов часовник"
+
+#: menu/tokens_catalogue.lua:68
+msgid "Date short (28 Mar)"
+msgstr "Кратка дата (28 март)"
+
+#: menu/tokens_catalogue.lua:69
+msgid "Date long (28 March 2026)"
+msgstr "Пълна дата (28 март 2026)"
+
+#: menu/tokens_catalogue.lua:70
+msgid "Date numeric (28/03/2026)"
+msgstr "Цифрова дата (28/03/2026)"
+
+#: menu/tokens_catalogue.lua:71
+msgid "Weekday (Friday)"
+msgstr "Ден от седмицата (петък)"
+
+#: menu/tokens_catalogue.lua:72
+msgid "Weekday short (Fri)"
+msgstr "Кратък ден (пет)"
+
+#: menu/tokens_catalogue.lua:73
+msgid "Custom date/time format (strftime spec)"
+msgstr "Персонализиран формат за дата/час (спецификация strftime)"
+
+#: menu/tokens_catalogue.lua:74
+msgid "Time left in chapter"
+msgstr "Оставащо време до края на главата"
+
+#: menu/tokens_catalogue.lua:75
+msgid "Time left in book"
+msgstr "Оставащо време до края на книгата"
+
+#: menu/tokens_catalogue.lua:76
+msgid "Session reading time"
+msgstr "Време за четене за сесията"
+
+#: menu/tokens_catalogue.lua:77
+msgid "Session pages read"
+msgstr "Прочетени страници за сесията"
+
+#: menu/tokens_catalogue.lua:78
+msgid "Pages read today (all books)"
+msgstr "Прочетени страници днес (всички книги)"
+
+#: menu/tokens_catalogue.lua:79
+msgid "Reading time today (all books)"
+msgstr "Време за четене днес (всички книги)"
+
+#: menu/tokens_catalogue.lua:80
+msgid "Pages read today (current book)"
+msgstr "Прочетени страници днес (текуща книга)"
+
+#: menu/tokens_catalogue.lua:81
+msgid "Reading time today (current book)"
+msgstr "Време за четене днес (текуща книга)"
+
+#: menu/tokens_catalogue.lua:82
+msgid "Pages read in last 7 days (current book)"
+msgstr "Прочетени страници за последните 7 дни (текуща книга)"
+
+#: menu/tokens_catalogue.lua:83
+msgid "Reading time in last 7 days (current book)"
+msgstr "Време за четене за последните 7 дни (текуща книга)"
+
+#: menu/tokens_catalogue.lua:84 menu/tokens_catalogue.lua:128
+msgid "Day streak (any book)"
+msgstr "Поредица от дни (всяка книга)"
+
+#: menu/tokens_catalogue.lua:85 menu/tokens_catalogue.lua:129
+msgid "Day streak (current book)"
+msgstr "Поредица от дни (текуща книга)"
+
+#: menu/tokens_catalogue.lua:86
+msgid "Lifetime reading time (all books)"
+msgstr "Общо време за четене (всички книги)"
+
+#: menu/tokens_catalogue.lua:87
+msgid "Books finished (lifetime)"
+msgstr "Завършени книги (общо)"
+
+#: menu/tokens_catalogue.lua:88
+msgid "Reading speed (pages/hour)"
+msgstr "Скорост на четене (стр./час)"
+
+#: menu/tokens_catalogue.lua:89
+msgid "Average time per page"
+msgstr "Средно време на страница"
+
+#: menu/tokens_catalogue.lua:90
+msgid "Total reading time for book"
+msgstr "Общо време за четене на книгата"
+
+#: menu/tokens_catalogue.lua:91
+msgid "Pages read of this book (lifetime)"
+msgstr "Прочетени страници от книгата (общо)"
+
+#: menu/tokens_catalogue.lua:92
+msgid "Book read percentage (skip-aware)"
+msgstr "Прочетен процент от книгата (без прескочените)"
+
+#: menu/tokens_catalogue.lua:93
+msgid "Days reading this book"
+msgstr "Дни на четене на книгата"
+
+#: menu/tokens_catalogue.lua:94
+msgid "Pages per day for this book"
+msgstr "Страници на ден за книгата"
+
+#: menu/tokens_catalogue.lua:95
+msgid "Battery level"
+msgstr "Заряд на батерията"
+
+#: menu/tokens_catalogue.lua:96
+msgid "Plugin content"
+msgstr "Съдържание от плъгин"
+
+#: menu/tokens_catalogue.lua:97
+msgid "Frontlight brightness"
+msgstr "Яркост на предното осветление"
+
+#: menu/tokens_catalogue.lua:98 menu/tokens_catalogue.lua:134
+msgid "Frontlight brightness %"
+msgstr "Яркост на предното осветление %"
+
+#: menu/tokens_catalogue.lua:99
+msgid "Frontlight warmth"
+msgstr "Топлина на предното осветление"
+
+#: menu/tokens_catalogue.lua:100 menu/tokens_catalogue.lua:135
+msgid "Frontlight warmth %"
+msgstr "Топлина на предното осветление %"
+
+#: menu/tokens_catalogue.lua:101
+msgid "RAM used %"
+msgstr "Използвана RAM %"
+
+#: menu/tokens_catalogue.lua:102
+msgid "RAM used (MiB)"
+msgstr "Използвана RAM (МиБ)"
+
+#: menu/tokens_catalogue.lua:103
+msgid "Free disk space"
+msgstr "Свободно дисково пространство"
+
+#: menu/tokens_catalogue.lua:104
+msgid "Page X of Y, em-dash framed"
+msgstr "Страница X от Y, в рамка от тирета"
+
+#: menu/tokens_catalogue.lua:105
+msgid "Title ⋮ author (italic)"
+msgstr "Заглавие ⋮ автор (курсив)"
+
+#: menu/tokens_catalogue.lua:106
+msgid "Bookmark(s) count + label"
+msgstr "Брой отметки + етикет"
+
+#: menu/tokens_catalogue.lua:107
+msgid "Highlight(s) count + label"
+msgstr "Брой маркирания + етикет"
+
+#: menu/tokens_catalogue.lua:108
+msgid "Hourglass session timer + pages"
+msgstr "Пясъчен часовник за сесията + страници"
+
+#: menu/tokens_catalogue.lua:109
+msgid "Sparkles 1"
+msgstr "Искрици 1"
+
+#: menu/tokens_catalogue.lua:110
+msgid "Sparkles 2"
+msgstr "Искрици 2"
+
+#: menu/tokens_catalogue.lua:114
+msgid "If Wi-Fi is on"
+msgstr "Ако Wi-Fi е включен"
+
+#: menu/tokens_catalogue.lua:115
+msgid "If connected"
+msgstr "Ако е свързан"
+
+#: menu/tokens_catalogue.lua:116
+msgid "Battery 0–100"
+msgstr "Батерия от 0 до 100"
+
+#: menu/tokens_catalogue.lua:117
+msgid "If charging"
+msgstr "Ако се зарежда"
+
+#: menu/tokens_catalogue.lua:118
+msgid "If page-turn flipped"
+msgstr "Ако посоката на превъртане е обърната"
+
+#: menu/tokens_catalogue.lua:119
+msgid "Book progress 0–100"
+msgstr "Напредък в книгата от 0 до 100"
+
+#: menu/tokens_catalogue.lua:120
+msgid "Chapter progress 0–100"
+msgstr "Напредък в главата от 0 до 100"
+
+#: menu/tokens_catalogue.lua:122
+msgid "Total chapters"
+msgstr "Общо глави"
+
+#: menu/tokens_catalogue.lua:123
+msgid "Pages per hour"
+msgstr "Страници на час"
+
+#: menu/tokens_catalogue.lua:124
+msgid "Minutes this session"
+msgstr "Минути през сесията"
+
+#: menu/tokens_catalogue.lua:125
+msgid "Pages this session"
+msgstr "Страници през сесията"
+
+#: menu/tokens_catalogue.lua:126
+msgid "Pages read today"
+msgstr "Прочетени страници днес"
+
+#: menu/tokens_catalogue.lua:127
+msgid "Pages today (current book)"
+msgstr "Страници днес (текуща книга)"
+
+#: menu/tokens_catalogue.lua:130
+msgid "Books finished"
+msgstr "Завършени книги"
+
+#: menu/tokens_catalogue.lua:131
+msgid "Book read % (skip-aware)"
+msgstr "Прочетен % от книгата (без прескочените)"
+
+#: menu/tokens_catalogue.lua:132
+msgid "odd / even"
+msgstr "нечетна / четна"
+
+#: menu/tokens_catalogue.lua:133
+msgid "If frontlight on"
+msgstr "Ако предното осветление е включено"
+
+#: menu/tokens_catalogue.lua:136
+msgid "If night mode on"
+msgstr "Ако нощният режим е включен"
+
+#: menu/tokens_catalogue.lua:137
+msgid "EPUB / PDF / CBZ / …"
+msgstr "EPUB / PDF / CBZ / …"
+
+#: menu/tokens_catalogue.lua:138
+msgid "Current HH:MM (24h)"
+msgstr "Текущо ЧЧ:ММ (24 ч.)"
+
+#: menu/tokens_catalogue.lua:139
+msgid "Mon–Sun"
+msgstr "Пон–Нед"
+
+#: menu/tokens_catalogue.lua:140
+msgid "If book has title"
+msgstr "Ако книгата има заглавие"
+
+#: menu/tokens_catalogue.lua:141
+msgid "If book has author"
+msgstr "Ако книгата има автор"
+
+#: menu/tokens_catalogue.lua:142
+msgid "If book in series"
+msgstr "Ако книгата е от поредица"
+
+#: menu/tokens_catalogue.lua:143
+msgid "If chapter has title"
+msgstr "Ако главата има заглавие"
+
+#: menu/tokens_catalogue.lua:144
+msgid "Chapter title at depth 1/2/3"
+msgstr "Заглавие на главата на ниво 1/2/3"
+
+#: menu/tokens_catalogue.lua:145
+msgid "If book has 2+ authors"
+msgstr "Ако книгата има 2+ автори"
+
+#: menu/tokens_catalogue.lua:146
+msgid "Author with et al. for multi-author"
+msgstr "Автор с et al. за много автори"
+
+#: menu/tokens_catalogue.lua:147
+msgid "Wi-Fi icon only when Wi-Fi enabled"
+msgstr "Икона на Wi-Fi само когато Wi-Fi е включен"
+
+#: menu/tokens_catalogue.lua:148
+msgid "Low-battery warning"
+msgstr "Предупреждение за нисък заряд на батерията"
+
+#: menu/tokens_catalogue.lua:149
+msgid "Bolt when charging"
+msgstr "Мълния при зареждане"
+
+#: menu/tokens_catalogue.lua:150
+msgid "Arrow when page-turn flipped"
+msgstr "Стрелка при обърната посока на превъртане"
+
+#: menu/tokens_catalogue.lua:151
+msgid "Odd/even variations"
+msgstr "Вариации за нечетни/четни"
+
+#: menu/tokens_catalogue.lua:152
+msgid "Near end of book"
+msgstr "Близо до края на книгата"
+
+#: menu/tokens_catalogue.lua:153
+msgid "Frontlight on/off label"
+msgstr "Етикет вкл./изкл. на предното осветление"
+
+#: menu/tokens_catalogue.lua:154
+msgid "If format"
+msgstr "Ако форматът е"
+
+#: menu/tokens_catalogue.lua:155
+msgid "Weekends"
+msgstr "Почивни дни"
+
+#: menu/tokens_catalogue.lua:156
+msgid "Time window"
+msgstr "Времеви прозорец"
+
+#: menu/tokens_catalogue.lua:157
+msgid "Non-series books"
+msgstr "Книги извън поредица"
+
+#: menu/tokens_catalogue.lua:158
+msgid "Fall back to shallower chapter"
+msgstr "Връщане към по-плитка глава"
+
+#: menu/tokens_catalogue.lua:159
+msgid "Long books (20+ chapters)"
+msgstr "Дълги книги (20+ глави)"
+
+#: menu/tokens_catalogue.lua:160
+msgid "Chapter title only when different from book title"
+msgstr "Заглавие на главата само когато се различава от заглавието на книгата"
+
+#: menu/tokens_catalogue.lua:161
+msgid "Battery bars"
+msgstr "Стълбчета за батерията"
+
+#: menu/main_menu.lua:28 menu/preset_manager_modal.lua:1066
+msgid "Save preset"
+msgstr "Запазване на настройката"
+
+#: menu/main_menu.lua:30 menu/preset_manager_modal.lua:1068
+msgid "Preset name"
+msgstr "Име на настройката"
+
+#: menu/main_menu.lua:45
+msgid "Saved preset:"
+msgstr "Запазена настройка:"
+
+#: menu/main_menu.lua:69 menu/preset_manager_modal.lua:1188
+msgid "Rename preset"
+msgstr "Преименуване на настройката"
+
+#: menu/main_menu.lua:74 menu/main_menu.lua:490
+#: menu/preset_manager_modal.lua:1192 menu/preset_manager_modal.lua:1379
+msgid "Rename"
+msgstr "Преименуване"
+
+#: menu/main_menu.lua:107 menu/main_menu.lua:109
+msgid "Bookends settings"
+msgstr "Настройки на Bookends"
+
+#: menu/main_menu.lua:107
+msgid "plugin update available"
+msgstr "налична актуализация на плъгина"
+
+#: menu/main_menu.lua:124 menu/main_menu.lua:126
+msgid "Preset"
+msgstr "Предварителна настройка"
+
+#: menu/main_menu.lua:176
+msgid "Full width progress bars"
+msgstr "Ленти за напредъка на цяла ширина"
+
+#: menu/main_menu.lua:188
+msgid "Save current as new preset…"
+msgstr "Запазване на текущата като нова настройка…"
+
+#: menu/main_menu.lua:206
+msgid "Enable bookends"
+msgstr "Включване на Bookends"
+
+#: menu/main_menu.lua:217 menu/main_menu.lua:219
+msgid "Disable stock status bar"
+msgstr "Изключване на вградената лента на състоянието"
+
+#: menu/main_menu.lua:217
+msgid "recommended"
+msgstr "препоръчано"
+
+#: menu/main_menu.lua:222
+msgid ""
+"Hides KOReader's built-in status bar. This simplifies the render pipeline "
+"and can reduce e-ink flicker on some devices. All status bar features are "
+"available as Bookends tokens."
+msgstr ""
+"Скрива вградената лента на състоянието на KOReader. Това опростява процеса "
+"на изобразяване и може да намали трептенето на е-мастилото на някои "
+"устройства. Всички функции на лентата за състоянието са достъпни като токени "
+"на Bookends."
+
+#: menu/main_menu.lua:243 menu/main_menu.lua:253
+#: menu/preset_manager_modal.lua:1271
+msgid "Default font"
+msgstr "Шрифт по подразбиране"
+
+#: menu/main_menu.lua:279
+msgid "Bottom center tap gesture"
+msgstr "Докосване в долния център"
+
+#: menu/main_menu.lua:281
+msgid "toggle bookends"
+msgstr "превключване на Bookends"
+
+#: menu/main_menu.lua:283
+msgid "cycle presets"
+msgstr "смяна на настройките"
+
+#: menu/main_menu.lua:285
+msgid "preset library"
+msgstr "библиотека с настройки"
+
+#: menu/main_menu.lua:289
+msgid ""
+"Configure what happens when you tap the centre of the status bar area, and "
+"whether long-pressing a progress bar opens the skim dialog."
+msgstr ""
+"Настройте какво се случва при докосване на центъра на лентата за състоянието "
+"и дали продълженото натискане на лента за напредъка отваря диалога за "
+"прелистване."
+
+#: menu/main_menu.lua:300
+msgid "Do nothing"
+msgstr "Без действие"
+
+#: menu/main_menu.lua:308
+msgid "Toggle bookends"
+msgstr "Превключване на Bookends"
+
+#: menu/main_menu.lua:322
+msgid "Cycle starred presets"
+msgstr "Смяна на отбелязаните настройки"
+
+#: menu/main_menu.lua:336
+msgid "Open preset library"
+msgstr "Отваряне на библиотека с настройки"
+
+#: menu/main_menu.lua:351
+msgid "Long-press progress bars to skim document"
+msgstr ""
+"Продължено натискане на лентите за напредъка за прелистване на документа"
+
+#: menu/main_menu.lua:359
+msgid ""
+"Opens the skim dialog when you long-press on a full-width progress bar. "
+"Replaces the stock status bar's long-press to skim feature."
+msgstr ""
+"Отваря диалога за прелистване при продължено натискане на лента за напредъка "
+"на цяла ширина. Замества функцията за прелистване с продължено натискане на "
+"вградената лента на състоянието."
+
+#: menu/main_menu.lua:366
+msgid "Include current page in pages-left tokens"
+msgstr "Включване на текущата страница в токените за оставащи страници"
+
+#: menu/main_menu.lua:367
 msgid ""
 "Affects %L (pages left in book) and %l (pages left in chapter). Off "
 "(default): 'n−1 → 0'. On: 'n → 1'."
@@ -92,12 +1142,730 @@ msgstr ""
 "Влияе на %L (оставащи страници в книгата) и %l (оставащи страници в "
 "главата). Изкл. (по подразбиране): „n−1 → 0“. Вкл.: „n → 1“."
 
-msgid "All pg"
-msgstr "Всички стр."
+#: menu/main_menu.lua:380
+msgid "Notify on wake when update available"
+msgstr "Известяване при събуждане, ако има налична актуализация"
 
-msgid "Anchor"
-msgstr "Закрепване"
+#: menu/main_menu.lua:400
+msgid "Update available"
+msgstr "Налична актуализация"
 
+#: menu/main_menu.lua:402
+msgid "Installed version"
+msgstr "Инсталирана версия"
+
+#: menu/main_menu.lua:410
+msgid "Advanced"
+msgstr "Разширени"
+
+#: menu/main_menu.lua:429
+msgid "Check for updates"
+msgstr "Проверка за актуализации"
+
+#: menu/main_menu.lua:431
+msgid "Install branch"
+msgstr "Инсталиране на клон"
+
+#: menu/main_menu.lua:439
+msgid "Reset to latest stable release"
+msgstr "Нулиране до последната стабилна версия"
+
+#: menu/main_menu.lua:450 menu/main_menu.lua:453
+msgid "Installed: v"
+msgstr "Инсталиран: v"
+
+#: menu/main_menu.lua:470
+msgid "Preset library…"
+msgstr "Библиотека с настройки…"
+
+#: menu/main_menu.lua:504 menu/main_menu.lua:508
+msgid "Font scale"
+msgstr "Мащаб на шрифта"
+
+#: menu/main_menu.lua:532
+msgid "Truncation gap between regions"
+msgstr "Разстояние при съкращаване между областите"
+
+#: menu/main_menu.lua:536
+msgid "Truncation gap"
+msgstr "Разстояние при съкращаване"
+
+#: menu/main_menu.lua:547
+msgid "Prioritise left/right and truncate long center text"
+msgstr "Приоритет на ляво/дясно и съкращаване на дълъг централен текст"
+
+#: menu/main_menu.lua:572 menu/colours_menu.lua:310
+msgid "Progress bar colors and tick marks"
+msgstr "Цветове и отметки на лентата за напредъка"
+
+#: menu/tokens_library.lua:187
+msgid "Tokens library"
+msgstr "Библиотека с токени"
+
+#: menu/tokens_library.lua:188
+msgid "Tokens & conditionals"
+msgstr "Токени и условия"
+
+#: menu/tokens_library.lua:189
+msgid ""
+"TOKENS\n"
+"\n"
+"Tokens are placeholders that get replaced with live data each time the "
+"preset renders. Each entry in the Book / Progress / Time / Session / Device "
+"chips is a token, written as %name. They expand inline:\n"
+"  %title — %page_num/%page_count\n"
+"  → 1984 — 12/268\n"
+"\n"
+"CONDITIONALS\n"
+"\n"
+"Wrap content in [if:condition]…[/if] to show it only when the condition is "
+"true. Add an [else]…[/if] branch for an alternative.\n"
+"\n"
+"OPERATORS\n"
+"  =    equals               !=  not equals\n"
+"  <    less than            >   greater than\n"
+"  <=   at most              >=  at least\n"
+"  and / or / not  · ( ) for grouping\n"
+"\n"
+"  Example:  [if:batt<20 and not charging]LOW[/if]\n"
+"\n"
+"Truthy check: a bare [if:key] tests whether the key is set, non-zero, and "
+"not \"off\"/\"no\". Useful for [if:title]…[/if], [if:author]…[/if], "
+"[if:series]…[/if].\n"
+"\n"
+"Token-reference comparison: =@token compares against another token's current "
+"value, e.g. [if:chap_title_1!=@title]…[/if] hides the chapter title when it "
+"equals the book title.\n"
+"\n"
+"For the full list of conditional state keys (wifi, batt, light_pct, night, "
+"time, format, …) browse the If/else chip — every reference entry there shows "
+"the exact key and operator syntax for one condition.\n"
+"\n"
+"EXAMPLES\n"
+"\n"
+"  [if:authors>1]%author, et al.[else]%author[/if]\n"
+"  [if:batt<20]LOW %batt[/if]\n"
+"  [if:time>=18:00 and time<18:30]6–6:30[/if]\n"
+"  [if:not series]Standalone[/if]\n"
+msgstr ""
+"ТОКЕНИ\n"
+"\n"
+"Токените са контейнери, които се заменят с актуални данни при всяко "
+"изобразяване на настройката. Всеки запис в чиповете Книга / Напредък / Час "
+"/ Сесия / Устройство е токен, записан като %name. Те се разширяват в реда:\n"
+"  %title — %page_num/%page_count\n"
+"  → 1984 — 12/268\n"
+"\n"
+"УСЛОВИЯ\n"
+"\n"
+"Обвийте съдържание в [if:условие]…[/if], за да го показвате само когато "
+"условието е изпълнено. Добавете клон [else]…[/if] за алтернатива.\n"
+"\n"
+"ОПЕРАТОРИ\n"
+"  =    равно                 !=  различно\n"
+"  <    по-малко              >   по-голямо\n"
+"  <=   най-много             >=  най-малко\n"
+"  and / or / not  · ( ) за групиране\n"
+"\n"
+"  Пример:  [if:batt<20 and not charging]LOW[/if]\n"
+"\n"
+"Проверка за истинност: голото [if:key] проверява дали ключът е зададен, "
+"различен от нула и не е \"off\"/\"no\". Полезно за [if:title]…[/if], "
+"[if:author]…[/if], [if:series]…[/if].\n"
+"\n"
+"Сравнение между токени: =@token сравнява със стойността на друг токен, "
+"напр. [if:chap_title_1!=@title]…[/if] скрива заглавието на главата, когато "
+"то съвпада със заглавието на книгата.\n"
+"\n"
+"За пълния списък с условни ключове (wifi, batt, light_pct, night, time, "
+"format, …) разгледайте чипа If/else — всеки запис там показва точния ключ "
+"и синтаксиса на операторите за съответното условие.\n"
+"\n"
+"ПРИМЕРИ\n"
+"\n"
+"  [if:authors>1]%author, et al.[else]%author[/if]\n"
+"  [if:batt<20]LOW %batt[/if]\n"
+"  [if:time>=18:00 and time<18:30]6–6:30[/if]\n"
+"  [if:not series]Standalone[/if]\n"
+
+#: menu/tokens_library.lua:244
+msgid "Search tokens by name, value, or expression…"
+msgstr "Търсене на токени по име, стойност или израз…"
+
+#: menu/tokens_library.lua:273
+msgid "Help"
+msgstr "Помощ"
+
+#: menu/icons_library.lua:250
+msgid "Icons library"
+msgstr "Библиотека с икони"
+
+#: menu/icons_library.lua:282
+msgid "Search %1 icons by name…"
+msgstr "Търсене на икони от %1 по име…"
+
+#: menu/icons_catalogue.lua:25
+msgid "Dynamic"
+msgstr "Динамичен"
+
+#: menu/icons_catalogue.lua:27
+msgid "Reading"
+msgstr "Четене"
+
+#: menu/icons_catalogue.lua:29
+msgid "Symbols"
+msgstr "Символи"
+
+#: menu/icons_catalogue.lua:30
+msgid "Arrows"
+msgstr "Стрелки"
+
+#: menu/icons_catalogue.lua:31
+msgid "Blocks"
+msgstr "Блокове"
+
+#: menu/icons_catalogue.lua:32
+msgid "Separators"
+msgstr "Разделители"
+
+#: menu/icons_catalogue.lua:37
+msgid "Battery"
+msgstr "Батерия"
+
+#: menu/icons_catalogue.lua:38
+msgid "Wi-Fi"
+msgstr "Wi-Fi"
+
+#: menu/icons_catalogue.lua:39
+msgid "Frontlight"
+msgstr "Предно осветление"
+
+#: menu/icons_catalogue.lua:40
+msgid "Warmth"
+msgstr "Топлина"
+
+#: menu/icons_catalogue.lua:41
+msgid "Night mode"
+msgstr "Нощен режим"
+
+#: menu/icons_catalogue.lua:171
+msgid "Sun (outline)"
+msgstr "Слънце (контур)"
+
+#: menu/icons_catalogue.lua:172
+msgid "Hot springs / warmth"
+msgstr "Горещи извори / топлина"
+
+#: menu/icons_catalogue.lua:173
+msgid "Spade"
+msgstr "Пика"
+
+#: menu/icons_catalogue.lua:174
+msgid "Club"
+msgstr "Трефа"
+
+#: menu/icons_catalogue.lua:175
+msgid "Heart"
+msgstr "Сърце"
+
+#: menu/icons_catalogue.lua:176
+msgid "Diamond suit"
+msgstr "Каро"
+
+#: menu/icons_catalogue.lua:177
+msgid "Star (filled)"
+msgstr "Звезда (запълнена)"
+
+#: menu/icons_catalogue.lua:178
+msgid "Star (outline)"
+msgstr "Звезда (контур)"
+
+#: menu/icons_catalogue.lua:179
+msgid "Infinity"
+msgstr "Безкрайност"
+
+#: menu/icons_catalogue.lua:180
+msgid "Section sign"
+msgstr "Знак за раздел"
+
+#: menu/icons_catalogue.lua:181
+msgid "Pilcrow / paragraph"
+msgstr "Пилкроу / абзац"
+
+#: menu/icons_catalogue.lua:182
+msgid "Dagger"
+msgstr "Кинжал"
+
+#: menu/icons_catalogue.lua:183
+msgid "Double dagger"
+msgstr "Двоен кинжал"
+
+#: menu/icons_catalogue.lua:184
+msgid "Numero"
+msgstr "Номер"
+
+#: menu/icons_catalogue.lua:185
+msgid "High voltage"
+msgstr "Високо напрежение"
+
+#: menu/icons_catalogue.lua:211
+msgid "Arrow left"
+msgstr "Стрелка наляво"
+
+#: menu/icons_catalogue.lua:212
+msgid "Arrow right"
+msgstr "Стрелка надясно"
+
+#: menu/icons_catalogue.lua:213
+msgid "Arrow up"
+msgstr "Стрелка нагоре"
+
+#: menu/icons_catalogue.lua:214
+msgid "Arrow down"
+msgstr "Стрелка надолу"
+
+#: menu/icons_catalogue.lua:215
+msgid "Double arrow left"
+msgstr "Двойна стрелка наляво"
+
+#: menu/icons_catalogue.lua:216
+msgid "Double arrow right"
+msgstr "Двойна стрелка надясно"
+
+#: menu/icons_catalogue.lua:217
+msgid "Double arrow up"
+msgstr "Двойна стрелка нагоре"
+
+#: menu/icons_catalogue.lua:218
+msgid "Double arrow down"
+msgstr "Двойна стрелка надолу"
+
+#: menu/icons_catalogue.lua:219
+msgid "Arrows left-right"
+msgstr "Стрелки наляво-надясно"
+
+#: menu/icons_catalogue.lua:220
+msgid "Double arrows right"
+msgstr "Двойни стрелки надясно"
+
+#: menu/icons_catalogue.lua:221
+msgid "Left harpoon with right arrow"
+msgstr "Харпун наляво със стрелка надясно"
+
+#: menu/icons_catalogue.lua:222
+msgid "Curved back arrow"
+msgstr "Извита стрелка назад"
+
+#: menu/icons_catalogue.lua:223
+msgid "Arrow left with tail"
+msgstr "Стрелка наляво с опашка"
+
+#: menu/icons_catalogue.lua:224
+msgid "Arrow right with tail"
+msgstr "Стрелка надясно с опашка"
+
+#: menu/icons_catalogue.lua:225
+msgid "Arrow left to bar"
+msgstr "Стрелка наляво до черта"
+
+#: menu/icons_catalogue.lua:226
+msgid "Arrow right to bar"
+msgstr "Стрелка надясно до черта"
+
+#: menu/icons_catalogue.lua:227
+msgid "Arrow left hooked"
+msgstr "Стрелка наляво с кука"
+
+#: menu/icons_catalogue.lua:228
+msgid "Arrow right hooked"
+msgstr "Стрелка надясно с кука"
+
+#: menu/icons_catalogue.lua:229
+msgid "Arrow right then up"
+msgstr "Стрелка надясно, после нагоре"
+
+#: menu/icons_catalogue.lua:230
+msgid "Arrow right then down"
+msgstr "Стрелка надясно, после надолу"
+
+#: menu/icons_catalogue.lua:231
+msgid "Arrow up then left"
+msgstr "Стрелка нагоре, после наляво"
+
+#: menu/icons_catalogue.lua:232
+msgid "Arrow up then right"
+msgstr "Стрелка нагоре, после надясно"
+
+#: menu/icons_catalogue.lua:233
+msgid "Arrow down then left"
+msgstr "Стрелка надолу, после наляво"
+
+#: menu/icons_catalogue.lua:234
+msgid "Arrow down then right"
+msgstr "Стрелка надолу, после надясно"
+
+#: menu/icons_catalogue.lua:235
+msgid "Circle arrow left"
+msgstr "Кръгла стрелка наляво"
+
+#: menu/icons_catalogue.lua:236
+msgid "Circle arrow right"
+msgstr "Кръгла стрелка надясно"
+
+#: menu/icons_catalogue.lua:237
+msgid "Heavy arrow right"
+msgstr "Плътна стрелка надясно"
+
+#: menu/icons_catalogue.lua:238
+msgid "Heavy round arrow right"
+msgstr "Плътна кръгла стрелка надясно"
+
+#: menu/icons_catalogue.lua:239
+msgid "Triangle-head right"
+msgstr "Глава-триъгълник надясно"
+
+#: menu/icons_catalogue.lua:240
+msgid "Heavy triangle right"
+msgstr "Плътен триъгълник надясно"
+
+#: menu/icons_catalogue.lua:241
+msgid "Arrowhead right"
+msgstr "Върх на стрелка надясно"
+
+#: menu/icons_catalogue.lua:242
+msgid "Long arrow left"
+msgstr "Дълга стрелка наляво"
+
+#: menu/icons_catalogue.lua:243
+msgid "Long arrow right"
+msgstr "Дълга стрелка надясно"
+
+#: menu/icons_catalogue.lua:244
+msgid "Single angle left"
+msgstr "Единична ъглова скоба наляво"
+
+#: menu/icons_catalogue.lua:245
+msgid "Single angle right"
+msgstr "Единична ъглова скоба надясно"
+
+#: menu/icons_catalogue.lua:246
+msgid "Double angle left"
+msgstr "Двойна ъглова скоба наляво"
+
+#: menu/icons_catalogue.lua:247
+msgid "Double angle right"
+msgstr "Двойна ъглова скоба надясно"
+
+#: menu/icons_catalogue.lua:348
+msgid "Block (full)"
+msgstr "Блок (плътен)"
+
+#: menu/icons_catalogue.lua:349
+msgid "Block (dark)"
+msgstr "Блок (тъмен)"
+
+#: menu/icons_catalogue.lua:350
+msgid "Block (medium)"
+msgstr "Блок (среден)"
+
+#: menu/icons_catalogue.lua:351
+msgid "Block (light)"
+msgstr "Блок (светъл)"
+
+#: menu/icons_catalogue.lua:352
+msgid "Upper half block"
+msgstr "Горен половин блок"
+
+#: menu/icons_catalogue.lua:353
+msgid "Right half block"
+msgstr "Десен половин блок"
+
+#: menu/icons_catalogue.lua:354
+msgid "Lower 1/8 block"
+msgstr "Долен блок 1/8"
+
+#: menu/icons_catalogue.lua:355
+msgid "Lower 2/8 block"
+msgstr "Долен блок 2/8"
+
+#: menu/icons_catalogue.lua:356
+msgid "Lower 3/8 block"
+msgstr "Долен блок 3/8"
+
+#: menu/icons_catalogue.lua:357
+msgid "Lower 4/8 block"
+msgstr "Долен блок 4/8"
+
+#: menu/icons_catalogue.lua:358
+msgid "Lower 5/8 block"
+msgstr "Долен блок 5/8"
+
+#: menu/icons_catalogue.lua:359
+msgid "Lower 6/8 block"
+msgstr "Долен блок 6/8"
+
+#: menu/icons_catalogue.lua:360
+msgid "Lower 7/8 block"
+msgstr "Долен блок 7/8"
+
+#: menu/icons_catalogue.lua:361
+msgid "Left 1/8 block"
+msgstr "Ляв блок 1/8"
+
+#: menu/icons_catalogue.lua:362
+msgid "Left 2/8 block"
+msgstr "Ляв блок 2/8"
+
+#: menu/icons_catalogue.lua:363
+msgid "Left 3/8 block"
+msgstr "Ляв блок 3/8"
+
+#: menu/icons_catalogue.lua:364
+msgid "Left 4/8 block"
+msgstr "Ляв блок 4/8"
+
+#: menu/icons_catalogue.lua:365
+msgid "Left 5/8 block"
+msgstr "Ляв блок 5/8"
+
+#: menu/icons_catalogue.lua:366
+msgid "Left 6/8 block"
+msgstr "Ляв блок 6/8"
+
+#: menu/icons_catalogue.lua:367
+msgid "Left 7/8 block"
+msgstr "Ляв блок 7/8"
+
+#: menu/icons_catalogue.lua:368
+msgid "Square (filled)"
+msgstr "Квадрат (запълнен)"
+
+#: menu/icons_catalogue.lua:369
+msgid "Square (empty)"
+msgstr "Квадрат (празен)"
+
+#: menu/icons_catalogue.lua:370
+msgid "Rectangle (filled)"
+msgstr "Правоъгълник (запълнен)"
+
+#: menu/icons_catalogue.lua:371
+msgid "Rectangle (empty)"
+msgstr "Правоъгълник (празен)"
+
+#: menu/icons_catalogue.lua:372
+msgid "Vertical block"
+msgstr "Вертикален блок"
+
+#: menu/icons_catalogue.lua:373
+msgid "Vertical block (empty)"
+msgstr "Вертикален блок (празен)"
+
+#: menu/icons_catalogue.lua:374
+msgid "Slant block"
+msgstr "Наклонен блок"
+
+#: menu/icons_catalogue.lua:375
+msgid "Slant block (empty)"
+msgstr "Наклонен блок (празен)"
+
+#: menu/icons_catalogue.lua:376
+msgid "Circle (filled)"
+msgstr "Кръг (запълнен)"
+
+#: menu/icons_catalogue.lua:377
+msgid "Circle (empty)"
+msgstr "Кръг (празен)"
+
+#: menu/icons_catalogue.lua:378
+msgid "Circle (left half)"
+msgstr "Кръг (лява половина)"
+
+#: menu/icons_catalogue.lua:379
+msgid "Circle (right half)"
+msgstr "Кръг (дясна половина)"
+
+#: menu/icons_catalogue.lua:380
+msgid "Circle (lower half)"
+msgstr "Кръг (долна половина)"
+
+#: menu/icons_catalogue.lua:381
+msgid "Circle (upper half)"
+msgstr "Кръг (горна половина)"
+
+#: menu/icons_catalogue.lua:382
+msgid "Diamond (filled)"
+msgstr "Ромб (запълнен)"
+
+#: menu/icons_catalogue.lua:383
+msgid "Diamond (empty)"
+msgstr "Ромб (празен)"
+
+#: menu/icons_catalogue.lua:386
+msgid "Vertical bar"
+msgstr "Вертикална черта"
+
+#: menu/icons_catalogue.lua:387
+msgid "Bullet"
+msgstr "Точка"
+
+#: menu/icons_catalogue.lua:388
+msgid "Middle dot"
+msgstr "Средна точка"
+
+#: menu/icons_catalogue.lua:389
+msgid "Vertical ellipsis"
+msgstr "Вертикално многоточие"
+
+#: menu/icons_catalogue.lua:390
+msgid "Em dash"
+msgstr "Тире (em)"
+
+#: menu/icons_catalogue.lua:391
+msgid "En dash"
+msgstr "Тире (en)"
+
+#: menu/icons_catalogue.lua:392
+msgid "Horizontal ellipsis"
+msgstr "Хоризонтално многоточие"
+
+#: menu/icons_catalogue.lua:393
+msgid "Slash"
+msgstr "Наклонена черта"
+
+#: menu/icons_catalogue.lua:394
+msgid "Division slash"
+msgstr "Наклонена черта за деление"
+
+#: menu/icons_catalogue.lua:395
+msgid "Fraction slash"
+msgstr "Дробна наклонена черта"
+
+#: menu/icons_catalogue.lua:396
+msgid "Double fraction slash"
+msgstr "Двойна дробна наклонена черта"
+
+#: menu/icons_catalogue.lua:397
+msgid "Tilde"
+msgstr "Тилда"
+
+#: menu/icons_catalogue.lua:398
+msgid "Triangular bullet"
+msgstr "Триъгълна точка"
+
+#: menu/colours_menu.lua:66
+msgid "per style"
+msgstr "по стил"
+
+#: menu/colours_menu.lua:71 menu/colours_menu.lua:82 menu/colours_menu.lua:184
+#: menu/colours_menu.lua:368 menu/colours_menu.lua:376
+#: menu/colours_menu.lua:382 menu/colours_menu.lua:390
+#: menu/progress_bar_menu.lua:328
+msgid "default"
+msgstr "по подразбиране"
+
+#: menu/colours_menu.lua:79 menu/colours_menu.lua:373 menu/colours_menu.lua:387
+msgid "transparent"
+msgstr "прозрачен"
+
+#: menu/colours_menu.lua:88
+msgid "Read color"
+msgstr "Цвят на прочетената част"
+
+#: menu/colours_menu.lua:92
+msgid "Read color (% black)"
+msgstr "Цвят на прочетената част (% черно)"
+
+#: menu/colours_menu.lua:101
+msgid "Unread color"
+msgstr "Цвят на непрочетената част"
+
+#: menu/colours_menu.lua:105
+msgid "Unread color (% black)"
+msgstr "Цвят на непрочетената част (% черно)"
+
+#: menu/colours_menu.lua:114
+msgid "Metro read color"
+msgstr "Цвят на прочетената част (метро)"
+
+#: menu/colours_menu.lua:118
+msgid "Metro read color (% black)"
+msgstr "Цвят на прочетената част в % черно (метро)"
+
+#: menu/colours_menu.lua:127
+msgid "Metro track color"
+msgstr "Цвят на релсата (метро)"
+
+#: menu/colours_menu.lua:131
+msgid "Metro track color (% black)"
+msgstr "Цвят на релсата в % черно (метро)"
+
+#: menu/colours_menu.lua:140
+msgid "Tick color"
+msgstr "Цвят на отметките"
+
+#: menu/colours_menu.lua:144
+msgid "Tick color (% black)"
+msgstr "Цвят на отметките (% черно)"
+
+#: menu/colours_menu.lua:152
+msgid "Invert tick color on read portion"
+msgstr "Инвертиране на цвета на отметките върху прочетената част"
+
+#: menu/colours_menu.lua:165
+msgid "Border color"
+msgstr "Цвят на рамката"
+
+#: menu/colours_menu.lua:169
+msgid "Border color (% black)"
+msgstr "Цвят на рамката (% черно)"
+
+#: menu/colours_menu.lua:179 menu/colours_menu.lua:184
+#: menu/colours_menu.lua:186 menu/colours_menu.lua:196
+msgid "Border thickness"
+msgstr "Дебелина на рамката"
+
+#: menu/colours_menu.lua:210
+msgid "Tick inversion color"
+msgstr "Цвят на инвертиране на отметките"
+
+#: menu/colours_menu.lua:214
+msgid "Tick inversion color (% black)"
+msgstr "Цвят на инвертиране на отметките (% черно)"
+
+#: menu/colours_menu.lua:242 menu/colours_menu.lua:246
+#: menu/progress_bar_menu.lua:326 menu/progress_bar_menu.lua:328
+#: menu/progress_bar_menu.lua:334
+msgid "Tick width"
+msgstr "Ширина на отметките"
+
+#: menu/colours_menu.lua:266 menu/colours_menu.lua:270
+#: menu/progress_bar_menu.lua:300 menu/progress_bar_menu.lua:305
+msgid "Tick height"
+msgstr "Височина на отметките"
+
+#: menu/colours_menu.lua:290
+msgid "Reset all to defaults"
+msgstr "Нулиране на всичко до стойностите по подразбиране"
+
+#: menu/colours_menu.lua:368 menu/colours_menu.lua:376
+#: menu/colours_menu.lua:400 menu/progress_bar_menu.lua:32
+msgid "book"
+msgstr "книга"
+
+#: menu/colours_menu.lua:382 menu/colours_menu.lua:390
+#: menu/colours_menu.lua:415
+msgid "text"
+msgstr "текст"
+
+#: menu/colours_menu.lua:396 menu/colours_menu.lua:400
+msgid "Text color"
+msgstr "Цвят на текста"
+
+#: menu/colours_menu.lua:410 menu/colours_menu.lua:415
+msgid "Icon color"
+msgstr "Цвят на икона"
+
+#: menu/colours_menu.lua:412
 msgid ""
 "Applies to Nerd Font and FontAwesome icon glyphs (the Private Use Area "
 "range, e.g. %W, %B, %k). Unicode symbols in the regular text ranges (like "
@@ -113,201 +1881,156 @@ msgstr ""
 "Вграден таг [c=#RRGGBB]…[/c] в реда замества цвета на иконите за всички "
 "глифи вътре в него."
 
-msgid "Apply"
-msgstr "Прилагане"
+#: menu/library_modal.lua:302
+msgid "Search…"
+msgstr "Търсене…"
 
-msgid "Arrow down"
-msgstr "Стрелка надолу"
+#: menu/library_modal.lua:338
+msgid "Search"
+msgstr "Търсене"
 
-msgid "Arrow down then left"
-msgstr "Стрелка надолу, после наляво"
-
-msgid "Arrow down then right"
-msgstr "Стрелка надолу, после надясно"
-
-msgid "Arrow left"
-msgstr "Стрелка наляво"
-
-msgid "Arrow left hooked"
-msgstr "Стрелка наляво с кука"
-
-msgid "Arrow left to bar"
-msgstr "Стрелка наляво до черта"
-
-msgid "Arrow left with tail"
-msgstr "Стрелка наляво с опашка"
-
-msgid "Arrow right"
-msgstr "Стрелка надясно"
-
-msgid "Arrow right hooked"
-msgstr "Стрелка надясно с кука"
-
-msgid "Arrow right then down"
-msgstr "Стрелка надясно, после надолу"
-
-msgid "Arrow right then up"
-msgstr "Стрелка надясно, после нагоре"
-
-msgid "Arrow right to bar"
-msgstr "Стрелка надясно до черта"
-
-msgid "Arrow right with tail"
-msgstr "Стрелка надясно с опашка"
-
-msgid "Arrow up"
-msgstr "Стрелка нагоре"
-
-msgid "Arrow up then left"
-msgstr "Стрелка нагоре, после наляво"
-
-msgid "Arrow up then right"
-msgstr "Стрелка нагоре, после надясно"
-
-msgid "Arrow when page-turn flipped"
-msgstr "Стрелка при обърната посока на превъртане"
-
-msgid "Arrowhead right"
-msgstr "Върх на стрелка надясно"
-
-msgid "Arrows"
-msgstr "Стрелки"
-
-msgid "Arrows left-right"
-msgstr "Стрелки наляво-надясно"
-
-msgid "All authors"
-msgstr "Всички автори"
-
-msgid "Author with et al. for multi-author"
-msgstr "Автор с et al. за много автори"
-
-msgid "First author"
-msgstr "Първи автор"
-
-msgid "If book has 2+ authors"
-msgstr "Ако книгата има 2+ автори"
-
-msgid "Second author (empty if none)"
-msgstr "Втори автор (празно, ако няма)"
-
+#: menu/progress_bar_menu.lua:30
 msgid "Bar"
 msgstr "Лента"
 
+#: menu/progress_bar_menu.lua:32
+msgid "chapter"
+msgstr "глава"
+
+#: menu/progress_bar_menu.lua:33
+msgid "top"
+msgstr "горе"
+
+#: menu/progress_bar_menu.lua:33
+msgid "bottom"
+msgstr "долу"
+
+#: menu/progress_bar_menu.lua:33
+msgid "left"
+msgstr "ляво"
+
+#: menu/progress_bar_menu.lua:33
+msgid "right"
+msgstr "дясно"
+
+#: menu/progress_bar_menu.lua:69
 msgid "Bar %1"
 msgstr "Лента %1"
 
-msgid "Bar chart"
-msgstr "Стълбова диаграма"
+#: menu/progress_bar_menu.lua:80
+msgid "Long press to change render order"
+msgstr "Продължено натискане за промяна на реда на изобразяване"
 
-msgid "Bar thickness"
-msgstr "Дебелина на лентата"
+#: menu/progress_bar_menu.lua:84
+msgid "Inline progress bars can be added via the line editor"
+msgstr ""
+"Вградени ленти за напредъка могат да се добавят чрез редактора на редове"
 
-msgid "Battery (changes with level)"
-msgstr "Батерия (променя се според заряда)"
+#: menu/progress_bar_menu.lua:100
+msgid "Enable"
+msgstr "Включване"
 
-msgid "Battery 0–100"
-msgstr "Батерия от 0 до 100"
+#: menu/progress_bar_menu.lua:109
+msgid "Type"
+msgstr "Вид"
 
-msgid "Battery icon (dynamic)"
-msgstr "Икона на батерията (динамична)"
+#: menu/progress_bar_menu.lua:122
+msgid "Chapter ticks: off"
+msgstr "Отметки за глави: изкл."
 
-msgid "Battery level"
-msgstr "Заряд на батерията"
+#: menu/progress_bar_menu.lua:123
+msgid "Chapter ticks: all levels"
+msgstr "Отметки за глави: всички нива"
 
-msgid "Bold"
-msgstr "Удебелен"
+#: menu/progress_bar_menu.lua:124
+msgid "Chapter ticks: top level"
+msgstr "Отметки за глави: горно ниво"
 
-msgid "Bold italic"
-msgstr "Удебелен курсив"
+#: menu/progress_bar_menu.lua:125
+msgid "Chapter ticks: top 2 levels"
+msgstr "Отметки за глави: горните 2 нива"
 
-msgid "Bolt when charging"
-msgstr "Мълния при зареждане"
-
-msgid "Book"
-msgstr "Книга"
-
-msgid "Book language"
-msgstr "Език на книгата"
-
-msgid "Book percentage read"
-msgstr "Прочетен процент от книгата"
-
-msgid "Book progress 0–100"
-msgstr "Напредък в книгата от 0 до 100"
-
-msgid "Book+"
-msgstr "Книга+"
-
-msgid "Book++"
-msgstr "Книга++"
-
-msgid "Book+++"
-msgstr "Книга+++"
-
-msgid "Bookends"
-msgstr "Bookends"
-
-msgid "Bookends is up to date."
-msgstr "Bookends е актуален."
-
-msgid "Bookends settings"
-msgstr "Настройки на Bookends"
-
-msgid "Bookends update available: v"
-msgstr "Налична актуализация на Bookends: v"
-
-msgid "Bookends updated to v"
-msgstr "Bookends е актуализиран до v"
-
-msgid "Bookends: cycle preset"
-msgstr "Bookends: следваща предварителна настройка"
-
-msgid "Bookends: open preset library"
-msgstr "Bookends: отваряне на библиотека с настройки"
-
-msgid "Bookends: set visibility"
-msgstr "Bookends: задаване на видимост"
-
-msgid "Bookends: toggle visibility"
-msgstr "Bookends: превключване на видимостта"
-
-msgid "Bookmark (filled)"
-msgstr "Отметка (запълнена)"
-
-msgid "Bookmark (outline)"
-msgstr "Отметка (контур)"
-
-msgid "Border"
-msgstr "Рамка"
-
-msgid "Border color"
-msgstr "Цвят на рамката"
-
-msgid "Border color (% black)"
-msgstr "Цвят на рамката (% черно)"
-
-msgid "Border thickness"
-msgstr "Дебелина на рамката"
-
+#: menu/progress_bar_menu.lua:141
 msgid "Bordered"
 msgstr "С рамка"
 
-msgid "Bottom"
-msgstr "Долу"
+#: menu/progress_bar_menu.lua:141
+msgid "Rounded"
+msgstr "Закръглена"
 
-msgid "Bottom center tap gesture"
-msgstr "Докосване в долния център"
+#: menu/progress_bar_menu.lua:141
+msgid "Radial hollow"
+msgstr "Радиален кух"
 
-msgid "Bottom-center"
-msgstr "Долу в центъра"
+#: menu/progress_bar_menu.lua:142
+msgid "Style"
+msgstr "Стил"
 
-msgid "Bottom-left"
-msgstr "Долу вляво"
+#: menu/progress_bar_menu.lua:157
+msgid "Anchor"
+msgstr "Закрепване"
 
-msgid "Bottom-right"
-msgstr "Долу вдясно"
+#: menu/progress_bar_menu.lua:182
+msgid "Fill: clockwise"
+msgstr "Запълване: по часовниковата стрелка"
 
+#: menu/progress_bar_menu.lua:185
+msgid "Fill: left to right"
+msgstr "Запълване: от ляво надясно"
+
+#: menu/progress_bar_menu.lua:186
+msgid "Fill: right to left"
+msgstr "Запълване: от дясно наляво"
+
+#: menu/progress_bar_menu.lua:187
+msgid "Fill: top to bottom"
+msgstr "Запълване: от горе надолу"
+
+#: menu/progress_bar_menu.lua:188
+msgid "Fill: bottom to top"
+msgstr "Запълване: от долу нагоре"
+
+#: menu/progress_bar_menu.lua:224 menu/progress_bar_menu.lua:232
+msgid "Diameter"
+msgstr "Диаметър"
+
+#: menu/progress_bar_menu.lua:224
+msgid "Thickness"
+msgstr "Дебелина"
+
+#: menu/progress_bar_menu.lua:232
+msgid "Bar thickness"
+msgstr "Дебелина на лентата"
+
+#: menu/progress_bar_menu.lua:259 menu/progress_bar_menu.lua:261
+msgid "Custom colors and tick marks"
+msgstr "Персонализирани цветове и отметки"
+
+#: menu/progress_bar_menu.lua:269
+msgid "Use custom colors"
+msgstr "Използване на персонализирани цветове"
+
+#: menu/progress_bar_menu.lua:354
+msgid "Reset custom to defaults"
+msgstr "Нулиране на персонализираното до стойностите по подразбиране"
+
+#: menu/progress_bar_menu.lua:381
+msgid "Edge"
+msgstr "Ръб"
+
+#: menu/progress_bar_menu.lua:381
+msgid "Vertical"
+msgstr "Вертикален"
+
+#: menu/preset_manager_modal.lua:290
+msgid "+ New blank preset"
+msgstr "+ Нова празна настройка"
+
+#: menu/preset_manager_modal.lua:306
+msgid "Discover more presets"
+msgstr "Открийте още настройки"
+
+#: menu/preset_manager_modal.lua:312
 msgid ""
 "Browse presets others have shared, preview them on your own status bar, and "
 "install the ones you like. Once installed, you can edit each preset freely "
@@ -318,561 +2041,7 @@ msgstr ""
 "След инсталиране можете да редактирате всяка настройка свободно в раздела "
 "„Моите настройки“."
 
-msgid "Bullet"
-msgstr "Точка"
-
-msgid "Calendar"
-msgstr "Календар"
-
-msgid "Calendar (checked)"
-msgstr "Календар (отметнат)"
-
-msgid "Cancel"
-msgstr "Отказ"
-
-msgid "Ch."
-msgstr "Гл."
-
-msgid "Chapter"
-msgstr "Глава"
-
-msgid "Chapter percentage read"
-msgstr "Прочетен процент от главата"
-
-msgid "Chapter progress 0–100"
-msgstr "Напредък в главата от 0 до 100"
-
-msgid "Chapter ticks: all levels"
-msgstr "Отметки за глави: всички нива"
-
-msgid "Chapter ticks: off"
-msgstr "Отметки за глави: изкл."
-
-msgid "Chapter ticks: top 2 levels"
-msgstr "Отметки за глави: горните 2 нива"
-
-msgid "Chapter ticks: top level"
-msgstr "Отметки за глави: горно ниво"
-
-msgid "Chapter title (deepest)"
-msgstr "Заглавие на главата (най-дълбоко)"
-
-msgid "Chapter title at depth 1"
-msgstr "Заглавие на главата на ниво 1"
-
-msgid "Chapter title at depth 1/2/3"
-msgstr "Заглавие на главата на ниво 1/2/3"
-
-msgid "Chapter title at depth 2"
-msgstr "Заглавие на главата на ниво 2"
-
-msgid "Chapter title at depth 3"
-msgstr "Заглавие на главата на ниво 3"
-
-msgid "Chapter title only when different from book title"
-msgstr "Заглавие на главата само когато се различава от заглавието на книгата"
-
-msgid "Check"
-msgstr "Проверка"
-
-msgid "Check mark"
-msgstr "Отметка"
-
-msgid "Checking for updates..."
-msgstr "Проверка за актуализации..."
-
-msgid "Circle arrow left"
-msgstr "Кръгла стрелка наляво"
-
-msgid "Circle arrow right"
-msgstr "Кръгла стрелка надясно"
-
-msgid "Clock"
-msgstr "Часовник"
-
-msgid "Close"
-msgstr "Затваряне"
-
-msgid "Cloud"
-msgstr "Облак"
-
-msgid "Club"
-msgstr "Трефа"
-
-msgid "Cog"
-msgstr "Зъбно колело"
-
-msgid "Compare:  =  !=  <  >     Boolean:  and  or  not  ( )"
-msgstr "Сравнение:  =  !=  <  >     Булево:  and  or  not  ( )"
-
-msgid ""
-"Configurable text overlays at screen corners and edges with token expansion "
-"and icon support."
-msgstr ""
-"Конфигурируеми текстови слоеве по ъглите и ръбовете на екрана с разширяване "
-"на токени и поддръжка на икони."
-
-msgid ""
-"Configure what happens when you tap the centre of the status bar area, and "
-"whether long-pressing a progress bar opens the skim dialog."
-msgstr ""
-"Настройте какво се случва при докосване на центъра на лентата за състоянието "
-"и дали продълженото натискане на лента за напредъка отваря диалога за "
-"прелистване."
-
-msgid "Copyright"
-msgstr "Авторски права"
-
-msgid "Could not check for updates."
-msgstr "Неуспешна проверка за актуализации."
-
-msgid "Could not preview preset"
-msgstr "Предварителната настройка не може да бъде прегледана"
-
-msgid "Couldn't download '%1'."
-msgstr "„%1“ не можа да бъде изтеглен."
-
-msgid "Cross"
-msgstr "Кръст"
-
-msgid "Cross mark"
-msgstr "Знак „х“"
-
-msgid "Current HH:MM (24h)"
-msgstr "Текущо ЧЧ:ММ (24 ч.)"
-
-msgid "Current chapter number"
-msgstr "Номер на текущата глава"
-
-msgid "Current page number"
-msgstr "Номер на текущата страница"
-
-msgid "Current time (24h, same as %time_24h)"
-msgstr "Текущ час (24 ч., същото като %time_24h)"
-
-msgid "Cursive"
-msgstr "Ръкописен"
-
-msgid "Curved back arrow"
-msgstr "Извита стрелка назад"
-
-msgid "Custom colors and tick marks"
-msgstr "Персонализирани цветове и отметки"
-
-msgid "Custom date/time format (strftime spec)"
-msgstr "Персонализиран формат за дата/час (спецификация strftime)"
-
-msgid "Custom fonts in this preset:"
-msgstr "Персонализирани шрифтове в тази настройка:"
-
-msgid "Cycle starred presets"
-msgstr "Смяна на отбелязаните настройки"
-
-msgid "Dagger"
-msgstr "Кинжал"
-
-msgid "Date long (28 March 2026)"
-msgstr "Пълна дата (28 март 2026)"
-
-msgid "Date numeric (28/03/2026)"
-msgstr "Цифрова дата (28/03/2026)"
-
-msgid "Date short (28 Mar)"
-msgstr "Кратка дата (28 март)"
-
-msgid "Default"
-msgstr "По подразбиране"
-
-msgid "Default font"
-msgstr "Шрифт по подразбиране"
-
-msgid "Delete"
-msgstr "Изтриване"
-
-msgid "Delete preset '%1'?"
-msgstr "Изтриване на настройката „%1“?"
-
-msgid "Device"
-msgstr "Устройство"
-
-msgid "Diameter"
-msgstr "Диаметър"
-
-msgid "Diamond"
-msgstr "Диамант"
-
-msgid "Diamond suit"
-msgstr "Каро"
-
-msgid "Disable stock status bar"
-msgstr "Изключване на вградената лента на състоянието"
-
-msgid "Discover more presets"
-msgstr "Открийте още настройки"
-
-msgid "Dismiss"
-msgstr "Затваряне"
-
-msgid "Division slash"
-msgstr "Наклонена черта за деление"
-
-msgid "Do nothing"
-msgstr "Без действие"
-
-msgid "Document format (EPUB, PDF, etc.)"
-msgstr "Формат на документа (EPUB, PDF и др.)"
-
-msgid "Document title"
-msgstr "Заглавие на документа"
-
-msgid "Double angle left"
-msgstr "Двойна ъглова скоба наляво"
-
-msgid "Double angle right"
-msgstr "Двойна ъглова скоба надясно"
-
-msgid "Double arrow down"
-msgstr "Двойна стрелка надолу"
-
-msgid "Double arrow left"
-msgstr "Двойна стрелка наляво"
-
-msgid "Double arrow right"
-msgstr "Двойна стрелка надясно"
-
-msgid "Double arrow up"
-msgstr "Двойна стрелка нагоре"
-
-msgid "Double arrows right"
-msgstr "Двойни стрелки надясно"
-
-msgid "Double dagger"
-msgstr "Двоен кинжал"
-
-msgid "Double fraction slash"
-msgstr "Двойна дробна наклонена черта"
-
-msgid "Download failed."
-msgstr "Изтеглянето е неуспешно."
-
-msgid "Downloading update..."
-msgstr "Изтегляне на актуализацията..."
-
-msgid "Duplicate"
-msgstr "Дублиране"
-
-msgid "Duplicate preset"
-msgstr "Дублиране на настройката"
-
-msgid "Dynamic"
-msgstr "Динамичен"
-
-msgid "EPUB / PDF / CBZ / …"
-msgstr "EPUB / PDF / CBZ / …"
-
-msgid "Edge"
-msgstr "Ръб"
-
-msgid "Edit author"
-msgstr "Редактиране на автора"
-
-msgid "Edit author…"
-msgstr "Редактиране на автора…"
-
-msgid "Edit description"
-msgstr "Редактиране на описанието"
-
-msgid "Edit description…"
-msgstr "Редактиране на описанието…"
-
-msgid "Em dash"
-msgstr "Тире (em)"
-
-msgid "En dash"
-msgstr "Тире (en)"
-
-msgid "Enable"
-msgstr "Включване"
-
-msgid "Enable bookends"
-msgstr "Включване на Bookends"
-
-msgid "Enabled"
-msgstr "Включен"
-
-msgid "Even pg"
-msgstr "Четни стр."
-
-msgid "Examples"
-msgstr "Примери"
-
-msgid "Extra bottom margin"
-msgstr "Допълнително долно поле"
-
-msgid "Extra left margin"
-msgstr "Допълнително ляво поле"
-
-msgid "Extra right margin"
-msgstr "Допълнително дясно поле"
-
-msgid "Extra top margin"
-msgstr "Допълнително горно поле"
-
-msgid "Eye"
-msgstr "Око"
-
-msgid "Eye (hidden)"
-msgstr "Око (скрито)"
-
-msgid "Fall back to shallower chapter"
-msgstr "Връщане към по-плитка глава"
-
-msgid "Fantasy"
-msgstr "Фантазия"
-
-msgid "File name"
-msgstr "Име на файла"
-
-msgid "Fill: bottom to top"
-msgstr "Запълване: от долу нагоре"
-
-msgid "Fill: clockwise"
-msgstr "Запълване: по часовниковата стрелка"
-
-msgid "Fill: left to right"
-msgstr "Запълване: от ляво надясно"
-
-msgid "Fill: right to left"
-msgstr "Запълване: от дясно наляво"
-
-msgid "Fill: top to bottom"
-msgstr "Запълване: от горе надолу"
-
-msgid "Fixed-width progress bar (100px)"
-msgstr "Лента за напредъка с фиксирана ширина (100px)"
-
-msgid "Flag"
-msgstr "Знаме"
-
-msgid "Font"
-msgstr "Шрифт"
-
-msgid "Font scale"
-msgstr "Мащаб на шрифта"
-
-msgid "Font size"
-msgstr "Размер на шрифта"
-
-msgid "Font-family fonts"
-msgstr "Шрифтове по семейство"
-
-msgid "Font..."
-msgstr "Шрифт..."
-
-msgid "Fonts"
-msgstr "Шрифтове"
-
-msgid "Fraction slash"
-msgstr "Дробна наклонена черта"
-
-msgid "Free disk space"
-msgstr "Свободно дисково пространство"
-
-msgid "Frontlight brightness"
-msgstr "Яркост на предното осветление"
-
-msgid "Frontlight on/off label"
-msgstr "Етикет вкл./изкл. на предното осветление"
-
-msgid "Frontlight warmth"
-msgstr "Топлина на предното осветление"
-
-msgid "Full width progress bars"
-msgstr "Ленти за напредъка на цяла ширина"
-
-msgid "Gallery"
-msgstr "Галерия"
-
-msgid "HDD / disk"
-msgstr "Твърд диск"
-
-msgid "Heart"
-msgstr "Сърце"
-
-msgid "Heavy arrow right"
-msgstr "Плътна стрелка надясно"
-
-msgid "Heavy round arrow right"
-msgstr "Плътна кръгла стрелка надясно"
-
-msgid "Heavy triangle right"
-msgstr "Плътен триъгълник надясно"
-
-msgid "Hex:"
-msgstr "Hex:"
-
-msgid ""
-"Hides KOReader's built-in status bar. This simplifies the render pipeline "
-"and can reduce e-ink flicker on some devices. All status bar features are "
-"available as Bookends tokens."
-msgstr ""
-"Скрива вградената лента на състоянието на KOReader. Това опростява процеса "
-"на изобразяване и може да намали трептенето на е-мастилото на някои "
-"устройства. Всички функции на лентата за състоянието са достъпни като токени "
-"на Bookends."
-
-msgid "High voltage"
-msgstr "Високо напрежение"
-
-msgid "Hollow"
-msgstr "Кух"
-
-msgid "Horizontal ellipsis"
-msgstr "Хоризонтално многоточие"
-
-msgid "Hot springs / warmth"
-msgstr "Горещи извори / топлина"
-
-msgid "Hourglass"
-msgstr "Пясъчен часовник"
-
-msgid "Hourglass (filled)"
-msgstr "Пясъчен часовник (запълнен)"
-
-msgid "Icon color"
-msgstr "Цвят на икона"
-
-msgid "If Wi-Fi is on"
-msgstr "Ако Wi-Fi е включен"
-
-msgid "If book has author"
-msgstr "Ако книгата има автор"
-
-msgid "If book has title"
-msgstr "Ако книгата има заглавие"
-
-msgid "If book in series"
-msgstr "Ако книгата е от поредица"
-
-msgid "If chapter has title"
-msgstr "Ако главата има заглавие"
-
-msgid "If charging"
-msgstr "Ако се зарежда"
-
-msgid "If connected"
-msgstr "Ако е свързан"
-
-msgid "If frontlight on"
-msgstr "Ако предното осветление е включено"
-
-msgid "If page-turn flipped"
-msgstr "Ако посоката на превъртане е обърната"
-
-msgid "If/Else conditional tokens"
-msgstr "Условни токени If/Else"
-
-msgid "Imported from your earlier Bookends settings"
-msgstr "Импортирано от предишните ви настройки на Bookends"
-
-msgid "Include current page in pages-left tokens"
-msgstr "Включване на текущата страница в токените за оставащи страници"
-
-msgid "Infinity"
-msgstr "Безкрайност"
-
-msgid "Info"
-msgstr "Информация"
-
-msgid "Inline progress bars can be added via the line editor"
-msgstr ""
-"Вградени ленти за напредъка могат да се добавят чрез редактора на редове"
-
-msgid "Insert conditional"
-msgstr "Вмъкване на условие"
-
-msgid "Insert symbol"
-msgstr "Вмъкване на символ"
-
-msgid "Insert token"
-msgstr "Вмъкване на токен"
-
-msgid "Install"
-msgstr "Инсталиране"
-
-msgid "Install as"
-msgstr "Инсталиране като"
-
-msgid "Install as new name…"
-msgstr "Инсталиране под ново име…"
-
-msgid "Installation failed: "
-msgstr "Инсталирането е неуспешно: "
-
-msgid "Installed version"
-msgstr "Инсталирана версия"
-
-msgid "Installed: "
-msgstr "Инсталиран: "
-
-msgid "Invalid hex colour (use #RGB or #RRGGBB)"
-msgstr "Невалиден хекс цвят (използвайте #RGB или #RRGGBB)"
-
-msgid "Invert tick color on read portion"
-msgstr "Инвертиране на цвета на отметките върху прочетената част"
-
-msgid "Italic"
-msgstr "Курсив"
-
-msgid "Late-night reading"
-msgstr "Четене късно през нощта"
-
-msgid "Latest"
-msgstr "Последни"
-
-msgid "Latest: "
-msgstr "Последна: "
-
-msgid "Left"
-msgstr "Ляво"
-
-msgid "Left harpoon with right arrow"
-msgstr "Харпун наляво със стрелка надясно"
-
-msgid "Lightbulb"
-msgstr "Крушка"
-
-msgid "Lightbulb emoji"
-msgstr "Емоджи крушка"
-
-msgid "Lightning bolt"
-msgstr "Мълния"
-
-msgid "Line"
-msgstr "Ред"
-
-msgid "Line %1: %2"
-msgstr "Ред %1: %2"
-
-msgid "Long arrow left"
-msgstr "Дълга стрелка наляво"
-
-msgid "Long arrow right"
-msgstr "Дълга стрелка надясно"
-
-msgid "Long books (20+ chapters)"
-msgstr "Дълги книги (20+ глави)"
-
-msgid "Long press to change render order"
-msgstr "Продължено натискане за промяна на реда на изобразяване"
-
-msgid "Long-press progress bars to skim document"
-msgstr ""
-"Продължено натискане на лентите за напредъка за прелистване на документа"
-
-msgid "Low-battery warning"
-msgstr "Предупреждение за нисък заряд на батерията"
-
+#: menu/preset_manager_modal.lua:319
 msgid ""
 "Made something worth sharing? Submit it with the Manage button while viewing "
 "one of your own presets."
@@ -880,433 +2049,155 @@ msgstr ""
 "Направили сте нещо, което си струва да споделите? Изпратете го с бутона "
 "„Управление“ при преглед на ваша предварителна настройка."
 
-msgid "Manage…"
-msgstr "Управление…"
-
-msgid "Memory chip"
-msgstr "Чип памет"
-
-msgid "Metadata"
-msgstr "Описателни данни"
-
-msgid "Metro"
-msgstr "Метро"
-
-msgid "Metro read color"
-msgstr "Цвят на прочетената част (метро)"
-
-msgid "Metro read color (% black)"
-msgstr "Цвят на прочетената част в % черно (метро)"
-
-msgid "Metro track color"
-msgstr "Цвят на релсата (метро)"
-
-msgid "Metro track color (% black)"
-msgstr "Цвят на релсата в % черно (метро)"
-
-msgid "Middle dot"
-msgstr "Средна точка"
-
-msgid "Minutes this session"
-msgstr "Минути през сесията"
-
-msgid "Mobile"
-msgstr "Мобилен"
-
-msgid "Monospace"
-msgstr "Моноширочинен"
-
-msgid "Mon–Sun"
-msgstr "Пон–Нед"
-
-msgid "Moon"
-msgstr "Луна"
-
-msgid "Move down"
-msgstr "Преместване надолу"
-
-msgid "Move to"
-msgstr "Преместване в"
-
-msgid "Move up"
-msgstr "Преместване нагоре"
-
-msgid "My presets"
-msgstr "Моите настройки"
-
-msgid "My setup"
-msgstr "Моята конфигурация"
-
-msgid "Near end of book"
-msgstr "Близо до края на книгата"
-
-msgid "No download available for this release."
-msgstr "Няма наличен файл за изтегляне за тази версия."
-
-msgid "Non-series books"
-msgstr "Книги извън поредица"
-
-msgid "Notify on wake when update available"
-msgstr "Известяване при събуждане, ако има налична актуализация"
-
-msgid "Number of bookmarks"
-msgstr "Брой отметки"
-
-msgid "Number of highlights"
-msgstr "Брой маркирания"
-
-msgid "Number of notes"
-msgstr "Брой бележки"
-
-msgid "Numero"
-msgstr "Номер"
-
-msgid "Odd pg"
-msgstr "Нечетни стр."
-
-msgid "Odd/even variations"
-msgstr "Вариации за нечетни/четни"
-
-msgid "Offline — connect and tap a sort to retry"
-msgstr "Офлайн — свържете се и докоснете подредба за нов опит"
-
-msgid "Offline — connect to preview this preset."
-msgstr "Офлайн — свържете се, за да прегледате тази настройка."
-
-msgid "One-line description of this preset"
-msgstr "Едноредово описание на тази настройка"
-
-msgid "Only for PDFs"
-msgstr "Само за PDF документи"
-
-msgid "Open"
-msgstr "Отваряне"
-
-msgid "Open preset library"
-msgstr "Отваряне на библиотека с настройки"
-
-msgid "Open the releases page in a browser?"
-msgstr "Отваряне на страницата с версиите в браузър?"
-
-msgid ""
-"Opens the skim dialog when you long-press on a full-width progress bar. "
-"Replaces the stock status bar's long-press to skim feature."
+#: menu/preset_manager_modal.lua:326
+msgid "Tap Latest or Popular above to load the gallery."
 msgstr ""
-"Отваря диалога за прелистване при продължено натискане на лента за напредъка "
-"на цяла ширина. Замества функцията за прелистване с продължено натискане на "
-"вградената лента на състоянието."
+"Докоснете „Последни“ или „Популярни“ по-горе, за да заредите галерията."
 
-msgid "Page %1 of %2"
-msgstr "Страница %1 от %2"
-
-msgid "Page / progress"
-msgstr "Страница / напредък"
-
-msgid "Page-turn direction ⇄ (shows when inverted)"
-msgstr "Посока на превъртане ⇄ (показва се при обърната)"
-
-msgid "Pages left in book"
-msgstr "Оставащи страници в книгата"
-
-msgid "Pages left in chapter"
-msgstr "Оставащи страници в главата"
-
-msgid "Pages per hour"
-msgstr "Страници на час"
-
-msgid "Pages read in chapter"
-msgstr "Прочетени страници в главата"
-
-msgid "Pages this session"
-msgstr "Страници през сесията"
-
-msgid "Paper aeroplane"
-msgstr "Хартиен самолет"
-
-msgid "Pick a color"
-msgstr "Избор на цвят"
-
-msgid "Pilcrow / paragraph"
-msgstr "Пилкроу / абзац"
-
-msgid "Plugin content (dynamic)"
-msgstr "Съдържание от плъгин (динамично)"
-
-msgid "Pointing down"
-msgstr "Сочещ надолу"
-
-msgid "Pointing left"
-msgstr "Сочещ наляво"
-
-msgid "Pointing right"
-msgstr "Сочещ надясно"
-
-msgid "Pointing right (black)"
-msgstr "Сочещ надясно (черен)"
-
-msgid "Pointing up"
-msgstr "Сочещ нагоре"
-
-msgid "Popular"
-msgstr "Популярни"
-
-msgid "Position"
-msgstr "Позиция"
-
-msgid "Power"
-msgstr "Захранване"
-
-msgid "Preset"
-msgstr "Предварителна настройка"
-
-msgid "Preset error: %1"
-msgstr "Грешка в настройката: %1"
-
+#: menu/preset_manager_modal.lua:456
 msgid "Preset library"
 msgstr "Библиотека с настройки"
 
-msgid "Preset library…"
-msgstr "Библиотека с настройки…"
+#: menu/preset_manager_modal.lua:458
+msgid "My presets"
+msgstr "Моите настройки"
 
-msgid "Preset name"
-msgstr "Име на настройката"
+#: menu/preset_manager_modal.lua:459
+msgid "Gallery"
+msgstr "Галерия"
 
-msgid "Preset: %1"
-msgstr "Предварителна настройка: %1"
+#: menu/preset_manager_modal.lua:469 menu/preset_manager_modal.lua:481
+msgid "Latest"
+msgstr "Последни"
 
-msgid "Prioritise left/right and truncate long center text"
-msgstr "Приоритет на ляво/дясно и съкращаване на дълъг централен текст"
-
-msgid "Progress bar (configure type in line editor)"
-msgstr "Лента за напредъка (настройте вида в редактора на редове)"
-
-msgid "Progress bar colors and tick marks"
-msgstr "Цветове и отметки на лентата за напредъка"
-
-msgid "Progress bar, 10px tall"
-msgstr "Лента за напредъка, 10px висока"
-
-msgid "Progress bar, 200px wide and 4px tall"
-msgstr "Лента за напредъка, 200px широка и 4px висока"
-
-msgid "Progress bars"
-msgstr "Ленти за напредъка"
-
-msgid "RAM used %"
-msgstr "Използвана RAM %"
-
-msgid "RAM used (MiB)"
-msgstr "Използвана RAM (МиБ)"
-
-msgid "Radial"
-msgstr "Радиален"
-
-msgid "Radial hollow"
-msgstr "Радиален кух"
-
-msgid "Read color"
-msgstr "Цвят на прочетената част"
-
-msgid "Read color (% black)"
-msgstr "Цвят на прочетената част (% черно)"
-
-msgid "Reading"
-msgstr "Четене"
-
-msgid "Reading speed (pages/hour)"
-msgstr "Скорост на четене (стр./час)"
-
-msgid "Reference"
-msgstr "Справка"
-
-msgid "Refresh failed — tap a sort to retry"
-msgstr "Обновяването е неуспешно — докоснете подредба за нов опит"
-
-msgid "Refreshing…"
-msgstr "Обновяване…"
-
-msgid "Regular"
-msgstr "Обикновен"
-
-msgid "Rename"
-msgstr "Преименуване"
-
-msgid "Rename preset"
-msgstr "Преименуване на настройката"
-
-msgid "Rename…"
-msgstr "Преименуване…"
-
-msgid "Replace"
-msgstr "Замяна"
-
-msgid "Reset"
-msgstr "Нулиране"
-
-msgid "Reset all to defaults"
-msgstr "Нулиране на всичко до стойностите по подразбиране"
-
-msgid "Reset custom to defaults"
-msgstr "Нулиране на персонализираното до стойностите по подразбиране"
-
-msgid "Restart"
-msgstr "Рестартиране"
-
-msgid "Restart KOReader now?"
-msgstr "Рестартиране на KOReader сега?"
-
-msgid "Right"
-msgstr "Дясно"
-
-msgid "Round"
-msgstr "Закръглен"
-
-msgid "Rounded"
-msgstr "Закръглена"
-
-msgid "Sans-serif"
-msgstr "Без засечки"
-
-msgid "Save"
-msgstr "Запазване"
-
-msgid "Save current as new preset…"
-msgstr "Запазване на текущата като нова настройка…"
-
-msgid "Save preset"
-msgstr "Запазване на настройката"
-
-msgid "Saved preset:"
-msgstr "Запазена настройка:"
-
-msgid "Section sign"
-msgstr "Знак за раздел"
-
-msgid "Select font"
-msgstr "Избор на шрифт"
-
-msgid "Separators"
-msgstr "Разделители"
-
-msgid "Series name only"
-msgstr "Само името на поредицата"
-
-msgid "Series number only"
-msgstr "Само номерът на поредицата"
-
-msgid "Series with index (combined)"
-msgstr "Поредица с номер (комбинирано)"
-
-msgid "Serif"
-msgstr "Със засечки"
-
-msgid "Session / reading"
-msgstr "Сесия / четене"
-
-msgid "Session pages read"
-msgstr "Прочетени страници за сесията"
-
-msgid "Session reading time"
-msgstr "Време за четене за сесията"
-
-msgid "Session time after start"
-msgstr "Време на сесията след началото"
-
-msgid "Set"
-msgstr "Задаване"
-
-msgid "Set font"
-msgstr "Задаване на шрифт"
-
-msgid "Single angle left"
-msgstr "Единична ъглова скоба наляво"
-
-msgid "Single angle right"
-msgstr "Единична ъглова скоба надясно"
-
-msgid "Size"
-msgstr "Размер"
-
-msgid "Slash"
-msgstr "Наклонена черта"
-
-msgid "Sliders"
-msgstr "Плъзгачи"
-
-msgid "Snippets"
-msgstr "Фрагменти"
-
-msgid "Solid"
-msgstr "Плътна"
-
-msgid "Spade"
-msgstr "Пика"
-
-msgid "Speed once calculated"
-msgstr "Скорост, след като е изчислена"
-
-msgid "Star (filled)"
-msgstr "Звезда (запълнена)"
-
-msgid "Star (outline)"
-msgstr "Звезда (контур)"
-
-msgid "Star = include in preset cycle gesture"
-msgstr "Звезда = включване в жеста за смяна на настройките"
-
+#: menu/preset_manager_modal.lua:470
 msgid "Starred"
 msgstr "Отбелязани със звезда"
 
-msgid "Status"
-msgstr "Състояние"
+#: menu/preset_manager_modal.lua:483
+msgid "Popular"
+msgstr "Популярни"
 
-msgid "Stopwatch"
-msgstr "Хронометър"
+#: menu/preset_manager_modal.lua:497
+msgid "Search my presets by name or author…"
+msgstr "Търсене в моите настройки по име или автор…"
 
-msgid "Style"
-msgstr "Стил"
+#: menu/preset_manager_modal.lua:499
+msgid "Search gallery presets by name or author…"
+msgstr "Търсене в настройките от галерията по име или автор…"
 
-msgid "Submission failed — details in the KOReader log."
-msgstr "Изпращането е неуспешно — подробности в журнала на KOReader."
+#: menu/preset_manager_modal.lua:541
+msgid "Manage…"
+msgstr "Управление…"
 
-msgid "Submission failed: %1"
-msgstr "Изпращането е неуспешно: %1"
+#: menu/preset_manager_modal.lua:559 menu/preset_manager_modal.lua:562
+#: menu/preset_manager_modal.lua:1667
+msgid "Install"
+msgstr "Инсталиране"
 
-msgid "Submit"
-msgstr "Изпращане"
+#: menu/preset_manager_modal.lua:793 menu/preset_manager_modal.lua:1625
+msgid "Could not preview preset"
+msgstr "Предварителната настройка не може да бъде прегледана"
 
+#: menu/preset_manager_modal.lua:908
+msgid "by"
+msgstr "от"
+
+#: menu/preset_manager_modal.lua:1127 menu/preset_manager_modal.lua:1441
+msgid "Untitled"
+msgstr "Без заглавие"
+
+#: menu/preset_manager_modal.lua:1156
+msgid "Rename…"
+msgstr "Преименуване…"
+
+#: menu/preset_manager_modal.lua:1160
+msgid "Edit description…"
+msgstr "Редактиране на описанието…"
+
+#: menu/preset_manager_modal.lua:1164
+msgid "Edit author…"
+msgstr "Редактиране на автора…"
+
+#: menu/preset_manager_modal.lua:1168
+msgid "Duplicate"
+msgstr "Дублиране"
+
+#: menu/preset_manager_modal.lua:1172
+msgid "Submit to gallery…"
+msgstr "Изпращане в галерията…"
+
+#: menu/preset_manager_modal.lua:1282
+msgid "%1, line %2"
+msgstr "%1, ред %2"
+
+#: menu/preset_manager_modal.lua:1319
+msgid "Edit description"
+msgstr "Редактиране на описанието"
+
+#: menu/preset_manager_modal.lua:1323
+msgid "Edit author"
+msgstr "Редактиране на автора"
+
+#: menu/preset_manager_modal.lua:1327
+msgid "copy"
+msgstr "копиране"
+
+#: menu/preset_manager_modal.lua:1330
+msgid "Duplicate preset"
+msgstr "Дублиране на настройката"
+
+#: menu/preset_manager_modal.lua:1373
+msgid "Rename before sharing"
+msgstr "Преименуване преди споделяне"
+
+#: menu/preset_manager_modal.lua:1424
+msgid "Who should we credit as the author?"
+msgstr "Кого да посочим като автор?"
+
+#: menu/preset_manager_modal.lua:1429
+msgid "One-line description of this preset"
+msgstr "Едноредово описание на тази настройка"
+
+#: menu/preset_manager_modal.lua:1448
+msgid ""
+"'%1' is one of Bookends' default placeholder names. Give your preset "
+"something distinctive — that's how it'll appear in the gallery."
+msgstr ""
+"„%1“ е едно от стандартните примерни имена на Bookends. Дайте на "
+"настройката си нещо отличително — така ще се показва в галерията."
+
+#: menu/preset_manager_modal.lua:1454
+msgid ""
+"Write a short description that tells gallery users what your preset shows"
+msgstr ""
+"Напишете кратко описание, което казва на потребителите от галерията какво "
+"показва вашата настройка"
+
+#: menu/preset_manager_modal.lua:1476
 msgid ""
 "Submit '%1' by %2 to the gallery? A pull request will be opened for review."
 msgstr ""
 "Изпращане на „%1“ от %2 в галерията? Ще бъде отворена заявка за преглед."
 
-msgid "Submit anyway"
-msgstr "Изпращане въпреки това"
+#: menu/preset_manager_modal.lua:1478
+msgid "Submit"
+msgstr "Изпращане"
 
-msgid "Submit to gallery…"
-msgstr "Изпращане в галерията…"
+#: menu/preset_manager_modal.lua:1488
+msgid ""
+"A preset called '%1' is already in the gallery. Rename your preset (Manage… "
+"→ Rename…) before submitting, so it doesn't collide with the existing entry."
+msgstr ""
+"Предварителна настройка с името „%1“ вече съществува в галерията. "
+"Преименувайте я (Управление… → Преименуване…) преди да я изпратите, за да не "
+"се застъпва с вече съществуващата."
 
+#: menu/preset_manager_modal.lua:1495
 msgid "Submitting to gallery…"
 msgstr "Изпращане в галерията…"
 
-msgid "Sun (filled)"
-msgstr "Слънце (запълнено)"
-
-msgid "Sun (outline)"
-msgstr "Слънце (контур)"
-
-msgid "Symbols"
-msgstr "Символи"
-
-msgid "Tachometer"
-msgstr "Тахометър"
-
-msgid "Tap Latest or Popular above to load the gallery."
-msgstr "Докоснете „Последни“ или „Популярни“ по-горе, за да заредите галерията."
-
-msgid "Text color"
-msgstr "Цвят на текста"
-
+#: menu/preset_manager_modal.lua:1507
 msgid ""
 "Thanks! Your submission is PR #%1.\n"
 "\n"
@@ -1316,57 +2207,41 @@ msgstr ""
 "\n"
 "Поддържащият ще я прегледа, преди да се появи в Галерията."
 
-msgid "Thickness"
-msgstr "Дебелина"
+#: menu/preset_manager_modal.lua:1516
+msgid ""
+"A preset called '%1' is already in the gallery. Rename your preset (Manage… "
+"→ Rename…) before submitting."
+msgstr ""
+"Предварителна настройка с името „%1“ вече съществува в галерията. "
+"Преименувайте я (Управление… → Преименуване…) преди да я изпратите."
 
-msgid "This preset appears invalid; skipping."
-msgstr "Тази настройка изглежда невалидна; пропускане."
+#: menu/preset_manager_modal.lua:1519
+msgid ""
+"A submission for '%1' is already awaiting review. Wait for that one to be "
+"reviewed, or rename your preset to submit under a different name."
+msgstr ""
+"Заявка за „%1“ вече очаква преглед. Изчакайте тя да бъде прегледана или "
+"преименувайте настройката си, за да я изпратите под различно име."
 
+#: menu/preset_manager_modal.lua:1522
+msgid "Submission failed: %1"
+msgstr "Изпращането е неуспешно: %1"
+
+#: menu/preset_manager_modal.lua:1534
 msgid ""
 "This preset uses specific fonts that won't exist on other devices. These "
 "overrides will be stripped from your submission so other users see their own "
 "default font."
 msgstr ""
 "Тази настройка използва конкретни шрифтове, които може да не съществуват на "
-"други устройства. Тези презаписвания ще бъдат премахнати от вашата заявка, така че "
-"другите потребители да виждат собствения си шрифт по подразбиране."
+"други устройства. Тези презаписвания ще бъдат премахнати от вашата заявка, "
+"така че другите потребители да виждат собствения си шрифт по подразбиране."
 
-msgid "Tick color"
-msgstr "Цвят на отметките"
+#: menu/preset_manager_modal.lua:1536
+msgid "Custom fonts in this preset:"
+msgstr "Персонализирани шрифтове в тази настройка:"
 
-msgid "Tick color (% black)"
-msgstr "Цвят на отметките (% черно)"
-
-msgid "Tick height"
-msgstr "Височина на отметките"
-
-msgid "Tick inversion color"
-msgstr "Цвят на инвертиране на отметките"
-
-msgid "Tick inversion color (% black)"
-msgstr "Цвят на инвертиране на отметките (% черно)"
-
-msgid "Tick width"
-msgstr "Ширина на отметките"
-
-msgid "Tilde"
-msgstr "Тилда"
-
-msgid "Time"
-msgstr "Час"
-
-msgid "Time / date"
-msgstr "Час / дата"
-
-msgid "Time left in book"
-msgstr "Оставащо време до края на книгата"
-
-msgid "Time left in chapter"
-msgstr "Оставащо време до края на главата"
-
-msgid "Time window"
-msgstr "Времеви прозорец"
-
+#: menu/preset_manager_modal.lua:1542
 msgid ""
 "Tip: for portable presets, pick a Font-family font (Serif, Sans-serif, etc.) "
 "instead of a specific one — those adapt to each user's font settings."
@@ -1375,252 +2250,315 @@ msgstr ""
 "и др.) вместо конкретен — те се адаптират към шрифтовите настройки на всеки "
 "потребител."
 
-msgid "Toggle bookends"
-msgstr "Превключване на Bookends"
-
-msgid "Tokens"
-msgstr "Токени"
-
-msgid "Top"
-msgstr "Горе"
-
-msgid "Top-center"
-msgstr "Горе в центъра"
-
-msgid "Top-left"
-msgstr "Горе вляво"
-
-msgid "Top-right"
-msgstr "Горе вдясно"
-
-msgid "Total annotations (bookmarks + highlights + notes)"
-msgstr "Всички анотации (отметки + маркирания + бележки)"
-
-msgid "Total chapter count"
-msgstr "Общ брой глави"
-
-msgid "Total chapters"
-msgstr "Общо глави"
-
-msgid "Total pages"
-msgstr "Общ брой страници"
-
-msgid "Total pages in chapter"
-msgstr "Общ брой страници в главата"
-
-msgid "Total reading time for book"
-msgstr "Общо време за четене на книгата"
-
-msgid "Triangle down"
-msgstr "Триъгълник надолу"
-
-msgid "Triangle left"
-msgstr "Триъгълник наляво"
-
-msgid "Triangle right"
-msgstr "Триъгълник надясно"
-
-msgid "Triangle up"
-msgstr "Триъгълник нагоре"
-
-msgid "Triangle-head right"
-msgstr "Глава-триъгълник надясно"
-
-msgid "Triangular bullet"
-msgstr "Триъгълна точка"
-
-msgid "Truncation gap"
-msgstr "Разстояние при съкращаване"
-
-msgid "Truncation gap between regions"
-msgstr "Разстояние при съкращаване между областите"
-
-msgid "Type"
-msgstr "Вид"
-
-msgid "UI font"
-msgstr "Шрифт на интерфейса"
-
-msgid "Unread color"
-msgstr "Цвят на непрочетената част"
-
-msgid "Unread color (% black)"
-msgstr "Цвят на непрочетената част (% черно)"
-
-msgid "Untitled"
-msgstr "Без заглавие"
-
-msgid "Update and restart"
-msgstr "Актуализиране и рестартиране"
-
-msgid "Update available"
-msgstr "Налична актуализация"
-
-msgid "Update available!"
-msgstr "Налична е актуализация!"
-
-msgid "Use custom colors"
-msgstr "Използване на персонализирани цветове"
-
-msgid "Version: "
-msgstr "Версия: "
-
-msgid "Vertical"
-msgstr "Вертикален"
-
-msgid "Vertical bar"
-msgstr "Вертикална черта"
-
-msgid "Vertical ellipsis"
-msgstr "Вертикално многоточие"
-
-msgid "Warning"
-msgstr "Предупреждение"
-
-msgid "Watch"
-msgstr "Часовник"
-
-msgid "Wave"
-msgstr "Вълна"
-
-msgid "Weekday (Friday)"
-msgstr "Ден от седмицата (петък)"
-
-msgid "Weekday short (Fri)"
-msgstr "Кратък ден (пет)"
-
-msgid "Weekends"
-msgstr "Почивни дни"
-
-msgid "Who should we credit as the author?"
-msgstr "Кого да посочим като автор?"
-
-msgid "Wi-Fi"
-msgstr "Wi-Fi"
-
-msgid "Wi-Fi (changes with status)"
-msgstr "Wi-Fi (променя се според статуса)"
-
-msgid "Wi-Fi icon (dynamic)"
-msgstr "Икона на Wi-Fi (динамична)"
-
-msgid "Wi-Fi icon only when Wi-Fi enabled"
-msgstr "Икона на Wi-Fi само когато Wi-Fi е включен"
-
-msgid "Wi-Fi is not enabled."
-msgstr "Wi-Fi не е включен."
-
-msgid "[if:key=value]if true[else]if false[/if]"
-msgstr "[if:ключ=стойност]ако е вярно[else]ако е невярно[/if]"
-
-msgid "[if:key=value]show when true[/if]"
-msgstr "[if:ключ=стойност]показване при вярно[/if]"
-
-msgid "book"
-msgstr "книга"
-
-msgid "bottom"
-msgstr "долу"
-
-msgid "by"
-msgstr "от"
-
-msgid "chapter"
-msgstr "глава"
-
-msgid "copy"
-msgstr "копиране"
-
-msgid "cycle presets"
-msgstr "смяна на настройките"
-
-msgid "default"
-msgstr "по подразбиране"
-
-msgid "left"
-msgstr "ляво"
-
-msgid "line"
-msgstr "ред"
-
-msgid "long press lines to manage"
-msgstr "продължено натискане на редовете за управление"
-
-msgid "odd / even"
-msgstr "нечетна / четна"
-
-msgid "off"
-msgstr "изкл."
-
-msgid "on"
-msgstr "вкл."
-
-msgid "per style"
-msgstr "по стил"
-
-msgid "plugin update available"
-msgstr "налична актуализация на плъгина"
-
-msgid "preset library"
-msgstr "библиотека с настройки"
-
-msgid "recommended"
-msgstr "препоръчано"
-
-msgid "right"
-msgstr "дясно"
-
-msgid "text"
-msgstr "текст"
-
-msgid "toggle bookends"
-msgstr "превключване на Bookends"
-
-msgid "top"
-msgstr "горе"
-
-msgid "transparent"
-msgstr "прозрачен"
-
-msgid "Advanced"
-msgstr "Разширени"
-
-msgid "Branch name (leave empty for stable)"
-msgstr "Име на клон (оставете празно за стабилна версия)"
-
-msgid "Check for updates"
-msgstr "Проверка за актуализации"
-
-msgid "Could not fetch latest release."
-msgstr "Последната версия не можа да бъде изтеглена."
-
-msgid "Could not install branch:"
-msgstr "Клонът не можа да бъде инсталиран:"
-
-msgid "Development branch"
-msgstr "Клон за разработка"
-
-msgid "Downloading latest release..."
-msgstr "Изтегляне на последната версия..."
-
-msgid "Install branch"
-msgstr "Инсталиране на клон"
-
-msgid "Installed: v"
-msgstr "Инсталиран: v"
-
-msgid "Latest release has no downloadable zip."
-msgstr "Последната версия няма zip файл за изтегляне."
-
-msgid "Reset to latest stable release"
-msgstr "Нулиране до последната стабилна версия"
-
+#: menu/preset_manager_modal.lua:1545
+msgid "Submit anyway"
+msgstr "Изпращане въпреки това"
+
+#: menu/preset_manager_modal.lua:1558
+msgid "Submission failed — details in the KOReader log."
+msgstr "Изпращането е неуспешно — подробности в журнала на KOReader."
+
+#: menu/preset_manager_modal.lua:1564
+msgid "Delete preset '%1'?"
+msgstr "Изтриване на настройката „%1“?"
+
+#: menu/preset_manager_modal.lua:1607
+msgid "Offline — connect to preview this preset."
+msgstr "Офлайн — свържете се, за да прегледате тази настройка."
+
+#: menu/preset_manager_modal.lua:1609
+msgid "Couldn't download '%1'."
+msgstr "„%1“ не можа да бъде изтеглен."
+
+#: menu/preset_manager_modal.lua:1615
+msgid "This preset appears invalid; skipping."
+msgstr "Тази настройка изглежда невалидна; пропускане."
+
+#: menu/preset_manager_modal.lua:1638
 msgid ""
-"This will clear the development branch setting and install the latest stable "
-"release of Bookends, then restart KOReader. Continue?"
+"'%1' already exists in your library.\n"
+"\n"
+"Replacing it will overwrite your local copy with the current gallery "
+"version. Any local edits will be lost.\n"
+"\n"
+"Install under a new name to keep both."
 msgstr ""
-"Това ще изчисти настройките на клона за разработка и ще инсталира последната "
-"стабилна версия на Bookends, след което ще рестартира KOReader. Продължаване?"
+"„%1“ вече съществува в библиотеката ви.\n"
+"\n"
+"Замяната ще презапише локалното копие с текущата версия от галерията. Всички "
+"локални промени ще бъдат изгубени.\n"
+"\n"
+"Инсталирайте под ново име, за да запазите и двете."
+
+#: menu/preset_manager_modal.lua:1644
+msgid "Replace"
+msgstr "Замяна"
+
+#: menu/preset_manager_modal.lua:1658
+msgid "Install as new name…"
+msgstr "Инсталиране под ново име…"
+
+#: menu/preset_manager_modal.lua:1662
+msgid "Install as"
+msgstr "Инсталиране като"
+
+#~ msgid "Battery (changes with level)"
+#~ msgstr "Батерия (променя се според заряда)"
+
+#~ msgid "Wi-Fi (changes with status)"
+#~ msgstr "Wi-Fi (променя се според статуса)"
+
+#~ msgid "Lightbulb"
+#~ msgstr "Крушка"
+
+#~ msgid "Lightbulb emoji"
+#~ msgstr "Емоджи крушка"
+
+#~ msgid "Sun (filled)"
+#~ msgstr "Слънце (запълнено)"
+
+#~ msgid "Moon"
+#~ msgstr "Луна"
+
+#~ msgid "Paper aeroplane"
+#~ msgstr "Хартиен самолет"
+
+#~ msgid "Adjust / contrast"
+#~ msgstr "Настройка / контраст"
+
+#~ msgid "Lightning bolt"
+#~ msgstr "Мълния"
+
+#~ msgid "Power"
+#~ msgstr "Захранване"
+
+#~ msgid "Mobile"
+#~ msgstr "Мобилен"
+
+#~ msgid "Cloud"
+#~ msgstr "Облак"
+
+#~ msgid "Memory chip"
+#~ msgstr "Чип памет"
+
+#~ msgid "HDD / disk"
+#~ msgstr "Твърд диск"
+
+#~ msgid "Bookmark (filled)"
+#~ msgstr "Отметка (запълнена)"
+
+#~ msgid "Bookmark (outline)"
+#~ msgstr "Отметка (контур)"
+
+#~ msgid "Eye"
+#~ msgstr "Око"
+
+#~ msgid "Eye (hidden)"
+#~ msgstr "Око (скрито)"
+
+#~ msgid "Flag"
+#~ msgstr "Знаме"
+
+#~ msgid "Bar chart"
+#~ msgstr "Стълбова диаграма"
+
+#~ msgid "Tachometer"
+#~ msgstr "Тахометър"
+
+#~ msgid "Sliders"
+#~ msgstr "Плъзгачи"
+
+#~ msgid "Clock"
+#~ msgstr "Часовник"
+
+#~ msgid "Stopwatch"
+#~ msgstr "Хронометър"
+
+#~ msgid "Watch"
+#~ msgstr "Часовник"
+
+#~ msgid "Hourglass"
+#~ msgstr "Пясъчен часовник"
+
+#~ msgid "Hourglass (filled)"
+#~ msgstr "Пясъчен часовник (запълнен)"
+
+#~ msgid "Calendar"
+#~ msgstr "Календар"
+
+#~ msgid "Calendar (checked)"
+#~ msgstr "Календар (отметнат)"
+
+#~ msgid "Status"
+#~ msgstr "Състояние"
+
+#~ msgid "Check"
+#~ msgstr "Проверка"
+
+#~ msgid "Cross"
+#~ msgstr "Кръст"
+
+#~ msgid "Info"
+#~ msgstr "Информация"
+
+#~ msgid "Warning"
+#~ msgstr "Предупреждение"
+
+#~ msgid "Cog"
+#~ msgstr "Зъбно колело"
+
+#~ msgid "Check mark"
+#~ msgstr "Отметка"
+
+#~ msgid "Cross mark"
+#~ msgstr "Знак „х“"
+
+#~ msgid "Copyright"
+#~ msgstr "Авторски права"
+
+#~ msgid "Triangle right"
+#~ msgstr "Триъгълник надясно"
+
+#~ msgid "Triangle left"
+#~ msgstr "Триъгълник наляво"
+
+#~ msgid "Triangle up"
+#~ msgstr "Триъгълник нагоре"
+
+#~ msgid "Triangle down"
+#~ msgstr "Триъгълник надолу"
+
+#~ msgid "Pointing right (black)"
+#~ msgstr "Сочещ надясно (черен)"
+
+#~ msgid "Pointing right"
+#~ msgstr "Сочещ надясно"
+
+#~ msgid "Pointing left"
+#~ msgstr "Сочещ наляво"
+
+#~ msgid "Pointing up"
+#~ msgstr "Сочещ нагоре"
+
+#~ msgid "Pointing down"
+#~ msgstr "Сочещ надолу"
+
+#~ msgid "Progress blocks"
+#~ msgstr "Блокове за напредъка"
+
+#~ msgid "Diamond"
+#~ msgstr "Диамант"
+
+#~ msgid "Insert symbol"
+#~ msgstr "Вмъкване на символ"
+
+#~ msgid "Star = include in preset cycle gesture"
+#~ msgstr "Звезда = включване в жеста за смяна на настройките"
+
+#~ msgid "Refreshing…"
+#~ msgstr "Обновяване…"
+
+#~ msgid "Offline — connect and tap a sort to retry"
+#~ msgstr "Офлайн — свържете се и докоснете подредба за нов опит"
+
+#~ msgid "Refresh failed — tap a sort to retry"
+#~ msgstr "Обновяването е неуспешно — докоснете подредба за нов опит"
+
+#~ msgid "1 preset in the approval queue"
+#~ msgstr "1 предварителна настройка в опашката за одобрение"
+
+#~ msgid "%1 presets in the approval queue"
+#~ msgstr "%1 предварителни настройки в опашката за одобрение"
+
+#~ msgid "Metadata"
+#~ msgstr "Описателни данни"
+
+#~ msgid "Total chapter count"
+#~ msgstr "Общ брой глави"
+
+#~ msgid "Number of highlights"
+#~ msgstr "Брой маркирания"
+
+#~ msgid "Number of notes"
+#~ msgstr "Брой бележки"
+
+#~ msgid "Number of bookmarks"
+#~ msgstr "Брой отметки"
+
+#~ msgid "Total annotations (bookmarks + highlights + notes)"
+#~ msgstr "Всички анотации (отметки + маркирания + бележки)"
+
+#~ msgid "Page / progress"
+#~ msgstr "Страница / напредък"
+
+#~ msgid "Progress bars"
+#~ msgstr "Ленти за напредъка"
+
+#~ msgid "Time / date"
+#~ msgstr "Час / дата"
+
+#~ msgid "Session / reading"
+#~ msgstr "Сесия / четене"
+
+#~ msgid "Battery icon (dynamic)"
+#~ msgstr "Икона на батерията (динамична)"
+
+#~ msgid "Wi-Fi icon (dynamic)"
+#~ msgstr "Икона на Wi-Fi (динамична)"
+
+#~ msgid "Plugin content (dynamic)"
+#~ msgstr "Съдържание от плъгин (динамично)"
+
+#~ msgid "Page-turn direction ⇄ (shows when inverted)"
+#~ msgstr "Посока на превъртане ⇄ (показва се при обърната)"
+
+#~ msgid "Snippets"
+#~ msgstr "Фрагменти"
+
+#~ msgid "Reference"
+#~ msgstr "Справка"
+
+#~ msgid "Examples"
+#~ msgstr "Примери"
+
+#~ msgid "Speed once calculated"
+#~ msgstr "Скорост, след като е изчислена"
+
+#~ msgid "Session time after start"
+#~ msgstr "Време на сесията след началото"
+
+#~ msgid "Only for PDFs"
+#~ msgstr "Само за PDF документи"
+
+#~ msgid "Late-night reading"
+#~ msgstr "Четене късно през нощта"
+
+#~ msgid "If/Else conditional tokens"
+#~ msgstr "Условни токени If/Else"
+
+#~ msgid "[if:key=value]show when true[/if]"
+#~ msgstr "[if:ключ=стойност]показване при вярно[/if]"
+
+#~ msgid "[if:key=value]if true[else]if false[/if]"
+#~ msgstr "[if:ключ=стойност]ако е вярно[else]ако е невярно[/if]"
+
+#~ msgid "Compare:  =  !=  <  >     Boolean:  and  or  not  ( )"
+#~ msgstr "Сравнение:  =  !=  <  >     Булево:  and  or  not  ( )"
+
+#~ msgid "@key = another field's value (chap_title_1!=@title)"
+#~ msgstr "@ключ = стойност на друго поле (chap_title_1!=@title)"
+
+#~ msgid "Insert conditional"
+#~ msgstr "Вмъкване на условие"
+
+#~ msgid "Insert token"
+#~ msgstr "Вмъкване на токен"
+
+#~ msgid "Hex:"
+#~ msgstr "Hex:"
+
+#~ msgid "Set"
+#~ msgstr "Задаване"
 
 #~ msgid "+ New preset"
 #~ msgstr "+ Нова предварителна настройка"

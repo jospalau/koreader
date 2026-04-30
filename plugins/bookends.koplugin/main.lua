@@ -159,39 +159,10 @@ require("menu.colours_menu")(Bookends)
 require("menu.main_menu")(Bookends)
 require("menu.position_menu")(Bookends)
 require("menu.progress_bar_menu")(Bookends)
-require("menu.token_picker")(Bookends)
 require("bookends_colour_palette").attach(Bookends)
 require("bookends_textwidget_patch")  -- TextWidget: paint ColorRGB32 fgcolor as true colour
 
 function Bookends:init()
-    -- Install custom icons (chevron.down) into KOReader's user icons dir
-    local DataStorage = require("datastorage")
-    local lfs = require("libs/libkoreader-lfs")
-    local icons_dst = DataStorage:getDataDir() .. "/icons"
-    if lfs.attributes(icons_dst, "mode") ~= "directory" then
-        lfs.mkdir(icons_dst)
-    end
-    local plugin_icons = self.path .. "/icons"
-    if lfs.attributes(plugin_icons, "mode") == "directory" then
-        for f in lfs.dir(plugin_icons) do
-            if f:match("%.svg$") then
-                local src = plugin_icons .. "/" .. f
-                local dst = icons_dst .. "/" .. f
-                if lfs.attributes(dst, "mode") ~= "file" then
-                    local fin = io.open(src, "r")
-                    if fin then
-                        local fout = io.open(dst, "w")
-                        if fout then
-                            fout:write(fin:read("*a"))
-                            fout:close()
-                        end
-                        fin:close()
-                    end
-                end
-            end
-        end
-    end
-
     self:openSettings()
     self:loadSettings()
     self.ui.menu:registerToMainMenu(self)
@@ -451,10 +422,6 @@ function Bookends:setupTouchZones()
                 ratio_w = DTAP_ZONE_MINIBAR.w, ratio_h = DTAP_ZONE_MINIBAR.h,
             },
             handler = function(ges)
-                -- If any of the actions is selected and the plugin is not enabled
-                -- will prevent the tap event in the footer from being triggered
-                -- return false to signal is not handled
-                if not self.enabled then return false end
                 local action = self.settings:readSetting("bottom_center_tap_action")
                 if action == "toggle" then
                     self:onToggleBookends()
@@ -529,10 +496,20 @@ function Bookends:onCycleBookendsPreset()
     -- Strip any legacy "_empty" sentinel from the cycle. It used to mean
     -- "cycle to a blank overlay" but we've removed that concept — users who
     -- want a blank state can create an empty preset instead.
+    -- Also self-heal stale entries pointing at preset files that no longer
+    -- exist (issue #31): a Replace-from-Gallery, an external rename, or a
+    -- legacy code path that didn't prune the cycle on delete can leave a
+    -- filename in the list with no file behind it, which would trip every
+    -- subsequent cycle on a parse error. Drop those silently.
+    local lfs = require("libs/libkoreader-lfs")
+    local dir = self:presetDir()
     local cycle_raw = self.settings:readSetting("preset_cycle") or {}
     local cycle = {}
     for _, entry in ipairs(cycle_raw) do
-        if entry ~= "_empty" then cycle[#cycle + 1] = entry end
+        if entry ~= "_empty"
+            and lfs.attributes(dir .. "/" .. entry, "mode") == "file" then
+            cycle[#cycle + 1] = entry
+        end
     end
     if #cycle ~= #cycle_raw then
         self.settings:saveSetting("preset_cycle", cycle)
@@ -901,9 +878,9 @@ function Bookends:markOverlayDirty()
 end
 
 --- Compute chapter tick fractions for book progress bars (cached per dirty cycle).
-function Bookends:_computeTickCache()
+function Bookends:_computeTickCache(current_pageno)
     local tick_m = self.settings:readSetting("tick_width_multiplier", self.DEFAULT_TICK_WIDTH_MULTIPLIER)
-    return Tokens.computeTickFractions(self.ui.document, self.ui.toc, tick_m)
+    return Tokens.computeTickFractions(self.ui.document, self.ui.toc, tick_m, current_pageno)
 end
 
 -- Style constants and helpers
@@ -1039,15 +1016,21 @@ function Bookends:gatedRepaint(token_names, debounce)
     end
 end
 
-local FRONTLIGHT_TOKENS = { "light", "warmth" }
-local BATTERY_TOKENS    = { "batt", "batt_icon" }
-local WIFI_TOKENS       = { "wifi" }
+local FRONTLIGHT_TOKENS     = { "light", "warmth" }
+local BATTERY_TOKENS        = { "batt", "batt_icon" }
+local WIFI_TOKENS           = { "wifi" }
+local PLUGIN_CONTENT_TOKENS = { "plugin_content" }
 
-function Bookends:onFrontlightStateChanged() self:gatedRepaint(FRONTLIGHT_TOKENS, 1.0) end
-function Bookends:onCharging()               self:gatedRepaint(BATTERY_TOKENS) end
-function Bookends:onNotCharging()            self:gatedRepaint(BATTERY_TOKENS) end
-function Bookends:onNetworkConnected()       self:gatedRepaint(WIFI_TOKENS) end
-function Bookends:onNetworkDisconnected()    self:gatedRepaint(WIFI_TOKENS) end
+function Bookends:onFrontlightStateChanged()    self:gatedRepaint(FRONTLIGHT_TOKENS, 1.0) end
+function Bookends:onCharging()                  self:gatedRepaint(BATTERY_TOKENS) end
+function Bookends:onNotCharging()               self:gatedRepaint(BATTERY_TOKENS) end
+function Bookends:onNetworkConnected()          self:gatedRepaint(WIFI_TOKENS) end
+function Bookends:onNetworkDisconnected()       self:gatedRepaint(WIFI_TOKENS) end
+-- Plugins (kobo.koplugin BT, readtimer countdown, ...) broadcast
+-- RefreshAdditionalContent on state change. Stock footer repaints on this
+-- (readerfooter.lua:2716); we do too so %plugin_content updates without
+-- waiting for the next page turn.
+function Bookends:onRefreshAdditionalContent() self:gatedRepaint(PLUGIN_CONTENT_TOKENS) end
 Bookends.onToggleReadingOrder = Bookends.delayedRepaint
 function Bookends:onAnnotationsModified()
     self:markDirty()
@@ -1182,11 +1165,18 @@ function Bookends:_computeBarProgress(bar_cfg, pageno_local)
             end
             pct = math.max(0, math.min(1, pct))
         end
-        -- Chapter tick marks (cached — static for the document)
+        -- Chapter tick marks. Cache is keyed by current flow id when the
+        -- document has hidden flows configured: tick fractions are flow-
+        -- relative (matching the flow-aware bar fill above), so they have
+        -- to be recomputed when the user navigates between flows. For
+        -- documents without flows the cache is computed once and reused.
         local tick_level = bar_cfg.chapter_ticks
         if tick_level and tick_level ~= "off" then
-            if not self._tick_cache then
-                self._tick_cache = self:_computeTickCache()
+            local current_flow = doc.hasHiddenFlows and doc:hasHiddenFlows()
+                and doc:getPageFlow(pageno_local) or nil
+            if not self._tick_cache or self._tick_cache_flow ~= current_flow then
+                self._tick_cache = self:_computeTickCache(pageno_local)
+                self._tick_cache_flow = current_flow
             end
             if tick_level == "all" then
                 ticks = self._tick_cache or {}
@@ -1350,12 +1340,18 @@ function Bookends:_paintToInner(bb, x, y)
     -- Filter lines by page parity, join with \n, then expand tokens
     local pageno = self.ui.view.state.page or 0
     local is_odd_page = (pageno % 2) == 1
-    local expanded = {}
+    local expanded = {}             -- key -> joined string (cache comparison only)
+    local expanded_arrays = {}      -- key -> array of per-config-line expansions (for buildTextWidget)
     local active_line_indices = {} -- key -> { original indices of visible lines }
     local bar_data = {} -- key -> sparse table { [expanded_line_index] = bar_info }
     -- Shared across every Tokens.expand() call for this paint: lets expensive
     -- setup (buildConditionState) happen once even when many lines need it.
     local paint_ctx = {}
+    -- Per-paint cache for SQLite-backed stats reads (getCurrentBookStats,
+    -- getTodayBookStats). Same idea as paint_ctx — many lines may use stats
+    -- tokens, but the underlying SQL only needs to run once per paint.
+    -- Allocated fresh each paint so values stay current across page turns.
+    local stats_cache = {}
     for _, pos in ipairs(self.POSITIONS) do
         if self:isPositionActive(pos.key) then
             local pos_settings = self.positions[pos.key]
@@ -1385,7 +1381,7 @@ function Bookends:_paintToInner(bb, x, y)
                     local result, is_empty, line_bar = Tokens.expand(line, self.ui, session_elapsed, session_pages,
                         nil, self.settings:readSetting("tick_width_multiplier", self.DEFAULT_TICK_WIDTH_MULTIPLIER),
                         symbol_color, paint_ctx,
-                        { legacy_literal = is_edit_line })
+                        { legacy_literal = is_edit_line, stats_cache = stats_cache })
                     if not is_empty then
                         table.insert(expanded_lines, result)
                         table.insert(final_indices, visible_indices[j])
@@ -1395,7 +1391,13 @@ function Bookends:_paintToInner(bb, x, y)
                     end
                 end
                 if #expanded_lines > 0 then
+                    -- Joined string is kept for cache-comparison only; the
+                    -- per-config-line array is what flows into buildTextWidget
+                    -- (joining and re-splitting on \n loses the config-line
+                    -- boundary, causing bar-from-line-N to render onto the
+                    -- wrap-row of line-N-1 when N-1 has an embedded \n).
                     expanded[pos.key] = table.concat(expanded_lines, "\n")
+                    expanded_arrays[pos.key] = expanded_lines
                     active_line_indices[pos.key] = final_indices
                     if next(position_bars) then
                         bar_data[pos.key] = position_bars
@@ -1442,8 +1444,9 @@ function Bookends:_paintToInner(bb, x, y)
     end
 
     -- Phase 2: Build per-line rendering configs and build widgets for measurement
-    local pre_built = {} -- key -> { widget, w, h, line_configs, pos_def }
+    local pre_built = {} -- key -> { widget, w, h, line_configs, pos_def, line_texts }
     for key, text in pairs(expanded) do
+        local line_texts = expanded_arrays[key] or {}
         local pos_settings = self.positions[key]
         local default_face_name = self:getPositionSetting(key, "font_face")
         local default_font_size = self:getPositionSetting(key, "font_size")
@@ -1508,26 +1511,23 @@ function Bookends:_paintToInner(bb, x, y)
             if p.key == key then pos_def = p; break end
         end
 
-        -- Apply per-token pixel limits (markers from tokens.lua) using resolved font.
-        -- Must happen before widget building so text is clean.
-        local limited_text = text
-        if text:find("\x01") then
-            local limited_lines = {}
-            local li = 0
-            for line in text:gmatch("([^\n]+)") do
-                li = li + 1
-                local cfg = line_configs[li] or line_configs[#line_configs]
-                local cleaned = OverlayWidget.applyTokenLimits(line, cfg.face, cfg.bold, cfg.uppercase)
-                table.insert(limited_lines, cleaned)
+        -- Apply per-token pixel limits (markers from tokens.lua) using resolved
+        -- font. Walk per-config-line so embedded \n inside one config-line
+        -- doesn't shift cfg lookup onto the next line's font.
+        local limited_line_texts = {}
+        for ci, cfg_text in ipairs(line_texts) do
+            if cfg_text:find("\x01") then
+                local cfg = line_configs[ci] or line_configs[#line_configs]
+                cfg_text = OverlayWidget.applyTokenLimits(cfg_text, cfg.face, cfg.bold, cfg.uppercase)
             end
-            limited_text = table.concat(limited_lines, "\n")
+            table.insert(limited_line_texts, cfg_text)
         end
 
         -- Build without truncation to measure natural text width.
         -- For bar positions, Phase 4 will rebuild with the correct row-aware available_w.
         local pos_available_w = screen_w
-        local widget, w, h = OverlayWidget.buildTextWidget(limited_text, line_configs, pos_def.h_anchor, nil, pos_available_w)
-        pre_built[key] = { widget = widget, w = w, h = h, line_configs = line_configs, pos_def = pos_def, text = limited_text }
+        local widget, w, h = OverlayWidget.buildTextWidget(limited_line_texts, line_configs, pos_def.h_anchor, nil, pos_available_w)
+        pre_built[key] = { widget = widget, w = w, h = h, line_configs = line_configs, pos_def = pos_def, line_texts = limited_line_texts }
     end
 
     -- Phase 3: Calculate overlap limits per row
@@ -1547,7 +1547,7 @@ function Bookends:_paintToInner(bb, x, y)
             local pb = pre_built[key]
             if not pb then return nil end
             if bar_data[key] then
-                return OverlayWidget.measureTextWidth(pb.text, pb.line_configs)
+                return OverlayWidget.measureTextWidth(pb.line_texts, pb.line_configs)
             end
             return pb.w
         end
@@ -1582,7 +1582,7 @@ function Bookends:_paintToInner(bb, x, y)
                     -- Truncation needed: free pre-built widget and rebuild with limit
                     if pb.widget and pb.widget.free then pb.widget:free() end
                     widget, w, h = OverlayWidget.buildTextWidget(
-                        pb.text, pb.line_configs, pb.pos_def.h_anchor, max_width, max_width)
+                        pb.line_texts, pb.line_configs, pb.pos_def.h_anchor, max_width, max_width)
                 elseif bar_data[key] then
                     -- Bar position without truncation: rebuild with row-aware available width
                     -- so auto-fill bars don't exceed the space overlap prevention would allow
@@ -1634,7 +1634,7 @@ function Bookends:_paintToInner(bb, x, y)
                         end
                     end
                     widget, w, h = OverlayWidget.buildTextWidget(
-                        pb.text, pb.line_configs, pb.pos_def.h_anchor, nil, bar_avail)
+                        pb.line_texts, pb.line_configs, pb.pos_def.h_anchor, nil, bar_avail)
                 else
                     -- No truncation: reuse pre-built widget
                     widget, w, h = pb.widget, pb.w, pb.h

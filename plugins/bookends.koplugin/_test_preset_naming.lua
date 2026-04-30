@@ -70,5 +70,69 @@ test("presets with similar-but-not-matching names ignored", function()
     eq(PresetNaming.nextUntitledName(presets, "Untitled"), "Untitled")
 end)
 
+test("looksLikeDefaultName: empty / nil counts as default", function()
+    eq(PresetNaming.looksLikeDefaultName("",  {"My setup"}, {"Untitled"}), true)
+    eq(PresetNaming.looksLikeDefaultName(nil, {"My setup"}, {"Untitled"}), true)
+end)
+
+test("looksLikeDefaultName: exact match against default-name list", function()
+    eq(PresetNaming.looksLikeDefaultName("My setup", {"My setup"}, {"Untitled"}), true)
+end)
+
+test("looksLikeDefaultName: localized default also matches", function()
+    eq(PresetNaming.looksLikeDefaultName("Mi configuración",
+        {"My setup", "Mi configuración"}, {"Untitled"}), true)
+end)
+
+test("looksLikeDefaultName: bare Untitled prefix", function()
+    eq(PresetNaming.looksLikeDefaultName("Untitled",   {"My setup"}, {"Untitled"}), true)
+    eq(PresetNaming.looksLikeDefaultName("Untitled 3", {"My setup"}, {"Untitled"}), true)
+end)
+
+test("looksLikeDefaultName: any name starting with Untitled gated", function()
+    -- Per spec: literal prefix match. A user can briefly rename to bypass.
+    eq(PresetNaming.looksLikeDefaultName("Untitled hero theme",
+        {"My setup"}, {"Untitled"}), true)
+end)
+
+test("looksLikeDefaultName: Untitled mid-string is fine", function()
+    eq(PresetNaming.looksLikeDefaultName("Pre-Untitled", {"My setup"}, {"Untitled"}), false)
+end)
+
+test("looksLikeDefaultName: case-sensitive", function()
+    eq(PresetNaming.looksLikeDefaultName("untitled 3", {"My setup"}, {"Untitled"}), false)
+    eq(PresetNaming.looksLikeDefaultName("my setup",   {"My setup"}, {"Untitled"}), false)
+end)
+
+test("looksLikeDefaultName: distinct user-chosen name passes", function()
+    eq(PresetNaming.looksLikeDefaultName("Cool preset", {"My setup"}, {"Untitled"}), false)
+end)
+
+test("looksLikeDefaultName: pattern-magic in prefix is treated literally", function()
+    -- Guards against a translation that happens to contain Lua pattern characters.
+    eq(PresetNaming.looksLikeDefaultName("Untitled%2", {"My setup"}, {"Untitled%"}), true)
+    eq(PresetNaming.looksLikeDefaultName("Untitled 2", {"My setup"}, {"Untitled%"}), false)
+end)
+
+test("looksLikeDefaultName: nil lists tolerated", function()
+    eq(PresetNaming.looksLikeDefaultName("Anything", nil, nil), false)
+    eq(PresetNaming.looksLikeDefaultName("",        nil, nil), true)
+end)
+
+test("looksLikeDefaultDescription: empty / nil counts as default", function()
+    eq(PresetNaming.looksLikeDefaultDescription("",  {"Imported"}), true)
+    eq(PresetNaming.looksLikeDefaultDescription(nil, {"Imported"}), true)
+end)
+
+test("looksLikeDefaultDescription: migration placeholder rejected", function()
+    local D = "Imported from your earlier Bookends settings"
+    eq(PresetNaming.looksLikeDefaultDescription(D, {D}), true)
+end)
+
+test("looksLikeDefaultDescription: distinct description passes", function()
+    eq(PresetNaming.looksLikeDefaultDescription("My great preset",
+        {"Imported from your earlier Bookends settings"}), false)
+end)
+
 io.stdout:write(string.format("%d passed, %d failed\n", pass, fail))
 os.exit(fail == 0 and 0 or 1)

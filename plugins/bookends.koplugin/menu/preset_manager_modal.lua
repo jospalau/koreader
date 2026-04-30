@@ -81,6 +81,46 @@ function ColourFlag:paintTo(bb, x, y)
     -- Thin outline so the flag keeps a silhouette against the card background.
     bb:paintBorder(x, y, self.side * 4, self.side, 1, Blitbuffer.COLOR_DARK_GRAY)
 end
+
+-- Dashed-border overlay for the synthetic "+ New blank preset" tile so it
+-- reads as a placeholder/affordance rather than another solid card. Drawn
+-- on top of the (border-less) card frame inside an OverlapGroup. Paints
+-- short rectangles around the perimeter at a fixed dash + gap stride.
+local DashedBorder = WidgetContainer:extend{
+    w_actual  = 0,
+    h_actual  = 0,
+    color     = nil,
+    dash_len  = nil,
+    gap_len   = nil,
+}
+
+function DashedBorder:getSize()
+    return Geom:new{ w = self.w_actual, h = self.h_actual }
+end
+
+function DashedBorder:paintTo(bb, x, y)
+    local color = self.color or Blitbuffer.COLOR_DARK_GRAY
+    local dash  = self.dash_len or Device.screen:scaleBySize(6)
+    local gap   = self.gap_len  or Device.screen:scaleBySize(4)
+    local stride = dash + gap
+    local w, h = self.w_actual, self.h_actual
+    local thickness = Device.screen:scaleBySize(1)
+    local cx = x
+    while cx < x + w do
+        local seg = math.min(dash, x + w - cx)
+        bb:paintRect(cx, y, seg, thickness, color)
+        bb:paintRect(cx, y + h - thickness, seg, thickness, color)
+        cx = cx + stride
+    end
+    local cy = y
+    while cy < y + h do
+        local seg = math.min(dash, y + h - cy)
+        bb:paintRect(x, cy, thickness, seg, color)
+        bb:paintRect(x + w - thickness, cy, thickness, seg, color)
+        cy = cy + stride
+    end
+end
+
 local util = require("util")
 local _ = require("bookends_i18n").gettext
 local T = require("ffi/util").template
@@ -149,6 +189,386 @@ local function activePresetPage(bookends, mode)
     return 1
 end
 
+local GALLERY_STALE_SECONDS = 5 * 60
+
+--- True when the gallery data is absent, errored, or older than the freshness
+--- window. Extracted from the show() closure so it can be tested in isolation.
+local function galleryIsStale(self)
+    if not self.gallery_index then return true end
+    if self.gallery_error then return true end
+    if not self.gallery_last_refresh_time then return true end
+    if self.gallery_sort == "popular" and type(self.gallery_counts) ~= "table" then
+        return true
+    end
+    return (os.time() - self.gallery_last_refresh_time) >= GALLERY_STALE_SECONDS
+end
+
+--- Cache-invalidation key: any state change that affects the item list changes this.
+local function _cacheKey(self)
+    return table.concat({
+        self.tab or "",
+        self.my_sort or "",
+        self.gallery_sort or "",
+        self.current_search or "",
+        tostring(self.gallery_loading),
+        tostring(self.gallery_error),
+        self.gallery_index and "idx" or "no",
+        self.gallery_counts and "ctn" or "noctn",
+    }, "|")
+end
+
+--- Sorted item list for whichever tab is active. Returns {} when the gallery
+--- is not yet loaded so callers get a consistent empty list without branching.
+--- Applies the current_search filter when set. Annotates gallery entries with
+--- _installed so renderPresetCard doesn't have to re-read preset files per card.
+--- Memoized by _cacheKey so multiple calls per refresh cycle don't repeat the
+--- sort + file-read work (item_count and item_at each call this).
+local function currentItemList(self)
+    local key = _cacheKey(self)
+    if self._items_cache_key == key and self._items_cache then
+        return self._items_cache
+    end
+    local LibraryModal = require("menu.library_modal")
+    local entries
+    if self.tab == "local" then
+        entries = sortedLocalPresets(self.bookends, self.my_sort)
+    else
+        if not self.gallery_index or not self.gallery_index.presets then
+            self._items_cache_key = key
+            self._items_cache = {}
+            return self._items_cache
+        end
+        if self.gallery_loading or self.gallery_error then
+            self._items_cache_key = key
+            self._items_cache = {}
+            return self._items_cache
+        end
+        entries = {}
+        for _i, e in ipairs(self.gallery_index.presets) do entries[#entries + 1] = e end
+        if self.gallery_sort == "popular" and type(self.gallery_counts) == "table" then
+            local counts = self.gallery_counts
+            table.sort(entries, function(a, b)
+                local ca = counts[a.slug or ""] or 0
+                local cb = counts[b.slug or ""] or 0
+                if ca ~= cb then return ca > cb end
+                local da, db = a.added or "", b.added or ""
+                if da ~= db then return da > db end
+                return (a.name or "") < (b.name or "")
+            end)
+        else
+            table.sort(entries, function(a, b)
+                local da, db = a.added or "", b.added or ""
+                if da ~= db then return da > db end
+                return (a.name or "") < (b.name or "")
+            end)
+        end
+        -- Annotate installed-state once per call so per-card render doesn't
+        -- re-read the preset directory on every paint.
+        local local_names = {}
+        for _i, p in ipairs(self.bookends:readPresetFiles()) do local_names[p.name] = true end
+        for _i, e in ipairs(entries) do e._installed = local_names[e.name] == true end
+    end
+    if self.current_search and #self.current_search >= 2 then
+        local filtered = {}
+        for _i, item in ipairs(entries) do
+            -- Search across name AND author. Local presets nest author
+            -- inside item.preset; gallery entries have it flat. Build a
+            -- single haystack so multi-term AND match (e.g. "stock kobo"
+            -- or "minimal mido") works across both fields.
+            local author = (item.preset and item.preset.author) or item.author or ""
+            local haystack = (item.name or "") .. " " .. author
+            if LibraryModal._matchesQuery(haystack, self.current_search) then
+                filtered[#filtered + 1] = item
+            end
+        end
+        entries = filtered
+    end
+    -- Append a synthetic "+ New blank preset" tile at the end of the local
+    -- list as a discoverable affordance for creating a fresh preset. Skip
+    -- it when search is active so the tile doesn't clutter filtered results.
+    if self.tab == "local" and not self.current_search then
+        entries[#entries + 1] = { is_virtual = true, name = _("+ New blank preset") }
+    end
+    self._items_cache = entries
+    self._items_cache_key = key
+    return self._items_cache
+end
+
+--- Empty-state help panel for the Gallery tab. Rendered when gallery_index is
+--- nil or has no presets. Sized to exactly area_height so the modal chrome
+--- stays the same height as when cards are present.
+local function galleryHelpPanel(self, width, area_height, left_pad)
+    -- Wider side margins than the card layout so the help panel reads as
+    -- content, not a list. Body text stays pure black on e-ink — dark-grey
+    -- is reserved for labels/chrome, not for reading content.
+    local text_width = width - 8 * left_pad
+    local title_widget = TextWidget:new{
+        text = _("Discover more presets"),
+        face = Font:getFace("cfont", 20),
+        bold = true,
+        fgcolor = Blitbuffer.COLOR_BLACK,
+    }
+    local intro = TextBoxWidget:new{
+        text = _("Browse presets others have shared, preview them on your own status bar, and install the ones you like. Once installed, you can edit each preset freely on the My presets tab."),
+        face = Font:getFace("cfont", 16),
+        width = text_width,
+        alignment = "center",
+        fgcolor = Blitbuffer.COLOR_BLACK,
+    }
+    local share = TextBoxWidget:new{
+        text = _("Made something worth sharing? Submit it with the Manage button while viewing one of your own presets."),
+        face = Font:getFace("cfont", 16),
+        width = text_width,
+        alignment = "center",
+        fgcolor = Blitbuffer.COLOR_BLACK,
+    }
+    local cta = TextWidget:new{
+        text = _("Tap Latest or Popular above to load the gallery."),
+        face = Font:getFace("cfont", 16),
+        bold = true,
+        fgcolor = Blitbuffer.COLOR_BLACK,
+    }
+    local help_group = VerticalGroup:new{
+        align = "center",
+        title_widget,
+        VerticalSpan:new{ width = Screen:scaleBySize(16) },
+        intro,
+        VerticalSpan:new{ width = Screen:scaleBySize(14) },
+        share,
+        VerticalSpan:new{ width = Screen:scaleBySize(22) },
+        cta,
+    }
+    -- CenterContainer sizes itself to exactly area_height — no trailing span needed.
+    return CenterContainer:new{
+        dimen = Geom:new{ w = width, h = area_height },
+        help_group,
+    }
+end
+
+--- Render a single preset card widget to return to LibraryModal as a row.
+--- Delegates to _addRow by wrapping a temporary VerticalGroup and extracting
+--- the first (and only) logical card, since _addRow also inserts a gap span.
+--- This keeps Phase 1 behavioural parity without duplicating card layout code.
+local function renderPresetCard(self, item, slot_dimen)
+    local card_height = Screen:scaleBySize(64)
+    local row_height = card_height
+    local font_size = 18
+    local baseline = math.floor(row_height * 0.65)
+    local left_pad = Size.padding.large
+
+    -- Tap on a card should dismiss the on-screen keyboard if it's up,
+    -- otherwise the user is trapped behind it after previewing a preset
+    -- (the modal's pagination/footer sit beneath the keyboard).
+    local function withKeyboardDismiss(action)
+        return function()
+            local lm = self.modal_widget
+            if lm and lm._dismissKeyboard then lm:_dismissKeyboard() end
+            action()
+        end
+    end
+
+    local is_local = self.tab == "local"
+    local vg_tmp = VerticalGroup:new{ align = "left" }
+
+    if is_local then
+        local opts
+        if item.is_virtual then
+            -- Synthetic "+ New blank preset" tile: bypass _previewLocal
+            -- (no preset to load) and route the tap to _createBlankPreset.
+            -- _addRow's is_virtual branch handles the centered-italic
+            -- placeholder styling.
+            opts = {
+                display    = item.name,
+                is_virtual = true,
+                on_preview = withKeyboardDismiss(function() PresetManagerModal._createBlankPreset(self) end),
+            }
+        else
+            local selected_key
+            if self.previewing and self.previewing.kind == "local" then
+                selected_key = self.previewing.filename
+            else
+                selected_key = self.bookends:getActivePresetFilename()
+            end
+            local has_colour = PresetManager.hasColour(item.preset) or false
+            opts = {
+                display      = item.name,
+                description  = item.preset and item.preset.description,
+                author       = item.preset and item.preset.author,
+                star_key     = item.filename,
+                has_colour   = has_colour,
+                on_preview   = withKeyboardDismiss(function() PresetManagerModal._previewLocal(self, item) end),
+                on_hold      = withKeyboardDismiss(function() PresetManagerModal._openOverflow(self, item) end),
+                is_selected  = (selected_key == item.filename),
+            }
+        end
+        PresetManagerModal._addRow(self, vg_tmp, slot_dimen.w, row_height, font_size, baseline, left_pad, opts)
+    else
+        -- Gallery tab: highlighted if currently previewed, or if the gallery
+        -- entry's name matches the active local preset (mirrors local-tab
+        -- behaviour so the user can see which gallery preset they're already
+        -- running when they open the tab for the first time).
+        local is_selected
+        if self.previewing and self.previewing.kind == "gallery"
+           and self.previewing.entry and self.previewing.entry.slug == item.slug then
+            is_selected = true
+        else
+            -- Resolve once per render cycle; reuse across cards via self cache.
+            if self._active_preset_name == nil then
+                local active_fn = self.bookends:getActivePresetFilename()
+                if active_fn then
+                    local presets = self.bookends:readPresetFiles()
+                    for _i, p in ipairs(presets) do
+                        if p.filename == active_fn then
+                            -- false sentinel prevents repeated lookups when no match.
+                            self._active_preset_name = p.name or false
+                            break
+                        end
+                    end
+                end
+                if self._active_preset_name == nil then self._active_preset_name = false end
+            end
+            is_selected = self._active_preset_name ~= false
+                and self._active_preset_name == item.name
+        end
+        local captured = item
+        PresetManagerModal._addRow(self, vg_tmp, slot_dimen.w, row_height, font_size, baseline, left_pad, {
+            display     = item.name,
+            description = item.description,
+            author      = item.author,
+            has_colour  = item.has_colour or false,
+            on_preview  = withKeyboardDismiss(function() PresetManagerModal._previewGallery(self, captured) end),
+            is_selected = is_selected,
+            installed   = item._installed == true,
+        })
+    end
+
+    -- _addRow inserts card then a gap VerticalSpan into vg_tmp; return the
+    -- card (index 1) wrapped in a VerticalGroup so LibraryModal gets a widget.
+    -- The gap is intentionally dropped — LibraryModal manages inter-row spacing.
+    local card_widget = vg_tmp[1]
+    return card_widget
+end
+
+--- Build the LibraryModal config table for the preset manager.
+--- Called once from show(); self must already have all state fields set.
+local function buildPresetLibraryConfig(self)
+    return {
+        title = _("Preset library"),
+        tabs = {
+            { key = "local",   label = _("My presets") },
+            { key = "gallery", label = _("Gallery") },
+        },
+        on_tab_change = function(tab_key)
+            -- LibraryModal calls refresh() after on_tab_change; setTab also
+            -- calls rebuild(). Accept the double-refresh for Phase 1 simplicity.
+            self.setTab(tab_key)
+        end,
+        chip_strip = function(active_tab)
+            if active_tab == "local" then
+                return {
+                    { key = "latest",  label = _("Latest"),  is_active = self.my_sort == "latest" },
+                    { key = "starred", label = _("Starred"), is_active = self.my_sort == "starred" },
+                }
+            else
+                -- Cold gallery state (never engaged) shows neither chip active
+                -- so the user's first tap carries an unambiguous "load this"
+                -- intent. is_active must be an explicit true/false (not nil)
+                -- so LibraryModal's chip-strip honors the config flag rather
+                -- than falling back to widget-tracked active_chip.
+                local engaged = (self.gallery_loading or self.gallery_index ~= nil
+                    or self.gallery_error ~= nil) and true or false
+                return {
+                    { key = "latest",  label = _("Latest"),
+                      is_active = engaged and self.gallery_sort == "latest" or false },
+                    { key = "popular", label = _("Popular"),
+                      is_active = engaged and self.gallery_sort == "popular" or false },
+                }
+            end
+        end,
+        on_chip_tap = function(chip_key)
+            if self.tab == "local" then
+                self.setMySort(chip_key)
+            else
+                self.setGallerySort(chip_key)
+            end
+        end,
+        search_placeholder = function(active_tab)
+            if active_tab == "local" then
+                return _("Search my presets by name or author…")
+            else
+                return _("Search gallery presets by name or author…")
+            end
+        end,
+        on_search_submit = function(query)
+            self.current_search = query
+            self.page = 1
+            -- Submitting a search on the cold gallery tab kicks off the
+            -- gallery fetch. Without this, the search would just hit an
+            -- empty list (currentItemList returns {} until gallery_index
+            -- is populated). The fetch's completion callback re-renders,
+            -- at which point the search filter applies to the loaded data.
+            if self.tab == "gallery" and not self.gallery_loading
+                    and galleryIsStale(self) then
+                self.refreshGallery()
+            else
+                self.rebuild()
+            end
+        end,
+        rows_per_page = function()
+            return Screen:getWidth() > Screen:getHeight() and 4 or 5
+        end,
+        item_count = function() return #currentItemList(self) end,
+        item_at = function(idx) return currentItemList(self)[idx] end,
+        row_renderer = function(item, dimen)
+            return renderPresetCard(self, item, dimen)
+        end,
+        empty_state = function(w, h)
+            if self.tab == "gallery" and not self.gallery_index then
+                -- Pass a reasonable left_pad so the help panel's text margins
+                -- look correct; galleryHelpPanel uses it to inset text_width.
+                return galleryHelpPanel(self, w, h, Size.padding.large)
+            end
+            return nil
+        end,
+        footer_actions = {
+            {
+                key   = "close",
+                label = _("Close"),
+                on_tap = function() self.close(true) end,
+            },
+            {
+                key   = "manage",
+                label = _("Manage…"),
+                on_tap = function()
+                    if not self.previewing then return end
+                    -- Convert self.previewing to the preset_entry shape _openOverflow expects.
+                    if self.previewing.kind == "local" then
+                        local presets = self.bookends:readPresetFiles()
+                        for _i, p in ipairs(presets) do
+                            if p.filename == self.previewing.filename then
+                                PresetManagerModal._openOverflow(self, p)
+                                return
+                            end
+                        end
+                    end
+                end,
+                enabled_when = function() return self.previewing ~= nil and self.previewing.kind == "local" end,
+            },
+            {
+                key      = "install",
+                label    = _("Install"),
+                label_func = function()
+                    return (self.previewing and self.previewing.kind == "local")
+                        and _("Apply") or _("Install")
+                end,
+                on_tap   = function() self.applyCurrent() end,
+                primary  = true,
+                enabled_when = function() return self.previewing ~= nil end,
+            },
+        },
+    }
+end
+
 --- Open the manager modal. Single entry point from menu / gesture.
 function PresetManagerModal.show(bookends)
     local self = {
@@ -175,6 +595,9 @@ function PresetManagerModal.show(bookends)
         -- network fetch when the cached data is older than this threshold,
         -- absent, or flagged as failed. Otherwise it just re-sorts locally.
         gallery_last_refresh_time = nil,
+        -- Active search query from the LibraryModal search bar; nil means no
+        -- filter applied. Reset to nil on tab change.
+        current_search = nil,
     }
 
     -- Snapshot the complete overlay state via the same pipeline used to save a
@@ -187,10 +610,27 @@ function PresetManagerModal.show(bookends)
     -- nextTick lets any pending dialog dismissal flush before we re-open the modal,
     -- avoiding visual glitches where the dialog's close races the modal's rebuild.
     self.rebuild = function()
-        UIManager:nextTick(function() PresetManagerModal._rebuild(self) end)
+        -- Bust the per-render active-preset-name cache so gallery highlights
+        -- reflect the current active preset after an apply or tab switch.
+        self._active_preset_name = nil
+        -- Invalidate the item list cache so disk-changing operations
+        -- (delete / duplicate / rename / blank-create / install) see the
+        -- new state. The cache key only tracks in-memory sort/tab/search
+        -- toggles, not filesystem state. Within one refresh cycle the
+        -- cache is rebuilt on the first item_count call and reused by the
+        -- subsequent item_at calls (same key). The page is owned by
+        -- LibraryModal once the modal is shown — chevron taps update
+        -- lm.page directly; explicit domain-driven page jumps go through
+        -- syncPageToWidget. Don't overwrite lm.page here or chevron
+        -- navigation gets reset on every preview/star tap.
+        self._items_cache = nil
+        self._items_cache_key = nil
+        UIManager:nextTick(function()
+            if self.modal_widget and self.modal_widget.refresh then
+                self.modal_widget:refresh()
+            end
+        end)
     end
-    -- Initial synchronous build on show
-    self.rebuildSync = function() PresetManagerModal._rebuild(self) end
     self.close = function(restore) PresetManagerModal._close(self, restore) end
     -- Explicit refresh: only called by the user tapping the Refresh button.
     -- This is the single code path that initiates a network request for the
@@ -236,38 +676,33 @@ function PresetManagerModal.show(bookends)
             end)
         end)
     end
-    -- Stale when: never loaded, last attempt errored, or data is older than
-    -- the freshness window. Popular-selected-without-counts also flags stale
-    -- so tapping Popular recovers from a partial fetch where /counts failed.
-    local GALLERY_STALE_SECONDS = 5 * 60
-    local function galleryIsStale()
-        if not self.gallery_index then return true end
-        if self.gallery_error then return true end
-        if not self.gallery_last_refresh_time then return true end
-        if self.gallery_sort == "popular" and type(self.gallery_counts) ~= "table" then
-            return true
-        end
-        return (os.time() - self.gallery_last_refresh_time) >= GALLERY_STALE_SECONDS
-    end
     self.setGallerySort = function(mode)
         local mode_changed = self.gallery_sort ~= mode
         if mode_changed then
             self.gallery_sort = mode
             self.page = 1
         end
-        if not self.gallery_loading and galleryIsStale() then
-            -- Stale or absent data — refresh will rebuild twice (once to show
-            -- "Refreshing…" status, once on completion). Skip the extra
-            -- rebuild here to avoid visual churn.
+        -- LibraryModal._onChipTap already refreshes after this returns; we only
+        -- trigger an explicit rebuild for the async-fetch case (refreshGallery
+        -- updates state from a network callback that LibraryModal can't see).
+        if not self.gallery_loading and galleryIsStale(self) then
             self.refreshGallery()
-        elseif mode_changed then
-            self.rebuild()
         end
-        -- Same mode tapped with fresh data → no-op.
+    end
+    -- Keep LibraryModal's internal page counter in step with the domain page
+    -- whenever a sort/tab change recomputes it. The widget's _onTabSelect /
+    -- _onChipTap both reset their local page=1 unconditionally, then call our
+    -- handler — so we have to push the corrected page value back before they
+    -- refresh.
+    local function syncPageToWidget(self)
+        if self.modal_widget then self.modal_widget.page = self.page end
     end
     self.setTab = function(tab)
         if self.tab ~= tab then
             self.tab = tab
+            -- Drop search state across tabs so a query typed on one tab doesn't
+            -- silently filter the other tab when the user switches.
+            self.current_search = nil
             -- When returning to My presets, jump to the page with the active
             -- preset (same reason as on initial show). Gallery has no active
             -- concept, so it resets to page 1.
@@ -276,7 +711,7 @@ function PresetManagerModal.show(bookends)
             else
                 self.page = 1
             end
-            self.rebuild()
+            syncPageToWidget(self)
         end
     end
     self.setMySort = function(mode)
@@ -285,15 +720,41 @@ function PresetManagerModal.show(bookends)
             -- Keep the active preset in view when switching sort modes. Falls
             -- back to page 1 if filtered out (e.g. unstarred in Starred view).
             self.page = activePresetPage(self.bookends, mode)
-            self.rebuild()
+            syncPageToWidget(self)
         end
     end
     self.setPage = function(p) self.page = p; self.rebuild() end
-    self.previewLocal = function(p) PresetManagerModal._previewLocal(self, p) end
-    self.applyCurrent = function() PresetManagerModal._applyCurrent(self) end
-    self.toggleStar = function(key) PresetManagerModal._toggleStar(self, key) end
+    -- Dismissal helper: star and other domain-internal taps go through this
+    -- so the keyboard doesn't trap the user behind it after they tap.
+    local function dismissModalKeyboard()
+        if self.modal_widget and self.modal_widget._dismissKeyboard then
+            self.modal_widget:_dismissKeyboard()
+        end
+    end
+    self.previewLocal = function(p) dismissModalKeyboard(); PresetManagerModal._previewLocal(self, p) end
+    self.applyCurrent = function() dismissModalKeyboard(); PresetManagerModal._applyCurrent(self) end
+    self.toggleStar = function(key) dismissModalKeyboard(); PresetManagerModal._toggleStar(self, key) end
 
-    self.rebuildSync()
+    -- Open at the page containing the active preset so it's immediately visible
+    -- without the user having to page forward. Must be set before LibraryModal
+    -- :init() runs because the config's item_count/item_at are called at refresh
+    -- time, but page is also read by LibraryModal directly via self.page on the
+    -- widget — so we stash it on the domain self and let the config's item_count
+    -- drive pagination through LibraryModal's own self.page field (which starts
+    -- at 1). We sync it via on_search_submit / setMySort / setTab.
+    -- NOTE: LibraryModal owns its own self.page counter. The domain self.page is
+    -- used by config callbacks that directly set self.page then call rebuild().
+    -- LibraryModal's pagination state is fully separate. The active-preset jump
+    -- is achieved by pre-computing the page and injecting it into LibraryModal
+    -- after :new{} but before UIManager:show.
+    local LibraryModal = require("menu.library_modal")
+    local config = buildPresetLibraryConfig(self)
+    local lm = LibraryModal:new{ config = config }
+    -- Jump to the page containing the active preset on first open.
+    lm.page = activePresetPage(bookends, "latest")
+    self.modal_widget = lm
+    UIManager:show(lm)
+    UIManager:setDirty("all", "flashui")
 end
 
 function PresetManagerModal._close(self, restore)
@@ -402,402 +863,6 @@ local function isStarred(bookends, key)
     return false
 end
 
-function PresetManagerModal._rebuild(self)
-    if self.modal_widget then
-        UIManager:close(self.modal_widget)
-        self.modal_widget = nil
-    end
-
-    local width = math.floor(math.min(Screen:getWidth(), Screen:getHeight()) * 0.8)
-    local row_height = Screen:scaleBySize(42)
-    local font_size = 18
-    local baseline = math.floor(row_height * 0.65)
-    local left_pad = Size.padding.large
-
-    local vg = VerticalGroup:new{ align = "left" }
-
-    -- Title + tab switcher
-    local title_face = Font:getFace("infofont", 20)
-    local title = TextWidget:new{
-        text = _("Preset library"),
-        face = title_face,
-        bold = true,
-        forced_height = row_height,
-        forced_baseline = baseline,
-        fgcolor = Blitbuffer.COLOR_BLACK,
-    }
-    -- Tab-style segmented toggle: each half fills the full row height so the
-    -- bottom edge sits flush with the title-row separator below. Active half
-    -- has inverted colors.
-    local function segmentHalf(label, is_active, on_tap)
-        local pad_h = Screen:scaleBySize(16)
-        local bg = is_active and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE
-        local fg = is_active and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK
-        local tb = TextWidget:new{
-            text = label,
-            face = Font:getFace("infofont", 16),
-            bold = is_active,
-            forced_height = row_height,
-            forced_baseline = baseline,
-            fgcolor = fg,
-        }
-        local frame = FrameContainer:new{
-            bordersize = 0,
-            padding = 0,
-            padding_left = pad_h, padding_right = pad_h,
-            padding_top = 0, padding_bottom = 0,
-            margin = 0,
-            background = bg,
-            tb,
-        }
-        local ic = InputContainer:new{
-            dimen = Geom:new{ w = frame:getSize().w, h = frame:getSize().h },
-            frame,
-        }
-        ic.ges_events = { TapSelect = { GestureRange:new{ ges = "tap", range = ic.dimen } } }
-        ic.onTapSelect = function() on_tap(); return true end
-        return ic
-    end
-    local local_seg   = segmentHalf(_("My presets"), self.tab == "local",   function() self.setTab("local") end)
-    local gallery_seg = segmentHalf(_("Gallery"), self.tab == "gallery", function() self.setTab("gallery") end)
-    local seg_divider = LineWidget:new{
-        background = Blitbuffer.COLOR_BLACK,
-        dimen = Geom:new{ w = Size.line.thin, h = math.max(local_seg:getSize().h, gallery_seg:getSize().h) },
-    }
-    local segmented = FrameContainer:new{
-        bordersize = 0,
-        padding = 0,
-        margin = 0,
-        background = Blitbuffer.COLOR_WHITE,
-        HorizontalGroup:new{ local_seg, seg_divider, gallery_seg },
-    }
-
-    -- Right-align the segmented toggle on the title row.
-    local title_w = title:getWidth()
-    local seg_w = segmented:getSize().w
-    local title_row_spacer_w = math.max(Screen:scaleBySize(20),
-                                        width - left_pad - title_w - seg_w - left_pad)
-    table.insert(vg, LeftContainer:new{
-        dimen = Geom:new{ w = width, h = row_height },
-        HorizontalGroup:new{
-            HorizontalSpan:new{ width = left_pad },
-            title,
-            HorizontalSpan:new{ width = title_row_spacer_w },
-            segmented,
-        },
-    })
-    table.insert(vg, LineWidget:new{
-        background = Blitbuffer.COLOR_BLACK,
-        dimen = Geom:new{ w = width, h = Size.line.thick },
-    })
-
-    -- (No dedicated state header row — the ▸ indicator on the selected row + the
-    --  inline ⋯ on Personal preset rows carry that information more compactly.)
-
-    -- Body
-    if self.tab == "local" then
-        PresetManagerModal._renderLocalRows(self, vg, width, row_height, font_size, baseline, left_pad)
-    else
-        PresetManagerModal._renderGalleryRows(self, vg, width, row_height, font_size, baseline, left_pad)
-    end
-
-    -- Footer: three buttons (Close | Edit | Apply) separated by thin vertical lines.
-    -- Edit targets whichever Personal preset is "selected": the previewed one
-    -- if we're previewing a Local row, otherwise the currently-active preset
-    -- (highlighted in the list when no preview is active). Gallery previews
-    -- and virtual-blank previews leave edit disabled.
-    local edit_target
-    if self.previewing then
-        if self.previewing.kind == "local" then
-            edit_target = self.previewing.filename
-        end
-    else
-        edit_target = self.bookends:getActivePresetFilename()
-    end
-    local edit_enabled = edit_target ~= nil
-    local btn_w = math.floor((width - 2 * Size.line.thin) / 3)
-
-    local function make_footer_btn(label_text, active, on_tap, is_bold)
-        local label = TextWidget:new{
-            text = label_text,
-            face = Font:getFace("infofont", 16),
-            forced_height = row_height,
-            forced_baseline = baseline,
-            bold = is_bold and active,
-            fgcolor = active and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_DARK_GRAY,
-        }
-        local ic = InputContainer:new{
-            dimen = Geom:new{ w = btn_w, h = row_height },
-            CenterContainer:new{ dimen = Geom:new{ w = btn_w, h = row_height }, label },
-        }
-        ic.ges_events = { TapSelect = { GestureRange:new{ ges = "tap", range = ic.dimen } } }
-        ic.onTapSelect = function() if active then on_tap() end; return true end
-        return ic
-    end
-
-    local btn_close_ic = make_footer_btn(_("Close"), true,
-        function() self.close(true) end, true)
-    local btn_edit_ic = make_footer_btn(_("Manage…"), edit_enabled, function()
-        -- Open the same overflow actions that long-press triggers
-        if not edit_target then return end
-        local presets = self.bookends:readPresetFiles()
-        for _i, p in ipairs(presets) do
-            if p.filename == edit_target then
-                PresetManagerModal._openOverflow(self, p)
-                return
-            end
-        end
-    end, false)
-    local apply_text = (self.previewing and self.previewing.kind == "gallery")
-        and _("Install") or _("Apply")
-    -- Apply is always tappable. If there's nothing previewed it just closes
-    -- the modal (same end state as reopening it). This is less surprising
-    -- than toggling the button's enablement after a tap on the already-
-    -- active preset.
-    local btn_apply_ic = make_footer_btn(apply_text, true,
-        function() self.applyCurrent() end, true)
-
-    -- Thin dark-grey separator above the footer, matching the font picker's
-    -- treatment. Lighter than the title bar's thick black line so the title
-    -- remains the strongest visual divide.
-    table.insert(vg, LineWidget:new{
-        background = Blitbuffer.COLOR_DARK_GRAY,
-        dimen = Geom:new{ w = width, h = Size.line.thin },
-    })
-    -- Vertical button dividers: lighter and inset top/bottom so they don't
-    -- run the full button height (also matching the font picker's ButtonTable).
-    local vdiv_inset = Screen:scaleBySize(10)
-    local vdiv = function() return CenterContainer:new{
-        dimen = Geom:new{ w = Size.line.thin, h = row_height },
-        LineWidget:new{
-            background = Blitbuffer.COLOR_DARK_GRAY,
-            dimen = Geom:new{ w = Size.line.thin, h = row_height - 2 * vdiv_inset },
-        },
-    } end
-    table.insert(vg, HorizontalGroup:new{ btn_close_ic, vdiv(), btn_edit_ic, vdiv(), btn_apply_ic })
-
-    -- Outer frame + center
-    local frame = FrameContainer:new{
-        bordersize = Size.border.window,
-        radius = Size.radius.window,
-        padding = 0,
-        margin = 0,
-        background = Blitbuffer.COLOR_WHITE,
-        vg,
-    }
-    local wc = CenterContainer:new{
-        dimen = Screen:getSize(),
-        frame,
-    }
-    -- Outer shell publishes the visible frame's rect to external observers
-    -- (Bookends' FlippingHaloOverlay suppression, the dogear userpatch) via
-    -- its own dimen, while wc keeps dimen = Screen:getSize() — that field
-    -- is what CenterContainer:paintTo uses to compute its centring offset,
-    -- so overwriting it pins the modal to (0, 0) on the second repaint.
-    -- Matches ButtonDialog, which hangs `self.dimen = movable.dimen` on its
-    -- outer FocusManager, not on the inner CenterContainer.
-    local shell = WidgetContainer:new{ dimen = Screen:getSize(), wc }
-    function shell:paintTo(bb, x, y)
-        wc:paintTo(bb, x, y)
-        self.dimen = frame.dimen
-    end
-    self.modal_widget = shell
-    UIManager:show(shell)
-    -- Force a full-screen flash so e-ink repaints cleanly when a dialog above
-    -- us closes and we rebuild (otherwise the dialog's last frame can ghost).
-    UIManager:setDirty("all", "flashui")
-end
-
-function PresetManagerModal._renderLocalRows(self, vg, width, row_height, font_size, baseline, left_pad)
-    -- A small top gap so cards don't butt against the title separator.
-    table.insert(vg, VerticalSpan:new{ width = Screen:scaleBySize(8) })
-
-    -- Work out which row should look "selected" — the one currently previewed,
-    -- or the currently-active preset when nothing is being previewed.
-    local active_fn = self.bookends:getActivePresetFilename()
-    local selected_key
-    if self.previewing and self.previewing.kind == "local" then
-        selected_key = self.previewing.filename
-    else
-        selected_key = active_fn
-    end
-
-    -- Control strip: sort/filter pill [Latest | A–Z | Starred], status hint
-    -- on the right. Layout-parity with the Gallery tab's control strip so
-    -- switching tabs doesn't resize the modal.
-    local seg_pad_h = Screen:scaleBySize(12)
-    local seg_pad_v = Screen:scaleBySize(6)
-    local function segment(label, is_active, on_tap)
-        local fg = is_active and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK
-        local bg = is_active and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE
-        local tb = TextWidget:new{
-            text = label,
-            face = Font:getFace("cfont", 14),
-            bold = is_active,
-            fgcolor = fg,
-        }
-        local fr = FrameContainer:new{
-            bordersize = 0,
-            padding = 0,
-            padding_left = seg_pad_h, padding_right = seg_pad_h,
-            padding_top = seg_pad_v, padding_bottom = seg_pad_v,
-            margin = 0,
-            background = bg,
-            tb,
-        }
-        local ic = InputContainer:new{
-            dimen = Geom:new{ w = fr:getSize().w, h = fr:getSize().h },
-            fr,
-        }
-        ic.ges_events = { TapSelect = { GestureRange:new{ ges = "tap", range = ic.dimen } } }
-        ic.onTapSelect = function() on_tap(); return true end
-        return ic
-    end
-    local latest_seg = segment(_("Latest"), self.my_sort == "latest",
-        function() self.setMySort("latest") end)
-    local star_seg = segment(_("Starred"), self.my_sort == "starred",
-        function() self.setMySort("starred") end)
-    local seg_h = math.max(latest_seg:getSize().h, star_seg:getSize().h)
-    local my_vdiv = LineWidget:new{
-        background = Blitbuffer.COLOR_BLACK,
-        dimen = Geom:new{ w = Size.line.thin, h = seg_h },
-    }
-    local sort_frame = FrameContainer:new{
-        bordersize = Size.border.thin,
-        radius = Size.radius.default,
-        padding = 0, margin = 0,
-        background = Blitbuffer.COLOR_WHITE,
-        HorizontalGroup:new{ latest_seg, my_vdiv, star_seg },
-    }
-    local sort_size = sort_frame:getSize()
-    local strip_gap = Screen:scaleBySize(12)
-    local strip_outer_w = width - 2 * left_pad
-    local hint_w = strip_outer_w - sort_size.w - strip_gap
-    local hint_widget = TextWidget:new{
-        text = _("Star = include in preset cycle gesture"),
-        face = Font:getFace("cfont", 13),
-        max_width = hint_w,
-        fgcolor = Blitbuffer.COLOR_DARK_GRAY,
-    }
-    table.insert(vg, HorizontalGroup:new{
-        align = "center",
-        HorizontalSpan:new{ width = left_pad },
-        sort_frame,
-        HorizontalSpan:new{ width = strip_gap },
-        LeftContainer:new{
-            dimen = Geom:new{ w = hint_w, h = sort_size.h },
-            hint_widget,
-        },
-    })
-    -- Match the inter-card gap so the first real preset sits at the same
-    -- distance below as subsequent rows sit from each other.
-    table.insert(vg, VerticalSpan:new{ width = Screen:scaleBySize(8) })
-
-    -- Real presets, paginated. Page 1 fits the same 5 cards as the Gallery
-    -- tab — the compact (No overlay) strip above is small enough that we
-    -- don't need to displace a card.
-    local presets = sortedLocalPresets(self.bookends, self.my_sort)
-    local ROWS_PER_PAGE = 5
-    local TILE_SLOT = 1  -- the synthetic "+ New preset" tile after the last card
-    local total_items = #presets + TILE_SLOT
-    local total_pages = math.max(1, math.ceil(total_items / ROWS_PER_PAGE))
-    if self.page > total_pages then self.page = total_pages end
-    local start_idx = (self.page - 1) * ROWS_PER_PAGE + 1
-    local end_idx = math.min(start_idx + ROWS_PER_PAGE - 1, total_items)
-    for i = start_idx, end_idx do
-        if i <= #presets then
-            local p = presets[i]
-            local has_colour = PresetManager.hasColour(p.preset) or false
-            PresetManagerModal._addRow(self, vg, width, row_height, font_size, baseline, left_pad, {
-                display = p.name,
-                description = p.preset.description,
-                author = p.preset.author,
-                star_key = p.filename,
-                has_colour = has_colour,
-                on_preview = function() self.previewLocal(p) end,
-                on_hold = function() PresetManagerModal._openOverflow(self, p) end,
-                is_selected = (selected_key == p.filename),
-            })
-        else
-            -- Synthetic tile: final slot on the last page.
-            PresetManagerModal._addRow(self, vg, width, row_height, font_size, baseline, left_pad, {
-                display = _("+ New blank preset"),
-                is_virtual = true,
-                on_preview = function() PresetManagerModal._createBlankPreset(self) end,
-            })
-        end
-    end
-
-    -- Pad out short pages so the modal height stays stable regardless of
-    -- how many items fit the page. Each pad slot equals one card plus the
-    -- 8px gap _addRow adds after every rendered card.
-    local rendered = end_idx - start_idx + 1
-    local card_slot_h = Screen:scaleBySize(64) + Screen:scaleBySize(8)
-    for _ = rendered + 1, ROWS_PER_PAGE do
-        table.insert(vg, VerticalSpan:new{ width = card_slot_h })
-    end
-
-    -- Always reserve the pagination area's full height (span + hairline +
-    -- span + nav) even when we don't render it, so Local ↔ Gallery and
-    -- empty ↔ loaded transitions don't resize the modal.
-    PresetManagerModal._renderPagination(self, vg, width, row_height, total_pages)
-end
-
---- Render the pagination strip OR reserve its equivalent height. Shared
---- between Local and Gallery tabs so single-page and multi-page states
---- produce identical modal heights.
-function PresetManagerModal._renderPagination(self, vg, width, row_height, total_pages)
-    local pagination_area_h = 2 * Size.span.vertical_default + Size.line.thin + row_height
-    if total_pages <= 1 then
-        table.insert(vg, VerticalSpan:new{ width = pagination_area_h })
-        return
-    end
-    local page_cur = self.page
-    -- Pagination chrome is a secondary control, so the chevrons and page
-    -- label are sized smaller than the card content. Icon size here is the
-    -- glyph's render box (stock KOReader pagination uses 40); Button still
-    -- adds its own touch padding around it.
-    local chev_size = Screen:scaleBySize(32)
-    local function chev(icon_name, enabled, cb)
-        return Button:new{
-            icon = icon_name, icon_width = chev_size, icon_height = chev_size,
-            callback = cb, bordersize = 0, enabled = enabled,
-            show_parent = self.modal_widget,
-        }
-    end
-    -- Uniform 32px spacing between each pagination element, matching the
-    -- stock Menu widget's page_info_spacer so custom and stock paginations
-    -- read identically across the plugin.
-    local pn_span = Screen:scaleBySize(32)
-    local page_nav = HorizontalGroup:new{
-        align = "center",
-        chev("chevron.first", page_cur > 1, function() self.setPage(1) end),
-        HorizontalSpan:new{ width = pn_span },
-        chev("chevron.left", page_cur > 1, function() self.setPage(page_cur - 1) end),
-        HorizontalSpan:new{ width = pn_span },
-        Button:new{ text = T(_("Page %1 of %2"), page_cur, total_pages),
-            text_font_size = 15, callback = function() end,
-            bordersize = 0, show_parent = self.modal_widget },
-        HorizontalSpan:new{ width = pn_span },
-        chev("chevron.right", page_cur < total_pages, function() self.setPage(page_cur + 1) end),
-        HorizontalSpan:new{ width = pn_span },
-        chev("chevron.last", page_cur < total_pages, function() self.setPage(total_pages) end),
-    }
-    table.insert(vg, VerticalSpan:new{ width = Size.span.vertical_default })
-    table.insert(vg, CenterContainer:new{
-        dimen = Geom:new{ w = width, h = Size.line.thin },
-        LineWidget:new{
-            background = Blitbuffer.COLOR_DARK_GRAY,
-            dimen = Geom:new{ w = width - 2 * Size.padding.default, h = Size.line.thin },
-        },
-    })
-    table.insert(vg, VerticalSpan:new{ width = Size.span.vertical_default })
-    table.insert(vg, CenterContainer:new{
-        dimen = Geom:new{ w = width, h = row_height },
-        page_nav,
-    })
-end
-
 function PresetManagerModal._addRow(self, vg, width, row_height, font_size, baseline, left_pad, opts)
     -- Row layout:  [ card (title + description/author) ]  [ gap ]  [ star ]
     -- Tap card → preview. Tap star → toggle cycle membership (no preview).
@@ -809,13 +874,18 @@ function PresetManagerModal._addRow(self, vg, width, row_height, font_size, base
     local star_width = Screen:scaleBySize(40)
     local star_gap = Screen:scaleBySize(6)
     local inner_pad = Screen:scaleBySize(12)
-    local card_outer_w = width - 2 * left_pad - star_gap - star_width
+    -- Row fills the full slot width: [card][gap][star_column]. The card's
+    -- left edge sits flush with the slot's left edge so it lines up with
+    -- the search box / chip strip / pagination divider above and below.
+    local card_outer_w = width - star_gap - star_width
     local content_w = card_outer_w - 2 * inner_pad - 2 * Size.border.thin
 
-    -- Secondary text colour: DARK_GRAY on WHITE is fine; on LIGHT_GRAY
-    -- (selected state) we darken to pure black for readable contrast.
+    -- Secondary text colour: GRAY_5 (0x55) on WHITE — read as too faded
+    -- at the older DARK_GRAY (0x88), matched the tokens picker bump.
+    -- On LIGHT_GRAY (selected state) we darken to pure black for
+    -- readable contrast.
     local secondary_fg = opts.is_selected and Blitbuffer.COLOR_BLACK
-        or Blitbuffer.COLOR_DARK_GRAY
+        or Blitbuffer.COLOR_GRAY_5
 
     -- Title line: "Title" + optional " by Author" in smaller lighter type.
     -- Both widgets get the same forced_height + forced_baseline so the 18pt
@@ -882,12 +952,13 @@ function PresetManagerModal._addRow(self, vg, width, row_height, font_size, base
         }
     end
 
-    -- Card frame: thin border always; background fills light-gray when selected.
+    -- Card frame: solid thin border for real cards; bordersize 0 for virtual
+    -- placeholders so the dashed-border overlay below is the only outline.
     local card_bg = opts.is_selected
         and (Blitbuffer.COLOR_LIGHT_GRAY or Blitbuffer.gray(0.92))
         or Blitbuffer.COLOR_WHITE
     local card_frame = FrameContainer:new{
-        bordersize = Size.border.thin,
+        bordersize = opts.is_virtual and 0 or Size.border.thin,
         radius = Size.radius.default,
         padding = 0,
         padding_left = inner_pad,
@@ -906,7 +977,18 @@ function PresetManagerModal._addRow(self, vg, width, row_height, font_size, base
     -- top and right edges so the rounded corner isn't visually clipped.
     local card_w, card_h = card_frame:getSize().w, card_frame:getSize().h
     local card_stack
-    if opts.has_colour then
+    if opts.is_virtual then
+        -- Synthetic placeholder tile gets a dashed-border overlay instead of
+        -- the solid bordered look so it reads as an action affordance, not
+        -- another preset card.
+        card_stack = OverlapGroup:new{
+            dimen = Geom:new{ w = card_w, h = card_h },
+            allow_mirroring = false,
+            card_frame,
+            DashedBorder:new{ w_actual = card_w, h_actual = card_h,
+                              color = Blitbuffer.COLOR_DARK_GRAY },
+        }
+    elseif opts.has_colour then
         local flag_inset = Screen:scaleBySize(6)
         local flag_side = Screen:scaleBySize(8)
         local flag_w = flag_side * 4
@@ -970,7 +1052,6 @@ function PresetManagerModal._addRow(self, vg, width, row_height, font_size, base
 
     table.insert(vg, HorizontalGroup:new{
         align = "center",
-        HorizontalSpan:new{ width = left_pad },
         card,
         HorizontalSpan:new{ width = star_gap },
         accent_ic,
@@ -1281,6 +1362,47 @@ local function serializePresetForSubmission(preset_entry)
     return header .. "return " .. PresetManager.serializeTable(preset_entry.preset) .. "\n"
 end
 
+-- Submit-flow rename helper: same effect as the standard rename action (file
+-- on disk + cycle list + active-preset bookkeeping) but takes a callback so
+-- the gate can re-enter the submit flow once the user picks a real name. The
+-- explanatory `message` argument tells the user *why* a rename is being asked
+-- for, which differs from a cold rename initiated from the manage menu.
+local function promptRenameAndContinue(self, entry, message, on_done)
+    local dlg
+    dlg = InputDialog:new{
+        title       = _("Rename before sharing"),
+        description = message,
+        input       = entry.name,
+        buttons = {{
+            { text = _("Cancel"), id = "close",
+              callback = function() UIManager:close(dlg) end },
+            { text = _("Rename"), is_enter_default = true, callback = function()
+                local new_name = dlg:getInputText()
+                if new_name and new_name ~= "" and new_name ~= entry.name then
+                    local new_filename = self.bookends:renamePresetFile(entry.filename, new_name)
+                    if new_filename then
+                        local cycle = self.bookends.settings:readSetting("preset_cycle") or {}
+                        for i, f in ipairs(cycle) do
+                            if f == entry.filename then cycle[i] = new_filename; break end
+                        end
+                        self.bookends.settings:saveSetting("preset_cycle", cycle)
+                        if self.bookends:getActivePresetFilename() == entry.filename then
+                            self.bookends:setActivePresetFilename(new_filename)
+                        end
+                        entry.filename = new_filename
+                        entry.name     = new_name
+                        if entry.preset then entry.preset.name = new_name end
+                    end
+                end
+                UIManager:close(dlg)
+                if on_done then on_done() end
+            end },
+        }},
+    }
+    UIManager:show(dlg)
+    dlg:onShowKeyboard()
+end
+
 -- Wrap the submit flow in xpcall so any unhandled error surfaces as a
 -- notification rather than crashing the overlay. The submit path runs rarely
 -- and shuttles between several dialogs; easy place for regressions.
@@ -1305,6 +1427,31 @@ local function submitToGalleryImpl(self, entry)
     end
     if needsField("description") then
         editMetadataField(self, entry, "description", _("One-line description of this preset"),
+            function() PresetManagerModal._submitToGallery(self, entry) end)
+        return
+    end
+
+    -- Default-content gates: catch placeholder name/description that the
+    -- plugin auto-generates (migration default "My setup", new-preset default
+    -- "Untitled[ N]", migration description). Both English source string and
+    -- current-locale translation are checked, so a Spanish KOReader's
+    -- "Mi configuración" is also gated. See preset_naming.lua for predicates.
+    local PresetNaming = require("preset_naming")
+    local default_names = { "My setup", _("My setup") }
+    local untitled_prefixes = { "Untitled", _("Untitled") }
+    local default_descriptions = {
+        "Imported from your earlier Bookends settings",
+        _("Imported from your earlier Bookends settings"),
+    }
+    if PresetNaming.looksLikeDefaultName(data.name, default_names, untitled_prefixes) then
+        promptRenameAndContinue(self, entry,
+            T(_("'%1' is one of Bookends' default placeholder names. Give your preset something distinctive — that's how it'll appear in the gallery."), data.name),
+            function() PresetManagerModal._submitToGallery(self, entry) end)
+        return
+    end
+    if PresetNaming.looksLikeDefaultDescription(data.description, default_descriptions) then
+        editMetadataField(self, entry, "description",
+            _("Write a short description that tells gallery users what your preset shows"),
             function() PresetManagerModal._submitToGallery(self, entry) end)
         return
     end
@@ -1448,239 +1595,6 @@ function PresetManagerModal._delete(self, entry)
             self.rebuild()
         end,
     })
-end
-
-function PresetManagerModal._renderGalleryRows(self, vg, width, row_height, font_size, baseline, left_pad)
-    local Gallery = require("preset_gallery")
-    local online = Gallery.isOnline()
-
-    -- Top gap so the control strip doesn't butt against the title separator
-    table.insert(vg, VerticalSpan:new{ width = Screen:scaleBySize(8) })
-
-    -- Control strip: a small card-styled Refresh button on the left, then
-    -- status text (last-updated / loading / offline). Refresh is the ONLY
-    -- code path that triggers a remote request — we never fetch on tab open.
-    local status_text
-    if self.gallery_loading then
-        status_text = _("Refreshing…")
-    elseif not online then
-        status_text = _("Offline — connect and tap a sort to retry")
-    elseif self.gallery_error then
-        status_text = _("Refresh failed — tap a sort to retry")
-    elseif self.approval_queue_count and self.approval_queue_count > 0 then
-        -- Approval queue = open PRs on the presets repo. Shown only when
-        -- a refresh has successfully populated both the index and the count.
-        if self.approval_queue_count == 1 then
-            status_text = _("1 preset in the approval queue")
-        else
-            status_text = T(_("%1 presets in the approval queue"), self.approval_queue_count)
-        end
-    else
-        -- When loaded with no pending PRs, and when idle-empty (the help
-        -- panel already explains what to do), leave the status blank.
-        status_text = ""
-    end
-
-    -- Control strip: sort pill [Latest|Popular] on the left, status text in
-    -- the remaining space. Tapping either mode triggers a refresh when data
-    -- is stale or absent (see galleryIsStale above); otherwise it just
-    -- re-sorts locally. There is no explicit refresh button — taps carry
-    -- the "show me this, fresh" intent.
-    local seg_pad_h = Screen:scaleBySize(12)
-    local seg_pad_v = Screen:scaleBySize(6)
-
-    local function segment(label, is_active, on_tap)
-        local fg = is_active and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK
-        local bg = is_active and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE
-        local tb = TextWidget:new{
-            text = label,
-            face = Font:getFace("cfont", 14),
-            bold = is_active,
-            fgcolor = fg,
-        }
-        local fr = FrameContainer:new{
-            bordersize = 0,
-            padding = 0,
-            padding_left = seg_pad_h, padding_right = seg_pad_h,
-            padding_top = seg_pad_v, padding_bottom = seg_pad_v,
-            margin = 0,
-            background = bg,
-            tb,
-        }
-        local ic = InputContainer:new{
-            dimen = Geom:new{ w = fr:getSize().w, h = fr:getSize().h },
-            fr,
-        }
-        ic.ges_events = { TapSelect = { GestureRange:new{ ges = "tap", range = ic.dimen } } }
-        ic.onTapSelect = function() on_tap(); return true end
-        return ic
-    end
-
-    -- Active highlight only appears once the user has engaged with the
-    -- gallery — either we're loading, have loaded, or a previous attempt
-    -- errored. In the cold "never tapped" state neither segment is
-    -- highlighted, so gallery_sort's "latest" default doesn't visually
-    -- preempt the user's choice.
-    local gallery_engaged = self.gallery_loading
-        or self.gallery_index
-        or self.gallery_error
-    local latest_seg  = segment(_("Latest"),
-        gallery_engaged and self.gallery_sort == "latest",
-        function() self.setGallerySort("latest") end)
-    local popular_seg = segment(_("Popular"),
-        gallery_engaged and self.gallery_sort == "popular",
-        function() self.setGallerySort("popular") end)
-
-    local sort_h = math.max(latest_seg:getSize().h, popular_seg:getSize().h)
-    local sort_vdiv = LineWidget:new{
-        background = Blitbuffer.COLOR_BLACK,
-        dimen = Geom:new{ w = Size.line.thin, h = sort_h },
-    }
-    local sort_frame = FrameContainer:new{
-        bordersize = Size.border.thin,
-        radius = Size.radius.default,
-        padding = 0,
-        margin = 0,
-        background = Blitbuffer.COLOR_WHITE,
-        HorizontalGroup:new{ latest_seg, sort_vdiv, popular_seg },
-    }
-    local sort_size = sort_frame:getSize()
-
-    local strip_gap = Screen:scaleBySize(12)
-    local strip_outer_w = width - 2 * left_pad
-    local status_w = strip_outer_w - sort_size.w - strip_gap
-    local status_widget = TextWidget:new{
-        text = status_text,
-        face = Font:getFace("cfont", 13),
-        max_width = status_w,
-        fgcolor = Blitbuffer.COLOR_DARK_GRAY,
-    }
-    table.insert(vg, HorizontalGroup:new{
-        align = "center",
-        HorizontalSpan:new{ width = left_pad },
-        sort_frame,
-        HorizontalSpan:new{ width = strip_gap },
-        LeftContainer:new{
-            dimen = Geom:new{ w = status_w, h = sort_size.h },
-            status_widget,
-        },
-    })
-    table.insert(vg, VerticalSpan:new{ width = Screen:scaleBySize(8) })
-
-    -- Empty state: render an explanatory help panel in the space a populated
-    -- list would occupy. Total height matches the populated layout (5 card
-    -- slots + pagination area) so the modal doesn't resize on Refresh.
-    if not self.gallery_index or not self.gallery_index.presets then
-        local card_slot_h = Screen:scaleBySize(64) + Screen:scaleBySize(8)
-        local pagination_area_h = 2 * Size.span.vertical_default + Size.line.thin + row_height
-        local help_h = card_slot_h * 5
-        -- Wider side margins than the card layout so the help panel reads as
-        -- content, not a list. Body text stays pure black on e-ink — dark-grey
-        -- is reserved for labels/chrome, not for reading content.
-        local text_width = width - 8 * left_pad
-        local title_widget = TextWidget:new{
-            text = _("Discover more presets"),
-            face = Font:getFace("cfont", 20),
-            bold = true,
-            fgcolor = Blitbuffer.COLOR_BLACK,
-        }
-        local intro = TextBoxWidget:new{
-            text = _("Browse presets others have shared, preview them on your own status bar, and install the ones you like. Once installed, you can edit each preset freely on the My presets tab."),
-            face = Font:getFace("cfont", 16),
-            width = text_width,
-            alignment = "center",
-            fgcolor = Blitbuffer.COLOR_BLACK,
-        }
-        local share = TextBoxWidget:new{
-            text = _("Made something worth sharing? Submit it with the Manage button while viewing one of your own presets."),
-            face = Font:getFace("cfont", 16),
-            width = text_width,
-            alignment = "center",
-            fgcolor = Blitbuffer.COLOR_BLACK,
-        }
-        local cta = TextWidget:new{
-            text = _("Tap Latest or Popular above to load the gallery."),
-            face = Font:getFace("cfont", 16),
-            bold = true,
-            fgcolor = Blitbuffer.COLOR_BLACK,
-        }
-        local help_group = VerticalGroup:new{
-            align = "center",
-            title_widget,
-            VerticalSpan:new{ width = Screen:scaleBySize(16) },
-            intro,
-            VerticalSpan:new{ width = Screen:scaleBySize(14) },
-            share,
-            VerticalSpan:new{ width = Screen:scaleBySize(22) },
-            cta,
-        }
-        table.insert(vg, CenterContainer:new{
-            dimen = Geom:new{ w = width, h = help_h },
-            help_group,
-        })
-        table.insert(vg, VerticalSpan:new{ width = pagination_area_h })
-        return
-    end
-
-    -- Build local-preset-name set to mark already-installed entries with ✓
-    local local_names = {}
-    for _i, p in ipairs(self.bookends:readPresetFiles()) do local_names[p.name] = true end
-
-    -- Sort per gallery_sort. "latest" is recent-first by `added` (ISO date,
-    -- lexicographic compare works); "popular" is install-count desc with
-    -- recent-added as tiebreaker so new-but-untapped presets don't always
-    -- stick to the bottom. Copy the list before sorting so the cached index
-    -- object keeps its original order.
-    local ROWS_PER_PAGE = 5
-    local entries = {}
-    for _i, e in ipairs(self.gallery_index.presets) do entries[#entries + 1] = e end
-    if self.gallery_sort == "popular" and type(self.gallery_counts) == "table" then
-        local counts = self.gallery_counts
-        table.sort(entries, function(a, b)
-            local ca = counts[a.slug or ""] or 0
-            local cb = counts[b.slug or ""] or 0
-            if ca ~= cb then return ca > cb end
-            local da, db = a.added or "", b.added or ""
-            if da ~= db then return da > db end
-            return (a.name or "") < (b.name or "")
-        end)
-    else
-        table.sort(entries, function(a, b)
-            local da, db = a.added or "", b.added or ""
-            if da ~= db then return da > db end
-            return (a.name or "") < (b.name or "")
-        end)
-    end
-    local total_pages = math.max(1, math.ceil(#entries / ROWS_PER_PAGE))
-    if self.page > total_pages then self.page = total_pages end
-    local start_idx = (self.page - 1) * ROWS_PER_PAGE + 1
-    local end_idx = math.min(start_idx + ROWS_PER_PAGE - 1, #entries)
-
-    for i = start_idx, end_idx do
-        local entry = entries[i]
-        local is_selected = self.previewing and self.previewing.kind == "gallery"
-            and self.previewing.entry and self.previewing.entry.slug == entry.slug
-        local captured = entry
-        PresetManagerModal._addRow(self, vg, width, row_height, font_size, baseline, left_pad, {
-            display = entry.name,
-            description = entry.description,
-            author = entry.author,
-            has_colour = entry.has_colour or false,
-            on_preview = function() PresetManagerModal._previewGallery(self, captured) end,
-            is_selected = is_selected,
-            installed = local_names[entry.name] == true,
-        })
-    end
-
-    -- Pad out short pages so the Gallery tab's body height matches the Local
-    -- tab's (which also pads). Each slot equals one card plus the 8px gap.
-    local rendered = end_idx - start_idx + 1
-    local card_slot_h = Screen:scaleBySize(64) + Screen:scaleBySize(8)
-    for _ = rendered + 1, ROWS_PER_PAGE do
-        table.insert(vg, VerticalSpan:new{ width = card_slot_h })
-    end
-
-    PresetManagerModal._renderPagination(self, vg, width, row_height, total_pages)
 end
 
 function PresetManagerModal._previewGallery(self, entry)
