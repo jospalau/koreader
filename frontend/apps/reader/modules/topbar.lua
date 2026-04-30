@@ -1893,7 +1893,7 @@ function TopBar:onPosUpdate(new_pos)
 end
 
 function TopBar:paintTo(bb, x, y)
-    if self.ui and self.ui.bookends and self.ui.bookends.enabled then return end
+    -- if self.ui and self.ui.bookends and self.ui.bookends.enabled then return end
     if self.status_bar and self.status_bar == true then
         -- self.battery_widget_container[1]:setText(self.time_battery_text_text:reverse())
         -- self.battery_widget_container:paintTo(bb, x - self.battery_widget_container[1]:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
@@ -2479,8 +2479,9 @@ function TopBar:paintToDisabled(bb, x, y)
     local parent_x = x + math.floor(Screen:getWidth() / 2)
     local x_pos = parent_x + parent_width + math.floor(self.chapter_pages_left_widget[1]:getSize().w / 2)
     local y_pos = Screen:getHeight()
-
-    self.chapter_pages_left_widget:paintTo(bb, x_pos, y_pos)
+    if not (self.ui.bookends and self.ui.bookends.enabled) then
+        self.chapter_pages_left_widget:paintTo(bb, x_pos, y_pos)
+    end
 end
 
 function TopBar:onAdjustMarginsTopbar()
