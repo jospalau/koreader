@@ -546,16 +546,21 @@ end
 local _strip_cache = setmetatable({}, { __mode = "k" })
 
 --- Walk the TOC once and return a table of chapter-title data derived from it.
--- Chapter titles have leading numbers stripped when the TOC at that depth
--- has a clean 1..N chapter-numbering sequence (e.g. "1 Title", "2 Title", ...).
--- See parseChapNumPrefix and computeStripPrefixByDepth for the rule.
+-- Chapter titles are returned as-is from the TOC. The helper additionally
+-- exposes split parts (chapter_title_num / chapter_title_name) when the
+-- heuristic deems the deepest covering depth strip-safe; see
+-- parseChapNumPrefix and computeStripPrefixByDepth for the rule.
 -- @param ui     KOReader ReaderUI instance (must have .toc)
 -- @param pageno current page number (1-indexed)
 -- @return table with keys:
---   chapter_title       — deepest (most-specific) chapter title covering the page
---   chapter_titles_by_depth — { [1]="Part II", [2]="Ch 3", ... }
+--   chapter_title       — deepest (most-specific) chapter title covering the page (raw)
+--   chapter_titles_by_depth — { [1]="Part II", [2]="Ch 3", ... } (raw)
 --   chapter_num         — 1-indexed flat position of the current entry
 --   chapter_count       — total TOC entries across all depths
+--   chapter_title_num   — leading number parsed from chapter_title when the
+--                         deepest depth has a strip-safe 1..N sequence; "" otherwise
+--   chapter_title_name  — chapter_title with the parsed leading number removed
+--                         when strip-safe; equal to chapter_title otherwise (always populated)
 -- Returns an empty-ish table if ui.toc or page data is unavailable.
 function Tokens.getChapterTitlesByDepth(ui, pageno)
     local out = {
@@ -563,26 +568,19 @@ function Tokens.getChapterTitlesByDepth(ui, pageno)
         chapter_titles_by_depth = {},
         chapter_num = 0,
         chapter_count = 0,
+        chapter_title_num = "",
+        chapter_title_name = "",
     }
     if not ui or not ui.toc or not pageno then return out end
 
     local full_toc = ui.toc.toc
     if not full_toc then
         local title = ui.toc:getTocTitleByPage(pageno)
-        if title and title ~= "" then out.chapter_title = title end
+        if title and title ~= "" then
+            out.chapter_title = title
+            out.chapter_title_name = title
+        end
         return out
-    end
-
-    local strip_by_depth = _strip_cache[full_toc]
-    if not strip_by_depth then
-        strip_by_depth = computeStripPrefixByDepth(full_toc)
-        _strip_cache[full_toc] = strip_by_depth
-    end
-
-    local function maybe_strip(t, depth)
-        if not t or t == "" or not strip_by_depth[depth] then return t end
-        local _n, rest = parseChapNumPrefix(t)
-        return rest or t
     end
 
     out.chapter_count = #full_toc
@@ -593,11 +591,11 @@ function Tokens.getChapterTitlesByDepth(ui, pageno)
         if entry.page and entry.page <= pageno then
             idx = i
             if entry.depth then
-                local stripped = maybe_strip(entry.title or "", entry.depth)
-                out.chapter_titles_by_depth[entry.depth] = stripped
+                local raw = entry.title or ""
+                out.chapter_titles_by_depth[entry.depth] = raw
                 if entry.depth >= deepest_depth then
                     deepest_depth = entry.depth
-                    deepest_title = stripped
+                    deepest_title = raw
                 end
             end
         else
@@ -612,6 +610,24 @@ function Tokens.getChapterTitlesByDepth(ui, pageno)
         local title = ui.toc:getTocTitleByPage(pageno)
         if title and title ~= "" then out.chapter_title = title end
     end
+
+    out.chapter_title_name = out.chapter_title
+
+    if out.chapter_title ~= "" and deepest_depth > 0 then
+        local strip_by_depth = _strip_cache[full_toc]
+        if not strip_by_depth then
+            strip_by_depth = computeStripPrefixByDepth(full_toc)
+            _strip_cache[full_toc] = strip_by_depth
+        end
+        if strip_by_depth[deepest_depth] then
+            local n, rest = parseChapNumPrefix(out.chapter_title)
+            if n and rest then
+                out.chapter_title_num  = tostring(n)
+                out.chapter_title_name = rest
+            end
+        end
+    end
+
     return out
 end
 
@@ -854,10 +870,39 @@ end
 --- Build a state table of raw values for conditional evaluation.
 --- If paint_ctx is provided and already has a cached state, returns it
 --- (shared across all expand() calls within one paint cycle).
-function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, paint_ctx, stats_cache)
+function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, paint_ctx, stats_cache, format_str)
     if paint_ctx and paint_ctx._condition_state then
         return paint_ctx._condition_state
     end
+
+    -- Optional format-string gating: when paint_ctx contains the union of all
+    -- visible-line format strings (paint_ctx._cond_format_union, set by
+    -- main.lua._paintToInner), or when format_str is passed directly, only
+    -- SQL-backed condition fields referenced in some [if:...] block are
+    -- fetched. Without either, every bucket fetches (preserves test/back-
+    -- compat behaviour). Issue #36: a preset with one [if:title] used to
+    -- fire ~7 SQLite queries per page turn, dominating the ~200ms expand
+    -- cost on a Clara BW. Gating drops that to 0 for stats-free conditionals.
+    local cond_region
+    local gating_source = (paint_ctx and paint_ctx._cond_format_union) or format_str
+    if gating_source then
+        local parts = {}
+        for cond in gating_source:gmatch("%[if:([^%]]+)%]") do
+            table.insert(parts, cond)
+        end
+        cond_region = "\0" .. table.concat(parts, "\0") .. "\0"
+    end
+    local function refs(...)
+        if not cond_region then return true end
+        for i = 1, select("#", ...) do
+            local name = select(i, ...)
+            if cond_region:find("[^%w_]" .. name .. "[^%w_]", 1, false) then
+                return true
+            end
+        end
+        return false
+    end
+
     local state = {}
 
     -- WiFi
@@ -1047,10 +1092,12 @@ function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, pai
     -- Chapter titles (reuses the helper already called for state.chap_num/chap_count)
     if pageno and ui.toc then
         local titles = Tokens.getChapterTitlesByDepth(ui, pageno)
-        state.chap_title   = titles.chapter_title or ""
-        state.chap_title_1 = titles.chapter_titles_by_depth[1] or ""
-        state.chap_title_2 = titles.chapter_titles_by_depth[2] or ""
-        state.chap_title_3 = titles.chapter_titles_by_depth[3] or ""
+        state.chap_title      = titles.chapter_title or ""
+        state.chap_title_1    = titles.chapter_titles_by_depth[1] or ""
+        state.chap_title_2    = titles.chapter_titles_by_depth[2] or ""
+        state.chap_title_3    = titles.chapter_titles_by_depth[3] or ""
+        state.chap_title_num  = titles.chapter_title_num or ""
+        state.chap_title_name = titles.chapter_title_name or ""
     end
 
     -- Time (minutes since midnight, compare with HH:MM or raw minutes)
@@ -1063,8 +1110,8 @@ function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, pai
 
     -- Session (prefer ReaderStatistics' skip-aware values; fall back to
     -- our wall-clock measurement and max-page counter when stats is disabled).
-    do
-        local stats_session = nil -- Tokens._readStatsBookSession(ui, stats_cache)
+    if refs("session", "session_pages", "session_time") then
+        local stats_session = Tokens._readStatsBookSession(ui, stats_cache)
         if stats_session then
             state.session = math.floor(stats_session.duration / 60)
             state.session_pages = math.max(0, stats_session.pages)
@@ -1078,7 +1125,7 @@ function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, pai
     -- Today's reading totals (across all books) from ReaderStatistics.
     -- pages_today is an integer; time_today is integer minutes (raw seconds
     -- get formatted at render time).
-    do
+    if refs("pages_today", "time_today") then
         local stats_today = Tokens._readStatsToday(ui, stats_cache)
         if stats_today then
             state.pages_today = math.max(0, stats_today.pages)
@@ -1092,7 +1139,7 @@ function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, pai
     -- Today's reading totals (current book only). Mirrors pages_today/time_today
     -- but with id_book scoping so a user reading a second book today doesn't
     -- inflate the count for the book they're currently reading.
-    do
+    if refs("pages_today_book", "time_today_book") then
         local now_t = os.date("*t")
         local start_today = os.time() - (now_t.hour * 3600 + now_t.min * 60 + now_t.sec)
         local s = Tokens._readStatsBookRange(ui, stats_cache, start_today, "book_today")
@@ -1101,7 +1148,7 @@ function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, pai
     end
 
     -- Current book over the last 7 days (rolling window, not calendar week).
-    do
+    if refs("pages_week_book", "time_week_book") then
         local since = os.time() - 7 * 86400
         local s = Tokens._readStatsBookRange(ui, stats_cache, since, "book_week")
         state.pages_week_book = s and math.max(0, s.pages) or 0
@@ -1109,15 +1156,19 @@ function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, pai
     end
 
     -- Reading streaks (consecutive calendar days). nil id_book = any-book streak.
-    state.streak = Tokens._readStreak(ui, stats_cache, nil, "streak") or 0
-    if ui and ui.statistics and ui.statistics.id_curr_book then
-        state.book_streak = Tokens._readStreak(ui, stats_cache, ui.statistics.id_curr_book, "book_streak") or 0
-    else
-        state.book_streak = 0
+    if refs("streak") then
+        state.streak = Tokens._readStreak(ui, stats_cache, nil, "streak") or 0
+    end
+    if refs("book_streak") then
+        if ui and ui.statistics and ui.statistics.id_curr_book then
+            state.book_streak = Tokens._readStreak(ui, stats_cache, ui.statistics.id_curr_book, "book_streak") or 0
+        else
+            state.book_streak = 0
+        end
     end
 
     -- Lifetime aggregates over the book table (single SQL, two values).
-    do
+    if refs("total_read_time", "books_finished") then
         local s = Tokens._readStatsBookSummary(ui, stats_cache)
         state.total_read_time = s and math.floor(s.total_time / 60) or 0
         state.books_finished = s and s.finished_count or 0
@@ -1147,7 +1198,7 @@ function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, pai
     end
 
     -- Days since first open of this book + derived per-day pace.
-    do
+    if refs("days_reading_book", "pages_per_day") then
         local first_open = Tokens._readBookFirstOpen(ui)
         if first_open and first_open > 0 then
             state.days_reading_book = math.max(0, math.floor((os.time() - first_open) / 86400))
@@ -1409,6 +1460,7 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
             title = "[title]", author = "[author]",
             series = "[series]", series_name = "[series.name]", series_num = "[series.#]",
             chap_title = "[chapter]",
+            chap_title_num = "[ch.#]", chap_title_name = "[chapter]",
             filename = "[file]", lang = "[lang]",
             format = "[format]",
             highlights = "[highlights]", notes = "[notes]",
@@ -1567,8 +1619,10 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     local chapter_title = ""
     local chapter_num = ""      -- 1-indexed position of current chapter in TOC
     local chapter_count = ""    -- total number of entries in TOC
+    local chapter_title_num = ""   -- leading number parsed from title when strip-safe
+    local chapter_title_name = ""  -- title with leading number removed when strip-safe; raw title otherwise
     local chapter_titles_by_depth = {}  -- { [1] = "Part II", [2] = "Chapter 1", ... }
-    if needs("chap_pct", "chap_pct_left", "chap_read", "chap_pages", "chap_pages_left", "chap_title", "chap_num", "chap_count") and pageno and ui.toc then
+    if needs("chap_pct", "chap_pct_left", "chap_read", "chap_pages", "chap_pages_left", "chap_title", "chap_num", "chap_count", "chap_title_num", "chap_title_name") and pageno and ui.toc then
         -- Raw page calculation for %P (percentage)
         local chapter_start = ui.toc:getPreviousChapter(pageno)
         if ui.toc:isChapterStart(pageno) then
@@ -1622,6 +1676,8 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
         chapter_titles_by_depth = titles.chapter_titles_by_depth
         if titles.chapter_num > 0  then chapter_num   = titles.chapter_num   end
         if titles.chapter_count > 0 then chapter_count = titles.chapter_count end
+        chapter_title_num  = titles.chapter_title_num or ""
+        chapter_title_name = titles.chapter_title_name or ""
     end
 
     -- Bar token data (parallel channel — not embedded in text)
@@ -1682,9 +1738,13 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
 
     -- Session pages read (skip-aware via ReaderStatistics with fallback to
     -- bookends' own max-page counter when stats is disabled or absent).
-    local session_pages
-    do
-        local stats_session = nil -- Tokens._readStatsBookSession(ui, stats_cache)
+    -- Only fetched when a token actually consumes it: %session_pages directly,
+    -- or %speed (derived from session_pages / session_elapsed). Skipping the
+    -- SQL read on stats-free presets is the bulk of the per-page cost on
+    -- low-power devices like the Clara BW (issue #36).
+    local session_pages = 0
+    if needs("session_pages", "speed") then
+        local stats_session = Tokens._readStatsBookSession(ui, stats_cache)
         if stats_session then
             session_pages = math.max(0, stats_session.pages)
         else
@@ -1729,7 +1789,7 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     local time_12h = ""
     local time_24h = ""
     if needs("time_12h") then
-        time_12h = os.date("%I:%M %p"):gsub("^0", "")
+        time_12h = os.date("%H:%M")
     end
     if needs("time_24h", "time") then
         time_24h = os.date("%H:%M")
@@ -2247,7 +2307,9 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
         series      = tostring(series),
         series_name = tostring(series_name or ""),   -- populated in Task 10
         series_num  = tostring(series_num or ""),    -- populated in Task 10
-        chap_title  = tostring(chapter_title),
+        chap_title      = tostring(chapter_title),
+        chap_title_num  = tostring(chapter_title_num or ""),
+        chap_title_name = tostring(chapter_title_name or ""),
         filename    = file_name,
         lang        = book_language,
         format      = doc_format,
