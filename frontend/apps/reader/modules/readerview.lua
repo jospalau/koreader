@@ -201,6 +201,7 @@ function ReaderView:resetLayout()
 end
 
 function ReaderView:paintTo(bb, x, y)
+    -- local start = os.clock()
     dbg:v("readerview painting", self.visible_area, "to", x, y)
     if self.page_scroll then
         self:drawPageBackground(bb, x, y)
@@ -486,6 +487,8 @@ function ReaderView:paintTo(bb, x, y)
         end
         self.state.drawn = true
     end
+    -- local elapsed = os.clock() - start
+    -- print("Paso: ", elapsed, "segundos")
 end
 
 --[[
