@@ -1064,7 +1064,7 @@ function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, pai
     -- Session (prefer ReaderStatistics' skip-aware values; fall back to
     -- our wall-clock measurement and max-page counter when stats is disabled).
     do
-        local stats_session = Tokens._readStatsBookSession(ui, stats_cache)
+        local stats_session = nil -- Tokens._readStatsBookSession(ui, stats_cache)
         if stats_session then
             state.session = math.floor(stats_session.duration / 60)
             state.session_pages = math.max(0, stats_session.pages)
@@ -1684,7 +1684,7 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     -- bookends' own max-page counter when stats is disabled or absent).
     local session_pages
     do
-        local stats_session = Tokens._readStatsBookSession(ui, stats_cache)
+        local stats_session = nil -- Tokens._readStatsBookSession(ui, stats_cache)
         if stats_session then
             session_pages = math.max(0, stats_session.pages)
         else
