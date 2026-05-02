@@ -36,21 +36,23 @@ if not ReaderDogear._custom_dogear_patched then
         self.dimen = Geom:new{ x = 0, y = 0, w = 0, h = 0 }
     end
 
-    function DogearOverlay:paintTo(bb, x, y)
-        local dogear = self._dogear
-        if not dogear or not dogear.view or not dogear.view.dogear_visible then return end
-        -- Suppress when a fullscreen widget (TOC, bookmap, etc.) covers the
-        -- reader. Small dialogs (ButtonDialog, ConfirmBox) don't set
-        -- covers_fullscreen, so the dogear stays visible above them.
-        for i = #UIManager._window_stack, 1, -1 do
-            local w = UIManager._window_stack[i].widget
-            if w ~= self and not w.toast then
-                if w.covers_fullscreen then return end
-                break
-            end
-        end
-        dogear:paintTo(bb, x, y)
-    end
+    -- Not needed. The dogear widget gets painted after painting the plugins.
+    -- It was changed in readerview.lua source
+    -- function DogearOverlay:paintTo(bb, x, y)
+    --     local dogear = self._dogear
+    --     if not dogear or not dogear.view or not dogear.view.dogear_visible then return end
+    --     -- Suppress when a fullscreen widget (TOC, bookmap, etc.) covers the
+    --     -- reader. Small dialogs (ButtonDialog, ConfirmBox) don't set
+    --     -- covers_fullscreen, so the dogear stays visible above them.
+    --     for i = #UIManager._window_stack, 1, -1 do
+    --         local w = UIManager._window_stack[i].widget
+    --         if w ~= self and not w.toast then
+    --             if w.covers_fullscreen then return end
+    --             break
+    --         end
+    --     end
+    --     dogear:paintTo(bb, x, y)
+    -- end
 
     local orig_setupDogear = ReaderDogear.setupDogear
     ReaderDogear.setupDogear = function(self, new_dogear_size)
