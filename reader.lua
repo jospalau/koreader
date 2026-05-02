@@ -220,6 +220,7 @@ if G_reader_settings:isTrue("apply_extra_patches") then
     -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/pageno-in-subtitle.lua")
     -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/hide-pagination.lua")
     -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/quick-settings.lua")
+    local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/dogear-custom.lua")
 end
 
 -- Inform once about color rendering on newly supported devices
