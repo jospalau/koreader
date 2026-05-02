@@ -249,14 +249,39 @@ function PresetManager.attach(Bookends)
         return dir
     end
 
+    --- Invalidate the in-memory preset-files cache. Called by every
+    --- mutator path on this object so the next readPresetFiles() picks up
+    --- the new state. Cache survives only the plugin process lifetime;
+    --- a KOReader restart always rebuilds.
+    function Bookends:invalidatePresetCache()
+        self._preset_files_cache = nil
+    end
+
+    -- Shallow-copy the cached entries so callers can table.insert / table.sort
+    -- freely (e.g. the modal appending a synthetic "+ New blank preset" tile,
+    -- or sortedLocalPresets reordering by mtime) without polluting the cache
+    -- for the next reader. Entry tables are still shared, but entry-level
+    -- mutations only happen inside mutator flows that invalidate the cache
+    -- anyway (rename / write / delete / update). Cost: a few dozen ref-copies,
+    -- vs. the loadfile + sandbox + parse + validate per file the cache avoids.
+    local function copyEntries(src)
+        local out = {}
+        for i = 1, #src do out[i] = src[i] end
+        return out
+    end
+
     function Bookends:readPresetFiles()
+        if self._preset_files_cache then
+            return copyEntries(self._preset_files_cache)
+        end
         local lfs = require("libs/libkoreader-lfs")
         local logger = require("logger")
         local dir = self:presetDir()
         local presets = {}
 
         if lfs.attributes(dir, "mode") ~= "directory" then
-            return presets
+            self._preset_files_cache = presets
+            return copyEntries(presets)
         end
 
         for f in lfs.dir(dir) do
@@ -275,6 +300,12 @@ function PresetManager.attach(Bookends)
                             name = name,
                             filename = f,
                             preset = data,
+                            -- Memoise hasColour at parse time so card
+                            -- renderers don't re-walk the preset table on
+                            -- every visible slot, every refresh. Falls in
+                            -- step with the readPresetFiles cache: stays
+                            -- valid until invalidatePresetCache() runs.
+                            has_colour = hasColour(data),
                         })
                     end
                 end
@@ -282,7 +313,8 @@ function PresetManager.attach(Bookends)
         end
 
         table.sort(presets, function(a, b) return a.name < b.name end)
-        return presets
+        self._preset_files_cache = presets
+        return copyEntries(presets)
     end
 
     function Bookends:writePresetFile(name, preset_data)
@@ -300,6 +332,7 @@ function PresetManager.attach(Bookends)
         end
 
         writePresetContents(dir .. "/" .. filename, name, preset_data)
+        self:invalidatePresetCache()
         return filename
     end
 
@@ -307,6 +340,7 @@ function PresetManager.attach(Bookends)
         local path = self:presetDir() .. "/" .. filename
         os.remove(path)
         pruneFromCycle(self, filename)
+        self:invalidatePresetCache()
     end
 
     function Bookends:renamePresetFile(old_filename, new_name)
@@ -323,6 +357,9 @@ function PresetManager.attach(Bookends)
             renameInCycle(self, old_filename, new_filename)
         end
 
+        -- writePresetFile already invalidated; renaming the file on disk
+        -- invalidates the prior entry's filename too, so re-invalidate.
+        self:invalidatePresetCache()
         return new_filename
     end
 
@@ -334,6 +371,7 @@ function PresetManager.attach(Bookends)
         preset_data = preset_data or self:buildPreset()
         preset_data.name = name
         writePresetContents(path, name, preset_data)
+        self:invalidatePresetCache()
     end
 
     function Bookends:migratePresetsToFiles()
@@ -406,6 +444,7 @@ function PresetManager.attach(Bookends)
             preset_data.author = existing.author
         end
         writePresetContents(path, preset_data.name or filename, preset_data)
+        self:invalidatePresetCache()
     end
 end
 

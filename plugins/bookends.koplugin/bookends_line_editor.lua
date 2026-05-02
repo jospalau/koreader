@@ -429,8 +429,14 @@ function LineEditor.attach(Bookends)
                     -- so it merges into the InputDialog's own paint cycle.  A deferred
                     -- repaint causes a *separate* e-ink refresh that briefly flashes
                     -- book text through the Bookends area.
+                    --
+                    -- Tick cache is intentionally NOT cleared here: the format
+                    -- string doesn't affect tick fractions (those depend on TOC
+                    -- pages / total pages, keyed by flow id at the rebuild
+                    -- check). Sparing this clear lets typing in the editor
+                    -- skip the per-keystroke TOC walk on books with many
+                    -- chapters or hidden flows.
                     self.dirty = true
-                    self._tick_cache = nil
                     UIManager:setDirty(self.ui, "fast")
                 end
             end,

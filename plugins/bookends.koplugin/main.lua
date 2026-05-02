@@ -1303,9 +1303,13 @@ end
 --- Returns (bar_colors, text_color, symbol_color) — colour values the
 --- text-rendering phase also needs.
 function Bookends:_renderProgressBars(bb, x, y, screen_w, screen_h)
-    if self.dirty then
-        self._tick_cache = nil
-    end
+    -- Tick cache is invalidated explicitly by the events that actually
+    -- change tick fractions (onPageUpdate / onPosUpdate / footer-visibility
+    -- change, applyPreset, _scheduleRepaint). The previous cascade clear
+    -- here on any dirty paint was redundant for those paths and actively
+    -- harmful on the live-line-editor path, where dirty=true fires per
+    -- keystroke but tick fractions don't change. The flow-id check inside
+    -- _computeBarProgress already handles cross-flow paint cycles.
 
     -- Progress bar colors from settings
     local global_tick_height_pct = self.settings:readSetting("tick_height_pct")
@@ -1395,6 +1399,11 @@ function Bookends:_paintToInner(bb, x, y)
         end
         paint_ctx._cond_format_union = table.concat(union, "\0")
     end
+    -- Hoisted out of the per-line expand loop below: this setting is paint-
+    -- invariant and reading it once per visible line was wasted work on
+    -- low-power devices.
+    local tick_width_multiplier = self.settings:readSetting(
+        "tick_width_multiplier", self.DEFAULT_TICK_WIDTH_MULTIPLIER)
     for _, pos in ipairs(self.POSITIONS) do
         if self:isPositionActive(pos.key) then
             local pos_settings = self.positions[pos.key]
@@ -1422,7 +1431,7 @@ function Bookends:_paintToInner(bb, x, y)
                     local is_edit_line = self._live_edit_position == pos.key
                         and self._live_edit_line_idx == visible_indices[j]
                     local result, is_empty, line_bar = Tokens.expand(line, self.ui, session_elapsed, session_pages,
-                        nil, self.settings:readSetting("tick_width_multiplier", self.DEFAULT_TICK_WIDTH_MULTIPLIER),
+                        nil, tick_width_multiplier,
                         symbol_color, paint_ctx,
                         { legacy_literal = is_edit_line, stats_cache = stats_cache })
                     if not is_empty then

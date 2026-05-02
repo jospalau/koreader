@@ -76,6 +76,10 @@ local function getAllNerdFontCells()
             glyph = utf8FromCodepoint(entry.code),
             label = entry.name,
             canonical = entry.name,
+            -- Pre-lowercased haystack for the search path. Avoids re-lowering
+            -- ~2,800 names on every keystroke-submit refresh: see currentItemList
+            -- below which now does query-tokenisation + cell-match using this.
+            search_lc = entry.name:lower(),
             code = entry.code,
             insert_value = utf8FromCodepoint(entry.code),
         }
@@ -173,10 +177,29 @@ local function currentItemList(state)
     if state.search_query and #state.search_query >= 2 then
         -- Search across the full Nerd Font index; cap at 200 to keep
         -- pagination sensible. Reuse the cached cell projections.
+        --
+        -- Hot path: with ~2,800 cells and 16 grid slots per page, the parent
+        -- LibraryModal calls into this list multiple times per refresh. We
+        -- tokenise the query once and match against each cell's pre-lowered
+        -- search_lc — avoids ~2,800 query:lower() + gmatch reparses and
+        -- ~2,800 haystack:lower() calls per refresh that the generic
+        -- LibraryModal._matchesQuery would do.
+        local terms = {}
+        for term in state.search_query:lower():gmatch("%S+") do
+            terms[#terms + 1] = term
+        end
         local cells = getAllNerdFontCells()
         local items = {}
         for _i, cell in ipairs(cells) do
-            if LibraryModal._matchesQuery(cell.canonical, state.search_query) then
+            local lc = cell.search_lc
+            local match = true
+            for _t = 1, #terms do
+                if not lc:find(terms[_t], 1, true) then
+                    match = false
+                    break
+                end
+            end
+            if match then
                 items[#items + 1] = cell
                 if #items >= 200 then break end
             end
@@ -244,6 +267,20 @@ function IconsLibrary:show(on_select)
     -- a closure rather than on the modal so taps/chips/search can mutate it
     -- without going through LibraryModal's own state.
     local state = { active_chip = "all", search_query = nil }
+    -- Memoise the filtered list per (chip, query) key. LibraryModal calls
+    -- item_count + item_at-per-cell + pagination's second item_count per
+    -- refresh, so without this the search path was scanning all ~2,800
+    -- nerd-font cells multiple times per keystroke-submit. Curated chips
+    -- benefit too: projectCuratedItems builds a fresh table every time.
+    local items_key, items_cache = nil, nil
+    local function items()
+        local key = (state.active_chip or "") .. "\0" .. (state.search_query or "")
+        if items_key ~= key then
+            items_cache = currentItemList(state)
+            items_key = key
+        end
+        return items_cache
+    end
     local self_ref = self
     local config
     config = {
@@ -312,8 +349,8 @@ function IconsLibrary:show(on_select)
             if self_ref.modal then UIManager:close(self_ref.modal); self_ref.modal = nil end
             if on_select then on_select(val) end
         end,
-        item_count = function() return #currentItemList(state) end,
-        item_at = function(idx) return currentItemList(state)[idx] end,
+        item_count = function() return #items() end,
+        item_at = function(idx) return items()[idx] end,
         footer_actions = {
             { key = "close", label = _("Close"), on_tap = function()
                 if self_ref.modal then UIManager:close(self_ref.modal); self_ref.modal = nil end

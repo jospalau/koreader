@@ -389,7 +389,12 @@ local function renderPresetCard(self, item, slot_dimen)
             else
                 selected_key = self.bookends:getActivePresetFilename()
             end
-            local has_colour = PresetManager.hasColour(item.preset) or false
+            -- item.has_colour is memoised on the cached entry by readPresetFiles;
+            -- fall back to a fresh walk for any caller that hand-builds an item.
+            local has_colour = item.has_colour
+            if has_colour == nil then
+                has_colour = PresetManager.hasColour(item.preset) or false
+            end
             opts = {
                 display      = item.name,
                 description  = item.preset and item.preset.description,
