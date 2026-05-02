@@ -1855,6 +1855,14 @@ msgstr "Altura de la marca"
 msgid "Reset all to defaults"
 msgstr "Restablecer todo"
 
+#: menu/colours_menu.lua:291
+msgid "Read thickness"
+msgstr "Grosor leído"
+
+#: menu/colours_menu.lua:312
+msgid "Unread thickness"
+msgstr "Grosor no leído"
+
 #: menu/colours_menu.lua:368 menu/colours_menu.lua:376
 #: menu/colours_menu.lua:400 menu/progress_bar_menu.lua:32
 msgid "book"
@@ -2008,6 +2016,14 @@ msgstr "Grosor"
 #: menu/progress_bar_menu.lua:232
 msgid "Bar thickness"
 msgstr "Grosor de la barra"
+
+#: menu/progress_bar_menu.lua:241
+msgid "Read"
+msgstr "Leído"
+
+#: menu/progress_bar_menu.lua:242
+msgid "Unread"
+msgstr "No leído"
 
 #: menu/progress_bar_menu.lua:259 menu/progress_bar_menu.lua:261
 msgid "Custom colors and tick marks"

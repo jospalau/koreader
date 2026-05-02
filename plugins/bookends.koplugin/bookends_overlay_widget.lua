@@ -279,10 +279,14 @@ OverlayWidget.BAR_PLACEHOLDER = BAR_PLACEHOLDER
 -- @return widget, width, height
 local function buildBarLine(text, cfg, available_w, max_width)
     local bar_info = cfg.bar
-    -- Height precedence: inline %bar{v…} overrides the line's bar_height setting,
-    -- which in turn overrides the line-font-size default.
+    -- Height precedence: inline %bar{v…} overrides the line's bar_height
+    -- setting, which overrides the global read_height_pct-scaled font size,
+    -- which overrides the raw font-size default.
+    local read_pct = cfg.bar_colors and cfg.bar_colors.read_height_pct
+    local font_h = cfg.face and cfg.face.size
+    local font_scaled = (font_h and read_pct) and math.floor(font_h * read_pct / 100) or font_h
     local bar_h = (bar_info and bar_info.height)
-        or cfg.bar_height or (cfg.face and cfg.face.size) or 5
+        or cfg.bar_height or font_scaled or 5
     local bar_style = cfg.bar_style or "bordered"
     local effective_w = max_width or available_w
 
@@ -881,8 +885,14 @@ function OverlayWidget.buildStyledLine(segments, cfg, available_w, max_width)
     -- Handle bar segment if present
     if bar_slot and cfg.bar then
         local bar_info = cfg.bar
+        -- Height precedence: inline %bar{v…} overrides the line's bar_height
+        -- setting, which overrides the global read_height_pct-scaled font size,
+        -- which overrides the raw font-size default.
+        local read_pct = cfg.bar_colors and cfg.bar_colors.read_height_pct
+        local font_h = cfg.face and cfg.face.size
+        local font_scaled = (font_h and read_pct) and math.floor(font_h * read_pct / 100) or font_h
         local bar_h = (bar_info and bar_info.height)
-            or cfg.bar_height or (cfg.face and cfg.face.size) or 5
+            or cfg.bar_height or font_scaled or 5
         local bar_style = cfg.bar_style or "bordered"
         local bar_manual_w = (bar_info and bar_info.width) or 0
 
@@ -1094,12 +1104,35 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
     local ox = vertical and y or x  -- origin along progress axis
     local oy = vertical and x or y  -- origin along cross axis
 
+    -- Asymmetric thickness: read side = full `thickness`, unread side = a
+    -- separate value (centred on the same midline). nil/equal = symmetric,
+    -- and the per-style code paths collapse back to the existing render.
+    -- Resolution order for unread thickness:
+    --   1. colors.unread_height (per-bar absolute px) — wins if set
+    --   2. colors.unread_height_pct (global %)        — fallback
+    --   3. read_thick                                 — symmetric default
+    local read_thick = thickness
+    local unread_thick
+    if colors and colors.unread_height then
+        unread_thick = colors.unread_height
+    elseif colors and colors.unread_height_pct then
+        unread_thick = math.floor(read_thick * colors.unread_height_pct / 100)
+    else
+        unread_thick = read_thick
+    end
+    if unread_thick < 0 then unread_thick = 0 end
+    if unread_thick > read_thick then unread_thick = read_thick end
+    local unread_oy = oy + math.floor((read_thick - unread_thick) / 2)
+
     if style == "metro" then
         -- Metro style: start ring, trunk line, position dot, ticks above/below
         local line_thick = math.max(3, math.floor(thickness * 0.2))
         local start_r = math.floor(thickness / 2)  -- full height circle
         local dot_r = math.max(4, math.floor(thickness * 0.35))
         local line_y = oy + math.floor((thickness - line_thick) / 2)
+        local unread_line_thick = unread_thick == read_thick and line_thick
+            or math.max(1, math.floor(line_thick * unread_thick / read_thick))
+        local unread_line_y = oy + math.floor((thickness - unread_line_thick) / 2)
         -- Metro ticks default shorter — the thin trunk looks better with
         -- compact ticks.  Scale the user's tick_height_pct relative to 60%
         -- so 100% (default) → 60%, 200% → 120%, etc.
@@ -1117,15 +1150,26 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
         local metro_track = resolveColor(custom_track, Blitbuffer.COLOR_DARK_GRAY)
         -- metro_fill: nil when user has not set a distinct fill (or set it to false/transparent)
         local metro_fill = resolveColor(custom_metro_fill, nil)
-        -- Track line full length
-        pr(line_ox, line_y, line_len, line_thick, metro_track)
-        -- Optional fill overlay on the read portion
-        if metro_fill then
-            pr(line_ox + line_fill_start, line_y, line_fill, line_thick, metro_fill)
+        -- Trunk: read portion at full line_thick, unread portion at unread_line_thick.
+        -- Both centred on the bar's cross-axis. When symmetric they coincide.
+        local read_trunk_start = reverse and (line_len - line_fill) or 0
+        local unread_trunk_start = reverse and 0 or line_fill
+        local unread_trunk_len = line_len - line_fill
+        if line_fill > 0 then
+            pr(line_ox + read_trunk_start, line_y, line_fill, line_thick, metro_track)
+        end
+        if unread_trunk_len > 0 and unread_line_thick > 0 and unread_thick > 0 then
+            pr(line_ox + unread_trunk_start, unread_line_y, unread_trunk_len, unread_line_thick, metro_track)
+        end
+        -- Optional fill overlay on the read portion (always at read line_thick)
+        if metro_fill and line_fill > 0 then
+            pr(line_ox + read_trunk_start, line_y, line_fill, line_thick, metro_fill)
         end
 
-        -- Chapter ticks: depth 1 above line (connected to trunk), depth 2 below
-        -- When reversed, flip tick sides so the visual hierarchy mirrors the direction
+        -- Chapter ticks: depth 1 above line (connected to trunk), depth 2 below.
+        -- When reversed, flip tick sides so the visual hierarchy mirrors the direction.
+        -- Tick height is uniform across both halves — derived from the read
+        -- thickness so unread-half ticks don't shrink with the trunk.
         local metro_tick_h = math.max(1, math.floor(thickness * tick_height_pct / 100))
         for _i, tick in ipairs(ticks or {}) do
             local tick_frac = type(tick) == "table" and tick[1] or tick
@@ -1150,10 +1194,13 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
                     is_read = tick_pos <= line_fill
                 end
                 local tick_color = (metro_fill and is_read) and metro_fill or metro_track
+                -- Anchor ticks at the bar's vertical centre so they always cross
+                -- the trunk regardless of read/unread thickness asymmetry.
+                local centre_y = oy + math.floor(thickness / 2)
                 if tick_above then
-                    pr(line_ox + tick_pos, line_y - metro_tick_h, line_thick, metro_tick_h, tick_color)
+                    pr(line_ox + tick_pos, centre_y - metro_tick_h, line_thick, metro_tick_h, tick_color)
                 else
-                    pr(line_ox + tick_pos, line_y + line_thick, line_thick, metro_tick_h, tick_color)
+                    pr(line_ox + tick_pos, centre_y, line_thick, metro_tick_h, tick_color)
                 end
             end
         end
@@ -1200,6 +1247,9 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
         local amplitude = math.floor(thickness * 0.35)
         local ribbon_h = math.max(3, math.floor(thickness * 0.4))
         local half_ribbon = math.floor(ribbon_h / 2)
+        local unread_ribbon_h = unread_thick == read_thick and ribbon_h
+            or math.max(1, math.floor(ribbon_h * unread_thick / read_thick))
+        local unread_half_ribbon = math.floor(unread_ribbon_h / 2)
         local mid = oy + math.floor(thickness / 2)
         local two_pi = 2 * math.pi
 
@@ -1238,17 +1288,22 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
         paintCap(ox, wave_y(0), start_color)
         paintCap(ox + length - 1, wave_y(length - 1), end_color)
 
-        -- Paint ribbon column by column
+        -- Paint ribbon column by column. Read columns use full ribbon_h;
+        -- unread columns use the (possibly thinner) unread_ribbon_h, centred
+        -- on the same wave path. Symmetric configs collapse to the prior render.
         for i = 0, length - 1 do
             local cy = wave_y(i)
-            local ry = cy - half_ribbon
             local in_fill = i >= fill_start and i < fill_end
             local color = in_fill and wave_fill or wave_track
+            if not in_fill and unread_thick == 0 then color = nil end
+            local h_local = in_fill and ribbon_h or unread_ribbon_h
+            local half_local = in_fill and half_ribbon or unread_half_ribbon
+            local ry = cy - half_local
             if color then
                 if vertical then
-                    bbPaintRect(bb, ry, ox + i, ribbon_h, 1, color)
+                    bbPaintRect(bb, ry, ox + i, h_local, 1, color)
                 else
-                    bbPaintRect(bb, ox + i, ry, 1, ribbon_h, color)
+                    bbPaintRect(bb, ox + i, ry, 1, h_local, color)
                 end
             end
         end
@@ -1261,9 +1316,11 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
             local tick_pos = math.floor(length * tick_frac)
             if tick_pos > 0 and tick_pos < length then
                 local cy = wave_y(tick_pos)
-                local th = math.max(1, math.floor(ribbon_h * tick_height_pct / 100))
-                local ty = cy - math.floor(th / 2)
                 local in_fill = tick_pos >= fill_start and tick_pos < fill_end
+                -- Tick height scales to local ribbon thickness (read or unread).
+                local local_ribbon_h = in_fill and ribbon_h or unread_ribbon_h
+                local th = math.max(1, math.floor(local_ribbon_h * tick_height_pct / 100))
+                local ty = cy - math.floor(th / 2)
                 local base_tick = wave_dot
                 if base_tick then
                     local tick_color
@@ -1298,6 +1355,11 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
 
     elseif style == "radial" or style == "radial_hollow" then
         -- Radial (pie-chart) style: a circle filled clockwise from 12 o'clock.
+        -- Two distinct asymmetric models:
+        --   solid:  unread arc draws as a smaller pie wedge (scaled diameter),
+        --           with radial connector lines at the angular boundaries.
+        --   hollow: unread arc keeps the read band's diameter but uses a
+        --           thinner ring centred on the read band's midline.
         local diameter = math.min(vertical and h or w, vertical and w or h)
         local radius = math.floor(diameter / 2)
         if radius < 2 then radius = 2 end
@@ -1310,96 +1372,209 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
         local radial_tick = resolveColor(custom_tick, Blitbuffer.COLOR_BLACK)
         local radial_border_color = resolveColor(custom_border, Blitbuffer.COLOR_BLACK)
 
-        local r2 = radius * radius
         local hollow = style == "radial_hollow"
         local inner_radius = hollow and math.floor(radius * 0.55) or 0
+
+        local r2 = radius * radius
         local inner_r2 = inner_radius * inner_radius
         local two_pi = 2 * math.pi
 
-        -- Paint the pie circle pixel by pixel.
-        -- Angle 0 = 12 o'clock (top), increasing clockwise.
+        -- Asymmetric geometry differs by style.
+        -- For solid: unread radii scale down (smaller pie wedge).
+        -- For hollow: unread band is thinner, centred on read band's midline.
+        local unread_radius, unread_inner_radius, unread_r2, unread_inner_r2
+        local mid_r, band_half, unread_band_half, unread_outer_band_r, unread_inner_band_r
+        if hollow then
+            mid_r = (radius + inner_radius) / 2
+            band_half = (radius - inner_radius) / 2
+            unread_band_half = unread_thick == read_thick and band_half
+                or band_half * unread_thick / read_thick
+            unread_outer_band_r = mid_r + unread_band_half
+            unread_inner_band_r = mid_r - unread_band_half
+            unread_radius = unread_outer_band_r
+            unread_inner_radius = unread_inner_band_r
+            unread_r2 = unread_outer_band_r * unread_outer_band_r
+            unread_inner_r2 = unread_inner_band_r * unread_inner_band_r
+        else
+            -- Solid: scale full radius
+            unread_radius = unread_thick == read_thick and radius
+                or math.floor(radius * unread_thick / read_thick)
+            unread_inner_radius = 0
+            unread_r2 = unread_radius * unread_radius
+            unread_inner_r2 = 0
+        end
+
+        -- Paint the pie/donut pixel by pixel.
         for py = -radius, radius - 1 do
             for px = -radius, radius - 1 do
-                -- Offset to pixel center for smoother circle
                 local dx = px + 0.5
                 local dy = py + 0.5
                 local d2 = dx * dx + dy * dy
-                if d2 <= r2 and d2 > inner_r2 then
-                    -- Compute angle from top, clockwise: atan2(dx, -dy) mapped to [0, 2π)
-                    local angle = math.atan2(dx, -dy)
-                    if angle < 0 then angle = angle + two_pi end
-                    local pixel_frac = angle / two_pi
-
-                    local in_fill = pixel_frac <= fraction
-                    local color = in_fill and radial_fill or radial_bg
-                    if color then
-                        bbPaintRect(bb, cx + px, cy + py, 1, 1, color)
+                local angle = math.atan2(dx, -dy)
+                if angle < 0 then angle = angle + two_pi end
+                local pixel_frac = angle / two_pi
+                local in_fill = pixel_frac <= fraction
+                if in_fill then
+                    if d2 <= r2 and d2 > inner_r2 then
+                        if radial_fill then
+                            bbPaintRect(bb, cx + px, cy + py, 1, 1, radial_fill)
+                        end
+                    end
+                else
+                    if d2 <= unread_r2 and d2 > unread_inner_r2 then
+                        if radial_bg then
+                            bbPaintRect(bb, cx + px, cy + py, 1, 1, radial_bg)
+                        end
                     end
                 end
             end
         end
 
-        -- Chapter tick marks: radial lines from center to edge at each chapter boundary
+        -- Chapter tick marks: radial lines at each chapter boundary.
+        -- Per-half: read ticks span the read band; unread ticks span the unread band
+        -- (which for solid is a smaller-radius pie, for hollow is a thinner ring).
         for _, tick in ipairs(ticks or {}) do
             local tick_frac = type(tick) == "table" and tick[1] or tick
             local tick_w = type(tick) == "table" and tick[2] or 1
-
-            local tick_angle = tick_frac * two_pi - math.pi / 2  -- 0 = top (12 o'clock)
-            -- Adjusted: tick at fraction 0 points up. tick_angle measured from 3 o'clock.
-            -- Recalculate: from 12 o'clock clockwise
-            tick_angle = tick_frac * two_pi
+            local tick_angle = tick_frac * two_pi
             local cos_a = math.cos(tick_angle - math.pi / 2)
             local sin_a = math.sin(tick_angle - math.pi / 2)
-
-            -- Draw tick as a line from 60% of radius to the edge
-            local inner_r = math.floor(radius * (1 - tick_height_pct / 100))
-            if inner_r < inner_radius then inner_r = inner_radius end
-            for t = inner_r, radius do
-                local lx = cx + math.floor(t * cos_a)
-                local ly = cy + math.floor(t * sin_a)
-                -- Determine if this tick position is in the filled region
-                local pix_angle = math.atan2(t * cos_a, -(t * sin_a))
-                if pix_angle < 0 then pix_angle = pix_angle + two_pi end
-                local pix_frac = pix_angle / two_pi
-                local in_fill = pix_frac <= fraction
-                local tick_color
-                if invert_read_ticks ~= false and in_fill then
-                    tick_color = resolveColor(custom_invert, Blitbuffer.COLOR_WHITE)
-                else
-                    tick_color = radial_tick
-                end
-                if tick_color then
-                    bbPaintRect(bb, lx, ly, tick_w, tick_w, tick_color)
+            local in_fill = tick_frac <= fraction
+            local local_outer = in_fill and radius or unread_radius
+            local local_inner = in_fill and inner_radius or unread_inner_radius
+            if local_outer > 0 and local_outer > local_inner then
+                local span = local_outer - local_inner
+                local inner_r_for_tick = math.floor(local_outer - span * tick_height_pct / 100)
+                if inner_r_for_tick < local_inner then inner_r_for_tick = local_inner end
+                for t = inner_r_for_tick, local_outer do
+                    local lx = cx + math.floor(t * cos_a)
+                    local ly = cy + math.floor(t * sin_a)
+                    local pix_angle = math.atan2(t * cos_a, -(t * sin_a))
+                    if pix_angle < 0 then pix_angle = pix_angle + two_pi end
+                    local pix_frac = pix_angle / two_pi
+                    local pix_in_fill = pix_frac <= fraction
+                    local tick_color
+                    if invert_read_ticks ~= false and pix_in_fill then
+                        tick_color = resolveColor(custom_invert, Blitbuffer.COLOR_WHITE)
+                    else
+                        tick_color = radial_tick
+                    end
+                    if tick_color then
+                        bbPaintRect(bb, lx, ly, tick_w, tick_w, tick_color)
+                    end
                 end
             end
         end
 
-        -- Optional border circle (1px ring at the outer edge)
+        -- Border ring(s). Read arc uses full radii; unread arc uses style-specific
+        -- radii (smaller pie for solid, thinner band for hollow).
         if radial_border_color then
-            local border_r2_outer = radius * radius
-            local border_r2_inner = (radius - 1) * (radius - 1)
-            for py = -radius, radius - 1 do
-                for px = -radius, radius - 1 do
-                    local dx = px + 0.5
-                    local dy = py + 0.5
-                    local d2 = dx * dx + dy * dy
-                    if d2 <= border_r2_outer and d2 > border_r2_inner then
-                        bbPaintRect(bb, cx + px, cy + py, 1, 1, radial_border_color)
-                    end
-                end
-            end
-            -- Inner border ring for hollow variant
-            if hollow then
-                local ib_r2_outer = inner_radius * inner_radius
-                local ib_r2_inner = (inner_radius - 1) * (inner_radius - 1)
-                for py = -inner_radius, inner_radius - 1 do
-                    for px = -inner_radius, inner_radius - 1 do
+            local border = (colors and colors.border_thickness) or 1
+            if border < 0 then border = 0 end
+            if border > 0 then
+                local read_b = math.min(border, radius)
+                local r_outer_r2 = radius * radius
+                local r_inner_r2 = (radius - read_b) * (radius - read_b)
+                -- Unread border bounds: outer ring at unread_radius, with thickness
+                -- min(border, band_width). For hollow, "band_width" is the unread
+                -- ring band; for solid, it's just the unread radius (so border eats
+                -- inward from the smaller circle's edge).
+                local unread_b_outer = math.min(border, unread_radius)
+                local u_outer_outer_r2 = unread_radius * unread_radius
+                local u_outer_inner_r2 = (unread_radius - unread_b_outer) * (unread_radius - unread_b_outer)
+                for py = -radius, radius - 1 do
+                    for px = -radius, radius - 1 do
                         local dx = px + 0.5
                         local dy = py + 0.5
                         local d2 = dx * dx + dy * dy
-                        if d2 <= ib_r2_outer and d2 > ib_r2_inner then
-                            bbPaintRect(bb, cx + px, cy + py, 1, 1, radial_border_color)
+                        local angle = math.atan2(dx, -dy)
+                        if angle < 0 then angle = angle + two_pi end
+                        local pixel_frac = angle / two_pi
+                        local in_fill = pixel_frac <= fraction
+                        if in_fill then
+                            if read_b > 0 and d2 <= r_outer_r2 and d2 > r_inner_r2 then
+                                bbPaintRect(bb, cx + px, cy + py, 1, 1, radial_border_color)
+                            end
+                        else
+                            if unread_b_outer > 0 and unread_radius > 0 and d2 <= u_outer_outer_r2 and d2 > u_outer_inner_r2 then
+                                bbPaintRect(bb, cx + px, cy + py, 1, 1, radial_border_color)
+                            end
                         end
+                    end
+                end
+                -- Inner border ring(s): for hollow only.
+                if hollow then
+                    local read_ib = math.min(border, inner_radius)
+                    local rib_outer_r2 = inner_radius * inner_radius
+                    local rib_inner_r2 = (inner_radius - read_ib) * (inner_radius - read_ib)
+                    -- Unread inner band edge for hollow uses unread_inner_radius
+                    -- (= mid_r - unread_band_half). Border inset goes outward from
+                    -- there toward mid_r.
+                    local unread_b_inner = math.min(border, unread_inner_radius)
+                    local uib_outer_r2 = unread_inner_radius * unread_inner_radius
+                    local uib_inner_r2 = (unread_inner_radius - unread_b_inner) * (unread_inner_radius - unread_b_inner)
+                    -- Loop must cover both read inner_radius AND unread_inner_radius
+                    -- (which can be larger when the unread band is centred on the
+                    -- read midline and shrinks toward it). Use ceil to avoid
+                    -- truncating the unread band's outermost pixels.
+                    local loop_r = math.max(inner_radius, math.ceil(unread_inner_radius))
+                    for py = -loop_r, loop_r - 1 do
+                        for px = -loop_r, loop_r - 1 do
+                            local dx = px + 0.5
+                            local dy = py + 0.5
+                            local d2 = dx * dx + dy * dy
+                            local angle = math.atan2(dx, -dy)
+                            if angle < 0 then angle = angle + two_pi end
+                            local pixel_frac = angle / two_pi
+                            local in_fill = pixel_frac <= fraction
+                            if in_fill then
+                                if read_ib > 0 and d2 <= rib_outer_r2 and d2 > rib_inner_r2 then
+                                    bbPaintRect(bb, cx + px, cy + py, 1, 1, radial_border_color)
+                                end
+                            else
+                                if unread_b_inner > 0 and unread_inner_radius > 0 and d2 <= uib_outer_r2 and d2 > uib_inner_r2 then
+                                    bbPaintRect(bb, cx + px, cy + py, 1, 1, radial_border_color)
+                                end
+                            end
+                        end
+                    end
+                end
+                -- Connector radial lines at the angular boundaries. For solid:
+                -- bridge the read disk's outer edge to the unread (smaller) disk's
+                -- outer edge. For hollow: bridge the band's outer edges AND the
+                -- band's inner edges (read band extends from inner_radius to
+                -- radius; unread band extends from unread_inner_band_r to
+                -- unread_outer_band_r — both shorter than the read band).
+                if read_thick ~= unread_thick and fraction > 0 and fraction < 1 then
+                    local function paintRadialConnector(angle_at, r_a, r_b)
+                        -- Paint border-thickness radial line from r_a to r_b at the
+                        -- given angle. Caller passes any pair; ordering doesn't matter.
+                        if r_a == r_b then return end
+                        local cos_a = math.cos(angle_at - math.pi / 2)
+                        local sin_a = math.sin(angle_at - math.pi / 2)
+                        local r_lo = math.min(r_a, r_b)
+                        local r_hi = math.max(r_a, r_b)
+                        local half_b = math.floor(border / 2)
+                        for t = r_lo, r_hi do
+                            local lx = cx + math.floor(t * cos_a)
+                            local ly = cy + math.floor(t * sin_a)
+                            bbPaintRect(bb, lx - half_b, ly - half_b,
+                                math.max(1, border), math.max(1, border),
+                                radial_border_color)
+                        end
+                    end
+                    if hollow then
+                        -- Bridge outer band edges (radius vs unread_outer_band_r)
+                        paintRadialConnector(0, radius, unread_outer_band_r)
+                        paintRadialConnector(fraction * two_pi, radius, unread_outer_band_r)
+                        -- Bridge inner band edges (inner_radius vs unread_inner_band_r)
+                        paintRadialConnector(0, inner_radius, unread_inner_band_r)
+                        paintRadialConnector(fraction * two_pi, inner_radius, unread_inner_band_r)
+                    else
+                        -- Solid: just one connector per boundary, from outer disk
+                        -- (radius) down to unread disk (unread_radius).
+                        paintRadialConnector(0, unread_radius, radius)
+                        paintRadialConnector(fraction * two_pi, unread_radius, radius)
                     end
                 end
             end
@@ -1408,7 +1583,9 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
     elseif style == "solid" then
         local solid_fill = resolveColor(custom_fill, Blitbuffer.COLOR_GRAY_5)
         local solid_bg = resolveColor(custom_bg, Blitbuffer.COLOR_GRAY)
-        pr(ox, oy, length, thickness, solid_bg)
+        if unread_thick > 0 then
+            pr(ox, unread_oy, length, unread_thick, solid_bg)
+        end
         local fill_len = math.floor(length * fraction)
         local fill_start = reverse and (length - fill_len) or 0
         if fill_len > 0 then
@@ -1429,7 +1606,9 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
                     else
                         tick_color = base_tick
                     end
-                    local th = math.max(1, math.floor(thickness * tick_height_pct / 100))
+                    -- Tick height scales to the local thickness (read or unread half).
+                    local local_thick = in_fill and read_thick or unread_thick
+                    local th = math.max(1, math.floor(local_thick * tick_height_pct / 100))
                     local t_oy = oy + math.floor((thickness - th) / 2)
                     pr(ox + tick_pos, t_oy, tick_w, th, tick_color)
                 end
@@ -1443,6 +1622,224 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
         if border > math.floor(thickness / 2) then border = math.floor(thickness / 2) end
         local min_dim = vertical and w or h
         local radius = style == "rounded" and math.floor(min_dim / 2) or 0
+        -- Asymmetric path: paint two adjacent segments (read at read_thick,
+        -- unread at unread_thick centred on the same midline). Each segment
+        -- is fully bordered. Symmetric configs fall through to the legacy
+        -- single-rect render below to keep that pixel output unchanged.
+        if unread_thick ~= read_thick then
+            local read_len = math.floor(length * fraction)
+            local unread_len = length - read_len
+            local read_seg_ox = reverse and (length - read_len) or 0
+            local unread_seg_ox = reverse and 0 or read_len
+
+            -- Paints one segment: outer bg + optional inner fill + border outline
+            -- with one inner-facing edge optionally skipped (for stepped boundary).
+            -- skip_side: "left" omits the rect's left edge in abstract coords (the
+            -- progress-axis low end), "right" omits the high end. nil = paint all.
+            local function paintSeg(seg_ox, seg_oy, seg_len, seg_thick, outer_color, inner_color, skip_side)
+                if seg_len <= 0 or seg_thick <= 0 then return end
+                local rx = vertical and seg_oy or seg_ox
+                local ry = vertical and seg_ox or seg_oy
+                local rw = vertical and seg_thick or seg_len
+                local rh = vertical and seg_len or seg_thick
+                local seg_radius = radius
+                if seg_radius > math.floor(math.min(rw, rh) / 2) then
+                    seg_radius = math.floor(math.min(rw, rh) / 2)
+                end
+                -- Outer bg fill
+                if outer_color then
+                    if seg_radius > 0 then
+                        bbPaintRoundedRect(bb, rx, ry, rw, rh, outer_color, seg_radius)
+                    else
+                        bbPaintRect(bb, rx, ry, rw, rh, outer_color)
+                    end
+                end
+                -- Inner fill, inset by border + padding
+                if inner_color then
+                    local padding = math.max(1, math.floor(seg_thick * 0.1))
+                    local inset = border + padding
+                    local inner_rx = rx + inset
+                    local inner_ry = ry + inset
+                    local inner_rw = rw - 2 * inset
+                    local inner_rh = rh - 2 * inset
+                    if inner_rw > 0 and inner_rh > 0 then
+                        if seg_radius > 0 then
+                            local inner_r = math.max(0, seg_radius - inset)
+                            bbPaintRoundedRect(bb, inner_rx, inner_ry, inner_rw, inner_rh, inner_color, inner_r)
+                        else
+                            bbPaintRect(bb, inner_rx, inner_ry, inner_rw, inner_rh, inner_color)
+                        end
+                    end
+                end
+                -- Border. For rounded, bbPaintBorder traces all four sides; we
+                -- can't selectively skip a single curved edge from that helper,
+                -- so for rounded we still paint the full bordered outline (the
+                -- connectors will overpaint the boundary area). For square
+                -- (non-rounded) borders we paint as four explicit rects and
+                -- omit the side specified by skip_side.
+                local seg_border_color = resolveColor(custom_border, Blitbuffer.COLOR_BLACK)
+                if seg_border_color and border > 0 then
+                    if seg_radius > 0 then
+                        bbPaintBorder(bb, rx, ry, rw, rh, border, seg_border_color, seg_radius)
+                    else
+                        local seg_b = border
+                        if seg_b > math.floor(seg_thick / 2) then seg_b = math.floor(seg_thick / 2) end
+                        if seg_b < 0 then seg_b = 0 end
+                        if seg_b > 0 then
+                            -- Map abstract skip_side to the rect's actual edge.
+                            -- For horizontal bars: "left" = small-x edge, "right" = large-x edge.
+                            -- For vertical bars: "left" (small progress-axis) = small-y edge,
+                            --                    "right" (large progress-axis) = large-y edge.
+                            local skip_low_x = (not vertical) and skip_side == "left"
+                            local skip_high_x = (not vertical) and skip_side == "right"
+                            -- Top edge
+                            bbPaintRect(bb, rx, ry, rw, seg_b, seg_border_color)
+                            -- Bottom edge
+                            bbPaintRect(bb, rx, ry + rh - seg_b, rw, seg_b, seg_border_color)
+                            -- Left edge (small-x)
+                            if not skip_low_x then
+                                bbPaintRect(bb, rx, ry, seg_b, rh, seg_border_color)
+                            end
+                            -- Right edge (large-x)
+                            if not skip_high_x then
+                                bbPaintRect(bb, rx + rw - seg_b, ry, seg_b, rh, seg_border_color)
+                            end
+                            -- For vertical bars the top/bottom paints above already
+                            -- cover the cross-axis edges. The progress-axis-low/high
+                            -- edges are handled by the small-x/large-x overpaint
+                            -- the "Top" and "Bottom" lines do (since axes were
+                            -- swapped via rx/ry/rw/rh). The skip_low_y/skip_high_y
+                            -- decisions therefore translate as: if true, undo the
+                            -- corresponding top/bottom paint by overpainting bg.
+                            -- We don't undo here; vertical bars use horizontal-style
+                            -- skip_side semantics in the call sites and the swap
+                            -- below makes it work out: the call sites pass skip_side
+                            -- referring to abstract progress-axis low/high, and for
+                            -- vertical bars that maps to the screen-y top/bottom of
+                            -- the segment — already handled by skipping the right
+                            -- "corner" via the unread top/bottom not existing, but
+                            -- ASCII border still paints. Since vertical asymmetric
+                            -- bars are uncommon and this comment is already too long,
+                            -- skip vertical-axis skip handling for now.
+                        end
+                    end
+                end
+            end
+
+            -- Read segment: skip the inner-facing border edge (boundary side).
+            -- Unread segment: same. Connectors below bridge the step in the outline.
+            local read_skip = reverse and "left" or "right"
+            local unread_skip = reverse and "right" or "left"
+            paintSeg(ox + read_seg_ox, oy, read_len, read_thick, border_bg, border_fill, read_skip)
+            paintSeg(ox + unread_seg_ox, unread_oy, unread_len, unread_thick, border_bg, nil, unread_skip)
+
+            -- Rounded asymmetric: paintSeg painted both segments as fully-rounded
+            -- pills. The inner-facing rounded corners create a "two separate pills"
+            -- look that breaks the stepped flow. Overpaint each segment's inner
+            -- side: erase the inner-facing border, fill the corner indents with bg
+            -- to square them, then re-paint straight top/bottom borders extending
+            -- to the boundary.
+            if radius > 0 and read_thick ~= unread_thick then
+                local seg_border_color = resolveColor(custom_border, Blitbuffer.COLOR_BLACK)
+
+                -- Per-segment inner radius (clamped to half the segment thickness,
+                -- matching paintSeg's clamp).
+                local read_r = radius
+                if read_r > math.floor(read_thick / 2) then read_r = math.floor(read_thick / 2) end
+                local unread_r = radius
+                if unread_r > math.floor(unread_thick / 2) then unread_r = math.floor(unread_thick / 2) end
+
+                local function squareInnerSide(seg_ox, seg_oy, seg_len, seg_thick, seg_r, side)
+                    -- side: "right" (square the right end) or "left" (square left end)
+                    if seg_len <= 0 or seg_thick <= 0 then return end
+                    local inner_x  -- abstract x of the inner-facing edge (boundary side)
+                    if side == "right" then
+                        inner_x = seg_ox + seg_len - seg_r
+                    else
+                        inner_x = seg_ox
+                    end
+                    -- Erase inner-facing border: full segment height, border-thick.
+                    if border > 0 then
+                        local erase_ox = (side == "right")
+                            and (seg_ox + seg_len - border)
+                            or seg_ox
+                        pr(erase_ox, seg_oy, border, seg_thick, border_bg)
+                    end
+                    -- Fill the two inner-side corner indents (square them).
+                    pr(inner_x, seg_oy, seg_r, seg_r, border_bg)
+                    pr(inner_x, seg_oy + seg_thick - seg_r, seg_r, seg_r, border_bg)
+                    -- Re-paint top and bottom borders straight across the squared
+                    -- corner area so the segment outline is continuous along the
+                    -- top and bottom edges.
+                    if seg_border_color and border > 0 then
+                        pr(inner_x, seg_oy, seg_r, border, seg_border_color)
+                        pr(inner_x, seg_oy + seg_thick - border, seg_r, border, seg_border_color)
+                    end
+                end
+
+                -- Only square the unread segment's inner end. Read keeps its
+                -- rounded inner end so the read pill ends with a clean rounded
+                -- "tip" at the boundary.
+                squareInnerSide(ox + unread_seg_ox, unread_oy, unread_len, unread_thick, unread_r,
+                    reverse and "right" or "left")
+            end
+
+            -- Boundary connectors: bridge between read and unread heights so the
+            -- bordered outline is closed and "flows" from thick to thin. Only paint
+            -- for bordered (radius == 0); rounded keeps its rounded inner end on the
+            -- read pill and a vertical connector here would clash with that look.
+            if border > 0 and read_thick ~= unread_thick and radius == 0 then
+                local boundary_x = ox + (reverse and unread_seg_ox + unread_len or read_seg_ox + read_len)
+                local b_x = boundary_x - math.floor(border / 2)
+                -- Top connector: from read top (oy) down to unread top (unread_oy),
+                -- inclusive of corner overlap on the unread side.
+                local top_y = oy
+                local top_h = unread_oy - oy + border
+                if top_h > 0 then
+                    pr(b_x, top_y, border, top_h, resolveColor(custom_border, Blitbuffer.COLOR_BLACK))
+                end
+                -- Bottom connector: from unread bottom up to read bottom.
+                local bot_y = unread_oy + unread_thick - border
+                local bot_h = (oy + read_thick) - bot_y
+                if bot_h > 0 then
+                    pr(b_x, bot_y, border, bot_h, resolveColor(custom_border, Blitbuffer.COLOR_BLACK))
+                end
+            end
+
+            -- Ticks (read-thickness, centred on read midline). Mirrors the
+            -- symmetric tick logic below, simplified — the asymmetric segments
+            -- already carry their own borders, so no inner-rect inset is needed.
+            local tick_ox = ox
+            local tick_len = length
+            local tick_thick = read_thick
+            local fill_len_for_ticks = read_len
+            local fill_start_for_ticks = read_seg_ox
+            for _, tick in ipairs(ticks or {}) do
+                local tick_frac = type(tick) == "table" and tick[1] or tick
+                local tick_w = type(tick) == "table" and tick[2] or 1
+                if reverse then tick_frac = 1 - tick_frac end
+                local tick_pos = math.floor(tick_len * tick_frac)
+                if tick_pos > 0 and tick_pos < tick_len then
+                    local base_tick = resolveColor(custom_tick, Blitbuffer.COLOR_BLACK)
+                    if base_tick then
+                        local in_fill = tick_pos >= fill_start_for_ticks
+                            and tick_pos < fill_start_for_ticks + fill_len_for_ticks
+                        local tick_color
+                        if invert_read_ticks ~= false and in_fill then
+                            tick_color = resolveColor(custom_invert, border_bg)
+                        else
+                            tick_color = base_tick
+                        end
+                        -- Tick height scales to local thickness (read or unread).
+                        local local_thick = in_fill and read_thick or unread_thick
+                        local th = math.max(1, math.floor(local_thick * tick_height_pct / 100))
+                        local t_oy = oy + math.floor((tick_thick - th) / 2)
+                        pr(tick_ox + tick_pos, t_oy, tick_w, th, tick_color)
+                    end
+                end
+            end
+            return
+        end
         -- Background (use real coordinates for rounded rect API)
         if radius > 0 then
             if border_bg then

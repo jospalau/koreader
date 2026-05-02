@@ -434,6 +434,14 @@ msgstr ""
 msgid "Bookends update available: v"
 msgstr "Aggiornamento Bookends disponibile: v"
 
+#: menu/progress_bar_menu.lua:241
+msgid "Read"
+msgstr "Letto"
+
+#: menu/progress_bar_menu.lua:242
+msgid "Unread"
+msgstr "Non letto"
+
 #: main.lua:2528 menu/main_menu.lua:522 menu/progress_bar_menu.lua:245
 #: menu/progress_bar_menu.lua:379
 msgid "Adjust margins"
@@ -1852,6 +1860,14 @@ msgstr "Larghezza tacca"
 #: menu/progress_bar_menu.lua:300 menu/progress_bar_menu.lua:305
 msgid "Tick height"
 msgstr "Altezza tacca"
+
+#: menu/colours_menu.lua:291 menu/colours_menu.lua:295
+msgid "Read thickness"
+msgstr "Spessore letto"
+
+#: menu/colours_menu.lua:312 menu/colours_menu.lua:316
+msgid "Unread thickness"
+msgstr "Spessore non letto"
 
 #: menu/colours_menu.lua:290
 msgid "Reset all to defaults"

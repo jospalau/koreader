@@ -4,6 +4,7 @@ local _ = require("bookends_i18n").gettext
 local Device = require("device")
 local Screen = Device.screen
 local Colour = require("bookends_colour")
+local DialogHelpers = require("bookends_dialog_helpers")
 
 return function(Bookends)
 
@@ -225,7 +226,7 @@ function Bookends:buildBarColorsMenu()
     local bc = self.settings:readSetting("bar_colors") or {}
 
     local function saveColors()
-        if not bc.fill and not bc.bg and not bc.track and not bc.tick and bc.invert_read_ticks == nil and not bc.tick_height_pct and not bc.border and not bc.invert and not bc.border_thickness and not bc.metro_fill then
+        if not bc.fill and not bc.bg and not bc.track and not bc.tick and bc.invert_read_ticks == nil and not bc.tick_height_pct and not bc.border and not bc.invert and not bc.border_thickness and not bc.metro_fill and not bc.read_height_pct and not bc.unread_height_pct then
             self.settings:delSetting("bar_colors")
         else
             self.settings:saveSetting("bar_colors", bc)
@@ -282,6 +283,44 @@ function Bookends:buildBarColorsMenu()
             self.settings:delSetting("tick_height_pct")
             self:markDirty()
             if touchmenu_instance then touchmenu_instance:updateItems() end
+        end,
+    })
+
+    -- Bar thickness % (combined Read + Unread). Affects inline bars only;
+    -- per-bar full-width thickness is set in each bar's own settings.
+    table.insert(items, {
+        text_func = function()
+            local r = bc.read_height_pct or 100
+            local u = bc.unread_height_pct or 100
+            if r ~= 100 or u ~= 100 then
+                return _("Bar thickness") .. ": " .. r .. "/" .. u .. "%"
+            end
+            return _("Bar thickness") .. ": " .. r .. "%"
+        end,
+        keep_menu_open = true,
+        callback = function(touchmenu_instance)
+            DialogHelpers.showNudgeGrid{
+                title = _("Bar thickness"),
+                rows = {
+                    { label = _("Read"),   field = "read_height_pct" },
+                    { label = _("Unread"), field = "unread_height_pct" },
+                },
+                get_value = function(field)
+                    return bc[field] or 100
+                end,
+                set_value = function(field, value)
+                    bc[field] = (value ~= 100) and value or nil
+                end,
+                on_row_change = saveColors,
+                on_cancel = saveColors,
+                on_default = function()
+                    bc.read_height_pct = nil
+                    bc.unread_height_pct = nil
+                    saveColors()
+                end,
+                default_text = _("Default") .. " 100%",
+                parent_menu = touchmenu_instance,
+            }
         end,
     })
 

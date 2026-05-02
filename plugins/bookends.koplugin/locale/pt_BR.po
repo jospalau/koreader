@@ -1784,6 +1784,10 @@ msgstr "Cor de leitura"
 msgid "Read color (% black)"
 msgstr "Cor de leitura (% preto)"
 
+#: menu/colours_menu.lua:291
+msgid "Read thickness"
+msgstr "Espessura de leitura"
+
 #: menu/colours_menu.lua:101
 msgid "Unread color"
 msgstr "Cor não lida"
@@ -1791,6 +1795,10 @@ msgstr "Cor não lida"
 #: menu/colours_menu.lua:105
 msgid "Unread color (% black)"
 msgstr "Cor não lida (% preto)"
+
+#: menu/colours_menu.lua:312
+msgid "Unread thickness"
+msgstr "Espessura não lida"
 
 #: menu/colours_menu.lua:114
 msgid "Metro read color"
@@ -2009,6 +2017,14 @@ msgstr "Espessura"
 #: menu/progress_bar_menu.lua:232
 msgid "Bar thickness"
 msgstr "Espessura da barra"
+
+#: menu/progress_bar_menu.lua:241
+msgid "Read"
+msgstr "Lido"
+
+#: menu/progress_bar_menu.lua:242
+msgid "Unread"
+msgstr "Não lido"
 
 #: menu/progress_bar_menu.lua:259 menu/progress_bar_menu.lua:261
 msgid "Custom colors and tick marks"

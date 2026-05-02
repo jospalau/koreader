@@ -1160,6 +1160,8 @@ local function resolveBarColors(bc)
         invert_read_ticks = bc.invert_read_ticks,
         tick_height_pct = bc.tick_height_pct,
         border_thickness = bc.border_thickness,
+        read_height_pct = bc.read_height_pct,
+        unread_height_pct = bc.unread_height_pct,
     }
 end
 
@@ -1316,7 +1318,7 @@ function Bookends:_renderProgressBars(bb, x, y, screen_w, screen_h)
     local bc = self.settings:readSetting("bar_colors") or {}
     bc.tick_height_pct = global_tick_height_pct or bc.tick_height_pct
     local bar_colors
-    if bc.fill or bc.bg or bc.track or bc.tick or bc.invert_read_ticks ~= nil or bc.tick_height_pct or bc.border or bc.invert or bc.border_thickness or bc.metro_fill then
+    if bc.fill or bc.bg or bc.track or bc.tick or bc.invert_read_ticks ~= nil or bc.tick_height_pct or bc.border or bc.invert or bc.border_thickness or bc.metro_fill or bc.read_height_pct or bc.unread_height_pct then
         bar_colors = resolveBarColors(bc)
     end
 
@@ -1339,6 +1341,34 @@ function Bookends:_renderProgressBars(bb, x, y, screen_w, screen_h)
                     colors.tick_height_pct = global_tick_height_pct
                 elseif not colors and global_tick_height_pct then
                     colors = { tick_height_pct = global_tick_height_pct }
+                end
+                -- Plumb asymmetric thickness when set. Geometry lives on
+                -- bar_cfg directly; piggybacks on the colors table to avoid
+                -- changing paintProgressBar's signature. Copy bar_colors
+                -- before mutating so per-bar overrides don't pollute the
+                -- shared global table (which feeds inline bars too).
+                if bar_cfg.unread_height then
+                    if colors == bar_colors and colors ~= nil then
+                        local copy = {}
+                        for k, v in pairs(colors) do copy[k] = v end
+                        colors = copy
+                    end
+                    if colors then
+                        colors.unread_height = bar_cfg.unread_height
+                    else
+                        colors = { unread_height = bar_cfg.unread_height }
+                    end
+                end
+                -- Strip global Read/Unread thickness %s — those are inline-only.
+                -- Full-width bars have their own per-bar absolute-px controls.
+                if colors and (colors.read_height_pct or colors.unread_height_pct) then
+                    if colors == bar_colors then
+                        local copy = {}
+                        for k, v in pairs(colors) do copy[k] = v end
+                        colors = copy
+                    end
+                    colors.read_height_pct = nil
+                    colors.unread_height_pct = nil
                 end
                 OverlayWidget.paintProgressBar(bb, bar_x, bar_y, bar_w, bar_h, pct, ticks,
                     bar_cfg.style or "solid", paint_vertical and "vertical" or nil, paint_reverse, colors)
