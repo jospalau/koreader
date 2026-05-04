@@ -67,27 +67,29 @@ function FileChooser:genItemTable(dirs, files, path)
     end
 
     self._left_tap_callback = self._left_tap_callback or self.title_bar.left_icon_tap_callback
-    local pagetextinfo
-    if require("apps/filemanager/filemanager").instance then
-        pagetextinfo = require("apps/filemanager/filemanager").instance.pagetextinfo
-    else
-        pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
-    end
-    if pagetextinfo.settings:isTrue("enable_change_bar_menu") then
-        Icon = {
-            home = "home2",
-            up = BD.mirroredUILayout() and "back.top.rtl" or "back.top2",
-        }
-    else
-        Icon = {
-            home = "home",
-            up = BD.mirroredUILayout() and "back.top.rtl" or "back.top",
-        }
-    end
-    if is_sub_folder then
-        self:_changeLeftIcon(Icon.up, function() self:onFolderUp() end)
-    else
-        self:_changeLeftIcon(Icon.home, self._left_tap_callback)
+    if (G_reader_settings:readSetting("plugins_disabled") or {}).plainui then
+        local pagetextinfo
+        if require("apps/filemanager/filemanager").instance then
+            pagetextinfo = require("apps/filemanager/filemanager").instance.pagetextinfo
+        else
+            pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
+        end
+        if pagetextinfo.settings:isTrue("enable_change_bar_menu") then
+            Icon = {
+                home = "home2",
+                up = BD.mirroredUILayout() and "back.top.rtl" or "back.top2",
+            }
+        else
+            Icon = {
+                home = "home",
+                up = BD.mirroredUILayout() and "back.top.rtl" or "back.top",
+            }
+        end
+        if is_sub_folder then
+            self:_changeLeftIcon(Icon.up, function() self:onFolderUp() end)
+        else
+            self:_changeLeftIcon(Icon.home, self._left_tap_callback)
+        end
     end
     return items
 end
