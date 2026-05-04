@@ -240,9 +240,11 @@ function FileChooser:getListItem(dirpath, f, fullpath, attributes, collate)
         item.dim = self.ui and self.ui.selected_files and self.ui.selected_files[item.path]
         item.mandatory = self:getMenuItemMandatory(item, collate)
     else -- folder
-        local sub_dirs, dir_files, complete = self:getList(item.path)
-        item.files_no = #dir_files
-        item.files_no_finished = complete and complete or 0
+        if self.__skip_virtual_count then
+            local sub_dirs, dir_files, complete = self:getList(item.path)
+            item.files_no = #dir_files
+            item.files_no_finished = complete and complete or 0
+        end
         if item.text == "./." then -- added as content of an unreadable directory
             item.text = _("Current folder not readable. Some content may not be shown.")
         else
