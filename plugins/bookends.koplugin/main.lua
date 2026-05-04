@@ -442,10 +442,8 @@ function Bookends:setupTouchZones()
                     self:onOpenPresetManager()
                     return true
                 end
-                -- Block the stock footer from re-appearing when we've disabled it
-                if self.stock_bar_disabled then
-                    return true
-                end
+                -- Pass through: let KOReader's other tap zones (page turn etc.) handle this.
+                -- The stock footer stays hidden via our overrides on readerfooter_tap.
             end,
             overrides = {
                 "readerfooter_tap",
@@ -1025,12 +1023,27 @@ function Bookends:gatedRepaint(token_names, debounce)
     end
 end
 
-local FRONTLIGHT_TOKENS     = { "light", "warmth" }
+-- Suffixed variants must be enumerated: anyActiveLineUses pattern-matches
+-- "%name" + a non-identifier boundary, so listing only "light" misses
+-- "%light_pct" / "%light_icon" (the "_" after "light" is an identifier
+-- char and the boundary check fails). Without these the FrontlightState
+-- event handler skips the repaint entirely and the icons/percentages
+-- only refresh on the next page turn.
+local FRONTLIGHT_TOKENS     = {
+    "light", "light_pct", "light_icon",
+    "warmth", "warmth_pct", "warmth_icon",
+}
 local BATTERY_TOKENS        = { "batt", "batt_icon" }
 local WIFI_TOKENS           = { "wifi" }
 local PLUGIN_CONTENT_TOKENS = { "plugin_content" }
 
-function Bookends:onFrontlightStateChanged()    self:gatedRepaint(FRONTLIGHT_TOKENS, 1.0) end
+-- 0.3s is a coalescing-only debounce: long enough to merge slider-drag
+-- events, short enough to feel instant. The original 1.0s was load-bearing
+-- against a feedback loop with 2-dim-during-refresh.lua, but markOverlayDirty
+-- now uses regional setDirty calls (see comment at the function definition)
+-- which the dim patch ignores — so the loop is already broken at the source
+-- and the debounce no longer needs to outlast multiple dim/restore cycles.
+function Bookends:onFrontlightStateChanged()    self:gatedRepaint(FRONTLIGHT_TOKENS, 0.3) end
 function Bookends:onCharging()                  self:gatedRepaint(BATTERY_TOKENS) end
 function Bookends:onNotCharging()               self:gatedRepaint(BATTERY_TOKENS) end
 function Bookends:onNetworkConnected()          self:gatedRepaint(WIFI_TOKENS) end
@@ -1169,7 +1182,6 @@ end
 --- Returns (pct, ticks).
 function Bookends:_computeBarProgress(bar_cfg, pageno_local)
     local doc = self.ui.document
-    local is_cre = self.ui.rolling ~= nil
     local pct = 0
     local ticks = {}
 
@@ -1224,33 +1236,23 @@ function Bookends:_computeBarProgress(bar_cfg, pageno_local)
             ticks = remapped
         end
     elseif bar_cfg.type == "chapter" then
-        if is_cre and doc.getCurrentPos and self.ui.toc then
-            local cur_pos = doc:getCurrentPos()
+        -- Match the inline-bar formula in bookends_tokens.lua so a chapter bar
+        -- and an inline %chap_pct render the same fraction on the same page.
+        if self.ui.toc then
             local chapter_start = self.ui.toc:getPreviousChapter(pageno_local)
             if self.ui.toc:isChapterStart(pageno_local) then
                 chapter_start = pageno_local
             end
-            local next_chapter = self.ui.toc:getNextChapter(pageno_local)
             if chapter_start then
-                local start_xp = doc:getPageXPointer(chapter_start)
-                local start_pos = start_xp and doc:getPosFromXPointer(start_xp) or 0
-                local end_pos
-                if next_chapter then
-                    local next_xp = doc:getPageXPointer(next_chapter)
-                    end_pos = next_xp and doc:getPosFromXPointer(next_xp) or (doc.info and doc.info.doc_height or 0)
-                else
-                    end_pos = doc.info and doc.info.doc_height or 0
+                local next_chapter = self.ui.toc:getNextChapter(pageno_local)
+                local chapter_end = next_chapter or (doc:getPageCount() + 1)
+                local total = chapter_end - chapter_start
+                if total > 1 then
+                    local done = pageno_local - chapter_start
+                    pct = math.max(0, math.min(1, done / (total - 1)))
+                elseif total > 0 then
+                    pct = 1
                 end
-                local range = end_pos - start_pos
-                if range > 0 then
-                    pct = math.max(0, math.min(1, (cur_pos - start_pos) / range))
-                end
-            end
-        elseif self.ui.toc then
-            local done = self.ui.toc:getChapterPagesDone(pageno_local)
-            local total = self.ui.toc:getChapterPageCount(pageno_local)
-            if done and total and total > 0 then
-                pct = math.max(0, math.min(1, (done + 1) / total))
             end
         end
     end
@@ -1341,6 +1343,16 @@ function Bookends:_renderProgressBars(bb, x, y, screen_w, screen_h)
                     colors.tick_height_pct = global_tick_height_pct
                 elseif not colors and global_tick_height_pct then
                     colors = { tick_height_pct = global_tick_height_pct }
+                end
+                -- Per-bar override: inherit global border_thickness when not
+                -- set per-bar. The per-bar menu's "Default Xpx" label promises
+                -- inheritance from global, and storing the menu value collapses
+                -- to nil when val == default_val. Without this, a per-bar
+                -- struct with border_thickness=nil would fall back to the
+                -- painter's hardcoded 1px instead of the global value.
+                if colors and colors ~= bar_colors and not colors.border_thickness
+                        and bar_colors and bar_colors.border_thickness then
+                    colors.border_thickness = bar_colors.border_thickness
                 end
                 -- Plumb asymmetric thickness when set. Geometry lives on
                 -- bar_cfg directly; piggybacks on the colors table to avoid
@@ -1815,6 +1827,40 @@ function Bookends:onFlushSettings()
         -- Autosave the active preset (no-op if _previewing or no active preset).
         local ok, err = pcall(self.autosaveActivePreset, self)
         if not ok then require("logger").warn("bookends: autosave failed:", err) end
+    end
+end
+
+-- KOReader's PluginLoader calls this when the user ticks "Also delete plugin
+-- settings" while deleting Bookends via Plugin management. By the time we run,
+-- the koplugin folder is already purged; what remains is everything we wrote
+-- into koreader/settings/, which we own and clear here.
+function Bookends:deletePluginSettings()
+    -- Cancel before clearing self.settings: the 2 s autosave debounce can
+    -- otherwise fire between our delete and the user accepting the restart
+    -- prompt, recreating the file we just removed.
+    if self._pending_autosave then
+        UIManager:unschedule(self._pending_autosave)
+        self._pending_autosave = nil
+    end
+    self.settings = nil
+
+    local DataStorage = require("datastorage")
+    local ffiUtil = require("ffi/util")
+    local settings_dir = DataStorage:getSettingsDir()
+
+    os.remove(settings_dir .. "/bookends.lua")
+    os.remove(settings_dir .. "/bookends.lua.old")
+    pcall(ffiUtil.purgeDir, settings_dir .. "/bookends_cache")
+    pcall(ffiUtil.purgeDir, settings_dir .. "/bookends_presets")
+
+    -- Pre-v4 keys: the one-time migration at openSettings() moves these into
+    -- bookends.lua on first boot, but a user who deletes the plugin before
+    -- ever opening a book post-upgrade would never have triggered it.
+    for _, key in ipairs(Config.LEGACY_GLOBAL_KEYS) do
+        G_reader_settings:delSetting("bookends_" .. key)
+    end
+    for _, pos in ipairs(self.POSITIONS) do
+        G_reader_settings:delSetting("bookends_pos_" .. pos.key)
     end
 end
 

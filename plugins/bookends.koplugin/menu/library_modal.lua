@@ -60,12 +60,20 @@ function LibraryModal:init()
     if self.config.tabs and #self.config.tabs > 0 then
         self.active_tab = self.config.tabs[1].key
     end
-    -- Default chip is "all" if present in the chip strip
+    -- Default chip = the explicit is_active=true winner. When chips
+    -- advertise explicit is_active values but none is true (e.g. gallery
+    -- cold state where neither Latest nor Popular has been engaged yet),
+    -- treat that as a deliberate "no active chip" and leave self.active_chip
+    -- nil — otherwise the chips[1] fallback would make _onChipTap's
+    -- "already-active, return" branch silently swallow the user's first tap
+    -- on whatever chips[1] happens to be.
     local chips = self.config.chip_strip and self.config.chip_strip(self.active_tab) or {}
+    local any_explicit = false
     for _i, chip in ipairs(chips) do
+        if chip.is_active ~= nil then any_explicit = true end
         if chip.is_active then self.active_chip = chip.key; break end
     end
-    if not self.active_chip and chips[1] then
+    if not self.active_chip and not any_explicit and chips[1] then
         self.active_chip = chips[1].key
     end
     -- Modal-wide tap fallback: if a tap isn't consumed by a child widget AND
@@ -160,8 +168,18 @@ function LibraryModal:onTapDismissKeyboard(_arg, ges)
                 and ges.pos:notIntersectWith(kb.dimen) then
             self:_dismissKeyboard()
         end
+        return false
     end
-    return false  -- don't consume; the user's tap already missed any deeper handler
+    -- Keyboard not up: a tap that missed every child AND lands outside the
+    -- visible modal frame is treated as "dismiss the modal". Issue #39.
+    -- Hit-testing uses self.frame.dimen so accidental taps in the empty
+    -- gap *inside* the frame (e.g. between pagination buttons) don't close.
+    if self.frame and self.frame.dimen and ges and ges.pos
+            and ges.pos:notIntersectWith(self.frame.dimen) then
+        UIManager:close(self)
+        return true
+    end
+    return false
 end
 
 function LibraryModal:_buildFrame()
@@ -311,9 +329,21 @@ function LibraryModal:_onTabSelect(tab_key)
     self.active_tab = tab_key
     self.search_query = nil
     self.page = 1
-    -- Default chip on the new tab is its first chip (or "all")
+    -- Default chip on the new tab: same logic as init() at line 64. Honour
+    -- explicit is_active=true; when chips advertise explicit is_active but
+    -- none is true (gallery cold state), leave active_chip nil so the first
+    -- chip tap on the new tab actually fires _onChipTap rather than being
+    -- swallowed by the same-key short-circuit.
     local chips = self.config.chip_strip and self.config.chip_strip(self.active_tab) or {}
-    self.active_chip = chips[1] and chips[1].key or nil
+    local any_explicit = false
+    self.active_chip = nil
+    for _i, chip in ipairs(chips) do
+        if chip.is_active ~= nil then any_explicit = true end
+        if chip.is_active then self.active_chip = chip.key; break end
+    end
+    if not self.active_chip and not any_explicit and chips[1] then
+        self.active_chip = chips[1].key
+    end
     -- The search placeholder may differ per tab. Dismiss any open keyboard,
     -- then release the persisted InputText so _renderSearchInput rebuilds
     -- it with the new hint.
@@ -566,6 +596,34 @@ function LibraryModal:_renderChipStrip(content_width)
         if #rows >= 2 then break end
     end
     table.insert(rows, current_row)
+
+    -- Optional inline status text rendered alongside the chips on the first
+    -- row, in the empty space to their right. The domain returns a string
+    -- (or nil) via `chip_strip_status` — used for transient feedback like
+    -- "Loading gallery…" so the message reads as part of the modal chrome
+    -- rather than a separate KOReader popup. Matches the slot the legacy
+    -- bespoke chrome used for the approval-queue count.
+    local status_text = self.config.chip_strip_status
+        and self.config.chip_strip_status(self.active_tab) or nil
+    if status_text and #status_text > 0 and rows[1] then
+        local row1 = rows[1]
+        local row1_w = 0
+        for _i, child in ipairs(row1) do
+            local sz = child.getSize and child:getSize() or { w = 0 }
+            row1_w = row1_w + (sz.w or 0)
+        end
+        local status_gap = Screen:scaleBySize(12)
+        local status_max = content_width - row1_w - status_gap
+        if status_max > 0 then
+            table.insert(row1, HorizontalSpan:new{ width = status_gap })
+            table.insert(row1, TextWidget:new{
+                text = status_text,
+                face = Font:getFace("cfont", 13),
+                max_width = status_max,
+                fgcolor = Blitbuffer.COLOR_DARK_GRAY,
+            })
+        end
+    end
 
     local vg = VerticalGroup:new{ align = "left" }
     for i, row in ipairs(rows) do

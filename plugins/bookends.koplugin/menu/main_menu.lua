@@ -313,7 +313,7 @@ function Bookends:buildBookendsSettingsMenu()
                 end
                 return {
                     {
-                        text = _("Do nothing"),
+                        text = _("Pass through"),
                         checked_func = function()
                             return not self.settings:readSetting("bottom_center_tap_action")
                         end,
