@@ -455,10 +455,15 @@ function FileManager:registerModule(name, ui_module, always_active)
     end
 end
 
+function FileManager:registerPostInitCallback(callback)
+    table.insert(self.postInitCallback, callback)
+end
+
 -- NOTE: The only thing that will *ever* instantiate a new FileManager object is our very own showFiles below!
 function FileManager:init()
     self.calibre_data = util.loadCalibreData()
     self.active_widgets = {}
+    self.postInitCallback = {}
 
     self:registerModule("screenshot", Screenshoter:new{
         prefix = "FileManager",
@@ -504,6 +509,11 @@ function FileManager:init()
     self:initGesListener()
     self:handleEvent(Event:new("SetDimensions", self.dimen))
     self:handleEvent(Event:new("PathChanged", self.file_chooser.path))
+
+    for _, v in ipairs(self.postInitCallback) do
+        v()
+    end
+    self.postInitCallback = nil
 
     if FileManager.instance == nil then
         logger.dbg("Spinning up new FileManager instance", tostring(self))
