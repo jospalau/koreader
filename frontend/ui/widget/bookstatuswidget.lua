@@ -268,7 +268,7 @@ function BookStatusWidget:genBookInfoGroup()
     -- Get a chance to have title and authors rendered with alternate
     -- glyphs for the book language
     local props = self.ui.doc_props
-    local series = self.ui.document._document:getDocumentProps().series
+    local series = util.getFileNameSuffix(self.ui.document.file) == "epub" and self.ui.document._document:getDocumentProps().series or ""
     local lang = props.language
     -- title
     local book_meta_info_group = VerticalGroup:new{
