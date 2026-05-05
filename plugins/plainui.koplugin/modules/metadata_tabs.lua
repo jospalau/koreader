@@ -13,83 +13,47 @@ local HorizontalGroup = require("ui/widget/horizontalgroup")
 local HorizontalSpan = require("ui/widget/horizontalspan")
 local InfoMessage = require("ui/widget/infomessage")
 local LeftContainer = require("ui/widget/container/leftcontainer")
+local MetadataFacetDropdown = require("modules.metadata_facet_dropdown")
 local NetworkMgr = require("ui/network/manager")
 local OverlapGroup = require("ui/widget/overlapgroup")
-local PluginLoader = require("pluginloader")
 local RightContainer = require("ui/widget/container/rightcontainer")
+local StatusIndicators = require("modules.status_indicators")
 local TextWidget = require("ui/widget/textwidget")
 local UIManager = require("ui/uimanager")
 local VerticalGroup = require("ui/widget/verticalgroup")
 local VerticalSpan = require("ui/widget/verticalspan")
+local VirtualPath = require("modules.virtual_path")
 local _ = require("gettext")
 local Screen = Device.screen
 local Size = require("ui/size")
 
 local DGENERIC_ICON_SIZE = G_defaults:readSetting("DGENERIC_ICON_SIZE")
-local VIRTUAL_ROOT_SYMBOL = "\u{e257}"
-local AUTHOR_SYMBOL = "\u{f2c0}"
-local SERIES_SYMBOL = "\u{ecd7}"
-local EMPTY_VALUE_SYMBOL = "\u{2205}"
-local NIGHT_MODE_SYMBOL = "◐"
-local FRONTLIGHT_SYMBOL = "☼"
-local FRONTLIGHT_OFF_SYMBOL = "☀"
-local WIFI_ON_SYMBOL = ""
-local WIFI_OFF_SYMBOL = ""
-
-local function decodeVirtualPathValue(fragment)
-    if fragment == EMPTY_VALUE_SYMBOL then
-        return EMPTY_VALUE_SYMBOL
-    end
-    if fragment == "%EMPTY%" then
-        return ""
-    end
-    return (fragment:gsub("%%(%x%x)", function(hex)
-        return string.char(tonumber(hex, 16))
-    end))
-end
-
-local function findVirtualRoot(path)
-    if path then
-        return path:find("/" .. VIRTUAL_ROOT_SYMBOL, 1, true)
-    end
-end
-
-local function getVirtualFragments(path)
-    local _root_start, root_end = findVirtualRoot(path)
-    if not root_end then
-        return
-    end
-
-    local fragments = {}
-    for fragment in path:sub(root_end + 1):gmatch("[^/]+") do
-        table.insert(fragments, fragment)
-    end
-    return fragments
-end
+local AUTHOR_SYMBOL = VirtualPath.AUTHOR_SYMBOL
+local SERIES_SYMBOL = VirtualPath.SERIES_SYMBOL
+local TAG_SYMBOL = VirtualPath.KEYWORD_SYMBOL
 
 local function getMetadataLeafInfo(path)
-    local fragments = getVirtualFragments(path)
-    if not fragments or #fragments < 2 then
-        return
-    end
-    if fragments[1] ~= AUTHOR_SYMBOL and fragments[1] ~= SERIES_SYMBOL then
+    local base_dir, active_dimension, filter_state = VirtualPath.parse(path)
+    if active_dimension then
         return
     end
 
-    local title = decodeVirtualPathValue(fragments[2])
+    local leaf = VirtualPath.getLeafEntry(filter_state)
+    if not leaf then
+        return
+    end
+
+    local title = VirtualPath.displayValue(leaf.value)
 
     return {
         title = title,
-        parent_path = path:gsub("(/[^/]+)$", ""),
+        parent_path = VirtualPath.buildPreviousFilterPath(base_dir, filter_state),
     }
 end
 
 local function getVirtualBaseDir(file_manager)
     local path = file_manager.file_chooser and file_manager.file_chooser.path
-    local root_start = findVirtualRoot(path)
-    if root_start then
-        return path:sub(1, root_start - 1)
-    end
+    return VirtualPath.getVirtualBaseDir(path)
 end
 
 local function openBooks(file_manager)
@@ -109,7 +73,7 @@ end
 
 local function getSelectedTabKey(file_manager)
     local path = file_manager and file_manager.file_chooser and file_manager.file_chooser.path
-    local fragments = getVirtualFragments(path)
+    local fragments = VirtualPath.getFragments(path)
     if not fragments then
         return "books"
     end
@@ -119,6 +83,8 @@ local function getSelectedTabKey(file_manager)
             return "authors"
         elseif fragment == SERIES_SYMBOL then
             return "series"
+        elseif fragment == TAG_SYMBOL then
+            return "tags"
         end
     end
 
@@ -137,99 +103,6 @@ local function getBackTitleBarInfo(file_manager)
         parent_path = leaf_info.parent_path,
         current_path = path,
     }
-end
-
-local function getBatteryText()
-    if not Device:hasBattery() then
-        return ""
-    end
-
-    local powerd = Device:getPowerDevice()
-    local batt_lvl = powerd:getCapacity()
-    local batt_symbol
-    if Device:hasAuxBattery() and powerd:isAuxBatteryConnected() then
-        batt_lvl = batt_lvl + powerd:getAuxCapacity()
-        batt_symbol = powerd:getBatterySymbol(powerd:isAuxCharged(), powerd:isAuxCharging(), batt_lvl / 2)
-    else
-        batt_symbol = powerd:getBatterySymbol(powerd:isCharged(), powerd:isCharging(), batt_lvl)
-    end
-    return batt_symbol
-end
-
-local function getWifiText()
-    if not Device:hasWifiToggle() then
-        return ""
-    end
-    if NetworkMgr.is_wifi_on == nil then
-        NetworkMgr:queryNetworkState()
-    end
-    if NetworkMgr.is_wifi_on then
-        return WIFI_ON_SYMBOL
-    end
-    return WIFI_OFF_SYMBOL
-end
-
-local function getFrontlightText()
-    if Device:hasFrontlight() then
-        local powerd = Device:getPowerDevice()
-        return powerd:isFrontlightOn() and FRONTLIGHT_SYMBOL or FRONTLIGHT_OFF_SYMBOL
-    end
-    return ""
-end
-
-local function showBatteryInfo()
-    if not Device:hasBattery() then
-        return
-    end
-    if PluginLoader.loaded_plugins and PluginLoader:isPluginLoaded("batterystat") then
-        UIManager:broadcastEvent(Event:new("ShowBatteryStatistics"))
-        return
-    end
-
-    UIManager:show(InfoMessage:new{
-        text = getBatteryText(),
-    })
-end
-
-local function toggleWifi(refresh_callback)
-    if not Device:hasWifiToggle() then
-        return
-    end
-
-    NetworkMgr:queryNetworkState()
-    local complete_callback = function()
-        NetworkMgr:queryNetworkState()
-        if refresh_callback then
-            refresh_callback()
-        end
-    end
-    if NetworkMgr.is_wifi_on and NetworkMgr.is_connected then
-        NetworkMgr:toggleWifiOff(complete_callback, true)
-    elseif NetworkMgr.is_wifi_on then
-        NetworkMgr:promptWifi(complete_callback, nil, true)
-    else
-        NetworkMgr:toggleWifiOn(complete_callback, nil, true)
-    end
-end
-
-local function showWifiNetworks(refresh_callback)
-    if not Device:hasWifiToggle() then
-        return
-    end
-
-    NetworkMgr:queryNetworkState()
-    local complete_callback = function()
-        NetworkMgr:queryNetworkState()
-        if refresh_callback then
-            refresh_callback()
-        end
-    end
-    if NetworkMgr.is_wifi_on then
-        NetworkMgr.wifi_toggle_long_press = true
-        NetworkMgr:reconnectOrShowNetworkMenu(complete_callback, true)
-    else
-        NetworkMgr:toggleWifiOn(complete_callback, true, true)
-    end
 end
 
 local ModeLeftContainer = LeftContainer:extend{
@@ -275,19 +148,6 @@ function MetadataTabsTitleBar:init()
 
     self.file_manager = self.file_manager or FileManager.instance
     local file_manager = self.file_manager
-    local function measureTextWidth(candidates, padding_h)
-        local face = Font:getFace(self.tab_font_face, self.tab_font_size)
-        local width = 0
-        for _, text in ipairs(candidates) do
-            local widget = TextWidget:new{
-                text = text,
-                face = face,
-            }
-            width = math.max(width, widget:getSize().w)
-            widget:free()
-        end
-        return width + 2 * padding_h
-    end
     local function getTabWidth(text)
         local face = Font:getFace(self.tab_font_face, self.tab_font_size)
         local normal_widget = TextWidget:new{
@@ -340,42 +200,22 @@ function MetadataTabsTitleBar:init()
     self.authors_tab = makeTab("authors", _("Authors"), function()
         browseByMetadata(file_manager, "author")
     end)
+    self.tags_tab = makeTab("tags", _("Tags"), function()
+        browseByMetadata(file_manager, "tags")
+    end)
     self.books_button = self.books_tab.button
     self.series_button = self.series_tab.button
     self.authors_button = self.authors_tab.button
+    self.tags_button = self.tags_tab.button
     self.tab_label_height = self.books_button.label_container.dimen.h
-    local function getStatusWidths()
-        local powerd = Device:getPowerDevice()
-        local battery_candidates = {
-            "",
-        }
-        if Device:hasBattery() then
-            table.insert(battery_candidates, powerd:getBatterySymbol(true, false, 100))
-            table.insert(battery_candidates, powerd:getBatterySymbol(false, true, 100))
-            table.insert(battery_candidates, powerd:getBatterySymbol(false, false, 100))
-        end
-
-        local icon_width = measureTextWidth({
-            NIGHT_MODE_SYMBOL,
-            FRONTLIGHT_SYMBOL,
-            FRONTLIGHT_OFF_SYMBOL,
-            WIFI_ON_SYMBOL,
-            WIFI_OFF_SYMBOL,
-        }, self.status_padding_h)
-        return {
-            night_mode = icon_width,
-            frontlight = icon_width,
-            wifi = icon_width,
-            battery = measureTextWidth(battery_candidates, self.status_padding_h),
-        }
-    end
-
+    self.back_chevron_hit_width = self.tab_label_height + self.tab_padding_h
     self.tabs_group = HorizontalGroup:new{
         align = "bottom",
         allow_mirroring = false,
         self.books_tab,
         self.series_tab,
         self.authors_tab,
+        self.tags_tab,
     }
     local tabs_size = self.tabs_group:getSize()
     self.titlebar_height = math.max(self.titlebar_height, tabs_size.h)
@@ -408,14 +248,14 @@ function MetadataTabsTitleBar:init()
     table.insert(self, self.tabs_container)
     self:updateSelectedTab(false)
 
-    local status_widths = getStatusWidths()
+    local status_widths = StatusIndicators.getWidths(self.tab_font_face, self.tab_font_size, self.status_padding_h)
     self.night_mode_width = status_widths.night_mode
     self.frontlight_width = status_widths.frontlight
     self.wifi_width = status_widths.wifi
     self.battery_width = status_widths.battery
     self.status_width = self.night_mode_width + self.frontlight_width + self.wifi_width + self.battery_width + 3 * self.status_gap
     self.night_mode_button = Button:new{
-        text = NIGHT_MODE_SYMBOL,
+        text = StatusIndicators.NIGHT_MODE_SYMBOL,
         text_font_face = self.tab_font_face,
         text_font_size = self.tab_font_size,
         text_font_bold = false,
@@ -430,7 +270,7 @@ function MetadataTabsTitleBar:init()
         show_parent = self.show_parent,
     }
     self.frontlight_button = Button:new{
-        text = getFrontlightText(),
+        text = StatusIndicators.getFrontlightText(),
         text_font_face = self.tab_font_face,
         text_font_size = self.tab_font_size,
         text_font_bold = false,
@@ -453,7 +293,7 @@ function MetadataTabsTitleBar:init()
         show_parent = self.show_parent,
     }
     self.wifi_button = Button:new{
-        text = getWifiText(),
+        text = StatusIndicators.getWifiText(),
         text_font_face = self.tab_font_face,
         text_font_size = self.tab_font_size,
         text_font_bold = false,
@@ -463,19 +303,19 @@ function MetadataTabsTitleBar:init()
         padding_h = self.status_padding_h,
         padding_v = self.tab_padding_v,
         callback = function()
-            toggleWifi(function()
+            StatusIndicators.toggleWifi(function()
                 self:updateStatusIndicators()
             end)
         end,
         hold_callback = function()
-            showWifiNetworks(function()
+            StatusIndicators.showWifiNetworks(function()
                 self:updateStatusIndicators()
             end)
         end,
         show_parent = self.show_parent,
     }
     self.battery_button = Button:new{
-        text = getBatteryText(),
+        text = StatusIndicators.getBatteryText(),
         text_font_face = self.tab_font_face,
         text_font_size = self.tab_font_size,
         text_font_bold = false,
@@ -485,7 +325,7 @@ function MetadataTabsTitleBar:init()
         padding_h = self.status_padding_h,
         padding_v = self.tab_padding_v,
         hold_callback = function()
-            showBatteryInfo()
+            StatusIndicators.showBatteryInfo()
             self:updateStatusIndicators()
         end,
         show_parent = self.show_parent,
@@ -534,17 +374,21 @@ function MetadataTabsTitleBar:init()
         width = self.back_title_width,
         height = self.tab_label_height,
         bordersize = 0,
-        padding_h = self.tab_padding_h,
+        padding_h = 0,
         padding_v = self.tab_padding_v,
         callback = function()
-            self:onBackTitleTap()
+            MetadataFacetDropdown.show(file_manager, function()
+                return self:getDropdownAnchor()
+            end)
         end,
         show_parent = self.show_parent,
     }
     self.back_chevron_button = Button:new{
         icon = "chevron.left",
+        align = "left",
         icon_width = self.tab_label_height,
         icon_height = self.tab_label_height,
+        width = self.back_chevron_hit_width,
         height = self.tab_label_height,
         bordersize = 0,
         padding_h = 0,
@@ -609,7 +453,7 @@ function MetadataTabsTitleBar:updateBackTitle(refresh)
 
     self.back_title_info = back_title_info
     self.back_title = title
-    self.back_button:setText(title or "", self.back_button.width)
+    self.back_button:setText(title and title .. " \u{25be}" or "", self.back_button.width)
 
     if refresh ~= false then
         UIManager:setDirty(self.show_parent, "ui", self.dimen)
@@ -625,14 +469,19 @@ function MetadataTabsTitleBar:onBackTitleTap()
     end
 end
 
+function MetadataTabsTitleBar:getDropdownAnchor()
+    local button = self.back_button
+    return button and button[1] and button[1].dimen or button and button.dimen, true
+end
+
 function MetadataTabsTitleBar:updateStatusIndicators(refresh)
     if not self.battery_button then
         return
     end
 
-    local battery_text = getBatteryText()
-    local wifi_text = getWifiText()
-    local frontlight_text = getFrontlightText()
+    local battery_text = StatusIndicators.getBatteryText()
+    local wifi_text = StatusIndicators.getWifiText()
+    local frontlight_text = StatusIndicators.getFrontlightText()
     if self.battery_text == battery_text
             and self.wifi_text == wifi_text
             and self.frontlight_text == frontlight_text then
@@ -671,7 +520,7 @@ function MetadataTabsTitleBar:updateSelectedTab(refresh)
     end
 
     self.selected_tab_key = selected_tab_key
-    for _, tab in ipairs({ self.books_tab, self.series_tab, self.authors_tab }) do
+    for _, tab in ipairs({ self.books_tab, self.series_tab, self.authors_tab, self.tags_tab }) do
         self:setTabSelected(tab, tab.key == selected_tab_key)
     end
 
@@ -739,6 +588,7 @@ function MetadataTabsTitleBar:generateHorizontalLayout()
         self.books_button,
         self.series_button,
         self.authors_button,
+        self.tags_button,
     }
     table.insert(row, self.night_mode_button)
     table.insert(row, self.frontlight_button)
@@ -755,6 +605,7 @@ function MetadataTabsTitleBar:generateVerticalLayout()
         { self.books_button },
         { self.series_button },
         { self.authors_button },
+        { self.tags_button },
     }
     table.insert(layout, { self.night_mode_button })
     table.insert(layout, { self.frontlight_button })

@@ -5,17 +5,13 @@ local userpatch = require("userpatch")
 
 userpatch.registerPatchPluginFunc("coverbrowser", function(CoverBrowser)
     local BD = require("ui/bidi")
-    local Blitbuffer = require("ffi/blitbuffer")
+    local CoverBadge = require("modules.cover_badge")
     local Device = require("device")
     local Font = require("ui/font")
-    local Geom = require("ui/geometry")
     local MosaicMenu = require("mosaicmenu")
     local MosaicMenuItem = userpatch.getUpValue(MosaicMenu._updateItemsBuildUI, "MosaicMenuItem")
     local FileChooser = require("ui/widget/filechooser")
-    local FrameContainer = require("ui/widget/container/framecontainer")
-    local CenterContainer = require("ui/widget/container/centercontainer")
     local Size = require("ui/size")
-    local TextWidget = require("ui/widget/textwidget")
     local Screen = Device.screen
 
     local complete_badge
@@ -26,25 +22,23 @@ userpatch.registerPatchPluginFunc("coverbrowser", function(CoverBrowser)
             return complete_badge
         end
 
-        local text_widget = TextWidget:new{
+        local padding = Screen:scaleBySize(3)
+        local border = math.max(1, Size.line.thin)
+        local measured_badge = CoverBadge.newTextBadge{
             text = "\u{2713}",
             face = complete_face,
-            fgcolor = Blitbuffer.COLOR_WHITE,
         }
-        local text_size = text_widget:getSize()
-        local padding = Screen:scaleBySize(3)
-        local inner_side = math.max(text_size.w, text_size.h)
-        complete_badge = FrameContainer:new{
-            margin = 0,
+        local inner_side = math.max(measured_badge.text_size.w, measured_badge.text_size.h)
+        local badge_side = inner_side + 2 * padding + 2 * border
+        measured_badge.text_widget:free()
+        complete_badge = CoverBadge.newTextBadge{
+            text = "\u{2713}",
+            face = complete_face,
             padding = padding,
-            bordersize = math.max(1, Size.line.thin),
-            color = Blitbuffer.COLOR_WHITE,
-            radius = math.floor((inner_side + padding * 2) / 2) + 1,
-            background = Blitbuffer.COLOR_BLACK,
-            CenterContainer:new{
-                dimen = Geom:new{ w = inner_side, h = inner_side },
-                text_widget,
-            },
+            border = border,
+            width = badge_side,
+            height = badge_side,
+            radius = math.floor(badge_side / 2),
         }
         return complete_badge
     end
@@ -82,6 +76,6 @@ userpatch.registerPatchPluginFunc("coverbrowser", function(CoverBrowser)
             badge_x = target.dimen.x + target.dimen.w - badge_size.w - Screen:scaleBySize(5)
         end
         local badge_y = target.dimen.y + target.dimen.h - badge_size.h - Screen:scaleBySize(5)
-        badge:paintTo(bb, badge_x, badge_y)
+        CoverBadge.paint(bb, badge_x, badge_y, badge)
     end
 end)
