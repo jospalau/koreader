@@ -236,6 +236,22 @@ registerBrowseAction("browse_by_metadata_author", "author", _("Browse by author"
 registerBrowseAction("browse_by_metadata_series", "series", _("Browse by series"))
 registerBrowseAction("browse_by_metadata_tags", "tags", _("Browse by tag"))
 
+
+-- Avoid stackoverflow because a change in the filechooser.lua getItemTable() function to count folder files
+local original_getList = FileChooser.getList
+
+function FileChooser:getList(path, ...)
+    if self._in_getlist and self:getVirtualPathTypePath(path) then
+        return {}, {}, 0
+    end
+
+    self._in_getlist = true
+    local res = table.pack(original_getList(self, path, ...))
+    self._in_getlist = false
+
+    return table.unpack(res, 1, res.n)
+end
+
 -- Patch FileManager:setupLayout()
 local FileManager_setupLayout = FileManager.setupLayout
 FileManager.setupLayout = function (self)
