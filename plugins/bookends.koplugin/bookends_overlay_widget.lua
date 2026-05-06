@@ -25,14 +25,8 @@ end
 -- through them renders as grey on a colour buffer. KOReader exposes parallel
 -- *RGB32 variants for true-colour fills; these wrappers dispatch by colour
 -- type so all the call-sites in paintProgressBar can stay shape-agnostic.
-local function bbPaintRect(bb, x, y, w, h, c)
-    if not c then return end
-    if ffi.istype(ColorRGB32_t, c) then
-        bb:paintRectRGB32(x, y, w, h, c)
-    else
-        bb:paintRect(x, y, w, h, c)
-    end
-end
+-- bbPaintRect is declared as OverlayWidget.bbPaintRect (module export) below
+-- and then aliased to a local for in-file call sites.
 
 local function bbPaintRoundedRect(bb, x, y, w, h, c, r)
     if not c then return end
@@ -53,6 +47,22 @@ local function bbPaintBorder(bb, x, y, w, h, bw, c, r)
 end
 
 local OverlayWidget = {}
+
+--- Dispatch a filled rectangle paint to the correct Blitbuffer variant.
+--- Blitbuffer's plain paintRect flattens its colour to luminance via
+--- getColor8(), so a ColorRGB32 painted through it renders as grey on a
+--- colour buffer. KOReader's *RGB32 variants preserve true colour; this
+--- wrapper dispatches by colour type so callers stay shape-agnostic.
+--- Exported as OverlayWidget.bbPaintRect so main.lua can call it directly.
+function OverlayWidget.bbPaintRect(bb, x, y, w, h, c)
+    if not c then return end
+    if ffi.istype(ColorRGB32_t, c) then
+        bb:paintRectRGB32(x, y, w, h, c)
+    else
+        bb:paintRect(x, y, w, h, c)
+    end
+end
+local bbPaintRect = OverlayWidget.bbPaintRect
 
 -- Default TextWidget options for overlay text.
 -- use_book_text_color ensures text matches the book's color scheme
@@ -1962,6 +1972,79 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
             end
         end
     end
+end
+
+--- Compute per-end fill extents for the Background colour feature.
+--- @param positions_data table: keyed by tl/tc/tr/bl/bc/br. Each entry has:
+---   { disabled = bool, height_px = H, v_offset = V, v_margin = M,
+---     first_line_h = F, last_line_h = L }
+---   where height_px is the configured pixel height of the position's rendered
+---   block (composite line stack). first_line_h / last_line_h are the per-line
+---   heights of the top / bottom lines in the stack, used to derive the
+---   EPUB-facing breathing-room padding. Both default to 0 when missing.
+--- @param screen_h number: pixel screen height
+--- @return table { top_y, bottom_y, top_any_enabled, bottom_any_enabled }
+---   top_any_enabled / bottom_any_enabled are true only when the position is
+---   not disabled AND its configured height_px > 0. top_y / bottom_y are
+---   extended by 0.5 × line-height of the propping position's inner-edge line
+---   (last line for top, first line for bottom) so the text doesn't sit
+---   flush against the EPUB content area.
+function OverlayWidget.computeEndFillExtents(positions_data, screen_h)
+    local function inner_edge_top(p)
+        return p.v_offset + p.v_margin + p.height_px
+    end
+    local function inner_edge_bottom(p)
+        return screen_h - p.v_offset - p.v_margin - p.height_px
+    end
+
+    local top_keys = { "tl", "tc", "tr" }
+    local bottom_keys = { "bl", "bc", "br" }
+
+    local top_y, bottom_y = 0, screen_h
+    -- Inner-edge line height of whichever position is propping the bar open.
+    -- On a tie at the same edge, take the larger basis so padding is sized
+    -- for the more visually substantial line.
+    local top_pad_basis, bottom_pad_basis = 0, 0
+    local top_any_enabled, bottom_any_enabled = false, false
+
+    for _, k in ipairs(top_keys) do
+        local p = positions_data[k]
+        if p then
+            local edge = inner_edge_top(p)
+            local llh = p.last_line_h or 0
+            if edge > top_y then
+                top_y = edge
+                top_pad_basis = llh
+            elseif edge == top_y and llh > top_pad_basis then
+                top_pad_basis = llh
+            end
+            if not p.disabled and p.height_px > 0 then top_any_enabled = true end
+        end
+    end
+    for _, k in ipairs(bottom_keys) do
+        local p = positions_data[k]
+        if p then
+            local edge = inner_edge_bottom(p)
+            local flh = p.first_line_h or 0
+            if edge < bottom_y then
+                bottom_y = edge
+                bottom_pad_basis = flh
+            elseif edge == bottom_y and flh > bottom_pad_basis then
+                bottom_pad_basis = flh
+            end
+            if not p.disabled and p.height_px > 0 then bottom_any_enabled = true end
+        end
+    end
+
+    local top_pad = math.floor(top_pad_basis * 0.5 + 0.5)
+    local bottom_pad = math.floor(bottom_pad_basis * 0.5 + 0.5)
+
+    return {
+        top_y = top_y + top_pad,
+        bottom_y = bottom_y - bottom_pad,
+        top_any_enabled = top_any_enabled,
+        bottom_any_enabled = bottom_any_enabled,
+    }
 end
 
 return OverlayWidget

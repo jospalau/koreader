@@ -80,6 +80,41 @@ function Swatch:paintTo(bb, x, y)
     bb:paintBorder(x, y, self.side, self.side, bw, bc, r)
 end
 
+-- nullTile: a labelled white tile used as the "No background" sentinel.
+-- Rendered at grid position [0,0] of the palette when null_tile is set.
+local function nullTile(label, selected, side, on_tap)
+    local tw = TextWidget:new{
+        text      = label,
+        face      = Font:getFace("ffont", 12),
+        max_width = side - 2 * Size.padding.small,
+    }
+    local frame = FrameContainer:new{
+        bordersize = selected and Size.border.thick or Size.border.thin,
+        padding    = 0,
+        margin     = 0,
+        radius     = 0,
+        background = Blitbuffer.COLOR_WHITE,
+        CenterContainer:new{
+            dimen = Geom:new{ w = side, h = side },
+            tw,
+        },
+    }
+    local container = InputContainer:new{
+        dimen = Geom:new{ w = side, h = side },
+        frame,
+    }
+    container.ges_events = {
+        TapSelect = {
+            GestureRange:new{ ges = "tap", range = container.dimen },
+        },
+    }
+    function container:onTapSelect()
+        on_tap()
+        return true
+    end
+    return container
+end
+
 -- swatchTile: InputContainer wrapping a Swatch for gesture handling.
 local function swatchTile(hex, selected, side, on_tap)
     local swatch = Swatch:new{ hex = hex, selected = selected, side = side }
@@ -132,6 +167,12 @@ local ColourPaletteWidget = FocusManager:extend{
     default_callback = nil,
     revert_callback  = nil,
     ok_callback      = nil,
+    null_tile        = nil,
+    -- When set, a "White" footer button appears that taps apply_callback with
+    -- this hex and closes the picker (one-tap commit, like Default but to
+    -- a fixed colour rather than off). Used by the background-colour picker
+    -- as a shortcut to the page-background colour.
+    white_callback   = nil,
 }
 
 function ColourPaletteWidget:init()
@@ -142,7 +183,8 @@ function ColourPaletteWidget:init()
     -- horizontal padding here is matched against the vertical span above /
     -- below the palette in update(), so the grid sits inside even gutters
     -- on all four sides.
-    self.palette_width = SWATCH_SIDE * 5 + SWATCH_GAP * 4
+    local ncols = self.null_tile and 6 or 5
+    self.palette_width = SWATCH_SIDE * ncols + SWATCH_GAP * (ncols - 1)
     self.inner_width   = self.palette_width + Size.padding.fullscreen * 2
     self.dialog_width  = self.inner_width + 2 * Size.border.thin
 
@@ -214,6 +256,14 @@ function ColourPaletteWidget:update()
     local palette_vgroup = VerticalGroup:new{ align = "center" }
     for row_idx, row_hexes in ipairs(PALETTE) do
         local hgroup = HorizontalGroup:new{ align = "center" }
+        -- Prepend the null tile at grid position [0,0] of the first row only.
+        if row_idx == 1 and self.null_tile then
+            local sel = (self.selected_hex == nil)
+            hgroup[#hgroup + 1] = nullTile(self.null_tile.label, sel, side, function()
+                self.null_tile.on_tap()
+            end)
+            hgroup[#hgroup + 1] = HorizontalSpan:new{ width = gap }
+        end
         for col_idx, hex in ipairs(row_hexes) do
             if col_idx > 1 then
                 hgroup[#hgroup + 1] = HorizontalSpan:new{ width = gap }
@@ -287,16 +337,21 @@ function ColourPaletteWidget:update()
         self.preview_swatch,
     }
 
-    -- Footer row: Cancel | Default | Apply, matching the preset-library modal's
-    -- Close | Manage… | Apply pattern (no button borders, LineWidget dividers).
+    -- Footer row: Cancel | Default | [White] | Apply, matching the preset-library
+    -- modal's Close | Manage… | Apply pattern (no button borders, LineWidget
+    -- dividers). White is conditional — present only when white_callback is set
+    -- (currently the background-colour picker).
     local footer_h = Screen:scaleBySize(44)
-    local btn_w    = math.floor(iw / 3)
+    local n_btns   = self.white_callback and 4 or 3
+    local btn_w    = math.floor(iw / n_btns)
     local cancel_btn  = makeFooterBtn(_("Cancel"),  btn_w, footer_h,
         function() if self.revert_callback  then self.revert_callback()  end end)
     local default_btn = makeFooterBtn(_("Default"), btn_w, footer_h,
         function() if self.default_callback then self.default_callback() end end)
     local apply_btn   = makeFooterBtn(_("Apply"),   btn_w, footer_h,
         function() if self.ok_callback      then self.ok_callback()      end end)
+    local white_btn   = self.white_callback and makeFooterBtn(_("White"), btn_w, footer_h,
+        function() self.white_callback() end) or nil
 
     local vdiv_inset = Screen:scaleBySize(10)
     local vdiv = function() return CenterContainer:new{
@@ -307,9 +362,16 @@ function ColourPaletteWidget:update()
         },
     } end
 
-    local footer_row = HorizontalGroup:new{
-        cancel_btn, vdiv(), default_btn, vdiv(), apply_btn,
-    }
+    local footer_row
+    if white_btn then
+        footer_row = HorizontalGroup:new{
+            cancel_btn, vdiv(), default_btn, vdiv(), white_btn, vdiv(), apply_btn,
+        }
+    else
+        footer_row = HorizontalGroup:new{
+            cancel_btn, vdiv(), default_btn, vdiv(), apply_btn,
+        }
+    end
     local footer_separator = LineWidget:new{
         background = Blitbuffer.COLOR_DARK_GRAY,
         dimen      = Geom:new{ w = iw, h = Size.line.thin },
@@ -420,7 +482,7 @@ function ColourPaletteWidget:onShow()
 end
 
 -- Public entry point.
-local function showColourPicker(bookends, title, current_hex, default_hex, on_apply, on_default, on_revert, touchmenu_instance)
+local function showColourPicker(bookends, title, current_hex, default_hex, on_apply, on_default, on_revert, touchmenu_instance, null_tile_label, white_hex)
     local restoreMenu = bookends:hideMenu(touchmenu_instance)
 
     local closed = false
@@ -449,14 +511,27 @@ local function showColourPicker(bookends, title, current_hex, default_hex, on_ap
             UIManager:close(widget, "ui")
             finish()
         end,
+        null_tile        = null_tile_label and {
+            label  = null_tile_label,
+            on_tap = function()
+                UIManager:close(widget, "ui")
+                if on_default then on_default() end
+                finish()
+            end,
+        } or nil,
+        white_callback   = white_hex and function()
+            if on_apply then on_apply(white_hex) end
+            UIManager:close(widget, "ui")
+            finish()
+        end or nil,
     }
     UIManager:show(widget)
 end
 
 local M = {}
 function M.attach(Bookends)
-    function Bookends:showColourPicker(title, current_hex, default_hex, on_apply, on_default, on_revert, touchmenu_instance)
-        showColourPicker(self, title, current_hex, default_hex, on_apply, on_default, on_revert, touchmenu_instance)
+    function Bookends:showColourPicker(title, current_hex, default_hex, on_apply, on_default, on_revert, touchmenu_instance, null_tile_label, white_hex)
+        showColourPicker(self, title, current_hex, default_hex, on_apply, on_default, on_revert, touchmenu_instance, null_tile_label, white_hex)
     end
 end
 return M
