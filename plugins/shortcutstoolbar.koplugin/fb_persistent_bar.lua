@@ -110,7 +110,7 @@ function M.inject(fb_config)
     -- Wrap in a FrameContainer for a clean white background.
     local frame = FrameContainer:new{
         padding    = 0,
-        bordersize = 2,
+        bordersize = 0,
         background = Blitbuffer.COLOR_WHITE,
         _is_persistent_bar = true,
         content,
