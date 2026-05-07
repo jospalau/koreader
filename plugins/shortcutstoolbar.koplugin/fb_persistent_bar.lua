@@ -176,7 +176,7 @@ function M.inject(fb_config)
     M.remove()
 
     local fc = getFileChooser()
-if not fc then return end  -- FM not ready yet; main.lua schedules a retry
+    if not fc then return end  -- FM not ready yet; main.lua schedules a retry
 
     local content = buildBarContent(fc, fb_config)
     if not content then return end
@@ -184,7 +184,7 @@ if not fc then return end  -- FM not ready yet; main.lua schedules a retry
     -- Wrap in a FrameContainer for a clean white background.
     local frame = FrameContainer:new{
         padding    = 0,
-        bordersize = 0,
+        bordersize = 0,--3,
         background = Blitbuffer.COLOR_WHITE,
         -- _is_persistent_bar = true,
         content,
@@ -210,7 +210,7 @@ if not fc then return end  -- FM not ready yet; main.lua schedules a retry
 
     local label_frame = FrameContainer:new{
         padding    = 0,
-        bordersize = 0,
+        bordersize = 0,--3,
         -- background = Blitbuffer.COLOR_WHITE,
         CenterContainer:new{
             dimen = Geom:new{ w = Screen:getWidth(), h = _label_text_widget:getSize().h },

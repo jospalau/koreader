@@ -444,6 +444,7 @@ local function createShortcutsBar(menu, config, reset_fn, reserved_left)
                     icon          = initial_icon,
                     width         = icon_size,
                     height        = icon_size,
+                    padding_bottom = Screen:scaleBySize(2),
                     padding_top   = Screen:scaleBySize(2),
                     padding_left  = padding_h,
                     padding_right = padding_h,
@@ -525,7 +526,7 @@ local function createShortcutsBar(menu, config, reset_fn, reserved_left)
     local Blitbuffer = require("ffi/blitbuffer")
 
     return LeftContainer:new{
-        no_center_vertically = 1,
+        -- no_center_vertically = 1,
         dimen = Geom:new{ w = menu.width, h = vg:getSize().h},
         -- FrameContainer:new{
         --     bordersize = 2,
