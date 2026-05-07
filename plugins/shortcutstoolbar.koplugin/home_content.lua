@@ -522,12 +522,12 @@ local function createShortcutsBar(menu, config, reset_fn, reserved_left)
         end
     end
     -- table.insert(vg, VerticalSpan:new{ width = v_pad })
-    local original_paintTo = vg.paintTo
-    vg.paintTo = function(self, bb, x, y)
-        -- print("vg paintTo: y=", y, "size.h=", self:getSize().h)
-        -- print(debug.traceback())
-        original_paintTo(self, bb, x, 1)
-    end
+    -- local original_paintTo = vg.paintTo
+    -- vg.paintTo = function(self, bb, x, y)
+    --     print("paso vg paintTo: y=", y, "size.h=", self:getSize().h)
+    --     -- print(debug.traceback())
+    --     original_paintTo(self, bb, x, 1)
+    -- end
     return vg
 end
 
@@ -651,7 +651,7 @@ createHomeContent = function(menu, config, reset_fn)
     local combined = VerticalGroup:new{
         align            = "left",
         is_shortcuts_bar = true,
-        VerticalSpan:new{ width = Screen:scaleBySize(4) },
+        -- VerticalSpan:new{ width = Screen:scaleBySize(4) },
     }
     if top_row then table.insert(combined, top_row) end
     table.insert(combined, bottom_row)
