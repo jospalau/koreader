@@ -175,6 +175,33 @@ function FileManager:setupLayout()
         center_icon = false,
     }
 
+    local Widget = require("ui/widget/widget")
+    local EmptyTitleBar = Widget:extend{}
+
+    function EmptyTitleBar:init()
+        self.dimen = {
+            x = 0,
+            y = 0,
+            w = Screen:getWidth(),
+            h = 0,
+        }
+    end
+
+    function EmptyTitleBar:getSize() return { w = 0, h = 0 } end
+    function EmptyTitleBar:getHeight() return 0 end
+
+    function EmptyTitleBar:paintTo() end
+    function EmptyTitleBar:handleEvent() return false end
+    function EmptyTitleBar:free() end
+
+    function EmptyTitleBar:setTitle() end
+    function EmptyTitleBar:setSubTitle() end
+    function EmptyTitleBar:setLeftIcon() end
+    function EmptyTitleBar:setRightIcon() end
+    function EmptyTitleBar:clear() end
+    function EmptyTitleBar:generateHorizontalLayout() return { {} } end
+    function EmptyTitleBar:generateVerticalLayout() return { {} } end
+    self.title_bar = EmptyTitleBar:new{}
     local file_chooser = FileChooser:new{
         name = "filemanager",
         path = self.root_path,

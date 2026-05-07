@@ -486,7 +486,7 @@ local function createShortcutsBar(menu, config, reset_fn, reserved_left)
     local v_pad  = Screen:scaleBySize(6)
     local row_gap = Screen:scaleBySize(4)
     local vg = VerticalGroup:new{ align = config.align or "right", is_shortcuts_bar = true }
-    table.insert(vg, VerticalSpan:new{ width = v_pad })
+    -- table.insert(vg, VerticalSpan:new{ width = v_pad })
     for ri, row in ipairs(rows) do
         -- Resolve spacer widths for this row.
         local fixed_w, spacer_cnt = 0, 0
@@ -520,8 +520,20 @@ local function createShortcutsBar(menu, config, reset_fn, reserved_left)
             table.insert(vg, VerticalSpan:new{ width = row_gap })
         end
     end
-    table.insert(vg, VerticalSpan:new{ width = v_pad })
-    return vg
+    -- table.insert(vg, VerticalSpan:new{ width = v_pad })
+    local FrameContainer = require("ui/widget/container/framecontainer")
+    local Blitbuffer = require("ffi/blitbuffer")
+
+    return LeftContainer:new{
+        no_center_vertically = 1,
+        dimen = Geom:new{ w = menu.width, h = vg:getSize().h},
+        -- FrameContainer:new{
+        --     bordersize = 2,
+        --     -- background = Blitbuffer.COLOR_BLACK,
+        --     vg
+        -- }
+        vg,
+    }
 end
 
 function M.refreshTimeBatteryWifiOnly()
