@@ -444,8 +444,8 @@ local function createShortcutsBar(menu, config, reset_fn, reserved_left)
                     icon          = initial_icon,
                     width         = icon_size,
                     height        = icon_size,
-                    padding_bottom = Screen:scaleBySize(2),
-                    padding_top   = Screen:scaleBySize(2),
+                    -- padding_bottom = Screen:scaleBySize(2),
+                    -- padding_top   = Screen:scaleBySize(2),
                     padding_left  = padding_h,
                     padding_right = padding_h,
                     callback      = function() def.callback(btn) end,
@@ -522,19 +522,13 @@ local function createShortcutsBar(menu, config, reset_fn, reserved_left)
         end
     end
     -- table.insert(vg, VerticalSpan:new{ width = v_pad })
-    local FrameContainer = require("ui/widget/container/framecontainer")
-    local Blitbuffer = require("ffi/blitbuffer")
-
-    return LeftContainer:new{
-        -- no_center_vertically = 1,
-        dimen = Geom:new{ w = menu.width, h = vg:getSize().h},
-        -- FrameContainer:new{
-        --     bordersize = 2,
-        --     -- background = Blitbuffer.COLOR_BLACK,
-        --     vg
-        -- }
-        vg,
-    }
+    local original_paintTo = vg.paintTo
+    vg.paintTo = function(self, bb, x, y)
+        -- print("vg paintTo: y=", y, "size.h=", self:getSize().h)
+        -- print(debug.traceback())
+        original_paintTo(self, bb, x, 1)
+    end
+    return vg
 end
 
 function M.refreshTimeBatteryWifiOnly()

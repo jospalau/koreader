@@ -184,11 +184,26 @@ function M.inject(fb_config)
     -- Wrap in a FrameContainer for a clean white background.
     local frame = FrameContainer:new{
         padding    = 0,
-        bordersize = 0,--3,
+        bordersize = 0, --3
         background = Blitbuffer.COLOR_WHITE,
-        -- _is_persistent_bar = true,
         content,
     }
+
+    local bar_h = frame:getSize().h
+    local bar_w = frame:getSize().w
+    local mid_x = math.floor(bar_w / 2)
+
+    -- local original_paintTo = frame.paintTo
+    -- -- frame.paintTo = function(self, bb, x, y)
+    -- --     original_paintTo(self, bb, x, y)
+    -- --     -- línea vertical de 1px en el centro
+    -- --     bb:paintRect(x + mid_x, y, 1, bar_h, Blitbuffer.COLOR_BLACK)
+    -- -- end
+    -- frame.paintTo = function(self, bb, x, y)
+    --     original_paintTo(self, bb, x, y)
+    --     -- línea horizontal en el punto medio vertical
+    --     bb:paintRect(x, y + math.floor(bar_h / 2), bar_w, 1, Blitbuffer.COLOR_BLACK)
+    -- end
     -- frame._is_persistent_bar = true
 
     local bar_h = frame:getSize().h

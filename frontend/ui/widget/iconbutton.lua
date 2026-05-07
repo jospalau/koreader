@@ -54,9 +54,18 @@ function IconButton:init()
     table.insert(self.button, self.horizontal_group)
     table.insert(self.button, VerticalSpan:new{})
 
+    -- local FrameContainer = require("ui/widget/container/framecontainer")
+    -- local Blitbuffer = require("ffi/blitbuffer")
+
+    -- self[1] = FrameContainer:new{
+    --     padding    = 0,
+    --     bordersize = 1,
+    --     bordercolor = Blitbuffer.COLOR_RED,
+    --     self.button,
+    -- }
     self[1] = self.button
     self:update()
-end
+    end
 
 function IconButton:update()
     if not self.padding_top then self.padding_top = self.padding end
