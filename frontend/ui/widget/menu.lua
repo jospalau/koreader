@@ -997,6 +997,38 @@ function Menu:init()
     }
 
     local text = ""
+
+ if ffiUtil.realpath(require("datastorage"):getSettingsDir() .. "/stats.lua") then
+        local ok, stats = pcall(dofile, require("datastorage"):getSettingsDir() .. "/stats.lua")
+        if ok and stats then
+            local stats_line = "T:" .. stats["total_books"]
+                .. "·F:" .. stats["total_books_finished"]
+                .. "·FTM:" .. stats["total_books_finished_this_month"]
+                .. "·FTY:" .. stats["total_books_finished_this_year"]
+                .. "·FLY:" .. stats["total_books_finished_last_year"]
+                .. "·MR:" .. stats["total_books_mbr"]
+                .. "·TR:" .. stats["total_books_tbr"]
+                -- .. ", LD:" .. last_days
+                -- .. stats_year
+
+            local Topbar = require("apps/reader/modules/topbar")
+            local topbar = Topbar:new{
+                    view = nil,
+                    ui = nil,
+                    fm = true,
+                }
+            if topbar then
+                local stats_year = topbar:getReadThisYearSoFar()
+                if stats_year > 0 then
+                    stats_year = "+" .. stats_year
+                end
+                topbar_line = topbar:getDateAndVersion() .. ". BDB:" .. topbar:getBooksOpened() .. "·TR:" .. topbar:getTotalRead() .. "d" .. "·ΔL:" .. stats_year .. "h"
+            end
+
+            text = topbar_line and (topbar_line .. "\n" .. stats_line) or stats_line
+        end
+    end
+
     if self.name == "filesearcher" then
         text = "File searcher"
     elseif self.name == "collections" and self.collection_name == "listall" then
@@ -1017,25 +1049,27 @@ function Menu:init()
         text = "Search results"
     end
 
-    local footer_text_text = TextWidget:new {
+    local footer_text_text = TextBoxWidget:new {
         text = text,
-        face = Font:getFace("NotoSans-Regular.ttf", 12),
-        max_width = (self.screen_w * 0.94) - self.page_info:getSize().w, -- pagination_width,
-        truncate_with_ellipsis = true,
+        face = Font:getFace("myfont4", 11),
+        bold = true,
+        width = (self.screen_w * 0.99) - self.page_info:getSize().w,
+        height_adjust = true,
     }
 
     local footer_text_geom = Geom:new {
-        w = self.screen_w * 0.94,
-        h = self.page_info:getSize().h,
+        w = self.screen_w * 0.98,
+        h = self.page_info:getSize().h,  -- 40px igual que el pager
     }
 
     local footer_text_container = LeftContainer:new {
         dimen = footer_text_geom,
         footer_text_text,
-        max_width = (self.screen_w * 0.94) - self.page_info:getSize().w, -- pagination_width,
+        max_width = (self.screen_w * 0.98) - self.page_info:getSize().w, -- pagination_width,
         truncate_with_ellipsis = true,
         truncate_left = true,
     }
+
 
     self.footer_text = BottomContainer:new {
         dimen = self.inner_dimen:copy(),

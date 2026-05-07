@@ -2282,13 +2282,13 @@ function TopBar:paintTo(bb, x, y)
             }
             version_widget_container[1]:setText(TopBar:getDateAndVersion() .. ". BDB:" .. TopBar:getBooksOpened() .. "·TR:" .. TopBar:getTotalRead() .. "d" .. "·ΔL:" .. stats_year .. "h")
             if not G_reader_settings:isTrue("simpleui_enabled") then
-                version_widget_container:paintTo(bb, x + version_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES,
-                Screen:getHeight()
-                - books_information_widget_container[1]:getSize().h - 10)
+                -- version_widget_container:paintTo(bb, x + version_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES,
+                -- Screen:getHeight()
+                -- - books_information_widget_container[1]:getSize().h - 10)
                 -- - times_widget_container[1]:getSize().h)
             else
-                version_widget_container:paintTo(bb, x + version_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES,
-                Screen:getHeight())
+                -- version_widget_container:paintTo(bb, x + version_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES,
+                -- Screen:getHeight())
                 -- - times_widget_container[1]:getSize().h)
             end
             if ffiUtil.realpath(require("datastorage"):getSettingsDir() .. "/stats.lua") then
@@ -2316,10 +2316,10 @@ function TopBar:paintTo(bb, x, y)
 
             local fm = require("apps/filemanager/filemanager").instance
             if not G_reader_settings:isTrue("simpleui_enabled") then
-                books_information_widget_container:paintTo(bb, x + books_information_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES, Screen:getHeight() - 10)
+                -- books_information_widget_container:paintTo(bb, x + books_information_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES, Screen:getHeight() - 10)
             else
-                books_information_widget_container:paintTo(bb, x + version_widget_container[1]:getSize().w
-                + books_information_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES, Screen:getHeight())
+                -- books_information_widget_container:paintTo(bb, x + version_widget_container[1]:getSize().w
+                -- + books_information_widget_container[1]:getSize().w / 2 + TopBar.MARGIN_SIDES, Screen:getHeight())
             end
 
 
