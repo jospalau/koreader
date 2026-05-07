@@ -195,25 +195,52 @@ if not fc then return end  -- FM not ready yet; main.lua schedules a retry
 
     -- Shrink inner_dimen so _recalculateDimen computes fewer rows.
 
+    -- local ref_face = Font:getFace("NotoSans-Regular.ttf", 14)
+    -- local ref_w = TextWidget:new{ text = "", face = ref_face }
+    -- local forced_baseline = ref_w:getBaseline()
+    -- local forced_height = ref_w:getSize().h
+    -- ref_w:free()
+
     _label_text_widget = TextWidget:new{
         text = getLabel(fc),
         face = Font:getFace("smallinfofont", 14),
+        -- forced_baseline = forced_baseline,
+        -- forced_height = forced_height,
     }
+
     local label_frame = FrameContainer:new{
         padding    = 0,
         bordersize = 0,
-        background = Blitbuffer.COLOR_WHITE,
+        -- background = Blitbuffer.COLOR_WHITE,
         CenterContainer:new{
             dimen = Geom:new{ w = Screen:getWidth(), h = _label_text_widget:getSize().h },
             _label_text_widget,
         }
     }
 
+    local LineWidget = require("ui/widget/linewidget")
+    local separator = LineWidget:new{
+        dimen = Geom:new{ w = Screen:getWidth(), h = Screen:scaleBySize(3) },
+    }
+
     local combined = VerticalGroup:new{
         align = "left",
         _is_persistent_bar = true,
         frame,
-        label_frame,
+        separator,
+    }
+    local OverlapGroup = require("ui/widget/overlapgroup")
+    local VerticalSpan = require("ui/widget/verticalspan")
+    local label_offset = math.floor((frame:getSize().h - label_frame:getSize().h) / 2)
+    local overlapped = OverlapGroup:new{
+        _is_persistent_bar = true,
+        dimen = Geom:new{ w = Screen:getWidth(), h = combined:getSize().h },
+        combined,
+        VerticalGroup:new{
+            align = "left",
+            VerticalSpan:new{ width = label_offset },
+            label_frame,
+        },
     }
 
     local bar_h = combined:getSize().h
@@ -225,7 +252,7 @@ if not fc then return end  -- FM not ready yet; main.lua schedules a retry
 
     -- Insert between title_bar (idx 1) and item_group (idx 2).
     local cg = fc.content_group
-    table.insert(cg, 2, combined)
+    table.insert(cg, 2, overlapped)
 
     fc:_recalculateDimen()
     fc:updateItems()

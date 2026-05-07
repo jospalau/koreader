@@ -81,7 +81,7 @@ end
 local function createTimeButton(padding_h)
     local btn = Button:new{
         text           = getTimeText(),
-        face           = Font:getFace("ffont"),
+        text_font_size = 20,
         text_font_bold = false,
         padding_h      = padding_h,
         bordersize     = 0,
@@ -100,7 +100,7 @@ end
 local function createBatteryButton(padding_h)
     local btn = Button:new{
         text           = getBatteryText(),
-        face           = Font:getFace("ffont"),
+        text_font_size = 20,
         text_font_bold = false,
         padding_h      = padding_h,
         bordersize     = 0,
