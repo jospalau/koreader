@@ -135,10 +135,10 @@ function Dialog:makeDefinition(ui, phrase, html_content, title, large_size, clos
 
 	local bottom_buttons = {}
 
-	local VocabBuilder = ui["vocabbuilder"]
-	if VocabBuilder then
-		VocabBuilder:onDictButtonsReady(ui, bottom_buttons)
-	end
+    local VocabBuilder = ui["vocabbuilder"]
+    if VocabBuilder and type(VocabBuilder.onDictButtonsReady) == "function" then
+        VocabBuilder:onDictButtonsReady(ui, bottom_buttons)
+    end
 
 	table.insert(bottom_buttons, #bottom_buttons + 1, {
 		{

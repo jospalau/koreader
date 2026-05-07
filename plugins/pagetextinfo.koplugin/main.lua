@@ -1181,8 +1181,55 @@ function PageTextInfo:onReaderReady()
     -- end
     -- UIManager:unschedule(self.insertSession)
     -- UIManager:scheduleIn(600, self.insertSession)
+    self:registerDictButtons()
 end
 
+function PageTextInfo:registerDictButtons()
+    local _ = require("gettext")
+    if self.ui and self.ui.dictionary then
+        self.ui.dictionary:addToDictButtons({
+            id = "xray",
+            text = _("X-Ray"),
+            menu_text = _("X-Ray"),
+            insert_first = true,
+            callback = function(dict_popup)
+                local text = dict_popup and (dict_popup.word or dict_popup.text or dict_popup.selection_text)
+                local pos0 = dict_popup and dict_popup.pos0
+                local pos1 = dict_popup and dict_popup.pos1
+
+                -- Close the native dictionary popup immediately so it doesn't linger
+                if dict_popup then pcall(function() UIManager:close(dict_popup) end) end
+
+                if text then
+                    self.ui.xray.lookup_manager:handleLookup(text, pos0, pos1)
+                end
+            end,
+        })
+        local NetworkMgr = require("ui/network/manager")
+        local Trapper = require("ui/trapper")
+        self.ui.dictionary:addToDictButtons({
+            id = "wordreference",
+            text = _("WordReference"),
+            menu_text = _("WordReference"),
+            insert_first = true,
+            callback = function(dict_popup)
+              local wordreference = self.ui.wordreference
+              NetworkMgr:runWhenOnline(function()
+				Trapper:wrap(function()
+					UIManager:close(dict_popup)
+					wordreference:showDefinition(dict_popup.ui, dict_popup.word, function()
+						UIManager:scheduleIn(0.5, function()
+							if not dict_popup.ui.highlight.highlight_dialog or not UIManager:isWidgetShown(dict_popup.ui.highlight.highlight_dialog) then
+								dict_popup.ui.highlight:clear()
+							end
+						end)
+					end)
+				end)
+			end)
+            end,
+        })
+    end
+end
 
 function PageTextInfo:onPageUpdate(pageno)
     -- Avoid double execution when loading document
