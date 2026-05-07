@@ -32,6 +32,8 @@ local M = {}
 
 -- Module-level state.
 local _saved_inner_h = nil -- original inner_dimen.h before shrinking
+local _label_text_widget = nil
+local _patched         = false
 
 -- ==========================================================================
 -- Helpers
@@ -92,6 +94,72 @@ local function restoreLayout(fc)
     UIManager:setDirty(fc, "ui")
 end
 
+local function getLabel(fc)
+    local lfs = require("libs/libkoreader-lfs")
+    local home_dir = G_reader_settings:readSetting("home_dir") or Device.home_dir or lfs.currentdir()
+    local path = fc.path
+
+    if not fc.item_table then
+        return path:match("([^/]+)$") or "KOReader"
+    end
+
+    local file_count = 0
+    local dir_count = 0
+    for _, item in ipairs(fc.item_table) do
+        if item.is_file then
+            file_count = file_count + 1
+        else
+            dir_count = dir_count + 1
+        end
+    end
+
+    local folder_name, count_label
+    if path == home_dir or path == "/" then
+        folder_name = "KOReader"
+        count_label = dir_count .. " authors"
+    elseif path:match("/✪ Collections$") then
+        folder_name = "Collections"
+        count_label = dir_count .. " collections"
+    elseif path:match("/✪ Collections/") then
+        folder_name = "Collection " .. (path:match("/✪ Collections/(.+)$") or "")
+        count_label = file_count .. " books"
+    else
+        folder_name = path:match("([^/]+)$")
+        if file_count == 0 and dir_count > 0 then
+            count_label = dir_count .. " authors"
+        elseif file_count > 0 then
+            count_label = file_count .. " books"
+        end
+    end
+
+    if count_label then
+        return folder_name .. " · " .. count_label
+    else
+        return folder_name
+    end
+end
+
+local function updateLabel(fc)
+    if not _label_text_widget then return end
+    _label_text_widget:setText(getLabel(fc))
+    UIManager:setDirty(fc, "ui")
+end
+
+local function hookPathChange()
+    if _patched then return end
+    _patched = true
+
+    local FileChooser = require("ui/widget/filechooser")
+    local original = FileChooser.changeToPath
+    FileChooser.changeToPath = function(self, path, ...)
+        local result = original(self, path, ...)
+        UIManager:scheduleIn(0, function()
+            updateLabel(self)
+        end)
+        return result
+    end
+end
+
 -- ==========================================================================
 -- Public API
 -- ==========================================================================
@@ -99,10 +167,16 @@ end
 --- Activate or refresh the persistent bar.
 -- Safe to call repeatedly – removes any existing bar first.
 function M.inject(fb_config)
+    local TextWidget      = require("ui/widget/textwidget")
+    local CenterContainer = require("ui/widget/container/centercontainer")
+    local Geom            = require("ui/geometry")
+    local VerticalGroup   = require("ui/widget/verticalgroup")
+    local Font            = require("ui/font")
+
     M.remove()
 
     local fc = getFileChooser()
-    if not fc then return end  -- FM not ready yet; main.lua schedules a retry
+if not fc then return end  -- FM not ready yet; main.lua schedules a retry
 
     local content = buildBarContent(fc, fb_config)
     if not content then return end
@@ -112,14 +186,38 @@ function M.inject(fb_config)
         padding    = 0,
         bordersize = 0,
         background = Blitbuffer.COLOR_WHITE,
-        _is_persistent_bar = true,
+        -- _is_persistent_bar = true,
         content,
     }
-    frame._is_persistent_bar = true
+    -- frame._is_persistent_bar = true
 
     local bar_h = frame:getSize().h
 
     -- Shrink inner_dimen so _recalculateDimen computes fewer rows.
+
+    _label_text_widget = TextWidget:new{
+        text = getLabel(fc),
+        face = Font:getFace("smallinfofont", 14),
+    }
+    local label_frame = FrameContainer:new{
+        padding    = 0,
+        bordersize = 0,
+        background = Blitbuffer.COLOR_WHITE,
+        CenterContainer:new{
+            dimen = Geom:new{ w = Screen:getWidth(), h = _label_text_widget:getSize().h },
+            _label_text_widget,
+        }
+    }
+
+    local combined = VerticalGroup:new{
+        align = "left",
+        _is_persistent_bar = true,
+        frame,
+        label_frame,
+    }
+
+    local bar_h = combined:getSize().h
+
     if _saved_inner_h == nil then
         _saved_inner_h = fc.inner_dimen.h
     end
@@ -127,15 +225,17 @@ function M.inject(fb_config)
 
     -- Insert between title_bar (idx 1) and item_group (idx 2).
     local cg = fc.content_group
-    table.insert(cg, 2, frame)
+    table.insert(cg, 2, combined)
 
     fc:_recalculateDimen()
     fc:updateItems()
+    hookPathChange()
     UIManager:setDirty(fc, "ui")
 end
 
 --- Deactivate the persistent bar and restore the file list.
 function M.remove()
+    _label_text_widget = nil
     local fc = getFileChooser()
     if fc then
         removeFromContentGroup(fc)
