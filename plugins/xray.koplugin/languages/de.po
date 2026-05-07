@@ -5,6 +5,9 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
+msgid "about"
+msgstr "About"
+
 msgid "ai_fetch_complete"
 msgstr "Erfolgreich von %s abgerufen!\n\nBuch: %s\nAutor: %s\n\nCharaktere: %d\nOrte: %d\nThemen: %d\nTimeline-Ereignisse: %d\nHistorische Personen: %d\n\n%s\n\nZUSAMMENFASSUNG:\n%s"
 
@@ -137,6 +140,9 @@ msgstr "NAME"
 msgid "label_occupation"
 msgstr "BERUF"
 
+msgid "label_reasoning"
+msgstr "KI-DENKPROZESS"
+
 msgid "label_role"
 msgstr "ROLLE"
 
@@ -151,6 +157,18 @@ msgstr "Falsche Sprache"
 
 msgid "language_changed_reopen"
 msgstr "Sprache geändert. Öffnen Sie das Menü erneut, um die Änderungen zu sehen."
+
+msgid "linked_entries"
+msgstr "Linked Entries"
+
+msgid "linked_entries_disabled"
+msgstr "Disabled"
+
+msgid "linked_entries_enabled"
+msgstr "Enabled"
+
+msgid "linked_entries_setting_desc"
+msgstr "Linked Entries automatically connects characters, locations, and historical figures when they are mentioned in each other's descriptions.\n\nDisabling this will hide the 'Linked Entries' button from detail dialogs."
 
 msgid "logs_cleared"
 msgstr "Logs gelöscht!"
@@ -194,6 +212,9 @@ msgstr "Über"
 msgid "menu_ai_settings"
 msgstr "KI-Einstellungen"
 
+msgid "menu_api_keys"
+msgstr "API Keys & Providers"
+
 msgid "menu_author_info"
 msgstr "Autor-Info"
 
@@ -202,9 +223,6 @@ msgstr "Auto X-Ray Einstellungen"
 
 msgid "menu_characters"
 msgstr "Charaktere"
-
-msgid "menu_chatgpt_key"
-msgstr "ChatGPT API-Key"
 
 msgid "menu_clear_cache"
 msgstr "Cache leeren"
@@ -221,9 +239,6 @@ msgstr "Benutzerdefiniertes %s-Modell"
 msgid "menu_enter_custom_model"
 msgstr "Benutzerdefiniertes Modell eingeben..."
 
-msgid "menu_enter_ui_key"
-msgstr "Enter UI override key: "
-
 msgid "menu_fetch_author"
 msgstr "Autor-Info abrufen (KI)"
 
@@ -233,14 +248,14 @@ msgstr "Weitere Charaktere abrufen"
 msgid "menu_fetch_xray"
 msgstr "X-Ray Daten abrufen"
 
-msgid "menu_gemini_key"
-msgstr "Google Gemini API-Key"
-
 msgid "menu_historical_figures"
 msgstr "Historische Personen"
 
 msgid "menu_language"
 msgstr "Sprache"
+
+msgid "menu_linked_entries_settings"
+msgstr "Linked Entries Settings"
 
 msgid "menu_locations"
 msgstr "Orte"
@@ -253,6 +268,9 @@ msgstr "Mentions Settings"
 
 msgid "menu_primary_ai_model"
 msgstr "Primäres KI-Modell"
+
+msgid "menu_reasoning_effort"
+msgstr "GPT Reasoning-Aufwand"
 
 msgid "menu_secondary_ai_model"
 msgstr "Sekundäres KI-Modell"
@@ -274,6 +292,30 @@ msgstr "X-Ray"
 
 msgid "menu_xray_mode"
 msgstr "X-Ray Modus-Einstellungen"
+
+msgid "merge_back"
+msgstr "← Back"
+
+msgid "merge_confirm"
+msgstr "Merge %s into %s? The secondary entry will be deleted and its aliases absorbed."
+
+msgid "merge_duplicates"
+msgstr "Merge Duplicates..."
+
+msgid "merge_failed"
+msgstr "Merge failed."
+
+msgid "merge_pick_primary"
+msgstr "Choose the entry to KEEP"
+
+msgid "merge_pick_secondary"
+msgstr "Choose the entry to REMOVE"
+
+msgid "merge_success"
+msgstr "Entries merged successfully."
+
+msgid "merging_smartly"
+msgstr "Merging..."
 
 msgid "model_free"
 msgstr "kostenlos"
@@ -327,7 +369,22 @@ msgid "plugin_description"
 msgstr "Verbessern Sie Ihr Leseerlebnis mit KI-gestützter Buchanalyse, genau wie Amazon Kindle X-Ray!"
 
 msgid "quick_menu_title"
-msgstr "X-Ray Schnellzugriff"
+msgstr "X-Ray-Schnellmenü"
+
+msgid "reasoning_about"
+msgstr "Controls "
+
+msgid "reasoning_high"
+msgstr "Hoch"
+
+msgid "reasoning_low"
+msgstr "Niedrig"
+
+msgid "reasoning_medium"
+msgstr "Mittel"
+
+msgid "reasoning_xhigh"
+msgstr "Extra Hoch (X-High)"
 
 msgid "save"
 msgstr "Speichern"
@@ -440,3 +497,30 @@ msgstr "Fügt eine 'X-Ray'-Schaltfläche zu Wörterbuch- und Auswahlmenüs für 
 msgid "yes"
 msgstr "Yes"
 
+
+msgid "custom_api_name"
+msgstr "Custom API %d (OpenAI-compatible)"
+
+msgid "custom_api_endpoint_title"
+msgstr "Custom API %d — Endpoint URL"
+
+msgid "custom_api_key_title"
+msgstr "Custom API %d — API Key"
+
+msgid "custom_api_model_title"
+msgstr "Custom API %d — Default Model"
+
+msgid "custom_api_endpoint_hint"
+msgstr "e.g., https://openrouter.ai/api/v1/chat/completions"
+
+msgid "custom_api_model_hint"
+msgstr "e.g., google/gemini-2.5-flash or openai/gpt-4o"
+
+msgid "custom_api_saved"
+msgstr "Custom API %d configuration saved."
+
+msgid "custom_api_not_configured"
+msgstr "(not configured — tap to set up)"
+
+msgid "custom_api_is_reasoning"
+msgstr "Is Reasoning Model (e.g. DeepSeek-R1)"

@@ -8,7 +8,8 @@ if not ok or type(lfs) ~= "table" then
 end
 local logger = require("logger")
 local DocSettings = require("docsettings")
-local AIHelper = require("xray_aihelper")
+local plugin_path = ((...) or ""):match("(.-)[^%.]+$") or ""
+local AIHelper = require(plugin_path .. "xray_aihelper")
 
 local CacheManager = {}
 
@@ -42,10 +43,12 @@ function CacheManager:ensureDirectory(path)
         return false
     end
     
+    if not lfs then return true end
     local attr = lfs.attributes(dir)
     if attr and attr.mode == "directory" then
         return true
     end
+
     
     logger.info("CacheManager: Creating directory:", dir)
     local success, err = lfs.mkdir(dir)

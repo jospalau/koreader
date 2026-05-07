@@ -3,9 +3,12 @@
 local UIManager = require("ui/uimanager")
 local InfoMessage = require("ui/widget/infomessage")
 local ConfirmBox = require("ui/widget/confirmbox")
+local MultiConfirmBox = require("ui/widget/multiconfirmbox")
+local ButtonDialog = require("ui/widget/buttondialog")
 local Menu = require("ui/widget/menu")
 local Screen = require("device").screen
 local _ = require("gettext")
+local plugin_path = ((...) or ""):match("(.-)[^%.]+$") or ""
 
 local M = {}
 
@@ -136,7 +139,7 @@ function M:checkBookLanguageMatch()
     if self.suggestion_dismissed[self.ui.document.file] then return end
     
     -- Check if we should ignore this book (from cache)
-    if not self.cache_manager then self.cache_manager = require("xray_cachemanager"):new() end
+    if not self.cache_manager then self.cache_manager = require(plugin_path .. "xray_cachemanager"):new() end
     local cache = self.cache_manager:loadCache(self.ui.document.file)
     if cache and cache.ignore_lang_mismatch then return end
 
@@ -261,6 +264,7 @@ function M:showCharacters()
 
     local items = {
         { text = "⌕ " .. self.loc:t("search_character"), callback = function() self:showCharacterSearch() end },
+        { text = "⋈ " .. (self.loc:t("merge_duplicates") or "Merge Duplicates..."), callback = function() self:showMergeFlow(self.characters, "characters") end },
         { text = "✚ " .. (self.loc:t("menu_fetch_more_chars") or "Fetch More Characters"), keep_menu_open = true, callback = function() self:fetchMoreCharacters() end, separator = true },
     }
     for _, char in ipairs(self.characters) do
@@ -294,6 +298,146 @@ function M:showCharacters()
     UIManager:show(self.char_menu)
 end
 
+function M:findRelatedEntities(text, exclude_name)
+    if not text or text == "" then return {} end
+    local related = {}
+    local seen = {}
+    if exclude_name then seen[exclude_name:lower()] = true end
+
+    local lower_text = text:lower()
+
+    -- Honorifics: fast-path blocklist for known titles.
+    -- Tokens < 3 chars are already blocked by isTooGeneric's length check;
+    -- 3-char titles (mr., mrs, sir, dr., etc.) are listed here since they can
+    -- have plausible frequency ratios in densely character-focused descriptions.
+    local honorifics = {
+        ["mr"] = true, ["mr."] = true, ["mrs"] = true, ["mrs."] = true, ["ms"] = true, ["ms."] = true,
+        ["dr"] = true, ["dr."] = true, ["sir"] = true, ["rev"] = true, ["rev."] = true, ["lt"] = true, ["lt."] = true,
+        ["col"] = true, ["col."] = true, ["sgt"] = true, ["sgt."] = true, ["gen"] = true, ["gen."] = true,
+        ["miss"] = true, ["lord"] = true, ["lady"] = true, ["dame"] = true, ["prof"] = true, ["prof."] = true,
+        ["capt"] = true, ["capt."] = true, ["st"] = true, ["st."] = true, ["jr"] = true, ["jr."] = true,
+        
+        -- International
+        ["m"] = true, ["m."] = true, ["mme"] = true, ["mme."] = true, ["mlle"] = true, ["mlle."] = true, ["mgr"] = true,
+        ["herr"] = true, ["frau"] = true, ["hr"] = true, ["hr."] = true, ["fr"] = true, ["fr."] = true,
+        ["sr"] = true, ["sr."] = true, ["sra"] = true, ["sra."] = true, ["don"] = true, ["dona"] = true, ["doña"] = true,
+        ["bey"] = true, ["hanım"] = true,
+        ["пан"] = true, ["пані"] = true, ["г-н"] = true, ["г-жа"] = true,
+    }
+
+    -- Frequency-ratio guard: if a candidate term appears 5× more often than the
+    -- entity's full name in the text, it is too generic to be a useful identifier.
+    -- This is language-agnostic — articles, stop words, and AI-hallucinated
+    -- one-word aliases will all fail this test naturally.
+    local function countInText(term)
+        local escaped = term:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%1")
+        local pattern = escaped
+        if #term < 4 then
+            pattern = "%f[%w]" .. escaped .. "%f[%W]"
+        end
+        local _, n = lower_text:gsub(pattern, "")
+        return n
+    end
+    local function isTooGeneric(term, entity_name)
+        local term_l = term:lower()
+        if #term < 2 or honorifics[term_l] then return true end
+        local name_freq = math.max(1, countInText(entity_name:lower()))
+        return countInText(term_l) > name_freq * 5
+    end
+
+    -- Check if a term appears in the text surrounded by non-word characters.
+    -- Pads the text so names at the very start/end of a string also match.
+    local function termFound(term)
+        if not term or #term < 2 then return false end
+        local escaped = term:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%1")
+        return (" " .. lower_text .. " "):find("[^%w]" .. escaped:lower() .. "[^%w]") ~= nil
+    end
+
+    local function scanList(list, type_name)
+        if not list then return end
+        for _, item in ipairs(list) do
+            local name = item.name
+            if name and not seen[name:lower()] then
+                local found = false
+
+                -- Strategy 1: Full name match
+                if termFound(name) then
+                    found = true
+                end
+
+                -- Strategy 2: Aliases (skip generic and honorific-only aliases)
+                if not found and item.aliases then
+                    for _, alias in ipairs(item.aliases) do
+                        if type(alias) == "string"
+                                  and not honorifics[alias:lower()]
+                                  and not isTooGeneric(alias, name)
+                                  and termFound(alias) then
+                            found = true
+                            break
+                        end
+                    end
+                end
+
+                if found then
+                    seen[name:lower()] = true
+                    table.insert(related, { item = item, type = type_name })
+                end
+            end
+        end
+    end
+
+    scanList(self.characters, "character")
+    scanList(self.locations, "location")
+    scanList(self.historical_figures, "historical")
+
+    return related
+end
+
+function M:showRelatedEntities(related)
+    local items = {}
+    if self.active_related_menu then
+        UIManager:close(self.active_related_menu)
+        self.active_related_menu = nil
+    end
+
+    for _, entry in ipairs(related) do
+        local item = entry.item
+        local item_type = entry.type
+        local display_type = item_type:sub(1,1):upper() .. item_type:sub(2)
+        table.insert(items, {
+            text = (item.name or "???") .. " (" .. display_type .. ")",
+            callback = function()
+                -- Close both the linked entries menu and any open detail dialog
+                -- before opening the new entity's detail.
+                if self.active_related_menu then
+                    UIManager:close(self.active_related_menu)
+                    self.active_related_menu = nil
+                end
+                if self.active_details_dialog then
+                    UIManager:close(self.active_details_dialog)
+                    self.active_details_dialog = nil
+                end
+                if item_type == "character" then
+                    self:showCharacterDetails(item)
+                elseif item_type == "location" then
+                    self:showLocationDetails(item)
+                elseif item_type == "historical" then
+                    self:showHistoricalFigureDetails(item)
+                end
+            end
+        })
+    end
+    
+    self.active_related_menu = Menu:new{
+        title = self.loc:t("linked_entries") or "Linked Entries",
+        item_table = items,
+        on_close_callback = function()
+            self.active_related_menu = nil
+        end
+    }
+    UIManager:show(self.active_related_menu)
+end
+
 function M:showCharacterDetails(character)
     local lines = {
         (self.loc:t("label_name") or "NAME") .. ": " .. (character.name or "???")
@@ -304,33 +448,78 @@ function M:showCharacterDetails(character)
     table.insert(lines, (self.loc:t("label_role") or "ROLE") .. ": " .. (character.role or "---"))
     table.insert(lines, (self.loc:t("label_gender") or "GENDER") .. ": " .. (character.gender or "---"))
     table.insert(lines, (self.loc:t("label_occupation") or "OCCUPATION") .. ": " .. (character.occupation or "---"))
+    if character.ai_reasoning then
+        table.insert(lines, "")
+        table.insert(lines, "[" .. (self.loc:t("label_reasoning") or "AI REASONING") .. "]")
+        table.insert(lines, character.ai_reasoning)
+    end
     table.insert(lines, "")
     table.insert(lines, (self.loc:t("label_description") or "DESCRIPTION") .. ":")
     table.insert(lines, character.description or "---")
+    local body_text = table.concat(lines, "\n")
     
+    local linked_enabled = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.linked_entries_enabled ~= false
+    local related = linked_enabled and self:findRelatedEntities(character.description or "", character.name) or {}
     local mentions_enabled = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.mentions_enabled ~= false
-    if mentions_enabled then
-        self.active_details_dialog = ConfirmBox:new{
-            text = table.concat(lines, "\n"),
-            icon = "info",
-            ok_text = self.loc:t("find_mentions") or "Find Mentions",
-            cancel_text = self.loc:t("close") or "Close",
-            ok_callback = function()
-                self.active_details_dialog = nil
-                self:showMentionsForEntity(character)
-            end,
-            cancel_callback = function()
-                self.active_details_dialog = nil
-            end,
+    
+    if #related > 0 then
+        local buttons = {
+            {
+                {
+                    text = self.loc:t("linked_entries") or "Linked Entries",
+                    callback = function()
+                        self:showRelatedEntities(related)
+                    end,
+                }
+            },
+            {
+                {
+                    text = self.loc:t("find_mentions") or "Find Mentions",
+                    callback = function()
+                        self:showMentionsForEntity(character)
+                    end,
+                },
+                {
+                    text = self.loc:t("close") or "Close",
+                    callback = function()
+                        if self.active_details_dialog then UIManager:close(self.active_details_dialog) end
+                        self.active_details_dialog = nil
+                    end,
+                }
+            }
+        }
+        
+        if not mentions_enabled then
+            table.remove(buttons[2], 1)
+        end
+        
+        self.active_details_dialog = ButtonDialog:new{
+            title = table.concat(lines, "\n"),
+            buttons = buttons,
         }
     else
-        self.active_details_dialog = ConfirmBox:new{
-            text = table.concat(lines, "\n"),
-            icon = "info",
-            ok_text = self.loc:t("close") or "Close",
-            ok_callback = function() self.active_details_dialog = nil end,
-            cancel_callback = function() self.active_details_dialog = nil end,
-        }
+        if mentions_enabled then
+            self.active_details_dialog = ConfirmBox:new{
+                text = table.concat(lines, "\n"),
+                icon = "info",
+                ok_text = self.loc:t("find_mentions") or "Find Mentions",
+                cancel_text = self.loc:t("close") or "Close",
+                ok_callback = function()
+                    self:showMentionsForEntity(character)
+                end,
+                cancel_callback = function()
+                    self.active_details_dialog = nil
+                end,
+            }
+        else
+            self.active_details_dialog = ConfirmBox:new{
+                text = table.concat(lines, "\n"),
+                icon = "info",
+                ok_text = self.loc:t("close") or "Close",
+                ok_callback = function() self.active_details_dialog = nil end,
+                cancel_callback = function() self.active_details_dialog = nil end,
+            }
+        end
     end
     UIManager:show(self.active_details_dialog)
 end
@@ -338,29 +527,69 @@ end
 function M:showLocationDetails(loc_item)
     local name = loc_item.name or "???"
     local desc = loc_item.description or ""
+    local body_text = name .. "\n\n" .. desc
+    local linked_enabled = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.linked_entries_enabled ~= false
+    local related = linked_enabled and self:findRelatedEntities(desc, name) or {}
     local mentions_enabled = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.mentions_enabled ~= false
-    if mentions_enabled then
-        self.active_details_dialog = ConfirmBox:new{
-            text = name .. "\n\n" .. desc,
-            icon = "info",
-            ok_text = self.loc:t("find_mentions") or "Find Mentions",
-            cancel_text = self.loc:t("close") or "Close",
-            ok_callback = function()
-                self.active_details_dialog = nil
-                self:showMentionsForEntity(loc_item)
-            end,
-            cancel_callback = function()
-                self.active_details_dialog = nil
-            end,
+    
+    if #related > 0 then
+        local buttons = {
+            {
+                {
+                    text = self.loc:t("linked_entries") or "Linked Entries",
+                    callback = function()
+                        self:showRelatedEntities(related)
+                    end,
+                }
+            },
+            {
+                {
+                    text = self.loc:t("find_mentions") or "Find Mentions",
+                    callback = function()
+                        self:showMentionsForEntity(loc_item)
+                    end,
+                },
+                {
+                    text = self.loc:t("close") or "Close",
+                    callback = function()
+                        if self.active_details_dialog then UIManager:close(self.active_details_dialog) end
+                        self.active_details_dialog = nil
+                    end,
+                }
+            }
+        }
+        
+        if not mentions_enabled then
+            table.remove(buttons[2], 1)
+        end
+        
+        self.active_details_dialog = ButtonDialog:new{
+            title = body_text,
+            buttons = buttons,
         }
     else
-        self.active_details_dialog = ConfirmBox:new{
-            text = name .. "\n\n" .. desc,
-            icon = "info",
-            ok_text = self.loc:t("close") or "Close",
-            ok_callback = function() self.active_details_dialog = nil end,
-            cancel_callback = function() self.active_details_dialog = nil end,
-        }
+        if mentions_enabled then
+            self.active_details_dialog = ConfirmBox:new{
+                text = body_text,
+                icon = "info",
+                ok_text = self.loc:t("find_mentions") or "Find Mentions",
+                cancel_text = self.loc:t("close") or "Close",
+                ok_callback = function()
+                    self:showMentionsForEntity(loc_item)
+                end,
+                cancel_callback = function()
+                    self.active_details_dialog = nil
+                end,
+            }
+        else
+            self.active_details_dialog = ConfirmBox:new{
+                text = body_text,
+                icon = "info",
+                ok_text = self.loc:t("close") or "Close",
+                ok_callback = function() self.active_details_dialog = nil end,
+                cancel_callback = function() self.active_details_dialog = nil end,
+            }
+        end
     end
     UIManager:show(self.active_details_dialog)
 end
@@ -424,6 +653,235 @@ function M:showMentionsSettings()
     
     showSettings()
 end
+
+function M:showLinkedEntriesSettings()
+    local ButtonDialog = require("ui/widget/buttondialog")
+    local InfoMessage = require("ui/widget/infomessage")
+    local info_dialog
+    
+    local function showSettings()
+        if info_dialog then UIManager:close(info_dialog) end
+        
+        local current_setting = self.ai_helper.settings.linked_entries_enabled ~= false -- default is true
+        local enabled_text = self.loc:t("linked_entries_enabled") or "Enabled"
+        local disabled_text = self.loc:t("linked_entries_disabled") or "Disabled"
+        
+        local buttons = {
+            {
+                {
+                    text = (current_setting and "[✓] " or "[  ] ") .. enabled_text,
+                    callback = function()
+                        self.ai_helper:saveSettings({ linked_entries_enabled = true })
+                        UIManager:setDirty(nil, "ui")
+                        UIManager:nextTick(function() showSettings() end)
+                    end
+                },
+                {
+                    text = ((not current_setting) and "[✓] " or "[  ] ") .. disabled_text,
+                    callback = function()
+                        self.ai_helper:saveSettings({ linked_entries_enabled = false })
+                        UIManager:setDirty(nil, "ui")
+                        UIManager:nextTick(function() showSettings() end)
+                    end
+                }
+            },
+            {
+                {
+                    text = self.loc:t("menu_about") or "About",
+                    callback = function()
+                        UIManager:show(InfoMessage:new{
+                            text = self.loc:t("linked_entries_setting_desc") or "Linked Entries automatically connects characters, locations, and historical figures when they are mentioned in each other's descriptions.\n\nDisabling this will hide the 'Linked Entries' button from detail dialogs.",
+                            timeout = 30
+                        })
+                    end
+                },
+                {
+                    text = self.loc:t("close") or "Close",
+                    callback = function()
+                        UIManager:close(info_dialog)
+                    end
+                }
+            }
+        }
+        
+        info_dialog = ButtonDialog:new{
+            title = self.loc:t("menu_linked_entries_settings") or "Linked Entries Settings",
+            buttons = {
+                {
+                    {
+                        text = (current_setting and "[✓] " or "[  ] ") .. enabled_text,
+                        callback = function()
+                            self.ai_helper:saveSettings({ linked_entries_enabled = true })
+                            UIManager:setDirty(nil, "ui")
+                            UIManager:nextTick(function() showSettings() end)
+                        end
+                    },
+                    {
+                        text = ((not current_setting) and "[✓] " or "[  ] ") .. disabled_text,
+                        callback = function()
+                            self.ai_helper:saveSettings({ linked_entries_enabled = false })
+                            UIManager:setDirty(nil, "ui")
+                            UIManager:nextTick(function() showSettings() end)
+                        end
+                    }
+                },
+                {
+                    {
+                        text = self.loc:t("menu_about") or "About",
+                        callback = function()
+                            UIManager:show(InfoMessage:new{
+                                text = self.loc:t("linked_entries_setting_desc") or "Linked Entries automatically connects characters, locations, and historical figures when they are mentioned in each other's descriptions.\n\nDisabling this will hide the 'Linked Entries' button from detail dialogs.",
+                                timeout = 30
+                            })
+                        end
+                    },
+                    {
+                        text = self.loc:t("close") or "Close",
+                        callback = function()
+                            UIManager:close(info_dialog)
+                        end
+                    }
+                }
+            }
+        }
+        UIManager:show(info_dialog)
+    end
+    
+    showSettings()
+end
+
+function M:showMergeFlow(list, list_name)
+    local ButtonDialog = require("ui/widget/buttondialog")
+    local ConfirmBox = require("ui/widget/confirmbox")
+    local InfoMessage = require("ui/widget/infomessage")
+    
+    local primary_dialog, secondary_dialog
+    
+    local function pickSecondary(primary_item)
+        local buttons = {}
+        for _, item in ipairs(list) do
+            if item.name ~= primary_item.name then
+                local secondary_name = item.name
+                table.insert(buttons, {{
+                    text = secondary_name,
+                    callback = function()
+                        UIManager:close(secondary_dialog)
+                        secondary_dialog = nil
+                        local confirm = ConfirmBox:new{
+                            text = string.format(
+                                self.loc:t("merge_confirm") or "Merge %s into %s? The secondary entry will be deleted and its aliases absorbed.",
+                                secondary_name, primary_item.name
+                            ),
+                            ok_text = self.loc:t("yes") or "Yes",
+                            cancel_text = self.loc:t("close") or "Close",
+                            ok_callback = function()
+                                local wait_msg = InfoMessage:new{ text = self.loc:t("merging_smartly") or "Merging...", timeout = 120 }
+                                UIManager:show(wait_msg)
+                                
+                                UIManager:scheduleIn(0.1, function()
+                                    local ai_merged_desc = nil
+                                    if self.ai_helper and self.ai_helper:hasApiKey() then
+                                        local sec_item = nil
+                                        for _, it in ipairs(list) do
+                                            if it.name == secondary_name then sec_item = it; break end
+                                        end
+                                        
+                                        if sec_item and primary_item.description and sec_item.description then
+                                            ai_merged_desc = self.ai_helper:mergeDescriptionsWithAI(primary_item.description, sec_item.description)
+                                        end
+                                    end
+                                    
+                                    UIManager:close(wait_msg)
+                                    
+                                    if self:mergeEntries(list, primary_item.name, secondary_name, ai_merged_desc) then
+                                        -- Save cache: load existing, patch only the changed list
+                                        if not self.cache_manager then
+                                            self.cache_manager = require(plugin_path .. "xray_cachemanager"):new()
+                                        end
+                                        local cache = self.cache_manager:loadCache(self.ui.document.file) or {}
+                                        if list_name == "characters" then
+                                            cache.characters = list
+                                        elseif list_name == "locations" then
+                                            cache.locations = list
+                                        end
+                                        self.cache_manager:saveCache(self.ui.document.file, cache)
+                                        
+                                        -- Clear normalized lookup caches so the LookupManager rebuilds them
+                                        for _, it in ipairs(list) do
+                                            it._norm_name = nil
+                                            it._norm_aliases = nil
+                                        end
+                                        
+                                        UIManager:show(InfoMessage:new{
+                                            text = self.loc:t("merge_success") or "Entries merged successfully.",
+                                            timeout = 3
+                                        })
+                                        
+                                        -- Refresh the list menu
+                                        if list_name == "characters" then
+                                            self:showCharacters()
+                                        elseif list_name == "locations" then
+                                            self:showLocations()
+                                        end
+                                    else
+                                        UIManager:show(InfoMessage:new{
+                                            text = self.loc:t("merge_failed") or "Merge failed.",
+                                            timeout = 3
+                                        })
+                                    end
+                                end)
+                            end,
+                        }
+                        UIManager:show(confirm)
+                    end
+                }})
+            end
+        end
+        
+        table.insert(buttons, {{
+            text = self.loc:t("merge_back") or "← Back",
+            callback = function()
+                UIManager:close(secondary_dialog)
+                secondary_dialog = nil
+                UIManager:show(primary_dialog)
+            end
+        }})
+        
+        secondary_dialog = ButtonDialog:new{
+            title = self.loc:t("merge_pick_secondary") or "Choose the entry to REMOVE",
+            buttons = buttons
+        }
+        UIManager:show(secondary_dialog)
+    end
+    
+    local buttons = {}
+    for _, item in ipairs(list) do
+        local primary_item = item
+        table.insert(buttons, {{
+            text = item.name,
+            callback = function()
+                UIManager:close(primary_dialog)
+                primary_dialog = nil
+                pickSecondary(primary_item)
+            end
+        }})
+    end
+    
+    table.insert(buttons, {{
+        text = self.loc:t("close") or "Close",
+        callback = function()
+            UIManager:close(primary_dialog)
+            primary_dialog = nil
+        end
+    }})
+    
+    primary_dialog = ButtonDialog:new{
+        title = self.loc:t("merge_pick_primary") or "Choose the entry to KEEP",
+        buttons = buttons
+    }
+    UIManager:show(primary_dialog)
+end
+
 
 function M:showAutoUpdateSettings()
     local ButtonDialog = require("ui/widget/buttondialog")
@@ -573,6 +1031,119 @@ function M:showSpoilerSettings()
     showSettings()
 end
 
+function M:showDescriptionLengthSettings()
+    local menu_items = {
+        {
+            text = self.loc:t("menu_characters"),
+            callback = function() self:showEntityLengthPresets("char_desc_len", self.loc:t("menu_characters")) end,
+        },
+        {
+            text = self.loc:t("menu_locations"),
+            callback = function() self:showEntityLengthPresets("loc_desc_len", self.loc:t("menu_locations")) end,
+        },
+        {
+            text = self.loc:t("menu_timeline"),
+            callback = function() self:showEntityLengthPresets("timeline_event_len", self.loc:t("menu_timeline"), true) end,
+        },
+        {
+            text = self.loc:t("menu_historical_figures"),
+            callback = function() self:showEntityLengthPresets("hist_fig_bio_len", self.loc:t("menu_historical_figures")) end,
+        },
+    }
+
+    local menu = Menu:new{
+        title = self.loc:t("menu_desc_length_settings"),
+        item_table = menu_items,
+    }
+    UIManager:show(menu)
+end
+
+function M:showEntityLengthPresets(setting_key, entity_name, is_timeline)
+    local info_dialog
+
+    local function showSettings()
+        if info_dialog then UIManager:close(info_dialog) end
+
+        local s = self.ai_helper and self.ai_helper.settings or {}
+        local defaults = {
+            char_desc_len    = 200,
+            loc_desc_len     = 100,
+            timeline_event_len = 80,
+            hist_fig_bio_len = 100,
+        }
+        local current_val = s[setting_key] or (is_timeline and 80 or defaults[setting_key] or 100)
+
+        local presets = {
+            { name = self.loc:t("desc_len_short"),      val = is_timeline and 50  or (setting_key == "char_desc_len" and 80  or 50)  },
+            { name = self.loc:t("desc_len_default"),    val = is_timeline and 80  or (setting_key == "char_desc_len" and 200 or 100) },
+            { name = self.loc:t("desc_len_detailed"),   val = is_timeline and 150 or (setting_key == "char_desc_len" and 350 or 200) },
+            { name = self.loc:t("desc_len_v_detailed"), val = is_timeline and 200 or (setting_key == "char_desc_len" and 500 or 300) },
+        }
+
+        local buttons = {}
+        for _, p in ipairs(presets) do
+            local label = (current_val == p.val and "[✓] " or "[  ] ") .. p.name
+            local pval = p.val
+            table.insert(buttons, {{
+                text = label,
+                align = "left",
+                callback = function()
+                    if self.ai_helper then
+                        local updates = {}
+                        updates[setting_key] = pval
+                        self.ai_helper:saveSettings(updates)
+                    end
+                    UIManager:nextTick(function() showSettings() end)
+                end,
+            }})
+        end
+
+        -- About text varies by entity type
+        local about_text
+        if is_timeline then
+            about_text = self.loc:t("desc_len_about_timeline") or
+                "TIMELINE — ONE EVENT PER CHAPTER (always)\n\nTimeline always has exactly one entry per chapter. This setting only affects how much detail is included in each summary.\n\n• Short (~50 chars): Brief one-phrase summary.\n• Default (~80 chars): Standard summary.\n• Detailed (~150 chars): Includes context and consequences.\n• Very Detailed (~200 chars): Full narrative description.\n\nThere is no count trade-off for the timeline."
+        elseif setting_key == "char_desc_len" then
+            about_text = self.loc:t("desc_len_about_chars") or
+                "CHARACTER DESCRIPTIONS\n\n• Short (~80 chars): Name, role, and a brief note.\n• Default (~200 chars): Standard analysis.\n• Detailed (~350 chars): Rich character study with traits and motivations.\n• Very Detailed (~500 chars): Deep analysis.\n\nTRADE-OFF\nLonger descriptions → fewer characters returned during initial/full fetches. Subsequent 'Fetch More' runs are unaffected."
+        elseif setting_key == "loc_desc_len" then
+            about_text = self.loc:t("desc_len_about_locs") or
+                "LOCATION DESCRIPTIONS\n\n• Short (~50 chars): Place name and one-line context.\n• Default (~100 chars): Standard description.\n• Detailed (~200 chars): Atmosphere, significance, and events.\n• Very Detailed (~300 chars): Full description.\n\nTRADE-OFF\nLonger descriptions → fewer locations returned during initial/full fetches."
+        else
+            about_text = self.loc:t("desc_len_about_hist") or
+                "HISTORICAL FIGURE BIOGRAPHIES\n\n• Short (~50 chars): Name and primary role.\n• Default (~100 chars): Standard biography.\n• Detailed (~200 chars): Life, significance, and book context.\n• Very Detailed (~300 chars): Comprehensive biography.\n\nTRADE-OFF\nLonger biographies → fewer historical figures returned during initial/full fetches."
+        end
+
+        table.insert(buttons, {
+            {
+                text = self.loc:t("menu_about") or "About",
+                callback = function()
+                    UIManager:show(InfoMessage:new{
+                        text = about_text,
+                        timeout = 120,
+                    })
+                end,
+            },
+            {
+                text = self.loc:t("close") or "Close",
+                callback = function()
+                    UIManager:close(info_dialog)
+                end,
+            },
+        })
+
+        info_dialog = ButtonDialog:new{
+            title = entity_name .. " — " .. (self.loc:t("menu_desc_length_settings") or "Description Length"),
+            buttons = buttons,
+        }
+        UIManager:show(info_dialog)
+    end
+
+    showSettings()
+end
+
+
+
 function M:showAuthorInfo()
     if not self.author_info or not self.author_info.description or self.author_info.description == "" or self.author_info.description == (self.loc:t("msg_no_bio") or "No biography available.") then
         local ButtonDialog = require("ui/widget/buttondialog")
@@ -589,7 +1160,9 @@ function M:showLocations()
         UIManager:show(InfoMessage:new{ text = self.loc:t("no_location_data"), timeout = 3 })
         return 
     end
-    local items = {}
+    local items = {
+        { text = "⋈ " .. (self.loc:t("merge_duplicates") or "Merge Duplicates..."), callback = function() self:showMergeFlow(self.locations, "locations") end, separator = true },
+    }
     for _, loc in ipairs(self.locations) do 
         if type(loc) == "table" then
             local captured_loc = loc
@@ -635,21 +1208,21 @@ function M:showAbout()
         ok_text = self.loc:t("updater_check") or "Check for Updates",
         cancel_text = self.loc:t("close") or "Close",
         ok_callback = function()
-            local updater = require("xray_updater")
+            local updater = require(plugin_path .. "xray_updater")
             updater.checkForUpdates(self.loc)
         end,
     })
 end
 
 function M:clearCache()
-    if not self.cache_manager then self.cache_manager = require("xray_cachemanager"):new() end
+    if not self.cache_manager then self.cache_manager = require(plugin_path .. "xray_cachemanager"):new() end
     self.cache_manager:clearCache(self.ui.document.file)
     self.characters = {}; self.locations = {}; self.timeline = {}; self.historical_figures = {}; self.author_info = nil
     UIManager:show(InfoMessage:new{ text = self.loc:t("cache_cleared"), timeout = 3 })
 end
 
 function M:clearLogs()
-    local XRayLogger = require("xray_logger")
+    local XRayLogger = require(plugin_path .. "xray_logger")
     XRayLogger:clear()
     UIManager:show(InfoMessage:new{ text = self.loc:t("logs_cleared") or "Logs cleared!", timeout = 3 })
 end
@@ -741,30 +1314,69 @@ end
 function M:showHistoricalFigureDetails(fig)
     local name = fig.name or "???"
     local bio = fig.biography or (self.loc:t("msg_no_bio") or "No biography available.")
-    
+    local body_text = name .. "\n\n" .. bio
+    local linked_enabled = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.linked_entries_enabled ~= false
+    local related = linked_enabled and self:findRelatedEntities(bio, name) or {}
     local mentions_enabled = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.mentions_enabled ~= false
-    if mentions_enabled then
-        self.active_details_dialog = ConfirmBox:new{
-            text = name .. "\n\n" .. bio,
-            icon = "info",
-            ok_text = self.loc:t("find_mentions") or "Find Mentions",
-            cancel_text = self.loc:t("close") or "Close",
-            ok_callback = function()
-                self.active_details_dialog = nil
-                self:showMentionsForEntity(fig)
-            end,
-            cancel_callback = function()
-                self.active_details_dialog = nil
-            end,
+    
+    if #related > 0 then
+        local buttons = {
+            {
+                {
+                    text = self.loc:t("linked_entries") or "Linked Entries",
+                    callback = function()
+                        self:showRelatedEntities(related)
+                    end,
+                }
+            },
+            {
+                {
+                    text = self.loc:t("find_mentions") or "Find Mentions",
+                    callback = function()
+                        self:showMentionsForEntity(fig)
+                    end,
+                },
+                {
+                    text = self.loc:t("close") or "Close",
+                    callback = function()
+                        if self.active_details_dialog then UIManager:close(self.active_details_dialog) end
+                        self.active_details_dialog = nil
+                    end,
+                }
+            }
+        }
+        
+        if not mentions_enabled then
+            table.remove(buttons[2], 1)
+        end
+        
+        self.active_details_dialog = ButtonDialog:new{
+            title = body_text,
+            buttons = buttons,
         }
     else
-        self.active_details_dialog = ConfirmBox:new{
-            text = name .. "\n\n" .. bio,
-            icon = "info",
-            ok_text = self.loc:t("close") or "Close",
-            ok_callback = function() self.active_details_dialog = nil end,
-            cancel_callback = function() self.active_details_dialog = nil end,
-        }
+        if mentions_enabled then
+            self.active_details_dialog = ConfirmBox:new{
+                text = body_text,
+                icon = "info",
+                ok_text = self.loc:t("find_mentions") or "Find Mentions",
+                cancel_text = self.loc:t("close") or "Close",
+                ok_callback = function()
+                    self:showMentionsForEntity(fig)
+                end,
+                cancel_callback = function()
+                    self.active_details_dialog = nil
+                end,
+            }
+        else
+            self.active_details_dialog = ConfirmBox:new{
+                text = body_text,
+                icon = "info",
+                ok_text = self.loc:t("close") or "Close",
+                ok_callback = function() self.active_details_dialog = nil end,
+                cancel_callback = function() self.active_details_dialog = nil end,
+            }
+        end
     end
     UIManager:show(self.active_details_dialog)
 end
@@ -812,12 +1424,52 @@ function M:showFullXRayMenu()
     UIManager:show(self.xray_menu) 
 end
 
-function M:getAPIKeySelectionMenu(provider, provider_name)
-    local config_key = (self.ai_helper and self.ai_helper.config_keys) and self.ai_helper.config_keys[provider] or nil
+function M:getAPIKeysMenu()
+    local menu_items = {}
+    local providers = {
+        { id = "gemini", name = "Google Gemini" },
+        { id = "chatgpt", name = "OpenAI ChatGPT" },
+        { id = "deepseek", name = "DeepSeek" },
+        { id = "claude", name = "Anthropic Claude" },
+        { id = "custom1", name = self.loc:t("custom_api_name") and string.format(self.loc:t("custom_api_name"), 1) or "Custom API 1 (OpenAI-compatible)" },
+        { id = "custom2", name = self.loc:t("custom_api_name") and string.format(self.loc:t("custom_api_name"), 2) or "Custom API 2 (OpenAI-compatible)" },
+    }
+    for _, p in ipairs(providers) do
+        local prov_data = self.ai_helper.providers[p.id]
+        if prov_data then
+            local active_val = prov_data.api_key or ""
+            local status
+            if p.id:find("custom") then
+                local endpoint = prov_data.endpoint or ""
+                local host = endpoint:match("^https?://([^/]+)") or endpoint
+                local model = prov_data.model or ""
+                if host ~= "" or model ~= "" then
+                    status = (host ~= "" and host or "?") .. " | " .. (model ~= "" and model or "?")
+                else
+                    status = self.loc:t("custom_api_not_configured") or "(not configured — tap to set up)"
+                end
+            else
+                status = (active_val ~= "") and (active_val:sub(1,6) .. "...") or "(None)"
+            end
+            local source = prov_data.ui_key_active and "[UI]" or "[Config]"
+            
+            table.insert(menu_items, {
+                text = p.name .. " " .. source .. ": " .. status,
+                keep_menu_open = true,
+                sub_item_table_func = function() return self:getProviderKeySubMenu(p.id, p.name) end
+            })
+        end
+    end
+    return menu_items
+end
+
+function M:getProviderKeySubMenu(provider, provider_name)
+    local config_key = (self.ai_helper and self.ai_helper.config_keys) and self.ai_helper.config_keys[provider] or ""
+    local ui_key = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings[provider .. "_api_key"] or ""
     
     local menu_items = {
         {
-            text = "Use key from config.lua: " .. (config_key and #config_key > 0 and config_key or "(Not set)"),
+            text = "Use key from config.lua: " .. (#config_key > 0 and (config_key:sub(1,6) .. "...") or "(Not set)"),
             checked_func = function() 
                 if not self.ai_helper or not self.ai_helper.providers or not self.ai_helper.providers[provider] then return false end
                 return not self.ai_helper.providers[provider].ui_key_active 
@@ -829,19 +1481,92 @@ function M:getAPIKeySelectionMenu(provider, provider_name)
             end
         },
         {
-            text = (self.loc:t("menu_enter_ui_key") or "Enter UI override key: ") .. ((self.ai_helper and self.ai_helper.settings and self.ai_helper.settings[provider .. "_api_key"]) or "(Not set)"),
+            text = "Use UI override key: " .. (#ui_key > 0 and (ui_key:sub(1,6) .. "...") or "(Not set)"),
             checked_func = function() 
                 if not self.ai_helper or not self.ai_helper.providers or not self.ai_helper.providers[provider] then return false end
                 return self.ai_helper.providers[provider].ui_key_active 
             end,
             callback = function()
-                local ui_key = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings[provider .. "_api_key"] or nil
-                
                 -- If we have a UI key but it's not currently active, let's just activate it
-                if ui_key and #ui_key > 0 and not self.ai_helper.providers[provider].ui_key_active then
+                if #ui_key > 0 and not self.ai_helper.providers[provider].ui_key_active then
                     self.ai_helper:saveSettings({ [provider .. "_use_ui_key"] = true })
                     self.ai_helper:init(self.path)
                     UIManager:setDirty(nil, "ui")
+                    return
+                end
+
+                if provider:find("custom") then
+                    local InputDialog = require("ui/widget/inputdialog")
+                    local InfoMessage = require("ui/widget/infomessage")
+                    
+                    local function promptModel(endpoint, key)
+                        local current_model = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings[provider .. "_model"] or ""
+                        local model_dialog
+                        model_dialog = InputDialog:new{
+                            title = self.loc:t("custom_api_model_title") and string.format(self.loc:t("custom_api_model_title"), provider:sub(-1)) or ("Custom API " .. provider:sub(-1) .. " — Default Model"),
+                            input = current_model,
+                            input_hint = self.loc:t("custom_api_model_hint") or "e.g., google/gemini-2.5-flash or openai/gpt-4o",
+                            buttons = {
+                                {
+                                    { text = self.loc:t("cancel"), callback = function() UIManager:close(model_dialog) end },
+                                    { text = self.loc:t("save"), is_enter_default = true, callback = function()
+                                        local model = model_dialog:getInputText()
+                                        UIManager:close(model_dialog)
+                                        self.ai_helper:setCustomAPIConfig(provider, key, endpoint, model)
+                                        self.ai_helper:init(self.path)
+                                        UIManager:show(InfoMessage:new{ text = self.loc:t("custom_api_saved") and string.format(self.loc:t("custom_api_saved"), provider:sub(-1)) or ("Custom API " .. provider:sub(-1) .. " configuration saved."), timeout = 3 })
+                                        UIManager:setDirty(nil, "ui")
+                                    end }
+                                }
+                            }
+                        }
+                        UIManager:show(model_dialog)
+                        model_dialog:onShowKeyboard()
+                    end
+
+                    local function promptKey(endpoint)
+                        local key_dialog
+                        key_dialog = InputDialog:new{
+                            title = self.loc:t("custom_api_key_title") and string.format(self.loc:t("custom_api_key_title"), provider:sub(-1)) or ("Custom API " .. provider:sub(-1) .. " — API Key"),
+                            input = ui_key,
+                            buttons = {
+                                {
+                                    { text = self.loc:t("cancel"), callback = function() UIManager:close(key_dialog) end },
+                                    { text = self.loc:t("next") or "Next", is_enter_default = true, callback = function()
+                                        local key = key_dialog:getInputText()
+                                        UIManager:close(key_dialog)
+                                        promptModel(endpoint, key)
+                                    end }
+                                }
+                            }
+                        }
+                        UIManager:show(key_dialog)
+                        key_dialog:onShowKeyboard()
+                    end
+
+                    local function promptEndpoint()
+                        local current_endpoint = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings[provider .. "_endpoint"] or "https://openrouter.ai/api/v1/chat/completions"
+                        local endpoint_dialog
+                        endpoint_dialog = InputDialog:new{
+                            title = self.loc:t("custom_api_endpoint_title") and string.format(self.loc:t("custom_api_endpoint_title"), provider:sub(-1)) or ("Custom API " .. provider:sub(-1) .. " — Endpoint URL"),
+                            input = current_endpoint,
+                            input_hint = self.loc:t("custom_api_endpoint_hint") or "e.g., https://openrouter.ai/api/v1/chat/completions",
+                            buttons = {
+                                {
+                                    { text = self.loc:t("cancel"), callback = function() UIManager:close(endpoint_dialog) end },
+                                    { text = self.loc:t("next") or "Next", is_enter_default = true, callback = function()
+                                        local endpoint = endpoint_dialog:getInputText()
+                                        UIManager:close(endpoint_dialog)
+                                        promptKey(endpoint)
+                                    end }
+                                }
+                            }
+                        }
+                        UIManager:show(endpoint_dialog)
+                        endpoint_dialog:onShowKeyboard()
+                    end
+                    
+                    promptEndpoint()
                     return
                 end
 
@@ -849,7 +1574,7 @@ function M:getAPIKeySelectionMenu(provider, provider_name)
                 local input_dialog
                 input_dialog = InputDialog:new{
                     title = provider_name .. " API Key",
-                    input = ui_key or "",
+                    input = ui_key,
                     buttons = {
                         {
                             { text = self.loc:t("cancel"), callback = function() UIManager:close(input_dialog) end },
@@ -857,7 +1582,11 @@ function M:getAPIKeySelectionMenu(provider, provider_name)
                                 local key = input_dialog:getInputText()
                                 UIManager:close(input_dialog)
                                 if key and #key > 0 then
-                                    self.ai_helper:setAPIKey(provider, key)
+                                    self.ai_helper:saveSettings({ 
+                                        [provider .. "_api_key"] = key,
+                                        [provider .. "_use_ui_key"] = true
+                                    })
+                                    self.ai_helper:init(self.path)
                                     UIManager:setDirty(nil, "ui")
                                 end
                             end }
@@ -869,6 +1598,25 @@ function M:getAPIKeySelectionMenu(provider, provider_name)
             end
         }
     }
+
+    -- For custom slots: add a toggle to mark the model as a reasoning model.
+    -- When enabled, the plugin raises the output token ceiling to 32000 to accommodate
+    -- reasoning chains that would otherwise consume the entire output budget.
+    if provider:find("custom") then
+        table.insert(menu_items, {
+            text = self.loc:t("custom_api_is_reasoning") or "Is Reasoning Model (e.g. DeepSeek-R1)",
+            keep_menu_open = true,
+            checked_func = function()
+                return (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings[provider .. "_is_reasoning"] or false
+            end,
+            callback = function()
+                local current = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings[provider .. "_is_reasoning"] or false
+                self.ai_helper:saveSettings({ [provider .. "_is_reasoning"] = not current })
+                UIManager:setDirty(nil, "ui")
+            end
+        })
+    end
+
     return menu_items
 end
 
@@ -877,9 +1625,28 @@ function M:getAIModelSelectionMenu(setting_type)
         { name = "Gemini Flash (gemini-2.5-flash) - " .. (self.loc:t("model_free") or "free"), provider = "gemini", id = "gemini-2.5-flash" },
         { name = "Gemini Flash-Lite (gemini-2.5-flash-lite) - " .. (self.loc:t("model_free") or "free"), provider = "gemini", id = "gemini-2.5-flash-lite" },
         { name = "Gemini Pro (gemini-2.5-pro) - " .. (self.loc:t("model_paid") or "paid"), provider = "gemini", id = "gemini-2.5-pro" },
-        { name = "ChatGPT Mini (gpt-4o-mini) - " .. (self.loc:t("model_paid") or "paid"), provider = "chatgpt", id = "gpt-4o-mini" },
-        { name = "ChatGPT (gpt-4o) - " .. (self.loc:t("model_paid") or "paid"), provider = "chatgpt", id = "gpt-4o" },
+        { name = "GPT-5.5 (gpt-5.5) - " .. (self.loc:t("model_paid") or "paid"), provider = "chatgpt", id = "gpt-5.5" },
+        { name = "GPT-5.4 Mini (gpt-5.4-mini) - " .. (self.loc:t("model_paid") or "paid"), provider = "chatgpt", id = "gpt-5.4-mini" },
+        { name = "GPT-5.4 Nano (gpt-5.4-nano) - " .. (self.loc:t("model_paid") or "paid"), provider = "chatgpt", id = "gpt-5.4-nano" },
+        { name = "DeepSeek Chat (deepseek-chat) - " .. (self.loc:t("model_paid") or "paid"), provider = "deepseek", id = "deepseek-chat" },
+        { name = "DeepSeek Reasoner (deepseek-reasoner) - " .. (self.loc:t("model_paid") or "paid"), provider = "deepseek", id = "deepseek-reasoner" },
+        { name = "Claude 4.6 Sonnet (claude-sonnet-4-6) - " .. (self.loc:t("model_paid") or "paid"), provider = "claude", id = "claude-sonnet-4-6" },
+        { name = "Claude 4.5 Haiku (claude-haiku-4-5) - " .. (self.loc:t("model_paid") or "paid"), provider = "claude", id = "claude-haiku-4-5" },
     }
+    
+    local custom1_model = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings.custom1_model or nil
+    local custom2_model = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings.custom2_model or nil
+    
+    table.insert(models, {
+        name = "Custom API 1: " .. (custom1_model or "(configure in API Keys)"),
+        provider = "custom1",
+        id = (custom1_model or "custom1")
+    })
+    table.insert(models, {
+        name = "Custom API 2: " .. (custom2_model or "(configure in API Keys)"),
+        provider = "custom2",
+        id = (custom2_model or "custom2")
+    })
     
     local menu_items = {}
     for i, m in ipairs(models) do
@@ -923,7 +1690,10 @@ function M:getAIModelSelectionMenu(setting_type)
                             callback = function()
                                 local custom_model = input_dialog:getInputText()
                                 if custom_model and #custom_model > 0 then
-                                    local provider = string.find(custom_model, "gpt") and "chatgpt" or "gemini"
+                                    local provider = string.find(custom_model, "gpt") and "chatgpt" or "custom1"
+                                    if string.find(custom_model, "deepseek") then provider = "deepseek" end
+                                    if string.find(custom_model, "claude") then provider = "claude" end
+                                    if string.find(custom_model, "gemini") then provider = "gemini" end
                                     self.ai_helper:setUnifiedModel(setting_type, provider, custom_model)
                                     UIManager:show(InfoMessage:new{ text = setting_type:gsub("^%l", string.upper) .. " AI set to " .. custom_model, timeout = 3 })
                                     UIManager:setDirty(nil, "ui")
@@ -993,11 +1763,82 @@ function M:showConfigSummary()
     local function add(p, n)
         local c = self.ai_helper.providers[p]
         local key_label = (self.loc:t("config_api_key_label") or "%s API Key: "):format(n)
-        text = text .. key_label .. (c.api_key and set_label or not_set_label) .. "\n"
+        text = text .. key_label .. ((c.api_key and #c.api_key > 0) and set_label or not_set_label) .. "\n"
     end
     add("gemini", "Google Gemini"); add("chatgpt", "ChatGPT")
+    add("deepseek", "DeepSeek"); add("claude", "Anthropic Claude")
+    add("custom1", "Custom API 1"); add("custom2", "Custom API 2")
     
     UIManager:show(InfoMessage:new{ text = text, timeout = 15 })
+end
+
+function M:showReasoningEffortSettings()
+    local ButtonDialog = require("ui/widget/buttondialog")
+    local info_dialog
+    
+    local function showSettings()
+        if info_dialog then UIManager:close(info_dialog) end
+        local current = self.ai_helper.settings and self.ai_helper.settings.reasoning_effort or "medium"
+        
+        info_dialog = ButtonDialog:new{
+            title = self.loc:t("menu_reasoning_effort") or "AI Model Reasoning Effort",
+            text = "Controls internal 'thinking' time for supported reasoning models.",
+            buttons = {
+                {
+                    {
+                        text = (current == "low" and "[✓] " or "[  ] ") .. (self.loc:t("reasoning_low") or "Low"),
+                        callback = function()
+                            self.ai_helper:saveSettings({ reasoning_effort = "low" })
+                            UIManager:nextTick(function() showSettings() end)
+                        end
+                    },
+                    {
+                        text = (current == "medium" and "[✓] " or "[  ] ") .. (self.loc:t("reasoning_medium") or "Medium"),
+                        callback = function()
+                            self.ai_helper:saveSettings({ reasoning_effort = "medium" })
+                            UIManager:nextTick(function() showSettings() end)
+                        end
+                    }
+                },
+                {
+                    {
+                        text = (current == "high" and "[✓] " or "[  ] ") .. (self.loc:t("reasoning_high") or "High"),
+                        callback = function()
+                            self.ai_helper:saveSettings({ reasoning_effort = "high" })
+                            UIManager:nextTick(function() showSettings() end)
+                        end
+                    },
+                    {
+                        text = (current == "xhigh" and "[✓] " or "[  ] ") .. (self.loc:t("reasoning_xhigh") or "Extra High"),
+                        callback = function()
+                            self.ai_helper:saveSettings({ reasoning_effort = "xhigh" })
+                            UIManager:nextTick(function() showSettings() end)
+                        end
+                    }
+                },
+                {
+                    {
+                        text = self.loc:t("about") or "About",
+                        callback = function()
+                            UIManager:show(InfoMessage:new{
+                                text = self.loc:t("reasoning_about") or "Controls 'thinking' depth for reasoning models:\n\n• Low: Fast, economical extraction for simple books.\n• Medium: Balanced depth for most narratives.\n• High: Detailed analysis for complex character webs.\n• Extra High: Maximum effort for long books or omnibus editions.\n\nApplies to: GPT-5.x, DeepSeek Reasoner, Claude 4.5+ (extended thinking), and Gemini 2.5+.",
+                                timeout = 12
+                            })
+                        end
+                    },
+                    {
+                        text = self.loc:t("close") or "Close",
+                        callback = function()
+                            UIManager:close(info_dialog)
+                        end
+                    }
+                }
+            }
+        }
+        UIManager:show(info_dialog)
+    end
+    
+    showSettings()
 end
 
 function M:checkWeeklyUpdate()
@@ -1012,7 +1853,7 @@ function M:checkWeeklyUpdate()
         if NetworkMgr:isOnline() then
             self:log("XRayPlugin: Triggering weekly silent update check")
             self.ai_helper:saveSettings({ last_update_check = now })
-            local updater = require("xray_updater")
+            local updater = require(plugin_path .. "xray_updater")
             updater.checkSilentForUpdates(self.loc)
         else
             self:log("XRayPlugin: Skipping weekly update check (offline)")

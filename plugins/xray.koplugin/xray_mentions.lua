@@ -3,7 +3,8 @@
 local UIManager = require("ui/uimanager")
 local Menu = require("ui/widget/menu")
 local Screen = require("device").screen
-local XRayConfig = require("xray_config")
+local plugin_path = ((...) or ""):match("(.-)[^%.]+$") or ""
+local XRayConfig = require(plugin_path .. "xray_config")
 
 
 local M = {}
@@ -45,7 +46,7 @@ function M:buildMentionsInBackground(is_from_fetch)
     self.mentions_scan_active = true
     self:log("XRayPlugin: Background mentions update for " .. #queue .. " activated entities")
     if not self.chapter_analyzer then
-        self.chapter_analyzer = require("xray_chapteranalyzer"):new()
+        self.chapter_analyzer = require(plugin_path .. "xray_chapteranalyzer"):new()
     end
 
     local idx = 1
@@ -70,8 +71,7 @@ function M:buildMentionsInBackground(is_from_fetch)
             function(result)
                 if result then item.entity.mentions = result end
                 -- Yield between entities
-                local XRayConfig = require("xray_config")
-                UIManager:scheduleIn(XRayConfig.isLowPowerDevice and 0.5 or 0, scanNext)
+                UIManager:scheduleIn(0.5, scanNext)
             end
         )
     end
@@ -83,7 +83,7 @@ function M:updateMentionsForChapter(toc_entry, next_toc_entry)
     if self.mentions_scan_active then return end
     if not toc_entry then return end
     if not self.chapter_analyzer then
-        self.chapter_analyzer = require("xray_chapteranalyzer"):new()
+        self.chapter_analyzer = require(plugin_path .. "xray_chapteranalyzer"):new()
     end
     -- Early-exit
     local has_activated = false
@@ -156,15 +156,14 @@ function M:updateMentionsForChapter(toc_entry, next_toc_entry)
                 end)
             end
         end
-        local XRayConfig = require("xray_config")
-        UIManager:scheduleIn(XRayConfig.isLowPowerDevice and 0.1 or 0, scanNext)
+        UIManager:scheduleIn(0.1, scanNext)
     end
     UIManager:scheduleIn(0, scanNext)
 end
 
 function M:saveMentionsToCache()
     if not self.cache_manager then
-        self.cache_manager = require("xray_cachemanager"):new()
+        self.cache_manager = require(plugin_path .. "xray_cachemanager"):new()
     end
     if not self.ui or not self.ui.document then return end
     local updated = {
@@ -203,7 +202,7 @@ function M:showMentionsForEntity(entity)
     if not self.ui or not self.ui.document then return end
     
     if not self.chapter_analyzer then
-        self.chapter_analyzer = require("xray_chapteranalyzer"):new()
+        self.chapter_analyzer = require(plugin_path .. "xray_chapteranalyzer"):new()
     end
     
     local toc = self.ui.document:getToc() or {}
@@ -295,7 +294,7 @@ function M:buildMentionsMenuItems(entity)
                 local max_page = spoiler_free and self.ui:getCurrentPage() or nil
                 
                 if not self.chapter_analyzer then
-                    self.chapter_analyzer = require("xray_chapteranalyzer"):new()
+                    self.chapter_analyzer = require(plugin_path .. "xray_chapteranalyzer"):new()
                 end
                 
                 self.active_mention_scan = {
@@ -360,15 +359,11 @@ function M:buildMentionsMenuItems(entity)
             keep_menu_open = true,
             callback = function()
                 if is_scanning then return end
-                if self.mentions_menu then UIManager:close(self.mentions_menu) end
+                self:closeAllMenus()
                 
                 UIManager:nextTick(function()
-                    self:closeAllMenus()
-                    
-                    UIManager:nextTick(function()
-                        local Event = require("ui/event")
-                        self.ui:handleEvent(Event:new("GotoPage", pg))
-                    end)
+                    local Event = require("ui/event")
+                    self.ui:handleEvent(Event:new("GotoPage", pg))
                 end)
             end,
         })
@@ -401,8 +396,7 @@ function M:showMentionsMenu(entity)
         width          = Screen:getWidth(),
         height         = Screen:getHeight(),
         on_close_callback = function() 
-            if self.is_cancelled then return end
-            self:showFullXRayMenu() 
+            self.mentions_menu = nil
         end,
     }
     UIManager:show(self.mentions_menu)

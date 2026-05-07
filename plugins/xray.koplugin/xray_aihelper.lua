@@ -1,16 +1,21 @@
 -- AIHelper - Google Gemini & ChatGPT for X-Ray
-local http = require("socket.http")
-local https = require("ssl.https")
-local ltn12 = require("ltn12")
-local socket = require("socket")
-local socketutil = require("socketutil")
+local ok_http, http = pcall(require, "socket.http")
+local ok_https, https = pcall(require, "ssl.https")
+local ok_ltn12, ltn12 = pcall(require, "ltn12")
+local ok_socket, socket = pcall(require, "socket")
+local ok_socketutil, socketutil = pcall(require, "socketutil")
+
 local logger = require("logger")
-local XRayLogger = require("xray_logger")
+local plugin_path = ((...) or ""):match("(.-)[^%.]+$") or ""
+local XRayLogger = require(plugin_path .. "xray_logger")
 local Trapper = require("ui/trapper")
 
 -- Optimization: Use rapidjson if available
-local rapidjson_ok, rapidjson = pcall(require, "rapidjson")
-local json = rapidjson_ok and rapidjson or require("json")
+local json_ok, json = pcall(require, "json")
+if not json_ok then
+    rapidjson_ok, json = pcall(require, "rapidjson")
+end
+
 
 local AIHelper = {
     path = nil,
@@ -25,6 +30,32 @@ local AIHelper = {
             enabled = true,
             api_key = nil,
             endpoint = "https://api.openai.com/v1/chat/completions",
+        },
+        deepseek = {
+            name = "DeepSeek",
+            enabled = true,
+            api_key = nil,
+            endpoint = "https://api.deepseek.com/chat/completions",
+        },
+        claude = {
+            name = "Anthropic Claude",
+            enabled = true,
+            api_key = nil,
+            endpoint = "https://api.anthropic.com/v1/messages",
+        },
+        custom1 = {
+            name = "Custom API 1",
+            enabled = true,
+            api_key = nil,
+            endpoint = "",
+            model = nil,
+        },
+        custom2 = {
+            name = "Custom API 2",
+            enabled = true,
+            api_key = nil,
+            endpoint = "",
+            model = nil,
         }
     },
     default_provider = nil,
@@ -96,6 +127,23 @@ local function sanitize_utf8(s)
     return table.concat(out)
 end
 
+function AIHelper:getChatGPTTokenConfig(model)
+    -- OpenAI reasoning models (o1, o3) and newer generations (gpt-5+) REQUIRE max_completion_tokens.
+    -- Modern flagship models (gpt-4o, gpt-4o-mini) also support it.
+    if model:find("^o[13]") or model:find("^gpt%-5") or model:find("^gpt%-4o") then
+        return "max_completion_tokens", 32000
+    end
+    
+    -- DeepSeek (including R1/reasoner) and older GPT-4 models do NOT support max_completion_tokens 
+    -- in their official APIs and will return a 400 error. They require the standard max_tokens.
+    if model:find("reasoner") or model:find("deepseek") or model:find("%-r1") or model:find("/r1") then
+        return "max_tokens", 32000
+    end
+    
+    -- Raise the default from 8192 to 16384 for other models.
+    return "max_tokens", 16384
+end
+
 function AIHelper:setTrapWidget(trap_widget) self.trap_widget = trap_widget end
 function AIHelper:resetTrapWidget() self.trap_widget = nil end
 
@@ -148,6 +196,30 @@ function AIHelper:buildComprehensiveRequest(title, author, context)
                 local system_instruction_text = self.prompts and self.prompts.system_instruction or "Return valid JSON ONLY."
                 url = "https://generativelanguage.googleapis.com/v1beta/models/" .. model .. ":generateContent"
                 headers = { ["Content-Type"] = "application/json", ["x-goog-api-key"] = config.api_key }
+                
+                local gen_config = { temperature = 0.2, maxOutputTokens = 16384 } -- default
+                local current_effort = self.settings and self.settings.reasoning_effort or "medium"
+                if model:find("thinking") or model:find("2%.5") or model:find("3%.0") or model:find("pro") or model:find("flash") then
+                    local effort_map = { low = 1024, medium = 2048, high = 4096, xhigh = 8192 }
+                    local budget = effort_map[current_effort] or 2048
+                    
+                    -- Gemini 1.5 Pro, 1.5 Flash, and 2.0 Flash have a hard output limit of 8,192 tokens.
+                    -- Thinking tokens count against this, so we must leave room for the response.
+                    if (model:find("1%.5") or model:find("2%.0%-flash")) and budget > 2000 then
+                        self:log(string.format("AIHelper: Constrained Gemini %s detected — capping thinking budget from %d to 2000 (limit=8192)", model, budget))
+                        budget = 2000
+                        gen_config.maxOutputTokens = 8192
+                    elseif model:find("2%.5") or model:find("3%.0") then
+                        -- For newer models with 65k limits, scale maxOutputTokens to budget + 16000 reserve
+                        gen_config.maxOutputTokens = budget + 16000
+                    else
+                        -- Standard fallback for other models
+                        gen_config.maxOutputTokens = budget + 8000
+                    end
+                    
+                    gen_config.thinkingConfig = { thinkingBudgetTokens = budget }
+                end
+                
                 body = json.encode({
                     contents = {{ role = "user", parts = {{ text = prompt }} }},
                     system_instruction = { parts = {{ text = system_instruction_text }} },
@@ -157,22 +229,108 @@ function AIHelper:buildComprehensiveRequest(title, author, context)
                         { category = "HARM_CATEGORY_HARASSMENT", threshold = "BLOCK_NONE" },
                         { category = "HARM_CATEGORY_DANGEROUS_CONTENT", threshold = "BLOCK_NONE" }
                     },
-                    generationConfig = { temperature = 0.2, maxOutputTokens = 16384 }
+                    generationConfig = gen_config
                 })
+            elseif ai.provider == "claude" then
+                local model = ai.model or "claude-3-7-sonnet-latest"
+                url = config.endpoint or "https://api.anthropic.com/v1/messages"
+                headers = { ["Content-Type"] = "application/json", ["x-api-key"] = config.api_key, ["anthropic-version"] = "2023-06-01" }
+                local system_instruction_text = (self.prompts and self.prompts.system_instruction or "Return valid JSON ONLY.") .. " You MUST output strictly valid JSON, starting with '{'."
+                
+                local req_body = {
+                    model = model,
+                    max_tokens = 8192,  -- default for non-thinking models; overridden below
+                    system = system_instruction_text,
+                    messages = {
+                        { role = "user", content = prompt },
+                        { role = "assistant", content = "{" }
+                    }
+                }
+                
+                if model:find("sonnet") or model:find("opus") or model:find("haiku") then
+                    local current_effort = self.settings and self.settings.reasoning_effort or "medium"
+                    local effort_map = { low = 2048, medium = 4096, high = 8192, xhigh = 16384 }
+                    local budget = effort_map[current_effort] or 4096
+                    -- Haiku has a hard max_tokens limit of 8192; silently cap budget to leave room for output.
+                    -- Claude thinking tokens count against max_tokens, so max_tokens must be > budget_tokens.
+                    if model:find("haiku") and budget > 2000 then
+                        self:log(string.format("AIHelper: Haiku detected — capping thinking budget from %d to 2000 (haiku max_tokens=8192)", budget))
+                        budget = 2000
+                        req_body.max_tokens = 8192
+                    else
+                        -- For sonnet/opus: dynamically scale max_tokens to always leave 8000 tokens for the JSON response.
+                        -- Without this, at 'high' effort budget_tokens==max_tokens leaving zero room for output.
+                        local output_reserve = 8000
+                        req_body.max_tokens = budget + output_reserve
+                    end
+                    -- Claude extended thinking configuration
+                    req_body.thinking = { type = "enabled", budget_tokens = budget }
+                end
+                
+                body = json.encode(req_body)
             else
                 local model = ai.model or "gpt-4o-mini"
                 url = config.endpoint or "https://api.openai.com/v1/chat/completions"
                 headers = { ["Content-Type"] = "application/json", ["Authorization"] = "Bearer " .. config.api_key }
                 local system_instruction_text = self.prompts and self.prompts.system_instruction or "Return valid JSON ONLY."
-                body = json.encode({ 
+                local is_openai_reasoning = (model:find("^gpt%-5") or model:find("^o[13]"))
+                if is_openai_reasoning then
+                    system_instruction_text = system_instruction_text .. " You MUST output strictly valid JSON, starting with '{'."
+                end
+
+                local instruction_role = "system"
+                if is_openai_reasoning then
+                    instruction_role = "developer"
+                end
+
+                local token_param, token_val = self:getChatGPTTokenConfig(model)
+                local req_body = { 
                     model = model, 
                     messages = {
-                        { role = "system", content = system_instruction_text },
+                        { role = instruction_role, content = system_instruction_text },
                         { role = "user", content = prompt }
                     }, 
                     response_format = { type = "json_object" },
-                    max_tokens = 4096
-                })
+                    [token_param] = token_val
+                }
+                
+                -- DeepSeek-R1 reasons inherently; official API does not support reasoning_effort and will return a 400 error.
+                -- We only apply token ceiling adjustments here.
+                if ai.provider == "deepseek" and model:find("reasoner") then
+                    -- No effort mapping for official DeepSeek API to avoid 400 errors.
+                    -- The 32k token ceiling is already handled by getChatGPTTokenConfig.
+                end
+
+                -- OpenAI gpt-5 and o-series: inject reasoning_effort (xhigh is a valid OpenAI value).
+                -- IMPORTANT: response_format={json_object} is incompatible with reasoning_effort and causes a 400 error.
+                -- When reasoning is active, drop response_format and rely on the system prompt JSON instruction.
+                -- Also raise max_completion_tokens: GPT-5 models support 128k output; at xhigh effort
+                -- OpenAI recommends reserving ~25k for reasoning, so 65k is a safe ceiling.
+                if (ai.provider == "chatgpt" or ai.provider == "custom1" or ai.provider == "custom2")
+                    and (model:find("^gpt%-5") or model:find("^o[13]")) then
+                    local current_effort = self.settings and self.settings.reasoning_effort or "medium"
+                    req_body.reasoning_effort = current_effort
+                    req_body.response_format = nil  -- incompatible with reasoning_effort
+                    if current_effort == "high" or current_effort == "xhigh" then
+                        req_body[token_param] = 65000
+                        self:log(string.format("AIHelper: OpenAI %s at %s effort — dropping json_object mode, raising max_completion_tokens to 65000", model, current_effort))
+                    end
+                end
+                
+                if ai.provider == "custom1" or ai.provider == "custom2" then
+                    if (config.endpoint or ""):find("openrouter.ai") then
+                        headers["HTTP-Referer"]      = "https://github.com/koreader/koreader-xray-plugin"
+                        headers["X-OpenRouter-Title"] = "KOReader X-Ray"
+                    end
+                    -- Per-slot "Is Reasoning Model" setting: raise token ceiling to accommodate reasoning chains
+                    local is_reasoning = self.settings and self.settings[ai.provider .. "_is_reasoning"]
+                    if is_reasoning then
+                        req_body["max_completion_tokens"] = 32000
+                        self:log(string.format("AIHelper: Custom slot %s marked as reasoning model — using 32000 token ceiling", ai.provider))
+                    end
+                end
+                
+                body = json.encode(req_body)
             end
             table.insert(requests, { url = url, headers = headers, body = body, provider = ai.provider, model = ai.model })
         end
@@ -188,6 +346,10 @@ end
 function AIHelper:hasApiKey()
     if self.providers.gemini and self.providers.gemini.api_key and self.providers.gemini.api_key ~= "" then return true end
     if self.providers.chatgpt and self.providers.chatgpt.api_key and self.providers.chatgpt.api_key ~= "" then return true end
+    if self.providers.deepseek and self.providers.deepseek.api_key and self.providers.deepseek.api_key ~= "" then return true end
+    if self.providers.claude and self.providers.claude.api_key and self.providers.claude.api_key ~= "" then return true end
+    if self.providers.custom1 and self.providers.custom1.api_key and self.providers.custom1.api_key ~= "" then return true end
+    if self.providers.custom2 and self.providers.custom2.api_key and self.providers.custom2.api_key ~= "" then return true end
     return false
 end
 
@@ -447,6 +609,11 @@ function AIHelper:checkAsyncResult(result_file)
            data.candidates[1].content.parts[1] then
             ai_text = data.candidates[1].content.parts[1].text
         end
+    elseif provider == "claude" then
+        if data.content and data.content[1] and data.content[1].text then
+            -- Prepend the '{' that we prefilled in the request
+            ai_text = "{" .. data.content[1].text
+        end
     else
         if data.choices and data.choices[1] then
             ai_text = data.choices[1].message.content
@@ -465,9 +632,11 @@ end
 
 function AIHelper:init(path)
     self.path = path or "plugins/xray.koplugin"
-    self:loadConfig(); self:loadSettings()
+    self:loadConfig()
+    self:loadSettings()
     self:log("AIHelper initialized")
 end
+
 
 function AIHelper:loadConfig()
     local new_config_file = self.path .. "/xray_config.lua"
@@ -489,11 +658,14 @@ function AIHelper:loadConfig()
                     local new_text = new_f:read("*a")
                     new_f:close()
                     if old_config.gemini_api_key and #old_config.gemini_api_key > 0 then
-                        new_text = new_text:gsub('gemini_api_key%s*=%s*""', 'gemini_api_key = "' .. old_config.gemini_api_key .. '"')
+                        local safe_key = old_config.gemini_api_key:gsub("%%", "%%%%")
+                        new_text = new_text:gsub('gemini_api_key%s*=%s*""', 'gemini_api_key = "' .. safe_key .. '"')
                     end
                     if old_config.chatgpt_api_key and #old_config.chatgpt_api_key > 0 then
-                        new_text = new_text:gsub('chatgpt_api_key%s*=%s*""', 'chatgpt_api_key = "' .. old_config.chatgpt_api_key .. '"')
+                        local safe_key = old_config.chatgpt_api_key:gsub("%%", "%%%%")
+                        new_text = new_text:gsub('chatgpt_api_key%s*=%s*""', 'chatgpt_api_key = "' .. safe_key .. '"')
                     end
+
                     local out_f = io.open(new_config_file, "w")
                     if out_f then
                         out_f:write(new_text)
@@ -510,14 +682,22 @@ function AIHelper:loadConfig()
     end
 
     local success, config = pcall(dofile, new_config_file)
-    self.config_keys = { gemini = nil, chatgpt = nil }
+    self.config_keys = { gemini = nil, chatgpt = nil, deepseek = nil, claude = nil, custom1 = nil, custom2 = nil }
     if success and config then
         if config.gemini_api_key then self.providers.gemini.api_key = config.gemini_api_key; self.config_keys.gemini = config.gemini_api_key end
         if config.gemini_primary_model then self.providers.gemini.primary_model = config.gemini_primary_model end
         if config.gemini_secondary_model then self.providers.gemini.secondary_model = config.gemini_secondary_model end
         if config.chatgpt_api_key then self.providers.chatgpt.api_key = config.chatgpt_api_key; self.config_keys.chatgpt = config.chatgpt_api_key end
         if config.chatgpt_model then self.providers.chatgpt.model = config.chatgpt_model end
+        if config.deepseek_api_key then self.providers.deepseek.api_key = config.deepseek_api_key; self.config_keys.deepseek = config.deepseek_api_key end
+        if config.claude_api_key then self.providers.claude.api_key = config.claude_api_key; self.config_keys.claude = config.claude_api_key end
         if config.default_provider then self.default_provider = config.default_provider end
+        
+        for _, slot in ipairs({"custom1", "custom2"}) do
+            if config[slot .. "_api_key"]  then self.providers[slot].api_key  = config[slot .. "_api_key"];  self.config_keys[slot] = config[slot .. "_api_key"] end
+            if config[slot .. "_endpoint"] then self.providers[slot].endpoint = config[slot .. "_endpoint"] end
+            if config[slot .. "_model"]    then self.providers[slot].model    = config[slot .. "_model"]    end
+        end
     end
 end
 
@@ -535,11 +715,13 @@ function AIHelper:loadSettings()
     
     if not ok or type(lfs) ~= "table" then
         self:log("AIHelper: Settings will be in-memory only (lfs module missing)")
+        lfs = nil
     else
         if lfs.attributes(xray_dir, "mode") ~= "directory" then
             lfs.mkdir(xray_dir)
         end
     end
+
     
     local settings_file = xray_dir .. "/settings.json"
     
@@ -580,6 +762,12 @@ function AIHelper:loadSettings()
     if not settings.gemini_primary_model then settings.gemini_primary_model = self.providers.gemini.primary_model end
     if not settings.gemini_secondary_model then settings.gemini_secondary_model = self.providers.gemini.secondary_model end
     if not settings.chatgpt_model then settings.chatgpt_model = self.providers.chatgpt.model end
+
+    -- Description length defaults (chars per entity type)
+    if not settings.char_desc_len     then settings.char_desc_len     = 200 end
+    if not settings.loc_desc_len      then settings.loc_desc_len      = 100 end
+    if not settings.timeline_event_len then settings.timeline_event_len = 80  end
+    if not settings.hist_fig_bio_len  then settings.hist_fig_bio_len  = 100 end
     
     -- Migration to unified Primary and Secondary AI logic
     if type(settings.primary_ai) ~= "table" or type(settings.secondary_ai) ~= "table" then
@@ -588,7 +776,7 @@ function AIHelper:loadSettings()
             settings.primary_ai = { provider = "gemini", model = settings.gemini_primary_model or "gemini-2.5-flash" }
             settings.secondary_ai = { provider = "gemini", model = settings.gemini_secondary_model or "gemini-2.5-flash-lite" }
         else
-            settings.primary_ai = { provider = "chatgpt", model = settings.chatgpt_model or "gpt-4o-mini" }
+            settings.primary_ai = { provider = "chatgpt", model = settings.chatgpt_model or "gpt-5.4-mini" }
             settings.secondary_ai = { provider = "gemini", model = "gemini-2.5-flash-lite" }
         end
         migrated = true
@@ -647,6 +835,37 @@ function AIHelper:loadSettings()
         end
     end
     
+    if settings.deepseek_api_key then 
+        if settings.deepseek_use_ui_key ~= false then
+            self.providers.deepseek.api_key = settings.deepseek_api_key
+            self.providers.deepseek.ui_key_active = true
+        else
+            self.providers.deepseek.ui_key_active = false
+        end
+    end
+    
+    if settings.claude_api_key then 
+        if settings.claude_use_ui_key ~= false then
+            self.providers.claude.api_key = settings.claude_api_key
+            self.providers.claude.ui_key_active = true
+        else
+            self.providers.claude.ui_key_active = false
+        end
+    end
+    
+    for _, slot in ipairs({"custom1", "custom2"}) do
+        if settings[slot .. "_api_key"] then
+            if settings[slot .. "_use_ui_key"] ~= false then
+                self.providers[slot].api_key = settings[slot .. "_api_key"]
+                self.providers[slot].ui_key_active = true
+            else
+                self.providers[slot].ui_key_active = false
+            end
+        end
+        if settings[slot .. "_endpoint"] then self.providers[slot].endpoint = settings[slot .. "_endpoint"] end
+        if settings[slot .. "_model"] then self.providers[slot].model = settings[slot .. "_model"] end
+    end
+    
     self:loadLanguage()
 end
 
@@ -664,6 +883,7 @@ function AIHelper:saveSettings(new_settings)
     if lfs.attributes(xray_dir, "mode") ~= "directory" then
         lfs.mkdir(xray_dir)
     end
+
     
     self.settings = self.settings or {}
     if new_settings then
@@ -713,7 +933,8 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
         if context.annotations then extra_context = extra_context .. "\n\nUSER HIGHLIGHTS:\n" .. context.annotations end
         -- Merge mode: tell AI what we already know
         local has_merge_data = false
-        local merge_instructions = "\n\nMERGE MODE INSTRUCTIONS:\nYou are UPDATING an existing X-Ray.\n- For entities (Characters, Locations, Historical Figures) that already exist, synthesize a completely rewritten, cohesive summary combining the EXISTING KNOWLEDGE with any new information found in the text.\n- Write a solid summary that is not repetitive.\n- Descriptions MUST NOT exceed 500 characters.\n- If there is no new information, return the existing description (or a refined version of it under 500 characters)."
+        local _merge_char_len = (self.settings and self.settings.char_desc_len) or 200
+        local merge_instructions = "\n\nMERGE MODE INSTRUCTIONS:\nYou are UPDATING an existing X-Ray.\n- For entities (Characters, Locations, Historical Figures) that already exist, synthesize a completely rewritten, cohesive summary combining the EXISTING KNOWLEDGE with any new information found in the text.\n- Write a solid summary that is not repetitive.\n- Descriptions MUST NOT exceed " .. tostring(_merge_char_len) .. " characters.\n- If there is no new information, return the existing description (or a refined version of it under " .. tostring(_merge_char_len) .. " characters)."
         
         if context.existing_characters and #context.existing_characters > 0 then
             local existing_lines = {}
@@ -784,6 +1005,30 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
     if not success then final_prompt = string.format("Extract %s data.", section_name) end
     if #extra_context > 0 then final_prompt = final_prompt .. extra_context end
 
+    -- Inject dynamic description-length placeholders.
+    -- These replace {MAX_CHAR_DESC}, {NUM_CHARS}, etc. in all prompt templates so
+    -- the user's Description Length setting is honoured without needing separate
+    -- per-language prompt edits for numeric values.
+    do
+        local s = self.settings or {}
+        local char_len  = math.max(100, math.min(500, s.char_desc_len     or 200))
+        local loc_len   = math.max(50,  math.min(300, s.loc_desc_len      or 100))
+        local tl_len    = math.max(50,  math.min(200, s.timeline_event_len or 80))
+        local hist_len  = math.max(50,  math.min(400, s.hist_fig_bio_len  or 100))
+        -- Count scaling: inversely proportional to description length, with floor/cap.
+        local num_chars = math.min(40, math.max(10, math.floor(25 * 200 / char_len)))
+        local num_locs  = math.min(20, math.max(3,  math.floor(8  * 100 / loc_len)))
+        local num_hist  = math.min(15, math.max(3,  math.floor(8  * 100 / hist_len)))
+        final_prompt = final_prompt
+            :gsub("{MAX_CHAR_DESC}",    tostring(char_len))
+            :gsub("{NUM_CHARS}",        tostring(num_chars))
+            :gsub("{MAX_LOC_DESC}",     tostring(loc_len))
+            :gsub("{NUM_LOCS}",         tostring(num_locs))
+            :gsub("{MAX_TIMELINE_EVENT}",tostring(tl_len))
+            :gsub("{MAX_HIST_BIO}",     tostring(hist_len))
+            :gsub("{NUM_HIST}",         tostring(num_hist))
+    end
+
     -- Strip invalid UTF-8 introduced by byte-based truncation of multi-byte
     -- text (Cyrillic, CJK, curly quotes, etc.) before the prompt is JSON-encoded.
     local before_len = #final_prompt
@@ -811,6 +1056,8 @@ function AIHelper:executeUnifiedRequest(prompt)
             local result, err_code, err_msg
             if ai.provider == "gemini" then
                 result, err_code, err_msg = self:callGemini(prompt, config, ai.model)
+            elseif ai.provider == "custom1" or ai.provider == "custom2" then
+                result, err_code, err_msg = self:callChatGPT(prompt, config, ai.model or config.model)
             else
                 result, err_code, err_msg = self:callChatGPT(prompt, config, ai.model)
             end
@@ -845,6 +1092,23 @@ end
 function AIHelper:lookupSingleWord(text, context)
     local prompt = self:createPrompt(nil, nil, context, "single_word_lookup", text)
     return self:executeUnifiedRequest(prompt)
+end
+
+function AIHelper:mergeDescriptionsWithAI(primary_desc, secondary_desc)
+    if not self.prompts then self:loadLanguage() end
+    local template = self.prompts.merge_descriptions
+    if not template then
+        self:log("AIHelper: merge_descriptions prompt not found, falling back.")
+        return nil
+    end
+    
+    local prompt = string.format(template, primary_desc or "", secondary_desc or "")
+    local result, err_code, err_msg = self:executeUnifiedRequest(prompt)
+    if result and result.merged_description then
+        return result.merged_description
+    end
+    self:log("AIHelper: mergeDescriptionsWithAI failed: " .. tostring(err_msg))
+    return nil
 end
 
 function AIHelper:callGemini(prompt, config, current_model)
@@ -905,17 +1169,54 @@ function AIHelper:callChatGPT(prompt, config, current_model)
 
     self:log("AIHelper: ChatGPT Prompt prepared")
     local system_instruction_text = self.prompts and self.prompts.system_instruction or "Return valid JSON ONLY."
-    local request_body = json.encode({ 
+    local is_openai_reasoning = (model:find("^gpt%-5") or model:find("^o[13]"))
+    if is_openai_reasoning then
+        system_instruction_text = system_instruction_text .. " You MUST output strictly valid JSON, starting with '{'."
+    end
+    
+    -- Modern models (gpt-5, o1, o3) use 'developer' role instead of 'system'
+    local instruction_role = "system"
+    if is_openai_reasoning then
+        instruction_role = "developer"
+    end
+
+    local token_param, token_val = self:getChatGPTTokenConfig(model)
+    local request_payload = { 
         model = model, 
         messages = {
-            { role = "system", content = system_instruction_text },
+            { role = instruction_role, content = system_instruction_text },
             { role = "user", content = prompt }
         }, 
         response_format = { type = "json_object" }, 
-        max_tokens = 4096 
-    })
+        [token_param] = token_val 
+    }
+
+    -- Add reasoning_effort if configured and supported.
+    -- xhigh is a valid OpenAI API value; pass through directly.
+    -- IMPORTANT: response_format={json_object} is incompatible with reasoning_effort and causes a 400.
+    -- When reasoning is active, drop response_format and rely on the system prompt's JSON instruction.
+    -- Also raise max_completion_tokens: GPT-5 supports 128k output; at xhigh OpenAI recommends ~25k buffer,
+    -- so 65k is a safe ceiling that leaves ample room for both reasoning and the X-Ray JSON.
+    if self.settings.reasoning_effort and (model:find("^gpt%-5") or model:find("^o[13]")) then
+        local effort = self.settings.reasoning_effort
+        request_payload.reasoning_effort = effort
+        request_payload.response_format = nil  -- incompatible with reasoning_effort
+        if effort == "high" or effort == "xhigh" then
+            request_payload[token_param] = 65000
+            self:log(string.format("AIHelper: OpenAI %s at %s effort — dropping json_object mode, raising max_completion_tokens to 65000", model, effort))
+        end
+    end
+
+    local request_body = json.encode(request_payload)
     self:log("AIHelper: Sending ChatGPT request (" .. #request_body .. " bytes)")
-    local ok, code, response_text = self:makeRequest(config.endpoint or "https://api.openai.com/v1/chat/completions", { ["Content-Type"] = "application/json", ["Authorization"] = "Bearer " .. config.api_key }, request_body)
+    
+    local headers = { ["Content-Type"] = "application/json", ["Authorization"] = "Bearer " .. config.api_key }
+    if (config.endpoint or ""):find("openrouter.ai") then
+        headers["HTTP-Referer"]       = "https://github.com/koreader/koreader-xray-plugin"
+        headers["X-OpenRouter-Title"] = "KOReader X-Ray"
+    end
+    
+    local ok, code, response_text = self:makeRequest(config.endpoint or "https://api.openai.com/v1/chat/completions", headers, request_body)
     
     local code_num = tonumber(code)
     self:log("AIHelper: ChatGPT Response Code: " .. tostring(code_num))
@@ -924,8 +1225,17 @@ function AIHelper:callChatGPT(prompt, config, current_model)
     if code_num == 200 and response_text then 
         local success, data = pcall(json.decode, response_text)
         if success and data.choices and data.choices[1] then
-            local parsed_data, err = self:parseAIResponse(data.choices[1].message.content)
-            if parsed_data then return parsed_data end
+            local message = data.choices[1].message
+            local content = message.content
+            local reasoning = message.reasoning_content
+            
+            local parsed_data, err = self:parseAIResponse(content)
+            if parsed_data then 
+                if reasoning then
+                    parsed_data.ai_reasoning = reasoning
+                end
+                return parsed_data 
+            end
             self:log("AIHelper: ChatGPT parse failed: " .. tostring(err))
         end
     else
@@ -1097,6 +1407,21 @@ function AIHelper:setAPIKey(p, k)
     self.providers[p].ui_key_active = true
     self:saveSettings({ [p .. "_api_key"] = k, [p .. "_use_ui_key"] = true })
     return true 
+end
+
+function AIHelper:setCustomAPIConfig(slot, key, endpoint, model)
+    -- slot is "custom1" or "custom2"
+    self.providers[slot].api_key        = key
+    self.providers[slot].endpoint       = endpoint
+    self.providers[slot].model          = model
+    self.providers[slot].ui_key_active  = true
+    self:saveSettings({
+        [slot .. "_api_key"]    = key,
+        [slot .. "_use_ui_key"] = true,
+        [slot .. "_endpoint"]   = endpoint,
+        [slot .. "_model"]      = model,
+    })
+    return true
 end
 
 function AIHelper:setUnifiedModel(type, provider, model)

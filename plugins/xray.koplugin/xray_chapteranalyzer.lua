@@ -1,6 +1,7 @@
 -- ChapterAnalyzer - Analyze which characters appear in current chapter/page
 local logger = require("logger")
-local AIHelper = require("xray_aihelper")
+local plugin_path = ((...) or ""):match("(.-)[^%.]+$") or ""
+local AIHelper = require(plugin_path .. "xray_aihelper")
 
 local ChapterAnalyzer = {}
 
@@ -301,10 +302,22 @@ function ChapterAnalyzer:findCharactersInText(text, characters)
     
     for _, char in ipairs(characters) do
         local name = char.name
-        if name and #name > 2 then
-            -- Check full name
+        if name and #name >= 1 then
             local name_lower = string.lower(name)
-            if string.find(text_lower, name_lower, 1, true) then
+            
+            -- Helper to check word boundaries for short names
+            local function findWithBoundaries(text, needle)
+                if #needle < 4 then
+                    local safe_needle = needle:gsub("([%(%)%.%%%+%-%*%?%[%^%$])", "%%%1")
+                    local pattern = "%f[%w]" .. safe_needle .. "%f[%W]"
+                    return string.find(text, pattern)
+                else
+                    return string.find(text, needle, 1, true)
+                end
+            end
+            
+            -- Check full name
+            if findWithBoundaries(text_lower, name_lower) then
                 table.insert(found_characters, {
                     character = char,
                     count = self:countMentions(text_lower, name_lower)
@@ -312,9 +325,9 @@ function ChapterAnalyzer:findCharactersInText(text, characters)
             else
                 -- Check first name only
                 local first_name = string.match(name, "^(%S+)")
-                if first_name and #first_name > 2 then
+                if first_name and #first_name >= 1 then
                     local first_name_lower = string.lower(first_name)
-                    if string.find(text_lower, first_name_lower, 1, true) then
+                    if findWithBoundaries(text_lower, first_name_lower) then
                         table.insert(found_characters, {
                             character = char,
                             count = self:countMentions(text_lower, first_name_lower)
@@ -773,8 +786,19 @@ function ChapterAnalyzer:countMentions(text, name)
     local count = 0
     local pos = 1
     
+    local pattern
+    if #name < 4 then
+        local safe_name = name:gsub("([%(%)%.%%%+%-%*%?%[%^%$])", "%%%1")
+        pattern = "%f[%w]" .. safe_name .. "%f[%W]"
+    end
+    
     while true do
-        local start_pos = string.find(text, name, pos, true)
+        local start_pos
+        if pattern then
+            start_pos = text:lower():find(pattern, pos)
+        else
+            start_pos = text:lower():find(name:lower(), pos, true)
+        end
         if not start_pos then break end
         count = count + 1
         pos = start_pos + 1
@@ -826,53 +850,107 @@ function ChapterAnalyzer:findMentionsInChapter(ui, entity, toc_entry, next_toc_e
 
     local name = entity.name
     local name_lower = name:lower()
-    
-    -- Prepare search terms
-    local terms = { { s = name_lower, l = #name_lower } }
-    
-    -- Fallback: auto-generate first and last name aliases
-    local first_name = name:match("^(%S+)")
-    local last_name  = name:match("(%S+)$")
-    if first_name and #first_name > 2 and first_name ~= name then
-        local fl = first_name:lower()
-        table.insert(terms, { s = fl, l = #fl })
-    end
-    if last_name and #last_name > 2 and last_name ~= first_name and last_name ~= name then
-        local ll = last_name:lower()
-        table.insert(terms, { s = ll, l = #ll })
-    end
-
-    -- Add AI aliases if available
-    if entity.aliases and type(entity.aliases) == "table" then
-        for _, alias in ipairs(entity.aliases) do
-            if type(alias) == "string" and #alias > 2 then
-                local al = alias:lower()
-                local exists = false
-                for _, t in ipairs(terms) do
-                    if t.s == al then exists = true; break end
-                end
-                if not exists then
-                    table.insert(terms, { s = al, l = #al })
-                end
-            end
-        end
-    end
-    
     local chapter_mentions = {}
 
+    -- Load chapter text first so we can use frequency analysis when building terms
     local ok, raw_text = pcall(function()
         return ui.document:getTextFromXPointer(toc_entry.xpointer) or ""
     end)
     if not ok or not raw_text or #raw_text < 10 then return {} end
 
     local text_lower = raw_text:lower()
-    local pos = 1
-    
-    -- Optimization: Pre-calculate the first match for each term.
-    -- This avoids re-scanning the entire text for every term on every iteration.
-    for _, t in ipairs(terms) do
-        t.next_p = text_lower:find(t.s, pos, true)
+
+    -- Count occurrences of a needle in text_lower (used for frequency check)
+    local function countIn(needle)
+        local escaped = needle:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%1")
+        local pattern = escaped
+        if #needle < 4 then
+            pattern = "%f[%w]" .. escaped .. "%f[%W]"
+        end
+        local _, n = text_lower:gsub(pattern, "")
+        return n
     end
+
+    -- Honorifics: fast-path blocklist for known titles.
+    -- Short honorifics (< 3 chars) are already caught by the length check;
+    -- 3-char ones (mr., mrs, sir, dr., etc.) need explicit listing since they
+    -- can have plausible frequency ratios in heavily character-focused chapters.
+    local honorifics = {
+        ["mr"] = true, ["mr."] = true, ["mrs"] = true, ["mrs."] = true, ["ms"] = true, ["ms."] = true,
+        ["dr"] = true, ["dr."] = true, ["sir"] = true, ["rev"] = true, ["rev."] = true, ["lt"] = true, ["lt."] = true,
+        ["col"] = true, ["col."] = true, ["sgt"] = true, ["sgt."] = true, ["gen"] = true, ["gen."] = true,
+        ["miss"] = true, ["lord"] = true, ["lady"] = true, ["dame"] = true, ["prof"] = true, ["prof."] = true,
+        ["capt"] = true, ["capt."] = true, ["st"] = true, ["st."] = true, ["jr"] = true, ["jr."] = true,
+        
+        -- International
+        ["m"] = true, ["m."] = true, ["mme"] = true, ["mme."] = true, ["mlle"] = true, ["mlle."] = true, ["mgr"] = true,
+        ["herr"] = true, ["frau"] = true, ["hr"] = true, ["hr."] = true, ["fr"] = true, ["fr."] = true,
+        ["sr"] = true, ["sr."] = true, ["sra"] = true, ["sra."] = true, ["don"] = true, ["dona"] = true, ["doña"] = true,
+        ["bey"] = true, ["hanım"] = true,
+        ["пан"] = true, ["пані"] = true, ["г-н"] = true, ["г-жа"] = true,
+    }
+
+    -- Frequency-ratio guard: if a candidate term appears 5× more often than the
+    -- entity's full name, it is too generic to be a meaningful identifier.
+    -- This is language-agnostic — "The", "Le", "Der" all fail naturally.
+    local name_freq = math.max(1, countIn(name_lower))
+    local function isTooGeneric(term)
+        local term_l = term:lower()
+        if #term < 2 or honorifics[term_l] then return true end
+        return countIn(term_l) > name_freq * 5
+    end
+
+    -- Always start with the full name
+    local terms = { { s = name_lower, l = #name_lower } }
+
+    -- Auto-generate first and last name components
+    local first_name = name:match("^(%S+)")
+    local last_name  = name:match("(%S+)$")
+    if first_name and first_name ~= name then
+        local fl = first_name:lower()
+        if not honorifics[fl] and not isTooGeneric(fl) then
+            table.insert(terms, { s = fl, l = #fl })
+        end
+    end
+    if last_name and last_name ~= first_name and last_name ~= name then
+        local ll = last_name:lower()
+        if not honorifics[ll] and not isTooGeneric(ll) then
+            table.insert(terms, { s = ll, l = #ll })
+        end
+    end
+
+    -- Add AI-provided aliases, filtered by the same rules
+    if entity.aliases and type(entity.aliases) == "table" then
+        for _, alias in ipairs(entity.aliases) do
+            if type(alias) == "string" then
+                local al = alias:lower()
+                if not honorifics[al] and not isTooGeneric(al) then
+                    local exists = false
+                    for _, t in ipairs(terms) do
+                        if t.s == al then exists = true; break end
+                    end
+                    if not exists then
+                        table.insert(terms, { s = al, l = #al })
+                    end
+                end
+            end
+        end
+    end
+
+    local pos = 1
+
+    -- Pre-calculate the first match position for each term
+    -- For short terms (< 4 chars), enforce word boundaries
+    for _, t in ipairs(terms) do
+        if t.l < 4 then
+            local safe_s = t.s:gsub("([%(%)%.%%%+%-%*%?%[%^%$])", "%%%1")
+            t.pattern = "%f[%w]" .. safe_s .. "%f[%W]"
+            t.next_p = text_lower:find(t.pattern, pos)
+        else
+            t.next_p = text_lower:find(t.s, pos, true)
+        end
+    end
+
 
     local last_yield = os.clock()
     
@@ -915,7 +993,11 @@ function ChapterAnalyzer:findMentionsInChapter(ui, entity, toc_entry, next_toc_e
         -- Update ONLY the term we just found. Others are still valid if their next_p >= pos.
         for _, t in ipairs(terms) do
             if not t.next_p or t.next_p < pos then
-                t.next_p = text_lower:find(t.s, pos, true)
+                if t.pattern then
+                    t.next_p = text_lower:find(t.pattern, pos)
+                else
+                    t.next_p = text_lower:find(t.s, pos, true)
+                end
             end
         end
 
@@ -935,7 +1017,7 @@ function ChapterAnalyzer:scanMentionsAsync(ui, entity, toc, max_page, on_progres
     end
 
     local UIManager = require("ui/uimanager")
-    local XRayConfig = require("xray_config")
+    local XRayConfig = require(plugin_path .. "xray_config")
     local cancel_handle = { _cancelled = false }
     function cancel_handle:cancel()
         self._cancelled = true
@@ -996,13 +1078,13 @@ function ChapterAnalyzer:scanMentionsAsync(ui, entity, toc, max_page, on_progres
 
         if coroutine.status(scan_co) ~= "dead" then
             -- Schedule next chunk
-            local delay = XRayConfig.isLowPowerDevice and 0.1 or 0.01
+            local delay = 0.01
             UIManager:scheduleIn(delay, resumeScan)
         end
     end
 
     -- Start the scan
-    UIManager:scheduleIn(XRayConfig.isLowPowerDevice and 0.2 or 0, resumeScan)
+    UIManager:scheduleIn(0.2, resumeScan)
     
     return cancel_handle
 end

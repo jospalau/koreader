@@ -5,6 +5,9 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
+msgid "about"
+msgstr "About"
+
 msgid "ai_fetch_complete"
 msgstr "%s üzerinden başarıyla çekildi!\n\nKitap: %s\nYazar: %s\n\nKarakterler: %d\nMekanlar: %d\nTemalar: %d\nZaman Çizelgesi Olayları: %d\nTarihi Kişiler: %d\n\n%s\n\nÖZET:\n%s"
 
@@ -137,6 +140,9 @@ msgstr "İSİM"
 msgid "label_occupation"
 msgstr "MESLEK"
 
+msgid "label_reasoning"
+msgstr "YZ AKIL YÜRÜTME"
+
 msgid "label_role"
 msgstr "ROL"
 
@@ -151,6 +157,18 @@ msgstr "Dil Uyumsuzluğu"
 
 msgid "language_changed_reopen"
 msgstr "Dil değiştirildi. Değişiklikleri görmek için menüyü tekrar açın."
+
+msgid "linked_entries"
+msgstr "Linked Entries"
+
+msgid "linked_entries_disabled"
+msgstr "Disabled"
+
+msgid "linked_entries_enabled"
+msgstr "Enabled"
+
+msgid "linked_entries_setting_desc"
+msgstr "Linked Entries automatically connects characters, locations, and historical figures when they are mentioned in each other's descriptions.\n\nDisabling this will hide the 'Linked Entries' button from detail dialogs."
 
 msgid "logs_cleared"
 msgstr "Günlükler temizlendi!"
@@ -194,6 +212,9 @@ msgstr "Hakkında"
 msgid "menu_ai_settings"
 msgstr "AI Ayarları"
 
+msgid "menu_api_keys"
+msgstr "API Keys & Providers"
+
 msgid "menu_author_info"
 msgstr "Yazar Bilgisi"
 
@@ -202,9 +223,6 @@ msgstr "Otomatik X-Ray Ayarları"
 
 msgid "menu_characters"
 msgstr "Karakterler"
-
-msgid "menu_chatgpt_key"
-msgstr "ChatGPT API Anahtarı"
 
 msgid "menu_clear_cache"
 msgstr "Önbelleği Temizle"
@@ -221,9 +239,6 @@ msgstr "Özel %s Modeli"
 msgid "menu_enter_custom_model"
 msgstr "Özel model girin..."
 
-msgid "menu_enter_ui_key"
-msgstr "UI geçersiz kılma anahtarını girin: "
-
 msgid "menu_fetch_author"
 msgstr "Yazar Bilgisini Çek (AI)"
 
@@ -233,14 +248,14 @@ msgstr "Daha Fazla Karakter Getir"
 msgid "menu_fetch_xray"
 msgstr "X-Ray Verilerini Çek"
 
-msgid "menu_gemini_key"
-msgstr "Google Gemini API Anahtarı"
-
 msgid "menu_historical_figures"
 msgstr "Tarihi Kişiler"
 
 msgid "menu_language"
 msgstr "Dil"
+
+msgid "menu_linked_entries_settings"
+msgstr "Linked Entries Settings"
 
 msgid "menu_locations"
 msgstr "Mekanlar"
@@ -253,6 +268,9 @@ msgstr "Bahsedilenler Ayarları"
 
 msgid "menu_primary_ai_model"
 msgstr "Birincil YZ Modeli"
+
+msgid "menu_reasoning_effort"
+msgstr "GPT Akıl Yürütme Çabası"
 
 msgid "menu_secondary_ai_model"
 msgstr "İkincil YZ Modeli"
@@ -274,6 +292,30 @@ msgstr "X-Ray"
 
 msgid "menu_xray_mode"
 msgstr "X-Ray Modu Ayarları"
+
+msgid "merge_back"
+msgstr "← Back"
+
+msgid "merge_confirm"
+msgstr "Merge %s into %s? The secondary entry will be deleted and its aliases absorbed."
+
+msgid "merge_duplicates"
+msgstr "Merge Duplicates..."
+
+msgid "merge_failed"
+msgstr "Merge failed."
+
+msgid "merge_pick_primary"
+msgstr "Choose the entry to KEEP"
+
+msgid "merge_pick_secondary"
+msgstr "Choose the entry to REMOVE"
+
+msgid "merge_success"
+msgstr "Entries merged successfully."
+
+msgid "merging_smartly"
+msgstr "Merging..."
 
 msgid "model_free"
 msgstr "ücretsiz"
@@ -327,7 +369,22 @@ msgid "plugin_description"
 msgstr "Amazon Kindle X-Ray gibi, YZ destekli kitap analizi ile okuma deneyiminizi dönüştürün!"
 
 msgid "quick_menu_title"
-msgstr "X-Ray Hızlı Erişim"
+msgstr "X-Ray Hızlı Menü"
+
+msgid "reasoning_about"
+msgstr "Controls "
+
+msgid "reasoning_high"
+msgstr "Yüksek"
+
+msgid "reasoning_low"
+msgstr "Düşük"
+
+msgid "reasoning_medium"
+msgstr "Orta"
+
+msgid "reasoning_xhigh"
+msgstr "Çok Yüksek (X-High)"
 
 msgid "save"
 msgstr "Kaydet"
@@ -440,3 +497,30 @@ msgstr "Anında arama yapmak için sözlük ve seçim menülerine bir 'X-Ray' d�
 msgid "yes"
 msgstr "Evet"
 
+
+msgid "custom_api_name"
+msgstr "Custom API %d (OpenAI-compatible)"
+
+msgid "custom_api_endpoint_title"
+msgstr "Custom API %d — Endpoint URL"
+
+msgid "custom_api_key_title"
+msgstr "Custom API %d — API Key"
+
+msgid "custom_api_model_title"
+msgstr "Custom API %d — Default Model"
+
+msgid "custom_api_endpoint_hint"
+msgstr "e.g., https://openrouter.ai/api/v1/chat/completions"
+
+msgid "custom_api_model_hint"
+msgstr "e.g., google/gemini-2.5-flash or openai/gpt-4o"
+
+msgid "custom_api_saved"
+msgstr "Custom API %d configuration saved."
+
+msgid "custom_api_not_configured"
+msgstr "(not configured — tap to set up)"
+
+msgid "custom_api_is_reasoning"
+msgstr "Is Reasoning Model (e.g. DeepSeek-R1)"

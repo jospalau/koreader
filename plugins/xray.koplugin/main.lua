@@ -1,34 +1,72 @@
 -- X-Ray Plugin for KOReader v2.0.0
-
-local UIManager = require("ui/uimanager")
-local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local logger = require("logger")
-local XRayLogger = require("xray_logger")
-local XRayConfig = require("xray_config")
+logger.info("X-Ray: main.lua parsing...")
 
 
-local XRayPlugin = WidgetContainer:extend{
+local ok_ui, UIManager = pcall(require, "ui/uimanager")
+local ok_wc, WidgetContainer = pcall(require, "ui/widget/container/widgetcontainer")
+local ok_log, logger = pcall(require, "logger")
+if not ok_log then logger = { info = function() end, warn = function() end, error = function() end } end
+logger.info("X-Ray: main.lua parsing...")
+
+local plugin_path = ((...) or ""):match("(.-)[^%.]+$") or ""
+local ok_xl, XRayLogger = pcall(require, plugin_path .. "xray_logger")
+local ok_xc, XRayConfig = pcall(require, plugin_path .. "xray_config")
+
+
+local XRayPlugin = (ok_wc and WidgetContainer and WidgetContainer.extend) and WidgetContainer:extend{
     name = "xray",
     is_doc_only = true,
-}
+} or { name = "xray_failed" }
+
 
 -- Mixin pattern helper: merges module functions into the XRayPlugin object.
 -- This keeps main.lua clean while allowing modules to use self:method() calls.
+local function _t(self, key, default)
+    if self.loc and self.loc.t then
+        return self.loc:t(key) or default
+    end
+    return default
+end
+
 local function applyMixin(target, source)
+
     for k, v in pairs(source) do
         target[k] = v
     end
 end
 
-applyMixin(XRayPlugin, require("xray_data"))
-applyMixin(XRayPlugin, require("xray_ui"))
-applyMixin(XRayPlugin, require("xray_fetch"))
-applyMixin(XRayPlugin, require("xray_mentions"))
+local function safeRequireMixin(name)
+    local ok, mod = pcall(require, plugin_path .. name)
+    if ok then
+        applyMixin(XRayPlugin, mod)
+    else
+        logger.error("XRayPlugin: Failed to load mixin " .. name .. ": " .. tostring(mod))
+    end
+end
+
+safeRequireMixin("xray_data")
+safeRequireMixin("xray_ui")
+safeRequireMixin("xray_fetch")
+safeRequireMixin("xray_mentions")
+
 
 function XRayPlugin:init()
-    if self.ui and self.ui.menu then
-        self.ui.menu:registerToMainMenu(self)
-    end
+    local ok, err = pcall(function()
+        if self.ui and self.ui.menu then
+            self.ui.menu:registerToMainMenu(self)
+        end
+        
+        -- Register to Reader Menu Order if available
+        local ok_order, reader_menu_order = pcall(require, "ui/elements/reader_menu_order")
+        if ok_order and reader_menu_order and reader_menu_order.tools then
+            local found = false
+            for _, v in ipairs(reader_menu_order.tools) do
+                if v == "xray" then found = true; break end
+            end
+            if not found then table.insert(reader_menu_order.tools, 1, "xray") end
+        end
+
 
     -- Clean up legacy un-prefixed module files from older versions to prevent namespace collisions
     local legacy_files = { "aihelper.lua", "cachemanager.lua", "chapteranalyzer.lua", "lookupmanager.lua", "updater.lua" }
@@ -42,17 +80,17 @@ function XRayPlugin:init()
         end
     end
 
-    local Localization = require("localization_xray")
+    local Localization = require(plugin_path .. "localization_xray")
     self.loc = Localization
     self.loc:init(self.path)
 
     XRayLogger:init(self.path)
-
-    local AIHelper = require("xray_aihelper")
+    
+    local AIHelper = require(plugin_path .. "xray_aihelper")
     self.ai_helper = AIHelper
     self.ai_helper:init(self.path)
     self.ai_provider = self.ai_helper.default_provider or "gemini"
-
+    
     self.xray_mode_enabled = true
     if self.ai_helper.settings and self.ai_helper.settings.xray_mode_enabled ~= nil then
         self.xray_mode_enabled = self.ai_helper.settings.xray_mode_enabled
@@ -70,28 +108,23 @@ function XRayPlugin:init()
     self.locations = {}
     self.timeline = {}
     self.historical_figures = {}
-
+    
     -- Mentions Feature Gating
     self.mentions_enabled = true
     if self.ai_helper.settings and self.ai_helper.settings.mentions_enabled ~= nil then
         self.mentions_enabled = self.ai_helper.settings.mentions_enabled
-    else
-        -- Default Mentions to OFF on low-power hardware to ensure stability
-        if XRayConfig.isLowPowerDevice then
-            self.mentions_enabled = false
-        end
     end
 
     -- Track dismissed language suggestions for the current session
     self.suggestion_dismissed = {}
 
     -- Modular lookup logic for text selection
-    local LookupManager = require("xray_lookupmanager")
+    local LookupManager = require(plugin_path .. "xray_lookupmanager")
     self.lookup_manager = LookupManager:new(self)
-
+    
     self:log("XRayPlugin: Initialized with language: " .. self.loc:getLanguage())
     self:onDispatcherRegisterActions()
-
+    
     if self.ui then
         self.ui:registerKeyEvents({
             ShowXRayMenu = {
@@ -112,24 +145,24 @@ function XRayPlugin:init()
                         local text = sel.text
                         local pos0 = sel.pos0
                         local pos1 = sel.pos1
-
+                        
                         -- Directly tell the UIManager to close this specific dialog instance
                         if _reader_highlight_instance then
-                            pcall(function()
+                            pcall(function() 
                                 if _reader_highlight_instance.onClose then _reader_highlight_instance:onClose() end
                             end)
                             UIManager:close(_reader_highlight_instance)
                         end
-
+                        
                         -- Execute optimized clear
                         self:closeAllMenus()
-
+                        
                         -- Explicitly clear selection to prevent dictionary menu re-asserting
                         if self.ui and self.ui.handleEvent then
                             local Event = require("ui/event")
                             self.ui:handleEvent(Event:new("ClearSelection"))
                         end
-
+                        
                         if text then
                             self.lookup_manager:handleLookup(text, pos0, pos1)
                         end
@@ -138,14 +171,20 @@ function XRayPlugin:init()
             end)
         end
     end
-
-    logger.info("XRayPlugin: Initialized with language:", self.loc:getLanguage())
+    
+        logger.info("XRayPlugin: Initialized successfully")
+    end)
+    if not ok then
+        logger.error("XRayPlugin: CRITICAL INIT ERROR: " .. tostring(err))
+        if XRayLogger then XRayLogger:log("CRITICAL INIT ERROR: " .. tostring(err)) end
+    end
 end
+
 
 -- Hook for Dictionary/Selection Popup (single word)
 function XRayPlugin:onDictButtonsReady(dict_popup, dict_buttons)
     if not self.xray_mode_enabled then return end
-
+    
     local xray_button = {
         text = "X-Ray",
         callback = function()
@@ -153,10 +192,17 @@ function XRayPlugin:onDictButtonsReady(dict_popup, dict_buttons)
             local text = dict_popup and (dict_popup.word or dict_popup.text or dict_popup.selection_text)
             local pos0 = dict_popup and dict_popup.pos0
             local pos1 = dict_popup and dict_popup.pos1
-
+            
             -- Close the native dictionary popup immediately so it doesn't linger
             if dict_popup then pcall(function() UIManager:close(dict_popup) end) end
-
+            
+            -- Execute optimized clear and clear selection
+            self:closeAllMenus()
+            if self.ui and self.ui.handleEvent then
+                local Event = require("ui/event")
+                self.ui:handleEvent(Event:new("ClearSelection"))
+            end
+            
             if text then
                 self.lookup_manager:handleLookup(text, pos0, pos1)
             end
@@ -186,12 +232,12 @@ function XRayPlugin:onReaderReady()
 
     -- Initialize language based on logic (auto, book, or manual)
     self:applyLanguageLogic()
-
+    
     -- Suggest switching to book language if appropriate
     UIManager:scheduleIn(5, function()
         self:checkBookLanguageMatch()
     end)
-
+    
     -- Weekly silent update check
     UIManager:scheduleIn(10, function()
         self:checkWeeklyUpdate()
@@ -203,7 +249,7 @@ function XRayPlugin:onPageUpdate(pageno)
     self:log("XRayPlugin: onPageUpdate for pageno " .. tostring(pageno))
     self.last_pageno = pageno
     if not self.auto_fetch_enabled then return end
-
+    
     self:log("XRayPlugin: onPageUpdate for pageno " .. tostring(pageno))
     if not self.ui or not self.ui.document then return end
 
@@ -233,12 +279,12 @@ function XRayPlugin:onPageUpdate(pageno)
     local unique_id = chapter_title .. "_" .. tostring(chapter_page)
 
     -- Skip non-narrative chapters (Frontmatter/Backmatter)
-    if self:isNonNarrativeChapter(chapter_title) then
+    if self:isNonNarrativeChapter(chapter_title) then 
         if not self.chapters_fetched[unique_id] then
             self:log("XRayPlugin: Skipping non-narrative chapter: " .. tostring(chapter_title) .. " (page " .. tostring(chapter_page) .. ")")
             self.chapters_fetched[unique_id] = true
         end
-        return
+        return 
     end
 
     -- Incremental mentions update: fires on every new narrative chapter
@@ -259,7 +305,7 @@ function XRayPlugin:onPageUpdate(pageno)
                     end
                 end
                 if toc_entry_for_mentions then
-                    local scan_delay = XRayConfig.isLowPowerDevice and 8 or 4
+                    local scan_delay = 4
                     UIManager:scheduleIn(scan_delay, function()
                         if self.mentions_enabled then
                             self:updateMentionsForChapter(toc_entry_for_mentions, next_toc_entry)
@@ -305,9 +351,9 @@ function XRayPlugin:onPageUpdate(pageno)
     if not self.auto_fetch_enabled then return end
 
     -- Already fetched this chapter this session?
-    if self.chapters_fetched[unique_id] then
+    if self.chapters_fetched[unique_id] then 
         self:log("XRayPlugin: Already fetched chapter this session: " .. tostring(unique_id))
-        return
+        return 
     end
 
     -- Same chapter as before (no change)?
@@ -315,9 +361,9 @@ function XRayPlugin:onPageUpdate(pageno)
     self.last_auto_chapter = unique_id
 
     -- Debounce: ignore if a fetch is already scheduled
-    if self.bg_fetch_pending or self.bg_fetch_active then
+    if self.bg_fetch_pending or self.bg_fetch_active then 
         self:log("XRayPlugin: Fetch already pending/active. Skipping trigger for " .. tostring(chapter_title))
-        return
+        return 
     end
     self.bg_fetch_pending = true
 
@@ -355,14 +401,14 @@ function XRayPlugin:triggerBackgroundMergeFetch(chapter_title)
         local total_pages = self.ui.document:getPageCount()
         if not total_pages or total_pages == 0 then return end
         local reading_percent = math.floor((current_page / total_pages) * 100)
-
+        
         local spoiler_setting = self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
         if spoiler_setting == "full_book" then
             reading_percent = 100
         end
-
+        
         local last_fetch_page = self.book_data and self.book_data.last_fetch_page
-
+        
         local is_update = true
         if not self.timeline or #self.timeline == 0 then
             is_update = false
@@ -370,7 +416,7 @@ function XRayPlugin:triggerBackgroundMergeFetch(chapter_title)
         else
             self:log("XRayPlugin: Auto-merge fetch for chapter: " .. tostring(chapter_title))
         end
-
+        
         self.fetch_attempts = self.fetch_attempts or {}
         self.fetch_attempts[chapter_title] = (self.fetch_attempts[chapter_title] or 0) + 1
         self:continueWithFetch(reading_percent, is_update, last_fetch_page, true) -- is_silent=true
@@ -381,20 +427,24 @@ function XRayPlugin:triggerBackgroundMergeFetch(chapter_title)
 end
 
 function XRayPlugin:onDispatcherRegisterActions()
-    local Dispatcher = require("dispatcher")
-    Dispatcher:registerAction("xray_quick_menu", {
-        category = "none",
-        event = "ShowXRayQuickMenu",
-        title = self.loc:t("quick_menu_title") or "X-Ray Quick Menu",
-        general = true,
-        separator = true,
-    })
-    Dispatcher:registerAction("xray_characters", {
-        category = "none",
-        event = "ShowXRayCharacters",
-        title = self.loc:t("menu_characters") or "Characters",
-        general = true,
-    })
+    local ok, Dispatcher = pcall(require, "dispatcher")
+    if not ok or not Dispatcher then return end
+    
+    pcall(function()
+        Dispatcher:registerAction("xray_quick_menu", {
+            category = "none",
+            event = "ShowXRayQuickMenu",
+            title = _t(self, "quick_menu_title", "X-Ray Quick Menu"),
+            general = true,
+            separator = true,
+        })
+        Dispatcher:registerAction("xray_characters", {
+            category = "none",
+            event = "ShowXRayCharacters",
+            title = _t(self, "menu_characters", "Characters"),
+            general = true,
+        })
+    end)
 end
 
 function XRayPlugin:onShowXRayQuickMenu()
@@ -409,15 +459,15 @@ end
 
 function XRayPlugin:autoLoadCache()
     if not self.cache_manager then
-        local CacheManager = require("xray_cachemanager")
+        local CacheManager = require(plugin_path .. "xray_cachemanager")
         self.cache_manager = CacheManager:new()
     end
-
+    
     local book_path = self.ui.document.file
     logger.info("XRayPlugin: Auto-loading cache for:", book_path)
     self:log("XRayPlugin: Auto-loading cache for: " .. tostring(book_path))
     local cached_data = self.cache_manager:loadCache(book_path)
-
+    
     if cached_data then
         self:log("XRayPlugin: Cache loaded successfully")
         -- Stage 1: Fast data restore (immediate)
@@ -449,7 +499,7 @@ function XRayPlugin:autoLoadCache()
             end
             restoreOrder(self.characters)
             restoreOrder(self.historical_figures)
-
+            
             -- Stage 3: Repair Page Numbers & Deduplicate (Deferred another 500ms)
             UIManager:scheduleIn(500, function()
                 if not self.ui or not self.ui.document then return end
@@ -457,9 +507,30 @@ function XRayPlugin:autoLoadCache()
                 local toc = self.ui.document:getToc()
                 self:assignTimelinePages(self.timeline, toc, false)
                 self:sortTimelineByTOC(self.timeline)
+
+                -- Safely extract text for frequency sorting.
+                -- document:getText() does not exist on all platforms (e.g. Android/crengine).
+                -- Use ChapterAnalyzer which has the proper multi-method fallback chain.
+                local full_text = ""
+                local ok_ca, result_text = pcall(function()
+                    if not self.chapter_analyzer then
+                        self.chapter_analyzer = require(plugin_path .. "xray_chapteranalyzer"):new()
+                    end
+                    return self.chapter_analyzer:getTextForAnalysis(self.ui, 50000, nil, self.ui:getCurrentPage()) or ""
+                end)
+                if ok_ca and type(result_text) == "string" then
+                    full_text = result_text
+                else
+                    self:log("XRayPlugin: Stage 3 - text extraction failed, skipping frequency sort: " .. tostring(result_text))
+                end
+
+                self.characters = self:sortDataByFrequency(self.characters, full_text, "name")
                 self.characters = self:deduplicateByName(self.characters, "name")
+                self.historical_figures = self:sortDataByFrequency(self.historical_figures, full_text, "name")
                 self.historical_figures = self:deduplicateByName(self.historical_figures, "name")
+                self.locations = self:sortDataByFrequency(self.locations, full_text, "name")
                 self.locations = self:deduplicateByName(self.locations, "name")
+
                 self:log("XRayPlugin: Chunked post-load complete")
             end)
         end)
@@ -477,14 +548,9 @@ function XRayPlugin:getMenuCounts()
     }
 end
 
-local reader_menu_order = require("ui/elements/reader_menu_order")
-if reader_menu_order and reader_menu_order.tools then
-    local found = false
-    for _, v in ipairs(reader_menu_order.tools) do
-        if v == "xray" then found = true; break end
-    end
-    if not found then table.insert(reader_menu_order.tools, 1, "xray") end
-end
+-- reader_menu_order registration moved to init()
+
+
 
 function XRayPlugin:getSubMenuItems()
     self.current_xray_menu_table = {
@@ -530,9 +596,19 @@ function XRayPlugin:getSubMenuItems()
             keep_menu_open = true,
             sub_item_table = {
                 {
-                    text = self.loc:t("spoiler_preference_title") or "Spoiler Settings",
+                    text = self.loc:t("menu_auto_update_frequency") or "Auto X-Ray Settings",
                     keep_menu_open = true,
-                    callback = function() self:showSpoilerSettings() end,
+                    callback = function() self:showAutoUpdateSettings() end,
+                },
+                {
+                    text = self.loc:t("menu_desc_length_settings") or "Description Length Settings",
+                    keep_menu_open = true,
+                    callback = function() self:showDescriptionLengthSettings() end,
+                },
+                {
+                    text = self.loc:t("menu_linked_entries_settings") or "Linked Entries Settings",
+                    keep_menu_open = true,
+                    callback = function() self:showLinkedEntriesSettings() end,
                 },
                 {
                     text = self.loc:t("mentions_setting_title") or "Mentions Settings",
@@ -540,14 +616,15 @@ function XRayPlugin:getSubMenuItems()
                     callback = function() self:showMentionsSettings() end,
                 },
                 {
-                    text = self.loc:t("menu_auto_update_frequency") or "Auto X-Ray Settings",
+                    text = self.loc:t("spoiler_preference_title") or "Spoiler Settings",
                     keep_menu_open = true,
-                    callback = function() self:showAutoUpdateSettings() end,
+                    callback = function() self:showSpoilerSettings() end,
                 },
                 {
                     text = self.loc:t("menu_xray_mode"),
                     keep_menu_open = true,
                     callback = function() self:toggleXRayMode() end,
+                    separator = true,
                 },
                 {
                     text = self.loc:t("menu_language") or "Language",
@@ -567,22 +644,22 @@ function XRayPlugin:getSubMenuItems()
                             text = self.loc:t("menu_secondary_ai_model") or "Secondary AI Model",
                             keep_menu_open = true,
                             sub_item_table_func = function() return self:getAIModelSelectionMenu("secondary") end,
-                            separator = true,
                         },
                         {
-                            text = self.loc:t("menu_gemini_key"),
+                            text = self.loc:t("menu_reasoning_effort") or "Reasoning Effort",
                             keep_menu_open = true,
-                            sub_item_table_func = function() return self:getAPIKeySelectionMenu("gemini", "Google Gemini") end,
+                            callback = function() self:showReasoningEffortSettings() end,
                             separator = true,
                         },
                         {
-                            text = self.loc:t("menu_chatgpt_key"),
+                            text = self.loc:t("menu_api_keys") or "API Keys & Providers", 
                             keep_menu_open = true,
-                            sub_item_table_func = function() return self:getAPIKeySelectionMenu("chatgpt", "ChatGPT") end,
+                            sub_item_table_func = function() return self:getAPIKeysMenu() end,
                             separator = true,
                         },
                         {
-                            text = self.loc:t("menu_view_config") or "View All Config Values",
+                            text = self.loc:t("menu_view_config") or "View All Config Values", 
+                            keep_menu_open = true,
                             callback = function() self:showConfigSummary() end,
                         },
                     }
@@ -607,19 +684,20 @@ function XRayPlugin:getSubMenuItems()
                     text = self.loc:t("updater_check") or "Check for Updates",
                     keep_menu_open = true,
                     callback = function()
-                        local updater = require("xray_updater")
+                        local updater = require(plugin_path .. "xray_updater")
                         updater.checkForUpdates(self.loc)
                     end,
                 },
             }
         },
         {
-            text = self.loc:t("menu_about"),
+            text = _t(self, "menu_about", "About X-Ray"),
             keep_menu_open = true,
             callback = function() self:showAbout() end,
         },
-    }
 
+    }
+    
     return self.current_xray_menu_table
 end
 
@@ -627,7 +705,8 @@ end
 
 function XRayPlugin:addToMainMenu(menu_items)
     menu_items.xray = {
-        text = self.loc:t("menu_xray") or "X-Ray",
+        text = _t(self, "menu_xray", "X-Ray"),
+
         sorting_hint = "tools",
         callback = function() self:showQuickXRayMenu() end,
         hold_callback = function() self:showFullXRayMenu() end,
