@@ -201,7 +201,7 @@ function FileManager:setupLayout()
     function EmptyTitleBar:clear() end
     function EmptyTitleBar:generateHorizontalLayout() return { {} } end
     function EmptyTitleBar:generateVerticalLayout() return { {} } end
-    self.title_bar = EmptyTitleBar:new{}
+    -- self.title_bar = EmptyTitleBar:new{}
     local file_chooser = FileChooser:new{
         name = "filemanager",
         path = self.root_path,
