@@ -974,13 +974,6 @@ function Menu:init()
         self.page_info,
     }
     -- end
-    local LineWidget = require("ui/widget/linewidget")
-    local separator_line = LineWidget:new{
-        dimen = Geom:new{
-            w = Screen:getWidth(),
-            h = Screen:scaleBySize(3),
-        }
-    }
 
     local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
     if ui ~= nil then
@@ -994,7 +987,6 @@ function Menu:init()
         dimen = self.inner_dimen:copy(),
         VerticalGroup:new{
             align = "left",
-            separator_line,
             VerticalSpan:new{ width = pager_h },
         }
     }
@@ -1007,7 +999,6 @@ function Menu:init()
             dimen = self.inner_dimen:copy(),
             VerticalGroup:new{
                 align = "left",
-                separator_line,
                 page_info_container,
             }
         }
@@ -1084,24 +1075,21 @@ function Menu:init()
         text = "Search results"
     end
 
+    local pager_h = self.page_info:getSize().h
+    local pager_w = self.page_info:getSize().w
+    local no_pager = pagetextinfo and pagetextinfo.settings:isTrue("enable_no_pager")
+    -- Siempre usar el mismo ancho para el footer text
+    -- Si no_pager, el espacio del pager queda vacío pero el texto no se expande
+    -- local footer_w = (self.screen_w * 0.99) - pager_w
+    local footer_w = no_pager and (self.screen_w * 0.99) or ((self.screen_w * 0.99) - pager_w)
 
-
-
-local pager_h = self.page_info:getSize().h
-local pager_w = self.page_info:getSize().w
-local no_pager = pagetextinfo and pagetextinfo.settings:isTrue("enable_no_pager")
--- Siempre usar el mismo ancho para el footer text
--- Si no_pager, el espacio del pager queda vacío pero el texto no se expande
--- local footer_w = (self.screen_w * 0.99) - pager_w
-local footer_w = no_pager and (self.screen_w * 0.99) or ((self.screen_w * 0.99) - pager_w)
-
-local footer_text_text = TextBoxWidget:new {
-    text = text,
-    face = Font:getFace("myfont4", 11),
-    bold = true,
-    width = footer_w,
-    height_adjust = true,
-}
+    local footer_text_text = TextBoxWidget:new {
+        text = text,
+        face = Font:getFace("myfont4", 11),
+        bold = true,
+        width = footer_w,
+        height_adjust = true,
+    }
 
     local footer_text_geom = Geom:new {
         w = self.screen_w * 0.98,
