@@ -382,6 +382,62 @@ if settings:isTrue("enable_change_bar_menu") then
     FileManager.hooked_fmSetupLayout = true
 end
 
+local _original_setupLayout = nil
+local _original_filechooser_init = nil
+
+function PageTextInfo:_hookSetupLayout()
+    if not _original_setupLayout then
+        _original_setupLayout = FileManager.setupLayout
+    end
+    local FileChooser = require("ui/widget/filechooser")
+    if not _original_filechooser_init then
+        _original_filechooser_init = FileChooser.init
+    end
+
+    FileManager.setupLayout = function(instance, ...)
+        local orig_init = _original_filechooser_init
+        FileChooser.init = function(fc, ...)
+            local Widget = require("ui/widget/widget")
+            local EmptyTitleBar = Widget:extend{}
+            function EmptyTitleBar:init()
+                self.dimen = { x = 0, y = 0, w = Screen:getWidth(), h = 0 }
+            end
+            function EmptyTitleBar:getSize()                  return { w = 0, h = 0 } end
+            function EmptyTitleBar:getHeight()                return 0 end
+            function EmptyTitleBar:paintTo()                  end
+            function EmptyTitleBar:handleEvent()              return false end
+            function EmptyTitleBar:free()                     end
+            function EmptyTitleBar:setTitle()                 end
+            function EmptyTitleBar:setSubTitle()              end
+            function EmptyTitleBar:setLeftIcon()              end
+            function EmptyTitleBar:setRightIcon()             end
+            function EmptyTitleBar:clear()                    end
+            function EmptyTitleBar:generateHorizontalLayout() return {} end
+            function EmptyTitleBar:generateVerticalLayout()   return {} end
+            fc.custom_title_bar = EmptyTitleBar:new{}
+            orig_init(fc, ...)
+        end
+        _original_setupLayout(instance, ...)
+        FileChooser.init = orig_init
+    end
+end
+
+function PageTextInfo:_unhookSetupLayout()
+    if _original_setupLayout then
+        FileManager.setupLayout = _original_setupLayout
+        _original_setupLayout = nil
+    end
+    local FileChooser = require("ui/widget/filechooser")
+    if _original_filechooser_init then
+        FileChooser.init = _original_filechooser_init
+        _original_filechooser_init = nil
+    end
+end
+
+if settings:isTrue("enable_no_bar_menu") then
+    PageTextInfo._hookSetupLayout(PageTextInfo)
+end
+
 function PageTextInfo:onDispatcherRegisterActions()
     Dispatcher:registerAction("pagetextinfo_action", {category="none", event="PageTextInfo", title=_("Page text info widget"), general=true,})
 
@@ -1289,6 +1345,7 @@ function PageTextInfo:addToMainMenu(menu_items)
     -- If we don't want this being called for the filemanager, better to call self.ui.menu:registerToMainMenu(self) in the onReaderReady() event handler function
     -- Although we can set in the init() function and skip it like this:
     local FileManager = require("apps/filemanager/filemanager")
+    local plugin = self
     if FileManager.instance then
         menu_items.pagetextinfo = {
             text = _("Page text info"),
@@ -1326,6 +1383,29 @@ function PageTextInfo:addToMainMenu(menu_items)
                         --self.ui.menu:exitOrRestart(nil, true)
                         --UIManager:restartKOReader()
                         --FileManager:onRefresh()
+                        return true
+                    end,
+                },
+                {
+                  text = _("No bar menu"),
+                    checked_func = function() return self.settings:isTrue("enable_no_bar_menu") end,
+                    callback = function(touchmenu_instance)
+                        local enable_no_bar_menu = not self.settings:isTrue("enable_no_bar_menu")
+                        self.settings:saveSetting("enable_no_bar_menu", enable_no_bar_menu)
+                        self.settings:flush()
+                        if enable_no_bar_menu then
+                            plugin:_hookSetupLayout()
+                        else
+                            plugin:_unhookSetupLayout()
+                        end
+                        local path = FileManager.instance.file_chooser.path
+                        if path:match("✪ Collections") then
+                            path = G_reader_settings:readSetting("home_dir")
+                        end
+                        touchmenu_instance:closeMenu()
+                        local cur_page = FileManager.instance.file_chooser.page
+                        FileManager:showFiles(path)  -- esto llama setupLayout ya sin hook
+                        FileManager.instance.file_chooser:onGotoPage(cur_page)
                         return true
                     end,
                 },
