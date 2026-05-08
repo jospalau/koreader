@@ -1,0 +1,673 @@
+-- chip_strip.lua
+-- Two render modes:
+--
+--   1. Default (chips list): segmented control of N chips (Recent / Latest /
+--      Series / ★ etc). Active chip inverts (black fill, paper text); tap
+--      dispatches on_change(key).
+--
+--   2. Breadcrumb (drill-down): when `breadcrumb_path` is a non-empty array
+--      of { label } records, the strip renders as a chip-shaped "pill" for
+--      the current chip type followed by ">"-separated crumbs:
+--
+--         [Series] > Foundation > Asimov, Isaac
+--
+--      Tap dispatch:
+--         * the chip pill         → on_breadcrumb(0)  (pop to top level)
+--         * a crumb at index i    → on_breadcrumb(i)  (pop to that depth)
+--
+--      Truncation: when the assembled width would exceed self.width, older
+--      crumbs are replaced from the left with a single "…" entry until it
+--      fits, keeping the chip pill + (optionally) ellipsis + the deepest
+--      crumb visible. Tapping the ellipsis is a no-op (resolves to the
+--      first non-truncated crumb's depth in practice — but the deepest
+--      crumb stays a clear target).
+--
+-- Border-butting approach (chips mode): chips are joined by giving each
+-- chip (after the first) a padding_left = -Size.border.thin. If KOReader's
+-- FrameContainer clamps negative padding to zero, the visual gap is a 1px
+-- double-border rather than a seamless join — still readable.
+
+local FrameContainer = require("ui/widget/container/framecontainer")
+local InputContainer = require("ui/widget/container/inputcontainer")
+local HorizontalGroup= require("ui/widget/horizontalgroup")
+local HorizontalSpan = require("ui/widget/horizontalspan")
+local TextWidget     = require("ui/widget/textwidget")
+local CenterContainer= require("ui/widget/container/centercontainer")
+local OverlapGroup   = require("ui/widget/overlapgroup")
+local Widget         = require("ui/widget/widget")
+local Geom           = require("ui/geometry")
+local GestureRange   = require("ui/gesturerange")
+local Size           = require("ui/size")
+local Font           = require("ui/font")
+local Blitbuffer     = require("ffi/blitbuffer")
+local UIManager      = require("ui/uimanager")
+local Screen         = require("device").screen
+
+local ChipStrip = InputContainer:extend{
+    chips             = nil,   -- list of { key, label } (chips mode)
+    active            = nil,   -- key of the currently-selected chip
+    breadcrumb_path   = nil,   -- list of { label } — when non-empty, breadcrumb mode
+    chip_pill_label   = nil,   -- label for the chip pill in breadcrumb mode (e.g. "Series")
+    chip_pill_glyph   = nil,   -- nerd-font glyph for the chip pill (overrides label)
+    back_label        = nil,   -- when set, prepend a Back pill (depth -1) before the chip pill
+    width             = nil,
+    height            = nil,
+    on_change         = nil,   -- function(key) — chips mode tap
+    on_breadcrumb     = nil,   -- function(depth) — breadcrumb mode tap
+    show_parent       = nil,   -- window-level widget, used as setDirty target
+}
+
+-- Small triangular pointer that protrudes ABOVE the chip body, base on
+-- the chip's top edge, apex pointing upward. Used by selected action
+-- chips (currently-reading) so the chip "points at" what it represents
+-- in the hero region above the strip. Same colour as the chip's bg, so
+-- the triangle reads as an extension of the chip's silhouette rather
+-- than a separate marker. Painted via OverlapGroup overlap_offset with
+-- a negative y so the pixels land in the area above the chip strip's
+-- top edge — within the bookshelf widget's bounds, so refreshes work.
+local UpTrianglePointer = require("ui/widget/widget"):extend{
+    width  = nil,
+    height = nil,
+    color  = nil,
+}
+function UpTrianglePointer:init()
+    self.dimen = Geom:new{ w = self.width, h = self.height }
+end
+function UpTrianglePointer:paintTo(bb, x, y)
+    local w, h = self.width, self.height
+    for dy = 0, h - 1 do
+        -- Linear taper: apex (1px wide) at the top, full base at bottom.
+        local row_w   = math.max(1, math.floor(w * (dy + 1) / h + 0.5))
+        local row_off = math.floor((w - row_w) / 2)
+        bb:paintRect(x + row_off, y + dy, row_w, 1, self.color)
+    end
+end
+
+-- Breadcrumb pill rendered as a black-outlined tag (white interior) with
+-- an arrow tip on the right. Pills CHAIN by overlapping the right tip
+-- of one with the left "notch" (empty space) of the next. The widget's
+-- placement_w deliberately EXCLUDES the right tip — when a chained next
+-- pill is laid out adjacently in a HorizontalGroup, its notch occupies
+-- exactly the same x-range as the previous tip, and because the next
+-- pill (chained=true) paints nothing in the notch area, the previous
+-- tip remains visible.
+--
+-- Text labels in chained pills get an extra `tip_w` of left padding so
+-- the text doesn't visually sit on top of the previous tip's apex.
+--
+-- Returns (widget, placement_w, tip_w). `placement_w` is what
+-- HorizontalGroup uses for layout (notch + body, NOT including tip);
+-- the tip overhangs into the next slot.
+local function arrowPillFrame(label, h, chained, glyph)
+    -- glyph (optional): a UTF-8 string (typically a nerd-font icon) shown
+    -- in the pill. Three render modes depending on which of label/glyph
+    -- are supplied:
+    --   * label only        — uppercase text (the standard breadcrumb crumb)
+    --   * glyph only        — single icon, point-size 18 to match chip-row
+    --   * glyph + label     — icon + text, side-by-side ("[icon] LABEL")
+    -- The combined mode is used for the search-mode chip pill so the user
+    -- sees "[search] SEARCH RESULTS" instead of just the bare icon.
+    local content_widget, content_w, content_h
+    if glyph and label and label ~= "" then
+        local icon_tw = TextWidget:new{
+            text    = glyph,
+            face    = Font:getFace("infofont", 18),
+            bold    = true,
+            fgcolor = Blitbuffer.COLOR_BLACK,
+        }
+        local text_tw = TextWidget:new{
+            text    = label:upper(),
+            face    = Font:getFace("infofont", 16),
+            bold    = true,
+            fgcolor = Blitbuffer.COLOR_BLACK,
+        }
+        local gap = Size.padding.default
+        content_widget = HorizontalGroup:new{
+            align = "center",
+            icon_tw,
+            HorizontalSpan:new{ width = gap },
+            text_tw,
+        }
+        content_w = icon_tw:getSize().w + gap + text_tw:getSize().w
+        content_h = math.max(icon_tw:getSize().h, text_tw:getSize().h)
+    else
+        local label_text, face
+        if glyph then
+            label_text = glyph
+            face       = Font:getFace("infofont", 18)
+        else
+            label_text = (label or ""):upper()
+            face       = Font:getFace("infofont", 16)
+        end
+        content_widget = TextWidget:new{
+            text    = label_text,
+            face    = face,
+            bold    = true,
+            fgcolor = Blitbuffer.COLOR_BLACK,
+        }
+        content_w = content_widget:getSize().w
+        content_h = content_widget:getSize().h
+    end
+    local text_w = content_w  -- keep historical names so the layout maths below stay readable
+    local text_h = content_h
+    local h_pad  = Size.padding.large
+    local tip_w  = math.floor(h * 0.4)
+    -- For chained pills the body has a TRIANGULAR NOTCH carved into
+    -- its LEFT side (matching the previous pill's tip shape) AND extra
+    -- tip_w of left padding inside so text doesn't sit on the apex.
+    -- The body's footprint is the same width regardless of where the
+    -- text falls — the notch is just a paint-time exclusion.
+    local left_text_pad = h_pad + (chained and tip_w or 0)
+    local body_w        = text_w + left_text_pad + h_pad
+    -- HorizontalGroup placement width = body_w only. The right tip
+    -- overhangs into the NEXT pill's notch footprint, so successive
+    -- pills overlap by tip_w in absolute coords.
+    local placement_w = body_w
+    local b = Size.border.thin
+
+    -- notch_x_at(dy): right edge of the notch at row dy. Triangular,
+    -- 0 at top/bottom, tip_w at the vertical centre. Used by both the
+    -- BLACK body fill and the WHITE inner-knockout so the body's
+    -- silhouette respects the notch shape — the previous pill's tip
+    -- (painted into our notch area) remains visible.
+    local hh = (h - 1) / 2
+    local function notch_x_at(dy)
+        if not chained then return 0 end
+        local from_center = math.abs(dy - hh)
+        local x = math.floor(tip_w * (1 - from_center / hh) + 0.5)
+        if x < 0 then return 0 end
+        if x > tip_w then return tip_w end
+        return x
+    end
+
+    local ArrowBg = Widget:extend{}
+    function ArrowBg:init()
+        self.dimen = Geom:new{ w = placement_w, h = h }
+    end
+    function ArrowBg:paintTo(bb, x, y)
+        local BLACK = Blitbuffer.COLOR_BLACK
+        local WHITE = Blitbuffer.COLOR_WHITE
+        -- Black body: per-row, starting at notch_x_at(dy) so the
+        -- silhouette has the triangular notch on the left.
+        for dy = 0, h - 1 do
+            local nl = notch_x_at(dy)
+            if body_w > nl then
+                bb:paintRect(x + nl, y + dy, body_w - nl, 1, BLACK)
+            end
+        end
+        -- Right tip: tapered triangle past body_w.
+        for dy = 0, h - 1 do
+            local from_center = math.abs(dy - hh)
+            local row_w = math.max(0, math.floor(tip_w * (1 - from_center / hh) + 0.5))
+            if row_w > 0 then
+                bb:paintRect(x + body_w, y + dy, row_w, 1, BLACK)
+            end
+        end
+        -- Inner WHITE knockout. Per-row: starts at notch_x_at(dy) +
+        -- (b for unchained, 0 for chained) so chained pills have no
+        -- separate left-border line — the previous pill's tip butts
+        -- straight up against pure white interior.
+        local inner_h = h - 2 * b
+        if inner_h <= 0 then return end
+        for dy = b, h - b - 1 do
+            local nl = notch_x_at(dy)
+            local left_inset = chained and 0 or b
+            local row_start = nl + left_inset
+            if body_w > row_start then
+                bb:paintRect(x + row_start, y + dy, body_w - row_start, 1, WHITE)
+            end
+        end
+        -- Right tip inner.
+        local inner_tip_w = tip_w - 2 * b
+        if inner_tip_w > 0 then
+            local inner_hh = (inner_h - 1) / 2
+            for dy_inner = 0, inner_h - 1 do
+                local from_inner = math.abs(dy_inner - inner_hh)
+                local row_w = math.max(0, math.floor(inner_tip_w * (1 - from_inner / inner_hh) + 0.5))
+                if row_w > 0 then
+                    bb:paintRect(x + body_w, y + dy_inner + b, row_w, 1, WHITE)
+                end
+            end
+        end
+    end
+
+    -- Text positioning: x_local = left_text_pad (no notch_w offset
+    -- because the body's local origin is at x_local=0 now).
+    local text_positioned = FrameContainer:new{
+        bordersize   = 0,
+        padding      = 0,
+        padding_left = left_text_pad,
+        padding_top  = math.floor((h - text_h) / 2),
+        content_widget,
+    }
+
+    local pill = OverlapGroup:new{
+        dimen = Geom:new{ w = placement_w, h = h },
+        ArrowBg:new{},
+        text_positioned,
+    }
+    return pill, placement_w, tip_w
+end
+
+function ChipStrip:init()
+    self.dimen = Geom:new{ w = self.width, h = self.height }
+    if self.breadcrumb_path and #self.breadcrumb_path > 0 then
+        self:_initBreadcrumb()
+    elseif self.chips and #self.chips > 0 then
+        self:_initChips()
+    else
+        self[1] = require("ui/widget/widget"):new{ dimen = self.dimen }
+    end
+    self.ges_events = {
+        TapStrip = { GestureRange:new{ ges = "tap", range = self.dimen } },
+    }
+end
+
+-- ─── Default chips mode ─────────────────────────────────────────────────────
+
+function ChipStrip:_initChips()
+    local n = #self.chips
+    local row = HorizontalGroup:new{}
+    self._chip_dimens = {}
+
+    local paper       = Blitbuffer.COLOR_WHITE
+    local LineWidget  = require("ui/widget/linewidget")
+    local separator_w = Size.border.thin
+    local sep_total   = separator_w * (n - 1)
+
+    -- Width policy: chips with `chip.action == true` (icon-only edge
+    -- buttons like the search and currently-reading actions) are fixed-
+    -- width — wider than tall (1.6x strip height) so the tap target is
+    -- comfortable on touch. The remaining width is split equally among
+    -- the flex (navigable tab) chips. The LAST flex chip absorbs any
+    -- rounding leftover so the row fills self.width exactly.
+    local action_w = math.floor(self.height * 1.6)
+    local n_flex, last_flex_idx = 0, nil
+    for i, c in ipairs(self.chips) do
+        if not c.action then
+            n_flex = n_flex + 1
+            last_flex_idx = i
+        end
+    end
+    n_flex = math.max(1, n_flex)
+    local action_count = n - n_flex  -- chips marked action
+    local flex_total   = self.width - sep_total - action_w * action_count
+    local flex_w       = math.floor(flex_total / n_flex)
+
+    -- Resolve a chip's fill-state — action chips invert via .selected,
+    -- navigable chips via key-equals-active. Used to colour separators
+    -- between adjacent inverted chips (otherwise a black separator
+    -- between two black chips is invisible and they merge).
+    local function isFilled(c)
+        if c.action then return c.selected and true or false end
+        return c.key == self.active
+    end
+
+    for i, chip in ipairs(self.chips) do
+        if i > 1 then
+            -- White separator when both adjacent chips are inverted (e.g.
+            -- selected currently-reading + active Home chip), so the chip
+            -- boundary stays visible. Black separator otherwise — same
+            -- behaviour as before.
+            local prev_filled = isFilled(self.chips[i - 1])
+            local cur_filled  = isFilled(chip)
+            local sep_color   = (prev_filled and cur_filled)
+                                and Blitbuffer.COLOR_WHITE
+                                or  Blitbuffer.COLOR_BLACK
+            row[#row + 1] = LineWidget:new{
+                background = sep_color,
+                dimen = Geom:new{ w = separator_w, h = self.height },
+            }
+        end
+        local is_active = isFilled(chip)
+        -- Pre-paint feedback: when the user has tapped a chip and we're
+        -- waiting for the heavy on_change work (refetch + rebuild), the
+        -- tapped chip renders with a light-grey fill so the tap feels
+        -- responsive on slower chips like Genres / Authors. Cleared
+        -- automatically when the rebuild replaces this strip with a
+        -- fresh instance whose active chip is now black.
+        local is_pending = self._pending_key == chip.key
+        local w
+        if chip.action then
+            w = action_w
+        elseif i == last_flex_idx then
+            w = flex_total - flex_w * (n_flex - 1)
+        else
+            w = flex_w
+        end
+        -- Chips can be either text labels or icons. Icon chips are
+        -- used for action-only entries like the search button — tap
+        -- triggers the on_change callback but visually we render the
+        -- icon centred in the cell instead of text. Active state on
+        -- icon chips inverts the icon by drawing on a black background.
+        local cell_content
+        if chip.nerd_glyph then
+            -- Nerd-font glyph chip. KOReader bundles
+            -- fonts/nerdfonts/symbols.ttf, and the xtext / harfbuzz
+            -- pipeline falls back to it for any codepoint outside
+            -- infofont's range — so we just put the UTF-8-encoded
+            -- glyph in a TextWidget at the chip-label point size
+            -- and the bold solid shape comes through as the user
+            -- expects (vs the thin appbar.search SVG).
+            cell_content = TextWidget:new{
+                text    = chip.nerd_glyph,
+                face    = Font:getFace("infofont", 18),
+                fgcolor = is_active and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK,
+            }
+        elseif chip.icon then
+            local IconWidget = require("ui/widget/iconwidget")
+            -- Icon at ~75% of chip height. KOReader only ships the
+            -- mdlight ("light" weight) icon set; bumping the render
+            -- size compensates for the thin strokes so the icon
+            -- reads as substantial against the chip border.
+            local icon_size  = math.floor(self.height * 0.75)
+            cell_content = IconWidget:new{
+                icon   = chip.icon,
+                width  = icon_size,
+                height = icon_size,
+                invert = is_active or nil,
+            }
+        else
+            cell_content = TextWidget:new{
+                text      = (chip.label or ""):upper(),
+                face      = Font:getFace("infofont", 16),
+                bold      = true,
+                fgcolor   = is_active and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK,
+                -- Truncate with ellipsis at extreme DPI / font scale
+                -- rather than letting "FAVOURITES" overflow into the
+                -- adjacent chip's cell. Some inner padding (Size.
+                -- padding.small per side) keeps the text from
+                -- touching the chip border.
+                max_width = w - 2 * Size.padding.small,
+            }
+        end
+        -- Reserve a thick border slot on every chip so we can swap its
+        -- colour without shifting the cell_content position. The border
+        -- is invisible against the chip's bg in idle/active state
+        -- (paper-on-paper or black-on-black) and switches to black when
+        -- the chip is pending — drawing a hollow ring inside the chip
+        -- silhouette as tap feedback. Size.border.thick (2dp) reads
+        -- more clearly as a "ring" than the chip strip's own outer
+        -- border (Size.border.thin = 0.5dp).
+        local b = Size.border.thick
+        local border_color
+        if is_pending or is_active then
+            border_color = Blitbuffer.COLOR_BLACK
+        else
+            border_color = paper
+        end
+        local chip_body = FrameContainer:new{
+            bordersize = b,
+            color      = border_color,
+            margin     = 0,
+            padding    = 0,
+            background = is_active and Blitbuffer.COLOR_BLACK or paper,
+            CenterContainer:new{
+                dimen = Geom:new{ w = w - 2 * b, h = self.height - 2 * b },
+                cell_content,
+            },
+        }
+        if chip.action and is_active then
+            -- Selected action chip points up at the hero cover above.
+            -- Full chip-width base, ~25% strip-height tall — a "roof"
+            -- silhouette that visually anchors the chip to whatever's
+            -- above it in the layout.
+            local pointer_h = math.max(Screen:scaleBySize(5),
+                                       math.floor(self.height * 0.25))
+            local pointer = UpTrianglePointer:new{
+                width  = w,
+                height = pointer_h,
+                color  = Blitbuffer.COLOR_BLACK,
+            }
+            -- Negative y offset: the pointer paints into the area ABOVE
+            -- the chip strip (still within the bookshelf widget bb, so
+            -- refresh works). The strip's outer thin border is then
+            -- painted over the pointer's lowest row — both are black, so
+            -- the triangle silhouette continues smoothly across the line.
+            pointer.overlap_offset = { 0, -pointer_h }
+            row[#row + 1] = OverlapGroup:new{
+                dimen = Geom:new{ w = w, h = self.height },
+                chip_body,
+                pointer,
+            }
+        else
+            row[#row + 1] = chip_body
+        end
+        local prev = self._chip_dimens[self.chips[i - 1] and self.chips[i - 1].key]
+        local x = prev and (prev.x + prev.w + separator_w) or 0
+        self._chip_dimens[chip.key] = { x = x, w = w }
+    end
+    self[1] = FrameContainer:new{
+        bordersize = Size.border.thin,
+        margin     = 0,
+        padding    = 0,
+        row,
+    }
+end
+
+-- ─── Breadcrumb mode ────────────────────────────────────────────────────────
+--
+-- Layout: [chip_pill] > crumb1 > crumb2 > … > crumbN
+--
+-- Pill has the same metrics as a normal chip cell (single-chip width).
+-- Crumbs render with a chevron separator. We track each tappable region's
+-- x-range in self._breadcrumb_zones (which the unified TapStrip handler
+-- resolves) so the existing tap pipeline keeps working in both modes.
+
+function ChipStrip:_initBreadcrumb()
+    -- Layout: chip pill + (parents as CHAINED, OVERLAPPING arrow pills)
+    -- + small gap + the deepest crumb as plain text. When parents are
+    -- truncated to fit the strip width, an ELLIPSIS pill (also chained)
+    -- replaces the dropped run between the chip pill and the first
+    -- visible parent.
+    local face_text = Font:getFace("infofont", 16)
+    local n         = #self.breadcrumb_path
+
+    -- Arrow-left prefix is reserved for the explicit Back pill in search
+    -- mode — the chevron separator between chained pills already implies
+    -- hierarchy, so prefixing every crumb with another arrow read as
+    -- visual noise without adding meaning. Nerdfont fa-arrow-left
+    -- (U+F060), threaded through the same xtext font-fallback path that
+    -- renders the search glyph.
+    local ARROW_LEFT = "\xEF\x81\xA0"
+
+    -- Optional Back pill before the chip pill — fires on_breadcrumb(-1)
+    -- so the parent widget can interpret "user wants out of this drill"
+    -- as something different from "user wants to tap the chip pill"
+    -- (which in search mode now means "edit the query"). Used only by
+    -- search mode today; non-search drilldowns leave back_label nil and
+    -- the strip starts straight with the chip pill as before.
+    local back_pill, back_pill_w
+    local has_back = type(self.back_label) == "string" and self.back_label ~= ""
+    if has_back then
+        local back_text = ARROW_LEFT .. " " .. self.back_label
+        back_pill, back_pill_w = arrowPillFrame(back_text, self.height, false)
+    end
+
+    -- Chip pill at depth 0 (e.g. "HOME"). chained=true when there's a
+    -- Back pill before it so the two visually butt together; otherwise
+    -- the chip pill is chained=false (full border) as the strip's leftmost
+    -- element. chip_pill_glyph wins over chip_pill_label when set: search
+    -- mode replaces the chip name with the search icon so the user sees
+    -- they're in a separate "search" context, not nested under their
+    -- previously-active chip.
+    local pill, pill_w, pill_tip_w = arrowPillFrame(
+        self.chip_pill_label or "", self.height, has_back, self.chip_pill_glyph)
+
+    -- Chained pills for parent entries (1..n-1).
+    local crumb_pills = {}
+    for i = 1, n - 1 do
+        local label = (self.breadcrumb_path[i].label or ""):gsub("/$", "")
+        local cp_widget, cp_w, cp_tip_w = arrowPillFrame(label, self.height, true)
+        crumb_pills[#crumb_pills + 1] = {
+            widget = cp_widget,
+            width  = cp_w,
+            tip_w  = cp_tip_w,
+            depth  = i,
+        }
+    end
+
+    -- Plain-text widget for the deepest crumb (the current folder).
+    local deepest_widget, deepest_w
+    if n >= 1 then
+        local deepest_label = (self.breadcrumb_path[n].label or ""):gsub("/$", "")
+        deepest_widget = TextWidget:new{
+            text    = deepest_label,
+            face    = face_text,
+            bold    = true,
+            fgcolor = Blitbuffer.COLOR_BLACK,
+        }
+        deepest_w = deepest_widget:getSize().w
+    end
+
+    -- Layout helper. Pills lay out adjacently in HorizontalGroup but
+    -- the chained pills' placement_w EXCLUDES the right tip, so each
+    -- pill's tip overhangs into the next pill's notch area — pills
+    -- visually overlap by tip_w and chain together.
+    local function build(visible_pills)
+        local row    = HorizontalGroup:new{}
+        local zones  = {}
+        local cursor = 0
+        if has_back then
+            row[#row + 1] = back_pill
+            zones[#zones + 1] = { x = cursor, w = back_pill_w, depth = -1 }
+            cursor = cursor + back_pill_w
+        end
+        row[#row + 1] = pill
+        zones[#zones + 1] = { x = cursor, w = pill_w, depth = 0 }
+        cursor = cursor + pill_w
+        for _, cp in ipairs(visible_pills) do
+            row[#row + 1] = cp.widget
+            zones[#zones + 1] = { x = cursor, w = cp.width, depth = cp.depth }
+            cursor = cursor + cp.width
+        end
+        if deepest_widget then
+            -- Plain text for the active folder. Gap = tip_w + large
+            -- inset so the text sits well clear of the last pill's
+            -- tip apex, mirroring the breathing room a chained pill
+            -- gives its own text via the extra-tip_w left padding.
+            local gap_w = pill_tip_w + Size.padding.large
+            row[#row + 1] = HorizontalSpan:new{ width = gap_w }
+            cursor = cursor + gap_w
+            row[#row + 1] = deepest_widget
+            -- Register a tap zone for the deepest crumb. The previous
+            -- behaviour left it inert (depth = #path was a no-op for
+            -- _drillBackTo), but search mode now uses this as a second
+            -- "edit query" affordance alongside the chip pill.
+            zones[#zones + 1] = { x = cursor, w = deepest_w, depth = n }
+            cursor = cursor + deepest_w
+        end
+        return row, zones, cursor
+    end
+
+    -- Try to fit all parents. If the chain overflows, drop the
+    -- earliest parent and replace the dropped run with a SINGLE
+    -- ellipsis pill (chained, label "…"). Repeat until the chain
+    -- fits the strip. The ellipsis pill, when present, taps to the
+    -- depth of the FIRST hidden parent so the user can pop back into
+    -- the truncated middle.
+    local first_visible = 1
+    local row, zones, total_w
+    while true do
+        local visible = {}
+        if first_visible > 1 then
+            local ep, ew, etw = arrowPillFrame("…", self.height, true)
+            visible[1] = {
+                widget = ep,
+                width  = ew,
+                tip_w  = etw,
+                depth  = first_visible - 1,
+            }
+        end
+        for i = first_visible, #crumb_pills do
+            visible[#visible + 1] = crumb_pills[i]
+        end
+        row, zones, total_w = build(visible)
+        if total_w <= self.width then break end
+        if first_visible > #crumb_pills then break end
+        first_visible = first_visible + 1
+    end
+
+    self._breadcrumb_zones = zones
+    self[1] = row
+end
+
+-- ─── Pre-paint feedback ─────────────────────────────────────────────────────
+-- flashPending(key): paint a black border around the named chip RIGHT
+-- NOW, before the caller's heavy work runs. Use this when a tap or swipe
+-- is about to trigger a slow tab switch — gives the user instant visual
+-- confirmation that their input was received.
+--
+-- Must be called before the work that will trigger _rebuild (which
+-- destroys this strip instance). The border clears automatically when
+-- the rebuild swaps in a fresh strip.
+--
+-- Why each step is here:
+--   * _initChips rebuilds the widget tree because chip colours are
+--     baked into the FrameContainer at build time, not read at paint
+--     time — flipping _pending_key alone would repaint the same baked
+--     bg/border.
+--   * setDirty must target show_parent (the window-level widget);
+--     ChipStrip itself is a subwidget so setDirty(self, ...) is a
+--     no-op for the dirty flag.
+--   * "fast" = A2 binary waveform (~100ms vs ~450ms for "ui" / GC16).
+--     Safe because the pending border is pure black on paper — no
+--     greys to crush.
+--   * Refresh region narrowed to the chip's screen rect so only that
+--     chip flashes, not the whole strip. d.x is row-local; the row
+--     sits inside the strip's outer FrameContainer at offset
+--     (Size.border.thin, Size.border.thin), so we shift by that.
+--   * forceRePaint drains the paint queue immediately — without it,
+--     the repaint would only run after the caller's heavy work
+--     returns, by which point the strip has been replaced.
+function ChipStrip:flashPending(key)
+    if not key or not self._chip_dimens then return end
+    local d = self._chip_dimens[key]
+    if not d or not self.show_parent or not self.dimen then return end
+    self._pending_key = key
+    self:_initChips()
+    local b = Size.border.thin
+    UIManager:setDirty(self.show_parent, "fast", Geom:new{
+        x = self.dimen.x + b + d.x,
+        y = self.dimen.y + b,
+        w = d.w,
+        h = self.height,
+    })
+    UIManager:forceRePaint()
+end
+
+-- ─── Unified tap dispatch ───────────────────────────────────────────────────
+
+function ChipStrip:onTapStrip(_, ges)
+    local x = ges.pos.x - self.dimen.x
+    if self._breadcrumb_zones then
+        for _, zone in ipairs(self._breadcrumb_zones) do
+            if x >= zone.x and x < zone.x + zone.w then
+                if self.on_breadcrumb then self.on_breadcrumb(zone.depth) end
+                return true
+            end
+        end
+        return false
+    end
+    -- Chips mode
+    if self._chip_dimens then
+        for _, chip in ipairs(self.chips) do
+            local d = self._chip_dimens[chip.key]
+            if d and x >= d.x and x < d.x + d.w then
+                if self.on_change and chip.key ~= self.active then
+                    -- Action chips (current / search) skip the pending
+                    -- paint because they don't trigger a rebuild — the
+                    -- border would have nothing to clear it.
+                    if not chip.action then
+                        self:flashPending(chip.key)
+                    end
+                    self.on_change(chip.key)
+                end
+                return true
+            end
+        end
+    end
+    return false
+end
+
+return ChipStrip
