@@ -218,7 +218,9 @@ function M.inject(fb_config)
 
     _label_text_widget = TextWidget:new{
         text = getLabel(fc),
-        face = Font:getFace("smallinfofont", 14),
+        face = Font:getFace("smallinfofont", 18),
+        max_width = Screen:getWidth() / 3,
+        truncate_left = true,
         -- forced_baseline = forced_baseline,
         -- forced_height = forced_height,
     }
