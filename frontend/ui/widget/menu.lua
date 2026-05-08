@@ -982,14 +982,36 @@ function Menu:init()
         }
     }
 
-    local page_controls = BottomContainer:new {
+    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+    if ui ~= nil then
+        pagetextinfo = ui.pagetextinfo
+    else
+        pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
+    end
+    local pager_h = self.page_info:getSize().h
+
+    local separator_controls = BottomContainer:new {
         dimen = self.inner_dimen:copy(),
         VerticalGroup:new{
             align = "left",
             separator_line,
-            page_info_container,
+            VerticalSpan:new{ width = pager_h },
         }
     }
+
+    local page_controls
+    if pagetextinfo and pagetextinfo.settings:isTrue("enable_no_pager") then
+        page_controls = separator_controls
+    else
+        page_controls = BottomContainer:new {
+            dimen = self.inner_dimen:copy(),
+            VerticalGroup:new{
+                align = "left",
+                separator_line,
+                page_info_container,
+            }
+        }
+    end
 
     local tap_indicator_geom = Geom:new {
         w = self.screen_w * 0.98,
@@ -1010,7 +1032,7 @@ function Menu:init()
 
     local text = ""
 
- if ffiUtil.realpath(require("datastorage"):getSettingsDir() .. "/stats.lua") then
+    if ffiUtil.realpath(require("datastorage"):getSettingsDir() .. "/stats.lua") then
         local ok, stats = pcall(dofile, require("datastorage"):getSettingsDir() .. "/stats.lua")
         if ok and stats then
             local stats_line = "T:" .. stats["total_books"]
@@ -1029,6 +1051,7 @@ function Menu:init()
                     ui = nil,
                     fm = true,
                 }
+            local topbar_line = nil
             if topbar then
                 local stats_year = topbar:getReadThisYearSoFar()
                 if stats_year > 0 then
@@ -1037,7 +1060,7 @@ function Menu:init()
                 topbar_line = topbar:getDateAndVersion() .. ". BDB:" .. topbar:getBooksOpened() .. "·TR:" .. topbar:getTotalRead() .. "d" .. "·ΔL:" .. stats_year .. "h"
             end
 
-            text = topbar_line and (topbar_line .. "\n" .. stats_line) or stats_line
+            if topbar_line then text = topbar_line .. (pagetextinfo and pagetextinfo.settings:isTrue("enable_no_pager") and " " or "\n") .. stats_line end
         end
     end
 
@@ -1061,28 +1084,37 @@ function Menu:init()
         text = "Search results"
     end
 
-    local footer_text_text = TextBoxWidget:new {
-        text = text,
-        face = Font:getFace("myfont4", 11),
-        bold = true,
-        width = (self.screen_w * 0.99) - self.page_info:getSize().w,
-        height_adjust = true,
-    }
+
+
+
+local pager_h = self.page_info:getSize().h
+local pager_w = self.page_info:getSize().w
+local no_pager = pagetextinfo and pagetextinfo.settings:isTrue("enable_no_pager")
+-- Siempre usar el mismo ancho para el footer text
+-- Si no_pager, el espacio del pager queda vacío pero el texto no se expande
+-- local footer_w = (self.screen_w * 0.99) - pager_w
+local footer_w = no_pager and (self.screen_w * 0.99) or ((self.screen_w * 0.99) - pager_w)
+
+local footer_text_text = TextBoxWidget:new {
+    text = text,
+    face = Font:getFace("myfont4", 11),
+    bold = true,
+    width = footer_w,
+    height_adjust = true,
+}
 
     local footer_text_geom = Geom:new {
         w = self.screen_w * 0.98,
-        h = self.page_info:getSize().h,  -- 40px igual que el pager
+        h = pager_h,
     }
 
     local footer_text_container = LeftContainer:new {
         dimen = footer_text_geom,
         footer_text_text,
-        max_width = (self.screen_w * 0.98) - self.page_info:getSize().w, -- pagination_width,
+        max_width = footer_w,
         truncate_with_ellipsis = true,
         truncate_left = true,
     }
-
-
     self.footer_text = BottomContainer:new {
         dimen = self.inner_dimen:copy(),
         footer_text_container,

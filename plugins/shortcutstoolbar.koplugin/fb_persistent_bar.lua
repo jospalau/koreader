@@ -141,7 +141,13 @@ end
 
 local function updateLabel(fc)
     if not _label_text_widget then return end
-    _label_text_widget:setText(getLabel(fc))
+    local page_label = ""
+    if pagetextinfo and pagetextinfo.settings:isTrue("enable_no_pager") then
+        local cur = fc.page or 1
+        local total = fc:getPageNumber(#fc.item_table) or 1
+        page_label = " " .. cur .. "/" .. total
+    end
+    _label_text_widget:setText(getLabel(fc) .. page_label)
     UIManager:setDirty(fc, "ui")
 end
 
@@ -159,6 +165,19 @@ local function hookPathChange()
         return result
     end
 end
+
+local function hookPageChange()
+    local FileChooser = require("ui/widget/filechooser")
+    local original = FileChooser.updateItems
+    FileChooser.updateItems = function(self, ...)
+        local result = original(self, ...)
+        UIManager:scheduleIn(0, function()
+            updateLabel(self)
+        end)
+        return result
+    end
+end
+
 
 -- ==========================================================================
 -- Public API
@@ -216,13 +235,25 @@ function M.inject(fb_config)
     -- local forced_height = ref_w:getSize().h
     -- ref_w:free()
 
+    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+    if ui ~= nil then
+        pagetextinfo = ui.pagetextinfo
+    else
+        pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
+    end
+    local page_label = ""
+    if pagetextinfo and pagetextinfo.settings:isTrue("enable_no_pager") then
+        local cur = fc.page or 1
+        local total = fc:getPageNumber(#fc.item_table) or 1
+        page_label = " " .. cur .. "/" .. total
+        page_label = " " .. cur .. "/" .. total
+    end
+
     _label_text_widget = TextWidget:new{
-        text = getLabel(fc),
-        face = Font:getFace("smallinfofont", 18),
+        text = getLabel(fc) .. page_label,
+        face = Font:getFace("smallinfofont", 14),
         max_width = Screen:getWidth() / 3,
         truncate_left = true,
-        -- forced_baseline = forced_baseline,
-        -- forced_height = forced_height,
     }
 
     local label_frame = FrameContainer:new{
@@ -274,6 +305,7 @@ function M.inject(fb_config)
     fc:_recalculateDimen()
     fc:updateItems()
     hookPathChange()
+    hookPageChange()
     UIManager:setDirty(fc, "ui")
 end
 

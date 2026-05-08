@@ -1415,6 +1415,24 @@ function PageTextInfo:addToMainMenu(menu_items)
                     end,
                 },
                 {
+                  text = _("No pager"),
+                    checked_func = function() return self.settings:isTrue("enable_no_pager") end,
+                    callback = function(touchmenu_instance)
+                        local enable_no_pager = not self.settings:isTrue("enable_no_pager")
+                        self.settings:saveSetting("enable_no_pager", enable_no_pager)
+                        self.settings:flush()
+                        local path = FileManager.instance.file_chooser.path
+                        if path:match("✪ Collections") then
+                            path = G_reader_settings:readSetting("home_dir")
+                        end
+                        touchmenu_instance:closeMenu()
+                        local cur_page = FileManager.instance.file_chooser.page
+                        FileManager:showFiles(path)  -- esto llama setupLayout ya sin hook
+                        FileManager.instance.file_chooser:onGotoPage(cur_page)
+                        return true
+                    end,
+                },
+                {
                     text = _("Enable devices flashes tweaks"),
                     checked_func = function() return self.settings:isTrue("enable_devices_flashes_tweaks") end,
                     help_text = _([[Some tweaks to fix the different issues for the different devices when flashing elements in the UI.
