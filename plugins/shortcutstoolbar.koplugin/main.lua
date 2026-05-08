@@ -275,6 +275,12 @@ function ShortcutsToolbar:onMenuUpdateItems(menu)
 end
 
 function ShortcutsToolbar:addToMainMenu(menu_items)
+    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+    if ui ~= nil then
+        pagetextinfo = ui.pagetextinfo
+    else
+        pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
+    end
     menu_items.shortcutstoolbar = {
         text         = _("Shortcuts toolbar"),
         sorting_hint = "setting",
@@ -291,6 +297,7 @@ function ShortcutsToolbar:addToMainMenu(menu_items)
             {
                 text         = _("Enable toolbar in file browser"),
                 checked_func = function() return fb_config.enabled end,
+                enabled_func = function() return pagetextinfo and not pagetextinfo.settings:isTrue("enable_no_bar_menu") end,
                 callback     = function()
                     fb_config.enabled = not fb_config.enabled
                     ToolbarSettings.saveConfig("fb", fb_config)
