@@ -1243,24 +1243,6 @@ end
 function PageTextInfo:registerDictButtons()
     local _ = require("gettext")
     if self.ui and self.ui.dictionary then
-        self.ui.dictionary:addToDictButtons({
-            id = "xray",
-            text = _("X-Ray"),
-            menu_text = _("X-Ray"),
-            insert_first = true,
-            callback = function(dict_popup)
-                local text = dict_popup and (dict_popup.word or dict_popup.text or dict_popup.selection_text)
-                local pos0 = dict_popup and dict_popup.pos0
-                local pos1 = dict_popup and dict_popup.pos1
-
-                -- Close the native dictionary popup immediately so it doesn't linger
-                if dict_popup then pcall(function() UIManager:close(dict_popup) end) end
-
-                if text then
-                    self.ui.xray.lookup_manager:handleLookup(text, pos0, pos1)
-                end
-            end,
-        })
         local NetworkMgr = require("ui/network/manager")
         local Trapper = require("ui/trapper")
         self.ui.dictionary:addToDictButtons({

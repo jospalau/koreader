@@ -9,6 +9,12 @@ if not ok then
     logger.error("Localization: lfs module not found!")
 end
 local plugin_path = ((...) or ""):match("(.-)[^%.]+$") or ""
+if plugin_path ~= "" then
+    local path_to_dir = plugin_path:gsub("%.", "/")
+    if not package.path:find(path_to_dir) then
+        package.path = package.path .. ";" .. path_to_dir .. "?.lua"
+    end
+end
 
 
 local Localization = {
@@ -240,6 +246,7 @@ function Localization:t(key, ...)
             character_not_found = "No character found matching '%s'",
             multiple_matches = "Multiple matches for '%s'. Which did you mean?",
             label_name = "NAME",
+            label_aliases = "ALIASES",
             label_role = "ROLE",
             label_gender = "GENDER",
             label_occupation = "OCCUPATION",
@@ -255,11 +262,12 @@ function Localization:t(key, ...)
             mentions_preference_desc = "Select your preference for character and location mentions:",
             find_mentions = "Find Mentions",
             menu_about = "About",
-            menu_reasoning_effort = "GPT Reasoning Effort",
+            menu_reasoning_effort = "AI Reasoning Effort",
             reasoning_low = "Low",
             reasoning_medium = "Medium",
             reasoning_high = "High",
-            reasoning_xhigh = "Extra High (X-High)",
+            reasoning_unset = "Unset (Default)",
+            reasoning_about = "Controls 'thinking' depth for reasoning models:\n\n• Unset: No specific instruction sent; model uses its internal defaults.\n• Low: Fast, economical extraction for simple books.\n• Medium: Balanced depth for most narratives.\n• High: Detailed analysis for complex character webs.\n\nApplies to: GPT-5.x, DeepSeek Reasoner, Claude 4.5+ (extended thinking), and Gemini 2.5+.",
             label_reasoning = "AI REASONING",
             linked_entries = "Linked Entries",
             menu_linked_entries_settings = "Linked Entries Settings",
