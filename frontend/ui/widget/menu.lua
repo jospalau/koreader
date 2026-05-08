@@ -974,9 +974,21 @@ function Menu:init()
         self.page_info,
     }
     -- end
+    local LineWidget = require("ui/widget/linewidget")
+    local separator_line = LineWidget:new{
+        dimen = Geom:new{
+            w = Screen:getWidth(),
+            h = Screen:scaleBySize(3),
+        }
+    }
+
     local page_controls = BottomContainer:new {
         dimen = self.inner_dimen:copy(),
-        page_info_container
+        VerticalGroup:new{
+            align = "left",
+            separator_line,
+            page_info_container,
+        }
     }
 
     local tap_indicator_geom = Geom:new {
