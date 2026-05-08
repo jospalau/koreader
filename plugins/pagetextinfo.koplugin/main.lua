@@ -1366,6 +1366,11 @@ function PageTextInfo:addToMainMenu(menu_items)
                             FileManager.setupLayout = _FileManager_setupLayout_orig
                             FileManager.updateTitleBarPath = _FileManager_updateTitleBarPath_orig
                         end
+                        if self.settings:isTrue("enable_no_bar_menu") then
+                            _original_setupLayout = nil
+                            _original_filechooser_init = nil
+                            plugin:_hookSetupLayout()
+                        end
                         -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/patch.lua")
                         --FileManager.instance:setupLayout()
                         --FileManager.instance:updateTitleBarTitle(true)
