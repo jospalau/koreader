@@ -63,6 +63,15 @@ Tap a book in the search results to open it.]]),
 end
 
 function FileSearcher:onShowFileSearch(search_string, callbackfunc)
+    -- local logger = require("logger")
+    -- logger.dbg("onShowFileSearch called", debug.traceback("", 2))
+    -- local UIManager = require("ui/uimanager")
+    -- for i, item in ipairs(UIManager._window_stack) do
+    --     local w = item.widget
+    --     local mt = getmetatable(w)
+    --     local cls = mt and mt.__index and (mt.__index.name or tostring(mt.__index)) or "?"
+    --     logger.dbg("  stack[" .. i .. "]:", w.name or tostring(w), "class:", cls)
+    -- end
     local search_dialog, check_button_case, check_button_subfolders, check_button_metadata
     local function _doSearch()
         local search_str = search_dialog:getInputText()
