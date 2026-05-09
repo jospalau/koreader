@@ -1150,6 +1150,7 @@ function ListMenu:_recalculateDimen()
     -- menu item height based on number of items per page
     -- add space for the separator
     self.item_height = math.floor(available_height / self.perpage) - Size.line.thin
+    -- logger.dbg("_recalculateDimen: available_height=", available_height, "perpage=", self.perpage, "item_height=", self.item_height, "title_bar_h=", self.title_bar and self.title_bar.dimen.h or 0, "others_height=", self.others_height)
     self.item_width = self.inner_dimen.w
     self.item_dimen = Geom:new{
         x = 0, y = 0,
