@@ -1051,7 +1051,7 @@ function Menu:init()
                 topbar_line = "BDB:" .. topbar:getBooksOpened() .. "·TR:" .. topbar:getTotalRead() .. "d" .. "·ΔL:" .. stats_year .. "h"
             end
 
-            if topbar_line then text = topbar_line .. (pagetextinfo and pagetextinfo.settings:isTrue("enable_no_pager") and " " or "\n") .. stats_line end
+            if topbar_line then text = topbar_line .. (pagetextinfo and pagetextinfo.settings:isTrue("enable_no_pager") and "\n" or "\n") .. stats_line end
         end
     end
 
@@ -1085,7 +1085,7 @@ function Menu:init()
 
     local footer_text_text = TextBoxWidget:new {
         text = text,
-        face = Font:getFace("myfont4", 11),
+        face = (pagetextinfo and pagetextinfo.settings:isTrue("enable_no_pager")) and Font:getFace("myfont4", 16) or Font:getFace("myfont4", 11),
         bold = true,
         width = footer_w,
         height_adjust = true,
