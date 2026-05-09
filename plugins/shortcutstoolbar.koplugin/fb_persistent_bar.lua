@@ -91,7 +91,7 @@ local function restoreLayout(fc)
     end
     fc:_recalculateDimen()
     fc:updateItems()
-    UIManager:setDirty(fc, "ui")
+    -- UIManager:setDirty(fc, "ui")
 end
 
 local function getLabel(fc)
@@ -148,7 +148,7 @@ local function updateLabel(fc)
         page_label = " " .. cur .. "/" .. total
     end
     _label_text_widget2:setText(getLabel(fc) .. page_label)
-    UIManager:setDirty(fc, "ui")
+    -- UIManager:setDirty(fc, "ui")
 end
 
 local function hookPathChange()
@@ -335,11 +335,10 @@ function M.inject(fb_config)
     local cg = fc.content_group
     table.insert(cg, 2, overlapped)
 
-    fc:_recalculateDimen()
-    fc:updateItems()
     hookPathChange()
     hookPageChange()
-    UIManager:setDirty(fc, "ui")
+    fc:_recalculateDimen()
+    fc:updateItems()
 end
 
 --- Deactivate the persistent bar and restore the file list.
