@@ -140,14 +140,14 @@ local function getLabel(fc)
 end
 
 local function updateLabel(fc)
-    if not _label_text_widget then return end
+    if not _label_text_widget2 then return end
     local page_label = ""
     if pagetextinfo and pagetextinfo.settings:isTrue("enable_no_pager") then
         local cur = fc.page or 1
         local total = fc:getPageNumber(#fc.item_table) or 1
         page_label = " " .. cur .. "/" .. total
     end
-    _label_text_widget:setText(getLabel(fc) .. page_label)
+    _label_text_widget2:setText(getLabel(fc) .. page_label)
     UIManager:setDirty(fc, "ui")
 end
 
@@ -203,6 +203,8 @@ function M.inject(fb_config)
     -- Wrap in a FrameContainer for a clean white background.
     local frame = FrameContainer:new{
         padding    = 0,
+        padding_top    = Screen:scaleBySize(16),
+        padding_bottom = Screen:scaleBySize(16),
         bordersize = 0, --3
         background = Blitbuffer.COLOR_WHITE,
         content,
@@ -223,8 +225,9 @@ function M.inject(fb_config)
     --     -- línea horizontal en el punto medio vertical
     --     bb:paintRect(x, y + math.floor(bar_h / 2), bar_w, 1, Blitbuffer.COLOR_BLACK)
     -- end
-    -- frame._is_persistent_bar = true
 
+
+    -- frame._is_persistent_bar = true
     local bar_h = frame:getSize().h
 
     -- Shrink inner_dimen so _recalculateDimen computes fewer rows.
@@ -249,20 +252,48 @@ function M.inject(fb_config)
         page_label = " " .. cur .. "/" .. total
     end
 
+    local date_and_version_file_path = "./dateandversion"
+    local date_and_version = io.open(date_and_version_file_path, "r")
+    local date_and_version_text = date_and_version and date_and_version:read("*line") or "No dateandversion file"
+
     _label_text_widget = TextWidget:new{
+        text = date_and_version_text,
+        face = Font:getFace("smallinfofont", 20),
+        max_width = Screen:getWidth() / 3,
+        truncate_left = true,
+    }
+
+    _label_text_widget2 = TextWidget:new{
         text = getLabel(fc) .. page_label,
         face = Font:getFace("smallinfofont", 14),
         max_width = Screen:getWidth() / 3,
         truncate_left = true,
     }
 
+    local label_w = math.floor(Screen:getWidth() / 2)
+
+    local line = CenterContainer:new{
+        dimen = Geom:new{ w = label_w, h = _label_text_widget:getSize().h },
+        _label_text_widget,
+    }
+    local line2 = CenterContainer:new{
+        dimen = Geom:new{ w = label_w, h = _label_text_widget2:getSize().h },
+        _label_text_widget2,
+    }
+    local pad = Screen:scaleBySize(1)
+    local total_h = _label_text_widget:getSize().h + _label_text_widget2:getSize().h + pad
+    local VerticalSpan = require("ui/widget/verticalspan")
     local label_frame = FrameContainer:new{
         padding    = 0,
-        bordersize = 0,--3,
-        -- background = Blitbuffer.COLOR_WHITE,
+        bordersize = 0,
         CenterContainer:new{
-            dimen = Geom:new{ w = Screen:getWidth(), h = _label_text_widget:getSize().h },
-            _label_text_widget,
+            dimen = Geom:new{ w = Screen:getWidth(), h = total_h },
+            VerticalGroup:new{
+                align = "center",
+                line,
+                VerticalSpan:new{ width = pad },
+                line2,
+            }
         }
     }
 
@@ -279,6 +310,8 @@ function M.inject(fb_config)
     }
     local OverlapGroup = require("ui/widget/overlapgroup")
     local VerticalSpan = require("ui/widget/verticalspan")
+    local line_h = _label_text_widget2:getSize().h
+    local total_h = line_h * 2 + pad
     local label_offset = math.floor((frame:getSize().h - label_frame:getSize().h) / 2)
     local overlapped = OverlapGroup:new{
         _is_persistent_bar = true,
@@ -311,7 +344,7 @@ end
 
 --- Deactivate the persistent bar and restore the file list.
 function M.remove()
-    _label_text_widget = nil
+    _label_text_widget2 = nil
     local fc = getFileChooser()
     if fc then
         removeFromContentGroup(fc)
