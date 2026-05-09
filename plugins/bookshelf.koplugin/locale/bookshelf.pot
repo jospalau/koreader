@@ -1,14 +1,14 @@
 # SOME DESCRIPTIVE TITLE.
 # Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
-# This file is distributed under the same license as the bookshelf package.
+# This file is distributed under the same license as the PACKAGE package.
 # FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
 #
 #, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: bookshelf 1.0.0\n"
+"Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-05-08 18:49+0100\n"
+"POT-Creation-Date: 2026-05-09 05:49+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -46,7 +46,7 @@ msgstr ""
 msgid "Version: "
 msgstr ""
 
-#: bookshelf_updater.lua:277 bookshelf_widget.lua:1759 hero_line_editor.lua:86
+#: bookshelf_updater.lua:277 bookshelf_widget.lua:1774 hero_line_editor.lua:86
 #: settings.lua:224
 msgid "Close"
 msgstr ""
@@ -111,148 +111,148 @@ msgstr ""
 msgid "Latest release has no downloadable zip."
 msgstr ""
 
-#: bookshelf_widget.lua:732
+#: bookshelf_widget.lua:747
 #, lua-format
 msgid "No matches for \"%s\""
 msgstr ""
 
-#: bookshelf_widget.lua:734
+#: bookshelf_widget.lua:749
 msgid ""
 "Nothing in Series yet · Add series metadata to your books and they will "
 "appear here"
 msgstr ""
 
-#: bookshelf_widget.lua:736
+#: bookshelf_widget.lua:751
 msgid ""
 "No authors yet · Add author metadata to your books and they will appear here"
 msgstr ""
 
-#: bookshelf_widget.lua:738
+#: bookshelf_widget.lua:753
 msgid ""
 "No genres yet · Add keywords or subject metadata to your books and they will "
 "appear here"
 msgstr ""
 
-#: bookshelf_widget.lua:740
+#: bookshelf_widget.lua:755
 msgid ""
 "No tags yet · Long-press a book and tap 'Add to collection' to create one"
 msgstr ""
 
-#: bookshelf_widget.lua:742
+#: bookshelf_widget.lua:757
 msgid "No favourites yet · Long-press a book and tap 'Add to favourites'"
 msgstr ""
 
-#: bookshelf_widget.lua:744
+#: bookshelf_widget.lua:759
 msgid "No books found · Set your library folder in Settings then tap Latest"
 msgstr ""
 
-#: bookshelf_widget.lua:746
+#: bookshelf_widget.lua:761
 #, lua-format
 msgid "No books in %s yet"
 msgstr ""
 
-#: bookshelf_widget.lua:1349 bookshelf_widget.lua:2646
+#: bookshelf_widget.lua:1364 bookshelf_widget.lua:2680
 msgid "File no longer exists. The bookshelf entry is stale."
 msgstr ""
 
-#: bookshelf_widget.lua:1676 bookshelf_widget.lua:1699
+#: bookshelf_widget.lua:1691 bookshelf_widget.lua:1714
 msgid "Recently read"
 msgstr ""
 
-#: bookshelf_widget.lua:1680 bookshelf_widget.lua:1702
+#: bookshelf_widget.lua:1695 bookshelf_widget.lua:1717
 msgid "Name"
 msgstr ""
 
-#: bookshelf_widget.lua:1681
+#: bookshelf_widget.lua:1696
 msgid "Name (natural sorting)"
 msgstr ""
 
-#: bookshelf_widget.lua:1682
+#: bookshelf_widget.lua:1697
 msgid "Date modified"
 msgstr ""
 
-#: bookshelf_widget.lua:1683
+#: bookshelf_widget.lua:1698
 msgid "Last read"
 msgstr ""
 
-#: bookshelf_widget.lua:1684 hero_line_editor.lua:287
+#: bookshelf_widget.lua:1699 hero_line_editor.lua:287
 msgid "Size"
 msgstr ""
 
-#: bookshelf_widget.lua:1685
+#: bookshelf_widget.lua:1700
 msgid "Format"
 msgstr ""
 
-#: bookshelf_widget.lua:1686
+#: bookshelf_widget.lua:1701
 msgid "Percent u{2013} unopened first"
 msgstr ""
 
-#: bookshelf_widget.lua:1687
+#: bookshelf_widget.lua:1702
 msgid "Percent u{2013} unopened last"
 msgstr ""
 
-#: bookshelf_widget.lua:1688
+#: bookshelf_widget.lua:1703
 msgid "Percent u{2013} unopened u{2013} finished last"
 msgstr ""
 
-#: bookshelf_widget.lua:1689
+#: bookshelf_widget.lua:1704
 msgid "Reverse"
 msgstr ""
 
-#: bookshelf_widget.lua:1690
+#: bookshelf_widget.lua:1705
 msgid "Mixed folders"
 msgstr ""
 
-#: bookshelf_widget.lua:1693 bookshelf_widget.lua:1697
+#: bookshelf_widget.lua:1708 bookshelf_widget.lua:1712
 msgid "Date added"
 msgstr ""
 
-#: bookshelf_widget.lua:1698
+#: bookshelf_widget.lua:1713
 msgid "Title"
 msgstr ""
 
-#: bookshelf_widget.lua:1703
+#: bookshelf_widget.lua:1718
 msgid "Latest read"
 msgstr ""
 
-#: bookshelf_widget.lua:1704
+#: bookshelf_widget.lua:1719
 msgid "Book count"
 msgstr ""
 
-#: bookshelf_widget.lua:1762 bookshelf_widget.lua:2860 hero_line_editor.lua:394
-#: main.lua:525 main.lua:561 settings.lua:477
+#: bookshelf_widget.lua:1777 bookshelf_widget.lua:2894 hero_line_editor.lua:394
+#: main.lua:547 main.lua:583 settings.lua:477
 msgid "Cancel"
 msgstr ""
 
-#: bookshelf_widget.lua:1763 settings.lua:480
+#: bookshelf_widget.lua:1778 settings.lua:480
 msgid "Apply"
 msgstr ""
 
-#: bookshelf_widget.lua:1781
+#: bookshelf_widget.lua:1796
 msgid "Sort by"
 msgstr ""
 
-#: bookshelf_widget.lua:2500
+#: bookshelf_widget.lua:2534
 msgid "✓ Bookshelf is my home screen"
 msgstr ""
 
-#: bookshelf_widget.lua:2501
+#: bookshelf_widget.lua:2535
 msgid "Set as home screen"
 msgstr ""
 
-#: bookshelf_widget.lua:2508 bookshelf_widget.lua:2512
+#: bookshelf_widget.lua:2542 bookshelf_widget.lua:2546
 msgid "Bookshelf will load on next launch"
 msgstr ""
 
-#: bookshelf_widget.lua:2854
+#: bookshelf_widget.lua:2888
 msgid "Search library"
 msgstr ""
 
-#: bookshelf_widget.lua:2856
+#: bookshelf_widget.lua:2890
 msgid "title, author, series, genre…"
 msgstr ""
 
-#: bookshelf_widget.lua:2865
+#: bookshelf_widget.lua:2899
 msgid "Search"
 msgstr ""
 
@@ -322,11 +322,11 @@ msgstr ""
 msgid "Icons…"
 msgstr ""
 
-#: hero_line_editor.lua:442 main.lua:530 main.lua:566
+#: hero_line_editor.lua:442 main.lua:552 main.lua:588
 msgid "Save"
 msgstr ""
 
-#: main.lua:140 main.lua:144 main.lua:168 _meta.lua:4
+#: main.lua:140 main.lua:144 main.lua:168 main.lua:236 _meta.lua:4
 msgid "Bookshelf"
 msgstr ""
 
@@ -334,43 +334,43 @@ msgstr ""
 msgid "Start with: %1"
 msgstr ""
 
-#: main.lua:235
+#: main.lua:240
 msgid "Close Bookshelf"
 msgstr ""
 
-#: main.lua:235
+#: main.lua:240
 msgid "Open Bookshelf"
 msgstr ""
 
-#: main.lua:248
+#: main.lua:253
 msgid "Edit book detail view"
 msgstr ""
 
-#: main.lua:257
+#: main.lua:262
 msgid "Choose Bookshelf tabs"
 msgstr ""
 
-#: main.lua:267
+#: main.lua:272
 msgid "Updates"
 msgstr ""
 
-#: main.lua:272
+#: main.lua:277
 msgid "Advanced settings"
 msgstr ""
 
-#: main.lua:275
+#: main.lua:280
 msgid "Scan all library metadata"
 msgstr ""
 
-#: main.lua:284
+#: main.lua:289
 msgid "\"Latest\" walk depth"
 msgstr ""
 
-#: main.lua:288
+#: main.lua:293
 msgid "Read calibre metadata.calibre"
 msgstr ""
 
-#: main.lua:289
+#: main.lua:294
 msgid ""
 "For users with a Calibre-managed library. Reads the metadata.calibre JSON "
 "file at home_dir to cover title / authors / series / tags / language for "
@@ -378,59 +378,59 @@ msgid ""
 "metadata still wins per field; Calibre data only fills gaps."
 msgstr ""
 
-#: main.lua:317
+#: main.lua:322
 msgid "About"
 msgstr ""
 
-#: main.lua:366
-msgid "Bookshelf: toggle visibility"
+#: main.lua:389
+msgid "Bookshelf: open or close"
 msgstr ""
 
-#: main.lua:373
+#: main.lua:395
 msgid "Bookshelf: open"
 msgstr ""
 
-#: main.lua:377
+#: main.lua:398
 msgid "on"
 msgstr ""
 
-#: main.lua:377
+#: main.lua:398
 msgid "off"
 msgstr ""
 
-#: main.lua:520 settings.lua:580 settings.lua:581
+#: main.lua:542 settings.lua:580 settings.lua:581
 msgid "Development branch"
 msgstr ""
 
-#: main.lua:522
+#: main.lua:544
 msgid "Branch name (leave empty for stable)"
 msgstr ""
 
-#: main.lua:556
+#: main.lua:578
 msgid "GitHub access token"
 msgstr ""
 
-#: main.lua:558
+#: main.lua:580
 msgid "Personal access token (leave empty to clear)"
 msgstr ""
 
-#: main.lua:598
+#: main.lua:620
 msgid ""
 "Book metadata scanner not available.\n"
 "Install the CoverBrowser plugin to enable it."
 msgstr ""
 
-#: main.lua:653
+#: main.lua:675
 msgid ""
 "This will clear the development branch setting and install the latest stable "
 "release of Bookshelf, then restart KOReader. Continue?"
 msgstr ""
 
-#: main.lua:654
+#: main.lua:676
 msgid "Reset"
 msgstr ""
 
-#: main.lua:675
+#: main.lua:697
 msgid "Bookshelf update available: v"
 msgstr ""
 
@@ -474,8 +474,8 @@ msgstr ""
 
 #: settings.lua:126
 msgid ""
-"Tokens are placeholders that get replaced with live data when the hero card "
-"or status line renders.\n"
+"Tokens are placeholders that get replaced with live data when the book "
+"detail view or status line renders.\n"
 "\n"
 "  %title — %book_pct\n"
 "  → Dune — 36%\n"
@@ -532,7 +532,7 @@ msgid "Favourites"
 msgstr ""
 
 #: settings.lua:466
-msgid "Hero card font scale"
+msgid "Book detail font scale"
 msgstr ""
 
 #: settings.lua:495

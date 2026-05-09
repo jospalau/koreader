@@ -365,22 +365,38 @@ end
 -- silently break existing bindings users have set up.
 function Bookshelf:onDispatcherRegisterActions()
     local Dispatcher = require("dispatcher")
+    -- Action ID stays "toggle_bookshelf" to preserve existing user
+    -- gesture bindings; only the user-visible title changes to match
+    -- what the handler actually does (close the live widget if showing,
+    -- otherwise open it). The earlier "toggle visibility" label dated
+    -- back to a removed menu option that flipped a hide flag without
+    -- closing the widget — the close/open semantics here have nothing
+    -- to do with that.
+    --
+    -- general=true marks the action as "available in every context"
+    -- (FM and Reader). The earlier registration used filemanager=true
+    -- and reader=true which LOOK like "available in both" but actually
+    -- mean the opposite: dispatcher.lua's isActionEnabled() treats
+    -- action.reader as "disable everywhere except reader" and
+    -- action.filemanager as "disable everywhere except FM". Setting
+    -- both meant the action was disabled in BOTH contexts — the gesture
+    -- fired, dispatcher ran, isActionEnabled returned false, sendEvent
+    -- was skipped, and the user saw a silent no-op. Stock actions like
+    -- "File browser" (line 58 of dispatcher.lua) use general=true.
     Dispatcher:registerAction("toggle_bookshelf", {
-        category    = "none",
-        event       = "ToggleBookshelf",
-        title       = _("Bookshelf: toggle visibility"),
-        filemanager = true,
-        reader      = true,
+        category = "none",
+        event    = "ToggleBookshelf",
+        title    = _("Bookshelf: open or close"),
+        general  = true,
     })
     Dispatcher:registerAction("set_bookshelf", {
-        category    = "string",
-        event       = "SetBookshelf",
-        title       = _("Bookshelf: open"),
-        filemanager = true,
-        reader      = true,
-        args        = { true, false },
-        toggle      = { _("on"), _("off") },
-        separator   = true,
+        category  = "string",
+        event     = "SetBookshelf",
+        title     = _("Bookshelf: open"),
+        general   = true,
+        args      = { true, false },
+        toggle    = { _("on"), _("off") },
+        separator = true,
     })
 end
 
@@ -409,7 +425,8 @@ function Bookshelf:_safeShow()
     end
 end
 
--- Toggle visibility — close the live widget if showing, otherwise safe-show.
+-- Close the live widget if showing, otherwise safe-show. Mirrors the
+-- "Open Bookshelf" / "Close Bookshelf" menu entry.
 function Bookshelf:onToggleBookshelf()
     if self:_isShowing() then
         UIManager:close(self._widget)

@@ -37,6 +37,20 @@ local function splitAuthors(s)
     return #t > 0 and t or nil
 end
 
+-- Split a genre/tag string (or array of strings) on common EPUB delimiters
+-- (comma, semicolon, pipe, slash) and return a trimmed array, or nil.
+local function splitGenreTags(src)
+    local t = {}
+    local inputs = type(src) == "table" and src or { src }
+    for _, s in ipairs(inputs) do
+        for part in s:gmatch("[^,;|/\n]+") do
+            local trimmed = part:match("^%s*(.-)%s*$")
+            if trimmed and trimmed ~= "" then t[#t + 1] = trimmed end
+        end
+    end
+    return #t > 0 and t or nil
+end
+
 -- Supported e-book extensions (used in both getCurrent and walkBooks).
 local SUPPORTED_EXT = {
     epub=true, pdf=true, mobi=true, azw3=true, fb2=true,
@@ -305,17 +319,9 @@ function Repo.buildBookMeta(filepath)
     -- Genres: Calibre `tags` (array) → BIM `keywords` (string) → none.
     local genres
     if cb and type(cb.tags) == "table" and #cb.tags > 0 then
-        genres = {}
-        for _i, t in ipairs(cb.tags) do genres[#genres + 1] = t end
+        genres = splitGenreTags(cb.tags)
     elseif info.keywords and info.keywords ~= "" then
-        genres = {}
-        for part in info.keywords:gmatch("[^,;]+") do
-            local trimmed = part:match("^%s*(.-)%s*$")
-            if trimmed and trimmed ~= "" then
-                genres[#genres + 1] = trimmed
-            end
-        end
-        if #genres == 0 then genres = nil end
+        genres = splitGenreTags(info.keywords)
     end
 
     return {
@@ -1055,6 +1061,27 @@ function Repo.searchBooks(query, limit)
     return out
 end
 
+-- Comparator for series/author/genre/tag group records. Works on either a
+-- cached SHAPE (with .filepaths) or a freshly-built group (with .books) —
+-- so the same comparator can sort _series_cache entries at HIT time and
+-- in-memory groups at MISS time without a second helper.
+local function _groupShapeCmp(key)
+    if key == "name" then
+        return function(a, b)
+            return (a.series_name or ""):lower() < (b.series_name or ""):lower()
+        end
+    elseif key == "book_count" then
+        return function(a, b)
+            local na = a.filepaths and #a.filepaths or (a.books and #a.books or 0)
+            local nb = b.filepaths and #b.filepaths or (b.books and #b.books or 0)
+            if na ~= nb then return na > nb end
+            return (a.series_name or ""):lower() < (b.series_name or ""):lower()
+        end
+    end
+    -- latest_read (default): most recent first.
+    return function(a, b) return (a.latest or 0) > (b.latest or 0) end
+end
+
 function Repo.getTags(limit)
     local rc = getCollections()
     if not rc.coll then return {} end
@@ -1108,27 +1135,6 @@ end
 -- of a series"). Caching the shape (filepath list + sort metadata) and
 -- rebuilding Books on read keeps the cover_bb lifetime safe while still
 -- skipping the lfs walk + the sort/group pass.
--- Comparator for series/author/genre/tag group records. Works on either a
--- cached SHAPE (with .filepaths) or a freshly-built group (with .books) —
--- so the same comparator can sort _series_cache entries at HIT time and
--- in-memory groups at MISS time without a second helper.
-local function _groupShapeCmp(key)
-    if key == "name" then
-        return function(a, b)
-            return (a.series_name or ""):lower() < (b.series_name or ""):lower()
-        end
-    elseif key == "book_count" then
-        return function(a, b)
-            local na = a.filepaths and #a.filepaths or (a.books and #a.books or 0)
-            local nb = b.filepaths and #b.filepaths or (b.books and #b.books or 0)
-            if na ~= nb then return na > nb end
-            return (a.series_name or ""):lower() < (b.series_name or ""):lower()
-        end
-    end
-    -- latest_read (default): most recent first.
-    return function(a, b) return (a.latest or 0) > (b.latest or 0) end
-end
-
 local function hydrateSeriesShape(shape)
     local books = {}
     for i, fp in ipairs(shape.filepaths) do
