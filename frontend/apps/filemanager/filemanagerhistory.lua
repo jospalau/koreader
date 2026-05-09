@@ -207,9 +207,6 @@ function FileManagerHistory:onMenuSelect(item)
             text = text,
             choice1_text = _("Yes"),
             choice1_callback = function()
-                if self.ui.history.booklist_menu then
-                    UIManager:close(self.ui.history.booklist_menu)
-                end
                 filemanagerutil.openFile(self.ui, item.file, self.close_callback)
             end,
             choice2_text = _("Do not open it"),
