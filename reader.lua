@@ -203,14 +203,14 @@ if G_reader_settings:isTrue("apply_extra_patches") then
     if not G_reader_settings:isTrue("simpleui_enabled") then
         local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/browser-up-folder.lua")
     end
-    local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/cvs-receipt.lua") -- requires book_receipt_background folder inside main koreader folder
+    -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/cvs-receipt.lua") -- requires book_receipt_background folder inside main koreader folder
     -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/sleep-overlay.lua") -- requires sleepoverlays folder inside main koreader folder
     --local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/statusbar-cycle-presets.lua")
     --local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/screensaver-cover.lua")
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/home-collections.lua")
     -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/home-metadata.lua")
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/reading-insights-popup.lua")
-    local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/kobo-style-sleepscreen-banner.lua")
+    -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/kobo-style-sleepscreen-banner.lua")
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/reading-stats.lua")
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/Reading_History_Popup_Table_Plus.lua")
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/other_books_author.lua")
