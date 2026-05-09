@@ -280,13 +280,14 @@ function Repo.buildBookMeta(filepath)
     -- with series_index as the bare number; Calibre stores series +
     -- series_index as separate fields. Prefer Calibre when present.
     local series_name, series_num
-    if cb and cb.series then
-        series_name = cb.series
+    local cb_series = cb and type(cb.series) == "string" and cb.series ~= "" and cb.series
+    if cb_series then
+        series_name = cb_series
     elseif info.series then
         series_name = info.series:gsub(" #%d+$", "")
         series_num  = info.series:match(" #(%d+)$")
     end
-    if cb and cb.series_index then
+    if cb and type(cb.series_index) == "number" then
         series_num = tostring(cb.series_index)
     elseif info.series_index then
         series_num = tostring(info.series_index)
@@ -308,7 +309,7 @@ function Repo.buildBookMeta(filepath)
     local filename = (filepath:match("([^/]+)$") or filepath):gsub("%.[^.]+$", "")
     -- Title chain: Calibre → BIM → filename
     local title
-    if cb and cb.title and cb.title ~= "" then
+    if cb and type(cb.title) == "string" and cb.title ~= "" then
         title = cb.title
     elseif info.title and info.title ~= "" then
         title = info.title
@@ -335,17 +336,16 @@ function Repo.buildBookMeta(filepath)
         -- `series` is the raw "Foundation #1" string used by some
         -- consumers; reconstruct it from Calibre fields when needed.
         series      = info.series
-                       or (cb and cb.series and series_num
-                           and (cb.series .. " #" .. series_num))
-                       or (cb and cb.series),
+                       or (cb_series and series_num and (cb_series .. " #" .. series_num))
+                       or cb_series,
         series_name = series_name,
         series_num  = series_num,
         -- BIM-only: covers and page count are not in metadata.calibre.
         cover_bb    = info.cover_bb,
         has_cover   = info.has_cover and not info.ignore_cover,
-        lang        = (cb and cb.languages and cb.languages[1])
+        lang        = (cb and type(cb.languages) == "table" and cb.languages[1])
                        or info.language,
-        description = (cb and cb.comments and cb.comments ~= "")
+        description = (cb and type(cb.comments) == "string" and cb.comments ~= "")
                        and cb.comments
                        or (info.description and info.description ~= ""
                            and info.description)
