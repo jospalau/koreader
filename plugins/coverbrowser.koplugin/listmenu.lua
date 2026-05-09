@@ -377,10 +377,13 @@ function ListMenuItem:update()
                         }
                     else
                         -- Let ImageWidget do the scaling and give us the final size
-                        local _, _, scale_factor = BookInfoManager.getCachedCoverSize(bookinfo.cover_w, bookinfo.cover_h, max_img_w, max_img_h)
+                        -- local _, _, scale_factor = BookInfoManager.getCachedCoverSize(bookinfo.cover_w, bookinfo.cover_h, max_img_w, max_img_h)
+                        local new_h = max_img_h
+                        local new_w = math.floor(bookinfo.cover_w * (new_h / bookinfo.cover_h) + 0.5)
                         wimage = ImageWidget:new{
                             image = bookinfo.cover_bb,
-                            scale_factor = scale_factor,
+                            width = new_w,
+                            height = new_h,
                         }
                     end
                     wimage:_render()
