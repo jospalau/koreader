@@ -379,7 +379,10 @@ function ListMenuItem:update()
                         -- Let ImageWidget do the scaling and give us the final size
                         -- local _, _, scale_factor = BookInfoManager.getCachedCoverSize(bookinfo.cover_w, bookinfo.cover_h, max_img_w, max_img_h)
                         local new_h = max_img_h
-                        local new_w = math.floor(bookinfo.cover_w * (new_h / bookinfo.cover_h) + 0.5)
+                        -- All covers are 450x680 (enforced by Calibre), so the aspect ratio is
+                        -- constant. Using fixed dimensions instead of bookinfo.cover_w/h ensures
+                        -- pixel-perfect consistency across all list items.
+                        local new_w = math.floor(450 * (new_h / 680) + 0.5)
                         wimage = ImageWidget:new{
                             image = bookinfo.cover_bb,
                             width = new_w,
