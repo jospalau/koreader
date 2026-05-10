@@ -1256,74 +1256,19 @@ end
 
 function ReaderUI:onAdjustMarginsTopbar()
     if self.bookends and self.bookends.enabled then
-        local b = self.bookends
-        local Screen_h = Screen:getHeight()
-
-        local top_text_px = 0
-        local bot_text_px = Screen_h
-        if b.widget_cache then
-            for key, entry in pairs(b.widget_cache) do
-                local size = entry.widget.getSize and entry.widget:getSize() or {w=0, h=0}
-                if key:sub(1,1) == "t" then
-                    local bottom = entry.y + size.h
-                    if bottom > top_text_px then top_text_px = bottom end
-                else
-                    if entry.y < bot_text_px then bot_text_px = entry.y end
-                end
-            end
-        end
-        if bot_text_px == Screen_h then bot_text_px = Screen_h - b.defaults.margin_bottom end
-
-        local top_bar_px = 0
-        local bot_bar_px = 0
-        local left_bar_px = 0
-        local right_bar_px = 0
-        for _, bar in ipairs(b.progress_bars or {}) do
-            if bar.enabled then
-                local anchor = bar.v_anchor or "bottom"
-                local bar_size = (bar.margin_v or 0) + (bar.height or 20)
-                if anchor == "top" then
-                    if bar_size > top_bar_px then top_bar_px = bar_size end
-                elseif anchor == "bottom" then
-                    if bar_size > bot_bar_px then bot_bar_px = bar_size end
-                elseif anchor == "left" then
-                    if bar_size > left_bar_px then left_bar_px = bar_size end
-                elseif anchor == "right" then
-                    if bar_size > right_bar_px then right_bar_px = bar_size end
-                end
-            end
-        end
-
-        local GAP = 0 --3
-        local MIN = 10
-        local top_final    = math.max(MIN, Screen:unscaleBySize(math.max(top_text_px, top_bar_px)) + GAP)
-        local bot_from_text = Screen_h - bot_text_px
-        local bottom_final = math.max(MIN, Screen:unscaleBySize(math.max(bot_from_text, bot_bar_px)) + GAP)
-
-        local left_final, right_final
-        if left_bar_px > 0 then
-            left_final = math.max(MIN, Screen:unscaleBySize(left_bar_px) + GAP)
-        else
-            left_final = math.max(MIN, b.defaults.margin_left)
-        end
-        if right_bar_px > 0 then
-            right_final = math.max(MIN, Screen:unscaleBySize(right_bar_px) + GAP)
-        else
-            right_final = math.max(MIN, b.defaults.margin_right)
-        end
-
-        local side_margins = { left_final, right_final }
-
-        if self.document.configurable.t_page_margin ~= top_final or
-            self.document.configurable.b_page_margin ~= bottom_final or
-            self.document.configurable.h_page_margins[1] ~= side_margins[1] or
-            self.document.configurable.h_page_margins[2] ~= side_margins[2] then
-                self.document.configurable.t_page_margin  = top_final
-                self.document.configurable.b_page_margin  = bottom_final
-                self.document.configurable.h_page_margins = side_margins
-                UIManager:sendEvent(Event:new("SetPageHorizMargins", side_margins))
-                UIManager:sendEvent(Event:new("SetPageTopMargin",    top_final))
-                UIManager:sendEvent(Event:new("SetPageBottomMargin", bottom_final))
+        local side_margins = {35, 35}
+        local top_margin, bottom_margin = 50, 50
+        if self.document.configurable.t_page_margin ~= top_margin or
+        self.document.configurable.b_page_margin ~= bottom_margin or
+        self.document.configurable.h_page_margins[1] ~= side_margins[1] or
+        self.document.configurable.h_page_margins[2] ~= side_margins[2] then
+            local margins = { side_margins[1], top_margin, side_margins[2], bottom_margin}
+            self.document.configurable.t_page_margin = top_margin
+            self.document.configurable.b_page_margin = bottom_margin
+            self.document.configurable.h_page_margins = side_margins
+            UIManager:sendEvent(Event:new("SetPageHorizMargins", side_margins))
+            UIManager:sendEvent(Event:new("SetPageTopMargin", top_margin))
+            UIManager:sendEvent(Event:new("SetPageBottomMargin", bottom_margin))
         else
             self:showBookStatus()
         end
@@ -1338,6 +1283,8 @@ function ReaderUI:onAdjustMarginsTopbar()
             -- and that's why we get the size of the different components of the status bar separately
             local footer_height = self.view.footer.settings.container_height
             + self.view.footer.settings.progress_style_thick_height
+            --local dump = require("dump")
+            --print(dump(self.document.configurable))
 
             local side_margins = {15, 15}
             if Device:isAndroid() and Device.screen:getWidth() < 1072 then
