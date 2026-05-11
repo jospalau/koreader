@@ -448,6 +448,12 @@ function Repo.buildBook(filepath)
     book.page_num = ds:readSetting("last_page")
     book.book_pct = ds:readSetting("percent_finished")
     book.last_xp  = ds:readSetting("last_xpointer")
+    -- summary.status feeds the cover-progress indicators in
+    -- bookshelf_cover_progress.decide(); read here so the DocSettings
+    -- handle is reused. nil is fine -- decide() treats absent status
+    -- as "new" and renders nothing.
+    local _summary = ds:readSetting("summary")
+    book.status = _summary and _summary.status or nil
     -- BIM skips page count for crengine docs (the unrendered getPageCount()
     -- returns 2-3x the rendered count), so EPUB books have nil page_count
     -- after buildBookMeta. Two sdr-side sources to fall back on, in order:
@@ -520,20 +526,34 @@ end
 -- to avoid hero+slot-1 duplication; that exchange wasn't worth the
 -- shelves jumping around as the user browsed previews.
 
-function Repo.getRecent(limit)
-    local rh  = getReadHistory()
-    local out = {}
+function Repo.getRecent(limit, offset)
+    local rh   = getReadHistory()
+    offset     = offset or 0
+    limit      = limit or 8
+    local out  = {}
+    -- entry.dim is ReadHistory's marker for files deleted via the
+    -- KOReader file manager when autoremove_deleted_items_from_history
+    -- is off (the default). Stock History dims them; bookshelf treats
+    -- them as gone -- if KOReader notices the file is back, the flag
+    -- clears and the entry reappears here naturally.
+    --
+    -- Single pass: count non-dim entries (= total) while fetching
+    -- buildBookMeta only for the visible slice [offset+1, offset+limit].
+    local total = 0
     for i = 1, #rh.hist do
         local entry = rh.hist[i]
-        -- Shelf path: BIM-only meta is enough (no DocSettings needed).
-        local book = Repo.buildBookMeta(entry.file)
-        if book then
-            book.last_read_time = entry.time
-            out[#out + 1] = book
-            if #out >= (limit or 8) then break end
+        if not entry.dim then
+            total = total + 1
+            if total > offset and #out < limit then
+                local book = Repo.buildBookMeta(entry.file)
+                if book then
+                    book.last_read_time = entry.time
+                    out[#out + 1] = book
+                end
+            end
         end
     end
-    return out
+    return out, total
 end
 
 -- ─── getLatest ───────────────────────────────────────────────────────────────
@@ -587,6 +607,17 @@ local _all_cache       = {}  -- { [key] = { shapes = {...}, expires_at = number 
 -- and letting all three readers hit the result is the dominant speedup
 -- (Lutesong's Kindle Color: 20s per chip → ~1-2s, 2000-book library).
 local _light_meta_cache = {}  -- { [key] = { map = {[fp]=record}, expires_at = number } }
+-- Per-file progress cache. DocSettings:open() does a Lua-parse from disk
+-- per call, which dominates loops that read percent / summary.status for
+-- many books in a row (getAll's prefetch on the Home chip is the obvious
+-- one). Caching the parsed result for a short window cuts repeat scans
+-- to memory reads.
+--
+-- Invalidation: onCloseDocument explicitly drops the just-closed file via
+-- invalidateProgressCache(fp); invalidateWalkCache wipes the whole map as
+-- a belt-and-braces refresh for any sideloaded / metadata-edited cases.
+local PROGRESS_CACHE_TTL = 120  -- seconds
+local _progress_cache    = {}   -- filepath → { pct, status, expires_at }
 
 function Repo.invalidateWalkCache()
     _walk_cache       = {}
@@ -595,6 +626,7 @@ function Repo.invalidateWalkCache()
     _genres_cache     = {}
     _all_cache        = {}
     _light_meta_cache = {}
+    _progress_cache   = {}
 end
 
 function Repo.invalidateSeriesCache()
@@ -602,6 +634,39 @@ function Repo.invalidateSeriesCache()
     _authors_cache    = {}
     _genres_cache     = {}
     _light_meta_cache = {}
+end
+
+function Repo.invalidateProgressCache(filepath)
+    if filepath then _progress_cache[filepath] = nil
+    else _progress_cache = {} end
+end
+
+-- Cached read of a file's percent_finished + summary.status. Returns
+-- (pct, status). Either field may be nil. A pcall guards a corrupt sdr
+-- sidecar so the caller's loop survives single-file faults.
+function Repo.readProgress(filepath)
+    if not filepath then return nil, nil end
+    local now = os.time()
+    local cached = _progress_cache[filepath]
+    if cached and cached.expires_at > now then
+        return cached.pct, cached.status
+    end
+    local pct, status
+    local ok_ds, ds = pcall(function() return getDocSettings():open(filepath) end)
+    if ok_ds and ds then
+        local ok_pct, p = pcall(ds.readSetting, ds, "percent_finished")
+        if ok_pct then pct = tonumber(p) end
+        local ok_sum, summary = pcall(ds.readSetting, ds, "summary")
+        if ok_sum and type(summary) == "table" then
+            status = summary.status
+        end
+    end
+    _progress_cache[filepath] = {
+        pct        = pct,
+        status     = status,
+        expires_at = now + PROGRESS_CACHE_TTL,
+    }
+    return pct, status
 end
 
 local function walkBooks(root, depth, out, current_depth)
@@ -782,22 +847,9 @@ function Repo.getLatest(limit, offset)
     local home       = G_reader_settings:readSetting("home_dir") or "/"
     local depth      = G_reader_settings:readSetting("bookshelf_latest_walk_depth") or 3
     local candidates = cachedWalk(home, depth)
-    local key = Repo.getSortKey("latest")
-    if key == "title" then
-        -- Pre-fetch titles so the comparator stays O(1) per pair. Use the
-        -- shared light-meta cache (one batch SELECT) rather than 2000
-        -- per-book BIM lookups; falls back to per-book on cache miss.
-        local light_cache = _getLightMetaCache(home, depth)
-        local titles = {}
-        for _, c in ipairs(candidates) do
-            local b = _lightMetaForFp(light_cache, c.fp)
-            titles[c.fp] = ((b and b.title) or c.fp:match("([^/]+)$") or ""):lower()
-        end
-        table.sort(candidates, function(a, b) return titles[a.fp] < titles[b.fp] end)
-    else
-        -- mtime (default): newest first.
-        table.sort(candidates, function(a, b) return a.mtime > b.mtime end)
-    end
+    -- "latest" chip is mtime-only by design (_SORT_VALID restricts it).
+    -- Newest first.
+    table.sort(candidates, function(a, b) return a.mtime > b.mtime end)
     offset      = offset or 0
     local total = #candidates
     local out   = {}
@@ -809,8 +861,8 @@ function Repo.getLatest(limit, offset)
             out[#out + 1] = book
         end
     end
-    logger.dbg(string.format("[bookshelf perf] getLatest: %.0fms cands=%d items=%d/%d sort=%s",
-        (_gettime() - _t0) * 1000, #candidates, #out, total, key))
+    logger.dbg(string.format("[bookshelf perf] getLatest: %.0fms cands=%d items=%d/%d",
+        (_gettime() - _t0) * 1000, #candidates, #out, total))
     return out, total
 end
 
@@ -919,16 +971,23 @@ local function _makeAllSort(key)
         end
     elseif key == "percent_natural" then
         -- In-progress (0 ≤ p < 1) descending first, then never-opened (nil),
-        -- then finished (p ≥ 1) last — mirrors KOReader's BookList.percent_natural.
+        -- then finished last — mirrors KOReader's BookList.percent_natural.
+        --
+        -- "Finished" includes both books at 100% read AND books the user has
+        -- explicitly marked complete (summary.status == "complete") even when
+        -- percent_finished is < 1. Without the status check, a book marked
+        -- complete at 99% read sorted as in-progress and appeared AHEAD of
+        -- unread books (issue #17).
         local natsort = require("sort").natsort_cmp()
         return function(a, b)
             local pa, pb = a._pct, b._pct
-            local function tier(p)
-                if p == nil  then return 2 end  -- never opened
-                if p >= 1    then return 3 end  -- finished
-                return 1                        -- in progress
+            local function tier(e, p)
+                if e._status == "complete" then return 3 end -- user-marked finished
+                if p == nil  then return 2 end               -- never opened
+                if p >= 1    then return 3 end               -- read to 100%
+                return 1                                      -- in progress
             end
-            local ta, tb = tier(pa), tier(pb)
+            local ta, tb = tier(a, pa), tier(b, pb)
             if ta ~= tb then return ta < tb end
             if ta == 1 then return pa > pb end  -- most-read first within in-progress
             local na = (a.doc_props and a.doc_props.display_title) or a.name
@@ -1081,19 +1140,22 @@ function Repo.getAll(path, limit, offset)
         end
     end
     if needs_percent then
-        local DocSettings = require("docsettings")
+        -- Route through Repo.readProgress so steady-state re-runs of this
+        -- prefetch (cache TTL expired, but progress cache still warm) skip
+        -- the per-file DocSettings:open() cost. readProgress also handles
+        -- the pcall guard for corrupt .sdr sidecars — a nil _pct sorts
+        -- as "never opened", matching the previous behaviour.
+        --
+        -- summary.status is read so percent_natural can put user-marked-
+        -- complete books in the finished tier even when percent_finished
+        -- < 1 (e.g. user marked complete at 99% read). Without this,
+        -- finished books would sort AHEAD of in-progress books because the
+        -- comparator only looked at percent (issue #17).
         for _, e in ipairs(entries) do
             if e.attr.mode == "file" then
-                -- pcall: a corrupt .sdr sidecar must not abort the prefetch.
-                -- A nil _pct sorts as "never opened" — same as a brand-new file.
-                local ok, ds = pcall(DocSettings.open, DocSettings, e.fp)
-                if ok and ds then
-                    local ok_pct, pct = pcall(ds.readSetting, ds, "percent_finished")
-                    if ok_pct then e._pct = pct end
-                else
-                    logger.warn("[bookshelf] DocSettings:open failed for", e.fp, ":", ds)
-                end
-                -- no ds:close() — DocSettings doesn't expose one; GC handles it
+                local pct, status = Repo.readProgress(e.fp)
+                e._pct    = pct
+                e._status = status
             end
         end
     end
@@ -1175,7 +1237,7 @@ end
 -- Returns up to `limit` Book records from ReadCollection favorites collection,
 -- sorted by access time descending (most recently accessed first).
 
-function Repo.getFavorites(limit)
+function Repo.getFavorites(limit, offset)
     local rc    = getCollections()
     local items = {}
     for _file, item in pairs(rc.coll and rc.coll.favorites or {}) do
@@ -1183,11 +1245,13 @@ function Repo.getFavorites(limit)
     end
     local key = Repo.getSortKey("favorites")
     if key == "title" then
+        -- Title-sort prefetch: get_cover=false skips the zstd decompression +
+        -- BlitBuffer allocation per favourite. The loop reads only info.title.
         local bim = getBookInfoMgr()
         local titles = {}
         for _, item in ipairs(items) do
             local fp = item.file
-            local info = bim:getBookInfo(fp, true) or {}
+            local info = bim:getBookInfo(fp, false) or {}
             titles[fp] = (info.title or (fp and fp:match("([^/]+)$")) or ""):lower()
         end
         table.sort(items, function(a, b) return titles[a.file] < titles[b.file] end)
@@ -1210,15 +1274,20 @@ function Repo.getFavorites(limit)
             return (a.attr and a.attr.access or 0) > (b.attr and b.attr.access or 0)
         end)
     end
-    local out = {}
-    for i = 1, math.min(limit or 8, #items) do
+    -- Build Book records only for the visible page; total returned so the
+    -- caller's _total_hint path can compute total_pages.
+    local total = #items
+    offset      = offset or 0
+    local stop  = math.min(offset + (limit or 8), total)
+    local out   = {}
+    for i = offset + 1, stop do
         local book = Repo.buildBookMeta(items[i].file)
         if book then
             book.in_favorites = true
             out[#out + 1] = book
         end
     end
-    return out
+    return out, total
 end
 
 -- ─── getTags ─────────────────────────────────────────────────────────────────

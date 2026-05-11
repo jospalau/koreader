@@ -1247,16 +1247,27 @@ function BookshelfWidget:_fetchChipItems(n)
         end
         return fresh
     end
-    -- Drill into a group (series / author / genre / tag): rebuild from filepaths
-    -- so cover_bbs are fresh (image_disposable frees them after each render).
+    -- Drill into a group (series / author / genre / tag): build Book records
+    -- only for the visible page slice. Previously this iterated every book in
+    -- the group and called Repo.buildBookMeta — which decompresses a cover
+    -- BlitBuffer per book — meaning a 700+ book genre held 700 covers in
+    -- memory simultaneously and OOM-killed KOReader on Kindle Color
+    -- (issue #17). With offset+limit applied here, only the current page's
+    -- 8-16 covers are materialised and total is returned so the caller's
+    -- _total_hint path takes over for pagination.
     if tip and (tip.kind == "series" or tip.kind == "author"
             or tip.kind == "genre" or tip.kind == "tag") then
+        local books = tip.payload.books or {}
+        local total = #books
+        local offset = (self.page - 1) * self:_pageSize()
+        local stop = math.min(offset + self:_viewSize(), total)
         local fresh = {}
-        for _, b in ipairs(tip.payload.books) do
+        for i = offset + 1, stop do
+            local b = books[i]
             local nb = b.filepath and Repo.buildBookMeta(b.filepath) or b
             fresh[#fresh + 1] = nb
         end
-        return fresh
+        return fresh, total
     end
     -- For the all-chip and folder drill-down, fetch only the current page
     -- slice and return the total count as a second value. Callers use the
@@ -1268,14 +1279,14 @@ function BookshelfWidget:_fetchChipItems(n)
     if tip and tip.kind == "folder" then
         return Repo.getAll(tip.payload.path, LIMIT, offset)
     end
-    if self.chip == "all"       then return Repo.getAll(nil, LIMIT, offset) end
-    if self.chip == "recent"  then return Repo.getRecent(n)                  end
-    if self.chip == "latest"  then return Repo.getLatest(LIMIT, offset)      end
-    if self.chip == "series"  then return Repo.getSeriesGroups(LIMIT, offset) end
-    if self.chip == "authors" then return Repo.getAuthors(LIMIT, offset)     end
-    if self.chip == "genres"  then return Repo.getGenres(LIMIT, offset)      end
-    if self.chip == "tags"      then return Repo.getTags(n)         end
-    if self.chip == "favorites" then return Repo.getFavorites(n)    end
+    if self.chip == "all"       then return Repo.getAll(nil, LIMIT, offset)  end
+    if self.chip == "recent"    then return Repo.getRecent(LIMIT, offset)    end
+    if self.chip == "latest"    then return Repo.getLatest(LIMIT, offset)    end
+    if self.chip == "series"    then return Repo.getSeriesGroups(LIMIT, offset) end
+    if self.chip == "authors"   then return Repo.getAuthors(LIMIT, offset)   end
+    if self.chip == "genres"    then return Repo.getGenres(LIMIT, offset)    end
+    if self.chip == "tags"      then return Repo.getTags(n)                  end
+    if self.chip == "favorites" then return Repo.getFavorites(LIMIT, offset) end
     return {}
 end
 
@@ -2018,6 +2029,90 @@ function BookshelfWidget:_swapShelvesInPlace()
     UIManager:setDirty(self, "ui")
 end
 
+-- softRefresh — lightweight return-to-bookshelf update. Splits the work
+-- the warm-path show() previously did as a single _rebuild() into two
+-- phases: the hero swap (synchronous, ~10ms — only depends on the current
+-- book, which is the dominant thing that changed during the reader
+-- session) and the shelf swap (deferred ~150ms, much heavier because of
+-- the fetch + sort + BIM hydration).
+--
+-- The user-perceived effect is that bookshelf "reappears" instantly with
+-- the existing shelves still on screen, then re-sorts a moment later. A
+-- full _rebuild() would have held the EPDC on a black screen for the
+-- whole fetch+sort cost.
+--
+-- The shelf swap is further gated on _needsReaderReturnShelfRefresh: most
+-- chip+sort combos can't have their visible order changed by a single
+-- book closing (e.g. All sorted by title), so for those the deferred
+-- swap is skipped entirely. The just-closed book's spine briefly shows
+-- a stale progress bar until the next page-flip / chip switch — a fair
+-- trade for a snappier return.
+--
+-- Falls back to _rebuild() when the live tree can't be reused (cold widget,
+-- expanded/tall layouts the in-place swap helpers don't handle).
+function BookshelfWidget:softRefresh()
+    local has_live_tree =
+        self._inner_vgroup and self._shelf_dims
+        and self._hero_parent and self._hero_dims
+    -- Two-shelf gate: _swapShelvesInPlace's own fast-path bailout. Falling
+    -- back to _rebuild here is cheaper than triggering it from the deferred
+    -- callback after we've already painted a stale tree.
+    if not has_live_tree or self:_nShelves() ~= 2 then
+        self:_rebuild()
+        if self._startStatusTimer then self:_startStatusTimer() end
+        UIManager:setDirty(self, "ui")
+        return
+    end
+    -- Hero now: the current book's progress / last-read time / cover
+    -- almost always changed during the reader session, and the swap is
+    -- cheap (one HeroCard build, no fetch).
+    self:_swapHeroInPlace()
+    UIManager:setDirty(self, "ui")
+    if self._startStatusTimer then self:_startStatusTimer() end
+    if not self:_needsReaderReturnShelfRefresh() then
+        return
+    end
+    -- Cancel any earlier deferred shelf swap that hasn't fired (two quick
+    -- reader open/close cycles); the later one supersedes.
+    if self._soft_refresh_shelves_fn then
+        UIManager:unschedule(self._soft_refresh_shelves_fn)
+    end
+    self._soft_refresh_shelves_fn = function()
+        self._soft_refresh_shelves_fn = nil
+        self:_swapShelvesInPlace()
+    end
+    UIManager:scheduleIn(0.15, self._soft_refresh_shelves_fn)
+end
+
+-- Does the current chip+sort combination depend on read state? Used by
+-- softRefresh to decide whether closing a book could have reordered the
+-- visible shelves. Chips driven purely by file metadata (title, mtime,
+-- date_added, size) can't be affected; chips driven by read history /
+-- progress can. Drilldown views are skipped — their group membership
+-- can't change just because one of the group's books was read.
+function BookshelfWidget:_needsReaderReturnShelfRefresh()
+    if #self._drilldown_path > 0 then return false end
+    local chip = self.chip
+    if chip == "recent" then return true end
+    if chip == "latest" then return false end
+    if chip == "favorites" then
+        return Repo.getSortKey("favorites") == "recently_read"
+    end
+    if chip == "all" then
+        local sk = Repo.getSortKey("all")
+        return sk == "last_read"
+            or sk == "percent_unopened_first"
+            or sk == "percent_unopened_last"
+            or sk == "percent_natural"
+    end
+    if chip == "series" or chip == "authors"
+       or chip == "genres" or chip == "tags" then
+        return Repo.getSortKey(chip) == "latest_read"
+    end
+    -- Unknown chip: refresh to be safe.
+    return true
+end
+
 -- Rebuild the hero from current state and swap it into _hero_parent[1].
 -- Shared between _previewBook (synchronous swap on user tap) and the async
 -- cover-load completion path. No-op if there's no live tree to swap into.
@@ -2416,6 +2511,25 @@ end
 -- UIManager calls paintTo in the new rotated frame while self.dimen still
 -- holds the old portrait size, placing the bottom of the widget off-screen.
 function BookshelfWidget:paintTo(bb, x, y)
+    -- Skip painting when a transitional widget (one flagged invisible) sits
+    -- on top of us. The motivating case is a seamless ReaderUI reload
+    -- (the terminal step of CRE's partial-rerendering automation after a
+    -- font/style change): ReaderUI:reloadDocument tears down the reader,
+    -- queues an invisible "Opening file..." InfoMessage placeholder, and
+    -- calls UIManager:forceRePaint between the close and the re-show.
+    -- UIManager marks us dirty when the reader is removed, so without this
+    -- guard we'd paint the full shelf into the framebuffer here — and the
+    -- placeholder InfoMessage's refresh callback returns ("ui", movable.dimen)
+    -- with movable.dimen == nil (an invisible InfoMessage never paints),
+    -- which degrades to a full-screen refresh in UIManager:_refresh. Net
+    -- result without the guard: ~1s of full-screen bookshelf flashed between
+    -- the old reader page and the freshly-rerendered one. The same heuristic
+    -- correctly suppresses paint under TrapWidget / ScreensaverLockWidget,
+    -- where preserving the previous framebuffer is the desired behaviour.
+    local stack = UIManager._window_stack
+    local top = stack and stack[#stack] and stack[#stack].widget
+    if top and top.invisible then return end
+
     local sw = Screen:getWidth()
     local sh = Screen:getHeight()
     if sw ~= self.width or sh ~= self.height then
@@ -2829,6 +2943,84 @@ function BookshelfWidget:_openBookMenu(item)
               end) },
         },
     }
+
+    -- Status row (Reading / On hold / Finished) + Reset / Delete row.
+    -- KOReader's filemanagerutil provides the canonical button generators
+    -- (status enum + cache updates + Reset confirmation dialog), and
+    -- FileManager:showDeleteFileDialog the canonical Delete flow -- reuse
+    -- both so we inherit any future behavioural fixes for free.
+    local filemanagerutil = require("apps/filemanager/filemanagerutil")
+    local function refresh_book_state()
+        Repo.invalidateProgressCache(book.filepath)
+        bw:_rebuild()
+        UIManager:setDirty(bw, "ui")
+    end
+    local function status_callback()
+        UIManager:close(dialog)
+        refresh_book_state()
+    end
+    buttons[#buttons + 1] = filemanagerutil.genStatusButtonsRow(
+        book.filepath, status_callback)
+
+    -- Reset: KOReader's generator opens its own ConfirmBox with checkboxes
+    -- (settings / cover / metadata). Close our dialog before the ConfirmBox
+    -- shows so it appears on a clean backdrop; the generator's caller_callback
+    -- runs only on confirmation (handles the rebuild after).
+    local reset_btn = filemanagerutil.genResetSettingsButton(
+        book.filepath, function()
+            Repo.invalidateProgressCache(book.filepath)
+            Repo.invalidateWalkCache()  -- sidecar gone -> walk results stale
+            bw:_rebuild()
+            UIManager:setDirty(bw, "ui")
+        end)
+    local orig_reset_cb = reset_btn.callback
+    reset_btn.callback = function()
+        UIManager:close(dialog)
+        orig_reset_cb()
+    end
+
+    -- Delete: prefer FileManager:showDeleteFileDialog when available so the
+    -- per-file confirmation, history/collection cleanup, and sdr purge all
+    -- match FM. Fall back to a minimal inline confirm + os.remove when
+    -- bookshelf is running outside an FM context.
+    local delete_btn = {
+        text = _("Delete"),
+        callback = function()
+            UIManager:close(dialog)
+            local FileManager = require("apps/filemanager/filemanager")
+            if FileManager.instance and FileManager.instance.showDeleteFileDialog then
+                FileManager.instance:showDeleteFileDialog(book.filepath, function()
+                    Repo.invalidateProgressCache(book.filepath)
+                    Repo.invalidateWalkCache()
+                    bw:_rebuild()
+                    UIManager:setDirty(bw, "ui")
+                end)
+            else
+                local ConfirmBox = require("ui/widget/confirmbox")
+                UIManager:show(ConfirmBox:new{
+                    text     = _("Delete file permanently?") .. "\n\n" .. book.filepath,
+                    ok_text  = _("Delete"),
+                    ok_callback = function()
+                        if os.remove(book.filepath) then
+                            require("readhistory"):fileDeleted(book.filepath)
+                            ReadCollection:removeItem(book.filepath)
+                            Repo.invalidateProgressCache(book.filepath)
+                            Repo.invalidateWalkCache()
+                            bw:_rebuild()
+                            UIManager:setDirty(bw, "ui")
+                        else
+                            UIManager:show(require("ui/widget/infomessage"):new{
+                                text = _("Failed to delete file."),
+                                icon = "notice-warning",
+                            })
+                        end
+                    end,
+                })
+            end
+        end,
+    }
+    buttons[#buttons + 1] = { reset_btn, delete_btn }
+
     for _, row in ipairs(nav_rows) do
         buttons[#buttons + 1] = row
     end
