@@ -30,6 +30,8 @@ local Screen = Device.screen
 local _ = require("gettext")
 local T = require("ffi/util").template
 
+-- How many years back to display (including current year)
+local NUM_YEARS = 4
 
 
 local CalendarWeek = FocusManager:extend{
@@ -52,29 +54,11 @@ function CalendarWeek:init()
 end
 
 function CalendarWeek:addDay(calday_widget)
-    -- Add day widget to this week widget, and update the
-    -- list of books read this week for later showing book
-    -- spans, that may span multiple days.
     table.insert(self.calday_widgets, calday_widget)
-
     local prev_day_num = #self.days_books
-    local prev_day_books = prev_day_num > 0 and self.days_books[#self.days_books]
-    local this_day_num = prev_day_num + 1
     local this_day_books = {}
     table.insert(self.days_books, this_day_books)
 end
-
-
--- function CalendarWeek:onTap()
---     if self.callback then
---         self.callback()
---     end
---     return true
--- end
-
--- function CalendarWeek:onHold()
---     return self:onTap()
--- end
 
 local CalendarDay = InputContainer:extend{
     ratio_per_hour = nil,
@@ -114,40 +98,34 @@ function CalendarDay:init()
     local inner_w = self.width - 2*self.border
     local inner_h = self.height - 2*self.border
 
-
     local bg_color = Blitbuffer.COLOR_WHITE
-    --print(self.duration)
     if self.duration >= 4 then
         bg_color = Blitbuffer.COLOR_BLACK
-    elseif self.duration>= 2 then
+    elseif self.duration >= 2 then
         bg_color = Blitbuffer.COLOR_DARK_GRAY
-    elseif self.duration>= 0.5 then
+    elseif self.duration >= 0.5 then
         bg_color = Blitbuffer.COLOR_GRAY
     end
+
     self[1] = FrameContainer:new{
         padding = 0,
-        -- color = self.is_future and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE, -- And border color
-        -- color = Blitbuffer.COLOR_BLACK,
-        -- bordersize = self.border,
-        -- bordersize = self.is_different_year and 0 or 1,
         color = self.is_today and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE,
-        -- bordersize = 1,
         paint_down = self.paint_down,
         paint_left = self.paint_left,
         width = self.width,
         height = self.height,
         background = bg_color,
         focusable = true,
-        focus_border_color = Blitbuffer.COLOR_GRAY, -- And border color
+        focus_border_color = Blitbuffer.COLOR_GRAY,
         OverlapGroup:new{
             dimen = { w = inner_w },
             TextWidget:new{
-                text = "", -- tostring(self.duration),
+                text = "",
                 face = Font:getFace("myfont3", Screen:scaleBySize(4)),
                 fgcolor = self.is_future and Blitbuffer.COLOR_GRAY or Blitbuffer.COLOR_BLACK,
                 padding = 0,
                 bold = true,
-            }, -- Just write a text
+            },
         }
     }
 end
@@ -164,8 +142,6 @@ function CalendarDay:onHold()
 end
 
 
-
--- Set of { Font color, background color }
 local SPAN_COLORS = {
     { Blitbuffer.COLOR_BLACK, Blitbuffer.COLOR_WHITE },
     { Blitbuffer.COLOR_BLACK, Blitbuffer.COLOR_GRAY_E },
@@ -179,13 +155,13 @@ local SPAN_COLORS = {
 
 function CalendarWeek:update()
     self.dimen = Geom:new{w = self.width, h = self.height}
-    self.day_container = VerticalGroup:new{ -- Make columns instead of rows
+    self.day_container = VerticalGroup:new{
         dimen = self.dimen:copy(),
     }
     for num, calday in ipairs(self.calday_widgets) do
         table.insert(self.day_container, calday)
         if num < #self.calday_widgets then
-            table.insert(self.day_container, HorizontalSpan:new{ width = 10, }) -- No padding
+            table.insert(self.day_container, HorizontalSpan:new{ width = 10 })
         end
     end
 
@@ -200,12 +176,11 @@ function CalendarWeek:update()
 end
 
 
--- Fetched from db, cached as local as it might be expensive
 local MIN_MONTH = nil
 
 local HeatmapView = FocusManager:extend{
     reader_statistics = nil,
-    start_day_of_week = 2, -- 2 = Monday, 1-7 = Sunday-Saturday
+    start_day_of_week = 2,
     show_hourly_histogram = true,
     browse_future_months = false,
     nb_book_spans = 3,
@@ -214,82 +189,52 @@ local HeatmapView = FocusManager:extend{
     width = nil,
     height = nil,
     cur_month = nil,
-    weekdays = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" }, -- in Lua wday order
+    weekdays = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" },
     months_names = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"},
     months_days = {
-        [1] = 31,
-        [2] = 28,
-        [3] = 31,
-        [4] = 30,
-        [5] = 31,
-        [6] = 30,
-        [7] = 31,
-        [8] = 31,
-        [9] = 30,
-        [10] = 31,
-        [11] = 30,
-        [12] = 31,
-        },
-    mondays_months_2023 = {
-        [1] = 5,
-        [2] = 4,
-        [3] = 4,
-        [4] = 4,
-        [5] = 5,
-        [6] = 4,
-        [7] = 5,
-        [8] = 4,
-        [9] = 4,
-        [10] = 5,
-        [11] = 4,
-        },
-    mondays_months_2024 = {
-        [1] = 5,
-        [2] = 4,
-        [3] = 4,
-        [4] = 5,
-        [5] = 4,
-        [6] = 4,
-        [7] = 5,
-        [8] = 4,
-        [9] = 5,
-        [10] = 4,
-        [11] = 4,
-        },
-    mondays_months_2025 = {
-        [1] = 4,
-        [2] = 4,
-        [3] = 5,
-        [4] = 4,
-        [5] = 4,
-        [6] = 5,
-        [7] = 4,
-        [8] = 4,
-        [9] = 5,
-        [10] = 4,
-        [11] = 4,
-        },
+        [1] = 31, [2] = 28, [3] = 31, [4] = 30,
+        [5] = 31, [6] = 30, [7] = 31, [8] = 31,
+        [9] = 30, [10] = 31, [11] = 30, [12] = 31,
+    },
 }
 
+-- Returns true if the given year is a leap year
 function HeatmapView:isLeapYear(year)
-    if ((year % 4 == 0) and (year % 100 ~= 0)) or (year % 400 == 0) then
-        return true
-    end
-    return false
+    year = tonumber(year)
+    return ((year % 4 == 0) and (year % 100 ~= 0)) or (year % 400 == 0)
 end
 
-
-
+-- Returns max days for a given month/year
 function HeatmapView:getMonthMaxDays(month, year)
-    if (self.months_days[month]) then
-        if (month ~= 2 and not self:isLeapYear(year)) then
-            return self.months_days[month]
-        else
-            return 29
+    if not self.months_days[month] then return false end
+    if month == 2 and self:isLeapYear(year) then
+        return 29
+    end
+    return self.months_days[month]
+end
+
+-- Computes the number of ISO weeks whose Monday falls in each month of a given year.
+-- This is used to correctly size the month label spacing in the header row.
+function HeatmapView:computeMondaysPerMonth(year)
+    year = tonumber(year)
+    local counts = {}
+    for m = 1, 12 do
+        counts[m] = 0
+    end
+    -- Iterate over every day of the year and count Mondays per month
+    for m = 1, 12 do
+        local max_day = self:getMonthMaxDays(m, year)
+        for d = 1, max_day do
+            local t = os.time({year=year, month=m, day=d})
+            local wday = os.date("*t", t).wday  -- 1=Sun .. 7=Sat
+            if wday == 2 then  -- Monday
+                counts[m] = counts[m] + 1
+            end
         end
     end
-    return false
+    return counts
 end
+
 function HeatmapView:getDates(year)
     local SQ3 = require("lua-ljsqlite3/init")
     local DataStorage = require("datastorage")
@@ -311,45 +256,35 @@ function HeatmapView:getDates(year)
         ORDER BY DATE(datetime(start_time,'unixepoch','localtime'));
         ]]
 
-    local stmt = conn:prepare(sql_stmt:gsub("year",year))
-    local res, nb = stmt:reset():bind(year):resultset()
+    local stmt = conn:prepare(sql_stmt:gsub("year", tostring(year)))
+    local res, nb = stmt:reset():bind(tostring(year)):resultset()
     stmt:close()
+
     local dates = {}
-    for i=1, nb do
-        -- (We don't care about the duration, we just needed it
-        -- to have the books in decreasing duration order)
+    for i = 1, nb do
         local day, duration = res[1][i], res[2][i]
-        if not dates[i] then
-            dates[i] = {}
-        end
+        if not dates[i] then dates[i] = {} end
         table.insert(dates[i], { day, tonumber(duration) })
-        -- table.insert(dates[day], { date_day = tonumber(day), time = tonumber(duration) })
     end
 
-
-    local sql_stmt = [[
+    local sql_stmt2 = [[
         SELECT ROUND(CAST(SUM(duration)/60 as real)/60,2) from wpm_stat_data
         GROUP BY strftime('%%Y',DATE(datetime(start_time,'unixepoch','localtime')))
         HAVING strftime('%%Y',DATE(datetime(start_time,'unixepoch','localtime')))='%d';
         ]]
+    local hours = conn:rowexec(string.format(sql_stmt2, year))
+    conn:close()
 
-        local hours = conn:rowexec(string.format(sql_stmt, year))
-
-        conn:close()
-        if hours == nil then
-            hours = 0
-        end
-        hours = tonumber(hours)
-
+    hours = tonumber(hours) or 0
     return dates, hours
 end
-
 
 function HeatmapView:getReadMonth(year, month)
     local SQ3 = require("lua-ljsqlite3/init")
     local DataStorage = require("datastorage")
     local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
     local conn = SQ3.open(db_location)
+
     local sql_stmt = [[
         SELECT ROUND(CAST(SUM(duration)/60 as real)/60,2),
         strftime('%%Y',DATE(datetime(start_time,'unixepoch','localtime'))),
@@ -358,29 +293,20 @@ function HeatmapView:getReadMonth(year, month)
         HAVING CAST(strftime('%%Y',DATE(datetime(start_time,'unixepoch','localtime'))) as decimal) ='%d'
         AND CAST(strftime('%%m',DATE(datetime(start_time,'unixepoch','localtime'))) as decimal) ='%d';
         ]]
+    local hours = conn:rowexec(string.format(sql_stmt, year, month))
+    conn:close()
 
-        local hours = conn:rowexec(string.format(sql_stmt, year, month))
-        conn:close()
-        if hours == nil then
-            hours = 0
-        end
-        hours = tonumber(hours)
-
-    return hours
+    return tonumber(hours) or 0
 end
 
-
-function deep_copy(obj, seen)
-	-- Handle non-tables and previously-seen tables.
-	if type(obj) ~= 'table' then return obj end
-	if seen and seen[obj] then return seen[obj] end
-
-	-- New table; mark it as seen an copy recursively.
-	local s = seen or {}
-	local res = {}
-	s[obj] = res
-	for k, v in next, obj do res[deep_copy(k, s)] = deep_copy(v, s) end
-	return setmetatable(res, getmetatable(obj))
+local function deep_copy(obj, seen)
+    if type(obj) ~= 'table' then return obj end
+    if seen and seen[obj] then return seen[obj] end
+    local s = seen or {}
+    local res = {}
+    s[obj] = res
+    for k, v in next, obj do res[deep_copy(k, s)] = deep_copy(v, s) end
+    return setmetatable(res, getmetatable(obj))
 end
 
 function HeatmapView:init()
@@ -389,9 +315,8 @@ function HeatmapView:init()
         h = self.height or Screen:getHeight(),
     }
 
-
     if self.dimen.w == Screen:getWidth() and self.dimen.h == Screen:getHeight() then
-        self.covers_fullscreen = true -- hint for UIManager:_repaint()
+        self.covers_fullscreen = true
     end
 
     if Device:hasKeys() then
@@ -401,47 +326,37 @@ function HeatmapView:init()
     end
     if Device:isTouchDevice() then
         self.ges_events.Swipe = {
-            GestureRange:new{
-                ges = "swipe",
-                range = self.dimen,
-            }
+            GestureRange:new{ ges = "swipe", range = self.dimen }
         }
         self.ges_events.MultiSwipe = {
-            GestureRange:new{
-                ges = "multiswipe",
-                range = self.dimen,
-            }
+            GestureRange:new{ ges = "multiswipe", range = self.dimen }
         }
     end
+
     self.outer_padding = Size.padding.large
     self.inner_padding = Size.padding.small
 
-    -- 7 days in a week
     self.day_width = math.floor((self.dimen.w - 2*self.outer_padding - 6*self.inner_padding) * (1/7))
-    -- Put back the possible 7px lost in rounding into outer_padding
     self.outer_padding = math.floor((self.dimen.w - 7*self.day_width - 6*self.inner_padding) * (1/2))
-
     self.content_width = self.dimen.w - 2*self.outer_padding
-
 
     self.title_bar = TitleBar:new{
         fullscreen = self.covers_fullscreen,
         width = self.dimen.w,
         align = "left",
-        title = "2023",
-        title_h_padding = self.outer_padding, -- have month name aligned with calendar left edge
-        -- close_callback = function() self:onClose() end,
-        -- show_parent = self,
+        title = "Reading Heatmap",
+        title_h_padding = self.outer_padding,
     }
-    self.size_tile = Screen:getWidth()/(12 * 5)
-    -- week days names header
+
+    self.size_tile = Screen:getWidth() / (12 * 5)
+
+    -- Build shared day names header
     self.day_names = VerticalGroup:new{}
     table.insert(self.day_names, HorizontalSpan:new{ width = self.outer_padding })
     for i = 0, 6 do
         local dayname = TextWidget:new{
             text = datetime.shortDayOfWeekTranslation[self.weekdays[(self.start_day_of_week-1+i)%7 + 1]],
             face = Font:getFace("myfont3", Screen:scaleBySize(4)),
-            -- bold = true,
         }
         table.insert(self.day_names, FrameContainer:new{
             padding = 0,
@@ -453,165 +368,96 @@ function HeatmapView:init()
             }
         })
         if i < 6 then
-            table.insert(self.day_names, HorizontalSpan:new{ width = self.inner_padding, })
+            table.insert(self.day_names, HorizontalSpan:new{ width = self.inner_padding })
         end
     end
 
-
-
-    -- At most 6 weeks in a month
     local available_height = self.dimen.h - self.title_bar:getHeight() - self.day_names:getSize().h
     self.week_height = math.floor((available_height - 7*self.inner_padding) * (1/6))
     self.day_border = Size.border.default
     if self.show_hourly_histogram then
-        -- day num + nb_book_spans + histogram: ceil() as histogram rarely
-        -- reaches 100% and is stuck to bottom
         self.span_height = math.ceil((self.week_height - 2*self.day_border) / (self.nb_book_spans+2))
     else
-        -- day num + nb_book_span: floor() to get some room for bottom padding
         self.span_height = math.floor((self.week_height - 2*self.day_border) / (self.nb_book_spans+1))
     end
-    -- Limit font size to 1/3 of available height, and so that
-    -- the day number and the +nb-not-shown do not overlap
     local text_height = math.min(self.span_height, self.week_height/3)
     self.span_font_size = TextBoxWidget:getFontSizeToFitHeight(text_height, 1, 0.3)
-    local day_inner_width = self.day_width - 2*self.day_border -2*self.inner_padding
 
+    -- Determine the range of years to show: last NUM_YEARS years
+    local current_year = tonumber(os.date("%Y"))
+    local start_year = current_year - NUM_YEARS + 1
 
+    -- Build per-year data and widgets, then assemble into a single VerticalGroup
+    local year_blocks = {}  -- list of {title_bar, months_group, main_content}
 
-    self.months = HorizontalGroup:new{}
-    table.insert(self.months, VerticalSpan:new{ width = Screen:scaleBySize(20) })
+    for y = start_year, current_year do
+        local year_str = tostring(y)
 
-    -- table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(40) })
-    local dateFirstDayYear = os.time({year=2023, month=1, day=1})
+        -- Precompute mondays-per-month for this year (generic, no hardcoded table)
+        local mondays_months = self:computeMondaysPerMonth(y)
 
-    if tonumber(os.date("%V", dateFirstDayYear)) == 52 then
-        table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(40) })
-    else
-        table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(28) })
-    end
+        -- Reset months group for this year
+        self.months = HorizontalGroup:new{}
+        table.insert(self.months, VerticalSpan:new{ width = Screen:scaleBySize(20) })
 
+        -- Leading offset: depends on whether Jan 1 is in ISO week 52 or week 1
+        local dateFirstDayYear = os.time({year=y, month=1, day=1})
+        if tonumber(os.date("%V", dateFirstDayYear)) == 52 then
+            table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(40) })
+        else
+            table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(28) })
+        end
 
+        self.dates, self.hours = self:getDates(year_str)
+        local main_content = HorizontalGroup:new{}
+        self:_populateItems(main_content, year_str, mondays_months)
 
+        local months_group = deep_copy(self.months)
 
-    local main_content2023 = HorizontalGroup:new{} -- With a vertical group, draws everything down
-    self.dates, self.hours = self:getDates('2023')
-    self:_populateItems(main_content2023, '2023')
-    self.months_2023 = deep_copy(self.months)
-    self.months = HorizontalGroup:new{}
-    table.insert(self.months, VerticalSpan:new{ width = Screen:scaleBySize(20) })
-
-
-
-    -- table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(40) })
-
-    local dateFirstDayYear = os.time({year=2024, month=1, day=1})
-
-    if tonumber(os.date("%V", dateFirstDayYear)) == 52 then
-        table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(40) })
-    else
-        table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(30) })
-    end
-
-
-
-    self.title_bar_2023 = TitleBar:new{
-        fullscreen = self.covers_fullscreen,
-        title_face_fullscreen = Font:getFace("myfont3", Screen:scaleBySize(8)),
-        width = self.dimen.w,
-        bottom_v_padding = 20,
-        align = "left",
-        title = "2023 (" ..  string.format("%.2fd)",self.hours / 24),
-        title_h_padding = self.outer_padding, -- have month name aligned with calendar left edge
-        -- close_callback = function() self:onClose() end,
-        -- show_parent = self,
-    }
-
-
-    self.dates, self.hours = self:getDates('2024')
-    local main_content2024 = HorizontalGroup:new{}
-    self:_populateItems(main_content2024, '2024')
-    self.months_2024 = deep_copy(self.months)
-    self.months = HorizontalGroup:new{}
-    table.insert(self.months, VerticalSpan:new{ width = Screen:scaleBySize(20) })
-
-
-    table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(40) })
-
-    self.title_bar_2024 = TitleBar:new{
-        fullscreen = self.covers_fullscreen,
-        title_face_fullscreen = Font:getFace("myfont3", Screen:scaleBySize(8)),
-        bottom_v_padding = 20,
-        width = self.dimen.w,
-        align = "left",
-        title = "2024 (" .. string.format("%.2fd)",self.hours / 24),
-        title_h_padding = self.outer_padding, -- have month name aligned with calendar left edge
-        -- close_callback = function() self:onClose() end,
-        -- show_parent = self,
-    }
-
-    self.dates, self.hours = self:getDates('2025')
-    --local dump = require("dump")
-    --print(dump(self.dates))
-    local main_content2025 = HorizontalGroup:new{}
-    self:_populateItems(main_content2025, '2025')
-    self.months_2025 = deep_copy(self.months)
-    self.title_bar_2025 = TitleBar:new{
-        fullscreen = self.covers_fullscreen,
-        title_face_fullscreen = Font:getFace("myfont3", Screen:scaleBySize(8)),
-        bottom_v_padding = 20,
-        width = self.dimen.w,
-        align = "left",
-        title = "2025 (" .. string.format("%.2fd)",self.hours / 24),
-        title_h_padding = self.outer_padding, -- have month name aligned with calendar left edge
-        -- close_callback = function() self:onClose() end,
-        -- show_parent = self,
-    }
-    local content = OverlapGroup:new{
-        dimen = Geom:new{
-            w = self.dimen.w,
-            h = self.dimen.h,
-        },
-        allow_mirroring = false,
-        VerticalGroup:new{
+        local title_bar = TitleBar:new{
+            fullscreen = self.covers_fullscreen,
+            title_face_fullscreen = Font:getFace("myfont3", Screen:scaleBySize(8)),
+            bottom_v_padding = 20,
+            width = self.dimen.w,
             align = "left",
-            self.title_bar_2023,
-            self.months_2023,
-            HorizontalGroup:new{
-                HorizontalSpan:new{ width = self.outer_padding },
-                self.day_names,
-                main_content2023,
-            },
-            FrameContainer:new{
+            title = year_str .. " (" .. string.format("%.2fd)", self.hours / 24),
+            title_h_padding = self.outer_padding,
+        }
+
+        table.insert(year_blocks, {
+            title_bar = title_bar,
+            months_group = months_group,
+            main_content = main_content,
+        })
+    end
+
+    -- Assemble all year blocks into a single vertical layout
+    local vgroup = VerticalGroup:new{ align = "left" }
+    for idx, block in ipairs(year_blocks) do
+        table.insert(vgroup, block.title_bar)
+        table.insert(vgroup, block.months_group)
+        table.insert(vgroup, HorizontalGroup:new{
+            HorizontalSpan:new{ width = self.outer_padding },
+            self.day_names,
+            block.main_content,
+        })
+        -- Add spacing between years (but not after the last one)
+        if idx < #year_blocks then
+            table.insert(vgroup, FrameContainer:new{
                 padding = 0,
                 bordersize = 0,
                 padding_bottom = 60,
                 HorizontalSpan:new{ width = self.outer_padding },
-            },
-            -- VerticalSpan:new{ width = 60 }, -- We need the main_content to go a little bit down
-            self.title_bar_2024,
-            self.months_2024,
-            HorizontalGroup:new{
-                HorizontalSpan:new{ width = self.outer_padding },
-                self.day_names,
-                main_content2024,
-            },
-            FrameContainer:new{
-                padding = 0,
-                bordersize = 0,
-                padding_bottom = 60,
-                HorizontalSpan:new{ width = self.outer_padding },
-            },
-            self.title_bar_2025,
-            self.months_2025,
-            HorizontalGroup:new{
-                HorizontalSpan:new{ width = self.outer_padding },
-                self.day_names,
-                main_content2025,
-            },
-        },
+            })
+        end
+    end
+
+    local content = OverlapGroup:new{
+        dimen = Geom:new{ w = self.dimen.w, h = self.dimen.h },
+        allow_mirroring = false,
+        vgroup,
     }
-    -- assemble page
+
     self[1] = FrameContainer:new{
         width = self.dimen.w,
         height = self.dimen.h,
@@ -619,27 +465,26 @@ function HeatmapView:init()
         margin = 0,
         bordersize = 0,
         background = Blitbuffer.COLOR_WHITE,
-        content
+        content,
     }
 end
 
-function HeatmapView:_populateItems(main_content, year)
+-- _populateItems now receives mondays_months as a parameter instead of using hardcoded tables
+function HeatmapView:_populateItems(main_content, year, mondays_months)
     self.layout = {}
     main_content:clear()
-
 
     table.insert(main_content, VerticalSpan:new{ width = self.inner_padding })
     self.weeks = {}
     local today_s = os.date("%Y-%m-%d", os.time())
     local cur_ts = month_start_ts
     local cur_date = os.date("*t", cur_ts)
-    local this_month = cur_date.month
     local cur_week
     local layout_week
     local last_weekday = ""
     local last_month = nil
 
-
+    -- Build month label header
     for i = 0, 11 do
         local hours = self:getReadMonth(year, i + 1)
         local month_name = TextWidget:new{
@@ -647,65 +492,44 @@ function HeatmapView:_populateItems(main_content, year)
             face = Font:getFace("myfont3", Screen:scaleBySize(3)),
             bold = true,
         }
-        padding = 0
-        --if i == 0 and year == '2025' then
-        --    padding = 80
-        --end
-        local fc =  FrameContainer:new{
+        local fc = FrameContainer:new{
             padding = 0,
             bordersize = 0,
             padding_right = 0,
-            padding_left = padding,
+            padding_left = 0,
             LeftContainer:new{
-                dimen = Geom:new{w = month_name:getSize().w, h = month_name:getSize().h },
+                dimen = Geom:new{ w = month_name:getSize().w, h = month_name:getSize().h },
                 month_name,
             }
         }
         table.insert(self.months, fc)
         if i < 11 then
-            -- table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(12) * self.mondays_months_2024[i + 1] - month_name:getSize().w})
-            -- table.insert(self.months, HorizontalSpan:new{ width = Screen:scaleBySize(12) * self:getMonthMaxDays(i + 1, year) / 7 - month_name:getSize().w}) -- Number of whole weeks in a month times the square size
-            -- table.insert(self.months, HorizontalSpan:new{ width = (Screen:scaleBySize(12) * self.months_weeks_2023[i + 1] ) - month_name:getSize().w })--  Screen:scaleBySize(fc[1][1]:getSize().w) })
-            if year == '2023' then
-                table.insert(self.months, HorizontalSpan:new{ width = self.size_tile * self.mondays_months_2023[i + 1] - month_name:getSize().w})
-            elseif year == '2024' then
-                table.insert(self.months, HorizontalSpan:new{ width = self.size_tile * self.mondays_months_2024[i + 1] - month_name:getSize().w})
-            else
-                table.insert(self.months, HorizontalSpan:new{ width = self.size_tile * self.mondays_months_2025[i + 1] - month_name:getSize().w})
-            end
-
+            -- Use the computed mondays_months table passed in
+            table.insert(self.months, HorizontalSpan:new{
+                width = self.size_tile * mondays_months[i + 1] - month_name:getSize().w
+            })
         end
     end
     table.insert(self.months, VerticalSpan:new{ width = Screen:scaleBySize(20) })
 
-
+    -- Populate day cells
     for i = 1, #self.dates do
-        -- print(self.dates[i][1][1])
-
         local pattern = "(%d+)-(%d+)-(%d+)"
         local ryear, rmonth, rday = self.dates[i][1][1]:match(pattern)
         local date = os.time({year=ryear, month=rmonth, day=rday})
-        local weekday = os.date("*t", date).wday - 1
+        local weekday = os.date("*t", date).wday - 1  -- 0=Sun..6=Sat
 
-
-        local hours = 0
-        if rmonth ~= last_month then
-            hours = self:getReadMonth(ryear, rmonth)
-            -- print(hours)
-        end
         last_month = rmonth
-
         last_weekday = weekday
-        if weekday == 0 then
-            weekday = 7
-        end
+
+        if weekday == 0 then weekday = 7 end
+
         local weekx = tonumber(os.date("%V", date))
-        local yearx = tonumber(os.date("%Y", date))
         local monthx = tonumber(os.date("%d", date))
-        --print(weekday)
         rday = tonumber(rday)
-        -- if dayc % 8 == 0 then
-        if i == 1 and weekx == 52 or i == 1 and weekx == 1 then
+
+        -- First day of year: handle partial first week
+        if i == 1 and (weekx == 52 or weekx == 1) then
             cur_week = CalendarWeek:new{
                 height = self.size_tile,
                 width = self.size_tile,
@@ -720,21 +544,11 @@ function HeatmapView:_populateItems(main_content, year)
             table.insert(main_content, cur_week)
 
             for j = 1, weekday do
-                local paint_down = false
-                local paint_left = false
-                if j >= weekday then
-                    paint_down = true
-                end
-
-                if j >= weekday and (rday == 1 or rday == 2 or rday == 3 or rday == 4 or rday == 5 or rday == 6 or rday == 7) then
-                    paint_left = true
-                end
-                duration = 0
-                if i == 1 and weekx == 1 and j >= weekday then
-                    duration = self.dates[i][1][2]
-                end
+                local paint_down = j >= weekday
+                local paint_left = j >= weekday and rday <= 7
+                local duration = (i == 1 and weekx == 1 and j >= weekday) and self.dates[i][1][2] or 0
                 local calendar_day = CalendarDay:new{
-                    is_different_year = j < weekday and true or false,
+                    is_different_year = j < weekday,
                     day = j < weekday and "" or i,
                     font_face = self.font_face,
                     font_size = self.span_font_size,
@@ -750,6 +564,7 @@ function HeatmapView:_populateItems(main_content, year)
                 table.insert(layout_week, calendar_day)
             end
         else
+            -- Start a new week column on Monday
             if weekday == 1 then
                 cur_week = CalendarWeek:new{
                     height = self.size_tile,
@@ -764,24 +579,16 @@ function HeatmapView:_populateItems(main_content, year)
                 table.insert(main_content, cur_week)
             end
 
-
             local day_s = os.date("%Y-%m-%d", cur_ts)
-            local day_ts = os.time({
-                year = cur_date.year,
-                month = cur_date.month,
-                day = cur_date.day,
-                hour = 0,
-            })
-
             local is_today = os.date("%Y-%m-%d") == self.dates[i][1][1]
             local is_future = day_s > today_s
+
             local calendar_day = CalendarDay:new{
                 font_face = self.font_face,
                 font_size = self.span_font_size,
-                -- border = is_future and 0 or 1,
                 is_different_year = false,
-                paint_down = (monthx == 1 and true or false),
-                paint_left = ((rday == 1 or rday == 2 or rday == 3 or rday == 4 or rday == 5 or rday == 6 or rday == 7) and true or false),
+                paint_down = (monthx == 1),
+                paint_left = (rday <= 7),
                 day = i,
                 is_today = is_today,
                 cur_month = ryear .. "-" .. rmonth,
@@ -791,7 +598,6 @@ function HeatmapView:_populateItems(main_content, year)
                 duration = self.dates[i][1][2],
                 callback = function(parent, cur_month)
                     local HeatmapView = require("calendarview")
-
                     UIManager:show(HeatmapView:new{
                         cur_month = cur_month,
                         reader_statistics = parent.reader_statistics,
@@ -800,13 +606,15 @@ function HeatmapView:_populateItems(main_content, year)
                         show_hourly_histogram = parent.reader_statistics.settings.calendar_show_histogram,
                         browse_future_months = parent.reader_statistics.settings.calendar_browse_future_months,
                     })
-                end
+                end,
             }
 
             cur_week:addDay(calendar_day)
             table.insert(layout_week, calendar_day)
         end
     end
+
+    -- Fill trailing empty days in last week
     if last_weekday > 1 then
         for j = last_weekday, 6 do
             local calendar_day = CalendarDay:new{
@@ -824,9 +632,11 @@ function HeatmapView:_populateItems(main_content, year)
             table.insert(layout_week, calendar_day)
         end
     end
+
     for _, week in ipairs(self.weeks) do
         week:update()
     end
+
     self:moveFocusTo(1, 1, FocusManager.NOT_UNFOCUS)
     UIManager:setDirty(self, function()
         return "ui", self.dimen
@@ -835,45 +645,19 @@ end
 
 
 function HeatmapView:onSwipe(arg, ges_ev)
-    -- trigger full refresh
     UIManager:setDirty(nil, "full")
-    -- a long diagonal swipe may also be used for taking a screenshot,
-    -- so let it propagate
     return false
 end
 
 function HeatmapView:onMultiSwipe(arg, ges_ev)
-    -- For consistency with other fullscreen widgets where swipe south can't be
-    -- used to close and where we then allow any multiswipe to close, allow any
-    -- multiswipe to close this widget too.
     self:onClose()
     return true
 end
 
-
--- function HeatmapView:onTap()
---     if self.callback then
---         self.callback()
---     end
---     return true
--- end
-
--- function HeatmapView:onHold()
---     return self:onTap()
--- end
-
 function HeatmapView:onClose()
     UIManager:close(self)
-    local Event = require("ui/event")
-    -- if not Device:isAndroid() then
-    --     UIManager:broadcastEvent(Event:new("SetRotationMode", 0, true))
-    --     UIManager:broadcastEvent(Event:new("GenerateCover", 0))
-    -- end
-
-    -- Remove ghosting
     UIManager:setDirty(nil, "full")
     return true
 end
 
 return HeatmapView
-
