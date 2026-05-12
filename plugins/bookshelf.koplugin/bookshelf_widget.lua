@@ -255,11 +255,26 @@ function BookshelfWidget:handleEvent(event)
 
     if InputContainer.handleEvent(self, event) then return true end
     -- Forward unhandled events to FM so Dispatcher action events
-    -- (IncreaseFlIntensity, ToggleNightMode, etc.) reach FM's registered
-    -- modules. EXCLUDE lifecycle events that target THIS widget — without
-    -- the blacklist, UIManager:close(self) propagates CloseWidget to us,
-    -- which forwards it to FM, which then tears itself down (nil'ing
-    -- FileManager.instance). That breaks all subsequent gesture forwarding.
+    -- (IncreaseFlIntensity, ToggleNightMode bound to a gesture, etc.)
+    -- reach FM's registered modules. UIManager:sendEvent only delivers to
+    -- the topmost widget (us); without this forward, FM-side handlers for
+    -- gesture-emitted single-target events would never fire while we're up.
+    --
+    -- TWO exclusions:
+    --
+    --   1. Lifecycle events that target THIS widget. UIManager:close(self)
+    --      propagates CloseWidget to us; forwarding it to FM tears FM
+    --      down (nil'ing FileManager.instance) and breaks all subsequent
+    --      gesture forwarding.
+    --
+    --   2. Events delivered via UIManager:broadcastEvent (tagged in
+    --      main.lua's _installBroadcastTag). The broadcast loop already
+    --      delivers to FM via its window-stack iteration; our forward
+    --      would be a redundant second delivery. Harmless for idempotent
+    --      lifecycle broadcasts (Suspend, Resume) but corrupting for
+    --      toggle broadcasts (ToggleNightMode flips state twice, net
+    --      zero -- issue #19). Skipping the forward for any broadcast
+    --      lets the loop's natural delivery do its job.
     local NEVER_FORWARD = {
         onCloseWidget   = true,
         onFlushSettings = true,
@@ -270,6 +285,7 @@ function BookshelfWidget:handleEvent(event)
         onShowFileSearchAllCompleted = true,
     }
     if NEVER_FORWARD[event.handler] then return end
+    if event._bookshelf_from_broadcast then return end
     local fm = require("apps/filemanager/filemanager").instance
     if fm and fm ~= self then
         return fm:handleEvent(event)
@@ -288,6 +304,47 @@ local function _resolveDisabledSet()
     -- that rather than falling back to the default disabled set.
     return G_reader_settings:readSetting("bookshelf_chips_disabled")
            or _DEFAULT_CHIPS_DISABLED
+end
+
+-- Remove a deleted filepath from any drilldown payload that captured it
+-- at descend-time. Series / author / genre / tag drilldowns all keep
+-- their book list in tip.payload.books (see _fetchChipItems); without
+-- this, deleting a book from inside such a drilldown leaves a ghost
+-- entry visible until the user backs out and re-enters.
+--
+-- Search-mode payloads carry a similar `.books` list and matching
+-- group lists; scrub them all.
+--
+-- Folder drilldown re-queries the filesystem via Repo.getAll on every
+-- render, so no payload mutation needed for that path.
+function BookshelfWidget:_scrubFromDrilldown(filepath)
+    if not filepath or not self._drilldown_path then return end
+    for _, entry in ipairs(self._drilldown_path) do
+        local payload = entry and entry.payload
+        if type(payload) == "table" then
+            local lists = { payload.books, payload.series,
+                            payload.authors, payload.genres,
+                            payload.folders }
+            for _, list in ipairs(lists) do
+                if type(list) == "table" then
+                    for i = #list, 1, -1 do
+                        local item = list[i]
+                        if type(item) == "table" and item.filepath == filepath then
+                            table.remove(list, i)
+                        elseif type(item) == "table" and type(item.books) == "table" then
+                            -- Nested group (e.g. series in a search payload):
+                            -- scrub its inner book list too.
+                            for j = #item.books, 1, -1 do
+                                if item.books[j] and item.books[j].filepath == filepath then
+                                    table.remove(item.books, j)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
 end
 
 function BookshelfWidget:_rebuild()
@@ -2992,6 +3049,7 @@ function BookshelfWidget:_openBookMenu(item)
                 FileManager.instance:showDeleteFileDialog(book.filepath, function()
                     Repo.invalidateProgressCache(book.filepath)
                     Repo.invalidateWalkCache()
+                    bw:_scrubFromDrilldown(book.filepath)
                     bw:_rebuild()
                     UIManager:setDirty(bw, "ui")
                 end)
@@ -3006,6 +3064,7 @@ function BookshelfWidget:_openBookMenu(item)
                             ReadCollection:removeItem(book.filepath)
                             Repo.invalidateProgressCache(book.filepath)
                             Repo.invalidateWalkCache()
+                            bw:_scrubFromDrilldown(book.filepath)
                             bw:_rebuild()
                             UIManager:setDirty(bw, "ui")
                         else
