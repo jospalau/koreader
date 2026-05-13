@@ -2,8 +2,10 @@
 
 local UIManager = require("ui/uimanager")
 local InfoMessage = require("ui/widget/infomessage")
+local ConfirmBox = require("ui/widget/confirmbox")
 local logger = require("logger")
 local plugin_path = ((...) or ""):match("(.-)[^%.]+$") or ""
+local utils = require(plugin_path .. "xray_utils")
 
 local M = {}
 
@@ -103,13 +105,23 @@ function M:fetchSingleWord(text, pos0, pos1)
             if wait_msg then UIManager:close(wait_msg) end
 
             if not result then
-                UIManager:show(InfoMessage:new{ text = error_msg or "Lookup failed.", timeout = 5 })
+                local title, text = utils:getFriendlyError(error_code, error_msg, self.loc)
+                UIManager:show(ConfirmBox:new{
+                    text = title .. "\n\n" .. text,
+                    ok_text = self.loc:t("ok") or "OK",
+                    cancel_text = nil
+                })
                 return
             end
 
             if result.is_valid then
                 local item = result.item
                 local item_type = result.type
+
+                -- Ensure tables exist before trying to merge
+                self.characters = self.characters or {}
+                self.locations = self.locations or {}
+                self.historical_figures = self.historical_figures or {}
 
                 -- Merge into our tables
                 local target_list
@@ -148,10 +160,10 @@ function M:fetchSingleWord(text, pos0, pos1)
                         last_fetch_page = self.book_data and self.book_data.last_fetch_page
                     }
                     self.cache_manager:saveCache(self.ui.document.file, book_data)
-
-                    -- Show result
-                    self.lookup_manager:showResult(item, item_type)
                 end
+
+                -- Always show result if it's valid, even if it didn't merge into a target_list
+                self.lookup_manager:showResult(item, item_type)
             else
                 local err = result.error_message or self.loc:t("entity_not_found", text:sub(1, 20))
                 UIManager:show(InfoMessage:new{ text = err, timeout = 5 })
@@ -276,10 +288,12 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
                 self:log("XRayPlugin: Failed to build request: " .. tostring(err_msg))
                 self.bg_fetch_active = false
                 if not is_silent then
-                    local ButtonDialog = require("ui/widget/buttondialog")
-                    local err_dialog
-                    err_dialog = ButtonDialog:new{ title = self.loc:t("error_fetch_title") or "Fetch Failed", text = err_msg or "Failed to build request.", buttons = {{{ text = self.loc:t("ok"), callback = function() UIManager:close(err_dialog) end }}} }
-                    UIManager:show(err_dialog)
+                    local title, text = utils:getFriendlyError(err_code, err_msg, self.loc)
+                    UIManager:show(ConfirmBox:new{
+                        text = title .. "\n\n" .. text,
+                        ok_text = self.loc:t("ok") or "OK",
+                        cancel_text = nil
+                    })
                 end
                 return
             end
@@ -317,21 +331,26 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
                         if wait_msg then UIManager:close(wait_msg) end
                         self.bg_fetch_active = false
                         self:log("XRayPlugin: Fetch timed out")
-                        if not is_silent then UIManager:show(InfoMessage:new{ text = "Fetch timed out. Please try again.", timeout = 5 }) end
+                        if not is_silent then
+                            local title, text = utils:getFriendlyError("error_timeout", nil, self.loc)
+                            UIManager:show(ConfirmBox:new{
+                                text = title .. "\n\n" .. text,
+                                ok_text = self.loc:t("ok") or "OK",
+                                cancel_text = nil
+                            })
+                        end
                     end
                 elseif data == false then
                     if wait_msg then UIManager:close(wait_msg) end
                     self.bg_fetch_active = false
                     self:log("XRayPlugin: Fetch failed: " .. tostring(p_err_msg))
                     if not is_silent then
-                        local user_msg = p_err_msg or self.loc:t("error_fetch_desc") or "Failed to fetch data."
-                        if tostring(p_err_msg):find("429") then
-                            user_msg = "Rate Limit Exceeded (HTTP 429).\n\nThe AI provider rejected the request. This typically means your free API quota is exhausted for today.\n\n• Wait ~1 minute, then try again\n• Or switch to a Claude or OpenRouter model in Settings → API Provider"
-                        end
-                        local ButtonDialog = require("ui/widget/buttondialog")
-                        local err_dialog
-                        err_dialog = ButtonDialog:new{ title = self.loc:t("error_fetch_title") or "Fetch Failed", text = user_msg, buttons = {{{ text = self.loc:t("ok"), callback = function() UIManager:close(err_dialog) end }}} }
-                        UIManager:show(err_dialog)
+                        local title, text = utils:getFriendlyError(p_err_code, p_err_msg, self.loc)
+                        UIManager:show(ConfirmBox:new{
+                            text = title .. "\n\n" .. text,
+                            ok_text = self.loc:t("ok") or "OK",
+                            cancel_text = nil
+                        })
                     end
                 else
                     if wait_msg then UIManager:close(wait_msg) end
@@ -344,41 +363,6 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
     end)
 end
 
-function M:pollBackgroundFetch(result_file, title, author, book_text, is_update, current_page)
-    local poll_count = 0
-    local function check()
-        -- Ensure we are still in a valid state
-        if not self.ui or not self.ui.document then
-            self:log("XRayPlugin: Polling aborted (document closed)")
-            os.remove(result_file)
-            self.bg_fetch_active = false
-            return
-        end
-
-        poll_count = poll_count + 1
-        local data, err_code, err_msg = self.ai_helper:checkAsyncResult(result_file)
-
-        if data == nil then
-            -- Still pending
-            if poll_count < 120 then -- 4 minutes max for background
-                UIManager:scheduleIn(2, check)
-            else
-                self:log("XRayPlugin: Background fetch timed out")
-                os.remove(result_file)
-                self.bg_fetch_active = false
-            end
-        elseif data == false then
-            -- Failed
-            self.bg_fetch_active = false
-            self:log("XRayPlugin: Background fetch failed: " .. tostring(err_msg))
-        else
-            -- Success
-            self.bg_fetch_active = false
-            self:finalizeXRayData(data, title, author, book_text, is_update, true, current_page)
-        end
-    end
-    UIManager:scheduleIn(2, check)
-end
 
 function M:finalizeXRayData(final_book_data, title, author, book_text, is_update, is_silent, current_page)
     final_book_data.book_title = title
@@ -400,6 +384,22 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
             end
         end
         final_book_data.timeline = filtered_timeline
+    end
+
+    -- Guard: never overwrite existing data with an all-empty result
+    local char_count = #(final_book_data.characters or {})
+    local loc_count  = #(final_book_data.locations or {})
+    local tl_count   = #(final_book_data.timeline or {})
+    local hist_count = #(final_book_data.historical_figures or {})
+
+    if char_count == 0 and loc_count == 0 and tl_count == 0 and hist_count == 0 then
+        self:log("XRayPlugin: AI returned all-empty data — aborting cache write to protect existing data")
+        if not is_silent then
+            local msg = "The AI returned no data.\n\nThis usually means the book sample was too short. Try reading further into the book, then fetch again."
+            UIManager:show(InfoMessage:new{ text = msg, timeout = 8 })
+        end
+        self.bg_fetch_active = false
+        return  -- do NOT touch self.characters / self.locations / cache
     end
 
     if is_update then
@@ -539,10 +539,6 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
         UIManager:show(success_dialog)
     end
 
-    -- Kick off background mentions scan for newly-fetched/merged data
-    UIManager:scheduleIn(0, function()
-        self:buildMentionsInBackground(true)
-    end)
 end
 
 function M:fetchMoreCharacters()
@@ -648,10 +644,12 @@ function M:fetchMoreCharacters()
             if is_cancelled or error_code == "USER_CANCELLED" then return end
 
             if not more_data or not more_data.characters then
-                local error_dialog
-                local ButtonDialog = require("ui/widget/buttondialog")
-                error_dialog = ButtonDialog:new{ title = "Fetch Failed", text = error_msg or "Failed to fetch more characters.", buttons = {{{ text = self.loc:t("ok"), callback = function() UIManager:close(error_dialog) end }}} }
-                UIManager:show(error_dialog)
+                local title, text = utils:getFriendlyError(error_code, error_msg, self.loc)
+                UIManager:show(ConfirmBox:new{
+                    text = title .. "\n\n" .. text,
+                    ok_text = self.loc:t("ok") or "OK",
+                    cancel_text = nil
+                })
                 return
             end
 
@@ -742,8 +740,12 @@ function M:fetchAuthorInfo()
         if is_cancelled or error_code == "USER_CANCELLED" then return end
 
         if not author_data then
-            local error_dialog = ButtonDialog:new{ title = self.loc:t("error_author_fetch_title") or "Error: Author Fetch", text = (error_msg or self.loc:t("error_author_fetch_desc") or "Failed to fetch author info.") .. "\n\n(See crash.log in root for details)", buttons = {{{ text = self.loc:t("ok"), callback = function() UIManager:close(error_dialog) end }}} }
-            UIManager:show(error_dialog)
+            local title, text = utils:getFriendlyError(error_code, error_msg, self.loc)
+            UIManager:show(ConfirmBox:new{
+                text = title .. "\n\n" .. text,
+                ok_text = self.loc:t("ok") or "OK",
+                cancel_text = nil
+            })
             return
         end
         self.author_info = {

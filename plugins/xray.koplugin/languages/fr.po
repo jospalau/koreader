@@ -35,6 +35,21 @@ msgstr "Fréquence de récupération en arrière-plan :"
 msgid "auto_update_sparse"
 msgstr "Clairsemé : vérifie max toutes les 30 min"
 
+msgid "back_to_reading"
+msgstr "Back to Reading"
+
+msgid "beta_channel_desc"
+msgstr "The beta channel allows you to receive pre-release versions of the X-Ray plugin. These versions include the latest features and bug fixes but may be less stable than the regular release."
+
+msgid "beta_disabled"
+msgstr "Stable Channel (Recommended)"
+
+msgid "beta_enabled"
+msgstr "Beta Channel Enabled"
+
+msgid "beta_preference_desc"
+msgstr "Select your update channel preference:"
+
 msgid "cache_cleared"
 msgstr "Cache vidé !\n\nVous pouvez maintenant récupérer de nouvelles données :\nMenu → X-Ray → Récupérer les données IA"
 
@@ -134,20 +149,56 @@ msgstr "Ne plus demander pour ce livre"
 msgid "entity_not_found"
 msgstr "'%s' n'a pas été trouvé comme personnage ou lieu."
 
-msgid "error_author_fetch_desc"
-msgstr "Échec de la récupération des infos auteur."
+msgid "error_api_key_desc"
+msgstr "The API key provided was rejected. Please check your settings and ensure the key is correct."
 
-msgid "error_author_fetch_title"
-msgstr "Échec de la récupération de l'auteur"
+msgid "error_api_key_title"
+msgstr "Invalid API Key"
 
 msgid "error_extract_text"
 msgstr "Erreur : Impossible d'extraire le texte du livre."
 
-msgid "error_fetch_desc"
-msgstr "Échec de la récupération des données X-Ray. Veuillez vérifier votre clé API et votre connexion."
+msgid "error_model_access_desc"
+msgstr "Your API key does not have access to the selected model. You might need to use a different model or provider."
 
-msgid "error_fetch_title"
-msgstr "Échec de la récupération"
+msgid "error_model_access_title"
+msgstr "Permission Denied"
+
+msgid "error_model_not_found_desc"
+msgstr "The selected AI model is unavailable or the endpoint URL is incorrect."
+
+msgid "error_model_not_found_title"
+msgstr "Model Not Found"
+
+msgid "error_parse_desc"
+msgstr "The AI returned a response that could not be processed. This might be a temporary glitch."
+
+msgid "error_parse_title"
+msgstr "Data Error"
+
+msgid "error_quota_desc"
+msgstr "Your API credits are exhausted or you have reached the rate limit. Please check your billing status or wait a while before trying again."
+
+msgid "error_quota_title"
+msgstr "Quota Exceeded"
+
+msgid "error_service_down_desc"
+msgstr "The AI service is temporarily unavailable or overloaded. Please try again in a few minutes."
+
+msgid "error_service_down_title"
+msgstr "Service Unavailable"
+
+msgid "error_timeout_desc"
+msgstr "The request took too long. This can happen with complex books or slow network connections."
+
+msgid "error_timeout_title"
+msgstr "Connection Timed Out"
+
+msgid "error_unknown_desc"
+msgstr "An unexpected error occurred: %s"
+
+msgid "error_unknown_title"
+msgstr "Fetch Failed"
 
 msgid "extracting_more_characters"
 msgstr "Extraction de personnages supplémentaires..."
@@ -227,6 +278,18 @@ msgstr "Logs effacés !"
 msgid "looking_up_msg"
 msgstr "Recherche de '%s'..."
 
+msgid "mention_dismiss_btn"
+msgstr "✕"
+
+msgid "mention_return_btn"
+msgstr "← Back"
+
+msgid "mention_return_label"
+msgstr "← Back to p.%d"
+
+msgid "mentions_at_location"
+msgstr "Mention: %s"
+
 msgid "mentions_disabled"
 msgstr "Disabled"
 
@@ -254,9 +317,6 @@ msgstr "Mentions Settings"
 msgid "mentions_title"
 msgstr "Mentions: %s"
 
-msgid "mentions_wait_scan"
-msgstr "Wait for scan to finish before navigating..."
-
 msgid "menu_about"
 msgstr "À propos"
 
@@ -271,6 +331,9 @@ msgstr "Infos Auteur"
 
 msgid "menu_auto_update_frequency"
 msgstr "Paramètres Auto X-Ray"
+
+msgid "menu_beta_channel"
+msgstr "Beta Channel Settings"
 
 msgid "menu_characters"
 msgstr "Personnages"
@@ -376,6 +439,9 @@ msgstr "payant"
 
 msgid "msg_added_characters"
 msgstr "%d nouveaux personnages ajoutés !"
+
+msgid "msg_fetch_failed"
+msgstr "AI Fetch Failed"
 
 msgid "msg_no_bio"
 msgstr "Aucune biographie disponible."

@@ -31,10 +31,18 @@ M.loc = nil
 local _plugin_dir = (debug.getinfo(1, "S").source or ""):match("^@(.+)/[^/]+$")
     or "/mnt/us/extensions/xray.koplugin"
 
-local _API_URL = string.format(
-    "https://api.github.com/repos/%s/%s/releases/latest",
-    GITHUB_OWNER, GITHUB_REPO
-)
+local function _apiUrl(use_beta)
+    if use_beta then
+        return string.format(
+            "https://api.github.com/repos/%s/%s/releases",
+            GITHUB_OWNER, GITHUB_REPO
+        )
+    end
+    return string.format(
+        "https://api.github.com/repos/%s/%s/releases/latest",
+        GITHUB_OWNER, GITHUB_REPO
+    )
+end
 
 -- Helper to safely call localizer
 local function t(key, ...)
@@ -45,21 +53,22 @@ local function t(key, ...)
     return key
 end
 
-local function _cacheFile()
+local function _cacheFile(use_beta)
+    local suffix = use_beta and "_beta" or ""
     local ok, DS = pcall(require, "datastorage")
     if ok and DS then
-        return DS:getSettingsDir() .. "/xray_update_cache.json"
+        return DS:getSettingsDir() .. "/xray_update_cache" .. suffix .. ".json"
     end
-    return "/tmp/xray_update_cache.json"
+    return "/tmp/xray_update_cache" .. suffix .. ".json"
 end
 
 -- ---------------------------------------------------------------------------
 -- Cache
 -- ---------------------------------------------------------------------------
 
-local function _loadCache()
+local function _loadCache(use_beta)
     if CACHE_TTL <= 0 then return nil end
-    local path = _cacheFile()
+    local path = _cacheFile(use_beta)
     local fh = io.open(path, "r")
     if not fh then return nil end
     local raw = fh:read("*a")
@@ -72,21 +81,21 @@ local function _loadCache()
     return data.payload
 end
 
-local function _saveCache(payload)
+local function _saveCache(payload, use_beta)
     if CACHE_TTL <= 0 then return end
     local ok_j, json = pcall(require, "json")
     if not ok_j then return end
     local ok_e, encoded = pcall(json.encode, { timestamp = os.time(), payload = payload })
     if not ok_e then return end
-    local fh = io.open(_cacheFile(), "w")
+    local fh = io.open(_cacheFile(use_beta), "w")
     if fh then
         fh:write(encoded)
         fh:close()
     end
 end
 
-local function _clearCache()
-    pcall(os.remove, _cacheFile())
+local function _clearCache(use_beta)
+    pcall(os.remove, _cacheFile(use_beta))
 end
 
 -- ---------------------------------------------------------------------------
@@ -103,11 +112,19 @@ local function _currentVersion()
 end
 
 local function _versionLessThan(a, b)
+    local function isBeta(v)
+        return v:lower():find("beta") ~= nil
+    end
+
     local function parts(v)
         local t_parts = {}
-        for n in (v .. "."):gmatch("(%d+)%.") do t_parts[#t_parts + 1] = tonumber(n) end
+        if not v then return t_parts end
+        for n in v:gmatch("(%d+)") do
+            t_parts[#t_parts + 1] = tonumber(n)
+        end
         return t_parts
     end
+
     local pa, pb = parts(a), parts(b)
     for i = 1, math.max(#pa, #pb) do
         local va = pa[i] or 0
@@ -115,6 +132,14 @@ local function _versionLessThan(a, b)
         if va < vb then return true end
         if va > vb then return false end
     end
+
+    -- If numeric parts are identical, a stable release is newer than a beta release
+    local betaA = isBeta(a)
+    local betaB = isBeta(b)
+    if betaA and not betaB then
+        return true -- a is beta, b is stable -> a < b
+    end
+
     return false
 end
 
@@ -228,7 +253,7 @@ end
 -- JSON parsing
 -- ---------------------------------------------------------------------------
 
-local function _parseRelease(body)
+local function _parseRelease(body, use_beta)
     local ok_j, json = pcall(require, "json")
 
     if not ok_j then
@@ -258,18 +283,35 @@ local function _parseRelease(body)
         return nil, "JSON parse error: " .. tostring(data)
     end
 
-    local tag = data.tag_name
+    -- GitHub error messages usually have a 'message' field
+    if data.message and not data.tag_name and not (use_beta and data[1]) then
+        return nil, "GitHub API error: " .. tostring(data.message)
+    end
+
+    -- If we query /releases instead of /releases/latest, we get an array
+    local release_data = data
+    if use_beta then
+        if type(data) == "table" and data[1] then
+            release_data = data[1]
+        elseif type(data) == "table" and #data == 0 then
+            return nil, "No releases found in repository"
+        else
+            return nil, "Unexpected API response format (expected array)"
+        end
+    end
+
+    local tag = release_data.tag_name
     if not tag then return nil, "tag_name missing from API response" end
 
     local download_url = nil
-    for _, asset in ipairs(data.assets or {}) do
+    for _, asset in ipairs(release_data.assets or {}) do
         if type(asset.name) == "string" and asset.name == ASSET_NAME then
             download_url = asset.browser_download_url
             break
         end
     end
 
-    local notes = data.body
+    local notes = release_data.body
     if notes and notes ~= "" then
         notes = notes:gsub("#+%s*", "")
         notes = notes:gsub("%*%*(.-)%*%*", "%1")
@@ -283,7 +325,7 @@ local function _parseRelease(body)
         version      = tag:match("v?(.*)"),
         download_url = download_url,
         notes        = (notes and notes ~= "") and notes or nil,
-        html_url     = data.html_url,
+        html_url     = release_data.html_url,
     }
 end
 
@@ -425,7 +467,8 @@ local function _applyUpdate(download_url, new_version)
             end
             return
         end
-        _clearCache()
+        _clearCache(true)
+        _clearCache(false)
         UIManager:show(ConfirmBox:new{
             text = t("updater_success_restart", new_version),
             ok_text     = t("updater_btn_restart"),
@@ -503,21 +546,21 @@ local function _showUpdateDialog(release, current)
     })
 end
 
-local function _doFetch()
-    local cached = _loadCache()
+local function _doFetch(use_beta)
+    local cached = _loadCache(use_beta)
     if cached then
-        logger.info("xray updater: using cache")
+        logger.info("xray updater: using cache (" .. (use_beta and "beta" or "stable") .. ")")
         return cached
     end
-    local body, err = _httpGet(_API_URL)
+    local body, err = _httpGet(_apiUrl(use_beta))
     if not body then return { error = err } end
-    local release, parse_err = _parseRelease(body)
+    local release, parse_err = _parseRelease(body, use_beta)
     if not release then return { error = "parse error: " .. tostring(parse_err) } end
-    _saveCache(release)
+    _saveCache(release, use_beta)
     return release
 end
 
-function M._doCheckForUpdates(current)
+function M._doCheckForUpdates(current, use_beta)
     local checking_msg = _toast(t("updater_checking"), 15)
     local ok_tr, Trapper = pcall(require, "ui/trapper")
 
@@ -537,7 +580,7 @@ function M._doCheckForUpdates(current)
 
     if ok_tr and Trapper and Trapper.dismissableRunInSubprocess then
         local completed, result = Trapper:dismissableRunInSubprocess(
-            _doFetch,
+            function() return _doFetch(use_beta) end,
             checking_msg,
             function(res) handleCheckResult(res) end
         )
@@ -549,29 +592,29 @@ function M._doCheckForUpdates(current)
         end
     else
         UIManager:scheduleIn(0.3, function()
-            handleCheckResult(_doFetch())
+            handleCheckResult(_doFetch(use_beta))
         end)
     end
 end
 
 -- localization param allows the caller to pass the X-Ray loc module
-function M.checkForUpdates(loc)
+function M.checkForUpdates(loc, use_beta)
     M.loc = loc
     local current = _currentVersion()
     local ok_nm, NetworkMgr = pcall(require, "ui/network/manager")
     if ok_nm and NetworkMgr and NetworkMgr.runWhenOnline then
         NetworkMgr:runWhenOnline(function()
-            M._doCheckForUpdates(current)
+            M._doCheckForUpdates(current, use_beta)
         end)
         return
     end
-    M._doCheckForUpdates(current)
+    M._doCheckForUpdates(current, use_beta)
 end
 
-function M.checkSilentForUpdates(loc)
+function M.checkSilentForUpdates(loc, use_beta)
     M.loc = loc
     local current = _currentVersion()
-    local release = _doFetch()
+    local release = _doFetch(use_beta)
     
     if release and not release.error then
         if _versionLessThan(current, release.version) then
