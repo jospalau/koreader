@@ -2529,6 +2529,15 @@ end
 
 -- ─────────────────────────────────────────────────────────────────────────────
 
+local DEBUG_VOCAB = false  -- flip to false to silence
+local dbg = require("dbg")
+local function dbg_vocab(fmt, ...)
+    if DEBUG_VOCAB then
+        dbg(string.format("[vocab-paint] " .. fmt, ...))
+    end
+end
+
+
 -- Returns the ascender ratio for the given font name.
 -- The ascender defines where the baseline sits within the line box.
 local function getFontAscenderRatio(font_name)
@@ -2546,15 +2555,24 @@ end
 
 -- Computes the y coordinate of the baseline for a given bounding box and font.
 local function getBaseline(box, font_name)
-    local ascender = box.h * getFontAscenderRatio(font_name)
-    return box.y + ascender
+    local ratio    = getFontAscenderRatio(font_name)
+    local ascender = box.h * ratio
+    local baseline = box.y + ascender
+    dbg_vocab("getBaseline: font=%s ratio=%.2f box={x=%s,y=%s,w=%s,h=%s} → baseline=%.1f",
+        font_name, ratio, box.x, box.y, box.w, box.h, baseline)
+    return baseline
 end
 
 -- Paints an underline at the baseline of each non-empty box.
 local function paintBaselines(bb, boxes, font_name)
-    for _, box in ipairs(boxes) do
-        if box.h ~= 0 then
+    dbg_vocab("paintBaselines: %d boxes, font=%s", #boxes, font_name)
+    for i, box in ipairs(boxes) do
+        dbg_vocab("  box[%d]: x=%s y=%s w=%s h=%s", i, box.x, box.y, box.w, box.h)
+        if box.h == 0 then
+            dbg_vocab("  box[%d]: SKIPPED — h is zero", i)
+        else
             local y_baseline = getBaseline(box, font_name)
+            dbg_vocab("  box[%d]: painting underline at y=%.1f", i, y_baseline)
             bb:paintRect(box.x, y_baseline, box.w, Size.line.thick, nil)
         end
     end
@@ -2573,7 +2591,12 @@ end
 --   right quarter → align to the right edge of the word
 --   centre        → centre over the word
 local function paintTranslationLabel(bb, box, translation, font_face, font_size, bottom_padding)
-    if not translation or translation == "" then return end
+    if not translation or translation == "" then
+        dbg_vocab("paintTranslationLabel: SKIPPED — translation is nil or empty")
+        return
+    end
+    dbg_vocab("paintTranslationLabel: text=%q font_size=%s box={x=%s,y=%s,w=%s,h=%s}",
+        translation, font_size, box.x, box.y, box.w, box.h)
 
     local label = FrameContainer:new{
         left_container:new{
@@ -2596,14 +2619,17 @@ local function paintTranslationLabel(bb, box, translation, font_face, font_size,
 
     if box.x < screen_w / 4 then
         label_x = box.x
+        dbg_vocab("  label alignment: LEFT edge (box.x=%s < screen_w/4=%s)", box.x, screen_w/4)
     elseif box.x > screen_w - screen_w / 4 then
         label_x = box.x + box.w - label_w
+        dbg_vocab("  label alignment: RIGHT edge (box.x=%s > %s)", box.x, screen_w - screen_w/4)
     else
         label_x = box.x + box.w / 2 - label_w / 2
+        dbg_vocab("  label alignment: CENTRE")
     end
 
-    -- Paint just above the line, not overlapping the text below
-    label_y = box.y + font_size / 2
+    local label_y = box.y + font_size / 2
+    dbg_vocab("  label_w=%s label_x=%s label_y=%s screen_w=%s", label_w, label_x, label_y, screen_w)
     label:paintTo(bb, label_x, label_y)
 end
 
@@ -2613,17 +2639,17 @@ end
 -- "have" → { "have", "Have", "HAVE" }
 -- Duplicates are removed (e.g. "I" would not produce "i" and "I" twice).
 local function wordVariants(word)
-    local lower = word:lower()
+    local lower      = word:lower()
     local capitalized = lower:gsub("^%l", string.upper)
-    local upper = word:upper()
-    local seen = {}
-    local variants = {}
+    local upper      = word:upper()
+    local seen, variants = {}, {}
     for _, v in ipairs({ lower, capitalized, upper }) do
         if not seen[v] then
             seen[v] = true
             table.insert(variants, v)
         end
     end
+    dbg_vocab("wordVariants(%q) → %s", word, table.concat(variants, ", "))
     return variants
 end
 
@@ -2748,10 +2774,16 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
         else
             local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true)
             if boxes then
-                -- Retrieve the visible text at the first box position.
+                -- Sample from the centre of the first box rather than its top-left corner.
+                -- getTextFromPositions() returns whichever word falls under the given point;
+                -- if we use (box.x, box.y) the point can land on the trailing edge of the
+                -- previous word (or the inter-word space), returning "have" when the box
+                -- actually belongs to "Antaup".
+                local mid_x = boxes[1].x + math.floor(boxes[1].w / 2)
+                local mid_y = boxes[1].y + math.floor(boxes[1].h / 2)
                 local word = self.ui.document._document:getTextFromPositions(
-                    boxes[1].x, boxes[1].y,
-                    boxes[1].x, boxes[1].y,
+                    mid_x, mid_y,
+                    mid_x, mid_y,
                     false, false
                 )
 
@@ -2759,9 +2791,19 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                 -- This handles cases where bounding boxes bleed into adjacent tags
                 -- (e.g. <em>, <b>) and the engine returns more text than expected.
                 word.text = word.text:match("[A-Za-zÁÉÍÓÚÜÑáéíóúüñ']+$") or word.text
-
+                word.text = word.text:match("^%s*(.-)%s*$")  -- trim espacios
+                word.text = word.text:match("[A-Za-zÁÉÍÓÚÜÑáéíóúüñ']+$") or word.text
                 local text_matches = word.text:upper() == item.text:upper()
 
+                dbg_vocab("check word: got=%q item=%q match=%s",
+                    word.text, item.text, tostring(text_matches))
+                if not text_matches then
+                    dbg_vocab("  MISMATCH — got bytes: %s",
+                        word.text:gsub(".", function(c) return string.format("%02X ", c:byte()) end))
+                    dbg_vocab("  MISMATCH — item bytes: %s",
+                        item.text:gsub(".", function(c) return string.format("%02X ", c:byte()) end))
+                    dbg_vocab("  MISMATCH — got=%q item=%q", word.text, item.text)
+                end
                 if text_matches then
                     -- Recompute boxes from precise positions now that we have pos1.
                     local precise_boxes
