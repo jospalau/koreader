@@ -589,7 +589,11 @@ UIManager:setDirty(self.widget, function() return "ui", self.someelement.dimen e
 function UIManager:setDirty(widget, refreshtype, refreshregion, refreshdither)
     -- local dump = require("dump")
     -- if refreshtype ~= nil and type(refreshtype) ~= "function" then
-    --     print("paso " .. refreshtype .. " " ..  debug.getinfo(1).name .. " " .. debug.getinfo(2).name .. " " .. debug.getinfo(3).name)
+    --     local function getname(level)
+    --         local info = debug.getinfo(level)
+    --         return (info and info.name) or "?"
+    --     end
+    --     print("paso " .. refreshtype .. " " .. getname(2) .. " " .. getname(3))
     --     print(dump(debug.getinfo(2)))
     --     print("----")
     -- elseif type(refreshtype) == "function" then

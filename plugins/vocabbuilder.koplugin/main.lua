@@ -566,7 +566,10 @@ function WordInfoDialog:init()
         end
     }
 
-    local buttons = self.update_callback and {{cancel_button, forgot_button, update_button}} or {{reset_button, remove_button}}
+    local buttons = self.update_callback
+    and {{cancel_button, forgot_button, update_button}, {remove_button}}
+    or {{reset_button, remove_button}}
+
     if self.vocabbuilder and self.vocabbuilder.item.last_due_time then
         table.insert(buttons, {{
             text = _("Undo study status"),
@@ -2138,6 +2141,13 @@ function VocabBuilder:onWordLookedUp(word, title, is_manual)
             forgot_callback = function()
                 DB:gotOrForgot(item, false)
                 DB:batchUpdateItems({ item })
+            end,
+            remove_callback = function()
+                DB:remove({word = item.word})
+                if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") and util.getFileNameSuffix(self.ui.document.file) == "epub" then
+                    self.ui.pagetextinfo:updateWordsVocabulary()
+                    UIManager:setDirty(nil, "ui")
+                end
             end,
         }
         UIManager:show(dialog)
