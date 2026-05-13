@@ -2058,141 +2058,6 @@ local function removeDupes(tab)
     return result
 end
 
-function PageTextInfo:updateWordsVocabulary()
-    if not ffiUtil.realpath(DataStorage:getSettingsDir() .. "/vocabulary_builder.sqlite3") then return end
-    local db_location = DataStorage:getSettingsDir() .. "/vocabulary_builder.sqlite3"
-    sql_stmt = "SELECT distinct(word) FROM vocabulary"
-    local conn = require("lua-ljsqlite3/init").open(db_location)
-    stmt = conn:prepare(sql_stmt)
-
-    self.words = {}
-    self.all_words = {}
-    while true do
-        local row = {}
-        if not stmt:step(row) then break end
-        local word = row[1]
-        if not word:find("%s+") then
-            self.all_words[word] = ""
-        end
-    end
-
-    -- Using regular expressions to get full words is very slow and then we have to remove the characters used in them
-    -- Searching text without regular expressions we won't get words, we will get the position in the dom (start and end)
-    -- for each of the places the text if found wether the full word or the text inside a word and we want full words to highlight them
-    -- When painting in the source readerview.lua, we get the boxes from the positions and using the boxes we can get the fulls words to highlight them
-    if self.all_words then
-        local res = self.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false)
-        if res and res.text then
-            -- print(res.pos0)
-            -- print(res.pos1)
-            local words_page = removeDupes(util.splitToWords2(res.text))
-            if words_page and self.all_words then
-                for i = 1, #words_page do
-                    local word_page = words_page[i] --:gsub("[^%w%s]+", "")
-                    local words = nil
-                    local hyphenated = false
-                    if i == 1 and self.all_words[word_page] then
-                        local cre = require("libs/libkoreader-cre")
-                        local hyphenation = cre.getHyphenationForWord(word_page)
-
-                        if hyphenation:find("-") then
-                            hyphenated = true
-                            words = findBestHyphenatedMatch(self.document, hyphenation)
-                        else
-                            words = self.document:findText(word_page, 1, false, true, -1, false, 1)
-                        end
-                    elseif self.all_words[word_page] then
-                        words = self.document:findText(word_page, 1, false, true, -1, false, 30)
-                    end
-                    if words then
-                        for j = 1, #words do
-                            local wordi = words[j]
-                            wordi.text = word_page
-                            -- First result of the first word of the page in case is hyphenated
-                            -- In this case we want always
-                            if hyphenated then
-                                wordi.hyphenated = true
-                            end
-
-                            local word = self.document:getTextFromXPointers(wordi.start, wordi["end"])
-                            -- Not using regular expressions
-                            -- print(word)
-                            -- print(wordi.start)
-                            -- if word:sub(word:len()) == " " then
-                            --     local pos = tonumber(wordi["end"]:sub(wordi["end"]:find("%.") + 1, wordi["end"]:len()))
-                            --     pos = pos - 1
-                            --     wordi["end"] = wordi["end"]:sub(1, wordi["end"]:find("%.") - 1) .. "." .. pos
-                            --     word = self.document:getTextFromXPointers(wordi.start, wordi["end"])
-                            -- end
-                            -- if word:sub(word:len()) == "." or
-                            --     word:sub(word:len()) == "," or
-                            --     word:sub(word:len()) == "!" or
-                            --     word:sub(word:len()) == "?" then
-                            --     local pos = tonumber(wordi["end"]:sub(wordi["end"]:find("%.") + 1, wordi["end"]:len()))
-                            --     pos = pos - 1
-                            --     wordi["end"] = wordi["end"]:sub(1, wordi["end"]:find("%.") - 1) .. "." .. pos
-                            -- end
-                            local page = self.document:getPageFromXPointer(wordi.start)
-                            if not self.words[page] then
-                                self.words[page] = {}
-                            end
-                            table.insert(self.words[page], wordi)
-                            local page2 = self.document:getPageFromXPointer(wordi["end"])
-                            if not self.words[page2] then
-                                self.words[page2] = {}
-                            end
-                            table.insert(self.words[page2], wordi)
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    -- if all_words then
-    --     all_words = all_words:sub(1, all_words:len() - 1)
-    --     local words = self.document:findAllText(all_words, true, 5, 300000, 0, false)
-    --     if words then
-    --         for i, wordi in ipairs(words) do
-    --             local page = self.document:getPageFromXPointer(wordi.start)
-    --             if not self.words[page] then
-    --                 self.words[page]={}
-    --             end
-    --             table.insert(self.words[page], wordi)
-    --             local page2 = self.document:getPageFromXPointer(wordi["end"])
-    --             if not self.words[page2] then
-    --                 self.words[page2]={}
-    --             end
-    --             table.insert(self.words[page2], wordi)
-    --         end
-    --     end
-    -- end
-
-    -- if self.all_words then
-    --     self.all_words = self.all_words:sub(1, self.all_words:len() - 1)
-    --     local words = self.document:findText(self.all_words, 1, false, true, -1, true, 100) -- Page not used, set -1
-    --     if words then
-    --         for i, wordi in ipairs(words) do
-    --             local page = self.document:getPageFromXPointer(wordi.start)
-    --             if not self.words[page] then
-    --                 self.words[page]={}
-    --             end
-    --             table.insert(self.words[page], wordi)
-    --             local page2 = self.document:getPageFromXPointer(wordi["end"])
-    --             if not self.words[page2] then
-    --                 self.words[page2]={}
-    --             end
-    --             table.insert(self.words[page2], wordi)
-    --         end
-    --     end
-    -- end
-    -- In the cre.cpp source findText() function, there is a call to doc->text_view->selectWords( words ); when looking for words
-    -- But when it finishes doesn't called doc->text_view->clearSelection(); like thefindAllText() function does
-    -- The result is that the words are highlighted by the CREngine
-    -- But only happens here when loading the document. It does not happen when turning pages
-    -- It should be done in the cre.cpp source but I do it here since I haven't found any other issue
-    self.ui.document:clearSelection()
-end
 function PageTextInfo:paintTo(bb, x, y)
 
     if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
@@ -2555,11 +2420,14 @@ function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
     return colorful
 end
 
-function extractDefinition(def)
+-- Extracts the shortest, cleanest translation from a dictionary definition.
+-- Tries each line in order, preferring short lines that look like translations
+-- (Spanish accents, semicolons, commas) and discarding headers and long prose.
+local function extractDefinition(def)
     if not def or def == "" then return "" end
 
-    -- Limpia etiquetas HTML y normaliza saltos de línea
-    def = def:gsub("%b<>", ""):gsub("[\r\n]+", "\n")
+    -- Strip HTML tags and normalize whitespace
+    def = def:gsub("%b<>", ""):gsub("[\r\n]+", "\n"):gsub("&nbsp;", " "):gsub("&[a-z]+;", "")
 
     local lines = {}
     for line in def:gmatch("[^\n]+") do
@@ -2569,59 +2437,286 @@ function extractDefinition(def)
         end
     end
 
-    -- Busca línea que parezca traducción (letras con acento, coma o punto y coma)
+    local function score(line)
+        -- Strip leading numbering and part-of-speech labels: "1. ", "adj. ", "v. "
+        local s = line:gsub("^%d+[%.%)%)]%s*", ""):gsub("^%a+[%.%)%)]%s*", "")
+        -- Too short or too long to be a useful inline gloss
+        if #s < 2 or #s > 60 then return nil end
+        -- Must contain at least one letter
+        if not s:match("%a") then return nil end
+        return s
+    end
+
+    -- First pass: prefer lines with Spanish diacritics, semicolons or commas
+    -- (strong signals that this is a translation, not an English-only definition)
     for _, line in ipairs(lines) do
-        -- Evita encabezados tipo "1. ", "adj.", etc.
-        local stripped = line:gsub("^%d+%.%s*", ""):gsub("^%a+%.%s*", "")
-        if #stripped > 2 and #stripped < 80 and
-           (stripped:match("[áéíóúñÑ]") or stripped:match("[a-zA-Z],") or stripped:match(";")) then
-            return stripped
+        local s = score(line)
+        if s and (s:match("[áéíóúüñÁÉÍÓÚÜÑ]") or s:match("[,;]")) then
+            return s
         end
     end
 
-    -- Si nada encaja, intenta devolver la primera línea que no sea encabezado
+    -- Second pass: accept any short line that looks like a word or phrase
     for _, line in ipairs(lines) do
-        local stripped = line:gsub("^%d+%.%s*", ""):gsub("^%a+%.%s*", "")
-        if #stripped > 2 and #stripped < 80 and stripped:match("%a") then
-            return stripped
-        end
+        local s = score(line)
+        if s then return s end
     end
 
-    -- Último recurso: la última línea o la definición entera
     return lines[#lines] or def
 end
 
-function getTranslation(self, word)
-    if self.translations[word] then
-        return self.translations[word]
+-- Truncates a translation to fit comfortably as an inline gloss.
+-- Cuts at the first separator (, ; () and trims to max_len characters.
+local function formatTranslation(text, max_len)
+    if not text or text == "" then return "" end
+    max_len = max_len or 50
+
+    -- Split on , or ; and take first 3 alternatives
+    local parts = {}
+    for part in text:gmatch("[^,;]+") do
+        local p = part:match("^%s*(.-)%s*$")
+        -- Skip parts that look like grammar labels: "vtr", "adj", etc.
+        if p and #p > 1 and not p:match("^%a%a?%a?%.?$") then
+            table.insert(parts, p)
+            if #parts >= 3 then break end
+        end
     end
 
-    local dictionaries = {}
+    local result = table.concat(parts, " / ")
+    if #result > max_len then
+        result = result:sub(1, max_len - 1) .. "…"
+    end
+    return result ~= "" and result or text
+end
 
-    table.insert(dictionaries, "WordReference_EN_ES")
-    table.insert(dictionaries, "Babylon English-Spanish")
+-- Queries the dictionary for a word and returns a short inline gloss.
+-- Tries each result in order until one yields a non-empty translation,
+-- so that if WordReference fails Babylon is used as fallback.
+local DICTIONARIES = { "WordReference_EN_ES", "Babylon English-Spanish" }
 
-    local results = self.ui.dictionary:startSdcv(word, dictionaries, true, true)
+function getTranslation(self, word)
+    -- Normalise to lowercase so "Have" and "have" share the same cache entry.
+    local key = word:lower()
+    if self.translations[key] then
+        return self.translations[key]
+    end
+
+    local results = self.ui.dictionary:startSdcv(key, DICTIONARIES, true, true)
+
+    -- If the preferred dictionaries have no entry for this word, fall back to
+    -- whatever dictionaries are installed.
+    if not results or #results == 0 then
+        results = self.ui.dictionary:startSdcv(key, nil, true, true)
+    end
+
     local translation = ""
 
-    if results and results[1] and results[1].definition then
-        local dict_name = results[1].dictionary
-        local def = results[1].definition
-        translation = extractDefinition(def)
+    if results then
+        for _, result in ipairs(results) do
+            if result.definition then
+                local candidate = extractDefinition(result.definition)
+                if candidate and candidate ~= "" then
+                    translation = formatTranslation(candidate)
+                    break
+                end
+            end
+        end
     end
 
-    self.translations[word] = translation
+    self.translations[key] = translation
     return translation
 end
 
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- Returns the ascender ratio for the given font name.
+-- The ascender defines where the baseline sits within the line box.
+local function getFontAscenderRatio(font_name)
+    if font_name:find(".*UglyQua.*") or font_name:find(".*Literata.*")
+        or font_name:find(".*BitterPro.*") or font_name:find(".*ChartereBook.*") then
+        return 0.90
+    elseif font_name:find(".*Chare.*") then
+        return 0.72
+    elseif font_name:find(".*Vollkorn.*") or font_name:find(".*Garamond.*")
+        or font_name:find(".*APHont.*") or font_name:find(".*Thesis.*") then
+        return 0.68
+    end
+    return 0.80
+end
+
+-- Computes the y coordinate of the baseline for a given bounding box and font.
+local function getBaseline(box, font_name)
+    local ascender = box.h * getFontAscenderRatio(font_name)
+    return box.y + ascender
+end
+
+-- Paints an underline at the baseline of each non-empty box.
+local function paintBaselines(bb, boxes, font_name)
+    for _, box in ipairs(boxes) do
+        if box.h ~= 0 then
+            local y_baseline = getBaseline(box, font_name)
+            bb:paintRect(box.x, y_baseline, box.w, Size.line.thick, nil)
+        end
+    end
+end
+
+-- Paints a floating translation label above a bounding box.
+-- Horizontally positions the label depending on where the box falls on screen:
+--   left quarter  → align label to the left edge of the word
+--   right quarter → align label to the right edge of the word
+--   centre        → centre label over the word
+-- Paints a floating translation label above a bounding box.
+-- The label has a light-gray background and slightly dimmed text so it reads
+-- as an annotation rather than body text.
+-- Horizontal alignment:
+--   left quarter  → align to the left edge of the word
+--   right quarter → align to the right edge of the word
+--   centre        → centre over the word
+local function paintTranslationLabel(bb, box, translation, font_face, font_size, bottom_padding)
+    if not translation or translation == "" then return end
+
+    local label = FrameContainer:new{
+        left_container:new{
+            dimen = Geom:new(),
+            TextWidget:new{
+                text    = translation,
+                face    = font_face,
+                fgcolor = Blitbuffer.COLOR_DARK_GRAY,
+            },
+        },
+        background     = Blitbuffer.COLOR_LIGHT_GRAY,
+        bordersize     = 0,
+        padding        = 1,
+        padding_bottom = bottom_padding,
+    }
+
+    local label_w  = label[1][1]:getSize().w
+    local screen_w = Screen:getWidth()
+    local label_x
+
+    if box.x < screen_w / 4 then
+        label_x = box.x
+    elseif box.x > screen_w - screen_w / 4 then
+        label_x = box.x + box.w - label_w
+    else
+        label_x = box.x + box.w / 2 - label_w / 2
+    end
+
+    -- Paint just above the line, not overlapping the text below
+    label_y = box.y + font_size / 2
+    label:paintTo(bb, label_x, label_y)
+end
+
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- Returns the capitalisation variants to search for a given vocabulary word.
+-- "have" → { "have", "Have", "HAVE" }
+-- Duplicates are removed (e.g. "I" would not produce "i" and "I" twice).
+local function wordVariants(word)
+    local lower = word:lower()
+    local capitalized = lower:gsub("^%l", string.upper)
+    local upper = word:upper()
+    local seen = {}
+    local variants = {}
+    for _, v in ipairs({ lower, capitalized, upper }) do
+        if not seen[v] then
+            seen[v] = true
+            table.insert(variants, v)
+        end
+    end
+    return variants
+end
+
+-- ─────────────────────────────────────────────────────────────────────────────
+
+function PageTextInfo:updateWordsVocabulary()
+    if not ffiUtil.realpath(DataStorage:getSettingsDir() .. "/vocabulary_builder.sqlite3") then return end
+    local db_location = DataStorage:getSettingsDir() .. "/vocabulary_builder.sqlite3"
+    local conn = require("lua-ljsqlite3/init").open(db_location)
+    local stmt = conn:prepare("SELECT DISTINCT LOWER(word) FROM vocabulary")
+    self.words    = {}
+    self.all_words = {}
+    while true do
+        local row = {}
+        if not stmt:step(row) then break end
+        local word = row[1]
+        if not word:find("%s+") then
+            -- Index every capitalisation variant so that "Have" at the start
+            -- of a sentence still matches the vocabulary entry "have".
+            for _, variant in ipairs(wordVariants(word)) do
+                self.all_words[variant] = word  -- value = canonical DB form
+            end
+        end
+    end
+    conn:close()
+
+    if not self.all_words then return end
+
+    local res = self.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false)
+    if not (res and res.text) then return end
+
+    local words_page = removeDupes(util.splitToWords2(res.text))
+    if not words_page then return end
+
+    -- Track which canonical words have already been searched on this page.
+    -- Without this, "have", "Have" and "HAVE" would each trigger a separate
+    -- findText() call and produce duplicate entries in self.words.
+    local seen_canonical = {}
+
+    for i = 1, #words_page do
+        local word_page = words_page[i]
+        local canonical = self.all_words[word_page]
+
+        if canonical and not seen_canonical[canonical] then
+            seen_canonical[canonical] = true
+
+            local words      = nil
+            local hyphenated = false
+
+            if i == 1 then
+                -- First word on the page may be hyphenated; handle separately.
+                local cre = require("libs/libkoreader-cre")
+                local hyphenation = cre.getHyphenationForWord(canonical)
+                if hyphenation:find("-") then
+                    hyphenated = true
+                    words = findBestHyphenatedMatch(self.document, hyphenation)
+                else
+                    words = self.document:findText(canonical, 1, false, true, -1, false, 1)
+                end
+            else
+                -- case_insensitive = true: finds "have", "Have" and "HAVE" in one call.
+                words = self.document:findText(canonical, 1, false, true, -1, false, 30)
+            end
+
+            if words then
+                for j = 1, #words do
+                    local wordi = words[j]
+                    -- Store the canonical form; drawXPointerVocabulary compares
+                    -- with :upper() so capitalisation differences are handled there.
+                    wordi.text = canonical
+                    if hyphenated then
+                        wordi.hyphenated = true
+                    end
+                    local page = self.document:getPageFromXPointer(wordi.start)
+                    if not self.words[page] then self.words[page] = {} end
+                    table.insert(self.words[page], wordi)
+                    local page2 = self.document:getPageFromXPointer(wordi["end"])
+                    if page2 ~= page then
+                        if not self.words[page2] then self.words[page2] = {} end
+                        table.insert(self.words[page2], wordi)
+                    end
+                end
+            end
+        end
+    end
+
+    self.ui.document:clearSelection()
+end
+
+-- ─────────────────────────────────────────────────────────────────────────────
+
 function PageTextInfo:drawXPointerVocabulary(bb, x, y)
-    -- Getting screen boxes is done for each tap on screen (changing pages,
-    -- showing menu...). We might want to cache these boxes per page (and
-    -- clear that cache when page layout change or highlights are added
-    -- or removed).
-    -- Even in page mode, it's safer to use pos and ui.dimen.h
-    -- than pages' xpointers pos, even if ui.dimen.h is a bit
-    -- larger than pages' heights
+    -- Determine the vertical extent of the current view in document positions.
     local cur_view_top = self.document:getCurrentPos()
     local cur_view_bottom
     if self.view_mode == "page" and self.document:getVisiblePageCount() > 1 then
@@ -2629,204 +2724,82 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
     else
         cur_view_bottom = cur_view_top + self.ui.dimen.h
     end
-    local colorful
---    if true then
---        local dump = require("dump")
---        UIManager:show( require("ui/widget/textviewer"):new{text = dump(self.ui.notes)})
---    end
---
-    if self.words[self.ui.view.state.page] then
-        for _, item in ipairs(self.words[self.ui.view.state.page]) do
-            -- local more_than_one_word = false
-            -- document:getScreenBoxesFromPositions() is expensive, so we
-            -- first check if this item is on current page
-            local start_pos = self.document:getPosFromXPointer(item.start)
-            --if start_pos > cur_view_bottom then return colorful end -- this and all next highlights are after the current page
-            local end_pos = self.document:getPosFromXPointer(item["end"])
-            if end_pos >= cur_view_top then
-                -- If the word to search starts after a i or em (also an a) tag
-                -- ...it had actually <i class="calibre4">grown</i> from the tree;...</p>
-                -- Removing the </p> or putting the space inside i fixes it
-                -- sometimes it gets also the previous word. It happens depending on the typography options applied
-                -- It is not common in any case
-                -- Passing false to getWordFromPosition() does not work
-                -- In these cases, we detect if there is more than word coming, compare the last word with the item one
-                -- and if it is the same, set set more_than_one_word and it will be highlighted propertly
-                -- (the boxes retrieved are correct)
 
-                -- For some of these cases there are more than one box, we pick up the second one and it works
-                -- But for some other cases still does not work
-                -- The box retrieved is valid always
-                -- Finally we use getTextFromPositions()
-                -- If a case is missed, we can pass boxes[1].x + 1 as first argument
+    local page_words = self.words[self.ui.view.state.page]
+    if not page_words then return end
 
-                -- We want to ensure the visible text matches the target word exactly
-                -- This avoids false positives where the word is merely contained within a larger one (e.g., "a" in "action").
-                local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true)
-                if boxes then
-                    local Device = require("device")
-                    local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
-                    local font_size_px = (display_dpi * self.ui.document.configurable.font_size) / 72
-                    local current_font = self.ui.document:getFontFace():gsub(" ","")
-                    local face = Font:getFace(current_font .. "-Regular", font_size_px)
-                    -- local factor = (current_font:find(".*Garamond.*") or current_font:find(".*APHont.*") or current_font:find(".*Spectral.*")) and 0.40 or 0.25
-                    -- local line_spacing_pct = self.ui.font.configurable.line_spacing * (1/100)
-                    -- VSPACE = math.ceil(font_size_px * factor * line_spacing_pct)
-                    -- local dump = require("dump")
-                    -- print(dump(boxes))
-                    local word = self.ui.document._document:getTextFromPositions(boxes[1].x, boxes[1].y, boxes[1].x, boxes[1].y, false, false)
+    -- Compute font metrics once, outside the per-word loop.
+    local Device       = require("device")
+    local display_dpi  = Device:getDeviceScreenDPI() or Screen:getDPI()
+    local font_size_px = (display_dpi * self.ui.document.configurable.font_size) / 72
+    local current_font = self.ui.document:getFontFace():gsub(" ", "")
 
-                    -- Sometimes the bounding boxes returned for the text are not precise
-                    -- This usually happens when the word is wrapped in tags like <em>, <b>, etc.
-                    -- In such cases, getTextFromPositions() may return surrounding text as well
-                    -- Here, we discard the extra text and rely on item.start to retrieve accurate boxes
-                    -- Example: boxes = self.document:getScreenBoxesFromPositions(item.start, word.pos1, true)
-                    -- print(word.text)
-                    -- Extract only the final word, ignoring any leading punctuation or quote characters.
-                    word.text = word.text:match("[A-Za-zÁÉÍÓÚÜÑáéíóúüñ']+$") or word.text
-                    --word.text = word.text:match(".*[%p%s](%w+)%s*$") or word.text
-                    -- if #boxes >1 then
-                    --     word = self.document:getWordFromPosition(boxes[2], true)
-                    -- else
-                    --     word = self.document:getWordFromPosition(boxes[1], true)
-                    -- end
-                    -- if word.word:find(" ") then
-                    --     -- print("paso   " .. item.text ..  "-" .. word.word)
-                    --     local word = word.word:sub(word.word:find(" ") + 1, word.word:len())
-                    --     if item.text:upper() == word:upper() then
-                    --         more_than_one_word = true
-                    --     end
-                    -- end
-                    if (item.hyphenated and word.text:upper() == item.text:upper()) or word.text:upper() == item.text:upper() then
-                        if item.hyphenated and word.text:upper() == item.text:upper() then
-                            boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
-                        else
-                            boxes = self.document:getScreenBoxesFromPositions(item.start, word.pos1, true)
-                        end
-                        if boxes then
-                            for _, box in ipairs(boxes) do
-                                if box.h ~= 0 then
-                                    if self.settings:isTrue("show_definitions") then
-                                        local dictionaries = {}
-                                        if self.settings:readSetting("dictionary") then
-                                            table.insert(dictionaries, self.settings:readSetting("dictionary"))
-                                        else
-                                            table.insert(dictionaries, "Babylon English-Spanish")
-                                        end
-                                        local translation = getTranslation(self, word.text)
-                                        local translation_font_size = self.ui.document.configurable.font_size * 0.60
-                                        local test = FrameContainer:new{
-                                            left_container:new{
-                                                dimen = Geom:new(),
-                                                TextWidget:new{
-                                                    text =  translation,
-                                                    -- face = Font:getFace(self.ui.document:getFontFace():gsub(" ",""), self.ui.document:getFontSize() * 0.75),
-                                                    -- face = Font:getFace("myfont4"),
-                                                    face = Font:getFace(self.ui.document:getFontFace():gsub(" ","") .. "-Regular", translation_font_size, 0, true), -- Same font reduced 40%
-                                                    -- fgcolor = Blitbuffer.COLOR_GRAY,
-                                                },
-                                            },
-                                            -- background = Blitbuffer.COLOR_WHITE,
-                                            bordersize = 0,
-                                            padding = 0,
-                                            padding_bottom = self.bottom_padding,
-                                        }
-                                        if box.x < Screen:getWidth()/4 then
-                                            test:paintTo(bb, box.x , box.y + translation_font_size/2)
-                                        elseif box.x > Screen:getWidth() - Screen:getWidth()/4 then
-                                            test:paintTo(bb, box.x + box.w - test[1][1]:getSize().w , box.y + translation_font_size/2)
-                                        else
-                                            test:paintTo(bb, box.x + box.w/2 - test[1][1]:getSize().w/2 , box.y + translation_font_size/2)
-                                        end
-                                    end
-                                    -- local RenderText = require("ui/rendertext")
-                                    -- local glyph = RenderText:getGlyph(face, 120)
-                                    -- print("paso " ..  glyph.xheight)
-                                    -- print("paso " ..  glyph.h)
-                                    -- print("paso " ..  face.ftsize:getCapHeight())
-                                    -- print("  ")
-                                    -- local xrect = box:copy()
-                                    -- if self.ui.document:getFontFace():gsub(" ",""):find(".*Garamond.*")
-                                    -- or self.ui.document:getFontFace():gsub(" ",""):find(".*APHont.*")
-                                    -- or self.ui.document:getFontFace():gsub(" ",""):find(".*Vollkorn.*") then
-                                    --     bb:paintRect(xrect.x, xrect.y + math.floor(xrect.h/2) + 1 + face.ftsize:getCapHeight()/2, xrect.w, Size.line.thick, nil)
-                                    -- else
-                                    --     local face_height, face_ascender = face.ftsize:getHeightAndAscender()
-                                    --     local line_spacing_pct = self.ui.font.configurable.line_spacing * (1/100)
-                                    --     VSPACE = math.ceil(font_size_px * (face_ascender/100) * line_spacing_pct)
-                                    --     local xrect = box:copy()
-                                    --     xrect.y = xrect.y - VSPACE
-                                    --     self.ui.view:drawHighlightRect(bb, x, y, xrect, "underscore", nil, false)
-                                    --     -- self.ui.view:drawHighlightRect(bb, x, y, xrect, "lighten", Blitbuffer.COLOR_LIGHT_GRAY, false)
-                                    -- end
-                                    -- local face_height, face_ascender = face.ftsize:getHeightAndAscender()
-                                    local xrect = box:copy()
-                                    -- xrect.y = xrect.y - VSPACE
-                                    -- self.ui.view:drawHighlightRect(bb, x, y, xrect, "underscore", nil, false)
-                                    -- self.ui.view:drawHighlightRect(bb, x, y, xrect, "lighten", Blitbuffer.COLOR_LIGHT_GRAY, false)
-                                    -- bb:paintRect(xrect.x, xrect.y + xrect.h - 1, xrect.w, Size.line.thick, nil)
-                                    local line_h = xrect.h  -- Total height of the text line rectangle
+    local show_defs         = self.settings:isTrue("show_definitions")
+    local translation_size  = self.ui.document.configurable.font_size * 0.60
+    local translation_face  = Font:getFace(current_font .. "-Regular", translation_size, 0, true)
 
-                                    -- Estimate typographic metrics as proportions of the line height. In most Latin-script fonts:
-                                    -- The visible tops of tall letters (l, h, b) typically reach ~70–75% of the line height,
-                                    -- while the font's ascender metric (which defines the top of the line box) is usually 80–90%.
-                                    -- The descender (bottom of g, y, p) accounts for ~20–30%
-                                    -- The baseline (where most letters sit) is between those two zones
-                                    local ascender  = line_h * 0.80     -- Height from top of line to baseline
-                                    local x_height  = line_h * 0.48     -- Height from baseline to top of lowercase letters (e.g. "x")
-                                    local descender = line_h * 0.26     -- Depth below the baseline for letters like "g", "p", "y"
+    for _, item in ipairs(page_words) do
+        -- Cheap position check before the expensive getScreenBoxesFromPositions().
+        local start_pos = self.document:getPosFromXPointer(item.start)
+        local end_pos   = self.document:getPosFromXPointer(item["end"])
 
-                                    if current_font:find(".*UglyQua.*") or current_font:find(".*Literata.*")
-                                        or current_font:find(".*BitterPro.*") or current_font:find(".*ChartereBook.*") then
-                                        ascender  = line_h * 0.90       -- baseline slightly higher
-                                    elseif current_font:find(".*Chare.*") then
-                                        ascender  = line_h * 0.72       -- baseline slightly lower
-                                    elseif current_font:find(".*Vollkorn.*") or current_font:find(".*Garamond.*")
-                                        or current_font:find(".*APHont.*") or current_font:find(".*Thesis.*") then
-                                        ascender  = line_h * 0.68       -- baseline slightly more lower
-                                    end
-                                    -- Compute y-coordinates of typographic reference lines
-                                    local y_baseline = xrect.y + ascender          -- Baseline position relative to line top
-                                    local y_xheight  = y_baseline - x_height       -- x-height line above baseline
-                                    local y_desc     = y_baseline + descender      -- Bottom of descenders below baseline
+        if end_pos < cur_view_top then
+            -- Word is above the viewport; skip.
+        else
+            local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true)
+            if boxes then
+                -- Retrieve the visible text at the first box position.
+                local word = self.ui.document._document:getTextFromPositions(
+                    boxes[1].x, boxes[1].y,
+                    boxes[1].x, boxes[1].y,
+                    false, false
+                )
 
-                                    -- bb:paintRect(xrect.x, y_xheight, xrect.w, Size.line.thick, nil)    -- x-height
-                                    bb:paintRect(xrect.x, y_baseline, xrect.w, Size.line.thick, nil)   -- baseline
-                                    -- bb:paintRect(xrect.x, y_desc, xrect.w, Size.line.thick, nil)       -- descender
+                -- Strip leading punctuation / quotes; keep only the trailing word.
+                -- This handles cases where bounding boxes bleed into adjacent tags
+                -- (e.g. <em>, <b>) and the engine returns more text than expected.
+                word.text = word.text:match("[A-Za-zÁÉÍÓÚÜÑáéíóúüñ']+$") or word.text
+
+                local text_matches = word.text:upper() == item.text:upper()
+
+                if text_matches then
+                    -- Recompute boxes from precise positions now that we have pos1.
+                    local precise_boxes
+                    if item.hyphenated then
+                        precise_boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
+                    else
+                        precise_boxes = self.document:getScreenBoxesFromPositions(item.start, word.pos1, true)
+                    end
+
+                    if precise_boxes then
+                        for _, box in ipairs(precise_boxes) do
+                            if box.h ~= 0 then
+                                -- Optionally render inline translation above the word.
+                                if show_defs then
+                                    local translation = getTranslation(self, word.text)
+                                    paintTranslationLabel(
+                                        bb, box,
+                                        translation, translation_face,
+                                        translation_size,
+                                        self.bottom_padding
+                                    )
                                 end
-                            end
-                        end
-                    elseif item.hyphenated then -- or more_than_one_word then
-                        if boxes then
-                            for _, box in ipairs(boxes) do
-                                if box.h ~= 0 then
-                                    local xrect = box:copy()
-                                    -- xrect.y = xrect.y - VSPACE
-                                    -- self.ui.view:drawHighlightRect(bb, x, y, xrect, "underscore", nil, false)
-                                    -- xrect.y = xrect.y - VSPACE
-                                    -- self.ui.view:drawHighlightRect(bb, x, y, xrect, "underscore", nil, false)
-                                    local line_h = xrect.h
-                                    local ascender  = line_h * 0.80
-                                    local y_baseline = xrect.y + ascender
-                                    if current_font:find(".*UglyQua.*") or current_font:find(".*Literata.*")
-                                        or current_font:find(".*BitterPro.*") or current_font:find(".*ChartereBook.*") then
-                                        ascender  = line_h * 0.90       -- baseline slightly higher
-                                    elseif current_font:find(".*Chare.*") then
-                                        ascender  = line_h * 0.72       -- baseline slightly lower
-                                    elseif current_font:find(".*Vollkorn.*") or current_font:find(".*Garamond.*")
-                                        or current_font:find(".*APHont.*") or current_font:find(".*Thesis.*") then
-                                        ascender  = line_h * 0.68       -- baseline slightly more lower
-                                    end
-                                    bb:paintRect(xrect.x, y_baseline, xrect.w, Size.line.thick, nil)
-                                end
+
+                                -- Draw baseline underline.
+                                local y_baseline = getBaseline(box, current_font)
+                                bb:paintRect(box.x, y_baseline, box.w, Size.line.thick, nil)
                             end
                         end
                     end
+
+                elseif item.hyphenated then
+                    -- Text didn't match but the item is hyphenated: still underline
+                    -- using the original (less precise) boxes.
+                    paintBaselines(bb, boxes, current_font)
                 end
             end
         end
     end
-    return colorful
 end
 
 -- Moved from readerui.lua. It won't be used since I handle double taps events in this plugin
