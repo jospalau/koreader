@@ -906,15 +906,73 @@ function MosaicMenuItem:update()
                         border_adjustment = 2 * Size.border.thin
                     end
                 -- end
-                local all_metadata_text = string.format("%s %s %s %s", words, pubdate, grvotes, grrating)
-                local directory = self:getDirectoryTextWidget({ w = image_size.w - border_adjustment, h = image_size.h }, all_metadata_text)
-                local dir_size = directory:getSize()
-                local container_size = {
-                    w = dir_size.w,
-                    h = dir_size.h,
-                }
 
-                local container = CenterContainer
+
+                local function makeTag(text, font_size)
+                    if not text or text == "" then
+                        return VerticalSpan:new{ width = Screen:scaleBySize(1) }
+                    end
+                    return TextWidget:new{
+                        text = text,
+                        face = Font:getFace("cfont", font_size),
+                        fgcolor = Blitbuffer.COLOR_WHITE,
+                        padding = 0,
+                    }
+                end
+
+                local text_h = Screen:scaleBySize(14) -- altura real aproximada de TextWidget con font 11
+                local num_lines = 0
+                if words ~= "N/A" then num_lines = num_lines + 1 end
+                if pubdate ~= "N/A" then num_lines = num_lines + 1 end
+                if grrating ~= "N/A" then num_lines = num_lines + 1 end
+
+                local target_h = math.floor(image_size.h * 0.5)
+                local rows_h = num_lines * text_h
+                local padding_h = math.max(0, target_h - rows_h)
+
+            local font_size = math.max(8, math.floor(image_size.h * 0.03))
+            local line_h = font_size + Screen:scaleBySize(4)
+            local pad = Screen:scaleBySize(4)
+
+            local info_rows = VerticalGroup:new{ align = "center" }
+            local num_lines = 0
+            if words ~= "N/A" then
+                table.insert(info_rows, makeTag("W: " .. words, font_size))
+                num_lines = num_lines + 1
+            end
+            if pubdate ~= "N/A" then
+                table.insert(info_rows, makeTag("Y: " .. pubdate, font_size))
+                num_lines = num_lines + 1
+            end
+            if grrating ~= "N/A" then
+                table.insert(info_rows, makeTag("★ " .. grrating .. " (" .. grvotes .. ")", font_size))
+                num_lines = num_lines + 1
+            end
+
+            -- alto exacto al contenido
+            local overlay_h = (num_lines * line_h) + (pad * 2)
+            local overlay_y = image_size.h - overlay_h
+            local overlay_w = math.min(image_size.w, max_img_w)
+
+            local info_overlay = OverlapGroup:new{
+                dimen = Geom:new{ w = overlay_w, h = image_size.h },
+                AlphaContainer:new{
+                    alpha = 0.65,
+                    overlap_offset = { 0, overlay_y },
+                    FrameContainer:new{
+                        margin = 0,
+                        padding = pad,
+                        bordersize = 0,
+                        background = Blitbuffer.COLOR_BLACK,
+                        dimen = Geom:new{ w = overlay_w, h = overlay_h },
+                        CenterContainer:new{
+                            dimen = Geom:new{ w = overlay_w - pad*2, h = overlay_h - pad*2 },
+                            info_rows,
+                        },
+                    },
+                },
+            }
+
                 widget = CenterContainer:new{
                     dimen = dimen,
                     FrameContainer:new{
@@ -925,84 +983,14 @@ function MosaicMenuItem:update()
                         bordersize = border_size,
                         dim = self.file_deleted,
                         color = self.file_deleted and Blitbuffer.COLOR_DARK_GRAY or nil,
-
-                        -- OverlapGroup para solapar imagen y texto
                         VerticalGroup:new{
-                            OverlapGroup:new {
-                                dimen = { w = image_size.w, h = image_size.h},
+                            OverlapGroup:new{
+                                dimen = { w = image_size.w, h = image_size.h },
                                 image,
-                                container:new {
-                                    dimen = { w = image_size.w, h = image_size.h},
-                                    FrameContainer:new {
-                                        margin = 0,
-                                        padding = 0,
-                                        bordersize = (self.pagetextinfo and self.pagetextinfo.settings:isTrue("draw_borders_mosaic_overlays")) and Size.border.thin or 0,
-                                        -- bordersize = self.pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") and Size.border.thin or 0,
-                                        AlphaContainer:new {
-                                            alpha = 0.6,
-                                            -- VerticalGroup:new{
-                                                container:new {
-                                                    dimen = container_size,
-                                                    directory,
-                                                -- },
-                                                -- -- HorizontalSpan:new({ width = 2 }),
-                                                -- LeftContainer:new {
-                                                --     dimen = { w = sizepd.w, h = sizepd.h },
-                                                --     TextWidget:new {
-                                                --         text = pubdate,
-                                                --         face = Font:getFace("cfont", 12),
-                                                --         -- fgcolor = Blitbuffer.COLOR_WHITE,
-                                                --     },
-                                                -- },
-                                                -- LeftContainer:new {
-                                                --     dimen = { w = sizegrv.w, h = sizegrv.h },
-                                                --     TextWidget:new {
-                                                --         text = grvotes,
-                                                --         face = Font:getFace("cfont", 12),
-                                                --         -- fgcolor = Blitbuffer.COLOR_WHITE,
-                                                --     },
-                                                -- },
-                                                -- -- HorizontalSpan:new({ width = 2 }),
-                                                -- LeftContainer:new {
-                                                --     dimen = { w = sizegrr.w, h = sizegrr.h },
-                                                --     TextWidget:new {
-                                                --         text = grrating,
-                                                --         face = Font:getFace("cfont", 12),
-                                                --         -- fgcolor = Blitbuffer.COLOR_WHITE,
-                                                --     },
-                                                -- },
-                                            },
-                                        },
-                                    },
-                                },
-                            }
-                            -- BottomContainer:new {
-                            --     dimen = { w = image_size.w, h = image_size.h },
-                            --     AlphaContainer:new {
-                            --         alpha = 0.7,
-                            --         VerticalGroup:new{
-                            --             LeftContainer:new {
-                            --                 dimen = { w = sizegrv.w, h = sizegrv.h },
-                            --                 TextWidget:new {
-                            --                     text = grvotes,
-                            --                     face = Font:getFace("cfont", 12),
-                            --                     -- fgcolor = Blitbuffer.COLOR_WHITE,
-                            --                 },
-                            --             },
-                            --             -- HorizontalSpan:new({ width = 2 }),
-                            --             LeftContainer:new {
-                            --                 dimen = { w = sizegrr.w, h = sizegrr.h },
-                            --                 TextWidget:new {
-                            --                     text = grrating,
-                            --                     face = Font:getFace("cfont", 12),
-                            --                     -- fgcolor = Blitbuffer.COLOR_WHITE,
-                            --                 },
-                            --             },
-                            --         },
-                            --     },
-                            -- },
+                                info_overlay,
+                            },
                         },
-                    }
+                    },
                 }
                 -- Let menu know it has some item with images
                 self.menu._has_cover_images = true
