@@ -2142,13 +2142,7 @@ function VocabBuilder:onWordLookedUp(word, title, is_manual)
                 DB:gotOrForgot(item, false)
                 DB:batchUpdateItems({ item })
             end,
-            remove_callback = function()
-                DB:remove({word = item.word})
-                if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") and util.getFileNameSuffix(self.ui.document.file) == "epub" then
-                    self.ui.pagetextinfo:updateWordsVocabulary()
-                    UIManager:setDirty(nil, "ui")
-                end
-            end,
+            remove_callback = remove,
         }
         UIManager:show(dialog)
     else
