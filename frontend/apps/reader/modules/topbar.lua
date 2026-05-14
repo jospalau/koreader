@@ -1423,55 +1423,58 @@ function TopBar:toggleBar(light_on)
         local user_duration_format = "modern"
         local session_time = datetime.secondsToClockDuration(user_duration_format, os.time() - self.start_session_time, false)
 
-        local duration_raw =  math.floor((os.time() - self.start_session_time))
+        local function toHoursOrDays(seconds)
+            if seconds >= 86400 then
+                return string.format("%.1fd", seconds / 86400)
+            elseif seconds >= 3600 then
+                return string.format("%.1fh", seconds / 3600)
+            else
+                return string.format("%.0fm", seconds / 60)
+            end
+        end
+
+        local duration_raw = math.floor((os.time() - self.start_session_time))
         if self.ui.statistics and self.ui.statistics._total_words then
-            self.wpm_session = math.floor(self.ui.statistics._total_words/duration_raw)
+            self.wpm_session = math.floor(self.ui.statistics._total_words / duration_raw)
         end
         self.wpm_text:setText(self.wpm_session .. "wpm")
 
-        local read_today = self.initial_read_today + (os.time() - self.start_session_time)
-        read_today = read_today > 86400 and math.floor(read_today/60/60/24 * 100)/100 .. "d" or datetime.secondsToClockDuration(user_duration_format, read_today, false)
+        local read_today_s  = self.initial_read_today + (os.time() - self.start_session_time)
+        local read_month_s  = self.initial_read_month + (os.time() - self.start_session_time)
+        local read_lmonth_s = self.initial_read_last_month
+        local read_year_s   = self.initial_read_year + (os.time() - self.start_session_time)
+        local read_book_s   = self.initial_total_time_book + (os.time() - self.start_session_time)
 
-        local read_month = self.initial_read_month + (os.time() - self.start_session_time)
-        read_month = read_month > 86400 and math.floor(read_month/60/60/24 * 100)/100 .. "d" or datetime.secondsToClockDuration(user_duration_format, read_month, false)
-
-        local read_last_month = self.initial_read_last_month + (os.time() - self.start_session_time)
-        read_last_month = read_last_month > 86400 and math.floor(read_last_month/60/60/24 * 100)/100 .. "d" or datetime.secondsToClockDuration(user_duration_format, read_last_month, false)
-
-        local read_year = self.initial_read_year + (os.time() - self.start_session_time)
-        read_year = read_year > 86400 and math.floor(read_year/60/60/24 * 100)/100 .. "d" or datetime.secondsToClockDuration(user_duration_format, read_year, false)
-
-        local read_book = self.initial_total_time_book + (os.time() - self.start_session_time)
-        read_book = read_book > 86400 and math.floor(read_book/60/60/24 * 100)/100 .. "d" or datetime.secondsToClockDuration(user_duration_format, read_book, false)
-
+        local read_today      = toHoursOrDays(read_today_s)
+        local read_month      = toHoursOrDays(read_month_s)
+        local read_last_month = toHoursOrDays(read_lmonth_s)
+        local read_year       = toHoursOrDays(read_year_s)
+        local read_book       = toHoursOrDays(read_book_s)
 
         self.session_time_text:setText(datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")))
 
-
         if self.ui.pagemap:wantsPageLabels() then
-           self.progress_book_text:setText(("%d de %d"):format(self.ui.pagemap:getCurrentPageLabel(true), self.ui.pagemap:getLastPageLabel(true)))
-           self.current_page_text:setText(("%d"):format(self.ui.pagemap:getCurrentPageLabel(true)))
+            self.progress_book_text:setText(("%d de %d"):format(self.ui.pagemap:getCurrentPageLabel(true), self.ui.pagemap:getLastPageLabel(true)))
+            self.current_page_text:setText(("%d"):format(self.ui.pagemap:getCurrentPageLabel(true)))
         else
-           self.progress_book_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
-           self.current_page_text:setText(("%d"):format(self.view.footer.pageno))
+            self.progress_book_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
+            self.current_page_text:setText(("%d"):format(self.view.footer.pageno))
         end
 
         local init_page = 0
         local pages_session = 0
+        local sep = "·"
+
         if self.ui.pagemap:wantsPageLabels() then
             init_page = self.init_page
             pages_session = self.ui.pagemap:getCurrentPageLabel(true) - init_page
-            -- self.times_text:setText("RTS: " .. session_time ..  "(" .. pages_session .. "p), RT: " .. read_today .. ", RTM: " .. read_month .. ", RLM: " .. read_last_month .. ", RTY: " .. read_year)
-            -- self.times_text_text = "RTS: " .. session_time ..  "(" .. pages_session .. "p), RT: " .. read_today .. ", RTM: " .. read_month .. ", RLM: " .. read_last_month .. ", RTY: " .. read_year
-            self.times_text:setText(session_time ..  "(" .. pages_session .. "p)," .. read_today .. "," .. read_month .. "," .. read_last_month .. "," .. read_year)
-            self.times_text_text = session_time ..  "(" .. pages_session .. "p)," .. read_today .. "," .. read_month .. "," .. read_last_month .. "," .. read_year
+            self.times_text:setText(toHoursOrDays(duration_raw) .. "(" .. pages_session .. "p)" .. sep .. read_today .. sep .. read_month .. sep .. read_last_month .. sep .. read_year)
+            self.times_text_text = toHoursOrDays(duration_raw) .. "(" .. pages_session .. "p)" .. sep .. read_today .. sep .. read_month .. sep .. read_last_month .. sep .. read_year
         else
             init_page = self.init_page_screens
             pages_session = self.view.footer.pageno - init_page
-            -- self.times_text:setText("RTS: " .. session_time .. ", RT: " .. read_today .. ", RTM: " .. read_month .. ", RLM: " .. read_last_month .. ", RTY: " .. read_year)
-            -- self.times_text_text = "RTS: " .. session_time .. ", RT: " .. read_today .. ", RTM: " .. read_month .. ", RLM: " .. read_last_month .. ", RTY: " .. read_year
-            self.times_text:setText(session_time .. "," .. read_today .. "," .. read_month .. "," .. read_last_month .. "," .. read_year)
-            self.times_text_text = session_time .. "," .. read_today .. "," .. read_month .. "," .. read_last_month .. "," .. read_year
+            self.times_text:setText(toHoursOrDays(duration_raw) .. "(" .. pages_session .. "p)" .. sep .. read_today .. sep .. read_month .. sep .. read_last_month .. sep .. read_year)
+            self.times_text_text = toHoursOrDays(duration_raw) .. "(" .. pages_session .. "p)" .. sep .. read_today .. sep .. read_month .. sep .. read_last_month .. sep .. read_year
         end
 
 
@@ -2131,7 +2134,7 @@ function TopBar:paintTo(bb, x, y)
 
         -- print(string.byte(self.chapter_widget_container [1].text, 1,-1))
         -- Bottom center
-         if self.chapter_widget_container[1].text ~= "" then
+        if self.chapter_widget_container[1].text ~= "" then
             -- self.chapter_widget_container:paintTo(bb, x + Screen:getWidth()/2 - self.chapter_widget_container[1]:getSize().w/2, Screen:getHeight() - TopBar.MARGIN_BOTTOM)
             if self.stats_times_widget_container[1]:getSize().w  + TopBar.MARGIN_SIDES > math.floor(Screen:getWidth() / 2) then
                 self.chapter_widget_container:paintTo(bb, x + self.stats_times_widget_container[1]:getSize().w + math.floor(self.chapter_widget_container[1]:getSize().w / 2) + TopBar.MARGIN_SIDES + 3, Screen:getHeight())
