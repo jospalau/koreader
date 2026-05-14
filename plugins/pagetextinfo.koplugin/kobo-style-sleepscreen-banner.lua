@@ -480,10 +480,42 @@ function UIManager:show(widget, ...)
 		end
 	end
 
+    local time_today_widget
+    local progress_year_widget
+    local time_widget
+    local Topbar = require("apps/reader/modules/topbar")
+    local topbar = Topbar:new{
+        view = nil,
+        ui = nil,
+        fm = true,
+    }
+    if topbar then
+        local doc_props = Sidecar and Sidecar:readSetting("doc_props") or {}
+        local read_today = select(1, topbar:getReadTodayThisMonth(doc_props.title)) or 0
+
+        read_today = read_today > 86400
+        and (math.floor(read_today / 60 / 60 / 24 * 100) / 100 .. "d")
+        or datetime.secondsToClockDuration("modern", read_today, false)
+        time_widget = buildTextField(
+            "Total time read today: " .. tostring(read_today),
+            font_.stats_font,
+            max_height - title_dimen.h - stats_dimen.h,
+            max_wid
+        )
+        local year_read = topbar:getReadThisYearSoFar() or 0
+        progress_year_widget = buildTextField(
+            "ΔL:" .. tostring(year_read) .. "h",
+            font_.stats_font,
+            max_height - title_dimen.h - stats_dimen.h,
+            max_wid
+        )
+    end
 	content_widget = VerticalGroup:new{
 		align = "left",
 		title_widget,
 		stats_widget,
+        time_widget or VerticalSpan:new{width = 0},
+        progress_year_widget or VerticalSpan:new{width = 0},
 	}
 
 	if highlightEnabled and highlight_widget then
