@@ -597,6 +597,12 @@ function FileManager:onSwipeFM(ges)
         Device.input.disable_double_tap = self.disable_double_tap
         UIManager:setDirty(self, "ui")
     elseif direction == "south" then
+        local x = ges.pos and ges.pos.x or (ges.start_pos and ges.start_pos.x)
+        local w = Screen:getWidth()
+        local border = math.floor(w * 0.10)
+        if x and (x < border or x > (w - border)) then
+            return false
+        end
         self:handleEvent(Event:new("ToggleBookshelf"))
     end
     return true
