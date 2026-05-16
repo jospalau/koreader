@@ -1083,7 +1083,7 @@ function ReaderUI:onHome()
                 FileManager.instance.history:sortHistoryByStatus()
                 FileManager.instance.history:onShowHist()
                 -- self.history:onShowHist()
-
+                UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
                 return true
             end,
             choice2_text = _("TBR"),
@@ -1126,12 +1126,14 @@ function ReaderUI:onHome()
                 self:showFileManager(file)
                 FileManager.instance.history:sortHistoryByStatus()
                 FileManager.instance.history:onShowHist()
+                UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
             end,
             choice3_text = _("Just exit"),
             choice3_callback = function()
                 self:onClose()
                 require("ui/widget/booklist").resetBookInfoCache(file)
                 self:showFileManager(file)
+                UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
                 return true
             end,
             cancel_callback = function()

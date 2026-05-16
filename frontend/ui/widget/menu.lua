@@ -1917,6 +1917,10 @@ function Menu:onSwipe(arg, ges_ev)
         if not self.no_title then
             -- If there is a titlebar with a close button displayed (so, this Menu can be
             -- closed), allow easier closing with swipe south.
+            if self.title == "Reading Planner & Tracker" then
+                local Event = require("ui/event")
+                UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
+            end
             self:onClose()
         end
         -- If there is no close button, it's a top level Menu and swipe

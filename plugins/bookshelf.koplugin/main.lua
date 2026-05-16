@@ -1217,7 +1217,7 @@ function Bookshelf:deletePluginSettings()
     end
 end
 
-function Bookshelf:onHistoryClose()
+function Bookshelf:onBookshelfRefresh()
     local Repo = require("lib/bookshelf_book_repository")
     if Repo.invalidateBookCache then
         Repo.invalidateBookCache("HistoryClose")
