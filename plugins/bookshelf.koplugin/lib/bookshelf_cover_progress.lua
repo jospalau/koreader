@@ -43,6 +43,8 @@ local _Repo
 --   page_count is independent of status -- the page total is meaningful
 --   for any book the user might browse, not just one that's been opened.
 function M.decide(book)
+    local util = require("util")
+    local calibre_data = util.loadCalibreData()
     local want_page_count = _toggle("progress_page_count_enabled") == true
     -- Default for the new page_count toggle is OFF, distinct from the
     -- other three indicators (which default ON). Reads from the same
@@ -78,8 +80,12 @@ function M.decide(book)
         -- reads self.book.page_count directly) picks it up without a
         -- second lookup, and subsequent decide() calls skip the
         -- readProgress branch entirely.
-        if need_pages_fallback and pages then
-            book.page_count = pages
+        if need_pages_fallback and calibre_data[book.filename.."."..string.lower(book.format)] and calibre_data[book.filename.."."..string.lower(book.format)]["pages"] then
+            local key = book.filename .. "." .. string.lower(book.format)
+            local cal = calibre_data[key]
+            if cal and cal["pages"] then
+                book.page_count = cal["pages"]
+            end
         end
     end
     local want_bar      = _toggle("progress_bar_enabled")
