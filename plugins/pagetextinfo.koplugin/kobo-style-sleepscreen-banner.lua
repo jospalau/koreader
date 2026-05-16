@@ -491,7 +491,7 @@ function UIManager:show(widget, ...)
     }
     if topbar then
         local doc_props = Sidecar and Sidecar:readSetting("doc_props") or {}
-        local read_today = select(1, topbar:getReadTodayThisMonth(doc_props.title)) or 0
+        local read_today = select(1, topbar:getReadTodayThisMonth(doc_props.title or "")) or 0
 
         read_today = read_today > 86400
         and (math.floor(read_today / 60 / 60 / 24 * 100) / 100 .. "d")
