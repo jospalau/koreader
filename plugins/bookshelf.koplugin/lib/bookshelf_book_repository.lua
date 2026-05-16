@@ -2974,7 +2974,31 @@ function Repo.getBySource(source, filter, sort_priority, offset, limit)
                 candidates = kept
             end
         end
-
+        if filter and filter.statuses and filter.statuses["tbr"] then
+            local rh = getReadHistory()
+            local hist_order = {}
+            for idx, entry in ipairs(rh.hist) do
+                if entry.file then hist_order[entry.file] = idx end
+            end
+            table.sort(candidates, function(a, b)
+                local ia = hist_order[a.filepath] or math.maxinteger
+                local ib = hist_order[b.filepath] or math.maxinteger
+                return ia < ib
+            end)
+            -- Saltarse el sort_priority general
+            local paths = {}
+            for _, b in ipairs(candidates) do paths[#paths + 1] = b.filepath end
+            _bySource_cache[cache_key] = paths
+            local total = #paths
+            local from  = (offset or 0) + 1
+            local to    = limit and math.min(from + limit - 1, total) or total
+            local page  = {}
+            for i = from, to do
+                local b = _safeBuildBookMeta(paths[i])
+                if b then page[#page + 1] = b end
+            end
+            return page, total
+        end
         -- needs-introspection for the sort: only pay for DocSettings reads
         -- when the user's sort priority actually depends on progress data.
         -- Same pattern getAll uses for its prefetch (search for "local needs").
