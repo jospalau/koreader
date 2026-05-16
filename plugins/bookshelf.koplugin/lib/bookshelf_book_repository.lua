@@ -2927,17 +2927,34 @@ function Repo.getBySource(source, filter, sort_priority, offset, limit)
             for _ in pairs(filter.statuses) do active = true; break end
             if active then
                 local kept = {}
-                for _, b in ipairs(candidates) do
-                    local s = b.read_status or b._status
-                    if not s and not b._progress_fetched and b.filepath then
-                        local pct, status, rating = Repo.readProgress(b.filepath)
-                        b._pct                = pct
-                        b._status             = status
-                        b.rating              = b.rating or rating
-                        b._progress_fetched   = true
-                        s = status
+                if filter.statuses["mbr"] then
+                    local ok_bl, BookList = pcall(require, "ui/widget/booklist")
+                    local rh = getReadHistory()
+                    local in_history = {}
+                    for _, entry in ipairs(rh.hist) do
+                        if entry.file then in_history[entry.file] = true end
                     end
-                    if s and filter.statuses[s] then kept[#kept + 1] = b end
+                    for _, b in ipairs(candidates) do
+                        if in_history[b.filepath]
+                                and ok_bl and BookList
+                                and BookList.hasBookBeenOpened
+                                and not BookList.hasBookBeenOpened(b.filepath) then
+                            kept[#kept + 1] = b
+                        end
+                    end
+                else
+                    for _, b in ipairs(candidates) do
+                        local s = b.read_status or b._status
+                        if not s and not b._progress_fetched and b.filepath then
+                            local pct, status, rating = Repo.readProgress(b.filepath)
+                            b._pct              = pct
+                            b._status           = status
+                            b.rating            = b.rating or rating
+                            b._progress_fetched = true
+                            s = status
+                        end
+                        if s and filter.statuses[s] then kept[#kept + 1] = b end
+                    end
                 end
                 candidates = kept
             end

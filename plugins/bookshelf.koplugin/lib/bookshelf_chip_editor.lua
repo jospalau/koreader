@@ -1197,6 +1197,10 @@ function Editor:_pickStatusFilter(draft, on_close)
             btn("on_hold",  _("On hold"),  function() toggle("on_hold")  end),
             btn("finished", _("Finished"), function() toggle("finished") end),
         },
+        {
+            btn("mbr",  _("MBR"),  function() toggle("mbr")  end),
+            btn("tbr", _("TBR"), function() toggle("tbr") end),
+        },
         -- Row 4: Done (full width)
         {
             { text = _("Done"), callback = function() UIManager:close(d); on_close() end },
