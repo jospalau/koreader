@@ -680,7 +680,7 @@ end
 ---        (i.e., don't look at the testsuite, which resorts to all kinds of nasty hacks).
 function ReaderUI:showReader(file, provider, seamless, is_provider_forced, after_open_callback)
     logger.dbg("show reader ui")
-    local BookshelfWidget = require("bookshelf_widget")
+    local BookshelfWidget = require("lib/bookshelf_widget")
     if BookshelfWidget.live then
         UIManager:close(BookshelfWidget.live)
     end

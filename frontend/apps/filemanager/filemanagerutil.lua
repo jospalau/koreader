@@ -706,7 +706,7 @@ function filemanagerutil.showChooseDialog(title_header, caller_callback, current
 end
 
 function filemanagerutil.openFile(ui, file, caller_pre_callback, no_dialog)
-    local BookshelfWidget = require("bookshelf_widget")
+    local BookshelfWidget = require("lib/bookshelf_widget")
     if BookshelfWidget.live then
         UIManager:close(BookshelfWidget.live)
     end
