@@ -42,9 +42,14 @@ local Editor = {}
 -- Same for text keys -- "Title (A-Z)" shows no arrow at default,
 -- shows ↑ if the user reverses to Z-A.
 local DEFAULT_REVERSE = {
-    book_count  = true,
-    last_opened = true,
-    date_added  = true,
+    book_count   = true,
+    last_opened  = true,
+    date_added   = true,
+    -- "Progress" sort defaults to highest-progress-first: a user picking
+    -- "Sort by progress" usually wants to see books they're furthest
+    -- through (or finished) at the top. Ascending (unread first) is the
+    -- niche choice -- still reachable via the picker's toggle.
+    percent_read = true,
     -- Everything else defaults to false (ascending). The table only
     -- needs entries for keys whose default is true.
 }

@@ -25,6 +25,7 @@ local Repo        = require("lib/bookshelf_book_repository")
 local HeroCard    = require("lib/bookshelf_hero_card")
 local ChipBar   = require("lib/bookshelf_chip_bar")
 local ShelfRow    = require("lib/bookshelf_shelf_row")
+local SpineWidget = require("lib/bookshelf_spine_widget")
 local logger      = require("logger")
 
 -- Wall-clock timer for perf instrumentation. LuaSocket's gettime() gives
@@ -47,7 +48,13 @@ end
 -- captures it lexically) -- Lua parses method bodies in the order they
 -- appear, so a local declared further down would be invisible up here
 -- and the references would silently rebind to the (nil) global.
-local MIN_HERO_SHARE = 0.30
+--
+-- Set to 0.25 (was 0.30 in early v2.0.0): the 30% floor was tight
+-- enough to drop Pixel-aspect tall screens (1080x2400 ~ 29% hero at
+-- n=3) from their natural 3 rows to 2, which users on Pixel 6/8
+-- treated as a regression. 0.25 keeps those devices at 3x3 while
+-- still triggering Boox Palma (~20% at n=3) to drop to 2 rows.
+local MIN_HERO_SHARE = 0.25
 
 -- ─── BookshelfWidget ──────────────────────────────────────────────────────────
 
@@ -1698,6 +1705,7 @@ end
 -- that froze the UI for several seconds on fat CBRs and the visual gain
 -- wasn't worth it.
 function BookshelfWidget:_buildHero(content_w, hero_cover_w, hero_cover_h, hero_h, PAD)
+    local _perf_t0 = _gettime()
     local current
     if self._preview_book and self._preview_book.filepath then
         current = Repo.buildBook(self._preview_book.filepath) or self._preview_book
@@ -1705,7 +1713,11 @@ function BookshelfWidget:_buildHero(content_w, hero_cover_w, hero_cover_h, hero_
     else
         current = Repo.getCurrent()
     end
+    local _perf_t1 = _gettime()
     if current then Repo.enrichStats(current) end
+    local _perf_t2 = _gettime()
+    local device_state = self:_buildDeviceState()
+    local _perf_t3 = _gettime()
     local card = HeroCard:new{
         book         = current,
         width        = content_w,
@@ -1713,7 +1725,7 @@ function BookshelfWidget:_buildHero(content_w, hero_cover_w, hero_cover_h, hero_
         cover_w      = hero_cover_w,
         cover_h      = hero_cover_h,
         pad          = PAD,
-        device_state = self:_buildDeviceState(),
+        device_state = device_state,
         -- The "Require double-tap to open" setting only gates SHELF
         -- cover taps. The hero cover already represents the user's
         -- current selection (preview or lastfile), so a double-tap
@@ -1725,6 +1737,15 @@ function BookshelfWidget:_buildHero(content_w, hero_cover_w, hero_cover_h, hero_
         on_rating_change   = function(b, r) self:_setBookRating(b, r) end,
         is_selected  = (self._focus_zone == "hero"),
     }
+    local _perf_t4 = _gettime()
+    logger.dbg(string.format(
+        "[bookshelf perf] _buildHero: buildBook=%.0fms stats=%.0fms"
+        .. " device=%.0fms card=%.0fms TOTAL=%.0fms",
+        (_perf_t1 - _perf_t0) * 1000,
+        (_perf_t2 - _perf_t1) * 1000,
+        (_perf_t3 - _perf_t2) * 1000,
+        (_perf_t4 - _perf_t3) * 1000,
+        (_perf_t4 - _perf_t0) * 1000))
     self._hero_card = card
     return card
 end
@@ -1865,11 +1886,11 @@ function BookshelfWidget:_buildShelfRows(items, content_w, shelf_h, PAD, n_rows)
         -- Expanded mode is "browse to open" — single tap opens the book.
         -- Normal mode is "preview, then commit" — tap shelf cover stages it
         -- in the hero, tap hero opens.
-        on_book_tap       = function(b)
+        on_book_tap       = function(b, tap_t)
             if bw._expanded then
                 bw:_openBook(b)
             else
-                bw:_previewBook(b)
+                bw:_previewBook(b, tap_t)
             end
         end,
         on_book_hold      = function(b) bw:_openBookMenu(b) end,
@@ -2206,6 +2227,126 @@ function BookshelfWidget:_swapShelvesInPlace()
     self:_persistNavState()
 end
 
+-- _repaintSelectionHighlight(old_fp, new_fp) — preview-tap fast path.
+--
+-- _swapShelvesInPlace was costing ~950ms per tap on a 329-item chip because
+-- it re-runs _fetchChipItems (8 × Repo.buildBookMeta ≈ 120ms/book) just so
+-- the selected-spine border can repaint. The on-screen shelves haven't
+-- changed — only two slots' borders flip — so we rebuild those two slots
+-- and leave the rest alone.
+--
+-- Limitations:
+--   * SeriesStack slots ignored: their is_selected flag is also baked at
+--     init time; if the changed selection happens to be the first book of
+--     a visible series, the series border won't update until the next
+--     _rebuild. Rare enough to defer.
+--   * Falls back to _swapShelvesInPlace if both old + new are off the
+--     current page (e.g. preview was set before pagination): without a
+--     matching slot to swap, the visible state would be wrong.
+function BookshelfWidget:_repaintSelectionHighlight(old_fp, new_fp)
+    local _perf_t0 = _gettime()
+    if not self._inner_vgroup or not self._shelf_dims then return end
+    local d = self._shelf_dims
+    local replaced = 0
+    local union_dimen
+
+    local function expand_union(g)
+        if not g then return end
+        if not union_dimen then
+            union_dimen = g:copy()
+            return
+        end
+        local x1 = math.min(union_dimen.x, g.x)
+        local y1 = math.min(union_dimen.y, g.y)
+        local x2 = math.max(union_dimen.x + union_dimen.w, g.x + g.w)
+        local y2 = math.max(union_dimen.y + union_dimen.h, g.y + g.h)
+        union_dimen.x, union_dimen.y = x1, y1
+        union_dimen.w, union_dimen.h = x2 - x1, y2 - y1
+    end
+
+    -- _inner_vgroup[idx] may be the row HorizontalGroup directly, OR a
+    -- CenterContainer wrapping it (kicks in when slot_w is shrunk to
+    -- preserve cover aspect — see lib/bookshelf_shelf_row.lua:298-305),
+    -- OR (expanded mode) the slot itself may be an InputContainer wrapping
+    -- VerticalGroup{ spine, title }. Descend up to 3 levels looking for a
+    -- container whose direct children include a SpineWidget with the
+    -- target filepath.
+    local function descend_find_spine(node, fp, depth)
+        if not node or depth > 3 then return nil, nil end
+        for i, c in ipairs(node) do
+            if c and c.book and c.book.filepath == fp then
+                -- Found a direct SpineWidget child — return the container
+                -- holding it (for slot replacement) and the index.
+                return node, i, c
+            end
+        end
+        -- No direct match — descend into children.
+        for _, c in ipairs(node) do
+            if c then
+                local parent, idx, spine = descend_find_spine(c, fp, depth + 1)
+                if parent then return parent, idx, spine end
+            end
+        end
+        return nil, nil, nil
+    end
+
+    local function find_and_swap(root, fp, want_selected)
+        if not fp then return end
+        local parent, idx, old_spine = descend_find_spine(root, fp, 0)
+        if not parent then return end
+        local fresh = Repo.buildBookMeta(fp) or old_spine.book
+        local new_slot = SpineWidget:new{
+            book          = fresh,
+            width         = old_spine.width,
+            height        = old_spine.height,
+            on_tap        = old_spine.on_tap,
+            on_hold       = old_spine.on_hold,
+            is_selected   = want_selected,
+            show_progress = old_spine.show_progress,
+            show_titles   = old_spine.show_titles,
+            in_series     = old_spine.in_series,
+        }
+        expand_union(old_spine.dimen)
+        parent[idx] = new_slot
+        replaced = replaced + 1
+        if parent.resetLayout then parent:resetLayout() end
+        UIManager:nextTick(function()
+            if old_spine and old_spine.free then
+                pcall(function() old_spine:free() end)
+            end
+        end)
+    end
+
+    for _, idx in ipairs({ d.shelf_top_idx, d.shelf_bottom_idx }) do
+        local hg = self._inner_vgroup[idx]
+        if hg then
+            find_and_swap(hg, old_fp, false)
+            find_and_swap(hg, new_fp, true)
+            if hg.resetLayout then hg:resetLayout() end
+        end
+    end
+
+    -- If neither old nor new slot was found on the visible shelves, the
+    -- caller must still get the selection state to render somewhere — fall
+    -- back to the heavier swap so the user isn't stuck looking at a stale
+    -- highlight. (Happens when preview was set on a different page before
+    -- the user paginated.)
+    if replaced == 0 then
+        logger.info("[bookshelf perf] _repaintHighlight: no slot match -> fallback _swapShelves")
+        self:_swapShelvesInPlace()
+        return
+    end
+
+    if union_dimen then
+        UIManager:setDirty(self, function() return "ui", union_dimen end)
+    else
+        UIManager:setDirty(self, "ui")
+    end
+    logger.dbg(string.format(
+        "[bookshelf perf] _repaintHighlight: replaced=%d TOTAL=%.0fms",
+        replaced, (_gettime() - _perf_t0) * 1000))
+end
+
 -- softRefresh — lightweight return-to-bookshelf update. Splits the work
 -- the warm-path show() previously did as a single _rebuild() into two
 -- phases: the hero swap (synchronous, ~10ms — only depends on the current
@@ -2231,6 +2372,19 @@ function BookshelfWidget:softRefresh()
     local has_live_tree =
         self._inner_vgroup and self._shelf_dims
         and self._hero_parent and self._hero_dims
+    -- Metadata edited while bookshelf was hidden (BookMetadataChanged
+    -- handler in main.lua sets this flag): chip membership and sort order
+    -- may both have shifted, but _needsReaderReturnShelfRefresh's gate is
+    -- keyed on chip+sort assumptions about progress changes only, so it
+    -- would otherwise skip a shelf refresh that's actually needed. Force
+    -- the heavy path here, clearing the flag. (Issue #40.)
+    if self._metadata_dirty_force_full_refresh then
+        self._metadata_dirty_force_full_refresh = nil
+        self:_rebuild()
+        if self._startStatusTimer then self:_startStatusTimer() end
+        UIManager:setDirty(self, "ui")
+        return
+    end
     -- Two-shelf gate: _swapShelvesInPlace's own fast-path bailout. Falling
     -- back to _rebuild here is cheaper than triggering it from the deferred
     -- callback after we've already painted a stale tree.
@@ -2383,13 +2537,18 @@ end
 -- index 1, defer the old hero's free, and dirty the screen. This avoids
 -- 8 SpineWidget reconstructions plus the bb:scale work for any small
 -- covers — perceptible on every shelf-cover tap.
-function BookshelfWidget:_previewBook(book)
+function BookshelfWidget:_previewBook(book, tap_t)
     if not book or not book.filepath then return end
+    local _perf_t0 = _gettime()
+    local _perf_gap_ms = tap_t and ((_perf_t0 - tap_t) * 1000) or -1
     -- Tap-twice-to-open: a tap on the already-selected spine confirms
     -- the preview and opens the book. Composes with the spine highlight
     -- — first tap marks the spine with the thicker border, second tap
     -- on the same spine commits.
     if self._preview_book and self._preview_book.filepath == book.filepath then
+        logger.info(string.format(
+            "[bookshelf perf] _previewBook: branch=open-same tap_gap=%.0fms",
+            _perf_gap_ms))
         self:_openBook(book)
         return
     end
@@ -2402,11 +2561,19 @@ function BookshelfWidget:_previewBook(book)
     local lastfile = Repo.getCurrent and Repo.getCurrent()
     local was_diff = self._preview_book and lastfile
                      and self._preview_book.filepath ~= lastfile.filepath
+    -- Capture the previously-selected filepath BEFORE the assignment below
+    -- so _repaintSelectionHighlight can deselect the old spine.
+    local prior_preview_fp = self._preview_book and self._preview_book.filepath
+    local _perf_t1 = _gettime()
     -- Shelf books are built via buildBookMeta (no DocSettings) for speed.
     -- The hero needs book_pct / page_num / last_xp to render the progress
     -- bar and token lines, so upgrade to the full Book record here. Single-
     -- book DocSettings read on each preview tap is fine.
     self._preview_book = Repo.buildBook(book.filepath) or book
+    local _perf_t2 = _gettime()
+    logger.dbg(string.format(
+        "[bookshelf perf] _previewBook: buildBook=%.0fms",
+        (_perf_t2 - _perf_t1) * 1000))
     local is_diff = self._preview_book and lastfile
                     and self._preview_book.filepath ~= lastfile.filepath
 
@@ -2417,23 +2584,42 @@ function BookshelfWidget:_previewBook(book)
     if was_diff ~= is_diff then
         self:_rebuild()
         UIManager:setDirty(self, "ui")
+        logger.info(string.format(
+            "[bookshelf perf] _previewBook: branch=rebuild tap_gap=%.0fms TOTAL=%.0fms",
+            _perf_gap_ms, (_gettime() - _perf_t0) * 1000))
         return
     end
 
     if self._hero_parent and self._hero_dims then
+        local _perf_t_hero = _gettime()
         self:_swapHeroInPlace()
-        -- Refresh the shelves so the new selected-spine highlight paints
-        -- and any previously-selected spine returns to the normal border.
-        -- Cheap (8 SpineWidget rebuilds, scaled covers reused from cache).
+        local _perf_t_after_hero = _gettime()
+        -- Update the selected-spine highlight: deselect the prior slot
+        -- (prior_preview_fp), select the newly-tapped slot. Only rebuilds
+        -- the 1-2 SpineWidgets whose state actually changed, avoiding the
+        -- ~950ms _swapShelvesInPlace fetch on heavy chips. Falls back to
+        -- the full shelf swap if neither old nor new is on the current page.
         if self._inner_vgroup and self._shelf_dims then
-            self:_swapShelvesInPlace()
+            self:_repaintSelectionHighlight(
+                prior_preview_fp, self._preview_book.filepath)
         end
+        local _perf_t_end = _gettime()
+        logger.info(string.format(
+            "[bookshelf perf] _previewBook: branch=swap tap_gap=%.0fms"
+            .. " hero=%.0fms shelves=%.0fms TOTAL=%.0fms",
+            _perf_gap_ms,
+            (_perf_t_after_hero - _perf_t_hero) * 1000,
+            (_perf_t_end - _perf_t_after_hero) * 1000,
+            (_perf_t_end - _perf_t0) * 1000))
         return
     end
 
     -- Cold path: no live tree to swap into yet. Full rebuild.
     self:_rebuild()
     UIManager:setDirty(self, "ui")
+    logger.info(string.format(
+        "[bookshelf perf] _previewBook: branch=cold-rebuild tap_gap=%.0fms TOTAL=%.0fms",
+        _perf_gap_ms, (_gettime() - _perf_t0) * 1000))
 end
 
 -- Cleanup hook: clears the plugin's tracked widget reference when this
@@ -3761,6 +3947,12 @@ function BookshelfWidget:_openBookMenu(item)
                     ReadCollection:addItem(book.filepath, "favorites")
                     ReadCollection:write({ favorites = true })
                 end
+                -- Chip caches store filepath lists post-filter -- a
+                -- favourites add/remove changes membership in the
+                -- favourites chip AND in any custom chip that filters on
+                -- collections, so the per-source caches must be wiped or
+                -- the toggle won't surface until swipe-down. (Issue #40.)
+                Repo.invalidateBookCache("favorites-toggle")
                 bw:_rebuild()
                 UIManager:setDirty(bw, "ui")
               end) },
@@ -3769,6 +3961,11 @@ function BookshelfWidget:_openBookMenu(item)
             { text = "Remove from history",
               callback = closing(function()
                 require("readhistory"):removeItemByPath(book.filepath)
+                -- Recent chip + any custom chip sorted by last_opened or
+                -- filtered on history membership caches the post-filter
+                -- filepath list; the removal won't surface until we clear
+                -- those caches. (Issue #40.)
+                Repo.invalidateBookCache("remove-from-history")
                 bw:_rebuild()
                 UIManager:setDirty(bw, "ui")
               end) },
@@ -3783,6 +3980,14 @@ function BookshelfWidget:_openBookMenu(item)
     local filemanagerutil = require("apps/filemanager/filemanagerutil")
     local function refresh_book_state()
         Repo.invalidateProgressCache(book.filepath)
+        -- Status changes also shift the book's membership in any
+        -- status-filtered chip and its position in a "Reading" /
+        -- "Unread first" sort, so wipe the per-source caches too --
+        -- otherwise the user has to swipe-down to see a status edit.
+        -- (Issue #40.) genStatusButtonsRow does not broadcast
+        -- BookMetadataChanged itself, so onBookMetadataChanged in main.lua
+        -- won't catch this either.
+        Repo.invalidateBookCache("openBookMenu/status")
         bw:_rebuild()
         UIManager:setDirty(bw, "ui")
     end
