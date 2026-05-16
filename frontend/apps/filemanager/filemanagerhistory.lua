@@ -579,7 +579,7 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
     --     FileManager:openFile("resources/Forthcoming_Books.pdf")
     else
         self:onClose()
-        UIManager:broadcastEvent(Event:new("HistoryClose"))
+        UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
         if require("apps/reader/readerui").instance then
             self.ui.view.topbar:toggleBar()
             UIManager:setDirty(self.ui.view.topbar, "ui")

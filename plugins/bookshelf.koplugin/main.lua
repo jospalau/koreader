@@ -1220,7 +1220,7 @@ end
 function Bookshelf:onBookshelfRefresh()
     local Repo = require("lib/bookshelf_book_repository")
     if Repo.invalidateBookCache then
-        Repo.invalidateBookCache("HistoryClose")
+        Repo.invalidateBookCache("BookshelfRefresh")
     end
     if not _live_widget then return end
     if self:_isShowing() then
