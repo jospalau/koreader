@@ -1919,7 +1919,7 @@ function Menu:onSwipe(arg, ges_ev)
             -- closed), allow easier closing with swipe south.
             if self.title == "Reading Planner & Tracker" then
                 local Event = require("ui/event")
-                UIManager:broadcastEvent(Event:new("BookMetadataChanged"))
+                UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
             end
             self:onClose()
         end

@@ -1217,4 +1217,25 @@ function Bookshelf:deletePluginSettings()
     end
 end
 
+function Bookshelf:onBookshelfRefresh()
+    local Repo = require("lib/bookshelf_book_repository")
+    if Repo.invalidateBookCache then
+        Repo.invalidateBookCache("BookshelfRefresh")
+    end
+    if not _live_widget then return end
+    if self:_isShowing() then
+        if self._metadata_rebuild_pending then return end
+        self._metadata_rebuild_pending = true
+        UIManager:nextTick(function()
+            self._metadata_rebuild_pending = false
+            if _live_widget and self:_isShowing() and _live_widget._rebuild then
+                _live_widget:_rebuild()
+                UIManager:setDirty(_live_widget, "ui")
+            end
+        end)
+    else
+        _live_widget._metadata_dirty_force_full_refresh = true
+    end
+end
+
 return Bookshelf
