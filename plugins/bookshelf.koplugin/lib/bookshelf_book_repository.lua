@@ -800,6 +800,7 @@ function Repo.invalidateBookCache(reason)
     _ratings_cache    = {}
     _all_cache        = {}
     _bySource_cache   = {}
+    _light_meta_cache = {}
     if logger and logger.dbg then
         logger.dbg("[bookshelf] cache invalidated: " .. tostring(reason))
     end
