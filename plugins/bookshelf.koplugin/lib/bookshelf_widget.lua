@@ -98,6 +98,11 @@ function BookshelfWidget._coverNeedsResize(info, specs)
 end
 
 function BookshelfWidget:init()
+    -- Diag: cradle init so the cold-start trace shows init time
+    -- distinct from the _rebuild it triggers at the end. Two markers
+    -- (entry, post-settings-and-gesture-setup) plus the existing
+    -- _rebuild log line tell the whole story.
+    local _diag_init_t0 = _gettime()
     self.width  = Screen:getWidth()
     self.height = Screen:getHeight()
     self.dimen  = Geom:new{ w = self.width, h = self.height }
@@ -234,8 +239,15 @@ function BookshelfWidget:init()
     -- zones here. Doing so previously also ignored the user's
     -- `activation_menu` preference — fixed as a side benefit.)
 
+    local _diag_init_t_pre_rebuild = _gettime()
     self:_rebuild()
     self:_startStatusTimer()
+    logger.info(string.format(
+        "[bookshelf perf] BookshelfWidget:init: pre_rebuild=%.0fms"
+        .. " rebuild+timer=%.0fms TOTAL=%.0fms chip=%s",
+        (_diag_init_t_pre_rebuild - _diag_init_t0) * 1000,
+        (_gettime() - _diag_init_t_pre_rebuild) * 1000,
+        (_gettime() - _diag_init_t0) * 1000, self.chip))
 end
 
 -- Bookshelf is the topmost widget while it's on screen, so KOReader's
@@ -328,8 +340,8 @@ function BookshelfWidget:handleEvent(event)
         if fm and fm.menu and fm.menu._ordered_touch_zones then
             zone_lists[#zone_lists + 1] = fm.menu._ordered_touch_zones
         end
-        for _, zones in ipairs(zone_lists) do
-            for _, tzone in ipairs(zones) do
+        for _i, zones in ipairs(zone_lists) do
+            for _i, tzone in ipairs(zones) do
                 if tzone.gs_range:match(ev) and tzone.handler(ev) then
                     return true
                 end
@@ -392,13 +404,13 @@ end
 -- render, so no payload mutation needed for that path.
 function BookshelfWidget:_scrubFromDrilldown(filepath)
     if not filepath or not self._drilldown_path then return end
-    for _, entry in ipairs(self._drilldown_path) do
+    for _i, entry in ipairs(self._drilldown_path) do
         local payload = entry and entry.payload
         if type(payload) == "table" then
             local lists = { payload.books, payload.series,
                             payload.authors, payload.genres,
                             payload.folders }
-            for _, list in ipairs(lists) do
+            for _i, list in ipairs(lists) do
                 if type(list) == "table" then
                     for i = #list, 1, -1 do
                         local item = list[i]
@@ -426,7 +438,7 @@ end
 -- needed to rebuild each entry via Repo lookups on restore.
 function BookshelfWidget:_serializeDrillPath()
     local out = {}
-    for _, e in ipairs(self._drilldown_path) do
+    for _i, e in ipairs(self._drilldown_path) do
         if e.kind == "folder" then
             out[#out + 1] = { kind = "folder", label = e.label,
                               path = e.payload and e.payload.path }
@@ -466,7 +478,7 @@ end
 -- user doesn't see a broken drill on the next launch.
 function BookshelfWidget:_restoreDrillPath(saved)
     if type(saved) ~= "table" or #saved == 0 then return end
-    for _, e in ipairs(saved) do
+    for _i, e in ipairs(saved) do
         if e.kind == "folder" and e.path then
             self._drilldown_path[#self._drilldown_path + 1] = {
                 kind = "folder", label = e.label,
@@ -632,7 +644,7 @@ function BookshelfWidget:_rebuild()
     -- contain inline nerd-font glyphs); the legacy tab.icon field still
     -- gets prepended for back-compat until the user re-saves and the
     -- editor migrates the record to the merged form.
-    for _, tab in ipairs(TabModel.getActive()) do
+    for _i, tab in ipairs(TabModel.getActive()) do
         local display = tab.label or ""
         if tab.icon and tab.icon ~= "" then
             display = tab.icon .. " " .. display
@@ -647,7 +659,7 @@ function BookshelfWidget:_rebuild()
     -- Fall back to all defaults so the shelves still have a data source
     -- even when the strip is hidden.
     if #active_chips == 0 then
-        for _, tab in ipairs(TabModel.DEFAULTS()) do
+        for _i, tab in ipairs(TabModel.DEFAULTS()) do
             active_chips[#active_chips + 1] = { key = tab.id, label = tab.label }
         end
     end
@@ -655,14 +667,14 @@ function BookshelfWidget:_rebuild()
     -- first surviving chip so render doesn't try to fetch from a
     -- disabled chip's data source.
     local active_in_set = false
-    for _, c in ipairs(active_chips) do
+    for _i, c in ipairs(active_chips) do
         if c.key == self.chip then active_in_set = true; break end
     end
     if not active_in_set then
         -- Skip action chips (current, search) — they have no data source.
         -- Fall back to the first nav chip instead.
         self.chip = active_chips[1].key
-        for _, c in ipairs(active_chips) do
+        for _i, c in ipairs(active_chips) do
             if not c.action then self.chip = c.key; break end
         end
         BookshelfSettings.save("active_chip", self.chip)
@@ -686,7 +698,7 @@ function BookshelfWidget:_rebuild()
     self._active_chip_keys = {}
     self._dpad_chip_keys   = {}
     self._action_chip_keys = {}
-    for _, c in ipairs(active_chips) do
+    for _i, c in ipairs(active_chips) do
         -- Exclude action chips from the swipe-cycle ring (search, current
         -- book, …) — they're actions, not navigable tabs.
         if not c.action then
@@ -751,6 +763,15 @@ function BookshelfWidget:_rebuild()
                             and Repo.buildBook(self._preview_book.filepath))
                             or self._preview_book
                             or (Repo.getCurrent and Repo.getCurrent())
+        -- Hand the freshly-built probe record off to _buildHero so it
+        -- doesn't pay another DocSettings:open() for the same filepath
+        -- in the same rebuild cycle. Only when the probe built a
+        -- preview-book record (not the fallback to getCurrent), so the
+        -- cache is precisely scoped. Cleared in _buildHero after use.
+        if probe_book and self._preview_book
+                and probe_book.filepath == self._preview_book.filepath then
+            self._hero_book_cache = probe_book
+        end
         local probe_row  = probe_book and HeroCard.buildStatusRow(
                                 probe_book, self:_buildDeviceState(),
                                 content_w, false)
@@ -1350,9 +1371,21 @@ function BookshelfWidget:_rebuild()
                                               -- VerticalSpan above.
         },
     }
-    logger.info(string.format("[bookshelf perf] _rebuild: TOTAL=%.0fms chip=%s page=%d/%d items=%d",
-        (_gettime() - _perf_t0) * 1000, _perf_chip, _perf_page, total_pages, total))
+    local _perf_t4 = _gettime()
+    logger.dbg(string.format("[bookshelf perf] _rebuild: assemble=%.0fms",
+        (_perf_t4 - _perf_t3) * 1000))
+    logger.info(string.format(
+        "[bookshelf perf] _rebuild: TOTAL=%.0fms chip=%s page=%d/%d items=%d"
+        .. " (hero=%.0f fetch=%.0f shelves=%.0f assemble=%.0f)",
+        (_perf_t4 - _perf_t0) * 1000, _perf_chip, _perf_page, total_pages, total,
+        (_perf_t1 - _perf_t0) * 1000,
+        (_perf_t2 - _perf_t1) * 1000,
+        (_perf_t3 - _perf_t2) * 1000,
+        (_perf_t4 - _perf_t3) * 1000))
+    local _perf_persist_t0 = _gettime()
     self:_persistNavState()
+    logger.dbg(string.format("[bookshelf perf] _rebuild: persist=%.0fms",
+        (_gettime() - _perf_persist_t0) * 1000))
 end
 
 -- ─── Background metadata extraction ──────────────────────────────────────────
@@ -1427,7 +1460,7 @@ function BookshelfWidget:_kickOffMissingMetaExtraction(items, slot_w, slot_h, he
             }
         end
     end
-    for _, item in ipairs(items or {}) do
+    for _i, item in ipairs(items or {}) do
         if item then
             -- Flat-book items (Recent / Latest / drilldown) carry filepath.
             maybe_queue(item.filepath)
@@ -1462,24 +1495,6 @@ function BookshelfWidget:_kickOffMissingMetaExtraction(items, slot_w, slot_h, he
     if hero_fp then maybe_queue(hero_fp) end
     logger.dbg(string.format("[bookshelf perf] _kickOffMeta: queued=%d displayed=%d",
         #files, #(items or {})))
-    -- Per-extension breakdown of what's being queued: helps confirm whether
-    -- the new v1.1.2 extensions (.docx/.doc/.rtf/.odt/.azw) are dominating
-    -- the queue on this device (which would make BIM extraction far heavier
-    -- than on v1.1.1).
-    do
-        local ext_count = {}
-        for _, q in ipairs(files) do
-            local ext = (q.filepath or ""):match("%.([^%.]+)$")
-            if ext then
-                ext = ext:lower()
-                ext_count[ext] = (ext_count[ext] or 0) + 1
-            end
-        end
-        local parts = {}
-        for ext, n in pairs(ext_count) do
-            parts[#parts + 1] = ext .. "=" .. n
-        end
-    end
     if #files > 0 then
         UIManager:nextTick(function()
             -- If CoverBrowser already has a background job running, don't
@@ -1545,7 +1560,7 @@ function BookshelfWidget:_pollExtraction()
     local max_tries = BIM.max_extract_tries or 3
     local ready_paths   = {}
     local still_pending = {}
-    for _, f in ipairs(files) do
+    for _i, f in ipairs(files) do
         local info = BIM:getBookInfo(f.filepath, false)
         local inprog = tonumber(info and info.in_progress) or 0
         local meta_ready = info and info.has_meta == "Y"
@@ -1639,7 +1654,7 @@ function BookshelfWidget:_fetchChipItems(n)
     -- feedback_image_disposable_shared_book).
     if tip and tip.kind == "search" then
         local fresh = {}
-        for _, f in ipairs(tip.payload.folders or {}) do
+        for _i, f in ipairs(tip.payload.folders or {}) do
             fresh[#fresh + 1] = {
                 kind       = "folder",
                 path       = f.path,
@@ -1647,19 +1662,19 @@ function BookshelfWidget:_fetchChipItems(n)
                 first_book = f.first_book_fp and Repo.buildBookMeta(f.first_book_fp),
             }
         end
-        for _, name in ipairs(tip.payload.author_names or {}) do
+        for _i, name in ipairs(tip.payload.author_names or {}) do
             local g = Repo.findGroup("author", name)
             if g then fresh[#fresh + 1] = g end
         end
-        for _, name in ipairs(tip.payload.series_names or {}) do
+        for _i, name in ipairs(tip.payload.series_names or {}) do
             local g = Repo.findGroup("series", name)
             if g then fresh[#fresh + 1] = g end
         end
-        for _, name in ipairs(tip.payload.genre_names or {}) do
+        for _i, name in ipairs(tip.payload.genre_names or {}) do
             local g = Repo.findGroup("genre", name)
             if g then fresh[#fresh + 1] = g end
         end
-        for _, fp in ipairs(tip.payload.book_fps or {}) do
+        for _i, fp in ipairs(tip.payload.book_fps or {}) do
             local b = Repo.buildBookMeta(fp)
             if b then fresh[#fresh + 1] = b end
         end
@@ -1876,7 +1891,19 @@ function BookshelfWidget:_buildHero(content_w, hero_cover_w, hero_cover_h, hero_
     local _perf_t0 = _gettime()
     local current
     if self._preview_book and self._preview_book.filepath then
-        current = Repo.buildBook(self._preview_book.filepath) or self._preview_book
+        -- _rebuild's expanded-mode probe stashed a freshly-built record
+        -- for this same filepath -- reuse it instead of paying
+        -- DocSettings:open() a second time. Cache is consumed
+        -- destructively so a subsequent _swapHeroInPlace / previewBook
+        -- rebuild gets fresh data.
+        local cached = self._hero_book_cache
+        if cached and cached.filepath == self._preview_book.filepath then
+            current = cached
+            self._hero_book_cache = nil
+        else
+            current = Repo.buildBook(self._preview_book.filepath) or self._preview_book
+            self._hero_book_cache = nil
+        end
         self._preview_book = current
     else
         current = Repo.getCurrent()
@@ -2034,7 +2061,7 @@ function BookshelfWidget:_buildShelfRows(items, content_w, shelf_h, PAD, n_rows)
         -- inside _rebuild isn't visible here. Require lazily so the
         -- dependency stays explicit and idempotent.
         local TabModel = require("lib/bookshelf_tab_model")
-        for _, c in ipairs(TabModel.getActive()) do
+        for _i, c in ipairs(TabModel.getActive()) do
             if c.id == self.chip and c.source and c.source.kind == "single_series" then
                 in_series = true
                 break
@@ -2231,7 +2258,7 @@ function BookshelfWidget:_buildPaginationFooter(content_w, label_h, total_pages)
     --      below us (e.g. SimpleUI's bottom-bar zone) instead of
     --      firing hold_callback. Mutating dimen.h propagates to the
     --      stored GestureRange.range via the shared reference.
-    for _, b in ipairs({first, prev, page_text, next_btn, last}) do
+    for _i, b in ipairs({first, prev, page_text, next_btn, last}) do
         if b.frame then
             b.frame.padding_bottom = (b.frame.padding_bottom or 0) + hit_extension
         end
@@ -2414,12 +2441,13 @@ function BookshelfWidget:_swapShelvesInPlace()
         self._inner_vgroup:resetLayout()
     end
     UIManager:nextTick(function()
-        for _, w in ipairs({ old_top, old_bottom, old_footer }) do
+        for _i, w in ipairs({ old_top, old_bottom, old_footer }) do
             if w and w.free then pcall(function() w:free() end) end
         end
     end)
-    logger.dbg(string.format("[bookshelf perf] _swapShelves: TOTAL=%.0fms page=%d/%d",
-        (_gettime() - _perf_t0) * 1000, self.page, self._total_pages or 0))
+    logger.info(string.format("[bookshelf perf] _swapShelves: TOTAL=%.0fms page=%d/%d items=%d chip=%s",
+        (_gettime() - _perf_t0) * 1000, self.page, self._total_pages or 0,
+        self._total_items or 0, self.chip))
     UIManager:setDirty(self, "ui")
     -- Pagination via _swapShelvesInPlace bypasses _rebuild's persist hook;
     -- repeat the save here so a forward/back swipe is enough to land back
@@ -2449,7 +2477,7 @@ local function _descendFindSpine(node, fp, depth)
         end
     end
     -- No direct match — descend into children.
-    for _, c in ipairs(node) do
+    for _i, c in ipairs(node) do
         if c then
             local parent, idx, spine = _descendFindSpine(c, fp, depth + 1)
             if parent then return parent, idx, spine end
@@ -2522,7 +2550,7 @@ function BookshelfWidget:_repaintSelectionHighlight(old_fp, new_fp)
         end)
     end
 
-    for _, idx in ipairs({ d.shelf_top_idx, d.shelf_bottom_idx }) do
+    for _i, idx in ipairs({ d.shelf_top_idx, d.shelf_bottom_idx }) do
         local hg = self._inner_vgroup[idx]
         if hg then
             find_and_swap(hg, old_fp, false)
@@ -2543,6 +2571,20 @@ function BookshelfWidget:_repaintSelectionHighlight(old_fp, new_fp)
     end
 
     if union_dimen then
+        -- BorderOverlay (the selection ring) paints OUTSIDE the spine's
+        -- dimen by SELECTED_BORDER pixels on each side -- see
+        -- bookshelf_spine_widget.lua:127, which calls paintRoundedRect
+        -- at (x - t, y - t) with size (w + 2t, h + 2t). union_dimen is
+        -- built from old_spine.dimen which only covers the card area,
+        -- so without this pad the OLD selection ring leaves an outer
+        -- band un-refreshed and the deselected slot shows a partial
+        -- border ghost. SELECTED_BORDER = SHADOW_OFFSET; mirroring the
+        -- constant inline keeps spine_widget's module-locals private.
+        local PAD = Screen:scaleBySize(4)
+        union_dimen.x = union_dimen.x - PAD
+        union_dimen.y = union_dimen.y - PAD
+        union_dimen.w = union_dimen.w + 2 * PAD
+        union_dimen.h = union_dimen.h + 2 * PAD
         UIManager:setDirty(self, function() return "ui", union_dimen end)
     else
         UIManager:setDirty(self, "ui")
@@ -2567,7 +2609,7 @@ function BookshelfWidget:_refreshSpineInPlace(fp)
     if not fp or not self._inner_vgroup or not self._shelf_dims then return end
     local d = self._shelf_dims
     local replaced_dimen
-    for _, idx in ipairs({ d.shelf_top_idx, d.shelf_bottom_idx }) do
+    for _i, idx in ipairs({ d.shelf_top_idx, d.shelf_bottom_idx }) do
         local hg = self._inner_vgroup[idx]
         if hg then
             local parent, slot_idx, old_spine = _descendFindSpine(hg, fp, 0)
@@ -2753,7 +2795,18 @@ function BookshelfWidget:_swapHeroInPlace()
             pcall(function() old_hero:free() end)
         end)
     end
-    UIManager:setDirty(self, "ui")
+    -- Scope the refresh to the hero's painted rect so the chip strip and
+    -- shelves below don't flash. The peer right-column-only path is
+    -- already scoped (issue #35); this one was missed. Falls back to a
+    -- full-widget refresh when the old hero's painted dimen isn't
+    -- available (e.g. first-paint races where the swap fires before the
+    -- previous hero rendered).
+    local scope = old_hero and old_hero.dimen
+    if scope then
+        UIManager:setDirty(self, function() return "ui", scope end)
+    else
+        UIManager:setDirty(self, "ui")
+    end
 end
 
 -- Live-preview hook used by the hero line editor. Rebuilds only the
@@ -2835,6 +2888,15 @@ function BookshelfWidget:_previewBook(book, tap_t)
     -- bar and token lines, so upgrade to the full Book record here. Single-
     -- book DocSettings read on each preview tap is fine.
     self._preview_book = Repo.buildBook(book.filepath) or book
+    -- Stash the freshly-built record so the _swapHeroInPlace ->
+    -- _buildHero call below doesn't pay DocSettings:open() a second time
+    -- for the same filepath. _buildHero consumes destructively. Skipped
+    -- when buildBook returned nil (fell back to the shelf record), since
+    -- _buildHero still needs to attempt a real build in that case.
+    if self._preview_book and self._preview_book.filepath == book.filepath
+            and self._preview_book ~= book then
+        self._hero_book_cache = self._preview_book
+    end
     local _perf_t2 = _gettime()
     logger.dbg(string.format(
         "[bookshelf perf] _previewBook: buildBook=%.0fms",
@@ -2939,10 +3001,10 @@ local NIGHTMODE_TOKENS  = { "nightmode" }
 function BookshelfWidget:_anyActiveRegionUses(tokens)
     local Regions = require("lib/bookshelf_hero_regions")
     local resolved = Regions.read()
-    for _, key in ipairs(Regions.ORDER) do
+    for _i, key in ipairs(Regions.ORDER) do
         local r = resolved[key]
         if r and not r.disabled and type(r.template) == "string" then
-            for _, name in ipairs(tokens) do
+            for _i, name in ipairs(tokens) do
                 -- "%name" followed by anything that isn't [A-Za-z0-9_]
                 -- (or end-of-string). %% in a Lua pattern matches a
                 -- literal %.
@@ -3021,6 +3083,16 @@ function BookshelfWidget:_stopStatusTimer()
     if self._gated_repaint_pending then
         UIManager:unschedule(self._gated_repaint_pending)
         self._gated_repaint_pending = nil
+    end
+    -- Cancel the 150ms deferred shelf swap too. _openBook calls this
+    -- function before opening the reader; without the cancel, a
+    -- softRefresh that scheduled _swapShelvesInPlace fires DURING the
+    -- reader's startup paint and marks the bookshelf dirty under the
+    -- reader -- wasted work plus a potential extra EPDC cycle while
+    -- the reader is trying to claim the screen.
+    if self._soft_refresh_shelves_fn then
+        UIManager:unschedule(self._soft_refresh_shelves_fn)
+        self._soft_refresh_shelves_fn = nil
     end
 end
 
@@ -3554,6 +3626,11 @@ end
 -- both produce identical state transitions.
 function BookshelfWidget:_setActiveChip(key)
     if not key or key == self.chip then return end
+    -- Diag: wrap the chip-switch flow so the log shows the elapsed time
+    -- between user action and rebuild-done. _rebuild logs its own
+    -- breakdown; this outer log is the user-facing TOTAL.
+    local _diag_t0   = _gettime()
+    local _diag_from = self.chip
     self:_clearDpadFocus()
     -- Pre-paint feedback on the destination chip: same affordance taps
     -- get, so a swipe-driven tab change feels just as responsive even
@@ -3563,6 +3640,7 @@ function BookshelfWidget:_setActiveChip(key)
     if self._chip_bar and self._chip_bar.flashPending then
         self._chip_bar:flashPending(key)
     end
+    local _diag_t_flash = _gettime()
     self._drilldown_path = {}
     self.chip            = key
     self._cursor         = 1
@@ -3570,6 +3648,12 @@ function BookshelfWidget:_setActiveChip(key)
     BookshelfSettings.save("active_chip", key)
     self:_rebuild()
     UIManager:setDirty(self, "ui")
+    logger.info(string.format(
+        "[bookshelf perf] chip-switch: from=%s to=%s flash=%.0fms rebuild=%.0fms TOTAL=%.0fms",
+        _diag_from, key,
+        (_diag_t_flash - _diag_t0) * 1000,
+        (_gettime() - _diag_t_flash) * 1000,
+        (_gettime() - _diag_t0) * 1000))
 end
 
 -- _isHeroSwipe(ges) -> bool
@@ -3635,6 +3719,21 @@ function BookshelfWidget:paintTo(bb, x, y)
     local sh = Screen:getHeight()
     if sw ~= self.width or sh ~= self.height then
         self:_rebuild()
+    end
+    -- Diag: one-shot first-paint marker for cold-start traces. The init
+    -- log fires at end of :init() (well before the paint actually
+    -- happens), and the Bookshelf:show TOTAL fires before UIManager has
+    -- drained the show queue. This marker captures the actual
+    -- show-to-first-pixel latency. Cleared so subsequent paints stay
+    -- silent.
+    if not self._diag_first_paint_done then
+        self._diag_first_paint_done = true
+        local _diag_paint_t0 = _gettime()
+        InputContainer.paintTo(self, bb, x, y)
+        logger.info(string.format(
+            "[bookshelf perf] paintTo: FIRST first_paint=%.0fms chip=%s",
+            (_gettime() - _diag_paint_t0) * 1000, self.chip))
+        return
     end
     InputContainer.paintTo(self, bb, x, y)
 end
@@ -3878,11 +3977,17 @@ function BookshelfWidget:_paginateNext()
     -- >8 books needs to page through. Earlier this early-returned on
     -- _expanded_series because the footer label was hijacked for back;
     -- breadcrumb mode in the chip strip handles back now.
+    local _diag_t0     = _gettime()
+    local _diag_page0  = self.page
     local total = self._total_pages or 1
     if self.page < total then
         self:_advanceCursor(1)
         self:_syncPageFromCursor()
         self:_swapShelvesInPlace()
+        logger.info(string.format(
+            "[bookshelf perf] paginate: dir=next %d->%d/%d TOTAL=%.0fms chip=%s",
+            _diag_page0, self.page, total,
+            (_gettime() - _diag_t0) * 1000, self.chip))
         return true
     end
     -- Last page at top level (no drill-down) and chip strip visible
@@ -3891,16 +3996,27 @@ function BookshelfWidget:_paginateNext()
     -- breadcrumb or east-swipe.
     if #self._drilldown_path == 0 and not self._chip_bar_hidden then
         local next_key = self:_chipNeighbour(1)
-        if next_key then self:_setActiveChip(next_key) end
+        if next_key then
+            logger.info(string.format(
+                "[bookshelf perf] paginate: dir=next at end -> chip-switch elapsed=%.0fms",
+                (_gettime() - _diag_t0) * 1000))
+            self:_setActiveChip(next_key)
+        end
     end
     return true
 end
 
 function BookshelfWidget:_paginatePrev()
+    local _diag_t0    = _gettime()
+    local _diag_page0 = self.page
     if self.page > 1 then
         self:_advanceCursor(-1)
         self:_syncPageFromCursor()
         self:_swapShelvesInPlace()
+        logger.info(string.format(
+            "[bookshelf perf] paginate: dir=prev %d->%d/%d TOTAL=%.0fms chip=%s",
+            _diag_page0, self.page, self._total_pages or 1,
+            (_gettime() - _diag_t0) * 1000, self.chip))
         return true
     end
     -- Already on page 1: if drilled into a folder/series, treat this as
@@ -3986,9 +4102,13 @@ end
 -- the grid from 2 to 3 rows. No-op when already expanded.
 function BookshelfWidget:onSwipeShelvesUp(_, ges)
     if self._expanded then return false end
+    local _diag_t0 = _gettime()
     self._expanded = true
     self:_rebuild()
     UIManager:setDirty(self, "ui")
+    logger.info(string.format(
+        "[bookshelf perf] toggle: dir=expand TOTAL=%.0fms chip=%s",
+        (_gettime() - _diag_t0) * 1000, self.chip))
     return true
 end
 
@@ -4005,9 +4125,13 @@ end
 --     preview; south is reserved).
 function BookshelfWidget:onSwipeShelvesDown(_, ges)
     if self._expanded then
+        local _diag_t0 = _gettime()
         self._expanded = false
         self:_rebuild()
         UIManager:setDirty(self, "ui")
+        logger.info(string.format(
+            "[bookshelf perf] toggle: dir=collapse TOTAL=%.0fms chip=%s",
+            (_gettime() - _diag_t0) * 1000, self.chip))
         return true
     end
     -- Only claim the gesture for a refresh when it started in the shelf
@@ -4204,7 +4328,7 @@ function BookshelfWidget:_openBookMenu(item)
     -- corresponding tab is enabled in TabModel.
     local TabModel = require("lib/bookshelf_tab_model")
     local enabled = {}
-    for _, tab in ipairs(TabModel.getActive()) do enabled[tab.id] = true end
+    for _i, tab in ipairs(TabModel.getActive()) do enabled[tab.id] = true end
     local nav_rows = {}
     -- Long-press nav rows are JUMPS, not descents — reset the drilldown
     -- path before each so the breadcrumb starts fresh (otherwise repeated
@@ -4432,7 +4556,7 @@ function BookshelfWidget:_openBookMenu(item)
     }
     buttons[#buttons + 1] = { reset_btn, delete_btn }
 
-    for _, row in ipairs(nav_rows) do
+    for _i, row in ipairs(nav_rows) do
         buttons[#buttons + 1] = row
     end
     buttons[#buttons + 1] = { { text = "Cancel", callback = closing() } }
@@ -4528,7 +4652,7 @@ function BookshelfWidget:_drillBackTo(depth)
         self._drilldown_path[#self._drilldown_path] = nil
     end
     if restore_path then
-        for _, entry in ipairs(restore_path) do
+        for _i, entry in ipairs(restore_path) do
             self._drilldown_path[#self._drilldown_path + 1] = entry
         end
     end
@@ -4574,9 +4698,9 @@ function BookshelfWidget:_applyWithinGroupSort(group)
     local SortEngine = require("lib/bookshelf_sort_engine")
     SortEngine.sort(group.books_meta, within)
     local fp_to_book = {}
-    for _, b in ipairs(group.books) do fp_to_book[b.filepath] = b end
+    for _i, b in ipairs(group.books) do fp_to_book[b.filepath] = b end
     local new_books = {}
-    for _, m in ipairs(group.books_meta) do
+    for _i, m in ipairs(group.books_meta) do
         local b = fp_to_book[m.filepath]
         if b then new_books[#new_books + 1] = b end
     end
@@ -4703,11 +4827,11 @@ function BookshelfWidget:_searchAndDrill(query)
     -- _fetchChipItems re-hydrates on every render so covers are always
     -- fresh.
     local author_names, series_names, genre_names = {}, {}, {}
-    for _, g in ipairs(results.authors or {}) do author_names[#author_names + 1] = g.series_name end
-    for _, g in ipairs(results.series  or {}) do series_names[#series_names + 1] = g.series_name end
-    for _, g in ipairs(results.genres  or {}) do genre_names[#genre_names + 1]   = g.series_name end
+    for _i, g in ipairs(results.authors or {}) do author_names[#author_names + 1] = g.series_name end
+    for _i, g in ipairs(results.series  or {}) do series_names[#series_names + 1] = g.series_name end
+    for _i, g in ipairs(results.genres  or {}) do genre_names[#genre_names + 1]   = g.series_name end
     local folders = {}
-    for _, f in ipairs(results.folders or {}) do
+    for _i, f in ipairs(results.folders or {}) do
         folders[#folders + 1] = {
             path          = f.path,
             label         = f.label,
@@ -4715,7 +4839,7 @@ function BookshelfWidget:_searchAndDrill(query)
         }
     end
     local book_fps = {}
-    for _, b in ipairs(results.books or {}) do
+    for _i, b in ipairs(results.books or {}) do
         if b.filepath then book_fps[#book_fps + 1] = b.filepath end
     end
     -- Search is its own top-level mode rather than a nested drill under

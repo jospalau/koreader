@@ -82,7 +82,7 @@ function Settings:_pickTokenViaLibraryModal(LibraryModal, dialog)
 
     local function items()
         local out = {}
-        for _, t in ipairs(Tokens.CATALOGUE) do
+        for _i, t in ipairs(Tokens.CATALOGUE) do
             if active_chip == "all" or t.category == active_chip then
                 if not search_query or #search_query < 2 then
                     out[#out + 1] = t
@@ -136,7 +136,7 @@ Wrap content in [if:foo]…[/if] to show it only when the token has a value. Add
   [if:batt<20]LOW %batt[/if]]==]),
             chip_strip = function()
                 local out = {}
-                for _, c in ipairs(CHIPS) do
+                for _i, c in ipairs(CHIPS) do
                     out[#out + 1] = { key = c.key, label = c.label, is_active = (c.key == active_chip) }
                 end
                 return out
@@ -254,7 +254,7 @@ function Settings:_pickTokenFallback(dialog)
 
     local items = {}
     local current_cat
-    for _, t in ipairs(Tokens.CATALOGUE) do
+    for _i, t in ipairs(Tokens.CATALOGUE) do
         if t.category ~= current_cat then
             current_cat = t.category
             items[#items + 1] = {
@@ -960,23 +960,185 @@ function Settings:_pickLatestDepth()
     })
 end
 
+-- _about() — small popup with the logo, plugin name + installed version,
+-- the one-paragraph description (sourced from _meta.lua so translators
+-- can localise it the same way they localise the plugin's own
+-- description), and the GitHub URL. Deliberately simple -- an earlier
+-- iteration rendered the full README which read as overwhelming.
 function Settings:_about()
-    -- Load our own _meta.lua by absolute path. `require("_meta")` is
-    -- ambiguous because every koplugin has a _meta and they all collide
-    -- in package.path — whichever plugin loaded first wins, so the about
-    -- box was showing some OTHER plugin's metadata.
-    local plugin_dir = debug.getinfo(1, "S").source:match("@(.*/)")
+    -- Find the plugin root from this file's path. settings.lua sits at
+    -- <plugin_dir>/lib/<file>.lua so strip one segment to reach
+    -- _meta.lua and assets/.
+    local src = debug.getinfo(1, "S").source:match("@(.*)$")
+    local plugin_dir = src and src:match("^(.*)/lib/[^/]+%.lua$")
     local meta
     if plugin_dir then
-        local ok, m = pcall(dofile, plugin_dir .. "_meta.lua")
+        local ok, m = pcall(dofile, plugin_dir .. "/_meta.lua")
         if ok then meta = m end
     end
-    local name    = (meta and meta.fullname)    or "Bookshelf"
-    local version = (meta and meta.version)     or "0.1.0"
-    local desc    = (meta and meta.description) or ""
-    UIManager:show(InfoMessage:new{
-        text = string.format("%s  v%s\n\n%s", name, version, desc),
-    })
+    local name        = (meta and meta.fullname)    or "Bookshelf"
+    local version     = (meta and meta.version)     or "?"
+    local description = (meta and meta.description) or ""
+
+    -- Hard-coded English URL; not translatable. Display form drops the
+    -- https:// prefix for compactness; the bare host+path reads as a
+    -- URL on its own. Full URL with scheme is what Device:openLink and
+    -- the clipboard receive on tap.
+    local GITHUB_URL_DISPLAY = "github.com/AndyHazz/bookshelf.koplugin"
+    local GITHUB_URL         = "https://github.com/AndyHazz/bookshelf.koplugin"
+
+    local Device           = require("device")
+    local Screen           = Device.screen
+    local Font             = require("ui/font")
+    local Geom             = require("ui/geometry")
+    local Size             = require("ui/size")
+    local Blitbuffer       = require("ffi/blitbuffer")
+    local FrameContainer   = require("ui/widget/container/framecontainer")
+    local CenterContainer  = require("ui/widget/container/centercontainer")
+    local MovableContainer = require("ui/widget/container/movablecontainer")
+    local InputContainer   = require("ui/widget/container/inputcontainer")
+    local VerticalGroup    = require("ui/widget/verticalgroup")
+    local VerticalSpan     = require("ui/widget/verticalspan")
+    local TextBoxWidget    = require("ui/widget/textboxwidget")
+    local TextWidget       = require("ui/widget/textwidget")
+    local GestureRange     = require("ui/gesturerange")
+
+    local sw, sh = Screen:getWidth(), Screen:getHeight()
+    -- Frame target: ~75% of width on phone-sized portraits, capped so it
+    -- doesn't sprawl on landscape / tablet sizes.
+    local frame_w = math.min(math.floor(sw * 0.8), Screen:scaleBySize(420))
+    -- Inner padding: Size.padding.large (10dp) reads as cramped at this
+    -- frame size; the text edges sit ~1mm from the rounded border on
+    -- PW5. Scale up to ~24dp -- still snug but visibly breathable.
+    local FRAME_PAD = Screen:scaleBySize(24)
+    local content_w = frame_w - FRAME_PAD * 2
+
+    local column = VerticalGroup:new{ align = "center" }
+
+    -- Logo at the top, centred. The PNG is 900x380 (2.37:1) with a
+    -- transparent background, so we MUST pass alpha=true -- the
+    -- default (alpha=false) ignores the alpha channel and renders the
+    -- transparent area as opaque black. Width caps at content_w or
+    -- ~220dp, whichever is smaller; height is derived from the image's
+    -- native aspect so the widget doesn't reserve a tall square box
+    -- with empty vertical bands above and below the actual logo.
+    local LOGO_NATIVE_W, LOGO_NATIVE_H = 900, 380
+    if plugin_dir then
+        local logo_path = plugin_dir .. "/assets/bookshelf-logo.png"
+        local ok_lfs, lfs = pcall(require, "libs/libkoreader-lfs")
+        if ok_lfs and lfs and lfs.attributes and lfs.attributes(logo_path) then
+            local ImageWidget = require("ui/widget/imagewidget")
+            local logo_w = math.min(content_w, Screen:scaleBySize(220))
+            local logo_h = math.floor(logo_w * LOGO_NATIVE_H / LOGO_NATIVE_W)
+            column[#column + 1] = ImageWidget:new{
+                file         = logo_path,
+                width        = logo_w,
+                height       = logo_h,
+                scale_factor = 0,
+                alpha        = true,
+            }
+            column[#column + 1] = VerticalSpan:new{ width = Size.padding.default }
+        end
+    end
+
+    -- Version-only line below the logo. "Bookshelf" would duplicate the
+    -- name baked into the logo; the version digits stand alone. Sourced
+    -- live from _meta.lua so any release that touches version=... in
+    -- that file flows through automatically -- there's no other
+    -- string to keep in sync.
+    column[#column + 1] = TextWidget:new{
+        text = "v" .. version,
+        face = Font:getFace("cfont", 16),
+    }
+    column[#column + 1] = VerticalSpan:new{ width = Size.padding.large }
+    column[#column + 1] = TextBoxWidget:new{
+        text      = description,
+        face      = Font:getFace("cfont", 16),
+        width     = content_w,
+        alignment = "center",
+    }
+    column[#column + 1] = VerticalSpan:new{ width = Size.padding.large }
+    -- Tappable URL: tries Device:openLink (works on SDL / Android), then
+    -- falls back to copying to KOReader's internal clipboard + a brief
+    -- Notification. On Kindle there's no native browser so the
+    -- clipboard path is the user-meaningful one (paste into a Send-to-
+    -- Kindle-style helper, or just read the URL clearly).
+    local Button = require("ui/widget/button")
+    local function open_github()
+        local ok = false
+        if Device.openLink then
+            local _ok, ret = pcall(function() return Device:openLink(GITHUB_URL) end)
+            if _ok and ret then ok = true end
+        end
+        if not ok and Device.input and Device.input.setClipboardText then
+            pcall(function() Device.input.setClipboardText(GITHUB_URL) end)
+            local Notification = require("ui/widget/notification")
+            UIManager:show(Notification:new{
+                text = _("Link copied to clipboard"),
+            })
+        end
+    end
+    column[#column + 1] = Button:new{
+        text       = GITHUB_URL_DISPLAY,
+        bordersize = 0,
+        padding    = 0,
+        margin     = 0,
+        text_font_face = "cfont",
+        text_font_size = 14,
+        callback   = open_github,
+    }
+
+    -- Frame styling matches the other Bookshelf modals (chip editor,
+    -- hero line editor): default Size.border.window thickness (thicker
+    -- than Size.border.thin) and Size.radius.window for rounded
+    -- corners. Earlier the popup used thin + square, which read as
+    -- subtly out-of-family next to the rest of the plugin's dialogs.
+    -- Per-side padding: tighter at the top because the BOOKSHELF logo's
+    -- bold glyphs carry their own visual mass and don't need as much
+    -- breathing room above them. Equal padding made the popup read as
+    -- top-heavy in the screenshot. Bottom keeps the full FRAME_PAD so
+    -- the URL has the same air the description gets.
+    local frame = FrameContainer:new{
+        radius        = Size.radius.window,
+        padding       = FRAME_PAD,
+        padding_top   = math.floor(FRAME_PAD * 0.5),
+        margin        = 0,
+        background    = Blitbuffer.COLOR_WHITE,
+        column,
+    }
+
+    local dialog
+    dialog = InputContainer:new{
+        align = "center",
+        dimen = Geom:new{ x = 0, y = 0, w = sw, h = sh },
+        CenterContainer:new{
+            dimen = Geom:new{ w = sw, h = sh },
+            MovableContainer:new{ frame },
+        },
+    }
+    if Device:isTouchDevice() then
+        dialog.ges_events = {
+            TapClose = { GestureRange:new{
+                ges   = "tap",
+                range = Geom:new{ x = 0, y = 0, w = sw, h = sh },
+            } },
+        }
+        dialog.onTapClose = function(self_d, _arg, ges_ev)
+            if not frame.dimen or ges_ev.pos:notIntersectWith(frame.dimen) then
+                UIManager:close(self_d)
+            end
+            return true
+        end
+    end
+    if Device:hasKeys() then
+        dialog.key_events = { Close = { { Device.input.group.Back } } }
+        dialog.onClose = function(self_d)
+            UIManager:close(self_d)
+            return true
+        end
+    end
+
+    UIManager:show(dialog)
 end
 
 -- _updateSubItems() — drill-down menu for the in-app updater. Mirrors
@@ -1114,7 +1276,7 @@ function Settings:_tabsMenuItems()
         },
     }
     local tabs = TabModel.load()
-    for _, tab in ipairs(tabs) do
+    for _i, tab in ipairs(tabs) do
         local tab_id = tab.id
         items[#items + 1] = {
             keep_menu_open = true,
@@ -1122,21 +1284,21 @@ function Settings:_tabsMenuItems()
                 -- Re-read from model so label reflects any edits made via
                 -- the long-press editor without re-opening the menu.
                 local fresh = TabModel.load()
-                for _, t in ipairs(fresh) do
+                for _i, t in ipairs(fresh) do
                     if t.id == tab_id then return t.label end
                 end
                 return tab_id
             end,
             checked_func = function()
                 local fresh = TabModel.load()
-                for _, t in ipairs(fresh) do
+                for _i, t in ipairs(fresh) do
                     if t.id == tab_id then return t.enabled ~= false end
                 end
                 return true
             end,
             callback = function(touchmenu_instance)
                 local fresh = TabModel.load()
-                for _, t in ipairs(fresh) do
+                for _i, t in ipairs(fresh) do
                     if t.id == tab_id then
                         t.enabled = (t.enabled == false) and true or false
                         TabModel.save(fresh)
@@ -1165,7 +1327,7 @@ function Settings:_tabsMenuItems()
             while true do
                 local candidate = "custom_" .. n
                 local taken = false
-                for _, t in ipairs(fresh) do
+                for _i, t in ipairs(fresh) do
                     if t.id == candidate then taken = true; break end
                 end
                 if not taken then break end
