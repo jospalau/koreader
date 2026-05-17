@@ -102,7 +102,43 @@ function BookshelfWidget:init()
     self.height = Screen:getHeight()
     self.dimen  = Geom:new{ w = self.width, h = self.height }
     self.chip   = BookshelfSettings.read("active_chip") or "recent"
-    self.page   = BookshelfSettings.read("active_page") or 1
+    -- Cursor-based pagination: _cursor is the 1-based index of the first
+    -- visible book on the current view. Primary persisted state. self.page
+    -- is a derived view-aligned index used for footer display only --
+    -- recomputed via _syncPageFromCursor whenever the cursor moves.
+    --
+    -- Why cursor instead of page-as-primary: the expand/collapse toggle
+    -- changes _viewSize (8 → 12 in expanded mode). Page-as-primary would
+    -- need to either keep self.page constant (which breaks the user's
+    -- visible position since pages have different sizes in each mode) or
+    -- recompute page on toggle (which can't preserve the top-row exactly
+    -- because (collapsed_page - 1) × 8 is rarely divisible by 12). Cursor
+    -- preserves the top row of collapsed-view as the top row of
+    -- expanded-view across the toggle by definition.
+    --
+    -- Backward compat: existing installs persisted "active_page" only.
+    -- Fall back to deriving cursor from page × PAGE_SIZE on load. New
+    -- saves use "active_cursor"; "active_page" stays in settings for one
+    -- or two releases so a downgrade keeps something sensible.
+    local _saved_cursor = BookshelfSettings.read("active_cursor")
+    if _saved_cursor and _saved_cursor >= 1 then
+        self._cursor = _saved_cursor
+    else
+        local _saved_page = BookshelfSettings.read("active_page") or 1
+        -- Use the same PAGE_SIZE the legacy code used (= _baseShelves *
+        -- _nCols, which the previous _pageSize() returned). This is a
+        -- per-device value -- 5 in landscape, 8 standard portrait, 9 tall
+        -- portrait, 6 phone-tall (Palma). _baseShelves and _nCols don't
+        -- depend on self._expanded (set later), so it's safe to call here.
+        local _legacy_page_size
+        if self:_isLandscape() then
+            _legacy_page_size = 5
+        else
+            _legacy_page_size = self:_baseShelves() * self:_nCols()
+        end
+        self._cursor = math.max(1, (_saved_page - 1) * _legacy_page_size + 1)
+    end
+    self.page = 1  -- derived; recomputed by _syncPageFromCursor below.
     -- Drill state persists across widget recreations (e.g. KOReader was
     -- restarted while the user had drilled into an author stack). The
     -- saved form is identifiers only -- _restoreDrillPath() re-hydrates
@@ -414,6 +450,11 @@ end
 -- rebuild, KOReader's own periodic flush will pick it up.
 function BookshelfWidget:_persistNavState()
     BookshelfSettings.save("active_chip", self.chip)
+    -- Cursor is the primary persisted state; active_page is also written
+    -- for back-compat with older bookshelf versions that didn't know
+    -- about active_cursor (a user downgrading mid-development should
+    -- still land on a sensible page).
+    BookshelfSettings.save("active_cursor", self._cursor)
     BookshelfSettings.save("active_page", self.page)
     BookshelfSettings.save("drill_path", self:_serializeDrillPath())
 end
@@ -870,7 +911,8 @@ function BookshelfWidget:_rebuild()
             self:_clearDpadFocus()
             self._drilldown_path = {}
             self.chip            = key
-            self.page            = 1
+            self._cursor         = 1
+            self:_syncPageFromCursor()
             BookshelfSettings.save("active_chip", key)
             self:_rebuild()
             UIManager:setDirty(self, "ui")
@@ -915,8 +957,9 @@ function BookshelfWidget:_rebuild()
     self._chip_bar = chips or nil
 
     -- ── Shelf items ───────────────────────────────────────────────────────────
-    -- PAGE_SIZE = _pageSize(): 8 on standard screens, 12 on tall screens.
-    -- VIEW_SIZE = _viewSize(): adds 4 books (one row) in expanded mode.
+    -- PAGE_SIZE = _pageSize() = _viewSize(): non-overlapping pagination,
+    -- so the next-page chevron always advances by a full screen-worth of
+    -- books regardless of expand/collapse state.
     -- Decoupling them means toggling preserves the top rows: expanded reveals
     -- one extra row at the bottom while the rest stays identical.
     local PAGE_SIZE  = self:_pageSize()
@@ -933,43 +976,30 @@ function BookshelfWidget:_rebuild()
     logger.dbg(string.format("[bookshelf perf] _rebuild: fetch=%.0fms items=%d chip=%s",
         (_perf_t2 - _perf_t1) * 1000, _total_hint or #all_items, _perf_chip))
     local total      = _total_hint or #all_items
-    -- Last page must contain at least one book that isn't already visible
-    -- on the previous page. With overlapping windows (PAGE_SIZE=8 advance,
-    -- VIEW_SIZE=12 in expanded), the formula `ceil(total / PAGE_SIZE)`
-    -- over-counts: e.g. 113 books expanded = 14 real pages (page 14 ends
-    -- at book 113), but `ceil(113/8) = 15` would give a phantom page 15
-    -- whose only "new" content was already shown in page 14's row 3.
-    --   last_page satisfies: (last_page - 1) * PAGE_SIZE + VIEW_SIZE >= total
-    --   → last_page = ceil((total - VIEW_SIZE) / PAGE_SIZE) + 1
+    -- Total pages = ceil(total / VIEW_SIZE) under the cursor model (no
+    -- overlap on pagination). Clamp the cursor to the valid range
+    -- BEFORE deriving self.page for display: total may have changed
+    -- since the cursor was last persisted, so the previously-valid
+    -- cursor might be off the end.
     local total_pages
     if total <= VIEW_SIZE then
         total_pages = 1
     else
-        total_pages = math.ceil((total - VIEW_SIZE) / PAGE_SIZE) + 1
+        total_pages = math.ceil(total / VIEW_SIZE)
     end
-    if self.page > total_pages then self.page = total_pages end
-    if self.page < 1 then self.page = 1 end
     -- Cache for the swipe handlers (which run outside _rebuild's scope).
     self._total_pages = total_pages
+    self._total_items = total
+    self:_clampCursor(total)
+    self:_syncPageFromCursor()
     -- all/folder chips return a pre-sliced page; others return the full list.
     local items
     if _total_hint then
         items = all_items
     else
-        local start_idx = (self.page - 1) * PAGE_SIZE + 1
+        local start_idx = self._cursor
         items = {}
         for i = 0, VIEW_SIZE - 1 do items[i + 1] = all_items[start_idx + i] end
-    end
-    -- Last-page de-duplication for expanded mode: pages overlap by
-    -- (VIEW_SIZE - PAGE_SIZE) books, so the LAST page's first 4 books are
-    -- already shown on the previous page's row 3. Skip them so the last
-    -- page shows only books unique to it (a partial page is fine; the
-    -- duplicates were the actual confusing thing).
-    if self._expanded and self.page == total_pages and self.page > 1 then
-        local skip = VIEW_SIZE - PAGE_SIZE
-        local trimmed = {}
-        for i = skip + 1, #items do trimmed[#trimmed + 1] = items[i] end
-        items = trimmed
     end
     -- Only count non-nil entries (the last page may be partial).
     local shown_count = 0
@@ -991,32 +1021,63 @@ function BookshelfWidget:_rebuild()
     --   • "recent"     when ReadHistory is empty
     --   • "latest"     when home_dir is empty / yields no supported files
     if #items == 0 then
+        -- Resolve the chip's source kind so we can branch on it (not on
+        -- self.chip, which is a chip id -- custom chips have ids like
+        -- "custom_3" but their source.kind tells us what view they show).
+        -- Default built-in chips have id == source.kind, so the existing
+        -- chip-id checks below still hit; the source-kind path catches
+        -- custom chips that adopt a built-in source (e.g. user's chip
+        -- with source.kind = "all" or "library", i.e. home folders /
+        -- home flattened).
+        local TabModel = require("lib/bookshelf_tab_model")
+        local _tab = TabModel.getById(self.chip)
+        local _source_kind = (_tab and _tab.source and _tab.source.kind)
+                              or self.chip
+        local _is_home_source = _source_kind == "all" or _source_kind == "library"
+
+        -- Branch on _source_kind, NOT self.chip. Chip IDs stay sticky
+        -- after the user changes a chip's source via the editor (a chip
+        -- created as "genres" keeps id="genres" even when re-pointed at
+        -- "library"), so keying off self.chip lights the wrong empty
+        -- message ("No genres yet" on a home-flattened chip). Default
+        -- built-in chips have id == source.kind so this still serves
+        -- them correctly.
         local placeholder_text
         local _tip = self._drilldown_path[#self._drilldown_path]
         if _tip and _tip.kind == "search" then
             placeholder_text = string.format(
                 _("No matches for \"%s\""), _tip.payload.query or "")
-        elseif self.chip == "series" then
+        elseif _source_kind == "series" then
             placeholder_text = _("Nothing in Series yet · Add series metadata to your books and they will appear here")
-        elseif self.chip == "authors" then
+        elseif _source_kind == "authors" then
             placeholder_text = _("No authors yet · Add author metadata to your books and they will appear here")
-        elseif self.chip == "genres" then
+        elseif _source_kind == "genres" then
             placeholder_text = _("No genres yet · Add keywords or subject metadata to your books and they will appear here")
-        elseif self.chip == "tags" then
+        elseif _source_kind == "tags" then
             placeholder_text = _("No tags yet · Long-press a book and tap 'Add to collection' to create one")
-        elseif self.chip == "favorites" then
+        elseif _source_kind == "favorites" then
             placeholder_text = _("No favourites yet · Long-press a book and tap 'Add to favourites'")
-        elseif self.chip == "latest" then
+        elseif _source_kind == "latest" then
             placeholder_text = _("No books found · Set your library folder in Settings then tap Latest")
+        elseif _source_kind == "recent" then
+            placeholder_text = _("No recent reads yet · Open a book and it will appear here")
+        elseif _is_home_source then
+            -- "Home (folders)" (kind "all") + "Home (flattened)" (kind
+            -- "library") both depend on KOReader's home_dir being set.
+            -- The "Set home folder" button below drives KOReader's
+            -- path-chooser dialog directly.
+            placeholder_text = _("No books here yet \xC2\xB7 Pick a folder to use as your KOReader library and books in it will appear here.")
         else
-            -- Handle custom-source tabs (non-built-in kinds).
-            local TabModel = require("lib/bookshelf_tab_model")
-            local tab = TabModel.getById(self.chip)
-            local builtin_kinds = { all=1, recent=1, latest=1, series=1, authors=1, genres=1, tags=1, favorites=1 }
-            if tab and tab.source and tab.source.kind and not builtin_kinds[tab.source.kind] then
+            -- Source kinds without a bespoke message: formats / ratings,
+            -- "specific" group drill-ins (folder / collection / tag /
+            -- genre / author), or anything else not enumerated above.
+            local builtin_kinds = { all=1, library=1, recent=1, latest=1,
+                series=1, authors=1, genres=1, tags=1, formats=1,
+                ratings=1, favorites=1 }
+            if _source_kind and not builtin_kinds[_source_kind] then
                 placeholder_text = string.format(
                     _("No books in %s yet \xC2\xB7 Long-press the chip to edit its source or filter"),
-                    tab.label or self.chip)
+                    _tab and _tab.label or self.chip)
             else
                 placeholder_text = string.format(_("No books in %s yet"), self:_chipLabel())
             end
@@ -1028,20 +1089,111 @@ function BookshelfWidget:_rebuild()
         local paper_bg = Blitbuffer.COLOR_WHITE
         local card_bg  = Blitbuffer.gray(0.07)
 
+        -- Split the placeholder text into headline + sub on the bullet
+        -- marker. Most chip-specific messages already follow this shape
+        -- ("No favourites yet · Long-press a book and tap..."), so we
+        -- can render the parts with different weights. Strings without
+        -- a bullet render as headline only.
+        local headline_text, sub_text
+        local sep_start, sep_end = placeholder_text:find(" \xC2\xB7 ", 1, true)
+        if sep_start then
+            headline_text = placeholder_text:sub(1, sep_start - 1)
+            sub_text      = placeholder_text:sub(sep_end + 1)
+        else
+            headline_text = placeholder_text
+            sub_text      = nil
+        end
+
+        -- Card claims all available shelf-area height so the empty state
+        -- has visible presence -- the original card was a thin strip pinned
+        -- to the chip-strip bottom with the rest of the screen blank, which
+        -- read as broken UI rather than guidance. Account for outer
+        -- FrameContainer padding (PAD * 2), the hero + chip strip + their
+        -- gaps inside the vgroup, and an extra PAD margin around the card.
+        local VerticalSpan = require("ui/widget/verticalspan")
+        local card_h
+        if hide_chip_bar then
+            card_h = self.height - 3 * PAD - hero_h
+        else
+            card_h = self.height - 4 * PAD - hero_h - chip_h
+        end
+        -- Floor at a sensible minimum so an unusually tall hero doesn't
+        -- squash the card into nothing.
+        local min_card_h = Screen:scaleBySize(140)
+        if card_h < min_card_h then card_h = min_card_h end
+
+        local card_inner_w = content_w - Size.padding.large * 2
+
+        local card_children = { align = "center" }
+        -- bgcolor must match the card -- TextBoxWidget defaults to
+        -- COLOR_WHITE and paints its own background fill, which shows up
+        -- as a white block on the grey card if we don't override.
+        card_children[#card_children + 1] = TextBoxWidget:new{
+            text      = headline_text,
+            face      = Font:getFace("infofont", 22),
+            bold      = true,
+            bgcolor   = card_bg,
+            width     = card_inner_w,
+            alignment = "center",
+        }
+        if sub_text and sub_text ~= "" then
+            card_children[#card_children + 1] = VerticalSpan:new{
+                width = Size.padding.large,
+            }
+            card_children[#card_children + 1] = TextBoxWidget:new{
+                text      = sub_text,
+                face      = Font:getFace("infofont", 15),
+                bgcolor   = card_bg,
+                width     = card_inner_w,
+                alignment = "center",
+            }
+        end
+        if _is_home_source then
+            local Button = require("ui/widget/button")
+            card_children[#card_children + 1] = VerticalSpan:new{
+                width = Size.padding.fullscreen,
+            }
+            local bw = self
+            card_children[#card_children + 1] = Button:new{
+                text           = _("Set home folder"),
+                width          = math.floor(card_inner_w * 0.5),
+                text_font_size = 16,
+                callback       = function()
+                    local filemanagerutil =
+                        require("apps/filemanager/filemanagerutil")
+                    local current = G_reader_settings:readSetting("home_dir")
+                    local default = filemanagerutil.getDefaultDir()
+                    filemanagerutil.showChooseDialog(
+                        _("Current home folder:"),
+                        function(path)
+                            G_reader_settings:saveSetting("home_dir", path)
+                            if Repo.invalidateWalkCache then
+                                Repo.invalidateWalkCache()
+                            end
+                            bw:_rebuild()
+                            UIManager:setDirty(bw, "ui")
+                        end,
+                        current,
+                        default)
+                end,
+            }
+        end
+
         local placeholder = FrameContainer:new{
             bordersize = Size.border.thin,
             background = card_bg,
             padding    = Size.padding.large,
             width      = content_w,
-            TextBoxWidget:new{
-                text      = placeholder_text,
-                face      = Font:getFace("infofont", 12),
-                width     = content_w - Size.padding.large * 2,
-                alignment = "center",
+            height     = card_h,
+            CenterContainer:new{
+                dimen = Geom:new{
+                    w = card_inner_w,
+                    h = card_h - Size.padding.large * 2,
+                },
+                VerticalGroup:new(card_children),
             },
         }
 
-        local VerticalSpan = require("ui/widget/verticalspan")
         local empty_vgroup
         if hide_chip_bar then
             empty_vgroup = VerticalGroup:new{
@@ -1526,7 +1678,9 @@ function BookshelfWidget:_fetchChipItems(n)
             or tip.kind == "format" or tip.kind == "rating") then
         local books = tip.payload.books or {}
         local total = #books
-        local offset = (self.page - 1) * self:_pageSize()
+        -- Cursor-based: offset is 0-based, cursor is 1-based. Clamp upstream
+        -- in _rebuild keeps cursor within range; defensive guard here too.
+        local offset = math.max(0, (self._cursor or 1) - 1)
         local stop = math.min(offset + self:_viewSize(), total)
         local fresh = {}
         for i = offset + 1, stop do
@@ -1536,18 +1690,32 @@ function BookshelfWidget:_fetchChipItems(n)
         end
         return fresh, total
     end
-    -- For the all-chip and folder drill-down, fetch only the current page
-    -- slice and return the total count as a second value. Callers use the
-    -- count to compute total_pages without hydrating the full item list.
-    -- offset uses _pageSize (8, page advance); limit uses _viewSize (8 or
-    -- 12) so expanded mode pulls the extra 4 books needed for row 3.
-    local offset    = (self.page - 1) * self:_pageSize()
+    -- For the all-chip and folder drill-down, fetch only the current
+    -- visible window and return the total count as a second value.
+    -- Cursor model: offset = cursor - 1 (cursor is 1-based, offset is
+    -- 0-based). Limit = view size for the current mode (8 standard
+    -- collapsed, 12 expanded, etc) so a single fetch covers the page.
+    local offset    = math.max(0, (self._cursor or 1) - 1)
     local LIMIT     = self:_viewSize()
+    local TabModel  = require("lib/bookshelf_tab_model")
+    local tab       = TabModel.getById(self.chip)
     if tip and tip.kind == "folder" then
-        return Repo.getAll(tip.payload.path, LIMIT, offset)
+        -- Drilldown inheritance: the chip's sort_priority levels 2+ drive
+        -- the order of books inside the drilled-into folder, mirroring how
+        -- _applyWithinGroupSort treats group-source drilldowns. Level 1 was
+        -- used at the parent view; levels 2+ apply within. Folder cards at
+        -- this level still sort by level-1 key (typically filename), since
+        -- SortEngine's filename comparator falls back to a.name for lfs
+        -- entries -- so passing the full sp also works. Match the group-
+        -- source convention and pass sp[2..#] for "within-folder" semantics.
+        local within
+        local sp = tab and tab.sort_priority
+        if sp and #sp >= 2 then
+            within = {}
+            for i = 2, #sp do within[#within + 1] = sp[i] end
+        end
+        return Repo.getAll(tip.payload.path, LIMIT, offset, within)
     end
-    local TabModel = require("lib/bookshelf_tab_model")
-    local tab      = TabModel.getById(self.chip)
     if tab then
         return Repo.getBySource(tab.source, tab.filter, tab.sort_priority, offset, LIMIT)
     end
@@ -1958,19 +2126,39 @@ function BookshelfWidget:_buildPaginationFooter(content_w, label_h, total_pages)
     -- below the footer, taking back wasted pixels without colliding
     -- with anything below the screen edge.
     local hit_extension = Screen:scaleBySize(12)
-    local function go(p)
-        return function() bw.page = p; bw:_swapShelvesInPlace() end
+    local function go_page(p)
+        -- "Go to page N" callback used by the Page X of Y dialog. Page is
+        -- a display concept; translate to a cursor snapped to that page's
+        -- aligned start in the current view size.
+        return function()
+            local view = bw:_viewSize()
+            bw._cursor = math.max(1, (p - 1) * view + 1)
+            bw:_clampCursor()
+            bw:_syncPageFromCursor()
+            bw:_swapShelvesInPlace()
+        end
     end
-    -- Long-press ±10: skip 10 pages instead of 1. Clamped via go() so we
-    -- can't land outside [1, total_pages] regardless of how many holds
-    -- the user fires. Returns nil rather than a no-op callback when the
-    -- button is disabled so Button hides the long-press affordance too.
+    local function step(direction)
+        -- Chevron callback. Advance cursor by view-size in the given
+        -- direction (+1 next, -1 prev). After a misaligned-cursor swipe-up,
+        -- this still steps cleanly by the current view's full size.
+        return function()
+            bw:_advanceCursor(direction)
+            bw:_syncPageFromCursor()
+            bw:_swapShelvesInPlace()
+        end
+    end
+    -- Long-press ±10: skip 10 pages instead of 1. Clamped via go_page()
+    -- so we can't land outside [1, total_pages] regardless of how many
+    -- holds the user fires. Returns nil rather than a no-op callback
+    -- when the button is disabled so Button hides the long-press
+    -- affordance too.
     local function skip(direction)
         local target = self.page + direction * 10
         if target < 1            then target = 1 end
         if target > total_pages  then target = total_pages end
         if target == self.page then return nil end
-        return go(target)
+        return go_page(target)
     end
     -- margin/bordersize swap: every button allocates the same outer footprint
     -- (margin + bordersize = focus_border) so moving focus never shifts layout.
@@ -1979,20 +2167,29 @@ function BookshelfWidget:_buildPaginationFooter(content_w, label_h, total_pages)
     local function bm(k) return (focused_btn == k) and 0           or focus_border end
     local function bs(k) return (focused_btn == k) and focus_border or 0           end
     local function br(k) return (focused_btn == k) and focus_radius or nil         end
+    -- Cursor-based enable conditions. The display page (self.page) can
+    -- show the same value for several cursor positions when the cursor
+    -- is misaligned after a swipe-up. Gating chevron-enabled on cursor
+    -- directly means books before/after the visible window are always
+    -- reachable regardless of what the page indicator shows.
+    local view_size_now    = self:_viewSize()
+    local max_cursor_now   = self:_maxCursor()
+    local can_step_back    = self._cursor > 1
+    local can_step_forward = self._cursor < max_cursor_now
     local first = Button:new{
         icon = "chevron.first", icon_width = chev_size, icon_height = chev_size,
         width      = slot(SLOT_EDGE),
-        callback   = go(1),
+        callback   = go_page(1),
         margin     = bm("first"), bordersize = bs("first"), radius = br("first"),
-        enabled    = self.page > 1, show_parent = self,
+        enabled    = can_step_back, show_parent = self,
     }
     local prev = Button:new{
         icon = "chevron.left",  icon_width = chev_size, icon_height = chev_size,
         width         = slot(SLOT_STEP),
-        callback      = go(self.page - 1),
+        callback      = step(-1),
         hold_callback = skip(-1),
         margin        = bm("prev"), bordersize = bs("prev"), radius = br("prev"),
-        enabled       = self.page > 1, show_parent = self,
+        enabled       = can_step_back, show_parent = self,
     }
     local page_text = Button:new{
         text = string.format("Page %d of %d", self.page, total_pages),
@@ -2006,17 +2203,17 @@ function BookshelfWidget:_buildPaginationFooter(content_w, label_h, total_pages)
     local next_btn = Button:new{
         icon = "chevron.right", icon_width = chev_size, icon_height = chev_size,
         width         = slot(SLOT_STEP),
-        callback      = go(self.page + 1),
+        callback      = step(1),
         hold_callback = skip(1),
         margin        = bm("next"), bordersize = bs("next"), radius = br("next"),
-        enabled       = self.page < total_pages, show_parent = self,
+        enabled       = can_step_forward, show_parent = self,
     }
     local last = Button:new{
         icon = "chevron.last", icon_width = chev_size, icon_height = chev_size,
         width      = slot(SLOT_EDGE),
-        callback   = go(total_pages),
+        callback   = go_page(total_pages),
         margin     = bm("last"), bordersize = bs("last"), radius = br("last"),
-        enabled    = self.page < total_pages, show_parent = self,
+        enabled    = can_step_forward, show_parent = self,
     }
     -- Extend each button's hit zone downward by hit_extension. Two
     -- mutations are needed:
@@ -2114,7 +2311,10 @@ function BookshelfWidget:_openPageJump()
                             })
                             return
                         end
-                        bw.page = math.floor(n)
+                        local view = bw:_viewSize()
+                        bw._cursor = math.max(1, (math.floor(n) - 1) * view + 1)
+                        bw:_clampCursor()
+                        bw:_syncPageFromCursor()
                         UIManager:close(dialog)
                         bw:_swapShelvesInPlace()
                     end,
@@ -2146,7 +2346,6 @@ function BookshelfWidget:_swapShelvesInPlace()
         return
     end
     local d = self._shelf_dims
-    local PAGE_SIZE = self:_pageSize()
     local VIEW_SIZE = self:_viewSize()
     local MAX_FETCH = 400
     local all_items, _total_hint = self:_fetchChipItems(MAX_FETCH)
@@ -2159,11 +2358,12 @@ function BookshelfWidget:_swapShelvesInPlace()
     if total <= VIEW_SIZE then
         total_pages = 1
     else
-        total_pages = math.ceil((total - VIEW_SIZE) / PAGE_SIZE) + 1
+        total_pages = math.ceil(total / VIEW_SIZE)
     end
-    if self.page > total_pages then self.page = total_pages end
-    if self.page < 1 then self.page = 1 end
     self._total_pages = total_pages
+    self._total_items = total
+    self:_clampCursor(total)
+    self:_syncPageFromCursor()
     if total == 0 then
         -- Going to empty state needs a structural change (hero + chips +
         -- placeholder, no shelves) — fall back to full rebuild.
@@ -2175,9 +2375,9 @@ function BookshelfWidget:_swapShelvesInPlace()
     if _total_hint then
         items = all_items
     else
-        local start_idx = (self.page - 1) * PAGE_SIZE + 1
+        local start_idx = self._cursor
         items = {}
-        for i = 0, PAGE_SIZE - 1 do items[i + 1] = all_items[start_idx + i] end
+        for i = 0, VIEW_SIZE - 1 do items[i + 1] = all_items[start_idx + i] end
     end
 
     self._page_items = items
@@ -2227,6 +2427,37 @@ function BookshelfWidget:_swapShelvesInPlace()
     self:_persistNavState()
 end
 
+-- Walk a widget tree looking for the SpineWidget whose .book.filepath
+-- matches `fp`. Returns (parent_container, index_in_parent, spine_widget)
+-- so the caller can do `parent[idx] = new_slot`.
+--
+-- _inner_vgroup[shelf_idx] may be the row HorizontalGroup directly, OR a
+-- CenterContainer wrapping it (kicks in when slot_w is shrunk to
+-- preserve cover aspect — see lib/bookshelf_shelf_row.lua:298-305),
+-- OR (expanded mode) the slot itself may be an InputContainer wrapping
+-- VerticalGroup{ spine, title }. Descend up to 3 levels.
+--
+-- Shared by _repaintSelectionHighlight (preview-tap highlight swap) and
+-- _refreshSpineInPlace (post-read refresh of the closed book's spine).
+local function _descendFindSpine(node, fp, depth)
+    if not node or depth > 3 then return nil, nil end
+    for i, c in ipairs(node) do
+        if c and c.book and c.book.filepath == fp then
+            -- Found a direct SpineWidget child — return the container
+            -- holding it (for slot replacement) and the index.
+            return node, i, c
+        end
+    end
+    -- No direct match — descend into children.
+    for _, c in ipairs(node) do
+        if c then
+            local parent, idx, spine = _descendFindSpine(c, fp, depth + 1)
+            if parent then return parent, idx, spine end
+        end
+    end
+    return nil, nil, nil
+end
+
 -- _repaintSelectionHighlight(old_fp, new_fp) — preview-tap fast path.
 --
 -- _swapShelvesInPlace was costing ~950ms per tap on a 329-item chip because
@@ -2264,35 +2495,9 @@ function BookshelfWidget:_repaintSelectionHighlight(old_fp, new_fp)
         union_dimen.w, union_dimen.h = x2 - x1, y2 - y1
     end
 
-    -- _inner_vgroup[idx] may be the row HorizontalGroup directly, OR a
-    -- CenterContainer wrapping it (kicks in when slot_w is shrunk to
-    -- preserve cover aspect — see lib/bookshelf_shelf_row.lua:298-305),
-    -- OR (expanded mode) the slot itself may be an InputContainer wrapping
-    -- VerticalGroup{ spine, title }. Descend up to 3 levels looking for a
-    -- container whose direct children include a SpineWidget with the
-    -- target filepath.
-    local function descend_find_spine(node, fp, depth)
-        if not node or depth > 3 then return nil, nil end
-        for i, c in ipairs(node) do
-            if c and c.book and c.book.filepath == fp then
-                -- Found a direct SpineWidget child — return the container
-                -- holding it (for slot replacement) and the index.
-                return node, i, c
-            end
-        end
-        -- No direct match — descend into children.
-        for _, c in ipairs(node) do
-            if c then
-                local parent, idx, spine = descend_find_spine(c, fp, depth + 1)
-                if parent then return parent, idx, spine end
-            end
-        end
-        return nil, nil, nil
-    end
-
     local function find_and_swap(root, fp, want_selected)
         if not fp then return end
-        local parent, idx, old_spine = descend_find_spine(root, fp, 0)
+        local parent, idx, old_spine = _descendFindSpine(root, fp, 0)
         if not parent then return end
         local fresh = Repo.buildBookMeta(fp) or old_spine.book
         local new_slot = SpineWidget:new{
@@ -2345,6 +2550,57 @@ function BookshelfWidget:_repaintSelectionHighlight(old_fp, new_fp)
     logger.dbg(string.format(
         "[bookshelf perf] _repaintHighlight: replaced=%d TOTAL=%.0fms",
         replaced, (_gettime() - _perf_t0) * 1000))
+end
+
+-- _refreshSpineInPlace(fp) — rebuild a single spine in place, preserving
+-- its current is_selected state. Used after a book is closed: the spine
+-- needs to pick up the new percent_finished / status / progress glyph
+-- without re-sorting the whole shelf. main.lua's onCloseDocument has
+-- already invalidated _progress_cache for `fp`, so Repo.buildBookMeta
+-- returns fresh state on the next CoverProgress.decide call.
+--
+-- No-op when the closed book isn't visible on either shelf row (off the
+-- current page, drilled into a different group, etc). softRefresh's
+-- gate / _swapShelvesInPlace handles those cases separately when the
+-- sort order itself needs refreshing.
+function BookshelfWidget:_refreshSpineInPlace(fp)
+    if not fp or not self._inner_vgroup or not self._shelf_dims then return end
+    local d = self._shelf_dims
+    local replaced_dimen
+    for _, idx in ipairs({ d.shelf_top_idx, d.shelf_bottom_idx }) do
+        local hg = self._inner_vgroup[idx]
+        if hg then
+            local parent, slot_idx, old_spine = _descendFindSpine(hg, fp, 0)
+            if parent then
+                local fresh = Repo.buildBookMeta(fp) or old_spine.book
+                local new_slot = SpineWidget:new{
+                    book          = fresh,
+                    width         = old_spine.width,
+                    height        = old_spine.height,
+                    on_tap        = old_spine.on_tap,
+                    on_hold       = old_spine.on_hold,
+                    is_selected   = old_spine.is_selected or false,
+                    show_progress = old_spine.show_progress,
+                    show_titles   = old_spine.show_titles,
+                    in_series     = old_spine.in_series,
+                }
+                if old_spine.dimen then
+                    replaced_dimen = replaced_dimen and replaced_dimen
+                                  or old_spine.dimen:copy()
+                end
+                parent[slot_idx] = new_slot
+                if parent.resetLayout then parent:resetLayout() end
+                UIManager:nextTick(function()
+                    if old_spine and old_spine.free then
+                        pcall(function() old_spine:free() end)
+                    end
+                end)
+            end
+        end
+    end
+    if replaced_dimen then
+        UIManager:setDirty(self, function() return "ui", replaced_dimen end)
+    end
 end
 
 -- softRefresh — lightweight return-to-bookshelf update. Splits the work
@@ -2414,6 +2670,15 @@ function BookshelfWidget:softRefresh()
         UIManager:setDirty(self, "ui")
     end
     if self._startStatusTimer then self:_startStatusTimer() end
+    -- Targeted spine refresh for the just-closed book. Runs even when the
+    -- gate below skips the full shelf swap, so the closed book's progress
+    -- bar / bookmark glyph picks up the new percent_finished without the
+    -- user needing to swipe-down. onCloseDocument invalidated the progress
+    -- cache for this fp already; buildBookMeta returns fresh data.
+    local lastfile = Repo.getCurrent and Repo.getCurrent()
+    if lastfile and lastfile.filepath then
+        self:_refreshSpineInPlace(lastfile.filepath)
+    end
     if not self:_needsReaderReturnShelfRefresh() then
         return
     end
@@ -2867,7 +3132,8 @@ function BookshelfWidget:_moveCursor(delta)
 
     if new_idx < 1 then
         if self.page > 1 then
-            self.page        = self.page - 1
+            self:_advanceCursor(-1)
+            self:_syncPageFromCursor()
             self._cursor_idx = view_size
             self:_swapShelvesInPlace()
         end
@@ -2877,7 +3143,8 @@ function BookshelfWidget:_moveCursor(delta)
     if new_idx > view_size then
         local total = self._total_pages or 1
         if self.page < total then
-            self.page        = self.page + 1
+            self:_advanceCursor(1)
+            self:_syncPageFromCursor()
             self._cursor_idx = 1
             self:_swapShelvesInPlace()
         end
@@ -3247,22 +3514,26 @@ function BookshelfWidget:onBSKbPress()
         local btn   = self._footer_cursor_btn
         local total = self._total_pages or 1
         if btn == "first" and self.page > 1 then
-            self.page = 1
+            self._cursor = 1
+            self:_syncPageFromCursor()
             self._footer_cursor_btn = "next"
             self:_swapShelvesInPlace()
             self:_swapFooterInPlace()
         elseif btn == "prev" and self.page > 1 then
-            self.page = self.page - 1
+            self:_advanceCursor(-1)
+            self:_syncPageFromCursor()
             if self.page <= 1 then self._footer_cursor_btn = "next" end
             self:_swapShelvesInPlace()
             self:_swapFooterInPlace()
         elseif btn == "next" and self.page < total then
-            self.page = self.page + 1
+            self:_advanceCursor(1)
+            self:_syncPageFromCursor()
             if self.page >= total then self._footer_cursor_btn = "prev" end
             self:_swapShelvesInPlace()
             self:_swapFooterInPlace()
         elseif btn == "last" and self.page < total then
-            self.page = total
+            self._cursor = self:_maxCursor()
+            self:_syncPageFromCursor()
             self._footer_cursor_btn = "prev"
             self:_swapShelvesInPlace()
             self:_swapFooterInPlace()
@@ -3294,7 +3565,8 @@ function BookshelfWidget:_setActiveChip(key)
     end
     self._drilldown_path = {}
     self.chip            = key
-    self.page            = 1
+    self._cursor         = 1
+    self:_syncPageFromCursor()
     BookshelfSettings.save("active_chip", key)
     self:_rebuild()
     UIManager:setDirty(self, "ui")
@@ -3437,17 +3709,101 @@ function BookshelfWidget:_nCols()
     return self:_isTallScreen() and 3 or 4
 end
 
--- _pageSize() — page-advance step: non-expanded rows × cols. Constant
--- across the expand/collapse toggle so the first-visible book stays put —
--- the top rows are identical, toggling reveals one extra row at the
--- bottom. Tracks _baseShelves rather than a hardcoded tall=3 / std=2 so
--- the dynamic phone-tall reduction (Palma → 2 shelves) advances the
--- right number of books per page.
--- Landscape: 5 (1×5). Standard: 8 (2×4). Tall PW-aspect: 9 (3×3).
--- Tall phone-aspect (Palma): 6 (2×3).
+-- _pageSize() — page-advance step. Matches _viewSize so paging forward
+-- reveals an entire new view's worth of books with no row overlap. The
+-- expand/collapse toggle (swipe-up) still reveals one extra row at the
+-- bottom on collapsed→expanded transition (that's a self.page-preserving
+-- view-size change, not a page advance), but within expanded mode the
+-- next-page chevron advances by the full visible count.
+--
+-- Tracks _nShelves rather than _baseShelves so expanded mode advances by
+-- _nShelves×_nCols (e.g. 12 on a standard expanded screen) instead of
+-- the previous _baseShelves×_nCols (8) which left the last row of page
+-- N visible as the first row of page N+1.
+--
+-- Landscape: 5 (1×5). Standard: 8 (2×4) collapsed / 12 (3×4) expanded.
+-- Tall PW-aspect: 9 (3×3) collapsed / 12 (4×3) expanded.
 function BookshelfWidget:_pageSize()
     if self:_isLandscape() then return 5 end
-    return self:_baseShelves() * self:_nCols()
+    return self:_nShelves() * self:_nCols()
+end
+
+-- _syncPageFromCursor() — recomputes self.page (display-only) from
+-- self._cursor + current view size + total items. Call this whenever
+-- cursor moves so the pagination footer stays in sync.
+--
+-- Two cases:
+--   * View contains the last book of the list  → last page (the user
+--     reasons "we're at the end, so this is the last page" regardless
+--     of where the cursor literally falls).
+--   * Otherwise                                → aligned page from
+--     cursor (floor((cursor-1)/view) + 1).
+--
+-- Example: 18 books, view=12, cursor=9. View shows books 9-18 which
+-- contains book 18 (the last). page = 2 (the last page). Without this
+-- special case the aligned formula would give page 1, leaving the user
+-- looking at end-of-list content while the footer claims "page 1 of 2"
+-- and the prev button is disabled.
+function BookshelfWidget:_syncPageFromCursor()
+    -- "Page of the last visible book". For a clamped near-end view
+    -- (cursor=9, view=12, total=18: visible 9-18), the last visible
+    -- book is 18 which is on page 2 -- the user reads this as "I'm at
+    -- the end". For a misaligned mid-list cursor (cursor=9, view=12,
+    -- total=30: visible 9-20), the last visible book is 20 which is on
+    -- page 2 -- also reasonable, since most of the view is page-2-ish
+    -- content. Aligned cursors are unaffected (cursor=1 → page 1,
+    -- cursor=13 → page 2, etc).
+    local view  = self:_viewSize()
+    local total = self._total_items or 0
+    local last_visible = self._cursor + view - 1
+    if total > 0 and last_visible > total then last_visible = total end
+    self.page = math.max(1, math.ceil(last_visible / view))
+    if self._total_pages and self.page > self._total_pages then
+        self.page = self._total_pages
+    end
+end
+
+-- _maxCursor(total) — last cursor position that shows non-empty content.
+-- Partial last view allowed: with total=25, view=12, max_cursor=25 (last
+-- view shows just book 25). Falls back to self._total_pages × view_size
+-- when total is missing, since handler call sites often don't have
+-- direct access to the unsliced item count.
+function BookshelfWidget:_maxCursor(total)
+    local view = self:_viewSize()
+    if total and total > 0 then
+        local n_pages = math.max(1, math.ceil(total / view))
+        return (n_pages - 1) * view + 1
+    end
+    local n_pages = math.max(1, self._total_pages or 1)
+    return (n_pages - 1) * view + 1
+end
+
+-- _clampCursor(total) — keep cursor inside [1, _maxCursor(total)].
+function BookshelfWidget:_clampCursor(total)
+    if total ~= nil and total <= 0 then
+        self._cursor = 1
+        return
+    end
+    local mx = self:_maxCursor(total)
+    if self._cursor > mx then self._cursor = mx end
+    if self._cursor < 1 then self._cursor = 1 end
+end
+
+-- _advanceCursor(delta_views, total) — chevron pagination. Adds
+-- delta_views × VIEW_SIZE to the cursor (no boundary snapping). After a
+-- swipe-up that left the cursor misaligned (e.g. cursor=9 in expanded
+-- mode with view=12, top row preserved from collapsed page 2), each
+-- chevron-next still reveals a full new view's worth of books with no
+-- row overlap -- the user just navigates from a non-page-aligned start.
+-- Snapping back to page boundaries would re-introduce the overlap the
+-- whole cursor rework was meant to remove. total is optional; falls
+-- through to _total_pages × view_size for the chevron handlers that
+-- don't carry the items count.
+function BookshelfWidget:_advanceCursor(delta_views, total)
+    local view = self:_viewSize()
+    self._cursor = self._cursor + delta_views * view
+    if self._cursor < 1 then self._cursor = 1 end
+    self:_clampCursor(total)
 end
 
 -- _viewSize() — books shown per page: current rows × cols.
@@ -3498,12 +3854,16 @@ function BookshelfWidget:_previewNeighbourBook(direction)
     if self._preview_book and self._preview_book.filepath == target.filepath then
         return  -- single-book chip; cycling would otherwise re-trigger open
     end
-    -- Update page so the new preview is on the visible shelf — otherwise
-    -- _previewBook's swap-shelves-in-place would highlight a book that
-    -- isn't currently rendered.
+    -- Update cursor so the new preview is on the visible shelf -- snap
+    -- to the page that contains the target so the user lands at a clean
+    -- page-aligned cursor rather than carrying a stale misalignment
+    -- across an explicit "go to that book" action.
     local all_idx = books_to_all[next_idx]
     if all_idx then
-        self.page = math.floor((all_idx - 1) / PAGE_SIZE) + 1
+        local view = self:_viewSize()
+        self._cursor = math.max(1, math.floor((all_idx - 1) / view) * view + 1)
+        self:_clampCursor()
+        self:_syncPageFromCursor()
     end
     self:_previewBook(target)
 end
@@ -3520,7 +3880,8 @@ function BookshelfWidget:_paginateNext()
     -- breadcrumb mode in the chip strip handles back now.
     local total = self._total_pages or 1
     if self.page < total then
-        self.page = self.page + 1
+        self:_advanceCursor(1)
+        self:_syncPageFromCursor()
         self:_swapShelvesInPlace()
         return true
     end
@@ -3537,7 +3898,8 @@ end
 
 function BookshelfWidget:_paginatePrev()
     if self.page > 1 then
-        self.page = self.page - 1
+        self:_advanceCursor(-1)
+        self:_syncPageFromCursor()
         self:_swapShelvesInPlace()
         return true
     end
@@ -3933,16 +4295,27 @@ function BookshelfWidget:_openBookMenu(item)
               end) },
             { text = fav_label,
               callback = closing(function()
-                -- KOReader API quirk: removeItem writes the collections
-                -- file to disk automatically; addItem only updates
-                -- in-memory state and relies on a caller-side :write()
-                -- to persist. Without the explicit write, additions are
-                -- lost on the next KOReader restart.
+                -- KOReader API quirks (frontend/readcollection.lua):
+                --   * addItem only updates in-memory state -- needs a
+                --     caller-side :write() to persist.
+                --   * removeItem DOES call :write({ collection_name = true })
+                --     internally (line 189) BUT passes the literal string
+                --     "collection_name" as the table key rather than the
+                --     variable's value. :write at line 76 then checks
+                --     updated_collections[coll_name] (e.g. "favorites"),
+                --     finds nil, and skips persisting the affected
+                --     collection. In-memory state updates correctly, but
+                --     the on-disk file stays stale -- so removed
+                --     favourites come back on the next KOReader restart.
+                -- Workaround: explicit :write({ favorites = true }) on
+                -- both branches, with the right key, so removal actually
+                -- persists.
                 local ok, already = pcall(function()
                     return ReadCollection:isFileInCollection(book.filepath, "favorites")
                 end)
                 if ok and already then
                     ReadCollection:removeItem(book.filepath, "favorites")
+                    ReadCollection:write({ favorites = true })
                 else
                     ReadCollection:addItem(book.filepath, "favorites")
                     ReadCollection:write({ favorites = true })
@@ -4110,9 +4483,10 @@ function BookshelfWidget:_drillInto(entry)
     -- restore it. Without this, drilling into a folder on page 3 and then
     -- backing out drops you on page 1 of the parent listing — disorienting
     -- when the parent has dozens of folders/series.
-    entry.parent_page = self.page
+    entry.parent_cursor = self._cursor
     self._drilldown_path[#self._drilldown_path + 1] = entry
-    self.page = 1
+    self._cursor = 1
+    self:_syncPageFromCursor()
     -- self._preview_book intentionally NOT reset: the hero is now sticky
     -- across drilldowns / chip switches / search until the user taps a
     -- cover. Earlier we pre-selected the first book on every drill so the
@@ -4139,12 +4513,12 @@ function BookshelfWidget:_drillBackTo(depth)
     -- Search entries also carry `prior_drilldown` (the path that was active
     -- before search was invoked); restore it so backing out of search
     -- returns the user to where they were, not to a bare chip top.
-    local restore_page = 1
+    local restore_cursor = 1
     local restore_path
     if #self._drilldown_path > depth then
         local first_pop = self._drilldown_path[depth + 1]
-        if first_pop and first_pop.parent_page then
-            restore_page = first_pop.parent_page
+        if first_pop and first_pop.parent_cursor then
+            restore_cursor = first_pop.parent_cursor
         end
         if first_pop and first_pop.kind == "search" and first_pop.prior_drilldown then
             restore_path = first_pop.prior_drilldown
@@ -4161,7 +4535,8 @@ function BookshelfWidget:_drillBackTo(depth)
     -- self._preview_book intentionally NOT reset here either — see the
     -- sticky-hero rationale in _drillInto. Backing out keeps the user's
     -- last-tapped book in the hero, regardless of which level they pop to.
-    self.page = restore_page
+    self._cursor = restore_cursor
+    self:_syncPageFromCursor()
     self:_rebuild()
     UIManager:setDirty(self, "ui")
 end
