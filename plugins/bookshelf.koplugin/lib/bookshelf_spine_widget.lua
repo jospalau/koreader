@@ -475,6 +475,80 @@ function SpineWidget:_renderShadowedCard(inner)
         end
     end
 
+    if indicators.glyph == "tbr" then
+        local glyph_h = _glyphSize(card_w)
+        local glyph_w = self:_glyphWidth(glyph_h)
+        if glyph_w <= card_w * 0.4 then
+            local halo_w = 1
+            -- Match the in-progress glyph's positioning exactly. The
+            -- in-progress branch (above) bases its lift on
+            -- TextWidget:getSize().h (actual rendered height,
+            -- ~glyph_h * 1.35 after font line metrics) rather than
+            -- glyph_h itself, because Font:getFace("symbols", N) paints
+            -- taller than N. Critically, buildOutlinedGlyphWidget's
+            -- OverlapGroup carries a SYNTHETIC dimen of glyph_h+2*halo_w
+            -- (see bookshelf_cover_progress.lua), which understates the
+            -- real paint footprint -- using outlined:getSize() here
+            -- under-shoots the lift the same way glyph_h does. Build a
+            -- throwaway bare glyph to measure the true height, then
+            -- offset by -halo_w so the inner glyph's centre lands on
+            -- the in-progress glyph's centre.
+            local probe = CoverProgress.buildGlyphWidget(
+                CoverProgress.GLYPH_TBR, glyph_h,
+                Blitbuffer.COLOR_BLACK)
+            local widget_h = probe:getSize().h
+            probe:free()
+            local outlined = CoverProgress.buildOutlinedGlyphWidget(
+                CoverProgress.GLYPH_TBR, glyph_h, halo_w)
+            local lift = _glyphTopLift(self.show_titles)
+            local y_offset = card_h - math.floor(widget_h * lift + 0.5)
+            children[#children + 1] = FrameContainer:new{
+                bordersize   = 0,
+                padding      = 0,
+                padding_top  = y_offset - halo_w,
+                padding_left = _glyphLeftInset() - halo_w,
+                outlined,
+            }
+        end
+    end
+
+    if indicators.glyph == "mbr" then
+        local glyph_h = _glyphSize(card_w)
+        local glyph_w = self:_glyphWidth(glyph_h)
+        if glyph_w <= card_w * 0.4 then
+            local halo_w = 1
+            -- Match the in-progress glyph's positioning exactly. The
+            -- in-progress branch (above) bases its lift on
+            -- TextWidget:getSize().h (actual rendered height,
+            -- ~glyph_h * 1.35 after font line metrics) rather than
+            -- glyph_h itself, because Font:getFace("symbols", N) paints
+            -- taller than N. Critically, buildOutlinedGlyphWidget's
+            -- OverlapGroup carries a SYNTHETIC dimen of glyph_h+2*halo_w
+            -- (see bookshelf_cover_progress.lua), which understates the
+            -- real paint footprint -- using outlined:getSize() here
+            -- under-shoots the lift the same way glyph_h does. Build a
+            -- throwaway bare glyph to measure the true height, then
+            -- offset by -halo_w so the inner glyph's centre lands on
+            -- the in-progress glyph's centre.
+            local probe = CoverProgress.buildGlyphWidget(
+                CoverProgress.GLYPH_MBR, glyph_h,
+                Blitbuffer.COLOR_BLACK)
+            local widget_h = probe:getSize().h
+            probe:free()
+            local outlined = CoverProgress.buildOutlinedGlyphWidget(
+                CoverProgress.GLYPH_MBR, glyph_h, halo_w)
+            local lift = _glyphTopLift(self.show_titles)
+            local y_offset = card_h - math.floor(widget_h * lift + 0.5)
+            children[#children + 1] = FrameContainer:new{
+                bordersize   = 0,
+                padding      = 0,
+                padding_top  = y_offset - halo_w,
+                padding_left = _glyphLeftInset() - halo_w,
+                outlined,
+            }
+        end
+    end
+
     -- 4b. Finished badge, tickbox style (IN FRONT of inner): a flat square
     --     pill at bottom-LEFT containing the nerd-font check glyph
     --     (U+F42E). Sized as ~55% of the page-count pill's natural height

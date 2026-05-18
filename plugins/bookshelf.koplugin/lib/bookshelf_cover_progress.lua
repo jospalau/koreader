@@ -17,6 +17,8 @@ local M = {}
 -- Glyph code points (KOReader's bundled nerd font).
 M.GLYPH_BOOKMARK       = "\u{e7bf}"  -- in-progress
 M.GLYPH_BOOKMARK_CHECK = "\u{e7c0}"  -- finished
+M.GLYPH_TBR = "\u{f00c}" -- tbr
+M.GLYPH_MBR = "\u{f00c}\u{f00c}" -- mbr
 
 -- Read a per-element toggle. All three default ON (true) when unset.
 -- Setting keys (within the bookshelf settings store):
@@ -118,6 +120,13 @@ function M.decide(book)
             glyph      = want_bookmark and "in_progress" or nil,
             page_count = want_page_count,
         }
+    elseif status == "tbr" then
+         return {
+            bar        = false,
+            bar_pct    = 0,
+            glyph      =  "tbr",
+            page_count = want_page_count,
+        }
     elseif status == "complete" or status == "finished" then
         local glyph_kind = nil
         if     badge_style == "bookmark" then glyph_kind = "complete_bookmark"
@@ -129,6 +138,15 @@ function M.decide(book)
             glyph      = glyph_kind,
             page_count = want_page_count,
         }
+    else
+        if require("readhistory"):getIndexByFile(book.filepath) and not require("docsettings"):hasSidecarFile(self.filepath) then
+            return {
+                bar        = false,
+                bar_pct    = 0,
+                glyph      =  "mbr",
+                page_count = want_page_count,
+            }
+        end
     end
     -- status = "new" or nil: bar / glyph stay off but page count can
     -- still show -- knowing the page count of an unread book is useful.

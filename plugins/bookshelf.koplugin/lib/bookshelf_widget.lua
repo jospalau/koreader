@@ -5113,7 +5113,7 @@ function BookshelfWidget:_openBookMenu(item)
     local current_status = BookList.getBookStatus(book.filepath)  -- "new" / "reading" / "abandoned" / "complete"
     local unopened_button = {
         text = _("Unopened") .. ((current_status == "new") and "  \xE2\x9C\x93" or ""),
-        enabled = current_status ~= "new",
+        enabled = current_status ~= "new" and current_status ~= "mbr",
         callback = function()
             -- Clear progress + status in the DocSettings summary, drop
             -- last_opened, and pull the book out of ReadHistory so it
