@@ -44,7 +44,10 @@ function UIFont:init()
         local path_bold = get_bold_path(path_regular)
         if path_exists[path_regular] and path_exists[path_bold] then
             table.insert(self.font_list, name)
-            self.fonts[name] = { regular = path_regular, bold = path_bold }
+            self.fonts[name] = {
+                regular = path_regular:match("([^/]+)$"),  -- filename only, not full path
+                bold = path_bold:match("([^/]+)$"),        -- Font:getFace prepends FontList.fontdir
+            }
         end
     end
 
@@ -118,3 +121,44 @@ function ReaderMenu:setUpdateItemTable()
     patch(self, require("ui/elements/reader_menu_order"))
     orig_ReaderMenu_setUpdateItemTable(self)
 end
+
+
+-- Fixed using a bigger window in the emulator:
+-- $ nano -w kodev
+-- ...
+-- local screen_width=700
+-- local screen_height=900
+-- ...
+-- local orig_getFace = Font.getFace
+-- function Font:getFace(font, size, faceindex, noscale)
+--     local face = orig_getFace(self, font, size, faceindex, noscale)
+--     -- This is to prevent a problem that is happening when the patch is used
+--     -- with the emulator running with the default window resolution (720x540)
+--     -- and there are buttontables with buttons containing text
+--     -- which contains glyphs which are not in the font
+--     -- like ✓ glyph (genStatusButtonsRow() function in filemanagerutil.lua)
+--     -- and the text needs to be shrinked
+--     -- button.lua code shrinks the text and it falls into a loop because
+--     -- the width measurement used by isTruncated(), which doesn't account for the fallback font's metrics correctly,
+--     -- making it think the text is wider than it actually renders.
+--     -- When the ui-font patch is active, fonts that don't contain certain glyphs (e.g. ✓)
+--     -- cause button.lua's shrink loop to trigger. The selected font falls back to a different
+--     -- font for missing glyphs, producing mixed metrics that make the button wider than
+--     -- expected. The shrink loop then gets inconsistent faces each iteration and never exits.
+--     -- En el fuente font.lua podemos ver las fuentes de fallback, entre ellas symbols.ttf
+--     -- $ python symbols.py koreader/resources/fonts/nerdfonts/symbols.ttf | grep -i check.2
+--     -- U+F42E    check.2
+
+--     -- Apparently, also happens with regular text and the fix works as well
+--     if face and size and require("device"):isEmulator() then
+--         local Screen = require("device").screen
+--         local scaled = Screen:scaleBySize(size)
+--         while Screen:scaleBySize(size - 1) == scaled and size > 8 do
+--             size = size - 1
+--         end
+--         if size ~= face.orig_size then
+--             face = orig_getFace(self, font, size, faceindex, noscale)
+--         end
+--     end
+--     return face
+-- end
