@@ -418,8 +418,8 @@ $(build_options_help_msg '' 'use existing build' 'default' '')
 function kodev-run() {
     # Defaults.
     KODEBUG=1
-    local screen_width=540
-    local screen_height=720
+    local screen_width=700
+    local screen_height=900
     # NOTE: Speaking of Valgrind, if your libdrm/mesa isn't built w/ valgrind markings, there's a Valgrind suppression file for AMD cards in the tools folder.
     #       Just append --suppressions=${PWD/tools/valgrind_amd.supp to your valgrind command.
     local valgrind=(valgrind --tool=memcheck --keep-debuginfo=yes --leak-check=full --show-reachable=yes --trace-children=yes --track-origins=yes)
