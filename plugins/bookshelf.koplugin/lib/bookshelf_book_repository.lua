@@ -928,7 +928,16 @@ local function walkBooks(root, depth, out, current_depth, dirs)
     if not ok or type(iter) ~= "function" then return end
 
     for entry in iter, dir_obj do
-        if entry ~= "." and entry ~= ".." and not SYSTEM_DIR_NAMES[entry] then
+        -- Skip "." / ".." and any hidden file or directory (entries
+        -- starting with "."). The hidden-file filter catches AppleDouble
+        -- metadata companions macOS spits out when copying to FAT32
+        -- (`._<filename>`, same extension as the original so the
+        -- extension-only filter below lets them through as "books"),
+        -- plus the usual .DS_Store / .git / .calibre-cache / etc. that
+        -- never contain real books. The other walkers in this file
+        -- (around lines 1222, 1269, 1406) already do this; walkBooks
+        -- was the odd one out.
+        if entry:sub(1, 1) ~= "." and not SYSTEM_DIR_NAMES[entry] then
             local fp = _joinPath(root, entry)
             -- One stat call instead of two on real lfs (which returns a
             -- table from attributes(fp) with no key). Falls back to two
@@ -3142,28 +3151,28 @@ function Repo.getBySource(source, filter, sort_priority, offset, limit)
                         end
                     end
                 else
-                for _i, b in ipairs(candidates) do
-                    local s = b.read_status or b._status
-                    if not s and not b._progress_fetched and b.filepath then
-                        local pct, status, rating = Repo.readProgress(b.filepath)
-                                b._pct              = pct
-                                b._status           = status
-                                b.rating            = b.rating or rating
-                                b._progress_fetched = true
-                        s = status
-                    end
-                    -- Normalise to bookshelf vocabulary (matches the chip
-                    -- editor's status IDs: unread / reading / on_hold /
-                    -- finished). KOReader writes a different set into
-                    -- DocSettings ("complete" / "abandoned"; nil/"new" for
-                    -- unopened books) so we must map across before the
-                    -- filter lookup, or unread / Finished / On-hold books
-                    -- get silently dropped. (Issue #41.)
-                    if     s == nil or s == "new" then s = "unread"
-                    elseif s == "complete"        then s = "finished"
-                    elseif s == "abandoned"       then s = "on_hold"
-                    end
-                    if filter.statuses[s] then kept[#kept + 1] = b end
+                    for _i, b in ipairs(candidates) do
+                        local s = b.read_status or b._status
+                        if not s and not b._progress_fetched and b.filepath then
+                            local pct, status, rating = Repo.readProgress(b.filepath)
+                                    b._pct              = pct
+                                    b._status           = status
+                                    b.rating            = b.rating or rating
+                                    b._progress_fetched = true
+                            s = status
+                        end
+                        -- Normalise to bookshelf vocabulary (matches the chip
+                        -- editor's status IDs: unread / reading / on_hold /
+                        -- finished). KOReader writes a different set into
+                        -- DocSettings ("complete" / "abandoned"; nil/"new" for
+                        -- unopened books) so we must map across before the
+                        -- filter lookup, or unread / Finished / On-hold books
+                        -- get silently dropped. (Issue #41.)
+                        if     s == nil or s == "new" then s = "unread"
+                        elseif s == "complete"        then s = "finished"
+                        elseif s == "abandoned"       then s = "on_hold"
+                        end
+                        if filter.statuses[s] then kept[#kept + 1] = b end
                     end
                 end
                 candidates = kept
