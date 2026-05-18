@@ -533,6 +533,12 @@ function TouchMenu:init()
             range = self.dimen,
         }
     }
+    self.ges_events.Pan = { -- (for mousewheel scrolling support)
+        GestureRange:new{
+            ges = "pan",
+            range = self.dimen,
+        }
+    }
 
     self.key_events.Back = { { Input.group.Back } }
     self.key_events.Close = { { "Menu" } }
@@ -878,6 +884,17 @@ function TouchMenu:onSwipe(arg, ges_ev)
         -- swipe, as the event handled for that is pan south).
         self:backToUpperMenu(true)
     end
+end
+
+function TouchMenu:onPan(arg, ges_ev)
+    if ges_ev.mousewheel_direction then
+        if ges_ev.direction == "north" then
+            self:onNextPage()
+        elseif ges_ev.direction == "south" then
+            self:onPrevPage()
+        end
+    end
+    return true
 end
 
 function TouchMenu:onMenuSelect(item, tap_on_checkmark)
