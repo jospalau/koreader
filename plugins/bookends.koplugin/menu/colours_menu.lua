@@ -423,7 +423,6 @@ function Bookends:buildTextColourMenu()
         if text_color.hex then return text_color.hex end
         if text_color.grey then
             local pct = math.floor((0xFF - text_color.grey) * 100 / 0xFF + 0.5)
-            if pct == 0 then return _("transparent") end
             return pct .. "%"
         end
         return _("default") .. " (" .. _("book") .. ")"
@@ -437,7 +436,6 @@ function Bookends:buildTextColourMenu()
         if symbol_color.hex then return symbol_color.hex end
         if symbol_color.grey then
             local pct = math.floor((0xFF - symbol_color.grey) * 100 / 0xFF + 0.5)
-            if pct == 0 then return _("transparent") end
             return pct .. "%"
         end
         return _("default") .. " (" .. _("text") .. ")"
@@ -451,7 +449,6 @@ function Bookends:buildTextColourMenu()
         if bg.hex then return bg.hex end
         if bg.grey then
             local pct = math.floor((0xFF - bg.grey) * 100 / 0xFF + 0.5)
-            if pct == 0 then return _("transparent") end
             return pct .. "%"
         end
         return _("off")

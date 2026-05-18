@@ -538,6 +538,9 @@ function OverlayWidget.measureTextWidth(line_texts, line_configs)
             if cfg.bar then
                 measure_text = row:gsub(BAR_PLACEHOLDER, "")
             end
+            -- Strip BBCode tags so they don't inflate the overlap-prevention
+            -- width and falsely trigger the truncation path for bar lines.
+            measure_text = measure_text:gsub("%[[/]?[biu]%]", ""):gsub("%[/?c[^%]]*%]", "")
             if measure_text ~= "" then
                 local display_text = cfg.uppercase and Utf8Proc.uppercase_dumb(measure_text) or measure_text
                 local tw = TextWidget:new(textWidgetOpts{

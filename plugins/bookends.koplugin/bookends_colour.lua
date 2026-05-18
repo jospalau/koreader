@@ -135,7 +135,6 @@ function Colour.parseColorValue(v, is_color_enabled)
     end
 
     if type(v) == "table" and v.grey then
-        if v.grey >= 0xFF then return false end
         return Blitbuffer.Color8(v.grey)
     end
 

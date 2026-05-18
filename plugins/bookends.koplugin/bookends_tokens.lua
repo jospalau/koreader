@@ -9,6 +9,22 @@ local Tokens = {}
 -- Default false matches stock KOReader's default behaviour.
 Tokens.pages_left_includes_current = false
 
+-- Returns the current page number across page-mode and scroll-mode for both
+-- CRE and KOPT. In CRE scroll mode, ReaderView:onPosUpdate only updates
+-- state.pos, not state.page (see KOReader readerview.lua:onPosUpdate), so
+-- reading ui.view.state.page directly gives a stale value. CRE's document
+-- object exposes getCurrentPage() which always reflects the current page in
+-- either mode; KOPT only fires PageUpdate (so view.state.page stays current)
+-- and doesn't expose getCurrentPage, so the fallback covers it.
+local function getCurrentPageNumber(ui)
+    if ui and ui.document and ui.document.getCurrentPage then
+        local ok, p = pcall(function() return ui.document:getCurrentPage() end)
+        if ok and p then return p end
+    end
+    return ui and ui.view and ui.view.state and ui.view.state.page
+end
+Tokens.getCurrentPageNumber = getCurrentPageNumber
+
 -- Legacy token → new-name alias map. See
 -- docs/superpowers/specs/2026-04-23-v5-token-system-design.md for full rationale.
 -- Single-letter keys only; %C1/%C2/%C3 handled via pattern in rewriteLegacyTokens.
@@ -949,7 +965,7 @@ function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, pai
     state.night = G_reader_settings:isTrue("night_mode") and "on" or "off"
 
     -- Page-based state
-    local pageno = ui.view and ui.view.state and ui.view.state.page
+    local pageno = getCurrentPageNumber(ui)
     local doc = ui.document
     if pageno and doc then
         -- Page number / count / remaining — exposed as conditional state so
@@ -1392,6 +1408,10 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     -- filters in one format string each get their own resolved value, and
     -- the existing bareword auto-hide path applies unchanged.
     local plugin_content_filters = {}
+    -- Decimal places for %book_pct{N} and %book_pct_left{N}. Set by the brace
+    -- handler below; consumed during percent computation to format with
+    -- string.format("%.Nf", raw_pct) instead of math.floor(pct + 0.5).
+    local pct_decimals = {}
 
     format_str = format_str:gsub("%%([%a_][%w_]*)(%b{})", function(name, brace)
         local content = brace:sub(2, -2)  -- strip { and }
@@ -1425,6 +1445,17 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
             local formatted = os.date(content) or ""
             if saved_locale then os.setlocale(saved_locale, "time") end
             return formatted
+        end
+        -- %book_pct{N} / %book_pct_left{N}: decimal places (0–4).
+        if name == "book_pct" or name == "book_pct_left" then
+            local d = content:match("^(%d+)$")
+            if d then
+                local n = tonumber(d)
+                if n and n >= 0 and n <= 4 then
+                    pct_decimals[name] = n
+                end
+            end
+            return "%" .. name
         end
         -- Default: pixel-width cap (digits only).
         local n = content:match("^(%d+)$")
@@ -1545,7 +1576,7 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
 
     local has_bar = format_str:find("%%bar") ~= nil
 
-    local pageno = ui.view.state.page
+    local pageno = getCurrentPageNumber(ui)
     local doc = ui.document
 
     -- Page numbers (respects hidden flows + pagemap)
@@ -1580,25 +1611,52 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
         end
 
         -- Book percent: flow-aware when hidden flows active, raw pages otherwise.
-        -- percent_left is derived from the same integer to keep "X% read" + "Y% left"
-        -- summing to exactly 100 at the displayed precision.
-        local percent_int
+        -- When both tokens render as integers (the common case), percent_left is
+        -- derived from the rounded percent so the pair always sums to 100. When
+        -- decimals are requested via %book_pct{N} / %book_pct_left{N}, both
+        -- values are formatted independently from the shared raw float; this
+        -- keeps the pair within ±0.1% at the displayed precision.
+        local pct_dec = pct_decimals.book_pct or 0
+        local left_dec = pct_decimals.book_pct_left or pct_dec
+        local pct_raw  -- raw float 0-100
         if pageno and doc:hasHiddenFlows() then
             local flow = doc:getPageFlow(pageno)
             local flow_page = doc:getPageNumberInFlow(pageno)
             local flow_total = doc:getTotalPagesInFlow(flow)
             if flow_total and flow_total > 0 then
-                percent_int = math.floor(flow_page / flow_total * 100 + 0.5)
+                pct_raw = flow_page / flow_total * 100
             end
         else
             local raw_total = doc:getPageCount()
             if pageno and raw_total and raw_total > 0 then
-                percent_int = math.floor(pageno / raw_total * 100 + 0.5)
+                pct_raw = pageno / raw_total * 100
             end
         end
-        if percent_int then
-            percent = percent_int .. "%"
-            percent_left = math.max(0, math.min(100, 100 - percent_int)) .. "%"
+        if pct_raw then
+            pct_raw = math.max(0, math.min(100, pct_raw))
+            local left_raw = math.max(0, 100 - pct_raw)
+            -- Default (both integer): derive percent_left from percent_int so the
+            -- pair always sums to 100, even at half-integer raw percentages where
+            -- two independent floor(x + 0.5) calls would round both up (e.g.
+            -- pct_raw=50.5 → 51% and 50% summing to 101%).
+            if pct_dec == 0 and left_dec == 0 then
+                local percent_int = math.floor(pct_raw + 0.5)
+                percent = percent_int .. "%"
+                percent_left = math.max(0, 100 - percent_int) .. "%"
+            else
+                if pct_dec > 0 then
+                    local s = string.format("%." .. pct_dec .. "f", pct_raw)
+                    percent = (s:gsub("(%..-)0+$", "%1"):gsub("%.$", "")) .. "%"
+                else
+                    percent = math.floor(pct_raw + 0.5) .. "%"
+                end
+                if left_dec > 0 then
+                    local s = string.format("%." .. left_dec .. "f", left_raw)
+                    percent_left = (s:gsub("(%..-)0+$", "%1"):gsub("%.$", "")) .. "%"
+                else
+                    percent_left = math.floor(left_raw + 0.5) .. "%"
+                end
+            end
         end
         -- Pages left in book: stable page count. Offset controlled by the
         -- Bookends `pages_left_includes_current` setting so users don't need
