@@ -6192,6 +6192,7 @@ function BookshelfWidget:_openBookMenu(item)
                     local ds = DocSettings:open(book.filepath)
                     local summary = ds:readSetting("summary") or {}
                     summary.status = draft.status
+                    summary.modified = os.date("%Y-%m-%d")
                     ds:saveSetting("summary", summary)
                     if draft.status == "new" then
                         ds:delSetting("percent_finished")
@@ -6199,9 +6200,57 @@ function BookshelfWidget:_openBookMenu(item)
                         ds:delSetting("last_page")
                     end
                     ds:flush()
+                    if G_reader_settings:isTrue("top_manager_infmandhistory")
+                            and _G.all_files
+                            and _G.all_files[book.filepath] then
+                        local util = require("util")
+                        local ryear, rmonth, rday = summary.modified:match("(%d+)-(%d+)-(%d+)")
+                        _G.all_files[book.filepath].status = draft.status
+                        _G.all_files[book.filepath].last_modified_year  = ryear
+                        _G.all_files[book.filepath].last_modified_month = rmonth
+                        _G.all_files[book.filepath].last_modified_day   = rday
+                        util.generateStats()
+                    end
                     if draft.status == "tbr" then
                         local ReadHistory = require("readhistory")
-                        ReadHistory:addItem(book.filepath)
+                        local date = os.date("%Y-%m-%d")
+                        ds:saveSetting("stats", {})
+                        ds:delSetting("percent_finished")
+                        ds:delSetting("last_xp")
+                        ds:delSetting("last_page")
+                        local summary = ds:readSetting("summary") or {}
+                        summary.status = "tbr"
+                        summary.modified = date
+                        ds:saveSetting("summary", summary)
+                        ds:flush()
+                        local ok_bl, BookList = pcall(require, "ui/widget/booklist")
+                        if ok_bl and BookList and BookList.resetBookInfoCache then
+                            BookList.resetBookInfoCache(book.filepath)
+                        end
+                        ReadHistory:removeItemByPath(book.filepath)
+                        ReadHistory:addItem(book.filepath, os.time())
+                        local DocSettings = require("docsettings")
+                        local items = ReadHistory.hist or {}
+                        local reading, tbr, abandoned, mbr, others = {}, {}, {}, {}, {}
+                        for _, entry in ipairs(items) do
+                            local ds2 = DocSettings:open(entry.file)
+                            local summary2 = ds2:readSetting("summary") or {}
+                            local st = summary2.status
+                            if st == nil then st = "mbr" end
+                            if st == "reading" then table.insert(reading, entry)
+                            elseif st == "tbr" then table.insert(tbr, entry)
+                            elseif st == "mbr" then table.insert(mbr, entry)
+                            elseif st == "abandoned" then table.insert(abandoned, entry)
+                            else table.insert(others, entry) end
+                        end
+                        local new_hist = {}
+                        for _, v in ipairs(reading)   do table.insert(new_hist, v) end
+                        for _, v in ipairs(abandoned) do table.insert(new_hist, v) end
+                        for _, v in ipairs(tbr)       do table.insert(new_hist, v) end
+                        for _, v in ipairs(mbr)       do table.insert(new_hist, v) end
+                        for _, v in ipairs(others)    do table.insert(new_hist, v) end
+                        ReadHistory.hist = new_hist
+                        ReadHistory:_flush()
                     end
                     Repo.invalidateProgressCache(book.filepath)
                     Repo.invalidateBookCache("apply-status")
