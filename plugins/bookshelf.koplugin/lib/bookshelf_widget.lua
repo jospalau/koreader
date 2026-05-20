@@ -207,11 +207,21 @@ function BookshelfWidget:init()
         SwipeShelvesDown = {
             GestureRange:new{
                 ges = "swipe", direction = "south",
+                -- y starts below the top 1/8th so the top strip stays
+                -- exclusively for KOReader's filemanager_swipe zone
+                -- (DTAP_ZONE_MENU.h = 1/8, full width). Once
+                -- onSwipeShelvesDown's range MATCHES a south-swipe,
+                -- the gesture is consumed inside InputContainer's
+                -- dispatch regardless of the handler's return value —
+                -- returning false from the handler does not propagate
+                -- back to FM. The only way to let FM's top-strip swipe
+                -- reach its menu handler is to not match here in the
+                -- first place.
                 range = Geom:new{
                     x = math.floor(self.width / 8),
-                    y = 0,
+                    y = math.floor(self.height / 8),
                     w = self.width - 2 * math.floor(self.width / 8),
-                    h = self.height,
+                    h = self.height - math.floor(self.height / 8),
                 },
             },
         },
@@ -5692,6 +5702,28 @@ function BookshelfWidget:_openBookMenu(item)
     local pill_specs = self:_buildPillSpecs(book, in_collections,
         function() UIManager:close(dialog) end)
 
+    -- _reinitDialog(): rebuild the header before calling dialog:reinit
+    -- so the header's disposable cover_bb (BIM one-shot invariant) is
+    -- a fresh widget for the next paint. Naked dialog:reinit() re-uses
+    -- the original ImageWidget whose bb was freed after first paint,
+    -- and the symptom is "book title / metadata disappears from the
+    -- heading" the next time a button callback fires reinit (e.g.
+    -- staging a status change). The rating-close path used to do this
+    -- inline at one call site; centralising means every reinit path
+    -- (status / collections / rating-close / etc.) gets it. bw is
+    -- already in scope from the outer function.
+    local function _reinitDialog()
+        if not (dialog and dialog.reinit) then return end
+        if dialog._added_widgets then
+            local new_header = bw:_buildBookMenuHeader(book, nil, pill_specs)
+            if new_header then
+                dialog._added_widgets[1] = new_header
+            end
+        end
+        dialog:reinit()
+        UIManager:setDirty(dialog, "ui")
+    end
+
     -- Build each button spec as a named local so the final buttons
     -- table assembles in the visual order we want without re-deriving
     -- closures. Order layout:
@@ -5740,10 +5772,7 @@ function BookshelfWidget:_openBookMenu(item)
         callback = function()
             draft.remove_from_history = not draft.remove_from_history
             remove_history_button.background = draft.remove_from_history and STAGED_BG or nil
-            if dialog and dialog.reinit then
-                dialog:reinit()
-                UIManager:setDirty(dialog, "ui")
-            end
+            _reinitDialog()
         end,
     }
 
@@ -5807,16 +5836,16 @@ function BookshelfWidget:_openBookMenu(item)
                     -- Stash is preserved; reopen pulls everything back.
                     UIManager:nextTick(function() bw:_openBookMenu(book) end)
                 end,
-                -- on_close stays for the pre-stage path: while Task 12
-                -- hasn't landed, the manager will still run its own
-                -- persist + on_close. We re-open the menu in that case
-                -- too so the user sees a fresh count.
-                on_close       = function()
-                    Repo.invalidateBookCache("tag-edit")
-                    bw:_rebuild()
-                    UIManager:setDirty(bw, "ui")
-                    UIManager:nextTick(function() bw:_openBookMenu(book) end)
-                end,
+                -- on_close intentionally OMITTED in stage_only mode:
+                -- both Save and Cancel in the manager fire on_save /
+                -- on_cancel respectively AND would fire on_close, so
+                -- with on_close set we ended up scheduling two
+                -- _openBookMenu calls on the same tick. First reopen
+                -- consumed the stash; second reopened a fresh menu
+                -- without it — symptoms: Apply grey, collection diff
+                -- lost. Bookshelf rebuild also runs for nothing here
+                -- (stage_only doesn't persist; the cache invalidation
+                -- belongs to Apply).
             }
         end),
     }
@@ -5831,10 +5860,7 @@ function BookshelfWidget:_openBookMenu(item)
         callback = function()
             draft.refresh_metadata = not draft.refresh_metadata
             refresh_button.background = draft.refresh_metadata and STAGED_BG or nil
-            if dialog and dialog.reinit then
-                dialog:reinit()
-                UIManager:setDirty(dialog, "ui")
-            end
+            _reinitDialog()
         end,
     }
 
@@ -5903,20 +5929,11 @@ function BookshelfWidget:_openBookMenu(item)
                 -- need to rebuild the header on every reinit anyway --
                 -- the reinit walks all child widgets and may repaint
                 -- the freed bb regardless of whether we touched it.)
-                if dialog and dialog.reinit then
-                    if dialog._added_widgets then
-                        local new_header = bw:_buildBookMenuHeader(book, nil, pill_specs)
-                        if new_header then
-                            dialog._added_widgets[1] = new_header
-                        end
-                    end
-                    -- Mutate the rating button's background so the
-                    -- rebuilt ButtonTable paints the gray fill (or
-                    -- clears it) per the now-current draft.rating.
-                    rating_button.background = draft.rating ~= false and STAGED_BG or nil
-                    dialog:reinit()
-                    UIManager:setDirty(dialog, "ui")
-                end
+                -- Mutate the rating button's background so the
+                -- rebuilt ButtonTable paints the gray fill (or
+                -- clears it) per the now-current draft.rating.
+                rating_button.background = draft.rating ~= false and STAGED_BG or nil
+                _reinitDialog()
             end
         end
         local rows = {}
@@ -5999,10 +6016,7 @@ function BookshelfWidget:_openBookMenu(item)
                     draft.status = status_value
                 end
                 _refresh_status_backgrounds()
-                if dialog and dialog.reinit then
-                    dialog:reinit()
-                    UIManager:setDirty(dialog, "ui")
-                end
+                _reinitDialog()
             end,
         }
         btn._status_value = status_value
@@ -6223,10 +6237,10 @@ function BookshelfWidget:_openBookMenu(item)
                         summary.modified = date
                         ds:saveSetting("summary", summary)
                         ds:flush()
-                        local ok_bl, BookList = pcall(require, "ui/widget/booklist")
-                        if ok_bl and BookList and BookList.resetBookInfoCache then
-                            BookList.resetBookInfoCache(book.filepath)
-                        end
+                    local ok_bl, BookList = pcall(require, "ui/widget/booklist")
+                    if ok_bl and BookList and BookList.resetBookInfoCache then
+                        BookList.resetBookInfoCache(book.filepath)
+                    end
                         ReadHistory:removeItemByPath(book.filepath)
                         ReadHistory:addItem(book.filepath, os.time())
                         local DocSettings = require("docsettings")
@@ -6254,6 +6268,17 @@ function BookshelfWidget:_openBookMenu(item)
                     end
                     Repo.invalidateProgressCache(book.filepath)
                     Repo.invalidateBookCache("apply-status")
+                    -- BookList.book_info_cache is keyed on filepath and is
+                    -- the source the per-book menu reads via
+                    -- BookList.getBookStatus(filepath) → "current_status"
+                    -- at menu construction. Cover progress indicators
+                    -- pick up the new status (they go via
+                    -- Repo.readProgress whose cache we just invalidated),
+                    -- but the menu's button-tick / staged-fill state read
+                    -- stale "current" from this separate cache and the
+                    -- next open couldn't change the status again until
+                    -- the cache was busted by opening the book or
+                    -- restarting KOReader. Reported on r/koreader.
                 end)
             end
             if draft.rating ~= false then
