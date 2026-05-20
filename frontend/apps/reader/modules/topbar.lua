@@ -48,6 +48,52 @@ local TopBar = WidgetContainer:extend{
     -- show_bar_in_top_bar = true,
 }
 
+function TopBar:getReadingStreak()
+    local DataStorage = require("datastorage")
+    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+
+    local conn = SQ3.open(db_location)
+
+    local exists = conn:rowexec("SELECT name FROM sqlite_master WHERE type='table' AND name='page_stat_data'")
+    if exists == nil then
+        conn:close()
+        return 0
+    end
+
+    -- Get all distinct reading days as a comma-separated string
+    local days_str = conn:rowexec([[
+        SELECT GROUP_CONCAT(day) FROM (
+            SELECT DISTINCT date(start_time, 'unixepoch', 'localtime') as day
+            FROM page_stat_data
+            ORDER BY day DESC
+        )
+    ]])
+
+    conn:close()
+
+    if not days_str then return 0 end
+
+    local streak = 0
+    local today = os.date("%Y-%m-%d")
+    local expected = today
+
+    for day in days_str:gmatch("[^,]+") do
+        if day == expected then
+            streak = streak + 1
+            local t = os.time({
+                year  = tonumber(expected:sub(1,4)),
+                month = tonumber(expected:sub(6,7)),
+                day   = tonumber(expected:sub(9,10)) - 1,
+            })
+            expected = os.date("%Y-%m-%d", t)
+        else
+            break
+        end
+    end
+
+    return streak
+end
+
 function TopBar:getReadToday()
     local DataStorage = require("datastorage")
     local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"

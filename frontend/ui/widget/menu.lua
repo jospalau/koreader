@@ -1048,7 +1048,7 @@ function Menu:init()
                 if stats_year > 0 then
                     stats_year = "+" .. stats_year
                 end
-                topbar_line = "BDB:" .. topbar:getBooksOpened() .. "·TR:" .. topbar:getTotalRead() .. "d" .. "·ΔL:" .. stats_year .. "h"
+                topbar_line = "BDB:" .. topbar:getBooksOpened() .. "·TR:" .. topbar:getTotalRead() .. "d" .. "·RS:" .. topbar:getReadingStreak() .. "d·ΔL:" .. stats_year .. "h"
             end
 
             if topbar_line then text = topbar_line .. (pagetextinfo and pagetextinfo.settings:isTrue("enable_no_pager") and "\n" or "\n") .. stats_line end
