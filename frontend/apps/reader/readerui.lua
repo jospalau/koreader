@@ -680,8 +680,15 @@ end
 ---        (i.e., don't look at the testsuite, which resorts to all kinds of nasty hacks).
 function ReaderUI:showReader(file, provider, seamless, is_provider_forced, after_open_callback)
     logger.dbg("show reader ui")
-    local BookshelfWidget = require("lib/bookshelf_widget")
-    if BookshelfWidget.live then
+    -- This is just in case we are launching KOReader with a file as argument
+    -- The plugin it is not loaded and it crashes
+    -- local bookshelf_path = "plugins/bookshelf.koplugin/?.lua"
+    -- if not package.path:find(bookshelf_path, 1, true) then
+    --     package.path = bookshelf_path .. ";" .. package.path
+    -- end
+    -- logger.info("DEBUG package.path=" .. package.path)
+    local ok, BookshelfWidget = pcall(require, "lib/bookshelf_widget")
+    if ok and BookshelfWidget.live then
         UIManager:close(BookshelfWidget.live)
     end
     if lfs.attributes(file, "mode") ~= "file" then
