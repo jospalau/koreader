@@ -1378,7 +1378,7 @@ function PageTextInfo:addToMainMenu(menu_items)
                     checked_func = function() return self.settings:isTrue("enable_no_bar_menu") end,
                     enabled_func = function()
                         local tb = G_reader_settings:readSetting("shortcutstoolbar_fb")
-                        return tb ~= nil and tb.enabled == true
+                        return tb == nil or tb.enabled == true
                     end,
                     callback = function(touchmenu_instance)
                         local enable_no_bar_menu = not self.settings:isTrue("enable_no_bar_menu")
