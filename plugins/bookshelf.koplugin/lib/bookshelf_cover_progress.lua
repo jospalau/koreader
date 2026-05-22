@@ -82,12 +82,8 @@ function M.decide(book)
         -- reads self.book.page_count directly) picks it up without a
         -- second lookup, and subsequent decide() calls skip the
         -- readProgress branch entirely.
-        if need_pages_fallback and calibre_data[book.filename.."."..string.lower(book.format)] and calibre_data[book.filename.."."..string.lower(book.format)]["pages"] then
-            local key = book.filename .. "." .. string.lower(book.format)
-            local cal = calibre_data[key]
-            if cal and cal["pages"] then
-                book.page_count = cal["pages"]
-            end
+        if need_pages_fallback and pages then
+            book.page_count = pages
         end
     end
     local want_bar      = _toggle("progress_bar_enabled")
