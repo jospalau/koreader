@@ -274,33 +274,61 @@ function BookshelfWidget:init()
 end
 
 -- Bookshelf is the topmost widget while it's on screen, so KOReader's
--- UIManager:sendEvent dispatches gestures to us alone — FileManager
+-- UIManager:sendEvent dispatches gestures to us alone -- FileManager
 -- underneath us is NOT is_always_active, so its registered touch zones
 -- (which include user-configured gestures from gestures.koplugin: corner
 -- taps for night mode, edge swipes for brightness/warmth, etc.) never
 -- fire on their own.
 --
--- The fix: for Gesture events specifically, walk FileManager's touch
--- zones FIRST. If one matches and consumes the gesture, we're done.
--- Otherwise fall through to our normal InputContainer handling so hero
--- taps, chip taps, swipe-to-paginate, etc. continue to work.
+-- The fix: after our own children get first crack, walk FM's touch
+-- zones for events we didn't consume. The walk is FILTERED to
+-- KOReader-native zones only:
 --
--- We only check FM's _ordered_touch_zones — NOT fm:handleEvent — to
--- avoid propagating into FM's child widget tree (which would risk
--- accidentally activating the file list underneath us).
+--   * FM's own zones (id prefix "filemanager_") -- the top-edge tap
+--     and swipe that open the FM menu (filemanager_tap, _ext_tap,
+--     _swipe on FM.menu); FM's east/west file-chooser swipe at the
+--     FM root, consumed by our own SwipeNextPage / SwipePrevPage
+--     above this walk before it would otherwise fire.
+--
+--   * gestures.koplugin zones whose id is a key in
+--     fm.gestures.gestures -- i.e., gestures the user has actually
+--     configured. The Gestures plugin is attached at fm.gestures by
+--     FM's registerModule. Unconfigured gestures.koplugin zones are
+--     skipped here (their handler no-ops via the action_list == nil
+--     branch anyway).
+--
+-- Third-party plugins that register FM-level touch zones (SimpleUI's
+-- bottom navbar / top header, etc.) are blocked across the whole
+-- screen so a tap, hold, or swipe in a gap of our layout can't put
+-- another widget in front of us. Stale state from that scenario was
+-- the motivation: bookshelf's plugin-menu entry would still say
+-- "Close Bookshelf" while bookshelf wasn't the visible widget,
+-- because another plugin's zone had taken over the foreground.
+--
+-- We only walk FM's _ordered_touch_zones and FM.menu's -- NOT
+-- fm:handleEvent -- to avoid propagating into FM's child widget tree
+-- (which would risk activating the file list underneath us).
+--
+-- Replaces a prior geometric absorber + bottom-corner carveout: same
+-- observable behaviour for stock KOReader paths (corner taps via
+-- gestures.koplugin, top-edge tap/swipe to menu via filemanager_*),
+-- with the third-party back door closed everywhere on screen rather
+-- than just inside the absorbed [side_m, w - side_m] × [top_m, h]
+-- rectangle. The hold_release leak from a pagination hold (chev
+-- hold_callback rebuilds the footer, destroying the originating
+-- Button, then the release arrives at the new Button) is still
+-- handled: gestures.koplugin doesn't register hold_release types and
+-- filemanager_* doesn't either, so the release finds no allowed zone
+-- and falls cleanly to return false (the event dies; UIManager only
+-- delivers to the topmost widget, so nothing further sees it).
 function BookshelfWidget:handleEvent(event)
     -- Two dispatch problems to fix, both stemming from KOReader's
     -- UIManager:sendEvent only delivering events to the topmost widget
     -- (us) and not propagating unhandled events down the window stack to
     -- FileManager (which is NOT is_always_active):
     --
-    --   1. Gesture events (input → onGesture). gestures.koplugin's
-    --      touch zones are registered against FM, so corner taps and
-    --      edge swipes (configured in the user's gesture_fm profile)
-    --      never get checked. Walk FM's _ordered_touch_zones FIRST and
-    --      let a matching zone consume the gesture. Skip fm:handleEvent
-    --      to avoid propagating into FM's child widget tree (which would
-    --      let the file list underneath activate book taps).
+    --   1. Gesture events (input → onGesture). See block comment above
+    --      for the filtered FM-zone walk that handles these.
     --
     --   2. Dispatcher-emitted action events (e.g. IncreaseFlIntensity
     --      from a brightness gesture, ToggleNightMode, etc.). These are
@@ -308,64 +336,34 @@ function BookshelfWidget:handleEvent(event)
     --      non-gesture event we don't consume ourselves, forward it to
     --      fm:handleEvent so FM's registered modules (DeviceListener,
     --      etc.) get a chance. Side-effect: events delivered via
-    --      broadcastEvent (Suspend, Resume, etc.) get double-handled —
+    --      broadcastEvent (Suspend, Resume, etc.) get double-handled --
     --      FM gets them via the broadcast loop AND via our forward.
     --      Accepted because the relevant broadcast events are idempotent.
     if event.handler == "onGesture" then
         -- Children first: let our own widget tree (chevron buttons, chip
         -- strip, hero, shelf covers, swipe zones) consume the gesture
         -- before falling through to FM. KOReader's normal dispatch is
-        -- parent → child via propagateEvent; an overlay that pre-empts
-        -- with FM zones strips that priority and breaks any third-party
-        -- plugin (e.g. SimpleUI's bottom navbar) that registers FM-level
-        -- zones overlapping our widgets.
+        -- parent → child via propagateEvent; pre-empting with FM zones
+        -- would strip that priority.
         if InputContainer.handleEvent(self, event) then return true end
-        -- Fallback: gestures we didn't consume (top-edge swipes, corner
-        -- taps from gestures.koplugin profiles, etc.) reach FM via its
-        -- registered touch zones. UIManager only delivers events to the
-        -- topmost widget (us), so without this explicit walk those zones
-        -- would never fire while Bookshelf is up.
+
         local fm = require("apps/filemanager/filemanager").instance
+        if not fm then return false end
         local ev = event.args[1]
-        -- Absorb any tap our widget tree didn't consume that falls in the inner
-        -- screen region. Without this, gaps in our layout (book-cover spans,
-        -- footer padding, etc.) fall through to FM touch zones and activate
-        -- third-party plugins registered there (e.g. SimpleUI's bottom navbar).
-        --
-        -- The outer Screen:scaleBySize(24) strip on each side is left open.
-        -- SimpleUI's tap zones all begin at side_m = Screen:scaleBySize(24)
-        -- from each edge, so that strip is the exact gap where gestures.koplugin
-        -- corner/edge actions (night mode, brightness, etc.) live without
-        -- SimpleUI intercepting them.
-        -- Absorb taps AND hold_release events in the inner screen region.
-        -- The hold_release case is subtle: pagination's prev/next buttons
-        -- fire hold_callback on a ±10-page skip, which triggers
-        -- _swapShelvesInPlace and rebuilds the footer -- destroying the
-        -- Button instance that held _hold_handled = true. When the user
-        -- then lifts their finger, the hold_release arrives at the NEW
-        -- Button which has no record of the original hold and returns
-        -- false from onHoldReleaseSelectButton. Without this absorber,
-        -- the release leaks to gestures.koplugin's bottom-edge zones
-        -- (SimpleUI's bottom bar, etc.) and surprises the user with an
-        -- unrelated menu popup.
-        if ev.ges == "tap" or ev.ges == "hold_release" then
-            local side_m = Screen:scaleBySize(24)
-            local top_m  = Screen:scaleBySize(60)
-            if ev.pos.x >= side_m and ev.pos.x <= self.width - side_m
-               and ev.pos.y >= top_m then
-                return true
-            end
-        end
-        local zone_lists = {}
-        if fm and fm._ordered_touch_zones then
-            zone_lists[#zone_lists + 1] = fm._ordered_touch_zones
-        end
-        if fm and fm.menu and fm.menu._ordered_touch_zones then
+        local user_gestures = (fm.gestures and fm.gestures.gestures) or {}
+
+        local zone_lists = { fm._ordered_touch_zones }
+        if fm.menu and fm.menu._ordered_touch_zones then
             zone_lists[#zone_lists + 1] = fm.menu._ordered_touch_zones
         end
         for _i, zones in ipairs(zone_lists) do
             for _i, tzone in ipairs(zones) do
-                if tzone.gs_range:match(ev) and tzone.handler(ev) then
+                local id = tzone.def and tzone.def.id
+                local allowed = id and (id:find("^filemanager_")
+                                        or user_gestures[id])
+                if allowed
+                   and tzone.gs_range:match(ev)
+                   and tzone.handler(ev) then
                     return true
                 end
             end
@@ -3539,19 +3537,34 @@ end
 -- the topmost check inside _gatedRepaint so a battery state change
 -- during a read doesn't try to paint over the reader.
 
+-- _device_state_expires_at is the 2s TTL guard on hardware reads in
+-- _buildDeviceState. The repaints these handlers schedule call
+-- _swapHeroRightColumnInPlace, which calls _buildDeviceState -- and
+-- the cache served stale values inside the TTL window, so the broadcast
+-- "state changed" event ended up painting the OLD light / batt / wifi
+-- reading until the cache expired naturally. The fix is to mark the
+-- cache expired here, before queueing the repaint, so the upcoming
+-- _buildDeviceState forces a fresh PowerD / NetMgr read. The TTL still
+-- coalesces unrelated rapid rebuilds (preview taps, _rebuild bursts);
+-- it just no longer overrides "we know this just changed."
 function BookshelfWidget:onFrontlightStateChanged()
+    _device_state_expires_at = 0
     self:_gatedRepaint(FRONTLIGHT_TOKENS, 0.3)
 end
 function BookshelfWidget:onCharging()
+    _device_state_expires_at = 0
     self:_gatedRepaint(BATTERY_TOKENS, 0.3)
 end
 function BookshelfWidget:onNotCharging()
+    _device_state_expires_at = 0
     self:_gatedRepaint(BATTERY_TOKENS, 0.3)
 end
 function BookshelfWidget:onNetworkConnected()
+    _device_state_expires_at = 0
     self:_gatedRepaint(WIFI_TOKENS, 0.3)
 end
 function BookshelfWidget:onNetworkDisconnected()
+    _device_state_expires_at = 0
     self:_gatedRepaint(WIFI_TOKENS, 0.3)
 end
 -- KOReader broadcasts ToggleNightMode (no-arg toggle) AND SetNightMode
@@ -6206,7 +6219,14 @@ function BookshelfWidget:_openBookMenu(item)
                     local ds = DocSettings:open(book.filepath)
                     local summary = ds:readSetting("summary") or {}
                     summary.status = draft.status
-                    summary.modified = os.date("%Y-%m-%d")
+                    -- Stamp the modified date the same way KOReader's own
+                    -- status writers do (filemanagerutil.saveSummary,
+                    -- readerstatus, bookstatuswidget). Without this stamp
+                    -- the status change is invisible to KOReader's
+                    -- sort-by-recently-read and to any third-party
+                    -- tooling that scrapes summary.modified. Reported in
+                    -- issue #66.
+                    summary.modified = os.date("%Y-%m-%d", os.time())
                     ds:saveSetting("summary", summary)
                     if draft.status == "new" then
                         ds:delSetting("percent_finished")
@@ -6279,6 +6299,10 @@ function BookshelfWidget:_openBookMenu(item)
                     -- next open couldn't change the status again until
                     -- the cache was busted by opening the book or
                     -- restarting KOReader. Reported on r/koreader.
+                    local ok_bl, BookList = pcall(require, "ui/widget/booklist")
+                    if ok_bl and BookList and BookList.resetBookInfoCache then
+                        BookList.resetBookInfoCache(book.filepath)
+                    end
                 end)
             end
             if draft.rating ~= false then
