@@ -5,7 +5,12 @@ local Device = require("device")
 local Font = require("ui/font")
 local TextWidget = require("ui/widget/textwidget")
 local Utf8Proc = require("ffi/utf8proc")
+local PacmanSprite = require("bookends_pacman_sprite")
 local Screen = Device.screen
+
+-- Pacman bar paint counter: parity drives mouth-open vs mouth-closed.
+-- Resets on plugin reload; no persistence needed.
+local _pacman_paint_count = 0
 
 local ColorRGB32_t = ffi.typeof("ColorRGB32")
 
@@ -1072,6 +1077,18 @@ function OverlayWidget.freeWidgets(widget_cache)
     end
 end
 
+-- Canonical list of styles paintProgressBar dispatches on. Exported so
+-- downstream consumers (bookshelf's hero bar picker, third-party themes,
+-- etc.) can enumerate the available styles without grepping the
+-- if/elseif chain inside paintProgressBar. Order = the order the styles
+-- were introduced; readers that want a stable cycle should follow this
+-- ordering. Add new entries here when paintProgressBar gains a new
+-- branch — the source of truth for "does bookends support style X?".
+OverlayWidget.BAR_STYLES = {
+    "bordered", "solid", "rounded", "metro", "wavy",
+    "radial", "radial_hollow", "pacman",
+}
+
 --- Paint a progress bar directly to a blitbuffer.
 -- @param orientation "horizontal" (default) or "vertical"
 -- @param reverse boolean: flip fill direction
@@ -1365,6 +1382,175 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
                 bbPaintRoundedRect(bb, dot_cx, dot_dy, dot_r * 2, dot_r * 2, wave_dot, dot_r)
             end
         end
+
+    elseif style == "pacman" then
+        -- Pacman bar: read portion is empty, pacman sprite at the read
+        -- fraction, dot strip and power pellet in the unread region. Mouth
+        -- flips between open and closed on every entry to this branch.
+        _pacman_paint_count = _pacman_paint_count + 1
+        local mouth_open = (_pacman_paint_count % 2) == 1
+
+        -- Resolve colours. Authentic arcade hex on colour-enabled devices;
+        -- strong greyscale defaults on B&W. Custom overrides via the existing
+        -- per-bar colors table flow through resolveColor as elsewhere.
+        local is_colour = Screen and Screen.isColorEnabled and Screen:isColorEnabled()
+        local default_fill, default_dot
+        if is_colour then
+            default_fill = Colour.parseColorValue({ hex = "#FFCC00" }, true)
+            default_dot  = Colour.parseColorValue({ hex = "#FFB897" }, true)
+        else
+            -- On greyscale screens, lean into "softer than black" — a hard
+            -- black silhouette reads harsh next to text. Pacman sits a
+            -- couple of shades darker than the dots so it still leads
+            -- visually. Explicit Color8 bytes so the values don't drift
+            -- if Blitbuffer renames its named constants.
+            default_fill = Blitbuffer.Color8(0x22)
+            default_dot  = Blitbuffer.COLOR_DARK_GRAY
+        end
+        local pac_fill = resolveColor(custom_fill, default_fill)
+        local pac_dot  = resolveColor(custom_bg, default_dot)
+
+        -- Pick frame + rotation. Direction "ltr"/"rtl" map to right/left;
+        -- "ttb"/"btt" map to down/up.
+        local dir_map = { ltr = "right", rtl = "left", ttb = "down", btt = "up" }
+        local facing = dir_map[orientation == "vertical"
+            and (reverse and "btt" or "ttb")
+            or (reverse and "rtl" or "ltr")] or "right"
+        local frame_name = mouth_open and "open" or "closed"
+        local sprite = PacmanSprite.rotate(
+            PacmanSprite.getFrame(frame_name),
+            PacmanSprite.directionToSteps(facing))
+
+        -- Block scale: minimum 2 device px per arcade pixel so the sprite
+        -- stays legible — at thickness=14 (typical inline) a block=1 sprite
+        -- is only 13 px, which is too small to read. Block=2 gives 26 px,
+        -- which slightly overflows the bar in both directions (see
+        -- `feedback_tick_overflow_intentional`) but is the right minimum.
+        local block = math.max(2, math.floor(thickness / 10))
+        local sprite_px = 13 * block
+
+        -- `length` and `thickness` are already in scope from the function preamble.
+        local fraction_px = math.floor(fraction * length)
+
+        -- We track two positions on the fill axis:
+        --   * `pacman_canonical_start` — canonical (un-mirrored) leading-edge
+        --     of pacman. Grows from 0 to length-sprite_px regardless of
+        --     direction. Used to decide which dots are still ahead of the
+        --     reader.
+        --   * `sprite_start` — the actual paint coordinate. Same as the
+        --     canonical position for forward bars; mirrored about the bar's
+        --     centre for reversed bars.
+        local pacman_canonical_start = math.floor(fraction_px - sprite_px / 2)
+        pacman_canonical_start = math.max(0, math.min(length - sprite_px, pacman_canonical_start))
+        local pacman_canonical_lead = pacman_canonical_start + sprite_px
+        local sprite_start = reverse
+            and (length - sprite_px - pacman_canonical_start)
+            or pacman_canonical_start
+
+        -- Perpendicular axis: centre the sprite on the bar midline.
+        local cross_offset = math.floor((thickness - sprite_px) / 2)
+
+        -- Paint sprite. For each "on" cell in the 13x13 grid, draw a
+        -- block-sized rect.
+        --
+        -- Horizontal bars: sprite col maps to the bar's progress axis
+        --   (the wedge sits on the right edge of the right-facing base sprite).
+        -- Vertical bars: the sprite is rotated so its wedge ends up on the
+        --   row axis (top or bottom of the grid), so row maps to the bar's
+        --   progress axis instead.
+        if pac_fill then
+            for row = 0, 12 do
+                for col = 0, 12 do
+                    local mask = 2 ^ col
+                    if (math.floor(sprite[row + 1] / mask) % 2) == 1 then
+                        local axis_off, cross_off
+                        if vertical then
+                            axis_off = sprite_start + row * block
+                            cross_off = cross_offset + col * block
+                        else
+                            axis_off = sprite_start + col * block
+                            cross_off = cross_offset + row * block
+                        end
+                        -- `ox` is the progress-axis origin, `oy` the cross-axis
+                        -- origin: in vertical mode `ox` == screen y and `oy` ==
+                        -- screen x, so `rect_x` gets `oy` and `rect_y` gets `ox`.
+                        local rect_x, rect_y
+                        if vertical then
+                            rect_x = oy + cross_off
+                            rect_y = ox + axis_off
+                        else
+                            rect_x = ox + axis_off
+                            rect_y = oy + cross_off
+                        end
+                        bbPaintRect(bb, rect_x, rect_y, block, block, pac_fill)
+                    end
+                end
+            end
+        end
+
+        -- Dot strip + pellet. Dots sit at FIXED canonical positions on
+        -- the bar (independent of pacman). On each paint we filter to the
+        -- dots still ahead of pacman's leading edge — the rest are
+        -- "eaten". This keeps dots anchored to the bar instead of
+        -- shifting around as pacman moves.
+        local dot_block = math.max(3, math.floor(thickness / 6))
+        local pellet_block = dot_block * 2
+
+        if pac_dot then
+            local layout = PacmanSprite.layoutDots(length, dot_block, pellet_block)
+            local dot_cross = math.floor((thickness - dot_block) / 2)
+            local pellet_cross = math.floor((thickness - pellet_block) / 2)
+
+            -- Map a canonical bar position (0..length) to its actual
+            -- paint coord. For reversed bars, mirror about the bar centre
+            -- so the pellet lands at the far end (opposite pacman's start).
+            local function toActual(canonical_pos, element_block)
+                if reverse then
+                    return length - canonical_pos - element_block
+                else
+                    return canonical_pos
+                end
+            end
+
+            -- Paint each marker until the leading edge has crossed its
+            -- entire footprint. Vanishing the marker the moment the
+            -- leading edge first reaches it goes by too fast to read at
+            -- typical page-turn cadence; holding it through dot_block
+            -- pixels of overlap gives a couple of frames where the
+            -- contact is visible before it disappears.
+            for _idx, canonical_dot in ipairs(layout.dots) do
+                if canonical_dot + dot_block > pacman_canonical_lead then
+                    local axis = toActual(canonical_dot, dot_block)
+                    local rect_x, rect_y
+                    if vertical then
+                        rect_x = oy + dot_cross
+                        rect_y = ox + axis
+                    else
+                        rect_x = ox + axis
+                        rect_y = oy + dot_cross
+                    end
+                    bbPaintRect(bb, rect_x, rect_y, dot_block, dot_block, pac_dot)
+                end
+            end
+
+            -- Pellet at the far canonical end of the bar; paint until
+            -- pacman has reached it.
+            if layout.pellet and layout.pellet >= pacman_canonical_lead then
+                local axis = toActual(layout.pellet, pellet_block)
+                local rect_x, rect_y
+                if vertical then
+                    rect_x = oy + pellet_cross
+                    rect_y = ox + axis
+                else
+                    rect_x = ox + axis
+                    rect_y = oy + pellet_cross
+                end
+                bbPaintRect(bb, rect_x, rect_y, pellet_block, pellet_block, pac_dot)
+            end
+        end
+
+        -- Chapter ticks intentionally not rendered for pacman (the strip is
+        -- already dot-dense and tick markers don't read at this density).
 
     elseif style == "radial" or style == "radial_hollow" then
         -- Radial (pie-chart) style: a circle filled clockwise from 12 o'clock.
