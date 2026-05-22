@@ -16,6 +16,11 @@ if not json_ok then
     rapidjson_ok, json = pcall(require, "rapidjson")
 end
 
+-- Single source of truth for default AI models
+local DEFAULT_AI = {
+    primary   = { provider = "gemini", model = "gemini-3.5-flash" },
+    secondary = { provider = "gemini", model = "gemini-3.1-flash-lite" },
+}
 
 local AIHelper = {
     path = ".",
@@ -185,8 +190,8 @@ end
 -- Returns: { {url, headers, body, provider, model}, ... } or nil, error_code, error_msg
 function AIHelper:buildComprehensiveRequest(title, author, context, prompt_override)
     local prompt = prompt_override or self:createPrompt(title, author, context, "comprehensive_xray")
-    local primary = self.settings.primary_ai or { provider = "gemini", model = "gemini-2.5-flash" }
-    local secondary = self.settings.secondary_ai or { provider = "gemini", model = "gemini-2.5-flash-lite" }
+    local primary = self.settings.primary_ai or DEFAULT_AI.primary
+    local secondary = self.settings.secondary_ai or DEFAULT_AI.secondary
 
     local requests = {}
     for _, ai in ipairs({ primary, secondary }) do
@@ -194,7 +199,7 @@ function AIHelper:buildComprehensiveRequest(title, author, context, prompt_overr
         if config and config.api_key and config.api_key ~= "" then
             local url, headers, body
             if ai.provider == "gemini" then
-                local model = ai.model or "gemini-2.5-flash"
+                local model = ai.model or DEFAULT_AI.primary.model
                 local system_instruction_text = self.prompts and self.prompts.system_instruction or "Return valid JSON ONLY."
                 url = "https://generativelanguage.googleapis.com/v1beta/models/" .. model .. ":generateContent"
                 headers = { ["Content-Type"] = "application/json", ["x-goog-api-key"] = config.api_key }
@@ -887,17 +892,23 @@ function AIHelper:loadSettings()
     if not settings.loc_desc_len      then settings.loc_desc_len      = 100 end
     if not settings.timeline_event_len then settings.timeline_event_len = 80  end
     if not settings.hist_fig_bio_len  then settings.hist_fig_bio_len  = 100 end
+    if not settings.term_def_len       then settings.term_def_len       = 100      end
+    if not settings.default_book_mode  then settings.default_book_mode  = "auto"   end
+    if not settings.terms_visibility   then settings.terms_visibility   = "always" end
     
     -- Migration to unified Primary and Secondary AI logic
-    if type(settings.primary_ai) ~= "table" or type(settings.secondary_ai) ~= "table" then
+    if type(settings.primary_ai) ~= "table" then
         local def_prov = settings.default_provider or "gemini"
         if def_prov == "gemini" then
-            settings.primary_ai = { provider = "gemini", model = settings.gemini_primary_model or "gemini-2.5-flash" }
-            settings.secondary_ai = { provider = "gemini", model = settings.gemini_secondary_model or "gemini-2.5-flash-lite" }
+            settings.primary_ai = { provider = "gemini", model = settings.gemini_primary_model or DEFAULT_AI.primary.model }
         else
             settings.primary_ai = { provider = "chatgpt", model = settings.chatgpt_model or "gpt-5.4-mini" }
-            settings.secondary_ai = { provider = "gemini", model = "gemini-2.5-flash-lite" }
         end
+        migrated = true
+    end
+    
+    if type(settings.secondary_ai) ~= "table" then
+        settings.secondary_ai = { provider = "gemini", model = settings.gemini_secondary_model or DEFAULT_AI.secondary.model }
         migrated = true
     end
     
@@ -931,7 +942,7 @@ function AIHelper:loadSettings()
             end
             
             -- Only auto-set if it's one of our supported languages
-            local supported = { en=1, de=1, fr=1, ru=1, zh_CN=1, tr=1, pt_br=1, es=1, uk=1 }
+            local supported = { en=1, de=1, fr=1, ru=1, zh_CN=1, tr=1, pt_br=1, es=1, uk=1, hu=1 }
             if supported[lang] then
                 settings.language = lang
                 migrated = true
@@ -1055,6 +1066,9 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
             if context.chapter_samples then extra_context = extra_context .. "\n\nCHAPTER SAMPLES:\n" .. context.chapter_samples end
         end
         if context.annotations then extra_context = extra_context .. "\n\nUSER HIGHLIGHTS:\n" .. context.annotations end
+        if context.book_type then
+            extra_context = extra_context .. "\n\nCRITICAL: The book type is already known to be: " .. context.book_type .. ". You MUST declare \"book_type\" as \"" .. context.book_type .. "\" at the JSON root and follow the extraction rules for " .. context.book_type .. " books."
+        end
         -- Merge mode: tell AI what we already know
         local has_merge_data = false
         local _merge_char_len = (self.settings and self.settings.char_desc_len) or 200
@@ -1116,6 +1130,12 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
             end
         end
     end
+    -- Dynamically inject "aliases" into the "terms" JSON schema template.
+    -- This inserts `"aliases": ["Alias 1", "Alias 2"],` before `"expanded":` translation-safely.
+    if template then
+        template = template:gsub('"expanded":', '"aliases": ["Alias 1", "Alias 2"],\n      "expanded":')
+    end
+
     local p = (context and context.reading_percent) or 100
     local success, final_prompt
     if section_name == "single_word_lookup" then
@@ -1123,8 +1143,15 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
     elseif section_name == "more_characters" then
         local exclude = context.exclude_characters or ""
         success, final_prompt = pcall(string.format, template, enhanced_title, enhanced_author, p, exclude, p)
+    elseif section_name == "more_terms" then
+        local exclude = context.exclude_terms or "None"
+        success, final_prompt = pcall(string.format, template, enhanced_title, enhanced_author, p, exclude, p)
     else
         success, final_prompt = pcall(string.format, template, enhanced_title, enhanced_author, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p)
+    end
+
+    if section_name == "comprehensive_xray" or section_name == "more_terms" then
+        extra_context = extra_context .. "\n- For each term, provide up to 3 alternative names, acronyms, or synonyms in an 'aliases' array. CRITICAL: These aliases MUST be variations or names that actually appear in the provided book text; do not hallucinate external synonyms."
     end
     if not success then final_prompt = string.format("Extract %s data.", section_name) end
     if #extra_context > 0 then final_prompt = final_prompt .. extra_context end
@@ -1143,6 +1170,8 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
         local num_chars = math.min(40, math.max(10, math.floor(25 * 200 / char_len)))
         local num_locs  = math.min(20, math.max(3,  math.floor(8  * 100 / loc_len)))
         local num_hist  = math.min(15, math.max(3,  math.floor(8  * 100 / hist_len)))
+        local term_len  = math.max(50, math.min(300, s.term_def_len or 100))
+        local num_terms = 15
         final_prompt = final_prompt
             :gsub("{MAX_CHAR_DESC}",    tostring(char_len))
             :gsub("{NUM_CHARS}",        tostring(num_chars))
@@ -1151,6 +1180,8 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
             :gsub("{MAX_TIMELINE_EVENT}",tostring(tl_len))
             :gsub("{MAX_HIST_BIO}",     tostring(hist_len))
             :gsub("{NUM_HIST}",         tostring(num_hist))
+            :gsub("{MAX_TERM_DEF}",     tostring(term_len))
+            :gsub("{NUM_TERMS}",        tostring(num_terms))
     end
 
     -- Strip invalid UTF-8 introduced by byte-based truncation of multi-byte
@@ -1164,8 +1195,8 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
 end
 
 function AIHelper:executeUnifiedRequest(prompt)
-    local primary = self.settings.primary_ai or { provider = "gemini", model = "gemini-2.5-flash" }
-    local secondary = self.settings.secondary_ai or { provider = "gemini", model = "gemini-2.5-flash-lite" }
+    local primary = self.settings.primary_ai or DEFAULT_AI.primary
+    local secondary = self.settings.secondary_ai or DEFAULT_AI.secondary
     
     local models_to_try = { primary, secondary }
     local last_err = "No models configured."
@@ -1208,6 +1239,10 @@ function AIHelper:getMoreCharacters(title, author, provider_name, context)
     return self:getBookDataSection(title, author, provider_name, context, "more_characters")
 end
 
+function AIHelper:getMoreTerms(title, author, provider_name, context)
+    return self:getBookDataSection(title, author, provider_name, context, "more_terms")
+end
+
 function AIHelper:startAIRequest(title, author, context, section_name, targeted_word)
     local prompt = self:createPrompt(title, author, context, section_name, targeted_word)
     local requests, error_code, error_msg = self:buildComprehensiveRequest(nil, nil, nil, prompt)
@@ -1242,7 +1277,7 @@ function AIHelper:mergeDescriptionsWithAI(primary_desc, secondary_desc)
 end
 
 function AIHelper:callGemini(prompt, config, current_model)
-    current_model = current_model or "gemini-2.0-flash"
+    current_model = current_model or DEFAULT_AI.primary.model
     local system_instruction_text = self.prompts and self.prompts.system_instruction or "Return valid JSON ONLY."
     self:log("AIHelper: Gemini Prompt prepared")
     

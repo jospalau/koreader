@@ -12,8 +12,7 @@ local plugin_path = ((...) or ""):match("(.-)[^%.]+$") or ""
 local M = {}
 
 function M:showLanguageSelection()
-    local ButtonDialog = require("ui/widget/buttondialog")
-    
+    local Menu = require("ui/widget/menu")
     local settings_lang = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings.language or "auto"
     
     local function changeLang(lang_code)
@@ -38,29 +37,63 @@ function M:showLanguageSelection()
         })
     end
     
-    local buttons = {
+    local items = {
         {
-            { text = (self.loc:t("lang_follow_system") or "Automatic (Follow System)") .. (settings_lang == "auto" and " [OK]" or ""), callback = function() changeLang("auto") end },
-            { text = (self.loc:t("lang_follow_book") or "Automatic (Follow Book)") .. (settings_lang == "book" and " [OK]" or ""), callback = function() changeLang("book") end },
+            text = (settings_lang == "auto" and "[✓] " or "[  ] ") .. (self.loc:t("lang_follow_system") or "Automatic (Follow System)"),
+            callback = function() changeLang("auto") end
         },
-        {{ text = "English" .. (settings_lang == "en" and " [OK]" or ""), callback = function() changeLang("en") end }},
-        {{ text = "Deutsch" .. (settings_lang == "de" and " [OK]" or ""), callback = function() changeLang("de") end }},
-        {{ text = "Français" .. (settings_lang == "fr" and " [OK]" or ""), callback = function() changeLang("fr") end }},
-        {{ text = "Русский" .. (settings_lang == "ru" and " [OK]" or ""), callback = function() changeLang("ru") end }},
-        {{ text = "简体中文" .. (settings_lang == "zh_CN" and " [OK]" or ""), callback = function() changeLang("zh_CN") end }},
-        {{ text = "Türkçe" .. (settings_lang == "tr" and " [OK]" or ""), callback = function() changeLang("tr") end }},
-        {{ text = "Português" .. (settings_lang == "pt_br" and " [OK]" or ""), callback = function() changeLang("pt_br") end }},
-        {{ text = "Español" .. (settings_lang == "es" and " [OK]" or ""), callback = function() changeLang("es") end }},
-        {{ text = "Українська" .. (settings_lang == "uk" and " [OK]" or ""), callback = function() changeLang("uk") end }},
+        {
+            text = (settings_lang == "book" and "[✓] " or "[  ] ") .. (self.loc:t("lang_follow_book") or "Automatic (Follow Book)"),
+            callback = function() changeLang("book") end,
+            separator = true
+        }
     }
     
+    local LANGUAGE_NAMES = {
+        en = "English",
+        de = "Deutsch",
+        fr = "Français",
+        ru = "Русский",
+        zh_CN = "简体中文",
+        tr = "Türkçe",
+        pt_br = "Português",
+        es = "Español",
+        uk = "Українська",
+        hu = "Magyar",
+    }
+    
+    local langs = self.loc and self.loc.available_languages or { "en", "de", "fr", "ru", "zh_CN", "tr", "pt_br", "es", "uk", "hu" }
+    for _, code in ipairs(langs) do
+        local name = LANGUAGE_NAMES[code] or code:upper()
+        table.insert(items, {
+            text = (settings_lang == code and "[✓] " or "[  ] ") .. name,
+            callback = function() changeLang(code) end
+        })
+    end
+    
     local dialog_title = (self.loc and self.loc:t("menu_language")) or "Language Selection"
-    self.ldlg = ButtonDialog:new{title = dialog_title, buttons = buttons}
+    self.ldlg = Menu:new{
+        title = dialog_title,
+        item_table = items,
+        is_borderless = true,
+        width = Screen:getWidth(),
+        height = Screen:getHeight(),
+        on_close_callback = function()
+            self.ldlg = nil
+        end
+    }
     UIManager:show(self.ldlg)
 end
 
 function M:resolveLanguage(code)
-    local supported = { en=1, de=1, fr=1, ru=1, zh_CN=1, tr=1, pt_br=1, es=1, uk=1 }
+    local supported = {}
+    if self.loc and self.loc.available_languages then
+        for _, c in ipairs(self.loc.available_languages) do
+            supported[c] = 1
+        end
+    else
+        supported = { en=1, de=1, fr=1, ru=1, zh_CN=1, tr=1, pt_br=1, es=1, uk=1, hu=1 }
+    end
     
     if code == "auto" or not code then
         local gettext = require("gettext")
@@ -124,11 +157,29 @@ function M:checkBookLanguageMatch()
     if book_lang:find("zh") then lang = "zh_CN"
     elseif book_lang:find("pt") then lang = "pt_br" end
     
-    local supported = {
-        en = "English", de = "Deutsch", fr = "Français",
-        ru = "Русский", zh_CN = "简体中文", tr = "Türkçe",
-        pt_br = "Português", es = "Español", uk = "Українська"
+    local LANGUAGE_NAMES = {
+        en = "English",
+        de = "Deutsch",
+        fr = "Français",
+        ru = "Русский",
+        zh_CN = "简体中文",
+        tr = "Türkçe",
+        pt_br = "Português",
+        es = "Español",
+        uk = "Українська",
+        hu = "Magyar",
     }
+    
+    local supported = {}
+    if self.loc and self.loc.available_languages then
+        for _, c in ipairs(self.loc.available_languages) do
+            supported[c] = LANGUAGE_NAMES[c] or c:upper()
+        end
+    else
+        for c, name in pairs(LANGUAGE_NAMES) do
+            supported[c] = name
+        end
+    end
     
     if not supported[lang] then return end
     
@@ -204,18 +255,22 @@ function M:closeAllMenus()
         self.active_mention_scan = nil
     end
 
+    if self.clearHighlightOverlay then
+        pcall(function() self:clearHighlightOverlay() end)
+    end
+
     -- 1. Close all custom plugin modals instantly
     local menus = {
         self.mentions_menu, self.char_menu, self.loc_menu,
         self.timeline_menu, self.hf_menu, self.xray_menu,
-        self.active_details_dialog, self.return_banner
+        self.terms_menu, self.active_details_dialog, self.return_banner
     }
-    for i = 1, 8 do
+    for i = 1, 9 do
         if menus[i] then pcall(function() UIManager:close(menus[i]) end) end
     end
     self.mentions_menu = nil; self.char_menu = nil; self.loc_menu = nil
     self.timeline_menu = nil; self.hf_menu = nil; self.xray_menu = nil
-    self.active_details_dialog = nil; self.return_banner = nil
+    self.terms_menu = nil; self.active_details_dialog = nil; self.return_banner = nil
     
     local function executeClear()
         -- 2. Dismiss native KOReader top menu stack
@@ -256,16 +311,13 @@ function M:closeAllMenus()
 end
 
 function M:showCharacters()
-    if not self.characters or #self.characters == 0 then
-        UIManager:show(InfoMessage:new{ text = self.loc:t("no_character_data"), timeout = 3 })
-        return
+    self.characters = self.characters or {}
+    local items = {}
+    if #self.characters > 0 then
+        table.insert(items, { text = "⌕ " .. self.loc:t("search_character"), callback = function() self:showCharacterSearch() end })
+        table.insert(items, { text = "⋈ " .. (self.loc:t("merge_duplicates") or "Merge Duplicates..."), callback = function() self:showMergeFlow(self.characters, "characters") end })
     end
-
-    local items = {
-        { text = "⌕ " .. self.loc:t("search_character"), callback = function() self:showCharacterSearch() end },
-        { text = "⋈ " .. (self.loc:t("merge_duplicates") or "Merge Duplicates..."), callback = function() self:showMergeFlow(self.characters, "characters") end },
-        { text = "✚ " .. (self.loc:t("menu_fetch_more_chars") or "Fetch More Characters"), keep_menu_open = true, callback = function() self:fetchMoreCharacters() end, separator = true },
-    }
+    table.insert(items, { text = "✚ " .. (self.loc:t("menu_fetch_more_chars") or "Fetch More Characters"), keep_menu_open = true, callback = function() self:fetchMoreCharacters() end, separator = #self.characters > 0 })
     for _, char in ipairs(self.characters) do
         local name = char.name or "Unknown"
         local text = "• " .. name
@@ -390,6 +442,7 @@ function M:findRelatedEntities(text, exclude_name)
     scanList(self.characters, "character")
     scanList(self.locations, "location")
     scanList(self.historical_figures, "historical")
+    scanList(self.terms, "term")
 
     return related
 end
@@ -424,6 +477,8 @@ function M:showRelatedEntities(related)
                     self:showLocationDetails(item)
                 elseif item_type == "historical" then
                     self:showHistoricalFigureDetails(item)
+                elseif item_type == "term" then
+                    self:showTermDetails(item)
                 end
             end
         })
@@ -488,6 +543,7 @@ function M:showCharacterDetails(character)
                 {
                     text = self.loc:t("find_mentions") or "Find Mentions",
                     callback = function()
+                        if self.active_details_dialog then UIManager:close(self.active_details_dialog); self.active_details_dialog = nil end
                         self:showMentionsForEntity(character)
                     end,
                 },
@@ -517,6 +573,7 @@ function M:showCharacterDetails(character)
                 ok_text = self.loc:t("find_mentions") or "Find Mentions",
                 cancel_text = self.loc:t("close") or "Close",
                 ok_callback = function()
+                    if self.active_details_dialog then UIManager:close(self.active_details_dialog); self.active_details_dialog = nil end
                     self:showMentionsForEntity(character)
                 end,
                 cancel_callback = function()
@@ -558,6 +615,7 @@ function M:showLocationDetails(loc_item)
                 {
                     text = self.loc:t("find_mentions") or "Find Mentions",
                     callback = function()
+                        if self.active_details_dialog then UIManager:close(self.active_details_dialog); self.active_details_dialog = nil end
                         self:showMentionsForEntity(loc_item)
                     end,
                 },
@@ -587,6 +645,7 @@ function M:showLocationDetails(loc_item)
                 ok_text = self.loc:t("find_mentions") or "Find Mentions",
                 cancel_text = self.loc:t("close") or "Close",
                 ok_callback = function()
+                    if self.active_details_dialog then UIManager:close(self.active_details_dialog); self.active_details_dialog = nil end
                     self:showMentionsForEntity(loc_item)
                 end,
                 cancel_callback = function()
@@ -604,6 +663,232 @@ function M:showLocationDetails(loc_item)
         end
     end
     UIManager:show(self.active_details_dialog)
+end
+
+function M:showTermDetails(term)
+    local name = term.name or "???"
+    local lines = { (self.loc:t("label_name") or "NAME") .. ": " .. name }
+    if term.aliases and type(term.aliases) == "table" and #term.aliases > 0 then
+        local meaningful_aliases = {}
+        local name_lower = name:lower()
+        for _, alias in ipairs(term.aliases) do
+            local al_lower = tostring(alias):lower()
+            if #al_lower > 1 and not name_lower:find(al_lower, 1, true) then
+                table.insert(meaningful_aliases, alias)
+            end
+        end
+        if #meaningful_aliases > 0 then
+            table.insert(lines, (self.loc:t("label_aliases") or "ALIASES") .. ": " .. table.concat(meaningful_aliases, ", "))
+        end
+    end
+    if term.expanded and term.expanded ~= "" and term.expanded ~= term.name then
+        table.insert(lines, (self.loc:t("label_expanded") or "STANDS FOR") .. ": " .. term.expanded)
+    end
+    if term.category and term.category ~= "" then
+        table.insert(lines, (self.loc:t("label_category") or "CATEGORY") .. ": " .. term.category)
+    end
+    table.insert(lines, "")
+    table.insert(lines, (self.loc:t("label_definition") or "DEFINITION") .. ":")
+    table.insert(lines, term.definition or "---")
+    
+    local body_text = table.concat(lines, "\n")
+    local linked_enabled = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.linked_entries_enabled ~= false
+    local related = linked_enabled and self:findRelatedEntities(term.definition or "", name) or {}
+    local mentions_enabled = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.mentions_enabled ~= false
+
+    if #related > 0 then
+        local buttons = {
+            {
+                {
+                    text = self.loc:t("linked_entries") or "Linked Entries",
+                    callback = function()
+                        self:showRelatedEntities(related)
+                    end,
+                }
+            },
+            {
+                {
+                    text = self.loc:t("find_mentions") or "Find Mentions",
+                    callback = function()
+                        if self.active_details_dialog then UIManager:close(self.active_details_dialog); self.active_details_dialog = nil end
+                        self:showMentionsForEntity(term)
+                    end,
+                },
+                {
+                    text = self.loc:t("close") or "Close",
+                    callback = function()
+                        if self.active_details_dialog then UIManager:close(self.active_details_dialog) end
+                        self.active_details_dialog = nil
+                    end,
+                }
+            }
+        }
+        if not mentions_enabled then table.remove(buttons[2], 1) end
+        self.active_details_dialog = ButtonDialog:new{ title = body_text, buttons = buttons }
+    else
+        if mentions_enabled then
+            self.active_details_dialog = ConfirmBox:new{
+                text = body_text, icon = "info",
+                ok_text = self.loc:t("find_mentions") or "Find Mentions",
+                cancel_text = self.loc:t("close") or "Close",
+                ok_callback = function()
+                    if self.active_details_dialog then UIManager:close(self.active_details_dialog); self.active_details_dialog = nil end
+                    self:showMentionsForEntity(term)
+                end,
+                cancel_callback = function() self.active_details_dialog = nil end,
+            }
+        else
+            self.active_details_dialog = ConfirmBox:new{
+                text = body_text, icon = "info",
+                ok_text = self.loc:t("close") or "Close",
+                ok_callback = function() self.active_details_dialog = nil end,
+                cancel_callback = function() self.active_details_dialog = nil end,
+            }
+        end
+    end
+    UIManager:show(self.active_details_dialog)
+end
+
+function M:showTerms()
+    self.terms = self.terms or {}
+    local items = {}
+    if #self.terms > 0 then
+        table.insert(items, { text = "⌕ " .. (self.loc:t("search_term") or "Search Terms"), callback = function() self:showTermSearch() end })
+    end
+    table.insert(items, { text = "✚ " .. (self.loc:t("menu_fetch_more_terms") or "Fetch More Terms"), callback = function() self:fetchMoreTerms() end, separator = #self.terms > 0 })
+    for _, term in ipairs(self.terms) do 
+        if type(term) == "table" then
+            local captured_term = term
+            table.insert(items, {
+                text = "• " .. (term.name or "???"),
+                subtext = term.definition and term.definition:sub(1, 80) .. "...",
+                keep_menu_open = true,
+                callback = function()
+                    self:showTermDetails(captured_term)
+                end
+            })
+        end
+    end
+    
+    self.terms_menu = Menu:new{
+        title = (self.loc:t("menu_terms") or "Glossary") .. " (" .. #self.terms .. ")",
+        item_table = items,
+        is_borderless = true,
+        width = Screen:getWidth(),
+        height = Screen:getHeight(),
+        on_close_callback = function() 
+            if self.is_cancelled then return end
+            self:showFullXRayMenu() 
+        end,
+    }
+    UIManager:show(self.terms_menu)
+end
+
+function M:findTermByName(word)
+    if not word or not self.terms then return nil end
+    local query = word:lower()
+    for _, term in ipairs(self.terms) do
+        if (term.name or ""):lower() == query then
+            return term
+        end
+        if term.aliases and type(term.aliases) == "table" then
+            for _, alias in ipairs(term.aliases) do
+                if tostring(alias):lower() == query then
+                    return term
+                end
+            end
+        end
+    end
+    return nil
+end
+
+function M:showTermSearch()
+    if not self.terms or #self.terms == 0 then UIManager:show(InfoMessage:new{ text = self.loc:t("no_terms_data"), timeout = 3 }); return end
+    local InputDialog = require("ui/widget/inputdialog")
+    local input_dialog
+    input_dialog = InputDialog:new{ 
+        title = self.loc:t("search_term") or "Search Terms", 
+        input = "", input_hint = self.loc:t("search_hint"), 
+        buttons = {
+            {{ text = self.loc:t("cancel"), callback = function() UIManager:close(input_dialog) end }, 
+             { text = self.loc:t("search_button") or "Search", is_enter_default = true, 
+               callback = function() 
+                   local search_text = input_dialog:getInputText()
+                   UIManager:close(input_dialog)
+                   if search_text and #search_text > 0 then 
+                       local found = self:findTermByName(search_text)
+                       if found then self:showTermDetails(found) 
+                       else UIManager:show(InfoMessage:new{ text = self.loc:t("term_not_found", search_text) or "Term not found.", timeout = 3 }) end 
+                   end 
+               end 
+             }}
+        } 
+    }
+    UIManager:show(input_dialog); input_dialog:onShowKeyboard()
+end
+
+function M:showBookTypeSettings()
+    local ButtonDialog = require("ui/widget/buttondialog")
+    local info_dialog
+    
+    local function showSettings()
+        if info_dialog then UIManager:close(info_dialog) end
+        
+        local current = "auto"
+        if not self.cache_manager then self.cache_manager = require(plugin_path .. "xray_cachemanager"):new() end
+        local cache = self.cache_manager:loadCache(self.ui.document.file)
+        if cache and cache.book_mode_override then
+            current = cache.book_mode_override
+        else
+            current = self.ai_helper.settings.default_book_mode or "auto"
+        end
+
+        local function setType(mode)
+            local cache = self.cache_manager:loadCache(self.ui.document.file) or {}
+            cache.book_mode_override = mode
+            self.cache_manager:saveCache(self.ui.document.file, cache)
+            self.book_type = (mode == "auto") and nil or mode
+            UIManager:show(InfoMessage:new{ text = self.loc:t("book_type_saved") or "Book Type saved!", timeout = 3 })
+            UIManager:setDirty(nil, "ui")
+            UIManager:nextTick(function() showSettings() end)
+        end
+
+        info_dialog = ButtonDialog:new{
+            title = self.loc:t("menu_book_mode") or "Book Type",
+            text = self.loc:t("book_mode_desc") or "Select the type for this book:",
+            buttons = {
+                {
+                    { 
+                        text = (current == "auto" and "[✓] " or "[  ] ") .. (self.loc:t("book_type_auto") or "Auto-Detect"), 
+                        callback = function() setType("auto") end 
+                    },
+                    { 
+                        text = (current == "fiction" and "[✓] " or "[  ] ") .. (self.loc:t("book_type_fiction") or "Fiction"), 
+                        callback = function() setType("fiction") end 
+                    },
+                    { 
+                        text = (current == "non_fiction" and "[✓] " or "[  ] ") .. (self.loc:t("book_type_nonfiction") or "Non-Fiction"), 
+                        callback = function() setType("non_fiction") end 
+                    },
+                },
+                {
+                    { 
+                        text = self.loc:t("menu_about") or "About", 
+                        callback = function()
+                            UIManager:show(InfoMessage:new{
+                                text = self.loc:t("book_type_about") or "The Book Type determines which AI extraction strategy is used.\n\n- Fiction: Focuses on characters, timeline, and world-building terms (factions, spells, lore, etc.).\n- Non-Fiction: Focuses on technical terms, concepts, and historical figures.\n\n'Auto-Detect' will let the AI decide after the first fetch.",
+                                timeout = 30
+                            })
+                        end
+                    },
+                    { text = self.loc:t("close") or "Close", callback = function() UIManager:close(info_dialog) end }
+                }
+            }
+        }
+        UIManager:show(info_dialog)
+    end
+    
+    showSettings()
 end
 
 function M:showMentionsSettings()
@@ -1061,6 +1346,10 @@ function M:showDescriptionLengthSettings()
             text = self.loc:t("menu_historical_figures"),
             callback = function() self:showEntityLengthPresets("hist_fig_bio_len", self.loc:t("menu_historical_figures")) end,
         },
+        {
+            text = self.loc:t("menu_terms") or "Glossary",
+            callback = function() self:showEntityLengthPresets("term_def_len", self.loc:t("menu_terms") or "Glossary") end,
+        },
     }
 
     local menu = Menu:new{
@@ -1345,6 +1634,7 @@ function M:showHistoricalFigureDetails(fig)
                 {
                     text = self.loc:t("find_mentions") or "Find Mentions",
                     callback = function()
+                        if self.active_details_dialog then UIManager:close(self.active_details_dialog); self.active_details_dialog = nil end
                         self:showMentionsForEntity(fig)
                     end,
                 },
@@ -1374,6 +1664,7 @@ function M:showHistoricalFigureDetails(fig)
                 ok_text = self.loc:t("find_mentions") or "Find Mentions",
                 cancel_text = self.loc:t("close") or "Close",
                 ok_callback = function()
+                    if self.active_details_dialog then UIManager:close(self.active_details_dialog); self.active_details_dialog = nil end
                     self:showMentionsForEntity(fig)
                 end,
                 cancel_callback = function()
@@ -1633,52 +1924,114 @@ function M:getProviderKeySubMenu(provider, provider_name)
 end
 
 function M:getAIModelSelectionMenu(setting_type)
-    local models = {
-        { name = "Gemini Flash (gemini-2.5-flash) - " .. (self.loc:t("model_free") or "free"), provider = "gemini", id = "gemini-2.5-flash" },
-        { name = "Gemini Flash-Lite (gemini-2.5-flash-lite) - " .. (self.loc:t("model_free") or "free"), provider = "gemini", id = "gemini-2.5-flash-lite" },
-        { name = "Gemini Pro (gemini-2.5-pro) - " .. (self.loc:t("model_paid") or "paid"), provider = "gemini", id = "gemini-2.5-pro" },
-        { name = "GPT-5.5 (gpt-5.5) - " .. (self.loc:t("model_paid") or "paid"), provider = "chatgpt", id = "gpt-5.5" },
-        { name = "GPT-5.4 Mini (gpt-5.4-mini) - " .. (self.loc:t("model_paid") or "paid"), provider = "chatgpt", id = "gpt-5.4-mini" },
-        { name = "GPT-5.4 Nano (gpt-5.4-nano) - " .. (self.loc:t("model_paid") or "paid"), provider = "chatgpt", id = "gpt-5.4-nano" },
-        { name = "DeepSeek Chat (deepseek-chat) - " .. (self.loc:t("model_paid") or "paid"), provider = "deepseek", id = "deepseek-chat" },
-        { name = "DeepSeek Reasoner (deepseek-reasoner) - " .. (self.loc:t("model_paid") or "paid"), provider = "deepseek", id = "deepseek-reasoner" },
-        { name = "Claude 4.6 Sonnet (claude-sonnet-4-6) - " .. (self.loc:t("model_paid") or "paid"), provider = "claude", id = "claude-sonnet-4-6" },
-        { name = "Claude 4.5 Haiku (claude-haiku-4-5) - " .. (self.loc:t("model_paid") or "paid"), provider = "claude", id = "claude-haiku-4-5" },
+    local providers = {
+        {
+            id = "gemini",
+            display_name = "Gemini",
+            models = {
+                { id = "gemini-3.5-flash", cost = "free" },
+                { id = "gemini-3.1-flash-lite", cost = "free" },
+                { id = "gemini-2.5-flash", cost = "free" },
+                { id = "gemini-2.5-flash-lite", cost = "free" },
+                { id = "gemini-2.5-pro", cost = "paid" },
+            }
+        },
+        {
+            id = "chatgpt",
+            display_name = "ChatGPT",
+            models = {
+                { id = "gpt-5.5", cost = "paid" },
+                { id = "gpt-5.4-mini", cost = "paid" },
+                { id = "gpt-5.4-nano", cost = "paid" },
+            }
+        },
+        {
+            id = "deepseek",
+            display_name = "DeepSeek",
+            models = {
+                { id = "deepseek-chat", cost = "paid" },
+                { id = "deepseek-reasoner", cost = "paid" },
+            }
+        },
+        {
+            id = "claude",
+            display_name = "Claude",
+            models = {
+                { id = "claude-sonnet-4-6", cost = "paid" },
+                { id = "claude-haiku-4-5", cost = "paid" },
+            }
+        }
     }
     
     local custom1_model = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings.custom1_model or nil
     local custom2_model = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings.custom2_model or nil
     
-    table.insert(models, {
-        name = "Custom API 1: " .. (custom1_model or "(configure in API Keys)"),
-        provider = "custom1",
-        id = (custom1_model or "custom1")
-    })
-    table.insert(models, {
-        name = "Custom API 2: " .. (custom2_model or "(configure in API Keys)"),
-        provider = "custom2",
-        id = (custom2_model or "custom2")
-    })
-    
     local menu_items = {}
-    for i, m in ipairs(models) do
+    
+    for _, p in ipairs(providers) do
+        local provider_id = p.id
+        local provider_name = p.display_name
+        local provider_models = p.models
         table.insert(menu_items, {
-            text = m.name,
+            text = provider_name,
+            keep_menu_open = true,
             checked_func = function()
                 if not self.ai_helper or not self.ai_helper.settings then return false end
                 local current = setting_type == "primary" and self.ai_helper.settings.primary_ai or self.ai_helper.settings.secondary_ai
                 if type(current) ~= "table" then return false end
-                return current.provider == m.provider and current.model == m.id
+                return current.provider == provider_id
             end,
-            callback = function()
-                self.ai_helper:setUnifiedModel(setting_type, m.provider, m.id)
-                UIManager:setDirty(nil, "ui")
+            sub_item_table_func = function()
+                local sub_items = {}
+                for _, m in ipairs(provider_models) do
+                    local model_id = m.id
+                    local model_cost = m.cost
+                    table.insert(sub_items, {
+                        text = model_id .. " [" .. (model_cost == "free" and self.loc:t("model_free") or self.loc:t("model_paid")) .. "]",
+                        checked_func = function()
+                            if not self.ai_helper or not self.ai_helper.settings then return false end
+                            local current = setting_type == "primary" and self.ai_helper.settings.primary_ai or self.ai_helper.settings.secondary_ai
+                            if type(current) ~= "table" then return false end
+                            return current.provider == provider_id and current.model == model_id
+                        end,
+                        callback = function()
+                            self.ai_helper:setUnifiedModel(setting_type, provider_id, model_id)
+                            UIManager:setDirty(nil, "ui")
+                        end
+                    })
+                end
+                return sub_items
             end
         })
-        if i == #models then
-            menu_items[#menu_items].separator = true
-        end
     end
+    
+    table.insert(menu_items, {
+        text = "Custom API 1: " .. (custom1_model or "(configure in API Keys)"),
+        checked_func = function()
+            if not self.ai_helper or not self.ai_helper.settings then return false end
+            local current = setting_type == "primary" and self.ai_helper.settings.primary_ai or self.ai_helper.settings.secondary_ai
+            if type(current) ~= "table" then return false end
+            return current.provider == "custom1" and current.model == (custom1_model or "custom1")
+        end,
+        callback = function()
+            self.ai_helper:setUnifiedModel(setting_type, "custom1", custom1_model or "custom1")
+            UIManager:setDirty(nil, "ui")
+        end
+    })
+    table.insert(menu_items, {
+        text = "Custom API 2: " .. (custom2_model or "(configure in API Keys)"),
+        checked_func = function()
+            if not self.ai_helper or not self.ai_helper.settings then return false end
+            local current = setting_type == "primary" and self.ai_helper.settings.primary_ai or self.ai_helper.settings.secondary_ai
+            if type(current) ~= "table" then return false end
+            return current.provider == "custom2" and current.model == (custom2_model or "custom2")
+        end,
+        callback = function()
+            self.ai_helper:setUnifiedModel(setting_type, "custom2", custom2_model or "custom2")
+            UIManager:setDirty(nil, "ui")
+        end,
+        separator = true
+    })
     table.insert(menu_items, {
         text = self.loc:t("menu_enter_custom_model") or "Enter custom model...",
         keep_menu_open = true,
