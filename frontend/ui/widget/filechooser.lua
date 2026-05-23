@@ -20,6 +20,7 @@ local FileChooser = BookList:extend{
     show_path = true,
     parent = nil,
     show_filter      = G_reader_settings:readSetting("show_filter", {}),
+    show_flat_view   = G_reader_settings:readSetting("show_flat_view", false), -- show all files from subfolders
     show_hidden      = G_reader_settings:readSetting("show_hidden", false), -- folders/files starting with "."
     show_unsupported = G_reader_settings:readSetting("show_unsupported", false), -- set to true to ignore file_filter
     file_filter = nil, -- function defined in the caller, returns true for files to be shown
@@ -106,6 +107,11 @@ end
 
 function FileChooser:getList(path, collate)
     local dirs, files = {}, {}
+    local _, _, complete = self:getPathList(path, collate, dirs, files)
+    return dirs, files, complete
+end
+
+function FileChooser:getPathList(path, collate, dirs, files)
     -- lfs.dir directory without permission will give error
     local ok, iter, dir_obj = pcall(lfs.dir, path)
     local home_dir = G_reader_settings:readSetting("home_dir")
@@ -122,10 +128,14 @@ function FileChooser:getList(path, collate)
                 local item = true
                 if attributes.mode == "directory" and f ~= "." and f ~= ".."
                         and self:show_dir(f) then
-                    if collate then -- when collate == nil count only to display in folder mandatory
-                        item = self:getListItem(path, f, fullpath, attributes, collate)
+                    if FileChooser.show_flat_view then
+                        self:getPathList(fullpath, collate, dirs, files)
+                    else
+                        if collate then -- when collate == nil count only to display in folder mandatory
+                            item = self:getListItem(path, f, fullpath, attributes, collate)
+                        end
+                        table.insert(dirs, item)
                     end
-                    table.insert(dirs, item)
                 -- Always ignore macOS resource forks.
                 elseif attributes.mode == "file" and not util.stringStartsWith(f, "._")
                         and self:show_file(f, fullpath) then
@@ -142,6 +152,7 @@ function FileChooser:getList(path, collate)
             end
         end
     else -- error, probably "permission denied"
+        if FileChooser.show_flat_view then return end
         if unreadable_dir_content[path] then
             -- Add this dummy item that will be replaced with a message by genItemTable()
             table.insert(dirs, self:getListItem(path, "./.", path, {}))
@@ -156,9 +167,6 @@ function FileChooser:getList(path, collate)
             end
         end
     end
-    -- local dump = require("dump")
-    -- print(dump(dirs))
-
     return dirs, files, complete
 end
 
@@ -486,7 +494,7 @@ function FileChooser:onFolderUp()
 end
 
 function FileChooser:toggleShowFilesMode(mode)
-    -- modes: "show_hidden", "show_unsupported"
+    -- modes: "show_flat_view", "show_hidden", "show_unsupported"
     FileChooser[mode] = not FileChooser[mode]
     G_reader_settings:saveSetting(mode, FileChooser[mode])
     self:refreshPath()
