@@ -289,66 +289,8 @@ function Profiles:getSubMenuItems()
     end
     return sub_item_table
 end
-function shallow_copy(t)
-    local t2 = {}
-    for k,v in pairs(t) do
-      t2[k] = v
-    end
-    return t2
-end
+
 function Profiles:onProfileExecute(name, exec_props)
-    -- local copy_profile = shallow_copy(self.data[name])
-    -- -- if Device.model == "Kobo_io" or Device.model == "Kobo_cadmus" then -- Libra2 or Sage
-    -- --     copy_profile.font_size =  self.data[name].font_size + 0.5
-    -- if Device.model == "Kobo_goldfinch" then -- Clara2E
-    --     if self.data[name].font_size ~= nil then
-    --         if copy_profile.font_size == 16.5 or copy_profile.font_size == 18.5 then
-    --             copy_profile.font_size = self.data[name].font_size + 3
-    --         elseif copy_profile.font_size == 20.5 then
-    --             copy_profile.font_size = self.data[name].font_size + 4
-    --         end
-    --     end
-    -- end
-
-    -- if Device.model == "Kobo_cadmus" then -- Sage
-    --     if self.data[name].font_size ~= nil then
-    --         if copy_profile.font_size == 16.5 then
-    --             copy_profile.font_size = self.data[name].font_size - 2
-    --         elseif copy_profile.font_size == 18.5 or copy_profile.font_size == 20.5 then
-    --             copy_profile.font_size = self.data[name].font_size - 2.5
-    --         end
-    --     end
-    -- end
-
-    -- -- Boox Palma
-    -- -- Sizes have been calculated for KOReader app having been configured to 300dpi in Android (Press briefly the app - Optimize)
-    -- if Device:isAndroid() and Device.screen:getWidth() < 1200  then
-    --     if copy_profile.font_size == 16.5 then
-    --         copy_profile.font_size = self.data[name].font_size + 8.5
-    --     elseif copy_profile.font_size == 18.5 then
-    --         copy_profile.font_size = self.data[name].font_size + 9.5
-    --     elseif copy_profile.font_size == 20.5 then
-    --         copy_profile.font_size = self.data[name].font_size + 11
-    --     end
-    -- end
-
-    -- -- Xiaomi 12TPro
-    -- if Device:isAndroid() and Device.screen:getWidth() == 1220  then
-    --     if self.data[name].font_size ~= nil then
-    --         copy_profile.font_size = self.data[name].font_size + 7.5
-    --     end
-    -- end
-
-    -- if Device.model == "ares" then -- LikeBook Ares
-    --     if self.data[name].font_size ~= nil then
-    --         copy_profile.font_size = self.data[name].font_size + 9
-    --     end
-    -- end
-    -- -- if Device:isKindle() then
-    -- --     if self.data[name].font_size ~= nil then
-    -- --         copy_profile.font_size = self.data[name].font_size + 5
-    -- --     end
-    -- -- end
     Dispatcher:execute(self.data[name], exec_props)
 end
 
@@ -1381,6 +1323,14 @@ function Profiles:executeAutoExecDocConditional(event)
             end
         end
     end
+end
+
+function shallow_copy(t)
+    local t2 = {}
+    for k,v in pairs(t) do
+      t2[k] = v
+    end
+    return t2
 end
 
 return Profiles
