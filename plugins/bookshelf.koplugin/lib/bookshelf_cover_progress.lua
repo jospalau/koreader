@@ -9,6 +9,7 @@
 -- Widget builders (buildBarWidget, buildGlyphWidget) live in this file
 -- alongside the decision logic so SpineWidget has a single require to
 -- pull in everything it needs.
+
 local Blitbuffer        = require("ffi/blitbuffer")
 local Device            = require("device")
 local Font              = require("ui/font")
