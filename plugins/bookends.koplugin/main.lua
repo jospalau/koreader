@@ -22,6 +22,7 @@ end
 
 local Blitbuffer = require("ffi/blitbuffer")
 local Colour = require("bookends_colour")
+local Migrations = require("bookends_migrations")
 local Geom = require("ui/geometry")
 local Config = require("bookends_config")
 local ConfirmBox = require("ui/widget/confirmbox")
@@ -700,6 +701,85 @@ function Bookends:migrateSchemaIfNeeded()
             end
         end
     end
+
+    if not self.settings:isTrue("bar_colors_promoted_to_per_bar") then
+        -- Promote global bar_colors / tick_height_pct / tick_width_multiplier
+        -- into each enabled progress bar's per-bar colors. See spec
+        -- docs/superpowers/specs/2026-05-25-remove-preset-bar-defaults-design.md.
+        local logger = require("logger")
+
+        -- 1) Active settings (the in-memory current preset state).
+        if Migrations.barColorsToPerBar(self.settings.data) then
+            logger.info("bookends: migrated active settings bar_colors → per-bar")
+        end
+
+        -- 2) Every preset file on disk. Load each, mutate, persist back via
+        --    updatePresetFile (which preserves the filename — no auto-rename).
+        --    Per-preset failures are logged and skipped so one corrupt file
+        --    doesn't block migration of the rest.
+        local lfs = require("libs/libkoreader-lfs")
+        local presets_dir = self:presetDir()
+        local ok_iter, err_iter = pcall(function()
+            if lfs.attributes(presets_dir, "mode") ~= "directory" then return end
+            for filename in lfs.dir(presets_dir) do
+                if filename:match("%.lua$") then
+                    local path = presets_dir .. "/" .. filename
+                    -- loadPresetFile returns (nil, err_string) on failure; it
+                    -- never raises, so no pcall needed. Capturing both values
+                    -- preserves the actual parse error in the log.
+                    local data, lerr = self.loadPresetFile(path)
+                    if data and type(data) == "table" then
+                        if Migrations.barColorsToPerBar(data) then
+                            local preset_name = data.name or filename:gsub("%.lua$", "")
+                            -- updatePresetFile now returns true on successful
+                            -- write, false if io.open failed. Treat a false
+                            -- return as a failure to migrate this preset.
+                            local ok_w, werr = pcall(self.updatePresetFile, self, filename, preset_name, data)
+                            local wrote_ok = ok_w and werr ~= false
+                            if wrote_ok then
+                                logger.info("bookends: migrated preset " .. filename)
+                            else
+                                logger.warn("bookends: failed to write migrated preset "
+                                    .. filename .. ": "
+                                    .. (ok_w and "io.open returned false" or tostring(werr)))
+                            end
+                        end
+                    else
+                        logger.warn("bookends: skip preset migration for "
+                            .. filename .. ": " .. tostring(lerr))
+                    end
+                end
+            end
+        end)
+        if not ok_iter then
+            logger.warn("bookends: preset directory iteration failed; will retry on next startup: "
+                .. tostring(err_iter))
+        else
+            self.settings:saveSetting("bar_colors_promoted_to_per_bar", true)
+            self:markDirty()
+            -- Flush settings explicitly. The migration mutated self.settings.data
+            -- directly (setting top-level keys to nil); KOReader's autosave is
+            -- debounced and may not fire before a fast restart, leaving the
+            -- stripped keys on disk. An explicit flush guarantees the strip is
+            -- persisted now, in the same session as the migration.
+            self.settings:flush()
+        end
+    end
+
+    -- Orphan-key cleanup: strip any stale top-level bar_colors /
+    -- tick_height_pct / tick_width_multiplier that survive on disk past
+    -- the flag-gated migration above. Runs every init (idempotent) until
+    -- the keys are gone, then becomes a no-op. Fixes users who migrated
+    -- in pre-flush versions where KOReader's autosave didn't pick up the
+    -- direct-table mutation before the next launch.
+    if self.settings:has("bar_colors")
+            or self.settings:has("tick_height_pct")
+            or self.settings:has("tick_width_multiplier") then
+        self.settings:delSetting("bar_colors")
+        self.settings:delSetting("tick_height_pct")
+        self.settings:delSetting("tick_width_multiplier")
+        self.settings:flush()
+    end
 end
 
 function Bookends:buildPreset()
@@ -906,7 +986,11 @@ end
 
 --- Compute chapter tick fractions for book progress bars (cached per dirty cycle).
 function Bookends:_computeTickCache(current_pageno)
-    local tick_m = self.settings:readSetting("tick_width_multiplier", self.DEFAULT_TICK_WIDTH_MULTIPLIER)
+    -- Inline bars use the hardcoded default tick width since the
+    -- bar_colors → per-bar migration removed the global setting.
+    -- Per-bar full-width bars apply their own bar_cfg.colors
+    -- .tick_width_multiplier downstream in the remap pass.
+    local tick_m = self.DEFAULT_TICK_WIDTH_MULTIPLIER
     return Tokens.computeTickFractions(self.ui.document, self.ui.toc, tick_m, current_pageno)
 end
 
@@ -1180,29 +1264,6 @@ function Bookends:paintTo(bb, x, y)
     end
 end
 
---- Convert a settings-stored color value (number, {grey=N}, {hex="#RRGGBB"},
---- false, or nil) to a Blitbuffer colour object (or false for transparent).
---- Delegates per-value parsing + memoisation to bookends_colour so hex → RGB
---- and greyscale-fallback are consistent with text_color / symbol_color.
-local function resolveBarColors(bc)
-    local Colour = require("bookends_colour")
-    local is_color_enabled = Screen:isColorEnabled()
-    local function cv(v) return Colour.parseColorValue(v, is_color_enabled) end
-    return {
-        fill = cv(bc.fill),
-        bg = cv(bc.bg),
-        track = cv(bc.track),
-        tick = cv(bc.tick),
-        border = cv(bc.border),
-        invert = cv(bc.invert),
-        metro_fill = cv(bc.metro_fill),
-        invert_read_ticks = bc.invert_read_ticks,
-        tick_height_pct = bc.tick_height_pct,
-        border_thickness = bc.border_thickness,
-        read_height_pct = bc.read_height_pct,
-        unread_height_pct = bc.unread_height_pct,
-    }
-end
 
 --- Compute the progress percentage and tick marks for a single bar.
 --- Returns (pct, ticks).
@@ -1330,7 +1391,7 @@ end
 
 --- Render all enabled full-width progress bars (bars drawn behind text).
 --- Populates self._hold_rects so long-press gestures can find the bars.
---- Returns (bar_colors, text_color, symbol_color) — colour values the
+--- Returns (text_color, symbol_color) — colour values the
 --- text-rendering phase also needs.
 function Bookends:_renderProgressBars(bb, x, y, screen_w, screen_h)
     -- Tick cache is invalidated explicitly by the events that actually
@@ -1340,18 +1401,6 @@ function Bookends:_renderProgressBars(bb, x, y, screen_w, screen_h)
     -- harmful on the live-line-editor path, where dirty=true fires per
     -- keystroke but tick fractions don't change. The flow-id check inside
     -- _computeBarProgress already handles cross-flow paint cycles.
-
-    -- Progress bar colors from settings
-    local global_tick_height_pct = self.settings:readSetting("tick_height_pct")
-    local bc = self.settings:readSetting("bar_colors") or {}
-    bc.tick_height_pct = global_tick_height_pct or bc.tick_height_pct
-    local bar_colors
-    if bc.fill or bc.bg or bc.track or bc.tick or bc.invert_read_ticks ~= nil or bc.tick_height_pct or bc.border or bc.invert or bc.border_thickness or bc.metro_fill or bc.read_height_pct or bc.unread_height_pct then
-        bar_colors = resolveBarColors(bc)
-    end
-
-    local text_color = self.settings:readSetting("text_color")
-    local symbol_color = self.settings:readSetting("symbol_color")
 
     for _bar_idx, bar_cfg in ipairs(self.progress_bars or {}) do
         if bar_cfg.enabled then
@@ -1363,48 +1412,27 @@ function Bookends:_renderProgressBars(bb, x, y, screen_w, screen_h)
                 local direction = bar_cfg.direction or (vertical and "ttb" or "ltr")
                 local paint_vertical = direction == "ttb" or direction == "btt"
                 local paint_reverse = direction == "rtl" or direction == "btt"
-                local colors = bar_cfg.colors and resolveBarColors(bar_cfg.colors) or bar_colors
-                -- Ensure global tick_height_pct is always available
-                if colors and not colors.tick_height_pct and global_tick_height_pct then
-                    colors.tick_height_pct = global_tick_height_pct
-                elseif not colors and global_tick_height_pct then
-                    colors = { tick_height_pct = global_tick_height_pct }
-                end
-                -- Per-bar override: inherit global border_thickness when not
-                -- set per-bar. The per-bar menu's "Default Xpx" label promises
-                -- inheritance from global, and storing the menu value collapses
-                -- to nil when val == default_val. Without this, a per-bar
-                -- struct with border_thickness=nil would fall back to the
-                -- painter's hardcoded 1px instead of the global value.
-                if colors and colors ~= bar_colors and not colors.border_thickness
-                        and bar_colors and bar_colors.border_thickness then
-                    colors.border_thickness = bar_colors.border_thickness
-                end
+                -- Per-bar colours stand alone after the
+                -- bar_colors_promoted_to_per_bar migration removed the
+                -- preset-level bar_colors / tick_*_pct globals.
+                -- Missing fields fall back to hardcoded defaults at paint
+                -- time (in paintProgressBar's resolveColor helper).
+                local colors = bar_cfg.colors
+                    and Colour.resolveBarColors(bar_cfg.colors, Screen:isColorEnabled())
+                    or nil
                 -- Plumb asymmetric thickness when set. Geometry lives on
                 -- bar_cfg directly; piggybacks on the colors table to avoid
-                -- changing paintProgressBar's signature. Copy bar_colors
-                -- before mutating so per-bar overrides don't pollute the
-                -- shared global table (which feeds inline bars too).
+                -- changing paintProgressBar's signature.
                 if bar_cfg.unread_height then
-                    if colors == bar_colors and colors ~= nil then
-                        local copy = {}
-                        for k, v in pairs(colors) do copy[k] = v end
-                        colors = copy
-                    end
                     if colors then
                         colors.unread_height = bar_cfg.unread_height
                     else
                         colors = { unread_height = bar_cfg.unread_height }
                     end
                 end
-                -- Strip global Read/Unread thickness %s — those are inline-only.
+                -- Strip Read/Unread thickness %s — those are inline-only.
                 -- Full-width bars have their own per-bar absolute-px controls.
                 if colors and (colors.read_height_pct or colors.unread_height_pct) then
-                    if colors == bar_colors then
-                        local copy = {}
-                        for k, v in pairs(colors) do copy[k] = v end
-                        colors = copy
-                    end
                     colors.read_height_pct = nil
                     colors.unread_height_pct = nil
                 end
@@ -1415,7 +1443,7 @@ function Bookends:_renderProgressBars(bb, x, y, screen_w, screen_h)
         end
     end
 
-    return bar_colors, text_color, symbol_color
+    -- No return value; callers read text_color / symbol_color directly.
 end
 
 --- Assemble a per-position snapshot for OverlayWidget.computeEndFillExtents.
@@ -1532,8 +1560,9 @@ function Bookends:_paintToInner(bb, x, y)
     -- Hoisted out of the per-line expand loop below: this setting is paint-
     -- invariant and reading it once per visible line was wasted work on
     -- low-power devices.
-    local tick_width_multiplier = self.settings:readSetting(
-        "tick_width_multiplier", self.DEFAULT_TICK_WIDTH_MULTIPLIER)
+    -- Same hardcoded default as Site 1 (the inline bars rendered here
+    -- have no per-bar override).
+    local tick_width_multiplier = self.DEFAULT_TICK_WIDTH_MULTIPLIER
     for _, pos in ipairs(self.POSITIONS) do
         if self:isPositionActive(pos.key) then
             local pos_settings = self.positions[pos.key]
@@ -1613,9 +1642,8 @@ function Bookends:_paintToInner(bb, x, y)
     end
 
     -- Phase 0: Render full-width progress bars (drawn behind text, on top
-    -- of BG fill). Discard the returned text_color/symbol_color — they're
-    -- duplicates of the hoisted reads at the top of this function.
-    local bar_colors = self:_renderProgressBars(bb, x, y, screen_w, screen_h)
+    -- of BG fill). text_color / symbol_color are read directly above.
+    self:_renderProgressBars(bb, x, y, screen_w, screen_h)
 
     -- Check if anything changed
     -- Bar positions depend on page number; only rebuild when page changes
@@ -1682,36 +1710,44 @@ function Bookends:_paintToInner(bb, x, y)
             local expanded_idx = #line_configs + 1
             if bar_data[key] and bar_data[key][expanded_idx] then
                 local all_bars = bar_data[key][expanded_idx]
-                local bar_type = (pos_settings.line_bar_type and pos_settings.line_bar_type[i]) or "chapter"
-                if bar_type == "book_ticks_all" then
+                local raw_type  = pos_settings.line_bar_type and pos_settings.line_bar_type[i]
+                local raw_ticks = pos_settings.line_bar_chapter_ticks and pos_settings.line_bar_chapter_ticks[i]
+                local bar_type, ticks_depth = Utils.resolveLineBarTypeAndTicks(raw_type, raw_ticks)
+                if bar_type == "book" then
                     local book = all_bars.book
-                    cfg.bar = { kind = book.kind, pct = book.pct, ticks = book.ticks }
-                elseif bar_type == "book_ticks" or bar_type == "book_ticks2" then
-                    local max_tick_depth = bar_type == "book_ticks" and 1 or 2
-                    local book = all_bars.book
-                    local filtered_ticks = {}
-                    for _, tick in ipairs(book.ticks) do
-                        if type(tick) == "table" and tick[3] and tick[3] <= max_tick_depth then
-                            table.insert(filtered_ticks, tick)
+                    local filtered_ticks
+                    if ticks_depth == nil then
+                        filtered_ticks = {}
+                    elseif ticks_depth == math.huge then
+                        filtered_ticks = book.ticks
+                    else
+                        filtered_ticks = {}
+                        for _, tick in ipairs(book.ticks) do
+                            if type(tick) == "table" and tick[3] and tick[3] <= ticks_depth then
+                                table.insert(filtered_ticks, tick)
+                            end
                         end
                     end
                     cfg.bar = { kind = book.kind, pct = book.pct, ticks = filtered_ticks }
-                elseif bar_type == "book" then
-                    local book = all_bars.book
-                    cfg.bar = { kind = book.kind, pct = book.pct, ticks = {} }
                 else
                     local ch = all_bars.chapter
                     cfg.bar = { kind = ch.kind, pct = ch.pct, ticks = ch.ticks }
                 end
-                if all_bars.width then
-                    cfg.bar.width = all_bars.width
+                if all_bars.width  then cfg.bar.width  = all_bars.width  end
+                if all_bars.height then cfg.bar.height = all_bars.height end
+                cfg.bar_height        = (pos_settings.line_bar_height and pos_settings.line_bar_height[i]) or nil
+                cfg.bar_unread_height = (pos_settings.line_bar_unread_height and pos_settings.line_bar_unread_height[i]) or nil
+                cfg.bar_style         = (pos_settings.line_bar_style and pos_settings.line_bar_style[i]) or nil
+                cfg.bar_reverse       = (pos_settings.line_bar_direction and pos_settings.line_bar_direction[i]) == "rtl"
+                local line_colors = pos_settings.line_bar_colors and pos_settings.line_bar_colors[i]
+                if line_colors and next(line_colors) ~= nil then
+                    -- Per-line colour override is now canonical. No global
+                    -- to merge from — missing fields hit hardcoded defaults
+                    -- in paintProgressBar's resolveColor helper.
+                    cfg.bar_colors = Colour.resolveBarColors(line_colors, Screen:isColorEnabled())
                 end
-                if all_bars.height then
-                    cfg.bar.height = all_bars.height
-                end
-                cfg.bar_height = (pos_settings.line_bar_height and pos_settings.line_bar_height[i]) or nil
-                cfg.bar_style = (pos_settings.line_bar_style and pos_settings.line_bar_style[i]) or nil
-                cfg.bar_colors = bar_colors
+                -- cfg.bar_colors stays nil when no per-line override exists;
+                -- the painter handles nil colors by using hardcoded defaults.
             end
             table.insert(line_configs, cfg)
         end
@@ -1988,6 +2024,7 @@ local TIMER_TOKENS = {
     "time", "time_12h", "time_24h",
     "date", "date_long", "date_numeric", "weekday", "weekday_short",
     "session_time", "book_time_left", "chap_time_left",
+    "book_time_left_eta", "chap_time_left_eta",
     "speed", "book_read_time",
     "batt", "batt_icon",
 }
@@ -2092,8 +2129,15 @@ function Bookends:showNudgeDialog(title, value, min_val, max_val, default_val, u
                 table.insert(footer, {
                     text = extra_button.text,
                     callback = function()
-                        value = extra_button.value
-                        on_change(value)
+                        -- callback wins over value so non-numeric sentinels
+                        -- (e.g. `false` for explicit-transparent colour) can
+                        -- bypass the on_change(value) numeric pipeline.
+                        if extra_button.callback then
+                            extra_button.callback()
+                        else
+                            value = extra_button.value
+                            on_change(value)
+                        end
                         UIManager:close(dialog)
                         if on_close then on_close() end
                     end,

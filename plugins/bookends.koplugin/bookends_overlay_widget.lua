@@ -8,9 +8,18 @@ local Utf8Proc = require("ffi/utf8proc")
 local PacmanSprite = require("bookends_pacman_sprite")
 local Screen = Device.screen
 
--- Pacman bar paint counter: parity drives mouth-open vs mouth-closed.
--- Resets on plugin reload; no persistence needed.
-local _pacman_paint_count = 0
+-- Per-pacman animation frame counters keyed by screen position. Each
+-- distinct pacman on screen has its own counter, incremented once per
+-- paintProgressBar call (so the bar animates on every repaint regardless
+-- of who's driving the paint — bookends overlay, bookshelf's hero bar,
+-- or any future consumer). Different pacmans first appearing in the same
+-- paint get sequential starting phases via _pacman_seq, so two pacmans
+-- side-by-side animate in opposite phase rather than locked together.
+-- Resets on plugin reload; no persistence needed. Table growth is
+-- bounded by the number of distinct screen positions ever painted —
+-- negligible in practice.
+local _pacman_frames = {}
+local _pacman_seq = 0
 
 local ColorRGB32_t = ffi.typeof("ColorRGB32")
 
@@ -59,6 +68,7 @@ local OverlayWidget = {}
 --- colour buffer. KOReader's *RGB32 variants preserve true colour; this
 --- wrapper dispatches by colour type so callers stay shape-agnostic.
 --- Exported as OverlayWidget.bbPaintRect so main.lua can call it directly.
+
 function OverlayWidget.bbPaintRect(bb, x, y, w, h, c)
     if not c then return end
     if ffi.istype(ColorRGB32_t, c) then
@@ -228,6 +238,8 @@ function BarWidget:new(o)
     o.fraction = math.max(0, math.min(1, o.fraction or 0))
     o.ticks = o.ticks or {}
     o.style = o.style or "bordered"
+    o.reverse = o.reverse or false
+    -- o.unread_height stays nil for symmetric thickness
     return o
 end
 
@@ -236,9 +248,21 @@ function BarWidget:getSize()
 end
 
 function BarWidget:paintTo(bb, x, y)
-    -- Delegate to paintProgressBar for consistent color handling
+    -- Delegate to paintProgressBar for consistent color handling.
+    -- unread_height piggybacks on `colors` so paintProgressBar's existing
+    -- asymmetric-thickness path (which reads colors.unread_height) picks it
+    -- up without changing its signature. Inheriting via metatable keeps the
+    -- caller's colors table immutable.
+    local colors = self.colors
+    if self.unread_height and (not colors or colors.unread_height ~= self.unread_height) then
+        if colors then
+            colors = setmetatable({ unread_height = self.unread_height }, { __index = colors })
+        else
+            colors = { unread_height = self.unread_height }
+        end
+    end
     OverlayWidget.paintProgressBar(bb, x, y, self.width, self.height,
-        self.fraction, self.ticks, self.style, nil, false, self.colors)
+        self.fraction, self.ticks, self.style, nil, self.reverse, colors)
 end
 
 function BarWidget:free()
@@ -384,6 +408,8 @@ local function buildBarLine(text, cfg, available_w, max_width)
         ticks = bar_info.ticks or {},
         style = bar_style,
         colors = cfg.bar_colors,
+        reverse = cfg.bar_reverse or false,
+        unread_height = cfg.bar_unread_height,
     }
 
     table.insert(segments, bar_slot, { widget = bar_widget, w = bar_w, h = bar_h })
@@ -933,6 +959,8 @@ function OverlayWidget.buildStyledLine(segments, cfg, available_w, max_width)
                 ticks = bar_info.ticks or {},
                 style = bar_style,
                 colors = cfg.bar_colors,
+                reverse = cfg.bar_reverse or false,
+                unread_height = cfg.bar_unread_height,
             }
             table.insert(widgets, bar_slot, { widget = bar_widget, w = bar_w, h = bar_h })
             total_w = total_w + bar_w
@@ -1100,13 +1128,11 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
     -- Custom colors: nil = not set (use default), false = transparent (skip paint)
     local custom_fill = colors and colors.fill
     local custom_bg = colors and colors.bg
-    local custom_track = colors and colors.track
     local custom_tick = colors and colors.tick
     local invert_read_ticks = colors and colors.invert_read_ticks
     local tick_height_pct = colors and colors.tick_height_pct or 100
     local custom_border = colors and colors.border
     local custom_invert = colors and colors.invert
-    local custom_metro_fill = colors and colors.metro_fill
 
     -- Resolve custom color: false → nil (transparent/skip), nil → default, else custom.
     -- Must use type() checks to avoid triggering Blitbuffer's __eq metamethod.
@@ -1177,23 +1203,22 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
         local line_fill = math.floor(line_len * fraction)
         local line_fill_start = reverse and (line_len - line_fill) or 0
 
-        local metro_track = resolveColor(custom_track, Blitbuffer.COLOR_DARK_GRAY)
-        -- metro_fill: nil when user has not set a distinct fill (or set it to false/transparent)
-        local metro_fill = resolveColor(custom_metro_fill, nil)
+        -- Metro reads fill/bg like every other style now. Defaults match the
+        -- previous all-dark-grey trunk so an unconfigured metro bar is
+        -- visually unchanged. The legacy track/metro_fill fields are aliased
+        -- to bg/fill upstream by Colour.resolveBarColors (back-compat shim).
+        local metro_read   = resolveColor(custom_fill, Blitbuffer.COLOR_DARK_GRAY)
+        local metro_unread = resolveColor(custom_bg,   Blitbuffer.COLOR_DARK_GRAY)
         -- Trunk: read portion at full line_thick, unread portion at unread_line_thick.
         -- Both centred on the bar's cross-axis. When symmetric they coincide.
         local read_trunk_start = reverse and (line_len - line_fill) or 0
         local unread_trunk_start = reverse and 0 or line_fill
         local unread_trunk_len = line_len - line_fill
         if line_fill > 0 then
-            pr(line_ox + read_trunk_start, line_y, line_fill, line_thick, metro_track)
+            pr(line_ox + read_trunk_start, line_y, line_fill, line_thick, metro_read)
         end
         if unread_trunk_len > 0 and unread_line_thick > 0 and unread_thick > 0 then
-            pr(line_ox + unread_trunk_start, unread_line_y, unread_trunk_len, unread_line_thick, metro_track)
-        end
-        -- Optional fill overlay on the read portion (always at read line_thick)
-        if metro_fill and line_fill > 0 then
-            pr(line_ox + read_trunk_start, line_y, line_fill, line_thick, metro_fill)
+            pr(line_ox + unread_trunk_start, unread_line_y, unread_trunk_len, unread_line_thick, metro_unread)
         end
 
         -- Chapter ticks: depth 1 above line (connected to trunk), depth 2 below.
@@ -1216,14 +1241,14 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
                 end
                 -- Vertical (side-anchored) bars: flip tick sides
                 if vertical then tick_above = not tick_above end
-                -- Tick recolouring: ticks within the read portion paint in metro_fill
+                -- Tick recolouring: ticks within the read portion paint in metro_read
                 local is_read
                 if reverse then
                     is_read = tick_pos >= line_len - line_fill
                 else
                     is_read = tick_pos <= line_fill
                 end
-                local tick_color = (metro_fill and is_read) and metro_fill or metro_track
+                local tick_color = is_read and metro_read or metro_unread
                 -- Anchor ticks at the bar's vertical centre so they always cross
                 -- the trunk regardless of read/unread thickness asymmetry.
                 local centre_y = oy + math.floor(thickness / 2)
@@ -1247,16 +1272,23 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
 
         -- Start circle (empty ring; read colour when set, else trunk colour)
         local start_cx = reverse and (line_ox + line_len - start_r) or (line_ox - start_r)
-        paintCircle(start_cx, oy, start_r, metro_fill or metro_track)
+        paintCircle(start_cx, oy, start_r, metro_read or metro_unread)
         local ring_border = line_thick
         local inner_r = start_r - ring_border
         if inner_r > 0 then
-            paintCircle(start_cx + ring_border, oy + ring_border, inner_r, resolveColor(custom_invert, Blitbuffer.COLOR_WHITE))
+            -- Inner ring is paper-coloured. KOReader's night-mode framebuffer
+            -- inversion maps COLOR_WHITE → COLOR_BLACK at refresh time, so the
+            -- ring stays visually correct on inverted reads. Previously this
+            -- read colors.invert, overloading that field (also used for tick
+            -- inversion). Decoupled here so "Tick inversion colour" in the
+            -- menu only describes tick behaviour.
+            paintCircle(start_cx + ring_border, oy + ring_border, inner_r,
+                Blitbuffer.COLOR_WHITE)
         end
 
         -- End circle (filled, trunk colour, same size as start)
         local end_cx = reverse and (line_ox - start_r) or (line_ox + line_len - start_r)
-        paintCircle(end_cx, oy, start_r, metro_track)
+        paintCircle(end_cx, oy, start_r, metro_unread)
 
         -- Current position dot (uses tick colour, default black)
         local pos_on_line = reverse and (line_len - line_fill) or line_fill
@@ -1267,11 +1299,8 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
     elseif style == "wavy" then
         -- Wavy ribbon: the entire bar follows a sine wave path.
         -- Two-toned fill with a position dot riding the curve.
-        local wave_fill = resolveColor(custom_fill, Blitbuffer.COLOR_DARK_GRAY)
-        -- wavy's "unread" ribbon historically used `track` only; accept `bg`
-        -- as a higher-priority override so the global "Unread color" menu item
-        -- also affects wavy (matches the semantics of every other bar style).
-        local wave_track = resolveColor(custom_bg, resolveColor(custom_track, Blitbuffer.COLOR_GRAY))
+        local wave_fill  = resolveColor(custom_fill, Blitbuffer.COLOR_DARK_GRAY)
+        local wave_track = resolveColor(custom_bg,   Blitbuffer.COLOR_GRAY)
         local wave_dot = resolveColor(custom_tick, Blitbuffer.COLOR_BLACK)
 
         local amplitude = math.floor(thickness * 0.35)
@@ -1385,10 +1414,24 @@ function OverlayWidget.paintProgressBar(bb, x, y, w, h, fraction, ticks, style, 
 
     elseif style == "pacman" then
         -- Pacman bar: read portion is empty, pacman sprite at the read
-        -- fraction, dot strip and power pellet in the unread region. Mouth
-        -- flips between open and closed on every entry to this branch.
-        _pacman_paint_count = _pacman_paint_count + 1
-        local mouth_open = (_pacman_paint_count % 2) == 1
+        -- fraction, dot strip and power pellet in the unread region.
+        --
+        -- Mouth animation: each pacman is keyed by its top-left screen
+        -- position. First sighting at a position seeds its counter from
+        -- a monotonic sequence (so two pacmans appearing side-by-side in
+        -- the same paint start in opposite mouth phase). Every subsequent
+        -- paintProgressBar call increments that pacman's own counter, so
+        -- the animation advances on each repaint regardless of how many
+        -- pacmans are on screen or who is driving the paint (bookends
+        -- overlay, bookshelf, etc.).
+        local pacman_key = math.floor(x) .. "_" .. math.floor(y)
+        local frame = _pacman_frames[pacman_key]
+        if frame == nil then
+            _pacman_seq = _pacman_seq + 1
+            frame = _pacman_seq
+        end
+        _pacman_frames[pacman_key] = frame + 1
+        local mouth_open = (frame % 2) == 1
 
         -- Resolve colours. Authentic arcade hex on colour-enabled devices;
         -- strong greyscale defaults on B&W. Custom overrides via the existing

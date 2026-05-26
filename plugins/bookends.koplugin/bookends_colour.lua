@@ -2,8 +2,9 @@
 Central colour-value helpers.
 
 Every colour setting in Bookends (text_color, symbol_color, bar_colors.{fill,
-bg, track, tick, border, invert, metro_fill}) can be stored in one of three
-shapes:
+bg, tick, border, invert}) can be stored in one of three shapes (bc.metro_fill
+and bc.track are legacy keys pre-v5.13; Colour.resolveBarColors aliases them
+to bc.fill and bc.bg respectively on read, and no new code writes them):
 
   - table with .hex = "#RRGGBB"    -- v4.3+ colour-picker authoring
   - table with .grey = 0xNN        -- v2+ greyscale nudge (text/symbol)
@@ -149,6 +150,42 @@ end
 function Colour.flushCache()
     _hex_cache = {}
     _last_color_mode = nil  -- reset so next parseColorValue re-seeds the mode
+end
+
+--- Resolve a stored bar_colors table into a Blitbuffer-Color-typed table.
+-- Each colour-shape field (table {hex=…} / table {grey=…} / number / false)
+-- is converted via parseColorValue; numeric/boolean fields pass through.
+-- Storage shape is identical across the three scopes (global / per-bar /
+-- per-line); this function normalises them all into a single shape that
+-- paintProgressBar understands.
+--
+-- @param bc table  raw stored bar_colors-shaped table
+-- @param is_color_enabled boolean  Screen:isColorEnabled() value (caller-supplied
+--                                  so the function stays pure and unit-testable)
+-- @return table  resolved colours table; keys: fill, bg, tick, border, invert,
+--                invert_read_ticks, tick_height_pct, border_thickness,
+--                read_height_pct, unread_height_pct
+function Colour.resolveBarColors(bc, is_color_enabled)
+    local function cv(v) return Colour.parseColorValue(v, is_color_enabled) end
+    -- Legacy field aliases: metro_fill→fill, track→bg (read-only shim).
+    -- Must not use `or`-chains: `false` is the explicit-transparent sentinel
+    -- (#43) and is non-nil but falsy, so `false or bc.metro_fill` would
+    -- incorrectly evaluate to bc.metro_fill. Explicit if/else handles it.
+    local fill_src, bg_src
+    if bc.fill ~= nil then fill_src = bc.fill else fill_src = bc.metro_fill end
+    if bc.bg   ~= nil then bg_src   = bc.bg   else bg_src   = bc.track     end
+    return {
+        fill = cv(fill_src),
+        bg   = cv(bg_src),
+        tick = cv(bc.tick),
+        border = cv(bc.border),
+        invert = cv(bc.invert),
+        invert_read_ticks = bc.invert_read_ticks,
+        tick_height_pct = bc.tick_height_pct,
+        border_thickness = bc.border_thickness,
+        read_height_pct = bc.read_height_pct,
+        unread_height_pct = bc.unread_height_pct,
+    }
 end
 
 return Colour

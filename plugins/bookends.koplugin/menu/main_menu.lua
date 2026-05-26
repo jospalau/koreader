@@ -144,7 +144,7 @@ function Bookends:buildMainMenu()
                 local previews = {}
                 for _, line in ipairs(lines) do
                     table.insert(previews, (Tokens.expandPreview(line, self.ui, session_elapsed, session_pages,
-                        self.settings:readSetting("tick_width_multiplier", self.DEFAULT_TICK_WIDTH_MULTIPLIER))))
+                        self.DEFAULT_TICK_WIDTH_MULTIPLIER)))
                 end
                 local preview = table.concat(previews, " \xC2\xB7 ")
                 preview = preview:gsub("%s+", " "):match("^%s*(.-)%s*$")
@@ -581,15 +581,6 @@ function Bookends:buildPresetAdjustmentsMenu()
     for _, item in ipairs(self:buildTextColourMenu()) do
         table.insert(items, item)
     end
-
-    -- Progress bar colours remain nested — too many sub-items to flatten
-    -- without overflowing the 10-row limit.
-    table.insert(items, {
-        text = _("Progress bar colors and tick marks"),
-        sub_item_table_func = function()
-            return self:buildBarColorsMenu()
-        end,
-    })
 
     return items
 end

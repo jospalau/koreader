@@ -25,6 +25,35 @@ local function getCurrentPageNumber(ui)
 end
 Tokens.getCurrentPageNumber = getCurrentPageNumber
 
+--- Return the last digit of a numeric value as a string.
+-- Used by the %<token>_lastdigit family (#55) to expose the units digit
+-- of page/chapter counters for languages whose grammar branches on it
+-- (Hungarian vowel harmony for -ból / -ből, etc.).
+--
+-- Accepts numbers, numeric strings, or labels that end in a digit
+-- (e.g. "page 547" -> "7"). Returns "" if the value has no trailing
+-- digit (nil, empty string, or non-numeric label like roman numerals).
+function Tokens.lastDigit(value)
+    return tostring(value or ""):match("(%d)$") or ""
+end
+
+--- Strip the community-convention page-count suffix Calibre users append
+-- via custom save templates ("Book Title - P(123)") so the Kindle/Kobo
+-- home-screen badge populates without opening every book first.
+--
+-- Anchored to end-of-title and requires the literal " - P(" + digits + ")"
+-- form with whitespace around the dash. This avoids clobbering:
+--   * legitimate year-in-parens titles ("Doctor Strange P(2025)") — no dash
+--   * mid-string occurrences ("Title - P(123) - Author")
+--   * titles starting with P( ("P(123) Title at start")
+--   * unrelated bracketed annotations ("Title (Anniversary Edition)")
+--
+-- The raw filename stays reachable via %filename for anyone who needs the
+-- unstripped form. Closes #53.
+function Tokens.stripPageCountSuffix(title)
+    return (title or ""):gsub("%s+%-%s+P%(%d+%)%s*$", "")
+end
+
 -- Legacy token → new-name alias map. See
 -- docs/superpowers/specs/2026-04-23-v5-token-system-design.md for full rationale.
 -- Single-letter keys only; %C1/%C2/%C3 handled via pattern in rewriteLegacyTokens.
@@ -202,42 +231,54 @@ function Tokens._readStatsToday(ui, cache)
     return result
 end
 
--- Cache of book-first-open timestamps keyed by ReaderStatistics' id_curr_book.
--- Populated lazily by _readBookFirstOpen on first access; tests can pre-populate
--- it directly to avoid needing real SQLite during pure-Lua test runs.
-Tokens._first_open_cache = {}
-
--- Return the unix timestamp of the first stats-recorded page view for the
--- current book, or nil if unavailable. Caches per-book so the SQL fires at
--- most once per book per process.
-function Tokens._readBookFirstOpen(ui)
-    if not ui or not ui.statistics or not ui.statistics.id_curr_book then return nil end
-    local id_book = ui.statistics.id_curr_book
-    local cached = Tokens._first_open_cache[id_book]
-    if cached ~= nil then
-        if cached == false then return nil end
-        return cached
+-- Count of distinct local calendar dates the current book has been read on.
+-- Mirrors the SQL KOReader's stats plugin uses inside getCurrentStat and
+-- getBookStat — the divisor behind "Estimated finish date" and "Average time
+-- per day". Cached per paint cycle; the value only changes once per day so
+-- paint-scoped staleness is fine.
+--
+-- Used by %days_reading_book, %pages_per_day, and %book_finish_date so all
+-- three answer "what's your pace when you actually read this book" instead
+-- of "what's your pace averaged over calendar days since first touching the
+-- file" (the latter is meaningless for sporadically-read books).
+function Tokens._readBookDistinctReadingDays(ui, cache)
+    if cache and cache.book_distinct_days ~= nil then
+        if cache.book_distinct_days == false then return nil end
+        return cache.book_distinct_days
     end
-    local ok, ts = pcall(function()
-        local SQ3 = require("lua-ljsqlite3/init")
-        local DataStorage = require("datastorage")
-        local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
-        local conn = SQ3.open(db_location)
-        local sql = string.format(
-            "SELECT min(start_time) FROM page_stat WHERE id_book = %d;", id_book)
-        local stmt = conn:prepare(sql)
-        local rows, nrows = stmt:reset():resultset("i")
-        stmt:close()
-        conn:close()
-        if not nrows or nrows == 0 then return nil end
-        return tonumber(rows[1][1])
-    end)
-    if not ok or not ts then
-        Tokens._first_open_cache[id_book] = false
+    if not ui or not ui.statistics or not ui.statistics.id_curr_book then
+        if cache then cache.book_distinct_days = false end
         return nil
     end
-    Tokens._first_open_cache[id_book] = ts
-    return ts
+    local id_book = ui.statistics.id_curr_book
+    local ok, days = pcall(function()
+        local SQ3 = require("lua-ljsqlite3/init")
+        local DataStorage = require("datastorage")
+        local conn = SQ3.open(DataStorage:getSettingsDir() .. "/statistics.sqlite3")
+        local sql = string.format([[
+            SELECT count(*) FROM (
+                SELECT strftime('%%Y-%%m-%%d', start_time, 'unixepoch', 'localtime') AS d
+                FROM   page_stat
+                WHERE  id_book = %d
+                GROUP  BY d
+            );
+        ]], id_book)
+        local n = conn:rowexec(sql)
+        conn:close()
+        return tonumber(n) or 0
+    end)
+    if not ok or not days then
+        if cache then cache.book_distinct_days = false end
+        return nil
+    end
+    -- If the user has read at all this session but no row has flushed yet,
+    -- today still counts as a reading day from the user's perspective. Fold
+    -- in the in-memory delta so a brand-new book on day-one shows 1 not 0.
+    if days == 0 and ui.statistics.mem_read_pages and ui.statistics.mem_read_pages > 0 then
+        days = 1
+    end
+    if cache then cache.book_distinct_days = days end
+    return days
 end
 
 -- Per-book stats over a time range. Returns { duration, pages } or nil. duration
@@ -447,6 +488,46 @@ local function getDateLocale()
     if saved then os.setlocale(saved, "time") end -- restore after failed probes
     _date_locale_cache[lang] = false
     return false
+end
+
+-- Format an ETA epoch for the %*_time_left_eta tokens. When brace_fmt is nil,
+-- defaults to KOReader's clock format (datetime.secondsToHour honours the
+-- twelve_hour_clock setting and any %_I-style strftime variants the platform
+-- needs). When brace_fmt is set, it is passed through os.date with the device
+-- locale applied — same locale handling as %datetime.
+local function formatEtaEpoch(epoch, brace_fmt)
+    if not epoch then return "" end
+    if brace_fmt and brace_fmt ~= "" then
+        local loc = getDateLocale()
+        local saved
+        if loc then
+            saved = os.setlocale(nil, "time")
+            os.setlocale(loc, "time")
+        end
+        local out = os.date(brace_fmt, epoch) or ""
+        if saved then os.setlocale(saved, "time") end
+        return tostring(out)
+    end
+    local twelve = G_reader_settings and G_reader_settings:isTrue("twelve_hour_clock") or false
+    return datetime.secondsToHour(epoch, twelve)
+end
+
+-- Format a finish-date epoch for %book_finish_date. Default format is short
+-- localised date ("9 Jun" / "9 Juin" / etc); brace_fmt overrides with a full
+-- strftime spec. Locale wrap mirrors formatEtaEpoch and %datetime so the
+-- month / weekday names match the rest of the device.
+local function formatFinishDate(epoch, brace_fmt)
+    if not epoch then return "" end
+    local fmt = (brace_fmt and brace_fmt ~= "") and brace_fmt or "%d %b"
+    local loc = getDateLocale()
+    local saved
+    if loc then
+        saved = os.setlocale(nil, "time")
+        os.setlocale(loc, "time")
+    end
+    local out = os.date(fmt, epoch) or ""
+    if saved then os.setlocale(saved, "time") end
+    return tostring(out)
 end
 
 --- Compute chapter tick fractions as {fraction, width, depth} triples.
@@ -1225,18 +1306,18 @@ function Tokens.buildConditionState(ui, session_elapsed, session_pages_read, pai
         end
     end
 
-    -- Days since first open of this book + derived per-day pace.
+    -- Distinct calendar days the user has actually read this book, and the
+    -- derived per-day pace. Uses the stats plugin's divisor (count(distinct
+    -- date) over page_stat) rather than calendar-days-since-first-open — so
+    -- "5 reading days in the last month" reports 5, not 30, and pages-per-day
+    -- reflects pace WHEN reading rather than averaged over dead time.
     if refs("days_reading_book", "pages_per_day") then
-        local first_open = Tokens._readBookFirstOpen(ui)
-        if first_open and first_open > 0 then
-            state.days_reading_book = math.max(0, math.floor((os.time() - first_open) / 86400))
-        else
-            state.days_reading_book = 0
-        end
+        local days = Tokens._readBookDistinctReadingDays(ui, stats_cache) or 0
+        state.days_reading_book = days
         local read = state.book_pages_read or 0
-        local days = math.max(state.days_reading_book, 1)
-        if read > 0 then
-            state.pages_per_day = math.floor(read / days)
+        local divisor = math.max(days, 1)
+        if read > 0 and days > 0 then
+            state.pages_per_day = math.floor(read / divisor)
         else
             state.pages_per_day = 0
         end
@@ -1424,6 +1505,10 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     -- handler below; consumed during percent computation to format with
     -- string.format("%.Nf", raw_pct) instead of math.floor(pct + 0.5).
     local pct_decimals = {}
+    -- strftime format brace for time/date projection tokens. Keyed by token
+    -- name; consumed when building the substitution table. Used by the two
+    -- %*_time_left_eta tokens and %book_finish_date.
+    local date_formats = {}
 
     format_str = format_str:gsub("%%([%a_][%w_]*)(%b{})", function(name, brace)
         local content = brace:sub(2, -2)  -- strip { and }
@@ -1457,6 +1542,14 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
             local formatted = os.date(content) or ""
             if saved_locale then os.setlocale(saved_locale, "time") end
             return formatted
+        end
+        -- %chap_time_left_eta{<strftime>} / %book_time_left_eta{<strftime>} /
+        -- %book_finish_date{<strftime>}. Stash format and rewrite to bareword
+        -- so the substitution pass renders it with the right epoch.
+        if name == "chap_time_left_eta" or name == "book_time_left_eta"
+                or name == "book_finish_date" then
+            date_formats[name] = content
+            return "%" .. name
         end
         -- %book_pct{N} / %book_pct_left{N}: decimal places (0–4).
         if name == "book_pct" or name == "book_pct_left" then
@@ -1495,6 +1588,8 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
             chap_pages_left = "[ch.left]", pages_left = "[left]",
             chap_num = "[ch.num]", chap_count = "[ch.count]",
             chap_time_left = "[ch.time]", book_time_left = "[time]",
+            chap_time_left_eta = "[ch.eta]", book_time_left_eta = "[eta]",
+            book_finish_date = "[finish]",
             time_12h = "[12h]", time_24h = "[24h]", time = "[24h]",
             date = "[date]", date_long = "[date.long]",
             date_numeric = "[dd/mm/yy]",
@@ -1541,6 +1636,19 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
             local formatted = os.date(content) or ""
             if saved_locale then os.setlocale(saved_locale, "time") end
             return formatted
+        end)
+        -- Live-preview braced ETA tokens with dummy offsets so the user can
+        -- see their strftime format render in the line editor. Chapter uses
+        -- +30 minutes, book uses +2 hours so the two times differ visibly.
+        r = r:gsub("%%chap_time_left_eta(%b{})", function(brace)
+            return formatEtaEpoch(os.time() + 30 * 60, brace:sub(2, -2))
+        end)
+        r = r:gsub("%%book_time_left_eta(%b{})", function(brace)
+            return formatEtaEpoch(os.time() + 120 * 60, brace:sub(2, -2))
+        end)
+        -- Live-preview %book_finish_date with a dummy +17-day offset.
+        r = r:gsub("%%book_finish_date(%b{})", function(brace)
+            return formatFinishDate(os.time() + 17 * 86400, brace:sub(2, -2))
         end)
         -- %plugin_content{<plugin>} preview label, before generic {N}
         r = r:gsub("%%plugin_content(%b{})", function(brace)
@@ -1601,7 +1709,8 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     -- Numeric page indices for arithmetic (separate from display labels)
     local page_idx = nil   -- numeric current page position
     local page_count = nil -- numeric total pages
-    if needs("page_num", "page_count", "book_pct", "book_pct_left", "pages_left") then
+    if needs("page_num", "page_count", "book_pct", "book_pct_left", "pages_left",
+             "page_num_lastdigit", "page_count_lastdigit", "pages_left_lastdigit") then
         if ui.pagemap and ui.pagemap:wantsPageLabels() then
             local label, idx, count = ui.pagemap:getCurrentPageLabel(true)
             currentpage = label or ""
@@ -1692,7 +1801,10 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     local chapter_title_num = ""   -- leading number parsed from title when strip-safe
     local chapter_title_name = ""  -- title with leading number removed when strip-safe; raw title otherwise
     local chapter_titles_by_depth = {}  -- { [1] = "Part II", [2] = "Chapter 1", ... }
-    if needs("chap_pct", "chap_pct_left", "chap_read", "chap_pages", "chap_pages_left", "chap_title", "chap_title_1", "chap_title_2", "chap_title_3", "chap_num", "chap_count", "chap_title_num", "chap_title_name") and pageno and ui.toc then
+    if needs("chap_pct", "chap_pct_left", "chap_read", "chap_pages", "chap_pages_left",
+             "chap_read_lastdigit", "chap_pages_lastdigit", "chap_pages_left_lastdigit",
+             "chap_title", "chap_title_1", "chap_title_2", "chap_title_3", "chap_num", "chap_count",
+             "chap_title_num", "chap_title_name") and pageno and ui.toc then
         -- Raw page calculation for %P (percentage)
         local chapter_start = ui.toc:getPreviousChapter(pageno)
         if ui.toc:isChapterStart(pageno) then
@@ -1852,6 +1964,58 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
             elseif doc_left then
                 time_left_doc = "0m"
             end
+        end
+    end
+
+    -- ETA epochs for %chap_time_left_eta / %book_time_left_eta. Derived from
+    -- pages_left × avg_time (seconds) instead of parsing the formatted
+    -- chap/book_time_left strings — mirrors how buildConditionState computes
+    -- state.chap_time_left in minutes.
+    local eta_chap_epoch
+    local eta_book_epoch
+    if needs("chap_time_left_eta", "book_time_left_eta")
+            and pageno and doc and ui.statistics and ui.statistics.avg_time then
+        local avg = ui.statistics.avg_time
+        if avg and avg > 0 then
+            local now = os.time()
+            if needs("chap_time_left_eta") then
+                local ch_left = ui.toc and ui.toc:getChapterPagesLeft(pageno, true)
+                if not ch_left then ch_left = doc:getTotalPagesLeft(pageno) end
+                if ch_left and ch_left > 0 then
+                    eta_chap_epoch = now + math.floor(ch_left * avg + 0.5)
+                end
+            end
+            if needs("book_time_left_eta") then
+                local doc_left = doc:getTotalPagesLeft(pageno)
+                if doc_left and doc_left > 0 then
+                    eta_book_epoch = now + math.floor(doc_left * avg + 0.5)
+                end
+            end
+        end
+    end
+
+    -- Finish-date projection for %book_finish_date. Calendar projection (not
+    -- clock-time) based on the user's average reading time per day on this
+    -- book. Formula matches statistics.koplugin/main.lua:1641-1643:
+    --   time_to_read = pages_left * avg_time                  (seconds)
+    --   seconds_per_day = book_read_time / distinct_reading_days
+    --   days_to_finish = ceil(time_to_read / seconds_per_day)
+    -- Auto-hides (empty string) when any input is missing — fresh books with
+    -- no recorded reading time can't yield a meaningful projection.
+    local book_finish_epoch
+    if needs("book_finish_date") and pageno and doc and ui.statistics then
+        local avg = ui.statistics.avg_time
+        local book_read_time = ui.statistics.book_read_time
+        local total_days = Tokens._readBookDistinctReadingDays(ui, stats_cache)
+        local doc_left = doc:getTotalPagesLeft(pageno)
+        if avg and avg > 0
+                and book_read_time and book_read_time > 0
+                and total_days and total_days > 0
+                and doc_left and doc_left > 0 then
+            local time_to_read = doc_left * avg
+            local seconds_per_day = book_read_time / total_days
+            local days_to_finish = math.ceil(time_to_read / seconds_per_day)
+            book_finish_epoch = os.time() + days_to_finish * 86400
         end
     end
 
@@ -2033,18 +2197,14 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
     local days_reading_str = ""
     local pages_per_day_str = ""
     if needs("days_reading_book", "pages_per_day") then
-        local first_open = Tokens._readBookFirstOpen(ui)
-        local days = 0
-        if first_open and first_open > 0 then
-            days = math.max(0, math.floor((os.time() - first_open) / 86400))
-        end
+        local days = Tokens._readBookDistinctReadingDays(ui, stats_cache) or 0
         if needs("days_reading_book") and days > 0 then
             days_reading_str = tostring(days)
         end
-        if needs("pages_per_day") then
+        if needs("pages_per_day") and days > 0 then
             local read = (ui.statistics and tonumber(ui.statistics.book_read_pages)) or 0
             if read > 0 then
-                pages_per_day_str = tostring(math.floor(read / math.max(days, 1)))
+                pages_per_day_str = tostring(math.floor(read / days))
             end
         end
     end
@@ -2064,7 +2224,7 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
         local doc_props = ui.doc_props or {}
         local ok, props = pcall(doc.getProps, doc)
         if not ok then props = {} end
-        title = doc_props.display_title or props.title or ""
+        title = Tokens.stripPageCountSuffix(doc_props.display_title or props.title or "")
         local authors_raw = doc_props.authors or props.authors or ""
         authors_list = splitAuthors(authors_raw)
         first_author = authors_list[1] or ""
@@ -2347,9 +2507,24 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
         pages_left = tostring(pages_left_book),
         chap_num   = tostring(chapter_num),
         chap_count = tostring(chapter_count),
+        -- Last-digit variants of the numeric page/chapter tokens (#55).
+        -- Expose the units digit so format strings can branch on it for
+        -- languages with vowel harmony or number-shape agreement
+        -- (Hungarian -ból/-ből, Finnish partitive, etc.). Empty string
+        -- when the underlying value isn't a number (e.g. roman-numeral
+        -- pagemap labels).
+        page_num_lastdigit         = Tokens.lastDigit(currentpage),
+        page_count_lastdigit       = Tokens.lastDigit(totalpages),
+        pages_left_lastdigit       = Tokens.lastDigit(pages_left_book),
+        chap_read_lastdigit        = Tokens.lastDigit(chapter_pages_done),
+        chap_pages_lastdigit       = Tokens.lastDigit(chapter_total_pages),
+        chap_pages_left_lastdigit  = Tokens.lastDigit(chapter_pages_left),
         -- Time/Reading
         chap_time_left = tostring(time_left_chapter),
         book_time_left = tostring(time_left_doc),
+        chap_time_left_eta = formatEtaEpoch(eta_chap_epoch, date_formats.chap_time_left_eta),
+        book_time_left_eta = formatEtaEpoch(eta_book_epoch, date_formats.book_time_left_eta),
+        book_finish_date   = formatFinishDate(book_finish_epoch, date_formats.book_finish_date),
         time_12h = time_12h,
         time_24h = time_24h,
         time     = time_24h,              -- plain %time = %time_24h
@@ -2432,9 +2607,18 @@ function Tokens.expand(format_str, ui, session_elapsed, session_pages_read, prev
         page_num = true, page_count = true, book_pct = true, book_pct_left = true, pages_left = true,
         chap_pct = true, chap_pct_left = true, chap_read = true, chap_pages = true, chap_pages_left = true,
         chap_num = true, chap_count = true,
-        chap_time_left = true, book_time_left = true, time_12h = true, time_24h = true,
+        chap_time_left = true, book_time_left = true,
+        chap_time_left_eta = true, book_time_left_eta = true,
+        book_finish_date = true,
+        time_12h = true, time_24h = true,
         time = true,
         session_time = true, session_pages = true, speed = true,
+        -- _lastdigit tokens (#55): "0" is a real value (last digit of 10,
+        -- 20, …); without this gate it would auto-hide and the conditional
+        -- grammar branching on the digit would break.
+        page_num_lastdigit = true, page_count_lastdigit = true,
+        pages_left_lastdigit = true, chap_read_lastdigit = true,
+        chap_pages_lastdigit = true, chap_pages_left_lastdigit = true,
     }
     -- Per-token occurrence counters for matching limits
     local token_occurrence = {}

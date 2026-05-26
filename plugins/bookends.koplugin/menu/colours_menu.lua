@@ -4,15 +4,12 @@ local _ = require("bookends_i18n").gettext
 local Device = require("device")
 local Screen = Device.screen
 local Colour = require("bookends_colour")
-local DialogHelpers = require("bookends_dialog_helpers")
 
 return function(Bookends)
 
---- Build the shared colour items used by bar colours (read / unread /
---- metro-track / tick / invert toggle / border / border thickness / tick-invert).
---- When is_per_bar is true, the Border thickness item inherits the global
---- bar_colors.border_thickness as its default instead of the hard-coded 1px.
-function Bookends:_buildColorItems(bc, saveColors, is_per_bar)
+--- Build the shared colour items used by bar colours (progress bar /
+--- track / tick / invert toggle / border / border thickness / tick-invert).
+function Bookends:_buildColorItems(bc, saveColors)
     local function colorNudge(title, field, default_pct, touchmenu_instance)
         if Screen:isColorEnabled() then
             -- Colour device: show palette picker. Hex-shape takes priority; if
@@ -48,7 +45,9 @@ function Bookends:_buildColorItems(bc, saveColors, is_per_bar)
                 touchmenu_instance)
             return
         end
-        -- Greyscale device: existing nudge path, unchanged.
+        -- Greyscale device: nudge dialog. 0% renders pure white (since
+        -- v5.10.2); Transparent is the separate explicit no-fill sentinel
+        -- (issue #43) — stored as `false` and handled at the paint layer.
         local v = bc[field]
         local byte
         if type(v) == "table" and v.grey then byte = v.grey
@@ -64,20 +63,35 @@ function Bookends:_buildColorItems(bc, saveColors, is_per_bar)
             function()
                 bc[field] = nil; saveColors()
             end,
-            _("Default") .. " (" .. _("per style") .. ")")
+            _("Default") .. " (" .. _("per style") .. ")",
+            {
+                text = _("Transparent"),
+                callback = function()
+                    bc[field] = false
+                    saveColors()
+                end,
+            })
     end
 
     local function pctLabel(field)
         local v = bc[field]
-        if not v then return _("default") end
-        if type(v) == "table" and v.hex then return v.hex end
+        -- Boolean check first: under LuaJIT, `not v` on an ffi.metatype with
+        -- __eq (Blitbuffer.Color*) routes through __eq and crashes. Cheap
+        -- type() check avoids it. `false` = explicit transparent (#43);
+        -- `nil` = inherit-from-default; everything else is a stored colour.
+        local t = type(v)
+        if t == "nil" then return _("default") end
+        if t == "boolean" then return _("transparent") end
+        if t == "table" and v.hex then return v.hex end
         local byte
-        if type(v) == "table" and v.grey then byte = v.grey
-        elseif type(v) == "number" then byte = v
+        if t == "table" and v.grey then byte = v.grey
+        elseif t == "number" then byte = v
         end
         if byte then
+            -- 0% (white) is a real colour since v5.10.2 — no longer aliased
+            -- to "transparent". Users wanting no fill choose the explicit
+            -- Transparent button which stores `false`.
             local pct = math.floor((0xFF - byte) * 100 / 0xFF + 0.5)
-            if pct == 0 then return _("transparent") end
             return pct .. "%"
         end
         return _("default")
@@ -86,11 +100,11 @@ function Bookends:_buildColorItems(bc, saveColors, is_per_bar)
     return {
         {
             text_func = function()
-                return _("Read color") .. ": " .. pctLabel("fill")
+                return _("Progress bar colour") .. ": " .. pctLabel("fill")
             end,
             keep_menu_open = true,
             callback = function(touchmenu_instance)
-                colorNudge(_("Read color (% black)"), "fill", 75, touchmenu_instance)
+                colorNudge(_("Progress bar colour (% black)"), "fill", 75, touchmenu_instance)
             end,
             hold_callback = function(touchmenu_instance)
                 bc.fill = nil; saveColors()
@@ -99,40 +113,14 @@ function Bookends:_buildColorItems(bc, saveColors, is_per_bar)
         },
         {
             text_func = function()
-                return _("Unread color") .. ": " .. pctLabel("bg")
+                return _("Progress bar track colour") .. ": " .. pctLabel("bg")
             end,
             keep_menu_open = true,
             callback = function(touchmenu_instance)
-                colorNudge(_("Unread color (% black)"), "bg", 25, touchmenu_instance)
+                colorNudge(_("Progress bar track colour (% black)"), "bg", 25, touchmenu_instance)
             end,
             hold_callback = function(touchmenu_instance)
                 bc.bg = nil; saveColors()
-                if touchmenu_instance then touchmenu_instance:updateItems() end
-            end,
-        },
-        {
-            text_func = function()
-                return _("Metro read color") .. ": " .. pctLabel("metro_fill")
-            end,
-            keep_menu_open = true,
-            callback = function(touchmenu_instance)
-                colorNudge(_("Metro read color (% black)"), "metro_fill", 100, touchmenu_instance)
-            end,
-            hold_callback = function(touchmenu_instance)
-                bc.metro_fill = nil; saveColors()
-                if touchmenu_instance then touchmenu_instance:updateItems() end
-            end,
-        },
-        {
-            text_func = function()
-                return _("Metro track color") .. ": " .. pctLabel("track")
-            end,
-            keep_menu_open = true,
-            callback = function(touchmenu_instance)
-                colorNudge(_("Metro track color (% black)"), "track", 75, touchmenu_instance)
-            end,
-            hold_callback = function(touchmenu_instance)
-                bc.track = nil; saveColors()
                 if touchmenu_instance then touchmenu_instance:updateItems() end
             end,
         },
@@ -179,20 +167,11 @@ function Bookends:_buildColorItems(bc, saveColors, is_per_bar)
                 if bc.border_thickness then
                     return _("Border thickness") .. ": " .. bc.border_thickness .. "px"
                 end
-                if is_per_bar then
-                    local gbc = self.settings:readSetting("bar_colors")
-                    local gt = (gbc and gbc.border_thickness) or 1
-                    return _("Border thickness") .. ": " .. _("default") .. " (" .. gt .. "px)"
-                end
                 return _("Border thickness") .. ": 1px"
             end,
             keep_menu_open = true,
             callback = function(touchmenu_instance)
                 local default_val = 1
-                if is_per_bar then
-                    local gbc = self.settings:readSetting("bar_colors")
-                    if gbc and gbc.border_thickness then default_val = gbc.border_thickness end
-                end
                 local current = bc.border_thickness or default_val
                 self:showNudgeDialog(_("Border thickness"), current, 0, 10, default_val, "px",
                     function(val)
@@ -222,137 +201,6 @@ function Bookends:_buildColorItems(bc, saveColors, is_per_bar)
     }
 end
 
-function Bookends:buildBarColorsMenu()
-    local bc = self.settings:readSetting("bar_colors") or {}
-
-    local function saveColors()
-        if not bc.fill and not bc.bg and not bc.track and not bc.tick and bc.invert_read_ticks == nil and not bc.tick_height_pct and not bc.border and not bc.invert and not bc.border_thickness and not bc.metro_fill and not bc.read_height_pct and not bc.unread_height_pct then
-            self.settings:delSetting("bar_colors")
-        else
-            self.settings:saveSetting("bar_colors", bc)
-        end
-        self:markDirty()
-    end
-
-    local items = self:_buildColorItems(bc, saveColors)
-
-    -- Tick width multiplier
-    table.insert(items, {
-        text_func = function()
-            local m = self.settings:readSetting("tick_width_multiplier", self.DEFAULT_TICK_WIDTH_MULTIPLIER)
-            return _("Tick width") .. ": " .. m .. "x"
-        end,
-        keep_menu_open = true,
-        callback = function(touchmenu_instance)
-            self:showNudgeDialog(_("Tick width"), self.settings:readSetting("tick_width_multiplier", self.DEFAULT_TICK_WIDTH_MULTIPLIER), 1, 5, self.DEFAULT_TICK_WIDTH_MULTIPLIER, "x",
-                function(val)
-                    self.settings:saveSetting("tick_width_multiplier", val)
-                    self._tick_cache = nil
-                    self:markDirty()
-                end,
-                nil, 1, false, touchmenu_instance)
-        end,
-        hold_callback = function(touchmenu_instance)
-            self.settings:delSetting("tick_width_multiplier")
-            self._tick_cache = nil
-            self:markDirty()
-            if touchmenu_instance then touchmenu_instance:updateItems() end
-        end,
-    })
-
-    -- Tick height
-    table.insert(items, {
-        text_func = function()
-            local h = self.settings:readSetting("tick_height_pct", 100)
-            return _("Tick height") .. ": " .. h .. "%"
-        end,
-        keep_menu_open = true,
-        callback = function(touchmenu_instance)
-            self:showNudgeDialog(_("Tick height"), self.settings:readSetting("tick_height_pct", 100), 1, 400, 100, "%",
-                function(val)
-                    if val == 100 then
-                        self.settings:delSetting("tick_height_pct")
-                    else
-                        self.settings:saveSetting("tick_height_pct", val)
-                    end
-                    self:markDirty()
-                end,
-                nil, nil, nil, touchmenu_instance)
-        end,
-        hold_callback = function(touchmenu_instance)
-            self.settings:delSetting("tick_height_pct")
-            self:markDirty()
-            if touchmenu_instance then touchmenu_instance:updateItems() end
-        end,
-    })
-
-    -- Bar thickness % (combined Read + Unread). Affects inline bars only;
-    -- per-bar full-width thickness is set in each bar's own settings.
-    table.insert(items, {
-        text_func = function()
-            local r = bc.read_height_pct or 100
-            local u = bc.unread_height_pct or 100
-            if r ~= 100 or u ~= 100 then
-                return _("Bar thickness") .. ": " .. r .. "/" .. u .. "%"
-            end
-            return _("Bar thickness") .. ": " .. r .. "%"
-        end,
-        keep_menu_open = true,
-        callback = function(touchmenu_instance)
-            DialogHelpers.showNudgeGrid{
-                title = _("Bar thickness"),
-                rows = {
-                    { label = _("Read"),   field = "read_height_pct" },
-                    { label = _("Unread"), field = "unread_height_pct" },
-                },
-                get_value = function(field)
-                    return bc[field] or 100
-                end,
-                set_value = function(field, value)
-                    bc[field] = (value ~= 100) and value or nil
-                end,
-                on_row_change = saveColors,
-                on_cancel = saveColors,
-                on_default = function()
-                    bc.read_height_pct = nil
-                    bc.unread_height_pct = nil
-                    saveColors()
-                end,
-                default_text = _("Default") .. " 100%",
-                parent_menu = touchmenu_instance,
-            }
-        end,
-    })
-
-    -- Reset all
-    table.insert(items, {
-        text = _("Reset all to defaults"),
-        keep_menu_open = true,
-        callback = function(touchmenu_instance)
-            bc = {}
-            self.settings:delSetting("bar_colors")
-            self.settings:delSetting("tick_width_multiplier")
-            self.settings:delSetting("tick_height_pct")
-            self._tick_cache = nil
-            self:markDirty()
-            if touchmenu_instance then touchmenu_instance:updateItems() end
-        end,
-    })
-
-    return items
-end
-
-function Bookends:buildColoursMenu()
-    local items = self:buildTextColourMenu()
-    items[#items].separator = true
-    table.insert(items, {
-        text = _("Progress bar colors and tick marks"),
-        sub_item_table_func = function()
-            return self:buildBarColorsMenu()
-        end,
-    })
-    return items
-end
 
 function Bookends:buildTextColourMenu()
     local function textColorNudge(field, title, default_label_suffix, touchmenu_instance)

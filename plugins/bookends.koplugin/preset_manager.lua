@@ -370,8 +370,9 @@ function PresetManager.attach(Bookends)
         local path = self:presetDir() .. "/" .. filename
         preset_data = preset_data or self:buildPreset()
         preset_data.name = name
-        writePresetContents(path, name, preset_data)
+        local ok = writePresetContents(path, name, preset_data)
         self:invalidatePresetCache()
+        return ok
     end
 
     function Bookends:migratePresetsToFiles()
