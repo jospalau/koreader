@@ -40,6 +40,7 @@ local ReaderGoto = require("apps/reader/modules/readergoto")
 local ReaderHandMade = require("apps/reader/modules/readerhandmade")
 local ReaderHinting = require("apps/reader/modules/readerhinting")
 local ReaderHighlight = require("apps/reader/modules/readerhighlight")
+local ReaderKeySelection = require("apps/reader/modules/readerkeyselection")
 local ReaderScrolling = require("apps/reader/modules/readerscrolling")
 local ReaderKoptListener = require("apps/reader/modules/readerkoptlistener")
 local ReaderLink = require("apps/reader/modules/readerlink")
@@ -236,6 +237,15 @@ function ReaderUI:init()
         ui = self,
         document = self.document,
     })
+
+    -- text selection with cursor keys
+    self:registerModule("keyselection", ReaderKeySelection:new{
+        dialog = self.dialog,
+        view = self.view,
+        ui = self,
+        document = self.document,
+    })
+
     -- screenshot controller
     self:registerModule("screenshot", Screenshoter:new{
         prefix = 'Reader',
