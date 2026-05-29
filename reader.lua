@@ -222,6 +222,7 @@ if G_reader_settings:isTrue("apply_extra_patches") then
     -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/quick-settings.lua")
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/dogear-custom.lua")
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/top_reading_sessions.lua")
+    local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/reading-stats-popup.lua")
 end
 
 -- Inform once about color rendering on newly supported devices
