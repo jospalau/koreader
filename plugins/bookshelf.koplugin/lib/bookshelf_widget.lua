@@ -7757,6 +7757,7 @@ function BookshelfWidget:_openBookMenu(item)
                     if ok_bl and BookList and BookList.resetBookInfoCache then
                         BookList.resetBookInfoCache(book.filepath)
                     end
+                    self:_refreshLibrary()
                 end)
             end
             if draft.rating ~= false then
