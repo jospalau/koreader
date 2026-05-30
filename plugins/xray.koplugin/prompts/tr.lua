@@ -72,6 +72,11 @@ KESİN SPOILER KURALLARI:
 - Mevcut okuma ilerlemesinden sonrası hakkında KESİNLİKLE hiçbir bilgi verme. Tam olarak %%%d noktasında dur.
 - Açıklamalar karakterlerin kitabın tam bu noktasındaki durumunu yansıtmalıdır.
 
+KESİN BİLGİ KAYNAĞI KURALLARI (KRİTİK):
+- KURGU KARAKTERLER İÇİN: Açıklamalarınız KESİNLİKLE yalnızca sağlanan metinde açıkça belirtilen veya net bir şekilde ima edilen bilgilere dayanmalıdır. Önceki eğitimlerden, harici kaynaklardan veya kitap/seri/yazar hakkındaki genel bilgilerinize dayanarak ekleme yapmayın.
+- Bir karakterden şu ana kadar metinde yalnızca kısaca bahsedildiyse, açıklamanız yalnızca bu sınırlı bilgiyi yansıtmalıdır. Sağlanan bağlama dayanmayan hiçbir ayrıntıyı tahmin etmeyin, varsaymayın veya eklemeyin.
+- TEK istisna GERÇEK TARİHİ KİŞİLER içindir (`historical_figures` dizisinde yer alan): genel biyografileri/rolleri için dahili bilginizi kullanabilirsiniz, ancak kitaptaki rollerini (`context_in_book`) açıklamak için yine kitap metnine dayanmalısınız.
+
 KESİN JSON GÜVENLİK KURALLARI:
 - Dizeler içindeki tüm çift tırnakları (\") düzgün şekilde kaçırmalısın.
 - Dizeler içinde kaçırılmamış satır sonları KULLANMAYIN.
@@ -87,7 +92,7 @@ GEREKLİ JSON FORMATI:
       "role": "Mevcut ilerlemeye kadar olan rolü",
       "gender": "Erkek / Kadın / Bilinmiyor",
       "occupation": "Meslek/Durum",
-      "description": "Şu ana kadarki metinden detaylarla derin analiz. SPOILER YOK. (Maks {MAX_CHAR_DESC} karakter)"
+      "description": "Açıklama KESİNLİKLE sağlanan metne dayanmalıdır. Çıkarım yapmayın veya harici bilgi eklemeyin. SPOILER YOK. (Maks {MAX_CHAR_DESC} karakter)"
     }
   ],
   "historical_figures": [
@@ -146,7 +151,7 @@ GEREKLİ JSON FORMATI:
       "role": "Mevcut ilerlemeye kadar olan rolü",
       "gender": "Erkek / Kadın / Bilinmiyor",
       "occupation": "Meslek/Durum",
-      "description": "Şu ana kadarki metinden detaylarla derin analiz. SPOILER YOK. (Maks {MAX_CHAR_DESC} karakter)"
+      "description": "Açıklama KESİNLİKLE sağlanan metne dayanmalıdır. Çıkarım yapmayın veya harici bilgi eklemeyin. SPOILER YOK. (Maks {MAX_CHAR_DESC} karakter)"
     }
   ]
 }]],
@@ -188,6 +193,7 @@ GEREKLİ JSON FORMATI:
 GÖREV: Bu kelimenin kitaptaki bir Karakter, Konum, Tarihi Figür veya Teknik Terim/Kısaltma olup olmadığını belirleyin.
  
 CRITICAL FOR CHARACTERS AND LOCATIONS: Use ONLY the provided "BOOK TEXT CONTEXT". Outside knowledge is strictly forbidden. Do not hallucinate.
+KURGU KARAKTERLER İÇİN KRİTİK: YALNIZCA sağlanan kitap metninin ortaya koyduğu şeyleri açıklayın. Tanınmış bir seriden tanısanız bile, bu karakter hakkında eğitiminizden gelen ön bilgileri kullanmayın. Metin bu karakterden yalnızca kısaca bahsediyorsa, açıklamanız bu sınırlı bilgiyi yansıtmalıdır.
 CRITICAL FOR HISTORICAL FIGURES: You MAY use your internal knowledge to verify their identity and provide their biography/role, ONLY if they are a real, notable historical figure. You MUST still use the text context for their relevance in the book.
 CRITICAL FOR TERMS: Kitap kurgu dışı ise, kelimenin teknik bir terim, kısaltma veya anahtar kavram olup olmadığını doğrulayın. Bağlam içindeki tanımını sağlayın.
 Kelime metinde bir karakter, konum, tarihi figür veya teknik terim DEĞİLSE, `is_valid` değerini false yapın.
@@ -217,6 +223,59 @@ If `is_valid` is false:
 ]],
 
     -- Yedek dizeler (Fallback)
+    -- Multi-Book Series Context Prompts
+    series_detect = [[Kitap Adı: %s
+Yazar: %s
+
+GÖREV: Bu kitabın adlandırılmış bir serinin parçası olup olmadığını belirleyin.
+SADECE geçerli bir JSON döndürün:
+{
+  "is_series": true,
+  "series_name": "Zaman Çarkı",
+  "book_index": 3,
+  "total_books_known": 14
+}
+Eğer bu bir seri kitabı DEĞİLSE, şunu döndürün:
+{ "is_series": false }]],
+
+    prior_book_list = [[Seri: %s
+Mevcut Kitap İndeksi: %d
+
+GÖREV: Bu seride mevcut kitaptan ÖNCE gelen 1. kitaptan %d. kitaba kadar olan
+kitapların adlarını (ve "%s" yazardan farklıysa yazarlarını) listeleyin.
+SADECE geçerli bir JSON döndürün:
+{
+  "prior_books": [
+    { "index": 1, "title": "Dünyanın Gözü", "author": "Robert Jordan" }
+  ]
+}]],
+
+    series_book_summary = [[Kitap: %s
+Yazar: %s
+Bu, "%s" serisindeki %d. kitaptır.
+
+GÖREV: Serideki BİR SONRAKİ kitaba BAŞLAMAK ÜZERE olan bir okuyucu için
+bu kitabın TAMAMINI kapsayan bir özet sağlayın.
+Şunları ekleyin: ana karakterler (ad, rol, kitap sonundaki durumları), ana mekanlar,
+kritik olay örgüsü gelişmeleri ve tanıtılan önemli dünya oluşturma terimleri.
+Bu kitabın ÖTESİNDEKİ kitaplar için SPOILER İÇERMESİN.
+
+GEREKLİ JSON FORMATI:
+{
+  "characters": [
+    { "name": "Tam Adı", "aliases": [], "role": "...", "description": "Bu kitabın sonundaki durumu (en fazla 300 karakter)" }
+  ],
+  "locations": [
+    { "name": "...", "description": "..." }
+  ],
+  "terms": [
+    { "name": "...", "aliases": ["Alias 1", "Alias 2"], "expanded": "...", "category": "...", "definition": "..." }
+  ],
+  "timeline": [
+    { "chapter": "Kitap Özeti", "event": "Tüm kitabın olay örgüsünü, ana olaylarını ve sonucunu içeren, birkaç paragraftan oluşan tek, son derece ayrıntılı ve kapsamlı bir özet (en fazla 2000 karakter) You MUST format this recap using multiple distinct paragraphs separated by double newlines (\\n\\n) for readability instead of a single wall of text." }
+  ]
+}]],
+
     fallback = {
         unknown_book = "Bilinmeyen Kitap",
         unknown_author = "Bilinmeyen Yazar",
