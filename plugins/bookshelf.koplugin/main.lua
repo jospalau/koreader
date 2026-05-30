@@ -59,6 +59,12 @@ require("lib/bookshelf_color_palette").attach(Bookshelf)
 -- instance's onCloseWidget find and dismiss the overlay during a KOReader
 -- exit, so the UIManager window stack can drain to zero.
 local _live_widget = nil
+-- The FileManager path the overlay was sitting over when it last (re)appeared.
+-- onPathChanged compares against this so the PathChanged that FileManager
+-- fires during our OWN takeover (the onShow chain, same path) is ignored,
+-- while a genuine navigation underneath (folder shortcut, "go to parent", a
+-- "go home" gesture) -- which moves to a DIFFERENT path -- triggers a drill.
+local _overlay_open_path = nil
 -- Suppresses Bookshelf:onCloseDocument's nextTick(show) for the duration
 -- of a _safeShow call. _safeShow already schedules its own show() after
 -- onClose+showFileManager, so onCloseDocument's parallel schedule would
@@ -150,6 +156,13 @@ function Bookshelf:init()
     -- Run once per init -- no settings flag needed because the clean is
     -- idempotent and cheap (one lfs.dir scan over the plugin root).
     _cleanLegacyLayout()
+    -- Bundled fonts: install (best-effort, for pickers) and seed fresh-install
+    -- defaults exactly once. Must run before any other settings write so the
+    -- "settings file present" fresh-install signal is accurate.
+    local Fonts = require("lib/bookshelf_fonts")
+    Fonts.maybeSeedFreshInstall()
+    Fonts.ensureInstalled()
+
     -- Cache update-related settings on the instance for the menu's text_func
     -- closures. Defaults match bookends: branch empty, source = "release",
     -- background check OFF (opt-in via the menu toggle).
@@ -545,6 +558,10 @@ function Bookshelf:show()
     -- splits paint + deferred shelf reload.
     local _diag_t0 = _gettime()
     local _diag_branch
+    -- Record the FileManager path the overlay is (re)appearing over, so
+    -- onPathChanged can tell its own-takeover PathChanged (same path) apart
+    -- from a real navigation underneath (different path -> drill in).
+    _overlay_open_path = (self.ui and self.ui.file_chooser and self.ui.file_chooser.path) or nil
     -- Discard a stale self._widget without a stack walk. _live_widget
     -- is the canonical "what's actually on screen" pointer (set/cleared
     -- in sync with the widget's _on_close_callback), so anything else
@@ -989,6 +1006,30 @@ end
 -- idempotency check adopts whatever live widget already exists. So
 -- closing the widget here is safe — either a fresh one comes back on
 -- the next tick, or the stack drains and KOReader exits.
+-- Bookshelf:onPathChanged(path) — fired when the FileManager underneath us
+-- navigates (filemanager.lua emits PathChanged on changeToPath). This fires
+-- for any folder navigation while our overlay is up: folder shortcuts, the
+-- parent/home gestures, or any plugin/gesture that jumps to a folder. Rather
+-- than leave the user staring at a stale overlay covering the folder they just
+-- navigated to, follow the navigation: drill the bookshelf into that folder so
+-- browsing stays inside the library view. The folder is pushed onto the
+-- breadcrumb stack, so a swipe-back returns to where the user was before.
+--
+-- Guards: never while a document is open (we're not the home view then), only
+-- when the overlay is actually shown, and only when the path differs from
+-- where the overlay opened -- the last check skips the PathChanged that
+-- FileManager fires during our own takeover (same path).
+function Bookshelf:onPathChanged(path)
+    if self.ui and self.ui.document then return end
+    if not (_live_widget and UIManager:isWidgetShown(_live_widget)) then return end
+    if not path or path == "" or path == _overlay_open_path then return end
+    _overlay_open_path = path
+    if _live_widget._expandFolder then
+        local label = path:match("([^/]+)/?$") or path
+        _live_widget:_expandFolder{ path = path, label = label }
+    end
+end
+
 function Bookshelf:onCloseWidget()
     if not _live_widget then return end
     if self.ui and self.ui.tearing_down then return end
