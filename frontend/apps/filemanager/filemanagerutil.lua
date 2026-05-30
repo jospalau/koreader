@@ -265,6 +265,7 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
 
                         local util = require("util")
                         util.generateStats()
+                        UIManager:broadcastEvent(Event:new("FooterStatsRefresh"))
                 end
                 caller_callback(file, to_status)
                 local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
@@ -435,6 +436,7 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
                             _G.all_files[file].last_modified_day = 0
                             local util = require("util")
                             util.generateStats()
+                            UIManager:broadcastEvent(Event:new("FooterStatsRefresh"))
                     end
                     caller_callback(file, check_button_mbr.checked)
                 end,

@@ -1021,60 +1021,7 @@ function Menu:init()
         }
     }
 
-    local text = ""
-
-    if ffiUtil.realpath(require("datastorage"):getSettingsDir() .. "/stats.lua") then
-        local ok, stats = pcall(dofile, require("datastorage"):getSettingsDir() .. "/stats.lua")
-        if ok and stats then
-            local stats_line = "T:" .. stats["total_books"]
-                .. "·F:" .. stats["total_books_finished"]
-                .. "·FTM:" .. stats["total_books_finished_this_month"]
-                .. "·FTY:" .. stats["total_books_finished_this_year"]
-                .. "·FLY:" .. stats["total_books_finished_last_year"]
-                .. "·MR:" .. stats["total_books_mbr"]
-                .. "·TR:" .. stats["total_books_tbr"]
-                -- .. ", LD:" .. last_days
-                -- .. stats_year
-
-            local Topbar = require("apps/reader/modules/topbar")
-            local topbar = Topbar:new{
-                    view = nil,
-                    ui = nil,
-                    fm = true,
-                }
-            local topbar_line = nil
-            if topbar then
-                local stats_year = topbar:getReadThisYearSoFar()
-                if stats_year > 0 then
-                    stats_year = "+" .. stats_year
-                end
-                topbar_line = "BDB:" .. topbar:getBooksOpened() .. "·TR:" .. topbar:getTotalRead() .. "d" .. "·RS:" .. topbar:getReadingStreak() .. "d·ΔL:" .. stats_year .. "h"
-            end
-
-            if topbar_line then text = topbar_line .. (pagetextinfo and pagetextinfo.settings:isTrue("enable_no_pager") and "\n" or "\n") .. stats_line end
-        end
-    end
-
-    if self.name == "filesearcher" then
-        text = "File searcher"
-    elseif self.name == "collections" and self.collection_name == "listall" then
-        text = "Collections"
-    elseif self.name == "collections" and self.collection_name == "series" then
-        text = "Series"
-    elseif self.name == "collections" and self.series == true then
-        text = "Series " .. self.collection_name
-    elseif self.name == "collections" then
-        text = "Collection " .. self.collection_name
-    elseif self.name == "bookmarks" then
-        text = "Bookmarks"
-    elseif self.name == "tableofcontents" then
-        text = "Table of contents"
-    elseif self.name == "wordreference" then
-        text = "Wordreference"
-    elseif self.search == true then
-        text = "Search results"
-    end
-
+    local text = self:_buildFooterText()
     local pager_h = self.page_info:getSize().h
     local pager_w = self.page_info:getSize().w
     local no_pager = pagetextinfo and pagetextinfo.settings:isTrue("enable_no_pager")
@@ -1091,6 +1038,7 @@ function Menu:init()
         height_adjust = true,
     }
 
+    self.footer_text_widget = footer_text_text
     local footer_text_geom = Geom:new {
         w = self.screen_w * 0.98,
         h = pager_h,
@@ -2032,6 +1980,59 @@ function Menu.itemTableFromTouchMenu(t)
         table.insert(item_t, item)
     end
     return item_t
+end
+
+function Menu:_buildFooterText()
+    local text = ""
+
+    if ffiUtil.realpath(require("datastorage"):getSettingsDir() .. "/stats.lua") then
+        local ok, stats = pcall(dofile, require("datastorage"):getSettingsDir() .. "/stats.lua")
+        if ok and stats then
+            local stats_line = "T:" .. stats["total_books"]
+                .. "·F:" .. stats["total_books_finished"]
+                .. "·FTM:" .. stats["total_books_finished_this_month"]
+                .. "·FTY:" .. stats["total_books_finished_this_year"]
+                .. "·FLY:" .. stats["total_books_finished_last_year"]
+                .. "·MR:" .. stats["total_books_mbr"]
+                .. "·TR:" .. stats["total_books_tbr"]
+
+            local Topbar = require("apps/reader/modules/topbar")
+            local topbar = Topbar:new{ view = nil, ui = nil, fm = true }
+            local topbar_line = nil
+            if topbar then
+                local stats_year = topbar:getReadThisYearSoFar()
+                if stats_year > 0 then stats_year = "+" .. stats_year end
+                topbar_line = "BDB:" .. topbar:getBooksOpened()
+                    .. "·TR:" .. topbar:getTotalRead() .. "d"
+                    .. "·RS:" .. topbar:getReadingStreak() .. "d"
+                    .. "·ΔL:" .. stats_year .. "h"
+            end
+            if topbar_line then text = topbar_line .. "\n" .. stats_line end
+        end
+    end
+
+    -- Nombres especiales de vistas
+    if self.name == "filesearcher" then text = "File searcher"
+    elseif self.name == "collections" and self.collection_name == "listall" then text = "Collections"
+    elseif self.name == "collections" and self.collection_name == "series" then text = "Series"
+    elseif self.name == "collections" and self.series == true then text = "Series " .. self.collection_name
+    elseif self.name == "collections" then text = "Collection " .. self.collection_name
+    elseif self.name == "bookmarks" then text = "Bookmarks"
+    elseif self.name == "tableofcontents" then text = "Table of contents"
+    elseif self.name == "wordreference" then text = "Wordreference"
+    elseif self.search == true then text = "Search results"
+    end
+
+    return text
+end
+
+function Menu:onFooterStatsRefresh()
+    if self.footer_text_widget then
+        self.footer_text_widget.text = self:_buildFooterText()
+        self.footer_text_widget:init()
+        --UIManager:setDirty(self, "ui")
+    end
+    return false
 end
 
 return Menu
