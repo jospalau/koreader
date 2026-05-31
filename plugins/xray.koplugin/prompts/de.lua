@@ -73,11 +73,6 @@ STRIKTE SPOILER-REGELN:
 - ABSOLUT KEINE Informationen nach dem aktuellen Lesefortschritt. Hören Sie genau bei der %d%%-Marke auf.
 - Beschreibungen müssen den Zustand der Charaktere genau an diesem Punkt im Buch widerspiegeln.
 
-STRIKTE REGELN ZUR WISSENSQUELLE (WICHTIG):
-- FÜR FIKTIVE CHARAKTERE: Ihre Beschreibungen MÜSSEN AUSSCHLIESSLICH auf dem basieren, was im bereitgestellten Text explizit angegeben oder eindeutig impliziert ist. Ergänzen Sie dies NICHT durch Wissen aus früherem Training, externen Quellen oder allgemeiner Kenntnis des Buches/der Serie/des Autors.
-- Wenn ein Charakter im bisherigen Text nur kurz erwähnt wurde, darf Ihre Beschreibung nur diese begrenzte Information widerspiegeln. Ziehen Sie KEINE Schlussfolgerungen, machen Sie keine Annahmen und fügen Sie keine Details hinzu, die nicht im bereitgestellten Kontext begründet sind.
-- Die EINZIGE Ausnahme gilt für REALE HISTORISCHE PERSONEN (unter `historical_figures`): Sie dürfen internes Wissen für deren allgemeine Biografie/Rolle verwenden, müssen sich jedoch für deren `context_in_book` weiterhin auf den Buchtext verlassen.
-
 STRIKTE JSON-SICHERHEITSREGELN:
 - Sie MÜSSEN alle doppelten Anführungszeichen (\") innerhalb von Strings ordnungsgemäß escapen.
 - Verwenden Sie KEINE unescaped Zeilenumbrüche innerhalb von Strings.
@@ -92,7 +87,7 @@ ERFORDERLICHES JSON-FORMAT:
       "role": "Rolle bis zum aktuellen Fortschritt",
       "gender": "Männlich / Weiblich / Unbekannt",
       "occupation": "Beruf/Status",
-      "description": "Beschreibung basiert STRIKT auf dem bereitgestellten Text. Keine Schlussfolgerungen oder externes Wissen hinzufügen. KEINE SPOILER. (Max {MAX_CHAR_DESC} Zeichen)"
+      "description": "Tiefgehende Analyse mit Details aus dem bisherigen Text. KEINE SPOILER. (Max {MAX_CHAR_DESC} Zeichen)"
     }
   ],
   "historical_figures": [
@@ -151,7 +146,7 @@ ERFORDERLICHES JSON-FORMAT:
       "role": "Rolle bis zum aktuellen Fortschritt",
       "gender": "Männlich / Weiblich / Unbekannt",
       "occupation": "Beruf/Status",
-      "description": "Beschreibung basiert STRIKT auf dem bereitgestellten Text. Keine Schlussfolgerungen oder externes Wissen hinzufügen. KEINE SPOILER. (Max {MAX_CHAR_DESC} Zeichen)"
+      "description": "Tiefgehende Analyse mit Details aus dem bisherigen Text. KEINE SPOILER. (Max {MAX_CHAR_DESC} Zeichen)"
     }
   ]
 }]],
@@ -193,7 +188,6 @@ ERFORDERLICHES JSON-FORMAT:
 AUFGABE: Bestimmen Sie, ob es sich bei diesem Wort um einen Charakter, einen Ort, eine historische Figur oder einen Fachbegriff/Akronym im Buch handelt.
  
 WICHTIG FÜR CHARAKTERE UND ORTE: Verwenden Sie AUSSCHLIESSLICH den bereitgestellten "BOOK TEXT CONTEXT". Externes Wissen ist streng verboten. Keine Halluzinationen.
-WICHTIG FÜR FIKTIVE CHARAKTERE: Beschreiben Sie NUR das, was der bereitgestellte Buchtext offenbart. Verwenden Sie KEIN Vorwissen aus Ihrem Training über diesen Charakter, selbst wenn Sie ihn aus einer bekannten Serie wiedererkennen. Wenn der Text diesen Charakter nur kurz erwähnt, muss Ihre Beschreibung diese begrenzte Information widerspiegeln.
 WICHTIG FÜR HISTORISCHE PERSONEN: Sie DÜRFEN Ihr internes Wissen verwenden, um deren Identität zu verifizieren und deren Biografie/Rolle anzugeben, ABER NUR, wenn es sich um eine reale, bedeutende historische Person handelt. Sie MÜSSEN dennoch den Textkontext für deren Relevanz im Buch verwenden.
 CRITICAL FOR TERMS: Wenn das Buch ein Sachbuch ist, prüfen Sie, ob das Wort ein Fachbegriff, Akronym oder Schlüsselkonzept ist. Geben Sie die Definition im Kontext an.
 Wenn das Wort im Text KEIN Charakter, Ort, historische Figur oder Fachbegriff ist, setzen Sie `is_valid` auf false.
@@ -219,59 +213,6 @@ If `is_valid` is false:
 {
   "is_valid": false,
   "error_message": "Kurze Erklärung, warum dies kein Charakter oder Ort ist."
-}]],
-
-    -- Multi-Book Series Context Prompts
-    series_detect = [[Buchtitel: %s
-Autor: %s
-
-AUFGABE: Bestimmen Sie, ob dieses Buch Teil einer benannten Serie ist.
-Geben Sie NUR gültiges JSON zurück:
-{
-  "is_series": true,
-  "series_name": "Das Rad der Zeit",
-  "book_index": 3,
-  "total_books_known": 14
-}
-Wenn dies KEIN Buch einer Serie ist, geben Sie Folgendes zurück:
-{ "is_series": false }]],
-
-    prior_book_list = [[Serie: %s
-Aktueller Buchindex: %d
-
-AUFGABE: Listen Sie die Titel (und Autoren, falls sie sich von "%s" unterscheiden) der Bücher 1 bis %d auf,
-die VOR dem aktuellen Buch in dieser Serie erschienen sind.
-Geben Sie NUR gültiges JSON zurück:
-{
-  "prior_books": [
-    { "index": 1, "title": "Das Auge der Welt", "author": "Robert Jordan" }
-  ]
-}]],
-
-    series_book_summary = [[Buch: %s
-Autor: %s
-Dies ist Buch %d in der Serie "%s".
-
-AUFGABE: Bieten Sie eine VOLLSTÄNDIGE Zusammenfassung dieses gesamten Buches für einen Leser an,
-der kurz davor steht, das NÄCHSTE Buch der Serie zu BEGINNEN.
-Beziehen Sie Folgendes ein: Hauptcharaktere (Name, Rolle, Endstatus am Buchende), Hauptorte,
-kritische Handlungsereignisse und wichtige eingeführte Begriffe zum Weltaufbau.
-KEINE SPOILER für Bücher JENSEITS dieses Buches.
-
-ERFORDERLICHES JSON-FORMAT:
-{
-  "characters": [
-    { "name": "Vollständiger Name", "aliases": [], "role": "...", "description": "Status am Ende dieses Buches (max. 300 Zeichen)" }
-  ],
-  "locations": [
-    { "name": "...", "description": "..." }
-  ],
-  "terms": [
-    { "name": "...", "aliases": ["Alias 1", "Alias 2"], "expanded": "...", "category": "...", "definition": "..." }
-  ],
-  "timeline": [
-    { "chapter": "Buchzusammenfassung", "event": "Eine einzelne, hochdetaillierte, umfassende Zusammenfassung der Handlung, der Hauptereignisse und des Endes des gesamten Buches (max. 2000 Zeichen). Sie MÜSSEN diese Zusammenfassung in mehrere Absätze unterteilen, die durch doppelte Zeilenumbrüche (\\n\\n) getrennt sind, um die Lesbarkeit zu verbessern, anstatt eines einzigen Textblocks. You MUST format this recap using multiple distinct paragraphs separated by double newlines (\\n\\n) for readability instead of a single wall of text." }
-  ]
 }]],
 
     -- Fallback strings

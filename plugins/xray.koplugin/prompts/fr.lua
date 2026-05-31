@@ -73,11 +73,6 @@ RÈGLES STRICTES CONTRE LES SPOILERS :
 - ABSOLUMENT AUCUNE information provenant d'après la progression actuelle de la lecture. Arrêtez-vous exactement à la marque de %d%%.
 - Les descriptions doivent refléter l'état des personnages à ce point exact du livre.
 
-RÈGLES STRICTES SUR LES SOURCES DE CONNAISSANCES (CRITIQUE) :
-- POUR LES PERSONNAGES DE FICTION : Vos descriptions DOIVENT être basées UNIQUEMENT sur ce qui est explicitement indiqué ou clairement implicite dans le texte fourni. Ne complétez PAS avec des connaissances provenant de vos entraînements antérieurs, de sources externes ou d'une connaissance générale du livre/série/auteur.
-- Si un personnage n'a été que brièvement mentionné dans le texte jusqu'à présent, votre description doit refléter uniquement ces informations limitées. N'inférez pas, n'assumez pas et n'ajoutez aucun détail non fondé sur le contexte fourni.
-- La SEULE exception concerne les FIGURES HISTORIQUES RÉELLES (placées dans `historical_figures`) : vous pouvez utiliser vos connaissances internes pour leur biographie/rôle général, mais vous devez toujours vous fier au texte du livre pour leur `context_in_book`.
-
 RÈGLES STRICTES DE SÉCURITÉ JSON :
 - Vous DEVEZ échapper correctement tous les guillemets doubles (\") à l'intérieur des chaînes.
 - N'utilisez PAS de sauts de ligne non échappés à l'intérieur des chaînes.
@@ -92,7 +87,7 @@ FORMAT JSON REQUIS :
       "role": "Rôle jusqu'à la progression actuelle",
       "gender": "Masculin / Féminin / Inconnu",
       "occupation": "Métier/Statut",
-      "description": "Description basée STRICTEMENT sur le texte fourni. N'inférez pas et n'ajoutez pas de connaissances externes. PAS DE SPOILERS. (Max {MAX_CHAR_DESC} caractères)"
+      "description": "Analyse approfondie avec des détails du texte jusqu'à présent. PAS DE SPOILERS. (Max {MAX_CHAR_DESC} caractères)"
     }
   ],
   "historical_figures": [
@@ -151,7 +146,7 @@ FORMAT JSON REQUIS :
       "role": "Rôle jusqu'à la progression actuelle",
       "gender": "Masculin / Féminin / Inconnu",
       "occupation": "Métier/Statut",
-      "description": "Description basée STRICTEMENT sur le texte fourni. N'inférez pas et n'ajoutez pas de connaissances externes. PAS DE SPOILERS. (Max {MAX_CHAR_DESC} caractères)"
+      "description": "Analyse approfondie avec des détails du texte jusqu'à présent. PAS DE SPOILERS. (Max {MAX_CHAR_DESC} caractères)"
     }
   ]
 }]],
@@ -193,7 +188,6 @@ FORMAT JSON REQUIS :
 TÂCHE : Déterminez si ce mot est un Personnage, un Lieu, une Figure Historique ou un Terme Technique/Acronyme dans le livre.
  
 CRITIQUE POUR LES PERSONNAGES ET LES LIEUX : Utilisez UNIQUEMENT le "BOOK TEXT CONTEXT" fourni. Les connaissances externes sont strictement interdites. Ne pas halluciner.
-CRITIQUE POUR LES PERSONNAGES DE FICTION : Décrivez UNIQUEMENT ce que révèle le texte du livre fourni. N'utilisez PAS de connaissances préalables issues de votre entraînement sur ce personnage, même si vous le reconnaissez dans une série connue. Si le texte ne mentionne que brièvement ce personnage, votre description doit refléter ces informations limitées.
 CRITIQUE POUR LES FIGURES HISTORIQUES : Vous POUVEZ utiliser vos connaissances internes pour vérifier leur identité et fournir leur biographie/rôle, UNIQUEMENT s'il s'agit d'une figure historique réelle et notable. Vous DEVEZ toujours utiliser le contexte du texte pour leur pertinence dans le livre.
 CRITICAL FOR TERMS : Si le livre est une œuvre de non-fiction, vérifiez si le mot est un terme technique, un acronyme ou un concept clé. Fournissez sa définition dans son contexte.
 Si le mot n'est PAS un personnage, un lieu, une figure historique ou un terme technique dans le texte, définissez `is_valid` sur false.
@@ -219,59 +213,6 @@ If `is_valid` is false:
 {
   "is_valid": false,
   "error_message": "Explication courte expliquant pourquoi ce n'est ni un personnage ni un lieu."
-}]],
-
-    -- Multi-Book Series Context Prompts
-    series_detect = [[Titre du livre : %s
-Auteur : %s
-
-TÂCHE : Déterminez si ce livre fait partie d'une série nommée.
-Retournez UNIQUEMENT un JSON valide :
-{
-  "is_series": true,
-  "series_name": "La Roue du Temps",
-  "book_index": 3,
-  "total_books_known": 14
-}
-Si ce n'est PAS un livre de série, retournez :
-{ "is_series": false }]],
-
-    prior_book_list = [[Série : %s
-Index du livre actuel : %d
-
-TÂCHE : Listez les titres (et auteurs si différents de "%s") des livres 1 à %d
-qui précèdent le livre actuel dans cette série.
-Retournez UNIQUEMENT un JSON valide :
-{
-  "prior_books": [
-    { "index": 1, "title": "L'Œil du monde", "author": "Robert Jordan" }
-  ]
-}]],
-
-    series_book_summary = [[Livre : %s
-Auteur : %s
-Ceci est le livre %d de la série "%s".
-
-TÂCHE : Fournissez un résumé COMPLET de tout ce livre pour un lecteur
-qui est SUR LE POINT DE COMMENCER le PROCHAIN livre de la série.
-Incluez : les personnages clés (nom, rôle, état final à la fin du livre), les lieux principaux,
-les événements critiques de l'intrigue et les termes importants de la construction du monde présentés.
-PAS DE SPOILERS pour les livres AU-DELÀ de celui-ci.
-
-FORMAT JSON REQUIS :
-{
-  "characters": [
-    { "name": "Nom complet", "aliases": [], "role": "...", "description": "Statut à la fin de ce livre (max. 300 caractères)" }
-  ],
-  "locations": [
-    { "name": "...", "description": "..." }
-  ],
-  "terms": [
-    { "name": "...", "aliases": ["Alias 1", "Alias 2"], "expanded": "...", "category": "...", "definition": "..." }
-  ],
-  "timeline": [
-    { "chapter": "Résumé du livre", "event": "Un résumé unique, très détaillé et complet de l'intrigue, des événements principaux et de la résolution de tout le livre (max. 2000 caractères). Vous DEVEZ formater ce résumé en utilisant plusieurs paragraphes distincts séparés par des doubles sauts de ligne (\\n\\n) pour une meilleure lisibilité au lieu d'un seul bloc de texte. You MUST format this recap using multiple distinct paragraphs separated by double newlines (\\n\\n) for readability instead of a single wall of text." }
-  ]
 }]],
 
     -- Fallback strings
