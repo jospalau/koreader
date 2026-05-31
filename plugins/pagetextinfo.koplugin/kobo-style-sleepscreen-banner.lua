@@ -491,6 +491,7 @@ function UIManager:show(widget, ...)
     }
     if topbar then
         self.ui.statistics:insertDB()
+        self.ui.statistics:insertDBSessionStats()
         local doc_props = Sidecar and Sidecar:readSetting("doc_props") or {}
         local read_today = select(1, topbar:getReadTodayThisMonth(doc_props.title or "")) or 0
 
