@@ -50,6 +50,9 @@ local DEFAULT_REVERSE = {
     -- through (or finished) at the top. Ascending (unread first) is the
     -- niche choice -- still reachable via the picker's toggle.
     percent_read = true,
+    -- Rating sort defaults to highest-first, matching the Ratings stack
+    -- default and the usual "show my best-rated books at the top" intent.
+    rating       = true,
     -- Everything else defaults to false (ascending). The table only
     -- needs entries for keys whose default is true.
 }
@@ -1325,17 +1328,23 @@ function Editor:_pickSortLevel(draft, level_index, on_close)
         }
     end
 
-    local none_row = {{
-        text     = (not current and "\xE2\x9C\x93 " or "  ") .. _("(none)"),
+    -- "Clear sort" removes this level's sort_priority entry (the old
+    -- full-width "(none)" row, moved to a bottom-left button beside Close so
+    -- the picker leads with the actual sort options). Checkmark shows when no
+    -- sort is currently set for this level. Per-book tabs only -- group tabs
+    -- deliberately have no clear option (a group view must have an order).
+    local clear_btn = {
+        text     = (not current and "\xE2\x9C\x93 " or "  ") .. _("Clear sort"),
         callback = function()
             if draft.sort_priority then
                 table.remove(draft.sort_priority, level_index)
             end
             UIManager:close(d); on_close()
         end,
-    }}
-    local close_row = {{ text = _("Close"),
-                         callback = function() UIManager:close(d); on_close() end }}
+    }
+    local close_btn = { text = _("Close"),
+                        callback = function() UIManager:close(d); on_close() end }
+    local close_row = { close_btn }
 
     local rows
     if is_group and level_index == 1 then
@@ -1360,11 +1369,10 @@ function Editor:_pickSortLevel(draft, level_index, on_close)
         }
     else
         -- Per-book tabs get the full 2-col layout. Pairs grouped by
-        -- meaning (identity / author / series / time / progress / file);
-        -- Book count is full-width below since it only makes sense for
-        -- groups and has no book-level peer to pair with.
+        -- meaning (identity / author / series / time / progress); the
+        -- numeric/size sorts (file size / page count / stack size) share
+        -- the final 3-up row.
         rows = {
-            none_row,
             { key_btn("title"),          key_btn("filename")          },
             { key_btn("author_surname"), key_btn("author_name")       },
             -- Series name / index / combined ("Series + #") share one row
@@ -1372,10 +1380,11 @@ function Editor:_pickSortLevel(draft, level_index, on_close)
             { key_btn("series_name"),    key_btn("series_index"),
               key_btn("series_combined") },
             { key_btn("last_opened"),    key_btn("date_added")        },
-            { key_btn("percent_read"),   key_btn("size")              },
+            { key_btn("percent_read"),   key_btn("rating")            },
             { key_btn("read_status"),    key_btn("read_status_active")},
-            { key_btn("book_count") },
-            close_row,
+            { key_btn("size"),           key_btn("page_count"),
+              key_btn("book_count") },
+            { clear_btn, close_btn },
         }
     end
 
