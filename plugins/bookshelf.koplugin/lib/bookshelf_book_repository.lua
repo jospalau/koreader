@@ -439,6 +439,14 @@ function Repo.buildBookMeta(filepath, opts)
         genres = splitGenreTags(info.keywords)
     end
 
+    local util = require("util")
+    local calibre_data = util.loadCalibreData()
+    local key = filename .. "." .. (filepath:match("%.([^.]+)$") or "")
+    local page_count
+    if calibre_data[key] and calibre_data[key]["pages"] then
+        page_count = calibre_data[key]["pages"]
+    end
+    page_count = page_count or info.pages
     local book = {
         filepath    = filepath,
         filename    = filename,
@@ -472,7 +480,7 @@ function Repo.buildBookMeta(filepath, opts)
                        or (info.description and info.description ~= ""
                            and info.description)
                        or nil,
-        page_count  = info.pages,
+        page_count  = page_count, --info.pages,
     }
     -- Cache fresh records whose text metadata is present, with the
     -- cover_bb stripped. ImageWidget marks the cover_bb's
@@ -585,6 +593,14 @@ local function _buildLightMetaFromInfo(fp, info)
         title = filename
     end
 
+    local util = require("util")
+    local calibre_data = util.loadCalibreData()
+    local key = filename .. "." .. (fp:match("%.([^.]+)$") or "")
+    local page_count
+    if calibre_data[key] and calibre_data[key]["pages"] then
+        page_count = calibre_data[key]["pages"]
+    end
+    page_count = page_count or info.pages
     -- filename is also returned so callers like searchBooks can include
     -- it in their search haystack without paying for the heavy
     -- buildBookMeta path.
@@ -604,6 +620,7 @@ local function _buildLightMetaFromInfo(fp, info)
                        and cb.author_sort ~= "" and cb.author_sort or nil,
         genres      = genres,
         title       = title,
+        page_count = page_count,
     }
 end
 
@@ -1104,6 +1121,16 @@ function Repo.readProgress(filepath)
             end
         end
     end
+    --if not page_count then
+    local util = require("util")
+    local calibre_data = util.loadCalibreData()
+    local fname = filepath:match("([^/]+)$"):gsub("%.[^.]+$", "")
+    local ext   = filepath:match("%.([^.]+)$") or ""
+    local key   = fname .. "." .. ext
+    if calibre_data[key] and calibre_data[key]["pages"] then
+        page_count = calibre_data[key]["pages"]
+    end
+    --end
     -- Normalise to bookshelf canonical status values. KOReader's End-of-book
     -- dialog and Book Status widget store 'complete' / 'abandoned' in
     -- summary.status; bookshelf's filter UI / sort engine refer to the
