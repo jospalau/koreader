@@ -646,6 +646,39 @@ function HeroCard:_buildRightColumn(book, regions, state, dimen)
         end
     end
 
+    do
+        local util = require("util")
+        local calibre_data = util.loadCalibreData()
+        local fname = book.filepath and book.filepath:match("([^/]+)$") or ""
+        local ext   = book.filepath and (book.filepath:match("%.([^.]+)$") or "") or ""
+        local key   = fname:gsub("%.[^.]+$", "") .. "." .. ext
+        local cb = calibre_data[key]
+        if cb then
+            local parts = {}
+            if cb.words and cb.words ~= "" then
+                parts[#parts + 1] = "Kw: " .. tostring(math.floor(tonumber(cb.words) / 1000))
+            end
+            if cb.pubdate and cb.pubdate ~= "" then
+                parts[#parts + 1] = "PD: " .. tostring(cb.pubdate):sub(1, 4)
+            end
+            if cb.grrating and cb.grrating ~= "" then
+                parts[#parts + 1] = "GRR: " .. tostring(cb.grrating)
+            end
+            if cb.grvotes and cb.grvotes ~= "" then
+                parts[#parts + 1] = "GRV: " .. tostring(cb.grvotes)
+            end
+            if #parts > 0 then
+                local calibre_text = table.concat(parts, "  ")
+                right_top[#right_top + 1] = buildLine(
+                    calibre_text,
+                    regions.metadata or {},
+                    right_w,
+                    book
+                )
+            end
+        end
+    end
+
     -- Tags pill strip (above progress, after description). A fresh
     -- widget per rebuild — replaceRightColumn frees the previous right
     -- column, which would tear down the pill widget too if we reused

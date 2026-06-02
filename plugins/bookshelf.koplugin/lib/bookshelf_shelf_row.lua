@@ -521,7 +521,28 @@ function ShelfRow.new(opts)
                     spine,
                 }
                 if draw_label then
-                    local title_text = _labelFor(item)
+                    local util = require("util")
+                    local calibre_data = util.loadCalibreData()
+                    local fname = item.filepath and item.filepath:match("([^/]+)$") or ""
+                    local ext   = item.filepath and (item.filepath:match("%.([^.]+)$") or "") or ""
+                    local key   = fname:gsub("%.[^.]+$", "") .. "." .. ext
+                    local cb    = calibre_data[key]
+                    local parts = {}
+                    if cb then
+                        if cb.words and cb.words ~= "" then
+                            parts[#parts + 1] = tostring(math.floor(tonumber(cb.words) / 1000))
+                        end
+                        if cb.pubdate and cb.pubdate ~= "" then
+                            parts[#parts + 1] = tostring(cb.pubdate):sub(1, 4)
+                        end
+                        if cb.grrating and cb.grrating ~= "" then
+                            parts[#parts + 1] = tostring(cb.grrating)
+                        end
+                        if cb.grvotes and cb.grvotes ~= "" then
+                            parts[#parts + 1] = tostring(cb.grvotes)
+                        end
+                    end
+                    local title_text = #parts > 0 and table.concat(parts, " ") or _labelFor(item)
                     -- TextWidget (single-line) auto-truncates with ellipsis at
                     -- max_width — exactly what we want here. TextBoxWidget would
                     -- wrap to two lines for longer titles which crowds the grid.
