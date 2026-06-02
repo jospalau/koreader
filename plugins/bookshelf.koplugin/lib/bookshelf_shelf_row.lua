@@ -284,8 +284,14 @@ function ShelfRow.new(opts)
         for _i = 1, #list do
             local fp = is_paths and list[_i] or list[_i].filepath
             if fp then
-                local _pct, status = Repo.readProgress(fp)
-                if status == "finished" then f = f + 1 end
+                local status
+                if _G.all_files and _G.all_files[fp] then
+                    status = _G.all_files[fp].status
+                else
+                    local _pct, s = Repo.readProgress(fp)
+                    status = s
+                end
+                if status == "finished" or status == "complete" then f = f + 1 end
             end
         end
         return f
