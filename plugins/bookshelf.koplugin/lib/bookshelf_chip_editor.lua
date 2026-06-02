@@ -1365,6 +1365,7 @@ function Editor:_pickSortLevel(draft, level_index, on_close)
         rows = {
             { key_btn("series_name"), key_btn("author_surname"), key_btn("book_count") },
             { key_btn("last_opened"), key_btn("date_added")    },
+            { key_btn("pub_date")   },
             close_row,
         }
     else
@@ -1380,6 +1381,7 @@ function Editor:_pickSortLevel(draft, level_index, on_close)
             { key_btn("series_name"),    key_btn("series_index"),
               key_btn("series_combined") },
             { key_btn("last_opened"),    key_btn("date_added")        },
+            { key_btn("pub_date")   },
             { key_btn("percent_read"),   key_btn("rating")            },
             { key_btn("read_status"),    key_btn("read_status_active")},
             { key_btn("size"),           key_btn("page_count"),

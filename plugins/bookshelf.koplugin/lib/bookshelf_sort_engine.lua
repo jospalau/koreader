@@ -303,6 +303,11 @@ SortEngine.KEYS = {
                             return cmp(a.page_count or a.total_pages,
                                        b.page_count or b.total_pages)
                         end },
+    -- Book record: a.pub_date (publication year/date; nil = unknown)
+    pub_date        = { label = tr("Publication date"), short = tr("Pub. date"),
+                        comparator = function(a, b)
+                            return cmp(a.pub_date, b.pub_date)
+                        end },
 }
 
 -- ORDER used to surface keys in the picker UI later. Sorted by perceived

@@ -447,6 +447,10 @@ function Repo.buildBookMeta(filepath, opts)
         page_count = calibre_data[key]["pages"]
     end
     page_count = page_count or info.pages
+    local pub_date
+    if calibre_data[key] and calibre_data[key]["pubdate"] then
+        pub_date = calibre_data[key]["pubdate"]:sub(1, 4)
+    end
     local book = {
         filepath    = filepath,
         filename    = filename,
@@ -481,6 +485,7 @@ function Repo.buildBookMeta(filepath, opts)
                            and info.description)
                        or nil,
         page_count  = page_count, --info.pages,
+        pub_date    = pub_date or nil,
     }
     -- Cache fresh records whose text metadata is present, with the
     -- cover_bb stripped. ImageWidget marks the cover_bb's
@@ -597,10 +602,15 @@ local function _buildLightMetaFromInfo(fp, info)
     local calibre_data = util.loadCalibreData()
     local key = filename .. "." .. (fp:match("%.([^.]+)$") or "")
     local page_count
+    local pub_date
     if calibre_data[key] and calibre_data[key]["pages"] then
         page_count = calibre_data[key]["pages"]
     end
     page_count = page_count or info.pages
+    local pub_date
+    if calibre_data[key] and calibre_data[key]["pubdate"] then
+        pub_date = calibre_data[key]["pubdate"]:sub(1, 4)
+    end
     -- filename is also returned so callers like searchBooks can include
     -- it in their search haystack without paying for the heavy
     -- buildBookMeta path.
@@ -620,7 +630,8 @@ local function _buildLightMetaFromInfo(fp, info)
                        and cb.author_sort ~= "" and cb.author_sort or nil,
         genres      = genres,
         title       = title,
-        page_count = page_count,
+        page_count  = page_count,
+        pub_date    = pub_date or nil,
     }
 end
 
@@ -1100,7 +1111,7 @@ function Repo.readProgress(filepath)
     local now = os.time()
     local cached = _progress_cache[filepath]
     if cached then
-        return cached.pct, cached.status, cached.rating, cached.page_count
+        return cached.pct, cached.status, cached.rating, cached.page_count, cached.pub_date
     end
     local pct, status, rating, page_count
     local ok_ds, ds = pcall(function() return getDocSettings():open(filepath) end)
@@ -1130,6 +1141,9 @@ function Repo.readProgress(filepath)
     if calibre_data[key] and calibre_data[key]["pages"] then
         page_count = calibre_data[key]["pages"]
     end
+    if calibre_data[key] and calibre_data[key]["pubdate"] then
+        pub_date = calibre_data[key]["pubdate"]:sub(1, 4)
+    end
     --end
     -- Normalise to bookshelf canonical status values. KOReader's End-of-book
     -- dialog and Book Status widget store 'complete' / 'abandoned' in
@@ -1144,9 +1158,10 @@ function Repo.readProgress(filepath)
         status     = status,
         rating     = rating,
         page_count = page_count,
+        pub_date   = pub_date,
         expires_at = now + PROGRESS_CACHE_TTL,
     }
-    return pct, status, rating, page_count
+    return pct, status, rating, page_count, pub_date
 end
 
 -- `dirs` (optional out-param): when present, walkBooks records every visited
@@ -1837,6 +1852,7 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
         -- by either is a no-op unless we hydrate them from the sidecar here.
         if k == "rating"       then needs.rating     = true end
         if k == "page_count"   then needs.page_count = true end
+        if k == "pub_date"     then needs.pub_date    = true end
         -- Folder cards carry no book_count until we count their contents
         -- (issue 90: "sort folders by number of files").
         if k == "book_count"   then needs.book_count = true end
@@ -1975,7 +1991,7 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
             end
         end
     end
-    if needs.percent or needs.status or needs.rating or needs.page_count then
+    if needs.percent or needs.status or needs.rating or needs.page_count or needs.pub_date then
         -- Route through Repo.readProgress so steady-state re-runs of this
         -- prefetch (cache TTL expired, but progress cache still warm) skip
         -- the per-file DocSettings:open() cost. readProgress also handles
@@ -1993,11 +2009,12 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
         -- actually reorders. Only written when that key is in the priority.
         for _i, e in ipairs(entries) do
             if e.attr and e.attr.mode == "file" then
-                local pct, status, rating, page_count = Repo.readProgress(e.fp)
+                local pct, status, rating, page_count, pub_date = Repo.readProgress(e.fp)
                 e._pct    = pct
                 e._status = status
                 if needs.rating     then e.rating     = rating     end
                 if needs.page_count then e.page_count = page_count end
+                if needs.pub_date then e.pub_date = pub_date end
             end
         end
     end
