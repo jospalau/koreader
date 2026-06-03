@@ -148,7 +148,7 @@ function WordReference:onDictButtonsReady(dict_popup, buttons)
 				Trapper:wrap(function()
 					UIManager:close(dict_popup)
 					self:showDefinition(dict_popup.ui, dict_popup.word, function()
-						UIManager:scheduleIn(0.5, function()
+						UIManager:scheduleIn(G_defaults:readSetting("DELAY_CLEAR_HIGHLIGHT_S", 0.5), function()
 							if not dict_popup.ui.highlight.highlight_dialog or not UIManager:isWidgetShown(dict_popup.ui.highlight.highlight_dialog) then
 								dict_popup.ui.highlight:clear()
 							end
@@ -224,7 +224,9 @@ function syncOverrideDictionaryQuickLookupChanged()
 			if NetworkMgr:isOnline() then
 				Trapper:wrap(function()
 					WordReference:showDefinition(this_reader.ui, this_reader.selected_text.text, function()
-						this_reader:clear()
+						UIManager:scheduleIn(G_defaults:readSetting("DELAY_CLEAR_HIGHLIGHT_S", 0.5), function()
+							this_reader:clear()
+						end)
 					end)
 				end)
 			elseif this_reader._original_lookupDictWord then
@@ -266,7 +268,7 @@ function WordReference:showLanguageSettings(ui, close_callback, changed_language
                     -- require("apps/reader/readerui").instance.highlight:onClearHighlight()
                     UIManager:close(require("apps/reader/readerui").instance.highlight.highlight_dialog)
                     UIManager:close(require("apps/reader/readerui").instance.highlight:onShowHighlightMenu())
-                end
+				end
 			end,
 		})
 	end

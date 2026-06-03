@@ -135,10 +135,10 @@ function Dialog:makeDefinition(ui, phrase, html_content, title, large_size, clos
 
 	local bottom_buttons = {}
 
-    local VocabBuilder = ui["vocabbuilder"]
+	local VocabBuilder = ui["vocabbuilder"]
     if VocabBuilder and type(VocabBuilder.onDictButtonsReady) == "function" then
-        VocabBuilder:onDictButtonsReady(ui, bottom_buttons)
-    end
+		VocabBuilder:onDictButtonsReady(ui, bottom_buttons)
+	end
 
 	table.insert(bottom_buttons, #bottom_buttons + 1, {
 		{
@@ -213,10 +213,10 @@ function Dialog:makeDefinition(ui, phrase, html_content, title, large_size, clos
     local movable = MovableContainer:new {
         --ignore_events = { "swipe","hold","hold_release","hold_pan","touch","pan","pan_release" },
         is_movable_with_keys = false,
-        content_container,
-    }
+		content_container,
+	}
 
-        local WidgetContainer = require("ui/widget/container/widgetcontainer")
+    local WidgetContainer = require("ui/widget/container/widgetcontainer")
     local positioned_container = WidgetContainer:new {
         align = "center",
         dimen = { x = 0, y = 0, w = Screen:getWidth(), h = Screen:getHeight() },
@@ -242,7 +242,7 @@ function Dialog:makeDefinition(ui, phrase, html_content, title, large_size, clos
                 if not point_inside_rect(ges.pos.x, ges.pos.y, content_container.dimen) then
                     UIManager:close(definition_dialog)
                     return true
-                end
+		end
                 return false
             end,
         },
