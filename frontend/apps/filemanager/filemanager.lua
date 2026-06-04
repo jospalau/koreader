@@ -1905,6 +1905,7 @@ function FileManager:onOpenNextOrPreviousFileInFolder(prev)
 end
 
 function FileManager:onToggleReverseSorting()
+    if self.bookshelf and self.bookshelf:_isShowing() then return end
     if self.disable_double_tap then return end
     local DataStorage = require("datastorage")
     if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
@@ -1919,6 +1920,7 @@ function FileManager:onToggleReverseSorting()
 end
 
 function FileManager:onToggleSortByMode()
+    if self.bookshelf and self.bookshelf:_isShowing() then return end
     if self.disable_double_tap then return end
     local DataStorage = require("datastorage")
     if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
