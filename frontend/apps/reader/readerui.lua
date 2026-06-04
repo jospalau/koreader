@@ -1144,9 +1144,13 @@ function ReaderUI:onHome()
             end,
             choice3_text = _("Just exit"),
             choice3_callback = function()
-                self:onClose()
                 require("ui/widget/booklist").resetBookInfoCache(file)
-                self:showFileManager(file)
+                if self.bookshelf and G_reader_settings:readSetting("start_with") == "bookshelf" then
+                    self.bookshelf:_safeShow()
+                else
+                    self:onClose()
+                    self:showFileManager(file)
+                end
                 UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
                 return true
             end,
