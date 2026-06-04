@@ -239,13 +239,25 @@ function BookshelfWidget:init()
             -- short flick; we'd only collide with screenshot gestures by
             -- not bounding.
             GestureRange:new{
-                ges = "swipe", range = self.dimen, direction = "west",
+                ges = "swipe", direction = "west",
+                range = Geom:new{
+                    x = 0,
+                    y = math.floor(self.height / 8),
+                    w = self.width,
+                    h = self.height - math.floor(self.height / 8),
+                },
                 scale = { 0, SCREENSHOT_MIN - 1 },
             },
         },
         SwipePrevPage = {
             GestureRange:new{
-                ges = "swipe", range = self.dimen, direction = "east",
+                ges = "swipe", direction = "east",
+                range = Geom:new{
+                    x = 0,
+                    y = math.floor(self.height / 8),
+                    w = self.width,
+                    h = self.height - math.floor(self.height / 8),
+                },
                 scale = { 0, SCREENSHOT_MIN - 1 },
             },
         },
