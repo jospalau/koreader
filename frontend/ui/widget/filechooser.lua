@@ -487,9 +487,25 @@ function FileChooser:goHome()
 end
 
 function FileChooser:onFolderUp()
-    if not (G_reader_settings:isTrue("lock_home_folder") and
-            self.path == G_reader_settings:readSetting("home_dir")) then
-        self:changeToPath(string.format("%s/..", self.path), self.path)
+    local bookshelf = self.ui and self.ui.bookshelf
+    if bookshelf and bookshelf:_isShowing() then
+        -- drill up
+        local bw = nil
+        for _, w in ipairs(UIManager._window_stack) do
+            if w.widget and w.widget.name == "bookshelf" then
+                bw = w.widget
+                break
+            end
+        end
+        if bw and #bw._drilldown_path > 0 then
+            bw:_drillBackTo(#bw._drilldown_path - 1)
+        end
+    else
+        -- original FolderUp
+        if not (G_reader_settings:isTrue("lock_home_folder") and
+                self.path == G_reader_settings:readSetting("home_dir")) then
+            self:changeToPath(string.format("%s/..", self.path), self.path)
+        end
     end
 end
 
