@@ -480,6 +480,10 @@ function ShortcutsToolbar:addToMainMenu(menu_items)
     }
 end
 
+function ShortcutsToolbar:refreshTimeBatteryWifiOnly()
+    HomeContent.refreshTimeBatteryWifiOnly()
+end
+
 function ShortcutsToolbar:onResume()
     HomeContent.refreshTimeBatteryWifiOnly()
 end

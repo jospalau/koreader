@@ -603,6 +603,9 @@ function FileManager:onSwipeFM(ges)
         if x and (x < border or x > (w - border)) then
             return false
         end
+        if self.shortcutstoolbar then
+            self.shortcutstoolbar:refreshTimeBatteryWifiOnly()
+        end
         self:handleEvent(Event:new("ToggleBookshelf"))
     end
     return true
