@@ -196,7 +196,7 @@ userpatch.applyPatches(userpatch.late)
 if G_reader_settings:isTrue("apply_extra_patches") then
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/ui-font.lua")
     -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/browser-folder-cover.lua") -- Different approach which works quicker adapted in mosaicmenu.lua
-    if not G_reader_settings:isTrue("simpleui_enabled") then
+    if not G_reader_settings:readSetting("start_with") == "bookshelf" then
         local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/filemanager-titlebar.lua")
         -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/custom-titlebar.lua")
     end
