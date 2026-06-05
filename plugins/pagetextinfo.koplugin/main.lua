@@ -2691,6 +2691,10 @@ function PageTextInfo:updateWordsVocabulary()
 
     for i = 1, #words_page do
         local word_page = words_page[i]
+        -- E-book text may contain Unicode whitespace (e.g. non-breaking space U+00A0,
+        -- zero-width space U+200B) that the DB never stores. Strip them so the
+        -- lookup against all_words succeeds.
+        word_page = word_page:gsub("\xC2\xA0", ""):gsub("\xE2\x80\x8B", "")
         local canonical = self.all_words[word_page]
 
         if canonical and not seen_canonical[canonical] then
