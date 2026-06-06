@@ -7,6 +7,7 @@
 -- books.
 
 local BookshelfSettings = require("lib/bookshelf_settings_store")
+local logger = require("logger")
 
 local Hardcover = {}
 
@@ -395,15 +396,20 @@ end
 local function _notifyLoadedHardcoverSettings(filepath, config, original)
     local HardcoverSettings = package.loaded["hardcover/lib/hardcover_settings"]
     if not HardcoverSettings then return end
+    -- Keep the Hardcover app's in-memory book settings in sync so it sees our
+    -- link change next time it reads them.
     if HardcoverSettings.settings and HardcoverSettings.settings ~= _hc_settings then
         pcall(_applyExternalBookSetting, HardcoverSettings.settings, filepath, config)
     end
-    if type(HardcoverSettings.notify) == "function" then
-        pcall(HardcoverSettings.notify, HardcoverSettings, "books", {
-            filename = filepath,
-            config = config,
-        }, original or {})
-    end
+    -- Deliberately do NOT call HardcoverSettings:notify() here. That broadcasts
+    -- to the app's subscribers, one of which (onSettingsChanged ->
+    -- registerHighlight) dereferences self.ui.highlight -- nil in FileManager
+    -- context, where our link writes happen. A single link crashed its handler
+    -- (caught), and a bulk auto-link / "Remove all" fired it once per book: a
+    -- storm of error handlers that reads as a crash. The mirrored data is
+    -- already persisted by _mirrorExternalLink's _applyExternalBookSetting, so
+    -- skipping the broadcast loses nothing but the (crashing) live event.
+    -- `original` is retained in the signature for callers; intentionally unused.
 end
 
 local function _mirrorExternalLink(filepath, config)
@@ -446,6 +452,38 @@ function Hardcover.getCacheStats()
         rated = rated,
         fetched_at = Hardcover.getCachedAt(),
     }
+end
+
+-- True when the external Hardcover plugin's API module is loadable -- i.e.
+-- the plugin is installed AND enabled. KOReader only adds ENABLED plugins to
+-- package.path (pluginloader.lua), so a require of a disabled/uninstalled
+-- plugin's module fails. Memoised: the enable-state can't change without a
+-- KOReader restart, which reloads this module anyway.
+local _available
+function Hardcover.isAvailable()
+    if _available == nil then
+        local ok, Api = pcall(require, "hardcover/lib/hardcover_api")
+        _available = (ok and Api ~= nil and type(Api.query) == "function") or false
+    end
+    return _available
+end
+
+-- True when the user has any stored Hardcover data: a linked book, a cached
+-- rating, or a prior ratings fetch. Lets cache-backed UI (and the settings
+-- menu) persist for someone who used Hardcover and then removed the plugin.
+function Hardcover.hasData()
+    local ok, stats = pcall(Hardcover.getCacheStats)
+    if not ok or type(stats) ~= "table" then return false end
+    return (stats.linked or 0) > 0
+        or (stats.rated or 0) > 0
+        or stats.fetched_at ~= nil
+end
+
+-- Gate for the "Hardcover enrichment" settings menu: shown when the plugin is
+-- available OR the user already has data, hidden only for someone who has
+-- never used Hardcover and doesn't have the plugin installed.
+function Hardcover.shouldShowEnrichmentUI()
+    return Hardcover.isAvailable() or Hardcover.hasData()
 end
 
 function Hardcover.getCachedRating(book_id)
@@ -518,6 +556,39 @@ function Hardcover.clearLink(filepath)
     return true
 end
 
+-- Full reset: undo every Hardcover change so the library looks as it did before
+-- any linking. Unlinks every book (Bookshelf's own links + the mirrored
+-- Hardcover-app entries), restores any user cover we displaced into a book's
+-- .sdr, deletes downloaded covers, and empties all caches. Destructive and
+-- irreversible -- the menu guards it with a warning. Returns the count removed.
+function Hardcover.removeAllData()
+    local fps, seen = {}, {}
+    local function collect(fp, link)
+        if type(link) == "table" and link.book_id and not seen[fp] then
+            seen[fp] = true
+            fps[#fps + 1] = fp
+        end
+    end
+    for fp, link in pairs(_readLinks()) do collect(fp, link) end
+    for fp, link in pairs(_readExternalLinks(true)) do collect(fp, link) end
+
+    for _, fp in ipairs(fps) do
+        local link = Hardcover.getLink(fp)
+        -- Undo a sidecar cover we wrote (restores the user's cover.orig backup).
+        -- Books we never re-covered (use_cover ~= true) are left untouched.
+        if link and link.use_cover == true then
+            pcall(Hardcover.disableSidecarCover, fp)
+        end
+        pcall(Hardcover.clearLink, fp)
+    end
+
+    Hardcover.clearEnrichmentCache()  -- descriptions + downloaded cover files
+    Hardcover.clearRatingsCache()
+    Hardcover.clearReviewsCache()
+    Hardcover.invalidate()
+    return #fps
+end
+
 function Hardcover.linkLabel(filepath)
     local link = Hardcover.getLink(filepath)
     if not link or not link.book_id then return nil end
@@ -526,6 +597,190 @@ function Hardcover.linkLabel(filepath)
         return title .. " · " .. link.edition_format
     end
     return title
+end
+
+-- ─── Per-book enrichment toggles + sidecar cover ─────────────────────────────
+-- The link record carries two optional user flags, read by enrichBook:
+--   use_description = true -> force the cached Hardcover description (override
+--                             the book's own / the "fill when missing" default).
+--   use_cover       = true -> use a Hardcover cover stored in the book's .sdr
+--                             as KOReader's custom cover (cover.<ext>).
+-- The book menu toggles them; linking auto-enables per the quality rules.
+
+-- Per-book toggle state for the link menu. A Hardcover cover/description is
+-- only ever shown when the book's explicit flag is true (set by the link-time
+-- auto-decision or a manual toggle), so the checkbox is just that flag -- no
+-- global default to fold in any more.
+function Hardcover.getEnrichmentFlags(filepath)
+    local link = Hardcover.getLink(filepath)
+    if not link then return nil end
+    return {
+        use_cover       = link.use_cover == true,
+        use_description = link.use_description == true,
+    }
+end
+
+-- Merge a field into the (internal) link record and persist it. Promotes an
+-- external-only link into the internal table so the flag has somewhere to live.
+local function _updateLinkField(filepath, key, value)
+    local links = _readLinks()
+    local link = links[filepath]
+    if not link then
+        local existing = Hardcover.getLink(filepath)
+        if not existing then return false, "Book is not linked to Hardcover" end
+        link = existing
+        links[filepath] = link
+    end
+    link[key] = value
+    _saveLinks(links)
+    Hardcover.invalidate()
+    return true
+end
+
+function Hardcover.setUseDescription(filepath, enabled)
+    -- Store an explicit false (not nil) on disable: nil means "undecided, let
+    -- the global fill-when-missing default apply", which would re-assert the
+    -- description the user just turned off. False = "user said no".
+    return _updateLinkField(filepath, "use_description", enabled and true or false)
+end
+
+-- A pre-existing (user-set) custom cover is preserved before Hardcover takes
+-- over: renamed to "<sdr>/cover.orig.<ext>" (basename "cover.orig", so
+-- KOReader's findCustomCoverFile ignores it) and restored on toggle-off. The
+-- Hardcover cover itself is re-fetchable from the cache, so toggle-off just
+-- removes it. Nothing the user had is ever deleted.
+local function _findUserCoverBackup(dir)
+    local ok_lfs, lfs = pcall(require, "libs/libkoreader-lfs")
+    if not (ok_lfs and lfs and lfs.dir and dir) then return nil end
+    local ok_iter, iter, dir_obj = pcall(lfs.dir, dir)
+    if not ok_iter then return nil end
+    for f in iter, dir_obj do
+        if f:match("^cover%.orig%.[^.]+$") then return dir .. "/" .. f end
+    end
+    return nil
+end
+
+function Hardcover.enableSidecarCover(filepath)
+    local DocSettings = require("docsettings")
+    local dir = DocSettings:getSidecarDir(filepath)
+    -- Preserve a pre-existing user cover before we overwrite cover.<ext> --
+    -- but only once (if a backup already exists, the active cover is ours).
+    local active = DocSettings:findCustomCoverFile(filepath)
+    if active and dir and not _findUserCoverBackup(dir) then
+        local ext = active:match("%.([^.]+)$") or "jpg"
+        os.rename(active, dir .. "/cover.orig." .. ext)
+    end
+    -- Copy the cached Hardcover cover into the .sdr as cover.<ext>.
+    local link = Hardcover.getLink(filepath)
+    local enrichment = link and Hardcover.getCachedEnrichment(link.book_id, link.edition_id)
+    local src = type(enrichment) == "table" and enrichment.cover_path or nil
+    local ok_lfs, lfs = pcall(require, "libs/libkoreader-lfs")
+    if type(src) == "string" and src ~= ""
+            and ok_lfs and lfs and lfs.attributes(src, "mode") == "file" then
+        DocSettings:flushCustomCover(filepath, src)
+        DocSettings:getCustomCoverFile(true)
+        return true
+    end
+    -- Couldn't write the Hardcover cover -- undo the backup so the user's
+    -- original cover stays in place.
+    local bak = _findUserCoverBackup(dir)
+    if bak then
+        os.rename(bak, (bak:gsub("/cover%.orig%.", "/cover.")))
+        DocSettings:getCustomCoverFile(true)
+    end
+    return false, "No cached Hardcover cover -- refresh the link first"
+end
+
+function Hardcover.disableSidecarCover(filepath)
+    local DocSettings = require("docsettings")
+    local dir = DocSettings:getSidecarDir(filepath)
+    -- Remove the active (Hardcover) cover -- it's re-fetchable from the cache.
+    local active = DocSettings:findCustomCoverFile(filepath)
+    if active then os.remove(active) end
+    -- Restore the user's original cover, if we displaced one.
+    local bak = _findUserCoverBackup(dir)
+    if bak then os.rename(bak, (bak:gsub("/cover%.orig%.", "/cover."))) end
+    DocSettings:getCustomCoverFile(true)
+    return true
+end
+
+function Hardcover.setUseCover(filepath, enabled)
+    local ok, err
+    if enabled then
+        ok, err = Hardcover.enableSidecarCover(filepath)
+    else
+        ok, err = Hardcover.disableSidecarCover(filepath)
+    end
+    if not ok then return false, err end
+    -- Explicit false on disable (see setUseDescription) so the "fill when
+    -- missing" default doesn't immediately re-show the cover the user removed.
+    return _updateLinkField(filepath, "use_cover", enabled and true or false)
+end
+
+-- Parse BIM's cover_sizetag ("1072x1448") into width, height.
+local function _parseSizetag(tag)
+    if type(tag) ~= "string" then return nil end
+    local w, h = tag:match("^(%d+)x(%d+)$")
+    return tonumber(w), tonumber(h)
+end
+
+-- The sensible defaults, applied whenever a linked book is enriched (single
+-- link via refreshBook, or bulk via the paced "Refresh linked data" scan, which
+-- also calls refreshBook per file). Runs only on UNDECIDED
+-- flags (nil), so it never overrides an explicit user choice and never
+-- re-fires once the user (or a previous run) has decided. This is the single
+-- source of "should this book use Hardcover's cover/description" -- there is no
+-- separate global switch and no live fill; the decision is baked into the
+-- per-book flag here. `enrichment` is the just-cached payload.
+function Hardcover.autoDecideFlags(book, enrichment)
+    if type(book) ~= "table" or not book.filepath then return end
+    if type(enrichment) ~= "table" then return end
+    local link = Hardcover.getLink(book.filepath)
+    if not link then return end
+
+    -- Both decisions are recorded EXPLICITLY (true to adopt Hardcover's, false
+    -- to keep the book's own) -- never left nil. A stable true/false is what
+    -- lets a later refresh tell "already decided" from "still needs deciding",
+    -- and stops the auto-decision re-running forever on keep-own books.
+
+    -- Description: adopt Hardcover's when the book carries none of its own.
+    if link.use_description == nil then
+        local adopt = type(enrichment.description) == "string"
+            and enrichment.description ~= ""
+            and (not book.description or book.description == "")
+        Hardcover.setUseDescription(book.filepath, adopt)
+    end
+
+    -- Cover: adopt Hardcover's when the book has no embedded cover, or its
+    -- embedded cover is lower resolution than Hardcover's (compare total
+    -- pixels). Unknown dimensions on either side are treated conservatively --
+    -- keep the embedded cover rather than swap on a guess.
+    if link.use_cover == nil then
+        local adopt = false
+        if type(enrichment.cover_path) == "string" and enrichment.cover_path ~= "" then
+            if not book.has_cover then
+                adopt = true
+            else
+                local ew, eh = _parseSizetag(book.cover_sizetag)
+                local hw = tonumber(enrichment.cover_width)
+                local hh = tonumber(enrichment.cover_height)
+                if ew and eh and hw and hh then
+                    adopt = (hw * hh) > (ew * eh)
+                end
+            end
+        end
+        if adopt then
+            -- enableSidecarCover reads the (just-cached) enrichment and writes
+            -- the Hardcover cover into the book's .sdr so KOReader's own UI
+            -- picks it up too.
+            Hardcover.setUseCover(book.filepath, true)
+        else
+            -- Record "keep own cover" without touching files. NOT setUseCover
+            -- (false): disableSidecarCover would delete a user's own custom
+            -- .sdr cover. We only want to persist the decision.
+            _updateLinkField(book.filepath, "use_cover", false)
+        end
+    end
 end
 
 function Hardcover.getEmbeddedIdentifiers(book)
@@ -660,6 +915,128 @@ function Hardcover.linkFromEmbeddedIdentifiers(book, opts)
     return true, hc_book
 end
 
+-- Author / series extraction from a hydrated Hardcover search hit, mirroring
+-- the vendored search_dialog.lua (contributions may be a single .author string
+-- or an array of { author = { name } }; book_series[1].series.name is series).
+local function _candidateAuthor(b)
+    local c = b and b.contributions
+    if type(c) ~= "table" then return nil end
+    if type(c.author) == "string" and c.author ~= "" then return c.author end
+    local names = {}
+    for _, a in ipairs(c) do
+        if type(a) == "table" and type(a.author) == "table"
+                and type(a.author.name) == "string" then
+            names[#names + 1] = a.author.name
+        end
+    end
+    return #names > 0 and table.concat(names, ", ") or nil
+end
+
+local function _candidateSeries(b)
+    local bs = b and b.book_series
+    if type(bs) == "table" and type(bs[1]) == "table"
+            and type(bs[1].series) == "table" then
+        return bs[1].series.name
+    end
+    return nil
+end
+
+local function _candidateSeriesPosition(b)
+    local bs = b and b.book_series
+    if type(bs) == "table" and type(bs[1]) == "table" then
+        return bs[1].position
+    end
+    return nil
+end
+
+-- Genres from a book row's `cached_tags`. Hardcover's exact JSON shape is
+-- in flux, so parse defensively: handle a category-keyed object
+-- ({ Genre = { {tag=...}, ... } }), a flat array of { tag/name, category },
+-- and a plain string list. Returns ALL genres found (de-duped, order kept);
+-- callers cap how many they actually use. nil when nothing parseable.
+local function _candidateGenres(b)
+    local ct = b and b.cached_tags
+    if type(ct) ~= "table" then return nil end
+    local out, seen = {}, {}
+    local function add(name)
+        if type(name) ~= "string" then return end
+        name = name:gsub("^%s+", ""):gsub("%s+$", "")
+        local key = name:lower()
+        if name ~= "" and not seen[key] then
+            seen[key] = true
+            out[#out + 1] = name
+        end
+    end
+    -- Category-keyed object: take the Genre bucket only.
+    local genre_bucket = ct["Genre"] or ct["genre"] or ct["Genres"]
+    if type(genre_bucket) == "table" then
+        for _, t in ipairs(genre_bucket) do
+            if type(t) == "table" then add(t.tag or t.name)
+            elseif type(t) == "string" then add(t) end
+        end
+    end
+    -- Flat array fallback: keep entries whose category is Genre (or absent).
+    if #out == 0 then
+        for _, t in ipairs(ct) do
+            if type(t) == "table" then
+                local cat = t.category or t.categorySlug
+                if cat == nil or tostring(cat):lower() == "genre" then
+                    add(t.tag or t.name)
+                end
+            elseif type(t) == "string" then
+                add(t)
+            end
+        end
+    end
+    return #out > 0 and out or nil
+end
+
+-- "Best guess" link: full-text search Hardcover by the book's title + author,
+-- score the hits with the ebook-enricher heuristics, and link the best
+-- confident, canonical match (or nothing). Like linkFromEmbeddedIdentifiers it
+-- only links; the caller enriches afterwards. On success returns a details
+-- table { title, author, title_score, author_score } for the report.
+function Hardcover.bestGuessLink(book)
+    if not (book and book.filepath) then return false, "Missing local book" end
+    local title = book.title or _filenameTitle(book.filepath)
+    local author = _authorString(book)
+    if not title or title == "" then return false, "No title to search" end
+
+    local modules, _settings, user_id, ctx_err = _openPickerContext()
+    if not modules then return false, ctx_err end
+    local ok_search, results = pcall(function()
+        return modules.Api:findBooks(title, author or "", user_id)
+    end)
+    if not ok_search or type(results) ~= "table" then
+        return false, "Hardcover search failed"
+    end
+    if #results == 0 then return false, "no_match" end
+
+    local cands = {}
+    for _, b in ipairs(results) do
+        cands[#cands + 1] = {
+            title       = b.title,
+            author      = _candidateAuthor(b),
+            series_name = _candidateSeries(b),
+            _raw        = b,
+        }
+    end
+
+    local Match = require("lib/bookshelf_hardcover_match")
+    local chosen, t_score, a_score = Match.pickBest(
+        { title = title, author = author, series = book.series }, cands)
+    if not chosen then return false, "no_confident_match" end
+
+    local ok, link_err = Hardcover.linkBook(book.filepath, chosen._raw)
+    if not ok then return false, link_err end
+    return true, {
+        title        = chosen.title,
+        author       = chosen.author,
+        title_score  = t_score,
+        author_score = a_score,
+    }
+end
+
 function Hardcover.showBookPicker(book, opts)
     opts = opts or {}
     if not (book and book.filepath) then return false, "Missing local book" end
@@ -673,6 +1050,38 @@ function Hardcover.showBookPicker(book, opts)
         books = { embedded }
     else
         books, err = modules.Api:findBooks(title, author, user_id)
+        -- findBooks appends the author to the query, which can skew Hardcover's
+        -- fuzzy search badly (e.g. "Katabasis R. F. Kuang" returns database
+        -- books). If none of the hits' titles resemble the book's, retry
+        -- title-only and merge the new ones in -- "Katabasis" alone tends to
+        -- surface the real book.
+        if author and author ~= "" and type(books) == "table" then
+            local Match = require("lib/bookshelf_hardcover_match")
+            local matched = false
+            for _, b in ipairs(books) do
+                local ts = select(1, Match.scoreMatch(title, "x", b.title or "", "x"))
+                if ts and ts >= Match.TITLE_THRESHOLD then matched = true; break end
+            end
+            if not matched then
+                local ok2, more = pcall(function()
+                    return modules.Api:findBooks(title, "", user_id)
+                end)
+                if ok2 and type(more) == "table" and #more > 0 then
+                    local seen = {}
+                    for _, b in ipairs(books) do
+                        local id = b.book_id or b.id
+                        if id then seen[id] = true end
+                    end
+                    for _, b in ipairs(more) do
+                        local id = b.book_id or b.id
+                        if id and not seen[id] then
+                            seen[id] = true
+                            books[#books + 1] = b
+                        end
+                    end
+                end
+            end
+        end
     end
     if not books then return false, err or "No response from Hardcover" end
 
@@ -699,6 +1108,19 @@ function Hardcover.showBookPicker(book, opts)
         end,
         title
     )
+    -- buildSearchDialog doesn't wire a close_callback for the search variant,
+    -- so cancelling the picker returned nowhere. SearchDialog:onClose fires
+    -- close_callback on BOTH cancel and selection, so wiring it here lets the
+    -- caller (the book menu) reopen on either path. On selection the link is
+    -- set synchronously before this reopen runs (only the metadata refresh is
+    -- async), so the reopened menu reflects the new link.
+    if opts.on_close and manager.search_dialog then
+        local prev = manager.search_dialog.close_callback
+        manager.search_dialog.close_callback = function()
+            if prev then prev() end
+            opts.on_close()
+        end
+    end
     return true
 end
 
@@ -731,6 +1153,14 @@ function Hardcover.showEditionPicker(book, book_id, opts)
             end)
         end
     )
+    -- See showBookPicker: wire close_callback so cancel/selection both return.
+    if opts.on_close and manager.search_dialog then
+        local prev = manager.search_dialog.close_callback
+        manager.search_dialog.close_callback = function()
+            if prev then prev() end
+            opts.on_close()
+        end
+    end
     return true
 end
 
@@ -797,11 +1227,40 @@ end
 
 local function _imageUrl(row)
     if type(row) ~= "table" then return nil end
-    if type(row.cached_image) == "string" and row.cached_image ~= "" then
-        return row.cached_image
+    -- Hardcover's `cached_image` is a JSON object { url, width, height, ... },
+    -- NOT a plain string (the vendored plugin reads cached_image.url too).
+    -- The string branch is kept only as a defensive fallback for any caller
+    -- that pre-flattened it. Missing this object form was why linked books
+    -- never got a fallback cover: _imageUrl returned nil, so nothing was
+    -- downloaded.
+    local ci = row.cached_image
+    if type(ci) == "string" and ci ~= "" then
+        return ci
+    end
+    if type(ci) == "table" and type(ci.url) == "string" and ci.url ~= "" then
+        return ci.url
     end
     if type(row.image) == "table" and type(row.image.url) == "string" then
         return row.image.url
+    end
+    return nil
+end
+
+-- Like _imageUrl but also returns the cached_image's pixel dimensions when
+-- present (the JSON object carries { url, width, height }). Used to compare
+-- against the embedded cover's resolution when auto-deciding "Use Hardcover
+-- image" at link time. Dimensions are nil when Hardcover only gives a URL.
+local function _imageInfo(row)
+    if type(row) ~= "table" then return nil end
+    local ci = row.cached_image
+    if type(ci) == "table" and type(ci.url) == "string" and ci.url ~= "" then
+        return ci.url, tonumber(ci.width), tonumber(ci.height)
+    end
+    if type(ci) == "string" and ci ~= "" then
+        return ci
+    end
+    if type(row.image) == "table" and type(row.image.url) == "string" then
+        return row.image.url, tonumber(row.image.width), tonumber(row.image.height)
     end
     return nil
 end
@@ -884,6 +1343,9 @@ local function _fetchBookEnrichment(book_id, edition_id, opts)
                 title
                 description
                 cached_image
+                contributions: cached_contributors
+                cached_tags
+                book_series { position series { name } }
                 rating
                 ratings_count
                 reviews_count
@@ -911,6 +1373,9 @@ local function _fetchBookEnrichment(book_id, edition_id, opts)
                 title
                 description
                 cached_image
+                contributions: cached_contributors
+                cached_tags
+                book_series { position series { name } }
                 rating
                 ratings_count
                 reviews_count
@@ -929,7 +1394,8 @@ local function _fetchBookEnrichment(book_id, edition_id, opts)
     end
 
     local edition = type(data.edition) == "table" and data.edition or nil
-    local image_url = _imageUrl(edition) or _imageUrl(data.book)
+    local image_url, cover_w, cover_h = _imageInfo(edition)
+    if not image_url then image_url, cover_w, cover_h = _imageInfo(data.book) end
     local key = _cacheKey(book_id, edition_id)
     local cover_path = image_url and _downloadImage(image_url, key, opts.force) or nil
     return true, {
@@ -939,9 +1405,16 @@ local function _fetchBookEnrichment(book_id, edition_id, opts)
         description = data.book.description,
         cover_url = image_url,
         cover_path = cover_path,
+        cover_width = cover_w,
+        cover_height = cover_h,
         rating = tonumber(data.book.rating),
         ratings_count = tonumber(data.book.ratings_count),
         reviews_count = tonumber(data.book.reviews_count),
+        -- Bibliographic metadata for the "Use Hardcover metadata" override.
+        authors = _candidateAuthor(data.book),
+        series_name = _candidateSeries(data.book),
+        series_position = _candidateSeriesPosition(data.book),
+        genres = _candidateGenres(data.book),
         fetched_at = os.time(),
     }
 end
@@ -969,6 +1442,10 @@ function Hardcover.refreshBook(book, opts)
     cache[_cacheKey(link.book_id, link.edition_id)] = payload
     _saveEnrichmentCache(cache)
     _backfillRatingEntry(link.book_id, payload)
+    -- First-link defaults for the per-book cover/description overrides. Guarded
+    -- internally to fire once (only on undecided flags) -- safe to call on every
+    -- refresh.
+    pcall(Hardcover.autoDecideFlags, book, payload)
     if opts.on_refreshed then opts.on_refreshed(payload) end
     return true, payload
 end
@@ -983,45 +1460,6 @@ function Hardcover.refreshBookOnline(book, opts, callback)
     end)
 end
 
-function Hardcover.refreshAllLinked()
-    local linked, updated, failed = 0, 0, 0
-    local errors = {}
-    local seen = {}
-    local function process(_filepath, link)
-        if type(link) ~= "table" or not link.book_id then return end
-        local key = _cacheKey(link.book_id, link.edition_id)
-        if seen[key] then return end
-        seen[key] = true
-        linked = linked + 1
-        local ok, payload = _fetchBookEnrichment(link.book_id, link.edition_id, { force = true })
-        if ok then
-            local cache = _readEnrichmentCache()
-            cache[key] = payload
-            _saveEnrichmentCache(cache)
-            updated = updated + 1
-        else
-            failed = failed + 1
-            errors[#errors + 1] = tostring(payload)
-        end
-    end
-    for fp, link in pairs(_readExternalLinks(true)) do process(fp, link) end
-    for fp, link in pairs(_readLinks()) do process(fp, link) end
-    return true, {
-        linked = linked,
-        updated = updated,
-        failed = failed,
-        errors = errors,
-    }
-end
-
-function Hardcover.refreshAllLinkedOnline(callback)
-    return _runWhenOnline(function()
-        local ok, stats = Hardcover.refreshAllLinked()
-        if callback then callback(ok, stats) end
-    end, function(err)
-        if callback then callback(false, err) end
-    end)
-end
 
 local function _normaliseReviewsPayload(book)
     if type(book) ~= "table" then return nil end
@@ -1064,6 +1502,12 @@ function Hardcover.fetchReviews(book_id, opts)
     if not opts.force and type(cached) == "table" and cached.fetched_at
             and (os.time() - tonumber(cached.fetched_at)) < ttl then
         return true, cached
+    end
+
+    -- cache_only: peek the cache without ever hitting the API (lets callers
+    -- serve cached reviews synchronously, with no network and no progress UI).
+    if opts.cache_only then
+        return false, "No cached reviews"
     end
 
     local Api, api_err = _loadApi()
@@ -1236,6 +1680,59 @@ function Hardcover.refreshRatingsOnline(callback)
     end)
 end
 
+-- Apply the global "Use Hardcover metadata" override to `book`: for a linked
+-- book, replace its title / author(s) / series + # / genres with Hardcover's --
+-- a clean switch, no merging. No-op when the toggle is off, the book isn't
+-- linked, or no enrichment is cached. Self-contained (own link + cache reads,
+-- all memoized -- no file I/O) so it's cheap enough to also run on the light
+-- grouping records, keeping the genre/author/series chips in sync with the
+-- per-book tag pills. Cover/description stay under their per-book toggles.
+function Hardcover.applyMetadata(book)
+    if not BookshelfSettings.isTrue("hardcover_use_metadata") then return end
+    if type(book) ~= "table" or not book.filepath then return end
+    local link = Hardcover.getLink(book.filepath)
+    if not link then return end
+    local enrichment = Hardcover.getCachedEnrichment(link.book_id, link.edition_id)
+    if type(enrichment) ~= "table" then return end
+
+    book.hardcover_metadata = true
+    if type(enrichment.title) == "string" and enrichment.title ~= "" then
+        book.title = enrichment.title
+    end
+    if type(enrichment.authors) == "string" and enrichment.authors ~= "" then
+        local list = {}
+        for a in enrichment.authors:gmatch("[^,]+") do
+            local name = a:gsub("^%s+", ""):gsub("%s+$", "")
+            if name ~= "" then list[#list + 1] = name end
+        end
+        if #list > 0 then book.authors = list end
+    end
+    if type(enrichment.series_name) == "string" and enrichment.series_name ~= "" then
+        book.series_name = enrichment.series_name
+        local pos = enrichment.series_position
+        if pos ~= nil then
+            -- Format like Calibre: integer position with no decimal.
+            local n = tonumber(pos)
+            local pos_str = (n and n == math.floor(n)) and tostring(math.floor(n))
+                or tostring(pos)
+            book.series_num = pos_str
+            book.series = enrichment.series_name .. " #" .. pos_str
+        else
+            book.series_num = nil
+            book.series = enrichment.series_name
+        end
+    end
+    if type(enrichment.genres) == "table" and #enrichment.genres > 0 then
+        local max = tonumber(BookshelfSettings.read("hardcover_max_genres")) or 5
+        if max < 0 then max = 0 end
+        local g = {}
+        for i = 1, math.min(max, #enrichment.genres) do
+            g[i] = enrichment.genres[i]
+        end
+        if #g > 0 then book.genres = g end
+    end
+end
+
 function Hardcover.enrichBook(book)
     if not book or not book.filepath then return book end
     local link = Hardcover.getLink(book.filepath)
@@ -1272,20 +1769,37 @@ function Hardcover.enrichBook(book)
     local enrichment = Hardcover.getCachedEnrichment(link.book_id, link.edition_id)
     if type(enrichment) ~= "table" then return book end
 
-    if BookshelfSettings.nilOrTrue("hardcover_fill_descriptions")
-            and (not book.description or book.description == "")
-            and type(enrichment.description) == "string"
-            and enrichment.description ~= "" then
+    -- A Hardcover cover/description is shown only when the per-book flag is
+    -- explicitly on. The flag is set by autoDecideFlags (the sensible default,
+    -- applied at link/refresh time) or by a manual toggle; there is no live
+    -- "fill when missing" path, so what renders here can't disagree with the
+    -- toggle the user sees.
+    if link.use_description == true
+            and type(enrichment.description) == "string" and enrichment.description ~= "" then
         book.description = enrichment.description
         book.hardcover_description = true
     end
-    if BookshelfSettings.nilOrTrue("hardcover_fill_covers")
-            and not book.has_cover
-            and type(enrichment.cover_path) == "string"
-            and enrichment.cover_path ~= "" then
-        book.cover_image_path = enrichment.cover_path
-        book.hardcover_cover = true
+    if link.use_cover == true then
+        -- Cover lives in the book's .sdr as KOReader's custom cover; point
+        -- bookshelf at it (KOReader's own UI finds it natively). If somehow
+        -- absent, fall back to the cached download.
+        local DocSettings = require("docsettings")
+        local custom = DocSettings:findCustomCoverFile(book.filepath)
+        if custom then
+            book.cover_image_path = custom
+            book.hardcover_cover = true
+        elseif type(enrichment.cover_path) == "string" and enrichment.cover_path ~= "" then
+            book.cover_image_path = enrichment.cover_path
+            book.hardcover_cover = true
+        end
     end
+
+    -- "Use Hardcover metadata" override (title/author/series/genres) lives in
+    -- Hardcover.applyMetadata so the exact same logic also runs on the lighter
+    -- grouping records that back the genre/author/series chips -- not just full
+    -- book builds. Otherwise the tag pills (full build) would switch but the
+    -- chips/stacks (light build) wouldn't.
+    Hardcover.applyMetadata(book)
     return book
 end
 
