@@ -589,7 +589,7 @@ function FileManager:onSwipeFM(ges)
         -- We avoid this to be triggered when firing one-finger swipes on the edges of the screen
         -- This is even worse for devices like the Kobo Libra 2 in which tearing/papercut glitches occur
         -- because the clash of different kind of refreshes in notifications and here
-        local border = math.floor(w * 0.10)
+        local border = math.floor(w / 8) -- Same border width as the gestures plugin implementation
         if x and (x < border or x > (w - border)) then
             return false
         end
