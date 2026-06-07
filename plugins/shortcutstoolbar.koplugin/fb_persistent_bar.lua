@@ -256,12 +256,12 @@ function M.inject(fb_config)
     local date_and_version = io.open(date_and_version_file_path, "r")
     local date_and_version_text = date_and_version and date_and_version:read("*line") or "No dateandversion file"
     date_and_version_text = date_and_version_text:gsub("(%d%d/%d%d/)%d%d(%d%d)", "%1%2")
-    date_and_version_text = date_and_version_text .. "·⚡" .. ui.topbar:getReadingStreak()
-    date_and_version_text = date_and_version_text .. "·ΔL:" .. ui.topbar:getReadThisYearSoFar() .. "h"
+    -- date_and_version_text = date_and_version_text .. "·⚡" .. ui.topbar:getReadingStreak()
+    -- date_and_version_text = date_and_version_text .. "·ΔL:" .. ui.topbar:getReadThisYearSoFar() .. "h"
 
     _label_text_widget = TextWidget:new{
         text = date_and_version_text,
-        face = Font:getFace("smallinfofont", 20),
+        face = Font:getFace("smallinfofont", 24),
         max_width = Screen:getWidth() / 3,
         truncate_left = true,
     }
