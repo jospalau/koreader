@@ -849,8 +849,14 @@ local function buildSections(stats, fonts, layout, popup)
     local chapter_values    = buildTwoColRow(chapter_val1, chapter_val2, layout)
     local book_progress_row = buildTwoColRow(book_progress, book_pages_read, layout)
     local book_row          = buildTwoColRow(book_col1, book_col2, layout)
-    local pace_row = buildTwoColRow(days_col2, pace_col2, layout)
-
+    local session_col = valueLine(stats.session_time or emptyValue(), _("this session"))
+    local month_col   = valueLine(stats.month_time   or emptyValue(), _("this month"))
+    local pace_row = VerticalGroup:new{
+        align = "left",
+        buildTwoColRow(days_col2, pace_col2, layout),
+        VerticalSpan:new{ height = Size.padding.default },
+        buildTwoColRow(session_col, month_col, layout),
+    }
     local sections = VerticalGroup:new{
         align = "left",
     }
@@ -1147,9 +1153,23 @@ function ReadingStatsPopup:gatherStats()
             stats.today_time_all = formatTimeHuman(all_t)
         end
 
+        local topbar = ui.view and ui.view.topbar
+        if topbar then
+            if topbar.start_session_time then
+                local secs = os.time() - topbar.start_session_time
+                if secs > 0 then
+                    stats.session_time = formatTimeHuman(secs)
+                end
+            end
+            local month_secs = topbar:getReadTodayThisMonth(ui.document and ui.document:getProps().title)
+            local read_today, read_month = topbar:getReadTodayThisMonth(ui.document and ui.document:getProps().title)
+            if read_month and read_month > 0 then
+                stats.month_time = formatTimeHuman(read_month)
+            end
+        end
+
         self._has_book_id = true
     end -- stats_plugin
-
     -- TOC cache
     if toc then
         local book_id = stats_plugin and stats_plugin.id_curr_book
