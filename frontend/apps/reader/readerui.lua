@@ -695,7 +695,7 @@ function ReaderUI:showReader(file, provider, seamless, is_provider_forced, after
     -- end
     -- logger.info("DEBUG package.path=" .. package.path)
     local ok, BookshelfWidget = pcall(require, "lib/bookshelf_widget")
-    if ok and BookshelfWidget.live and G_reader_settings:readSetting("start_with") ~= "bookshelf" then
+    if ok and BookshelfWidget.live then -- and G_reader_settings:readSetting("start_with") ~= "bookshelf" then
         UIManager:close(BookshelfWidget.live)
     end
     if lfs.attributes(file, "mode") ~= "file" then

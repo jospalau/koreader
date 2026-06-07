@@ -931,7 +931,7 @@ function Bookshelf:_wireFastFileBrowserTab(force)
         -- setting, so a user who keeps "Start with: History" still lands on
         -- Bookshelf after finishing a book. Plain-FM users (Bookshelf not on
         -- the stack) fall through to KOReader's normal file-browser path.
-        if plugin:_isShowing() then
+        if G_reader_settings:readSetting("start_with") == "bookshelf" then
             -- Bookshelf is home: same fast-path as the gesture.
             plugin:_safeShow()
         else
