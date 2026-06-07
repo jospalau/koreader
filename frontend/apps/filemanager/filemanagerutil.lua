@@ -712,10 +712,6 @@ function filemanagerutil.showChooseDialog(title_header, caller_callback, current
 end
 
 function filemanagerutil.openFile(ui, file, caller_pre_callback, no_dialog)
-    local BookshelfWidget = require("lib/bookshelf_widget")
-    if BookshelfWidget.live then -- and G_reader_settings:readSetting("start_with") ~= "bookshelf" then
-        UIManager:close(BookshelfWidget.live)
-    end
     if ui and ui.history and ui.history.booklist_menu then
         UIManager:close(ui.history.booklist_menu)
     end
