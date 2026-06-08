@@ -1147,7 +1147,7 @@ function ReaderUI:onHome()
                     self:onClose()
                     self:showFileManager(file)
                 end
-                UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
+                --UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
                 return true
             end,
             cancel_callback = function()
