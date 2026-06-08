@@ -297,6 +297,11 @@ if ffiutil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
     _G.calibre_data = calibre_data
 end
 
+local date_and_version_file_path = "./dateandversion"
+local date_and_version = io.open(date_and_version_file_path, "r")
+_G.date_and_version = date_and_version and date_and_version:read("*line") or "No dateandversion file"
+
+
 -- Start app
 if exit_code then -- luacheck: ignore
     -- We're quitting to finalize an update.

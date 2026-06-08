@@ -77,6 +77,7 @@ Tokens.CATALOGUE = {
     { category = "Logic",    token = "[if:foo>50]…[/if]", description = "Numeric comparison" },
     { category = "Logic",    token = "[if:foo]…[else]…[/if]", description = "If/else" },
     { category = "Logic",    token = "%spacer",           description = "Elastic gap: pushes content left/right to the region edges" },
+    { category = "Device",   token = "%version_app",      description = "KOReader App Version" },
 }
 
 local function metaToken(field)
@@ -657,7 +658,7 @@ Tokens.expanders.warmth= function(_b, s) return s and s.warmth and tostring(s.wa
 Tokens.expanders.mem   = function(_b, s) return s and s.mem and (tostring(s.mem) .. "%") or "" end
 Tokens.expanders.ram   = function(_b, s) return s and s.ram_mib and (tostring(s.ram_mib) .. " MiB") or "" end
 Tokens.expanders.disk  = function(_b, s) return s and s.disk_free or "" end
-
+Tokens.expanders.version_app  = function() return _G.date_and_version end
 -- %bar and %spacer are intentionally NOT in the expander table. The
 -- hero card's elastic-line renderer (buildLine in hero_card.lua) detects
 -- both tokens AFTER token expansion and splits the line into [before,
