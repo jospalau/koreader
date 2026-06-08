@@ -11,6 +11,10 @@ local Repo = {}
 
 local logger = require("logger")
 local BookshelfSettings = require("lib/bookshelf_settings_store")
+local _ok = pcall(require, "lib/bookshelf_i18n")  -- soft: tests stub-load without it
+local i18n = package.loaded["lib/bookshelf_i18n"]
+local function tr(s) if i18n and i18n.gettext then return i18n.gettext(s) end; return s end
+
 -- Wall-clock timer. Falls back to os.clock() (CPU-only) if LuaSocket absent.
 local _gettime
 do
@@ -116,6 +120,29 @@ function Repo.hasBookInfoManager()
     return getBookInfoMgr() ~= nil
 end
 local function getDocSettings()  return require("docsettings") end
+
+-- _hasSidecar(filepath): does KOReader hold DocSettings (a metadata sidecar)
+-- for this book? Used as the cheap "has it ever been opened?" gate before the
+-- much heavier Repo.readProgress (DocSettings:open) on status/rating filters
+-- and sort prefetches.
+--
+-- KOReader's "Book metadata location" setting stores the .sdr alongside the
+-- book ("doc", the default), in a central folder ("dir"), or by partial-hash
+-- ("hash"). The old gate statted only the sibling "<book>.sdr" dir, so for
+-- "dir"/"hash" users no sidecar was ever found and every book read as unread /
+-- unrated in filters and sorts while covers showed the real status (issue
+-- #117). DocSettings:hasSidecarFile checks the correct location(s) and only
+-- stats (no Lua parse), so it preserves the "don't open every sidecar"
+-- optimisation from #113 -- it just looks in the right place.
+local function _hasSidecar(filepath)
+    if not filepath then return false end
+    local ds = getDocSettings()
+    if ds and ds.hasSidecarFile then
+        local ok, res = pcall(ds.hasSidecarFile, ds, filepath)
+        if ok then return res and true or false end
+    end
+    return false
+end
 
 -- Resolve the user's library root from G_reader_settings. Returns the
 -- configured home_dir, or nil when it is unset / empty. "/" is allowed:
@@ -291,6 +318,7 @@ local _SORT_DEFAULT = {
     genres     = "latest_read",
     tags       = "latest_read",
     formats    = "name",
+    languages  = "book_count",
 }
 
 local _SORT_VALID = {
@@ -308,6 +336,7 @@ local _SORT_VALID = {
     genres     = { name = true, latest_read = true, book_count = true },
     tags       = { name = true, latest_read = true, book_count = true },
     formats    = { name = true, latest_read = true, book_count = true },
+    languages  = { name = true, latest_read = true, book_count = true },
 }
 
 -- getSortPriority(tab_id): returns the priority list for a tab, falling back
@@ -317,6 +346,7 @@ local _SORT_VALID = {
 -- be deleted.
 local TabModel   = require("lib/bookshelf_tab_model")
 local SortEngine = require("lib/bookshelf_sort_engine")
+local BookshelfLang = require("lib/bookshelf_lang")
 
 function Repo.getSortPriority(tab_id)
     local tab = TabModel.getById(tab_id)
@@ -661,6 +691,8 @@ local function _buildLightMetaFromInfo(fp, info)
                        and cb.author_sort ~= "" and cb.author_sort or nil,
         genres      = genres,
         title       = title,
+        lang        = (cb and type(cb.languages) == "table" and cb.languages[1])
+                       or info.language,
         page_count  = page_count,
         pub_date    = pub_date or nil,
     }
@@ -896,6 +928,7 @@ local _authors_cache   = {}
 local _genres_cache    = {}
 local _formats_cache   = {}
 local _ratings_cache   = {}
+local _languages_cache = {}
 -- getAll result cache. FileChooser:genItemTableFromPath is expensive (2–5s
 -- on large home dirs); caches the shape (filepaths + folder labels) with the
 -- same TTL and invalidation path as the walk cache.
@@ -943,6 +976,7 @@ local _progress_cache    = {}   -- filepath → { pct, status, expires_at }
 local _folderHasBooks_cache
 local _normalize_genre_cache
 local _normalize_author_cache
+local _normalize_lang_cache
 -- Filter helpers used by group fetchers / hydrators / getAll. Their
 -- definitions live further down (near _buildGroups for readability)
 -- but several call sites — getTags, getAll's folder-filter pass,
@@ -963,6 +997,7 @@ function Repo.invalidateWalkCache()
     _genres_cache     = {}
     _formats_cache    = {}
     _ratings_cache    = {}
+    _languages_cache  = {}
     _all_cache        = {}
     _bySource_cache   = {}
     _light_meta_cache = {}
@@ -982,6 +1017,7 @@ function Repo.invalidateWalkCache()
     -- Negligible production cost to rebuild.
     _normalize_genre_cache = {}
     _normalize_author_cache = {}
+    _normalize_lang_cache  = {}
     -- Force getBookInfoMgr to re-resolve via require on its next call. In
     -- production this is a no-op cost (require's own cache returns the same
     -- module instantly), but it lets tests that swap the bookinfomanager
@@ -996,6 +1032,7 @@ function Repo.invalidateSeriesCache()
     _genres_cache     = {}
     _formats_cache    = {}
     _ratings_cache    = {}
+    _languages_cache  = {}
     _light_meta_cache = {}
 end
 
@@ -1138,6 +1175,7 @@ function Repo.invalidateBookCache(reason)
     _genres_cache     = {}
     _formats_cache    = {}
     _ratings_cache    = {}
+    _languages_cache  = {}
     _all_cache        = {}
     _bySource_cache   = {}
     if logger and logger.dbg then
@@ -1412,7 +1450,7 @@ local function _loadBatchBookInfoFromBim()
     local conn = bim.db_conn
     if not conn or type(conn.exec) ~= "function" then return nil end
 
-    local sql = "SELECT directory, filename, title, authors, series, series_index, keywords " ..
+    local sql = "SELECT directory, filename, title, authors, series, series_index, keywords, language " ..
                 "FROM bookinfo WHERE in_progress=0;"
     local rows
     local ok, err = pcall(function() rows = conn:exec(sql) end)
@@ -1433,6 +1471,7 @@ local function _loadBatchBookInfoFromBim()
             series       = rows[5][i],
             series_index = rows[6][i],
             keywords     = rows[7][i],
+            language     = rows[8][i],
         }
     end
     return map
@@ -1726,18 +1765,16 @@ end
 -- call site can hand its full shape list to this helper unconditionally.
 local function _filterAllShapes(shapes, filter)
     if not _filterIsActive(filter) then return shapes, #shapes end
-    local ok_lfs, lfs = pcall(require, "libs/libkoreader-lfs")
-    local lfs_attr = ok_lfs and lfs and lfs.attributes or nil
     local out = {}
     for _i, shape in ipairs(shapes) do
         if shape.kind == "book" then
-            local s = _statusForFp(shape.fp, lfs_attr)
+            local s = _statusForFp(shape.fp)
             if filter.statuses[s] then out[#out + 1] = shape end
         elseif shape.kind == "folder" then
             local fpaths = Repo.getFolderBookPaths(shape.path) or {}
             local first_fp
             for i = 1, #fpaths do
-                local s = _statusForFp(fpaths[i], lfs_attr)
+                local s = _statusForFp(fpaths[i])
                 if filter.statuses[s] then
                     first_fp = fpaths[i]
                     break
@@ -2884,6 +2921,29 @@ local function _normalizeAuthor(s)
     return key
 end
 
+local _LANG_UNKNOWN_KEY = "__bookshelf_unknown_lang__"
+
+-- _normalizeLang(s): canonical key for grouping by language. Trims and
+-- lowercases the input, then drops any region/script suffix ("en-US",
+-- "zh_Hans") so library entries that vary only in region collapse into
+-- one card. Full-name forms ("English", "français") stay distinct from
+-- their codes.
+_normalize_lang_cache = {}
+local function _normalizeLang(s)
+    if not s or s == "" then return "" end
+    local cached = _normalize_lang_cache[s]
+    if cached ~= nil then return cached end
+    local lower = s:lower():gsub("^%s+", ""):gsub("%s+$", "")
+    -- "en-US" / "en_US" -> "en". Keep names like "english" untouched.
+    local primary = lower:match("^([^-_]+)")
+    if primary and #primary >= 2 and #primary <= 3
+            and primary:match("^[a-z]+$") then
+        lower = primary
+    end
+    _normalize_lang_cache[s] = lower
+    return lower
+end
+
 -- _normalizeStatus(s): map any raw KOReader status to the bookshelf
 -- vocabulary used by the chip-editor filter UI and the SortEngine.
 -- Repo.readProgress already maps "complete" → "finished" and
@@ -2895,17 +2955,14 @@ _normalizeStatus = function(s)
     return s
 end
 
--- _statusForFp(fp, lfs_attr): canonical bookshelf status for a single
--- filepath. Cheap-path checks for the .sdr sidecar first — a book
--- without a sidecar has never been opened, so its status is "unread"
--- without paying a DocSettings parse. The sidecar check uses
--- lfs_attributes which is one stat call.
-_statusForFp = function(fp, lfs_attr)
+-- _statusForFp(fp): canonical bookshelf status for a single filepath.
+-- Cheap-path checks whether a DocSettings sidecar exists at all — a book
+-- without one has never been opened, so its status is "unread" without paying
+-- a DocSettings parse. _hasSidecar consults the configured metadata location
+-- (#117), so this is correct regardless of where the sidecar lives.
+_statusForFp = function(fp)
     if not fp then return "unread" end
-    if lfs_attr then
-        local sdr = fp:gsub("%.[^.]+$", "") .. ".sdr"
-        if lfs_attr(sdr, "mode") ~= "directory" then return "unread" end
-    end
+    if not _hasSidecar(fp) then return "unread" end
     local _pct, status = Repo.readProgress(fp)
     return _normalizeStatus(status)
 end
@@ -2937,6 +2994,10 @@ local function _buildGroups(group_kind, key_fn, multi)
                 if not multi then keys = { keys } end
                 for _i, raw_k in ipairs(keys) do
                     if raw_k and raw_k ~= "" then
+                        -- For language, resolve the canonical key + friendly
+                        -- label once (carried into the display block below).
+                        local lang_label
+
                         -- Key on the normalised form per group kind:
                         --   genre  → lowercase + simple plural collapse
                         --            ("Mystery" / "mystery" / "Mysteries")
@@ -2950,6 +3011,14 @@ local function _buildGroups(group_kind, key_fn, multi)
                             lookup_k = _normalizeGenre(raw_k)
                         elseif group_kind == "author" then
                             lookup_k = _normalizeAuthor(raw_k)
+                        elseif group_kind == "language" then
+                            if raw_k == _LANG_UNKNOWN_KEY then
+                                lookup_k = _LANG_UNKNOWN_KEY
+                            else
+                                local ck, cl = BookshelfLang.canonical(raw_k)
+                                lookup_k   = ck or _normalizeLang(raw_k)
+                                lang_label = cl
+                            end
                         else
                             lookup_k = raw_k
                         end
@@ -2966,6 +3035,16 @@ local function _buildGroups(group_kind, key_fn, multi)
                                 local fmt = BookshelfSettings.read("author_format") or "auto"
                                 if fmt ~= "auto" then
                                     display_name = _AuthorName_mod.formatted(raw_k, fmt)
+                                end
+                            elseif group_kind == "language" then
+                                if raw_k == _LANG_UNKNOWN_KEY then
+                                    display_name = tr("Unknown")
+                                else
+                                    -- Friendly, localised name from
+                                    -- bookshelf_lang (e.g. "English" for any of
+                                    -- en / eng / en-GB / English). Falls back to
+                                    -- the canonical key if no name resolved.
+                                    display_name = lang_label or lookup_k
                                 end
                             end
                             g = {
@@ -3189,11 +3268,12 @@ function Repo.getGroupChoices(kind)
     local key   = (home or "/") .. ":" .. tostring(depth or 0)
 
     local cache_for_kind = {
-        series = _series_cache,
-        author = _authors_cache,
-        genre  = _genres_cache,
-        format = _formats_cache,
-        rating = _ratings_cache,
+        series   = _series_cache,
+        author   = _authors_cache,
+        genre    = _genres_cache,
+        format   = _formats_cache,
+        rating   = _ratings_cache,
+        language = _languages_cache,
     }
     local store = cache_for_kind[kind]
     if not store then return {} end
@@ -3201,11 +3281,12 @@ function Repo.getGroupChoices(kind)
     -- Ensure the underlying cache is built. limit=0 makes the fetcher's
     -- hydration loop skip while still running the cache-build + sort.
     if not store[key] then
-        if     kind == "series" then Repo.getSeriesGroups(0, 0)
-        elseif kind == "author" then Repo.getAuthors(0, 0)
-        elseif kind == "genre"  then Repo.getGenres(0, 0)
-        elseif kind == "format" then Repo.getFormats(0, 0)
-        elseif kind == "rating" then Repo.getRatings(0, 0)
+        if     kind == "series"   then Repo.getSeriesGroups(0, 0)
+        elseif kind == "author"   then Repo.getAuthors(0, 0)
+        elseif kind == "genre"    then Repo.getGenres(0, 0)
+        elseif kind == "format"   then Repo.getFormats(0, 0)
+        elseif kind == "rating"   then Repo.getRatings(0, 0)
+        elseif kind == "language" then Repo.getLanguages(0, 0)
         end
     end
 
@@ -3307,6 +3388,49 @@ function Repo.getFormats(limit, offset, sort_priority_override, filter, opts)
     return out, total
 end
 
+-- getLanguages: group books by their ebook language metadata. Single-key
+-- per book (a book is filed under exactly one language card).
+-- Books without a language are filed as 'Unknown'
+function Repo.getLanguages(limit, offset, sort_priority_override, filter, opts)
+    local _t0 = _gettime()
+    local home  = G_reader_settings:readSetting("home_dir") or "/"
+    local depth = BookshelfSettings.read("latest_walk_depth") or 3
+    local key   = (home or "/") .. ":" .. tostring(depth or 0)
+    local now   = os.time()
+    local cached = _languages_cache[key]
+    local _hit = cached
+    if not _hit then
+        local list = _buildGroups("language",
+            function(b)
+                local v = b.lang
+                if v == nil or v == "" then return _LANG_UNKNOWN_KEY end
+                return v
+            end, false)
+        _languages_cache[key] = {
+            groups     = _cacheGroupShapes(list, "language"),
+            expires_at = now + SERIES_CACHE_TTL,
+        }
+        cached = _languages_cache[key]
+    end
+    local sk = sort_priority_override or Repo.getSortPriority("languages")
+    local within = _withinPriority(sk)
+    local sorted = {}
+    for _i, s in ipairs(cached.groups) do
+        if _shapeHasFilteredBook(s, filter) then sorted[#sorted + 1] = s end
+    end
+    table.sort(sorted, _groupShapeCmp(sk))
+    local total = #sorted
+    local out   = {}
+    offset      = offset or 0
+    local stop  = math.min(offset + (limit or 8), total)
+    for i = offset + 1, stop do
+        out[#out + 1] = _hydrateGroupShape(sorted[i], within, filter, opts and opts.light_only)
+    end
+    logger.dbg(string.format("[bookshelf perf] getLanguages: %s %.0fms groups=%d/%d",
+        _hit and "HIT" or "MISS", (_gettime() - _t0) * 1000, #out, total))
+    return out, total
+end
+
 -- UTF-8 star characters for the rating group display labels. Used as
 -- the group's series_name so chip + breadcrumb render '★★★★★' etc.
 local _STAR_REPEAT = {
@@ -3332,15 +3456,12 @@ local function _buildRatingGroups()
         local t = entry.time or 0
         if t > (read_time[entry.file] or 0) then read_time[entry.file] = t end
     end
-    local ok_lfs, lfs = pcall(require, "libs/libkoreader-lfs")
-    local lfs_attr = ok_lfs and lfs and lfs.attributes or nil
     local buckets = { [1]={}, [2]={}, [3]={}, [4]={}, [5]={}, unrated={} }
     for _i, c in ipairs(cands) do
         local book = _lightMetaForFp(light_cache, c.fp)
         if book then
             local rating
-            local sdr_path = c.fp:gsub("%.[^.]+$", "") .. ".sdr"
-            if lfs_attr and lfs_attr(sdr_path, "mode") == "directory" then
+            if _hasSidecar(c.fp) then
                 local _p, _s, r = Repo.readProgress(c.fp)
                 rating = r
             end
@@ -3505,18 +3626,20 @@ function Repo.findGroup(kind, name)
     local depth = BookshelfSettings.read("latest_walk_depth") or 3
     local key   = (home or "/") .. ":" .. tostring(depth or 0)
     local cache
-    if     kind == "author" then cache = _authors_cache[key]
-    elseif kind == "series" then cache = _series_cache[key]
-    elseif kind == "genre"  then cache = _genres_cache[key]
-    elseif kind == "format" then cache = _formats_cache[key]
-    elseif kind == "rating" then cache = _ratings_cache[key]
+    if     kind == "author"   then cache = _authors_cache[key]
+    elseif kind == "series"   then cache = _series_cache[key]
+    elseif kind == "genre"    then cache = _genres_cache[key]
+    elseif kind == "format"   then cache = _formats_cache[key]
+    elseif kind == "rating"   then cache = _ratings_cache[key]
+    elseif kind == "language" then cache = _languages_cache[key]
     else return nil end
     if not cache then
-        if     kind == "author" then Repo.getAuthors(0, 0);      cache = _authors_cache[key]
-        elseif kind == "series" then Repo.getSeriesGroups(0, 0); cache = _series_cache[key]
-        elseif kind == "genre"  then Repo.getGenres(0, 0);       cache = _genres_cache[key]
-        elseif kind == "format" then Repo.getFormats(0, 0);      cache = _formats_cache[key]
-        elseif kind == "rating" then Repo.getRatings(0, 0);      cache = _ratings_cache[key]
+        if     kind == "author"   then Repo.getAuthors(0, 0);      cache = _authors_cache[key]
+        elseif kind == "series"   then Repo.getSeriesGroups(0, 0); cache = _series_cache[key]
+        elseif kind == "genre"    then Repo.getGenres(0, 0);       cache = _genres_cache[key]
+        elseif kind == "format"   then Repo.getFormats(0, 0);      cache = _formats_cache[key]
+        elseif kind == "rating"   then Repo.getRatings(0, 0);      cache = _ratings_cache[key]
+        elseif kind == "language" then Repo.getLanguages(0, 0);    cache = _languages_cache[key]
         end
         if not cache then return nil end
     end
@@ -3808,6 +3931,7 @@ function Repo.getBySource(source, filter, sort_priority, offset, limit, opts)
     if kind == "tags"      then return Repo.getTags(limit, offset, sort_priority, filter, opts)    end
     if kind == "formats"   then return Repo.getFormats(limit, offset, sort_priority, filter, opts) end
     if kind == "ratings"   then return Repo.getRatings(limit, offset, sort_priority, filter, opts) end
+    if kind == "languages" then return Repo.getLanguages(limit, offset, sort_priority, filter, opts) end
 
     -- Custom kinds: walk the library and apply a predicate filter.
     -- Results are cached by (source, filter, sort_priority) so pagination
@@ -4035,6 +4159,25 @@ function Repo.getBySource(source, filter, sort_priority, offset, limit, opts)
             candidates = loadCandidatesByPredicate(function(b)
                 return _formatKey(b.filepath) == target
             end)
+        elseif kind == "language" then
+            -- The chip's id is the language card's display label (e.g.
+            -- "English") or, for older paths, a code. Canonicalise it the same
+            -- way book languages are canonicalised so every spelling matches
+            -- (en / eng / en-GB / English -> one key). Mirrors _buildGroups.
+            local raw_id     = source.id or ""
+            local target_key = BookshelfLang.canonical(raw_id)
+            local is_unknown = raw_id == "" or raw_id == _LANG_UNKNOWN_KEY
+                or _normalizeLang(raw_id) == _normalizeLang(tr("Unknown"))
+            if is_unknown or not target_key then
+                candidates = loadCandidatesByPredicate(function(b)
+                    return b.lang == nil or b.lang == ""
+                end)
+            else
+                candidates = loadCandidatesByPredicate(function(b)
+                    if b.lang == nil or b.lang == "" then return false end
+                    return BookshelfLang.canonical(b.lang) == target_key
+                end)
+            end
         elseif kind == "rating" then
             -- source.id is "1".."5" for a star count, or "unrated" / "0".
             -- Predicate fetches the rating lazily via readProgress (with
@@ -4045,12 +4188,9 @@ function Repo.getBySource(source, filter, sort_priority, offset, limit, opts)
             local raw = tostring(source.id or "")
             local target = tonumber(raw)
             if raw == "unrated" or target == 0 then target = nil end
-            local ok_lfs, lfs = pcall(require, "libs/libkoreader-lfs")
-            local lfs_attr = ok_lfs and lfs and lfs.attributes or nil
             candidates = loadCandidatesByPredicate(function(b)
                 if not b._progress_fetched and b.filepath then
-                    local sdr_path = b.filepath:gsub("%.[^.]+$", "") .. ".sdr"
-                    if lfs_attr and lfs_attr(sdr_path, "mode") == "directory" then
+                    if _hasSidecar(b.filepath) then
                         local _p, _s, r = Repo.readProgress(b.filepath)
                         b.rating = r
                     end
@@ -4074,16 +4214,17 @@ function Repo.getBySource(source, filter, sort_priority, offset, limit, opts)
             local active = false
             for _k in pairs(filter.statuses) do active = true; break end
             if active then
-                -- .sdr fast-path: a book with no sidecar has never been opened,
-                -- so it's unread by definition. Stat the .sdr (cheap) before the
-                -- much heavier DocSettings:open() in readProgress, and skip the
-                -- open for unread books. Same guard the rating predicate (above)
-                -- and the sort prefetch (below) already use; this loop was the
-                -- one status path missing it, so a status-filtered chip opened
-                -- every sidecar in the library -- ~28s for one chip on a
-                -- 2400-book library on slow flash (issue #113).
-                local ok_lfs, lfs = pcall(require, "libs/libkoreader-lfs")
-                local lfs_attr = ok_lfs and lfs and lfs.attributes or nil
+                -- Sidecar fast-path: a book with no DocSettings sidecar has
+                -- never been opened, so it's unread by definition. _hasSidecar
+                -- (a stat, no Lua parse) gates the much heavier
+                -- DocSettings:open() in readProgress, skipping the open for
+                -- unread books. Same guard the rating predicate (above) and the
+                -- sort prefetch (below) use; this loop was the one status path
+                -- missing it, so a status-filtered chip opened every sidecar in
+                -- the library -- ~28s for one chip on a 2400-book library on
+                -- slow flash (issue #113). _hasSidecar looks in the configured
+                -- metadata location, so it's also correct for non-default
+                -- "dir"/"hash" storage (issue #117).
                 local kept = {}
                 if filter.statuses["mbr"] then
                     local ok_bl, BookList = pcall(require, "ui/widget/booklist")
@@ -4104,9 +4245,7 @@ function Repo.getBySource(source, filter, sort_priority, offset, limit, opts)
                 for _i, b in ipairs(candidates) do
                     local s = b.read_status or b._status
                     if not s and not b._progress_fetched and b.filepath then
-                        local sdr_path = b.filepath:gsub("%.[^.]+$", "") .. ".sdr"
-                        local has_sdr  = lfs_attr
-                            and lfs_attr(sdr_path, "mode") == "directory"
+                        local has_sdr = _hasSidecar(b.filepath)
                         if has_sdr then
                             local pct, status, rating = Repo.readProgress(b.filepath)
                             b._pct            = pct
@@ -4198,16 +4337,11 @@ function Repo.getBySource(source, filter, sort_priority, offset, limit, opts)
             -- Note: even when sdr exists, Repo.readProgress hits its
             -- _progress_cache (120s TTL) so re-sorts within the same
             -- session are cheap.
-            local ok_lfs, lfs = pcall(require, "libs/libkoreader-lfs")
-            local lfs_attr = ok_lfs and lfs and lfs.attributes or nil
             local _t0 = _gettime()
             local fast_skipped, full_read = 0, 0
             for _i, b in ipairs(candidates) do
                 if not b._progress_fetched and b.filepath then
-                    -- "Foo.epub" -> "Foo.sdr"
-                    local sdr_path = b.filepath:gsub("%.[^.]+$", "") .. ".sdr"
-                    local has_sdr  = lfs_attr
-                        and lfs_attr(sdr_path, "mode") == "directory"
+                    local has_sdr = _hasSidecar(b.filepath)
                     if has_sdr then
                         local pct, status, rating, page_count = Repo.readProgress(b.filepath)
                         b._pct       = pct
