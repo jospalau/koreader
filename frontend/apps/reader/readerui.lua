@@ -549,7 +549,12 @@ function ReaderUI:init()
     -- Need the same event for PDF document
     self:handleEvent(Event:new("ReaderReady", self.doc_settings))
     self.doc_settings:saveSetting("doc_pages", self.document:getPageCount())
-
+    self.doc_settings:saveSetting("summary", summary)
+    self.doc_settings:flush()
+    --self.bookshelf:onBookMetadataChanged()
+    local Repo = require("lib/bookshelf_book_repository")
+    if Repo.invalidateProgressCache then Repo.invalidateProgressCache() end
+    if Repo.invalidateBookCache then Repo.invalidateBookCache("StatusChanged") end
     -- if util.getFileNameSuffix(self.document.file) == "epub" then
     --     -- There is a small delay when manipulating the cover in the coverimage plugin
     --     -- so the start_session_time in the topbar may be shown a bit delayed when opening the document
@@ -1093,7 +1098,11 @@ function ReaderUI:onHome()
                 FileManager.instance.history:sortHistoryByStatus()
                 FileManager.instance.history:onShowHist()
                 -- self.history:onShowHist()
-                UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
+                --UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
+                require("ui/widget/booklist").resetBookInfoCache(file)
+                local Repo = require("lib/bookshelf_book_repository")
+                if Repo.invalidateProgressCache then Repo.invalidateProgressCache() end
+                if Repo.invalidateBookCache then Repo.invalidateBookCache("StatusChanged") end
                 return true
             end,
             choice2_text = _("TBR"),
@@ -1136,7 +1145,10 @@ function ReaderUI:onHome()
                 self:showFileManager(file)
                 FileManager.instance.history:sortHistoryByStatus()
                 FileManager.instance.history:onShowHist()
-                UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
+                local Repo = require("lib/bookshelf_book_repository")
+                --UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
+                if Repo.invalidateProgressCache then Repo.invalidateProgressCache() end
+                if Repo.invalidateBookCache then Repo.invalidateBookCache("StatusChanged") end
             end,
             choice3_text = _("Just exit"),
             choice3_callback = function()
@@ -1147,7 +1159,7 @@ function ReaderUI:onHome()
                     self:onClose()
                     self:showFileManager(file)
                 end
-                UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
+                --UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
                 return true
             end,
             cancel_callback = function()
