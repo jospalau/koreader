@@ -579,16 +579,7 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
     --     FileManager:openFile("resources/Forthcoming_Books.pdf")
     else
         self:onClose()
-        --UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
-        local Repo = require("lib/bookshelf_book_repository")
-        if Repo.invalidateProgressCache then Repo.invalidateProgressCache() end
-        if Repo.invalidateBookCache then Repo.invalidateBookCache("StatusChanged") end
-        --UIManager:nextTick(function()
-        local BookshelfWidget = require("lib/bookshelf_widget")
-        if BookshelfWidget.live then
-            BookshelfWidget.live:softRefresh()
-        end
-        --end)
+        UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
         if require("apps/reader/readerui").instance then
             self.ui.view.topbar:toggleBar()
             UIManager:setDirty(self.ui.view.topbar, "ui")
