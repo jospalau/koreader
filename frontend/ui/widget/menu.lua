@@ -2017,7 +2017,8 @@ function Menu:_buildFooterText()
             if topbar then
                 local stats_year = topbar:getReadThisYearSoFar()
                 if stats_year > 0 then stats_year = "+" .. stats_year end
-                topbar_line = "BDB:" .. topbar:getBooksOpened()
+                topbar_line = topbar:getDateAndVersion()
+                    .. "·BDB:" .. topbar:getBooksOpened()
                     .. "·TR:" .. topbar:getTotalRead() .. "d"
                     .. "·RS:" .. topbar:getReadingStreak() .. "d"
                     .. "·ΔL:" .. stats_year .. "h"
