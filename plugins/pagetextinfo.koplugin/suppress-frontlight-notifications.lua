@@ -1,23 +1,45 @@
--- Suppresses the "Frontlight intensity set to X" and "Warmth set to X"
--- notifications that appear when using gestures to change brightness
--- or warmth. These popups are slow to disappear and redundant when
--- plugins like Bookends already show the value less obtrusively.
-
 local Device = require("device")
 
 if Device:hasFrontlight() then
     local DeviceListener = require("device/devicelistener")
+    local _fl_was_off = nil
 
-    -- Replace onShowIntensity with a no-op so the gesture handler
-    -- (onChangeFlIntensity) still adjusts brightness but stays silent.
     function DeviceListener:onShowIntensity()
+        local powerd = Device:getPowerDevice()
+        local is_off = powerd:isFrontlightOff()
+
+        if is_off and _fl_was_off == false then
+            local Notification = require("ui/widget/notification")
+            local _ = require("gettext")
+            Notification:notify(_("Frontlight off."))
+        elseif not is_off and _fl_was_off == true then
+            local Notification = require("ui/widget/notification")
+            local _ = require("gettext")
+            Notification:notify(_("Frontlight on."))
+        end
+
+        _fl_was_off = is_off
         return true
     end
 
-    -- Replace onShowWarmth with a no-op so the gesture handler
-    -- (onChangeFlWarmth) still adjusts warmth but stays silent.
     if Device:hasNaturalLight() then
+        local _warmth_was_off = nil
+
         function DeviceListener:onShowWarmth()
+            local powerd = Device:getPowerDevice()
+            local is_off = (powerd:frontlightWarmth() == 0)
+
+            if is_off and _warmth_was_off == false then
+                local Notification = require("ui/widget/notification")
+                local _ = require("gettext")
+                Notification:notify(_("Warmth off."))
+            elseif not is_off and _warmth_was_off == true then
+                local Notification = require("ui/widget/notification")
+                local _ = require("gettext")
+                Notification:notify(_("Warmth on."))
+            end
+
+            _warmth_was_off = is_off
             return true
         end
     end
