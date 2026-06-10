@@ -313,6 +313,44 @@ local function getBookAndTodayStats(book_id)
     return total_days, today_pages, today_time, today_pages_all, today_time_all
 end
 
+local function getRecentDaysStats(days_to_show)
+    days_to_show = days_to_show or 30
+    local conn = SQ3.open(stats_db_path)
+    if not conn then return {} end
+
+    local cutoff = os.time() - (days_to_show * 86400)
+    local sql = string.format([[
+        SELECT
+            strftime('%%Y-%%m-%%d', start_time, 'unixepoch', 'localtime') AS day,
+            ROUND(SUM(duration), 0) AS seconds
+        FROM page_stat
+        WHERE start_time > %d
+        GROUP BY day
+        ORDER BY day DESC;
+    ]], cutoff)
+
+    local ok, result = pcall(conn.exec, conn, sql)
+    conn:close()
+
+    if not ok or not result or not result.day then return {} end
+
+    local entries = {}
+    for i = 1, #result.day do
+        local secs = tonumber(result.seconds[i]) or 0
+        if secs > 0 then
+            local y = tonumber(result.day[i]:sub(1,4))
+            local m = tonumber(result.day[i]:sub(6,7))
+            local d = tonumber(result.day[i]:sub(9,10))
+            local ts = os.time({ year=y, month=m, day=d, hour=0, min=0, sec=0 })
+            table.insert(entries, {
+                label = os.date("%d/%m", ts),
+                hours = math.floor(secs / 3600 * 10) / 10,
+            })
+        end
+    end
+    return entries
+end
+
 -- TOC cache: single entry keyed by book_id, validated against total page count.
 local _toc_cache     = {}   -- [book_id] = entry table, or false on parse failure
 local _toc_cache_key = nil  -- book_id of the single cached entry
@@ -917,6 +955,44 @@ local function buildSections(stats, fonts, layout, popup)
         dimen      = Geom:new{ w = layout.full_width, h = Size.line.thick },
         background = Blitbuffer.COLOR_BLACK,
     })
+
+    local ScrollableContainer = require("ui/widget/container/scrollablecontainer")
+
+    local day_entries = getRecentDaysStats(30)
+    if #day_entries > 0 then
+        local row_h = Screen:scaleBySize(28)
+        local lines = VerticalGroup:new{ align = "left" }
+        for _, entry in ipairs(day_entries) do
+            local time_data = { value = formatNumber(entry.hours, 1) .. "h", unit = entry.label }
+            local line = buildValueLine(fonts.value, fonts.label, layout.col_width, time_data, "")
+            table.insert(lines, LeftContainer:new{
+                dimen = Geom:new{ w = layout.col_width, h = row_h },
+                line,
+            })
+        end
+
+        local visible_rows  = math.min(5, #day_entries)
+        local scroll_height = visible_rows * row_h
+
+        local scrollable = ScrollableContainer:new{
+            dimen       = Geom:new{ w = layout.full_width - 2 * layout.padding_h, h = scroll_height },
+            show_parent = popup,
+            lines,
+        }
+
+        table.insert(sections, padded(layout.padding_h, LineWidget:new{
+            dimen      = Geom:new{ w = layout.full_width - 2 * layout.padding_h, h = Size.line.thick },
+            background = Blitbuffer.COLOR_GRAY,
+        }))
+        table.insert(sections, buildSectionHeader(fonts.section, _("Last days"), layout.full_width))
+        table.insert(sections, VerticalSpan:new{ height = Size.padding.default })
+        table.insert(sections, padded(layout.padding_h, LineWidget:new{
+            dimen      = Geom:new{ w = layout.full_width - 2 * layout.padding_h, h = Size.line.thin },
+            background = Blitbuffer.COLOR_GRAY,
+        }))
+        table.insert(sections, padded(layout.padding_h, scrollable))
+        table.insert(sections, VerticalSpan:new{ height = Size.padding.large })
+    end
     return sections
 end
 
