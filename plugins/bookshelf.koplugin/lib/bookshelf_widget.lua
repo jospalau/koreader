@@ -4088,7 +4088,7 @@ end
 function BookshelfWidget:_needsReaderReturnShelfRefresh()
     if #self._drilldown_path > 0 then return false end
     local chip = self.chip
-    if chip == "recent" then return true end
+    if chip == "recent" then return false end
     if chip == "latest" then return false end
     if chip == "favorites" then
         return Repo.getSortKey("favorites") == "recently_read"
@@ -4103,6 +4103,16 @@ function BookshelfWidget:_needsReaderReturnShelfRefresh()
     if chip == "series" or chip == "authors"
        or chip == "genres" or chip == "tags" then
         return Repo.getSortKey(chip) == "latest_read"
+    end
+    -- Custom tabs with a status filter: membership can only change if
+    -- the just-closed book's status changed (tbr/mbr depend on history,
+    -- not on closing a book). Safe to skip the shelf swap.
+    local TabModel = require("lib/bookshelf_tab_model")
+    local tab = TabModel.getById(chip)
+    if tab and tab.filter and tab.filter.statuses then
+        local has_mbr = tab.filter.statuses["mbr"]
+        local has_tbr = tab.filter.statuses["tbr"]
+        if has_mbr or has_tbr then return false end
     end
     -- Unknown chip: refresh to be safe.
     return true
