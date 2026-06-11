@@ -314,11 +314,10 @@ local function getBookAndTodayStats(book_id)
 end
 
 local function getRecentDaysStats(days_to_show)
-    days_to_show = days_to_show or 30
+    days_to_show = days_to_show or 10
     local conn = SQ3.open(stats_db_path)
     if not conn then return {} end
 
-    local cutoff = os.time() - (days_to_show * 86400)
     local sql = string.format([[
         SELECT
             strftime('%%Y-%%m-%%d', start_time, 'unixepoch', 'localtime') AS day,
@@ -326,8 +325,9 @@ local function getRecentDaysStats(days_to_show)
         FROM page_stat
         WHERE start_time > %d
         GROUP BY day
-        ORDER BY day DESC;
-    ]], cutoff)
+        ORDER BY day DESC
+        LIMIT %d;
+    ]], os.time() - (180 * 86400), days_to_show * 2)
 
     local ok, result = pcall(conn.exec, conn, sql)
     conn:close()
@@ -337,15 +337,17 @@ local function getRecentDaysStats(days_to_show)
     local entries = {}
     for i = 1, #result.day do
         local secs = tonumber(result.seconds[i]) or 0
-        if secs > 0 then
+        local hours = math.floor(secs / 3600 * 10) / 10
+        if hours > 0 then
             local y = tonumber(result.day[i]:sub(1,4))
             local m = tonumber(result.day[i]:sub(6,7))
             local d = tonumber(result.day[i]:sub(9,10))
             local ts = os.time({ year=y, month=m, day=d, hour=0, min=0, sec=0 })
             table.insert(entries, {
                 label = os.date("%d/%m", ts),
-                hours = math.floor(secs / 3600 * 10) / 10,
+                hours = hours,
             })
+            if #entries >= days_to_show then break end
         end
     end
     return entries
@@ -956,41 +958,35 @@ local function buildSections(stats, fonts, layout, popup)
         background = Blitbuffer.COLOR_BLACK,
     })
 
-    local ScrollableContainer = require("ui/widget/container/scrollablecontainer")
-
-    local day_entries = getRecentDaysStats(30)
+    local day_entries = getRecentDaysStats(10)
     if #day_entries > 0 then
-        local row_h = Screen:scaleBySize(28)
-        local lines = VerticalGroup:new{ align = "left" }
-        for _, entry in ipairs(day_entries) do
-            local time_data = { value = formatNumber(entry.hours, 1) .. "h", unit = entry.label }
-            local line = buildValueLine(fonts.value, fonts.label, layout.col_width, time_data, "")
-            table.insert(lines, LeftContainer:new{
-                dimen = Geom:new{ w = layout.col_width, h = row_h },
-                line,
-            })
+        local rows = VerticalGroup:new{ align = "left" }
+        local half = math.ceil(#day_entries / 2)
+        for i = 1, half do
+            local left_entry  = day_entries[i]
+            local right_entry = day_entries[i + half]
+
+            local left_data  = { value = formatNumber(left_entry.hours, 1) .. "h", unit = left_entry.label }
+            local right_data = right_entry
+                and { value = formatNumber(right_entry.hours, 1) .. "h", unit = right_entry.label }
+                or  emptyValue()
+
+            local left_w  = buildValueLine(fonts.value, fonts.label, layout.col_width, left_data,  "")
+            local right_w = buildValueLine(fonts.value, fonts.label, layout.col_width, right_data, "")
+            table.insert(rows, buildTwoColRow(left_w, right_w, layout))
+            table.insert(rows, VerticalSpan:new{ height = Size.padding.small })
+            i = i + 1
         end
 
-        local visible_rows  = math.min(5, #day_entries)
-        local scroll_height = visible_rows * row_h
-
-        local scrollable = ScrollableContainer:new{
-            dimen       = Geom:new{ w = layout.full_width - 2 * layout.padding_h, h = scroll_height },
-            show_parent = popup,
-            lines,
-        }
-
-        table.insert(sections, padded(layout.padding_h, LineWidget:new{
-            dimen      = Geom:new{ w = layout.full_width - 2 * layout.padding_h, h = Size.line.thick },
-            background = Blitbuffer.COLOR_GRAY,
-        }))
-        table.insert(sections, buildSectionHeader(fonts.section, _("Last days"), layout.full_width))
+        table.insert(sections, VerticalSpan:new{ height = Size.padding.large })
+        table.insert(sections, buildSectionHeader(fonts.section, _("Last read days"), layout.full_width))
         table.insert(sections, VerticalSpan:new{ height = Size.padding.default })
         table.insert(sections, padded(layout.padding_h, LineWidget:new{
             dimen      = Geom:new{ w = layout.full_width - 2 * layout.padding_h, h = Size.line.thin },
             background = Blitbuffer.COLOR_GRAY,
         }))
-        table.insert(sections, padded(layout.padding_h, scrollable))
+        table.insert(sections, VerticalSpan:new{ height = Size.padding.large })
+        table.insert(sections, padded(layout.padding_h, rows))
         table.insert(sections, VerticalSpan:new{ height = Size.padding.large })
     end
     return sections
