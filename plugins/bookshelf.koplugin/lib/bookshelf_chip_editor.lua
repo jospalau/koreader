@@ -86,6 +86,11 @@ local SOURCE_SORT_DEFAULTS = {
     latest        = { { key = "date_added",      reverse = true  } },
     favorites     = { { key = "last_opened",     reverse = true  } },
     folder        = { { key = "filename",        reverse = false } },
+    -- Flattened folder (#76): a recursive book list with no folder cards,
+    -- so it sorts like "library" (Home flattened) rather than by filename.
+    folder_flat   = { { key = "author_surname",  reverse = false },
+                      { key = "series_name",     reverse = false },
+                      { key = "series_index",    reverse = false } },
     collection    = { { key = "last_opened",     reverse = true  } },
     tag           = { { key = "last_opened",     reverse = true  } },
     genre         = { { key = "author_surname",  reverse = false },
@@ -152,7 +157,7 @@ local function _applySourceDefaults(draft)
             -- Specific-X sources (folder, single_series, etc.): use the
             -- id as the label, with folder basename special-cased so
             -- long paths don't blow out the chip pill.
-            if draft.source.kind == "folder" then
+            if draft.source.kind == "folder" or draft.source.kind == "folder_flat" then
                 fresh = draft.source.id:match("([^/]+)/?$") or draft.source.id
             else
                 fresh = draft.source.id
@@ -208,6 +213,7 @@ SOURCE_LABEL = {
     favorites     = function() return _("Favourites")         end,
     -- "Specific X" kinds carry an id; the resolver appends it.
     folder        = function() return _("Folder")             end,
+    folder_flat   = function() return _("Folder (flattened)")  end,
     collection    = function() return _("Collection")         end,
     tag           = function() return _("Collection")         end,
     genre         = function() return _("Genre")              end,
@@ -231,7 +237,7 @@ local function _resolveSourceLabel(source)
         -- For folder paths, show the basename to keep the row tidy --
         -- "/mnt/us/Calibre/library/Pratchett" reads worse than "Pratchett".
         local id = source.id
-        if source.kind == "folder" then
+        if source.kind == "folder" or source.kind == "folder_flat" then
             id = id:match("([^/]+)/?$") or id
         end
         return label .. ": " .. id
@@ -951,7 +957,7 @@ function Editor:_pickSource(draft, on_close)
     -- Uses bookshelf_library_modal (ported from bookends) so bookshelf
     -- works standalone. ButtonDialog fallback retained as a safety net
     -- in case the LibraryModal require ever fails.
-    local function pickById(kind, choices, on_pick)
+    local function pickById(kind, choices, on_pick, opts)
         local ok_lm, LibraryModal = pcall(require, "lib/bookshelf_library_modal")
         if ok_lm and LibraryModal and LibraryModal.new then
             local Font          = require("ui/font")
@@ -983,7 +989,7 @@ function Editor:_pickSource(draft, on_close)
             local modal
             modal = LibraryModal:new{
                 config = {
-                    title              = _("Choose ") .. kind,
+                    title              = (opts and opts.title) or (_("Choose ") .. kind),
                     search_placeholder = function() return _("Search\xE2\x80\xA6") end,
                     on_search_submit   = function(q)
                         query = q
@@ -1008,8 +1014,25 @@ function Editor:_pickSource(draft, on_close)
                         UIManager:close(modal)
                         on_pick(item.value)
                     end,
-                    footer_actions = {
-                        {
+                    footer_actions = (function()
+                        -- Extra actions (e.g. the folder picker's "Browse
+                        -- device") sit to the LEFT of Close. Each is wrapped
+                        -- so the modal is torn down before the handler runs --
+                        -- the handler typically opens another widget and
+                        -- shouldn't have to juggle this modal's handle.
+                        local actions = {}
+                        if opts and opts.extra_footer_actions then
+                            for _i, a in ipairs(opts.extra_footer_actions) do
+                                actions[#actions + 1] = {
+                                    label  = a.label,
+                                    on_tap = function()
+                                        UIManager:close(modal)
+                                        a.on_tap()
+                                    end,
+                                }
+                            end
+                        end
+                        actions[#actions + 1] = {
                             label  = _("Close"),
                             -- Signal cancel via nil so the caller can
                             -- reopen the parent picker. Without this, Close
@@ -1019,8 +1042,9 @@ function Editor:_pickSource(draft, on_close)
                                 UIManager:close(modal)
                                 on_pick(nil)
                             end,
-                        },
-                    },
+                        }
+                        return actions
+                    end)(),
                 },
             }
             UIManager:show(modal)
@@ -1036,11 +1060,22 @@ function Editor:_pickSource(draft, on_close)
                 callback = function() on_pick(c.value); UIManager:close(k) end,
             }}
         end
+        if opts and opts.extra_footer_actions then
+            for _i, a in ipairs(opts.extra_footer_actions) do
+                rows[#rows + 1] = {{
+                    text     = a.label,
+                    callback = function() UIManager:close(k); a.on_tap() end,
+                }}
+            end
+        end
         rows[#rows + 1] = {{
             text     = _("Cancel"),
             callback = function() UIManager:close(k); on_pick(nil) end,
         }}
-        k = ButtonDialog:new{ title = _("Choose " .. kind), buttons = rows }
+        k = ButtonDialog:new{
+            title   = (opts and opts.title) or _("Choose " .. kind),
+            buttons = rows,
+        }
         UIManager:show(k)
     end
     -- Built-in shortcuts + working custom kinds.
@@ -1145,18 +1180,65 @@ function Editor:_pickSource(draft, on_close)
     -- subtitle (rendered by pickById's cell renderer) so duplicate basenames
     -- can be disambiguated. The picked path is the source id; getBySource
     -- prefix-matches it against book filepaths.
-    local function open_folder_picker()
+    -- folder_kind is "folder" (tree view, subfolders as cards) or
+    -- "folder_flat" (#76: every book under the path, no folder cards).
+    -- Both share the same picker + Browse-device flow; only the stored
+    -- source kind differs.
+    local function open_folder_picker(folder_kind)
+        folder_kind = folder_kind or "folder"
         local choices = Repo.getFolderChoices() or {}
         UIManager:close(d)
+
+        local function pick_path(picked)
+            draft.source = { kind = folder_kind, id = picked }
+            _applySourceDefaults(draft)
+            on_close()
+        end
+
+        -- "Browse device": KOReader's own folder navigator, unrooted, so any
+        -- folder on the device can back a chip -- including ones outside the
+        -- home folder that getFolderChoices (home-tree + book-bearing only)
+        -- never offers. Folder-only config matches Settings:_pickImageLibraryPath.
+        local function browse_device()
+            local PathChooser = require("ui/widget/pathchooser")
+            local confirmed = false
+            UIManager:show(PathChooser:new{
+                path             = G_reader_settings:readSetting("home_dir") or "/",
+                select_directory = true,
+                select_file      = false,
+                show_files       = false,
+                onConfirm        = function(folder)
+                    confirmed = true
+                    -- Normalise to getFolderChoices' no-trailing-slash id form
+                    -- so both entry points store the path identically.
+                    folder = (folder == "/") and "/" or folder:gsub("/+$", "")
+                    pick_path(folder)
+                end,
+                -- Backing out of the browser without choosing returns to the
+                -- source picker rather than dropping to the shelf -- the
+                -- editor's dialog `d` was already closed when the flat-list
+                -- picker opened, so there's nothing underneath to fall back to.
+                -- close_callback fires on any close, hence the confirmed guard.
+                close_callback   = function()
+                    if not confirmed then
+                        Editor:_pickSource(draft, on_close)
+                    end
+                end,
+            })
+        end
+
         pickById("folder", choices, function(picked)
             if not picked then
                 Editor:_pickSource(draft, on_close)
                 return
             end
-            draft.source = { kind = "folder", id = picked }
-            _applySourceDefaults(draft)
-            on_close()
-        end)
+            pick_path(picked)
+        end, {
+            title = _("Choose folder within home folder"),
+            extra_footer_actions = {
+                { label = _("Browse device\xE2\x80\xA6"), on_tap = browse_device },
+            },
+        })
     end
 
     local function btn(kind_value, label, on_tap)
@@ -1182,15 +1264,21 @@ function Editor:_pickSource(draft, on_close)
             btn("latest",    _("Latest added")),
             btn("favorites", _("\xE2\x98\x85 Favourites")),  -- ★ Favourites
         },
-        -- Row 2: full-library flattened view, full-width (no specific pair)
-        {
-            btn("library",   _("Home (flattened)")),
-        },
-        -- Row 3: folder pair -- Home (folders) browses the tree, the
-        -- specific-picker pins one folder subtree as the chip target.
+        -- Home pair: folders (tree view) on the left, flattened (every book,
+        -- no subfolder cards) on the right.
         {
             btn("all",       _("Home (folders)")),
-            specific_btn("folder", _("Specific folder\xE2\x80\xA6"), open_folder_picker),
+            btn("library",   _("Home (flattened)")),
+        },
+        -- Specific-folder pair (#76): same folder picker + Browse-device
+        -- flow, differing only in render. Left pins a folder subtree as a
+        -- tree (subfolder cards); right flattens it to every book under the
+        -- path with no subfolder cards. Mirrors the Home pair above.
+        {
+            specific_btn("folder", _("Specific folder\xE2\x80\xA6"),
+                function() open_folder_picker("folder") end),
+            specific_btn("folder_flat", _("Flattened folder\xE2\x80\xA6"),
+                function() open_folder_picker("folder_flat") end),
         },
         -- Rows 4+: browse-all on the left, specific-picker on the right
         {
