@@ -407,19 +407,14 @@ function Editor:editTab(tab_id, opts)
 
         local function open_label_dialog()
             local label_dialog
-            -- Build the button row. "Insert icon..." only appears when
-            -- bookends's IconsLibrary is available; without it the row
-            -- collapses to Cancel / OK.
+            local IconsLibrary = require("lib/bookshelf_icons_library")
             local row = {
                 {
                     text     = _("Cancel"),
                     id       = "close",
                     callback = function() UIManager:close(label_dialog) end,
                 },
-            }
-            local ok_il, IconsLibrary = pcall(require, "menu.icons_library")
-            if ok_il and IconsLibrary and IconsLibrary.show then
-                row[#row + 1] = {
+                {
                     text     = _("Insert icon\xE2\x80\xA6"),
                     callback = function()
                         -- Dismiss the on-screen keyboard before showing the
@@ -446,13 +441,14 @@ function Editor:editTab(tab_id, opts)
                         if label_dialog then
                             label_dialog.deny_keyboard_hiding = true
                         end
+                        -- Chip labels render literally (no token
+                        -- expansion), so dynamic %tokens are excluded.
                         IconsLibrary:show(function(glyph)
                             if label_dialog then
                                 label_dialog.deny_keyboard_hiding = false
                             end
-                            -- Insert the glyph at cursor in the InputDialog.
-                            -- KOReader's InputDialog exposes addTextToInput
-                            -- (lifts the bookends_line_editor pattern).
+                            -- Insert the glyph at cursor in the InputDialog
+                            -- via KOReader's InputDialog addTextToInput.
                             if glyph and glyph ~= ""
                                     and label_dialog and label_dialog.addTextToInput then
                                 pcall(function() label_dialog:addTextToInput(glyph) end)
@@ -460,10 +456,10 @@ function Editor:editTab(tab_id, opts)
                             if label_dialog and label_dialog.onShowKeyboard then
                                 pcall(function() label_dialog:onShowKeyboard() end)
                             end
-                        end)
+                        end, { dynamic = false })
                     end,
-                }
-            end
+                },
+            }
             row[#row + 1] = {
                 text             = _("OK"),
                 is_enter_default = true,
@@ -1508,53 +1504,16 @@ function Editor:_pickSortLevel(draft, level_index, on_close)
     }
     UIManager:show(d)
 end
--- _pickIcon -- opens bookends's IconsLibrary if present, otherwise falls back
--- to a small built-in list of useful nerd-font glyphs. Selection writes the
--- glyph (UTF-8 string) into draft.icon; "(none)" clears it.
+-- _pickIcon -- opens the bundled icons library (categorised glyph grid).
+-- Selection writes the glyph (UTF-8 string) into draft.icon. Dynamic
+-- %tokens are excluded: both consumers (chip icons, start menu icons)
+-- render the value literally, with no token expansion.
 function Editor:_pickIcon(draft, on_close)
-    -- Try bookends IconsLibrary first (richer picker with categories)
-    local ok, IconsLibrary = pcall(require, "menu.icons_library")
-    if ok and IconsLibrary and IconsLibrary.show then
-        IconsLibrary:show(function(value)
-            draft.icon = value and value ~= "" and value or nil
-            on_close()
-        end)
-        return
-    end
-    -- Fallback: a curated short list of bookshelf-relevant glyphs.
-    local FALLBACK_ICONS = {
-        { glyph = nil,            label = _("(none)")        },
-        { glyph = "\xE2\x98\x85", label = _("Star")          }, -- ★
-        { glyph = "\xE2\x99\xA5", label = _("Heart")         }, -- ♥
-        { glyph = "\xE2\x9C\x93", label = _("Check")         }, -- ✓
-        { glyph = "\xE2\x96\xB6", label = _("Play")          }, -- ▶
-        { glyph = "\xF0\x9F\x93\x96", label = _("Book")      }, -- 📖
-        { glyph = "\xF0\x9F\x93\x9A", label = _("Books")     }, -- 📚
-        { glyph = "\xF0\x9F\x94\x8D", label = _("Search")    }, -- 🔍
-    }
-    local d
-    local buttons = {}
-    for _i,opt in ipairs(FALLBACK_ICONS) do
-        local prefix = (draft.icon == opt.glyph) and "\xE2\x9C\x93 " or "  "
-        local display = opt.glyph and (opt.glyph .. "  " .. opt.label) or opt.label
-        buttons[#buttons + 1] = {{
-            text     = prefix .. display,
-            callback = function()
-                draft.icon = opt.glyph
-                UIManager:close(d)
-                on_close()
-            end,
-        }}
-    end
-    buttons[#buttons + 1] = {{
-        text     = _("Close"),
-        callback = function() UIManager:close(d); on_close() end,
-    }}
-    d = ButtonDialog:new{
-        title   = _("Chip icon"),
-        buttons = buttons,
-    }
-    UIManager:show(d)
+    local IconsLibrary = require("lib/bookshelf_icons_library")
+    IconsLibrary:show(function(value)
+        draft.icon = value and value ~= "" and value or nil
+        on_close()
+    end, { dynamic = false })
 end
 
 -- Exposed for tests/_test_chip_editor.lua (config tables + the pure
