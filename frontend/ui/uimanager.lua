@@ -602,6 +602,16 @@ function UIManager:setDirty(widget, refreshtype, refreshregion, refreshdither)
     --     print("----")
     -- end
 
+    -- if refreshtype ~= nil and type(refreshtype) ~= "function" then
+    --    local widget_name = widget == "all" and "all"
+    --        or (widget and widget.name)
+    --        or (widget and widget.id)
+    --        or tostring(widget)
+    --    print(string.format("[setDirty] type=%s widget=%s", tostring(refreshtype), tostring(widget_name)))
+    --    print(debug.traceback("", 2))
+    --    print("----")
+    -- end
+
     local widget_name
     if widget then
         widget_name = widget.name or widget.id or tostring(widget)
