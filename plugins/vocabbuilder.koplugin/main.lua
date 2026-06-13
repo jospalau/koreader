@@ -575,6 +575,9 @@ function WordInfoDialog:init()
 
     local buttons = self.update_callback and {{got_it_button, forgot_button, update_button}} or {{reset_button, remove_button}}
 
+    if self.update_callback and self.remove_callback then
+        table.insert(buttons, {remove_button})
+    end
     if self.vocabbuilder and self.vocabbuilder.item.last_due_time then
         table.insert(buttons, {{
             text = _("Undo study status"),
@@ -2150,6 +2153,7 @@ function VocabBuilder:onWordLookedUp(word, title, is_manual)
             got_it_callback = function()
                 DB:gotOrForgot(item, true)
                 DB:batchUpdateItems({ item })
+            end,
             remove_callback = remove,
         }
         UIManager:show(dialog)
