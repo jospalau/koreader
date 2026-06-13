@@ -792,6 +792,11 @@ function LibraryModal:_renderGridArea(content_width, area_height)
     if self.page > total_pages then self.page = total_pages end
     self._total_pages = total_pages -- for swipe-paging bounds
 
+    if total == 0 and self.config.empty_state then
+        local panel = self.config.empty_state(content_width, area_height)
+        if panel then return panel end
+    end
+
     -- Cols: prefer explicit config.grid_cols (avoids the scaleBySize-driven
     -- heuristic, which gets fooled by KOReader's display scale factor and
     -- silently drops to 3 cols when the caller wanted 4). Fall back to a
