@@ -107,16 +107,11 @@ function StartMenu:init()
     self._margin = math.min(
         math.floor(Size.padding.fullscreen * 2 * 0.8),
         math.floor(Screen:getWidth() * 0.03))
-    self._pad      = Screen:scaleBySize(10)
-    self._row_face  = Fonts:getFace("cfont", 18)
-    self._icon_face = Fonts:getFace("cfont", 22)
-    self._icon_col_w = Screen:scaleBySize(30)
-    self._icon_gap   = math.floor(self._pad / 2) -- breathing room icon → label
-    self._row_h     = Screen:scaleBySize(40)
     -- Chrome constants shared by row building and the pagination budget.
     self._focus_border = Screen:scaleBySize(2) -- row margin/border swap
     self._panel_border = Screen:scaleBySize(2) -- panel FrameContainer border
     self._panel_pad    = Screen:scaleBySize(3) -- panel FrameContainer padding
+    self:_applyFontScale()
     self._items    = Model.load()
     self._page     = 1     -- root panel page (panel-internal pagination)
     self._fly_page = 1     -- flyout panel page
@@ -151,9 +146,11 @@ function StartMenu:init()
     -- rendered rows. If nothing is focusable yet (empty menu with no __add)
     -- _focus.entry_id stays nil and the menu opens without a focus ring.
     if self._focus then
-        local first = self:_firstFocusable(self._focus.panel)
-        if first then
-            self._focus.entry_id = first
+        -- Seed at the bottom so the first arrow press moves upward -- matches
+        -- the menu's visual anchor in the bottom corner of the screen.
+        local last = self:_lastFocusable(self._focus.panel)
+        if last then
+            self._focus.entry_id = last
             self:_rebuild_only()
         end
     end
@@ -162,6 +159,22 @@ end
 function StartMenu:_panelWidthBounds()
     local sw = Screen:getWidth()
     return Screen:scaleBySize(180), math.floor(sw * 0.6)
+end
+
+-- Recomputes font-scaled row dimensions and faces from the current setting.
+-- Called from init() and from _build() so live nudge-dialog changes take
+-- effect on the next rebuild without restarting KOReader.
+function StartMenu:_applyFontScale()
+    local pct = Store.read("start_menu_font_scale") or 100
+    local function sc(n) return math.max(1, math.floor(n * pct / 100 + 0.5)) end
+    self._pad      = Screen:scaleBySize(sc(10))
+    self._row_face  = Fonts:getFace("cfont", sc(18))
+    self._icon_face = Fonts:getFace("cfont", sc(22))
+    self._icon_col_w = Screen:scaleBySize(sc(30))
+    self._icon_gap   = math.floor(self._pad / 2) -- breathing room icon → label
+    self._row_h     = Screen:scaleBySize(sc(40))
+    self._chev_nat  = nil -- invalidate cached chevron width
+    self._scale_pct = pct
 end
 
 -- Natural width of the widest row in `entries`, matching _buildRow's layout
@@ -311,14 +324,19 @@ end
 -- A module row: rendered panel (or muted fallback), tappable, holdable.
 -- The content sits on a light-grey rounded card inset from the panel
 -- edges so module panels read as distinct from plain action rows.
-function StartMenu:_buildModuleRow(entry, w, in_flyout)
+function StartMenu:_buildModuleRow(entry, w, focused, in_flyout)
     local def = Modules.get(entry.module)
+    local focus_border = self._focus_border
+    -- Content fits in (w - 2*focus_border) so the margin/border swap keeps
+    -- the row's outer dimen at exactly w regardless of focus state, matching
+    -- the same contract as _buildRow.
+    local inner_w_frame = w - 2 * focus_border
     local card_margin = math.floor(self._pad / 2) -- inset from panel edges
     local card_pad    = self._pad
-    local inner_w     = w - 2 * card_margin - 2 * card_pad
+    local inner_w     = inner_w_frame - 2 * card_margin - 2 * card_pad
     local inner
     if def then
-        local ok, widget = pcall(def.render, inner_w)
+        local ok, widget = pcall(def.render, inner_w, self._scale_pct or 100)
         inner = ok and widget or nil
         if not ok then
             logger.warn("[bookshelf] start menu module render failed:",
@@ -350,18 +368,19 @@ function StartMenu:_buildModuleRow(entry, w, in_flyout)
         padding    = card_pad,
         content,
     }
-    -- Spans pad the row back out to exactly `w` so the row's dimen (and
-    -- tap range) spans the whole panel width, same contract as _buildRow.
+    -- Spans pad the card row out to inner_w_frame so the margin/border swap
+    -- on the outer frame keeps the total row width at exactly w.
     local card_row = HorizontalGroup:new{
         align = "center",
         HorizontalSpan:new{ width = card_margin },
         card,
         HorizontalSpan:new{
-            width = math.max(0, w - card_margin - card:getSize().w),
+            width = math.max(0, inner_w_frame - card_margin - card:getSize().w),
         },
     }
     local frame = FrameContainer:new{
-        bordersize     = 0,
+        bordersize     = focused and focus_border or 0,
+        margin         = focused and 0 or focus_border,
         padding        = 0,
         padding_top    = card_margin,
         padding_bottom = card_margin,
@@ -409,10 +428,10 @@ function StartMenu:_buildPanel(entries, w, folder_id)
         rows[#rows + 1] = { row = row, entry = add_entry }
     end
     for _i, entry in ipairs(entries) do
+        local is_focused = self._focus and self._focus.entry_id == entry.id
         local row = entry.type == "module"
-            and self:_buildModuleRow(entry, w, in_flyout)
-            or  self:_buildRow(entry, w,
-                self._focus and self._focus.entry_id == entry.id, in_flyout)
+            and self:_buildModuleRow(entry, w, is_focused, in_flyout)
+            or  self:_buildRow(entry, w, is_focused, in_flyout)
         vg[#vg + 1] = row
         rows[#rows + 1] = { row = row, entry = entry }
     end
@@ -479,8 +498,8 @@ function StartMenu:_pagerRow(w, has_prev, has_next, on_prev, on_next, is_root)
         return c
     end
     return HorizontalGroup:new{
-        mk("\xE2\x80\xB9", has_prev, on_prev),  -- ‹
-        mk("\xE2\x80\xBA", has_next, on_next),  -- ›
+        mk("\xE2\x86\x91", has_prev, on_prev),  -- ↑
+        mk("\xE2\x86\x93", has_next, on_next),  -- ↓
     }
 end
 
@@ -531,6 +550,7 @@ function StartMenu:_markUnresolved(items)
 end
 
 function StartMenu:_build()
+    self:_applyFontScale()
     self:_markUnresolved(self._items)
     local sw = Screen:getWidth()
     local sh = Screen:getHeight()
@@ -540,10 +560,41 @@ function StartMenu:_build()
     -- so the panel width is stable across page turns.
     local root_w = self:_measurePanelWidth(self._items)
 
-    -- Root panel
-    local slice, has_prev, has_next =
-        self:_pageSlice(self._items, self._page, max_rows)
-    local root_frame, root_rows = self:_buildPanel(slice, root_w)
+    -- Root panel. Module rows render taller than the _row_h budget used by
+    -- _maxRows, so the initial slice may overflow the screen. Reduce max_rows
+    -- by 1 and rebuild until the panel fits, or until max_rows reaches 1.
+    -- The pager row (if active) adds roughly one row_stride to the total, so
+    -- its estimated height is included in the overflow check.
+    local avail_panel_h = sh - self.bottom_inset
+    local slice, has_prev, has_next, root_frame, root_rows
+    repeat
+        slice, has_prev, has_next = self:_pageSlice(self._items, self._page, max_rows)
+        root_frame, root_rows = self:_buildPanel(slice, root_w)
+        local panel_h = root_frame:getSize().h
+        if has_prev or has_next then
+            panel_h = panel_h + self._row_h + 2 * self._focus_border
+        end
+        if panel_h <= avail_panel_h or max_rows <= 1 then break end
+        root_frame:free()
+        max_rows = max_rows - 1
+    until false
+    -- Clamp _page to the range [1, actual_pages] now that the overflow loop has
+    -- determined the effective max_rows. _reload()/_rebuild_only() skip this
+    -- computation because they use the nominal (pre-overflow) max_rows.
+    if max_rows > 1 then
+        local _total = #self._items
+        if _total > max_rows then
+            local _per   = max_rows - 1
+            local _pages = math.max(1, math.ceil(_total / _per))
+            if self._page > _pages then
+                self._page = _pages
+                root_frame:free()
+                slice, has_prev, has_next = self:_pageSlice(self._items, self._page, max_rows)
+                root_frame, root_rows = self:_buildPanel(slice, root_w)
+            end
+        end
+    end
+    self._root_pager = nil
     if has_prev or has_next then
         local sm = self
         -- Paging the root may scroll the open folder's row off the page;
@@ -552,6 +603,7 @@ function StartMenu:_build()
             function() sm._flyout_for = nil; sm._page = sm._page - 1; sm:_reload() end,
             function() sm._flyout_for = nil; sm._page = sm._page + 1; sm:_reload() end,
             true)
+        root_frame[1]._size = nil -- invalidate cached layout; getSize() was called before pager row existed
     end
     self._root_rows = root_rows
     -- Position setting read straight from the store (single source; the
@@ -561,6 +613,25 @@ function StartMenu:_build()
     local root_sz = root_frame:getSize()
     local root_x  = on_right and (sw - self._margin - root_sz.w) or self._margin
     local root_y  = sh - self.bottom_inset - root_sz.h
+    -- Store pager hit region for onTapDismiss routing (backup tap path).
+    -- The pager row sits at the bottom of the panel content; its top is
+    -- root_sz.h minus the panel chrome minus one row_h.
+    if has_prev or has_next then
+        local chrome = self._panel_border + self._panel_pad
+        local sm = self
+        self._root_pager = {
+            region = Geom:new{
+                x = root_x + chrome,
+                y = root_y + root_sz.h - chrome - self._row_h,
+                w = root_w,
+                h = self._row_h,
+            },
+            has_prev = has_prev,
+            has_next = has_next,
+            on_prev = function() sm._flyout_for = nil; sm._page = sm._page - 1; sm:_reload() end,
+            on_next = function() sm._flyout_for = nil; sm._page = sm._page + 1; sm:_reload() end,
+        }
+    end
     local group = OverlapGroup:new{
         dimen = self.dimen:copy(),
         allow_mirroring = false, -- OffsetContainer children self-position
@@ -735,13 +806,9 @@ end
 function StartMenu:_reload()
     local old_region = self._dirty_region
     self._items = Model.load()
-    local max_rows = self:_maxRows()
-    if #self._items <= max_rows then
-        self._page = 1
-    elseif self._page > 1 then
-        local pages = math.max(1, math.ceil(#self._items / (max_rows - 1)))
-        if self._page > pages then self._page = pages end
-    end
+    -- Page clamping is handled in _build() after the overflow loop determines
+    -- the effective max_rows; don't pre-reset here with the nominal value.
+    if self._page < 1 then self._page = 1 end
     if self[1] and self[1].free then self[1]:free() end
     self:_build()
     -- The rebuild can orphan the key-nav focus (focused entry edited away,
@@ -919,16 +986,15 @@ end
 -- ── Key-nav helpers ──────────────────────────────────────────────────────────
 
 -- Returns the list of focusable entries in the named panel ("root"/"flyout")
--- for the CURRENT visible page slice. Module entries are excluded because they
--- have no meaningful "Press to activate" target. The synthetic __add row IS
--- included (it is the only focusable on an empty root panel).
+-- for the CURRENT visible page slice. The synthetic __add row IS included
+-- (it is the only focusable on an empty root panel).
 function StartMenu:_panelEntries(panel)
     local rows = panel == "flyout" and self._flyout_rows or self._root_rows
     if not rows then return {} end
     local out = {}
     for _i, r in ipairs(rows) do
         local e = r.entry
-        if e and e.type ~= "module" then
+        if e then
             out[#out + 1] = e
         end
     end
@@ -961,14 +1027,7 @@ end
 -- updates where the data hasn't changed.
 function StartMenu:_rebuild_only()
     local old_region = self._dirty_region
-    -- clamp pages (same logic as _reload)
-    local max_rows = self:_maxRows()
-    if #self._items <= max_rows then
-        self._page = 1
-    elseif self._page > 1 then
-        local pages = math.max(1, math.ceil(#self._items / (max_rows - 1)))
-        if self._page > pages then self._page = pages end
-    end
+    if self._page < 1 then self._page = 1 end
     if self[1] and self[1].free then self[1]:free() end
     self:_build()
     local region = self._dirty_region:copy()
@@ -1184,6 +1243,18 @@ function StartMenu:onTapDismiss(_arg, ges)
         return true
     end
     if in_root then
+        -- Pager row (backup tap handler): route taps on the pager area even
+        -- if the InputContainer ges_events path didn't fire.
+        local pg = self._root_pager
+        if pg and p:intersectWith(pg.region) then
+            local mid = pg.region.x + pg.region.w / 2
+            if p.x < mid then
+                if pg.has_prev then pg.on_prev() end
+            else
+                if pg.has_next then pg.on_next() end
+            end
+            return true
+        end
         if self._flyout_for then
             self:_toggleFlyout(self._flyout_for)
         end
