@@ -1359,7 +1359,12 @@ function UIManager:_repaint()
             refresh.dither = nil
         end
         dbg:v("triggering refresh", refresh)
-
+        -- print(string.format("[REFRESH] mode=%s x=%d y=%d w=%d h=%d",
+        -- tostring(refresh.mode),
+        -- refresh.region.x, refresh.region.y,
+        -- refresh.region.w, refresh.region.h))
+        -- print(debug.traceback("", 2))
+        -- print("----")
         --[[
         -- Remember the refresh region
         self._last_refresh_region = refresh.region:copy()
@@ -1368,7 +1373,6 @@ function UIManager:_repaint()
             refresh.region.x, refresh.region.y,
             refresh.region.w, refresh.region.h,
             refresh.dither)
-        -- print("paso   " .. refresh.mode)
     end
 
     -- Don't trigger afterPaint if we did not, in fact, paint anything
