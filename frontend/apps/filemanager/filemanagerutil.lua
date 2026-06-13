@@ -270,6 +270,7 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                 caller_callback(file, to_status)
                 local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
                 ui.history:sortHistoryByStatus()
+                _G.history_status_changed = true
                 if ui and ui.history and ui.history.booklist_menu then
                     ui.history:fetchStatuses(false)
                     ui.history:updateItemTable()

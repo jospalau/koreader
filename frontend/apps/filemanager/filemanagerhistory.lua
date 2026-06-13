@@ -296,6 +296,7 @@ function FileManagerHistory:onMenuHold(item)
             enabled = item.idx and item.idx > 1,
 
             callback = function()
+                _G.history_status_changed = true
                 UIManager:close(self.file_dialog)
                 local ReadHistory = require("readhistory")
                 local items = ReadHistory.hist or {}
@@ -320,6 +321,7 @@ function FileManagerHistory:onMenuHold(item)
             text = _(right_down),
             enabled = item.idx and require("readhistory").hist and item.idx < #require("readhistory").hist and not is_being_read,
             callback = function()
+                _G.history_status_changed = true
                 UIManager:close(self.file_dialog)
                 local ReadHistory = require("readhistory")
                 local items = ReadHistory.hist or {}
@@ -578,8 +580,11 @@ function FileManagerHistory:onMultiSwipe(arg, ges_ev)
     --     local FileManager = require("apps/filemanager/filemanager")
     --     FileManager:openFile("resources/Forthcoming_Books.pdf")
     else
+        if _G.history_status_changed then
+            UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
+            _G.history_status_changed = false
+        end
         self:onClose()
-        UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
         if require("apps/reader/readerui").instance then
             self.ui.view.topbar:toggleBar()
             UIManager:setDirty(self.ui.view.topbar, "ui")
