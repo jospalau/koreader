@@ -46,6 +46,22 @@ local CHEVRON_RIGHT = "\xEE\xA1\x81" -- U+E841 mdi-chevron-right (used by book m
 local FOLDER_ICON      = "\xEE\xA5\x8A" -- U+E94A mdi-folder
 local FOLDER_ICON_OPEN = "\xEE\xB9\xAE" -- U+EE6E mdi-folder-open (flyout open)
 
+-- Drop shadow matching the shelf cover cards (bookshelf_spine_widget) but at
+-- HALF their distance: same mode-aware grey and the panel's own corner radius,
+-- offset down-right so the popup casts the same shadow the covers do. The grey
+-- is mode-aware because KOReader inverts the framebuffer in night mode, so a
+-- fixed mid-grey would read as a bright halo there (see the spine widget for
+-- the full rationale). Covers offset by scaleBySize(4); half = scaleBySize(2).
+local PANEL_SHADOW_DIST  = Screen:scaleBySize(2)
+local PANEL_SHADOW_DAY   = Blitbuffer.gray(0.5)
+local PANEL_SHADOW_NIGHT = Blitbuffer.gray(0.15)
+local function _panelShadowGray()
+    if G_reader_settings and G_reader_settings:isTrue("night_mode") then
+        return PANEL_SHADOW_NIGHT
+    end
+    return PANEL_SHADOW_DAY
+end
+
 -- Rounded panel frame. Stock FrameContainer paints its background fill and
 -- its border with arcs of DIFFERENT centers when both radius and bordersize
 -- are set (framecontainer.lua adds bordersize to the fill radius), leaving a
@@ -58,6 +74,7 @@ local PanelFrame = WidgetContainer:extend{
     padding    = 0,
     radius     = 0,
     margin     = 0, -- consumers read frame.margin (FrameContainer parity)
+    shadow     = 0, -- drop-shadow distance; 0 = none
 }
 function PanelFrame:getSize()
     local s = self[1]:getSize()
@@ -68,6 +85,12 @@ function PanelFrame:paintTo(bb, x, y)
     local sz = self:getSize()
     self.dimen = Geom:new{ x = x, y = y, w = sz.w, h = sz.h }
     local t = self.bordersize
+    if self.shadow and self.shadow > 0 then
+        -- Painted first, under the panel; the panel's opaque fill overpaints
+        -- all but the down-right strip, leaving the cover-style drop shadow.
+        bb:paintRoundedRect(x + self.shadow, y + self.shadow, sz.w, sz.h,
+            _panelShadowGray(), self.radius)
+    end
     bb:paintRoundedRect(x, y, sz.w, sz.h, Blitbuffer.COLOR_BLACK, self.radius)
     bb:paintRoundedRect(x + t, y + t, sz.w - 2 * t, sz.h - 2 * t,
         Blitbuffer.COLOR_WHITE, math.max(0, self.radius - t))
@@ -113,8 +136,12 @@ function StartMenu:init()
     self._panel_pad    = Screen:scaleBySize(3) -- panel FrameContainer padding
     self:_applyFontScale()
     self._items    = Model.load()
-    self._page     = 1     -- root panel page (panel-internal pagination)
-    self._fly_page = 1     -- flyout panel page
+    -- Open on the LAST page (the menu is anchored bottom-left, so the final
+    -- rows sit by the thumb). Seeding the page past the end makes the first
+    -- build clamp it to the real last page; _build runs once per open, so this
+    -- is the open-time default and edits/reloads keep the page.
+    self._page     = #self._items -- root panel page (panel-internal pagination)
+    self._fly_page = 1            -- flyout panel page (folders open at top)
     self._flyout_for = nil -- id of the open folder, or nil
     self._focus    = nil   -- key-nav focus { panel, entry_id }; set when hasDPad
     if Device:isTouchDevice() then
@@ -203,9 +230,15 @@ function StartMenu:_measurePanelWidth(entries)
     local min_w, max_w = self:_panelWidthBounds()
     -- Reserve the chevron slot for the whole panel when ANY entry is a
     -- folder (all rows share one fixed width).
-    local has_folder = false
+    local has_folder, has_module = false, false
     for _i, e in ipairs(entries) do
-        if e.type == "folder" then has_folder = true; break end
+        if e.type == "folder" then has_folder = true end
+        if e.type == "module" then has_module = true end
+    end
+    -- Micro-modules render at the panel width; give a panel that contains one
+    -- a floor 25% above the plain-row minimum so modules get more room.
+    if has_module then
+        min_w = math.min(max_w, math.floor(min_w * 1.25))
     end
     local chrome = self:_rowChromeWidth(has_folder)
     local max_natural = 0
@@ -439,6 +472,7 @@ function StartMenu:_buildPanel(entries, w, folder_id)
         bordersize = self._panel_border,
         padding    = self._panel_pad,
         radius     = Screen:scaleBySize(4), -- bookshelf's card radius (CARD_RADIUS)
+        shadow     = PANEL_SHADOW_DIST,
         vg,
     }
     return frame, rows
@@ -456,16 +490,27 @@ function StartMenu:_maxRows()
 end
 
 -- Panel-internal pagination: slice entries to what fits the height budget.
+-- Pages are tiled from the BOTTOM, so any short remainder lands on page 1 (the
+-- top) and every lower page is full. The menu opens on the last page (see
+-- init), so its first view is a full page rather than a 1-2 item remainder.
 function StartMenu:_pageSlice(entries, page, max_rows)
     local total = #entries
     if total <= max_rows then return entries, false, false end
-    local per = max_rows - 1 -- reserve one row slot for the pager
-    local first = (page - 1) * per + 1
+    local per   = max_rows - 1 -- reserve one row slot for the pager
+    local pages = math.ceil(total / per)
+    local rem   = total - (pages - 1) * per -- size of page 1 (top), in 1..per
+    local first, last
+    if page <= 1 then
+        first, last = 1, rem
+    else
+        first = rem + (page - 2) * per + 1
+        last  = math.min(first + per - 1, total)
+    end
     local out = {}
-    for i = first, math.min(first + per - 1, total) do
+    for i = first, last do
         out[#out + 1] = entries[i]
     end
-    return out, first > 1, first + per - 1 < total
+    return out, first > 1, last < total
 end
 
 -- is_root: root-panel pagers decline taps that land inside the open flyout's
@@ -566,33 +611,43 @@ function StartMenu:_build()
     -- The pager row (if active) adds roughly one row_stride to the total, so
     -- its estimated height is included in the overflow check.
     local avail_panel_h = sh - self.bottom_inset
-    local slice, has_prev, has_next, root_frame, root_rows
-    repeat
+    -- Module rows render taller than the _row_h estimate _maxRows uses, so the
+    -- first build may overflow. Rather than decrement max_rows by 1 and rebuild
+    -- repeatedly (each rebuild re-renders every module), build ONCE, then if it
+    -- overflows use the MEASURED row heights to pick how many bottom rows fit
+    -- and rebuild ONCE at that count. Worst case two builds, not ~N.
+    local function _overflows(frame, hp, hn)
+        local h = frame:getSize().h
+        if hp or hn then h = h + self._row_h + 2 * self._focus_border end
+        return h > avail_panel_h
+    end
+    local slice, has_prev, has_next = self:_pageSlice(self._items, self._page, max_rows)
+    local root_frame, root_rows = self:_buildPanel(slice, root_w)
+    local need_rebuild = false
+    if max_rows > 1 and _overflows(root_frame, has_prev, has_next) then
+        -- Sum measured row heights from the bottom (the panel is bottom-
+        -- anchored), reserving the pager slot, to find how many rows fit.
+        local chrome = 2 * (self._panel_border + self._panel_pad)
+        local budget = avail_panel_h - chrome - (self._row_h + 2 * self._focus_border)
+        local acc, fit = 0, 0
+        for i = #root_rows, 1, -1 do
+            acc = acc + root_rows[i].row:getSize().h
+            if acc > budget then break end
+            fit = fit + 1
+        end
+        local new_max = math.max(2, fit + 1) -- +1: _pageSlice reserves a pager row
+        if new_max < max_rows then max_rows = new_max; need_rebuild = true end
+    end
+    -- Clamp the scroll offset to the final max_rows (bottom-seeded _page).
+    if max_rows > 1 then
+        local _per   = math.max(1, max_rows - 1)
+        local _pages = math.max(1, math.ceil(#self._items / _per))
+        if self._page > _pages then self._page = _pages; need_rebuild = true end
+    end
+    if need_rebuild then
+        root_frame:free()
         slice, has_prev, has_next = self:_pageSlice(self._items, self._page, max_rows)
         root_frame, root_rows = self:_buildPanel(slice, root_w)
-        local panel_h = root_frame:getSize().h
-        if has_prev or has_next then
-            panel_h = panel_h + self._row_h + 2 * self._focus_border
-        end
-        if panel_h <= avail_panel_h or max_rows <= 1 then break end
-        root_frame:free()
-        max_rows = max_rows - 1
-    until false
-    -- Clamp _page to the range [1, actual_pages] now that the overflow loop has
-    -- determined the effective max_rows. _reload()/_rebuild_only() skip this
-    -- computation because they use the nominal (pre-overflow) max_rows.
-    if max_rows > 1 then
-        local _total = #self._items
-        if _total > max_rows then
-            local _per   = max_rows - 1
-            local _pages = math.max(1, math.ceil(_total / _per))
-            if self._page > _pages then
-                self._page = _pages
-                root_frame:free()
-                slice, has_prev, has_next = self:_pageSlice(self._items, self._page, max_rows)
-                root_frame, root_rows = self:_buildPanel(slice, root_w)
-            end
-        end
     end
     self._root_pager = nil
     if has_prev or has_next then
@@ -637,8 +692,9 @@ function StartMenu:_build()
         allow_mirroring = false, -- OffsetContainer children self-position
         OffsetContainer:new{ x_off = root_x, y_off = root_y, root_frame },
     }
+    -- Include the down-right drop shadow so scoped refreshes clear it too.
     self._root_region = Geom:new{ x = root_x, y = root_y,
-        w = root_sz.w, h = root_sz.h }
+        w = root_sz.w + PANEL_SHADOW_DIST, h = root_sz.h + PANEL_SHADOW_DIST }
 
     -- Flyout panel
     self._flyout_region = nil
@@ -718,7 +774,7 @@ function StartMenu:_build()
             group[#group + 1] = OffsetContainer:new{
                 x_off = fly_x, y_off = fly_y, fly_frame }
             self._flyout_region = Geom:new{ x = fly_x, y = fly_y,
-                w = fly_sz.w, h = fly_sz.h }
+                w = fly_sz.w + PANEL_SHADOW_DIST, h = fly_sz.h + PANEL_SHADOW_DIST }
         else
             self._flyout_for = nil
         end
