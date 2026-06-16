@@ -33,30 +33,37 @@ function UIFont:getSetting() return G_reader_settings:readSetting(self.setting.n
 function UIFont:setSetting(value) G_reader_settings:saveSetting(self.setting.name, value) end
 
 function UIFont:init()
-    local path_exists = {}
-    -- stylua: ignore
-    for _, font in ipairs(FontList.fontlist) do path_exists[font] = true end
-
     self.font_list = {}
     self.fonts = {}
-    for _, name in ipairs(cre.getFontFaces()) do
-        local path_regular = cre.getFontFaceFilenameAndFaceIndex(name)
-        local path_bold = get_bold_path(path_regular)
-        if path_exists[path_regular] and path_exists[path_bold] then
-            table.insert(self.font_list, name)
-            self.fonts[name] = {
-                regular = path_regular:match("([^/]+)$"),  -- filename only, not full path
-                bold = path_bold:match("([^/]+)$"),        -- Font:getFace prepends FontList.fontdir
-            }
+
+    local path_exists = {}
+    for _, font in ipairs(FontList.fontlist) do path_exists[font] = true end
+
+    local seen = {}
+    for _, path in ipairs(FontList.fontlist) do
+        if path:find("%-Regular%.[ot]tf$") then
+            local bold = path:gsub("%-Regular%.", "-Bold.")
+            if path_exists[bold] then
+                local filename = path:match("([^/]+)$")
+                local family = filename:gsub("%-Regular%.[ot]tf$", "")
+                family = family:gsub("(%l)(%u)", "%1 %2")
+                if not seen[family] then
+                    seen[family] = true
+                    table.insert(self.font_list, family)
+                    self.fonts[family] = {
+                        regular = filename,
+                        bold    = bold:match("([^/]+)$"),
+                    }
+                end
+            end
         end
     end
+    table.sort(self.font_list)
 
     local type_font = {}
     self.to_be_replaced = {}
-    -- stylua: ignore start
     for typ, font in pairs(self.font_type) do type_font[font] = typ end
     for name, font in pairs(Font.fontmap) do self.to_be_replaced[name] = type_font[font] end
-    -- stylua: ignore end
 
     self:setFont()
 end
