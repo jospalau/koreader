@@ -103,7 +103,6 @@ function ReaderView:init()
         saved_drawer = "lighten",
         -- NOTE: Unfortunately, yellow tends to look like absolute ass on Kaleido panels...
         saved_color = Screen:isColorEnabled() and "yellow" or "gray",
-        indicator = nil, -- geom: non-touch highlight position indicator: {x = 50, y=50}
     }
     self.page_states = {}
     self.page_gap = {
@@ -262,10 +261,6 @@ function ReaderView:paintTo(bb, x, y)
     -- draw temporary highlight
     if self.highlight.temp and next(self.highlight.temp) then
         self:drawTempHighlight(bb, x, y)
-    end
-    -- draw highlight position indicator for non-touch
-    if self.highlight.indicator then
-        self:drawHighlightIndicator(bb, x, y)
     end
     -- paint footer
     if self.footer_visible then
@@ -702,23 +697,6 @@ function ReaderView:drawScrollView(bb, x, y)
         y + self.state.offset.y,
         self.visible_area,
         self.state.pos)
-end
-
-function ReaderView:drawHighlightIndicator(bb, x, y)
-    local rect = self.highlight.indicator
-    -- paint big cross line +
-    bb:paintRect(
-        rect.x,
-        rect.y + rect.h / 2 - Size.border.thick / 2,
-        rect.w,
-        Size.border.thick
-    )
-    bb:paintRect(
-        rect.x + rect.w / 2 - Size.border.thick / 2,
-        rect.y,
-        Size.border.thick,
-        rect.h
-    )
 end
 
 function ReaderView:drawTempHighlight(bb, x, y)
