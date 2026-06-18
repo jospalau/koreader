@@ -72,7 +72,13 @@ function M.getUIFontFace()
     if v == nil or v == M.FOLLOW or v == "" then return nil end
     if _ui_face_checked ~= v then
         _ui_face_checked = v
-        _ui_face_ok = Font:getFace(v) ~= nil
+        -- A size is MANDATORY here. Font:getFace with no size falls back to
+        -- self.sizemap[face], which is nil for an arbitrary UI face name, so
+        -- font.lua then does Screen:scaleBySize(nil) and crashes ("arithmetic
+        -- on px (nil)", framebuffer.lua) -- which took down every fresh install
+        -- whose seeded UI font can't load (issue #175, a regression from the
+        -- issue #168 probe). The size value itself is irrelevant to a load check.
+        _ui_face_ok = Font:getFace(v, 16) ~= nil
     end
     return _ui_face_ok and v or nil
 end
@@ -219,6 +225,16 @@ function M.maybeSeedFreshInstall()
     if not Settings.wasPresent() then            -- no prior settings file => fresh install
         Settings.save(M.SETTING_KEY, M.bundledFaceId("Roboto Condensed"))
         Settings.save("author_format", "first_last")
+        -- Flexible chip widths by default: chips size to their label instead of
+        -- equal-share, so the bar (now carrying the micro-modules chip) doesn't
+        -- crowd and truncate names (issue #176). New installs only -- existing
+        -- users keep whatever they have (chip_flex_widths unset = equal-share).
+        Settings.save("chip_flex_widths", true)
+        -- Micro-modules default to the full-screen footer button rather than the
+        -- in-hero chip: it declutters the chip bar (#176) and reads better. New
+        -- installs only -- existing users keep their placement (unset -> "hero"
+        -- via Store.microPlacement, the prior behaviour).
+        Settings.save("micro_modules_placement", "fullscreen")
         local ok, Regions = pcall(require, "lib/bookshelf_hero_regions")
         if ok and Regions and Regions.applyFreshInstallDefaults then
             Regions.applyFreshInstallDefaults()
