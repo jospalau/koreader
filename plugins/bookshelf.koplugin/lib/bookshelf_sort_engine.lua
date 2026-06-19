@@ -444,6 +444,12 @@ SortEngine.KEYS = {
                         comparator = function(a, b)
                             return cmp(a.pub_date, b.pub_date)
                         end },
+    -- Book record: a.modified_date (modified date; nil = unknown)
+    modified_date        = { label = tr("Modified date"), short = tr("Mod. date"),
+                        comparator = function(a, b)
+                            return cmp(b.modified_date, a.modified_date)
+                        end },
+
 }
 
 -- ORDER used to surface keys in the picker UI later. Sorted by perceived

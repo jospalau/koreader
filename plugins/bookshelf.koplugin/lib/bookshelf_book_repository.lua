@@ -338,6 +338,20 @@ local function _calibreMetadataFor(filepath)
     return map[filepath]
 end
 
+-- getModifiedDate(filepath): "YYYY-MM-DD" si el libro está marcado como
+-- terminado en _G.all_files (poblado por filemanagermenu.lua, sin coste de
+-- DocSettings:open()), o nil si no está terminado / no hay dato.
+local function getModifiedDate(filepath)
+    local af = _G.all_files and _G.all_files[filepath]
+    if af and (af.status == "complete" or af.status == "finished") then
+        local y = tonumber(af.last_modified_year)
+        if y and y > 0 then
+            return string.format("%04d-%02d-%02d", y, af.last_modified_month or 1, af.last_modified_day or 1)
+        end
+    end
+    return string.format("%04d-%02d-%02d", 1900, 1, 1)
+end
+
 -- ─── buildBook ────────────────────────────────────────────────────────────────
 -- Constructs a Book record for a given filepath.
 -- Fields follow spec §5.1. Metadata from BookInfoManager; position from
@@ -563,6 +577,7 @@ function Repo.buildBookMeta(filepath, opts)
     if calibre_data[key] and calibre_data[key]["pubdate"] then
         pub_date = calibre_data[key]["pubdate"]:sub(1, 4)
     end
+    local modified_date = getModifiedDate(filepath)
     local book = {
         filepath    = filepath,
         filename    = filename,
@@ -602,6 +617,7 @@ function Repo.buildBookMeta(filepath, opts)
                        or nil,
         page_count  = info.pages,
         pub_date    = pub_date or nil,
+        modified_date = modified_date,
     }
     -- Cache fresh records whose text metadata is present, with the
     -- cover_bb stripped. ImageWidget marks the cover_bb's
@@ -737,6 +753,8 @@ local function _buildLightMetaFromInfo(fp, info)
     if calibre_data[key] and calibre_data[key]["pubdate"] then
         pub_date = calibre_data[key]["pubdate"]:sub(1, 4)
     end
+    local modified_date = getModifiedDate(fp)
+
     -- filename is also returned so callers like searchBooks can include
     -- it in their search haystack without paying for the heavy
     -- buildBookMeta path.
@@ -760,6 +778,7 @@ local function _buildLightMetaFromInfo(fp, info)
                        or info.language,
         page_count  = page_count,
         pub_date    = pub_date or nil,
+        modified_date = modified_date,
     }
     -- Apply the global "Use Hardcover metadata" override here too, so the
     -- genre / author / series chips (built from these light records) switch
@@ -1338,7 +1357,7 @@ function Repo.readProgress(filepath)
     local now = os.time()
     local cached = _progress_cache[filepath]
     if cached then
-        return cached.pct, cached.status, cached.rating, cached.page_count, cached.pub_date
+        return cached.pct, cached.status, cached.rating, cached.page_count, cached.pub_date, cached.modified_date
     end
     local pct, status, rating, page_count
     local ok_ds, ds = pcall(function() return getDocSettings():open(filepath) end)
@@ -1373,6 +1392,7 @@ function Repo.readProgress(filepath)
     if calibre_data[key] and calibre_data[key]["pubdate"] then
         pub_date = calibre_data[key]["pubdate"]:sub(1, 4)
     end
+    local modified_date = getModifiedDate(filepath)
     -- Normalise to bookshelf canonical status values. KOReader's End-of-book
     -- dialog and Book Status widget store 'complete' / 'abandoned' in
     -- summary.status; bookshelf's filter UI / sort engine refer to the
@@ -1387,9 +1407,10 @@ function Repo.readProgress(filepath)
         rating     = rating,
         page_count = page_count,
         pub_date   = pub_date,
+        modified_date = modified_date,
         expires_at = now + PROGRESS_CACHE_TTL,
     }
-    return pct, status, rating, page_count, pub_date
+    return pct, status, rating, page_count, pub_date, modified_date
 end
 
 -- `dirs` (optional out-param): when present, walkBooks records every visited
@@ -2097,6 +2118,7 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
         if k == "rating"       then needs.rating     = true end
         if k == "page_count"   then needs.page_count = true end
         if k == "pub_date"     then needs.pub_date    = true end
+        if k == "modified_date" then needs.modified_date    = true end
         -- Folder cards carry no book_count until we count their contents
         -- (issue 90: "sort folders by number of files").
         if k == "book_count"   then needs.book_count = true end
@@ -2235,7 +2257,7 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
             end
         end
     end
-    if needs.percent or needs.status or needs.rating or needs.page_count or needs.pub_date then
+    if needs.percent or needs.status or needs.rating or needs.page_count or needs.pub_date or needs.modified_date then
         -- Route through Repo.readProgress so steady-state re-runs of this
         -- prefetch (cache TTL expired, but progress cache still warm) skip
         -- the per-file DocSettings:open() cost. readProgress also handles
@@ -2253,12 +2275,13 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
         -- actually reorders. Only written when that key is in the priority.
         for _i, e in ipairs(entries) do
             if e.attr and e.attr.mode == "file" then
-                local pct, status, rating, page_count, pub_date = Repo.readProgress(e.fp)
+                local pct, status, rating, page_count, pub_date, modified_date = Repo.readProgress(e.fp)
                 e._pct    = pct
                 e._status = status
                 if needs.rating     then e.rating     = rating     end
                 if needs.page_count then e.page_count = page_count end
                 if needs.pub_date then e.pub_date = pub_date end
+                if needs.modified_date then e.modified_date = modified_date end
             end
         end
     end
