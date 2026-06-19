@@ -431,11 +431,25 @@ buildLine = function(expanded, region, width, book, max_height, single_line)
     end
     if not first_pattern then
         -- single_line (the status strip): no elastic token, but the line must
-        -- stay one line. Truncate the WHOLE line on its LEFT edge -- ellipsis at
-        -- the start, right-anchored end kept -- instead of wrapping (issue #170).
+        -- stay one line -- truncate instead of wrapping (issue #170). The
+        -- truncated TextWidget is sized to its own (clamped) text width, so it
+        -- ignores region.alignment on its own; wrap it in the matching alignment
+        -- container sized to the full width so left/center/right work again
+        -- (issue #182 regression). The ellipsis sits on the end the alignment
+        -- does NOT anchor to: right-aligned keeps its right (ellipsis at start),
+        -- otherwise keep the left (ellipsis at end).
         if single_line then
-            local display = region.uppercase and TextSegments.upper(expanded) or expanded
-            return _buildSegmentedInline(display, regionFace(region), region.bold or false, width, true)
+            local display   = region.uppercase and TextSegments.upper(expanded) or expanded
+            local alignment = region.alignment or "left"
+            local seg = _buildSegmentedInline(display, regionFace(region),
+                region.bold or false, width, alignment == "right")
+            local dimen = Geom:new{ w = width, h = seg:getSize().h }
+            if alignment == "center" then
+                return CenterContainer:new{ dimen = dimen, seg }
+            elseif alignment == "right" then
+                return RightContainer:new{ dimen = dimen, seg }
+            end
+            return LeftContainer:new{ dimen = dimen, seg }
         end
         return buildText(expanded, region, width, max_height)
     end

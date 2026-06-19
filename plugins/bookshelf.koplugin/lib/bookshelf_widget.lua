@@ -4774,6 +4774,9 @@ function BookshelfWidget:_previewBook(book, tap_t)
         self._hero_mode    = "current"
         self._expanded     = false
         self._preview_book = Repo.buildBook(book.filepath) or book
+        -- #174: re-roll the per-book %quote token so each selection shows a
+        -- different random highlight from the newly-selected book.
+        pcall(function() require("lib/bookshelf_quotes").rerollBook() end)
         -- Hero (grid -> book) + chip strip change; scope to that band.
         self:_rebuildRefreshHeroAndChips()
         -- The rebuilt tree paints the tapped cover with its selection ring;
@@ -4822,6 +4825,8 @@ function BookshelfWidget:_previewBook(book, tap_t)
     -- bar and token lines, so upgrade to the full Book record here. Single-
     -- book DocSettings read on each preview tap is fine.
     self._preview_book = Repo.buildBook(book.filepath) or book
+    -- #174: re-roll the per-book %quote token on each selection.
+    pcall(function() require("lib/bookshelf_quotes").rerollBook() end)
     -- Stash the freshly-built record so the _swapHeroInPlace ->
     -- _buildHero call below doesn't pay DocSettings:open() a second time
     -- for the same filepath. _buildHero consumes destructively. Skipped
@@ -7874,6 +7879,10 @@ function BookshelfWidget:_buildBookMenuHeader(book, override_width, pill_specs, 
                                  -- "+N" pill so the visible row count
                                  -- never grows past this cap.
 
+        -- #177: cap a single pill's label so a very long tag truncates
+        -- (one line, ellipsis) inside text_w instead of spilling off-screen.
+        local pill_label_max = math.max(1, text_w - 2 * pill_pad_h - 2 * Size.border.thin)
+
         -- Build all pill widgets first so we know their widths up
         -- front (the packing pass needs them to greedily wrap).
         local function _buildPill(label_text, on_tap_cb)
@@ -7881,6 +7890,7 @@ function BookshelfWidget:_buildBookMenuHeader(book, override_width, pill_specs, 
                 text = TextSegments.upper(label_text or ""),
                 face = pill_face,
                 bold = pill_bold,
+                max_width = pill_label_max,
             }
             -- Explicit white bg so the tap-feedback inversion has
             -- something to flip to black. Matches the hero pill builder.
@@ -8295,12 +8305,18 @@ function BookshelfWidget:_buildPillGroup(pill_specs, available_w, max_rows, base
     local pill_pad_h = Size.padding.default
     local pill_pad_v = Size.padding.small
     local pill_gap   = Size.padding.default
+    -- #177: a single tag longer than the row would otherwise render at full
+    -- natural width and spill off the screen edge (the packer only rejects a
+    -- pill that isn't first in its row). Cap the label so one pill never exceeds
+    -- available_w; TextWidget truncates with an ellipsis on one line (no wrap).
+    local pill_label_max = math.max(1, available_w - 2 * pill_pad_h - 2 * Size.border.thin)
 
     local function _buildPill(label_text, on_tap_cb)
         local label_w = TextWidget_:new{
             text = TextSegments.upper(label_text or ""),
             face = pill_face,
             bold = pill_bold,
+            max_width = pill_label_max,
         }
         -- Explicit white bg so the tap-feedback inversion has something to
         -- invert to black (without this, the frame's transparent fill
