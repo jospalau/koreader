@@ -555,10 +555,10 @@ function Repo.buildBookMeta(filepath, opts)
     local calibre_data = util.loadCalibreData()
     local key = filename .. "." .. (filepath:match("%.([^.]+)$") or "")
     local page_count
-    if calibre_data[key] and calibre_data[key]["pages"] then
-        page_count = calibre_data[key]["pages"]
-    end
-    page_count = page_count or info.pages
+    --if calibre_data[key] and calibre_data[key]["pages"] then
+    --    page_count = calibre_data[key]["pages"]
+    --end
+    --page_count = page_count or info.pages
     local pub_date
     if calibre_data[key] and calibre_data[key]["pubdate"] then
         pub_date = calibre_data[key]["pubdate"]:sub(1, 4)
@@ -600,7 +600,7 @@ function Repo.buildBookMeta(filepath, opts)
                        or (info.description and info.description ~= ""
                            and info.description)
                        or nil,
-        page_count  = page_count, --info.pages,
+        page_count  = info.pages,
         pub_date    = pub_date or nil,
     }
     -- Cache fresh records whose text metadata is present, with the
@@ -729,7 +729,6 @@ local function _buildLightMetaFromInfo(fp, info)
     local calibre_data = util.loadCalibreData()
     local key = filename .. "." .. (fp:match("%.([^.]+)$") or "")
     local page_count
-    local pub_date
     if calibre_data[key] and calibre_data[key]["pages"] then
         page_count = calibre_data[key]["pages"]
     end
@@ -865,7 +864,16 @@ function Repo.buildBook(filepath)
     -- sidecar-derived count (unopened reflowable books). ds-or-filename also
     -- seeds the progress cache below, so it must match what readProgress
     -- computes (which never sees BIM's count).
-    local fallback_page_count = ds_page_count or pageCountFromFilename(filepath)
+    local util = require("util")
+    local calibre_data = util.loadCalibreData()
+    local fname = filepath:match("([^/]+)$"):gsub("%.[^.]+$", "")
+    local ext   = filepath:match("%.([^.]+)$") or ""
+    local key   = fname .. "." .. ext
+    local page_count_calibre
+    if calibre_data[key] and calibre_data[key]["pages"] then
+        page_count_calibre = calibre_data[key]["pages"]
+    end
+    local fallback_page_count = ds_page_count or page_count_calibre -- pageCountFromFilename(filepath)
     if not book.page_count then
         book.page_count = fallback_page_count
     end
@@ -1351,19 +1359,20 @@ function Repo.readProgress(filepath)
             end
         end
     end
-    --if not page_count then
     local util = require("util")
     local calibre_data = util.loadCalibreData()
     local fname = filepath:match("([^/]+)$"):gsub("%.[^.]+$", "")
     local ext   = filepath:match("%.([^.]+)$") or ""
     local key   = fname .. "." .. ext
-    if calibre_data[key] and calibre_data[key]["pages"] then
-        page_count = calibre_data[key]["pages"]
+    if not page_count then
+        --page_count = pageCountFromFilename(filepath)
+        if calibre_data[key] and calibre_data[key]["pages"] then
+            page_count = calibre_data[key]["pages"]
+        end
     end
     if calibre_data[key] and calibre_data[key]["pubdate"] then
         pub_date = calibre_data[key]["pubdate"]:sub(1, 4)
     end
-    --end
     -- Normalise to bookshelf canonical status values. KOReader's End-of-book
     -- dialog and Book Status widget store 'complete' / 'abandoned' in
     -- summary.status; bookshelf's filter UI / sort engine refer to the
@@ -4570,7 +4579,7 @@ function Repo.getBySource(source, filter, sort_priority, offset, limit, opts)
                         b._pct       = pct
                         b._status    = status
                         b.rating     = b.rating or rating
-                        b.page_count = b.page_count or page_count
+                        b.page_count = page_count or b.page_count
                         full_read    = full_read + 1
                     else
                         b._pct      = nil
