@@ -586,6 +586,7 @@ UIManager:setDirty(self.widget, function() return "ui", self.someelement.dimen e
 @param refreshregion a rectangle @{ui.geometry.Geom|Geom} object (optional, omitting it means the region will cover the full screen)
 @bool refreshdither `true` if widget requires dithering (optional)
 ]]
+local debug_refresh = false
 function UIManager:setDirty(widget, refreshtype, refreshregion, refreshdither)
     -- local dump = require("dump")
     -- if refreshtype ~= nil and type(refreshtype) ~= "function" then
@@ -602,15 +603,17 @@ function UIManager:setDirty(widget, refreshtype, refreshregion, refreshdither)
     --     print("----")
     -- end
 
-    -- if refreshtype ~= nil and type(refreshtype) ~= "function" then
-    --    local widget_name = widget == "all" and "all"
-    --        or (widget and widget.name)
-    --        or (widget and widget.id)
-    --        or tostring(widget)
-    --    print(string.format("[setDirty] type=%s widget=%s", tostring(refreshtype), tostring(widget_name)))
-    --    print(debug.traceback("", 2))
-    --    print("----")
-    -- end
+    if debug_refresh then
+        if refreshtype ~= nil and type(refreshtype) ~= "function" then
+           local widget_name = widget == "all" and "all"
+               or (widget and widget.name)
+               or (widget and widget.id)
+               or tostring(widget)
+           print(string.format("[setDirty] type=%s widget=%s", tostring(refreshtype), tostring(widget_name)))
+           print(debug.traceback("", 2))
+           print("----")
+        end
+    end
 
     local widget_name
     if widget then
@@ -1359,12 +1362,14 @@ function UIManager:_repaint()
             refresh.dither = nil
         end
         dbg:v("triggering refresh", refresh)
-        -- print(string.format("[REFRESH] mode=%s x=%d y=%d w=%d h=%d",
-        -- tostring(refresh.mode),
-        -- refresh.region.x, refresh.region.y,
-        -- refresh.region.w, refresh.region.h))
-        -- print(debug.traceback("", 2))
-        -- print("----")
+        if debug_refresh then
+            print(string.format("[REFRESH] mode=%s x=%d y=%d w=%d h=%d",
+            tostring(refresh.mode),
+            refresh.region.x, refresh.region.y,
+            refresh.region.w, refresh.region.h))
+            print(debug.traceback("", 2))
+            print("----")
+        end
         --[[
         -- Remember the refresh region
         self._last_refresh_region = refresh.region:copy()
