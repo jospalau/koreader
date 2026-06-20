@@ -204,6 +204,7 @@ function Localization:t(key, ...)
         logger.warn("Localization: Missing translation key:", key)
         -- Return a user-friendly fallback instead of the key
         local fallbacks = {
+            msg_suggest_lang = "This book is in %s. Switch X-Ray language to match?",
             cache_saved = "[Saved]",
             cache_save_failed = "[Save failed]",
             ai_fetch_complete = "Fetched from %s\n\nBook: %s\nAuthor: %s\n\nCharacters: %d | Locations: %d | Themes: %d | Events: %d | History: %d\n\n%s\n\n%s",
@@ -213,6 +214,8 @@ function Localization:t(key, ...)
             menu_update_xray = "Update X-Ray Data (Merge)",
             menu_fetch_more_chars = "Fetch More Characters",
             no_api_key = "No API key set!",
+            ai_key_required = "An AI API key is required.",
+            ai_error = "AI Error: ",
             no_author_data_fetch = "No author info available. Fetch from AI?",
             xray_mode_desc = "Adds an 'X-Ray' button to dictionary and selection menus for instant lookups.",
             no_data_prompt = "No X-Ray data found for this book. Would you like to fetch it from AI now?",
@@ -261,18 +264,26 @@ function Localization:t(key, ...)
             mentions_setting_title = "Mentions Settings",
             mentions_setting_desc = "Mentions scanning allows you to find every occurrence of a character or location in the book. This happens automatically in the background to ensure the reader stays responsive.\n\nDisabling this will hide the 'Find Mentions' button.",
             mentions_preference_desc = "Select your preference for character and location mentions:",
+            auto_dupe_check_enabled = "Enabled",
+            auto_dupe_check_disabled = "Disabled",
+            auto_dupe_check_setting_title = "Duplicate Check",
+            auto_dupe_check_preference_desc = "Select your preference for automatic AI duplicate detection:",
+            auto_dupe_check_setting_desc = "When enabled, X-Ray automatically asks the AI to check for duplicate characters and locations after every data fetch. If duplicates are detected, you will be prompted to review and merge them.\n\nDisabling this will stop all background duplicate scanning. You can still merge duplicates manually via the Characters or Locations menu.\n\nNote: each check uses one AI API call. Users on free-tier or quota-limited plans may prefer to disable this.",
             mentions_title = "Mentions: %s",
             mentions_none = "No mentions found for '%s' yet.",
             mentions_refresh = "Refresh Mentions",
             mentions_at_location = "Mention: %s",
             find_mentions = "Find Mentions",
             menu_about = "About",
+            menu_frequency = "Frequency",
+            auto_update_ultra = "Ultra: checks every %d pages",
+            auto_fetch_page_interval_prompt = "Page Interval",
             menu_reasoning_effort = "AI Reasoning Effort",
             reasoning_low = "Low",
             reasoning_medium = "Medium",
             reasoning_high = "High",
             reasoning_unset = "Unset (Default)",
-            reasoning_about = "Controls 'thinking' depth for reasoning models:\n\n• Unset: No specific instruction sent; model uses its internal defaults.\n• Low: Fast, economical extraction for simple books.\n• Medium: Balanced depth for most narratives.\n• High: Detailed analysis for complex character webs.\n\nApplies to: GPT-5.x, DeepSeek Reasoner, Claude 4.5+ (extended thinking), and Gemini 2.5+.",
+            reasoning_about = "Controls 'thinking' depth for reasoning models:\n\n• Unset: No specific instruction sent; model uses its internal defaults.\n• Low: Fast, economical extraction for simple books.\n• Medium: Balanced depth for most narratives.\n• High: Detailed analysis for complex character webs.\n\nApplies to: GPT-5.x (o1/o3/gpt-5), Claude (sonnet/opus/haiku), and Gemini 2.5+.\n\nNote: DeepSeek V4 reasons inherently — this setting has no effect on it.",
             label_reasoning = "AI REASONING",
             linked_entries = "Linked Entries",
             menu_linked_entries_settings = "Linked Entries Settings",
@@ -287,6 +298,14 @@ function Localization:t(key, ...)
             merge_success = "Entries merged successfully.",
             merge_failed = "Merge failed.",
             merge_back = "← Back",
+            menu_display_ui_settings = "Display & UI Settings",
+            menu_content_fetch_settings = "Content & Fetch Settings",
+            menu_entity_ui_mode = "Entity Description Style",
+            entity_ui_style_both = "Modern Popup (Both)",
+            entity_ui_style_in_text = "Modern Popup (In-text only)",
+            entity_ui_style_menu = "Modern Popup (Menu only)",
+            entity_ui_style_classic = "Classic Dialog",
+            entity_ui_style_desc = "Select when to use the new Modern Popup UI instead of the Classic Dialog for entity descriptions.",
             merging_smartly = "Merging...",
             custom_api_name = "Custom API %d (OpenAI-compatible)",
             custom_api_endpoint_title = "Custom API %d — Endpoint URL",
@@ -296,7 +315,7 @@ function Localization:t(key, ...)
             custom_api_model_hint = "e.g., google/gemini-2.5-flash or openai/gpt-4o",
             custom_api_saved = "Custom API %d configuration saved.",
             custom_api_not_configured = "(not configured — tap to set up)",
-            custom_api_is_reasoning = "Is Reasoning Model (e.g. DeepSeek-R1)",
+            custom_api_is_reasoning = "Is Reasoning Model (e.g. DeepSeek-V4-Pro, DeepSeek-R1)",
             menu_desc_length_settings = "Description Length Settings",
             desc_len_short = "Short",
             desc_len_default = "Default",
@@ -350,6 +369,35 @@ function Localization:t(key, ...)
             menu_fetch_more_terms = "Fetch More Terms",
             model_free = "free",
             model_paid = "paid",
+            menu_series_context = "Series Context",
+            series_context_enabled_toggle = "Enable Series Context",
+            series_context_prompt_title = "Series Detected",
+            series_context_prompt_text = "This appears to be Book %d of '%s'. Load a recap of the previous %d book(s)?\n\n(You can disable this in Settings → Series Context)",
+            fetching_series_context = "Fetching series context: Book %d of %d…",
+            series_context_loaded = "Series context loaded (%d prior books).",
+            series_prior_label = "[Prior]",
+            series_prior_books_header = "── Prior Books ──",
+            series_no_prior_detected = "No prior books detected for this series.",
+            menu_fetch_series_context = "Fetch / Refresh Series Context",
+            later = "Later",
+            dont_ask_again = "Don't ask again",
+            series_ask_later_msg = "Series recap postponed. We will ask again when you open/resume this book.",
+            series_disabled_msg = "Auto-prompt disabled for this book. You can manually fetch recap from X-Ray menu.",
+            relookup_button = "Re-lookup '%s'",
+            low_conf_match = "Partial match — showing '%s' for your query. Tap below to fetch the exact term.",
+            ai_scanning_duplicates = "AI is scanning for duplicates...",
+            no_duplicates_found = "No duplicates found.",
+            ai_merged_n = "Merged %d pair(s) successfully.",
+            ai_merge_confirm_title = "AI Duplicate Detected",
+            no_merges_performed = "No merges were performed.",
+            merge_button = "Merge",
+            skip = "Skip",
+            stop = "Stop",
+            reason = "Reason",
+            entity_label_characters = "characters",
+            entity_label_locations = "locations",
+            pending_duplicates_prompt = "AI found %d possible duplicate(s) from the last fetch. Review now?",
+            review = "Review",
         }
         translation = fallbacks[key] or key
     end
@@ -368,13 +416,33 @@ function Localization:t(key, ...)
             end
         end
         
-        local success, result = pcall(string.format, translation, (unpack or table.unpack)(args))
-        if success then
-            return result
+        -- Check if it contains positional arguments like %1$d or %2$s
+        if translation:find("%%%d+%$") then
+            local success, result = pcall(function()
+                return string.gsub(translation, "%%(%d+)%$([-+ #0]?%d*%.?%d*[cdeEfgGiouuxXsqp%%])", function(index, spec)
+                    local idx = tonumber(index)
+                    local val = args[idx]
+                    if val == nil then val = "???" end
+                    if spec == "%" then return "%" end
+                    return string.format("%" .. spec, val)
+                end)
+            end)
+            if success then
+                return result
+            else
+                logger.warn("Localization: Positional format error for key:", key)
+                logger.warn("Localization: Error:", result)
+                return translation
+            end
         else
-            logger.warn("Localization: Format error for key:", key)
-            logger.warn("Localization: Error:", result)
-            return translation
+            local success, result = pcall(string.format, translation, (unpack or table.unpack)(args))
+            if success then
+                return result
+            else
+                logger.warn("Localization: Format error for key:", key)
+                logger.warn("Localization: Error:", result)
+                return translation
+            end
         end
     end
     

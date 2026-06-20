@@ -116,6 +116,7 @@ function XRayPlugin:init()
 
     -- Auto-fetch on chapter change (session state)
     self.last_auto_chapter = nil
+    self.last_bg_fetch_page = nil
     self.chapters_fetched = {}
     self.bg_fetch_pending = false
     self.auto_fetch_enabled = not (self.ai_helper.settings and
@@ -141,6 +142,10 @@ function XRayPlugin:init()
     -- Modular lookup logic for text selection
     local LookupManager = require(plugin_path .. "xray_lookupmanager")
     self.lookup_manager = LookupManager:new(self)
+
+    -- Standalone Series Manager
+    local SeriesManager = require(plugin_path .. "xray_seriesmanager")
+    self.series_manager = SeriesManager:new()
     
     self:log("XRayPlugin: Initialized with language: " .. self.loc:getLanguage())
     self:onDispatcherRegisterActions()
@@ -216,6 +221,28 @@ function XRayPlugin:init()
 end
 
 
+function XRayPlugin:destroy()
+    self:log("XRayPlugin: destroy called, marking as destroyed")
+    self.destroyed = true
+    
+    if self.ai_helper then
+        self.ai_helper:cancelAsyncChild()
+    end
+    
+    if self.active_mention_scan and self.active_mention_scan.cancel_handle then
+        self.active_mention_scan.cancel_handle:cancel()
+        self.active_mention_scan = nil
+    end
+
+    self:closeAllMenus()
+    
+    if WidgetContainer.destroy then
+        WidgetContainer.destroy(self)
+    end
+end
+
+
+
 -- Builds the X-Ray button spec for the dict popup.
 -- Used by both the new addToDictButtons API and the legacy onDictButtonsReady hook.
 function XRayPlugin:_buildXRayDictButton(dict_popup_arg)
@@ -282,6 +309,7 @@ function XRayPlugin:onReaderReady()
     self:autoLoadCache()
     -- Reset per-session chapter fetch tracking
     self.last_auto_chapter = nil
+    self.last_bg_fetch_page = nil
     self.chapters_fetched = {}
     self.bg_fetch_pending = false
 
@@ -290,16 +318,25 @@ function XRayPlugin:onReaderReady()
     
     -- Suggest switching to book language if appropriate
     UIManager:scheduleIn(5, function()
+        if self.destroyed then return end
         self:checkBookLanguageMatch()
     end)
     
     -- Weekly silent update check
     UIManager:scheduleIn(10, function()
+        if self.destroyed then return end
         self:checkWeeklyUpdate()
+    end)
+
+    -- Check series context prompt after ~15 seconds
+    UIManager:scheduleIn(15, function()
+        if self.destroyed then return end
+        self:checkSeriesContext()
     end)
 
     -- Enforce X-Ray as the first item in the Tools menu for all KOReader versions
     UIManager:scheduleIn(1, function()
+        if self.destroyed then return end
         local order_module
         -- Strategy A: Check newer path (ui/elements/reader_menu_order)
         local status_new, res_new = pcall(require, "ui/elements/reader_menu_order")
@@ -314,8 +351,15 @@ function XRayPlugin:onReaderReady()
             order_module.insertSorted("tools", "xray", 1)
         end
     end)
+end
 
 
+function XRayPlugin:onNetworkConnected()
+    self:log("XRayPlugin: onNetworkConnected fired. Scheduling series context check in 2 seconds.")
+    UIManager:scheduleIn(2, function()
+        if self.destroyed then return end
+        self:checkSeriesContext()
+    end)
 end
 
 function XRayPlugin:onPageUpdate(pageno)
@@ -325,6 +369,7 @@ function XRayPlugin:onPageUpdate(pageno)
         local p = self.pending_return_banner
         self.pending_return_banner = nil
         UIManager:scheduleIn(0.3, function()
+            if self.destroyed then return end
             self:showReturnBanner(p.return_page, p.entity, p.mentions, self.last_pageno)
         end)
     elseif not self.is_programmatic_navigation then
@@ -366,6 +411,25 @@ function XRayPlugin:onPageUpdate(pageno)
             self.chapters_fetched[unique_id] = true
         end
         return 
+    end
+
+    -- Ultra mode: bypass chapter-boundary and is_populated guards; fire on page interval alone
+    local page_interval = self.ai_helper.settings and self.ai_helper.settings.auto_fetch_page_interval
+    if page_interval and page_interval > 0 then
+        local last = self.last_bg_fetch_page or 0
+        if (pageno - last) < page_interval then
+            return
+        end
+        self.last_bg_fetch_page = pageno
+        -- Debounce: ignore if a fetch is already scheduled
+        if self.bg_fetch_pending or self.bg_fetch_active then return end
+        self.bg_fetch_pending = true
+        UIManager:scheduleIn(2, function()
+            if self.destroyed then return end
+            self.bg_fetch_pending = false
+            self:triggerBackgroundMergeFetch(chapter_title)
+        end)
+        return
     end
 
     -- Check if it's already populated in the timeline data
@@ -418,6 +482,7 @@ function XRayPlugin:onPageUpdate(pageno)
 
     -- Wait 2s for the reader to settle on the new chapter before fetching
     UIManager:scheduleIn(2, function()
+        if self.destroyed then return end
         self.bg_fetch_pending = false
         self:triggerBackgroundMergeFetch(chapter_title)
     end)
@@ -429,7 +494,7 @@ function XRayPlugin:triggerBackgroundMergeFetch(chapter_title)
 
     -- SILENT NETWORK CHECK: use isOnline() instead of runWhenOnline to avoid "white box" connecting dialogs
     local NetworkMgr = require("ui/network/manager")
-    if NetworkMgr:isOnline() then
+    if NetworkMgr:isConnected() and NetworkMgr:isOnline() then
         -- Safety Check: Ensure API keys are configured before background activity
         if not self.ai_helper:hasApiKey() then
             return
@@ -548,6 +613,7 @@ function XRayPlugin:autoLoadCache()
 
         -- Stage 2: Restore Sort Order (Deferred 500ms)
         UIManager:scheduleIn(500, function()
+            if self.destroyed then return end
             if not self.ui or not self.ui.document then return end
             self:log("XRayPlugin: Stage 2 - Restoring sort order")
             local function restoreOrder(list)
@@ -560,6 +626,7 @@ function XRayPlugin:autoLoadCache()
             
             -- Stage 3: Repair Page Numbers & Deduplicate (Deferred another 500ms)
             UIManager:scheduleIn(500, function()
+                if self.destroyed then return end
                 if not self.ui or not self.ui.document then return end
                 self:log("XRayPlugin: Stage 3 - Repairing pages and deduplicating")
                 local toc = self.ui.document:getToc()
@@ -578,6 +645,7 @@ function XRayPlugin:autoLoadCache()
                 self:log("XRayPlugin: Chunked post-load complete")
             end)
         UIManager:scheduleIn(200, function()
+            if self.destroyed then return end
             pcall(function()
                 local ok_order, reader_menu_order = pcall(require, "ui/elements/reader_menu_order")
                 if not ok_order then
@@ -656,45 +724,109 @@ function XRayPlugin:getSubMenuItems()
         keep_menu_open = true,
         sub_item_table = {
             {
-                text = self.loc:t("menu_auto_update_frequency") or "Auto X-Ray Settings",
+                text = self.loc:t("menu_display_ui_settings") or "Display & UI Settings",
                 keep_menu_open = true,
-                callback = function() self:showAutoUpdateSettings() end,
+                sub_item_table = {
+                    {
+                        text = self.loc:t("menu_ui_popup_intext") or "Use Footnote Style for In-text Lookups",
+                        checked_func = function()
+                            local val = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.ui_popup_intext
+                            if val == nil then return true end
+                            return val
+                        end,
+                        callback = function()
+                            if self.ai_helper and self.ai_helper.settings then
+                                local current = self.ai_helper.settings.ui_popup_intext
+                                if current == nil then current = true end
+                                self.ai_helper:saveSettings({ ui_popup_intext = not current })
+                            end
+                        end,
+                    },
+                    {
+                        text = self.loc:t("menu_ui_popup_menu") or "Use Footnote Style for Menu Lookups",
+                        checked_func = function()
+                            local val = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.ui_popup_menu
+                            if val == nil then return true end
+                            return val
+                        end,
+                        callback = function()
+                            if self.ai_helper and self.ai_helper.settings then
+                                local current = self.ai_helper.settings.ui_popup_menu
+                                if current == nil then current = true end
+                                self.ai_helper:saveSettings({ ui_popup_menu = not current })
+                            end
+                        end,
+                    },
+                    {
+                        text = self.loc:t("menu_desc_length_settings") or "Description Length Settings",
+                        keep_menu_open = true,
+                        callback = function() self:showDescriptionLengthSettings() end,
+                    },
+                    {
+                        text = self.loc:t("menu_linked_entries_settings") or "Linked Entries Settings",
+                        keep_menu_open = true,
+                        callback = function() self:showLinkedEntriesSettings() end,
+                    },
+                    {
+                        text = self.loc:t("mentions_setting_title") or "Mentions Settings",
+                        keep_menu_open = true,
+                        callback = function() self:showMentionsSettings() end,
+                    },
+                }
             },
             {
-                text = self.loc:t("menu_book_mode") or "Book Type",
+                text = self.loc:t("menu_content_fetch_settings") or "Content & Fetch Settings",
                 keep_menu_open = true,
-                callback = function() self:showBookTypeSettings() end,
-            },
-            {
-                text = self.loc:t("menu_desc_length_settings") or "Description Length Settings",
-                keep_menu_open = true,
-                callback = function() self:showDescriptionLengthSettings() end,
-            },
-            {
-                text = self.loc:t("menu_linked_entries_settings") or "Linked Entries Settings",
-                keep_menu_open = true,
-                callback = function() self:showLinkedEntriesSettings() end,
-            },
-            {
-                text = self.loc:t("mentions_setting_title") or "Mentions Settings",
-                keep_menu_open = true,
-                callback = function() self:showMentionsSettings() end,
-            },
-            {
-                text = self.loc:t("spoiler_preference_title") or "Spoiler Settings",
-                keep_menu_open = true,
-                callback = function() self:showSpoilerSettings() end,
+                sub_item_table = {
+                    {
+                        text = self.loc:t("menu_auto_update_frequency") or "Auto X-Ray Settings",
+                        keep_menu_open = true,
+                        sub_item_table = {
+                            {
+                                text = self.loc:t("menu_frequency") or "Frequency",
+                                keep_menu_open = true,
+                                callback = function() self:showAutoUpdateSettings() end,
+                            },
+                            {
+                                text = self.loc:t("auto_dupe_check_setting_title") or "Duplicate Check",
+                                keep_menu_open = true,
+                                callback = function() self:showAutoDupeCheckSettings() end,
+                            },
+                        }
+                    },
+                    {
+                        text = self.loc:t("menu_book_mode") or "Book Type",
+                        keep_menu_open = true,
+                        callback = function() self:showBookTypeSettings() end,
+                    },
+                    {
+                        text = self.loc:t("spoiler_preference_title") or "Spoiler Settings",
+                        keep_menu_open = true,
+                        callback = function() self:showSpoilerSettings() end,
+                    },
+                    {
+                        text = self.loc:t("menu_series_context") or "Series Context",
+                        keep_menu_open = true,
+                        sub_item_table = {
+                            {
+                                text = self.loc:t("series_context_enabled_toggle") or "Enable Series Context",
+                                checked_func = function() return self.ai_helper.settings.series_context_enabled end,
+                                callback = function() self:toggleSeriesContextEnabled() end,
+                            },
+                            {
+                                text = self.loc:t("menu_fetch_series_context") or "Fetch / Refresh Series Context",
+                                keep_menu_open = true,
+                                callback = function() self:manualFetchSeriesContext() end,
+                            }
+                        }
+                    },
+                }
             },
             {
                 text = self.loc:t("menu_xray_mode"),
                 keep_menu_open = true,
                 callback = function() self:toggleXRayMode() end,
                 separator = true,
-            },
-            {
-                text = self.loc:t("menu_language") or "Language",
-                keep_menu_open = true,
-                callback = function() self:showLanguageSelection() end,
             },
             {
                 text = self.loc:t("menu_ai_settings"),
@@ -728,6 +860,11 @@ function XRayPlugin:getSubMenuItems()
                         callback = function() self:showConfigSummary() end,
                     },
                 }
+            },
+            {
+                text = self.loc:t("menu_language") or "Language",
+                keep_menu_open = true,
+                callback = function() self:showLanguageSelection() end,
             }
         }
     })

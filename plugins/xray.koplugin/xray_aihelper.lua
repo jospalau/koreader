@@ -142,9 +142,9 @@ function AIHelper:getChatGPTTokenConfig(model)
         return "max_completion_tokens", 32000
     end
     
-    -- DeepSeek (including R1/reasoner) and older GPT-4 models do NOT support max_completion_tokens 
+    -- DeepSeek (all v4 models) and older GPT-4 models do NOT support max_completion_tokens 
     -- in their official APIs and will return a 400 error. They require the standard max_tokens.
-    if model:find("reasoner") or model:find("deepseek") or model:find("%-r1") or model:find("/r1") then
+    if model:find("deepseek") or model:find("%-r1") or model:find("/r1") then
         return "max_tokens", 32000
     end
     
@@ -321,9 +321,9 @@ function AIHelper:buildComprehensiveRequest(title, author, context, prompt_overr
                     [token_param] = token_val
                 }
                 
-                -- DeepSeek-R1 reasons inherently; official API does not support reasoning_effort and will return a 400 error.
-                -- We only apply token ceiling adjustments here.
-                if ai.provider == "deepseek" and model:find("reasoner") then
+                -- DeepSeek V4 models reason inherently; official API does not support reasoning_effort and will return a 400 error.
+                -- We only apply token ceiling adjustments here. Also catches legacy deepseek-reasoner stored values.
+                if ai.provider == "deepseek" and (model:find("reasoner") or model:find("v4") or model:find("deepseek")) then
                     -- No effort mapping for official DeepSeek API to avoid 400 errors.
                     -- The 32k token ceiling is already handled by getChatGPTTokenConfig.
                 end
@@ -594,6 +594,13 @@ function AIHelper:makeRequestAsync(request_params, result_file)
         end
 
         -- Exit child cleanly
+        local ffi_ok, ffi = pcall(require, "ffi")
+        if ffi_ok then
+            pcall(function()
+                ffi.cdef[[ void _exit(int status); ]]
+                ffi.C._exit(0)
+            end)
+        end
         local posix_ok, posix = pcall(require, "posix.unistd")
         if posix_ok and posix and posix._exit then
             posix._exit(0)
@@ -734,6 +741,26 @@ function AIHelper:checkAsyncResult(result_file)
         return parsed_data
     else
         return false, "error_parse", tostring(parse_err)
+    end
+end
+
+function AIHelper:cancelAsyncChild()
+    if self._async_child_pid then
+        self:log("AIHelper: Cancelling async child process PID " .. tostring(self._async_child_pid))
+        pcall(function()
+            local ffi = require("ffi")
+            ffi.cdef[[
+                int kill(int pid, int sig);
+                int waitpid(int pid, int *status, int options);
+            ]]
+            ffi.C.kill(self._async_child_pid, 9) -- SIGKILL
+            ffi.C.waitpid(self._async_child_pid, nil, 1) -- WNOHANG = 1
+        end)
+        pcall(function()
+            local posix_sys = require("posix.sys.wait")
+            posix_sys.wait(self._async_child_pid, posix_sys.WNOHANG)
+        end)
+        self._async_child_pid = nil
     end
 end
 
@@ -895,6 +922,7 @@ function AIHelper:loadSettings()
     if not settings.term_def_len       then settings.term_def_len       = 100      end
     if not settings.default_book_mode  then settings.default_book_mode  = "auto"   end
     if not settings.terms_visibility   then settings.terms_visibility   = "always" end
+    if settings.series_context_enabled == nil then settings.series_context_enabled = true end
     
     -- Migration to unified Primary and Secondary AI logic
     if type(settings.primary_ai) ~= "table" then
@@ -912,6 +940,24 @@ function AIHelper:loadSettings()
         migrated = true
     end
     
+    -- Migrate legacy DeepSeek model names to v4 API names (deprecated 2026-07-24)
+    local deepseek_model_map = {
+        ["deepseek-chat"]     = "deepseek-v4-flash",
+        ["deepseek-reasoner"] = "deepseek-v4-pro",
+    }
+    local function migrate_deepseek_model(ai_slot)
+        if type(settings[ai_slot]) == "table" and settings[ai_slot].provider == "deepseek" then
+            local old = settings[ai_slot].model
+            if old and deepseek_model_map[old] then
+                self:log(string.format("AIHelper: Migrating DeepSeek model '%s' -> '%s' in %s", old, deepseek_model_map[old], ai_slot))
+                settings[ai_slot].model = deepseek_model_map[old]
+                migrated = true
+            end
+        end
+    end
+    migrate_deepseek_model("primary_ai")
+    migrate_deepseek_model("secondary_ai")
+
     if migrated then
         self.settings = settings
         self:saveSettings()
@@ -1079,10 +1125,39 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
             local sample_text = context.book_text or ""
             for _, c in ipairs(context.existing_characters) do
                 if c.name and c.description then
-                    -- CONTEXT TRIMMING: Only send full descriptions for characters that appear in the sample
-                    -- Otherwise just send the name to allow the AI to mention them if they appear
-                    if sample_text:find(c.name) then
-                        table.insert(existing_lines, "- " .. c.name .. ": " .. c.description)
+                    -- Optimized context trimming checks (Name, aliases, first-name fallback)
+                    local found_in_sample = false
+                    local name_lower = c.name:lower()
+                    local sample_lower = sample_text:lower()
+                    if sample_lower:find(name_lower, 1, true) then
+                        found_in_sample = true
+                    else
+                        if c.aliases then
+                            for _, alias in ipairs(c.aliases) do
+                                if type(alias) == "string" and #alias > 1 and sample_lower:find(alias:lower(), 1, true) then
+                                    found_in_sample = true; break
+                                end
+                            end
+                        end
+                        if not found_in_sample then
+                            local first_name = c.name:match("^(%S+)")
+                            if first_name and #first_name > 3 and sample_lower:find(first_name:lower(), 1, true) then
+                                found_in_sample = true
+                            end
+                        end
+                    end
+
+                    if found_in_sample then
+                        -- Prompt Anchoring: Send initial + latest description if history is available
+                        local desc_str = c.description
+                        if c.history and #c.history > 1 then
+                            local initial_desc = c.history[1].description
+                            local latest_desc = c.history[#c.history].description
+                            if initial_desc and latest_desc and initial_desc ~= latest_desc then
+                                desc_str = "Initial Introduction: " .. initial_desc .. " | Latest Status: " .. latest_desc
+                            end
+                        end
+                        table.insert(existing_lines, "- " .. c.name .. ": " .. desc_str)
                     else
                         table.insert(existing_lines, "- " .. c.name)
                     end
@@ -1099,8 +1174,37 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
             local sample_text = context.book_text or ""
             for _, h in ipairs(context.existing_historical_figures) do
                 if h.name and h.biography then
-                    if sample_text:find(h.name) then
-                        table.insert(existing_lines, "- " .. h.name .. ": " .. h.biography)
+                    local found_in_sample = false
+                    local name_lower = h.name:lower()
+                    local sample_lower = sample_text:lower()
+                    if sample_lower:find(name_lower, 1, true) then
+                        found_in_sample = true
+                    else
+                        if h.aliases then
+                            for _, alias in ipairs(h.aliases) do
+                                if type(alias) == "string" and #alias > 1 and sample_lower:find(alias:lower(), 1, true) then
+                                    found_in_sample = true; break
+                                end
+                            end
+                        end
+                        if not found_in_sample then
+                            local first_name = h.name:match("^(%S+)")
+                            if first_name and #first_name > 3 and sample_lower:find(first_name:lower(), 1, true) then
+                                found_in_sample = true
+                            end
+                        end
+                    end
+
+                    if found_in_sample then
+                        local bio_str = h.biography
+                        if h.history and #h.history > 1 then
+                            local initial_bio = h.history[1].biography
+                            local latest_bio = h.history[#h.history].biography
+                            if initial_bio and latest_bio and initial_bio ~= latest_bio then
+                                bio_str = "Initial Introduction: " .. initial_bio .. " | Latest Status: " .. latest_bio
+                            end
+                        end
+                        table.insert(existing_lines, "- " .. h.name .. ": " .. bio_str)
                     else
                         table.insert(existing_lines, "- " .. h.name)
                     end
@@ -1117,8 +1221,37 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
             local sample_text = context.book_text or ""
             for _, l in ipairs(context.existing_locations) do
                 if l.name and l.description then
-                    if sample_text:find(l.name) then
-                        table.insert(existing_lines, "- " .. l.name .. ": " .. l.description)
+                    local found_in_sample = false
+                    local name_lower = l.name:lower()
+                    local sample_lower = sample_text:lower()
+                    if sample_lower:find(name_lower, 1, true) then
+                        found_in_sample = true
+                    else
+                        if l.aliases then
+                            for _, alias in ipairs(l.aliases) do
+                                if type(alias) == "string" and #alias > 1 and sample_lower:find(alias:lower(), 1, true) then
+                                    found_in_sample = true; break
+                                end
+                            end
+                        end
+                        if not found_in_sample then
+                            local first_name = l.name:match("^(%S+)")
+                            if first_name and #first_name > 3 and sample_lower:find(first_name:lower(), 1, true) then
+                                found_in_sample = true
+                            end
+                        end
+                    end
+
+                    if found_in_sample then
+                        local desc_str = l.description
+                        if l.history and #l.history > 1 then
+                            local initial_desc = l.history[1].description
+                            local latest_desc = l.history[#l.history].description
+                            if initial_desc and latest_desc and initial_desc ~= latest_desc then
+                                desc_str = "Initial Introduction: " .. initial_desc .. " | Latest Status: " .. latest_desc
+                            end
+                        end
+                        table.insert(existing_lines, "- " .. l.name .. ": " .. desc_str)
                     else
                         table.insert(existing_lines, "- " .. l.name)
                     end
@@ -1146,6 +1279,14 @@ function AIHelper:createPrompt(title, author, context, section_name, targeted_wo
     elseif section_name == "more_terms" then
         local exclude = context.exclude_terms or "None"
         success, final_prompt = pcall(string.format, template, enhanced_title, enhanced_author, p, exclude, p)
+    elseif section_name == "series_detect" then
+        success, final_prompt = pcall(string.format, template, enhanced_title, enhanced_author)
+    elseif section_name == "prior_book_list" then
+        local idx = context and context.index or 1
+        success, final_prompt = pcall(string.format, template, context.series_name or "Unknown", idx, enhanced_title, enhanced_author, idx - 1)
+    elseif section_name == "series_book_summary" then
+        local idx = context and context.index or 1
+        success, final_prompt = pcall(string.format, template, enhanced_title, enhanced_author, idx, context.series_name or "Unknown")
     else
         success, final_prompt = pcall(string.format, template, enhanced_title, enhanced_author, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p, p)
     end
@@ -1619,6 +1760,42 @@ function AIHelper:setUnifiedModel(type, provider, model)
     end
     self:saveSettings()
     return true
+end
+
+function AIHelper:findDuplicates(title, author, entities, entity_type_label, reading_percent)
+    if not self.prompts then self:loadLanguage() end
+    local template = self.prompts.find_duplicates
+    if not template then return nil, "no_prompt", "find_duplicates prompt missing" end
+
+    -- Build compact list string
+    local lines = {}
+    for _, e in ipairs(entities) do
+        local line = "- " .. (e.name or "?")
+        -- Include aliases if present (characters)
+        if e.aliases and type(e.aliases) == "table" and #e.aliases > 0 then
+            line = line .. " (aka: " .. table.concat(e.aliases, ", ") .. ")"
+        end
+        -- Include a truncated description for context
+        local desc = e.description or e.biography or ""
+        if #desc > 0 then
+            line = line .. ": " .. desc:sub(1, 100)
+        end
+        table.insert(lines, line)
+    end
+
+    local p = reading_percent or 100
+    local prompt = string.format(template,
+        title or "Unknown", author or "Unknown",
+        p, entity_type_label or "entities",
+        table.concat(lines, "\n"), p
+    )
+    prompt = self:sanitize_utf8(prompt)
+
+    local result, err_code, err_msg = self:executeUnifiedRequest(prompt)
+    if result and type(result.duplicate_pairs) == "table" then
+        return result.duplicate_pairs
+    end
+    return nil, err_code or "error_parse", err_msg or "No duplicate_pairs in response"
 end
 
 return AIHelper

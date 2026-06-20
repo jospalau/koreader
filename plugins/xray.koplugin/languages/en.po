@@ -8,11 +8,44 @@ msgstr ""
 msgid "about"
 msgstr "About"
 
+msgid "ai_error"
+msgstr "AI Error: "
+
 msgid "ai_fetch_complete"
 msgstr "Successfully fetched from %s!\n\nBook: %s\nAuthor: %s\n\nCharacters: %d\nLocations: %d\nThemes: %d\nTimeline Events: %d\nHistorical Figures: %d\n\n%s\n\nSUMMARY:\n%s"
 
 msgid "ai_fetch_complete_msg"
 msgstr "AI Fetch Complete!"
+
+msgid "ai_key_required"
+msgstr "An AI API key is required."
+
+msgid "ai_merge_confirm_title"
+msgstr "AI Duplicate Detected"
+
+msgid "ai_merged_n"
+msgstr "Merged %d pair(s) successfully."
+
+msgid "ai_scanning_duplicates"
+msgstr "AI is scanning for duplicates..."
+
+msgid "auto_dupe_check_disabled"
+msgstr "Disabled"
+
+msgid "auto_dupe_check_enabled"
+msgstr "Enabled"
+
+msgid "auto_dupe_check_preference_desc"
+msgstr "Select your preference for automatic AI duplicate detection:"
+
+msgid "auto_dupe_check_setting_desc"
+msgstr "When enabled, X-Ray automatically asks the AI to check for duplicate characters and locations after every data fetch. If duplicates are detected, you will be prompted to review and merge them.\n\nDisabling this will stop all background duplicate scanning. You can still merge duplicates manually via the Characters or Locations menu.\n\nNote: each check uses one AI API call. Users on free-tier or quota-limited plans may prefer to disable this."
+
+msgid "auto_dupe_check_setting_title"
+msgstr "Duplicate Check"
+
+msgid "auto_fetch_page_interval_prompt"
+msgstr "Page Interval"
 
 msgid "auto_update_aggressive"
 msgstr "Aggressive: checks every new chapter"
@@ -27,13 +60,16 @@ msgid "auto_update_economical"
 msgstr "Economical: checks at most every 15 mins"
 
 msgid "auto_update_freq_about"
-msgstr "Auto-update checks for new chapter data in the background as you read.\n\nLIMITS & PERFORMANCE\nFrequent background requests can drain BATTERY LIFE and may hit AI PROVIDER RATE LIMITS (especially on Pro models).\n\nMODES\n• Disabled: No background requests\n• Aggressive: Checks every time you enter a new chapter\n• Balanced: Checks at most every 5 minutes (recommended)\n• Economical: Checks at most every 15 minutes\n• Sparse: Checks at most every 30 minutes\n\nNote: If a chapter is skipped due to frequency limits, X-Ray will automatically include it in the next background fetch."
+msgstr "Auto-update checks for new chapter data in the background as you read.\n\nLIMITS & PERFORMANCE\nFrequent background requests can drain BATTERY LIFE and may hit AI PROVIDER RATE LIMITS (especially on Pro models).\n\nMODES\n• Ultra: Checks every N pages you configure (mid-chapter)\n• Aggressive: Checks every time you enter a new chapter\n• Balanced: Checks at most every 5 minutes (recommended)\n• Economical: Checks at most every 15 minutes\n• Sparse: Checks at most every 30 minutes\n• Disabled: No background requests\n\nNote: If a chapter is skipped due to frequency limits, X-Ray will automatically include it in the next background fetch."
 
 msgid "auto_update_freq_label"
 msgstr "Background fetching frequency:"
 
 msgid "auto_update_sparse"
 msgstr "Sparse: checks at most every 30 mins"
+
+msgid "auto_update_ultra"
+msgstr "Ultra: checks every %d pages"
 
 msgid "back_to_reading"
 msgstr "Back to Reading"
@@ -179,8 +215,29 @@ msgstr "Very Detailed"
 msgid "dont_ask_again"
 msgstr "Don't ask again"
 
+msgid "entity_label_characters"
+msgstr "characters"
+
+msgid "entity_label_locations"
+msgstr "locations"
+
 msgid "entity_not_found"
 msgstr "'%s' was not found as a character or location."
+
+msgid "entity_ui_style_both"
+msgstr "Modern Popup (Both)"
+
+msgid "entity_ui_style_classic"
+msgstr "Classic Dialog"
+
+msgid "entity_ui_style_desc"
+msgstr "Select when to use the new Modern Popup UI instead of the Classic Dialog for entity descriptions."
+
+msgid "entity_ui_style_in_text"
+msgstr "Modern Popup (In-text only)"
+
+msgid "entity_ui_style_menu"
+msgstr "Modern Popup (Menu only)"
 
 msgid "error_api_key_desc"
 msgstr "The API key provided was rejected. Please check your settings and ensure the key is correct."
@@ -257,6 +314,12 @@ msgstr "Analyzing book to generate X-Ray data..."
 msgid "fetching_author"
 msgstr "Fetching author info from %s..."
 
+msgid "fetching_series_context"
+msgstr "Fetching series context: Book %d of %d…"
+
+msgid "fetching_series_info"
+msgstr "Identifying series books…"
+
 msgid "fetching_wait"
 msgstr "⏳ Please wait...\nThis process may take 10-50 seconds."
 
@@ -308,6 +371,9 @@ msgstr "Language Mismatch"
 msgid "language_changed_reopen"
 msgstr "Language changed. Reopen the menu to see the changes."
 
+msgid "later"
+msgstr "Later"
+
 msgid "linked_entries"
 msgstr "Linked Entries"
 
@@ -325,6 +391,9 @@ msgstr "Logs cleared!"
 
 msgid "looking_up_msg"
 msgstr "Looking up '%s'..."
+
+msgid "low_conf_match"
+msgstr "Partial match — showing '%s' for your query. Tap below to fetch the exact term."
 
 msgid "mention_dismiss_btn"
 msgstr "✕"
@@ -398,14 +467,23 @@ msgstr "Clear Logs"
 msgid "menu_config_header"
 msgstr "--- Current Configuration ---"
 
+msgid "menu_content_fetch_settings"
+msgstr "Content & Fetch Settings"
+
 msgid "menu_custom_model_title"
 msgstr "Custom %s Model"
 
 msgid "menu_desc_length_settings"
 msgstr "Description Length"
 
+msgid "menu_display_ui_settings"
+msgstr "Display & UI Settings"
+
 msgid "menu_enter_custom_model"
 msgstr "Enter custom model..."
+
+msgid "menu_entity_ui_mode"
+msgstr "Entity Description Style"
 
 msgid "menu_fetch_author"
 msgstr "Fetch Author Info (AI)"
@@ -415,6 +493,12 @@ msgstr "Fetch More Characters"
 
 msgid "menu_fetch_more_terms"
 msgstr "Fetch More Terms"
+
+msgid "menu_fetch_series_context"
+msgstr "Fetch / Refresh Series Context"
+
+msgid "menu_frequency"
+msgstr "Frequency"
 
 msgid "menu_historical_figures"
 msgstr "Historical Figures"
@@ -443,6 +527,9 @@ msgstr "AI Reasoning Effort"
 msgid "menu_secondary_ai_model"
 msgstr "Secondary AI Model"
 
+msgid "menu_series_context"
+msgstr "Series Context"
+
 msgid "menu_settings"
 msgstr "Settings"
 
@@ -451,6 +538,12 @@ msgstr "Glossary"
 
 msgid "menu_timeline"
 msgstr "Timeline"
+
+msgid "menu_ui_popup_intext"
+msgstr "Use Footnote Style for In-text Lookups"
+
+msgid "menu_ui_popup_menu"
+msgstr "Use Footnote Style for Menu Lookups"
 
 msgid "menu_update_xray"
 msgstr "Update X-Ray Data"
@@ -462,10 +555,13 @@ msgid "menu_xray"
 msgstr "X-Ray"
 
 msgid "menu_xray_mode"
-msgstr "X-Ray Mode Settings"
+msgstr "In-text X-Ray Lookups"
 
 msgid "merge_back"
 msgstr "← Back"
+
+msgid "merge_button"
+msgstr "Merge"
 
 msgid "merge_confirm"
 msgstr "Merge %s into %s? The secondary entry will be deleted and its aliases absorbed."
@@ -530,11 +626,17 @@ msgstr "No character data yet.\n\nPlease use 'Fetch X-Ray Data' first."
 msgid "no_data_prompt"
 msgstr "No X-Ray data found for this book. Would you like to fetch it from AI now?"
 
+msgid "no_duplicates_found"
+msgstr "No duplicates found."
+
 msgid "no_historical_data"
 msgstr "No historical figure data yet.\n\nPlease use 'Fetch X-Ray Data' first.\n\nAI will detect real historical\nfigures mentioned in the book."
 
 msgid "no_location_data"
 msgstr "No location data yet. Please use 'Fetch X-Ray Data' first."
+
+msgid "no_merges_performed"
+msgstr "No merges were performed."
 
 msgid "no_terms_data"
 msgstr "No terms data yet. Please use 'Fetch X-Ray Data' first."
@@ -548,14 +650,20 @@ msgstr "OK"
 msgid "path"
 msgstr "plugins/xray.koplugin"
 
+msgid "pending_duplicates_prompt"
+msgstr "AI found %d possible duplicate(s) from the last fetch. Review now?"
+
 msgid "plugin_description"
 msgstr "Transform your reading experience with AI-powered book analysis, just like Amazon Kindle X-Ray!"
 
 msgid "quick_menu_title"
 msgstr "X-Ray Quick Menu"
 
+msgid "reason"
+msgstr "Reason"
+
 msgid "reasoning_about"
-msgstr "Controls 'thinking' depth for reasoning models:\n\n• Unset: No specific instruction sent; model uses its internal defaults.\n• Low: Fast, economical extraction for simple books.\n• Medium: Balanced depth for most narratives.\n• High: Detailed analysis for complex character webs.\n\nApplies to: GPT-5.x, DeepSeek Reasoner, Claude 4.5+ (extended thinking), and Gemini 2.5+."
+msgstr "Controls 'thinking' depth for reasoning models:\n\n• Unset: No specific instruction sent; model uses its internal defaults.\n• Low: Fast, economical extraction for simple books.\n• Medium: Balanced depth for most narratives.\n• High: Detailed analysis for complex character webs.\n\nApplies to: GPT-5.x (o1/o3/gpt-5), Claude (sonnet/opus/haiku), and Gemini 2.5+.\n\nNote: DeepSeek V4 reasons inherently — this setting has no effect on it."
 
 msgid "reasoning_high"
 msgstr "High"
@@ -568,6 +676,12 @@ msgstr "Medium"
 
 msgid "reasoning_unset"
 msgstr "Unset (Default)"
+
+msgid "relookup_button"
+msgstr "Re-lookup '%s'"
+
+msgid "review"
+msgstr "Review"
 
 msgid "save"
 msgstr "Save"
@@ -587,6 +701,36 @@ msgstr "Enter character name"
 msgid "search_term"
 msgstr "Search Terms"
 
+msgid "series_ask_later_msg"
+msgstr "Series recap postponed. We will ask again when you open/resume this book."
+
+msgid "series_context_enabled_toggle"
+msgstr "Enable Series Context"
+
+msgid "series_context_loaded"
+msgstr "Series context loaded (%d prior books)."
+
+msgid "series_context_prompt_text"
+msgstr "This appears to be Book %d of '%s'. Load a recap of the previous %d book(s)?\n\n(You can disable this in Settings → Series Context)"
+
+msgid "series_context_prompt_title"
+msgstr "Series Detected"
+
+msgid "series_disabled_msg"
+msgstr "Auto-prompt disabled for this book. You can manually fetch recap from X-Ray menu."
+
+msgid "series_no_prior_detected"
+msgstr "No prior books detected for this series."
+
+msgid "series_prior_books_header"
+msgstr "── Prior Books ──"
+
+msgid "series_prior_label"
+msgstr "[Prior]"
+
+msgid "skip"
+msgstr "Skip"
+
 msgid "spoiler_free_about"
 msgstr "Spoiler-free mode limits AI extraction to the pages you have already read (up to your current page), preventing spoilers from future chapters.\n\nFull Book Mode analyzes the entire book, which may contain spoilers."
 
@@ -601,6 +745,9 @@ msgstr "Select your spoiler preference for X-Ray data:"
 
 msgid "spoiler_preference_title"
 msgstr "Spoiler Preference"
+
+msgid "stop"
+msgstr "Stop"
 
 msgid "term_not_found"
 msgstr "No term found matching '%s'"
@@ -673,6 +820,9 @@ msgstr "What's new:"
 
 msgid "updating_ai"
 msgstr "Updating X-Ray Data..."
+
+msgid "val"
+msgstr "???"
 
 msgid "xray_disabled_label"
 msgstr "Disabled"

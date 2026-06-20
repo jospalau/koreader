@@ -16,6 +16,35 @@ REQUIRED JSON FORMAT:
   "author_death": "Death Date, formatted based on local date format"
 }]],
 
+    -- Find Duplicates (for AI-Assisted Merge)
+    find_duplicates = [[Book: %s
+Author: %s
+Reading Progress: %d%%
+
+You are reviewing the following list of %s extracted from this book.
+Your task is to identify any entries that appear to be the SAME entity listed under different names.
+
+LIST:
+%s
+
+RULES:
+- A duplicate exists when two entries clearly refer to the same entity (e.g., "The Grand Library" and "Grand Library", or "John" and "John Doe").
+- Do NOT flag entries that are merely related or similar but distinct.
+- Do NOT flag entries unless you are highly confident they are the same entity.
+- If no duplicates exist, return an empty array.
+- SPOILER RULE: Do not use knowledge from beyond %d%% reading progress.
+
+REQUIRED JSON FORMAT:
+{
+  "duplicate_pairs": [
+    {
+      "primary": "Name of the entry to KEEP (the more complete or formal name)",
+      "secondary": "Name of the entry to REMOVE",
+      "reason": "Brief reason (max 100 chars)"
+    }
+  ]
+}]],
+
     -- Single Comprehensive Fetch (Combined Characters, Locations, Timeline)
     comprehensive_xray = [[Book: %s
 Author: %s
@@ -73,6 +102,11 @@ STRICT SPOILER RULES:
 - ABSOLUTELY NO information from after the current reading progress. Stop exactly at the %d%% mark.
 - Descriptions must reflect the characters' state at this exact point in the book.
 
+STRICT KNOWLEDGE SOURCE RULES (CRITICAL):
+- For FICTIONAL CHARACTERS: Your descriptions MUST be based SOLELY on what is explicitly stated or clearly implied in the provided text. Do NOT supplement with knowledge from prior training, external sources, or general awareness of the book/series/author.
+- If a character has only been briefly mentioned in the text so far, your description must reflect that limited information only. Do NOT infer, assume, or add any detail not grounded in the provided context.
+- The ONLY exception is for REAL HISTORICAL FIGURES (placed in `historical_figures`): you may use internal knowledge for their general biography/role, but still rely on the book text for their `context_in_book`.
+
 STRICT JSON SAFETY RULES:
 - You MUST properly escape all double quotes (\") inside strings.
 - Do NOT use unescaped line breaks inside strings.
@@ -88,7 +122,7 @@ REQUIRED JSON FORMAT:
       "role": "Short archetype label (3-5 words, e.g. 'Antagonist', 'Protagonist', 'The Victim')",
       "gender": "Male / Female / Unknown",
       "occupation": "Job/Status",
-      "description": "Deep analysis with details from the text so far. NO SPOILERS. (Max {MAX_CHAR_DESC} chars)"
+      "description": "Description based STRICTLY on text provided. Do not infer or add external knowledge. NO SPOILERS. (Max {MAX_CHAR_DESC} chars)"
     }
   ],
   "historical_figures": [
@@ -147,7 +181,7 @@ REQUIRED JSON FORMAT:
       "role": "Short archetype label (3-5 words, e.g. 'Antagonist', 'Protagonist', 'The Victim')",
       "gender": "Male / Female / Unknown",
       "occupation": "Job/Status",
-      "description": "Deep analysis with details from the text so far. NO SPOILERS. (Max {MAX_CHAR_DESC} chars)"
+      "description": "Description based STRICTLY on text provided. Do not infer or add external knowledge. NO SPOILERS. (Max {MAX_CHAR_DESC} chars)"
     }
   ]
 }]],
@@ -188,9 +222,10 @@ REQUIRED JSON FORMAT:
 TASK: Determine if this word represents a Character, Location, Historical Figure, or Technical Term/Acronym in the book.
 
 CRITICAL FOR CHARACTERS AND LOCATIONS: Use the provided "BOOK TEXT CONTEXT" to identify the entity. If the word is provided in a "SEARCH TARGET" or "DIRECT REFERENCE" hint, it IS present in the book at the current position. Do not reject it just because it isn't found exactly in the sub-sampled narrative text. Short names (as short as 2 letters, e.g. "Oz", "Al", "Jo") are valid and should be analyzed.
+CRITICAL FOR FICTIONAL CHARACTERS: Describe ONLY what the provided book text reveals. Do NOT use prior training knowledge about this character, even if you recognize them from a well-known series. If the text only briefly mentions this character, your description must reflect that limited information.
 CRITICAL FOR HISTORICAL FIGURES: You MAY use your internal knowledge to verify their identity and provide their biography/role, ONLY if they are a real, notable historical figure. You MUST still use the text context for their relevance in the book.
-CRITICAL FOR TERMS: If the book is non-fiction, check if the word is a technical term, acronym, or key concept. Provide its definition in context.
-If the word is NOT a character, location, historical figure, or technical term, set `is_valid` to false.
+CRITICAL FOR TERMS: If the book is non-fiction, check if the word is a technical term, acronym, or key concept. For technical terms, concepts, or jargon: the term may appear in chapter samples rather than the immediate page context — treat it as valid if you can define it in the context of this book's subject. Only set `is_valid` to false if the phrase has absolutely no relevance to this book's subject matter.
+If the word is NOT a character, location, historical figure, or technical term/concept, set `is_valid` to false.
 
 REQUIRED JSON FORMAT:
 {
@@ -225,6 +260,60 @@ Secondary Description: %s
 REQUIRED JSON FORMAT:
 {
   "merged_description": "Combined and polished description (Max {MAX_CHAR_DESC} chars)"
+}]],
+
+    -- Multi-Book Series Context Prompts
+    series_detect = [[Book Title: %s
+Author: %s
+
+TASK: Determine if this book is part of a named series.
+Return ONLY valid JSON:
+{
+  "is_series": true,
+  "series_name": "The Wheel of Time",
+  "book_index": 3,
+  "total_books_known": 14
+}
+If this is NOT a series book, return:
+{ "is_series": false }]],
+
+    prior_book_list = [[Series: %s
+Current Book Index: %d
+Current Book Title: %s
+
+TASK: List the titles (and authors if different from "%s") of books 1 through %d
+that come BEFORE the current book in this series.
+Return ONLY valid JSON:
+{
+  "prior_books": [
+    { "index": 1, "title": "The Eye of the World", "author": "Robert Jordan" }
+  ]
+}]],
+
+    series_book_summary = [[Book: %s
+Author: %s
+This is book %d in the series "%s".
+
+TASK: Provide a COMPLETE recap of this entire book for a reader
+who is ABOUT TO START the NEXT book in the series.
+Include: key characters (name, role, final status at book end), major locations,
+critical plot events, and important world-building terms introduced.
+NO SPOILERS for books BEYOND this one.
+
+REQUIRED JSON FORMAT:
+{
+  "characters": [
+    { "name": "Full Name", "aliases": [], "role": "...", "description": "Status at end of this book (max 300 chars)" }
+  ],
+  "locations": [
+    { "name": "...", "description": "..." }
+  ],
+  "terms": [
+    { "name": "...", "aliases": ["Alias 1", "Alias 2"], "expanded": "...", "category": "...", "definition": "..." }
+  ],
+  "timeline": [
+    { "chapter": "Book Summary", "event": "A single, highly detailed, comprehensive recap of the entire book's plot, main events, and resolution (max 2000 characters). You MUST format this recap using multiple distinct paragraphs separated by double newlines (\\n\\n) for readability instead of a single wall of text." }
+  ]
 }]],
 
     -- Fallback strings
