@@ -227,18 +227,31 @@ function ReadingHoursWindow:init()
 			HorizontalSpan:new({ width = Screen:scaleBySize(5) }),
 			icon2,
 		})
-
         local datetime = require("datetime")
-        local read_book = ""
         local ui = require("apps/reader/readerui").instance
         local user_duration_format = "modern"
-        read_book = ui.view.topbar.initial_total_time_book + (os.time() - ui.view.topbar.start_session_time)
 
-        local percentage_read = ui.view.footer.pageno / ui.view.footer.pages
-        local Math = require("optmath")
-        local words_read = Math.round(ui.view.topbar.total_words * percentage_read)
-        local wpm =  math.floor(words_read / (read_book/60))
-        read_book = read_book > 86400 and math.floor(read_book/60/60/24 * 100)/100 .. "d" or datetime.secondsToClockDuration(user_duration_format, read_book, false)
+        local read_book = "0:00"
+        local session_time = "0:00"
+        local wpm = 0
+
+        local topbar = ui.view and ui.view.topbar
+        if topbar then
+            local session_secs = os.time() - topbar.start_session_time
+            local total_secs = topbar.initial_total_time_book + session_secs
+
+            local percentage_read = ui.view.footer.pageno / ui.view.footer.pages
+            local Math = require("optmath")
+            local words_read = Math.round(topbar.total_words * percentage_read)
+            wpm = math.floor(words_read / (total_secs / 60))
+            session_time = session_secs > 86400
+            and math.floor(session_secs / 60 / 60 / 24 * 100) / 100 .. "d"
+            or datetime.secondsToClockDuration(user_duration_format, session_secs, false)
+
+            read_book = total_secs > 86400
+            and math.floor(total_secs / 60 / 60 / 24 * 100) / 100 .. "d"
+            or datetime.secondsToClockDuration(user_duration_format, total_secs, false)
+        end
 
         local title_text = TextWidget:new{
             text = ui.view.topbar.title,
@@ -283,7 +296,10 @@ function ReadingHoursWindow:init()
             LeftContainer:new({
                 dimen = Geom:new({ w = scrollable:getSize().w, h = Screen:scaleBySize(20) }),
                 TextWidget:new{
-                    text = datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")) .. " - " .. read_book .. " - " .. wpm .. "wpm",
+                    text = datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
+                    .. " - " .. session_time
+                    .. " - " .. read_book
+                    .. " - " .. wpm .. "wpm",
                     face = Font:getFace("cfont", 16),
                     bold = false,
                 },
