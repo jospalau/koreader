@@ -1387,7 +1387,7 @@ function Repo.readProgress(filepath)
         --page_count = pageCountFromFilename(filepath)
         if calibre_data[key] and calibre_data[key]["pages"] then
             page_count = calibre_data[key]["pages"]
-        end
+    end
     end
     if calibre_data[key] and calibre_data[key]["pubdate"] then
         pub_date = calibre_data[key]["pubdate"]:sub(1, 4)
@@ -3792,28 +3792,37 @@ function Repo.searchAll(query)
     if not query or query == "" then return empty end
     local q = query:lower()
 
-    -- ── folders ──
-    -- Derive from the already-cached walk: unique parent directories whose
-    -- basename matches the query. No disk I/O: cachedWalk returns { fp, mtime }.
     local home  = G_reader_settings:readSetting("home_dir") or "/"
     local depth = BookshelfSettings.read("latest_walk_depth") or 3
     local key   = (home or "/") .. ":" .. tostring(depth or 0)
-    local cands = cachedWalk(home, depth)
-    local seen_dirs = {}
+
+    -- ── folders ──
+    -- Folder names are excluded from search by default (issue #190): most
+    -- libraries file books into author / series / genre folders, so a folder
+    -- whose name matches the query just duplicates the metadata group of the
+    -- same name (often with a slightly different count when a book is filed
+    -- there without matching metadata). Opt in via the "Include folder names
+    -- in search results" advanced setting for folder-led navigation.
+    -- Derive from the already-cached walk: unique parent directories whose
+    -- basename matches the query. No disk I/O: cachedWalk returns { fp, mtime }.
     local folders = {}
-    for _i, c in ipairs(cands) do
-        local dir = c.fp:match("^(.*)/[^/]+$") or "/"
-        if not seen_dirs[dir] then
-            seen_dirs[dir] = true
-            local basename = dir:match("([^/]+)$") or dir
-            if basename:lower():find(q, 1, true) then
-                local first_book = Repo.buildBookMeta(c.fp)
-                folders[#folders + 1] = {
-                    kind       = "folder",
-                    path       = dir,
-                    label      = basename,
-                    first_book = first_book,
-                }
+    if BookshelfSettings.read("search_include_folders") == true then
+        local cands = cachedWalk(home, depth)
+        local seen_dirs = {}
+        for _i, c in ipairs(cands) do
+            local dir = c.fp:match("^(.*)/[^/]+$") or "/"
+            if not seen_dirs[dir] then
+                seen_dirs[dir] = true
+                local basename = dir:match("([^/]+)$") or dir
+                if basename:lower():find(q, 1, true) then
+                    local first_book = Repo.buildBookMeta(c.fp)
+                    folders[#folders + 1] = {
+                        kind       = "folder",
+                        path       = dir,
+                        label      = basename,
+                        first_book = first_book,
+                    }
+                end
             end
         end
     end
