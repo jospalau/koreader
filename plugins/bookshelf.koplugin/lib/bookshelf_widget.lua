@@ -10051,6 +10051,7 @@ function BookshelfWidget:_openBookMenu(item)
                     end
                     if ai and bi then h[ai], h[bi] = h[bi], h[ai] end
                     ReadHistory.hist = h
+                    ReadHistory:_flush()
                     Repo.invalidateWalkCache()
                     bw:_rebuild()
                 end,
@@ -10069,6 +10070,7 @@ function BookshelfWidget:_openBookMenu(item)
                     end
                     if ai and bi then h[ai], h[bi] = h[bi], h[ai] end
                     ReadHistory.hist = h
+                    ReadHistory:_flush()
                     Repo.invalidateWalkCache()
                     bw:_rebuild()
                 end,
