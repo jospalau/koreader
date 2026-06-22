@@ -16,7 +16,8 @@ local _ = require("lib/bookshelf_i18n").gettext
 local STATUS_ROWS = {
     { id = "reading",  label = _("Reading") },
     { id = "unread",   label = _("Unread") },
-    { id = "on_hold",  label = _("On hold") },
+    { id = "tbr",  label = _("TBR") },
+    { id = "mbr",  label = _("MBR") },
     { id = "finished", label = _("Finished") },
 }
 
@@ -33,7 +34,7 @@ local function getCounts()
         if ok then
             _gen, _total, _counts = gen, total, counts
         else
-            _total, _counts = 0, { reading = 0, unread = 0, on_hold = 0, finished = 0 }
+            _total, _counts = 0, { reading = 0, unread = 0, tbr = 0, mbr = 0, finished = 0 }
         end
     end
     return _total, _counts

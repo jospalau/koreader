@@ -3188,10 +3188,16 @@ end
 -- bookshelf states. Built on _statusForFp, so unopened books (no sidecar)
 -- cost nothing beyond the walk, and opened ones hit the progress cache.
 function Repo.countByStatus()
-    local counts = { unread = 0, reading = 0, on_hold = 0, finished = 0 }
+    local counts = {}
     local paths = Repo.getAllFilepaths()
     for _i, fp in ipairs(paths) do
-        local s = _statusForFp(fp)
+        local s
+        if G_reader_settings:isTrue("top_manager_infmandhistory") then
+            s = (_G.all_files and _G.all_files[fp] and _G.all_files[fp].status) or _statusForFp(fp)
+            if s == "complete" then s = "finished" end
+        else
+            s = _statusForFp(fp)
+        end
         counts[s] = (counts[s] or 0) + 1
     end
     return #paths, counts
