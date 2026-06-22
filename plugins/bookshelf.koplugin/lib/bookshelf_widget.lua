@@ -9959,6 +9959,62 @@ function BookshelfWidget:_openBookMenu(item)
     buttons[#buttons + 1] = status_row
     buttons[#buttons + 1] = { reset_btn, remove_history_button, fav_button }
     buttons[#buttons + 1] = { delete_btn, refresh_button }
+    local _tbr_status = _G.all_files and _G.all_files[book.filepath] and _G.all_files[book.filepath].status
+    if _tbr_status == "tbr" then
+        local ReadHistory = require("readhistory")
+        local items = ReadHistory.hist or {}
+        -- Encuentra el índice del libro actual en la lista TBR
+        local tbr_items = {}
+        for _, entry in ipairs(items) do
+            local s = _G.all_files and _G.all_files[entry.file] and _G.all_files[entry.file].status
+            if s == "tbr" then
+                tbr_items[#tbr_items + 1] = entry
+            end
+        end
+        local cur_idx = nil
+        for i, entry in ipairs(tbr_items) do
+            if entry.file == book.filepath then cur_idx = i; break end
+        end
+        buttons[#buttons + 1] = {
+            {
+                text    = _("Move Up TBR"),
+                enabled = cur_idx and cur_idx > 1,
+                callback = function()
+                    UIManager:close(dialog)
+                    if not cur_idx or cur_idx <= 1 then return end
+                    -- intercambiar en hist original
+                    local h = ReadHistory.hist
+                    local ai, bi
+                    for i, e in ipairs(h) do
+                        if e.file == tbr_items[cur_idx - 1].file then ai = i end
+                        if e.file == book.filepath then bi = i end
+                    end
+                    if ai and bi then h[ai], h[bi] = h[bi], h[ai] end
+                    ReadHistory.hist = h
+                    Repo.invalidateWalkCache()
+                    bw:_rebuild()
+                end,
+            },
+            {
+                text    = _("Move Down TBR"),
+                enabled = cur_idx and cur_idx < #tbr_items,
+                callback = function()
+                    UIManager:close(dialog)
+                    if not cur_idx or cur_idx >= #tbr_items then return end
+                    local h = ReadHistory.hist
+                    local ai, bi
+                    for i, e in ipairs(h) do
+                        if e.file == tbr_items[cur_idx + 1].file then ai = i end
+                        if e.file == book.filepath then bi = i end
+                    end
+                    if ai and bi then h[ai], h[bi] = h[bi], h[ai] end
+                    ReadHistory.hist = h
+                    Repo.invalidateWalkCache()
+                    bw:_rebuild()
+                end,
+            },
+        }
+    end
     buttons[#buttons + 1] = { select_btn, cancel_btn, apply_btn }
 
     -- Inset the header by the shelf's inter-column book gap, and ONLY that:
