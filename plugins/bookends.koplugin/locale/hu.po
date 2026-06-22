@@ -1,157 +1,160 @@
 # Bookends — KOReader Plugin
-# Français translation
+# Hungarian translation
 msgid ""
 msgstr ""
+"Project-Id-Version: bookends\n"
 "Report-Msgid-Bugs-To: \n"
 "POT-Creation-Date: 2026-06-13 00:14+0100\n"
-"Language: fr\n"
+"Language-Team: Hungarian\n"
+"Language: hu\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=n != 1;\n"
 
 #: bookends_updater.lua:105
 msgid "Open the releases page in a browser?"
-msgstr "Ouvrir la page des versions dans un navigateur ?"
+msgstr "Megnyitod a kiadások oldalát a böngészőben?"
 
 #: bookends_updater.lua:106
 msgid "Open"
-msgstr "Ouvrir"
+msgstr "Megnyitás"
 
 #: bookends_updater.lua:189
 msgid "Checking for updates..."
-msgstr "Recherche de mises à jour…"
+msgstr "Frissítések keresése..."
 
 #: bookends_updater.lua:201
 msgid "Could not check for updates."
-msgstr "Impossible de vérifier les mises à jour."
+msgstr "A frissítések ellenőrzése nem sikerült."
 
 #: bookends_updater.lua:238
 msgid "Bookends is up to date."
-msgstr "Bookends est à jour."
+msgstr "A Bookends naprakész."
 
 #: bookends_updater.lua:239
 msgid "Version: "
-msgstr "Version : "
+msgstr "Verzió: "
 
 #: bookends_updater.lua:267 bookends_line_editor.lua:451 main.lua:2654
 #: menu/tokens_library.lua:458 menu/icons_library.lua:355
 #: menu/preset_manager_modal.lua:561
 msgid "Close"
-msgstr "Fermer"
+msgstr "Bezárás"
 
 #: bookends_updater.lua:273
 msgid "Update and restart"
-msgstr "Mettre à jour et redémarrer"
+msgstr "Frissítés és újraindítás"
 
 #: bookends_updater.lua:278
 msgid "No download available for this release."
-msgstr "Aucun téléchargement disponible pour cette version."
+msgstr "Ehhez a kiadáshoz nincs elérhető letöltés."
 
 #: bookends_updater.lua:289
 msgid "Update available!"
-msgstr "Mise à jour disponible !"
+msgstr "Frissítés elérhető!"
 
 #: bookends_updater.lua:290
 msgid "Installed: "
-msgstr "Installé : "
+msgstr "Telepítve: "
 
 #: bookends_updater.lua:291
 msgid "Latest: "
-msgstr "Dernière : "
+msgstr "Legújabb: "
 
 #: bookends_updater.lua:316
 msgid "Downloading update..."
-msgstr "Téléchargement de la mise à jour…"
+msgstr "Frissítés letöltése..."
 
 #: bookends_updater.lua:378
 msgid "Download failed."
-msgstr "Téléchargement échoué."
+msgstr "A letöltés sikertelen."
 
 #: bookends_updater.lua:390
 msgid "Installation failed: "
-msgstr "Installation échouée : "
+msgstr "A telepítés sikertelen: "
 
 #: bookends_updater.lua:407
 msgid "Bookends updated to v"
-msgstr "Bookends mis à jour vers v"
+msgstr "A Bookends frissítve erre: v"
 
 #: bookends_updater.lua:408
 msgid "Restart KOReader now?"
-msgstr "Redémarrer KOReader maintenant ?"
+msgstr "Újraindítod a KOReadert most?"
 
 #: bookends_updater.lua:409 main.lua:59
 msgid "Restart"
-msgstr "Redémarrer"
+msgstr "Újraindítás"
 
 #: bookends_updater.lua:425
 msgid "Could not install branch:"
-msgstr "Impossible d'installer la branche :"
+msgstr "A branch telepítése sikertelen:"
 
 #: bookends_updater.lua:444
 msgid "Downloading latest release..."
-msgstr "Téléchargement de la dernière version…"
+msgstr "A legújabb kiadás letöltése..."
 
 #: bookends_updater.lua:455
 msgid "Could not fetch latest release."
-msgstr "Impossible de récupérer la dernière version."
+msgstr "A legújabb kiadás lekérése sikertelen."
 
 #: bookends_updater.lua:468
 msgid "Latest release has no downloadable zip."
-msgstr "La dernière version ne contient pas de fichier zip téléchargeable."
+msgstr "A legújabb kiadáshoz nincs letölthető zip."
 
 #: bookends_line_editor.lua:112 main.lua:1000
 msgid "Regular"
-msgstr "Normal"
+msgstr "Normál"
 
 #: bookends_line_editor.lua:118
 msgid "Size"
-msgstr "Taille"
+msgstr "Méret"
 
 #: bookends_line_editor.lua:125
 msgid "Font"
-msgstr "Police"
+msgstr "Betűtípus"
 
 #: bookends_line_editor.lua:127
 msgid "Font..."
-msgstr "Police…"
+msgstr "Betűtípus..."
 
 #: bookends_line_editor.lua:139
 msgid "Odd pg"
-msgstr "Pg impaire"
+msgstr "Páratlan old."
 
 #: bookends_line_editor.lua:140
 msgid "Even pg"
-msgstr "Pg paire"
+msgstr "Páros old."
 
 #: bookends_line_editor.lua:141
 msgid "All pg"
-msgstr "Ts pg"
+msgstr "Minden old."
 
 #: bookends_line_editor.lua:177
 msgid "- Progress bar"
-msgstr "- Barre de progression"
+msgstr "- Folyamatjelző"
 
 #: bookends_line_editor.lua:177
 msgid "+ Progress bar"
-msgstr "+ Barre de progression"
+msgstr "+ Folyamatjelző"
 
 #: bookends_line_editor.lua:182
 msgid "Bar style…"
-msgstr "Style de barre…"
+msgstr "Sávstílus…"
 
 #: bookends_line_editor.lua:213 bookends_line_editor.lua:367
 #: menu/progress_bar_menu.lua:141
 msgid "Bordered"
-msgstr "Bordé"
+msgstr "Szegélyezett"
 
 #: bookends_line_editor.lua:213 menu/progress_bar_menu.lua:141
 #: menu/progress_bar_menu.lua:142
 msgid "Solid"
-msgstr "Plein"
+msgstr "Teli"
 
 #: bookends_line_editor.lua:213 menu/progress_bar_menu.lua:141
 msgid "Rounded"
-msgstr "Arrondi"
+msgstr "Lekerekített"
 
 #: bookends_line_editor.lua:214 menu/progress_bar_menu.lua:141
 msgid "Metro"
@@ -159,15 +162,15 @@ msgstr "Metro"
 
 #: bookends_line_editor.lua:214 menu/progress_bar_menu.lua:141
 msgid "Wave"
-msgstr "Vague"
+msgstr "Hullám"
 
 #: bookends_line_editor.lua:214 menu/progress_bar_menu.lua:141
 msgid "Radial"
-msgstr "Radial"
+msgstr "Radiális"
 
 #: bookends_line_editor.lua:215 menu/progress_bar_menu.lua:141
 msgid "Radial hollow"
-msgstr "Radial creux"
+msgstr "Radiális, üres"
 
 #: bookends_line_editor.lua:215 menu/progress_bar_menu.lua:141
 msgid "Pacman"
@@ -175,65 +178,65 @@ msgstr "Pacman"
 
 #: bookends_line_editor.lua:219 menu/progress_bar_menu.lua:122
 msgid "Chapter ticks: off"
-msgstr "Repères chapitre : désactivés"
+msgstr "Fejezetjelölők: ki"
 
 #: bookends_line_editor.lua:220 menu/progress_bar_menu.lua:124
 msgid "Chapter ticks: top level"
-msgstr "Repères chapitre : premier niveau"
+msgstr "Fejezetjelölők: legfelső szint"
 
 #: bookends_line_editor.lua:221 menu/progress_bar_menu.lua:125
 msgid "Chapter ticks: top 2 levels"
-msgstr "Repères chapitre : 2 premiers niveaux"
+msgstr "Fejezetjelölők: felső 2 szint"
 
 #: bookends_line_editor.lua:222 menu/progress_bar_menu.lua:123
 msgid "Chapter ticks: all levels"
-msgstr "Repères de chapitre : Tous les niveaux"
+msgstr "Fejezetjelölők: minden szint"
 
 #: bookends_line_editor.lua:252
 msgid "Disable custom colours"
-msgstr "Désactiver les couleurs personnalisées"
+msgstr "Egyéni színek letiltása"
 
 #: bookends_line_editor.lua:252
 msgid "Enable custom colours"
-msgstr "Activer les couleurs personnalisées"
+msgstr "Egyéni színek engedélyezése"
 
 #: bookends_line_editor.lua:306
 msgid "Back"
-msgstr "Retour"
+msgstr "Vissza"
 
 #: bookends_line_editor.lua:313
 msgid "Bar colours"
-msgstr "Couleurs de la barre"
+msgstr "Sáv színei"
 
 #: bookends_line_editor.lua:343 menu/progress_bar_menu.lua:109
 msgid "Type"
-msgstr "Type"
+msgstr "Típus"
 
 #: bookends_line_editor.lua:343 menu/tokens_catalogue.lua:21
 #: menu/progress_bar_menu.lua:109
 msgid "Book"
-msgstr "Livre"
+msgstr "Könyv"
 
 #: bookends_line_editor.lua:343 menu/progress_bar_menu.lua:109
 msgid "Chapter"
-msgstr "Chapitre"
+msgstr "Fejezet"
 
 #: bookends_line_editor.lua:367 menu/progress_bar_menu.lua:142
 msgid "Style"
-msgstr "Style"
+msgstr "Stílus"
 
 #: bookends_line_editor.lua:379 menu/progress_bar_menu.lua:186
 msgid "Fill: right to left"
-msgstr "Remplissage : droite vers gauche"
+msgstr "Feltöltés: jobbról balra"
 
 #: bookends_line_editor.lua:379 menu/progress_bar_menu.lua:185
 msgid "Fill: left to right"
-msgstr "Remplissage : gauche vers droite"
+msgstr "Feltöltés: balról jobbra"
 
 #: bookends_line_editor.lua:395 bookends_line_editor.lua:397
 #: bookends_line_editor.lua:399 menu/progress_bar_menu.lua:224
 msgid "Thickness"
-msgstr "Épaisseur"
+msgstr "Vastagság"
 
 #: bookends_line_editor.lua:395 bookends_line_editor.lua:432
 msgid "auto"
@@ -241,42 +244,42 @@ msgstr "auto"
 
 #: bookends_line_editor.lua:407 menu/progress_bar_menu.lua:236
 msgid "Bar thickness"
-msgstr "Épaisseur de la barre"
+msgstr "Sáv vastagsága"
 
 #: bookends_line_editor.lua:409 menu/progress_bar_menu.lua:241
 msgid "Read"
-msgstr "Lu"
+msgstr "Olvasott"
 
 #: bookends_line_editor.lua:410 menu/progress_bar_menu.lua:242
 msgid "Unread"
-msgstr "Non lu"
+msgstr "Olvasatlan"
 
 #: bookends_line_editor.lua:432 bookends_colour_palette.lua:402 main.lua:2127
 #: main.lua:2359 bookends_dialog_helpers.lua:109 menu/colours_menu.lua:73
 #: menu/colours_menu.lua:269 menu/progress_bar_menu.lua:268
 #: menu/progress_bar_menu.lua:425
 msgid "Default"
-msgstr "Défaut"
+msgstr "Alapértelmezett"
 
 #: bookends_line_editor.lua:440
 msgid "Custom colours"
-msgstr "Couleurs personnalisées"
+msgstr "Egyéni színek"
 
 #: bookends_line_editor.lua:456
 msgid "Bar style"
-msgstr "Style de barre"
+msgstr "Sávstílus"
 
 #: bookends_line_editor.lua:477
 msgid "Font size"
-msgstr "Taille de police"
+msgstr "Betűméret"
 
 #: bookends_line_editor.lua:477
 msgid "line"
-msgstr "ligne"
+msgstr "sor"
 
 #: bookends_line_editor.lua:540
 msgid "Position"
-msgstr "Position"
+msgstr "Pozíció"
 
 #: bookends_line_editor.lua:582 bookends_line_editor.lua:848
 #: bookends_colour_palette.lua:400 main.lua:2117 main.lua:2816
@@ -288,70 +291,70 @@ msgstr "Position"
 #: menu/preset_manager_modal.lua:1707 menu/preset_manager_modal.lua:1731
 #: menu/preset_manager_modal.lua:1755
 msgid "Cancel"
-msgstr "Annuler"
+msgstr "Mégse"
 
 #: bookends_line_editor.lua:597
 msgid "Icons"
-msgstr "Icônes"
+msgstr "Ikonok"
 
 #: bookends_line_editor.lua:606
 msgid "Tokens"
-msgstr "Jetons"
+msgstr "Tokenek"
 
 #: bookends_line_editor.lua:616 main.lua:2818 menu/main_menu.lua:34
 #: menu/preset_manager_modal.lua:1135 menu/preset_manager_modal.lua:1294
 #: menu/preset_manager_modal.lua:1395
 msgid "Save"
-msgstr "Enregistrer"
+msgstr "Mentés"
 
 #: bookends_line_editor.lua:657 menu/position_menu.lua:44
 msgid "Line"
-msgstr "Ligne"
+msgstr "Sor"
 
 #: bookends_line_editor.lua:768 menu/progress_bar_menu.lua:44
 msgid "Move up"
-msgstr "Déplacer vers le haut"
+msgstr "Felfelé"
 
 #: bookends_line_editor.lua:778 menu/progress_bar_menu.lua:53
 msgid "Move down"
-msgstr "Déplacer vers le bas"
+msgstr "Lefelé"
 
 #: bookends_line_editor.lua:832
 msgid "Move to"
-msgstr "Déplacer vers"
+msgstr "Áthelyezés ide"
 
 #: bookends_line_editor.lua:842
 msgid "Line %1: %2"
-msgstr "Ligne %1 : %2"
+msgstr "%1. sor: %2"
 
 #: bookends_line_editor.lua:844 menu/preset_manager_modal.lua:1237
 #: menu/preset_manager_modal.lua:1631
 msgid "Delete"
-msgstr "Supprimer"
+msgstr "Törlés"
 
 #: bookends_utils.lua:8 bookends_utils.lua:197
 msgid "UI font"
-msgstr "Police de l'interface"
+msgstr "Felhasználói felület betűtípusa"
 
 #: bookends_utils.lua:9
 msgid "Serif"
-msgstr "Serif"
+msgstr "Talpas (Serif)"
 
 #: bookends_utils.lua:10
 msgid "Sans-serif"
-msgstr "Sans-serif"
+msgstr "Talpatlan (Sans-serif)"
 
 #: bookends_utils.lua:11
 msgid "Monospace"
-msgstr "Monospace"
+msgstr "Fix szélességű (Monospace)"
 
 #: bookends_utils.lua:12
 msgid "Cursive"
-msgstr "Cursive"
+msgstr "Kézírás (Cursive)"
 
 #: bookends_utils.lua:13
 msgid "Fantasy"
-msgstr "Fantaisie"
+msgstr "Díszes (Fantasy)"
 
 #: _meta.lua:7 menu/main_menu.lua:12
 msgid "Bookends"
@@ -362,683 +365,683 @@ msgid ""
 "Configurable text overlays at screen corners and edges with token expansion "
 "and icon support."
 msgstr ""
-"Surcouches de texte configurables aux coins et bords de l'écran avec "
-"expansion des jetons et prise en charge des icônes."
+"Beállítható szöveges overlay-ek a képernyő sarkaiban és szélein, token-"
+"helyettesítéssel és ikontámogatással."
 
 #: bookends_colour_palette.lua:404 main.lua:2156
 #: bookends_dialog_helpers.lua:116 menu/preset_manager_modal.lua:587
 msgid "Apply"
-msgstr "Appliquer"
+msgstr "Alkalmaz"
 
 #: bookends_colour_palette.lua:406 menu/colours_menu.lua:257
 msgid "White"
-msgstr "Blanc"
+msgstr "Fehér"
 
 #: bookends_colour_palette.lua:441 bookends_colour_palette.lua:561
 msgid "Pick a color"
-msgstr "Choisir une couleur"
+msgstr "Válassz színt"
 
 #: bookends_colour_palette.lua:529
 msgid "Invalid hex colour (use #RGB or #RRGGBB)"
-msgstr "Couleur hexadécimale invalide (utilisez #RGB ou #RRGGBB)"
+msgstr "Érvénytelen hexa szín (használj #RGB vagy #RRGGBB formátumot)"
 
 #: main.lua:60
 msgid "Dismiss"
-msgstr "Fermer"
+msgstr "Elvetés"
 
 #: main.lua:145
 msgid "Top-left"
-msgstr "Haut-gauche"
+msgstr "Bal felső"
 
 #: main.lua:146
 msgid "Top-center"
-msgstr "Haut-centre"
+msgstr "Felül középen"
 
 #: main.lua:147
 msgid "Top-right"
-msgstr "Haut-droite"
+msgstr "Jobb felső"
 
 #: main.lua:148
 msgid "Bottom-left"
-msgstr "Bas-gauche"
+msgstr "Bal alsó"
 
 #: main.lua:149
 msgid "Bottom-center"
-msgstr "Bas-centre"
+msgstr "Alul középen"
 
 #: main.lua:150
 msgid "Bottom-right"
-msgstr "Bas-droite"
+msgstr "Jobb alsó"
 
 #: main.lua:252
 msgid "Bookends: toggle visibility"
-msgstr "Bookends : basculer la visibilité"
+msgstr "Bookends: láthatóság váltása"
 
 #: main.lua:258
 msgid "Bookends: cycle preset"
-msgstr "Bookends : preset suivant"
+msgstr "Bookends: előbeállítás váltása"
 
 #: main.lua:264
 msgid "Bookends: set visibility"
-msgstr "Bookends : définir la visibilité"
+msgstr "Bookends: láthatóság beállítása"
 
 #: main.lua:267
 msgid "on"
-msgstr "activé"
+msgstr "be"
 
 #: main.lua:267 menu/colours_menu.lua:302 menu/colours_menu.lua:309
 #: menu/colours_menu.lua:349
 msgid "off"
-msgstr "désactivé"
+msgstr "ki"
 
 #: main.lua:272
 msgid "Bookends: open preset library"
-msgstr "Bookends : ouvrir la bibliothèque de presets"
+msgstr "Bookends: előbeállítás-könyvtár megnyitása"
 
 #: main.lua:361 main.lua:399 menu/preset_manager_modal.lua:1501
 msgid "My setup"
-msgstr "Ma config"
+msgstr "Saját beállításom"
 
 #: main.lua:362 main.lua:400 menu/preset_manager_modal.lua:1505
 msgid "Imported from your earlier Bookends settings"
-msgstr "Importé depuis vos précédents paramètres Bookends"
+msgstr "Importálva a korábbi Bookends-beállításaidból"
 
 #: main.lua:542
 msgid "Preset error: %1"
-msgstr "Erreur de preset : %1"
+msgstr "Előbeállítás hiba: %1"
 
 #: main.lua:551
 msgid "Preset: %1"
-msgstr "Preset : %1"
+msgstr "Előbeállítás: %1"
 
 #: main.lua:1001
 msgid "Bold"
-msgstr "Gras"
+msgstr "Félkövér"
 
 #: main.lua:1002
 msgid "Italic"
-msgstr "Italique"
+msgstr "Dőlt"
 
 #: main.lua:1003
 msgid "Bold italic"
-msgstr "Gras italique"
+msgstr "Félkövér dőlt"
 
 #: main.lua:2375
 msgid "Select font"
-msgstr "Choisir une police"
+msgstr "Betűtípus kiválasztása"
 
 #: main.lua:2416
 msgid "Font-family fonts"
-msgstr "Polices de famille"
+msgstr "Betűtípus-családok"
 
 #: main.lua:2481
 msgid "Fonts"
-msgstr "Polices"
+msgstr "Betűtípusok"
 
 #: main.lua:2575 menu/library_modal.lua:932
 msgid "Page %1 of %2"
-msgstr "Page %1 sur %2"
+msgstr "%1 / %2 oldal"
 
 #: main.lua:2664 main.lua:2838
 msgid "Reset"
-msgstr "Réinitialiser"
+msgstr "Visszaállítás"
 
 #: main.lua:2673
 msgid "Set font"
-msgstr "Définir la police"
+msgstr "Betűtípus beállítása"
 
 #: main.lua:2812 menu/main_menu.lua:416 menu/main_menu.lua:418
 msgid "Development branch"
-msgstr "Branche de développement"
+msgstr "Fejlesztői branch"
 
 #: main.lua:2814
 msgid "Branch name (leave empty for stable)"
-msgstr "Nom de branche (laisser vide pour la version stable)"
+msgstr "Branch neve (üresen hagyva: stabil)"
 
 #: main.lua:2837
 msgid ""
-"This will clear the development branch setting and install the latest stable "
-"release of Bookends, then restart KOReader. Continue?"
+"This will clear the development branch setting and install the latest stable"
+" release of Bookends, then restart KOReader. Continue?"
 msgstr ""
-"Ceci effacera le paramètre de branche de développement et installera la "
-"dernière version stable de Bookends, puis redémarrera KOReader. Continuer ?"
+"Ez törli a fejlesztői branch beállítást, és telepíti a Bookends legújabb "
+"stabil kiadását, majd újraindítja a KOReadert. Folytatod?"
 
 #: main.lua:2856
 msgid "Bookends update available: v"
-msgstr "Mise à jour de Bookends disponible : v"
+msgstr "Bookends frissítés elérhető: v"
 
 #: main.lua:2864 menu/main_menu.lua:522 menu/progress_bar_menu.lua:275
 #: menu/progress_bar_menu.lua:409
 msgid "Adjust margins"
-msgstr "Régler les marges"
+msgstr "Margók beállítása"
 
 #: main.lua:2866 menu/progress_bar_menu.lua:156 menu/progress_bar_menu.lua:412
 msgid "Top"
-msgstr "Haut"
+msgstr "Fent"
 
 #: main.lua:2867 menu/progress_bar_menu.lua:156 menu/progress_bar_menu.lua:413
 msgid "Bottom"
-msgstr "Bas"
+msgstr "Lent"
 
 #: main.lua:2868 menu/progress_bar_menu.lua:156 menu/progress_bar_menu.lua:412
 msgid "Left"
-msgstr "Gauche"
+msgstr "Bal"
 
 #: main.lua:2869 menu/progress_bar_menu.lua:156 menu/progress_bar_menu.lua:413
 msgid "Right"
-msgstr "Droite"
+msgstr "Jobb"
 
 #: menu/position_menu.lua:16
 msgid "Enabled"
-msgstr "Activé"
+msgstr "Engedélyezve"
 
 #: menu/position_menu.lua:58
 msgid "Add line"
-msgstr "Ajouter une ligne"
+msgstr "Sor hozzáadása"
 
 #: menu/position_menu.lua:58
 msgid "long press lines to manage"
-msgstr "appui long sur une ligne pour gérer"
+msgstr "hosszan nyomva kezelheted a sorokat"
 
 #: menu/position_menu.lua:71
 msgid "Extra top margin"
-msgstr "Marge haute supplémentaire"
+msgstr "Extra felső margó"
 
 #: menu/position_menu.lua:71
 msgid "Extra bottom margin"
-msgstr "Marge basse supplémentaire"
+msgstr "Extra alsó margó"
 
 #: menu/position_menu.lua:94
 msgid "Extra left margin"
-msgstr "Marge gauche supplémentaire"
+msgstr "Extra bal margó"
 
 #: menu/position_menu.lua:94
 msgid "Extra right margin"
-msgstr "Marge droite supplémentaire"
+msgstr "Extra jobb margó"
 
 #: menu/tokens_catalogue.lua:20 menu/icons_catalogue.lua:24
 msgid "All"
-msgstr "Tout"
+msgstr "Mind"
 
 #: menu/tokens_catalogue.lua:22
 msgid "Progress"
-msgstr "Progression"
+msgstr "Folyamat"
 
 #: menu/tokens_catalogue.lua:23 menu/icons_catalogue.lua:28
 msgid "Time"
-msgstr "Heure"
+msgstr "Idő"
 
 #: menu/tokens_catalogue.lua:24
 msgid "Session"
-msgstr "Session"
+msgstr "Munkamenet"
 
 #: menu/tokens_catalogue.lua:25 menu/icons_catalogue.lua:26
 msgid "Device"
-msgstr "Appareil"
+msgstr "Eszköz"
 
 #: menu/tokens_catalogue.lua:26
 msgid "If/else"
-msgstr "Si/sinon"
+msgstr "Ha/akkor"
 
 #: menu/tokens_catalogue.lua:27
 msgid "Templates"
-msgstr "Modèles"
+msgstr "Sablonok"
 
 #: menu/tokens_catalogue.lua:31
 msgid "Document title"
-msgstr "Titre du document"
+msgstr "Dokumentum címe"
 
 #: menu/tokens_catalogue.lua:32
 msgid "First author"
-msgstr "Premier auteur"
+msgstr "Első szerző"
 
 #: menu/tokens_catalogue.lua:33
 msgid "All authors"
-msgstr "Tous les auteurs"
+msgstr "Összes szerző"
 
 #: menu/tokens_catalogue.lua:34
 msgid "Second author (empty if none)"
-msgstr "Deuxième auteur (vide si absent)"
+msgstr "Második szerző (üres, ha nincs)"
 
 #: menu/tokens_catalogue.lua:35
 msgid "Series with index (combined)"
-msgstr "Série avec index (combiné)"
+msgstr "Sorozat sorszámmal (összevont)"
 
 #: menu/tokens_catalogue.lua:36
 msgid "Series name only"
-msgstr "Nom de série uniquement"
+msgstr "Csak a sorozat neve"
 
 #: menu/tokens_catalogue.lua:37
 msgid "Series number only"
-msgstr "Numéro de série uniquement"
+msgstr "Csak a sorozatszám"
 
 #: menu/tokens_catalogue.lua:38
 msgid "Chapter title (deepest)"
-msgstr "Titre de chapitre (plus profond)"
+msgstr "Fejezet címe (legmélyebb szint)"
 
 #: menu/tokens_catalogue.lua:39
 msgid "Chapter title at depth 1"
-msgstr "Titre de chapitre au niveau 1"
+msgstr "Fejezet címe, 1. szint"
 
 #: menu/tokens_catalogue.lua:40
 msgid "Chapter title at depth 2"
-msgstr "Titre de chapitre au niveau 2"
+msgstr "Fejezet címe, 2. szint"
 
 #: menu/tokens_catalogue.lua:41
 msgid "Chapter title at depth 3"
-msgstr "Titre de chapitre au niveau 3"
+msgstr "Fejezet címe, 3. szint"
 
 #: menu/tokens_catalogue.lua:42
 msgid "Chapter title without leading number (when detected)"
-msgstr "Titre de chapitre sans numéro initial (si détecté)"
+msgstr "Fejezet címe a sorszám nélkül (ha felismerhető)"
 
 #: menu/tokens_catalogue.lua:43
 msgid "Number from chapter title (when detected)"
-msgstr "Numéro extrait du titre de chapitre (si détecté)"
+msgstr "A fejezetcím sorszáma (ha felismerhető)"
 
 #: menu/tokens_catalogue.lua:44 menu/tokens_catalogue.lua:137
 msgid "Current chapter number"
-msgstr "Numéro du chapitre actuel"
+msgstr "Jelenlegi fejezetszám"
 
 #: menu/tokens_catalogue.lua:45
 msgid "Chapter count"
-msgstr "Nombre de chapitres"
+msgstr "Fejezetek száma"
 
 #: menu/tokens_catalogue.lua:46
 msgid "File name"
-msgstr "Nom de fichier"
+msgstr "Fájlnév"
 
 #: menu/tokens_catalogue.lua:47
 msgid "Book language"
-msgstr "Langue du livre"
+msgstr "Könyv nyelve"
 
 #: menu/tokens_catalogue.lua:48
 msgid "Document format (EPUB, PDF, etc.)"
-msgstr "Format du document (EPUB, PDF, etc.)"
+msgstr "Dokumentumformátum (EPUB, PDF, stb.)"
 
 #: menu/tokens_catalogue.lua:49
 msgid "Highlights count"
-msgstr "Nombre de surlignages"
+msgstr "Kiemelések száma"
 
 #: menu/tokens_catalogue.lua:50
 msgid "Notes count"
-msgstr "Nombre de notes"
+msgstr "Jegyzetek száma"
 
 #: menu/tokens_catalogue.lua:51
 msgid "Bookmarks count"
-msgstr "Nombre de signets"
+msgstr "Könyvjelzők száma"
 
 #: menu/tokens_catalogue.lua:52
 msgid "Annotations count (bookmarks + highlights + notes)"
-msgstr "Nombre d'annotations (signets + surlignages + notes)"
+msgstr "Annotációk száma (könyvjelzők + kiemelések + jegyzetek)"
 
 #: menu/tokens_catalogue.lua:53
 msgid "Current page number"
-msgstr "Numéro de page actuel"
+msgstr "Jelenlegi oldalszám"
 
 #: menu/tokens_catalogue.lua:54
 msgid "Total pages"
-msgstr "Pages totales"
+msgstr "Összes oldal"
 
 #: menu/tokens_catalogue.lua:55
 msgid "Book percentage read"
-msgstr "% du livre lu"
+msgstr "Könyv elolvasott aránya"
 
 #: menu/tokens_catalogue.lua:56
 msgid "Book % with 1 decimal (e.g. 45.3%)"
-msgstr "% du livre lu (1 décimale, ex. 45,3 %)"
+msgstr "Könyv %-a, 1 tizedesjeggyel (pl. 45,3%)"
 
 #: menu/tokens_catalogue.lua:57
 msgid "Book % with 2 decimal places"
-msgstr "% du livre lu (2 décimales)"
+msgstr "Könyv %-a, 2 tizedesjeggyel"
 
 #: menu/tokens_catalogue.lua:58
 msgid "Book % with 3 decimal places"
-msgstr "% du livre lu (3 décimales)"
+msgstr "Könyv %-a, 3 tizedesjeggyel"
 
 #: menu/tokens_catalogue.lua:59
 msgid "Book % with 4 decimal places"
-msgstr "% du livre lu (4 décimales)"
+msgstr "Könyv %-a, 4 tizedesjeggyel"
 
 #: menu/tokens_catalogue.lua:60
 msgid "Book percentage left"
-msgstr "% du livre restant"
+msgstr "Könyvből hátralévő rész aránya"
 
 #: menu/tokens_catalogue.lua:61
 msgid "Book % left with 1 decimal"
-msgstr "% du livre restant (1 décimale)"
+msgstr "Hátralévő % 1 tizedesjeggyel"
 
 #: menu/tokens_catalogue.lua:62
 msgid "Book % left with 2 decimals"
-msgstr "% du livre restant (2 décimales)"
+msgstr "Hátralévő % 2 tizedesjeggyel"
 
 #: menu/tokens_catalogue.lua:63
 msgid "Book % left with 3 decimals"
-msgstr "% du livre restant (3 décimales)"
+msgstr "Hátralévő % 3 tizedesjeggyel"
 
 #: menu/tokens_catalogue.lua:64
 msgid "Book % left with 4 decimals"
-msgstr "% du livre restant (4 décimales)"
+msgstr "Hátralévő % 4 tizedesjeggyel"
 
 #: menu/tokens_catalogue.lua:65
 msgid "Chapter percentage read"
-msgstr "% du chapitre lu"
+msgstr "Fejezet elolvasott aránya"
 
 #: menu/tokens_catalogue.lua:66
 msgid "Chapter percentage left"
-msgstr "% du chapitre restant"
+msgstr "Fejezetből hátralévő rész aránya"
 
 #: menu/tokens_catalogue.lua:67
 msgid "Pages read in chapter"
-msgstr "Pages lues dans le chapitre"
+msgstr "Fejezetben elolvasott oldalak"
 
 #: menu/tokens_catalogue.lua:68
 msgid "Total pages in chapter"
-msgstr "Pages totales du chapitre"
+msgstr "Fejezet összes oldala"
 
 #: menu/tokens_catalogue.lua:69
 msgid "Pages left in chapter"
-msgstr "Pages restantes dans le chapitre"
+msgstr "Fejezetből hátralévő oldalak"
 
 #: menu/tokens_catalogue.lua:70
 msgid "Pages left in book"
-msgstr "Pages restantes dans le livre"
+msgstr "Könyvből hátralévő oldalak"
 
 #: menu/tokens_catalogue.lua:71
 msgid "Progress bar (configure type in line editor)"
-msgstr "Barre de progression (configurer le type dans l'éditeur de ligne)"
+msgstr "Folyamatjelző (típus a sorszerkesztőben állítható)"
 
 #: menu/tokens_catalogue.lua:72
 msgid "Fixed-width progress bar (100px)"
-msgstr "Barre de progression à largeur fixe (100 px)"
+msgstr "Fix szélességű folyamatjelző (100px)"
 
 #: menu/tokens_catalogue.lua:73
 msgid "Progress bar, 10px tall"
-msgstr "Barre de progression, 10 px de haut"
+msgstr "10px magas folyamatjelző"
 
 #: menu/tokens_catalogue.lua:74
 msgid "Progress bar, 200px wide and 4px tall"
-msgstr "Barre de progression, 200 px de large et 4 px de haut"
+msgstr "200px széles, 4px magas folyamatjelző"
 
 #: menu/tokens_catalogue.lua:75
 msgid "Current time (24h, same as %time_24h)"
-msgstr "Heure actuelle (24h, identique à %time_24h)"
+msgstr "Jelenlegi idő (24 órás, mint a %time_24h)"
 
 #: menu/tokens_catalogue.lua:76
 msgid "12-hour clock"
-msgstr "Horloge 12 h"
+msgstr "12 órás formátum"
 
 #: menu/tokens_catalogue.lua:77
 msgid "24-hour clock"
-msgstr "Horloge 24 h"
+msgstr "24 órás formátum"
 
 #: menu/tokens_catalogue.lua:78
 msgid "Date short (28 Mar)"
-msgstr "Date courte (28 mars)"
+msgstr "Dátum, rövid (márc. 28.)"
 
 #: menu/tokens_catalogue.lua:79
 msgid "Date long (28 March 2026)"
-msgstr "Date longue (28 mars 2026)"
+msgstr "Dátum, hosszú (2026. március 28.)"
 
 #: menu/tokens_catalogue.lua:80
 msgid "Date numeric (28/03/2026)"
-msgstr "Date numérique (28/03/2026)"
+msgstr "Dátum, számjegyekkel (2026.03.28.)"
 
 #: menu/tokens_catalogue.lua:81
 msgid "Weekday (Friday)"
-msgstr "Jour de la semaine (vendredi)"
+msgstr "Hét napja (péntek)"
 
 #: menu/tokens_catalogue.lua:82
 msgid "Weekday short (Fri)"
-msgstr "Jour court (ven.)"
+msgstr "Hét napja, rövidítve (pén)"
 
 #: menu/tokens_catalogue.lua:83
 msgid "Custom date/time format (strftime spec)"
-msgstr "Format de date/heure personnalisé (spec strftime)"
+msgstr "Egyéni dátum/idő formátum (strftime szintaxis)"
 
 #: menu/tokens_catalogue.lua:84
 msgid "Time left in chapter"
-msgstr "Temps restant dans le chapitre"
+msgstr "Fejezetből hátralévő idő"
 
 #: menu/tokens_catalogue.lua:85
 msgid "Time left in book"
-msgstr "Temps restant dans le livre"
+msgstr "Könyvből hátralévő idő"
 
 #: menu/tokens_catalogue.lua:86
 msgid "Chapter finish time (clock)"
-msgstr "Heure de fin du chapitre (horloge)"
+msgstr "Fejezet befejezésének időpontja"
 
 #: menu/tokens_catalogue.lua:87
 msgid "Book finish time (clock)"
-msgstr "Heure de fin du livre (horloge)"
+msgstr "Könyv befejezésének időpontja"
 
 #: menu/tokens_catalogue.lua:88
 msgid "Chapter finish time (custom format)"
-msgstr "Heure de fin du chapitre (format personnalisé)"
+msgstr "Fejezet befejezési ideje (egyéni formátum)"
 
 #: menu/tokens_catalogue.lua:89
 msgid "Book finish date (projected)"
-msgstr "Date de fin du livre (estimée)"
+msgstr "Könyv befejezésének dátuma (becsült)"
 
 #: menu/tokens_catalogue.lua:90
 msgid "Book finish date (custom format)"
-msgstr "Date de fin du livre (format personnalisé)"
+msgstr "Könyv befejezési dátuma (egyéni formátum)"
 
 #: menu/tokens_catalogue.lua:91
 msgid "Session reading time"
-msgstr "Temps de lecture de la session"
+msgstr "Munkamenet olvasási ideje"
 
 #: menu/tokens_catalogue.lua:92
 msgid "Session pages read"
-msgstr "Pages lues cette session"
+msgstr "Munkamenetben olvasott oldalak"
 
 #: menu/tokens_catalogue.lua:93
 msgid "Pages read today (all books)"
-msgstr "Pages lues aujourd'hui (tous livres)"
+msgstr "Mai oldalak (összes könyv)"
 
 #: menu/tokens_catalogue.lua:94
 msgid "Reading time today (all books)"
-msgstr "Temps de lecture aujourd'hui (tous livres)"
+msgstr "Mai olvasási idő (összes könyv)"
 
 #: menu/tokens_catalogue.lua:95
 msgid "Pages read today (current book)"
-msgstr "Pages lues aujourd'hui (livre actuel)"
+msgstr "Mai oldalak (jelenlegi könyv)"
 
 #: menu/tokens_catalogue.lua:96
 msgid "Reading time today (current book)"
-msgstr "Temps de lecture aujourd'hui (livre actuel)"
+msgstr "Mai olvasási idő (jelenlegi könyv)"
 
 #: menu/tokens_catalogue.lua:97
 msgid "Pages read in last 7 days (current book)"
-msgstr "Pages lues sur les 7 derniers jours (livre actuel)"
+msgstr "Oldalak az utolsó 7 napban (jelenlegi könyv)"
 
 #: menu/tokens_catalogue.lua:98
 msgid "Reading time in last 7 days (current book)"
-msgstr "Temps de lecture sur les 7 derniers jours (livre actuel)"
+msgstr "Olvasási idő az utolsó 7 napban (jelenlegi könyv)"
 
 #: menu/tokens_catalogue.lua:99 menu/tokens_catalogue.lua:144
 msgid "Day streak (any book)"
-msgstr "Série de jours (tout livre)"
+msgstr "Sorozatos napok (bármely könyv)"
 
 #: menu/tokens_catalogue.lua:100 menu/tokens_catalogue.lua:145
 msgid "Day streak (current book)"
-msgstr "Série de jours (livre actuel)"
+msgstr "Sorozatos napok (jelenlegi könyv)"
 
 #: menu/tokens_catalogue.lua:101
 msgid "Lifetime reading time (all books)"
-msgstr "Temps de lecture cumulé (tous livres)"
+msgstr "Élethosszi olvasási idő (összes könyv)"
 
 #: menu/tokens_catalogue.lua:102
 msgid "Books finished (lifetime)"
-msgstr "Livres terminés (cumul)"
+msgstr "Befejezett könyvek (élethossz)"
 
 #: menu/tokens_catalogue.lua:103
 msgid "Reading speed (pages/hour)"
-msgstr "Vitesse de lecture (pages/heure)"
+msgstr "Olvasási sebesség (oldal/óra)"
 
 #: menu/tokens_catalogue.lua:104
 msgid "Average time per page"
-msgstr "Temps moyen par page"
+msgstr "Átlagos idő oldalanként"
 
 #: menu/tokens_catalogue.lua:105
 msgid "Total reading time for book"
-msgstr "Temps de lecture total du livre"
+msgstr "Könyv teljes olvasási ideje"
 
 #: menu/tokens_catalogue.lua:106
 msgid "Pages read of this book (lifetime)"
-msgstr "Pages lues de ce livre (cumul)"
+msgstr "Ebből a könyvből olvasott oldalak (élethossz)"
 
 #: menu/tokens_catalogue.lua:107
 msgid "Book read percentage (skip-aware)"
-msgstr "Pourcentage du livre lu (hors pages survolées)"
+msgstr "Könyv elolvasott aránya (átugrásérzékeny)"
 
 #: menu/tokens_catalogue.lua:108
 msgid "Days reading this book"
-msgstr "Jours de lecture de ce livre"
+msgstr "Hány napja olvasod ezt a könyvet"
 
 #: menu/tokens_catalogue.lua:109
 msgid "Pages per day for this book"
-msgstr "Pages par jour pour ce livre"
+msgstr "Napi oldalak ennél a könyvnél"
 
 #: menu/tokens_catalogue.lua:110
 msgid "Battery level"
-msgstr "Niveau de batterie"
+msgstr "Akkumulátor szintje"
 
 #: menu/tokens_catalogue.lua:111
 msgid "Plugin content"
-msgstr "Contenu de plugin"
+msgstr "Plugin tartalom"
 
 #: menu/tokens_catalogue.lua:112
 msgid "Frontlight brightness"
-msgstr "Luminosité de l'éclairage"
+msgstr "Háttérvilágítás fényerő"
 
 #: menu/tokens_catalogue.lua:113 menu/tokens_catalogue.lua:150
 msgid "Frontlight brightness %"
-msgstr "Luminosité de l'éclairage %"
+msgstr "Háttérvilágítás fényerő %"
 
 #: menu/tokens_catalogue.lua:114
 msgid "Frontlight warmth"
-msgstr "Chaleur de l'éclairage"
+msgstr "Háttérvilágítás melegség"
 
 #: menu/tokens_catalogue.lua:115 menu/tokens_catalogue.lua:151
 msgid "Frontlight warmth %"
-msgstr "Chaleur de l'éclairage %"
+msgstr "Háttérvilágítás melegség %"
 
 #: menu/tokens_catalogue.lua:116
 msgid "RAM used %"
-msgstr "RAM utilisée %"
+msgstr "RAM-használat %"
 
 #: menu/tokens_catalogue.lua:117
 msgid "RAM used (MiB)"
-msgstr "RAM utilisée (Mio)"
+msgstr "RAM-használat (MiB)"
 
 #: menu/tokens_catalogue.lua:118
 msgid "Free disk space"
-msgstr "Espace disque libre"
+msgstr "Szabad tárhely"
 
 #: menu/tokens_catalogue.lua:119
 msgid "Page X of Y, em-dash framed"
-msgstr "Page X sur Y, encadrée de tirets cadratins"
+msgstr "X / Y oldal, gondolatjelek között"
 
 #: menu/tokens_catalogue.lua:120
 msgid "Title ⋮ author (italic)"
-msgstr "Titre ⋮ auteur (italique)"
+msgstr "Cím ⋮ szerző (dőlt)"
 
 #: menu/tokens_catalogue.lua:121
 msgid "Title in a chosen font"
-msgstr "Titre dans une police choisie"
+msgstr "Cím kiválasztott betűtípussal"
 
 #: menu/tokens_catalogue.lua:122
 msgid "Bookmark(s) count + label"
-msgstr "Nombre de signet(s) + libellé"
+msgstr "Könyvjelző(k) száma + felirat"
 
 #: menu/tokens_catalogue.lua:123
 msgid "Highlight(s) count + label"
-msgstr "Nombre de surlignage(s) + libellé"
+msgstr "Kiemelés(ek) száma + felirat"
 
 #: menu/tokens_catalogue.lua:124
 msgid "Hourglass session timer + pages"
-msgstr "Sablier de session + pages"
+msgstr "Homokóra munkamenet-időzítő + oldalak"
 
 #: menu/tokens_catalogue.lua:125
 msgid "Sparkles 1"
-msgstr "Étincelles 1"
+msgstr "Csillogás 1"
 
 #: menu/tokens_catalogue.lua:126
 msgid "Sparkles 2"
-msgstr "Étincelles 2"
+msgstr "Csillogás 2"
 
 #: menu/tokens_catalogue.lua:130
 msgid "If Wi-Fi is on"
-msgstr "Si le Wi-Fi est activé"
+msgstr "Ha a Wi-Fi be van kapcsolva"
 
 #: menu/tokens_catalogue.lua:131
 msgid "If connected"
-msgstr "Si connecté"
+msgstr "Ha kapcsolódva van"
 
 #: menu/tokens_catalogue.lua:132
 msgid "Battery 0–100"
-msgstr "Batterie 0–100"
+msgstr "Akkumulátor 0–100"
 
 #: menu/tokens_catalogue.lua:133
 msgid "If charging"
-msgstr "Si en charge"
+msgstr "Ha töltődik"
 
 #: menu/tokens_catalogue.lua:134
 msgid "If page-turn flipped"
-msgstr "Si le sens de tourne est inversé"
+msgstr "Ha az oldalváltás iránya megfordult"
 
 #: menu/tokens_catalogue.lua:135
 msgid "Book progress 0–100"
-msgstr "Progression du livre 0–100"
+msgstr "Könyv folyamata 0–100"
 
 #: menu/tokens_catalogue.lua:136
 msgid "Chapter progress 0–100"
-msgstr "Progression du chapitre 0–100"
+msgstr "Fejezet folyamata 0–100"
 
 #: menu/tokens_catalogue.lua:138
 msgid "Total chapters"
-msgstr "Total des chapitres"
+msgstr "Összes fejezet"
 
 #: menu/tokens_catalogue.lua:139
 msgid "Pages per hour"
-msgstr "Pages par heure"
+msgstr "Oldal/óra"
 
 #: menu/tokens_catalogue.lua:140
 msgid "Minutes this session"
-msgstr "Minutes cette session"
+msgstr "Ennyi perce tart a munkamenet"
 
 #: menu/tokens_catalogue.lua:141
 msgid "Pages this session"
-msgstr "Pages cette session"
+msgstr "Munkamenetben olvasott oldalak"
 
 #: menu/tokens_catalogue.lua:142
 msgid "Pages read today"
-msgstr "Pages lues aujourd'hui"
+msgstr "Mai oldalak"
 
 #: menu/tokens_catalogue.lua:143
 msgid "Pages today (current book)"
-msgstr "Pages aujourd'hui (livre actuel)"
+msgstr "Mai oldalak (jelenlegi könyv)"
 
 #: menu/tokens_catalogue.lua:146
 msgid "Books finished"
-msgstr "Livres terminés"
+msgstr "Befejezett könyvek"
 
 #: menu/tokens_catalogue.lua:147
 msgid "Book read % (skip-aware)"
-msgstr "% du livre lu (hors pages survolées)"
+msgstr "Könyv elolvasott % (átugrásérzékeny)"
 
 #: menu/tokens_catalogue.lua:148
 msgid "odd / even"
-msgstr "impair / pair"
+msgstr "páratlan / páros"
 
 #: menu/tokens_catalogue.lua:149
 msgid "If frontlight on"
-msgstr "Si l'éclairage est allumé"
+msgstr "Ha a háttérvilágítás be van kapcsolva"
 
 #: menu/tokens_catalogue.lua:152
 msgid "If night mode on"
-msgstr "Si mode nuit activé"
+msgstr "Ha az éjszakai mód be van kapcsolva"
 
 #: menu/tokens_catalogue.lua:153
 msgid "EPUB / PDF / CBZ / …"
@@ -1046,156 +1049,156 @@ msgstr "EPUB / PDF / CBZ / …"
 
 #: menu/tokens_catalogue.lua:154
 msgid "Current HH:MM (24h)"
-msgstr "HH:MM actuel (24 h)"
+msgstr "Jelenlegi idő ÓÓ:PP (24 órás)"
 
 #: menu/tokens_catalogue.lua:155
 msgid "Mon–Sun"
-msgstr "Lun–Dim"
+msgstr "hét–vas"
 
 #: menu/tokens_catalogue.lua:156
 msgid "If book has title"
-msgstr "Si le livre a un titre"
+msgstr "Ha a könyvnek van címe"
 
 #: menu/tokens_catalogue.lua:157
 msgid "If book has author"
-msgstr "Si le livre a un auteur"
+msgstr "Ha a könyvnek van szerzője"
 
 #: menu/tokens_catalogue.lua:158
 msgid "If book in series"
-msgstr "Si le livre fait partie d'une série"
+msgstr "Ha a könyv egy sorozat része"
 
 #: menu/tokens_catalogue.lua:159
 msgid "If chapter has title"
-msgstr "Si le chapitre a un titre"
+msgstr "Ha a fejezetnek van címe"
 
 #: menu/tokens_catalogue.lua:160
 msgid "Chapter title at depth 1/2/3"
-msgstr "Titre de chapitre au niveau 1/2/3"
+msgstr "Fejezetcím, 1/2/3. szint"
 
 #: menu/tokens_catalogue.lua:161
 msgid "If book has 2+ authors"
-msgstr "Si le livre a 2+ auteurs"
+msgstr "Ha a könyvnek 2 vagy több szerzője van"
 
 #: menu/tokens_catalogue.lua:162
 msgid "Author with et al. for multi-author"
-msgstr "Auteur avec et al. pour plusieurs auteurs"
+msgstr "Szerző „és mtsai” jelöléssel több szerző esetén"
 
 #: menu/tokens_catalogue.lua:163
 msgid "Wi-Fi icon only when Wi-Fi enabled"
-msgstr "Icône Wi-Fi seulement quand Wi-Fi activé"
+msgstr "Wi-Fi ikon csak ha a Wi-Fi engedélyezve van"
 
 #: menu/tokens_catalogue.lua:164
 msgid "Low-battery warning"
-msgstr "Alerte batterie faible"
+msgstr "Alacsony akkumulátorszint figyelmeztetés"
 
 #: menu/tokens_catalogue.lua:165
 msgid "Bolt when charging"
-msgstr "Éclair en charge"
+msgstr "Villám, ha töltődik"
 
 #: menu/tokens_catalogue.lua:166
 msgid "Arrow when page-turn flipped"
-msgstr "Flèche quand le sens de tourne est inversé"
+msgstr "Nyíl, ha az oldalváltás iránya megfordult"
 
 #: menu/tokens_catalogue.lua:167
 msgid "Odd/even variations"
-msgstr "Variations pair/impair"
+msgstr "Páratlan/páros variációk"
 
 #: menu/tokens_catalogue.lua:168
 msgid "Near end of book"
-msgstr "Vers la fin du livre"
+msgstr "A könyv vége közeledik"
 
 #: menu/tokens_catalogue.lua:169
 msgid "Frontlight on/off label"
-msgstr "Étiquette éclairage on/off"
+msgstr "Háttérvilágítás be/ki felirat"
 
 #: menu/tokens_catalogue.lua:170
 msgid "If format"
-msgstr "Si format"
+msgstr "Ha a formátum"
 
 #: menu/tokens_catalogue.lua:171
 msgid "Weekends"
-msgstr "Week-ends"
+msgstr "Hétvégék"
 
 #: menu/tokens_catalogue.lua:172
 msgid "Time window"
-msgstr "Plage horaire"
+msgstr "Időablak"
 
 #: menu/tokens_catalogue.lua:173
 msgid "Non-series books"
-msgstr "Livres hors série"
+msgstr "Sorozaton kívüli könyvek"
 
 #: menu/tokens_catalogue.lua:174
 msgid "Fall back to shallower chapter"
-msgstr "Replier sur un chapitre moins profond"
+msgstr "Visszaesés egy alacsonyabb fejezetszintre"
 
 #: menu/tokens_catalogue.lua:175
 msgid "Chapter number then title"
-msgstr "Numéro puis titre de chapitre"
+msgstr "Fejezetszám, majd cím"
 
 #: menu/tokens_catalogue.lua:176
 msgid "Long books (20+ chapters)"
-msgstr "Livres longs (20+ chapitres)"
+msgstr "Hosszú könyvek (20+ fejezet)"
 
 #: menu/tokens_catalogue.lua:177
 msgid "Chapter title only when different from book title"
-msgstr "Titre de chapitre uniquement s'il diffère du titre du livre"
+msgstr "Fejezetcím csak akkor, ha különbözik a könyv címétől"
 
 #: menu/tokens_catalogue.lua:178
 msgid "Battery bars"
-msgstr "Barres de batterie"
+msgstr "Akkumulátor szintsávok"
 
 #: menu/main_menu.lua:28 menu/preset_manager_modal.lua:1127
 msgid "Save preset"
-msgstr "Enregistrer le preset"
+msgstr "Előbeállítás mentése"
 
 #: menu/main_menu.lua:30 menu/preset_manager_modal.lua:1129
 msgid "Preset name"
-msgstr "Nom du preset"
+msgstr "Előbeállítás neve"
 
 #: menu/main_menu.lua:45
 msgid "Saved preset:"
-msgstr "Preset enregistré :"
+msgstr "Mentett előbeállítás:"
 
 #: menu/main_menu.lua:69 menu/preset_manager_modal.lua:1249
 msgid "Rename preset"
-msgstr "Renommer le preset"
+msgstr "Előbeállítás átnevezése"
 
 #: menu/main_menu.lua:74 menu/main_menu.lua:490
 #: menu/preset_manager_modal.lua:1253 menu/preset_manager_modal.lua:1440
 msgid "Rename"
-msgstr "Renommer"
+msgstr "Átnevezés"
 
 #: menu/main_menu.lua:107 menu/main_menu.lua:109
 msgid "Bookends settings"
-msgstr "Paramètres de Bookends"
+msgstr "Bookends beállítások"
 
 #: menu/main_menu.lua:107
 msgid "plugin update available"
-msgstr "mise à jour du plugin disponible"
+msgstr "plugin frissítés elérhető"
 
 #: menu/main_menu.lua:124 menu/main_menu.lua:126
 msgid "Preset"
-msgstr "Preset"
+msgstr "Előbeállítás"
 
 #: menu/main_menu.lua:176
 msgid "Full width progress bars"
-msgstr "Barres de progression pleine largeur"
+msgstr "Teljes szélességű folyamatjelzők"
 
 #: menu/main_menu.lua:188
 msgid "Save current as new preset…"
-msgstr "Enregistrer le courant comme nouveau preset…"
+msgstr "Jelenlegi mentése új előbeállításként…"
 
 #: menu/main_menu.lua:206
 msgid "Enable bookends"
-msgstr "Activer Bookends"
+msgstr "Bookends engedélyezése"
 
 #: menu/main_menu.lua:217 menu/main_menu.lua:219
 msgid "Disable stock status bar"
-msgstr "Désactiver la barre d'état d'origine"
+msgstr "Beépített állapotsor letiltása"
 
 #: menu/main_menu.lua:217
 msgid "recommended"
-msgstr "recommandé"
+msgstr "ajánlott"
 
 #: menu/main_menu.lua:222
 msgid ""
@@ -1203,149 +1206,146 @@ msgid ""
 "and can reduce e-ink flicker on some devices. All status bar features are "
 "available as Bookends tokens."
 msgstr ""
-"Masque la barre d'état intégrée de KOReader. Cela simplifie le pipeline de "
-"rendu et peut réduire le scintillement e-ink sur certains appareils. Toutes "
-"les fonctions de la barre d'état sont disponibles sous forme de jetons "
-"Bookends."
+"Elrejti a KOReader beépített állapotsorát. Ez egyszerűsíti a renderelési "
+"folyamatot, és csökkentheti az e-ink villódzást egyes eszközökön. Az "
+"állapotsor minden funkciója elérhető Bookends tokenként."
 
 #: menu/main_menu.lua:243 menu/main_menu.lua:253
 #: menu/preset_manager_modal.lua:1332
 msgid "Default font"
-msgstr "Police par défaut"
+msgstr "Alapértelmezett betűtípus"
 
 #: menu/main_menu.lua:279
 msgid "Bottom center tap gesture"
-msgstr "Geste de toucher bas-centre"
+msgstr "Alul középre koppintás gesztusa"
 
 #: menu/main_menu.lua:281
 msgid "toggle bookends"
-msgstr "basculer bookends"
+msgstr "bookends váltása"
 
 #: menu/main_menu.lua:283
 msgid "cycle presets"
-msgstr "parcourir les presets"
+msgstr "előbeállítások váltása"
 
 #: menu/main_menu.lua:285
 msgid "preset library"
-msgstr "bibliothèque de presets"
+msgstr "előbeállítás-könyvtár"
 
 #: menu/main_menu.lua:289
 msgid ""
 "Configure what happens when you tap the centre of the status bar area, and "
 "whether long-pressing a progress bar opens the skim dialog."
 msgstr ""
-"Configurez ce qui se passe quand vous touchez le centre de la zone de la "
-"barre d'état, et si un appui long sur une barre de progression ouvre le "
-"dialogue de survol."
+"Itt állíthatod be, mi történjen, ha az állapotsor közepére koppintasz, és "
+"hogy egy folyamatjelző hosszú érintése megnyitja-e az átfutás "
+"párbeszédablakot."
 
 #: menu/main_menu.lua:300
 msgid "Pass through"
-msgstr "Laisser passer"
+msgstr "Áteresztés"
 
 #: menu/main_menu.lua:308
 msgid "Toggle bookends"
-msgstr "Basculer Bookends"
+msgstr "Bookends váltása"
 
 #: menu/main_menu.lua:322
 msgid "Cycle starred presets"
-msgstr "Parcourir les presets favoris"
+msgstr "Csillagozott előbeállítások váltása"
 
 #: menu/main_menu.lua:336
 msgid "Open preset library"
-msgstr "Ouvrir la bibliothèque de presets"
+msgstr "Előbeállítás-könyvtár megnyitása"
 
 #: menu/main_menu.lua:351
 msgid "Long-press progress bars to skim document"
-msgstr "Appui long sur les barres de progression pour survoler le document"
+msgstr "Folyamatjelzők hosszú érintése az átfutáshoz"
 
 #: menu/main_menu.lua:359
 msgid ""
 "Opens the skim dialog when you long-press on a full-width progress bar. "
 "Replaces the stock status bar's long-press to skim feature."
 msgstr ""
-"Ouvre le dialogue de survol lors d'un appui long sur une barre de "
-"progression pleine largeur. Remplace la fonction de survol par appui long de "
-"la barre d'état d'origine."
+"Megnyitja az átfutás párbeszédablakot, ha hosszan megérintesz egy teljes "
+"szélességű folyamatjelzőt. Az állapotsor eredeti hosszan-érintéses átfutás "
+"funkcióját helyettesíti."
 
 #: menu/main_menu.lua:366
 msgid "Include current page in pages-left tokens"
-msgstr "Inclure la page actuelle dans les jetons de pages restantes"
+msgstr "A jelenlegi oldal beleszámítása a hátralévő oldalakat jelző tokenekbe"
 
 #: menu/main_menu.lua:367
 msgid ""
 "Affects %L (pages left in book) and %l (pages left in chapter). Off "
 "(default): 'n−1 → 0'. On: 'n → 1'."
 msgstr ""
-"Affecte %L (pages restantes dans le livre) et %l (pages restantes dans le "
-"chapitre). Désactivé (défaut) : « n−1 → 0 ». Activé : « n → 1 »."
+"A %L (hátralévő oldalak a könyvben) és %l (hátralévő oldalak a fejezetben) "
+"tokeneket érinti. Ki (alapértelmezett): „n−1 → 0”. Be: „n → 1”."
 
 #: menu/main_menu.lua:380
 msgid "Notify on wake when update available"
-msgstr "Notifier au réveil si une mise à jour est disponible"
+msgstr "Értesítés ébredéskor, ha frissítés elérhető"
 
 #: menu/main_menu.lua:400
 msgid "Update available"
-msgstr "Mise à jour disponible"
+msgstr "Frissítés elérhető"
 
 #: menu/main_menu.lua:402
 msgid "Installed version"
-msgstr "Version installée"
+msgstr "Telepített verzió"
 
 #: menu/main_menu.lua:410
 msgid "Advanced"
-msgstr "Avancé"
+msgstr "Speciális"
 
 #: menu/main_menu.lua:429
 msgid "Check for updates"
-msgstr "Rechercher des mises à jour"
+msgstr "Frissítések keresése"
 
 #: menu/main_menu.lua:431
 msgid "Install branch"
-msgstr "Installer la branche"
+msgstr "Branch telepítése"
 
 #: menu/main_menu.lua:439
 msgid "Reset to latest stable release"
-msgstr "Réinitialiser à la dernière version stable"
+msgstr "Visszaállítás a legújabb stabil kiadásra"
 
 #: menu/main_menu.lua:450 menu/main_menu.lua:453
 msgid "Installed: v"
-msgstr "Installé : v"
+msgstr "Telepítve: v"
 
 #: menu/main_menu.lua:470
 msgid "Preset library…"
-msgstr "Bibliothèque de presets…"
+msgstr "Előbeállítás-könyvtár…"
 
 #: menu/main_menu.lua:504 menu/main_menu.lua:508
 msgid "Font scale"
-msgstr "Échelle de police"
+msgstr "Betűméret-arány"
 
 #: menu/main_menu.lua:532
 msgid "Truncation gap between regions"
-msgstr "Espace de troncature entre régions"
+msgstr "Csonkolási hézag a régiók között"
 
 #: menu/main_menu.lua:536
 msgid "Truncation gap"
-msgstr "Espace de troncature"
+msgstr "Csonkolási hézag"
 
 #: menu/main_menu.lua:547
 msgid "Prioritise left/right and truncate long center text"
-msgstr "Priorité gauche/droite, tronquer le texte central long"
+msgstr "Bal/jobb oldal előnyben, a hosszú középső szöveg csonkolása"
 
 #: menu/tokens_library.lua:335
 msgid "Tokens library"
-msgstr "Bibliothèque de jetons"
+msgstr "Token-könyvtár"
 
 #: menu/tokens_library.lua:336
 msgid "Tokens & conditionals"
-msgstr "Jetons et conditions"
+msgstr "Tokenek és feltételek"
 
 #: menu/tokens_library.lua:337
 msgid ""
 "TOKENS\n"
 "\n"
-"Tokens are placeholders that get replaced with live data each time the "
-"preset renders. Each entry in the Book / Progress / Time / Session / Device "
-"chips is a token, written as %name. They expand inline:\n"
+"Tokens are placeholders that get replaced with live data each time the preset renders. Each entry in the Book / Progress / Time / Session / Device chips is a token, written as %name. They expand inline:\n"
 "  %title — %page_num/%page_count\n"
 "  → 1984 — 12/268\n"
 "\n"
@@ -1356,15 +1356,11 @@ msgid ""
 "  [c=50]…[/c] grey 0–100   [c=#RRGGBB]…[/c] colour\n"
 "  [font=Name]…[/font] switch font for the span\n"
 "\n"
-"The font Name is the display name shown in KOReader's font menu, e.g. "
-"[font=Noto Sans]%title[/font]. Spaces are fine. If that font isn't installed "
-"on the device, the span falls back to the line's font, so presets stay "
-"readable when shared.\n"
+"The font Name is the display name shown in KOReader's font menu, e.g. [font=Noto Sans]%title[/font]. Spaces are fine. If that font isn't installed on the device, the span falls back to the line's font, so presets stay readable when shared.\n"
 "\n"
 "CONDITIONALS\n"
 "\n"
-"Wrap content in [if:condition]…[/if] to show it only when the condition is "
-"true. Add an [else]…[/if] branch for an alternative.\n"
+"Wrap content in [if:condition]…[/if] to show it only when the condition is true. Add an [else]…[/if] branch for an alternative.\n"
 "\n"
 "OPERATORS\n"
 "  =    equals               !=  not equals\n"
@@ -1374,17 +1370,11 @@ msgid ""
 "\n"
 "  Example:  [if:batt<20 and not charging]LOW[/if]\n"
 "\n"
-"Truthy check: a bare [if:key] tests whether the key is set, non-zero, and "
-"not \"off\"/\"no\". Useful for [if:title]…[/if], [if:author]…[/if], "
-"[if:series]…[/if].\n"
+"Truthy check: a bare [if:key] tests whether the key is set, non-zero, and not \"off\"/\"no\". Useful for [if:title]…[/if], [if:author]…[/if], [if:series]…[/if].\n"
 "\n"
-"Token-reference comparison: =@token compares against another token's current "
-"value, e.g. [if:chap_title_1!=@title]…[/if] hides the chapter title when it "
-"equals the book title.\n"
+"Token-reference comparison: =@token compares against another token's current value, e.g. [if:chap_title_1!=@title]…[/if] hides the chapter title when it equals the book title.\n"
 "\n"
-"For the full list of conditional state keys (wifi, batt, light_pct, night, "
-"time, format, …) browse the If/else chip — every reference entry there shows "
-"the exact key and operator syntax for one condition.\n"
+"For the full list of conditional state keys (wifi, batt, light_pct, night, time, format, …) browse the If/else chip — every reference entry there shows the exact key and operator syntax for one condition.\n"
 "\n"
 "EXAMPLES\n"
 "\n"
@@ -1393,113 +1383,97 @@ msgid ""
 "  [if:time>=18:00 and time<18:30]6–6:30[/if]\n"
 "  [if:not series]Standalone[/if]\n"
 msgstr ""
-"JETONS\n"
+"TOKENEK\n"
 "\n"
-"Les jetons sont des espaces réservés qui sont remplacés par des données en "
-"direct chaque fois que le preset s'affiche. Chaque entrée des chips Livre / "
-"Progression / Heure / Session / Appareil est un jeton, écrit sous la forme "
-"%name. Ils se développent en ligne :\n"
+"A tokenek olyan helykitöltők, amelyeket a rendszer minden renderelésnél friss adatra cserél. A Könyv / Folyamat / Idő / Munkamenet / Eszköz chipjeiben minden bejegyzés egy token, %névként megírva. Soron belül helyettesülnek:\n"
 "  %title — %page_num/%page_count\n"
 "  → 1984 — 12/268\n"
 "\n"
-"MISE EN FORME INTÉGRÉE\n"
+"SOR KÖZBENI FORMÁZÁS\n"
 "\n"
-"Encadrez une portion de texte pour en modifier le style uniquement :\n"
-"  [b]…[/b] gras   [i]…[/i] italique   [u]…[/u] MAJUSCULES\n"
-"  [c=50]…[/c] gris 0–100   [c=#RRGGBB]…[/c] couleur\n"
-"  [font=Name]…[/font] changer de police pour cette portion\n"
+"Egy szövegrészt körbevéve csak azt a részt formázhatod:\n"
+"  [b]…[/b] félkövér   [i]…[/i] dőlt   [u]…[/u] NAGYBETŰS\n"
+"  [c=50]…[/c] szürke 0–100   [c=#RRGGBB]…[/c] szín\n"
+"  [font=Név]…[/font] betűtípus váltása a részre\n"
 "\n"
-"Le Name de la police est le nom d'affichage visible dans le menu des polices "
-"de KOReader, par ex. [font=Noto Sans]%title[/font]. Les espaces sont "
-"acceptés. Si cette police n'est pas installée sur l'appareil, la portion "
-"revient à la police de la ligne, afin que les presets restent lisibles une "
-"fois partagés.\n"
+"A Név a KOReader betűtípus-menüjében megjelenő név, pl. [font=Noto Sans]%title[/font]. A szóköz nem gond. Ha az adott betűtípus nincs telepítve az eszközön, a rész visszaesik a sor betűtípusára, így az előbeállítások megosztáskor is olvashatók maradnak.\n"
 "\n"
-"CONDITIONS\n"
+"FELTÉTELEK\n"
 "\n"
-"Encadrez du contenu avec [if:condition]…[/if] pour ne l'afficher que lorsque "
-"la condition est vraie. Ajoutez une branche [else]…[/if] pour une "
-"alternative.\n"
+"Foglald a tartalmat [if:feltétel]…[/if] közé, hogy csak akkor jelenjen meg, ha a feltétel igaz. Adj hozzá [else]…[/if] ágat az alternatívához.\n"
 "\n"
-"OPÉRATEURS\n"
-"  =    égal                  !=  différent de\n"
-"  <    inférieur à           >   supérieur à\n"
-"  <=   au plus               >=  au moins\n"
-"  and / or / not  · ( ) pour le groupement\n"
+"OPERÁTOROK\n"
+"  =    egyenlő               !=  nem egyenlő\n"
+"  <    kisebb mint            >   nagyobb mint\n"
+"  <=   legfeljebb             >=  legalább\n"
+"  and / or / not  · ( ) csoportosításhoz\n"
 "\n"
-"  Exemple :  [if:batt<20 and not charging]FAIBLE[/if]\n"
+"  Példa:  [if:batt<20 and not charging]ALACSONY[/if]\n"
 "\n"
-"Test de vérité : un [if:key] seul vérifie si la clé est définie, non nulle "
-"et différente de « off »/« no ». Utile pour [if:title]…[/if], [if:author]…[/"
-"if], [if:series]…[/if].\n"
+"Igazságérték-vizsgálat: az önálló [if:kulcs] azt ellenőrzi, hogy a kulcs beállított, nem nulla, és nem „off”/„no”. Hasznos itt: [if:title]…[/if], [if:author]…[/if], [if:series]…[/if].\n"
 "\n"
-"Comparaison par référence de jeton : =@token compare avec la valeur actuelle "
-"d'un autre jeton, par exemple [if:chap_title_1!=@title]…[/if] masque le "
-"titre de chapitre lorsqu'il est identique au titre du livre.\n"
+"Token-hivatkozás összehasonlítás: =@token egy másik token aktuális értékéhez hasonlít, pl. [if:chap_title_1!=@title]…[/if] elrejti a fejezetcímet, ha az megegyezik a könyv címével.\n"
 "\n"
-"Pour la liste complète des clés d'état conditionnelles (wifi, batt, "
-"light_pct, night, time, format, …), parcourez le chip Si/sinon — chaque "
-"entrée de référence y indique la syntaxe exacte de clé et d'opérateur pour "
-"une condition.\n"
+"A feltételes állapotkulcsok teljes listájához (wifi, batt, light_pct, night, time, format, …) nézd át a Ha/akkor chipet — minden bejegyzés megadja a pontos kulcsot és operátor-szintaxist egy feltételhez.\n"
 "\n"
-"EXEMPLES\n"
+"PÉLDÁK\n"
 "\n"
 "  [if:authors>1]%author, et al.[else]%author[/if]\n"
-"  [if:batt<20]FAIBLE %batt[/if]\n"
-"  [if:time>=18:00 and time<18:30]18 h–18 h 30[/if]\n"
-"  [if:not series]Indépendant[/if]\n"
+"  [if:batt<20]ALACSONY %batt[/if]\n"
+"  [if:time>=18:00 and time<18:30]6–6:30[/if]\n"
+"  [if:not series]Önálló[/if]\n"
 
 #: menu/tokens_library.lua:383
 msgid "★ Favourites"
-msgstr "★ Favoris"
+msgstr "★ Kedvencek"
 
 #: menu/tokens_library.lua:409
 msgid "Search tokens by name, value, or expression…"
-msgstr "Rechercher des jetons par nom, valeur ou expression…"
+msgstr "Tokenek keresése név, érték vagy kifejezés szerint…"
 
 #: menu/tokens_library.lua:414
 msgid "No favourites yet. Tap the ☆ on any token to add it."
-msgstr "Pas encore de favoris. Appuyez sur ☆ sur un jeton pour l'ajouter."
+msgstr "Még nincsenek kedvencek. Koppints egy token ☆ jelére, hogy hozzáadd."
 
 #: menu/tokens_library.lua:461
 msgid "Help"
-msgstr "Aide"
+msgstr "Segítség"
 
 #: menu/icons_library.lua:287
 msgid "Icons library"
-msgstr "Bibliothèque d'icônes"
+msgstr "Ikonkönyvtár"
 
 #: menu/icons_library.lua:319
 msgid "Search %1 icons by name…"
-msgstr "Rechercher %1 icônes par nom…"
+msgstr "%1 ikon keresése név szerint…"
 
 #: menu/icons_catalogue.lua:25
 msgid "Dynamic"
-msgstr "Dynamique"
+msgstr "Dinamikus"
 
 #: menu/icons_catalogue.lua:27
 msgid "Reading"
-msgstr "Lecture"
+msgstr "Olvasás"
 
 #: menu/icons_catalogue.lua:29
 msgid "Symbols"
-msgstr "Symboles"
+msgstr "Szimbólumok"
 
 #: menu/icons_catalogue.lua:30
 msgid "Arrows"
-msgstr "Flèches"
+msgstr "Nyilak"
 
 #: menu/icons_catalogue.lua:31
 msgid "Blocks"
-msgstr "Blocs"
+msgstr "Blokkok"
 
 #: menu/icons_catalogue.lua:32
 msgid "Separators"
-msgstr "Séparateurs"
+msgstr "Elválasztók"
 
 #: menu/icons_catalogue.lua:37
 msgid "Battery"
-msgstr "Batterie"
+msgstr "Akkumulátor"
 
 #: menu/icons_catalogue.lua:38
 msgid "Wi-Fi"
@@ -1507,529 +1481,523 @@ msgstr "Wi-Fi"
 
 #: menu/icons_catalogue.lua:39
 msgid "Frontlight"
-msgstr "Éclairage"
+msgstr "Háttérvilágítás"
 
 #: menu/icons_catalogue.lua:40
 msgid "Warmth"
-msgstr "Chaleur"
+msgstr "Melegség"
 
 #: menu/icons_catalogue.lua:41
 msgid "Night mode"
-msgstr "Mode nuit"
+msgstr "Éjszakai mód"
 
 #: menu/icons_catalogue.lua:172
 msgid "Sun (outline)"
-msgstr "Soleil (contour)"
+msgstr "Nap (kontúr)"
 
 #: menu/icons_catalogue.lua:173
 msgid "Hot springs / warmth"
-msgstr "Sources chaudes / chaleur"
+msgstr "Forrás / melegség"
 
 #: menu/icons_catalogue.lua:174
 msgid "Spade"
-msgstr "Pique"
+msgstr "Pikk"
 
 #: menu/icons_catalogue.lua:175
 msgid "Club"
-msgstr "Trèfle"
+msgstr "Treff"
 
 #: menu/icons_catalogue.lua:176
 msgid "Heart"
-msgstr "Cœur"
+msgstr "Szív"
 
 #: menu/icons_catalogue.lua:177
 msgid "Diamond suit"
-msgstr "Carreau"
+msgstr "Káró"
 
 #: menu/icons_catalogue.lua:178
 msgid "Star (filled)"
-msgstr "Étoile (pleine)"
+msgstr "Csillag (kitöltött)"
 
 #: menu/icons_catalogue.lua:179
 msgid "Star (outline)"
-msgstr "Étoile (contour)"
+msgstr "Csillag (kontúr)"
 
 #: menu/icons_catalogue.lua:180
 msgid "Infinity"
-msgstr "Infini"
+msgstr "Végtelen"
 
 #: menu/icons_catalogue.lua:181
 msgid "Section sign"
-msgstr "Signe de section"
+msgstr "Szakaszjel"
 
 #: menu/icons_catalogue.lua:182
 msgid "Pilcrow / paragraph"
-msgstr "Pied-de-mouche / paragraphe"
+msgstr "Bekezdésjel"
 
 #: menu/icons_catalogue.lua:183
 msgid "Dagger"
-msgstr "Obèle"
+msgstr "Kereszt (dagger)"
 
 #: menu/icons_catalogue.lua:184
 msgid "Double dagger"
-msgstr "Double obèle"
+msgstr "Dupla kereszt (double dagger)"
 
 #: menu/icons_catalogue.lua:185
 msgid "Numero"
-msgstr "Numéro"
+msgstr "Numero jel"
 
 #: menu/icons_catalogue.lua:186
 msgid "High voltage"
-msgstr "Haute tension"
+msgstr "Magasfeszültség"
 
 #: menu/icons_catalogue.lua:212
 msgid "Arrow left"
-msgstr "Flèche gauche"
+msgstr "Balra nyíl"
 
 #: menu/icons_catalogue.lua:213
 msgid "Arrow right"
-msgstr "Flèche droite"
+msgstr "Jobbra nyíl"
 
 #: menu/icons_catalogue.lua:214
 msgid "Arrow up"
-msgstr "Flèche haut"
+msgstr "Felfelé nyíl"
 
 #: menu/icons_catalogue.lua:215
 msgid "Arrow down"
-msgstr "Flèche bas"
+msgstr "Lefelé nyíl"
 
 #: menu/icons_catalogue.lua:216
 msgid "Double arrow left"
-msgstr "Double flèche gauche"
+msgstr "Dupla balra nyíl"
 
 #: menu/icons_catalogue.lua:217
 msgid "Double arrow right"
-msgstr "Double flèche droite"
+msgstr "Dupla jobbra nyíl"
 
 #: menu/icons_catalogue.lua:218
 msgid "Double arrow up"
-msgstr "Double flèche haut"
+msgstr "Dupla felfelé nyíl"
 
 #: menu/icons_catalogue.lua:219
 msgid "Double arrow down"
-msgstr "Double flèche bas"
+msgstr "Dupla lefelé nyíl"
 
 #: menu/icons_catalogue.lua:220
 msgid "Arrows left-right"
-msgstr "Flèches gauche-droite"
+msgstr "Balra-jobbra nyilak"
 
 #: menu/icons_catalogue.lua:221
 msgid "Double arrows right"
-msgstr "Double flèche droite"
+msgstr "Dupla jobbra nyilak"
 
 #: menu/icons_catalogue.lua:222
 msgid "Left harpoon with right arrow"
-msgstr "Harpon gauche avec flèche droite"
+msgstr "Bal szigony jobbra nyíllal"
 
 #: menu/icons_catalogue.lua:223
 msgid "Curved back arrow"
-msgstr "Flèche courbée en arrière"
+msgstr "Görbe visszanyíl"
 
 #: menu/icons_catalogue.lua:224
 msgid "Arrow left with tail"
-msgstr "Flèche gauche à queue"
+msgstr "Balra nyíl farokkal"
 
 #: menu/icons_catalogue.lua:225
 msgid "Arrow right with tail"
-msgstr "Flèche droite à queue"
+msgstr "Jobbra nyíl farokkal"
 
 #: menu/icons_catalogue.lua:226
 msgid "Arrow left to bar"
-msgstr "Flèche gauche vers barre"
+msgstr "Balra nyíl korlátig"
 
 #: menu/icons_catalogue.lua:227
 msgid "Arrow right to bar"
-msgstr "Flèche droite vers barre"
+msgstr "Jobbra nyíl korlátig"
 
 #: menu/icons_catalogue.lua:228
 msgid "Arrow left hooked"
-msgstr "Flèche gauche crochue"
+msgstr "Balra horgos nyíl"
 
 #: menu/icons_catalogue.lua:229
 msgid "Arrow right hooked"
-msgstr "Flèche droite crochue"
+msgstr "Jobbra horgos nyíl"
 
 #: menu/icons_catalogue.lua:230
 msgid "Arrow right then up"
-msgstr "Flèche droite puis haut"
+msgstr "Jobbra majd fel nyíl"
 
 #: menu/icons_catalogue.lua:231
 msgid "Arrow right then down"
-msgstr "Flèche droite puis bas"
+msgstr "Jobbra majd le nyíl"
 
 #: menu/icons_catalogue.lua:232
 msgid "Arrow up then left"
-msgstr "Flèche haut puis gauche"
+msgstr "Fel majd balra nyíl"
 
 #: menu/icons_catalogue.lua:233
 msgid "Arrow up then right"
-msgstr "Flèche haut puis droite"
+msgstr "Fel majd jobbra nyíl"
 
 #: menu/icons_catalogue.lua:234
 msgid "Arrow down then left"
-msgstr "Flèche bas puis gauche"
+msgstr "Le majd balra nyíl"
 
 #: menu/icons_catalogue.lua:235
 msgid "Arrow down then right"
-msgstr "Flèche bas puis droite"
+msgstr "Le majd jobbra nyíl"
 
 #: menu/icons_catalogue.lua:236
 msgid "Circle arrow left"
-msgstr "Flèche circulaire gauche"
+msgstr "Körbe balra nyíl"
 
 #: menu/icons_catalogue.lua:237
 msgid "Circle arrow right"
-msgstr "Flèche circulaire droite"
+msgstr "Körbe jobbra nyíl"
 
 #: menu/icons_catalogue.lua:238
 msgid "Heavy arrow right"
-msgstr "Grosse flèche droite"
+msgstr "Vastag jobbra nyíl"
 
 #: menu/icons_catalogue.lua:239
 msgid "Heavy round arrow right"
-msgstr "Grosse flèche ronde droite"
+msgstr "Vastag kerek jobbra nyíl"
 
 #: menu/icons_catalogue.lua:240
 msgid "Triangle-head right"
-msgstr "Tête triangulaire droite"
+msgstr "Háromszögfejű jobbra nyíl"
 
 #: menu/icons_catalogue.lua:241
 msgid "Heavy triangle right"
-msgstr "Gros triangle droit"
+msgstr "Vastag háromszög jobbra"
 
 #: menu/icons_catalogue.lua:242
 msgid "Arrowhead right"
-msgstr "Pointe de flèche à droite"
+msgstr "Nyílhegy jobbra"
 
 #: menu/icons_catalogue.lua:243
 msgid "Long arrow left"
-msgstr "Longue flèche gauche"
+msgstr "Hosszú balra nyíl"
 
 #: menu/icons_catalogue.lua:244
 msgid "Long arrow right"
-msgstr "Longue flèche droite"
+msgstr "Hosszú jobbra nyíl"
 
 #: menu/icons_catalogue.lua:245
 msgid "Single angle left"
-msgstr "Chevron gauche"
+msgstr "Egyszerű balra szögjel"
 
 #: menu/icons_catalogue.lua:246
 msgid "Single angle right"
-msgstr "Chevron droit"
+msgstr "Egyszerű jobbra szögjel"
 
 #: menu/icons_catalogue.lua:247
 msgid "Double angle left"
-msgstr "Double chevron gauche"
+msgstr "Dupla balra szögjel"
 
 #: menu/icons_catalogue.lua:248
 msgid "Double angle right"
-msgstr "Double chevron droit"
+msgstr "Dupla jobbra szögjel"
 
 #: menu/icons_catalogue.lua:349
 msgid "Block (full)"
-msgstr "Bloc (plein)"
+msgstr "Blokk (teljes)"
 
 #: menu/icons_catalogue.lua:350
 msgid "Block (dark)"
-msgstr "Bloc (foncé)"
+msgstr "Blokk (sötét)"
 
 #: menu/icons_catalogue.lua:351
 msgid "Block (medium)"
-msgstr "Bloc (moyen)"
+msgstr "Blokk (közepes)"
 
 #: menu/icons_catalogue.lua:352
 msgid "Block (light)"
-msgstr "Bloc (clair)"
+msgstr "Blokk (világos)"
 
 #: menu/icons_catalogue.lua:353
 msgid "Upper half block"
-msgstr "Demi-bloc supérieur"
+msgstr "Felső fél blokk"
 
 #: menu/icons_catalogue.lua:354
 msgid "Right half block"
-msgstr "Demi-bloc droit"
+msgstr "Jobb fél blokk"
 
 #: menu/icons_catalogue.lua:355
 msgid "Lower 1/8 block"
-msgstr "Bloc inférieur 1/8"
+msgstr "Alsó 1/8 blokk"
 
 #: menu/icons_catalogue.lua:356
 msgid "Lower 2/8 block"
-msgstr "Bloc inférieur 2/8"
+msgstr "Alsó 2/8 blokk"
 
 #: menu/icons_catalogue.lua:357
 msgid "Lower 3/8 block"
-msgstr "Bloc inférieur 3/8"
+msgstr "Alsó 3/8 blokk"
 
 #: menu/icons_catalogue.lua:358
 msgid "Lower 4/8 block"
-msgstr "Bloc inférieur 4/8"
+msgstr "Alsó 4/8 blokk"
 
 #: menu/icons_catalogue.lua:359
 msgid "Lower 5/8 block"
-msgstr "Bloc inférieur 5/8"
+msgstr "Alsó 5/8 blokk"
 
 #: menu/icons_catalogue.lua:360
 msgid "Lower 6/8 block"
-msgstr "Bloc inférieur 6/8"
+msgstr "Alsó 6/8 blokk"
 
 #: menu/icons_catalogue.lua:361
 msgid "Lower 7/8 block"
-msgstr "Bloc inférieur 7/8"
+msgstr "Alsó 7/8 blokk"
 
 #: menu/icons_catalogue.lua:362
 msgid "Left 1/8 block"
-msgstr "Bloc gauche 1/8"
+msgstr "Bal 1/8 blokk"
 
 #: menu/icons_catalogue.lua:363
 msgid "Left 2/8 block"
-msgstr "Bloc gauche 2/8"
+msgstr "Bal 2/8 blokk"
 
 #: menu/icons_catalogue.lua:364
 msgid "Left 3/8 block"
-msgstr "Bloc gauche 3/8"
+msgstr "Bal 3/8 blokk"
 
 #: menu/icons_catalogue.lua:365
 msgid "Left 4/8 block"
-msgstr "Bloc gauche 4/8"
+msgstr "Bal 4/8 blokk"
 
 #: menu/icons_catalogue.lua:366
 msgid "Left 5/8 block"
-msgstr "Bloc gauche 5/8"
+msgstr "Bal 5/8 blokk"
 
 #: menu/icons_catalogue.lua:367
 msgid "Left 6/8 block"
-msgstr "Bloc gauche 6/8"
+msgstr "Bal 6/8 blokk"
 
 #: menu/icons_catalogue.lua:368
 msgid "Left 7/8 block"
-msgstr "Bloc gauche 7/8"
+msgstr "Bal 7/8 blokk"
 
 #: menu/icons_catalogue.lua:369
 msgid "Square (filled)"
-msgstr "Carré (plein)"
+msgstr "Négyzet (kitöltött)"
 
 #: menu/icons_catalogue.lua:370
 msgid "Square (empty)"
-msgstr "Carré (vide)"
+msgstr "Négyzet (üres)"
 
 #: menu/icons_catalogue.lua:371
 msgid "Rectangle (filled)"
-msgstr "Rectangle (plein)"
+msgstr "Téglalap (kitöltött)"
 
 #: menu/icons_catalogue.lua:372
 msgid "Rectangle (empty)"
-msgstr "Rectangle (vide)"
+msgstr "Téglalap (üres)"
 
 #: menu/icons_catalogue.lua:373
 msgid "Vertical block"
-msgstr "Bloc vertical"
+msgstr "Vízszintes blokk"
 
 #: menu/icons_catalogue.lua:374
 msgid "Vertical block (empty)"
-msgstr "Bloc vertical (vide)"
+msgstr "Vízszintes blokk (üres)"
 
 #: menu/icons_catalogue.lua:375
 msgid "Slant block"
-msgstr "Bloc oblique"
+msgstr "Dőlt blokk"
 
 #: menu/icons_catalogue.lua:376
 msgid "Slant block (empty)"
-msgstr "Bloc oblique (vide)"
+msgstr "Dőlt blokk (üres)"
 
 #: menu/icons_catalogue.lua:377
 msgid "Circle (filled)"
-msgstr "Cercle (plein)"
+msgstr "Kör (kitöltött)"
 
 #: menu/icons_catalogue.lua:378
 msgid "Circle (empty)"
-msgstr "Cercle (vide)"
+msgstr "Kör (üres)"
 
 #: menu/icons_catalogue.lua:379
 msgid "Circle (left half)"
-msgstr "Cercle (moitié gauche)"
+msgstr "Kör (bal fél)"
 
 #: menu/icons_catalogue.lua:380
 msgid "Circle (right half)"
-msgstr "Cercle (moitié droite)"
+msgstr "Kör (jobb fél)"
 
 #: menu/icons_catalogue.lua:381
 msgid "Circle (lower half)"
-msgstr "Cercle (moitié inférieure)"
+msgstr "Kör (alsó fél)"
 
 #: menu/icons_catalogue.lua:382
 msgid "Circle (upper half)"
-msgstr "Cercle (moitié supérieure)"
+msgstr "Kör (felső fél)"
 
 #: menu/icons_catalogue.lua:383
 msgid "Diamond (filled)"
-msgstr "Losange (plein)"
+msgstr "Káró (kitöltött)"
 
 #: menu/icons_catalogue.lua:384
 msgid "Diamond (empty)"
-msgstr "Losange (vide)"
+msgstr "Káró (üres)"
 
 #: menu/icons_catalogue.lua:387
 msgid "Vertical bar"
-msgstr "Barre verticale"
+msgstr "Függőleges vonal"
 
 #: menu/icons_catalogue.lua:388
 msgid "Bullet"
-msgstr "Puce"
+msgstr "Pont (bullet)"
 
 #: menu/icons_catalogue.lua:389
 msgid "Middle dot"
-msgstr "Point médian"
+msgstr "Középső pont"
 
 #: menu/icons_catalogue.lua:390
 msgid "Vertical ellipsis"
-msgstr "Ellipse verticale"
+msgstr "Függőleges három pont"
 
 #: menu/icons_catalogue.lua:391
 msgid "Em dash"
-msgstr "Tiret cadratin"
+msgstr "Gondolatjel (em dash)"
 
 #: menu/icons_catalogue.lua:392
 msgid "En dash"
-msgstr "Tiret demi-cadratin"
+msgstr "Kötőjel (en dash)"
 
 #: menu/icons_catalogue.lua:393
 msgid "Horizontal ellipsis"
-msgstr "Ellipse horizontale"
+msgstr "Vízszintes három pont"
 
 #: menu/icons_catalogue.lua:394
 msgid "Slash"
-msgstr "Barre oblique"
+msgstr "Perjel"
 
 #: menu/icons_catalogue.lua:395
 msgid "Division slash"
-msgstr "Barre de division"
+msgstr "Osztásjel"
 
 #: menu/icons_catalogue.lua:396
 msgid "Fraction slash"
-msgstr "Barre de fraction"
+msgstr "Törtjel"
 
 #: menu/icons_catalogue.lua:397
 msgid "Double fraction slash"
-msgstr "Double barre de fraction"
+msgstr "Dupla törtjel"
 
 #: menu/icons_catalogue.lua:398
 msgid "Tilde"
-msgstr "Tilde"
+msgstr "Hullámjel"
 
 #: menu/icons_catalogue.lua:399
 msgid "Triangular bullet"
-msgstr "Puce triangulaire"
+msgstr "Háromszög pont"
 
 #: menu/colours_menu.lua:73
 msgid "per style"
-msgstr "par style"
+msgstr "stílus szerint"
 
 #: menu/colours_menu.lua:75
 msgid "Transparent"
-msgstr "Transparent"
+msgstr "Átlátszó"
 
-#: menu/colours_menu.lua:90 menu/colours_menu.lua:104 menu/colours_menu.lua:276
-#: menu/colours_menu.lua:283 menu/colours_menu.lua:289
-#: menu/colours_menu.lua:296 menu/progress_bar_menu.lua:358
+#: menu/colours_menu.lua:90 menu/colours_menu.lua:104
+#: menu/colours_menu.lua:276 menu/colours_menu.lua:283
+#: menu/colours_menu.lua:289 menu/colours_menu.lua:296
+#: menu/progress_bar_menu.lua:358
 msgid "default"
-msgstr "défaut"
+msgstr "alapértelmezett"
 
 #: menu/colours_menu.lua:91
 msgid "transparent"
-msgstr "transparent"
+msgstr "átlátszó"
 
 #: menu/colours_menu.lua:110
 msgid "Progress bar colour"
-msgstr "Couleur de la barre de progression"
+msgstr "Folyamatjelző színe"
 
 #: menu/colours_menu.lua:114
 msgid "Progress bar colour (% black)"
-msgstr "Couleur de la barre de progression (% noir)"
+msgstr "Folyamatjelző színe (% fekete)"
 
 #: menu/colours_menu.lua:123
 msgid "Progress bar track colour"
-msgstr "Couleur de la voie de progression"
+msgstr "Folyamatjelző nyomvonal színe"
 
 #: menu/colours_menu.lua:127
 msgid "Progress bar track colour (% black)"
-msgstr "Couleur de la voie de progression (% noir)"
+msgstr "Folyamatjelző nyomvonal színe (% fekete)"
 
 #: menu/colours_menu.lua:136
 msgid "Tick color"
-msgstr "Couleur des repères"
+msgstr "Jelölés színe"
 
 #: menu/colours_menu.lua:140
 msgid "Tick color (% black)"
-msgstr "Couleur des repères (% noir)"
+msgstr "Jelölés színe (% fekete)"
 
 #: menu/colours_menu.lua:148
 msgid "Invert tick color on read portion"
-msgstr "Inverser la couleur des repères sur la partie lue"
+msgstr "Jelölésszín invertálása az olvasott részen"
 
 #: menu/colours_menu.lua:161
 msgid "Border color"
-msgstr "Couleur de la bordure"
+msgstr "Szegély színe"
 
 #: menu/colours_menu.lua:165
 msgid "Border color (% black)"
-msgstr "Couleur de la bordure (% noir)"
+msgstr "Szegély színe (% fekete)"
 
 #: menu/colours_menu.lua:175 menu/colours_menu.lua:177
 #: menu/colours_menu.lua:183
 msgid "Border thickness"
-msgstr "Épaisseur de la bordure"
+msgstr "Szegély vastagsága"
 
 #: menu/colours_menu.lua:197
 msgid "Tick inversion color"
-msgstr "Couleur d'inversion des graduations"
+msgstr "Jelölés-invertálási szín"
 
 #: menu/colours_menu.lua:201
 msgid "Tick inversion color (% black)"
-msgstr "Couleur d'inversion des graduations (% noir)"
+msgstr "Jelölés-invertálási szín (% fekete)"
 
 #: menu/colours_menu.lua:225
 msgid "No background"
-msgstr "Sans arrière-plan"
+msgstr "Nincs háttér"
 
 #: menu/colours_menu.lua:276 menu/colours_menu.lua:283
 #: menu/colours_menu.lua:319 menu/progress_bar_menu.lua:32
 msgid "book"
-msgstr "livre"
+msgstr "könyv"
 
 #: menu/colours_menu.lua:289 menu/colours_menu.lua:296
 #: menu/colours_menu.lua:334
 msgid "text"
-msgstr "texte"
+msgstr "szöveg"
 
 #: menu/colours_menu.lua:315 menu/colours_menu.lua:319
 msgid "Text color"
-msgstr "Couleur du texte"
+msgstr "Szöveg színe"
 
 #: menu/colours_menu.lua:329 menu/colours_menu.lua:334
 msgid "Icon color"
-msgstr "Couleur des icônes"
+msgstr "Ikon színe"
 
 #: menu/colours_menu.lua:331
 msgid ""
-"Applies to Nerd Font and FontAwesome icon glyphs (the Private Use Area "
-"range, e.g. %W, %B, %k). Unicode symbols in the regular text ranges (like "
-"the hourglass \"⌛\") follow the text color instead.\n"
+"Applies to Nerd Font and FontAwesome icon glyphs (the Private Use Area range, e.g. %W, %B, %k). Unicode symbols in the regular text ranges (like the hourglass \"⌛\") follow the text color instead.\n"
 "\n"
-"An inline [c=#RRGGBB]…[/c] tag in a line overrides the icon colour for any "
-"glyphs inside it."
+"An inline [c=#RRGGBB]…[/c] tag in a line overrides the icon colour for any glyphs inside it."
 msgstr ""
-"S'applique aux glyphes d'icônes Nerd Font et FontAwesome (la plage Private "
-"Use Area, par exemple %W, %B, %k). Les symboles Unicode dans les plages de "
-"texte régulières (comme le sablier \"⌛\") suivent plutôt la couleur du "
-"texte.\n"
+"A Nerd Font és FontAwesome ikon-glifekre vonatkozik (Private Use Area tartomány, pl. %W, %B, %k). A normál szövegtartományok Unicode szimbólumai (mint a „⌛” homokóra) a szöveg színét követik.\n"
 "\n"
-"Une balise en ligne [c=#RRGGBB]…[/c] dans une ligne remplace la couleur des "
-"icônes pour tous les glyphes qu'elle contient."
+"Egy soron belüli [c=#RRGGBB]…[/c] tag felülírja az ikonszínt minden benne lévő glifre."
 
 #: menu/colours_menu.lua:344 menu/colours_menu.lua:349
 msgid "Background colour"
-msgstr "Couleur de fond"
+msgstr "Háttérszín"
 
 #: menu/colours_menu.lua:346
 msgid ""
@@ -2037,115 +2005,115 @@ msgid ""
 "across the screen. Choose a colour to enable, hold this row or tap Default "
 "in the picker to turn off."
 msgstr ""
-"Fond plein affiché derrière les zones de superposition haut et bas, bord à "
-"bord sur toute la largeur de l'écran. Choisissez une couleur pour activer, "
-"maintenez cette ligne ou appuyez sur Défaut dans le sélecteur pour "
-"désactiver."
+"A felső és alsó overlay-régiók mögé rajzolt teli kitöltés, a képernyő teljes"
+" szélességében. Válassz színt a bekapcsoláshoz, vagy tartsd lenyomva ezt a "
+"sort, illetve koppints az Alapértelmezett gombra a színválasztóban a "
+"kikapcsoláshoz."
 
 #: menu/library_modal.lua:442
 msgid "Search…"
-msgstr "Rechercher…"
+msgstr "Keresés…"
 
 #: menu/library_modal.lua:478
 msgid "Search"
-msgstr "Rechercher"
+msgstr "Keresés"
 
 #: menu/progress_bar_menu.lua:30
 msgid "Bar"
-msgstr "Barre"
+msgstr "Sáv"
 
 #: menu/progress_bar_menu.lua:32
 msgid "chapter"
-msgstr "chapitre"
+msgstr "fejezet"
 
 #: menu/progress_bar_menu.lua:33
 msgid "top"
-msgstr "haut"
+msgstr "fent"
 
 #: menu/progress_bar_menu.lua:33
 msgid "bottom"
-msgstr "bas"
+msgstr "lent"
 
 #: menu/progress_bar_menu.lua:33
 msgid "left"
-msgstr "gauche"
+msgstr "bal"
 
 #: menu/progress_bar_menu.lua:33
 msgid "right"
-msgstr "droite"
+msgstr "jobb"
 
 #: menu/progress_bar_menu.lua:69
 msgid "Bar %1"
-msgstr "Barre %1"
+msgstr "%1. sáv"
 
 #: menu/progress_bar_menu.lua:80
 msgid "Long press to change render order"
-msgstr "Appui long pour changer l'ordre de rendu"
+msgstr "Hosszan nyomva változtathatod a megjelenítési sorrendet"
 
 #: menu/progress_bar_menu.lua:84
 msgid "Inline progress bars can be added via the line editor"
-msgstr "Les barres de progression peuvent être ajoutées via l'éditeur de ligne"
+msgstr "Beágyazott folyamatjelzők a sorszerkesztőben adhatók hozzá"
 
 #: menu/progress_bar_menu.lua:100
 msgid "Enable"
-msgstr "Activer"
+msgstr "Engedélyezés"
 
 #: menu/progress_bar_menu.lua:157
 msgid "Anchor"
-msgstr "Ancre"
+msgstr "Horgony"
 
 #: menu/progress_bar_menu.lua:182
 msgid "Fill: clockwise"
-msgstr "Remplissage : sens horaire"
+msgstr "Feltöltés: óramutató járásával"
 
 #: menu/progress_bar_menu.lua:187
 msgid "Fill: top to bottom"
-msgstr "Remplissage : haut vers bas"
+msgstr "Feltöltés: fentről le"
 
 #: menu/progress_bar_menu.lua:188
 msgid "Fill: bottom to top"
-msgstr "Remplissage : bas vers haut"
+msgstr "Feltöltés: lentről fel"
 
 #: menu/progress_bar_menu.lua:224 menu/progress_bar_menu.lua:236
 msgid "Diameter"
-msgstr "Diamètre"
+msgstr "Átmérő"
 
 #: menu/progress_bar_menu.lua:289 menu/progress_bar_menu.lua:291
 msgid "Custom colors and tick marks"
-msgstr "Couleurs et graduations personnalisées"
+msgstr "Egyéni színek és jelölővonalak"
 
 #: menu/progress_bar_menu.lua:299
 msgid "Use custom colors"
-msgstr "Utiliser des couleurs personnalisées"
+msgstr "Egyéni színek használata"
 
 #: menu/progress_bar_menu.lua:330 menu/progress_bar_menu.lua:335
 msgid "Tick height"
-msgstr "Hauteur des graduations"
+msgstr "Jelölővonal magassága"
 
 #: menu/progress_bar_menu.lua:356 menu/progress_bar_menu.lua:358
 #: menu/progress_bar_menu.lua:364
 msgid "Tick width"
-msgstr "Largeur des graduations"
+msgstr "Jelölővonal szélessége"
 
 #: menu/progress_bar_menu.lua:384
 msgid "Reset custom to defaults"
-msgstr "Réinitialiser les personnalisations aux valeurs par défaut"
+msgstr "Egyéni beállítások visszaállítása alapértelmezettre"
 
 #: menu/progress_bar_menu.lua:411
 msgid "Edge"
-msgstr "Bord"
+msgstr "Szél"
 
 #: menu/progress_bar_menu.lua:411
 msgid "Vertical"
-msgstr "Vertical"
+msgstr "Függőleges"
 
 #: menu/preset_manager_modal.lua:295
 msgid "+ New blank preset"
-msgstr "+ Nouveau preset vierge"
+msgstr "+ Új üres előbeállítás"
 
 #: menu/preset_manager_modal.lua:311
 msgid "Discover more presets"
-msgstr "Découvrir d'autres presets"
+msgstr "További előbeállítások felfedezése"
 
 #: menu/preset_manager_modal.lua:317
 msgid ""
@@ -2153,169 +2121,170 @@ msgid ""
 "install the ones you like. Once installed, you can edit each preset freely "
 "on the My presets tab."
 msgstr ""
-"Parcourez les presets partagés par d'autres, prévisualisez-les sur votre "
-"barre d'état et installez ceux qui vous plaisent. Une fois installés, vous "
-"pouvez modifier librement chaque preset depuis l'onglet Mes presets."
+"Nézd át a másokkal megosztott előbeállításokat, próbáld ki őket a saját "
+"állapotsávodon, és telepítsd a tetszőeket. Telepítés után a Saját "
+"előbeállítások lapon szabadon szerkesztheted bármelyiket."
 
 #: menu/preset_manager_modal.lua:324
 msgid ""
-"Made something worth sharing? Submit it with the Manage button while viewing "
-"one of your own presets."
+"Made something worth sharing? Submit it with the Manage button while viewing"
+" one of your own presets."
 msgstr ""
-"Vous avez créé quelque chose à partager ? Envoyez-le via le bouton Gérer en "
-"consultant l'un de vos propres presets."
+"Csináltál valami megosztásra érdemeset? Küldd be a Kezelés gombbal, miközben"
+" az egyik saját előbeállításodat nézed."
 
 #: menu/preset_manager_modal.lua:331
 msgid "Tap Latest or Popular above to load the gallery."
-msgstr "Touchez Récents ou Populaires ci-dessus pour charger la galerie."
+msgstr ""
+"Koppints a Legújabb vagy a Népszerű gombra fent a galéria betöltéséhez."
 
 #: menu/preset_manager_modal.lua:470
 msgid "Preset library"
-msgstr "Bibliothèque de presets"
+msgstr "Előbeállítás-könyvtár"
 
 #: menu/preset_manager_modal.lua:472
 msgid "My presets"
-msgstr "Mes presets"
+msgstr "Saját előbeállítások"
 
 #: menu/preset_manager_modal.lua:473
 msgid "Gallery"
-msgstr "Galerie"
+msgstr "Galéria"
 
 #: menu/preset_manager_modal.lua:483 menu/preset_manager_modal.lua:495
 msgid "Latest"
-msgstr "Récents"
+msgstr "Legújabb"
 
 #: menu/preset_manager_modal.lua:484
 msgid "Starred"
-msgstr "Favoris"
+msgstr "Csillagozott"
 
 #: menu/preset_manager_modal.lua:497
 msgid "Popular"
-msgstr "Populaires"
+msgstr "Népszerű"
 
 #: menu/preset_manager_modal.lua:509
 msgid "Loading gallery…"
-msgstr "Chargement de la galerie…"
+msgstr "Galéria betöltése…"
 
 #: menu/preset_manager_modal.lua:522
 msgid "Search my presets by name or author…"
-msgstr "Rechercher mes presets par nom ou auteur…"
+msgstr "Saját előbeállítások keresése név vagy szerző szerint…"
 
 #: menu/preset_manager_modal.lua:524
 msgid "Search gallery presets by name or author…"
-msgstr "Rechercher les presets de la galerie par nom ou auteur…"
+msgstr "Galéria előbeállítások keresése név vagy szerző szerint…"
 
 #: menu/preset_manager_modal.lua:566
 msgid "Manage…"
-msgstr "Gérer…"
+msgstr "Kezelés…"
 
 #: menu/preset_manager_modal.lua:584 menu/preset_manager_modal.lua:587
 #: menu/preset_manager_modal.lua:1733
 msgid "Install"
-msgstr "Installer"
+msgstr "Telepítés"
 
 #: menu/preset_manager_modal.lua:824 menu/preset_manager_modal.lua:1691
 msgid "Could not preview preset"
-msgstr "Impossible de prévisualiser le preset"
+msgstr "Az előbeállítás előnézete nem sikerült"
 
 #: menu/preset_manager_modal.lua:939
 msgid "by"
-msgstr "par"
+msgstr "tőle:"
 
 #: menu/preset_manager_modal.lua:1188 menu/preset_manager_modal.lua:1502
 msgid "Untitled"
-msgstr "Sans titre"
+msgstr "Névtelen"
 
 #: menu/preset_manager_modal.lua:1217
 msgid "Rename…"
-msgstr "Renommer…"
+msgstr "Átnevezés…"
 
 #: menu/preset_manager_modal.lua:1221
 msgid "Edit description…"
-msgstr "Modifier la description…"
+msgstr "Leírás szerkesztése…"
 
 #: menu/preset_manager_modal.lua:1225
 msgid "Edit author…"
-msgstr "Modifier l'auteur…"
+msgstr "Szerző szerkesztése…"
 
 #: menu/preset_manager_modal.lua:1229
 msgid "Duplicate"
-msgstr "Dupliquer"
+msgstr "Másolat"
 
 #: menu/preset_manager_modal.lua:1233
 msgid "Submit to gallery…"
-msgstr "Envoyer à la galerie…"
+msgstr "Beküldés a galériába…"
 
 #: menu/preset_manager_modal.lua:1343
 msgid "%1, line %2"
-msgstr "%1, ligne %2"
+msgstr "%1, %2. sor"
 
 #: menu/preset_manager_modal.lua:1380
 msgid "Edit description"
-msgstr "Modifier la description"
+msgstr "Leírás szerkesztése"
 
 #: menu/preset_manager_modal.lua:1384
 msgid "Edit author"
-msgstr "Modifier l'auteur"
+msgstr "Szerző szerkesztése"
 
 #: menu/preset_manager_modal.lua:1388
 msgid "copy"
-msgstr "copie"
+msgstr "másolat"
 
 #: menu/preset_manager_modal.lua:1391
 msgid "Duplicate preset"
-msgstr "Dupliquer le preset"
+msgstr "Előbeállítás duplikálása"
 
 #: menu/preset_manager_modal.lua:1434
 msgid "Rename before sharing"
-msgstr "Renommer avant de partager"
+msgstr "Átnevezés megosztás előtt"
 
 #: menu/preset_manager_modal.lua:1485
 msgid "Who should we credit as the author?"
-msgstr "Qui devons-nous créditer comme auteur ?"
+msgstr "Kit jelöljünk meg szerzőként?"
 
 #: menu/preset_manager_modal.lua:1490
 msgid "One-line description of this preset"
-msgstr "Description en une ligne de ce preset"
+msgstr "Egysoros leírás erről az előbeállításról"
 
 #: menu/preset_manager_modal.lua:1509
 msgid ""
 "'%1' is one of Bookends' default placeholder names. Give your preset "
 "something distinctive — that's how it'll appear in the gallery."
 msgstr ""
-"« %1 » est l'un des noms par défaut de Bookends. Donnez à votre preset "
-"quelque chose de distinctif — c'est ainsi qu'il apparaîtra dans la galerie."
+"„%1” a Bookends egyik alapértelmezett helykitöltő neve. Adj egyedi nevet az "
+"előbeállításodnak — így fog megjelenni a galériában."
 
 #: menu/preset_manager_modal.lua:1515
 msgid ""
 "Write a short description that tells gallery users what your preset shows"
 msgstr ""
-"Rédigez une courte description qui indique aux utilisateurs de la galerie ce "
-"que montre votre preset"
+"Írj egy rövid leírást, amely megmutatja a galéria felhasználóinak, mit "
+"jelenít meg az előbeállítás"
 
 #: menu/preset_manager_modal.lua:1537
 msgid ""
 "Submit '%1' by %2 to the gallery? A pull request will be opened for review."
 msgstr ""
-"Envoyer « %1 » par %2 à la galerie ? Une pull request sera ouverte pour "
-"relecture."
+"Beküldöd a galériába „%1”-t %2 nevében? Egy pull request fog megnyílni "
+"felülvizsgálatra."
 
 #: menu/preset_manager_modal.lua:1539
 msgid "Submit"
-msgstr "Envoyer"
+msgstr "Beküldés"
 
 #: menu/preset_manager_modal.lua:1549
 msgid ""
 "A preset called '%1' is already in the gallery. Rename your preset (Manage… "
 "→ Rename…) before submitting, so it doesn't collide with the existing entry."
 msgstr ""
-"Un preset nommé « %1 » est déjà dans la galerie. Renommez votre preset "
-"(Gérer… → Renommer…) avant de l'envoyer, afin qu'il n'entre pas en conflit "
-"avec l'entrée existante."
+"„%1” nevű előbeállítás már szerepel a galériában. Nevezd át az "
+"előbeállításodat (Kezelés… → Átnevezés…), mielőtt beküldöd, hogy ne ütközzön"
+" a meglévő bejegyzéssel."
 
 #: menu/preset_manager_modal.lua:1560
 msgid "Submitting to gallery…"
-msgstr "Envoi à la galerie…"
+msgstr "Beküldés a galériába…"
 
 #: menu/preset_manager_modal.lua:1572
 msgid ""
@@ -2323,129 +2292,125 @@ msgid ""
 "\n"
 "The maintainer will review it before it appears in the Gallery."
 msgstr ""
-"Merci ! Votre envoi est la PR #%1.\n"
+"Köszönjük! A beküldésed a #%1 pull request.\n"
 "\n"
-"Le mainteneur l'examinera avant qu'il n'apparaisse dans la Galerie."
+"A karbantartó felülvizsgálja, mielőtt megjelenne a Galériában."
 
 #: menu/preset_manager_modal.lua:1581
 msgid ""
 "A preset called '%1' is already in the gallery. Rename your preset (Manage… "
 "→ Rename…) before submitting."
 msgstr ""
-"Un preset nommé « %1 » est déjà dans la galerie. Renommez votre preset "
-"(Gérer… → Renommer…) avant de l'envoyer."
+"„%1” nevű előbeállítás már szerepel a galériában. Nevezd át az "
+"előbeállításodat (Kezelés… → Átnevezés…), mielőtt beküldöd."
 
 #: menu/preset_manager_modal.lua:1584
 msgid ""
 "A submission for '%1' is already awaiting review. Wait for that one to be "
 "reviewed, or rename your preset to submit under a different name."
 msgstr ""
-"Un envoi pour « %1 » est déjà en attente de relecture. Attendez sa "
-"relecture, ou renommez votre preset pour l'envoyer sous un autre nom."
+"„%1” nevű beküldés már felülvizsgálatra várakozik. Várj, amíg azt "
+"felülvizsgálják, vagy nevezd át az előbeállításodat, hogy más néven küldhesd"
+" be."
 
 #: menu/preset_manager_modal.lua:1587
 msgid "Submission failed: %1"
-msgstr "Échec de l'envoi : %1"
+msgstr "A beküldés sikertelen: %1"
 
 #: menu/preset_manager_modal.lua:1600
 msgid ""
 "This preset uses specific fonts that won't exist on other devices. These "
-"overrides will be stripped from your submission so other users see their own "
-"default font."
+"overrides will be stripped from your submission so other users see their own"
+" default font."
 msgstr ""
-"Ce preset utilise des polices spécifiques qui n'existeront pas sur d'autres "
-"appareils. Ces surcharges seront retirées de votre envoi afin que les autres "
-"utilisateurs voient leur propre police par défaut."
+"Ez az előbeállítás olyan betűtípusokat használ, amelyek más eszközökön nem "
+"léteznek. Ezek a felülírások eltávolításra kerülnek a beküldésedből, így a "
+"többi felhasználó a saját alapértelmezett betűtípusát látja."
 
 #: menu/preset_manager_modal.lua:1602
 msgid "Custom fonts in this preset:"
-msgstr "Polices personnalisées dans ce preset :"
+msgstr "Egyéni betűtípusok ebben az előbeállításban:"
 
 #: menu/preset_manager_modal.lua:1608
 msgid ""
-"Tip: for portable presets, pick a Font-family font (Serif, Sans-serif, etc.) "
-"instead of a specific one — those adapt to each user's font settings."
+"Tip: for portable presets, pick a Font-family font (Serif, Sans-serif, etc.)"
+" instead of a specific one — those adapt to each user's font settings."
 msgstr ""
-"Astuce : pour des presets portables, choisissez une police de famille "
-"(Serif, Sans-serif, etc.) plutôt qu'une police spécifique — celles-ci "
-"s'adaptent aux réglages de police de chaque utilisateur."
+"Tipp: hordozható előbeállításokhoz válassz betűtípus-családot (Serif, Sans-"
+"serif, stb.) egy konkrét betűtípus helyett — ezek minden felhasználó "
+"betűtípus-beállításához igazodnak."
 
 #: menu/preset_manager_modal.lua:1611
 msgid "Submit anyway"
-msgstr "Envoyer quand même"
+msgstr "Mégis beküldés"
 
 #: menu/preset_manager_modal.lua:1624
 msgid "Submission failed — details in the KOReader log."
-msgstr "Échec de l'envoi — détails dans le journal de KOReader."
+msgstr "A beküldés sikertelen — részletek a KOReader naplóban."
 
 #: menu/preset_manager_modal.lua:1630
 msgid "Delete preset '%1'?"
-msgstr "Supprimer le preset « %1 » ?"
+msgstr "Törlöd az „%1” előbeállítást?"
 
 #: menu/preset_manager_modal.lua:1673
 msgid "Offline — connect to preview this preset."
-msgstr "Hors ligne — connectez-vous pour prévisualiser ce preset."
+msgstr "Offline — csatlakozz az előbeállítás előnézetéhez."
 
 #: menu/preset_manager_modal.lua:1675
 msgid "Couldn't download '%1'."
-msgstr "Impossible de télécharger « %1 »."
+msgstr "„%1” letöltése nem sikerült."
 
 #: menu/preset_manager_modal.lua:1681
 msgid "This preset appears invalid; skipping."
-msgstr "Ce preset semble invalide ; ignoré."
+msgstr "Ez az előbeállítás érvénytelennek tűnik; kihagyva."
 
 #: menu/preset_manager_modal.lua:1704
 msgid ""
 "'%1' already exists in your library.\n"
 "\n"
-"Replacing it will overwrite your local copy with the current gallery "
-"version. Any local edits will be lost.\n"
+"Replacing it will overwrite your local copy with the current gallery version. Any local edits will be lost.\n"
 "\n"
 "Install under a new name to keep both."
 msgstr ""
-"« %1 » existe déjà dans votre bibliothèque.\n"
+"„%1” már létezik a könyvtáradban.\n"
 "\n"
-"Le remplacer écrasera votre copie locale par la version actuelle de la "
-"galerie. Toutes les modifications locales seront perdues.\n"
+"Ha lecseréled, a helyi másolatod felülíródik a galéria jelenlegi verziójával. A helyi módosítások elvesznek.\n"
 "\n"
-"Installez sous un nouveau nom pour conserver les deux."
+"Telepítsd új néven, hogy mindkettő megmaradjon."
 
 #: menu/preset_manager_modal.lua:1710
 msgid "Replace"
-msgstr "Remplacer"
+msgstr "Csere"
 
 #: menu/preset_manager_modal.lua:1724
 msgid "Install as new name…"
-msgstr "Installer sous un nouveau nom…"
+msgstr "Telepítés új néven…"
 
 #: menu/preset_manager_modal.lua:1728
 msgid "Install as"
-msgstr "Installer sous"
+msgstr "Telepítés mint"
 
 #: menu/icons_catalogue.lua:33
 msgid "SVG icon folder"
-msgstr "Dossier d'icônes SVG"
+msgstr "SVG ikonmappa"
 
 #: menu/icons_library.lua:435
 msgid "Drop .svg or .png files in koreader/icons/"
-msgstr "Placez des fichiers .svg ou .png dans koreader/icons/"
+msgstr "Helyezz .svg vagy .png fájlokat a koreader/icons/ mappába"
 
 #~ msgid "Wi-Fi is not enabled."
-#~ msgstr "Le Wi-Fi n'est pas activé."
+#~ msgstr "A Wi-Fi nincs engedélyezve."
 
 #~ msgid ""
 #~ "TOKENS\n"
 #~ "\n"
-#~ "Tokens are placeholders that get replaced with live data each time the "
-#~ "preset renders. Each entry in the Book / Progress / Time / Session / "
-#~ "Device chips is a token, written as %name. They expand inline:\n"
+#~ "Tokens are placeholders that get replaced with live data each time the preset renders. Each entry in the Book / Progress / Time / Session / Device chips is a token, written as %name. They expand inline:\n"
 #~ "  %title — %page_num/%page_count\n"
 #~ "  → 1984 — 12/268\n"
 #~ "\n"
 #~ "CONDITIONALS\n"
 #~ "\n"
-#~ "Wrap content in [if:condition]…[/if] to show it only when the condition "
-#~ "is true. Add an [else]…[/if] branch for an alternative.\n"
+#~ "Wrap content in [if:condition]…[/if] to show it only when the condition is true. Add an [else]…[/if] branch for an alternative.\n"
 #~ "\n"
 #~ "OPERATORS\n"
 #~ "  =    equals               !=  not equals\n"
@@ -2455,17 +2420,11 @@ msgstr "Placez des fichiers .svg ou .png dans koreader/icons/"
 #~ "\n"
 #~ "  Example:  [if:batt<20 and not charging]LOW[/if]\n"
 #~ "\n"
-#~ "Truthy check: a bare [if:key] tests whether the key is set, non-zero, and "
-#~ "not \"off\"/\"no\". Useful for [if:title]…[/if], [if:author]…[/if], "
-#~ "[if:series]…[/if].\n"
+#~ "Truthy check: a bare [if:key] tests whether the key is set, non-zero, and not \"off\"/\"no\". Useful for [if:title]…[/if], [if:author]…[/if], [if:series]…[/if].\n"
 #~ "\n"
-#~ "Token-reference comparison: =@token compares against another token's "
-#~ "current value, e.g. [if:chap_title_1!=@title]…[/if] hides the chapter "
-#~ "title when it equals the book title.\n"
+#~ "Token-reference comparison: =@token compares against another token's current value, e.g. [if:chap_title_1!=@title]…[/if] hides the chapter title when it equals the book title.\n"
 #~ "\n"
-#~ "For the full list of conditional state keys (wifi, batt, light_pct, "
-#~ "night, time, format, …) browse the If/else chip — every reference entry "
-#~ "there shows the exact key and operator syntax for one condition.\n"
+#~ "For the full list of conditional state keys (wifi, batt, light_pct, night, time, format, …) browse the If/else chip — every reference entry there shows the exact key and operator syntax for one condition.\n"
 #~ "\n"
 #~ "EXAMPLES\n"
 #~ "\n"
@@ -2474,519 +2433,509 @@ msgstr "Placez des fichiers .svg ou .png dans koreader/icons/"
 #~ "  [if:time>=18:00 and time<18:30]6–6:30[/if]\n"
 #~ "  [if:not series]Standalone[/if]\n"
 #~ msgstr ""
-#~ "JETONS\n"
+#~ "TOKENEK\n"
 #~ "\n"
-#~ "Les jetons sont des espaces réservés qui sont remplacés par des données "
-#~ "en direct chaque fois que le preset s'affiche. Chaque entrée des chips "
-#~ "Livre / Progression / Heure / Session / Appareil est un jeton, écrit sous "
-#~ "la forme %name. Ils se développent en ligne :\n"
+#~ "A tokenek olyan helykitöltők, amelyeket a rendszer minden renderelésnél friss adatra cserél. A Könyv / Folyamat / Idő / Munkamenet / Eszköz chipjeiben minden bejegyzés egy token, %névként megírva. Soron belül helyettesülnek:\n"
 #~ "  %title — %page_num/%page_count\n"
 #~ "  → 1984 — 12/268\n"
 #~ "\n"
-#~ "CONDITIONS\n"
+#~ "FELTÉTELEK\n"
 #~ "\n"
-#~ "Encadrez du contenu avec [if:condition]…[/if] pour ne l'afficher que "
-#~ "lorsque la condition est vraie. Ajoutez une branche [else]…[/if] pour une "
-#~ "alternative.\n"
+#~ "Foglald a tartalmat [if:feltétel]…[/if] közé, hogy csak akkor jelenjen meg, ha a feltétel igaz. Adj hozzá [else]…[/if] ágat az alternatívához.\n"
 #~ "\n"
-#~ "OPÉRATEURS\n"
-#~ "  =    égal                  !=  différent de\n"
-#~ "  <    inférieur à           >   supérieur à\n"
-#~ "  <=   au plus               >=  au moins\n"
-#~ "  and / or / not  · ( ) pour le groupement\n"
+#~ "OPERÁTOROK\n"
+#~ "  =    egyenlő               !=  nem egyenlő\n"
+#~ "  <    kisebb mint            >   nagyobb mint\n"
+#~ "  <=   legfeljebb             >=  legalább\n"
+#~ "  and / or / not  · ( ) csoportosításhoz\n"
 #~ "\n"
-#~ "  Exemple :  [if:batt<20 and not charging]FAIBLE[/if]\n"
+#~ "  Példa:  [if:batt<20 and not charging]ALACSONY[/if]\n"
 #~ "\n"
-#~ "Test de vérité : un [if:key] seul vérifie si la clé est définie, non "
-#~ "nulle et différente de « off »/« no ». Utile pour [if:title]…[/if], "
-#~ "[if:author]…[/if], [if:series]…[/if].\n"
+#~ "Igazságérték-vizsgálat: az önálló [if:kulcs] azt ellenőrzi, hogy a kulcs beállított, nem nulla, és nem „off”/„no”. Hasznos itt: [if:title]…[/if], [if:author]…[/if], [if:series]…[/if].\n"
 #~ "\n"
-#~ "Comparaison par référence de jeton : =@token compare avec la valeur "
-#~ "actuelle d'un autre jeton, par exemple [if:chap_title_1!=@title]…[/if] "
-#~ "masque le titre de chapitre lorsqu'il est identique au titre du livre.\n"
+#~ "Token-hivatkozás összehasonlítás: =@token egy másik token aktuális értékéhez hasonlít, pl. [if:chap_title_1!=@title]…[/if] elrejti a fejezetcímet, ha az megegyezik a könyv címével.\n"
 #~ "\n"
-#~ "Pour la liste complète des clés d'état conditionnelles (wifi, batt, "
-#~ "light_pct, night, time, format, …), parcourez le chip Si/sinon — chaque "
-#~ "entrée de référence y indique la syntaxe exacte de clé et d'opérateur "
-#~ "pour une condition.\n"
+#~ "A feltételes állapotkulcsok teljes listájához (wifi, batt, light_pct, night, time, format, …) nézd át a Ha/akkor chipet — minden bejegyzés megadja a pontos kulcsot és operátor-szintaxist egy feltételhez.\n"
 #~ "\n"
-#~ "EXEMPLES\n"
+#~ "PÉLDÁK\n"
 #~ "\n"
 #~ "  [if:authors>1]%author, et al.[else]%author[/if]\n"
-#~ "  [if:batt<20]FAIBLE %batt[/if]\n"
-#~ "  [if:time>=18:00 and time<18:30]18 h–18 h 30[/if]\n"
-#~ "  [if:not series]Indépendant[/if]\n"
+#~ "  [if:batt<20]ALACSONY %batt[/if]\n"
+#~ "  [if:time>=18:00 and time<18:30]6–6:30[/if]\n"
+#~ "  [if:not series]Önálló[/if]\n"
 
 #~ msgid "Book+"
-#~ msgstr "Livre+"
+#~ msgstr "Könyv+"
 
 #~ msgid "Book++"
-#~ msgstr "Livre++"
+#~ msgstr "Könyv++"
 
 #~ msgid "Book+++"
-#~ msgstr "Livre+++"
+#~ msgstr "Könyv+++"
 
 #~ msgid "Ch."
-#~ msgstr "Ch."
+#~ msgstr "Fej."
 
 #~ msgid "Border"
-#~ msgstr "Bordure"
+#~ msgstr "Szegély"
 
 #~ msgid "Hollow"
-#~ msgstr "Creux"
+#~ msgstr "Üres"
 
 #~ msgid "Round"
-#~ msgstr "Rond"
+#~ msgstr "Kerek"
 
 #~ msgid "Read color"
-#~ msgstr "Couleur de lecture"
+#~ msgstr "Olvasott szín"
 
 #~ msgid "Read color (% black)"
-#~ msgstr "Couleur de lecture (% noir)"
+#~ msgstr "Olvasott szín (% fekete)"
 
 #~ msgid "Unread color"
-#~ msgstr "Couleur non lu"
+#~ msgstr "Olvasatlan szín"
 
 #~ msgid "Unread color (% black)"
-#~ msgstr "Couleur non lu (% noir)"
+#~ msgstr "Olvasatlan szín (% fekete)"
 
 #~ msgid "Metro read color"
-#~ msgstr "Couleur lue Métro"
+#~ msgstr "Metro olvasott szín"
 
 #~ msgid "Metro read color (% black)"
-#~ msgstr "Couleur lue Métro (% noir)"
+#~ msgstr "Metro olvasott szín (% fekete)"
 
 #~ msgid "Metro track color"
-#~ msgstr "Couleur de voie Métro"
+#~ msgstr "Metro nyomvonal szín"
 
 #~ msgid "Reset all to defaults"
-#~ msgstr "Tout réinitialiser"
+#~ msgstr "Mindent visszaállít alapértelmezettre"
 
 #~ msgid "Progress bar colors and tick marks"
-#~ msgstr "Couleurs et graduations de la barre de progression"
+#~ msgstr "Folyamatjelző színei és jelölővonalai"
 
 #~ msgid "Do nothing"
-#~ msgstr "Aucune action"
+#~ msgstr "Ne csináljon semmit"
 
 #~ msgid "Read thickness"
-#~ msgstr "Épaisseur de lecture"
+#~ msgstr "Olvasott vastagság"
 
 #~ msgid "Unread thickness"
-#~ msgstr "Épaisseur non lu"
+#~ msgstr "Olvasatlan vastagság"
 
 #~ msgid "Battery (changes with level)"
-#~ msgstr "Batterie (change selon niveau)"
+#~ msgstr "Akkumulátor (szinttől függően változik)"
 
 #~ msgid "Wi-Fi (changes with status)"
-#~ msgstr "Wi-Fi (change selon l'état)"
+#~ msgstr "Wi-Fi (állapottól függően változik)"
 
 #~ msgid "Lightbulb"
-#~ msgstr "Ampoule"
+#~ msgstr "Villanykörte"
 
 #~ msgid "Lightbulb emoji"
-#~ msgstr "Émoji ampoule"
+#~ msgstr "Villanykörte emoji"
 
 #~ msgid "Sun (filled)"
-#~ msgstr "Soleil (plein)"
+#~ msgstr "Nap (kitöltött)"
 
 #~ msgid "Moon"
-#~ msgstr "Lune"
+#~ msgstr "Hold"
 
 #~ msgid "Paper aeroplane"
-#~ msgstr "Avion en papier"
+#~ msgstr "Papírrepülő"
 
 #~ msgid "Adjust / contrast"
-#~ msgstr "Régler / contraste"
+#~ msgstr "Beállítás / kontraszt"
 
 #~ msgid "Lightning bolt"
-#~ msgstr "Éclair"
+#~ msgstr "Villám"
 
 #~ msgid "Power"
-#~ msgstr "Alimentation"
+#~ msgstr "Bekapcsolás"
 
 #~ msgid "Mobile"
-#~ msgstr "Mobile"
+#~ msgstr "Mobil"
 
 #~ msgid "Cloud"
-#~ msgstr "Nuage"
+#~ msgstr "Felhő"
 
 #~ msgid "Memory chip"
-#~ msgstr "Puce mémoire"
+#~ msgstr "Memóriachip"
 
 #~ msgid "HDD / disk"
-#~ msgstr "HDD / disque"
+#~ msgstr "HDD / lemez"
 
 #~ msgid "Bookmark (filled)"
-#~ msgstr "Signet (plein)"
+#~ msgstr "Könyvjelző (kitöltött)"
 
 #~ msgid "Bookmark (outline)"
-#~ msgstr "Signet (contour)"
+#~ msgstr "Könyvjelző (kontúr)"
 
 #~ msgid "Eye"
-#~ msgstr "Œil"
+#~ msgstr "Szem"
 
 #~ msgid "Eye (hidden)"
-#~ msgstr "Œil (masqué)"
+#~ msgstr "Szem (rejtett)"
 
 #~ msgid "Flag"
-#~ msgstr "Drapeau"
+#~ msgstr "Zászló"
 
 #~ msgid "Bar chart"
-#~ msgstr "Histogramme"
+#~ msgstr "Oszlopdiagram"
 
 #~ msgid "Tachometer"
-#~ msgstr "Tachymètre"
+#~ msgstr "Sebességmérő"
 
 #~ msgid "Sliders"
-#~ msgstr "Curseurs"
+#~ msgstr "Csúszkák"
 
 #~ msgid "Clock"
-#~ msgstr "Horloge"
+#~ msgstr "Óra"
 
 #~ msgid "Stopwatch"
-#~ msgstr "Chronomètre"
+#~ msgstr "Stopperóra"
 
 #~ msgid "Watch"
-#~ msgstr "Montre"
+#~ msgstr "Karóra"
 
 #~ msgid "Hourglass"
-#~ msgstr "Sablier"
+#~ msgstr "Homokóra"
 
 #~ msgid "Hourglass (filled)"
-#~ msgstr "Sablier (plein)"
+#~ msgstr "Homokóra (kitöltött)"
 
 #~ msgid "Calendar"
-#~ msgstr "Calendrier"
+#~ msgstr "Naptár"
 
 #~ msgid "Calendar (checked)"
-#~ msgstr "Calendrier (coché)"
+#~ msgstr "Naptár (bejelölt)"
 
 #~ msgid "Status"
-#~ msgstr "Statut"
+#~ msgstr "Állapot"
 
 #~ msgid "Check"
-#~ msgstr "Vérifier"
+#~ msgstr "Pipa"
 
 #~ msgid "Cross"
-#~ msgstr "Croix"
+#~ msgstr "X jel"
 
 #~ msgid "Info"
-#~ msgstr "Info"
+#~ msgstr "Infó"
 
 #~ msgid "Warning"
-#~ msgstr "Avertissement"
+#~ msgstr "Figyelmeztetés"
 
 #~ msgid "Cog"
-#~ msgstr "Engrenage"
+#~ msgstr "Fogaskerék"
 
 #~ msgid "Check mark"
-#~ msgstr "Coche"
+#~ msgstr "Pipa jel"
 
 #~ msgid "Cross mark"
-#~ msgstr "Croix de refus"
+#~ msgstr "X jelölés"
 
 #~ msgid "Copyright"
 #~ msgstr "Copyright"
 
 #~ msgid "Triangle right"
-#~ msgstr "Triangle droit"
+#~ msgstr "Háromszög jobbra"
 
 #~ msgid "Triangle left"
-#~ msgstr "Triangle gauche"
+#~ msgstr "Háromszög balra"
 
 #~ msgid "Triangle up"
-#~ msgstr "Triangle haut"
+#~ msgstr "Háromszög fel"
 
 #~ msgid "Triangle down"
-#~ msgstr "Triangle bas"
+#~ msgstr "Háromszög le"
 
 #~ msgid "Pointing right (black)"
-#~ msgstr "Pointant vers la droite (noir)"
+#~ msgstr "Jobbra mutató (fekete)"
 
 #~ msgid "Pointing right"
-#~ msgstr "Pointant vers la droite"
+#~ msgstr "Jobbra mutató"
 
 #~ msgid "Pointing left"
-#~ msgstr "Pointant vers la gauche"
+#~ msgstr "Balra mutató"
 
 #~ msgid "Pointing up"
-#~ msgstr "Pointant vers le haut"
+#~ msgstr "Felfelé mutató"
 
 #~ msgid "Pointing down"
-#~ msgstr "Pointant vers le bas"
+#~ msgstr "Lefelé mutató"
 
 #~ msgid "Progress blocks"
-#~ msgstr "Blocs de progression"
+#~ msgstr "Folyamat blokkok"
 
 #~ msgid "Diamond"
-#~ msgstr "Losange"
+#~ msgstr "Káró"
 
 #~ msgid "Insert symbol"
-#~ msgstr "Insérer un symbole"
+#~ msgstr "Szimbólum beszúrása"
 
 #~ msgid "Star = include in preset cycle gesture"
-#~ msgstr "Étoile = inclure dans le geste de parcours des presets"
+#~ msgstr "Csillag = szerepeljen az előbeállítás-váltó gesztusban"
 
 #~ msgid "Refreshing…"
-#~ msgstr "Actualisation…"
+#~ msgstr "Frissítés…"
 
 #~ msgid "Offline — connect and tap a sort to retry"
-#~ msgstr "Hors ligne — connectez-vous et touchez un tri pour réessayer"
+#~ msgstr ""
+#~ "Offline — csatlakozz, és koppints egy rendezésre az újrapróbálkozáshoz"
 
 #~ msgid "Refresh failed — tap a sort to retry"
-#~ msgstr "Échec de l'actualisation — touchez un tri pour réessayer"
+#~ msgstr ""
+#~ "A frissítés sikertelen — koppints egy rendezésre az újrapróbálkozáshoz"
 
 #~ msgid "1 preset in the approval queue"
-#~ msgstr "1 preset dans la file d'approbation"
+#~ msgstr "1 előbeállítás vár jóváhagyásra"
 
 #~ msgid "%1 presets in the approval queue"
-#~ msgstr "%1 presets dans la file d'approbation"
+#~ msgstr "%1 előbeállítás vár jóváhagyásra"
 
 #~ msgid "Metadata"
-#~ msgstr "Métadonnées"
+#~ msgstr "Metaadatok"
 
 #~ msgid "Total chapter count"
-#~ msgstr "Nombre total de chapitres"
+#~ msgstr "Összes fejezet száma"
 
 #~ msgid "Number of highlights"
-#~ msgstr "Nombre de surlignages"
+#~ msgstr "Kiemelések száma"
 
 #~ msgid "Number of notes"
-#~ msgstr "Nombre de notes"
+#~ msgstr "Jegyzetek száma"
 
 #~ msgid "Number of bookmarks"
-#~ msgstr "Nombre de signets"
+#~ msgstr "Könyvjelzők száma"
 
 #~ msgid "Total annotations (bookmarks + highlights + notes)"
-#~ msgstr "Total des annotations (signets + surlignages + notes)"
+#~ msgstr "Összes annotáció (könyvjelzők + kiemelések + jegyzetek)"
 
 #~ msgid "Page / progress"
-#~ msgstr "Page / Progression"
+#~ msgstr "Oldal / folyamat"
 
 #~ msgid "Progress bars"
-#~ msgstr "Barres de progression"
+#~ msgstr "Folyamatjelzők"
 
 #~ msgid "Time / date"
-#~ msgstr "Heure / Date"
+#~ msgstr "Idő / dátum"
 
 #~ msgid "Session / reading"
-#~ msgstr "Session / lecture"
+#~ msgstr "Munkamenet / olvasás"
 
 #~ msgid "Battery icon (dynamic)"
-#~ msgstr "Icône batterie (dynamique)"
+#~ msgstr "Akkumulátor ikon (dinamikus)"
 
 #~ msgid "Wi-Fi icon (dynamic)"
-#~ msgstr "Icône Wi-Fi (dynamique)"
+#~ msgstr "Wi-Fi ikon (dinamikus)"
 
 #~ msgid "Plugin content (dynamic)"
-#~ msgstr "Contenu plugin (dynamique)"
+#~ msgstr "Plugin tartalom (dinamikus)"
 
 #~ msgid "Page-turn direction ⇄ (shows when inverted)"
-#~ msgstr "Sens de tourne ⇄ (affiché lorsqu'inversé)"
+#~ msgstr "Lapozási irány ⇄ (megfordításnál jelenik meg)"
 
 #~ msgid "Snippets"
-#~ msgstr "Extraits"
+#~ msgstr "Részletek"
 
 #~ msgid "Reference"
-#~ msgstr "Référence"
+#~ msgstr "Referencia"
 
 #~ msgid "Examples"
-#~ msgstr "Exemples"
+#~ msgstr "Példák"
 
 #~ msgid "Speed once calculated"
-#~ msgstr "Vitesse une fois calculée"
+#~ msgstr "Sebesség, ha már kiszámítható"
 
 #~ msgid "Session time after start"
-#~ msgstr "Durée de session après démarrage"
+#~ msgstr "Munkamenet ideje a kezdettől"
 
 #~ msgid "Only for PDFs"
-#~ msgstr "Uniquement pour les PDF"
+#~ msgstr "Csak PDF-eknél"
 
 #~ msgid "Late-night reading"
-#~ msgstr "Lecture tardive"
+#~ msgstr "Késő esti olvasás"
 
 #~ msgid "If/Else conditional tokens"
-#~ msgstr "Jetons conditionnels If/Else"
+#~ msgstr "Ha/akkor feltételes tokenek"
 
 #~ msgid "[if:key=value]show when true[/if]"
-#~ msgstr "[if:key=value]afficher si vrai[/if]"
+#~ msgstr "[if:kulcs=érték]megjelenik, ha igaz[/if]"
 
 #~ msgid "[if:key=value]if true[else]if false[/if]"
-#~ msgstr "[if:key=value]si vrai[else]si faux[/if]"
+#~ msgstr "[if:kulcs=érték]ha igaz[else]ha hamis[/if]"
 
 #~ msgid "Compare:  =  !=  <  >     Boolean:  and  or  not  ( )"
-#~ msgstr "Comparer :  =  !=  <  >     Booléen :  and  or  not  ( )"
+#~ msgstr "Hasonlítás:  =  !=  <  >     Logikai:  and  or  not  ( )"
 
 #~ msgid "@key = another field's value (chap_title_1!=@title)"
-#~ msgstr "@key = valeur d'un autre champ (chap_title_1!=@title)"
+#~ msgstr "@kulcs = egy másik mező értéke (chap_title_1!=@title)"
 
 #~ msgid "Insert conditional"
-#~ msgstr "Insérer une condition"
+#~ msgstr "Feltétel beszúrása"
 
 #~ msgid "Insert token"
-#~ msgstr "Insérer un jeton"
+#~ msgstr "Token beszúrása"
 
 #~ msgid "Hex:"
-#~ msgstr "Hex :"
+#~ msgstr "Hexa:"
 
 #~ msgid "Set"
-#~ msgstr "Définir"
+#~ msgstr "Beállítás"
 
 #~ msgid "+ New preset"
-#~ msgstr "+ Nouveau préréglage"
+#~ msgstr "+ Új előbeállítás"
 
 #~ msgid "A preset called '%1' already exists."
-#~ msgstr "Un preset nommé « %1 » existe déjà."
+#~ msgstr "„%1” nevű előbeállítás már létezik."
 
 #~ msgid "After 10pm"
-#~ msgstr "Après 22 h"
+#~ msgstr "22:00 után"
 
 #~ msgid "Bar thickness (px)"
-#~ msgstr "Épaisseur de barre (px)"
+#~ msgstr "Sáv vastagsága (px)"
 
 #~ msgid "Built-in presets"
-#~ msgstr "Préréglages intégrés"
+#~ msgstr "Beépített előbeállítások"
 
 #~ msgid "Classic alternating"
-#~ msgstr "Classique alterné"
+#~ msgstr "Klasszikus váltakozó"
 
 #~ msgid "Could not save download."
-#~ msgstr "Impossible d'enregistrer le téléchargement."
+#~ msgstr "A letöltés mentése sikertelen."
 
 #~ msgid "Custom presets"
-#~ msgstr "Préréglages personnalisés"
+#~ msgstr "Egyéni előbeállítások"
 
 #~ msgid "Cycle bookends preset"
-#~ msgstr "Faire défiler les préréglages"
+#~ msgstr "Bookends előbeállítás váltása"
 
 #~ msgid "Different content on odd/even pages"
-#~ msgstr "Contenu différent sur les pages paires/impaires"
+#~ msgstr "Eltérő tartalom páratlan/páros oldalakon"
 
 #~ msgid "Even"
-#~ msgstr "Pair"
+#~ msgstr "Páros"
 
 #~ msgid "Font size for line"
-#~ msgstr "Taille de police de la ligne"
+#~ msgstr "Sor betűmérete"
 
 #~ msgid "Frontlight status"
-#~ msgstr "État de l'éclairage frontal"
+#~ msgstr "Háttérvilágítás állapota"
 
 #~ msgid "Half-hour window (AND operator)"
-#~ msgstr "Fenêtre d'une demi-heure (opérateur AND)"
+#~ msgstr "Fél órás ablak (ÉS operátor)"
 
 #~ msgid "Long press presets to edit"
-#~ msgstr "Appui long sur un préréglage pour modifier"
+#~ msgstr "Hosszan nyomva szerkesztheted az előbeállításokat"
 
 #~ msgid "Odd"
-#~ msgstr "Impair"
+#~ msgstr "Páratlan"
 
 #~ msgid "Overwrite"
-#~ msgstr "Écraser"
+#~ msgstr "Felülírás"
 
 #~ msgid "Preset '%1' loaded."
-#~ msgstr "Préréglage « %1 » chargé."
+#~ msgstr "„%1” előbeállítás betöltve."
 
 #~ msgid "Presets"
-#~ msgstr "Préréglages"
+#~ msgstr "Előbeállítások"
 
 #~ msgid "Refresh"
-#~ msgstr "Actualiser"
+#~ msgstr "Frissítés"
 
 #~ msgid "Rename this preset…"
-#~ msgstr "Renommer ce preset…"
+#~ msgstr "Ezen előbeállítás átnevezése…"
 
 #~ msgid "Rich detail"
-#~ msgstr "Détail riche"
+#~ msgstr "Részletes nézet"
 
 #~ msgid "Save as new preset…"
-#~ msgstr "Enregistrer comme nouveau preset…"
+#~ msgstr "Mentés új előbeállításként…"
 
 #~ msgid "Set bookends"
-#~ msgstr "Définir Bookends"
+#~ msgstr "Bookends beállítása"
 
 #~ msgid "Settings"
-#~ msgstr "Paramètres"
+#~ msgstr "Beállítások"
 
 #~ msgid "SimpleUI status bar"
-#~ msgstr "Barre d'état SimpleUI"
+#~ msgstr "SimpleUI állapotsor"
 
 #~ msgid "Speed reader"
-#~ msgstr "Lecteur rapide"
+#~ msgstr "Gyorsolvasó"
 
 #~ msgid "Sub-chapter title when present"
-#~ msgstr "Titre de sous-chapitre si présent"
+#~ msgstr "Alfejezet címe, ha van"
 
 #~ msgid "Symbol color"
-#~ msgstr "Couleur du symbole"
+#~ msgstr "Szimbólum színe"
 
 #~ msgid "Symbol color (% black)"
-#~ msgstr "Couleur du symbole (% noir)"
+#~ msgstr "Szimbólum színe (% fekete)"
 
 #~ msgid "Text color (% black)"
-#~ msgstr "Couleur du texte (% noir)"
+#~ msgstr "Szöveg színe (% fekete)"
 
 #~ msgid "Truncation gap between regions (px)"
-#~ msgstr "Espace de troncature entre régions (px)"
+#~ msgstr "Csonkolási hézag a régiók között (px)"
 
 #~ msgid "Warning when battery below 20%"
-#~ msgstr "Avertissement quand la batterie descend sous 20 %"
+#~ msgstr "Figyelmeztetés, ha az akkumulátor 20% alatt van"
 
 #~ msgid "Weekend days (OR operator)"
-#~ msgstr "Jours du week-end (opérateur OR)"
+#~ msgstr "Hétvégi napok (VAGY operátor)"
 
 #~ msgid "author — author name"
-#~ msgstr "author — nom de l'auteur"
+#~ msgstr "author — szerző neve"
 
 #~ msgid "batt — 0 to 100"
-#~ msgstr "batt — 0 à 100"
+#~ msgstr "batt — 0 és 100 között"
 
 #~ msgid "black"
-#~ msgstr "noir"
+#~ msgstr "fekete"
 
 #~ msgid "book_pct — 0 to 100 (book progress)"
-#~ msgstr "book_pct — 0 à 100 (progression du livre)"
+#~ msgstr "book_pct — 0 és 100 között (könyv folyamata)"
 
 #~ msgid "chap_count — total chapter count"
-#~ msgstr "chap_count — nombre total de chapitres"
+#~ msgstr "chap_count — összes fejezet száma"
 
 #~ msgid "chap_num — current chapter number"
-#~ msgstr "chap_num — numéro du chapitre actuel"
+#~ msgstr "chap_num — jelenlegi fejezetszám"
 
 #~ msgid "chap_pct — 0 to 100 (chapter progress)"
-#~ msgstr "chap_pct — 0 à 100 (progression du chapitre)"
+#~ msgstr "chap_pct — 0 és 100 között (fejezet folyamata)"
 
 #~ msgid "chap_title — current chapter title"
-#~ msgstr "chap_title — titre du chapitre actuel"
+#~ msgstr "chap_title — jelenlegi fejezet címe"
 
 #~ msgid "chap_title_1/2/3 — title at depth 1/2/3"
-#~ msgstr "chap_title_1/2/3 — titre au niveau 1/2/3"
+#~ msgstr "chap_title_1/2/3 — cím 1/2/3. szinten"
 
 #~ msgid "charging — yes / no"
-#~ msgstr "charging — oui / non"
+#~ msgstr "charging — igen / nem"
 
 #~ msgid "connected — yes / no"
-#~ msgstr "connected — oui / non"
+#~ msgstr "connected — igen / nem"
 
 #~ msgid "day — Mon Tue Wed Thu Fri Sat Sun"
-#~ msgstr "day — lun mar mer jeu ven sam dim"
+#~ msgstr "day — hét, ked, sze, csü, pén, szo, vas"
 
 #~ msgid "invert — yes / no (page-turn direction)"
-#~ msgstr "invert — oui / non (sens de tourne)"
+#~ msgstr "invert — igen / nem (lapozási irány)"
 
 #~ msgid "light — on / off"
-#~ msgstr "light — allumé / éteint"
+#~ msgstr "light — be / ki"
 
 #~ msgid "series — series + index, empty when standalone"
-#~ msgstr "series — série + index, vide si indépendant"
+#~ msgstr "series — sorozat + sorszám, üres, ha önálló"
 
 #~ msgid "session — minutes reading"
-#~ msgstr "session — minutes de lecture"
+#~ msgstr "session — olvasott percek"
 
 #~ msgid "session_pages — pages read this session"
-#~ msgstr "session_pages — pages lues cette session"
+#~ msgstr "session_pages — munkamenetben olvasott oldalak"
 
 #~ msgid "title — book title (empty string is falsy)"
-#~ msgstr "title — titre du livre (chaîne vide est fausse)"
+#~ msgstr "title — könyv címe (üres string hamis értékű)"
 
 #~ msgid "wifi — on / off"
-#~ msgstr "wifi — activé / désactivé"
+#~ msgstr "wifi — be / ki"
