@@ -106,7 +106,7 @@ return {
         local col_w      = math.floor(mw / status_cols)
         local function statusCol(st)
             local col = VerticalGroup:new{
-                align = "left",
+                align = "center",
                 TextWidget:new{ text = st.label, face = head_face, fgcolor = SM.COLOR_MUTED,
                     max_width = col_w },
                 VerticalSpan:new{ width = sc(2) },
