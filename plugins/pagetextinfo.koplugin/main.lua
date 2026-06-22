@@ -501,6 +501,7 @@ function PageTextInfo:onDispatcherRegisterActions()
     Dispatcher:registerAction("toggle_sort_by_mode", {category="none", event="ToggleSortByMode", title=_("Toggle sort by mode"), general=true,})
     Dispatcher:registerAction("toggle_double_bar", {category="none", event="ToggleDoubleBar", title=_("Toggle double bar"), reader=true, separator=true,})
     Dispatcher:registerAction("notebook_file_render", {category="none", event="ShowNotebookFileRender", title=_("Notebook file render"), general=true,})
+    Dispatcher:registerAction("toggle_debug_verbose", {category="none", event="ToggleDebugVerbose", title=_("Toggle verbose logging"), general=true,})
 end
 
 function PageTextInfo:onPageTextInfo()
@@ -5974,6 +5975,22 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
         end
     else
         return self:get_empty_folder_cover(max_w, max_h)
+    end
+end
+
+function PageTextInfo:onToggleDebugVerbose()
+    if G_reader_settings:isTrue("debug_verbose") then
+        dbg:setVerbose(false)
+        dbg:turnOff()
+        G_reader_settings:makeFalse("debug_verbose")
+        G_reader_settings:makeFalse("debug")
+        UIManager:askForRestart(_("Verbose logging is now Off. Restart to apply changes."))
+    else
+        dbg:turnOn()
+        dbg:setVerbose(true)
+        G_reader_settings:makeTrue("debug")
+        G_reader_settings:makeTrue("debug_verbose")
+        UIManager:askForRestart(_("Verbose logging is now On. Restart to apply changes."))
     end
 end
 
