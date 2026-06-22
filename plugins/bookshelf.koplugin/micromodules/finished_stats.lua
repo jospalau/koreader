@@ -27,7 +27,8 @@ return {
     key   = "finished_stats",
     title = _("Finished stats"),
     summary = _("Books finished this/last month and year."),
-    render = function(width, scale_pct, _preview, avail_h)
+    render = function(ctx)
+        local width, scale_pct, _preview, avail_h = ctx.width, ctx.scale, ctx.preview, ctx.height
         local Fonts         = require("lib/bookshelf_fonts")
         local TextWidget    = require("ui/widget/textwidget")
         local VerticalGroup = require("ui/widget/verticalgroup")

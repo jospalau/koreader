@@ -82,7 +82,8 @@ return {
     key     = "reading_time_breakdown",
     title   = _("Reading time"),
     summary = _("Today / this month / last month / this year. From KOReader statistics."),
-    render  = function(width, scale_pct, _preview, avail_h)
+    render  = function(ctx)
+        local width, scale_pct, _preview, avail_h = ctx.width, ctx.scale, ctx.preview, ctx.height
         local Fonts           = require("lib/bookshelf_fonts")
         local TextWidget      = require("ui/widget/textwidget")
         local VerticalGroup   = require("ui/widget/verticalgroup")
