@@ -723,7 +723,7 @@ function PageTextInfo:onSwipe(_, ges)
             self.ui.doc_settings:saveSetting("reference_page_xpointer", xp)
             self.ui.doc_settings:flush()
         else
-            local pageno = self.ui.document:getPageFromXPointer(reference_page)
+            --[[local pageno = self.ui.document:getPageFromXPointer(reference_page)
             local pageno_label = self.ui.pagemap:getXPointerPageLabel(reference_page)
             local toc_title = self.ui.toc:getTocTitleByPage(pageno)
             local _ = require("gettext")
@@ -743,7 +743,9 @@ function PageTextInfo:onSwipe(_, ges)
                     self.ui.rolling:onGotoXPointer(reference_page)
                     return true
                 end,
-            })
+            })]]
+            -- UIManager:broadcastEvent(Event:new("BookshelfOpenMicroModules"))
+            UIManager:broadcastEvent(Event:new("BookshelfOpenStartMenu"))
         end
         return
     end
