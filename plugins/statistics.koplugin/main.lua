@@ -3237,6 +3237,25 @@ function ReaderStatistics:onPageUpdate(pageno)
             -- This to be done only when computing a page obviously
             self._total_words = self._last_nbwords + self._total_words
             self._total_pages = self._total_pages + 1
+            local duration_raw = math.floor(((os.time() - self.start_current_period) / 60) * 100) / 100
+            local wpm = 0
+            if self._total_words > 0 and duration_raw > 0 then
+                wpm = math.floor(self._total_words / duration_raw)
+            end
+            local words  = self._total_words
+            local pages  = self._total_pages
+            local ts     = os.time()
+            local UIManager = require("ui/uimanager")
+            UIManager:scheduleIn(0, function()
+                local DataStorage = require("datastorage")
+                local path = DataStorage:getSettingsDir() .. "/wpm_session.json"
+                local f = io.open(path, "w")
+                if f then
+                    f:write(string.format('{"wpm":%d,"words":%d,"pages":%d,"updated":%d}',
+                        wpm, words, pages, ts))
+                    f:close()
+                end
+            end)
         end
     elseif diff_time > self.settings.max_sec then
         self.mem_read_time = self.mem_read_time + self.settings.max_sec
@@ -3250,6 +3269,25 @@ function ReaderStatistics:onPageUpdate(pageno)
         if not closing and not self.ui.searching then -- don't count statistics when closing the book and when searching
             self._total_words = self._last_nbwords + self._total_words
             self._total_pages = self._total_pages + 1
+            local duration_raw = math.floor(((os.time() - self.start_current_period) / 60) * 100) / 100
+            local wpm = 0
+            if self._total_words > 0 and duration_raw > 0 then
+                wpm = math.floor(self._total_words / duration_raw)
+            end
+            local words  = self._total_words
+            local pages  = self._total_pages
+            local ts     = os.time()
+            local UIManager = require("ui/uimanager")
+            UIManager:scheduleIn(0, function()
+                local DataStorage = require("datastorage")
+                local path = DataStorage:getSettingsDir() .. "/wpm_session.json"
+                local f = io.open(path, "w")
+                if f then
+                    f:write(string.format('{"wpm":%d,"words":%d,"pages":%d,"updated":%d}',
+                        wpm, words, pages, ts))
+                    f:close()
+                end
+            end)
         end
     end
 
@@ -3362,6 +3400,9 @@ function ReaderStatistics:onCloseDocument()
     if not ReaderStatistics.preserve then -- Not save session when adjusting configuration which forces document reopening
         self:insertDBSessionStats()
     end
+    local DataStorage = require("datastorage")
+    local path = DataStorage:getSettingsDir() .. "/wpm_session.json"
+    os.remove(path)
 end
 
 function ReaderStatistics:onAnnotationsModified(annotations)
