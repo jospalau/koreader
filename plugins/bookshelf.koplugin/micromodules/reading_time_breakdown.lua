@@ -34,6 +34,8 @@ local function queryStats()
 
             local day_start   = os.time{ year=t.year, month=t.month, day=t.day, hour=0, min=0, sec=0 }
             local month_start = os.time{ year=t.year, month=t.month, day=1,     hour=0, min=0, sec=0 }
+            local yesterday_start = day_start - 86400
+            local yesterday_end   = day_start - 1
             local year_start  = os.time{ year=t.year, month=1,       day=1,     hour=0, min=0, sec=0 }
             local lm = t.month - 1 == 0 and 12 or t.month - 1
             local ly = t.month - 1 == 0 and t.year - 1 or t.year
@@ -52,6 +54,7 @@ local function queryStats()
 
             out = {
                 today_secs   = query(day_start,    now),
+                yesterday_secs = query(yesterday_start, yesterday_end),
                 month_secs   = query(month_start,  now),
                 lmonth_secs  = query(lmonth_start, lmonth_end),
                 year_secs    = query(year_start,   now),
@@ -100,6 +103,7 @@ return {
         local data = readStats()
         local ROWS = {
             { label = _("Today"),      secs = data and data.today_secs  or 0 },
+            { label = _("Yesterday"),  secs = data and data.yesterday_secs or 0 },
             { label = _("Month"),      secs = data and data.month_secs  or 0 },
             { label = _("Last month"), secs = data and data.lmonth_secs or 0 },
             { label = _("Year"),       secs = data and data.year_secs   or 0 },
