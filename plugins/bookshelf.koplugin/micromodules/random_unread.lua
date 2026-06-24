@@ -220,6 +220,7 @@ local function showSettings(ctx)
             { statusBtn(_("Unread"), "unread") },
             { statusBtn(_("In progress"), "reading") },
             { statusBtn(_("On hold"), "on_hold") },
+            { statusBtn(_("MBR"),     "mbr") },
             { statusBtn(_("Finished"), "finished") },
         },
     }
