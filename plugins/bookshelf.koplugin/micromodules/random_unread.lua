@@ -242,14 +242,34 @@ return {
         local mw = math.max(50, width)
         local function sc(n) return math.max(1, math.floor(n * (scale_pct or 100) / 100 + 0.5)) end
         local statuses = readStatuses()
-        local b = currentPick()
+        local b = _pick_cache and _pick_cache.book or nil
         if not b then
-            return TextWidget:new{
-                text = unreadOnly(statuses) and _("Nothing unread here")
-                    or _("Nothing to pick from here"),
-                face = Fonts:getFace("cfont", sc(15)),
-                fgcolor = SM.COLOR_MUTED,
-                max_width = mw,
+            local TextBoxWidget = require("ui/widget/textboxwidget")
+            local VerticalSpan  = require("ui/widget/verticalspan")
+            local Screen = require("device").screen
+            local die_face = Fonts:getFace("cfont", sc(38))
+            local die_text = DICE[math.random(#DICE)]
+            local probe = TextWidget:new{ text = die_text, face = die_face }
+            probe:getSize()
+            local die_ink_h = probe._baseline_h
+            probe:free()
+            local die = TextWidget:new{
+                text = die_text,
+                face = die_face,
+                fgcolor = SM.COLOR_PRIMARY,
+                forced_height   = die_ink_h,
+                forced_baseline = die_ink_h,
+            }
+            return VerticalGroup:new{
+                align = "left",
+                TextWidget:new{
+                    text = _("Tap for your next read"),
+                    face = Fonts:getFace("cfont", sc(13), {italic=true}),
+                    fgcolor = SM.COLOR_MUTED,
+                    max_width = mw,
+                },
+                VerticalSpan:new{ width = Screen:scaleBySize(sc(8)) },
+                die,
             }
         end
         local TextBoxWidget  = require("ui/widget/textboxwidget")
@@ -319,27 +339,22 @@ return {
     -- roll — each tap cycles a new candidate into view.
     keep_open = true,
     on_tap = function(ctx)
+        -- Primera vez: no hay caché, generar el primero
+        -- Siguientes: invalidar el actual y generar el siguiente
         local b = _pick_cache and _pick_cache.book
-        if not (b and b.filepath) then return end
-        -- Same stale-record guard as bookshelf_widget._openBook.
+        if b then
+            invalidate(b.filepath)
+        end
+        local next_b = currentPick()
+        if not (next_b and next_b.filepath) then return end
         local ok_lfs, lfs = pcall(require, "libs/libkoreader-lfs")
-        if ok_lfs and lfs.attributes(b.filepath, "mode") ~= "file" then return end
+        if ok_lfs and lfs.attributes(next_b.filepath, "mode") ~= "file" then return end
         local bw = ctx and ctx.bw
         if bw and bw._previewBook then
-            -- Load the displayed candidate into the hero via the widget's
-            -- preview path (covers the in-place hero swap + scoped repaint;
-            -- the menu above repaints on top). Guard the same-book case:
-            -- _previewBook treats a re-tap of the current preview as
-            -- "confirm and open", which must never fire from here (it can
-            -- recur when only one unread candidate exists, so the re-roll
-            -- lands on the same book).
             if not (bw._preview_book
-                    and bw._preview_book.filepath == b.filepath) then
-                bw:_previewBook(b)
+                    and bw._preview_book.filepath == next_b.filepath) then
+                bw:_previewBook(next_b)
             end
         end
-        -- Re-roll for the menu reload that follows; don't show the book
-        -- we just loaded again when there's any alternative.
-        invalidate(b.filepath)
     end,
 }
