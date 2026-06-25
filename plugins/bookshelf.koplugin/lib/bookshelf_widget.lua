@@ -9903,6 +9903,14 @@ function BookshelfWidget:_openBookMenu(item)
                     end
                     Repo.invalidateProgressCache(book.filepath)
                     Repo.invalidateBookCache("apply-status")
+                    -- Custom change begin
+                    Repo.invalidateProgressCache(book.filepath)
+                    Repo.invalidateBookCache("apply-status")
+                    if draft.status == "complete" or draft.status == "finished" then
+                        if Repo.invalidateLightMeta then Repo.invalidateLightMeta() end
+                    end
+                    -- Custom change end
+
                     -- BookList.book_info_cache is keyed on filepath and is
                     -- the source the per-book menu reads via
                     -- BookList.getBookStatus(filepath) → "current_status"
