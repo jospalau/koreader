@@ -354,8 +354,5 @@ return {
                 bw:_previewBook(next_b)
             end
         end
-        -- Re-roll for the menu reload that follows; don't show the book
-        -- we just loaded again when there's any alternative.
-        invalidate(b.filepath)
     end,
 }
