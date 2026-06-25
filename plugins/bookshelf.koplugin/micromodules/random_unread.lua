@@ -265,8 +265,8 @@ return {
                 TextWidget:new{
                     text = _("Tap for your next read"),
                     face = Fonts:getFace("cfont", sc(13), {italic=true}),
-                    fgcolor = SM.COLOR_MUTED,
-                    max_width = mw,
+                fgcolor = SM.COLOR_MUTED,
+                max_width = mw,
                 },
                 VerticalSpan:new{ width = Screen:scaleBySize(sc(8)) },
                 die,
@@ -339,8 +339,6 @@ return {
     -- roll — each tap cycles a new candidate into view.
     keep_open = true,
     on_tap = function(ctx)
-        -- Primera vez: no hay caché, generar el primero
-        -- Siguientes: invalidar el actual y generar el siguiente
         local b = _pick_cache and _pick_cache.book
         if b then
             invalidate(b.filepath)
@@ -356,5 +354,8 @@ return {
                 bw:_previewBook(next_b)
             end
         end
+        -- Re-roll for the menu reload that follows; don't show the book
+        -- we just loaded again when there's any alternative.
+        invalidate(b.filepath)
     end,
 }
