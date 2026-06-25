@@ -3962,7 +3962,15 @@ local function _buildRatingGroups()
                 local _p, _s, r = Repo.readProgress(c.fp)
                 rating = r
             end
-            local bk = rating or "unrated"
+            -- Bucket key: only an integer 1..5 is a star bucket; everything
+            -- else (nil, 0 = KOReader's "no rating", a float, out of range)
+            -- is Unrated. NB 0 is TRUTHY in Lua, so `rating or "unrated"`
+            -- would key buckets[0] (nil) and crash on #bucket below.
+            local bk = "unrated"
+            if type(rating) == "number" then
+                local r = math.floor(rating)
+                if r >= 1 and r <= 5 then bk = r end
+            end
             local b_meta = {
                 filepath     = c.fp,
                 title        = book.title,
@@ -4760,7 +4768,7 @@ function Repo.getBySource(source, filter, sort_priority, offset, limit, opts)
                     end
                 end
             else
-                for _i, b in ipairs(candidates) do
+            for _i, b in ipairs(candidates) do
                     --if _recordMatches(b, compiled_e) then kept[#kept + 1] = b end
                     local s = b.read_status or b._status
                     if not s and not b._progress_fetched and b.filepath then
