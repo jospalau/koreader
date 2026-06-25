@@ -401,7 +401,12 @@ function filemanagerutil.genResetSettingsButton(doc_settings_or_file, caller_cal
                     if check_button_mbr.checked then
                         require("readhistory"):addItem(file, os.time())
                         require("apps/filemanager/filemanagerhistory"):sortHistoryByStatus()
-                        UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
+                        UIManager:nextTick(function()
+                            local top = UIManager:getTopmostVisibleWidget()
+                            if not (top and top.name == "bookshelf") then
+                                _G.history_status_changed = true
+                            end
+                        end)
                     else
                         require("readhistory"):removeItemByPath(file)
                     end
