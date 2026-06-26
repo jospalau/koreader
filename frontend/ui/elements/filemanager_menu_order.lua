@@ -206,6 +206,7 @@ local order = {
         "search_menu",
         "----------------------------",
         "report_bug",
+        "plugins_disable_external",
         "----------------------------",
         "system_statistics", -- if enabled (Plugin)
         "version",
