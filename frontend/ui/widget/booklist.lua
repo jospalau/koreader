@@ -448,7 +448,7 @@ function BookList.getBookStatus(file)
         if summary and summary.status and summary.status ~= "" then
             return summary.status
         end
-        return "reading"
+        return "new"
     end
     local in_history =  require("readhistory"):getIndexByFile(file)
     if in_history then return "mbr" end
