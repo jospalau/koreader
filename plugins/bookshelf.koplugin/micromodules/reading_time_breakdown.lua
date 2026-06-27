@@ -154,7 +154,7 @@ return {
         local live = getLiveSecs()
 
         local ROWS = {
-            { label = _("Today"),      secs = (data and data.today_secs      or 0) + live },
+            -- { label = _("Today"),      secs = (data and data.today_secs      or 0) + live },
             { label = _("Yesterday"),  secs =  data and data.yesterday_secs  or 0         },
             { label = _("Month"),      secs = (data and data.month_secs      or 0) + live },
             { label = _("Last month"), secs =  data and data.lmonth_secs     or 0         },
