@@ -4567,7 +4567,7 @@ function BookshelfWidget:softRefresh()
         self._soft_refresh_shelves_fn = nil
         self:_swapShelvesInPlace()
     end
-    UIManager:scheduleIn(0.15, self._soft_refresh_shelves_fn)
+    -- UIManager:scheduleIn(0.15, self._soft_refresh_shelves_fn)
 end
 
 -- Does the current chip+sort combination depend on read state? Used by
