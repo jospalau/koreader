@@ -32,32 +32,38 @@ local function queryStats()
             local now = os.time()
             local t = os.date("*t", now)
 
-            local day_start   = os.time{ year=t.year, month=t.month, day=t.day, hour=0, min=0, sec=0 }
-            local month_start = os.time{ year=t.year, month=t.month, day=1,     hour=0, min=0, sec=0 }
+            local day_start       = os.time{ year=t.year, month=t.month, day=t.day, hour=0, min=0, sec=0 }
+            local month_start     = os.time{ year=t.year, month=t.month, day=1,     hour=0, min=0, sec=0 }
             local yesterday_start = day_start - 86400
             local yesterday_end   = day_start - 1
-            local year_start  = os.time{ year=t.year, month=1,       day=1,     hour=0, min=0, sec=0 }
-            local lm = t.month - 1 == 0 and 12 or t.month - 1
-            local ly = t.month - 1 == 0 and t.year - 1 or t.year
-            local lmonth_start = os.time{ year=ly,    month=lm,      day=1,     hour=0, min=0, sec=0 }
-            local lmonth_end   = month_start - 1
+            local year_start      = os.time{ year=t.year, month=1,       day=1,     hour=0, min=0, sec=0 }
+            local lm              = t.month - 1 == 0 and 12 or t.month - 1
+            local ly              = t.month - 1 == 0 and t.year - 1 or t.year
+            local lmonth_start    = os.time{ year=ly, month=lm, day=1,   hour=0, min=0, sec=0 }
+            local lmonth_end      = month_start - 1
 
+            -- Uses overlap instead of start_time range so sessions crossing
+            -- midnight are counted proportionally in each day/period.
             local stmt = conn:prepare([[
-                SELECT COALESCE(SUM(duration), 0)
-                FROM page_stat_data WHERE start_time >= ? AND start_time <= ?]])
+                SELECT COALESCE(SUM(
+                    MIN(start_time + duration, ?) - MAX(start_time, ?)
+                ), 0)
+                FROM page_stat_data
+                WHERE start_time + duration >= ? AND start_time <= ?
+            ]])
 
             local function query(from, to)
-                local row = stmt:bind(from, to):step()
+                local row = stmt:bind(to, from, from, to):step()
                 stmt:clearbind():reset()
                 return tonumber(row[1]) or 0
             end
 
             out = {
-                today_secs   = query(day_start,    now),
+                today_secs     = query(day_start,    now),
                 yesterday_secs = query(yesterday_start, yesterday_end),
-                month_secs   = query(month_start,  now),
-                lmonth_secs  = query(lmonth_start, lmonth_end),
-                year_secs    = query(year_start,   now),
+                month_secs     = query(month_start,  now),
+                lmonth_secs    = query(lmonth_start, lmonth_end),
+                year_secs      = query(year_start,   now),
             }
             stmt:close()
         end)
@@ -81,6 +87,17 @@ local function readStats()
     return result
 end
 
+-- Seconds in the active reading session not yet flushed to the DB.
+local function getLiveSecs()
+    local ok, ReaderUI = pcall(require, "apps/reader/readerui")
+    if not ok or not ReaderUI or not ReaderUI.instance then return 0 end
+    local sp = ReaderUI.instance.statistics
+    if sp and sp.start_current_period and sp.start_current_period > 0 then
+        return math.max(0, os.time() - sp.start_current_period)
+    end
+    return 0
+end
+
 return {
     key     = "reading_time_breakdown",
     title   = _("Reading time"),
@@ -101,15 +118,17 @@ return {
         local mw    = math.max(50, width)
 
         local data = readStats()
+        local live = getLiveSecs()
+
         local ROWS = {
-            { label = _("Today"),      secs = data and data.today_secs  or 0 },
-            { label = _("Yesterday"),  secs = data and data.yesterday_secs or 0 },
-            { label = _("Month"),      secs = data and data.month_secs  or 0 },
-            { label = _("Last month"), secs = data and data.lmonth_secs or 0 },
-            { label = _("Year"),       secs = data and data.year_secs   or 0 },
+            { label = _("Today"),      secs = (data and data.today_secs      or 0) + live },
+            { label = _("Yesterday"),  secs =  data and data.yesterday_secs  or 0         },
+            { label = _("Month"),      secs = (data and data.month_secs      or 0) + live },
+            { label = _("Last month"), secs =  data and data.lmonth_secs     or 0         },
+            { label = _("Year"),       secs = (data and data.year_secs       or 0) + live },
         }
 
-        local head_face        = Fonts:getFace("cfont", sc(12))
+        local head_face             = Fonts:getFace("cfont", sc(12))
         local count_face, count_bold = Fonts:getFace("cfont", sc(18), {bold=true})
         local n     = #ROWS
         local col_w = math.floor(mw / n)
@@ -118,7 +137,7 @@ return {
         for _, r in ipairs(ROWS) do
             local col = VerticalGroup:new{
                 align = "center",
-                TextWidget:new{ text = r.label,          face = head_face,  fgcolor = SM.COLOR_MUTED, max_width = col_w },
+                TextWidget:new{ text = r.label,             face = head_face,  fgcolor = SM.COLOR_MUTED, max_width = col_w },
                 VerticalSpan:new{ width = sc(2) },
                 TextWidget:new{ text = fmtDuration(r.secs), face = count_face, bold = count_bold, fgcolor = BLACK, max_width = col_w },
             }
@@ -129,3 +148,4 @@ return {
         return VerticalGroup:new{ align = "left", row }
     end,
 }
+
