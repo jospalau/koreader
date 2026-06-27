@@ -712,10 +712,10 @@ function ReaderSearch:findAllText(search_text, untilCurrentPage)
     if not_cached then
         local Trapper = require("ui/trapper")
         local info = InfoMessage:new{ text = _("Searching… (tap to cancel)") }
-        if Device.model == "Kobo_spaColour" then
-            local util = require("ffi/util")
-            util.usleep(300000)
-        end
+        -- if Device.model == "Kobo_spaColour" then
+        --     local util = require("ffi/util")
+        --     util.usleep(300000)
+        -- end
         UIManager:show(info)
         UIManager:forceRePaint()
         local completed, res = Trapper:dismissableRunInSubprocess(function()
