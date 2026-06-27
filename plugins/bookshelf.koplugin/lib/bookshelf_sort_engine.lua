@@ -97,6 +97,13 @@ local STATUS_RANK_ACTIVE   = {
     finished = 4, complete = 4,
 }
 
+local STATUS_RANK_FINISHED = {
+    finished = 1, complete = 1,
+    reading = 2,
+    on_hold = 3, abandoned = 3,
+    unread = 4, ["new"] = 4,
+}
+
 -- nil-safe comparator helper. Returns -1, 0, +1 so it composes cleanly.
 -- nil always sorts to the end (higher sort order).
 -- Sentinel return values for nil-handling. The chainedComparator detects
@@ -394,6 +401,14 @@ SortEngine.KEYS = {
                                 return cmp(STATUS_RANK_ACTIVE[a.read_status or a._status or "unread"] or 99,
                                            STATUS_RANK_ACTIVE[b.read_status or b._status or "unread"] or 99)
                             end },
+
+    read_status_finished = { label = tr("Finished/Reading/Unread"),
+                             short = tr("Finished 1st"),
+                             comparator = function(a, b)
+                                 return cmp(STATUS_RANK_FINISHED[a.read_status or a._status or "unread"] or 99,
+                                            STATUS_RANK_FINISHED[b.read_status or b._status or "unread"] or 99)
+                             end },
+
     -- Book record: a.date_added
     -- lfs entry:   a.attr.modification
     -- group shape: a.latest_added (max member mtime; set in _buildGroups so
@@ -459,7 +474,7 @@ SortEngine.ORDER = {
     "series_name", "series_index", "series_combined",
     "last_opened", "date_added",
     "percent_read", "rating",
-    "read_status", "read_status_active",
+    "read_status", "read_status_active", "read_status_finished",
     "size", "page_count", "book_count",
 }
 

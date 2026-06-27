@@ -414,6 +414,7 @@ local _SORT_VALID = {
         size  = true, format  = true, last_read  = true,
         percent_unopened_first = true, percent_unopened_last = true,
         percent_natural        = true,
+        read_status_finished   = true,
     },
     latest     = { mtime = true },
     favorites  = { updated = true, date_added = true, title = true,
@@ -457,6 +458,7 @@ function Repo.getSortPriority(tab_id)
         percent_natural        = { key = "percent_read", reverse = true  },
         name                   = { key = "filename",     reverse = false },
         book_count             = { key = "book_count",   reverse = true  },
+        read_status_finished = { key = "read_status_finished", reverse = false },
     }
     return { map[legacy] or { key = "title", reverse = false } }
 end

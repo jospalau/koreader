@@ -1737,7 +1737,7 @@ function Editor:_pickSortLevel(draft, level_index, on_close)
             { key_btn("last_opened"),    key_btn("date_added")        },
             { key_btn("pub_date")   },   { key_btn("modified_date")   },
             { key_btn("percent_read"),   key_btn("rating")            },
-            { key_btn("read_status"),    key_btn("read_status_active")},
+            { key_btn("read_status"),    key_btn("read_status_active"),    key_btn("read_status_finished"), },
             { key_btn("size"),           key_btn("page_count"),
               key_btn("book_count") },
             { clear_btn, close_btn },
