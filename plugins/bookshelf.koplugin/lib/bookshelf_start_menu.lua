@@ -643,10 +643,15 @@ function StartMenu:_buildPanel(entries, w, folder_id)
         rows[#rows + 1] = { row = row, entry = add_entry }
     end
     for _i, entry in ipairs(entries) do
+        -- local t_row = require("socket").gettime()
         local is_focused = self._focus and self._focus.entry_id == entry.id
         local row = entry.type == "module"
             and self:_buildModuleRow(entry, w, is_focused, in_flyout)
             or  self:_buildRow(entry, w, is_focused, in_flyout)
+        -- if entry.type == "module" then
+        --     print(string.format("[bookshelf] _buildPanel module=%s %.1f ms",
+        --     tostring(entry.module), (require("socket").gettime() - t_row) * 1000))
+        -- end
         vg[#vg + 1] = row
         rows[#rows + 1] = { row = row, entry = entry }
     end

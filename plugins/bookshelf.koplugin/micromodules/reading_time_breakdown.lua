@@ -17,62 +17,95 @@ end
 
 local STATS_TTL_S = 30
 local _cache
+local _conn
+local _stmt
 
-local function queryStats()
+local function closeConn()
+    if _stmt then pcall(function() _stmt:close() end); _stmt = nil end
+    if _conn then pcall(function() _conn:close() end); _conn = nil end
+end
+
+local function getConn()
+    if _conn then return _conn end
     local DataStorage = require("datastorage")
     local path = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
     local lfs = require("libs/libkoreader-lfs")
     if lfs.attributes(path, "mode") ~= "file" then return nil end
-    local ok, res = pcall(function()
+    local ok, conn = pcall(function()
         local SQ3 = require("lua-ljsqlite3/init")
-        local conn = SQ3.open(path, "ro")
-        local out
-        local ok_q, err = pcall(function()
-            conn:exec("PRAGMA busy_timeout=200;")
-            local now = os.time()
-            local t = os.date("*t", now)
-
-            local day_start       = os.time{ year=t.year, month=t.month, day=t.day, hour=0, min=0, sec=0 }
-            local month_start     = os.time{ year=t.year, month=t.month, day=1,     hour=0, min=0, sec=0 }
-            local yesterday_start = day_start - 86400
-            local yesterday_end   = day_start - 1
-            local year_start      = os.time{ year=t.year, month=1,       day=1,     hour=0, min=0, sec=0 }
-            local lm              = t.month - 1 == 0 and 12 or t.month - 1
-            local ly              = t.month - 1 == 0 and t.year - 1 or t.year
-            local lmonth_start    = os.time{ year=ly, month=lm, day=1,   hour=0, min=0, sec=0 }
-            local lmonth_end      = month_start - 1
-
-            -- Uses overlap instead of start_time range so sessions crossing
-            -- midnight are counted proportionally in each day/period.
-            local stmt = conn:prepare([[
-                SELECT COALESCE(SUM(
-                    MIN(start_time + duration, ?) - MAX(start_time, ?)
-                ), 0)
-                FROM page_stat_data
-                WHERE start_time + duration >= ? AND start_time <= ?
-            ]])
-
-            local function query(from, to)
-                local row = stmt:bind(to, from, from, to):step()
-                stmt:clearbind():reset()
-                return tonumber(row[1]) or 0
-            end
-
-            out = {
-                today_secs     = query(day_start,    now),
-                yesterday_secs = query(yesterday_start, yesterday_end),
-                month_secs     = query(month_start,  now),
-                lmonth_secs    = query(lmonth_start, lmonth_end),
-                year_secs      = query(year_start,   now),
-            }
-            stmt:close()
-        end)
-        conn:close()
-        if not ok_q then error(err) end
-        return out
+        local c = SQ3.open(path, "ro")
+        c:exec("PRAGMA busy_timeout=200;")
+        return c
     end)
     if not ok then
-        require("logger").warn("[bookshelf] reading_time_breakdown unavailable:", res)
+        require("logger").warn("[bookshelf] reading_time_breakdown: failed to open DB:", conn)
+        return nil
+    end
+    _conn = conn
+    return _conn
+end
+
+local function getStmt(conn)
+    if _stmt then return _stmt end
+    local ok, stmt = pcall(function()
+        -- Uses overlap instead of start_time range so sessions crossing
+        -- midnight are counted proportionally in each day/period.
+        -- wpm_stat_data has far fewer rows than page_stat_data (one row
+        -- per session vs one per page), so queries are much faster.
+        return conn:prepare([[
+            SELECT COALESCE(SUM(
+                MIN(start_time + duration, ?) - MAX(start_time, ?)
+            ), 0)
+            FROM wpm_stat_data
+            WHERE start_time + duration >= ? AND start_time <= ?
+        ]])
+    end)
+    if not ok then
+        require("logger").warn("[bookshelf] reading_time_breakdown: failed to prepare stmt:", stmt)
+        return nil
+    end
+    _stmt = stmt
+    return _stmt
+end
+
+local function queryStats()
+    local conn = getConn()
+    if not conn then return nil end
+    local stmt = getStmt(conn)
+    if not stmt then return nil end
+
+    local ok, res = pcall(function()
+        local now = os.time()
+        local t = os.date("*t", now)
+
+        local day_start       = os.time{ year=t.year, month=t.month, day=t.day, hour=0, min=0, sec=0 }
+        local month_start     = os.time{ year=t.year, month=t.month, day=1,     hour=0, min=0, sec=0 }
+        local yesterday_start = day_start - 86400
+        local yesterday_end   = day_start - 1
+        local year_start      = os.time{ year=t.year, month=1,       day=1,     hour=0, min=0, sec=0 }
+        local lm              = t.month - 1 == 0 and 12 or t.month - 1
+        local ly              = t.month - 1 == 0 and t.year - 1 or t.year
+        local lmonth_start    = os.time{ year=ly, month=lm, day=1,   hour=0, min=0, sec=0 }
+        local lmonth_end      = month_start - 1
+
+        local function query(from, to)
+            local row = stmt:bind(to, from, from, to):step()
+            stmt:clearbind():reset()
+            return tonumber(row[1]) or 0
+        end
+
+        return {
+            today_secs     = query(day_start,       now),
+            yesterday_secs = query(yesterday_start, yesterday_end),
+            month_secs     = query(month_start,     now),
+            lmonth_secs    = query(lmonth_start,    lmonth_end),
+            year_secs      = query(year_start,      now),
+        }
+    end)
+
+    if not ok then
+        require("logger").warn("[bookshelf] reading_time_breakdown query failed:", res)
+        closeConn()
         return nil
     end
     return res
@@ -128,7 +161,7 @@ return {
             { label = _("Year"),       secs = (data and data.year_secs       or 0) + live },
         }
 
-        local head_face             = Fonts:getFace("cfont", sc(12))
+        local head_face              = Fonts:getFace("cfont", sc(12))
         local count_face, count_bold = Fonts:getFace("cfont", sc(18), {bold=true})
         local n     = #ROWS
         local col_w = math.floor(mw / n)
