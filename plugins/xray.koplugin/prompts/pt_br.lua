@@ -5,7 +5,7 @@ return {
     -- Mensagem apenas para o autor (Para busca rápida de biografia)
     author_only = [[Identifique e forneça a biografia do autor do livro "%s". 
 Os metadatos sugerem que o autor é "%s". 
-CRÍTICO: Verifique o autor usando o CONTEXTO DO TEXTO DO LIVRO (se fornecido no final desta mensagem) para garantir 100% de precisão e evitar identificações incorretas.
+CRÍTICO: Verifique o autor usando o CONTEXTO DO TEXTO DO LIVRO (se fornecido no final desta mensagem) para garantir 100%% de precisão e evitar identificações incorretas.
 
 FORMATO JSON REQUERIDO:
 {
@@ -39,7 +39,7 @@ Passo 1. Olhe APENAS para o bloco "CHAPTER SAMPLES". Identifique os capítulos n
 Passo 2. EXCLUA todo o material pré-textual e pós-textual não narrativo (ex: Capa, Folha de Rosto, Direitos Autorais, Índice, Dedicatória, Agradecimentos, Também por).
 Passo 3. Para cada capítulo narrativo, começando do primeiríssimo, crie EXATAMENTE UM objeto de evento no array `timeline`.
 Passo 4. O campo `chapter` DEVE corresponder exatamente ao cabeçalho do capítulo na amostra. (Mapeie-os estritamente em ordem sequencial).
-Passo 5. Resuma esse capítulo específico no campo `event` (MÁX {MAX_TIMELINE_EVENT} caracteres). NÃO agrupe capítulos.
+Passo 5. Resuma esse capítulo específico no campo `event` {TIMELINE_DETAIL_GUIDANCE} (MÁX {MAX_TIMELINE_EVENT} caracteres). NÃO agrupe capítulos.
 Passo 6. SEM SPOILERS: Pare exatamente na marca de %d%%. Não inclua eventos após este progresso.
 
 ALGORITMO PARA PERSONAGENS E FIGURAS HISTÓRICAS:
@@ -117,7 +117,7 @@ FORMATO JSON REQUERIDO:
   "timeline": [
     {
       "chapter": "Título Exato do Capítulo das Amostras",
-      "event": "Evento narrativo principal deste capítulo (Máx {MAX_TIMELINE_EVENT} caracteres)"
+      "event": "{TIMELINE_EXAMPLE}"
     }
   ]
 } ]],
@@ -222,7 +222,50 @@ If `is_valid` is false:
 ]],
 
     -- Strings de reserva (Fallback)
-    -- Multi-Book Series Context Prompts
+        -- Find Duplicates
+    find_duplicates = [[
+Livro: %s
+Autor: %s
+Progresso de leitura: %d%%
+
+Você está revisando a seguinte lista de %s extraídos deste livro.
+Sua tarefa é identificar quaisquer entradas que pareçam ser a MESMA entidade listada sob nomes diferentes.
+
+LISTA:
+%s
+
+REGRAS:
+- Um duplicado existe quando duas entradas se referem claramente à mesma entidade (por exemplo, "A Grande Biblioteca" e "Grande Biblioteca", ou "John" e "John Doe").
+- NÃO marque entradas que sejam meramente relacionadas ou semelhantes, mas distintas.
+- NÃO marque entradas a menos que tenha certeza absoluta de que são a mesma entidade.
+- Se não existirem duplicatas, retorne um array vazio.
+- REGRA DE SPOILER: Não use conhecimento além de %d%% de progresso de leitura.
+
+FORMATO JSON EXIGIDO:
+{
+  "duplicate_pairs": [
+    {
+      "primary": "Nome da entrada a MANTER (o nome mais completo ou formal)",
+      "secondary": "Nome da entrada a REMOVER",
+      "reason": "Breve motivo (máx 100 caracteres)"
+    }
+  ]
+}]],
+
+    -- Merge Descriptions
+    merge_descriptions = [[
+TAREFA: Combine as seguintes duas descrições da mesma entidade (personagem ou local) em um resumo único, coeso e conciso.
+Remova informações redundantes e garanta que a descrição final flua naturalmente.
+
+Descrição principal: %s
+Descrição secundária: %s
+
+FORMATO JSON EXIGIDO:
+{
+  "merged_description": "Descrição combinada e polida (Máx {MAX_CHAR_DESC} caracteres)"
+}]],
+
+-- Multi-Book Series Context Prompts
     series_detect = [[Título do livro: %s
 Autor: %s
 
@@ -286,3 +329,4 @@ FORMATO JSON EXIGIDO:
         no_biography = "Biografia Não Disponível"
     }
 }
+

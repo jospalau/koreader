@@ -41,7 +41,7 @@ Schritt 1. Schauen Sie NUR in den Block "CHAPTER SAMPLES". Identifizieren Sie di
 Schritt 2. SCHLIESSEN Sie alle nicht-erzählenden Vorspann- und Nachspann-Elemente AUS (z. B. Cover, Titelseite, Copyright, Inhaltsverzeichnis, Widmung, Danksagung, Auch von).
 Schritt 3. Erstellen Sie für jedes erzählende Kapitel, beginnend mit dem allerersten, GENAU EIN Ereignisobjekt im Array `timeline`.
 Schritt 4. Das Feld `chapter` MUSS exakt mit der Kapitelüberschrift in der Stichprobe übereinstimmen. (Ordnen Sie diese strikt in sequentieller Reihenfolge zu).
-Schritt 5. Fassen Sie dieses spezifische Kapitel im Feld `event` zusammen (MAX. {MAX_TIMELINE_EVENT} Zeichen). Gruppieren Sie KEINE Kapitel.
+Schritt 5. Fassen Sie dieses spezifische Kapitel im Feld `event` zusammen {TIMELINE_DETAIL_GUIDANCE} (MAX. {MAX_TIMELINE_EVENT} Zeichen). Gruppieren Sie KEINE Kapitel.
 Schritt 6. KEINE SPOILER: Hören Sie genau bei der %d%%-Marke auf. Beziehen Sie keine Ereignisse nach diesem Fortschritt ein.
 
 ALGORITHMUS FÜR CHARAKTERE & HISTORISCHE PERSONEN:
@@ -118,7 +118,7 @@ ERFORDERLICHES JSON-FORMAT:
   "timeline": [
     {
       "chapter": "Exakter Kapiteltitel aus den Stichproben",
-      "event": "Wichtiges erzählerisches Ereignis aus diesem Kapitel (Max. {MAX_TIMELINE_EVENT} Zeichen)"
+      "event": "{TIMELINE_EXAMPLE}"
     }
   ]
 } ]],
@@ -275,7 +275,50 @@ ERFORDERLICHES JSON-FORMAT:
   ]
 }]],
 
-    -- Fallback strings
+        -- Find Duplicates
+    find_duplicates = [[
+Buch: %s
+Autor: %s
+Lesefortschritt: %d%%
+
+Sie überprüfen die folgende Liste von %s, die aus diesem Buch extrahiert wurden.
+Ihre Aufgabe ist es, alle Einträge zu identifizieren, die dieselbe Entität zu sein scheinen, jedoch unter verschiedenen Namen aufgeführt sind.
+
+LISTE:
+%s
+
+REGELN:
+- Ein Duplikat liegt vor, wenn sich zwei Einträge eindeutig auf dieselbe Entität beziehen (z. B. "Die Große Bibliothek" und "Große Bibliothek" oder "John" und "John Doe").
+- Kennzeichnen Sie keine Einträge, die nur miteinander verwandt oder ähnlich, aber verschieden sind.
+- Kennzeichnen Sie Einträge nur, wenn Sie sich sehr sicher sind, dass es sich um dieselbe Entität handelt.
+- Wenn keine Duplikate vorhanden sind, geben Sie ein leeres Array zurück.
+- SPOILER-REGEL: Verwenden Sie keine Informationen, die über einen Lesefortschritt von %d%% hinausgehen.
+
+ERFORDERLICHES JSON-FORMAT:
+{
+  "duplicate_pairs": [
+    {
+      "primary": "Name des Eintrags, der BEHALTEN werden soll (der vollständigere oder formellere Name)",
+      "secondary": "Name des Eintrags, der ENTFERNT werden soll",
+      "reason": "Kurzer Grund (max. 100 Zeichen)"
+    }
+  ]
+}]],
+
+    -- Merge Descriptions
+    merge_descriptions = [[
+AUFGABE: Kombinieren Sie die folgenden zwei Beschreibungen derselben Entität (Karakter oder Ort) zu einer einzigen, zusammenhängenden und prägnanten Zusammenfassung.
+Entfernen Sie redundante Informationen und stellen Sie sicher, dass die endgültige Beschreibung natürlich fließt.
+
+Hauptbeschreibung: %s
+Sekundärbeschreibung: %s
+
+ERFORDERLICHES JSON-FORMAT:
+{
+  "merged_description": "Kombinierte und überarbeitete Beschreibung (max. {MAX_CHAR_DESC} Zeichen)"
+}]],
+
+-- Fallback strings
     fallback = {
         unknown_book = "Unbekanntes Buch",
         unknown_author = "Unbekannter Autor",
@@ -286,3 +329,4 @@ ERFORDERLICHES JSON-FORMAT:
         no_biography = "Keine Biografie verfügbar"
     }
 }
+

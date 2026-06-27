@@ -26,6 +26,9 @@ msgstr "AI 发现重复条目"
 msgid "ai_merged_n"
 msgstr "成功合并了 %d 对重复项。"
 
+msgid "ai_scan"
+msgstr "AI Scan"
+
 msgid "ai_scanning_duplicates"
 msgstr "AI 正在扫描重复项..."
 
@@ -309,7 +312,7 @@ msgid "fetch_successful"
 msgstr "获取成功"
 
 msgid "fetching_ai"
-msgstr "正在通过 %s 分析书籍以生成 X-Ray 数据..."
+msgstr "正在分析书籍以生成 X-Ray 数据..."
 
 msgid "fetching_author"
 msgstr "正在从 %s 获取作者信息..."
@@ -386,6 +389,15 @@ msgstr "已启用"
 msgid "linked_entries_setting_desc"
 msgstr "“关联条目”会在角色、地点和历史人物在彼此的描述中被提到时自动建立连接。\n\n禁用此功能将隐藏详情对话框中的“关联条目”按钮。"
 
+msgid "log_empty"
+msgstr "日志为空。"
+
+msgid "log_loading"
+msgstr "正在加载日志..."
+
+msgid "log_tail_notice"
+msgstr "[... 已省略 %d 行更早的日志 ...]"
+
 msgid "logs_cleared"
 msgstr "日志已清除！"
 
@@ -394,6 +406,9 @@ msgstr "正在查询 '%s'..."
 
 msgid "low_conf_match"
 msgstr "部分匹配 — 已显示“%s”的关联信息。点击下方重新获取精确词条。"
+
+msgid "manual_pick"
+msgstr "Manual Pick"
 
 msgid "mention_dismiss_btn"
 msgstr "✕"
@@ -551,6 +566,9 @@ msgstr "更新 X-Ray 数据 (合并)"
 msgid "menu_view_config"
 msgstr "查看所有配置"
 
+msgid "menu_view_log"
+msgstr "查看日志"
+
 msgid "menu_xray"
 msgstr "X-Ray"
 
@@ -647,6 +665,9 @@ msgstr "暂无时间线数据。\n\n请先使用“获取 X-Ray 数据”。\n\n
 msgid "ok"
 msgstr "确定"
 
+msgid "pair_rejected"
+msgstr "Pair marked as not a duplicate."
+
 msgid "path"
 msgstr "plugins/xray.koplugin"
 
@@ -679,6 +700,9 @@ msgstr "中"
 
 msgid "reasoning_unset"
 msgstr "未设置（默认）"
+
+msgid "reject_pair"
+msgstr "Reject"
 
 msgid "relookup_button"
 msgstr "重新查询“%s”"

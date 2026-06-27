@@ -41,7 +41,7 @@ return {
 步骤 2：排除所有非叙事性的前言和后记（例如：封面、扉页、版权页、目录、献词、致谢等）。
 步骤 3：针对每个叙事性章节，从第一章开始，在 `timeline` 数组中创建一个对应的事件对象。
 步骤 4：`chapter` 字段必须与样本中的章节标题完全匹配。（按顺序严格映射）。
-步骤 5：在 `event` 字段中总结该特定章节（最多 {MAX_TIMELINE_EVENT} 个字符）。不要合并章节。
+步骤 5：在 `event` 字段中总结该特定章节{TIMELINE_DETAIL_GUIDANCE} （最多 {MAX_TIMELINE_EVENT} 个字符）。不要合并章节。
 步骤 6：严禁剧透：严格停止在 %d%% 进度处。不要包含超过此进度的事件。
 
 角色与历史人物算法：
@@ -118,7 +118,7 @@ return {
     "timeline": [
     {
       "chapter": "样本中的准确章节标题",
-      "event": "该章节的关键叙事事件（最多 {MAX_TIMELINE_EVENT} 个字符）"
+      "event": "{TIMELINE_EXAMPLE}"
     }
   ]
 } ]],
@@ -272,7 +272,50 @@ If `is_valid` is false:
   ]
 }]],
 
-    -- Fallback strings
+        -- Find Duplicates
+    find_duplicates = [[
+书名: %s
+作者: %s
+阅读进度: %d%%
+
+您正在审查从本书中提取的以下 %s 列表。
+您的任务是找出任何看起来是在不同名称下列出的相同实体的条目。
+
+列表:
+%s
+
+规则:
+- 当两个条目显然指向同一实体时，即存在重复（例如，“大图书馆”和“大图书馆”，或“约翰”和“约翰·多伊”）。
+- 不要标记仅相关或相似但不同的条目。
+- 除非您高度确信它们是同一实体，否则不要进行标记。
+- 如果不存在重复，返回空数组。
+- 剧透规则: 不要使用超过 %d%% 阅读进度的知识。
+
+要求的 JSON 格式:
+{
+  "duplicate_pairs": [
+    {
+      "primary": "要保留的的条目名称（较完整或较正式的名称）",
+      "secondary": "要删除的条目名称",
+      "reason": "简短原因（最多 100 字）"
+    }
+  ]
+}]],
+
+    -- Merge Descriptions
+    merge_descriptions = [[
+任务: 将以下两个关于同一实体（人物或地点）的描述合并为一个单一、连贯且简洁的总结。
+删除冗余信息，并确保最终描述自然流畅。
+
+主要描述: %s
+次要描述: %s
+
+要求的 JSON 格式:
+{
+  "merged_description": "合并和润色后的描述（最多 {MAX_CHAR_DESC} 字）"
+}]],
+
+-- Fallback strings
     fallback = {
         unknown_book = "未知书籍",
         unknown_author = "未知作者",
@@ -283,3 +326,4 @@ If `is_valid` is false:
         no_biography = "暂无简介"
     }
 }
+

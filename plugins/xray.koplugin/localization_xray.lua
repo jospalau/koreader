@@ -220,6 +220,10 @@ function Localization:t(key, ...)
             xray_mode_desc = "Adds an 'X-Ray' button to dictionary and selection menus for instant lookups.",
             no_data_prompt = "No X-Ray data found for this book. Would you like to fetch it from AI now?",
             menu_clear_logs = "Clear Logs",
+            menu_view_log = "View Log",
+            log_empty = "Log is empty.",
+            log_tail_notice = "[... %d earlier line(s) omitted ...]",
+            log_loading = "Loading log...",
             logs_cleared = "Logs cleared!",
             spoiler_free_option = "Spoiler-free Mode (Up to %d%% of the book)",
             spoiler_free_about = "Spoiler-free mode limits AI extraction to the pages you have already read (up to your current page), preventing spoilers from future chapters.\n\nFull Book Mode analyzes the entire book, which may contain spoilers.",
@@ -392,12 +396,14 @@ function Localization:t(key, ...)
             no_merges_performed = "No merges were performed.",
             merge_button = "Merge",
             skip = "Skip",
+            reject_pair = "Reject",
             stop = "Stop",
             reason = "Reason",
             entity_label_characters = "characters",
             entity_label_locations = "locations",
             pending_duplicates_prompt = "AI found %d possible duplicate(s) from the last fetch. Review now?",
             review = "Review",
+            pair_rejected = "Pair marked as not a duplicate.",
         }
         translation = fallbacks[key] or key
     end

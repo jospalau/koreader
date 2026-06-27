@@ -26,6 +26,9 @@ msgstr "Duplicado detectado por IA"
 msgid "ai_merged_n"
 msgstr "%d par(es) mesclado(s) com sucesso."
 
+msgid "ai_scan"
+msgstr "AI Scan"
+
 msgid "ai_scanning_duplicates"
 msgstr "IA procurando duplicados..."
 
@@ -386,6 +389,15 @@ msgstr "Ativado"
 msgid "linked_entries_setting_desc"
 msgstr "Entradas vinculadas conecta automaticamente personagens, locais e termos nas descrições. Toque neles para ir diretamente para seus cartões do X-Ray."
 
+msgid "log_empty"
+msgstr "O log está vazio."
+
+msgid "log_loading"
+msgstr "Carregando log..."
+
+msgid "log_tail_notice"
+msgstr "[... %d linha(s) anterior(es) omitida(s) ...]"
+
 msgid "logs_cleared"
 msgstr "Logs limpos!"
 
@@ -394,6 +406,9 @@ msgstr "Buscando por '%s'..."
 
 msgid "low_conf_match"
 msgstr "Correspondência parcial – exibindo '%s' para sua consulta. Toque abaixo para buscar o termo exato."
+
+msgid "manual_pick"
+msgstr "Manual Pick"
 
 msgid "mention_dismiss_btn"
 msgstr "✕"
@@ -551,6 +566,9 @@ msgstr "Atualizar dados do X-Ray (Mesclar)"
 msgid "menu_view_config"
 msgstr "Ver configuração"
 
+msgid "menu_view_log"
+msgstr "Ver log"
+
 msgid "menu_xray"
 msgstr "X-Ray"
 
@@ -647,6 +665,9 @@ msgstr "Sem dados de linha do tempo ainda.\n\nUse 'Buscar Dados X-Ray' primeiro.
 msgid "ok"
 msgstr "OK"
 
+msgid "pair_rejected"
+msgstr "Pair marked as not a duplicate."
+
 msgid "path"
 msgstr "plugins/xray.koplugin"
 
@@ -679,6 +700,9 @@ msgstr "Médio"
 
 msgid "reasoning_unset"
 msgstr "Não definido (Padrão)"
+
+msgid "reject_pair"
+msgstr "Reject"
 
 msgid "relookup_button"
 msgstr "Buscar novamente '%s'"

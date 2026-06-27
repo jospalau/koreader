@@ -41,7 +41,7 @@ Stap 1. Kijk UITSLUITEND naar het blok "CHAPTER SAMPLES". Identificeer de verhal
 Stap 2. SLUIT alle niet-verhalende inleidingen en nawoorden UIT (bijv. Omslag, Titelpagina, Auteursrecht, Inhoudsopgave, Opdracht, Dankwoord, Ook van).
 Stap 3. Maak voor elk verhalend hoofdstuk, beginnend bij het allereerste, PRECIES ÉÉN gebeurtenisobject aan in de `timeline`-array.
 Stap 4. Het veld `chapter` MOET exact overeenkomen met de hoofdstuktitel in het voorbeeld. (Koppel ze strikt in opeenvolgende volgorde).
-Stap 5. Samenvat dit specifieke hoofdstuk in het veld `event` (MAXIMAAL {MAX_TIMELINE_EVENT} tekens). Gropeer hoofdstukken NIET.
+Stap 5. Samenvat dit specifieke hoofdstuk in het veld `event` {TIMELINE_DETAIL_GUIDANCE} (MAXIMAAL {MAX_TIMELINE_EVENT} tekens). Gropeer hoofdstukken NIET.
 Stap 6. GEEN SPOILERS: Stop exact bij de %d%%-grens. Neem geen gebeurtenissen op na deze voortgang.
 
 ALGORITME VOOR PERSONAGES & HISTORISCHE FIGUREN:
@@ -119,7 +119,7 @@ VEREIST JSON-FORMAAT:
   "timeline": [
     {
       "chapter": "Exacte hoofdstuktitel uit voorbeelden",
-      "event": "Belangrijke verhalende gebeurtenis uit dit hoofdstuk (Max {MAX_TIMELINE_EVENT} tekens)"
+      "event": "{TIMELINE_EXAMPLE}"
     }
   ]
 }]],
@@ -287,7 +287,37 @@ VEREIST JSON-FORMAAT:
   ]
 }]],
 
-    -- Fallback strings
+        -- Find Duplicates
+    find_duplicates = [[
+Boek: %s
+Auteur: %s
+Leesvoortgang: %d%%
+
+U bekijkt de volgende lijst van %s die uit dit boek zijn geëxtraheerd.
+Het is uw taak om vermeldingen te identificeren die dezelfde entiteit lijken te zijn, maar onder verschillende namen worden vermeld.
+
+LIJST:
+%s
+
+REGELS:
+- Er is sprake van een duplicaat wanneer twee vermeldingen duidelijk naar dezelfde entiteit verwijzen (bijv. "De Grote Bibliotheek" and "Grote Bibliotheek", of "John" and "John Doe").
+- Markeer geen vermeldingen die alleen gerelateerd of vergelijkbaar zijn, maar toch verschillend.
+- Markeer vermeldingen alleen als u er zeer zeker van bent dat het om dezelfde entiteit gaat.
+- Als er geen duplicaten bestaan, retourneer dan een lege array.
+- SPOILERREGEL: Gebruik geen kennis van voorbij %d%% leesvoortgang.
+
+VEREIST JSON-FORMAT:
+{
+  "duplicate_pairs": [
+    {
+      "primary": "Naam van de vermelding die BEHOUDEN moet worden (de meer volledige of formele naam)",
+      "secondary": "Naam van de vermelding die VERWIJDERD moet worden",
+      "reason": "Korte reden (max. 100 tekens)"
+    }
+  ]
+}]],
+
+-- Fallback strings
     fallback = {
         unknown_book = "Onbekend boek",
         unknown_author = "Onbekende auteur",
@@ -298,3 +328,4 @@ VEREIST JSON-FORMAAT:
         no_biography = "Geen biografie beschikbaar"
     }
 }
+

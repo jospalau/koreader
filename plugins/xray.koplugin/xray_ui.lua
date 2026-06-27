@@ -6,7 +6,21 @@ local ConfirmBox = require("ui/widget/confirmbox")
 local ButtonDialog = require("ui/widget/buttondialog")
 local Menu = require("ui/widget/menu")
 local Screen = require("device").screen
-local _ = require("gettext")
+local gettext = require("gettext")
+local orig_isRTL = gettext.isRTL
+local plugin_instance
+
+gettext.isRTL = function(...)
+    if plugin_instance and plugin_instance:isRTL() and plugin_instance:isXRayUIActive() then
+        return true
+    end
+    if orig_isRTL then
+        return orig_isRTL(...)
+    end
+    return false
+end
+
+local _ = gettext
 local plugin_path = ((...) or ""):match("(.-)[^%.]+$") or ""
 
 local M = {}
@@ -31,24 +45,22 @@ local Size            = require("ui/size")
 
 local DEFAULT_POPUP_FONT_SIZE = 22
 
-local function _getPopupFontSize()
+local function _getPopupFontSize(plugin)
     local size
-    if G_reader_settings then
-        size = G_reader_settings:readSetting("cre_font_size") or G_reader_settings:readSetting("kopt_font_size")
+    if plugin and plugin.ui and plugin.ui.font and plugin.ui.font.configurable then
+        size = plugin.ui.font.configurable.font_size
+    elseif G_reader_settings then
+        size = G_reader_settings:readSetting("cre_font_size")
+              or G_reader_settings:readSetting("kopt_font_size")
     end
     if size then
-        -- Match the book size exactly, capped at 22 pt minimum to prevent it from being too small
-        size = math.max(22, size)
-    else
-        -- Default fallback size (22 pt unscaled)
-        size = 22
+        return size  -- raw pt value; Font:getFace will call scaleBySize internally
     end
-    local Device = require("device")
-    if Device:isAndroid() then
-        -- Android high-DPI screens need a moderate size boost to match WSL visual scale
-        size = math.floor(size * 1.20)
+    -- Absolute fallback when no book is open
+    if Screen.scaleBySize then
+        return Screen:scaleBySize(22)
     end
-    return size
+    return 22
 end
 
 local XRayBottomPopup = InputContainer:extend{
@@ -71,123 +83,43 @@ function XRayBottomPopup:init()
 
     local e = self.entity or {}
 
-    local function resolveDocFontFilename(family)
-        if not family or family == "" then return nil, nil end
-        local path, idx
-        
-        local function ensureInFontList(p)
-            if not p or p == "" then return p end
-            pcall(function()
-                local FontList = require("fontlist")
-                local fl = FontList:getFontList()
-                local found = false
-                for _, v in ipairs(fl) do
-                    if v == p then found = true break end
-                end
-                if not found then
-                    table.insert(fl, p)
-                end
-            end)
-            return p
-        end
-
-        -- 1. Try CRe directly, as it knows exactly what file it uses for this family
-        pcall(function()
-            local cre = require("document/credocument"):engineInit()
-            if cre and cre.getFontFaceFilenameAndFaceIndex then
-                path, idx = cre.getFontFaceFilenameAndFaceIndex(family)
-            end
-        end)
-        
-        if type(path) == "string" and path ~= "" then
-            return ensureInFontList(path), idx
-        end
-        
-        -- 2. Fallback to FontList mapping
-        pcall(function()
-            local FontList = require("fontlist")
-            if not FontList.fontlist[1] then FontList:getFontList() end
-            if FontList.fontnames and FontList.fontnames[family] then
-                local infos = FontList.fontnames[family]
-                if infos and infos[1] and infos[1].path then
-                    path = ensureInFontList(infos[1].path)
-                    idx = infos[1].index
-                end
-            end
-        end)
-        return path, idx
+    local doc_family
+    if self.plugin and self.plugin.ui and self.plugin.ui.font then
+        doc_family = self.plugin.ui.font.font_face
     end
-
-    local doc_family = G_reader_settings and G_reader_settings:readSetting("cre_font_family")
+    if not doc_family and G_reader_settings then
+        doc_family = G_reader_settings:readSetting("cre_font_family")
+    end
     local Device = require("device")
-    local doc_filename, doc_faceindex
-    if not Device:isAndroid() then
-        doc_filename, doc_faceindex = resolveDocFontFilename(doc_family)
-    end
 
-    local function getAvailableSerifFont()
-        local ok, FontList = pcall(require, "fontlist")
-        if not ok or not FontList then return nil, nil end
-        if not FontList.fontlist or not FontList.fontlist[1] then
-            pcall(function() FontList:getFontList() end)
-        end
-        if FontList.fontnames then
-            local function getRegularInfo(infos)
-                for _, info in ipairs(infos) do
-                    if not info.italic and not info.bold then
-                        return info
+    local function getFontSafe(preferred_family, size)
+        if preferred_family and preferred_family ~= "" then
+            -- Resolve the CRE face name to an actual font file path
+            local ok, credoc = pcall(require, "document/credocument")
+            if ok and credoc and credoc.engineInit then
+                local ok2, cre = pcall(credoc.engineInit, credoc)
+                if ok2 and cre and cre.getFontFaceFilenameAndFaceIndex then
+                    local filename, faceindex = cre.getFontFaceFilenameAndFaceIndex(preferred_family)
+                    if not filename then
+                        filename, faceindex = cre.getFontFaceFilenameAndFaceIndex(preferred_family, nil, true)
                     end
-                end
-                return infos[1]
-            end
-
-            local candidates = {
-                "free serif", "droid serif", "noto serif", "dejavu serif",
-                "gentium book basic", "charis sil", "libertinus serif",
-                "georgia", "times new roman", "times", "serif"
-            }
-            for _, cand in ipairs(candidates) do
-                for family_name, infos in pairs(FontList.fontnames) do
-                    if family_name:lower():find(cand, 1, true) then
-                        local info = getRegularInfo(infos)
-                        if info and info.path then
-                            return info.path, info.index
-                        end
-                    end
-                end
-            end
-            for family_name, infos in pairs(FontList.fontnames) do
-                if family_name:lower():find("serif", 1, true) then
-                    local info = getRegularInfo(infos)
-                    if info and info.path then
-                        return info.path, info.index
+                    if filename then
+                        local face_ok, face = pcall(Font.getFace, Font, filename, size, faceindex)
+                        if face_ok and face then return face end
                     end
                 end
             end
         end
-        return nil, nil
-    end
-
-    local function getFontSafe(preferred, preferred_idx, fallback_path, fallback_idx, size)
-        local face = Font:getFace("cfont", size)
-        if preferred then
-            local ok, f = pcall(Font.getFace, Font, preferred, size, preferred_idx)
-            if ok and f then return f end
-        end
-        if fallback_path then
-            local ok, f = pcall(Font.getFace, Font, fallback_path, size, fallback_idx)
-            if ok and f then return f end
-        end
-        return face
+        -- Fallback to the standard UI content font
+        return Font:getFace("cfont", size)
     end
 
     -- Fonts
-    local serif_path, serif_idx = getAvailableSerifFont()
-    local face_normal = getFontSafe(doc_filename, doc_faceindex, serif_path, serif_idx, fs)
+    local face_normal = getFontSafe(doc_family, fs)
     local face_btn    = Font:getFace("cfont", math.max(12, fs - 2))
 
     local fs_small    = math.max(12, fs - 4)
-    local face_small_normal = getFontSafe(doc_filename, doc_faceindex, serif_path, serif_idx, fs_small)
+    local face_small_normal = getFontSafe(doc_family, fs_small)
 
     -- TextBoxWidget — wrap multilínea, justificado con guionado
     local function make_text(text, face, align, is_bold)
@@ -195,7 +127,7 @@ function XRayBottomPopup:init()
             text       = text,
             face       = face,
             width      = inner_w,
-            alignment  = align or "justify",
+            alignment  = align or ((self.plugin and self.plugin:isRTL()) and "right" or "justify"),
             justified  = true,
             bold       = is_bold,
         }
@@ -212,7 +144,7 @@ function XRayBottomPopup:init()
             face       = face_btn,
             padding_h  = btn_padding_h,
             padding_v  = btn_padding_v,
-            margin     = 0,
+            margin     = math.max(16, gap * 4),
             radius     = 4,
             bordersize = 2,
             callback   = cb,
@@ -224,10 +156,11 @@ function XRayBottomPopup:init()
     end
 
     -- ── content ──────────────────────────────────────────────────────────────
-    local vg = VerticalGroup:new{ align = "left" }
+    local align = (self.plugin and self.plugin:isRTL()) and "right" or "left"
+    local vg_components = { align = align }
 
     -- 1. Name (bold, justified)
-    vg[#vg+1] = make_text(tostring(e.name or "?"), face_normal, "justify", true)
+    table.insert(vg_components, make_text(tostring(e.name or "?"), face_normal, "justify", true))
 
     local has_metadata = false
 
@@ -247,8 +180,8 @@ function XRayBottomPopup:init()
         if #kept > 0 then aliases_str = table.concat(kept, ", ") end
     end
     if aliases_str then
-        vg[#vg+1] = VerticalSpan:new{ width = gap }
-        vg[#vg+1] = make_text(get_loc_t("label_aliases", "ALIASES") .. ": " .. aliases_str, face_small_normal, "justify")
+        table.insert(vg_components, VerticalSpan:new{ width = gap })
+        table.insert(vg_components, make_text(get_loc_t("label_aliases", "ALIASES") .. ": " .. aliases_str, face_small_normal, "justify"))
         has_metadata = true
     end
 
@@ -265,15 +198,15 @@ function XRayBottomPopup:init()
     end
 
     if #attrs > 0 then
-        vg[#vg+1] = VerticalSpan:new{ width = gap }
-        vg[#vg+1] = make_text(table.concat(attrs, " | "), face_small_normal, "justify")
+        table.insert(vg_components, VerticalSpan:new{ width = gap })
+        table.insert(vg_components, make_text(table.concat(attrs, " | "), face_small_normal, "justify"))
         has_metadata = true
     end
 
     -- 6. AI Reasoning
     if e.ai_reasoning and e.ai_reasoning ~= "" then
-        vg[#vg+1] = VerticalSpan:new{ width = gap }
-        vg[#vg+1] = make_text("[" .. get_loc_t("label_reasoning", "AI REASONING") .. "]\n" .. e.ai_reasoning, face_small_normal, "justify")
+        table.insert(vg_components, VerticalSpan:new{ width = gap })
+        table.insert(vg_components, make_text("[" .. get_loc_t("label_reasoning", "AI REASONING") .. "]\n" .. e.ai_reasoning, face_small_normal, "justify"))
         has_metadata = true
     end
 
@@ -292,9 +225,9 @@ function XRayBottomPopup:init()
             end
             display_desc = display_desc .. " ..."
         end
-        local desc_gap = has_metadata and math.max(12, gap * 3) or gap
-        vg[#vg+1] = VerticalSpan:new{ width = desc_gap }
-        vg[#vg+1] = make_text(display_desc, face_normal, "justify")
+        local desc_gap = has_metadata and fs or gap
+        table.insert(vg_components, VerticalSpan:new{ width = desc_gap })
+        table.insert(vg_components, make_text(display_desc, face_normal, "justify"))
     end
 
     -- ── buttons ──────────────────────────────────────────────────────────────
@@ -345,7 +278,7 @@ function XRayBottomPopup:init()
     end
 
     -- C. Find Mentions button
-    if mentions_enabled then
+    if mentions_enabled and not e.is_timeline then
         local right_btn = make_btn(get_loc_t("find_mentions", "Find Mentions"), function()
             UIManager:close(self)
             if plugin then
@@ -365,20 +298,22 @@ function XRayBottomPopup:init()
         for _, btn in ipairs(active_btns) do
             row_h = math.max(row_h, btn:getSize().h)
         end
-        btn_row = HorizontalGroup:new{ align = "center" }
+        local btn_components = { align = "center" }
         local btn_w = math.floor(inner_w / #active_btns)
-        for i, btn in ipairs(active_btns) do
-            btn_row[i] = LeftContainer:new{
+        for _, btn in ipairs(active_btns) do
+            table.insert(btn_components, LeftContainer:new{
                 dimen = Geom:new{ w = btn_w, h = row_h },
                 btn,
-            }
+            })
         end
+        btn_row = HorizontalGroup:new(btn_components)
     end
 
     if btn_row then
-        vg[#vg+1] = VerticalSpan:new{ width = math.max(28, gap * 6) }
-        vg[#vg+1] = btn_row
+        table.insert(vg_components, btn_row)
     end
+
+    local vg = VerticalGroup:new(vg_components)
 
     -- ── frame: line flush on top, then padded content ─────────────────────
     local line_h    = (Size.line and Size.line.thick) or 2
@@ -388,7 +323,7 @@ function XRayBottomPopup:init()
     }
 
     local pad_top_px    = math.floor(fs * 0.55)
-    local pad_bottom_px = math.floor(fs * 0.35)
+    local pad_bottom_px = math.floor(fs * 0.85)
     if Device:isAndroid() then
         -- Add a safe area inset at the bottom for rounded screens and gesture bar
         local safe_bottom = 20
@@ -398,18 +333,20 @@ function XRayBottomPopup:init()
         pad_bottom_px = pad_bottom_px + safe_bottom
     end
 
-    local outer_vg = VerticalGroup:new{ align = "left" }
-    outer_vg[1] = separator
-    outer_vg[2] = FrameContainer:new{
-        background     = Blitbuffer.COLOR_WHITE,
-        bordersize     = 0,
-        radius         = 0,
-        padding_top    = pad_top_px,
-        padding_bottom = pad_bottom_px,
-        padding_left   = pad,
-        padding_right  = pad,
-        width          = sw,
-        vg,
+    local outer_vg = VerticalGroup:new{
+        align = "left",
+        separator,
+        FrameContainer:new{
+            background     = Blitbuffer.COLOR_WHITE,
+            bordersize     = 0,
+            radius         = 0,
+            padding_top    = pad_top_px,
+            padding_bottom = pad_bottom_px,
+            padding_left   = pad,
+            padding_right  = pad,
+            width          = sw,
+            vg,
+        }
     }
 
     self.popup_frame = FrameContainer:new{
@@ -430,11 +367,17 @@ function XRayBottomPopup:init()
     self.ges_events = {
         TapOutside = {
             GestureRange:new{
-                ges   = "tap",
-                range = Geom:new{ x = 0, y = 0, w = sw, h = popup_y },
+                ges     = "tap",
+                range   = Geom:new{ x = 0, y = 0, w = sw, h = popup_y },
             },
         },
     }
+
+    if Device.hasKeys and Device:hasKeys() then
+        self.key_events = {
+            Close = { { Device.input.group.Back } },
+        }
+    end
 
     local BottomContainer = require("ui/widget/container/bottomcontainer")
     self[1] = BottomContainer:new{
@@ -444,6 +387,11 @@ function XRayBottomPopup:init()
 end
 
 function XRayBottomPopup:onTapOutside()
+    UIManager:close(self)
+    return true
+end
+
+function XRayBottomPopup:onClose()
     UIManager:close(self)
     return true
 end
@@ -486,7 +434,7 @@ local function showBottomPopup(plugin, entity)
         normalized.role = normalized.category
     end
 
-    local fs  = _getPopupFontSize()
+    local fs  = _getPopupFontSize(plugin)
     local pad = 28  -- default
     if G_reader_settings then
         pad = G_reader_settings:readSetting("xray_popup_margin") or pad
@@ -583,6 +531,10 @@ function M:showLanguageSelection()
         hu = "Magyar",
         nl = "Nederlands",
         pl = "Polski",
+        id = "Bahasa Indonesia",
+        ar = "العربية",
+        it = "Italiano",
+        sr = "Српски",
     }
     
     local langs = self.loc and self.loc.available_languages or { "en", "de", "fr", "ru", "zh_CN", "tr", "pt_br", "es", "uk", "hu" }
@@ -595,7 +547,7 @@ function M:showLanguageSelection()
     end
     
     local dialog_title = (self.loc and self.loc:t("menu_language")) or "Language Selection"
-    self.ldlg = Menu:new{
+    self.ldlg = self:newMenu("ldlg", {
         title = dialog_title,
         item_table = items,
         is_borderless = true,
@@ -604,7 +556,7 @@ function M:showLanguageSelection()
         on_close_callback = function()
             self.ldlg = nil
         end
-    }
+    })
     UIManager:show(self.ldlg)
 end
 
@@ -615,7 +567,7 @@ function M:resolveLanguage(code)
             supported[c] = 1
         end
     else
-        supported = { en=1, de=1, fr=1, ru=1, zh_CN=1, tr=1, pt_br=1, es=1, uk=1, hu=1, nl=1, pl=1 }
+        supported = { en=1, de=1, fr=1, ru=1, zh_CN=1, tr=1, pt_br=1, es=1, uk=1, hu=1, nl=1, pl=1, id=1, ar=1, sr=1 }
     end
     
     if code == "auto" or not code then
@@ -648,6 +600,38 @@ function M:resolveLanguage(code)
         return self:resolveLanguage("auto")
     end
     return code or "en"
+end
+
+function M:isRTL()
+    local lang = self.ai_helper and self.ai_helper.current_language
+    if not lang and self.ai_helper and self.ai_helper.settings then
+        lang = self:resolveLanguage(self.ai_helper.settings.language)
+    end
+    return lang == "ar"
+end
+
+function M:isXRayUIActive()
+    return self._menu_creating or self.xray_menu or self.char_menu or self.loc_menu or self.timeline_menu 
+        or self.hf_menu or self.terms_menu or self.ldlg or self.active_related_menu or self.length_presets_menu
+end
+
+function M:newMenu(var_name, args)
+    self._menu_creating = true
+    plugin_instance = self
+    
+    local orig_on_close = args.on_close_callback
+    args.on_close_callback = function()
+        if orig_on_close then
+            orig_on_close()
+        end
+        if var_name then
+            self[var_name] = nil
+        end
+    end
+    
+    local menu = Menu:new(args)
+    self._menu_creating = nil
+    return menu
 end
 
 function M:applyLanguageLogic()
@@ -693,6 +677,10 @@ function M:checkBookLanguageMatch()
         hu = "Magyar",
         nl = "Nederlands",
         pl = "Polski",
+        id = "Bahasa Indonesia",
+        ar = "العربية",
+        it = "Italiano",
+        sr = "Српски",
     }
     
     local supported = {}
@@ -711,6 +699,7 @@ function M:checkBookLanguageMatch()
     local current_lang = self.loc:getLanguage()
     if lang == current_lang then return end
     
+    self.suggestion_dismissed = self.suggestion_dismissed or {}
     if self.suggestion_dismissed[self.ui.document.file] then return end
     
     -- Check if we should ignore this book (from cache)
@@ -844,7 +833,30 @@ function M:showCharacters()
     local items = {}
     if #self.characters > 0 then
         table.insert(items, { text = "⌕ " .. self.loc:t("search_character"), callback = function() self:showCharacterSearch() end })
-        table.insert(items, { text = "⋈ " .. (self.loc:t("merge_duplicates") or "Merge Duplicates..."), callback = function() self:showMergeFlow(self.characters, "characters") end })
+        table.insert(items, { text = "⋈ " .. (self.loc:t("merge_duplicates") or "Merge Duplicates..."), callback = function()
+            local ButtonDialog = require("ui/widget/buttondialog")
+            local merge_dialog
+            merge_dialog = ButtonDialog:new{
+                title = self.loc:t("merge_duplicates") or "Merge Duplicates",
+                buttons = {{
+                    {
+                        text = "✦ " .. (self.loc:t("ai_scan") or "AI Scan"),
+                        callback = function()
+                            UIManager:close(merge_dialog)
+                            self:showAIFindDuplicatesFlow(self.characters, "characters", self.loc:t("entity_label_characters") or "characters")
+                        end
+                    },
+                    {
+                        text = self.loc:t("manual_pick") or "Manual Pick",
+                        callback = function()
+                            UIManager:close(merge_dialog)
+                            self:showMergeFlow(self.characters, "characters")
+                        end
+                    }
+                }}
+            }
+            UIManager:show(merge_dialog)
+        end })
     end
     table.insert(items, { text = "✚ " .. (self.loc:t("menu_fetch_more_chars") or "Fetch More Characters"), keep_menu_open = true, callback = function() self:fetchMoreCharacters() end, separator = #self.characters > 0 })
     for _, char in ipairs(self.characters) do
@@ -871,7 +883,7 @@ function M:showCharacters()
         self.char_menu = nil
     end
 
-    self.char_menu = Menu:new{
+    self.char_menu = self:newMenu("char_menu", {
         title = self.loc:t("menu_characters") .. " (" .. #self.characters .. ")",
         item_table = items,
         is_borderless = true,
@@ -881,28 +893,30 @@ function M:showCharacters()
             if self.is_cancelled then return end
             self:showFullXRayMenu() 
         end,
-    }
+    })
     UIManager:show(self.char_menu)
 
     UIManager:scheduleIn(0.3, function()
         if self.destroyed then return end
-        if self.pending_duplicate_review and self.pending_duplicate_review.characters then
-            local pairs = self.pending_duplicate_review.characters
+        if self.pending_duplicate_review and self.pending_duplicate_review.characters and #self.pending_duplicate_review.characters > 0 then
+            local pairs = self:filterValidDuplicatePairs(self.characters, self.pending_duplicate_review.characters)
             self.pending_duplicate_review.characters = nil
-            local ConfirmBox = require("ui/widget/confirmbox")
-            UIManager:show(ConfirmBox:new{
-                text = string.format(
-                    self.loc:t("pending_duplicates_prompt") or
-                    "AI found %d possible duplicate character(s) from the last fetch. Review now?",
-                    #pairs
-                ),
-                ok_text     = self.loc:t("review") or "Review",
-                cancel_text = self.loc:t("later")  or "Later",
-                ok_callback = function()
-                    self:showAIFindDuplicatesFlow(self.characters, "characters",
-                        self.loc:t("entity_label_characters") or "characters")
-                end,
-            })
+            if #pairs > 0 then
+                local ConfirmBox = require("ui/widget/confirmbox")
+                UIManager:show(ConfirmBox:new{
+                    text = string.format(
+                        self.loc:t("pending_duplicates_prompt") or
+                        "AI found %d possible duplicate character(s) from the last fetch. Review now?",
+                        #pairs
+                    ),
+                    ok_text     = self.loc:t("review") or "Review",
+                    cancel_text = self.loc:t("later")  or "Later",
+                    ok_callback = function()
+                        self:log("XRayPlugin: User chose to review pending " .. tostring(#pairs) .. " duplicate(s) for characters")
+                        self:walkDuplicatePairs(self.characters, "characters", pairs)
+                    end,
+                })
+            end
         end
     end)
 end
@@ -1040,13 +1054,13 @@ function M:showRelatedEntities(related, opts)
         })
     end
     
-    self.active_related_menu = Menu:new{
+    self.active_related_menu = self:newMenu("active_related_menu", {
         title = self.loc:t("linked_entries") or "Linked Entries",
         item_table = items,
         on_close_callback = function()
             self.active_related_menu = nil
         end
-    }
+    })
     UIManager:show(self.active_related_menu)
 end
 
@@ -1055,7 +1069,7 @@ function M:showCharacterDetails(character, opts)
         showBottomPopup(self, character)
         return
     end
-    local fs = _getPopupFontSize()
+    local fs = _getPopupFontSize(self)
     local border_window = (Size.border and Size.border.window) or 1
     local padding_button = (Size.padding and Size.padding.button) or 10
     local padding_default = (Size.padding and Size.padding.default) or 10
@@ -1065,15 +1079,16 @@ function M:showCharacterDetails(character, opts)
     local buttontable_width = dialog_width - 2 * border_window - 2 * padding_button
     local title_group_width = buttontable_width - 2 * (padding_default + margin_default)
 
-    local vg = VerticalGroup:new{ align = "left" }
+    local align = self:isRTL() and "right" or "left"
+    local vg_components = { align = align }
 
     -- 1. Bold Name (no label)
-    table.insert(vg, TextBoxWidget:new{
+    table.insert(vg_components, TextBoxWidget:new{
         text = character.name or "???",
         face = Font:getFace("cfont", fs),
         width = title_group_width,
         bold = true,
-        alignment = "left",
+        alignment = align,
     })
 
     -- 2. Aliases (with label, if present)
@@ -1088,12 +1103,12 @@ function M:showCharacterDetails(character, opts)
         end
     end
     if #meaningful_aliases > 0 then
-        table.insert(vg, VerticalSpan:new{ width = math.max(6, math.floor(fs * 0.3)) })
-        table.insert(vg, TextBoxWidget:new{
+        table.insert(vg_components, VerticalSpan:new{ width = math.max(6, math.floor(fs * 0.3)) })
+        table.insert(vg_components, TextBoxWidget:new{
             text = (self.loc:t("label_aliases") or "ALIASES") .. ": " .. table.concat(meaningful_aliases, ", "),
             face = Font:getFace("cfont", math.max(12, fs - 4)),
             width = title_group_width,
-            alignment = "left",
+            alignment = align,
         })
     end
 
@@ -1109,31 +1124,31 @@ function M:showCharacterDetails(character, opts)
         table.insert(attrs, character.gender)
     end
     if #attrs > 0 then
-        table.insert(vg, VerticalSpan:new{ width = math.max(6, math.floor(fs * 0.3)) })
-        table.insert(vg, TextBoxWidget:new{
+        table.insert(vg_components, VerticalSpan:new{ width = math.max(6, math.floor(fs * 0.3)) })
+        table.insert(vg_components, TextBoxWidget:new{
             text = table.concat(attrs, " | "),
             face = Font:getFace("cfont", math.max(12, fs - 4)),
             width = title_group_width,
-            alignment = "left",
+            alignment = align,
         })
     end
 
     -- 4. AI Reasoning (if present)
     if character.ai_reasoning then
-        table.insert(vg, VerticalSpan:new{ width = math.max(6, math.floor(fs * 0.3)) })
-        table.insert(vg, TextBoxWidget:new{
+        table.insert(vg_components, VerticalSpan:new{ width = math.max(6, math.floor(fs * 0.3)) })
+        table.insert(vg_components, TextBoxWidget:new{
             text = "[" .. (self.loc:t("label_reasoning") or "AI REASONING") .. "]",
             face = Font:getFace("cfont", fs),
             width = title_group_width,
             bold = true,
-            alignment = "left",
+            alignment = align,
         })
-        table.insert(vg, VerticalSpan:new{ width = math.max(4, math.floor(fs * 0.2)) })
-        table.insert(vg, TextBoxWidget:new{
+        table.insert(vg_components, VerticalSpan:new{ width = math.max(4, math.floor(fs * 0.2)) })
+        table.insert(vg_components, TextBoxWidget:new{
             text = character.ai_reasoning,
             face = Font:getFace("cfont", fs),
             width = title_group_width,
-            alignment = "left",
+            alignment = align,
         })
     end
 
@@ -1151,14 +1166,16 @@ function M:showCharacterDetails(character, opts)
             end
             display_desc = display_desc .. " ..."
         end
-        table.insert(vg, VerticalSpan:new{ width = math.max(6, math.floor(fs * 0.3)) })
-        table.insert(vg, TextBoxWidget:new{
+        table.insert(vg_components, VerticalSpan:new{ width = math.max(6, math.floor(fs * 0.3)) })
+        table.insert(vg_components, TextBoxWidget:new{
             text = display_desc,
             face = Font:getFace("cfont", fs),
             width = title_group_width,
-            alignment = "left",
+            alignment = align,
         })
     end
+
+    local vg = VerticalGroup:new(vg_components)
 
     local linked_enabled = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.linked_entries_enabled ~= false
     local related = linked_enabled and self:findRelatedEntities(resolved_desc or "", character.name) or {}
@@ -1270,7 +1287,7 @@ function M:showLocationDetails(loc_item, opts)
         showBottomPopup(self, loc_item)
         return
     end
-    local fs = _getPopupFontSize()
+    local fs = _getPopupFontSize(self)
     local border_window = (Size.border and Size.border.window) or 1
     local padding_button = (Size.padding and Size.padding.button) or 10
     local padding_default = (Size.padding and Size.padding.default) or 10
@@ -1280,15 +1297,16 @@ function M:showLocationDetails(loc_item, opts)
     local buttontable_width = dialog_width - 2 * border_window - 2 * padding_button
     local title_group_width = buttontable_width - 2 * (padding_default + margin_default)
 
-    local vg = VerticalGroup:new{ align = "left" }
+    local align = self:isRTL() and "right" or "left"
+    local vg_components = { align = align }
 
     -- 1. Bold Name (no label)
-    table.insert(vg, TextBoxWidget:new{
+    table.insert(vg_components, TextBoxWidget:new{
         text = loc_item.name or "???",
         face = Font:getFace("cfont", fs),
         width = title_group_width,
         bold = true,
-        alignment = "left",
+        alignment = align,
     })
 
     -- 2. Description (no label)
@@ -1306,14 +1324,16 @@ function M:showLocationDetails(loc_item, opts)
             end
             display_desc = display_desc .. " ..."
         end
-        table.insert(vg, VerticalSpan:new{ width = math.max(6, math.floor(fs * 0.3)) })
-        table.insert(vg, TextBoxWidget:new{
+        table.insert(vg_components, VerticalSpan:new{ width = math.max(6, math.floor(fs * 0.3)) })
+        table.insert(vg_components, TextBoxWidget:new{
             text = display_desc,
             face = Font:getFace("cfont", fs),
             width = title_group_width,
-            alignment = "left",
+            alignment = align,
         })
     end
+
+    local vg = VerticalGroup:new(vg_components)
 
     local linked_enabled = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.linked_entries_enabled ~= false
     local related = linked_enabled and self:findRelatedEntities(desc, loc_item.name) or {}
@@ -1415,7 +1435,7 @@ function M:showTermDetails(term, opts)
         showBottomPopup(self, term)
         return
     end
-    local fs = _getPopupFontSize()
+    local fs = _getPopupFontSize(self)
     local border_window = (Size.border and Size.border.window) or 1
     local padding_button = (Size.padding and Size.padding.button) or 10
     local padding_default = (Size.padding and Size.padding.default) or 10
@@ -1425,15 +1445,16 @@ function M:showTermDetails(term, opts)
     local buttontable_width = dialog_width - 2 * border_window - 2 * padding_button
     local title_group_width = buttontable_width - 2 * (padding_default + margin_default)
 
-    local vg = VerticalGroup:new{ align = "left" }
+    local align = self:isRTL() and "right" or "left"
+    local vg_components = { align = align }
 
     -- 1. Bold Name (no label)
-    table.insert(vg, TextBoxWidget:new{
+    table.insert(vg_components, TextBoxWidget:new{
         text = term.name or "???",
         face = Font:getFace("cfont", fs),
         width = title_group_width,
         bold = true,
-        alignment = "left",
+        alignment = align,
     })
 
     -- 2. Aliases (with label, if present)
@@ -1448,16 +1469,16 @@ function M:showTermDetails(term, opts)
         end
     end
     if #meaningful_aliases > 0 then
-        table.insert(vg, VerticalSpan:new{ width = math.max(6, math.floor(fs * 0.3)) })
-        table.insert(vg, TextBoxWidget:new{
+        table.insert(vg_components, VerticalSpan:new{ width = math.max(6, math.floor(fs * 0.3)) })
+        table.insert(vg_components, TextBoxWidget:new{
             text = (self.loc:t("label_aliases") or "ALIASES") .. ": " .. table.concat(meaningful_aliases, ", "),
             face = Font:getFace("cfont", math.max(12, fs - 4)),
             width = title_group_width,
-            alignment = "left",
+            alignment = align,
         })
     end
 
-    -- 3. Combined attributes (expanded, category) - smaller size
+    -- 3. Combined attributes
     local attrs = {}
     if term.expanded and term.expanded ~= "" and term.expanded ~= term.name then
         table.insert(attrs, term.expanded)
@@ -1466,12 +1487,12 @@ function M:showTermDetails(term, opts)
         table.insert(attrs, term.category)
     end
     if #attrs > 0 then
-        table.insert(vg, VerticalSpan:new{ width = math.max(6, math.floor(fs * 0.3)) })
-        table.insert(vg, TextBoxWidget:new{
+        table.insert(vg_components, VerticalSpan:new{ width = math.max(6, math.floor(fs * 0.3)) })
+        table.insert(vg_components, TextBoxWidget:new{
             text = table.concat(attrs, " | "),
             face = Font:getFace("cfont", math.max(12, fs - 4)),
             width = title_group_width,
-            alignment = "left",
+            alignment = align,
         })
     end
 
@@ -1489,27 +1510,29 @@ function M:showTermDetails(term, opts)
             end
             display_definition = display_definition .. " ..."
         end
-        table.insert(vg, VerticalSpan:new{ width = math.max(6, math.floor(fs * 0.3)) })
-        table.insert(vg, TextBoxWidget:new{
+        table.insert(vg_components, VerticalSpan:new{ width = math.max(6, math.floor(fs * 0.3)) })
+        table.insert(vg_components, TextBoxWidget:new{
             text = display_definition,
             face = Font:getFace("cfont", fs),
             width = title_group_width,
-            alignment = "left",
+            alignment = align,
         })
     end
 
-    -- 5. Low confidence warning (if present)
+    -- 5. Low confidence warning
     if opts and opts.low_confidence then
         local warning = self.loc:t("low_conf_match", term.name)
             or string.format("Partial match — showing '%s' for your query. Tap below to fetch the exact term.", term.name)
-        table.insert(vg, VerticalSpan:new{ width = math.max(6, math.floor(fs * 0.3)) })
-        table.insert(vg, TextBoxWidget:new{
+        table.insert(vg_components, VerticalSpan:new{ width = math.max(6, math.floor(fs * 0.3)) })
+        table.insert(vg_components, TextBoxWidget:new{
             text = warning,
             face = Font:getFace("cfont", fs),
             width = title_group_width,
-            alignment = "left",
+            alignment = align,
         })
     end
+
+    local vg = VerticalGroup:new(vg_components)
 
     local linked_enabled = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.linked_entries_enabled ~= false
     local related = linked_enabled and self:findRelatedEntities(term.definition or "", term.name) or {}
@@ -1562,9 +1585,7 @@ function M:showTermDetails(term, opts)
         end
     else
         if opts and opts.low_confidence then
-            buttons = {
-                get_relookup_row()
-            }
+            buttons = { get_relookup_row() }
             if mentions_enabled then
                 table.insert(buttons, {
                     {
@@ -1679,7 +1700,7 @@ function M:showTerms()
         end
     end
     
-    self.terms_menu = Menu:new{
+    self.terms_menu = self:newMenu("terms_menu", {
         title = (self.loc:t("menu_terms") or "Glossary") .. " (" .. #self.terms .. ")",
         item_table = items,
         is_borderless = true,
@@ -1689,7 +1710,7 @@ function M:showTerms()
             if self.is_cancelled then return end
             self:showFullXRayMenu() 
         end,
-    }
+    })
     UIManager:show(self.terms_menu)
 end
 
@@ -2019,9 +2040,225 @@ function M:showLinkedEntriesSettings()
     showSettings()
 end
 
+function M:filterValidDuplicatePairs(list, pairs)
+    if not pairs or not list then return {} end
+    if not self.book_data then
+        if not self.cache_manager then
+            self.cache_manager = require(plugin_path .. "xray_cachemanager"):new()
+        end
+        self.book_data = self.cache_manager:loadCache(self.ui.document.file) or {}
+    end
+    local rejected_pairs = self.book_data.rejected_merge_pairs or {}
+    local filtered = {}
+    for _, pair in ipairs(pairs) do
+        if pair.primary and pair.secondary then
+            local p_name = pair.primary:lower()
+            local s_name = pair.secondary:lower()
+            local key = p_name < s_name and (p_name .. "|" .. s_name) or (s_name .. "|" .. p_name)
+            if not rejected_pairs[key] then
+                local primary_item, secondary_item
+                for _, it in ipairs(list) do
+                    if it.name then
+                        if it.name:lower() == p_name then primary_item = it end
+                        if it.name:lower() == s_name then secondary_item = it end
+                    end
+                end
+                if primary_item and secondary_item then
+                    table.insert(filtered, pair)
+                end
+            end
+        end
+    end
+    return filtered
+end
+
+function M:walkDuplicatePairs(list, list_name, pairs_found)
+    local InfoMessage = require("ui/widget/infomessage")
+    local ButtonDialog = require("ui/widget/buttondialog")
+
+    self:log("XRayPlugin: Walking " .. tostring(pairs_found and #pairs_found or 0) .. " duplicate pair(s) for " .. tostring(list_name))
+
+    if not pairs_found or #pairs_found == 0 then
+        UIManager:show(InfoMessage:new{
+            text = self.loc:t("no_duplicates_found") or "No duplicates found.",
+            timeout = 3
+        })
+        return
+    end
+
+    if not self.book_data then
+        if not self.cache_manager then
+            self.cache_manager = require(plugin_path .. "xray_cachemanager"):new()
+        end
+        self.book_data = self.cache_manager:loadCache(self.ui.document.file) or {}
+    end
+
+    pairs_found = self:filterValidDuplicatePairs(list, pairs_found)
+
+    self:log("XRayPlugin: " .. tostring(#pairs_found) .. " pair(s) remain after filtering rejected/non-existent for " .. tostring(list_name))
+
+    if #pairs_found == 0 then
+        UIManager:show(InfoMessage:new{
+            text = self.loc:t("no_duplicates_found") or "No duplicates found.",
+            timeout = 3
+        })
+        return
+    end
+
+    -- Walk through pairs one at a time
+    local pair_idx = 1
+    local merge_count = 0
+
+    local function saveAndRefresh()
+        if merge_count == 0 then return end
+        if not self.cache_manager then
+            self.cache_manager = require(plugin_path .. "xray_cachemanager"):new()
+        end
+        if not self.book_data then
+            self.book_data = self.cache_manager:loadCache(self.ui.document.file) or {}
+        end
+        local cache = self.book_data
+        if list_name == "characters" then
+            cache.characters = list
+        elseif list_name == "locations" then
+            cache.locations = list
+        end
+        self.cache_manager:asyncSaveCache(self.ui.document.file, cache)
+        -- Clear normalized lookup caches
+        for _, it in ipairs(list) do
+            it._norm_name = nil
+            it._norm_aliases = nil
+        end
+    end
+
+    local function processNextPair()
+        if pair_idx > #pairs_found then
+            saveAndRefresh()
+            local msg = merge_count > 0
+                and self.loc:t("ai_merged_n", merge_count)
+                or  (self.loc:t("no_merges_performed") or "No merges performed.")
+            UIManager:show(InfoMessage:new{ text = msg, timeout = 3 })
+            self:log("XRayPlugin: Duplicate walk complete. " .. tostring(merge_count) .. " merge(s) performed.")
+            if list_name == "characters" then self:showCharacters()
+            elseif list_name == "locations" then self:showLocations() end
+            return
+        end
+
+        local pair = pairs_found[pair_idx]
+        pair_idx = pair_idx + 1
+
+        -- Validate both entries still exist (earlier merge may have removed one)
+        local primary_item, secondary_item
+        for _, it in ipairs(list) do
+            if it.name and it.name:lower() == (pair.primary or ""):lower() then
+                primary_item = it
+            end
+            if it.name and it.name:lower() == (pair.secondary or ""):lower() then
+                secondary_item = it
+            end
+        end
+
+        if not primary_item or not secondary_item then
+            processNextPair()  -- skip silently
+            return
+        end
+
+        local confirm_text = string.format(
+            "%s\n\nKEEP:   %s\nREMOVE: %s\n\n%s: %s",
+            self.loc:t("ai_merge_confirm_title") or "AI Duplicate Detected",
+            pair.primary, pair.secondary,
+            self.loc:t("reason") or "Reason",
+            pair.reason or "Similar entries"
+        )
+
+        local confirm_dialog
+        confirm_dialog = ButtonDialog:new{
+            title = confirm_text,
+            buttons = {{
+                {
+                    text = self.loc:t("merge_button") or "Merge",
+                    callback = function()
+                        self:log("XRayPlugin: Merging duplicate pair: keep '" .. tostring(pair.primary) .. "', remove '" .. tostring(pair.secondary) .. "'")
+                        UIManager:close(confirm_dialog)
+                        local p_desc = primary_item.description or primary_item.biography
+                        local s_desc = secondary_item.description or secondary_item.biography
+                        if p_desc and s_desc then
+                            local wait_msg = InfoMessage:new{ text = self.loc:t("merging_smartly") or "Merging...", timeout = 120 }
+                            UIManager:show(wait_msg)
+                            UIManager:scheduleIn(0.1, function()
+                                if self.destroyed then return end
+                                if self.ai_helper then self.ai_helper:setTrapWidget(wait_msg) end
+                                local ai_desc = self.ai_helper:mergeDescriptionsWithAI(p_desc, s_desc)
+                                if self.ai_helper then self.ai_helper:resetTrapWidget() end
+                                UIManager:close(wait_msg)
+                                self:mergeEntries(list, pair.primary, pair.secondary, ai_desc)
+                                merge_count = merge_count + 1
+                                processNextPair()
+                            end)
+                        else
+                            self:mergeEntries(list, pair.primary, pair.secondary, nil)
+                            merge_count = merge_count + 1
+                            processNextPair()
+                        end
+                    end
+                },
+                {
+                    text = self.loc:t("skip") or "Skip",
+                    callback = function()
+                        self:log("XRayPlugin: Skipping pair '" .. tostring(pair.primary) .. "' / '" .. tostring(pair.secondary) .. "'")
+                        UIManager:close(confirm_dialog)
+                        processNextPair()
+                    end
+                },
+                {
+                    text = self.loc:t("reject_pair") or "Reject",
+                    callback = function()
+                        self:log("XRayPlugin: Rejecting pair '" .. tostring(pair.primary) .. "' / '" .. tostring(pair.secondary) .. "'")
+                        UIManager:close(confirm_dialog)
+                        if not self.book_data then
+                            if not self.cache_manager then
+                                self.cache_manager = require(plugin_path .. "xray_cachemanager"):new()
+                            end
+                            self.book_data = self.cache_manager:loadCache(self.ui.document.file) or {}
+                        end
+                        self.book_data.rejected_merge_pairs = self.book_data.rejected_merge_pairs or {}
+                        local p_name = pair.primary:lower()
+                        local s_name = pair.secondary:lower()
+                        local key = p_name < s_name and (p_name .. "|" .. s_name) or (s_name .. "|" .. p_name)
+                        self.book_data.rejected_merge_pairs[key] = true
+                        
+                        -- Save cache to persist rejection
+                        if not self.cache_manager then
+                            self.cache_manager = require(plugin_path .. "xray_cachemanager"):new()
+                        end
+                        self.cache_manager:asyncSaveCache(self.ui.document.file, self.book_data)
+                        
+                        UIManager:show(InfoMessage:new{ text = self.loc:t("pair_rejected") or "Pair marked as not a duplicate.", timeout = 2 })
+                        processNextPair()
+                    end
+                },
+                {
+                    text = self.loc:t("stop") or "Stop",
+                    callback = function()
+                        self:log("XRayPlugin: User stopped duplicate walk after " .. tostring(merge_count) .. " merge(s)")
+                        UIManager:close(confirm_dialog)
+                        pair_idx = #pairs_found + 1
+                        processNextPair()
+                    end
+                }
+            }}
+        }
+        UIManager:show(confirm_dialog)
+    end
+
+    processNextPair()
+end
+
 function M:showAIFindDuplicatesFlow(list, list_name, entity_label)
     local InfoMessage = require("ui/widget/infomessage")
     local ButtonDialog = require("ui/widget/buttondialog")
+
+    self:log("XRayPlugin: AI duplicate scan started for " .. tostring(list_name))
 
     if not self.ai_helper or not self.ai_helper:hasApiKey() then
         UIManager:show(InfoMessage:new{
@@ -2053,6 +2290,7 @@ function M:showAIFindDuplicatesFlow(list, list_name, entity_label)
         UIManager:close(wait_msg)
 
         if not pairs_found then
+            self:log("XRayPlugin: AI duplicate scan failed for " .. tostring(list_name) .. ": " .. tostring(err_msg))
             UIManager:show(InfoMessage:new{
                 text = (self.loc:t("ai_error") or "AI Error: ") .. tostring(err_msg),
                 timeout = 4
@@ -2060,119 +2298,8 @@ function M:showAIFindDuplicatesFlow(list, list_name, entity_label)
             return
         end
 
-        if #pairs_found == 0 then
-            UIManager:show(InfoMessage:new{
-                text = self.loc:t("no_duplicates_found") or "No duplicates found.",
-                timeout = 3
-            })
-            return
-        end
-
-        -- Walk through pairs one at a time
-        local pair_idx = 1
-        local merge_count = 0
-
-        local function saveAndRefresh()
-            if merge_count == 0 then return end
-            if not self.cache_manager then
-                self.cache_manager = require(plugin_path .. "xray_cachemanager"):new()
-            end
-            if not self.book_data then
-                self.book_data = self.cache_manager:loadCache(self.ui.document.file) or {}
-            end
-            local cache = self.book_data
-            if list_name == "characters" then
-                cache.characters = list
-            elseif list_name == "locations" then
-                cache.locations = list
-            end
-            self.cache_manager:asyncSaveCache(self.ui.document.file, cache)
-            -- Clear normalized lookup caches
-            for _, it in ipairs(list) do
-                it._norm_name = nil
-                it._norm_aliases = nil
-            end
-        end
-
-        local function processNextPair()
-            if pair_idx > #pairs_found then
-                saveAndRefresh()
-                local msg = merge_count > 0
-                    and self.loc:t("ai_merged_n", merge_count)
-                    or  (self.loc:t("no_merges_performed") or "No merges performed.")
-                UIManager:show(InfoMessage:new{ text = msg, timeout = 3 })
-                if list_name == "characters" then self:showCharacters()
-                elseif list_name == "locations" then self:showLocations() end
-                return
-            end
-
-            local pair = pairs_found[pair_idx]
-            pair_idx = pair_idx + 1
-
-            -- Validate both entries still exist (earlier merge may have removed one)
-            local primary_item, secondary_item
-            for _, it in ipairs(list) do
-                if it.name and it.name:lower() == (pair.primary or ""):lower() then
-                    primary_item = it
-                end
-                if it.name and it.name:lower() == (pair.secondary or ""):lower() then
-                    secondary_item = it
-                end
-            end
-
-            if not primary_item or not secondary_item then
-                processNextPair()  -- skip silently
-                return
-            end
-
-            local confirm_text = string.format(
-                "%s\n\nKEEP:   %s\nREMOVE: %s\n\n%s: %s",
-                self.loc:t("ai_merge_confirm_title") or "AI Duplicate Detected",
-                pair.primary, pair.secondary,
-                self.loc:t("reason") or "Reason",
-                pair.reason or "Similar entries"
-            )
-
-            local confirm_dialog
-            confirm_dialog = ButtonDialog:new{
-                title = confirm_text,
-                buttons = {{
-                    {
-                        text = self.loc:t("merge_button") or "Merge",
-                        callback = function()
-                            UIManager:close(confirm_dialog)
-                            local ai_desc = nil
-                            local p_desc = primary_item.description or primary_item.biography
-                            local s_desc = secondary_item.description or secondary_item.biography
-                            if p_desc and s_desc then
-                                ai_desc = self.ai_helper:mergeDescriptionsWithAI(p_desc, s_desc)
-                            end
-                            self:mergeEntries(list, pair.primary, pair.secondary, ai_desc)
-                            merge_count = merge_count + 1
-                            processNextPair()
-                        end
-                    },
-                    {
-                        text = self.loc:t("skip") or "Skip",
-                        callback = function()
-                            UIManager:close(confirm_dialog)
-                            processNextPair()
-                        end
-                    },
-                    {
-                        text = self.loc:t("stop") or "Stop",
-                        callback = function()
-                            UIManager:close(confirm_dialog)
-                            pair_idx = #pairs_found + 1
-                            processNextPair()
-                        end
-                    }
-                }}
-            }
-            UIManager:show(confirm_dialog)
-        end
-
-        processNextPair()
+        self:log("XRayPlugin: AI duplicate scan found " .. tostring(#pairs_found) .. " pair(s) for " .. tostring(list_name))
+        self:walkDuplicatePairs(list, list_name, pairs_found)
     end)
 end
 
@@ -2214,7 +2341,9 @@ function M:showMergeFlow(list, list_name)
                                         end
                                         
                                         if sec_item and primary_item.description and sec_item.description then
+                                            if self.ai_helper then self.ai_helper:setTrapWidget(wait_msg) end
                                             ai_merged_desc = self.ai_helper:mergeDescriptionsWithAI(primary_item.description, sec_item.description)
+                                            if self.ai_helper then self.ai_helper:resetTrapWidget() end
                                         end
                                     end
                                     
@@ -2322,6 +2451,7 @@ function M:showAutoUpdateSettings()
         local is_enabled = self.auto_fetch_enabled
         local current_cooldown = self.ai_helper.settings and self.ai_helper.settings.auto_fetch_cooldown or 300
         local page_interval = self.ai_helper.settings and self.ai_helper.settings.auto_fetch_page_interval
+        local btn_align = self:isRTL() and "right" or "left"
         
         info_dialog = ButtonDialog:new{
             title = (self.loc:t("menu_auto_update_frequency") or "Auto X-Ray Settings") .. "\n\n" .. (self.loc:t("auto_update_freq_label") or "Background fetching frequency:"),
@@ -2329,7 +2459,7 @@ function M:showAutoUpdateSettings()
                 {
                     {
                         text = (is_enabled and page_interval ~= nil and page_interval > 0 and "[✓] " or "[  ] ") .. (self.loc:t("auto_update_ultra", page_interval or 25) or ("Ultra: checks every " .. (page_interval or 25) .. " pages")),
-                        align = "left",
+                        align = btn_align,
                         callback = function()
                             local SpinWidget = require("ui/widget/spinwidget")
                             local spin_dialog
@@ -2361,10 +2491,10 @@ function M:showAutoUpdateSettings()
                 {
                     {
                         text = (is_enabled and page_interval == nil and current_cooldown == 0 and "[✓] " or "[  ] ") .. (self.loc:t("auto_update_aggressive") or "Aggressive: checks every new chapter"),
-                        align = "left",
+                        align = btn_align,
                         callback = function()
                             self.auto_fetch_enabled = true
-                            self.ai_helper:saveSettings({ auto_fetch_on_chapter = true, auto_fetch_cooldown = 0, auto_fetch_page_interval = nil })
+                            self.ai_helper:saveSettings({ auto_fetch_on_chapter = true, auto_fetch_cooldown = 0 }, { "auto_fetch_page_interval" })
                             UIManager:nextTick(function() showSettings() end)
                         end
                     }
@@ -2372,10 +2502,10 @@ function M:showAutoUpdateSettings()
                 {
                     {
                         text = (is_enabled and current_cooldown == 300 and "[✓] " or "[  ] ") .. (self.loc:t("auto_update_balanced") or "Balanced: checks at most every 5 mins"),
-                        align = "left",
+                        align = btn_align,
                         callback = function()
                             self.auto_fetch_enabled = true
-                            self.ai_helper:saveSettings({ auto_fetch_on_chapter = true, auto_fetch_cooldown = 300, auto_fetch_page_interval = nil })
+                            self.ai_helper:saveSettings({ auto_fetch_on_chapter = true, auto_fetch_cooldown = 300 }, { "auto_fetch_page_interval" })
                             UIManager:nextTick(function() showSettings() end)
                         end
                     }
@@ -2383,10 +2513,10 @@ function M:showAutoUpdateSettings()
                 {
                     {
                         text = (is_enabled and current_cooldown == 900 and "[✓] " or "[  ] ") .. (self.loc:t("auto_update_economical") or "Economical: checks at most every 15 mins"),
-                        align = "left",
+                        align = btn_align,
                         callback = function()
                             self.auto_fetch_enabled = true
-                            self.ai_helper:saveSettings({ auto_fetch_on_chapter = true, auto_fetch_cooldown = 900, auto_fetch_page_interval = nil })
+                            self.ai_helper:saveSettings({ auto_fetch_on_chapter = true, auto_fetch_cooldown = 900 }, { "auto_fetch_page_interval" })
                             UIManager:nextTick(function() showSettings() end)
                         end
                     }
@@ -2394,10 +2524,10 @@ function M:showAutoUpdateSettings()
                 {
                     {
                         text = (is_enabled and current_cooldown == 1800 and "[✓] " or "[  ] ") .. (self.loc:t("auto_update_sparse") or "Sparse: checks at most every 30 mins"),
-                        align = "left",
+                        align = btn_align,
                         callback = function()
                             self.auto_fetch_enabled = true
-                            self.ai_helper:saveSettings({ auto_fetch_on_chapter = true, auto_fetch_cooldown = 1800, auto_fetch_page_interval = nil })
+                            self.ai_helper:saveSettings({ auto_fetch_on_chapter = true, auto_fetch_cooldown = 1800 }, { "auto_fetch_page_interval" })
                             UIManager:nextTick(function() showSettings() end)
                         end
                     }
@@ -2405,10 +2535,10 @@ function M:showAutoUpdateSettings()
                 {
                     {
                         text = (not is_enabled and "[✓] " or "[  ] ") .. (self.loc:t("auto_update_disabled") or "Disabled"),
-                        align = "left",
+                        align = btn_align,
                         callback = function()
                             self.auto_fetch_enabled = false
-                            self.ai_helper:saveSettings({ auto_fetch_on_chapter = false, auto_fetch_page_interval = nil })
+                            self.ai_helper:saveSettings({ auto_fetch_on_chapter = false }, { "auto_fetch_page_interval" })
                             UIManager:nextTick(function() showSettings() end)
                         end
                     }
@@ -2518,11 +2648,11 @@ function M:showDescriptionLengthSettings()
         },
     }
 
-    local menu = Menu:new{
+    self.length_presets_menu = self:newMenu("length_presets_menu", {
         title = self.loc:t("menu_desc_length_settings"),
         item_table = menu_items,
-    }
-    UIManager:show(menu)
+    })
+    UIManager:show(self.length_presets_menu)
 end
 
 function M:showEntityLengthPresets(setting_key, entity_name, is_timeline)
@@ -2547,13 +2677,14 @@ function M:showEntityLengthPresets(setting_key, entity_name, is_timeline)
             { name = self.loc:t("desc_len_v_detailed"), val = is_timeline and 200 or (setting_key == "char_desc_len" and 500 or 300) },
         }
 
+        local btn_align = self:isRTL() and "right" or "left"
         local buttons = {}
         for _, p in ipairs(presets) do
             local label = (current_val == p.val and "[✓] " or "[  ] ") .. p.name
             local pval = p.val
             table.insert(buttons, {{
                 text = label,
-                align = "left",
+                align = btn_align,
                 callback = function()
                     if self.ai_helper then
                         local updates = {}
@@ -2628,7 +2759,30 @@ function M:showLocations()
         return 
     end
     local items = {
-        { text = "⋈ " .. (self.loc:t("merge_duplicates") or "Merge Duplicates..."), callback = function() self:showMergeFlow(self.locations, "locations") end, separator = true },
+        { text = "⋈ " .. (self.loc:t("merge_duplicates") or "Merge Duplicates..."), callback = function()
+            local ButtonDialog = require("ui/widget/buttondialog")
+            local merge_dialog
+            merge_dialog = ButtonDialog:new{
+                title = self.loc:t("merge_duplicates") or "Merge Duplicates",
+                buttons = {{
+                    {
+                        text = "✦ " .. (self.loc:t("ai_scan") or "AI Scan"),
+                        callback = function()
+                            UIManager:close(merge_dialog)
+                            self:showAIFindDuplicatesFlow(self.locations, "locations", self.loc:t("entity_label_locations") or "locations")
+                        end
+                    },
+                    {
+                        text = self.loc:t("manual_pick") or "Manual Pick",
+                        callback = function()
+                            UIManager:close(merge_dialog)
+                            self:showMergeFlow(self.locations, "locations")
+                        end
+                    }
+                }}
+            }
+            UIManager:show(merge_dialog)
+        end, separator = true },
     }
     for _, loc in ipairs(self.locations) do 
         if type(loc) == "table" then
@@ -2653,7 +2807,7 @@ function M:showLocations()
         return
     end
     
-    self.loc_menu = Menu:new{
+    self.loc_menu = self:newMenu("loc_menu", {
         title = self.loc:t("menu_locations"),
         item_table = items,
         is_borderless = true,
@@ -2663,28 +2817,30 @@ function M:showLocations()
             if self.is_cancelled then return end
             self:showFullXRayMenu() 
         end,
-    }
+    })
     UIManager:show(self.loc_menu)
 
     UIManager:scheduleIn(0.3, function()
         if self.destroyed then return end
-        if self.pending_duplicate_review and self.pending_duplicate_review.locations then
-            local pairs = self.pending_duplicate_review.locations
+        if self.pending_duplicate_review and self.pending_duplicate_review.locations and #self.pending_duplicate_review.locations > 0 then
+            local pairs = self:filterValidDuplicatePairs(self.locations, self.pending_duplicate_review.locations)
             self.pending_duplicate_review.locations = nil
-            local ConfirmBox = require("ui/widget/confirmbox")
-            UIManager:show(ConfirmBox:new{
-                text = string.format(
-                    self.loc:t("pending_duplicates_prompt") or
-                    "AI found %d possible duplicate location(s) from the last fetch. Review now?",
-                    #pairs
-                ),
-                ok_text     = self.loc:t("review") or "Review",
-                cancel_text = self.loc:t("later")  or "Later",
-                ok_callback = function()
-                    self:showAIFindDuplicatesFlow(self.locations, "locations",
-                        self.loc:t("entity_label_locations") or "locations")
-                end,
-            })
+            if #pairs > 0 then
+                local ConfirmBox = require("ui/widget/confirmbox")
+                UIManager:show(ConfirmBox:new{
+                    text = string.format(
+                        self.loc:t("pending_duplicates_prompt") or
+                        "AI found %d possible duplicate location(s) from the last fetch. Review now?",
+                        #pairs
+                    ),
+                    ok_text     = self.loc:t("review") or "Review",
+                    cancel_text = self.loc:t("later")  or "Later",
+                    ok_callback = function()
+                        self:log("XRayPlugin: User chose to review pending " .. tostring(#pairs) .. " duplicate(s) for locations")
+                        self:walkDuplicatePairs(self.locations, "locations", pairs)
+                    end,
+                })
+            end
         end
     end)
 end
@@ -2719,6 +2875,412 @@ function M:clearLogs()
     local XRayLogger = require(plugin_path .. "xray_logger")
     XRayLogger:clear()
     UIManager:show(InfoMessage:new{ text = self.loc:t("logs_cleared") or "Logs cleared!", timeout = 3 })
+end
+
+local XRayLogViewer = InputContainer:extend{
+    pages = nil,
+    log_path = nil,
+    current_page = nil,
+    close_label = nil,
+    ui_instance = nil,
+}
+
+function XRayLogViewer:init()
+    local sw = Screen:getWidth()
+    local sh = Screen:getHeight()
+    local Device = require("device")
+
+    local pad = (Size.padding and Size.padding.large) or 12
+    local gap = math.max(4, math.floor(sh * 0.01))
+
+    self.dimen = Geom:new{ x = 0, y = 0, w = sw, h = sh }
+
+    if Device.hasKeys and Device:hasKeys() then
+        self.key_events = {
+            Close = { { Device.input.group.Back } },
+        }
+    end
+
+    self:_rebuild()
+end
+
+function XRayLogViewer:_rebuild()
+    local sw = Screen:getWidth()
+    local sh = Screen:getHeight()
+    local Device = require("device")
+    local pad = (Size.padding and Size.padding.large) or 12
+    local gap = math.max(4, math.floor(sh * 0.01))
+
+    local total_pages = (self.pages and #self.pages) or 1
+    local current_page = self.current_page or total_pages
+    if current_page < 1 then current_page = 1 end
+    if current_page > total_pages then current_page = total_pages end
+    self.current_page = current_page
+
+    local text = (self.pages and self.pages[current_page]) or ""
+
+    -- Title
+    local title_face = Font:getFace("cfont", 22)
+    local title_text = string.format("%s (%d/%d)", (self.ui_instance and self.ui_instance.loc:t("menu_view_log")) or "X-Ray Log", current_page, total_pages)
+    local title_widget = TextBoxWidget:new{
+        text = title_text,
+        face = title_face,
+        width = sw - pad * 2,
+        alignment = "center",
+        bold = true,
+    }
+
+    -- Separator
+    local line_h = (Size.line and Size.line.thick) or 2
+    local separator = LineWidget:new{
+        dimen = Geom:new{ w = sw - pad * 2, h = line_h },
+        background = Blitbuffer.COLOR_DARK_GRAY,
+    }
+
+    -- Resolution of 75% of user's selected book font size
+    local function _getPopupFontSize(plugin)
+        local size
+        if plugin and plugin.ui and plugin.ui.font and plugin.ui.font.configurable then
+            size = plugin.ui.font.configurable.font_size
+        elseif G_reader_settings then
+            size = G_reader_settings:readSetting("cre_font_size")
+                  or G_reader_settings:readSetting("kopt_font_size")
+        end
+        if size then
+            return size
+        end
+        if Screen.scaleBySize then
+            return Screen:scaleBySize(22)
+        end
+        return 22
+    end
+
+    local base_fs = _getPopupFontSize(self.ui_instance and self.ui_instance.plugin)
+    local fs = math.max(12, math.floor(base_fs * 0.75))
+
+    local content_face = Font:getFace("infont", fs)
+        or Font:getFace("smallinfont", fs)
+        or Font:getFace("cfont", fs)
+
+    if not content_face then
+        content_face = Font:getFace("cfont", fs)
+    end
+
+    -- Buttons
+    local HorizontalGroup = require("ui/widget/horizontalgroup")
+    local LeftContainer = require("ui/widget/container/leftcontainer")
+    local btn_face = Font:getFace("cfont", 18)
+    local btn_padding_h = (Size.padding and Size.padding.large) or 12
+    local btn_padding_v = (Size.padding and Size.padding.small) or 4
+
+    local active_btns = {}
+
+    -- Prev Button
+    local prev_btn = Button:new{
+        text = "◀ Prev",
+        face = btn_face,
+        padding_h = btn_padding_h,
+        padding_v = btn_padding_v,
+        margin = 10,
+        radius = 4,
+        bordersize = 2,
+        callback = current_page > 1 and function()
+            self.current_page = current_page - 1
+            UIManager:nextTick(function()
+                self:_rebuild()
+            end)
+        end or nil,
+    }
+    table.insert(active_btns, prev_btn)
+
+    -- Refresh Button
+    local refresh_btn = Button:new{
+        text = "⟳ Refresh",
+        face = btn_face,
+        padding_h = btn_padding_h,
+        padding_v = btn_padding_v,
+        margin = 10,
+        radius = 4,
+        bordersize = 2,
+        callback = function()
+            UIManager:nextTick(function()
+                self:_reloadFromDisk()
+            end)
+        end,
+    }
+    table.insert(active_btns, refresh_btn)
+
+    -- Next Button
+    local next_btn = Button:new{
+        text = "Next ▶",
+        face = btn_face,
+        padding_h = btn_padding_h,
+        padding_v = btn_padding_v,
+        margin = 10,
+        radius = 4,
+        bordersize = 2,
+        callback = current_page < total_pages and function()
+            self.current_page = current_page + 1
+            UIManager:nextTick(function()
+                self:_rebuild()
+            end)
+        end or nil,
+    }
+    table.insert(active_btns, next_btn)
+
+    -- Close Button
+    local close_btn = Button:new{
+        text = self.close_label or "Close",
+        face = btn_face,
+        padding_h = btn_padding_h,
+        padding_v = btn_padding_v,
+        margin = 10,
+        radius = 4,
+        bordersize = 2,
+        callback = function()
+            UIManager:close(self)
+        end,
+    }
+    table.insert(active_btns, close_btn)
+
+    local row_h = math.max(prev_btn:getSize().h, refresh_btn:getSize().h, next_btn:getSize().h, close_btn:getSize().h)
+    local btn_components = { align = "center" }
+    local btn_w = math.floor((sw - pad * 2) / #active_btns)
+    for _, btn in ipairs(active_btns) do
+        table.insert(btn_components, LeftContainer:new{
+            dimen = Geom:new{ w = btn_w, h = row_h },
+            btn,
+        })
+    end
+    local btn_row = HorizontalGroup:new(btn_components)
+
+    local title_h = title_widget:getSize().h
+    local btn_h = btn_row:getSize().h
+
+    local pad_top = math.max(20, pad)
+    local pad_bottom = math.max(20, pad)
+    if Device:isAndroid() then
+        local safe_bottom = 20
+        if Screen.scaleBySize then
+            safe_bottom = Screen:scaleBySize(20)
+        end
+        pad_bottom = pad_bottom + safe_bottom
+    end
+
+    local content_h = sh - title_h - separator:getSize().h - btn_h - pad_top - pad_bottom - gap * 4
+
+    local content_widget = TextBoxWidget:new{
+        text = text,
+        face = content_face,
+        width = sw - pad * 2,
+        height = content_h,
+        alignment = "left",
+        justified = false,
+        auto_para_direction = false,
+    }
+
+    local vg = VerticalGroup:new{
+        align = "center",
+        title_widget,
+        VerticalSpan:new{ width = gap },
+        separator,
+        VerticalSpan:new{ width = gap },
+        content_widget,
+        VerticalSpan:new{ width = gap },
+        btn_row,
+    }
+
+    self.frame = FrameContainer:new{
+        background = Blitbuffer.COLOR_WHITE,
+        bordersize = 0,
+        radius = 0,
+        padding_top = pad_top,
+        padding_bottom = pad_bottom,
+        padding_left = pad,
+        padding_right = pad,
+        width = sw,
+        height = sh,
+        vg,
+    }
+
+    local CenterContainer = require("ui/widget/container/centercontainer")
+    self[1] = CenterContainer:new{
+        dimen = Geom:new{ x = 0, y = 0, w = sw, h = sh },
+        self.frame,
+    }
+
+    UIManager:setDirty(self, "full")
+end
+
+function XRayLogViewer:_reloadFromDisk()
+    if not self.log_path then return end
+    local snapshot = nil
+    pcall(function()
+        local f = io.open(self.log_path, "r")
+        if f then
+            snapshot = f:read("*a")
+            f:close()
+        end
+    end)
+
+    if not snapshot or snapshot == "" then
+        UIManager:show(InfoMessage:new{
+            text = (self.ui_instance and self.ui_instance.loc:t("log_empty")) or "Log is empty or currently unavailable.",
+            timeout = 3,
+        })
+        return
+    end
+
+    local all_lines = {}
+    for line in snapshot:gmatch("[^\r\n]+") do
+        table.insert(all_lines, line)
+    end
+
+    -- Keep only the last 100 lines for display
+    local max_lines = 100
+    local display_lines = all_lines
+    local skipped = 0
+    if #all_lines > max_lines then
+        skipped = #all_lines - max_lines
+        display_lines = {}
+        for i = #all_lines - max_lines + 1, #all_lines do
+            table.insert(display_lines, all_lines[i])
+        end
+    end
+
+    -- Split into pages of 25 lines backward so the last page (most recent logs) is full
+    local lines_per_page = 25
+    local pages = {}
+    local i = #display_lines
+    while i > 0 do
+        local page_lines = {}
+        local start_idx = math.max(1, i - lines_per_page + 1)
+        for j = start_idx, i do
+            table.insert(page_lines, display_lines[j])
+        end
+        table.insert(pages, 1, table.concat(page_lines, "\n"))
+        i = start_idx - 1
+    end
+
+    -- Prepend skipped notice to the first page (earliest logs) if applicable
+    if skipped > 0 and #pages > 0 then
+        pages[1] = string.format("[... %d earlier line(s) omitted ...]\n%s", skipped, pages[1])
+    end
+
+    if #pages > 0 then
+        self.pages = pages
+        -- If current page is now invalid because pages count changed, clamp it
+        if self.current_page > #pages then
+            self.current_page = #pages
+        end
+        self:_rebuild()
+    end
+end
+
+function XRayLogViewer:onClose()
+    UIManager:close(self)
+    return true
+end
+
+function XRayLogViewer:onShow()
+    UIManager:setDirty(self, "ui")
+    return true
+end
+
+function XRayLogViewer:onCloseWidget()
+    if self.ui_instance then
+        self.ui_instance.log_viewer = nil
+    end
+    UIManager:setDirty(nil, "ui")
+end
+
+function M:viewLog(page_num)
+    local XRayLogger = require(plugin_path .. "xray_logger")
+    local log_path = XRayLogger.path .. "/xray.log"
+
+    local snapshot = nil
+    pcall(function()
+        local f = io.open(log_path, "r")
+        if f then
+            snapshot = f:read("*a")
+            f:close()
+        end
+    end)
+
+    if not snapshot or snapshot == "" then
+        UIManager:show(InfoMessage:new{
+            text = self.loc:t("log_empty") or "Log is empty or currently unavailable.",
+            timeout = 3,
+        })
+        return
+    end
+
+    local all_lines = {}
+    for line in snapshot:gmatch("[^\r\n]+") do
+        table.insert(all_lines, line)
+    end
+
+    -- Keep only the last 100 lines for display
+    local max_lines = 100
+    local display_lines = all_lines
+    local skipped = 0
+    if #all_lines > max_lines then
+        skipped = #all_lines - max_lines
+        display_lines = {}
+        for i = #all_lines - max_lines + 1, #all_lines do
+            table.insert(display_lines, all_lines[i])
+        end
+    end
+
+    -- Split into pages of 25 lines backward so the last page (most recent logs) is full
+    local lines_per_page = 25
+    local pages = {}
+    local i = #display_lines
+    while i > 0 do
+        local page_lines = {}
+        local start_idx = math.max(1, i - lines_per_page + 1)
+        for j = start_idx, i do
+            table.insert(page_lines, display_lines[j])
+        end
+        table.insert(pages, 1, table.concat(page_lines, "\n"))
+        i = start_idx - 1
+    end
+
+    -- Prepend skipped notice to the first page (earliest logs) if applicable
+    if skipped > 0 and #pages > 0 then
+        pages[1] = string.format("[... %d earlier line(s) omitted ...]\n%s", skipped, pages[1])
+    end
+
+    local total_pages = #pages
+    if total_pages == 0 then
+        UIManager:show(InfoMessage:new{
+            text = self.loc:t("log_empty") or "Log is empty.",
+            timeout = 3,
+        })
+        return
+    end
+
+    -- Default to the last page (most recent logs)
+    local target_page = page_num or total_pages
+    if target_page < 1 then target_page = 1 end
+    if target_page > total_pages then target_page = total_pages end
+
+    if self.log_viewer then
+        UIManager:close(self.log_viewer)
+        self.log_viewer = nil
+    end
+
+    self.log_viewer = XRayLogViewer:new{
+        pages = pages,
+        log_path = log_path,
+        current_page = target_page,
+        close_label = self.loc:t("close") or "Close",
+        ui_instance = self,
+    }
+    local viewer = self.log_viewer
+    UIManager:nextTick(function()
+        UIManager:show(viewer)
+    end)
 end
 
 function M:toggleXRayMode()
@@ -2815,13 +3377,7 @@ function M:showTimeline()
                     text = ev.chapter or "",
                     keep_menu_open = true,
                     callback = function()
-                        local TextViewer = require("ui/widget/textviewer")
-                        local text_viewer = TextViewer:new{
-                            title = ev.chapter or "Prior Book Summary",
-                            text = ev.event or "",
-                            text_type = "book_info",
-                        }
-                        UIManager:show(text_viewer)
+                        self:showTimelineEventDetails(ev, { source = "menu" })
                     end
                 })
             end
@@ -2830,13 +3386,7 @@ function M:showTimeline()
                 text = (ev.chapter or "") .. ": " .. (ev.event or ""),
                 keep_menu_open = true,
                 callback = function()
-                    local TextViewer = require("ui/widget/textviewer")
-                    local text_viewer = TextViewer:new{
-                        title = ev.chapter or "Event Summary",
-                        text = ev.event or "",
-                        text_type = "book_info",
-                    }
-                    UIManager:show(text_viewer)
+                    self:showTimelineEventDetails(ev, { source = "menu" })
                 end
             })
         end
@@ -2847,7 +3397,7 @@ function M:showTimeline()
         self.timeline_menu = nil
     end
 
-    self.timeline_menu = Menu:new{ 
+    self.timeline_menu = self:newMenu("timeline_menu", { 
         title = self.loc:t("menu_timeline"), 
         item_table = items, 
         is_borderless = true, 
@@ -2857,8 +3407,138 @@ function M:showTimeline()
             if self.is_cancelled then return end
             self:showFullXRayMenu() 
         end,
-    }
+    })
     UIManager:show(self.timeline_menu)
+end
+
+function M:showTimelineEventDetails(ev, opts)
+    -- (A) Bottom-popup path (when enabled in settings)
+    if shouldUseBottomPopup(self, opts) then
+        -- Wrap the timeline event as a normalized entity for the existing popup
+        local entity = {
+            name        = ev.chapter or "",
+            description = ev.event   or "",
+            is_timeline = true,
+        }
+        showBottomPopup(self, entity)
+        return
+    end
+
+    -- (B) ButtonDialog path
+    local fs = _getPopupFontSize(self)
+    local border_window  = (Size.border  and Size.border.window)   or 1
+    local padding_button = (Size.padding and Size.padding.button)   or 10
+    local padding_default= (Size.padding and Size.padding.default)  or 10
+    local margin_default = (Size.margin  and Size.margin.default)   or 5
+
+    local dialog_width       = math.floor(math.min(Screen:getWidth(), Screen:getHeight()) * 0.9)
+    local buttontable_width  = dialog_width - 2 * border_window - 2 * padding_button
+    local content_width      = buttontable_width - 2 * (padding_default + margin_default)
+
+    local align = self:isRTL() and "right" or "left"
+    local vg_components = { align = align }
+
+    -- 1. Chapter title (bold)
+    table.insert(vg_components, TextBoxWidget:new{
+        text      = ev.chapter or "",
+        face      = Font:getFace("cfont", fs),
+        width     = content_width,
+        bold      = true,
+        alignment = align,
+    })
+
+    -- 2. Event text (possibly truncated)
+    local event_text   = ev.event or ""
+    local display_text = event_text
+    local is_truncated = false
+    local TRUNCATE_AT  = 300   -- chars before we add Read More
+
+    if #event_text > TRUNCATE_AT then
+        is_truncated  = true
+        display_text  = event_text:sub(1, TRUNCATE_AT)
+        local last_sp = display_text:match("^.*()%s")
+        if last_sp then display_text = display_text:sub(1, last_sp - 1) end
+        display_text  = display_text .. " ..."
+    end
+
+    if event_text ~= "" then
+        table.insert(vg_components, VerticalSpan:new{
+            width = math.max(6, math.floor(fs * 0.3))
+        })
+        table.insert(vg_components, TextBoxWidget:new{
+            text      = display_text,
+            face      = Font:getFace("cfont", fs),
+            width     = content_width,
+            alignment = align,
+        })
+    end
+
+    local linked_enabled = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.linked_entries_enabled ~= false
+    local related = linked_enabled and self:findRelatedEntities(event_text, ev.chapter) or {}
+
+    local vg = VerticalGroup:new(vg_components)
+
+    -- Buttons
+    local buttons = {}
+    if #related > 0 then
+        buttons = {
+            {
+                {
+                    text     = self.loc:t("linked_entries") or "Linked Entries",
+                    callback = function()
+                        self:showRelatedEntities(related, opts)
+                    end,
+                },
+                {
+                    text     = self.loc:t("close") or "Close",
+                    callback = function()
+                        if self.active_details_dialog then
+                            UIManager:close(self.active_details_dialog)
+                        end
+                        self.active_details_dialog = nil
+                    end,
+                }
+            }
+        }
+    else
+        buttons = {
+            {
+                {
+                    text     = self.loc:t("close") or "Close",
+                    callback = function()
+                        if self.active_details_dialog then
+                            UIManager:close(self.active_details_dialog)
+                        end
+                        self.active_details_dialog = nil
+                    end,
+                }
+            }
+        }
+    end
+
+    if is_truncated then
+        table.insert(buttons, 1, {
+            {
+                text           = self.loc:t("read_more") or "Read More",
+                keep_menu_open = true,
+                callback       = function()
+                    local TextViewer = require("ui/widget/textviewer")
+                    local viewer = TextViewer:new{
+                        title     = ev.chapter or "",
+                        text      = event_text,
+                        text_type = "book_info",
+                    }
+                    UIManager:show(viewer)
+                end,
+            }
+        })
+    end
+
+    self.active_details_dialog = ButtonDialog:new{
+        _added_widgets = { vg },
+        buttons        = buttons,
+    }
+    UIManager:show(self.active_details_dialog)
 end
 
 function M:showHistoricalFigureDetails(fig, opts)
@@ -2866,7 +3546,7 @@ function M:showHistoricalFigureDetails(fig, opts)
         showBottomPopup(self, fig)
         return
     end
-    local fs = _getPopupFontSize()
+    local fs = _getPopupFontSize(self)
     local border_window = (Size.border and Size.border.window) or 1
     local padding_button = (Size.padding and Size.padding.button) or 10
     local padding_default = (Size.padding and Size.padding.default) or 10
@@ -2876,15 +3556,16 @@ function M:showHistoricalFigureDetails(fig, opts)
     local buttontable_width = dialog_width - 2 * border_window - 2 * padding_button
     local title_group_width = buttontable_width - 2 * (padding_default + margin_default)
 
-    local vg = VerticalGroup:new{ align = "left" }
+    local align = self:isRTL() and "right" or "left"
+    local vg_components = { align = align }
 
     -- 1. Bold Name (no label)
-    table.insert(vg, TextBoxWidget:new{
+    table.insert(vg_components, TextBoxWidget:new{
         text = fig.name or "???",
         face = Font:getFace("cfont", fs),
         width = title_group_width,
         bold = true,
-        alignment = "left",
+        alignment = align,
     })
 
     -- 2. Biography/Description (no label)
@@ -2902,14 +3583,16 @@ function M:showHistoricalFigureDetails(fig, opts)
             end
             display_bio = display_bio .. " ..."
         end
-        table.insert(vg, VerticalSpan:new{ width = math.max(6, math.floor(fs * 0.3)) })
-        table.insert(vg, TextBoxWidget:new{
+        table.insert(vg_components, VerticalSpan:new{ width = math.max(6, math.floor(fs * 0.3)) })
+        table.insert(vg_components, TextBoxWidget:new{
             text = display_bio,
             face = Font:getFace("cfont", fs),
             width = title_group_width,
-            alignment = "left",
+            alignment = align,
         })
     end
+
+    local vg = VerticalGroup:new(vg_components)
 
     local linked_enabled = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.linked_entries_enabled ~= false
     local related = linked_enabled and self:findRelatedEntities(bio, fig.name) or {}
@@ -2943,7 +3626,6 @@ function M:showHistoricalFigureDetails(fig, opts)
                 }
             }
         }
-        
         if not mentions_enabled then
             table.remove(buttons[2], 1)
         end
@@ -3024,7 +3706,7 @@ function M:showHistoricalFigures()
         })
     end
 
-    self.hf_menu = Menu:new{
+    self.hf_menu = self:newMenu("hf_menu", {
         title = self.loc:t("menu_historical_figures"), 
         item_table = items, 
         is_borderless = true, 
@@ -3034,20 +3716,20 @@ function M:showHistoricalFigures()
             if self.is_cancelled then return end
             self:showFullXRayMenu() 
         end,
-    }
+    })
     UIManager:show(self.hf_menu)
 end
 
 function M:showQuickXRayMenu() self:showFullXRayMenu() end
 function M:showFullXRayMenu()
     if self.xray_menu then UIManager:close(self.xray_menu); self.xray_menu = nil end
-    self.xray_menu = Menu:new{ 
+    self.xray_menu = self:newMenu("xray_menu", { 
         title = self.loc:t("menu_xray") or "X-Ray", 
         item_table = self:getSubMenuItems(), 
         is_borderless = true, 
         width = Screen:getWidth(), 
         height = Screen:getHeight() 
-    }
+    })
     UIManager:show(self.xray_menu) 
 end
 
@@ -3635,51 +4317,9 @@ function M:manualFetchSeriesContext()
     end)
 end
 
-function M:checkSeriesContext()
-    self:log("XRayPlugin: Series: checkSeriesContext starting")
-    if self.destroyed then
-        self:log("XRayPlugin: Series: checkSeriesContext: plugin destroyed, skipping")
-        return
-    end
-    if not self.ui or not self.ui.document then
-        self:log("XRayPlugin: Series: checkSeriesContext: document/ui not available, skipping")
-        return
-    end
-
-    if not self.ai_helper or not self.ai_helper.settings or not self.ai_helper.settings.series_context_enabled then
-        self:log("XRayPlugin: Series: checkSeriesContext: series_context_enabled setting is false/nil, skipping")
-        return
-    end
-
-    if self.book_data and (self.book_data.series_context_loaded or self.book_data.series_context_dismissed) then
-        self:log("XRayPlugin: Series: checkSeriesContext: series context is already loaded or dismissed, skipping")
-        return
-    end
-
-    local NetworkMgr = require("ui/network/manager")
-    if not NetworkMgr:isConnected() or not NetworkMgr:isOnline() then
-        self:log("XRayPlugin: Series: checkSeriesContext: device is offline, skipping silently.")
-        return
-    end
-
-    local props = self.ui.document:getProps() or {}
-    local function sanitizeMetadata(val)
-        if type(val) == "string" then return val
-        elseif type(val) == "table" then return table.concat(val, ", ")
-        else return "Unknown" end
-    end
-    local title = sanitizeMetadata(props.title)
-    local author = sanitizeMetadata(props.authors)
-
-    self:log("XRayPlugin: Series: checkSeriesContext: checking book title=" .. tostring(title) .. ", author=" .. tostring(author))
-
-    local series_info = self.series_manager:detectSeries(props, title, author, self.ai_helper)
-    if not series_info or not series_info.name or not series_info.index or series_info.index <= 1 then
-        self:log("XRayPlugin: Series: checkSeriesContext: No series detected or index is <= 1, skipping")
-        return
-    end
-
-    self:log("XRayPlugin: Series: checkSeriesContext: Series detected: " .. series_info.name .. ", index=" .. tostring(series_info.index) .. ". Showing prompt dialog.")
+function M:showSeriesContextPrompt(series_info)
+    if self.destroyed then return end
+    self:log("XRayPlugin: Series: showSeriesContextPrompt: Series detected: " .. series_info.name .. ", index=" .. tostring(series_info.index) .. ". Showing prompt dialog.")
 
     local body_text = self.loc:t(
         "series_context_prompt_text",
@@ -3761,6 +4401,141 @@ function M:checkSeriesContext()
         }
     }
     UIManager:show(confirm)
+end
+
+function M:checkSeriesContext()
+    self:log("XRayPlugin: Series: checkSeriesContext starting")
+    if self.destroyed then
+        self:log("XRayPlugin: Series: checkSeriesContext: plugin destroyed, skipping")
+        return
+    end
+    if not self.ui or not self.ui.document then
+        self:log("XRayPlugin: Series: checkSeriesContext: document/ui not available, skipping")
+        return
+    end
+
+    if not self.ai_helper or not self.ai_helper.settings or not self.ai_helper.settings.series_context_enabled then
+        self:log("XRayPlugin: Series: checkSeriesContext: series_context_enabled setting is false/nil, skipping")
+        return
+    end
+
+    if self.book_data and (self.book_data.series_context_loaded or self.book_data.series_context_dismissed) then
+        self:log("XRayPlugin: Series: checkSeriesContext: series context is already loaded or dismissed, skipping")
+        return
+    end
+
+    local NetworkMgr = require("ui/network/manager")
+    if not NetworkMgr:isConnected() or not NetworkMgr:isOnline() then
+        self:log("XRayPlugin: Series: checkSeriesContext: device is offline, skipping silently.")
+        return
+    end
+
+    local props = self.ui.document:getProps() or {}
+    local function sanitizeMetadata(val)
+        if type(val) == "string" then return val
+        elseif type(val) == "table" then return table.concat(val, ", ")
+        else return "Unknown" end
+    end
+    local title = sanitizeMetadata(props.title)
+    local author = sanitizeMetadata(props.authors)
+
+    self:log("XRayPlugin: Series: checkSeriesContext: checking book title=" .. tostring(title) .. ", author=" .. tostring(author))
+
+    local function saveSeriesChecked()
+        self:log("XRayPlugin: Series: Saving series check outcome (dismissed=true) to cache")
+        if not self.cache_manager then
+            self.cache_manager = require(plugin_path .. "xray_cachemanager"):new()
+        end
+        if not self.book_data then
+            self.book_data = self.cache_manager:loadCache(self.ui.document.file) or {}
+        end
+        self.book_data.series_context_dismissed = true
+        self.cache_manager:asyncSaveCache(self.ui.document.file, self.book_data)
+    end
+
+    -- 1. Try metadata check first (without AI, passes nil for ai_helper)
+    local series_info = self.series_manager:detectSeries(props, title, author, nil)
+    if series_info and series_info.name and series_info.index then
+        if series_info.index > 1 then
+            self:log("XRayPlugin: Series: Metadata check found series: " .. series_info.name .. ", index=" .. tostring(series_info.index))
+            self:showSeriesContextPrompt(series_info)
+            return
+        else
+            self:log("XRayPlugin: Series: Metadata check found series: " .. series_info.name .. ", index=" .. tostring(series_info.index) .. " (first book). Caching check outcome.")
+            saveSeriesChecked()
+            return
+        end
+    end
+
+    -- 2. Fallback to AI (performed asynchronously to prevent UI freeze)
+    self:log("XRayPlugin: Series: Metadata check didn't find series. Initiating asynchronous AI check.")
+    local prompt = self.ai_helper:createPrompt(title, author, nil, "series_detect")
+    local req_params = self.ai_helper:buildComprehensiveRequest(nil, nil, nil, prompt)
+    if not req_params then
+        self:log("XRayPlugin: Series: Failed to build AI request for series check")
+        return
+    end
+
+    local DataStorage = require("datastorage")
+    local result_file = DataStorage:getSettingsDir() .. "/xray/bg_series_detect_" .. tostring(os.time()) .. ".json"
+    
+    local started = self.ai_helper:makeRequestAsync(req_params, result_file)
+    if not started then
+        self:log("XRayPlugin: Series: Async check not supported/failed (e.g. on Windows). Skipping automatic AI fallback.")
+        return
+    end
+
+    local poll_count = 0
+    local max_polls = 150 -- 5 minutes at 2s intervals
+    local function pollDetect()
+        if self.destroyed then
+            pcall(function() os.remove(result_file) end)
+            return
+        end
+        if not self.ui or not self.ui.document then
+            pcall(function() os.remove(result_file) end)
+            return
+        end
+        poll_count = poll_count + 1
+        local result, p_err_code, p_err_msg = self.ai_helper:checkAsyncResult(result_file)
+        if result == nil then
+            if poll_count < max_polls then
+                UIManager:scheduleIn(2, pollDetect)
+            else
+                self:log("XRayPlugin: Series: Async series check timed out")
+            end
+        elseif result == false then
+            self:log("XRayPlugin: Series: Async series check failed: " .. tostring(p_err_msg))
+        else
+            -- AI returned a valid result!
+            self:log("XRayPlugin: Series: Async series check result received")
+            if result.is_series then
+                local name = result.series_name
+                local index = tonumber(result.book_index) or 1
+                if name and name ~= "" then
+                    local ai_series_info = {
+                        name = name,
+                        index = index,
+                        slug = self.series_manager:makeSlug(name)
+                    }
+                    self:log("XRayPlugin: Series: Async check detected series=" .. tostring(name) .. ", index=" .. tostring(index))
+                    if index > 1 then
+                        self:showSeriesContextPrompt(ai_series_info)
+                    else
+                        self:log("XRayPlugin: Series: Book is first in series (index=" .. tostring(index) .. "), skipping prompt. Caching check outcome.")
+                        saveSeriesChecked()
+                    end
+                else
+                    self:log("XRayPlugin: Series: Async check detected series, but name is invalid. Caching check outcome.")
+                    saveSeriesChecked()
+                end
+            else
+                self:log("XRayPlugin: Series: Async check determined book is not part of a series. Caching check outcome.")
+                saveSeriesChecked()
+            end
+        end
+    end
+    UIManager:scheduleIn(2, pollDetect)
 end
 
 function M:resolveDescriptionForPage(entity, current_page)
