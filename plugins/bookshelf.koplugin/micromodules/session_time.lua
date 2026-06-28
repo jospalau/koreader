@@ -75,6 +75,18 @@ local function getTodaySecs()
     return total
 end
 
+local function fitFontSize(Fonts, text, max_sz, min_sz, max_w, bold)
+    local sz = max_sz
+    while sz > min_sz do
+        local face, b = Fonts:getFace("cfont", sz, bold and {bold=true} or nil)
+        local tw = require("ui/widget/textwidget"):new{
+            text = text, face = face, bold = b }
+        if tw:getSize().w <= max_w then return sz end
+        sz = sz - 2
+    end
+    return min_sz
+end
+
 return {
     key     = "session_time",
     title   = _("Session time"),
@@ -110,22 +122,16 @@ return {
 
         local session_str = fmtTime(secs)
         local today_str   = fmtTime(today_secs)
-        local longest     = #session_str > #today_str and session_str or today_str
-        local big_sz      = sc(40)
-        if #longest > 6 then big_sz = sc(32) end
-        if #longest > 9 then big_sz = sc(26) end
 
+        local gap    = sc(24)
+        local col_w  = math.floor((mw - gap) / 2)
+        local col_w2 = mw - gap - col_w
+
+        local session_sz_fit = fitFontSize(Fonts, session_str, sc(40), sc(18), col_w,  true)
+        local today_sz_fit   = fitFontSize(Fonts, today_str,   sc(40), sc(18), col_w2, true)
+        local big_sz         = math.min(session_sz_fit, today_sz_fit)
         local big_face, big_bold     = Fonts:getFace("cfont", big_sz, {bold=true})
         local label_face, label_bold = Fonts:getFace("cfont", sc(20), {bold=true})
-        local dot_face               = Fonts:getFace("cfont", sc(20))
-
-        local dot_tw = TextWidget:new{
-            text    = "•",
-            face    = dot_face,
-            fgcolor = SM.COLOR_MUTED,
-        }
-        local dot_w = dot_tw:getSize().w + sc(16)
-        local col_w = math.floor((mw - dot_w) / 2)
 
         local session_col = VerticalGroup:new{
             align = "center",
@@ -153,7 +159,7 @@ return {
                 face      = big_face,
                 bold      = big_bold,
                 fgcolor   = BLACK,
-                max_width = col_w,
+                max_width = col_w2,
             },
             VerticalSpan:new{ width = sc(2) },
             TextWidget:new{
@@ -161,14 +167,11 @@ return {
                 face      = label_face,
                 bold      = label_bold,
                 fgcolor   = SM.COLOR_MUTED,
-                max_width = col_w,
+                max_width = col_w2,
             },
         }
 
-        local session_sz = session_col:getSize()
-        local today_sz   = today_col:getSize()
-        local dot_sz     = dot_tw:getSize()
-        local max_h      = math.max(session_sz.h, today_sz.h, dot_sz.h)
+        local max_h = math.max(session_col:getSize().h, today_col:getSize().h)
 
         return HorizontalGroup:new{
             align = "top",
@@ -176,12 +179,9 @@ return {
                 dimen = Geom:new{ w = col_w, h = max_h },
                 session_col,
             },
+            HorizontalSpan:new{ width = gap },
             CenterContainer:new{
-                dimen = Geom:new{ w = dot_w, h = max_h },
-                dot_tw,
-            },
-            CenterContainer:new{
-                dimen = Geom:new{ w = col_w, h = max_h },
+                dimen = Geom:new{ w = col_w2, h = max_h },
                 today_col,
             },
         }

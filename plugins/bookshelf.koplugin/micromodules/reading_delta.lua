@@ -14,7 +14,6 @@ local STATS_TTL_S = 30
 local _cache -- { at = <epoch>, value = <number> }
 
 local PACE_KEY = "micromodule_reading_delta_pace" -- hours/day target
-
 local function readPace()
     local Store = require("lib/bookshelf_settings_store")
     local v = tonumber(Store.read(PACE_KEY))
@@ -151,6 +150,8 @@ return {
         local VerticalSpan    = require("ui/widget/verticalspan")
         local HorizontalGroup = require("ui/widget/horizontalgroup")
         local HorizontalSpan  = require("ui/widget/horizontalspan")
+        local CenterContainer = require("ui/widget/container/centercontainer")
+        local Geom            = require("ui/geometry")
         local SM              = require("lib/bookshelf_start_menu_modules")
         local mw = math.max(50, width)
         local function sc(n) return math.max(1, math.floor(n * (scale_pct or 100) / 100 + 0.5)) end
@@ -186,18 +187,6 @@ return {
             bold    = label_bold,
             fgcolor = SM.COLOR_MUTED,
         }
-        local dy = math.max(0, big_tw:getBaseline() - label_tw:getBaseline())
-        local header = HorizontalGroup:new{
-            align = "top",
-            big_tw,
-            HorizontalSpan:new{ width = sc(12) },
-            VerticalGroup:new{
-                align = "left",
-                VerticalSpan:new{ width = dy },
-                label_tw,
-            },
-        }
-
         local pace_tw = TextWidget:new{
             text      = fmtPace(pace),
             face      = sub_face,
@@ -205,11 +194,39 @@ return {
             max_width = mw,
         }
 
-        return VerticalGroup:new{
+        -- ΔL baseline-aligned to the right of the number
+        local dy = math.max(0, big_tw:getBaseline() - label_tw:getBaseline())
+        local header = HorizontalGroup:new{
+            align = "top",
+            big_tw,
+            HorizontalSpan:new{ width = sc(8) },
+            VerticalGroup:new{
+                align = "left",
+                VerticalSpan:new{ width = dy },
+                label_tw,
+            },
+        }
+
+        local header_w = header:getSize().w
+        local pace_w   = pace_tw:getSize().w
+        local content_w = math.max(header_w, pace_w)
+
+        local col = VerticalGroup:new{
             align = "left",
-            header,
+            CenterContainer:new{
+                dimen = Geom:new{ w = content_w, h = header:getSize().h },
+                header,
+            },
             VerticalSpan:new{ width = sc(4) },
-            pace_tw,
+            CenterContainer:new{
+                dimen = Geom:new{ w = content_w, h = pace_tw:getSize().h },
+                pace_tw,
+            },
+        }
+
+        return CenterContainer:new{
+            dimen = Geom:new{ w = mw, h = col:getSize().h },
+            col,
         }
     end,
 }
