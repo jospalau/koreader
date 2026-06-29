@@ -1026,7 +1026,7 @@ function Menu:init()
         }
     }
 
-    local text = self:_buildFooterText()
+    local text = "" -- self:_buildFooterText()
     local pager_h = self.page_info:getSize().h
     local pager_w = self.page_info:getSize().w
     local no_pager = pagetextinfo and pagetextinfo.settings:isTrue("enable_no_pager")
@@ -2047,7 +2047,7 @@ end
 
 function Menu:onFooterStatsRefresh()
     if self.footer_text_widget then
-        self.footer_text_widget.text = self:_buildFooterText()
+        self.footer_text_widget.text = "" -- self:_buildFooterText()
         self.footer_text_widget:init()
         --UIManager:setDirty(self, "ui")
     end
