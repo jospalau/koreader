@@ -547,9 +547,9 @@ function BookInfoPopup:onShow()
 end
 
 function BookInfoPopup:onTapClose()   return self:_closeAndApplyFont() end
-function BookInfoPopup:onSwipeClose() return self:_closeAndApplyFont() end
+function BookInfoPopup:onSwipeClose() return UIManager:close(self) end
 function BookInfoPopup:onHoldClose()  return self:_closeAndApplyFont() end
-function BookInfoPopup:onClose()      return self:_closeAndApplyFont() end
+function BookInfoPopup:onClose()      return UIManager:close(self) end
 
 function BookInfoPopup:onCloseWidget()
     UIManager:setDirty(nil, "ui")

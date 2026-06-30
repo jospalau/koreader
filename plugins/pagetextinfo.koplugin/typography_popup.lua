@@ -498,6 +498,18 @@ function TextInfoPopup:init()
             GestureRange:new{ ges = "tap", range = self.dimen }
         }
     end
+
+   if Device:isTouchDevice() then
+        local range = GestureRange:new{ ges = "tap",   range = self.dimen }
+        self.ges_events.TapClose   = { range }
+        self.ges_events.SwipeClose = {
+            GestureRange:new{ ges = "swipe", range = self.dimen }
+        }
+        self.ges_events.HoldClose  = {
+            GestureRange:new{ ges = "hold",  range = self.dimen }
+        }
+    end
+
     if Device:hasKeys() then
         self.key_events = { Close = { { Device.input.group.Back } } }
     end
@@ -519,6 +531,11 @@ function TextInfoPopup:onClose()
     UIManager:close(self)
     return true
 end
+
+function TextInfoPopup:onTapClose()   return UIManager:close(self) end
+function TextInfoPopup:onSwipeClose() return UIManager:close(self) end
+function TextInfoPopup:onHoldClose()  return UIManager:close(self) end
+function TextInfoPopup:onClose()      return UIManager:close(self) end
 
 function TextInfoPopup:onCloseWidget()
     UIManager:setDirty(nil, "ui")
