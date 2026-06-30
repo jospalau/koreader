@@ -28,14 +28,25 @@ local function fmtTime(secs)
     return string.format("%dm", m)
 end
 
+local function dayStart(now)
+    local t = os.date("*t", now)
+    return os.time{ year = t.year, month = t.month, day = t.day, hour = 0, min = 0, sec = 0 }
+end
+
 local STATS_TTL_S = 30
 local _cache
 
 local function getTodaySecs()
     local now = os.time()
-    if _cache and now - _cache.at < STATS_TTL_S then
+    local day_start = dayStart(now)
+
+    -- FIX: previously only keyed on STATS_TTL_S, so a render right after
+    -- midnight (within the 30s window) could return a value computed for
+    -- the previous calendar day. Invalidate as soon as the day rolls over.
+    if _cache and now - _cache.at < STATS_TTL_S and _cache.day_start == day_start then
         return _cache.secs
     end
+
     local db_secs = 0
     pcall(function()
         local DataStorage = require("datastorage")
@@ -46,8 +57,6 @@ local function getTodaySecs()
         local conn = SQ3.open(path, "ro")
         pcall(function()
             conn:exec("PRAGMA busy_timeout=200;")
-            local t = os.date("*t", now)
-            local day_start = os.time{ year=t.year, month=t.month, day=t.day, hour=0, min=0, sec=0 }
             local stmt = conn:prepare([[
                 SELECT COALESCE(SUM(
                     MIN(start_time + duration, ?) - MAX(start_time, ?)
@@ -62,16 +71,24 @@ local function getTodaySecs()
         end)
         conn:close()
     end)
+
     local live = 0
     pcall(function()
         local ReaderUI = require("apps/reader/readerui")
         local sp = ReaderUI.instance and ReaderUI.instance.statistics
         if sp and sp.start_current_period and sp.start_current_period > 0 then
-            live = math.max(0, now - sp.start_current_period)
+            -- FIX: previously used `now - start_current_period` unclamped,
+            -- so a session spanning midnight (still open, not yet flushed
+            -- to the DB) leaked yesterday's minutes into "Today". Clamp the
+            -- effective start to the current day's midnight, matching how
+            -- db_secs is already bounded by day_start in the SQL query.
+            local effective_start = math.max(sp.start_current_period, day_start)
+            live = math.max(0, now - effective_start)
         end
     end)
+
     local total = db_secs + live
-    _cache = { at = now, secs = total }
+    _cache = { at = now, day_start = day_start, secs = total }
     return total
 end
 
