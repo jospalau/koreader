@@ -1,7 +1,7 @@
 --[[
 Book Info Popup
 Structured sectioned popup replacing onShowTextProperties plain TextViewer.
-Shows book metadata, reading stats, goals, session info and page metrics.
+Shows book metadata, reading stats, session info and page metrics.
 Tap or any gesture dismisses and applies a random font preset for the book genre.
 
 Action: ShowTextProperties
@@ -217,9 +217,7 @@ local function gatherData(ui)
 
     local doc    = ui.document
     local pti    = ui.pagetextinfo
-    local stats  = ui.statistics
     local footer = ui.view and ui.view.footer
-    local topbar = ui.view and ui.view.topbar
 
     local props  = doc._document:getDocumentProps()
     d.title      = props.title  or "?"
@@ -293,8 +291,15 @@ local function gatherData(ui)
             d.nblines = tostring(nblines or 0)
             d.nbwords = tostring(nbwords or 0)
         end
+
+        local configurable = doc.configurable
+        local display_dpi  = Device:getDeviceScreenDPI() or Screen:getDPI()
+        local font_size_px = math.floor((display_dpi * (configurable.font_size or 20)) / 72)
+        local line_h_px    = math.max(1, math.ceil(
+            font_size_px * ((configurable.line_spacing or 100) / 100)))
+
         local res0 = doc._document:getTextFromPositions(
-            0, 0, Screen:getWidth(), 1, false, true)
+            0, 0, Screen:getWidth(), line_h_px, false, true)
         if res0 and res0.text then
             d.chars_first_line = tostring(#res0.text)
         end
@@ -312,63 +317,19 @@ local function gatherData(ui)
 
     d.clock = datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
 
-    -- Goals
-    d.goal_time  = topbar and topbar.daily_time_goal  or 120
-    d.goal_pages = topbar and topbar.daily_pages_goal or 120
-
     -- Stats via pagetextinfo helpers
     if pti then
         local user_fmt = "letters"
 
-        -- Session
-        if stats and stats.start_current_period then
-            local dur_raw = math.floor(((os.time() - stats.start_current_period) / 60) * 100) / 100
-            if dur_raw > 0 then
-                d.session_wpm   = tostring(math.floor((stats._total_words or 0) / dur_raw))
-                d.session_words = tostring(stats._total_words or 0)
-                d.session_pages = tostring(stats._total_pages or 0)
-                d.session_dur   = datetime.secondsToClockDuration(user_fmt,
-                    math.floor(dur_raw * 60), true)
-            end
-        end
-
-        -- Today
-        if pti.getTodayBookStats then
-            local ok, today_secs, today_p, wpm_t =
-                pcall(pti.getTodayBookStats, pti)
-            if ok then
-                if topbar then
-                    today_secs = (today_secs or 0) +
-                        (os.time() - (topbar.start_session_time or os.time()))
-                end
-                d.today_dur   = datetime.secondsToClockDuration(user_fmt, today_secs or 0, true)
-                d.today_pages = tostring((today_p or 0) + (stats and stats._total_pages or 0))
-                d.today_wpm   = tostring(wpm_t or 0)
-                local today_min = math.floor((today_secs or 0) / 60 * 10) / 10
-                d.goal_time_left  = string.format("%.0fm", d.goal_time - today_min)
-                d.goal_pages_left = tostring(d.goal_pages - tonumber(d.today_pages))
-                d.goal_time_icon  = today_min >= d.goal_time and "⚑" or "⚐"
-                d.goal_pages_icon = tonumber(d.today_pages) >= d.goal_pages and "⚑" or "⚐"
-            end
-        end
-
-        -- This book
-        if pti.getReadThisBook then
-            local ok, book_secs = pcall(pti.getReadThisBook, pti, footer)
-            if ok then
-                if topbar then
-                    book_secs = (book_secs or 0) +
-                        (os.time() - (topbar.start_session_time or os.time()))
-                end
-                d.book_time = datetime.secondsToClockDuration(user_fmt, book_secs or 0, true)
-            end
-        end
-
         -- Sessions / wpm history
-        if pti.getSessionsInfo then
+        -- NOTE: getSessionsInfo is declared in main.lua as a bare global
+        -- function `getSessionsInfo(footer)` — it was never attached to the
+        -- PageTextInfo table, so `pti.getSessionsInfo` is nil and `pti:...`
+        -- would also pass the wrong first argument. Call the global directly.
+        if _G.getSessionsInfo then
             local ok, sessions, avg_wpm,
                   avg7, avg30, avg60, avg90, avg180 =
-                pcall(pti.getSessionsInfo, pti, footer)
+                pcall(_G.getSessionsInfo, footer)
             if ok then
                 d.sessions = tostring(sessions or 0)
                 d.avg_wpm  = string.format("%d wpm  %d wph",
@@ -445,25 +406,6 @@ local function buildSections(data, fonts, layout)
             sp(),
             row2(data.chars_first_line or "?", "chars in first line",
                  data.frontlight       or "Off", "frontlight"),
-        }, L)
-
-    -- ── GOALS ────────────────────────────────────────────────────────────────
-    table.insert(sections, hline(L, true))
-    addSection(sections,
-        sectionHeader(fonts, "GOALS", L.full_width),
-        {
-            row2(
-                (data.goal_time_left  or "?") .. "  " .. (data.goal_time_icon  or ""),
-                "time left  (goal " .. tostring(data.goal_time)  .. "m)",
-                (data.goal_pages_left or "?") .. "p  " .. (data.goal_pages_icon or ""),
-                "pages left  (goal " .. tostring(data.goal_pages) .. "p)"
-            ),
-            sp(),
-            row2(data.book_time    or "?", "this book",
-                 data.session_dur  or "?", "this session"),
-            sp(),
-            row2(data.today_dur    or "?", "today",
-                 data.today_pages  or "?", "today pages"),
         }, L)
 
     -- ── SPEED & HISTORY ───────────────────────────────────────────────────────
