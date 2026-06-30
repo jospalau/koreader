@@ -3,12 +3,10 @@ Start-menu module: shelf size.
 See README.md in this directory for the module spec contract.
 
 A big total-books number over a per-status breakdown (unread / reading /
-on hold / finished). Counts come from Repo.countByStatus(), which walks the
-library once and classifies each book by its sidecar status (books that have
-never been opened cost nothing beyond the walk). That walk + status read is
-not free on a large library, so the result is memoised per menu-open via the
-loader's menu_generation counter — render runs on every focus-step rebuild,
-but the tally is computed at most once per time the menu is opened. No on_tap.
+on hold / finished). Counts come straight from the in-memory _G.all_files
+table (status per book, already kept up to date elsewhere in the app), so
+the tally is just an in-memory walk + grouping on every render — no disk
+I/O, no caching needed.
 ]]
 local _ = require("lib/bookshelf_i18n").gettext
 
@@ -21,23 +19,28 @@ local STATUS_ROWS = {
     { id = "finished", label = _("Finished") },
 }
 
--- Per-menu-open memo: the walk + status reads are the expensive part, so cache
--- the tally against the loader's generation counter (bumped once per open).
-local _gen, _total, _counts
+-- Status -> bucket mapping for _G.all_files entries.
+-- "reading" maps directly; "tbr"/"mbr" map directly; "complete" -> finished;
+-- anything else (nil, "", "new", unrecognised) counts as unread.
+local function bucketFor(status)
+    if status == "reading" then return "reading" end
+    if status == "tbr"     then return "tbr" end
+    if status == "mbr"     then return "mbr" end
+    if status == "complete" then return "finished" end
+    return "unread"
+end
 
 local function getCounts()
-    local Modules = require("lib/bookshelf_start_menu_modules")
-    local gen = Modules.menu_generation
-    if _gen ~= gen or not _counts then
-        local Repo = require("lib/bookshelf_book_repository")
-        local ok, total, counts = pcall(Repo.countByStatus)
-        if ok then
-            _gen, _total, _counts = gen, total, counts
-        else
-            _total, _counts = 0, { reading = 0, unread = 0, tbr = 0, mbr = 0, finished = 0 }
+    local total = 0
+    local counts = { reading = 0, unread = 0, tbr = 0, mbr = 0, finished = 0 }
+    if _G.all_files then
+        for _, info in pairs(_G.all_files) do
+            total = total + 1
+            local bucket = bucketFor(info and info.status)
+            counts[bucket] = counts[bucket] + 1
         end
     end
-    return _total, _counts
+    return total, counts
 end
 
 return {
@@ -136,3 +139,4 @@ return {
         }
     end,
 }
+
