@@ -364,7 +364,8 @@ local function buildSections(data, fonts, layout)
 
     -- ── BOOK ─────────────────────────────────────────────────────────────────
     addSection(sections,
-        sectionHeader(fonts, "BOOK  —  " .. (data.clock or ""), L.full_width),
+        sectionHeader(fonts, "BOOK  —  " .. (data.clock or "") ..
+            "  ·  " .. (data.frontlight or "Off"), L.full_width),
         {
             row1(data.title  or "?", "title"),
             sp(),
@@ -404,8 +405,7 @@ local function buildSections(data, fonts, layout)
             row2(data.nblines          or "?", "lines",
                  data.nbwords          or "?", "words"),
             sp(),
-            row2(data.chars_first_line or "?", "chars in first line",
-                 data.frontlight       or "Off", "frontlight"),
+            row1(data.chars_first_line or "?", "chars in first line"),
         }, L)
 
     -- ── SPEED & HISTORY ───────────────────────────────────────────────────────
