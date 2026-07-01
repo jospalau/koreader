@@ -13,10 +13,10 @@ local _ = require("lib/bookshelf_i18n").gettext
 -- Display order and translatable labels for the per-status lines.
 local STATUS_ROWS = {
     { id = "reading",  label = _("Reading") },
-    { id = "unread",   label = _("Unread") },
     { id = "tbr",  label = _("TBR") },
     { id = "mbr",  label = _("MBR") },
     { id = "finished", label = _("Finished") },
+    { id = "unread",   label = _("Unread") },
 }
 
 -- Status -> bucket mapping for _G.all_files entries.
