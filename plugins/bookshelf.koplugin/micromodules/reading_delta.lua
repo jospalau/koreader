@@ -7,6 +7,9 @@ you are this year. Positive = ahead, negative = behind.
 
 Data comes from wpm_stat_data in statistics.sqlite3, the same query
 used by TopBar:getReadThisYearSoFar(). TTL-cached at 30s. Works offline.
+
+Also shows today's total reading time (from the DB + any live/open
+session) to the right of ΔL, same source data as session_time.lua.
 ]]
 local _ = require("lib/bookshelf_i18n").gettext
 
@@ -64,6 +67,88 @@ local function readDelta(pace)
     end
     _cache = { at = now, value = result, pace = pace }
     return result
+end
+
+-- Today's total reading time (DB + live open session), same logic as
+-- session_time.lua's getTodaySecs. Kept as its own copy with its own
+-- cache so this module has no dependency on session_time.lua internals.
+local _today_cache
+
+local function dayStart(now)
+    local t = os.date("*t", now)
+    return os.time{ year = t.year, month = t.month, day = t.day, hour = 0, min = 0, sec = 0 }
+end
+
+local function fmtTime(secs)
+    if not secs or secs < 0 then return "0m" end
+    local h = math.floor(secs / 3600)
+    local m = math.floor((secs % 3600) / 60)
+    if h > 0 then
+        return string.format("%dh %dm", h, m)
+    end
+    return string.format("%dm", m)
+end
+
+local function getTodaySecs()
+    local now = os.time()
+    local day_start = dayStart(now)
+
+    if _today_cache and now - _today_cache.at < STATS_TTL_S and _today_cache.day_start == day_start then
+        return _today_cache.secs
+    end
+
+    local db_secs = 0
+    pcall(function()
+        local DataStorage = require("datastorage")
+        local path = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+        local lfs = require("libs/libkoreader-lfs")
+        if lfs.attributes(path, "mode") ~= "file" then return end
+        local SQ3 = require("lua-ljsqlite3/init")
+        local conn = SQ3.open(path, "ro")
+        pcall(function()
+            conn:exec("PRAGMA busy_timeout=200;")
+            local stmt = conn:prepare([[
+                SELECT COALESCE(SUM(
+                    MIN(start_time + duration, ?) - MAX(start_time, ?)
+                ), 0)
+                FROM wpm_stat_data
+                WHERE start_time + duration >= ? AND start_time <= ?
+            ]])
+            local row = stmt:bind(now, day_start, day_start, now):step()
+            stmt:clearbind():reset()
+            stmt:close()
+            db_secs = tonumber(row[1]) or 0
+        end)
+        conn:close()
+    end)
+
+    local live = 0
+    pcall(function()
+        local ReaderUI = require("apps/reader/readerui")
+        local sp = ReaderUI.instance and ReaderUI.instance.statistics
+        if sp and sp.start_current_period and sp.start_current_period > 0 then
+            local effective_start = math.max(sp.start_current_period, day_start)
+            live = math.max(0, now - effective_start)
+        end
+    end)
+
+    local total = db_secs + live
+    _today_cache = { at = now, day_start = day_start, secs = total }
+    return total
+end
+
+-- Shrinks font size until `text` fits within `max_w` at the given face,
+-- same approach as session_time.lua's fitFontSize.
+local function fitFontSize(Fonts, text, max_sz, min_sz, max_w, bold)
+    local sz = max_sz
+    while sz > min_sz do
+        local face, b = Fonts:getFace("cfont", sz, bold and {bold=true} or nil)
+        local tw = require("ui/widget/textwidget"):new{
+            text = text, face = face, bold = b }
+        if tw:getSize().w <= max_w then return sz end
+        sz = sz - 2
+    end
+    return min_sz
 end
 
 local function showSettings(ctx)
@@ -170,10 +255,26 @@ return {
         end
 
         local display = (delta > 0 and "+" or "") .. tostring(delta)
+        local today_str = fmtTime(getTodaySecs())
 
-        local big_face, big_bold     = Fonts:getFace("cfont", sc(40), {bold=true})
+        -- Reserve roughly half the module width for each side (minus the
+        -- gap between them), then shrink each big number independently so
+        -- neither block overflows or crowds the other. ΔL's "display" text
+        -- is short (e.g. "-78") so it rarely needs shrinking, but Today's
+        -- "Xh Ym" can be noticeably wider at the same font size.
+        local gap        = sc(20)
+        local half_w      = math.floor((mw - gap) / 2)
+        local delta_sz    = fitFontSize(Fonts, display,   sc(40), sc(20), half_w, true)
+        local today_sz    = fitFontSize(Fonts, today_str, sc(40), sc(20), half_w, true)
+        local big_sz      = math.min(delta_sz, today_sz)
+
+        local big_face, big_bold     = Fonts:getFace("cfont", big_sz, {bold=true})
         local label_face, label_bold = Fonts:getFace("cfont", sc(20), {bold=true})
         local sub_face               = Fonts:getFace("cfont", sc(13))
+        -- Same sizes as the ΔL block so both feel like peers, not
+        -- primary/secondary.
+        local today_face, today_bold             = Fonts:getFace("cfont", big_sz, {bold=true})
+        local today_label_face, today_label_bold = Fonts:getFace("cfont", sc(20), {bold=true})
 
         local big_tw = TextWidget:new{
             text    = display,
@@ -196,7 +297,7 @@ return {
 
         -- ΔL baseline-aligned to the right of the number
         local dy = math.max(0, big_tw:getBaseline() - label_tw:getBaseline())
-        local header = HorizontalGroup:new{
+        local delta_block = HorizontalGroup:new{
             align = "top",
             big_tw,
             HorizontalSpan:new{ width = sc(8) },
@@ -204,6 +305,39 @@ return {
                 align = "left",
                 VerticalSpan:new{ width = dy },
                 label_tw,
+            },
+        }
+
+        -- "Today" block: value stacked over its caption, same scale as
+        -- the ΔL block, placed to its right.
+        local today_block = VerticalGroup:new{
+            align = "center",
+            TextWidget:new{
+                text    = today_str,
+                face    = today_face,
+                bold    = today_bold,
+                fgcolor = BLACK,
+            },
+            VerticalSpan:new{ width = sc(2) },
+            TextWidget:new{
+                text    = _("Today"),
+                face    = today_label_face,
+                bold    = today_label_bold,
+                fgcolor = SM.COLOR_MUTED,
+            },
+        }
+
+        local row_h = math.max(delta_block:getSize().h, today_block:getSize().h)
+        local header = HorizontalGroup:new{
+            align = "center",
+            CenterContainer:new{
+                dimen = Geom:new{ w = delta_block:getSize().w, h = row_h },
+                delta_block,
+            },
+            HorizontalSpan:new{ width = gap },
+            CenterContainer:new{
+                dimen = Geom:new{ w = today_block:getSize().w, h = row_h },
+                today_block,
             },
         }
 
@@ -230,4 +364,3 @@ return {
         }
     end,
 }
-
