@@ -220,6 +220,39 @@ function Bookshelf:init()
     Fonts.maybeSeedFreshInstall()
     Fonts.ensureInstalled()
 
+    -- Warm-up: pre-render the start-menu modules off-screen once, so the
+    -- first real _buildPanel doesn't pay the cost of requiring widget
+    -- classes + resolving font faces for the first time (issue: first
+    -- render was ~5-10x slower than subsequent ones). Deferred to nextTick
+    -- so it doesn't delay Bookshelf's own init, and pcall'd per-module so
+    -- one bad module can't block warming the rest.
+    UIManager:nextTick(function()
+        local ok, err = pcall(function()
+            local Modules = require("lib/bookshelf_start_menu_modules")
+            local ModuleKit = require("lib/bookshelf_module_kit")
+            local warm_keys = {
+                "finished_stats", "reading_time_breakdown", "reading_delta",
+                "book_info", "session_time", "wpm_session",
+            }
+            for _, key in ipairs(warm_keys) do
+                local def = Modules.get(key)
+                if def and def.render then
+                    local entry = { id = "__warmup_" .. key, type = "module", module = key }
+                    pcall(def.render, {
+                        width = 400, height = nil, scale = 100,
+                        preview = true, refresh = function() end,
+                        shape = nil, entry = entry, surface = "start_menu",
+                        bw = nil, menu = nil,
+                        config = ModuleKit.entryConfig(entry, nil),
+                    })
+                end
+            end
+        end)
+        if not ok then
+            logger.warn("[bookshelf] warmup failed:", err)
+        end
+    end)
+
     -- Cache update-related settings on the instance for the menu's text_func
     -- closures. Defaults match bookends: branch empty, source = "release",
     -- background check OFF (opt-in via the menu toggle).
