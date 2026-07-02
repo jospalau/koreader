@@ -227,6 +227,9 @@ function ReaderStatus:markBook(mark_read)
             local util = require("util")
             util.generateStats()
     end
+    require("readhistory"):removeItemByPath(self.document.file)
+    local Repo = require("lib/bookshelf_book_repository")
+    if Repo.invalidateLightMeta then Repo.invalidateLightMeta() end
 end
 
 return ReaderStatus
