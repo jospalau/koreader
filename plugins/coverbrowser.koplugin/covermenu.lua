@@ -195,9 +195,8 @@ function CoverMenu:onCloseWidget()
 
     -- Force garbage collecting when leaving too
     -- (delay it a bit so this pause is less noticeable)
-    UIManager:scheduleIn(0.2, function()
-        collectgarbage()
-        collectgarbage()
+    UIManager:scheduleIn(1.5, function()
+        collectgarbage("step", 200)
     end)
     nb_drawings_since_last_collectgarbage = 0
 
