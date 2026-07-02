@@ -1,4 +1,4 @@
---[[
+ --[[
 Start-menu / hero micro-module: current session reading time.
 Shows how long you have been reading in the current session,
 plus total reading time today from the statistics DB.
@@ -40,56 +40,58 @@ local function getTodaySecs()
     local now = os.time()
     local day_start = dayStart(now)
 
-    -- FIX: previously only keyed on STATS_TTL_S, so a render right after
-    -- midnight (within the 30s window) could return a value computed for
-    -- the previous calendar day. Invalidate as soon as the day rolls over.
+    -- Only the DB sum is expensive/cacheable. `live` (the still-open
+    -- session/stat period) must be recomputed every call, or it goes
+    -- stale for up to STATS_TTL_S and drifts away from getSessionSecs(),
+    -- which is never cached. Caching `db_secs + live` together was the
+    -- bug: "Today" would freeze mid-render-cycle while "Session" kept
+    -- ticking, making them disagree by a few seconds.
+    local db_secs
     if _cache and now - _cache.at < STATS_TTL_S and _cache.day_start == day_start then
-        return _cache.secs
-    end
-
-    local db_secs = 0
-    pcall(function()
-        local DataStorage = require("datastorage")
-        local path = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
-        local lfs = require("libs/libkoreader-lfs")
-        if lfs.attributes(path, "mode") ~= "file" then return end
-        local SQ3 = require("lua-ljsqlite3/init")
-        local conn = SQ3.open(path, "ro")
+        db_secs = _cache.db_secs
+    else
+        db_secs = 0
         pcall(function()
-            conn:exec("PRAGMA busy_timeout=200;")
-            local stmt = conn:prepare([[
-                SELECT COALESCE(SUM(
-                    MIN(start_time + duration, ?) - MAX(start_time, ?)
-                ), 0)
-                FROM wpm_stat_data
-                WHERE start_time + duration >= ? AND start_time <= ?
-            ]])
-            local row = stmt:bind(now, day_start, day_start, now):step()
-            stmt:clearbind():reset()
-            stmt:close()
-            db_secs = tonumber(row[1]) or 0
+            local DataStorage = require("datastorage")
+            local path = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+            local lfs = require("libs/libkoreader-lfs")
+            if lfs.attributes(path, "mode") ~= "file" then return end
+            local SQ3 = require("lua-ljsqlite3/init")
+            local conn = SQ3.open(path, "ro")
+            pcall(function()
+                conn:exec("PRAGMA busy_timeout=200;")
+                local stmt = conn:prepare([[
+                    SELECT COALESCE(SUM(
+                        MIN(start_time + duration, ?) - MAX(start_time, ?)
+                    ), 0)
+                    FROM wpm_stat_data
+                    WHERE start_time + duration >= ? AND start_time <= ?
+                ]])
+                local row = stmt:bind(now, day_start, day_start, now):step()
+                stmt:clearbind():reset()
+                stmt:close()
+                db_secs = tonumber(row[1]) or 0
+            end)
+            conn:close()
         end)
-        conn:close()
-    end)
+        _cache = { at = now, day_start = day_start, db_secs = db_secs }
+    end
 
     local live = 0
     pcall(function()
         local ReaderUI = require("apps/reader/readerui")
         local sp = ReaderUI.instance and ReaderUI.instance.statistics
         if sp and sp.start_current_period and sp.start_current_period > 0 then
-            -- FIX: previously used `now - start_current_period` unclamped,
-            -- so a session spanning midnight (still open, not yet flushed
-            -- to the DB) leaked yesterday's minutes into "Today". Clamp the
-            -- effective start to the current day's midnight, matching how
-            -- db_secs is already bounded by day_start in the SQL query.
+            -- Clamp the effective start to today's midnight, matching how
+            -- db_secs is already bounded by day_start in the SQL query,
+            -- so a session spanning midnight doesn't leak yesterday's
+            -- minutes into "Today".
             local effective_start = math.max(sp.start_current_period, day_start)
             live = math.max(0, now - effective_start)
         end
     end)
 
-    local total = db_secs + live
-    _cache = { at = now, day_start = day_start, secs = total }
-    return total
+    return db_secs + live
 end
 
 local function fitFontSize(Fonts, text, max_sz, min_sz, max_w, bold)
