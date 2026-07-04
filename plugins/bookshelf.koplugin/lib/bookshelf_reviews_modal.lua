@@ -1173,6 +1173,14 @@ function ReviewsModal:onSwipe(_arg, ges)
             self:_switchTab((self._active_tab - 2) % n + 1); return true
         end
     end
+    -- South closes the modal, mirroring the multi-swipe close and the
+    -- title bar's X button -- routes through onClose (not a bare
+    -- UIManager:close) so the tab-source persistence and on_tab_close
+    -- callback still fire on dismiss.
+    if ges and ges.direction == "south" then
+        self:onClose()
+        return true
+    end
     if self:_tryPassthrough(ges) then return true end
     return false
 end
