@@ -606,7 +606,28 @@ function FileManager:onSwipeFM(ges)
         if self.shortcutstoolbar then
             self.shortcutstoolbar:refreshTimeBatteryWifiOnly()
         end
-        self:handleEvent(Event:new("ToggleBookshelf"))
+        -- Look at whatever's actually on top of the window stack: if it's
+        -- FileManager or Bookshelf itself, this swipe means "toggle
+        -- Bookshelf" as usual. Anything else on top (a modal, a menu, a
+        -- dialog, etc.) means the swipe should just close that widget
+        -- instead of reaching through it to toggle Bookshelf underneath.
+        local top_widget = (UIManager.getTopmostVisibleWidget
+                and UIManager:getTopmostVisibleWidget())
+            or (UIManager._window_stack[#UIManager._window_stack]
+                and UIManager._window_stack[#UIManager._window_stack].widget)
+        local is_fm = FileManager.instance and top_widget == FileManager.instance
+        local ok_bw, BookshelfWidget = pcall(require, "lib/bookshelf_widget")
+        local is_bookshelf = ok_bw and BookshelfWidget
+            and top_widget and top_widget.is_a and top_widget:is_a("BookshelfWidget")
+
+        if is_fm or is_bookshelf then
+            if self.shortcutstoolbar then
+                self.shortcutstoolbar:refreshTimeBatteryWifiOnly()
+            end
+            self:handleEvent(Event:new("ToggleBookshelf"))
+        elseif top_widget then
+            UIManager:close(top_widget)
+        end
     end
     return true
 end
