@@ -490,7 +490,7 @@ function Settings:_tagsRegionSubItems()
         {
             text_func = function()
                 return _("Font size") .. ": "
-                    .. tostring(Regions.read().tags.font_size or 12)
+                    .. tostring(Regions.read().tags.font_size or 14)
             end,
             keep_menu_open = true,
             callback = function(touchmenu_instance)
@@ -500,8 +500,8 @@ function Settings:_tagsRegionSubItems()
                 -- submenu (and refreshes its rows) when the nudge closes.
                 local LineEditor  = require("lib/bookshelf_hero_line_editor")
                 local restoreMenu = LineEditor.hideParentMenu(touchmenu_instance)
-                local cur     = Regions.read().tags.font_size or 12
-                local default = Regions.DEFAULTS.tags.font_size or 12
+                local cur     = Regions.read().tags.font_size or 14
+                local default = Regions.DEFAULTS.tags.font_size or 14
                 LineEditor.showSizeNudge(
                     cur, default,
                     -- on_change: persist + live-refresh the hero each nudge.
@@ -524,6 +524,34 @@ function Settings:_tagsRegionSubItems()
                 alignmentRow("center", _("Centre")),
                 alignmentRow("right",  _("Right")),
             },
+        },
+        {
+            -- Caps how many rows of pills the hero shows; the overflow folds
+            -- into the tappable "+N" button (which opens the full tags sheet).
+            -- 1 row reads cleanest now that nothing is lost to the cap; more
+            -- rows suit a hero with the spare height (e.g. description off).
+            text_func = function()
+                return _("Maximum tag rows") .. ": "
+                    .. tostring(Regions.read().tags.max_rows or 2)
+            end,
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                local SpinWidget = require("ui/widget/spinwidget")
+                local UIManager_ = require("ui/uimanager")
+                local cur = tonumber(Regions.read().tags.max_rows) or 2
+                UIManager_:show(SpinWidget:new{
+                    title_text = _("Maximum tag rows"),
+                    info_text  = _("How many rows of tag pills the hero shows before the rest collapse into a tappable +N button."),
+                    value      = cur,
+                    value_min  = 1,
+                    value_max  = 5,
+                    value_step = 1,
+                    ok_text    = _("Set"),
+                    callback   = function(spin)
+                        setTagsField("max_rows", spin.value, touchmenu_instance)
+                    end,
+                })
+            end,
         },
     }
 end
@@ -2169,6 +2197,33 @@ function Settings:_expandedShelfSubItems()
             end,
         }
     end
+    -- What a tap on a book in the expanded shelf does. Defaults (via
+    -- expandedTapAction) honour the legacy tap_to_open_double toggle so
+    -- existing users keep their behaviour; that toggle still governs the
+    -- hero-card double-tap separately.
+    local tap_labels = {
+        show_detail = _("Show book detail in hero"),
+        open        = _("Open with a single tap"),
+        open_double = _("Open with a double tap"),
+    }
+    local function tapRow(action, label)
+        return {
+            text           = label,
+            checked_func   = function() return BookshelfSettings.expandedTapAction() == action end,
+            radio          = true,
+            keep_menu_open = true,
+            callback       = function(touchmenu_instance)
+                BookshelfSettings.save("expanded_tap_action", action)
+                BookshelfSettings.flush()
+                -- Clear any pending tap-selection so switching mid-session
+                -- doesn't leave a stale focus ring.
+                if self._bw then self._bw._tap_selected_fp = nil end
+                if touchmenu_instance and touchmenu_instance.updateItems then
+                    touchmenu_instance:updateItems()
+                end
+            end,
+        }
+    end
     return {
         {
             text_func = function()
@@ -2180,6 +2235,22 @@ function Settings:_expandedShelfSubItems()
                     optionRow("author", labels.author),
                     optionRow("series", labels.series),
                     optionRow("none",   labels.none),
+                }
+            end,
+        },
+        {
+            text_func = function()
+                return _("Tap a book") .. ": " .. tap_labels[BookshelfSettings.expandedTapAction()]
+            end,
+            help_text = _("What tapping a book does in the expanded shelf: show"
+                .. " that book's detail in the hero area, open it with a single"
+                .. " tap, or open it with a double tap (first tap selects). The"
+                .. " hero card's own double-tap-to-open is set in Advanced settings."),
+            sub_item_table_func = function()
+                return {
+                    tapRow("show_detail", tap_labels.show_detail),
+                    tapRow("open",        tap_labels.open),
+                    tapRow("open_double", tap_labels.open_double),
                 }
             end,
         },
@@ -2312,7 +2383,7 @@ end
 
 function Settings:_advancedSubItems()
     local plugin = self._plugin
-    return {
+    local items = {
         -- ── library & metadata ──
         {
             text     = _("Scan all library metadata"),
@@ -2615,6 +2686,32 @@ function Settings:_advancedSubItems()
             end,
         },
     }
+
+    -- Kobo virtual-library shelf (beta). Always listed (like the calibre beta
+    -- toggle) so Kobo users can reliably find and enable it -- on non-Kobo
+    -- devices the option simply does nothing, because the "Kobo" chip is
+    -- separately gated on this setting AND KoboSource.isAvailable() (false
+    -- off-Kobo). Toggling rebuilds so the chip appears/disappears immediately.
+    items[#items + 1] = {
+        text = _("BETA: Kobo library shelf"),
+        help_text = _("Adds a \"Kobo\" chip that surfaces your Kobo "
+            .. "virtual library (the books managed by the Kobo store / "
+            .. "OGKevin's kobo.koplugin) as a Bookshelf shelf. Read-only; "
+            .. "covers and opening depend on that plugin. Kobo devices only."),
+        checked_func = function()
+            return BookshelfSettings.read("kobo_shelf") == true
+        end,
+        keep_menu_open = true,
+        callback = function()
+            local enabled = BookshelfSettings.read("kobo_shelf") == true
+            BookshelfSettings.save("kobo_shelf", not enabled)
+            if self._bw and self._bw._rebuild then
+                self._bw:_rebuild()
+                UIManager:setDirty(self._bw, "ui")
+            end
+        end,
+    }
+    return items
 end
 
 --- @param extra_button table|nil  Optional shortcut button rendered between
@@ -3143,6 +3240,96 @@ function Settings:_pickStartMenuFontScale(touchmenu_instance)
     UIManager:show(dialog)
 end
 
+-- Nudge dialog for the book-detail popup's tab bar (Edit/Description/
+-- Reviews/Tags) label font scale. Same shape as _pickChipFontScale, but no
+-- live-rebuild call: the popup is per-book and not open while in Settings,
+-- so there's nothing on-screen to preview -- just persist and let the touch
+-- menu row's own label refresh.
+function Settings:_pickModalTabFontScale(touchmenu_instance)
+    local ButtonDialog = require("ui/widget/buttondialog")
+    local ReviewsModal = require("lib/bookshelf_reviews_modal")
+    local key = "modal_tab_font_scale"
+    local original = BookshelfSettings.read(key, 100)
+    -- See _pickCoverBadgeFontScale for the hide+restore rationale.
+    local restoreMenu = self._plugin:hideMenu(touchmenu_instance)
+
+    local function getValue() return BookshelfSettings.read(key, 100) end
+    local function setValue(v)
+        v = math.max(50, math.min(200, v))
+        BookshelfSettings.save(key, v)
+    end
+    local function refresh()
+        -- Live preview: if the book-detail popup is open (this setting is
+        -- normally tuned with it open, watching the tab strip), rebuild its
+        -- tab strip at the new label size in place. Only that strip changes.
+        local live = ReviewsModal._live
+        if live and not live._dismissed and live.refreshTabBar then
+            live:refreshTabBar()
+        end
+        -- Every font-scale picker here dirties a real on-screen widget in its
+        -- nudge callback; the one that didn't (this one, originally) stalled
+        -- the e-ink refresh pipeline and taps stopped registering (confirmed
+        -- on-device). The shelf rebuild is the proven repaint -- kept even
+        -- though this setting doesn't change the shelf itself.
+        if self._bw and self._bw._rebuild then
+            self._bw:_rebuild()
+            UIManager:setDirty(self._bw, "ui")
+        end
+        if touchmenu_instance and touchmenu_instance.updateItems then
+            touchmenu_instance:updateItems()
+        end
+    end
+
+    local dialog
+    -- ButtonDialog:reinit() is free()+init(), and init() unconditionally
+    -- rebuilds self.movable as a FRESH MovableContainer with its default
+    -- drag/hold/pan gestures -- discarding the lockdown below. Without
+    -- re-clearing it here, the second nudge's Focus.reinit() silently
+    -- restores dragging, and a tap on the closely-packed -/+ buttons that
+    -- lingers a touch too long gets claimed by the movable's hold/pan
+    -- handling instead of the button, wedging the touch state machine
+    -- (confirmed on-device: a detected tap with no callback firing, then
+    -- all further input going quiet).
+    local function reinitLocked()
+        Focus.reinit(dialog)
+        if dialog.movable then dialog.movable.ges_events = {} end
+    end
+    local function nudge(delta)
+        setValue(getValue() + delta)
+        refresh()
+        reinitLocked()
+    end
+    local function close() UIManager:close(dialog); restoreMenu() end
+    local function revert()
+        setValue(original)
+        refresh()
+    end
+
+    dialog = ButtonDialog:new{
+        dismissable = false,  -- nudge-dialog lockdown; see _pickCoverBadgeFontScale
+        title = _("Modal tab label font scale"),
+        buttons = {
+            {
+                { text = "-10",  callback = function() nudge(-10) end },
+                { text = "-5",   callback = function() nudge(-5)  end },
+                { text_func = function() return tostring(getValue()) .. "%" end,
+                  enabled = false },
+                { text = "+5",   callback = function() nudge(5)   end },
+                { text = "+10",  callback = function() nudge(10)  end },
+            },
+            {
+                { text = _("Cancel"), callback = function() revert(); close() end },
+                { text = _("Default"),
+                  callback = function() setValue(100); refresh(); reinitLocked() end },
+                { text = _("Apply"), is_enter_default = true, callback = close },
+            },
+        },
+        tap_close_callback = revert,
+    }
+    if dialog.movable then dialog.movable.ges_events = {} end
+    UIManager:show(dialog)
+end
+
 -- Bookshelf UI font picker -- reuses the hero line editor's font picker
 -- (bookends-rich preview when available, FontList file picker otherwise).
 -- Applies on tap: the chosen font is saved and the live bookshelf rebuilt
@@ -3201,6 +3388,7 @@ function Settings:_textSizeSubItems()
         row(_("Expanded shelf labels"), "expanded_shelf_font_scale", 100, "_pickExpandedShelfFontScale"),
         row(_("Cover badges"),          "cover_badge_font_scale",    100, "_pickCoverBadgeFontScale"),
         row(_("Start menu"),            "start_menu_font_scale",     100, "_pickStartMenuFontScale"),
+        row(_("Modal tabs"),            "modal_tab_font_scale",      100, "_pickModalTabFontScale"),
     }
 end
 
