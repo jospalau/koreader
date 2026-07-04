@@ -305,10 +305,15 @@ end
 -- than honour it, so the mistake degrades to an incomplete page + a logged
 -- warning instead of an out-of-memory SIGKILL (which Lua cannot catch).
 local MAX_HYDRATE = 512
-local function _hydrationStop(offset, limit, total, default_limit, who)
+-- light_only: when the caller wants only light metadata (one batched SELECT,
+-- no full Book records, no cover decompress) the hydration ceiling doesn't
+-- apply -- it exists solely to stop a runaway HYDRATING fetch from OOM-killing
+-- the app. Clamping a light fetch silently truncated full-list consumers like
+-- the "Go to letter" jump at exactly 512 items (#229).
+local function _hydrationStop(offset, limit, total, default_limit, who, light_only)
     offset = offset or 0
     local want = limit or default_limit or 8
-    if want > MAX_HYDRATE then
+    if not light_only and want > MAX_HYDRATE then
         logger.warn(string.format(
             "[bookshelf] %s asked to hydrate %s items; clamping to %d "
             .. "(use getGroupChoices / a light path for full lists)",
@@ -1118,7 +1123,7 @@ function Repo.getRecent(limit, offset, opts)
     local rh   = getReadHistory()
     offset     = offset or 0
     limit      = limit or 8
-    if limit > MAX_HYDRATE then
+    if not (opts and opts.light_only) and limit > MAX_HYDRATE then
         logger.warn(string.format("[bookshelf] getRecent asked to hydrate %s; clamping to %d",
             tostring(limit), MAX_HYDRATE))
         limit = MAX_HYDRATE
@@ -1874,7 +1879,7 @@ function Repo.getLatest(limit, offset, opts)
     offset      = offset or 0
     local total = #candidates
     local out   = {}
-    local stop  = _hydrationStop(offset, limit, total, 8, "getLatest")
+    local stop  = _hydrationStop(offset, limit, total, 8, "getLatest", opts and opts.light_only)
     local ScaledCoverCache
     if opts and opts.lazy_cover then
         ScaledCoverCache = require("lib/bookshelf_scaled_cover_cache")
@@ -2179,7 +2184,7 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
         local hit_light_cache = Filter.isActive(filter) and _getLightMetaCache(home_lc, depth_lc) or nil
         local shapes_for_slice, total = _filterAllShapes(entry.shapes, filter, hit_light_cache)
         local out   = {}
-        local stop  = _hydrationStop(offset, limit, total, total, "getAll")
+        local stop  = _hydrationStop(offset, limit, total, total, "getAll", opts and opts.light_only)
         -- Letter-jump path: serve light metadata for the slice instead of
         -- full _safeBuildBookMeta records. Book shapes only carry .fp, so a
         -- batched light-meta lookup supplies the sort-key fields (title /
@@ -2571,7 +2576,7 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
     local miss_light_cache = Filter.isActive(filter) and _getLightMetaCache(miss_lc_home, miss_lc_depth) or nil
     local shapes_for_slice, total = _filterAllShapes(shapes, filter, miss_light_cache)
     local out  = {}
-    local stop = _hydrationStop(offset, limit, total, total, "getAll")
+    local stop = _hydrationStop(offset, limit, total, total, "getAll", opts and opts.light_only)
     for i = offset + 1, stop do
         local shape = shapes_for_slice[i]
         if shape.kind == "folder" then
@@ -2662,7 +2667,7 @@ function Repo.getFavorites(limit, offset, opts)
     -- caller's _total_hint path can compute total_pages.
     local total = #items
     offset      = offset or 0
-    local stop  = _hydrationStop(offset, limit, total, 8, "getFavorites")
+    local stop  = _hydrationStop(offset, limit, total, 8, "getFavorites", opts and opts.light_only)
     local out   = {}
     local ScaledCoverCache
     if opts and opts.lazy_cover then
@@ -2855,7 +2860,7 @@ function Repo.getTags(limit, offset, sort_priority_override, filter, opts)
     -- view at one page of `limit` items even when more collections exist.
     local total = #groups
     offset      = offset or 0
-    local stop  = _hydrationStop(offset, limit, total, total, "getTags")
+    local stop  = _hydrationStop(offset, limit, total, total, "getTags", opts and opts.light_only)
     local out   = {}
     -- Upgrade each visible group's FRONT book (the one whose cover the
     -- SeriesStack renders) to a full record. Covers already in
@@ -3039,7 +3044,7 @@ function Repo.getSeriesGroups(limit, offset, sort_priority_override, filter, opt
         local total = #sorted
         local out   = {}
         offset      = offset or 0
-        local stop  = _hydrationStop(offset, limit, total, 8, "getSeriesGroups")
+        local stop  = _hydrationStop(offset, limit, total, 8, "getSeriesGroups", opts and opts.light_only)
         for i = offset + 1, stop do
             out[#out + 1] = hydrateSeriesShape(sorted[i], filter, opts and opts.light_only)
         end
@@ -3155,7 +3160,7 @@ function Repo.getSeriesGroups(limit, offset, sort_priority_override, filter, opt
     local total = #sorted
     local out   = {}
     offset      = offset or 0
-    local stop  = _hydrationStop(offset, limit, total, 8, "getSeriesGroups")
+    local stop  = _hydrationStop(offset, limit, total, 8, "getSeriesGroups", opts and opts.light_only)
     for i = offset + 1, stop do out[#out + 1] = hydrateSeriesShape(sorted[i], filter, opts and opts.light_only) end
     logger.dbg(string.format("[bookshelf perf] getSeriesGroups: MISS build=%.0fms cands=%d groups=%d/%d",
         (_gettime() - _t0) * 1000, #candidates, #out, total))
@@ -3710,7 +3715,7 @@ function Repo.getAuthors(limit, offset, sort_priority_override, filter, opts)
     local total = #sorted
     local out   = {}
     offset      = offset or 0
-    local stop  = _hydrationStop(offset, limit, total, 8, "getAuthors")
+    local stop  = _hydrationStop(offset, limit, total, 8, "getAuthors", opts and opts.light_only)
     for i = offset + 1, stop do
         out[#out + 1] = _hydrateGroupShape(sorted[i], within, filter, opts and opts.light_only)
     end
@@ -3753,7 +3758,7 @@ function Repo.getGenres(limit, offset, sort_priority_override, filter, opts)
     local total = #sorted
     local out   = {}
     offset      = offset or 0
-    local stop  = _hydrationStop(offset, limit, total, 8, "getGenres")
+    local stop  = _hydrationStop(offset, limit, total, 8, "getGenres", opts and opts.light_only)
     for i = offset + 1, stop do
         out[#out + 1] = _hydrateGroupShape(sorted[i], within, filter, opts and opts.light_only)
     end
@@ -4004,7 +4009,7 @@ function Repo.getFormats(limit, offset, sort_priority_override, filter, opts)
     local total = #sorted
     local out   = {}
     offset      = offset or 0
-    local stop  = _hydrationStop(offset, limit, total, 8, "getFormats")
+    local stop  = _hydrationStop(offset, limit, total, 8, "getFormats", opts and opts.light_only)
     for i = offset + 1, stop do
         out[#out + 1] = _hydrateGroupShape(sorted[i], within, filter, opts and opts.light_only)
     end
@@ -4047,7 +4052,7 @@ function Repo.getLanguages(limit, offset, sort_priority_override, filter, opts)
     local total = #sorted
     local out   = {}
     offset      = offset or 0
-    local stop  = _hydrationStop(offset, limit, total, 8, "getLanguages")
+    local stop  = _hydrationStop(offset, limit, total, 8, "getLanguages", opts and opts.light_only)
     for i = offset + 1, stop do
         out[#out + 1] = _hydrateGroupShape(sorted[i], within, filter, opts and opts.light_only)
     end
@@ -4173,7 +4178,7 @@ function Repo.getRatings(limit, offset, sort_priority_override, filter, opts)
     local total = #sorted
     local out   = {}
     offset      = offset or 0
-    local stop  = _hydrationStop(offset, limit, total, 8, "getRatings")
+    local stop  = _hydrationStop(offset, limit, total, 8, "getRatings", opts and opts.light_only)
     for i = offset + 1, stop do
         out[#out + 1] = _hydrateGroupShape(sorted[i], within, filter, opts and opts.light_only)
     end
@@ -4625,7 +4630,7 @@ function Repo.getBySource(source, filter, sort_priority, offset, limit, opts)
         -- order) and rehydrate just the visible page.
         local total = #cached_paths
         local from  = (offset or 0) + 1
-        local to    = _hydrationStop(offset or 0, limit, total, total, "getBySource")
+        local to    = _hydrationStop(offset or 0, limit, total, total, "getBySource", opts and opts.light_only)
         local page  = {}
         if opts and opts.light_only then
             -- Letter-jump path: the caller only reads sort-key fields
@@ -5068,7 +5073,7 @@ function Repo.getBySource(source, filter, sort_priority, offset, limit, opts)
     -- Light records are released for GC after this function returns.
     local total = #paths
     local from  = (offset or 0) + 1
-    local to    = _hydrationStop(offset or 0, limit, total, total, "getBySource")
+    local to    = _hydrationStop(offset or 0, limit, total, total, "getBySource", opts and opts.light_only)
     local page  = {}
     if opts and opts.light_only then
         -- Letter-jump path: the sorted light candidates already carry the

@@ -4,7 +4,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-03 23:37+0100\n"
+"POT-Creation-Date: 2026-07-04 12:12+0100\n"
 "PO-Revision-Date: 2026-06-14 12:00+0100\n"
 "Last-Translator: \n"
 "Language-Team: Hungarian\n"
@@ -488,6 +488,11 @@ msgstr "Válassz egy műveletet"
 #. instead of enumerating via the light getGroupChoices path. We clamp rather
 #. than honour it, so the mistake degrades to an incomplete page + a logged
 #. warning instead of an out-of-memory SIGKILL (which Lua cannot catch).
+#. light_only: when the caller wants only light metadata (one batched SELECT,
+#. no full Book records, no cover decompress) the hydration ceiling doesn't
+#. apply -- it exists solely to stop a runaway HYDRATING fetch from OOM-killing
+#. the app. Clamping a light fetch silently truncated full-list consumers like
+#. the "Go to letter" jump at exactly 512 items (#229).
 #. Resolve the user's library root from G_reader_settings. Returns the
 #. configured home_dir, or nil when it is unset / empty. "/" is allowed:
 #. some users (rooted devices, manual layouts) legitimately point home_dir
@@ -1920,8 +1925,8 @@ msgstr "Válassz egy műveletet"
 #. way book languages are canonicalised so every spelling matches
 #. (en / eng / en-GB / English -> one key). Mirrors _buildGroups.
 #. ⚡
-#: lib/bookshelf_book_repository.lua:3461
-#: lib/bookshelf_book_repository.lua:4791 micromodules/weather.lua:93
+#: lib/bookshelf_book_repository.lua:3466
+#: lib/bookshelf_book_repository.lua:4796 micromodules/weather.lua:93
 msgid "Unknown"
 msgstr "Ismeretlen"
 
@@ -2065,8 +2070,8 @@ msgstr "Ismeretlen"
 #. Specific-rating picker: a fixed list (1..5 stars + Unrated) rather
 #. than something derived from the library. Built inline because the
 #. option set is constant and tiny.
-#: lib/bookshelf_book_repository.lua:4056 lib/bookshelf_chip_editor.lua:1116
-#: lib/bookshelf_filter.lua:234
+#: lib/bookshelf_book_repository.lua:4061 lib/bookshelf_chip_editor.lua:1116
+#: lib/bookshelf_filter.lua:261
 msgid "Unrated"
 msgstr "Nincs értékelve"
 
@@ -2160,7 +2165,7 @@ msgstr "Kijelöltek szerkesztése (%d)"
 #. The status quad is a real ButtonTable row; Favourite/Remove-from-history
 #. is hand-built below instead (see "Favourite row" comment) so the
 #. checkbox glyph can be its own non-bold TextWidget.
-#: lib/bookshelf_bulk_actions.lua:111 lib/bookshelf_widget.lua:9271
+#: lib/bookshelf_bulk_actions.lua:111 lib/bookshelf_widget.lua:9294
 msgid "Unopened"
 msgstr "Olvasatlan"
 
@@ -2177,20 +2182,20 @@ msgstr "Olvasatlan"
 #. but the tally is computed at most once per time the menu is opened. No on_tap.
 #.
 #. Display order and translatable labels for the per-status lines.
-#: lib/bookshelf_bulk_actions.lua:112 lib/bookshelf_filter.lua:203
-#: lib/bookshelf_filter.lua:221 lib/bookshelf_icons_catalogue.lua:23
-#: lib/bookshelf_widget.lua:9271 micromodules/shelf_size.lua:17
+#: lib/bookshelf_bulk_actions.lua:112 lib/bookshelf_filter.lua:230
+#: lib/bookshelf_filter.lua:248 lib/bookshelf_icons_catalogue.lua:23
+#: lib/bookshelf_widget.lua:9294 micromodules/shelf_size.lua:17
 msgid "Reading"
 msgstr "Olvasás alatt"
 
-#: lib/bookshelf_bulk_actions.lua:113 lib/bookshelf_filter.lua:204
-#: lib/bookshelf_filter.lua:222 lib/bookshelf_widget.lua:9272
+#: lib/bookshelf_bulk_actions.lua:113 lib/bookshelf_filter.lua:231
+#: lib/bookshelf_filter.lua:249 lib/bookshelf_widget.lua:9295
 #: micromodules/random_unread.lua:222 micromodules/shelf_size.lua:19
 msgid "On hold"
 msgstr "Felfüggesztve"
 
-#: lib/bookshelf_bulk_actions.lua:114 lib/bookshelf_filter.lua:204
-#: lib/bookshelf_filter.lua:223 lib/bookshelf_widget.lua:9272
+#: lib/bookshelf_bulk_actions.lua:114 lib/bookshelf_filter.lua:231
+#: lib/bookshelf_filter.lua:250 lib/bookshelf_widget.lua:9295
 #: micromodules/random_unread.lua:223 micromodules/shelf_size.lua:20
 msgid "Finished"
 msgstr "Elolvasva"
@@ -2214,7 +2219,7 @@ msgstr "(törlés)"
 #. Toggle in place; never close/reopen (that's the old
 #. scroll-reset bug). refresh() re-renders the current
 #. page with updated selected states.
-#: lib/bookshelf_bulk_actions.lua:160 lib/bookshelf_chip_editor.lua:1507
+#: lib/bookshelf_bulk_actions.lua:160 lib/bookshelf_chip_editor.lua:1544
 msgid "Clear"
 msgstr "Törlés"
 
@@ -2542,11 +2547,11 @@ msgstr "Törlés"
 #: lib/bookshelf_settings.lua:3231 lib/bookshelf_settings.lua:3321
 #: lib/bookshelf_start_menu_edit.lua:56 lib/bookshelf_start_menu_edit.lua:161
 #: lib/bookshelf_start_menu_edit.lua:273 lib/bookshelf_start_menu_edit.lua:336
-#: lib/bookshelf_widget.lua:4046 lib/bookshelf_widget.lua:10163
-#: lib/bookshelf_widget.lua:10243 lib/bookshelf_widget.lua:10288
-#: lib/bookshelf_widget.lua:10356 lib/bookshelf_widget.lua:10404
-#: lib/bookshelf_widget.lua:10410 lib/bookshelf_widget.lua:11356
-#: lib/bookshelf_widget.lua:11837 main.lua:1613 micromodules/action.lua:223
+#: lib/bookshelf_widget.lua:4046 lib/bookshelf_widget.lua:10190
+#: lib/bookshelf_widget.lua:10270 lib/bookshelf_widget.lua:10315
+#: lib/bookshelf_widget.lua:10383 lib/bookshelf_widget.lua:10431
+#: lib/bookshelf_widget.lua:10437 lib/bookshelf_widget.lua:11386
+#: lib/bookshelf_widget.lua:11867 main.lua:1613 micromodules/action.lua:223
 #: micromodules/countdown.lua:60 micromodules/reading_goal.lua:369
 #: micromodules/weather.lua:269
 msgid "Cancel"
@@ -2598,7 +2603,7 @@ msgstr "Értékelés beállítása"
 #. visibly different typeface from its ButtonTable siblings whenever
 #. that substitution is active.
 #: lib/bookshelf_bulk_actions.lua:184 lib/bookshelf_bulk_actions.lua:186
-#: lib/bookshelf_bulk_actions.lua:188 lib/bookshelf_widget.lua:9439
+#: lib/bookshelf_bulk_actions.lua:188 lib/bookshelf_widget.lua:9462
 msgid "Favourite"
 msgstr "Kedvenc"
 
@@ -2609,14 +2614,14 @@ msgstr "Kedvenc"
 #. gray-fill background, mutated when on_save updates the draft.
 #: lib/bookshelf_bulk_actions.lua:214 lib/bookshelf_chip_editor.lua:210
 #: lib/bookshelf_chip_editor.lua:1284 lib/bookshelf_settings.lua:487
-#: lib/bookshelf_widget.lua:9932
+#: lib/bookshelf_widget.lua:9960
 msgid "Collections"
 msgstr "Gyűjtemények"
 
 #. Draft preserved; nothing to do.
 #. Refresh metadata / Remove from history: boolean toggles.
 #. Staged state signalled by gray-fill background.
-#: lib/bookshelf_bulk_actions.lua:246 lib/bookshelf_widget.lua:9236
+#: lib/bookshelf_bulk_actions.lua:246 lib/bookshelf_widget.lua:9259
 msgid "Refresh metadata"
 msgstr "Metaadatok frissítése"
 
@@ -2631,8 +2636,8 @@ msgstr "Metaadatok frissítése"
 #. shift. Evaluated once per buildBody() call, which already reruns via
 #. modal:rebuildTab() on every status change (refreshInPlace below).
 #. ── Favourite / Remove from history ──────────────────────────────────────
-#: lib/bookshelf_bulk_actions.lua:259 lib/bookshelf_widget.lua:9164
-#: lib/bookshelf_widget.lua:9442
+#: lib/bookshelf_bulk_actions.lua:259 lib/bookshelf_widget.lua:9187
+#: lib/bookshelf_widget.lua:9465
 msgid "Remove from history"
 msgstr "Eltávolítás az előzményekből"
 
@@ -2649,7 +2654,7 @@ msgstr "Eltávolítás az előzményekből"
 #. U+E831 checkbox-marked
 #. U+E830 checkbox-blank-outline
 #. ── File & metadata ──────────────────────────────────────────────────────
-#: lib/bookshelf_bulk_actions.lua:278 lib/bookshelf_widget.lua:9201
+#: lib/bookshelf_bulk_actions.lua:278 lib/bookshelf_widget.lua:9224
 msgid "Reset book data…"
 msgstr "Könyv adatainak visszaállítása…"
 
@@ -2683,8 +2688,8 @@ msgstr "A függő módosítások elvetve"
 #: lib/bookshelf_bulk_actions.lua:329 lib/bookshelf_bulk_actions.lua:345
 #: lib/bookshelf_chip_editor.lua:626 lib/bookshelf_collection_manager.lua:378
 #: lib/bookshelf_collection_manager.lua:408
-#: lib/bookshelf_start_menu_edit.lua:360 lib/bookshelf_widget.lua:9205
-#: lib/bookshelf_widget.lua:9218 lib/bookshelf_widget.lua:10403
+#: lib/bookshelf_start_menu_edit.lua:360 lib/bookshelf_widget.lua:9228
+#: lib/bookshelf_widget.lua:9241 lib/bookshelf_widget.lua:10430
 msgid "Delete"
 msgstr "Törlés"
 
@@ -3121,10 +3126,10 @@ msgstr "Módosítások alkalmazása %d könyvre?"
 #. toggle / activate semantics. No flashPending --
 #. they don't trigger a rebuild, so the border would
 #. have nothing to clear it.
-#. Tap on the already-active navigable tab opens the
-#. editor -- same affordance as long-press, surfaced
-#. via single-tap for users who reach for the focused
-#. chip when they want to edit it.
+#. Tapping the already-active chip does nothing. Editing is
+#. long-press only (on_hold); a stray tap on the focused
+#. chip used to open the editor, which was easy to trigger
+#. by accident (#224). Consume the tap so it's a clean no-op.
 #. Switch to a different tab.
 #. Only intercept swipes when there is more than one page of chips.
 #. Skip action chips (search, currently-reading) -- they have
@@ -3336,10 +3341,10 @@ msgstr "Legújabban hozzáadott"
 
 #. Rows 4+: browse-all on the left, specific-picker on the right
 #: lib/bookshelf_chip_editor.lua:207 lib/bookshelf_chip_editor.lua:222
-#: lib/bookshelf_chip_editor.lua:1269 lib/bookshelf_settings.lua:486
-#: lib/bookshelf_settings.lua:2186 lib/bookshelf_sort_engine.lua:348
-#: lib/bookshelf_tab_model.lua:50 lib/bookshelf_widget.lua:1181
-#: lib/bookshelf_widget.lua:9931
+#: lib/bookshelf_chip_editor.lua:1269 lib/bookshelf_filter.lua:37
+#: lib/bookshelf_settings.lua:486 lib/bookshelf_settings.lua:2186
+#: lib/bookshelf_sort_engine.lua:348 lib/bookshelf_tab_model.lua:50
+#: lib/bookshelf_widget.lua:1181 lib/bookshelf_widget.lua:9959
 msgid "Series"
 msgstr "Sorozatok"
 
@@ -3415,7 +3420,7 @@ msgstr "Szerzők"
 
 #: lib/bookshelf_chip_editor.lua:209 lib/bookshelf_chip_editor.lua:1279
 #: lib/bookshelf_settings.lua:488 lib/bookshelf_tab_model.lua:54
-#: lib/bookshelf_widget.lua:1182 lib/bookshelf_widget.lua:9933
+#: lib/bookshelf_widget.lua:1182 lib/bookshelf_widget.lua:9961
 msgid "Genres"
 msgstr "Műfajok"
 
@@ -3429,7 +3434,7 @@ msgstr "Formátumok"
 #. left inset -- reads better as a standalone block of content rather
 #. than a left-aligned label/value pair like the rows above it.
 #: lib/bookshelf_chip_editor.lua:212 lib/bookshelf_chip_editor.lua:1293
-#: lib/bookshelf_widget.lua:1185 lib/bookshelf_widget.lua:9596
+#: lib/bookshelf_widget.lua:1185 lib/bookshelf_widget.lua:9619
 msgid "Ratings"
 msgstr "Értékelések"
 
@@ -3694,14 +3699,14 @@ msgstr "Nyelvek"
 #. Localised display too -- "Favourites" UI label could collide
 #. with a same-named genre.
 #: lib/bookshelf_chip_editor.lua:214 lib/bookshelf_collection_manager.lua:118
-#: lib/bookshelf_tab_model.lua:60 lib/bookshelf_widget.lua:8376
-#: lib/bookshelf_widget.lua:8413
+#: lib/bookshelf_tab_model.lua:60 lib/bookshelf_widget.lua:8399
+#: lib/bookshelf_widget.lua:8436
 msgid "Favourites"
 msgstr "Kedvencek"
 
 #. "Specific X" kinds carry an id; the resolver appends it.
 #: lib/bookshelf_chip_editor.lua:216 lib/bookshelf_settings.lua:489
-#: lib/bookshelf_widget.lua:1184 lib/bookshelf_widget.lua:9934
+#: lib/bookshelf_widget.lua:1184 lib/bookshelf_widget.lua:9962
 msgid "Folder"
 msgstr "Mappa"
 
@@ -4167,7 +4172,7 @@ msgstr "Törlöd ezt a chipet? Ez nem vonható vissza."
 #. data-only cancel is instant.
 #: lib/bookshelf_chip_editor.lua:674 lib/bookshelf_collection_manager.lua:497
 #: lib/bookshelf_collection_manager.lua:521
-#: lib/bookshelf_hero_line_editor.lua:463 lib/bookshelf_widget.lua:10290
+#: lib/bookshelf_hero_line_editor.lua:463 lib/bookshelf_widget.lua:10317
 #: main.lua:1618 micromodules/action.lua:226 micromodules/countdown.lua:139
 #: micromodules/reading_goal.lua:376 micromodules/weather.lua:276
 msgid "Save"
@@ -4622,9 +4627,9 @@ msgstr "Válassz "
 #. library search (Repo.searchAll across title / author /
 #. series / genre). The page-jump dialog pre-fills the
 #. search dialog so the user doesn't have to retype.
-#: lib/bookshelf_chip_editor.lua:977 lib/bookshelf_chip_editor.lua:1478
+#: lib/bookshelf_chip_editor.lua:977 lib/bookshelf_chip_editor.lua:1515
 #: lib/bookshelf_library_modal.lua:517 lib/bookshelf_widget.lua:4022
-#: lib/bookshelf_widget.lua:10263
+#: lib/bookshelf_widget.lua:10290
 msgid "Search…"
 msgstr "Keresés…"
 
@@ -5021,7 +5026,7 @@ msgstr "Keresés…"
 #. strip bold
 #. strip italic
 #. strip inline code
-#: lib/bookshelf_chip_editor.lua:1020 lib/bookshelf_chip_editor.lua:1699
+#: lib/bookshelf_chip_editor.lua:1020 lib/bookshelf_chip_editor.lua:1736
 #: lib/bookshelf_collection_manager.lua:549
 #: lib/bookshelf_hero_line_editor.lua:95 lib/bookshelf_icons_library.lua:496
 #: lib/bookshelf_module_picker.lua:225 lib/bookshelf_reviews_modal.lua:422
@@ -5129,7 +5134,7 @@ msgstr "Chip forrása"
 #. "Műfaj"/"Értékelés" uppercase correctly, unlike Lua's ASCII :upper() (#209).
 #. line up with the left-aligned header text
 #. Single bottom row: Clear all on the left, Done on the right.
-#: lib/bookshelf_chip_editor.lua:1368
+#: lib/bookshelf_chip_editor.lua:1371
 msgid "Clear all filters"
 msgstr "Összes szűrő törlése"
 
@@ -5139,9 +5144,9 @@ msgstr "Összes szűrő törlése"
 #. "Done", not "Cancel": every action here (link, toggles, clear) applies
 #. immediately, so there's nothing to cancel -- this just exits to the book
 #. menu.
-#: lib/bookshelf_chip_editor.lua:1372 lib/bookshelf_chip_editor.lua:1517
-#: lib/bookshelf_chip_editor.lua:1575 lib/bookshelf_chip_editor.lua:1634
-#: lib/bookshelf_widget.lua:10915
+#: lib/bookshelf_chip_editor.lua:1375 lib/bookshelf_chip_editor.lua:1554
+#: lib/bookshelf_chip_editor.lua:1612 lib/bookshelf_chip_editor.lua:1671
+#: lib/bookshelf_widget.lua:10945
 msgid "Done"
 msgstr "Kész"
 
@@ -5153,43 +5158,53 @@ msgstr "Kész"
 #. Match ButtonDialog's own title-group width so the help text aligns with
 #. the heading and doesn't widen the dialog (mirrors its internal maths:
 #. default width_factor 0.9, then strip the border/button/title insets).
-#: lib/bookshelf_chip_editor.lua:1390
+#: lib/bookshelf_chip_editor.lua:1393
 msgid "Pick filters to narrow the shelf. Several picks in the same row match any of them, so picking two genres shows books in either. Picks in different rows must all match, so adding a 5-star rating then limits those to 5-star books only. Numbers below filter choices show how many books currently match based on other selected filters."
 msgstr "Válassz szűrőket a polc szűkítéséhez. Ugyanabban a sorban több választás bármelyikének megfelelhet – két műfaj kiválasztása mindkét műfaj könyveit mutatja. Különböző sorok választásainak mindegyike teljesülnie kell: egy 5 csillagos értékelés hozzáadása csak az 5 csillagos könyvekre szűkíti a listát. A szűrési lehetőségek alatti számok megmutatják, hány könyv felel meg jelenleg a többi kiválasztott szűrőnek."
 
 #. non-interactive; keep it out of dpad nav
-#: lib/bookshelf_chip_editor.lua:1396
+#: lib/bookshelf_chip_editor.lua:1399
 msgid "Filters"
 msgstr "Szűrők"
 
 #. bold heading, distinct from the body text
 #. Generic multi-select picker for a categorical dimension. Status uses a fixed
 #. value list; the others enumerate distinct library values via Repo.
-#: lib/bookshelf_chip_editor.lua:1413
+#. Single-choice ("choice" kind) filter picker -- currently only the Series
+#. dimension (standalone vs in a series). A small radio ButtonDialog: one row
+#. per option with the active one marked (filled/hollow circle); tapping sets it
+#. and returns to the filter list. "both" clears the dimension (no effect).
+#. Any dismissal (tap-outside included) reopens the filter list via on_close.
+#. ● (U+25CF) selected / ○ (U+25CB) unselected -- a plain radio marker.
+#: lib/bookshelf_chip_editor.lua:1436
+msgid "Series filter"
+msgstr "Sorozatszűrő"
+
+#: lib/bookshelf_chip_editor.lua:1450
 msgid "Reading status filter"
 msgstr "Olvasási állapot szűrő"
 
-#: lib/bookshelf_chip_editor.lua:1414
+#: lib/bookshelf_chip_editor.lua:1451
 msgid "Genre filter"
 msgstr "Műfajszűrő"
 
-#: lib/bookshelf_chip_editor.lua:1415
+#: lib/bookshelf_chip_editor.lua:1452
 msgid "Language filter"
 msgstr "Nyelvszűrő"
 
-#: lib/bookshelf_chip_editor.lua:1416
+#: lib/bookshelf_chip_editor.lua:1453
 msgid "Format filter"
 msgstr "Formátumszűrő"
 
-#: lib/bookshelf_chip_editor.lua:1417
+#: lib/bookshelf_chip_editor.lua:1454
 msgid "Rating filter"
 msgstr "Értékelésszűrő"
 
-#: lib/bookshelf_chip_editor.lua:1418
+#: lib/bookshelf_chip_editor.lua:1455
 msgid "Collection filter"
 msgstr "Gyűjteményszűrő"
 
-#: lib/bookshelf_chip_editor.lua:1420
+#: lib/bookshelf_chip_editor.lua:1457
 msgid "Filter"
 msgstr "Szűrő"
 
@@ -5233,13 +5248,13 @@ msgstr "Szűrő"
 #. so the picker won't live-render/fetch it in the chooser grid).
 #. clear cache
 #. Force recalculation without shortcuts before showing
-#: lib/bookshelf_chip_editor.lua:1553 micromodules/trivia.lua:72
+#: lib/bookshelf_chip_editor.lua:1590 micromodules/trivia.lua:72
 #: micromodules/trivia.lua:93 micromodules/trivia.lua:100
 #: micromodules/trivia.lua:432
 msgid "Any"
 msgstr "Bármilyen"
 
-#: lib/bookshelf_chip_editor.lua:1573
+#: lib/bookshelf_chip_editor.lua:1610
 msgid "(none in library)"
 msgstr "(nincs a könyvtárban)"
 
@@ -5247,19 +5262,19 @@ msgstr "(nincs a könyvtárban)"
 #. entries; tapping one removes it. "Add include / Add exclude" open the
 #. KOReader folder chooser to add a path. Recursive matching + exclude-wins are
 #. enforced by Filter.matches; this screen only edits the path sets.
-#: lib/bookshelf_chip_editor.lua:1627
+#: lib/bookshelf_chip_editor.lua:1664
 msgid "(no folder filters - tap to remove once added)"
 msgstr "(nincs mapp aszűrő – hozzáadás után koppintással eltávolítható)"
 
-#: lib/bookshelf_chip_editor.lua:1631
+#: lib/bookshelf_chip_editor.lua:1668
 msgid "Add folder to include"
 msgstr "Belefogl alandó mappa hozzáadása"
 
-#: lib/bookshelf_chip_editor.lua:1632
+#: lib/bookshelf_chip_editor.lua:1669
 msgid "Add folder to exclude"
 msgstr "Kizárandó mappa hozzáadása"
 
-#: lib/bookshelf_chip_editor.lua:1636
+#: lib/bookshelf_chip_editor.lua:1673
 msgid "Folder filter"
 msgstr "Mapp aszűrő"
 
@@ -5283,7 +5298,7 @@ msgstr "Mapp aszűrő"
 #. the picker leads with the actual sort options). Checkmark shows when no
 #. sort is currently set for this level. Per-book tabs only -- group tabs
 #. deliberately have no clear option (a group view must have an order).
-#: lib/bookshelf_chip_editor.lua:1691
+#: lib/bookshelf_chip_editor.lua:1728
 msgid "Clear sort"
 msgstr "Rendezés törlése"
 
@@ -5307,19 +5322,19 @@ msgstr "Rendezés törlése"
 #. the final 3-up row.
 #. Series name / index / combined ("Series + #") share one row
 #. so the one-tap combined option sits beside the pair it merges.
-#: lib/bookshelf_chip_editor.lua:1747
+#: lib/bookshelf_chip_editor.lua:1784
 msgid "Sort groups by"
 msgstr "Csoportok rendezése"
 
-#: lib/bookshelf_chip_editor.lua:1749
+#: lib/bookshelf_chip_editor.lua:1786
 msgid "Within each group, then by"
 msgstr "Csoporton belül ezután"
 
-#: lib/bookshelf_chip_editor.lua:1751
+#: lib/bookshelf_chip_editor.lua:1788
 msgid "Sort by"
 msgstr "Rendezés"
 
-#: lib/bookshelf_chip_editor.lua:1753
+#: lib/bookshelf_chip_editor.lua:1790
 msgid "Then by"
 msgstr "Majd"
 
@@ -5410,7 +5425,7 @@ msgstr "Majd"
 msgid "Rename collection"
 msgstr "Gyűjtemény átnevezése"
 
-#: lib/bookshelf_collection_manager.lua:332 lib/bookshelf_widget.lua:10354
+#: lib/bookshelf_collection_manager.lua:332 lib/bookshelf_widget.lua:10381
 msgid "New name"
 msgstr "Új név"
 
@@ -5430,8 +5445,8 @@ msgstr "Új név"
 #: lib/bookshelf_collection_manager.lua:336
 #: lib/bookshelf_collection_manager.lua:404
 #: lib/bookshelf_start_menu_edit.lua:100 lib/bookshelf_start_menu_edit.lua:102
-#: lib/bookshelf_start_menu_edit.lua:103 lib/bookshelf_widget.lua:10358
-#: lib/bookshelf_widget.lua:10399
+#: lib/bookshelf_start_menu_edit.lua:103 lib/bookshelf_widget.lua:10385
+#: lib/bookshelf_widget.lua:10426
 msgid "Rename"
 msgstr "Átnevezés"
 
@@ -5449,8 +5464,8 @@ msgid "\"? Books are not deleted, only the tag."
 msgstr "\"? A könyvek nem törlődnek, csak a címke."
 
 #: lib/bookshelf_collection_manager.lua:405
-#: lib/bookshelf_collection_manager.lua:416 lib/bookshelf_widget.lua:10401
-#: lib/bookshelf_widget.lua:10408
+#: lib/bookshelf_collection_manager.lua:416 lib/bookshelf_widget.lua:10428
+#: lib/bookshelf_widget.lua:10435
 msgid "Pin to chip bar"
 msgstr "Rögzítés a chipsorban"
 
@@ -5608,12 +5623,12 @@ msgstr "Vegyes"
 
 #. Effective membership for stage_only is current ± diff.
 #: lib/bookshelf_collection_manager.lua:817
-#: lib/bookshelf_start_menu_edit.lua:496 lib/bookshelf_widget.lua:10165
-#: lib/bookshelf_widget.lua:10245 micromodules/countdown.lua:116
+#: lib/bookshelf_start_menu_edit.lua:496 lib/bookshelf_widget.lua:10192
+#: lib/bookshelf_widget.lua:10272 micromodules/countdown.lua:116
 msgid "Add"
 msgstr "Hozzáadás"
 
-#: lib/bookshelf_collection_manager.lua:819 lib/bookshelf_widget.lua:10392
+#: lib/bookshelf_collection_manager.lua:819 lib/bookshelf_widget.lua:10419
 msgid "Remove"
 msgstr "Eltávolítás"
 
@@ -5689,10 +5704,26 @@ msgstr "Válassz színt"
 msgid "Invalid hex color (use #RGB or #RRGGBB)"
 msgstr "Érvénytelen hex szín (használj #RGB vagy #RRGGBB formátumot)"
 
-#: lib/bookshelf_filter.lua:37
+#: lib/bookshelf_filter.lua:38
 msgid "Folders"
 msgstr "Mappák"
 
+#. The single-choice "Series" dimension: standalone books vs books in a series.
+#. Stored as a plain string (like folders is an odd-shaped dimension); "both"
+#. or absent means no effect. Offered as a radio in the filter editor.
+#: lib/bookshelf_filter.lua:47
+msgid "Standalone and books in series"
+msgstr "Önálló és sorozathoz tartozó könyvek"
+
+#: lib/bookshelf_filter.lua:48
+msgid "Only standalone books"
+msgstr "Csak önálló könyvek"
+
+#: lib/bookshelf_filter.lua:49
+msgid "Only books in series"
+msgstr "Csak sorozathoz tartozó könyvek"
+
+#. true when the series dimension is narrowing the shelf (not "both"/absent).
 #. The "multi" dimension storage keys, in signature order.
 #. Stable, order-independent signature. Each active dimension contributes a
 #. sorted, comma-joined fragment; absent dimensions contribute nothing, so the
@@ -5707,31 +5738,32 @@ msgstr "Mappák"
 #. same key space as raw book.lang values (default: identity).
 #. opts.genre_normalize(tag) -> key  normalises picker labels to the same key
 #. space as raw book.genres entries (default: identity).
+#. Standalones have no series_name (buildBookMeta normalises "" -> nil).
 #. Single-status labels for compact summaries.
 #. Single-rating label for compact summaries. Mirrors ratingValues() so a
 #. single-selection ratings filter shows the friendly label, not the raw key.
-#: lib/bookshelf_filter.lua:203 lib/bookshelf_filter.lua:220
+#: lib/bookshelf_filter.lua:230 lib/bookshelf_filter.lua:247
 #: micromodules/random_unread.lua:220 micromodules/shelf_size.lua:18
 msgid "Unread"
 msgstr "Olvasatlan"
 
-#: lib/bookshelf_filter.lua:229
+#: lib/bookshelf_filter.lua:256
 msgid "5 stars"
 msgstr "5 csillag"
 
-#: lib/bookshelf_filter.lua:230
+#: lib/bookshelf_filter.lua:257
 msgid "4 stars"
 msgstr "4 csillag"
 
-#: lib/bookshelf_filter.lua:231
+#: lib/bookshelf_filter.lua:258
 msgid "3 stars"
 msgstr "3 csillag"
 
-#: lib/bookshelf_filter.lua:232
+#: lib/bookshelf_filter.lua:259
 msgid "2 stars"
 msgstr "2 csillag"
 
-#: lib/bookshelf_filter.lua:233
+#: lib/bookshelf_filter.lua:260
 msgid "1 star"
 msgstr "1 csillag"
 
@@ -5741,11 +5773,12 @@ msgstr "1 csillag"
 #. and append an ellipsis ("Comedy, Fantasy…"). The caller (editor) sizes the
 #. budget per row from the row width minus the label, so each row fills close to
 #. the edge before truncating. No budget = the full list (used in tests).
-#: lib/bookshelf_filter.lua:255 lib/bookshelf_filter.lua:260
+#: lib/bookshelf_filter.lua:282 lib/bookshelf_filter.lua:286
+#: lib/bookshelf_filter.lua:294
 msgid "any"
 msgstr "bármilyen"
 
-#: lib/bookshelf_filter.lua:256
+#: lib/bookshelf_filter.lua:283
 #, lua-format
 msgid "%d in, %d out"
 msgstr "%d bent, %d kint"
@@ -5758,11 +5791,11 @@ msgstr "%d bent, %d kint"
 #. boundaries (not mid-string) keeps it clean and avoids splitting a UTF-8
 #. character mid-byte.
 #. omitted some
-#: lib/bookshelf_filter.lua:292
+#: lib/bookshelf_filter.lua:326
 msgid "none"
 msgstr "nincs"
 
-#: lib/bookshelf_filter.lua:297
+#: lib/bookshelf_filter.lua:332
 #, lua-format
 msgid "%d active"
 msgstr "%d aktív"
@@ -6222,6 +6255,22 @@ msgstr "%d aktív"
 #. redundant second delivery -- harmless for idempotent lifecycle
 #. broadcasts (Suspend, Resume) but corrupting for toggle broadcasts
 #. (ToggleNightMode would flip state twice, net zero -- issue #19).
+#.
+#. FM-teardown guard: a forwarded event must never be able to quit KOReader.
+#. Some events, delivered to FM, drive it to FileManager:onClose -- e.g. a
+#. swipe that reaches an open FM menu fires onCloseAllMenus, whose
+#. close_callback is FileManager:onClose, which empties the window stack and
+#. exits the app (issue #225). We MUST still forward gesture-translated events
+#. (onSwipe etc.), because that is how FM's own gesture handlers get the
+#. brightness/warmth edge swipes and other actions while bookshelf is on top
+#. (issue #231 -- an over-broad "drop all gesture events" guard here silently
+#. killed those). So instead of dropping the event, we neutralise
+#. FileManager:onClose for the duration of the synchronous dispatch and
+#. restore it after: FM still handles the gesture, it just can't tear itself
+#. (and KOReader) down as a side effect.
+#. Neutralise FM teardown for this synchronous forward (see above, #225).
+#. rawget/restore so a pre-existing instance override is preserved and a
+#. nil restores the normal class method; pcall so an error still restores.
 #. bookshelf_hardcover.lua
 #. Optional Hardcover enrichment for Bookshelf.
 #.
@@ -9030,7 +9079,7 @@ msgstr "Helyezz .svg vagy .png fájlokat a koreader/icons/ mappába"
 #. button is the natural way to commit a query without a keystroke.
 #. Chip-style buttons share the input's border thickness so the row
 #. reads as one unit. input_border is set above.
-#: lib/bookshelf_library_modal.lua:553 lib/bookshelf_widget.lua:11842
+#: lib/bookshelf_library_modal.lua:553 lib/bookshelf_widget.lua:11872
 msgid "Search"
 msgstr "Keresés"
 
@@ -9753,7 +9802,7 @@ msgstr "könyv"
 #. reload glyph is a Nerd Font PUA icon (nf-md-reload, U+EB52) rendered
 #. through the bundled "symbols" face -- a plain circular arrow, cleaner
 #. at this size than the stock document+arrow SVG icon.
-#: lib/bookshelf_reviews_modal.lua:429 lib/bookshelf_widget.lua:9798
+#: lib/bookshelf_reviews_modal.lua:429 lib/bookshelf_widget.lua:9826
 #: micromodules/quote_of_day.lua:80
 msgid "Refresh"
 msgstr "Frissítés"
@@ -10286,8 +10335,8 @@ msgstr "Metaadatok"
 #. Embedded/Hardcover chip bar inside it) instead of a second top-level
 #. Hardcover tab -- making it obvious both are descriptions and keeping the
 #. tab strip short. The chosen source persists on close (on_source_close).
-#: lib/bookshelf_settings.lua:364 lib/bookshelf_widget.lua:8920
-#: lib/bookshelf_widget.lua:10530 lib/bookshelf_widget.lua:10540
+#: lib/bookshelf_settings.lua:364 lib/bookshelf_widget.lua:8943
+#: lib/bookshelf_widget.lua:10560 lib/bookshelf_widget.lua:10570
 msgid "Description"
 msgstr "Leírás"
 
@@ -11259,7 +11308,7 @@ msgstr "Lekéri a kapcsolt Hardcover könyvek aktuális nyilvános értékelése
 #. description there needs refreshing too. _swapHeroInPlace
 #. rebuilds from _preview_book (now reading fresh enrichment) and
 #. scopes its own setDirty to the hero rect.
-#: lib/bookshelf_settings.lua:2052 lib/bookshelf_widget.lua:10752
+#: lib/bookshelf_settings.lua:2052 lib/bookshelf_widget.lua:10782
 msgid "Hardcover integration could not be loaded"
 msgstr "A Hardcover integráció nem tölthető be"
 
@@ -12260,8 +12309,8 @@ msgstr "Olvasás alatt elöl"
 
 #. middle-dot
 #. Dates on their own row with a calendar glyph (rich popup header only).
-#: lib/bookshelf_sort_engine.lua:403 lib/bookshelf_widget.lua:7968
-#: lib/bookshelf_widget.lua:7983
+#: lib/bookshelf_sort_engine.lua:403 lib/bookshelf_widget.lua:7991
+#: lib/bookshelf_widget.lua:8006
 msgid "Added"
 msgstr "Hozzáadva"
 
@@ -12325,7 +12374,7 @@ msgstr "Oldalszám"
 #. same row (the original one-line strip); the rich popup header breaks them
 #. onto their own calendar-prefixed row below.
 #. nil for un-rendered EPUBs
-#: lib/bookshelf_sort_engine.lua:437 lib/bookshelf_widget.lua:7965
+#: lib/bookshelf_sort_engine.lua:437 lib/bookshelf_widget.lua:7988
 msgid "Pages"
 msgstr "Oldalak"
 
@@ -13929,7 +13978,7 @@ msgid "Latest"
 msgstr "Legújabb"
 
 #: lib/bookshelf_tab_model.lua:56 lib/bookshelf_widget.lua:1183
-#: lib/bookshelf_widget.lua:9940
+#: lib/bookshelf_widget.lua:9968
 msgid "Tags"
 msgstr "Címkék"
 
@@ -15764,7 +15813,7 @@ msgstr "Ez a Kobo könyv nem nyitható meg."
 #. Stale records (Send-to-Kindle moved/removed the file after BIM cached
 #. the path) crash filemanagerbookinfo:show via lfs.attributes on nil; a
 #. "file missing" toast is friendlier than a silent no-op.
-#: lib/bookshelf_widget.lua:2785 lib/bookshelf_widget.lua:9122
+#: lib/bookshelf_widget.lua:2785 lib/bookshelf_widget.lua:9145
 msgid "File no longer exists. The bookshelf entry is stale."
 msgstr "A fájl már nem létezik. A polc-bejegyzés elavult."
 
@@ -17374,7 +17423,7 @@ msgstr "Beállítás kezdőképernyőként"
 msgid "Bookshelf will load on next launch"
 msgstr "A Bookshelf a következő indításkor töltődik be"
 
-#: lib/bookshelf_widget.lua:7823
+#: lib/bookshelf_widget.lua:7846
 msgid "%1 bookmarks"
 msgstr "%1 könyvjelző"
 
@@ -17448,13 +17497,22 @@ msgstr "%1 könyvjelző"
 #. Native load: ImageViewer fits it to the screen preserving
 #. aspect. A fixed w*h resize here stretched the cover.
 #. ImageSource cache owns it
+#. Embedded cover: load the FULL-resolution cover straight from the
+#. document, exactly like KOReader's native Book information > Cover
+#. image (filemanagerbookinfo:getCoverImage, which also picks up a
+#. DocSettings custom cover). The BIM cover_bb used as the fallback
+#. below is a grid-sized THUMBNAIL -- feeding it to ImageViewer
+#. upscales blurry, even at "original size" (#228). Guarded with a
+#. pcall + the thumbnail fallback so an older build still shows
+#. something.
+#. getCoverPageImage bb is ours
 #. Bookmark link (#67): "N bookmark(s) ›" in the header's top-right
 #. corner, opening KOReader's bookmark browser. A text link rather than
 #. a bare icon -- clearer, and the count says what's there. Built only
 #. when bookmark_action is passed (book has annotations + browser
 #. available). Reserve its width off the text column so a long title
 #. doesn't run under it.
-#: lib/bookshelf_widget.lua:7823
+#: lib/bookshelf_widget.lua:7846
 msgid "1 bookmark"
 msgstr "1 könyvjelző"
 
@@ -17469,15 +17527,15 @@ msgstr "1 könyvjelző"
 #. strip (format · size · added · last opened) + filename. Series
 #. info is no longer rendered here -- it lives as a tappable pill
 #. in the nav strip below.
-#: lib/bookshelf_widget.lua:7864
+#: lib/bookshelf_widget.lua:7887
 msgid "(no title)"
 msgstr "(nincs cím)"
 
-#: lib/bookshelf_widget.lua:7969
+#: lib/bookshelf_widget.lua:7992
 msgid "Read"
 msgstr "Olvasás"
 
-#: lib/bookshelf_widget.lua:7984
+#: lib/bookshelf_widget.lua:8007
 msgid "Last read"
 msgstr "Utoljára olvasva"
 
@@ -17486,17 +17544,27 @@ msgstr "Utoljára olvasva"
 #. "Embedded" = the book file's own (KOReader/EPUB/Calibre) field;
 #. "Hardcover" = the fetched blurb.
 #. nf-md-pencil, U+EAEA
-#. Always flush the button against the row's right edge --
-#. whether or not there's a message -- so a section that
-#. sometimes shows one (e.g. Collections: a message only
-#. when empty) doesn't have its button hop between left
-#. and right depending on the book's own data.
-#. Same face/size as the button's own label (edit_face)
-#. so the two read as one line, not a smaller caption.
+#. Same height as the pills so it sits level with them,
+#. while staying a distinct bordered chip (not pill-styled).
+#. Pills top-align with the button (multi-row pills start at
+#. the top); a lone empty-state note instead centres against
+#. the button, like the Hardcover title row in the Edit tab.
+#. Pin the pill column to the FULL reserved width so the
+#. Edit button sits at the section's right edge -- a bare
+#. pill group sizes to its widest row, which left the
+#. button floating just right of the pills (#230 review).
+#. Empty section: a left-aligned note where the pills would
+#. be (e.g. "Not in any collection."), Edit still top-right.
+#. Register the button's focus AFTER the pills so dpad reads
+#. pills -> Edit, matching the visual top-left-to-right order.
 #. Genres are special: a source chip bar (Embedded /
 #. Calibre / Hardcover) over the SELECTED source's genres.
 #. Picking a source persists a per-book preference and
 #. re-resolves genres app-wide.
+#. Always render the Genres section (even with no genres in
+#. any source) so its inline Edit button stays reachable to
+#. add the first tag -- previously it was hidden entirely,
+#. leaving no way to add tags to an untagged book.
 #. Captured once: the widget_builder re-runs on every
 #. modal:rebuildTab() (each chip tap), so `active` itself
 #. already reflects the latest pick by the second run --
@@ -17504,7 +17572,7 @@ msgstr "Utoljára olvasva"
 #. FIRST run to stay a true "at open" baseline.
 #. Embedded is always offered (it's the editable source);
 #. Calibre / Hardcover only when that source has genres.
-#: lib/bookshelf_widget.lua:8930 lib/bookshelf_widget.lua:10092
+#: lib/bookshelf_widget.lua:8953 lib/bookshelf_widget.lua:10136
 msgid "Embedded"
 msgstr "Beágyazott"
 
@@ -17520,8 +17588,8 @@ msgstr "Beágyazott"
 #. (no stock `invert`, unlike FrameContainer), so paint then
 #. pixel-invert on top -- the same idiom as InvertedFrame
 #. elsewhere in this file.
-#: lib/bookshelf_widget.lua:8931 lib/bookshelf_widget.lua:9570
-#: lib/bookshelf_widget.lua:10094 lib/bookshelf_widget.lua:10986
+#: lib/bookshelf_widget.lua:8954 lib/bookshelf_widget.lua:9593
+#: lib/bookshelf_widget.lua:10138 lib/bookshelf_widget.lua:11016
 msgid "Hardcover"
 msgstr "Hardcover"
 
@@ -17531,7 +17599,7 @@ msgstr "Hardcover"
 #. effect as the per-book "Use Hardcover description" toggle. Only writes
 #. when the choice actually changed.
 #. Single source: show it, and note Hardcover-sourced descriptions.
-#: lib/bookshelf_widget.lua:8952
+#: lib/bookshelf_widget.lua:8975
 msgid "(from Hardcover)"
 msgstr "(Hardcoverről)"
 
@@ -17590,28 +17658,28 @@ msgstr "(Hardcoverről)"
 #. commit done; refresh shelf + this tab
 #. ── Hardcover availability + cached rating (read-only) ───────────────────
 #. ── Show info ────────────────────────────────────────────────────────────
-#: lib/bookshelf_widget.lua:9118
+#: lib/bookshelf_widget.lua:9141
 msgid "Show info"
 msgstr "Infó megjelenítése"
 
-#: lib/bookshelf_widget.lua:9169
+#: lib/bookshelf_widget.lua:9192
 msgid "Removed from history"
 msgstr "Eltávolítva az előzményekből"
 
 #. ✕
-#: lib/bookshelf_widget.lua:9217
+#: lib/bookshelf_widget.lua:9240
 msgid "Delete file permanently?"
 msgstr "Véglegesen törlöd a fájlt?"
 
-#: lib/bookshelf_widget.lua:9229
+#: lib/bookshelf_widget.lua:9252
 msgid "Failed to delete file."
 msgstr "A fájl törlése sikertelen."
 
-#: lib/bookshelf_widget.lua:9250
+#: lib/bookshelf_widget.lua:9273
 msgid "Metadata refresh queued"
 msgstr "Metaadat frissítés sorba állítva"
 
-#: lib/bookshelf_widget.lua:9252
+#: lib/bookshelf_widget.lua:9275
 msgid "Select"
 msgstr "Kiválasztás"
 
@@ -17638,9 +17706,9 @@ msgstr "Kiválasztás"
 #. height. None of this tab's rows have an icon glyph, so without an
 #. explicit floor they render shorter than the footer even at the same
 #. font_size.
-#. A thin Size.border.window gap either side, same as the Tags
-#. tab's editActionRow hairline and KOReader's own ButtonDialog
-#. separator -- close to full width, not perfectly edge-to-edge.
+#. A thin Size.border.window gap either side, same as KOReader's
+#. own ButtonDialog separator -- close to full width, not
+#. perfectly edge-to-edge.
 #. Pass the FULL tab width (not the scroll-reduced content_w) so the
 #. bar reaches the frame edge; getSize ignores width, so it can't widen
 #. the layout, and the scroll crop trims any overhang behind the bar.
@@ -17650,7 +17718,7 @@ msgstr "Kiválasztás"
 #. see ui/widget/buttontable.lua; one-off custom rows below get a
 #. `{layout=...}` wrapper to match that same shape).
 #. 1. Reading status.
-#: lib/bookshelf_widget.lua:9372
+#: lib/bookshelf_widget.lua:9395
 msgid "Reading status"
 msgstr "Olvasási állapot"
 
@@ -17674,7 +17742,7 @@ msgstr "Olvasási állapot"
 #. Dpad/keyboard focus highlight -- frame is a stock FrameContainer.
 #. Rating labels match the body text size (the number, collection names).
 #. "Your rating": label + tappable stars.
-#: lib/bookshelf_widget.lua:9513
+#: lib/bookshelf_widget.lua:9536
 msgid "Your rating"
 msgstr "Saját értékelésed"
 
@@ -17682,6 +17750,9 @@ msgstr "Saját értékelésed"
 #. left (inset to align with the headings), then a bordered ChipButton
 #. on the right -- same style as the Tags tab's Edit button (pencil glyph
 #. after the label). Used by the Hardcover row.
+#. Match the Tags-tab Edit button's height exactly (the Tags-tab
+#. pill height: bold cfont label + Size.padding.small + border.thin,
+#. top and bottom) so the two Edit buttons look identical.
 #. nf-md-pencil, U+EAEA
 #. Left cell: the value text, inset on the left to align with headings.
 #. Extra room OUTSIDE the button/text (not inside the button itself):
@@ -17692,7 +17763,7 @@ msgstr "Saját értékelésed"
 #. btn is a stock Button (native onFocus/onUnfocus) -- just needs
 #. registering as its own dpad row.
 #. 3. File & metadata.
-#: lib/bookshelf_widget.lua:9645
+#: lib/bookshelf_widget.lua:9673
 msgid "File & metadata"
 msgstr "Fájl és metaadatok"
 
@@ -17703,60 +17774,9 @@ msgstr "Fájl és metaadatok"
 #. No bottom border needed here: whatever follows (Plugin
 #. actions' heading, or the unconditional closing rule() below
 #. if this is the last section) already closes this row off.
-#: lib/bookshelf_widget.lua:9658
+#: lib/bookshelf_widget.lua:9686
 msgid "Not linked"
 msgstr "Nincs kapcsolva"
-
-#: lib/bookshelf_widget.lua:9659
-msgid "Edit…"
-msgstr "Szerkesztés…"
-
-#: lib/bookshelf_widget.lua:9659
-msgid "Link…"
-msgstr "Kapcsolás…"
-
-#. 5. Plugin actions (only when a plugin contributed buttons) --
-#. bordered ChipButtons, same style as the Tags tab's Edit button
-#. (minus its pencil glyph: these are arbitrary third-party actions
-#. with no shared icon), rather than plain ButtonTable menu rows.
-#: lib/bookshelf_widget.lua:9671
-msgid "Plugin actions"
-msgstr "Bővítmény műveletek"
-
-#. Close the last section so its final button has a bottom edge --
-#. unless Plugin actions rendered: its ChipButtons already read as a
-#. complete block without a trailing rule under them.
-#. Full width first; if the body overflows the tab height it will scroll, so
-#. rebuild scrollbar-width narrower to leave the bar its own strip.
-#. Every section's focusable row(s), in visual order, so the modal's
-#. FocusManager can chain dpad nav across the whole tab (see
-#. ReviewsModal:_assemble's handling of an ARRAY focus_tables).
-#. Native "★★★★☆ 3.6 · 54 ratings · 14 reviews  [reload Refresh]" header row for
-#. the Reviews tab, sitting above its own HTML review list (_buildReviewsTab
-#. below). The summary used to be part of that HTML with an inline "Refresh"
-#. <a> link; moved out to a native row so Refresh gets real tap feedback
-#. (pixel-inverts while the fetch is in flight) and its label can match the
-#. summary text's own (zoom-adjustable) font size, using the same small-button
-#. style as the Icons Library's search/close buttons (bookshelf_chip_button).
-#. Same read-only star glyphs as the Edit tab's Hardcover rating row, but
-#. sized to match the per-review stars below (REVIEW_CSS's ".stars"
-#. rule, "font-size: 1.15em" of the HTML body's base size) rather than
-#. the Edit tab's own "+4" -- the two rows sit one above the other here,
-#. so a size mismatch reads as inconsistent glyph weight.
-#. 0..10 half-units
-#. No per-star padding here (unlike the Edit tab's tappable "Your
-#. rating" stars, which need the extra gap as a bigger touch
-#. target) -- read-only, so they sit flush like the per-review
-#. star rows in the HTML below.
-#: lib/bookshelf_widget.lua:9784
-#, lua-format
-msgid "%d ratings"
-msgstr "%d értékelés"
-
-#: lib/bookshelf_widget.lua:9787
-#, lua-format
-msgid "%d reviews"
-msgstr "%d vélemény"
 
 #. Doesn't fit side by side (narrow screen / large zoom) -- stack.
 #. No rating data yet (still loading) -- just the button, flush right
@@ -17810,7 +17830,7 @@ msgstr "%d vélemény"
 #. Group the specs by category, wrapping each tap to close first.
 #. flush snug scrollbar
 #. Every section's focusable row(s), in visual top-to-bottom
-#. order -- pillsFrame/editActionRow below register into this
+#. order -- pillsFrame/pillsWithEdit below register into this
 #. as they're called, so each section's own call site doesn't
 #. need to change. See ReviewsModal:_assemble's handling of an
 #. ARRAY focus_tables (bookshelf_reviews_modal.lua).
@@ -17818,25 +17838,72 @@ msgstr "%d vélemény"
 #. (self:_sectionHeadingBar) -- this is the only gap
 #. between one section's pills and the next heading, so
 #. it's a bit larger than the pill row's own top pad.
-#. A full-width hairline then a left-aligned "Edit" button
-#. (same ChipButton style as the Reviews tab's Refresh) below
-#. an editable section's pills -- replaces the earlier inline
-#. "Edit…" link pill, which read as just another tag rather
-#. than a distinct action. An optional help/empty-state
-#. message (e.g. "Not in any collection.") sits inline to the
-#. button's right, in the same row, instead of its own line.
-#. A thin Size.border.window gap either side, same as the
-#. separator in KOReader's own ButtonDialog (its outer
-#. FrameContainer's border creates that reveal) -- close
-#. to full width, not inset to the button row's own
-#. (much wider) left/right padding.
-#. Nerd Font pencil glyph after the label, same pattern as
-#. the Reviews tab's Refresh button (icon_glyph takes a
-#. symbols-face glyph sized to match the label's own point
-#. size, icon_after puts it on the right of the text).
-#: lib/bookshelf_widget.lua:9916 lib/bookshelf_widget.lua:10021
+#. A section's pills laid out in a column that RESERVES the Edit
+#. button's width on the right, with the button pinned top-right
+#. (issue #230). Replaces the old hairline + separate padded Edit
+#. row + empty-state label: each editable section is now just its
+#. heading + this block, reclaiming the vertical space #230 flagged
+#. (genres pushed below the fold on a short screen). Empty `specs`
+#. => just the button, so a book with no tags can still add some.
+#. Pills wrap inside the narrowed column so they never run under
+#. the button.
+#. The pencil "Edit" ChipButton. Focus is NOT registered here so
+#. the caller can order it relative to sibling widgets (pills, the
+#. source-chip row).
+#. Height a Tags-tab pill renders at, so the Edit button lines up
+#. with them: a bold cfont label at `base` + Size.padding.small
+#. top/bottom + a thin border top/bottom (mirrors _buildPillGroup).
+#: lib/bookshelf_widget.lua:9687 lib/bookshelf_widget.lua:9944
+#: lib/bookshelf_widget.lua:10042
 msgid "Edit"
 msgstr "Szerkesztés"
+
+#: lib/bookshelf_widget.lua:9687
+msgid "Link…"
+msgstr "Kapcsolás…"
+
+#. 5. Plugin actions (only when a plugin contributed buttons) --
+#. bordered ChipButtons, same style as the Tags tab's Edit button
+#. (minus its pencil glyph: these are arbitrary third-party actions
+#. with no shared icon), rather than plain ButtonTable menu rows.
+#: lib/bookshelf_widget.lua:9699
+msgid "Plugin actions"
+msgstr "Bővítmény műveletek"
+
+#. Close the last section so its final button has a bottom edge --
+#. unless Plugin actions rendered: its ChipButtons already read as a
+#. complete block without a trailing rule under them.
+#. Full width first; if the body overflows the tab height it will scroll, so
+#. rebuild scrollbar-width narrower to leave the bar its own strip.
+#. Every section's focusable row(s), in visual order, so the modal's
+#. FocusManager can chain dpad nav across the whole tab (see
+#. ReviewsModal:_assemble's handling of an ARRAY focus_tables).
+#. Native "★★★★☆ 3.6 · 54 ratings · 14 reviews  [reload Refresh]" header row for
+#. the Reviews tab, sitting above its own HTML review list (_buildReviewsTab
+#. below). The summary used to be part of that HTML with an inline "Refresh"
+#. <a> link; moved out to a native row so Refresh gets real tap feedback
+#. (pixel-inverts while the fetch is in flight) and its label can match the
+#. summary text's own (zoom-adjustable) font size, using the same small-button
+#. style as the Icons Library's search/close buttons (bookshelf_chip_button).
+#. Same read-only star glyphs as the Edit tab's Hardcover rating row, but
+#. sized to match the per-review stars below (REVIEW_CSS's ".stars"
+#. rule, "font-size: 1.15em" of the HTML body's base size) rather than
+#. the Edit tab's own "+4" -- the two rows sit one above the other here,
+#. so a size mismatch reads as inconsistent glyph weight.
+#. 0..10 half-units
+#. No per-star padding here (unlike the Edit tab's tappable "Your
+#. rating" stars, which need the extra gap as a bigger touch
+#. target) -- read-only, so they sit flush like the per-review
+#. star rows in the HTML below.
+#: lib/bookshelf_widget.lua:9812
+#, lua-format
+msgid "%d ratings"
+msgstr "%d értékelés"
+
+#: lib/bookshelf_widget.lua:9815
+#, lua-format
+msgid "%d reviews"
+msgstr "%d vélemény"
 
 #. The Edit body starts with a black heading strip, so the active tab's
 #. open-bottom should stay black (not erase to white) to avoid a notch.
@@ -17844,11 +17911,11 @@ msgstr "Szerkesztés"
 #. into sections under the same black heading bars as the Edit tab (Author /
 #. Series / Collections / Genres / Folder), scrollable, each pill tappable
 #. (closes the popup then drills). Built lazily as a native widget body.
-#: lib/bookshelf_widget.lua:9930
+#: lib/bookshelf_widget.lua:9958
 msgid "Author(s)"
 msgstr "Szerző(k)"
 
-#: lib/bookshelf_widget.lua:10093
+#: lib/bookshelf_widget.lua:10137
 msgid "Calibre"
 msgstr "Calibre"
 
@@ -17856,16 +17923,10 @@ msgstr "Calibre"
 #. is active they're editable: long-press removes a tag
 #. and a trailing "+ Add" pill prompts for a new one.
 #. Edits go to the shared KOReader Keywords override.
-#. Its own row above the pills, for every source --
-#. editable and read-only sources share the same
-#. pill-row shape below; only whether an Edit… link
-#. pill gets appended to it differs.
-#. The expensive part (light-meta invalidation + a full
-#. shelf _rebuild -- confirmed via [bookshelf perf] logging
-#. to cost ~600-900ms, ~90% of a tap) is deferred to modal
-#. close; see genre_source_changed above. Only the cheap,
-#. per-book/per-chip caches refresh immediately so the Tags
-#. tab itself updates fast.
+#. The source-chip strip (Embedded/Calibre/Hardcover)
+#. is built at the render tail below, because the Edit
+#. button rides its row and needs editGenres (defined
+#. further down) as its handler.
 #. Multi-select editor (mirrors the collections "Edit…"
 #. model): the library's genre list UNION the book's
 #. current tags, shown in the searchable grid picker
@@ -17880,12 +17941,12 @@ msgstr "Calibre"
 #. selected ones append in (sorted) candidate order.
 #. Same bottom layout as the collection editor:
 #. a full-width "+ New tag" above a Cancel/Save pair.
-#: lib/bookshelf_widget.lua:10161 lib/bookshelf_widget.lua:10241
-#: lib/bookshelf_widget.lua:10286
+#: lib/bookshelf_widget.lua:10188 lib/bookshelf_widget.lua:10268
+#: lib/bookshelf_widget.lua:10313
 msgid "New tag"
 msgstr "Új címke"
 
-#: lib/bookshelf_widget.lua:10262
+#: lib/bookshelf_widget.lua:10289
 msgid "Edit tags"
 msgstr "Címkék szerkesztése"
 
@@ -17905,7 +17966,7 @@ msgstr "Címkék szerkesztése"
 #. the Embedded keywords -- genres aren't a global entity
 #. to rename across books). Replaces in place; a rename
 #. onto an existing tag just collapses into it.
-#: lib/bookshelf_widget.lua:10353
+#: lib/bookshelf_widget.lua:10380
 msgid "Rename tag"
 msgstr "Címke átnevezése"
 
@@ -17913,32 +17974,26 @@ msgstr "Címke átnevezése"
 #. hold menu. Editable (Embedded) source gets the full
 #. 2x2 (Rename / Pin / Delete / Cancel); read-only
 #. sources get Pin / Cancel only.
-#: lib/bookshelf_widget.lua:10391
+#: lib/bookshelf_widget.lua:10418
 msgid "Remove the tag \"%1\" from this book?"
 msgstr "Eltávolítod a(z) \"%1\" címkét ebből a könyvből?"
 
-#: lib/bookshelf_widget.lua:10414
+#: lib/bookshelf_widget.lua:10441
 msgid "Edit tag: "
 msgstr "Címke szerkesztése: "
 
-#. Editable (Embedded) source: the help line sits
-#. inline with the Edit button's hairline row, not
-#. another pill or its own line. Read-only sources
-#. (Calibre/Hardcover) get no edit action, so an
-#. empty-source message (if any) stays on its own
-#. line -- there's no button row to pair it with.
-#: lib/bookshelf_widget.lua:10448
-msgid "Long-press a tag for options."
-msgstr "Hosszan nyomva egy címkét, további lehetőségekért."
-
-#: lib/bookshelf_widget.lua:10449
-msgid "This book has no embedded tags."
-msgstr "Ennek a könyvnek nincsenek beágyazott címkéi."
-
-#: lib/bookshelf_widget.lua:10457
-msgid "No tags from this source."
-msgstr "Nincsenek címkék ebből a forrásból."
-
+#. Source-chip strip (Embedded/Calibre/Hardcover) as
+#. its own full-width row when there's more than one
+#. source. The Edit button then pins top-right of the
+#. first pill row (pillsWithEdit below).
+#. The expensive part (light-meta invalidation + a full
+#. shelf _rebuild -- ~600-900ms, ~90% of a tap) is
+#. deferred to modal close (see genre_source_changed);
+#. only the cheap per-book caches refresh now.
+#. Editable (Embedded) source: pills + inline top-right
+#. Edit button (empty gpills -> just the button, so an
+#. untagged book can still add tags). Read-only sources
+#. (Calibre/Hardcover): pills only, full width.
 #. Collections: the per-collection drill-in pills, then
 #. a hairline + Edit button opening the collection
 #. manager. Always shown (even with no memberships) so
@@ -17952,9 +18007,11 @@ msgstr "Nincsenek címkék ebből a forrásból."
 #. pill_specs upvalue and rebuild the Tags tab
 #. body (which re-reads it), so no flash from
 #. closing/reopening the popup.
-#. Empty state sits inline with the Edit button's
-#. hairline row rather than its own line above it.
-#: lib/bookshelf_widget.lua:10498
+#. Pills + inline top-right Edit button. When empty, a
+#. left-aligned "Not in any collection." note fills the
+#. pill column (Edit stays top-right), rather than its own
+#. extra line as before.
+#: lib/bookshelf_widget.lua:10530
 msgid "Not in any collection."
 msgstr "Nincs egyetlen gyűjteményben sem."
 
@@ -17975,15 +18032,15 @@ msgstr "Nincs egyetlen gyűjteményben sem."
 #. returns (KOReader only drains the paint queue between events).
 #. Force it now so the black-fill feedback is visible immediately.
 #. Same pre-paint pattern as the chip-strip's flashPending().
-#: lib/bookshelf_widget.lua:10585
+#: lib/bookshelf_widget.lua:10615
 msgid "Reviews couldn't be fetched."
 msgstr "A vélemények nem kérhetők le."
 
-#: lib/bookshelf_widget.lua:10600
+#: lib/bookshelf_widget.lua:10630
 msgid "Loading reviews…"
 msgstr "Vélemények betöltése…"
 
-#: lib/bookshelf_widget.lua:10604
+#: lib/bookshelf_widget.lua:10634
 msgid "Reviews"
 msgstr "Vélemények"
 
@@ -17997,11 +18054,11 @@ msgstr "Vélemények"
 #. Pass the filepath so the scaled-cover cache is dropped too: cover
 #. toggles / re-links change the cover, and a stale cached bitmap would
 #. otherwise keep showing the old one.
-#: lib/bookshelf_widget.lua:10795
+#: lib/bookshelf_widget.lua:10825
 msgid "Hardcover metadata refreshed"
 msgstr "Hardcover metaadatok frissítve"
 
-#: lib/bookshelf_widget.lua:10797
+#: lib/bookshelf_widget.lua:10827
 msgid "Hardcover refresh failed"
 msgstr "Hardcover frissítés sikertelen"
 
@@ -18009,83 +18066,83 @@ msgstr "Hardcover frissítés sikertelen"
 #. embedded ISBN / Hardcover id (reads the EPUB OPF once; cached on the book
 #. + instant for non-EPUBs). With an id we resolve exactly; without one the
 #. button becomes a title+author best-guess search instead of a dead end.
-#: lib/bookshelf_widget.lua:10809
+#: lib/bookshelf_widget.lua:10839
 msgid "Auto link"
 msgstr "Automatikus összekapcsolás"
 
-#: lib/bookshelf_widget.lua:10809
+#: lib/bookshelf_widget.lua:10839
 msgid "Auto link (best guess)"
 msgstr "Automatikus összekapcsolás (legjobb találat)"
 
-#: lib/bookshelf_widget.lua:10814
+#: lib/bookshelf_widget.lua:10844
 msgid "No embedded Hardcover identifier found"
 msgstr "Nem található beágyazott Hardcover azonosító"
 
-#: lib/bookshelf_widget.lua:10817 lib/bookshelf_widget.lua:10852
+#: lib/bookshelf_widget.lua:10847 lib/bookshelf_widget.lua:10882
 msgid "Hardcover book linked"
 msgstr "Hardcover könyv összekapcsolva"
 
 #. No embedded id: search Hardcover by title + author and link
 #. the most confident match (the auto-link-all "Best guess").
-#: lib/bookshelf_widget.lua:10824
+#: lib/bookshelf_widget.lua:10854
 msgid "No confident Hardcover match -- try Manual link"
 msgstr "Nincs magabiztos Hardcover egyezés -- próbáld a Kézi összekapcsolást"
 
 #. Picker failed to even open: no dialog, so on_close never fires --
 #. reopen the Hardcover menu now.
-#: lib/bookshelf_widget.lua:10825 lib/bookshelf_widget.lua:10859
+#: lib/bookshelf_widget.lua:10855 lib/bookshelf_widget.lua:10889
 msgid "Hardcover search failed"
 msgstr "A Hardcover keresés sikertelen"
 
-#: lib/bookshelf_widget.lua:10829
+#: lib/bookshelf_widget.lua:10859
 msgid "Hardcover book linked (best guess)"
 msgstr "Hardcover könyv összekapcsolva (legjobb találat)"
 
 #. (embedded_button is terminal: closeThen reopens the book menu for it.)
-#: lib/bookshelf_widget.lua:10836
+#: lib/bookshelf_widget.lua:10866
 msgid "Manual link"
 msgstr "Kézi összekapcsolás"
 
 #. on_close fires when the picker closes either way (cancel or
 #. selection), so the return to the book menu is handled there
 #. uniformly -- the per-result callbacks only show toasts / refresh.
-#: lib/bookshelf_widget.lua:10844 lib/bookshelf_widget.lua:10878
+#: lib/bookshelf_widget.lua:10874 lib/bookshelf_widget.lua:10908
 msgid "Hardcover link failed"
 msgstr "A Hardcover összekapcsolás sikertelen"
 
-#: lib/bookshelf_widget.lua:10849
+#: lib/bookshelf_widget.lua:10879
 msgid "Book linked, but metadata refresh failed: %1"
 msgstr "A könyv összekapcsolva, de a metaadat frissítése sikertelen: %1"
 
-#: lib/bookshelf_widget.lua:10866
+#: lib/bookshelf_widget.lua:10896
 msgid "Select edition"
 msgstr "Kiadás kiválasztása"
 
-#: lib/bookshelf_widget.lua:10871
+#: lib/bookshelf_widget.lua:10901
 msgid "Link a Hardcover book first"
 msgstr "Először kapcsolj össze egy Hardcover könyvet"
 
-#: lib/bookshelf_widget.lua:10883
+#: lib/bookshelf_widget.lua:10913
 msgid "Edition linked, but metadata refresh failed: %1"
 msgstr "A kiadás összekapcsolva, de a metaadat frissítése sikertelen: %1"
 
-#: lib/bookshelf_widget.lua:10886
+#: lib/bookshelf_widget.lua:10916
 msgid "Hardcover edition linked"
 msgstr "Hardcover kiadás összekapcsolva"
 
-#: lib/bookshelf_widget.lua:10891
+#: lib/bookshelf_widget.lua:10921
 msgid "Hardcover edition search failed"
 msgstr "A Hardcover kiadás keresése sikertelen"
 
-#: lib/bookshelf_widget.lua:10898
+#: lib/bookshelf_widget.lua:10928
 msgid "Clear link"
 msgstr "Kapcsolat törlése"
 
-#: lib/bookshelf_widget.lua:10904
+#: lib/bookshelf_widget.lua:10934
 msgid "Hardcover link cleared"
 msgstr "Hardcover kapcsolat törölve"
 
-#: lib/bookshelf_widget.lua:10906
+#: lib/bookshelf_widget.lua:10936
 msgid "Could not clear Hardcover link"
 msgstr "A Hardcover kapcsolat törlése sikertelen"
 
@@ -18093,14 +18150,14 @@ msgstr "A Hardcover kapcsolat törlése sikertelen"
 #. link record's use_cover / use_description flags in place and reinit the
 #. dialog so the checkbox updates without leaving the menu.
 #. ☑ / ☐
-#: lib/bookshelf_widget.lua:10932
+#: lib/bookshelf_widget.lua:10962
 msgid "Use Hardcover image"
 msgstr "Hardcover kép használata"
 
 #. Greyed out unless a Hardcover cover is actually downloaded for this
 #. book: with cover download off (issue #111), or for a book Hardcover
 #. has no cover for, there's nothing to apply.
-#: lib/bookshelf_widget.lua:10942
+#: lib/bookshelf_widget.lua:10972
 msgid "Could not update"
 msgstr "Nem sikerült frissíteni"
 
@@ -18111,7 +18168,7 @@ msgstr "Nem sikerült frissíteni"
 #. _rebuild refresh used to redraw the dialog as a side effect;
 #. the in-place refresh path scopes its setDirty to the spine /
 #. hero rect, so repaint the dialog explicitly here.
-#: lib/bookshelf_widget.lua:10959
+#: lib/bookshelf_widget.lua:10989
 msgid "Use Hardcover description"
 msgstr "Hardcover leírás használata"
 
@@ -18120,11 +18177,11 @@ msgstr "Hardcover leírás használata"
 #. Reviews and Refresh metadata are intentionally NOT here: Reviews was
 #. promoted to the book long-press menu, and Refresh duplicated that
 #. menu's own "Refresh metadata" button.
-#: lib/bookshelf_widget.lua:10977
+#: lib/bookshelf_widget.lua:11007
 msgid "Linked: %1"
 msgstr "Összekapcsolva: %1"
 
-#: lib/bookshelf_widget.lua:10978
+#: lib/bookshelf_widget.lua:11008
 msgid "Not linked to Hardcover"
 msgstr "Nincs Hardcoverhez kapcsolva"
 
@@ -18209,39 +18266,39 @@ msgstr "Nincs Hardcoverhez kapcsolva"
 #. payload. Callers pass kind explicitly; fall back to group.kind
 #. for the folder case so both call shapes work.
 #. Per-kind "this <thing>" fragment for the prompt. Translatable.
-#: lib/bookshelf_widget.lua:11240
+#: lib/bookshelf_widget.lua:11270
 msgid "this folder"
 msgstr "ezt a mappát"
 
-#: lib/bookshelf_widget.lua:11241
+#: lib/bookshelf_widget.lua:11271
 msgid "this series"
 msgstr "ezt a sorozatot"
 
-#: lib/bookshelf_widget.lua:11242
+#: lib/bookshelf_widget.lua:11272
 msgid "this author"
 msgstr "ezt a szerzőt"
 
-#: lib/bookshelf_widget.lua:11243
+#: lib/bookshelf_widget.lua:11273
 msgid "this genre"
 msgstr "ezt a műfajt"
 
-#: lib/bookshelf_widget.lua:11244
+#: lib/bookshelf_widget.lua:11274
 msgid "this collection"
 msgstr "ezt a gyűjteményt"
 
-#: lib/bookshelf_widget.lua:11245
+#: lib/bookshelf_widget.lua:11275
 msgid "this format"
 msgstr "ezt a formátumot"
 
-#: lib/bookshelf_widget.lua:11246
+#: lib/bookshelf_widget.lua:11276
 msgid "this rating"
 msgstr "ezt az értékelést"
 
-#: lib/bookshelf_widget.lua:11247
+#: lib/bookshelf_widget.lua:11277
 msgid "this language"
 msgstr "ezt a nyelvet"
 
-#: lib/bookshelf_widget.lua:11248
+#: lib/bookshelf_widget.lua:11278
 msgid "this group"
 msgstr "ezt a csoportot"
 
@@ -18251,7 +18308,7 @@ msgstr "ezt a csoportot"
 #. Hard line break after the first action so each option reads as
 #. its own line ("Pin …" / "or add/remove …") rather than wrapping
 #. mid-phrase.
-#: lib/bookshelf_widget.lua:11270
+#: lib/bookshelf_widget.lua:11300
 #, lua-format
 msgid ""
 "Pin %s to the chip bar for quick access,\n"
@@ -18262,7 +18319,7 @@ msgstr ""
 
 #. Partial overlap: surface both numbers in the prompt so the
 #. two action buttons read unambiguously without parsing.
-#: lib/bookshelf_widget.lua:11276
+#: lib/bookshelf_widget.lua:11306
 #, lua-format
 msgid ""
 "Pin %s to the chip bar for quick access,\n"
@@ -18272,7 +18329,7 @@ msgstr ""
 "vagy adj hozzá még %d-et / távolítsd el a már kijelölt %d-et."
 
 #. "none"
-#: lib/bookshelf_widget.lua:11280
+#: lib/bookshelf_widget.lua:11310
 #, lua-format
 msgid ""
 "Pin %s to the chip bar for quick access,\n"
@@ -18281,7 +18338,7 @@ msgstr ""
 "Rögzítsd %s elemet a chipsorban a gyors hozzáféréshez,\n"
 "vagy add hozzá %d könyvét a kijelöléshez tömeges szerkesztéshez."
 
-#: lib/bookshelf_widget.lua:11357
+#: lib/bookshelf_widget.lua:11387
 msgid "Pin"
 msgstr "Rögzítés"
 
@@ -18290,12 +18347,12 @@ msgstr "Rögzítés"
 #. "some" → Add N more | Remove M  (the Venn-diagram middle)
 #. "all"  → Remove N
 #. Each action applies directly with no extra confirmation.
-#: lib/bookshelf_widget.lua:11372 lib/bookshelf_widget.lua:11373
+#: lib/bookshelf_widget.lua:11402 lib/bookshelf_widget.lua:11403
 #, lua-format
 msgid "Add %d"
 msgstr "%d hozzáadása"
 
-#: lib/bookshelf_widget.lua:11382
+#: lib/bookshelf_widget.lua:11412
 #, lua-format
 msgid "Remove %d"
 msgstr "%d eltávolítása"
@@ -18306,11 +18363,11 @@ msgstr "%d eltávolítása"
 #. user's bookshelf image library. The two share storage and
 #. render path through ImageSource, but the picker / clear actions
 #. diverge slightly per kind.
-#: lib/bookshelf_widget.lua:11402
+#: lib/bookshelf_widget.lua:11432
 msgid "Set folder image…"
 msgstr "Mappakép beállítása…"
 
-#: lib/bookshelf_widget.lua:11409
+#: lib/bookshelf_widget.lua:11439
 msgid "Clear folder image"
 msgstr "Mappakép törlése"
 
@@ -18319,35 +18376,35 @@ msgstr "Mappakép törlése"
 #. would read wrong on the four kinds. The translation lookups
 #. are dynamic but each msgid is also written verbatim in the
 #. false-branch below so xgettext can find them.
-#: lib/bookshelf_widget.lua:11429 lib/bookshelf_widget.lua:11440
+#: lib/bookshelf_widget.lua:11459 lib/bookshelf_widget.lua:11470
 msgid "Set author image…"
 msgstr "Szerzőkép beállítása…"
 
-#: lib/bookshelf_widget.lua:11430 lib/bookshelf_widget.lua:11441
+#: lib/bookshelf_widget.lua:11460 lib/bookshelf_widget.lua:11471
 msgid "Set series image…"
 msgstr "Sorozatkép beállítása…"
 
-#: lib/bookshelf_widget.lua:11431 lib/bookshelf_widget.lua:11442
+#: lib/bookshelf_widget.lua:11461 lib/bookshelf_widget.lua:11472
 msgid "Set genre image…"
 msgstr "Műfajkép beállítása…"
 
-#: lib/bookshelf_widget.lua:11432 lib/bookshelf_widget.lua:11443
+#: lib/bookshelf_widget.lua:11462 lib/bookshelf_widget.lua:11473
 msgid "Set collection image…"
 msgstr "Gyűjteménykép beállítása…"
 
-#: lib/bookshelf_widget.lua:11433 lib/bookshelf_widget.lua:11446
+#: lib/bookshelf_widget.lua:11463 lib/bookshelf_widget.lua:11476
 msgid "Clear author image"
 msgstr "Szerzőkép törlése"
 
-#: lib/bookshelf_widget.lua:11434 lib/bookshelf_widget.lua:11447
+#: lib/bookshelf_widget.lua:11464 lib/bookshelf_widget.lua:11477
 msgid "Clear series image"
 msgstr "Sorozatkép törlése"
 
-#: lib/bookshelf_widget.lua:11435 lib/bookshelf_widget.lua:11448
+#: lib/bookshelf_widget.lua:11465 lib/bookshelf_widget.lua:11478
 msgid "Clear genre image"
 msgstr "Műfajkép törlése"
 
-#: lib/bookshelf_widget.lua:11436 lib/bookshelf_widget.lua:11449
+#: lib/bookshelf_widget.lua:11466 lib/bookshelf_widget.lua:11479
 msgid "Clear collection image"
 msgstr "Gyűjteménykép törlése"
 
@@ -18362,7 +18419,7 @@ msgstr "Gyűjteménykép törlése"
 #. chooser's default title because the alternative is a confusing
 #. silent-tap-on-the-folder UX (PathChooser's default behaviour for
 #. file selection is exactly long-press-to-choose).
-#: lib/bookshelf_widget.lua:11509
+#: lib/bookshelf_widget.lua:11539
 msgid "Choose folder image"
 msgstr "Mappakép kiválasztása"
 
@@ -18378,7 +18435,7 @@ msgstr "Mappakép kiválasztása"
 #. library matching by sanitised slug.
 #. Open the picker rooted at the image library so the user lands
 #. in the right place when they've already organised files there.
-#: lib/bookshelf_widget.lua:11548
+#: lib/bookshelf_widget.lua:11578
 msgid "Choose image"
 msgstr "Kép kiválasztása"
 
@@ -18461,11 +18518,11 @@ msgstr "Kép kiválasztása"
 #. (kind = "search") so the breadcrumb arrow pill doubles as a "back to
 #. whatever I was on" affordance and the existing east-swipe / chip-pill
 #. tap clears the search.
-#: lib/bookshelf_widget.lua:11831
+#: lib/bookshelf_widget.lua:11861
 msgid "Search library"
 msgstr "Könyvtár keresése"
 
-#: lib/bookshelf_widget.lua:11833
+#: lib/bookshelf_widget.lua:11863
 msgid "title, author, series, genre…"
 msgstr "cím, szerző, sorozat, műfaj…"
 
@@ -20560,6 +20617,18 @@ msgstr "Frissítve: %1 perccel ezelőtt"
 #: micromodules/weather.lua:473 micromodules/weather.lua:559
 msgid "Updated %1h ago"
 msgstr "Frissítve: %1 órával ezelőtt"
+
+#~ msgid "Edit…"
+#~ msgstr "Szerkesztés…"
+
+#~ msgid "Long-press a tag for options."
+#~ msgstr "Hosszan nyomva egy címkét, további lehetőségekért."
+
+#~ msgid "This book has no embedded tags."
+#~ msgstr "Ennek a könyvnek nincsenek beágyazott címkéi."
+
+#~ msgid "No tags from this source."
+#~ msgstr "Nincsenek címkék ebből a forrásból."
 
 #~ msgid "No Hardcover book is linked yet."
 #~ msgstr "Még nincs hozzá kapcsolt Hardcover könyv."
