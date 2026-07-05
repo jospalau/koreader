@@ -4,7 +4,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-04 13:52+0100\n"
+"POT-Creation-Date: 2026-07-05 00:05+0100\n"
 "PO-Revision-Date: 2026-06-14 12:00+0100\n"
 "Last-Translator: \n"
 "Language-Team: Hungarian\n"
@@ -41,19 +41,19 @@ msgstr "Rendszerművelet…"
 msgid "Menu action…"
 msgstr "Menüművelet…"
 
-#: lib/bookshelf_action_chooser.lua:63
+#: lib/bookshelf_action_chooser.lua:64
 msgid "Bookshelf action…"
 msgstr "Bookshelf művelet…"
 
-#: lib/bookshelf_action_chooser.lua:69
+#: lib/bookshelf_action_chooser.lua:70
 msgid "Bookshelf actions"
 msgstr "Bookshelf műveletek"
 
-#: lib/bookshelf_action_chooser.lua:72 lib/bookshelf_action_chooser.lua:73
+#: lib/bookshelf_action_chooser.lua:73 lib/bookshelf_action_chooser.lua:74
 msgid "Close bookshelf"
 msgstr "Bookshelf bezárása"
 
-#: lib/bookshelf_action_chooser.lua:76 lib/bookshelf_action_chooser.lua:77
+#: lib/bookshelf_action_chooser.lua:77 lib/bookshelf_action_chooser.lua:78
 #: lib/bookshelf_start_menu_model.lua:41
 msgid "Bookshelf menu"
 msgstr "Bookshelf menü"
@@ -62,12 +62,12 @@ msgstr "Bookshelf menü"
 msgid "Choose an action"
 msgstr "Válassz egy műveletet"
 
-#: lib/bookshelf_book_repository.lua:3466
-#: lib/bookshelf_book_repository.lua:4796 micromodules/weather.lua:93
+#: lib/bookshelf_book_repository.lua:3472
+#: lib/bookshelf_book_repository.lua:4802 micromodules/weather.lua:93
 msgid "Unknown"
 msgstr "Ismeretlen"
 
-#: lib/bookshelf_book_repository.lua:4061 lib/bookshelf_chip_editor.lua:1124
+#: lib/bookshelf_book_repository.lua:4067 lib/bookshelf_chip_editor.lua:1124
 #: lib/bookshelf_filter.lua:261
 msgid "Unrated"
 msgstr "Nincs értékelve"
@@ -101,7 +101,7 @@ msgstr "Elolvasva"
 
 #: lib/bookshelf_bulk_actions.lua:125 lib/bookshelf_bulk_actions.lua:127
 #: lib/bookshelf_chip_editor.lua:225 lib/bookshelf_filter.lua:35
-#: lib/bookshelf_sort_engine.lua:430
+#: lib/bookshelf_sort_engine.lua:441
 msgid "Rating"
 msgstr "Értékelés"
 
@@ -233,7 +233,7 @@ msgstr "Új chip"
 msgid "Name"
 msgstr "Keresztnév"
 
-#: lib/bookshelf_chip_editor.lua:192 lib/bookshelf_sort_engine.lua:346
+#: lib/bookshelf_chip_editor.lua:192 lib/bookshelf_sort_engine.lua:357
 msgid "Surname"
 msgstr "Vezetéknév"
 
@@ -245,7 +245,7 @@ msgstr "Legutóbb olvasott"
 msgid "Most recently added"
 msgstr "Legutóbb hozzáadott"
 
-#: lib/bookshelf_chip_editor.lua:195 lib/bookshelf_sort_engine.lua:422
+#: lib/bookshelf_chip_editor.lua:195 lib/bookshelf_sort_engine.lua:433
 msgid "Book count"
 msgstr "Könyvek száma"
 
@@ -268,7 +268,7 @@ msgstr "Legújabban hozzáadott"
 #: lib/bookshelf_chip_editor.lua:207 lib/bookshelf_chip_editor.lua:222
 #: lib/bookshelf_chip_editor.lua:1277 lib/bookshelf_filter.lua:37
 #: lib/bookshelf_settings.lua:486 lib/bookshelf_settings.lua:2186
-#: lib/bookshelf_sort_engine.lua:348 lib/bookshelf_tab_model.lua:50
+#: lib/bookshelf_sort_engine.lua:359 lib/bookshelf_tab_model.lua:50
 #: lib/bookshelf_widget.lua:1198 lib/bookshelf_widget.lua:10029
 msgid "Series"
 msgstr "Sorozatok"
@@ -325,7 +325,7 @@ msgstr "Műfaj"
 
 #: lib/bookshelf_chip_editor.lua:221 lib/bookshelf_settings.lua:361
 #: lib/bookshelf_settings.lua:485 lib/bookshelf_settings.lua:2185
-#: lib/bookshelf_sort_engine.lua:344
+#: lib/bookshelf_sort_engine.lua:355
 msgid "Author"
 msgstr "Szerző"
 
@@ -805,7 +805,7 @@ msgstr "Tokenek…"
 msgid "Icons…"
 msgstr "Ikonok…"
 
-#: lib/bookshelf_hero_modules.lua:441 lib/bookshelf_start_menu.lua:677
+#: lib/bookshelf_hero_modules.lua:441 lib/bookshelf_start_menu.lua:725
 msgid "%1 (error)"
 msgstr "%1 (hiba)"
 
@@ -1304,17 +1304,25 @@ msgstr "Keresés"
 msgid "Back"
 msgstr "Vissza"
 
-#: lib/bookshelf_menu_shortcut.lua:209
+#: lib/bookshelf_menu_shortcut.lua:222
 msgid "Menu unavailable"
 msgstr "A menü nem érhető el"
 
-#: lib/bookshelf_menu_shortcut.lua:219
+#: lib/bookshelf_menu_shortcut.lua:238
+msgid "Add this menu page"
+msgstr "Ezen menüoldal hozzáadása"
+
+#: lib/bookshelf_menu_shortcut.lua:239
 msgid "Add as shortcut"
 msgstr "Hozzáadás parancsikonként"
 
-#: lib/bookshelf_menu_shortcut.lua:258
+#: lib/bookshelf_menu_shortcut.lua:284 lib/bookshelf_menu_shortcut.lua:312
 msgid "That menu item isn't available"
 msgstr "Ez a menüpont nem érhető el"
+
+#: lib/bookshelf_menu_shortcut.lua:321
+msgid "Menu"
+msgstr "Menü"
 
 #: lib/bookshelf_module_picker.lua:59
 msgid "Network required"
@@ -1357,7 +1365,7 @@ msgid "Book"
 msgstr "Könyv"
 
 #: lib/bookshelf_settings.lua:95 lib/bookshelf_settings.lua:366
-#: lib/bookshelf_sort_engine.lua:376 lib/bookshelf_tokens.lua:24
+#: lib/bookshelf_sort_engine.lua:387 lib/bookshelf_tokens.lua:24
 msgid "Progress"
 msgstr "Folyamat"
 
@@ -1408,7 +1416,7 @@ msgid "Status line"
 msgstr "Állapotsor"
 
 #: lib/bookshelf_settings.lua:360 lib/bookshelf_settings.lua:2184
-#: lib/bookshelf_sort_engine.lua:333 lib/bookshelf_tokens.lua:57
+#: lib/bookshelf_sort_engine.lua:344 lib/bookshelf_tokens.lua:57
 msgid "Title"
 msgstr "Cím"
 
@@ -2132,12 +2140,12 @@ msgid "Slow"
 msgstr "Lassú"
 
 #: lib/bookshelf_settings.lua:2593
-msgid "Page turn animation"
-msgstr "Lapozási animáció"
+msgid "Animation speed"
+msgstr "Animáció sebessége"
 
 #: lib/bookshelf_settings.lua:2595
-msgid "Animate shelf page turns with a page-wipe effect: the new page sweeps in from the side. E-ink only (the effect relies on the panel's refresh, so it does nothing on LCD screens). Fast / Medium / Slow trade snappiness for smoothness. Slow looks smoothest but takes longer on older panels."
-msgstr "Animálja a polc lapozásait lapozó törléshatással: az új oldal oldalról söpör be. Csak e-ink kijelzőn működik (a hatás a kijelző frissítésére épül, ezért LCD kijelzőn semmit sem csinál). A Gyors / Közepes / Lassú a gyorsaság és a simaság között egyensúlyoz. A Lassú tűnik a legsimábbnak, de régebbi kijelzőkön tovább tart."
+msgid "Animate transitions with a wipe effect: shelf page turns, chip-bar paging, and the start menu opening and closing. E-ink only (the effect relies on the panel's refresh, so it does nothing on LCD screens). Fast / Medium / Slow trade snappiness for smoothness. Slow looks smoothest but takes longer on older panels."
+msgstr "Az átmenetek animálása törléshatással: a polc lapozásai, a szűrősáv lapozása, valamint az indítómenü megnyitása és bezárása. Csak e-ink kijelzőn működik (a hatás a kijelző frissítésére épül, ezért LCD kijelzőn semmit sem csinál). A Gyors / Közepes / Lassú a gyorsaság és a simaság között egyensúlyoz. A Lassú tűnik a legsimábbnak, de régebbi kijelzőkön tovább tart."
 
 #: lib/bookshelf_settings.lua:2626
 msgid "Closing book notification"
@@ -2336,97 +2344,97 @@ msgstr "Ki: minden chip ugyanolyan széles. Be: minden chip a feliratához igazo
 msgid "+ Add new chip"
 msgstr "+ Új chip hozzáadása"
 
-#: lib/bookshelf_sort_engine.lua:340
+#: lib/bookshelf_sort_engine.lua:351
 msgid "Filename"
 msgstr "Fájlnév"
 
-#: lib/bookshelf_sort_engine.lua:344
+#: lib/bookshelf_sort_engine.lua:355
 msgid "Author (given name)"
 msgstr "Szerző (keresztnév)"
 
-#: lib/bookshelf_sort_engine.lua:346
+#: lib/bookshelf_sort_engine.lua:357
 msgid "Author surname"
 msgstr "Szerző (vezetéknév)"
 
-#: lib/bookshelf_sort_engine.lua:348 lib/bookshelf_tokens.lua:64
+#: lib/bookshelf_sort_engine.lua:359 lib/bookshelf_tokens.lua:64
 msgid "Series name"
 msgstr "Sorozat neve"
 
-#: lib/bookshelf_sort_engine.lua:352
+#: lib/bookshelf_sort_engine.lua:363
 msgid "Series #"
 msgstr "Sorozat #"
 
-#: lib/bookshelf_sort_engine.lua:352
+#: lib/bookshelf_sort_engine.lua:363
 msgid "Series index"
 msgstr "Sorozat sorszáma"
 
-#: lib/bookshelf_sort_engine.lua:360
+#: lib/bookshelf_sort_engine.lua:371
 msgid "Series + #"
 msgstr "Sorozat + #"
 
-#: lib/bookshelf_sort_engine.lua:360
+#: lib/bookshelf_sort_engine.lua:371
 msgid "Series + index"
 msgstr "Sorozat + sorszám"
 
-#: lib/bookshelf_sort_engine.lua:370
+#: lib/bookshelf_sort_engine.lua:381
 msgid "Last opened"
 msgstr "Utoljára megnyitva"
 
-#: lib/bookshelf_sort_engine.lua:370
+#: lib/bookshelf_sort_engine.lua:381
 msgid "Opened"
 msgstr "Megnyitva"
 
-#: lib/bookshelf_sort_engine.lua:376 lib/bookshelf_tokens.lua:77
+#: lib/bookshelf_sort_engine.lua:387 lib/bookshelf_tokens.lua:77
 msgid "Percent read"
 msgstr "Olvasott százalék"
 
-#: lib/bookshelf_sort_engine.lua:381
+#: lib/bookshelf_sort_engine.lua:392
 msgid "Unread/Reading/Finished"
 msgstr "Olvasatlan/Olvasás alatt/Elolvasva"
 
-#: lib/bookshelf_sort_engine.lua:382
+#: lib/bookshelf_sort_engine.lua:393
 msgid "Unread 1st"
 msgstr "Olvasatlan elöl"
 
-#: lib/bookshelf_sort_engine.lua:391
+#: lib/bookshelf_sort_engine.lua:402
 msgid "Reading/Unread/Finished"
 msgstr "Olvasás alatt/Olvasatlan/Elolvasva"
 
-#: lib/bookshelf_sort_engine.lua:392
+#: lib/bookshelf_sort_engine.lua:403
 msgid "Reading 1st"
 msgstr "Olvasás alatt elöl"
 
-#: lib/bookshelf_sort_engine.lua:403 lib/bookshelf_widget.lua:8061
+#: lib/bookshelf_sort_engine.lua:414 lib/bookshelf_widget.lua:8061
 #: lib/bookshelf_widget.lua:8076
 msgid "Added"
 msgstr "Hozzáadva"
 
-#: lib/bookshelf_sort_engine.lua:403
+#: lib/bookshelf_sort_engine.lua:414
 msgid "Date added"
 msgstr "Hozzáadás dátuma"
 
-#: lib/bookshelf_sort_engine.lua:415
+#: lib/bookshelf_sort_engine.lua:426
 msgid "File size"
 msgstr "Fájlméret"
 
-#: lib/bookshelf_sort_engine.lua:422 micromodules/shelf_size.lua:75
+#: lib/bookshelf_sort_engine.lua:433 micromodules/shelf_size.lua:75
 #: micromodules/trivia.lua:74
 msgid "Books"
 msgstr "Könyv"
 
-#: lib/bookshelf_sort_engine.lua:437
+#: lib/bookshelf_sort_engine.lua:448
 msgid "Page count"
 msgstr "Oldalszám"
 
-#: lib/bookshelf_sort_engine.lua:437 lib/bookshelf_widget.lua:8058
+#: lib/bookshelf_sort_engine.lua:448 lib/bookshelf_widget.lua:8058
 msgid "Pages"
 msgstr "Oldalak"
 
-#: lib/bookshelf_start_menu.lua:673
+#: lib/bookshelf_start_menu.lua:721
 msgid "%1 (disabled - tap to retry)"
 msgstr "%1 (letiltva – koppints az újrapróbáláshoz)"
 
-#: lib/bookshelf_start_menu.lua:813
+#: lib/bookshelf_start_menu.lua:861
 msgid "Add…"
 msgstr "Hozzáadás…"
 
@@ -4330,6 +4338,9 @@ msgstr "Frissítve: %1 perccel ezelőtt"
 #: micromodules/weather.lua:473 micromodules/weather.lua:559
 msgid "Updated %1h ago"
 msgstr "Frissítve: %1 órával ezelőtt"
+
+#~ msgid "Page turn animation"
+#~ msgstr "Lapozási animáció"
 
 #~ msgid "Edit…"
 #~ msgstr "Szerkesztés…"

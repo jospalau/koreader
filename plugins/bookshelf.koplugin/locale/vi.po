@@ -1,7 +1,7 @@
 msgid ""
 msgstr ""
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-04 13:52+0100\n"
+"POT-Creation-Date: 2026-07-05 00:05+0100\n"
 "Language: vi\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -35,19 +35,19 @@ msgstr "Hànhđộng hệ thống…"
 msgid "Menu action…"
 msgstr "Hành động menu…"
 
-#: lib/bookshelf_action_chooser.lua:63
+#: lib/bookshelf_action_chooser.lua:64
 msgid "Bookshelf action…"
 msgstr "Hành động thùng sách…"
 
-#: lib/bookshelf_action_chooser.lua:69
+#: lib/bookshelf_action_chooser.lua:70
 msgid "Bookshelf actions"
 msgstr "Các hành động thùng sách"
 
-#: lib/bookshelf_action_chooser.lua:72 lib/bookshelf_action_chooser.lua:73
+#: lib/bookshelf_action_chooser.lua:73 lib/bookshelf_action_chooser.lua:74
 msgid "Close bookshelf"
 msgstr "Đóng kệ sách"
 
-#: lib/bookshelf_action_chooser.lua:76 lib/bookshelf_action_chooser.lua:77
+#: lib/bookshelf_action_chooser.lua:77 lib/bookshelf_action_chooser.lua:78
 #: lib/bookshelf_start_menu_model.lua:41
 msgid "Bookshelf menu"
 msgstr "Menu kệ sách"
@@ -56,12 +56,12 @@ msgstr "Menu kệ sách"
 msgid "Choose an action"
 msgstr "Chọn một hành động"
 
-#: lib/bookshelf_book_repository.lua:3466
-#: lib/bookshelf_book_repository.lua:4796 micromodules/weather.lua:93
+#: lib/bookshelf_book_repository.lua:3472
+#: lib/bookshelf_book_repository.lua:4802 micromodules/weather.lua:93
 msgid "Unknown"
 msgstr "Không xác định"
 
-#: lib/bookshelf_book_repository.lua:4061 lib/bookshelf_chip_editor.lua:1124
+#: lib/bookshelf_book_repository.lua:4067 lib/bookshelf_chip_editor.lua:1124
 #: lib/bookshelf_filter.lua:261
 msgid "Unrated"
 msgstr "Chưa xếp hạng"
@@ -95,7 +95,7 @@ msgstr "Hoàn thành"
 
 #: lib/bookshelf_bulk_actions.lua:125 lib/bookshelf_bulk_actions.lua:127
 #: lib/bookshelf_chip_editor.lua:225 lib/bookshelf_filter.lua:35
-#: lib/bookshelf_sort_engine.lua:430
+#: lib/bookshelf_sort_engine.lua:441
 msgid "Rating"
 msgstr "Đánh giá"
 
@@ -227,7 +227,7 @@ msgstr "Chip mới"
 msgid "Name"
 msgstr "Tên"
 
-#: lib/bookshelf_chip_editor.lua:192 lib/bookshelf_sort_engine.lua:346
+#: lib/bookshelf_chip_editor.lua:192 lib/bookshelf_sort_engine.lua:357
 msgid "Surname"
 msgstr "Họ"
 
@@ -239,7 +239,7 @@ msgstr "Sách gần nhất đãđọc"
 msgid "Most recently added"
 msgstr "Sách đã được thêm gần nhất"
 
-#: lib/bookshelf_chip_editor.lua:195 lib/bookshelf_sort_engine.lua:422
+#: lib/bookshelf_chip_editor.lua:195 lib/bookshelf_sort_engine.lua:433
 msgid "Book count"
 msgstr "Số sách"
 
@@ -262,7 +262,7 @@ msgstr "Thêm mới"
 #: lib/bookshelf_chip_editor.lua:207 lib/bookshelf_chip_editor.lua:222
 #: lib/bookshelf_chip_editor.lua:1277 lib/bookshelf_filter.lua:37
 #: lib/bookshelf_settings.lua:486 lib/bookshelf_settings.lua:2186
-#: lib/bookshelf_sort_engine.lua:348 lib/bookshelf_tab_model.lua:50
+#: lib/bookshelf_sort_engine.lua:359 lib/bookshelf_tab_model.lua:50
 #: lib/bookshelf_widget.lua:1198 lib/bookshelf_widget.lua:10029
 msgid "Series"
 msgstr "Series"
@@ -319,7 +319,7 @@ msgstr "Genre"
 
 #: lib/bookshelf_chip_editor.lua:221 lib/bookshelf_settings.lua:361
 #: lib/bookshelf_settings.lua:485 lib/bookshelf_settings.lua:2185
-#: lib/bookshelf_sort_engine.lua:344
+#: lib/bookshelf_sort_engine.lua:355
 msgid "Author"
 msgstr "Author"
 
@@ -799,7 +799,7 @@ msgstr "Khối…"
 msgid "Icons…"
 msgstr "Biểu tượng…"
 
-#: lib/bookshelf_hero_modules.lua:441 lib/bookshelf_start_menu.lua:677
+#: lib/bookshelf_hero_modules.lua:441 lib/bookshelf_start_menu.lua:725
 msgid "%1 (error)"
 msgstr "%1 (lỗi)"
 
@@ -1298,17 +1298,25 @@ msgstr "Tìm kiếm"
 msgid "Back"
 msgstr "Lùi"
 
-#: lib/bookshelf_menu_shortcut.lua:209
+#: lib/bookshelf_menu_shortcut.lua:222
 msgid "Menu unavailable"
 msgstr "Menu không sẵn sàng"
 
-#: lib/bookshelf_menu_shortcut.lua:219
+#: lib/bookshelf_menu_shortcut.lua:238
+msgid "Add this menu page"
+msgstr "Thêm trang menu này"
+
+#: lib/bookshelf_menu_shortcut.lua:239
 msgid "Add as shortcut"
 msgstr "Thêm làm tắt"
 
-#: lib/bookshelf_menu_shortcut.lua:258
+#: lib/bookshelf_menu_shortcut.lua:284 lib/bookshelf_menu_shortcut.lua:312
 msgid "That menu item isn't available"
 msgstr "Menu item này không sẵn sàng"
+
+#: lib/bookshelf_menu_shortcut.lua:321
+msgid "Menu"
+msgstr "Menu"
 
 #: lib/bookshelf_module_picker.lua:59
 msgid "Network required"
@@ -1351,7 +1359,7 @@ msgid "Book"
 msgstr "Sách"
 
 #: lib/bookshelf_settings.lua:95 lib/bookshelf_settings.lua:366
-#: lib/bookshelf_sort_engine.lua:376 lib/bookshelf_tokens.lua:24
+#: lib/bookshelf_sort_engine.lua:387 lib/bookshelf_tokens.lua:24
 msgid "Progress"
 msgstr "Tiến trình"
 
@@ -1402,7 +1410,7 @@ msgid "Status line"
 msgstr "Hàng trạng thái"
 
 #: lib/bookshelf_settings.lua:360 lib/bookshelf_settings.lua:2184
-#: lib/bookshelf_sort_engine.lua:333 lib/bookshelf_tokens.lua:57
+#: lib/bookshelf_sort_engine.lua:344 lib/bookshelf_tokens.lua:57
 msgid "Title"
 msgstr "Tiêu đề"
 
@@ -2126,12 +2134,12 @@ msgid "Slow"
 msgstr "Chậm"
 
 #: lib/bookshelf_settings.lua:2593
-msgid "Page turn animation"
-msgstr "Hiệu ứng lật trang"
+msgid "Animation speed"
+msgstr "Tốc độ hiệu ứng"
 
 #: lib/bookshelf_settings.lua:2595
-msgid "Animate shelf page turns with a page-wipe effect: the new page sweeps in from the side. E-ink only (the effect relies on the panel's refresh, so it does nothing on LCD screens). Fast / Medium / Slow trade snappiness for smoothness. Slow looks smoothest but takes longer on older panels."
-msgstr "Tạo hiệu ứng khi lật trang trên kệ sách bằng kiểu quét trang: trang mới trượt vào từ một bên. Chỉ dùng cho màn hình e-ink (hiệu ứng dựa vào việc làm mới của tấm nền, nên không có tác dụng trên màn hình LCD). Nhanh / Trung bình / Chậm đánh đổi giữa độ nhanh nhạy và độ mượt. Chậm trông mượt nhất nhưng lâu hơn trên các tấm nền cũ."
+msgid "Animate transitions with a wipe effect: shelf page turns, chip-bar paging, and the start menu opening and closing. E-ink only (the effect relies on the panel's refresh, so it does nothing on LCD screens). Fast / Medium / Slow trade snappiness for smoothness. Slow looks smoothest but takes longer on older panels."
+msgstr "Tạo hiệu ứng chuyển cảnh kiểu quét trang: lật trang trên kệ sách, chuyển trang thanh chip, và mở hoặc đóng menu. Chỉ dùng cho màn hình e-ink (hiệu ứng dựa vào việc làm mới của tấm nền, nên không có tác dụng trên màn hình LCD). Nhanh / Trung bình / Chậm đánh đổi giữa độ nhanh nhạy và độ mượt. Chậm trông mượt nhất nhưng lâu hơn trên các tấm nền cũ."
 
 #: lib/bookshelf_settings.lua:2626
 msgid "Closing book notification"
@@ -2330,97 +2338,97 @@ msgstr "Tắt: mọi chip có cùng độ rộng. Bật: mỗi chip được co 
 msgid "+ Add new chip"
 msgstr "+ Thêm chip mới"
 
-#: lib/bookshelf_sort_engine.lua:340
+#: lib/bookshelf_sort_engine.lua:351
 msgid "Filename"
 msgstr "Tên tệp"
 
-#: lib/bookshelf_sort_engine.lua:344
+#: lib/bookshelf_sort_engine.lua:355
 msgid "Author (given name)"
 msgstr "Tác giả (tên đệm)"
 
-#: lib/bookshelf_sort_engine.lua:346
+#: lib/bookshelf_sort_engine.lua:357
 msgid "Author surname"
 msgstr "Họ tác giả"
 
-#: lib/bookshelf_sort_engine.lua:348 lib/bookshelf_tokens.lua:64
+#: lib/bookshelf_sort_engine.lua:359 lib/bookshelf_tokens.lua:64
 msgid "Series name"
 msgstr "Tên series"
 
-#: lib/bookshelf_sort_engine.lua:352
+#: lib/bookshelf_sort_engine.lua:363
 msgid "Series #"
 msgstr "Số series"
 
-#: lib/bookshelf_sort_engine.lua:352
+#: lib/bookshelf_sort_engine.lua:363
 msgid "Series index"
 msgstr "Chỉ số series"
 
-#: lib/bookshelf_sort_engine.lua:360
+#: lib/bookshelf_sort_engine.lua:371
 msgid "Series + #"
 msgstr "Series + #"
 
-#: lib/bookshelf_sort_engine.lua:360
+#: lib/bookshelf_sort_engine.lua:371
 msgid "Series + index"
 msgstr "Chuỗi + chỉ số"
 
-#: lib/bookshelf_sort_engine.lua:370
+#: lib/bookshelf_sort_engine.lua:381
 msgid "Last opened"
 msgstr "Lần mở gần nhất"
 
-#: lib/bookshelf_sort_engine.lua:370
+#: lib/bookshelf_sort_engine.lua:381
 msgid "Opened"
 msgstr "Đã mở"
 
-#: lib/bookshelf_sort_engine.lua:376 lib/bookshelf_tokens.lua:77
+#: lib/bookshelf_sort_engine.lua:387 lib/bookshelf_tokens.lua:77
 msgid "Percent read"
 msgstr "Phần trăm đã đọc"
 
-#: lib/bookshelf_sort_engine.lua:381
+#: lib/bookshelf_sort_engine.lua:392
 msgid "Unread/Reading/Finished"
 msgstr "Chưa đọc/Đang đọc/Đã hoàn thành"
 
-#: lib/bookshelf_sort_engine.lua:382
+#: lib/bookshelf_sort_engine.lua:393
 msgid "Unread 1st"
 msgstr "Chưa đọc thứ nhất"
 
-#: lib/bookshelf_sort_engine.lua:391
+#: lib/bookshelf_sort_engine.lua:402
 msgid "Reading/Unread/Finished"
 msgstr "Đang đọc/Chưa đọc/Đã hoàn thành"
 
-#: lib/bookshelf_sort_engine.lua:392
+#: lib/bookshelf_sort_engine.lua:403
 msgid "Reading 1st"
 msgstr "Lần đọc thứ nhất"
 
-#: lib/bookshelf_sort_engine.lua:403 lib/bookshelf_widget.lua:8061
+#: lib/bookshelf_sort_engine.lua:414 lib/bookshelf_widget.lua:8061
 #: lib/bookshelf_widget.lua:8076
 msgid "Added"
 msgstr "Đã thêm"
 
-#: lib/bookshelf_sort_engine.lua:403
+#: lib/bookshelf_sort_engine.lua:414
 msgid "Date added"
 msgstr "Ngày thêm"
 
-#: lib/bookshelf_sort_engine.lua:415
+#: lib/bookshelf_sort_engine.lua:426
 msgid "File size"
 msgstr "Kích thước tệp"
 
-#: lib/bookshelf_sort_engine.lua:422 micromodules/shelf_size.lua:75
+#: lib/bookshelf_sort_engine.lua:433 micromodules/shelf_size.lua:75
 #: micromodules/trivia.lua:74
 msgid "Books"
 msgstr "Sách"
 
-#: lib/bookshelf_sort_engine.lua:437
+#: lib/bookshelf_sort_engine.lua:448
 msgid "Page count"
 msgstr "Số trang"
 
-#: lib/bookshelf_sort_engine.lua:437 lib/bookshelf_widget.lua:8058
+#: lib/bookshelf_sort_engine.lua:448 lib/bookshelf_widget.lua:8058
 msgid "Pages"
 msgstr "Trang"
 
-#: lib/bookshelf_start_menu.lua:673
+#: lib/bookshelf_start_menu.lua:721
 msgid "%1 (disabled - tap to retry)"
 msgstr "%1 (vô hiệu hóa - nhấn để thử lại)"
 
-#: lib/bookshelf_start_menu.lua:813
+#: lib/bookshelf_start_menu.lua:861
 msgid "Add…"
 msgstr "Thêm…"
 
@@ -4324,6 +4332,9 @@ msgstr "Đã cập nhật %1m trước"
 #: micromodules/weather.lua:473 micromodules/weather.lua:559
 msgid "Updated %1h ago"
 msgstr "Đã cập nhật %1h trước"
+
+#~ msgid "Page turn animation"
+#~ msgstr "Hiệu ứng lật trang"
 
 #~ msgid "Edit…"
 #~ msgstr "Chỉnh sửa…"

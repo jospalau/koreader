@@ -4,7 +4,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: bookends\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-04 13:52+0100\n"
+"POT-Creation-Date: 2026-07-05 00:05+0100\n"
 "PO-Revision-Date: 2026-06-25 00:02+0000\n"
 "Language-Team: Bulgarian\n"
 "Language: bg_BG\n"
@@ -41,19 +41,19 @@ msgstr "Системно действие…"
 msgid "Menu action…"
 msgstr "Действие от меню…"
 
-#: lib/bookshelf_action_chooser.lua:63
+#: lib/bookshelf_action_chooser.lua:64
 msgid "Bookshelf action…"
 msgstr "Действие в Bookshelf…"
 
-#: lib/bookshelf_action_chooser.lua:69
+#: lib/bookshelf_action_chooser.lua:70
 msgid "Bookshelf actions"
 msgstr "Действия в Bookshelf"
 
-#: lib/bookshelf_action_chooser.lua:72 lib/bookshelf_action_chooser.lua:73
+#: lib/bookshelf_action_chooser.lua:73 lib/bookshelf_action_chooser.lua:74
 msgid "Close bookshelf"
 msgstr "Затваряне на Bookshelf"
 
-#: lib/bookshelf_action_chooser.lua:76 lib/bookshelf_action_chooser.lua:77
+#: lib/bookshelf_action_chooser.lua:77 lib/bookshelf_action_chooser.lua:78
 #: lib/bookshelf_start_menu_model.lua:41
 msgid "Bookshelf menu"
 msgstr "Меню на Bookshelf"
@@ -62,12 +62,12 @@ msgstr "Меню на Bookshelf"
 msgid "Choose an action"
 msgstr "Избор на действие"
 
-#: lib/bookshelf_book_repository.lua:3466
-#: lib/bookshelf_book_repository.lua:4796 micromodules/weather.lua:93
+#: lib/bookshelf_book_repository.lua:3472
+#: lib/bookshelf_book_repository.lua:4802 micromodules/weather.lua:93
 msgid "Unknown"
 msgstr "Неизвестен"
 
-#: lib/bookshelf_book_repository.lua:4061 lib/bookshelf_chip_editor.lua:1124
+#: lib/bookshelf_book_repository.lua:4067 lib/bookshelf_chip_editor.lua:1124
 #: lib/bookshelf_filter.lua:261
 msgid "Unrated"
 msgstr "Без оценка"
@@ -101,7 +101,7 @@ msgstr "Завършени"
 
 #: lib/bookshelf_bulk_actions.lua:125 lib/bookshelf_bulk_actions.lua:127
 #: lib/bookshelf_chip_editor.lua:225 lib/bookshelf_filter.lua:35
-#: lib/bookshelf_sort_engine.lua:430
+#: lib/bookshelf_sort_engine.lua:441
 msgid "Rating"
 msgstr "Оценка"
 
@@ -233,7 +233,7 @@ msgstr "Нов чип"
 msgid "Name"
 msgstr "Име"
 
-#: lib/bookshelf_chip_editor.lua:192 lib/bookshelf_sort_engine.lua:346
+#: lib/bookshelf_chip_editor.lua:192 lib/bookshelf_sort_engine.lua:357
 msgid "Surname"
 msgstr "Фамилия"
 
@@ -245,7 +245,7 @@ msgstr "Последно четени"
 msgid "Most recently added"
 msgstr "Последно добавени"
 
-#: lib/bookshelf_chip_editor.lua:195 lib/bookshelf_sort_engine.lua:422
+#: lib/bookshelf_chip_editor.lua:195 lib/bookshelf_sort_engine.lua:433
 msgid "Book count"
 msgstr "Брой книги"
 
@@ -268,7 +268,7 @@ msgstr "Последно добавени"
 #: lib/bookshelf_chip_editor.lua:207 lib/bookshelf_chip_editor.lua:222
 #: lib/bookshelf_chip_editor.lua:1277 lib/bookshelf_filter.lua:37
 #: lib/bookshelf_settings.lua:486 lib/bookshelf_settings.lua:2186
-#: lib/bookshelf_sort_engine.lua:348 lib/bookshelf_tab_model.lua:50
+#: lib/bookshelf_sort_engine.lua:359 lib/bookshelf_tab_model.lua:50
 #: lib/bookshelf_widget.lua:1198 lib/bookshelf_widget.lua:10029
 msgid "Series"
 msgstr "Поредици"
@@ -325,7 +325,7 @@ msgstr "Жанр"
 
 #: lib/bookshelf_chip_editor.lua:221 lib/bookshelf_settings.lua:361
 #: lib/bookshelf_settings.lua:485 lib/bookshelf_settings.lua:2185
-#: lib/bookshelf_sort_engine.lua:344
+#: lib/bookshelf_sort_engine.lua:355
 msgid "Author"
 msgstr "Автор"
 
@@ -805,7 +805,7 @@ msgstr "Токени…"
 msgid "Icons…"
 msgstr "Икони…"
 
-#: lib/bookshelf_hero_modules.lua:441 lib/bookshelf_start_menu.lua:677
+#: lib/bookshelf_hero_modules.lua:441 lib/bookshelf_start_menu.lua:725
 msgid "%1 (error)"
 msgstr "%1 (грешка)"
 
@@ -1304,17 +1304,25 @@ msgstr "Търсене"
 msgid "Back"
 msgstr "Назад"
 
-#: lib/bookshelf_menu_shortcut.lua:209
+#: lib/bookshelf_menu_shortcut.lua:222
 msgid "Menu unavailable"
 msgstr "Менюто не е налично"
 
-#: lib/bookshelf_menu_shortcut.lua:219
+#: lib/bookshelf_menu_shortcut.lua:238
+msgid "Add this menu page"
+msgstr "Добавяне на тази страница от менюто"
+
+#: lib/bookshelf_menu_shortcut.lua:239
 msgid "Add as shortcut"
 msgstr "Добавяне като пряк път"
 
-#: lib/bookshelf_menu_shortcut.lua:258
+#: lib/bookshelf_menu_shortcut.lua:284 lib/bookshelf_menu_shortcut.lua:312
 msgid "That menu item isn't available"
 msgstr "Този елемент от менюто не е наличен"
+
+#: lib/bookshelf_menu_shortcut.lua:321
+msgid "Menu"
+msgstr "Меню"
 
 #: lib/bookshelf_module_picker.lua:59
 msgid "Network required"
@@ -1357,7 +1365,7 @@ msgid "Book"
 msgstr "Книга"
 
 #: lib/bookshelf_settings.lua:95 lib/bookshelf_settings.lua:366
-#: lib/bookshelf_sort_engine.lua:376 lib/bookshelf_tokens.lua:24
+#: lib/bookshelf_sort_engine.lua:387 lib/bookshelf_tokens.lua:24
 msgid "Progress"
 msgstr "Прогрес"
 
@@ -1408,7 +1416,7 @@ msgid "Status line"
 msgstr "Статус ред"
 
 #: lib/bookshelf_settings.lua:360 lib/bookshelf_settings.lua:2184
-#: lib/bookshelf_sort_engine.lua:333 lib/bookshelf_tokens.lua:57
+#: lib/bookshelf_sort_engine.lua:344 lib/bookshelf_tokens.lua:57
 msgid "Title"
 msgstr "Заглавие"
 
@@ -2132,12 +2140,12 @@ msgid "Slow"
 msgstr "Бавен"
 
 #: lib/bookshelf_settings.lua:2593
-msgid "Page turn animation"
-msgstr "Анимация при прелистване"
+msgid "Animation speed"
+msgstr "Скорост на анимацията"
 
 #: lib/bookshelf_settings.lua:2595
-msgid "Animate shelf page turns with a page-wipe effect: the new page sweeps in from the side. E-ink only (the effect relies on the panel's refresh, so it does nothing on LCD screens). Fast / Medium / Slow trade snappiness for smoothness. Slow looks smoothest but takes longer on older panels."
-msgstr "Анимиране на прелистването на рафта с ефект на изтриване: новата страница се плъзга навътре отстрани. Само за e-ink (ефектът разчита на опресняването на панела, затова не прави нищо на LCD екрани). „Бърз\" / „Среден\" / „Бавен\" разменят пъргавина за плавност. „Бавен\" изглежда най-плавно, но отнема повече време на по-стари панели."
+msgid "Animate transitions with a wipe effect: shelf page turns, chip-bar paging, and the start menu opening and closing. E-ink only (the effect relies on the panel's refresh, so it does nothing on LCD screens). Fast / Medium / Slow trade snappiness for smoothness. Slow looks smoothest but takes longer on older panels."
+msgstr "Анимиране на преходите с ефект на изтриване: прелистване на рафта, страниране на лентата с чипове и отваряне и затваряне на стартовото меню. Само за e-ink (ефектът разчита на опресняването на панела, затова не прави нищо на LCD екрани). „Бърз\" / „Среден\" / „Бавен\" разменят пъргавина за плавност. „Бавен\" изглежда най-плавно, но отнема повече време на по-стари панели."
 
 #: lib/bookshelf_settings.lua:2626
 msgid "Closing book notification"
@@ -2336,97 +2344,97 @@ msgstr "Изкл.: всеки чип получава еднаква ширин�
 msgid "+ Add new chip"
 msgstr "+ Добавяне на нов чип"
 
-#: lib/bookshelf_sort_engine.lua:340
+#: lib/bookshelf_sort_engine.lua:351
 msgid "Filename"
 msgstr "Файлово име"
 
-#: lib/bookshelf_sort_engine.lua:344
+#: lib/bookshelf_sort_engine.lua:355
 msgid "Author (given name)"
 msgstr "Автор (собствено име)"
 
-#: lib/bookshelf_sort_engine.lua:346
+#: lib/bookshelf_sort_engine.lua:357
 msgid "Author surname"
 msgstr "Автор (фамилия)"
 
-#: lib/bookshelf_sort_engine.lua:348 lib/bookshelf_tokens.lua:64
+#: lib/bookshelf_sort_engine.lua:359 lib/bookshelf_tokens.lua:64
 msgid "Series name"
 msgstr "Поредица (заглавие)"
 
-#: lib/bookshelf_sort_engine.lua:352
+#: lib/bookshelf_sort_engine.lua:363
 msgid "Series #"
 msgstr "Поредица №"
 
-#: lib/bookshelf_sort_engine.lua:352
+#: lib/bookshelf_sort_engine.lua:363
 msgid "Series index"
 msgstr "Поредица (номер)"
 
-#: lib/bookshelf_sort_engine.lua:360
+#: lib/bookshelf_sort_engine.lua:371
 msgid "Series + #"
 msgstr "Поредица + №"
 
-#: lib/bookshelf_sort_engine.lua:360
+#: lib/bookshelf_sort_engine.lua:371
 msgid "Series + index"
 msgstr "Поредица + номер"
 
-#: lib/bookshelf_sort_engine.lua:370
+#: lib/bookshelf_sort_engine.lua:381
 msgid "Last opened"
 msgstr "Последно отваряне"
 
-#: lib/bookshelf_sort_engine.lua:370
+#: lib/bookshelf_sort_engine.lua:381
 msgid "Opened"
 msgstr "Отворена"
 
-#: lib/bookshelf_sort_engine.lua:376 lib/bookshelf_tokens.lua:77
+#: lib/bookshelf_sort_engine.lua:387 lib/bookshelf_tokens.lua:77
 msgid "Percent read"
 msgstr "Прочетено (%)"
 
-#: lib/bookshelf_sort_engine.lua:381
+#: lib/bookshelf_sort_engine.lua:392
 msgid "Unread/Reading/Finished"
 msgstr "Непрочетени/Чета/Завършени"
 
-#: lib/bookshelf_sort_engine.lua:382
+#: lib/bookshelf_sort_engine.lua:393
 msgid "Unread 1st"
 msgstr "Непрочетени първо"
 
-#: lib/bookshelf_sort_engine.lua:391
+#: lib/bookshelf_sort_engine.lua:402
 msgid "Reading/Unread/Finished"
 msgstr "Чета/Непрочетени/Завършени"
 
-#: lib/bookshelf_sort_engine.lua:392
+#: lib/bookshelf_sort_engine.lua:403
 msgid "Reading 1st"
 msgstr "Четени първо"
 
-#: lib/bookshelf_sort_engine.lua:403 lib/bookshelf_widget.lua:8061
+#: lib/bookshelf_sort_engine.lua:414 lib/bookshelf_widget.lua:8061
 #: lib/bookshelf_widget.lua:8076
 msgid "Added"
 msgstr "Добавена"
 
-#: lib/bookshelf_sort_engine.lua:403
+#: lib/bookshelf_sort_engine.lua:414
 msgid "Date added"
 msgstr "Дата на добавяне"
 
-#: lib/bookshelf_sort_engine.lua:415
+#: lib/bookshelf_sort_engine.lua:426
 msgid "File size"
 msgstr "Размер на файла"
 
-#: lib/bookshelf_sort_engine.lua:422 micromodules/shelf_size.lua:75
+#: lib/bookshelf_sort_engine.lua:433 micromodules/shelf_size.lua:75
 #: micromodules/trivia.lua:74
 msgid "Books"
 msgstr "Книги"
 
-#: lib/bookshelf_sort_engine.lua:437
+#: lib/bookshelf_sort_engine.lua:448
 msgid "Page count"
 msgstr "Брой страници"
 
-#: lib/bookshelf_sort_engine.lua:437 lib/bookshelf_widget.lua:8058
+#: lib/bookshelf_sort_engine.lua:448 lib/bookshelf_widget.lua:8058
 msgid "Pages"
 msgstr "Стр."
 
-#: lib/bookshelf_start_menu.lua:673
+#: lib/bookshelf_start_menu.lua:721
 msgid "%1 (disabled - tap to retry)"
 msgstr "%1 (изключен - докоснете за нов опит)"
 
-#: lib/bookshelf_start_menu.lua:813
+#: lib/bookshelf_start_menu.lua:861
 msgid "Add…"
 msgstr "Добавяне…"
 
@@ -4330,6 +4338,9 @@ msgstr "Обновено преди %1 мин"
 #: micromodules/weather.lua:473 micromodules/weather.lua:559
 msgid "Updated %1h ago"
 msgstr "Обновено преди %1 ч"
+
+#~ msgid "Page turn animation"
+#~ msgstr "Анимация при прелистване"
 
 #~ msgid "Edit…"
 #~ msgstr "Редактиране…"

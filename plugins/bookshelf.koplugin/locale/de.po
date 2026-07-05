@@ -3,7 +3,7 @@
 msgid ""
 msgstr ""
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-04 13:52+0100\n"
+"POT-Creation-Date: 2026-07-05 00:05+0100\n"
 "Language: de\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -37,19 +37,19 @@ msgstr "Systemaktion…"
 msgid "Menu action…"
 msgstr "Menüaktion…"
 
-#: lib/bookshelf_action_chooser.lua:63
+#: lib/bookshelf_action_chooser.lua:64
 msgid "Bookshelf action…"
 msgstr "Bookshelf-Aktion…"
 
-#: lib/bookshelf_action_chooser.lua:69
+#: lib/bookshelf_action_chooser.lua:70
 msgid "Bookshelf actions"
 msgstr "Bookshelf-Aktionen"
 
-#: lib/bookshelf_action_chooser.lua:72 lib/bookshelf_action_chooser.lua:73
+#: lib/bookshelf_action_chooser.lua:73 lib/bookshelf_action_chooser.lua:74
 msgid "Close bookshelf"
 msgstr "Bookshelf schließen"
 
-#: lib/bookshelf_action_chooser.lua:76 lib/bookshelf_action_chooser.lua:77
+#: lib/bookshelf_action_chooser.lua:77 lib/bookshelf_action_chooser.lua:78
 #: lib/bookshelf_start_menu_model.lua:41
 msgid "Bookshelf menu"
 msgstr "Bookshelf-Menü"
@@ -58,12 +58,12 @@ msgstr "Bookshelf-Menü"
 msgid "Choose an action"
 msgstr "Aktion wählen"
 
-#: lib/bookshelf_book_repository.lua:3466
-#: lib/bookshelf_book_repository.lua:4796 micromodules/weather.lua:93
+#: lib/bookshelf_book_repository.lua:3472
+#: lib/bookshelf_book_repository.lua:4802 micromodules/weather.lua:93
 msgid "Unknown"
 msgstr "Unbekannt"
 
-#: lib/bookshelf_book_repository.lua:4061 lib/bookshelf_chip_editor.lua:1124
+#: lib/bookshelf_book_repository.lua:4067 lib/bookshelf_chip_editor.lua:1124
 #: lib/bookshelf_filter.lua:261
 msgid "Unrated"
 msgstr "Unbewertet"
@@ -97,7 +97,7 @@ msgstr "Beendet"
 
 #: lib/bookshelf_bulk_actions.lua:125 lib/bookshelf_bulk_actions.lua:127
 #: lib/bookshelf_chip_editor.lua:225 lib/bookshelf_filter.lua:35
-#: lib/bookshelf_sort_engine.lua:430
+#: lib/bookshelf_sort_engine.lua:441
 msgid "Rating"
 msgstr "Bewertung"
 
@@ -229,7 +229,7 @@ msgstr "Neuer Chip"
 msgid "Name"
 msgstr "Name"
 
-#: lib/bookshelf_chip_editor.lua:192 lib/bookshelf_sort_engine.lua:346
+#: lib/bookshelf_chip_editor.lua:192 lib/bookshelf_sort_engine.lua:357
 msgid "Surname"
 msgstr "Nachname"
 
@@ -241,7 +241,7 @@ msgstr "Zuletzt gelesen"
 msgid "Most recently added"
 msgstr "Zuletzt hinzugefügt"
 
-#: lib/bookshelf_chip_editor.lua:195 lib/bookshelf_sort_engine.lua:422
+#: lib/bookshelf_chip_editor.lua:195 lib/bookshelf_sort_engine.lua:433
 msgid "Book count"
 msgstr "Bücheranzahl"
 
@@ -264,7 +264,7 @@ msgstr "Zuletzt hinzugefügt"
 #: lib/bookshelf_chip_editor.lua:207 lib/bookshelf_chip_editor.lua:222
 #: lib/bookshelf_chip_editor.lua:1277 lib/bookshelf_filter.lua:37
 #: lib/bookshelf_settings.lua:486 lib/bookshelf_settings.lua:2186
-#: lib/bookshelf_sort_engine.lua:348 lib/bookshelf_tab_model.lua:50
+#: lib/bookshelf_sort_engine.lua:359 lib/bookshelf_tab_model.lua:50
 #: lib/bookshelf_widget.lua:1198 lib/bookshelf_widget.lua:10029
 msgid "Series"
 msgstr "Serien"
@@ -321,7 +321,7 @@ msgstr "Genre"
 
 #: lib/bookshelf_chip_editor.lua:221 lib/bookshelf_settings.lua:361
 #: lib/bookshelf_settings.lua:485 lib/bookshelf_settings.lua:2185
-#: lib/bookshelf_sort_engine.lua:344
+#: lib/bookshelf_sort_engine.lua:355
 msgid "Author"
 msgstr "Autor"
 
@@ -801,7 +801,7 @@ msgstr "Tokens…"
 msgid "Icons…"
 msgstr "Symbole…"
 
-#: lib/bookshelf_hero_modules.lua:441 lib/bookshelf_start_menu.lua:677
+#: lib/bookshelf_hero_modules.lua:441 lib/bookshelf_start_menu.lua:725
 msgid "%1 (error)"
 msgstr "%1 (Fehler)"
 
@@ -1300,17 +1300,25 @@ msgstr "Suchen"
 msgid "Back"
 msgstr "Zurück"
 
-#: lib/bookshelf_menu_shortcut.lua:209
+#: lib/bookshelf_menu_shortcut.lua:222
 msgid "Menu unavailable"
 msgstr "Menü nicht verfügbar"
 
-#: lib/bookshelf_menu_shortcut.lua:219
+#: lib/bookshelf_menu_shortcut.lua:238
+msgid "Add this menu page"
+msgstr "Diese Menüseite hinzufügen"
+
+#: lib/bookshelf_menu_shortcut.lua:239
 msgid "Add as shortcut"
 msgstr "Als Verknüpfung hinzufügen"
 
-#: lib/bookshelf_menu_shortcut.lua:258
+#: lib/bookshelf_menu_shortcut.lua:284 lib/bookshelf_menu_shortcut.lua:312
 msgid "That menu item isn't available"
 msgstr "Dieser Menüeintrag ist nicht verfügbar"
+
+#: lib/bookshelf_menu_shortcut.lua:321
+msgid "Menu"
+msgstr "Menü"
 
 #: lib/bookshelf_module_picker.lua:59
 msgid "Network required"
@@ -1353,7 +1361,7 @@ msgid "Book"
 msgstr "Buch"
 
 #: lib/bookshelf_settings.lua:95 lib/bookshelf_settings.lua:366
-#: lib/bookshelf_sort_engine.lua:376 lib/bookshelf_tokens.lua:24
+#: lib/bookshelf_sort_engine.lua:387 lib/bookshelf_tokens.lua:24
 msgid "Progress"
 msgstr "Fortschritt"
 
@@ -1404,7 +1412,7 @@ msgid "Status line"
 msgstr "Statuszeile"
 
 #: lib/bookshelf_settings.lua:360 lib/bookshelf_settings.lua:2184
-#: lib/bookshelf_sort_engine.lua:333 lib/bookshelf_tokens.lua:57
+#: lib/bookshelf_sort_engine.lua:344 lib/bookshelf_tokens.lua:57
 msgid "Title"
 msgstr "Titel"
 
@@ -2128,12 +2136,12 @@ msgid "Slow"
 msgstr "Langsam"
 
 #: lib/bookshelf_settings.lua:2593
-msgid "Page turn animation"
-msgstr "Seitenwechsel-Animation"
+msgid "Animation speed"
+msgstr "Animationsgeschwindigkeit"
 
 #: lib/bookshelf_settings.lua:2595
-msgid "Animate shelf page turns with a page-wipe effect: the new page sweeps in from the side. E-ink only (the effect relies on the panel's refresh, so it does nothing on LCD screens). Fast / Medium / Slow trade snappiness for smoothness. Slow looks smoothest but takes longer on older panels."
-msgstr "Animiert Regal-Seitenwechsel mit einem Wischeffekt: Die neue Seite wird von der Seite hereingewischt. Nur für E-Ink (der Effekt nutzt die Bildschirmaktualisierung des Panels und bewirkt daher auf LCD-Bildschirmen nichts). Schnell / Mittel / Langsam wägen Reaktionsschnelligkeit gegen Flüssigkeit ab. Langsam wirkt am flüssigsten, dauert aber auf älteren Panels länger."
+msgid "Animate transitions with a wipe effect: shelf page turns, chip-bar paging, and the start menu opening and closing. E-ink only (the effect relies on the panel's refresh, so it does nothing on LCD screens). Fast / Medium / Slow trade snappiness for smoothness. Slow looks smoothest but takes longer on older panels."
+msgstr "Animiert Übergänge mit einem Wischeffekt: Regal-Seitenwechsel, das Blättern in der Chip-Leiste sowie das Öffnen und Schließen des Startmenüs. Nur für E-Ink (der Effekt nutzt die Bildschirmaktualisierung des Panels und bewirkt daher auf LCD-Bildschirmen nichts). Schnell / Mittel / Langsam wägen Reaktionsschnelligkeit gegen Flüssigkeit ab. Langsam wirkt am flüssigsten, dauert aber auf älteren Panels länger."
 
 #: lib/bookshelf_settings.lua:2626
 msgid "Closing book notification"
@@ -2332,97 +2340,97 @@ msgstr "Aus: Alle Chips erhalten die gleiche Breite. Ein: Jeder Chip wird passen
 msgid "+ Add new chip"
 msgstr "+ Neuen Chip hinzufügen"
 
-#: lib/bookshelf_sort_engine.lua:340
+#: lib/bookshelf_sort_engine.lua:351
 msgid "Filename"
 msgstr "Dateiname"
 
-#: lib/bookshelf_sort_engine.lua:344
+#: lib/bookshelf_sort_engine.lua:355
 msgid "Author (given name)"
 msgstr "Autor (Vorname)"
 
-#: lib/bookshelf_sort_engine.lua:346
+#: lib/bookshelf_sort_engine.lua:357
 msgid "Author surname"
 msgstr "Autor (Nachname)"
 
-#: lib/bookshelf_sort_engine.lua:348 lib/bookshelf_tokens.lua:64
+#: lib/bookshelf_sort_engine.lua:359 lib/bookshelf_tokens.lua:64
 msgid "Series name"
 msgstr "Serienname"
 
-#: lib/bookshelf_sort_engine.lua:352
+#: lib/bookshelf_sort_engine.lua:363
 msgid "Series #"
 msgstr "Serien-Nr."
 
-#: lib/bookshelf_sort_engine.lua:352
+#: lib/bookshelf_sort_engine.lua:363
 msgid "Series index"
 msgstr "Serienindex"
 
-#: lib/bookshelf_sort_engine.lua:360
+#: lib/bookshelf_sort_engine.lua:371
 msgid "Series + #"
 msgstr "Serie + Nr."
 
-#: lib/bookshelf_sort_engine.lua:360
+#: lib/bookshelf_sort_engine.lua:371
 msgid "Series + index"
 msgstr "Serie + Index"
 
-#: lib/bookshelf_sort_engine.lua:370
+#: lib/bookshelf_sort_engine.lua:381
 msgid "Last opened"
 msgstr "Zuletzt geöffnet"
 
-#: lib/bookshelf_sort_engine.lua:370
+#: lib/bookshelf_sort_engine.lua:381
 msgid "Opened"
 msgstr "Geöffnet"
 
-#: lib/bookshelf_sort_engine.lua:376 lib/bookshelf_tokens.lua:77
+#: lib/bookshelf_sort_engine.lua:387 lib/bookshelf_tokens.lua:77
 msgid "Percent read"
 msgstr "Lesefortschritt (%)"
 
-#: lib/bookshelf_sort_engine.lua:381
+#: lib/bookshelf_sort_engine.lua:392
 msgid "Unread/Reading/Finished"
 msgstr "Ungelesen/Lesend/Beendet"
 
-#: lib/bookshelf_sort_engine.lua:382
+#: lib/bookshelf_sort_engine.lua:393
 msgid "Unread 1st"
 msgstr "Ungelesen zuerst"
 
-#: lib/bookshelf_sort_engine.lua:391
+#: lib/bookshelf_sort_engine.lua:402
 msgid "Reading/Unread/Finished"
 msgstr "Lesend/Ungelesen/Beendet"
 
-#: lib/bookshelf_sort_engine.lua:392
+#: lib/bookshelf_sort_engine.lua:403
 msgid "Reading 1st"
 msgstr "Lesend zuerst"
 
-#: lib/bookshelf_sort_engine.lua:403 lib/bookshelf_widget.lua:8061
+#: lib/bookshelf_sort_engine.lua:414 lib/bookshelf_widget.lua:8061
 #: lib/bookshelf_widget.lua:8076
 msgid "Added"
 msgstr "Hinzugefügt"
 
-#: lib/bookshelf_sort_engine.lua:403
+#: lib/bookshelf_sort_engine.lua:414
 msgid "Date added"
 msgstr "Hinzugefügt am"
 
-#: lib/bookshelf_sort_engine.lua:415
+#: lib/bookshelf_sort_engine.lua:426
 msgid "File size"
 msgstr "Dateigröße"
 
-#: lib/bookshelf_sort_engine.lua:422 micromodules/shelf_size.lua:75
+#: lib/bookshelf_sort_engine.lua:433 micromodules/shelf_size.lua:75
 #: micromodules/trivia.lua:74
 msgid "Books"
 msgstr "Bücher"
 
-#: lib/bookshelf_sort_engine.lua:437
+#: lib/bookshelf_sort_engine.lua:448
 msgid "Page count"
 msgstr "Seitenzahl"
 
-#: lib/bookshelf_sort_engine.lua:437 lib/bookshelf_widget.lua:8058
+#: lib/bookshelf_sort_engine.lua:448 lib/bookshelf_widget.lua:8058
 msgid "Pages"
 msgstr "Seiten"
 
-#: lib/bookshelf_start_menu.lua:673
+#: lib/bookshelf_start_menu.lua:721
 msgid "%1 (disabled - tap to retry)"
 msgstr "%1 (deaktiviert - zum Wiederholen tippen)"
 
-#: lib/bookshelf_start_menu.lua:813
+#: lib/bookshelf_start_menu.lua:861
 msgid "Add…"
 msgstr "Hinzufügen…"
 
@@ -4326,6 +4334,9 @@ msgstr "Aktualisiert vor %1 Min"
 #: micromodules/weather.lua:473 micromodules/weather.lua:559
 msgid "Updated %1h ago"
 msgstr "Aktualisiert vor %1 Std"
+
+#~ msgid "Page turn animation"
+#~ msgstr "Seitenwechsel-Animation"
 
 #~ msgid "Edit…"
 #~ msgstr "Bearbeiten…"
