@@ -892,6 +892,8 @@ function ReaderRolling:onRestoreBookLocation(saved_location)
 end
 
 function ReaderRolling:onGotoViewRel(diff)
+    -- local ffiutil = require("ffi/util")
+    -- local t0_sec, t0_usec = ffiutil.gettime()
     logger.dbg("goto relative screen:", diff, "in mode:", self.view.view_mode)
     if self.view.view_mode == "scroll" then
         local footer_height = ((self.view.footer_visible and not self.view.footer.settings.reclaim_height) and 1 or 0) * self.view.footer:getHeight()
@@ -949,6 +951,9 @@ function ReaderRolling:onGotoViewRel(diff)
     if self.ui.keyselection:isActive() then
         self.ui.keyselection:pageTurnDuringSelection()
     end
+    -- local t1_sec, t1_usec = ffiutil.gettime()
+    -- print(string.format("[PAGE_TIMING] onGotoPageRel: %.2f ms",
+    --     ((t1_sec - t0_sec) * 1000) + ((t1_usec - t0_usec) / 1000)))
     return true
 end
 
