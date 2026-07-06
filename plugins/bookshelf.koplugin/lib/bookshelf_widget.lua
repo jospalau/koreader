@@ -10779,7 +10779,10 @@ function BookshelfWidget:_showBookDetail(book, opts)
     local link = ok_hc and Hardcover and Hardcover.getLink
         and Hardcover.getLink(book.filepath) or nil
     local book_id = book.hardcover_book_id or (link and link.book_id)
-    local has_reviews = (ok_hc and Hardcover and book_id) and true or false
+    -- Only when the plugin is live: with it uninstalled/disabled we suppress all
+    -- Hardcover.app data, so no community-reviews tab even if reviews are cached.
+    local has_reviews = (ok_hc and Hardcover and Hardcover.isAvailable
+        and Hardcover.isAvailable() and book_id) and true or false
     -- No title: the popup header already shows the book title/author. The
     -- rating/counts summary is a native row (_buildReviewsHeader), not part
     -- of this HTML -- only the review list itself renders here.
