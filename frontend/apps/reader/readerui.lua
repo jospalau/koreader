@@ -553,7 +553,7 @@ function ReaderUI:init()
     self.doc_settings:flush()
     --self.bookshelf:onBookMetadataChanged()
     local Repo = require("lib/bookshelf_book_repository")
-    if Repo.invalidateProgressCache then Repo.invalidateProgressCache() end
+    -- if Repo.invalidateProgressCache then Repo.invalidateProgressCache() end
     if Repo.invalidateBookCache then Repo.invalidateBookCache("StatusChanged") end
     -- if util.getFileNameSuffix(self.document.file) == "epub" then
     --     -- There is a small delay when manipulating the cover in the coverimage plugin
