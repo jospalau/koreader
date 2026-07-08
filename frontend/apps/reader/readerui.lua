@@ -1096,7 +1096,7 @@ function ReaderUI:onHome()
                 -- and won't be reactivated after closing the history
                 -- We can call require("apps/filemanager/filemanager").instance.file_chooser:refreshPath() when closing the history to reactivate it
                 FileManager.instance.history:sortHistoryByStatus()
-                FileManager.instance.history:onShowHist()
+                -- FileManager.instance.history:onShowHist()
                 -- self.history:onShowHist()
                 --UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
                 require("ui/widget/booklist").resetBookInfoCache(file)
@@ -1144,7 +1144,7 @@ function ReaderUI:onHome()
                 local FileManager = require("apps/filemanager/filemanager")
                 self:showFileManager(file)
                 FileManager.instance.history:sortHistoryByStatus()
-                FileManager.instance.history:onShowHist()
+                -- FileManager.instance.history:onShowHist()
                 local Repo = require("lib/bookshelf_book_repository")
                 --UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
                 if Repo.invalidateProgressCache then Repo.invalidateProgressCache() end
