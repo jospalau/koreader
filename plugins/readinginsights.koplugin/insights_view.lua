@@ -17,9 +17,18 @@ Sections:
   - Streaks       current and best daily/weekly streaks
   - Year          time, days read, or books read + pages, navigable by year
   - Monthly chart bar chart per month (hours, days, or books mode, tappable)
-  - Total read    all-time totals
+  - Total read    all-time totals (tap header to open the reading heatmap)
 
 Gestures:
+  - Tap "Total read" header            open a GitHub-style heatmap of the
+                                        most recent half-year of reading
+                                        activity; swipe left/right inside
+                                        that popup to page through older/
+                                        newer half-years as far back as
+                                        there's data (the popup's header
+                                        shows the year, or the year range
+                                        if the half-year spans a Dec/Jan
+                                        boundary)
   - Tap yearly value or monthly bar    open book list for that period
   - Tap monthly chart header           cycle hours/days/books mode
   - Tap on Streak                      show the streak period date and some more stats
@@ -80,6 +89,7 @@ local InfoMessage = require("ui/widget/infomessage")
 local InputContainer = require("ui/widget/container/inputcontainer")
 local LeftContainer = require("ui/widget/container/leftcontainer")
 local LineWidget = require("ui/widget/linewidget")
+local logger = require("logger")
 local OverlapGroup = require("ui/widget/overlapgroup")
 local Size = require("ui/size")
 local SQ3 = require("lua-ljsqlite3/init")
@@ -200,6 +210,7 @@ local _cache = {
     last_week_daily_minute = nil,
     last8weeks        = nil,
     last8weeks_minute = nil,
+    daily_data        = nil,
 }
 
 local _yearly_cache  = {}
@@ -235,6 +246,7 @@ local function clearAllCache()
     _cache.last_week_daily_minute = nil
     _cache.last8weeks        = nil
     _cache.last8weeks_minute = nil
+    _cache.daily_data        = nil
     _yearly_cache          = {}
     _monthly_cache         = {}
     _yearly_base_cache     = {}
@@ -261,6 +273,21 @@ end
 -- refreshing the popup's data. This way the popup can always open instantly
 -- with the last known numbers, then refresh in the background and redraw -
 -- restart or not.
+--
+-- The "up to yesterday" base aggregates (_alltime_base_cache,
+-- _yearly_base_cache, _monthly_base_cache) are mirrored to disk as well, for
+-- a different reason: they aren't needed for instant display (the stale
+-- cache above already covers that), but without a disk copy each of them is
+-- nil right after a restart, so the first getAllTimeStats() /
+-- getYearlyStats() / getMonthlyReading*() call of the day has to rescan the
+-- entire page_stat history from scratch (expensive, and it makes the
+-- on-screen total visibly jump once that rescan finishes and replaces the
+-- stale placeholder). Restoring them from disk means a restart only has to
+-- redo the cheap today-only query, same as any other same-day cache hit.
+-- Each entry already carries its own `date` field (see makeCachedBase()), so
+-- a stale (yesterday-or-older) entry loaded from disk is simply ignored by
+-- getCachedBase() and recomputed once, exactly as if it had never been
+-- persisted.
 local LuaSettings = require("luasettings")
 local DISK_CACHE_PATH = DataStorage:getSettingsDir() .. "/reading_insights_cache.lua"
 
@@ -271,6 +298,9 @@ local function loadDiskCache()
     local stale_cache   = settings:readSetting("stale_cache")
     local stale_yearly  = settings:readSetting("stale_yearly")
     local stale_monthly = settings:readSetting("stale_monthly")
+    local alltime_base  = settings:readSetting("alltime_base")
+    local yearly_base   = settings:readSetting("yearly_base")
+    local monthly_base  = settings:readSetting("monthly_base")
 
     if type(stale_cache) == "table" then
         for k, v in pairs(stale_cache) do _stale_cache[k] = v end
@@ -281,17 +311,75 @@ local function loadDiskCache()
     if type(stale_monthly) == "table" then
         for k, v in pairs(stale_monthly) do _stale_monthly[k] = v end
     end
+    -- alltime_base is the single un-keyed base-cache entry itself (a
+    -- { date, data } table, or nil); the other two are keyed tables of such
+    -- entries, so they're merged key by key like the stale caches above.
+    if type(alltime_base) == "table" then
+        _alltime_base_cache = alltime_base
+    end
+    -- getYearlyStats()/getMonthlyBookCounts() unconditionally index
+    -- base.book_ids / base.current_month_book_ids without a nil check,
+    -- since a freshly-queried base always has them. A disk-loaded entry is
+    -- defensively backfilled with an empty table here (instead of trusting
+    -- the file to always contain them) so a cache file written by an older
+    -- plugin version, or edited/truncated by hand, can't crash those
+    -- lookups - worst case it just treats every book as "new" for one
+    -- lookup, same as an empty history would.
+    if type(yearly_base) == "table" then
+        for k, v in pairs(yearly_base) do
+            if type(v) == "table" and type(v.data) == "table" and v.data.book_ids == nil then
+                v.data.book_ids = {}
+            end
+            _yearly_base_cache[k] = v
+        end
+    end
+    if type(monthly_base) == "table" then
+        for k, v in pairs(monthly_base) do
+            if type(v) == "table" and type(v.data) == "table" and v.data.current_month_book_ids == nil then
+                v.data.current_month_book_ids = {}
+            end
+            _monthly_base_cache[k] = v
+        end
+    end
 end
 
 -- Best-effort save; any failure (full disk, odd permissions, ...) is
 -- silently ignored so it can never break the popup itself.
+--
+-- LuaSettings only serializes its whole in-memory table once, on flush().
+-- That means a single bad value anywhere in that table can make the *whole*
+-- flush() fail (and flush() is wrapped in pcall below, so that failure is
+-- silent) - which would drop even the already-reliable stale_cache /
+-- _stale_yearly / _stale_monthly placeholders that the "no Loading data...
+-- after restart" behavior depends on, just because one of the newer,
+-- lower-priority base-cache entries turned out to be unexpectedly shaped or
+-- oversized.
+--
+-- To make sure the essential placeholders can never be taken down by a
+-- problem in the base caches, they're saved and flushed to disk in their
+-- own pass first; the base caches (a pure performance optimization, see the
+-- big comment above loadDiskCache()) are only added and flushed afterwards,
+-- as a second, independent pass on the same file.
 local function saveDiskCache()
     local ok, settings = pcall(function() return LuaSettings:open(DISK_CACHE_PATH) end)
     if not ok or not settings then return end
+
     settings:saveSetting("stale_cache", _stale_cache)
     settings:saveSetting("stale_yearly", _stale_yearly)
     settings:saveSetting("stale_monthly", _stale_monthly)
-    pcall(function() settings:flush() end)
+    local stale_flush_ok, stale_flush_err = pcall(function() settings:flush() end)
+    if not stale_flush_ok then
+        logger.warn("ReadingInsights: failed to flush stale-cache placeholders: " .. tostring(stale_flush_err))
+        return -- don't even attempt the base caches against a settings object that just failed to flush
+    end
+
+    settings:saveSetting("alltime_base", _alltime_base_cache)
+    settings:saveSetting("yearly_base", _yearly_base_cache)
+    settings:saveSetting("monthly_base", _monthly_base_cache)
+    local base_flush_ok, base_flush_err = pcall(function() settings:flush() end)
+    if not base_flush_ok then
+        logger.warn("ReadingInsights: failed to flush base caches: " .. tostring(base_flush_err))
+    end
 end
 
 -- Seed the in-memory stale caches from disk immediately, so even the very
@@ -882,6 +970,10 @@ local function buildYearHeader(font_section, layout, year_range, selected_year)
         face = font_section,
         fgcolor = Colors.section(),
     }
+    -- Year navigation is done via swipe on the whole popup (see
+    -- onSwipe/_goToYear); the reading heatmap now opens from the
+    -- "Total read" header instead of from tapping the year (see
+    -- showReadingHeatmap and buildInsightsSections).
 
     local function makeSlot(yr, arrow_glyph, left, visible)
         if not visible then
@@ -1411,6 +1503,321 @@ end
 function WeeklyTrendPopup:onTap()           UIManager:close(self) return true end
 function WeeklyTrendPopup:onSwipe()         UIManager:close(self) return true end
 function WeeklyTrendPopup:onAnyKeyPressed() UIManager:close(self) return true end
+
+-- ---------------------------------------------------------------------
+-- Reading heatmap (GitHub-style contribution grid)
+--
+-- Tapping the "Total read" header (see buildInsightsSections) opens a
+-- full-screen popup showing the most recent half-year of reading
+-- activity as a grid of small squares, one per day, shaded by how much
+-- was read that day relative to the busiest single day in the period
+-- shown:
+--   0%   (no reading)            -> Colors.heatmap0()
+--   >0-25% of the peak day       -> Colors.heatmap25()
+--   25-50%                       -> Colors.heatmap50()
+--   50-75%                       -> Colors.heatmap75()
+--   75-100%                      -> Colors.heatmap100()
+-- Each column is one week (Monday first); the row above the grid labels
+-- the column each month starts in, exactly like GitHub's own graph.
+-- The popup itself (HeatmapPopup, further below) is paginated in
+-- half-year steps, swipe left/right, as far back as there's reading
+-- data - see getHeatmapPeriodRange / heatmapMaxPeriodsBack.
+-- ---------------------------------------------------------------------
+
+-- Adds/subtracts whole calendar months from a Y/M/D triple (relying on
+-- os.time's normalisation of out-of-range month values - e.g. month=13
+-- rolls over into January of the next year - same trick used elsewhere
+-- in this file for date maths). Returns the shifted year/month/day plus
+-- the resulting timestamp (noon, to stay clear of DST edge cases).
+local function shiftMonths(year, month, day, delta)
+    local t = os.time({ year = year, month = month + delta, day = day, hour = 12 })
+    local dt = os.date("*t", t)
+    return dt.year, dt.month, dt.day, t
+end
+
+-- Inclusive [start_t, end_t] timestamps (both at hour=12) for the
+-- half-year heatmap period `periods_back` half-years before the current
+-- one: period 0 is the 6 months ending today, period 1 the 6 months
+-- before that, and so on.
+local function getHeatmapPeriodRange(periods_back)
+    local today = os.date("*t")
+    local _, _, _, end_t     = shiftMonths(today.year, today.month, today.day, -6 * periods_back)
+    local sy, sm, sd         = shiftMonths(today.year, today.month, today.day, -6 * (periods_back + 1))
+    local start_t            = os.time({ year = sy, month = sm, day = sd + 1, hour = 12 })
+    return start_t, end_t
+end
+
+-- How many half-year periods back from the current one (0) still reach
+-- into a year with recorded reading data, given the DB's oldest year
+-- (getYearRange().min_year). Small loop (a handful of iterations for
+-- any realistic reading history) rather than closed-form month maths,
+-- to stay in lockstep with getHeatmapPeriodRange's own definition of a
+-- period boundary.
+local function heatmapMaxPeriodsBack(min_year)
+    local jan1_min = os.time({ year = min_year, month = 1, day = 1, hour = 12 })
+    local periods_back = 0
+    while periods_back < 200 do
+        local _, next_end = getHeatmapPeriodRange(periods_back + 1)
+        if next_end < jan1_min then break end
+        periods_back = periods_back + 1
+    end
+    return periods_back
+end
+
+-- Lays [start_t, end_t] out into Monday-first week columns, padded at
+-- both ends so every column has a full 7 days (leading/trailing days
+-- outside the period are kept but marked in_range = false so they
+-- render as blank spacer cells rather than colored squares).
+local function buildRangeHeatmapGrid(daily_map, start_t, end_t)
+    local start_wd   = tonumber(os.date("%w", start_t))  -- 0=Sun..6=Sat
+    local mon_offset = (start_wd + 6) % 7                 -- days back to Monday
+    local grid_start = start_t - mon_offset * 86400
+
+    local end_wd     = tonumber(os.date("%w", end_t))
+    local sun_offset = (7 - end_wd) % 7                   -- days forward to Sunday
+    local grid_end   = end_t + sun_offset * 86400
+
+    local total_days = math.floor((grid_end - grid_start) / 86400) + 1
+    local num_cols   = math.ceil(total_days / 7)
+
+    local start_str = os.date("%Y-%m-%d", start_t)
+    local end_str   = os.date("%Y-%m-%d", end_t)
+
+    local cols = {}
+    local t = grid_start
+    for col = 1, num_cols do
+        local col_days = {}
+        for row = 1, 7 do
+            local dstr = os.date("%Y-%m-%d", t)
+            local d_year, d_month, d_day = parseDateYMD(dstr)
+            local in_range = (dstr >= start_str and dstr <= end_str)
+            col_days[row] = {
+                in_range        = in_range,
+                is_month_start  = (in_range and d_day == 1),
+                month           = d_month,
+                year            = d_year,
+                seconds         = daily_map[dstr] or 0,
+            }
+            t = t + 86400
+        end
+        cols[col] = col_days
+    end
+    return cols, num_cols
+end
+
+-- Picks the shade for one day's seconds, relative to max_seconds (the
+-- busiest single day anywhere in the period being shown).
+local function heatmapLevelColor(seconds, max_seconds)
+    if not seconds or seconds <= 0 or not max_seconds or max_seconds <= 0 then
+        return Colors.heatmap0()
+    end
+    local ratio = seconds / max_seconds
+    if ratio <= 0.25 then return Colors.heatmap25() end
+    if ratio <= 0.50 then return Colors.heatmap50() end
+    if ratio <= 0.75 then return Colors.heatmap75() end
+    return Colors.heatmap100()
+end
+
+-- A single heatmap square: a thin separator-colored frame with the level
+-- color filled inside, built from two overlapping ColorBars (same trick
+-- as everywhere else in this file that needs a solid-color rectangle -
+-- see Colors.newBar) rather than a bordered FrameContainer, so it keeps
+-- working with the RGB32 custom-color patch documented in colors.lua.
+local function buildHeatmapCell(cell_size, border, fill_color)
+    local inner_size = cell_size - 2 * border
+    if inner_size < 1 then inner_size = cell_size end
+    return OverlapGroup:new{
+        dimen = Geom:new{ w = cell_size, h = cell_size },
+        Colors.newBar(cell_size, cell_size, Colors.separator()),
+        CenterContainer:new{
+            dimen = Geom:new{ w = cell_size, h = cell_size },
+            Colors.newBar(inner_size, inner_size, fill_color),
+        },
+    }
+end
+
+-- Builds the month-start label row + the 7-row/num_cols-column grid for
+-- [start_t, end_t]. Returns the combined widget plus the cell_size
+-- actually used (so the legend below can draw matching squares).
+local function buildRangeHeatmapWidget(daily_map, start_t, end_t, fonts, max_width)
+    local cols, num_cols = buildRangeHeatmapGrid(daily_map, start_t, end_t)
+
+    local gap    = Screen:scaleBySize(2)
+    local border = Size.line.thin
+
+    -- Mon/Wed/Fri labels run down the left side of the grid (row 1 = Mon,
+    -- row 3 = Wed, row 5 = Fri; the in-between rows get no label, same as
+    -- GitHub's contribution graph). Reserve a fixed-width column for them
+    -- - sized to the widest of the three - before sizing the grid itself,
+    -- so the cells still fit within max_width.
+    local WEEKDAY_ROW_LABELS = { [1] = _("Mon"), [3] = _("Wed"), [5] = _("Fri") }
+    local wd_label_w = 0
+    for _, text in pairs(WEEKDAY_ROW_LABELS) do
+        local tw = TextWidget:new{ text = text, face = fonts.small }
+        wd_label_w = math.max(wd_label_w, tw:getSize().w)
+        tw:free()
+    end
+
+    local grid_width = max_width - wd_label_w - gap
+    local cell_size = math.floor((grid_width - (num_cols - 1) * gap) / num_cols)
+    local min_cell   = Screen:scaleBySize(8)
+    local max_cell   = Screen:scaleBySize(16)
+    if cell_size < min_cell then cell_size = min_cell end
+    if cell_size > max_cell then cell_size = max_cell end
+
+    local max_seconds = 0
+    for _, col_days in ipairs(cols) do
+        for _, d in ipairs(col_days) do
+            if d.in_range and d.seconds > max_seconds then max_seconds = d.seconds end
+        end
+    end
+
+    -- Month-start labels, one slot per column (same width/gap as the
+    -- grid below it so the label lines up with the column it belongs to).
+    -- Starts with a spacer matching the weekday label column + gap so it
+    -- lines up with the grid, which is shifted right by that same amount.
+    local sample_label = TextWidget:new{ text = "Xxx", face = fonts.small }
+    local label_h = sample_label:getSize().h
+    sample_label:free()
+
+    -- First pass: which column (if any) gets a month-start label, same
+    -- one-per-month logic as before, but split out from widget-building
+    -- so the second pass can also see Dec->Jan boundaries ahead of time.
+    local month_label_col = {}   -- col -> { month = n, year = n }
+    local last_month_labeled = nil
+    for col = 1, num_cols do
+        for _, d in ipairs(cols[col]) do
+            if d.is_month_start and d.month ~= last_month_labeled then
+                month_label_col[col] = { month = d.month, year = d.year }
+                last_month_labeled = d.month
+                break
+            end
+        end
+    end
+
+    -- Slot a "YYYY" year label into the gap between a December label
+    -- and the January label that follows it, so the year is visible
+    -- right where the row rolls over into a new one (e.g. "... Dec.
+    -- 2026 Jan. Febr. ..."). Spans and centers within *all* the free
+    -- columns between the two labels (not just one), since "Dec." and
+    -- "Jan." are each wider than a single column and would otherwise
+    -- get overlapped by a lopsided year label. If there's no free
+    -- column at all between them, the year is prefixed onto the
+    -- January label instead ("2026 Jan.") so it's never lost.
+    local year_label_span = nil   -- { start_col, end_col, text }
+    local prev_col, prev_month = nil, nil
+    for col = 1, num_cols do
+        local d = month_label_col[col]
+        if d then
+            if d.month == 1 and prev_month == 12 then
+                local free_cols = col - prev_col - 1
+                if free_cols >= 1 then
+                    year_label_span = { start_col = prev_col + 1, end_col = col - 1, text = tostring(d.year) }
+                else
+                    d.combined = tostring(d.year) .. " " .. MONTH_NAMES_SHORT[d.month]
+                end
+            end
+            prev_col, prev_month = col, d.month
+        end
+    end
+
+    local labels_row = HorizontalGroup:new{ align = "bottom" }
+    table.insert(labels_row, HorizontalSpan:new{ width = wd_label_w + gap })
+    local col = 1
+    while col <= num_cols do
+        if year_label_span and col == year_label_span.start_col then
+            local span_cols = year_label_span.end_col - year_label_span.start_col + 1
+            local span_w    = span_cols * cell_size + (span_cols - 1) * gap
+
+            -- Plain centering puts the label closer to "Dec." than to
+            -- "Jan.": "Dec." is drawn from its own column and overflows
+            -- rightward past that column's width, eating into the left
+            -- side of this gap, while "Jan." doesn't reach backward into
+            -- it at all. Nudge the centering right by that overflow so
+            -- the label reads as visually centered between the two.
+            local dec_label = TextWidget:new{ text = MONTH_NAMES_SHORT[12], face = fonts.small }
+            local dec_overflow = math.max(0, dec_label:getSize().w - cell_size)
+            dec_label:free()
+
+            local year_widget = TextWidget:new{ text = year_label_span.text, face = fonts.small, fgcolor = Colors.label() }
+            local text_w = year_widget:getSize().w
+            if dec_overflow > span_w - text_w then dec_overflow = math.max(0, span_w - text_w) end
+            local left_pad  = dec_overflow + math.floor((span_w - text_w - dec_overflow) / 2)
+            if left_pad < 0 then left_pad = 0 end
+            local right_pad = span_w - text_w - left_pad
+            if right_pad < 0 then right_pad = 0 end
+
+            table.insert(labels_row, HorizontalGroup:new{
+                HorizontalSpan:new{ width = left_pad },
+                year_widget,
+                HorizontalSpan:new{ width = right_pad },
+            })
+            col = year_label_span.end_col + 1
+        else
+            local widget = nil
+            local d = month_label_col[col]
+            if d then
+                widget = TextWidget:new{ text = d.combined or MONTH_NAMES_SHORT[d.month],
+                    face = fonts.small, fgcolor = Colors.small() }
+            end
+            if widget then
+                table.insert(labels_row, LeftContainer:new{
+                    dimen = Geom:new{ w = cell_size, h = label_h },
+                    widget,
+                })
+            else
+                table.insert(labels_row, HorizontalSpan:new{ width = cell_size })
+            end
+            col = col + 1
+        end
+        if col <= num_cols then
+            table.insert(labels_row, HorizontalSpan:new{ width = gap })
+        end
+    end
+
+    -- 7-row grid, Monday (row 1) at the top through Sunday (row 7), each
+    -- row prefixed with its weekday label slot (blank unless it's one of
+    -- the WEEKDAY_ROW_LABELS rows).
+    local grid = VerticalGroup:new{ align = "left" }
+    for row = 1, 7 do
+        local row_group = HorizontalGroup:new{ align = "center" }
+        local wd_text = WEEKDAY_ROW_LABELS[row]
+        if wd_text then
+            table.insert(row_group, LeftContainer:new{
+                dimen = Geom:new{ w = wd_label_w, h = cell_size },
+                TextWidget:new{ text = wd_text, face = fonts.small, fgcolor = Colors.small() },
+            })
+        else
+            table.insert(row_group, HorizontalSpan:new{ width = wd_label_w })
+        end
+        table.insert(row_group, HorizontalSpan:new{ width = gap })
+
+        for col = 1, num_cols do
+            local d = cols[col][row]
+            if d.in_range then
+                table.insert(row_group,
+                    buildHeatmapCell(cell_size, border, heatmapLevelColor(d.seconds, max_seconds)))
+            else
+                table.insert(row_group, HorizontalSpan:new{ width = cell_size })
+            end
+            if col < num_cols then
+                table.insert(row_group, HorizontalSpan:new{ width = gap })
+            end
+        end
+        table.insert(grid, row_group)
+        if row < 7 then
+            table.insert(grid, VerticalSpan:new{ height = gap })
+        end
+    end
+
+    local widget = VerticalGroup:new{
+        align = "left",
+        labels_row,
+        VerticalSpan:new{ height = Size.padding.small },
+        grid,
+    }
+    return widget, cell_size
+end
 
 -- Weekly bar chart: 7 bars, index 1 = today (leftmost), index 7 = 6 days ago.
 -- Labels: "Today", "Yesterday", then weekday abbreviations.
@@ -1959,8 +2366,23 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, year_ran
         local all_book_count = all_time_stats and all_time_stats.book_count or 0
         local header_text = _("Total read")
 
+        -- Tapping the header opens the reading heatmap popup (moved here
+        -- from tapping the year, see showReadingHeatmap / buildYearHeader).
+        local total_read_header = buildSectionHeader(fonts.section, header_text, layout.full_width)
+        local tappable_total_read_header = InputContainer:new{
+            dimen = Geom:new{ x = 0, y = 0, w = total_read_header:getSize().w, h = total_read_header:getSize().h },
+            total_read_header,
+        }
+        tappable_total_read_header.ges_events = {
+            Tap = { GestureRange:new{ ges = "tap", range = tappable_total_read_header.dimen } },
+        }
+        function tappable_total_read_header:onTap()
+            popup_self:showReadingHeatmap()
+            return true
+        end
+
         addSectionWithRow(sections,
-            buildSectionHeader(fonts.section, header_text, layout.full_width),
+            tappable_total_read_header,
             all_time_row, layout, { no_bottom_line = true })
     end
 
@@ -2125,7 +2547,7 @@ function ReadingInsightsPopup:getMonthlyReadingDays(year, shared_conn)
 
             base = {}
             withStatement(conn, sql, function(stmt)
-                for row in stmt:rows() do base[row[1]] = row[2] end
+                for row in stmt:rows() do base[row[1]] = tonumber(row[2]) or 0 end
             end)
         end
 
@@ -2195,7 +2617,7 @@ function ReadingInsightsPopup:getMonthlyReadingHours(year, shared_conn)
 
             base = {}
             withStatement(conn, sql, function(stmt)
-                for row in stmt:rows() do base[row[1]] = row[2] end
+                for row in stmt:rows() do base[row[1]] = tonumber(row[2]) or 0 end
             end)
         end
 
@@ -2315,7 +2737,7 @@ function ReadingInsightsPopup:getYearlyStats(year, shared_conn)
                     t.duration     = t.duration + (tonumber(row[3]) or 0)
                     t.has_activity = true
                     local id_book = tostring(row[1])
-                    if not base.book_ids[id_book] and not seen[id_book] then
+                    if not (base.book_ids and base.book_ids[id_book]) and not seen[id_book] then
                         seen[id_book] = true
                         t.new_books = t.new_books + 1
                     end
@@ -2350,6 +2772,226 @@ function ReadingInsightsPopup:getYearlyStats(year, shared_conn)
 
     setMinuteCache(_yearly_cache, _stale_yearly, key, key .. ":minute", minute, result)
     return result
+end
+
+-- Returns a { ["YYYY-MM-DD"] = seconds_read } map covering every day in
+-- `year` that has any reading activity (days with none simply have no
+-- entry). Used to build the GitHub-style reading heatmap (a single
+-- calendar year is fetched and cached at a time; getDailyReadingDataForRange
+-- below stitches together whichever year(s) a given half-year period
+-- spans). Same dedup approach as getYearlyStats (group by book/page/day
+-- first, so a page re-read across multiple sessions on the same day
+-- isn't double counted), just grouped further down to per-day totals
+-- instead of one yearly sum. Cached per day (like getYearRange below)
+-- since the heatmap is only opened on demand, not on every popup rebuild.
+function ReadingInsightsPopup:getDailyReadingData(year, shared_conn)
+    local today = todayDateStr()
+    local cache_key = tostring(year)
+
+    if ENABLE_CACHE and _cache.daily_data and _cache.daily_data[cache_key]
+       and _cache.daily_data[cache_key].date == today then
+        return _cache.daily_data[cache_key].data
+    end
+
+    local data = withDb(shared_conn, {}, function(conn)
+        local year_str = tostring(year)
+        local sql = string.format([[
+            SELECT day, SUM(dur) AS duration
+            FROM (
+                SELECT id_book, page,
+                       date(start_time, 'unixepoch', 'localtime') AS day,
+                       SUM(duration) AS dur
+                FROM page_stat
+                WHERE strftime('%%Y', start_time, 'unixepoch', 'localtime') = '%s'
+                GROUP BY id_book, page, day
+            )
+            GROUP BY day
+        ]], year_str)
+
+        local result = {}
+        withStatement(conn, sql, function(stmt)
+            for row in stmt:rows() do
+                result[row[1]] = tonumber(row[2]) or 0
+            end
+        end)
+        return result
+    end)
+    data = data or {}
+
+    if ENABLE_CACHE then
+        _cache.daily_data = _cache.daily_data or {}
+        _cache.daily_data[cache_key] = { date = today, data = data }
+    end
+    return data
+end
+
+-- Returns a { ["YYYY-MM-DD"] = seconds_read } map for the inclusive date
+-- range [start_t, end_t] (timestamps at hour=12), by fetching every
+-- calendar year the range touches via getDailyReadingData (1 or 2 years
+-- for a half-year heatmap period) and filtering each down to just the
+-- days inside the range.
+function ReadingInsightsPopup:getDailyReadingDataForRange(start_t, end_t, shared_conn)
+    local year_start = tonumber(os.date("%Y", start_t))
+    local year_end   = tonumber(os.date("%Y", end_t))
+    local start_str  = os.date("%Y-%m-%d", start_t)
+    local end_str    = os.date("%Y-%m-%d", end_t)
+
+    local merged = {}
+    for year = year_start, year_end do
+        local year_map = self:getDailyReadingData(year, shared_conn)
+        for dstr, seconds in pairs(year_map) do
+            if dstr >= start_str and dstr <= end_str then
+                merged[dstr] = seconds
+            end
+        end
+    end
+    return merged
+end
+
+-- Builds the box_content (title + grid + legend + best-day line) for the
+-- "Reading heatmap" popup showing the half-year period `periods_back`
+-- half-years before the current one (0 = most recent, ending today - see
+-- getHeatmapPeriodRange). The title shows just the year, or a "start–end"
+-- year range if the period spans a Dec/Jan boundary. Also returns
+-- whether an older/newer period exists, so HeatmapPopup can gate
+-- swipe navigation.
+local function buildHeatmapBoxContent(popup_self, periods_back)
+    local start_t, end_t = getHeatmapPeriodRange(periods_back)
+    local daily_map = popup_self:getDailyReadingDataForRange(start_t, end_t)
+
+    local fonts = getCachedFonts()
+    local inner_padding = Size.padding.large
+    local box_width      = math.floor(Screen:getWidth() * 0.94)
+    local content_width  = box_width - 2 * inner_padding
+
+    -- Year is shown inline in the label row (see buildRangeHeatmapWidget)
+    -- when the period crosses a Dec/Jan boundary; no separate subtitle
+    -- here at all, even for periods that stay within one year.
+    local title_widget = TextWidget:new{ text = _("Reading heatmap"), face = fonts.section, fgcolor = Colors.section() }
+    local title_centered = CenterContainer:new{
+        dimen = Geom:new{ w = content_width, h = title_widget:getSize().h }, title_widget,
+    }
+
+    local heatmap_widget = buildRangeHeatmapWidget(daily_map, start_t, end_t, fonts, content_width)
+
+    local content = VerticalGroup:new{
+        align = "center",
+        title_centered,
+        VerticalSpan:new{ height = Size.padding.large + Size.padding.default },
+        heatmap_widget,
+    }
+
+    local box = FrameContainer:new{
+        background     = Blitbuffer.COLOR_WHITE,
+        bordersize     = Size.border.window,
+        radius         = Size.radius.window,
+        padding_top    = inner_padding,
+        padding_bottom = inner_padding,
+        padding_left   = inner_padding,
+        padding_right  = inner_padding,
+        content,
+    }
+
+    local min_year        = popup_self:getYearRange().min_year
+    local older_available = periods_back < heatmapMaxPeriodsBack(min_year)
+    local newer_available  = periods_back > 0
+
+    return box, older_available, newer_available
+end
+
+-- Full-screen "Reading heatmap" popup, paginated in half-year steps.
+-- Unlike the other full-screen popups in this file (WeeklyTrendPopup),
+-- a single tap does close it, but swipe left/right pages between
+-- half-year periods instead of closing (mirrors the main popup's own
+-- swipe-to-change-year convention - see ReadingInsightsPopup:onSwipe),
+-- and swipe down / any other key closes.
+local HeatmapPopup = InputContainer:extend{
+    modal        = true,
+    popup_self   = nil,   -- the ReadingInsightsPopup, for data access
+    periods_back = 0,     -- 0 = most recent half-year, ending today
+}
+
+function HeatmapPopup:init()
+    local screen_w = Screen:getWidth()
+    local screen_h = Screen:getHeight()
+    self.dimen = Geom:new{ x = 0, y = 0, w = screen_w, h = screen_h }
+
+    if Device:isTouchDevice() then
+        self.ges_events.Tap   = { GestureRange:new{ ges = "tap",   range = self.dimen } }
+        self.ges_events.Swipe = { GestureRange:new{ ges = "swipe", range = self.dimen } }
+    end
+    if Device:hasKeys() then
+        self.key_events.AnyKeyPressed = { { Device.input.group.Any } }
+    end
+
+    self:_rebuild()
+end
+
+function HeatmapPopup:_rebuild()
+    local box, older_available, newer_available = buildHeatmapBoxContent(self.popup_self, self.periods_back)
+    self.box_content      = box
+    self._older_available = older_available
+    self._newer_available = newer_available
+    self[1] = CenterContainer:new{
+        dimen = self.dimen,
+        self.box_content,
+    }
+end
+
+function HeatmapPopup:onShow()
+    UIManager:setDirty(self, function()
+        return "ui", self.box_content.dimen
+    end)
+    return true
+end
+
+function HeatmapPopup:onCloseWidget()
+    UIManager:setDirty(nil, function()
+        return "ui", self.box_content.dimen
+    end)
+end
+
+-- delta: -1 = newer (toward today), +1 = older. No-op (but still
+-- consumes the gesture) once there's nothing further in that direction.
+function HeatmapPopup:_goToPeriod(delta)
+    if delta < 0 and not self._newer_available then return true end
+    if delta > 0 and not self._older_available then return true end
+
+    self.periods_back = self.periods_back + delta
+    self:_rebuild()
+    UIManager:setDirty(self, function()
+        return "ui", self.box_content.dimen
+    end)
+    return true
+end
+
+function HeatmapPopup:onTap()
+    UIManager:close(self)
+    return true
+end
+
+function HeatmapPopup:onSwipe(arg, ges_ev)
+    if not ges_ev then UIManager:close(self) return true end
+    local dir = ges_ev.direction
+    if dir == "west" or dir == "left"  then return self:_goToPeriod(-1) end
+    if dir == "east" or dir == "right" then return self:_goToPeriod(1)  end
+    UIManager:close(self)
+    return true
+end
+
+function HeatmapPopup:onAnyKeyPressed(_, key)
+    if key and key:match({ { "RPgBack", "LPgBack", "Left"  } }) then return self:_goToPeriod(1)  end
+    if key and key:match({ { "RPgFwd",  "LPgFwd",  "Right" } }) then return self:_goToPeriod(-1) end
+    UIManager:close(self)
+    return true
+end
+
+-- Opens the "Reading heatmap" popup - tap the "Total read" header (see
+-- buildInsightsSections) to open it, starting on the most recent
+-- half-year; swipe left/right inside the popup to page through older/
+-- newer half-years as far back as there's data.
+function ReadingInsightsPopup:showReadingHeatmap()
+    UIManager:show(HeatmapPopup:new{ popup_self = self, periods_back = 0 })
 end
 
 -- Returns { min_year, max_year } from the DB, cached per day.
@@ -3140,7 +3782,7 @@ function ReadingInsightsPopup:getMonthlyBookCounts(year, shared_conn)
 
             local counts = {}
             withStatement(conn, sql, function(stmt)
-                for row in stmt:rows() do counts[row[1]] = row[2] end
+                for row in stmt:rows() do counts[row[1]] = tonumber(row[2]) or 0 end
             end)
 
             local ids_sql = string.format([[
@@ -3164,7 +3806,7 @@ function ReadingInsightsPopup:getMonthlyBookCounts(year, shared_conn)
         ]], today), function(stmt)
             for row in stmt:rows() do
                 local id_book = tostring(row[1])
-                if not base.current_month_book_ids[id_book] then
+                if not (base.current_month_book_ids and base.current_month_book_ids[id_book]) then
                     new_books_today = new_books_today + 1
                 end
             end
