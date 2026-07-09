@@ -10789,13 +10789,15 @@ function BookshelfWidget:_showBookDetail(book, opts)
     local function reviewsListHtml(result)
         return Tokens.reviewsHtml{ reviews = result and result.reviews }
     end
-    local reviews_pending
     local reviews_tab  -- forward ref: refreshReviews mutates it, its
                         -- widget_builder (below) reads it back each rebuild.
-    -- Named so both the initial cache-miss load and the header's Refresh
-    -- button can trigger the same re-fetch; `modal` is assigned after this
-    -- closure is created but before either caller can actually invoke it
-    -- (upvalue, read at call time).
+    -- The ONLY thing that fetches reviews (a network call that prompts for WiFi
+    -- when offline) is the header's Refresh button -- never opening the popup
+    -- and never just viewing the Reviews tab. This keeps battery/network use to
+    -- explicit user action; opening a linked book to read its description no
+    -- longer prompts for WiFi (issue 253). Cached reviews still show offline.
+    -- `modal` is assigned after this closure is created but before Refresh can
+    -- invoke it (upvalue, read at call time).
     local function refreshReviews()
         if not reviews_tab then return end
         reviews_tab.busy = true
@@ -10831,8 +10833,9 @@ function BookshelfWidget:_showBookDetail(book, opts)
             data = cached
             html = reviewsListHtml(cached)
         else
-            html = "<p>" .. _("Loading reviews\xE2\x80\xA6") .. "</p>"
-            reviews_pending = true
+            -- No cached reviews: invite an explicit fetch rather than loading
+            -- automatically (that would hit the network on open -- issue 253).
+            html = "<p>" .. _("Tap Refresh to load reviews.") .. "</p>"
         end
         reviews_tab = {
             id = "reviews", label = _("Reviews"), data = data, html = html,
@@ -10905,13 +10908,9 @@ function BookshelfWidget:_showBookDetail(book, opts)
     local ReviewsModal = require("lib/bookshelf_reviews_modal")
     modal = ReviewsModal:new(args)
     UIManager:show(modal)
-
-    -- Cache miss: fetch reviews online, then drop them into the reviews tab in
-    -- place. refreshReviews itself guards against the user closing the popup
-    -- before it returns.
-    if reviews_pending then
-        refreshReviews()
-    end
+    -- No fetch on open: reviews load only when the user taps Refresh on the
+    -- Reviews tab (see refreshReviews / issue 253). Cached reviews, if any,
+    -- are already shown from the cache_only peek above.
 end
 
 -- Hardcover reviews now live as a tab in the unified book-detail popup, so this
