@@ -195,6 +195,24 @@ local function saveMonthlyBarHeightSetting(value)
     saveNumSetting(SETTINGS_KEY_MONTHLY_BAR_HEIGHT, value)
 end
 
+-- Reading heatmap period length (Settings ▸ Advanced settings ▸ how many
+-- months the heatmap grid shows at once - 3, 4 or 6). Read by
+-- getHeatmapPeriodRange below every time a heatmap page is built, so a
+-- change takes effect the next time the popup (re)opens/pages.
+local SETTINGS_KEY_HEATMAP_MONTHS = "reading_insights_heatmap_months_per_period"
+local DEFAULT_HEATMAP_MONTHS      = 4
+local VALID_HEATMAP_MONTHS        = { [3] = true, [4] = true, [6] = true }
+
+local function readHeatmapMonthsSetting()
+    local v = readNumSetting(SETTINGS_KEY_HEATMAP_MONTHS, DEFAULT_HEATMAP_MONTHS)
+    if not VALID_HEATMAP_MONTHS[v] then return DEFAULT_HEATMAP_MONTHS end
+    return v
+end
+
+local function saveHeatmapMonthsSetting(value)
+    saveNumSetting(SETTINGS_KEY_HEATMAP_MONTHS, value)
+end
+
 local _cache = {
     streaks                = nil,
     streaks_date           = nil,
@@ -1508,10 +1526,11 @@ function WeeklyTrendPopup:onAnyKeyPressed() UIManager:close(self) return true en
 -- Reading heatmap (GitHub-style contribution grid)
 --
 -- Tapping the "Total read" header (see buildInsightsSections) opens a
--- full-screen popup showing the most recent half-year of reading
--- activity as a grid of small squares, one per day, shaded by how much
--- was read that day relative to the busiest single day in the period
--- shown:
+-- full-screen popup showing the most recent period of reading activity
+-- (3, 4 or 6 months - see readHeatmapMonthsSetting, Settings ▸ Advanced
+-- settings ▸ "Reading heatmap range") as a grid of small squares, one
+-- per day, shaded by how much was read that day relative to the busiest
+-- single day in the period shown:
 --   0%   (no reading)            -> Colors.heatmap0()
 --   >0-25% of the peak day       -> Colors.heatmap25()
 --   25-50%                       -> Colors.heatmap50()
@@ -1520,8 +1539,8 @@ function WeeklyTrendPopup:onAnyKeyPressed() UIManager:close(self) return true en
 -- Each column is one week (Monday first); the row above the grid labels
 -- the column each month starts in, exactly like GitHub's own graph.
 -- The popup itself (HeatmapPopup, further below) is paginated in
--- half-year steps, swipe left/right, as far back as there's reading
--- data - see getHeatmapPeriodRange / heatmapMaxPeriodsBack.
+-- steps of that same period length, swipe left/right, as far back as
+-- there's reading data - see getHeatmapPeriodRange / heatmapMaxPeriodsBack.
 -- ---------------------------------------------------------------------
 
 -- Adds/subtracts whole calendar months from a Y/M/D triple (relying on
@@ -1536,29 +1555,34 @@ local function shiftMonths(year, month, day, delta)
 end
 
 -- Inclusive [start_t, end_t] timestamps (both at hour=12) for the
--- half-year heatmap period `periods_back` half-years before the current
--- one: period 0 is the 6 months ending today, period 1 the 6 months
--- before that, and so on.
+-- heatmap period `periods_back` periods before the current one, where a
+-- period is readHeatmapMonthsSetting() months long (3, 4 or 6 - see
+-- Settings ▸ Advanced settings ▸ "Reading heatmap range"): period 0 is
+-- that many months ending today, period 1 the same span before that,
+-- and so on.
 local function getHeatmapPeriodRange(periods_back)
+    local months_per_period = readHeatmapMonthsSetting()
     local today = os.date("*t")
-    local _, _, _, end_t     = shiftMonths(today.year, today.month, today.day, -6 * periods_back)
-    local sy, sm, sd         = shiftMonths(today.year, today.month, today.day, -6 * (periods_back + 1))
+    local _, _, _, end_t     = shiftMonths(today.year, today.month, today.day, -months_per_period * periods_back)
+    local sy, sm, sd         = shiftMonths(today.year, today.month, today.day, -months_per_period * (periods_back + 1))
     local start_t            = os.time({ year = sy, month = sm, day = sd + 1, hour = 12 })
     return start_t, end_t
 end
 
--- How many half-year periods back from the current one (0) still reach
--- into a year with recorded reading data, given the DB's oldest year
--- (getYearRange().min_year). Small loop (a handful of iterations for
--- any realistic reading history) rather than closed-form month maths,
--- to stay in lockstep with getHeatmapPeriodRange's own definition of a
--- period boundary.
-local function heatmapMaxPeriodsBack(min_year)
-    local jan1_min = os.time({ year = min_year, month = 1, day = 1, hour = 12 })
+-- How many heatmap periods back from the current one (0) still reach
+-- into a month with recorded reading data, given the DB's oldest
+-- year/month (getYearRange().min_year / .min_month - the calendar month
+-- of the very first reading record, not just its year, so swiping back
+-- stops exactly at that month instead of running to Jan 1st of that
+-- year). Small loop (a handful of iterations for any realistic reading
+-- history) rather than closed-form month maths, to stay in lockstep
+-- with getHeatmapPeriodRange's own definition of a period boundary.
+local function heatmapMaxPeriodsBack(min_year, min_month)
+    local min_period_start = os.time({ year = min_year, month = min_month, day = 1, hour = 12 })
     local periods_back = 0
     while periods_back < 200 do
         local _, next_end = getHeatmapPeriodRange(periods_back + 1)
-        if next_end < jan1_min then break end
+        if next_end < min_period_start then break end
         periods_back = periods_back + 1
     end
     return periods_back
@@ -1661,9 +1685,11 @@ local function buildRangeHeatmapWidget(daily_map, start_t, end_t, fonts, max_wid
     local grid_width = max_width - wd_label_w - gap
     local cell_size = math.floor((grid_width - (num_cols - 1) * gap) / num_cols)
     local min_cell   = Screen:scaleBySize(8)
-    local max_cell   = Screen:scaleBySize(16)
+    -- No upper cap: for shorter heatmap ranges (fewer columns - see
+    -- Settings ▸ Advanced settings ▸ "Reading heatmap range"), the cells
+    -- grow proportionally to use the full available width instead of
+    -- leaving empty space to the right of a small fixed-size grid.
     if cell_size < min_cell then cell_size = min_cell end
-    if cell_size > max_cell then cell_size = max_cell end
 
     local max_seconds = 0
     for _, col_days in ipairs(cols) do
@@ -1816,7 +1842,60 @@ local function buildRangeHeatmapWidget(daily_map, start_t, end_t, fonts, max_wid
         VerticalSpan:new{ height = Size.padding.small },
         grid,
     }
-    return widget, cell_size
+    -- cell_size and the wd_label_w + gap offset (where the first day
+    -- column starts) are both handed back so the legend built below can
+    -- match the grid exactly, however it's currently sized (see
+    -- buildHeatmapLegendWidget).
+    return widget, cell_size, wd_label_w + gap
+end
+
+-- Color legend for the reading heatmap: a "Less" label, the same five
+-- shades used by the grid squares above (see heatmapLevelColor /
+-- Colors.heatmap0..100), and a "More" label - so it's clear at a glance
+-- which end of the scale a given square's color falls on. The swatches
+-- are sized as a fraction of the heatmap's own month/weekday label text
+-- height (fonts.small - see the "Xxx" sample-label measurement in
+-- buildRangeHeatmapWidget above, done the same way here) rather than a
+-- fixed pixel value, so if the user changes that font's size in the
+-- Fonts settings, the legend swatches scale along with it - but at
+-- SWATCH_SIZE_RATIO of that height, so they stay visibly smaller than
+-- the label text (and the grid's own cells) instead of matching it
+-- 1-for-1. They're spaced apart from each other by Size.padding.small.
+-- The whole row starts at left_offset, the same x position as the
+-- grid's first day column, so it always lines up with the heatmap above
+-- it regardless of how many months are currently shown.
+local SWATCH_SIZE_RATIO = 0.55
+
+local function buildHeatmapLegendWidget(fonts, left_offset)
+    local label_gap    = Screen:scaleBySize(2)
+    local swatch_gap    = Size.padding.small
+    local border        = Size.line.thin
+
+    local less_label = TextWidget:new{ text = _("Less"), face = fonts.small, fgcolor = Colors.small() }
+
+    local sample_label = TextWidget:new{ text = "Xxx", face = fonts.small }
+    local label_h = sample_label:getSize().h
+    sample_label:free()
+    local swatch_size = math.max(Screen:scaleBySize(6), math.floor(label_h * SWATCH_SIZE_RATIO))
+
+    local swatch_colors = {
+        Colors.heatmap0(), Colors.heatmap25(), Colors.heatmap50(),
+        Colors.heatmap75(), Colors.heatmap100(),
+    }
+
+    local row = HorizontalGroup:new{ align = "center" }
+    table.insert(row, HorizontalSpan:new{ width = left_offset })
+    table.insert(row, less_label)
+    table.insert(row, HorizontalSpan:new{ width = label_gap })
+    for i, color in ipairs(swatch_colors) do
+        table.insert(row, buildHeatmapCell(swatch_size, border, color))
+        if i < #swatch_colors then
+            table.insert(row, HorizontalSpan:new{ width = swatch_gap })
+        end
+    end
+    table.insert(row, HorizontalSpan:new{ width = label_gap })
+    table.insert(row, TextWidget:new{ text = _("More"), face = fonts.small, fgcolor = Colors.small() })
+    return row
 end
 
 -- Weekly bar chart: 7 bars, index 1 = today (leftmost), index 7 = 6 days ago.
@@ -2848,7 +2927,7 @@ function ReadingInsightsPopup:getDailyReadingDataForRange(start_t, end_t, shared
     return merged
 end
 
--- Builds the box_content (title + grid + legend + best-day line) for the
+-- Builds the box_content (title + grid + legend) for the
 -- "Reading heatmap" popup showing the half-year period `periods_back`
 -- half-years before the current one (0 = most recent, ending today - see
 -- getHeatmapPeriodRange). The title shows just the year, or a "start–end"
@@ -2872,13 +2951,36 @@ local function buildHeatmapBoxContent(popup_self, periods_back)
         dimen = Geom:new{ w = content_width, h = title_widget:getSize().h }, title_widget,
     }
 
-    local heatmap_widget = buildRangeHeatmapWidget(daily_map, start_t, end_t, fonts, content_width)
+    local heatmap_widget, unused_cell_size, left_offset =
+        buildRangeHeatmapWidget(daily_map, start_t, end_t, fonts, content_width)
+
+    -- The heatmap grid ends up centered (as a block) within content_width
+    -- rather than flush against the box's left edge, so its first day
+    -- column doesn't sit at a fixed x. To keep the legend and best-day
+    -- line lined up with that column regardless of where centering puts
+    -- it, every one of these three widgets is wrapped in a same-width
+    -- (heatmap_widget's own width) left-aligned box before being handed
+    -- to the outer, center-aligned VerticalGroup below - so all three get
+    -- centered by the exact same amount, keeping their left_offset
+    -- (weekday-label column + gap) spacers aligned with each other.
+    local heatmap_w = heatmap_widget:getSize().w
+    local function matchHeatmapWidth(widget)
+        if not widget then return nil end
+        return LeftContainer:new{
+            dimen = Geom:new{ w = heatmap_w, h = widget:getSize().h },
+            widget,
+        }
+    end
+
+    local legend_widget = buildHeatmapLegendWidget(fonts, left_offset)
 
     local content = VerticalGroup:new{
         align = "center",
         title_centered,
         VerticalSpan:new{ height = Size.padding.large + Size.padding.default },
-        heatmap_widget,
+        matchHeatmapWidth(heatmap_widget),
+        VerticalSpan:new{ height = Size.padding.default },
+        matchHeatmapWidth(legend_widget),
     }
 
     local box = FrameContainer:new{
@@ -2892,8 +2994,8 @@ local function buildHeatmapBoxContent(popup_self, periods_back)
         content,
     }
 
-    local min_year        = popup_self:getYearRange().min_year
-    local older_available = periods_back < heatmapMaxPeriodsBack(min_year)
+    local year_range       = popup_self:getYearRange()
+    local older_available  = periods_back < heatmapMaxPeriodsBack(year_range.min_year, year_range.min_month)
     local newer_available  = periods_back > 0
 
     return box, older_available, newer_available
@@ -2994,7 +3096,11 @@ function ReadingInsightsPopup:showReadingHeatmap()
     UIManager:show(HeatmapPopup:new{ popup_self = self, periods_back = 0 })
 end
 
--- Returns { min_year, max_year } from the DB, cached per day.
+-- Returns { min_year, max_year, min_month } from the DB, cached per day.
+-- min_month is the calendar month (1-12) of the very first reading
+-- record within min_year - used by the reading heatmap to stop swiping
+-- back exactly at the first month with data (see heatmapMaxPeriodsBack)
+-- rather than just the first year.
 function ReadingInsightsPopup:getYearRange(shared_conn)
     local today        = todayDateStr()
     local range_cached = ENABLE_CACHE and _cache.year_range and _cache.year_range_date == today
@@ -3004,18 +3110,20 @@ function ReadingInsightsPopup:getYearRange(shared_conn)
     end
 
     local current_year = tonumber(os.date("%Y"))
-    local range = { min_year = current_year, max_year = current_year }
+    local range = { min_year = current_year, max_year = current_year, min_month = 1 }
 
     withDb(shared_conn, nil, function(conn)
         local sql_range = [[
             SELECT MIN(strftime('%Y', start_time, 'unixepoch', 'localtime')) AS min_year,
-                   MAX(strftime('%Y', start_time, 'unixepoch', 'localtime')) AS max_year
+                   MAX(strftime('%Y', start_time, 'unixepoch', 'localtime')) AS max_year,
+                   MIN(strftime('%Y-%m', start_time, 'unixepoch', 'localtime')) AS min_year_month
             FROM page_stat
         ]]
         withStatement(conn, sql_range, function(stmt)
             for row in stmt:rows() do
                 if row[1] then range.min_year = tonumber(row[1]) or current_year end
                 if row[2] then range.max_year = tonumber(row[2]) or current_year end
+                if row[3] then range.min_month = tonumber(row[3]:sub(6, 7)) or 1 end
             end
         end)
         if ENABLE_CACHE then
@@ -4343,9 +4451,10 @@ end
 
 
 -- Module export.
--- The Popup class is what main.lua instantiates on demand; the four setting
+-- The Popup class is what main.lua instantiates on demand; the setting
 -- helpers are exposed too because main.lua's Tools-menu entries (full-screen
--- refresh toggle, 8-week chart order) read/write the same settings keys.
+-- refresh toggle, 8-week chart order, heatmap range) read/write the same
+-- settings keys.
 return {
     Popup                       = ReadingInsightsPopup,
     readFullRefreshSetting      = readFullRefreshSetting,
@@ -4356,6 +4465,9 @@ return {
     saveWeeklyBarHeightSetting  = saveWeeklyBarHeightSetting,
     readMonthlyBarHeightSetting = readMonthlyBarHeightSetting,
     saveMonthlyBarHeightSetting = saveMonthlyBarHeightSetting,
+    readHeatmapMonthsSetting    = readHeatmapMonthsSetting,
+    saveHeatmapMonthsSetting    = saveHeatmapMonthsSetting,
     DEFAULT_WEEKLY_BAR_HEIGHT   = DEFAULT_WEEKLY_BAR_HEIGHT,
     DEFAULT_MONTHLY_BAR_HEIGHT  = DEFAULT_MONTHLY_BAR_HEIGHT,
+    DEFAULT_HEATMAP_MONTHS      = DEFAULT_HEATMAP_MONTHS,
 }
