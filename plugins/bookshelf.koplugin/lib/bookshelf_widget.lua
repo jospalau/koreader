@@ -1291,6 +1291,14 @@ function BookshelfWidget:_rebuild()
             -- chip itself disappears with this clear (its presence is
             -- conditional on preview ≠ lastfile).
             if key == "current" then
+                local _already_lastfile_fp = Repo.currentFilepath and Repo.currentFilepath()
+                local _already_in_hero = (self._hero_mode ~= "micro")
+                    and (not self._expanded)
+                    and ((not self._preview_book)
+                         or (_already_lastfile_fp and self._preview_book.filepath == _already_lastfile_fp))
+                if _already_in_hero then
+                    return
+                end
                 -- Clear preview AND collapse expanded mode so the hero
                 -- comes back showing the lastfile. In expanded mode the
                 -- chip is rendered deselected (no visible hero), so the
