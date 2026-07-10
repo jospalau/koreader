@@ -361,6 +361,37 @@ local function closeCover()
 	closeBookInfoDbIfLoaded()
 end
 
+local function closeOverlayWidgets()
+	local stack = UIManager._window_stack
+	if not stack or #stack == 0 then
+		return
+	end
+
+	local widgets = {}
+	for i = #stack, 1, -1 do
+		local entry = stack[i]
+		if entry and entry.widget then
+			table.insert(widgets, entry.widget)
+		end
+	end
+
+	for _, widget in ipairs(widgets) do
+		if widget ~= State.cover_widget then
+			local name = widget.name
+			if name == "ReaderUI" or name == "FileManager" then
+				break
+			end
+			local ok, err = pcall(function()
+				UIManager:close(widget)
+			end)
+			if not ok then
+				warn("failed to close overlay widget before showing cover", err)
+			end
+		end
+	end
+    UIManager:forceRePaint()
+end
+
 local function scheduleCloseCover(delay)
 	UIManager:scheduleIn(delay, closeCover)
 end
@@ -818,6 +849,7 @@ local function showCover(filepath, options)
 	end
 
 	closeCover()
+	closeOverlayWidgets()
 
 	local cover_bb, needs_free = findCover(filepath, options)
 	if not cover_bb then
@@ -1236,3 +1268,4 @@ patchReaderInit()
 patchReaderOnClose()
 
 info("initialized successfully")
+
