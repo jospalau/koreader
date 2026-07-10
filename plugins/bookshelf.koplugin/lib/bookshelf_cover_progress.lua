@@ -184,11 +184,17 @@ function M.decide(book)
         if     badge_style == "bookmark" then glyph_kind = "complete_bookmark"
         elseif badge_style == "tickbox"  then glyph_kind = "complete_tickbox"
         end
+        -- Optional recessed treatment for finished books (#138), reusing the
+        -- on-hold fade render path (page-colour blend, no border/shadow).
+        -- Defaults OFF; independent of the badge style, mirroring #121's
+        -- split-cues lesson for on-hold.
+        local fade = BookshelfSettings.read("finished_fade_enabled") == true
         return {
-            bar        = false,
-            bar_pct    = 0,
-            glyph      = glyph_kind,
-            page_count = want_page_count,
+            bar          = false,
+            bar_pct      = 0,
+            glyph        = glyph_kind,
+            on_hold_fade = fade or nil,
+            page_count   = want_page_count,
         }
     else
         if require("readhistory"):getIndexByFile(book.filepath) and not require("docsettings"):hasSidecarFile(self.filepath) then
