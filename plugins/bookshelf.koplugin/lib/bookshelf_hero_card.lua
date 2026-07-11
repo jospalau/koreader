@@ -1218,23 +1218,41 @@ end
 --   whose dimens aren't set yet.
 function HeroCard:replaceRightColumn(regions, book, state, region_hint)
     if not self._right_holder or not self._right_dimen then return false end
-    local refresh_rect
+    local old_status_rect
     if region_hint == "status" then
-        refresh_rect = self:getStatusStripDimen()
+        old_status_rect = self:getStatusStripDimen()
     end
     local fresh = self:_buildRightColumn(book or self.book, regions,
         state or self.device_state, self._right_dimen)
     local old = self._right_holder[self._right_slot]
     self._right_holder[self._right_slot] = fresh
     if self._right_holder.resetLayout then self._right_holder:resetLayout() end
-    -- Fallback when the status-strip rect wasn't applicable: refresh
-    -- the FULL right column. We take the painted screen rect from the
-    -- old column for the x/y origin (HorizontalGroup's layout doesn't
-    -- shift on slot replacement, so the new column paints there too)
-    -- but expand w/h to the full right-column bound (self._right_dimen)
-    -- to avoid tearing when the new column is taller than the old one
-    -- — e.g. font-size edits that grow widget heights would otherwise
-    -- leave the bottom strip un-refreshed.
+
+    local refresh_rect
+    if region_hint == "status" then
+        -- getStatusStripDimen() reads the freshly-painted widgets after
+        -- resetLayout (dimens are populated during the swap above), so
+        -- this now reflects the NEW text width/height, not the old one.
+        local new_status_rect = self:getStatusStripDimen()
+        if old_status_rect and new_status_rect then
+            -- Union of old + new: covers both shrink and growth of the
+            -- status-line text (e.g. adding tokens made it wider, or the
+            -- clock lost a digit made it narrower). Using only the new
+            -- rect would leave stale pixels from the old, wider text;
+            -- using only the old rect (previous bug) truncates new,
+            -- wider text to the old bounds.
+            local x0 = math.min(old_status_rect.x, new_status_rect.x)
+            local y0 = math.min(old_status_rect.y, new_status_rect.y)
+            local x1 = math.max(old_status_rect.x + old_status_rect.w,
+                                 new_status_rect.x + new_status_rect.w)
+            local y1 = math.max(old_status_rect.y + old_status_rect.h,
+                                 new_status_rect.y + new_status_rect.h)
+            refresh_rect = Geom:new{ x = x0, y = y0, w = x1 - x0, h = y1 - y0 }
+        else
+            refresh_rect = new_status_rect or old_status_rect
+        end
+    end
+
     if not refresh_rect and old and old.dimen and self._right_dimen then
         refresh_rect = Geom:new{
             x = old.dimen.x,
