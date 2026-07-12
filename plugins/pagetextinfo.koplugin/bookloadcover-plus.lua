@@ -1167,8 +1167,15 @@ local function patchShowReaderCoroutine()
 
 	ReaderUI.showReaderCoroutine = function(self, file, provider, seamless)
 		local cover_shown = false
+		-- KOReader flags a document reload (e.g. triggered by changing a book
+		-- setting like font, margins, etc.) by setting self.reloading = true
+		-- on the new ReaderUI instance. Without this check, the opening cover
+		-- would be shown on every such reload regardless of the
+		-- "Show cover on internal reload/document switch" setting, since that
+		-- setting was previously only honored on the closing side.
+		local is_internal_reload = self.reloading and true or false
 
-		if shouldShowOpeningCover() then
+		if shouldShowOpeningCover() and not (is_internal_reload and not shouldShowOnTeardown()) then
 			local ok, result = pcall(showCover, file, {
 				reason = "open",
 				allow_direct_extract = true,
@@ -1268,4 +1275,5 @@ patchReaderInit()
 patchReaderOnClose()
 
 info("initialized successfully")
+
 
