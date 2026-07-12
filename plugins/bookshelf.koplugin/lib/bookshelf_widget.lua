@@ -2925,14 +2925,18 @@ function BookshelfWidget:_launchReader(open_path, after_open_callback)
     -- close-rebuild must re-read fresh state, not the pre-read snapshot (#103).
     self._hero_current_memo = nil
     self:_stopStatusTimer()
-    -- The opening-cover squeeze already painted at tap time (_openBook).
-    -- The seamless flag below makes KOReader's own "Opening file"
-    -- InfoMessage invisible (readerui.lua showReaderCoroutine) and swaps
-    -- the reader's arrival refresh from "full" to "ui" — onReaderReady
-    -- issues one full refresh to clear any shelf ghosting under the page.
-    self._seamless_open_full_pending = true
+    -- Seamless open is tied to the cover-opening effect. With the effect ON,
+    -- the flex squeeze (painted at tap time in _openBook) IS the feedback, so
+    -- go seamless: suppress KOReader's own "Opening file" InfoMessage
+    -- (readerui.lua showReaderCoroutine) and take the lighter "ui" arrival
+    -- refresh (onReaderReady issues one full refresh to clear ghosting). With
+    -- the effect OFF there's no flex, so DON'T suppress the message -- opening
+    -- a book with no feedback at all read as an unresponsive freeze (Reddit).
+    -- Let the native "Opening <file>" message show and take the normal arrival.
+    local seamless = BookshelfSettings.nilOrTrue("open_cover_effect")
+    self._seamless_open_full_pending = seamless or nil
     local ReaderUI = require("apps/reader/readerui")
-    ReaderUI:showReader(open_path, nil, true, nil, after_open_callback)
+    ReaderUI:showReader(open_path, nil, seamless, nil, after_open_callback)
 end
 
 -- Kobo books decrypt to a /tmp copy that can still be mid-write when
@@ -10755,6 +10759,11 @@ function BookshelfWidget:_buildBookCoverTab(book, show_parent, avail_w, avail_h,
     if total_pages > 1 then
         local nav = Pagination.buildNav{
             page = state.page, total_pages = total_pages, show_parent = show_parent,
+            -- Text chevrons: this nav lives inside the book-detail modal, whose
+            -- cropping_widget routes icon-button flash through the raw
+            -- widgetInvert/invertRect path that segfaulted on a PocketBook
+            -- InkPad framebuffer. Text buttons use the bounds-safe repaint path.
+            text_chevrons = true,
             on_goto = function(target)
                 state.page = target
                 if modal and modal.rebuildTab then modal:rebuildTab() end
@@ -10823,6 +10832,26 @@ function BookshelfWidget:_applyCoverCandidate(book, candidate, modal, state)
     local ok, err
     if candidate.kind == "embedded" then
         ok, err = CoverApply.revertToEmbedded(book.filepath)
+        -- BIM's cached cover_bb may still hold the previously-applied cover:
+        -- while a custom cover was active, a shelf re-extract cached IT (BIM
+        -- extracts the active DocSettings custom cover). With the custom cover
+        -- now removed, the render falls back to that stale cover_bb, so the
+        -- header/hero keep showing the old cover after "revert to embedded".
+        -- Force a fresh extraction (custom gone -> embedded) so cover_bb is
+        -- correct before the reopened modal's buildBookMeta reads it. delete +
+        -- extract mirrors the stale-sweep's proven re-extract pattern.
+        if ok then
+            pcall(function()
+                local BIM = require("bookinfomanager")
+                if BIM and BIM.extractBookInfo then
+                    local sw = Screen:getWidth()
+                    local cw = math.max(1, math.floor(sw * 0.5))
+                    if BIM.deleteBookInfo then BIM:deleteBookInfo(book.filepath) end
+                    BIM:extractBookInfo(book.filepath,
+                        { max_cover_w = cw, max_cover_h = math.floor(cw * 1.5) })
+                end
+            end)
+        end
     elseif not candidate.local_path then
         self:_hardcoverToast(_("That cover is unavailable"))
         return
@@ -10844,10 +10873,41 @@ function BookshelfWidget:_applyCoverCandidate(book, candidate, modal, state)
     end
     self:_refreshSingleBookCover(book.filepath, "cover-picker")
 
-    -- Carry the Cover-tab state (online results, page) across the reopen, but
-    -- drop the cached LOCAL list so the ring/current-cover entries rebuild
-    -- against the new sidecar state.
-    if type(state) == "table" then state.local_candidates = nil end
+    -- Keep the grid order stable across the reopen. Re-deriving the local list
+    -- inserts a new front-of-list "Current cover" (+ "Previous cover") and
+    -- drops the applied online result from its slot, so the whole grid
+    -- reshuffled on every apply. Instead, when the tapped candidate is one
+    -- that's already on screen, reuse the cached lists and just move the active
+    -- ring onto it -- dropping only entries whose file has since vanished (the
+    -- removed custom cover after a revert) so no blank tile lingers. The fresh
+    -- "Current cover"/"Previous cover" entries re-derive on the next open. An
+    -- off-grid apply (device file picker) isn't in the lists, so fall back to
+    -- re-deriving there or the new cover wouldn't appear at all.
+    if type(state) == "table" then
+        local function inList(list)
+            if type(list) == "table" then
+                for _i, c in ipairs(list) do if c == candidate then return true end end
+            end
+            return false
+        end
+        if inList(state.local_candidates) or inList(state.online_candidates) then
+            local function reflag(list)
+                if type(list) ~= "table" then return list end
+                local kept = {}
+                for _i, c in ipairs(list) do
+                    if c.kind == "embedded" or CoverApply.fileSize(c.local_path) then
+                        c.is_active = (c == candidate)
+                        kept[#kept + 1] = c
+                    end
+                end
+                return kept
+            end
+            state.local_candidates  = reflag(state.local_candidates)
+            state.online_candidates = reflag(state.online_candidates)
+        else
+            state.local_candidates = nil  -- off-grid pick: re-derive so it shows
+        end
+    end
     local bw = self
     local fresh = Repo.buildBookMeta(book.filepath, { want_cover = true }) or book
     if modal then UIManager:close(modal) end
@@ -11732,6 +11792,14 @@ function BookshelfWidget:_showBookDetail(book, opts)
                 Repo.invalidateLightMeta()
                 self:_rebuild(); UIManager:setDirty(self, "ui")
             end
+            -- Empty the Cover tab's transient working dir (embedded-cover
+            -- PNGs + online search downloads + any older per-book cruft) so it
+            -- doesn't pile up in the settings folder (issue 267). Applied
+            -- covers live in the book's .sdr and are untouched. Fires only on a
+            -- real dismiss/Open, NOT on the apply flow's reopen (that goes
+            -- through UIManager:close -> onCloseWidget, which doesn't run
+            -- on_close), so the carried online candidates survive that trip.
+            pcall(function() require("lib/bookshelf_cover_apply").resetWorkingCache() end)
             if opts.on_close then opts.on_close() end
         end,
         -- "Open" footer button opens the book in the reader (the popup closes
