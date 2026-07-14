@@ -228,6 +228,7 @@ if G_reader_settings:isTrue("apply_extra_patches") then
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/book_info_popup.lua")
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/bookloadcover-plus.lua")
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/animation-Koreader.lua")
+    local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/bookshelf-overlay.lua")
 end
 
 -- Inform once about color rendering on newly supported devices
