@@ -1941,6 +1941,7 @@ function BookshelfWidget:_rebuild()
         local Absorber = InputContainer:extend{}
         function Absorber:onTap()  return true end
         function Absorber:onHold() return true end
+        function Absorber:onDoubleTap() return true end
         local corner_w = math.floor(self.dimen.w * 0.125)
         local corner_h = Screen:scaleBySize(80)
         local left_dim  = Geom:new{
@@ -1960,6 +1961,7 @@ function BookshelfWidget:_rebuild()
             a.ges_events = {
                 Tap  = { GestureRange:new{ ges = "tap",  range = dim } },
                 Hold = { GestureRange:new{ ges = "hold", range = dim } },
+                DoubleTap = { GestureRange:new{ ges = "double_tap", range = dim } },
             }
             overlap_group[#overlap_group + 1] = a
         end
@@ -2830,6 +2832,25 @@ end
 
 -- ─── Navigation ───────────────────────────────────────────────────────────────
 
+-- _openOnDoubleTap(book) — direct-open used by the double_tap gesture on
+-- covers and the hero. A double tap is an unambiguous "open this book"
+-- intent, so it bypasses the single-tap preview/stage behaviour and the
+-- "Open with a double tap" two-tap dance — except in selection mode, where
+-- it toggles the book like a single tap. Only reachable when the user has
+-- KOReader's global double tap enabled (otherwise no double_tap is emitted);
+-- fixes #271, where the unhandled double_tap leaked to the parked reader.
+function BookshelfWidget:_openOnDoubleTap(book)
+    if not book or not book.filepath then return end
+    if self._selection:isActive() then
+        self._selection:toggle(book.filepath)
+        self:_refreshCoverFrame(book.filepath)
+        self:_refreshBucket()
+        return
+    end
+    self._tap_selected_fp = nil
+    self:_openBook(book)
+end
+
 -- _openBook(book, after_open_callback)  — open ReaderUI for the given book
 -- WITHOUT closing the home screen. The Reader is shown on top in UIManager's
 -- stack; when the Reader closes, Bookshelf is exposed automatically with no
@@ -3151,6 +3172,10 @@ function BookshelfWidget:_buildHero(content_w, hero_cover_w, hero_cover_h, hero_
             self._tap_selected_fp = nil
             self:_openBook(b)
         end,
+        -- A genuine double tap opens directly, skipping the stage-then-open
+        -- confirmation (#271). Inert unless the user enabled KOReader's
+        -- global double tap.
+        on_double_tap = function(b) self:_openOnDoubleTap(b) end,
         on_hold      = function(b)
             if self._selection:isActive() then
                 return true  -- suppress: no per-book menu in select mode
@@ -3433,6 +3458,10 @@ function BookshelfWidget:_buildShelfRows(items, content_w, shelf_h, PAD, n_rows)
                 bw:_previewBook(b, tap_t)
             end
         end,
+        -- Double tap on a shelf cover opens directly (#271), whether the
+        -- cover is a bare SpineWidget (collapsed) or wrapped in a titled
+        -- slot (expanded).
+        on_book_open      = function(b) bw:_openOnDoubleTap(b) end,
         on_book_hold      = function(b)
             if bw._selection:isActive() then
                 return true  -- suppress: no per-book menu in select mode
@@ -4689,6 +4718,33 @@ function BookshelfWidget:_paintOpeningEffect(fp)
                 bb:paintRect(rect.x, y_bot, dx, 1, W)
                 bb:paintRect(rect.x + rect.w - dx, y_bot, dx, 1, W)
             end
+        end
+    end
+    -- A selected cover wears the ring INSTEAD of a drop shadow (the selected
+    -- branch of _wrapCoverInCard sets no shadow_color), so erasing the ring
+    -- above left the opening cover flat and thin -- the "thicker book" cue was
+    -- lost only in the selected state (#271 follow-up). Restore the drop
+    -- shadow a non-selected cover would have, done BEFORE the flex so the
+    -- flex's lifted bands paint OVER it, exactly as the real card shadow sits
+    -- behind the cover (painting it after chopped across the lifting cover).
+    -- Method: paint the card's rounded shadow over the whole footprint, then
+    -- blit the clean cover face back on top -- only the rounded L outside the
+    -- cover survives, pixel-identical to a non-selected cover (rounded corners,
+    -- no square edges, no manual corner math). Non-selected / popup opens keep
+    -- their own real shadow untouched, so every path stays consistent.
+    if ringed and Screen.bb then
+        local sbb  = Screen.bb
+        local SO   = SpineWidget.SHADOW_OFFSET or Screen:scaleBySize(4)
+        local rad  = SpineWidget.CARD_RADIUS or Screen:scaleBySize(4)
+        local gray = SpineWidget.shadowGray and SpineWidget.shadowGray()
+        if gray then
+            pcall(function()
+                local snap = Blitbuffer.new(rect.w, rect.h, sbb:getType())
+                snap:blitFrom(sbb, 0, 0, rect.x, rect.y, rect.w, rect.h)
+                sbb:paintRoundedRect(rect.x + SO, rect.y + SO, rect.w, rect.h, gray, rad)
+                sbb:blitFrom(snap, rect.x, rect.y, 0, 0, rect.w, rect.h)
+                snap:free()
+            end)
         end
     end
     -- Paint the flex WITHOUT refreshing: the ring erase (above), the flex,
@@ -9725,13 +9781,23 @@ function BookshelfWidget:_buildBookEditTab(book, modal, avail_w, avail_h)
             return
         end
         closeModal()
-        local FileManager = require("apps/filemanager/filemanager")
-        local FileManagerBookInfo = require("apps/filemanager/filemanagerbookinfo")
-        if FileManager.instance and FileManager.instance.bookinfo then
-            FileManager.instance.bookinfo:show(book.filepath)
-        else
-            FileManagerBookInfo:new{}:show(book.filepath)
-        end
+        -- Book info needs a live FileManager: its bookinfo module carries
+        -- the `ui` context getDocProps reads (self.ui.coverbrowser). While a
+        -- reader is parked there is no FileManager, so finish the park first
+        -- (close the book, FM reborn under the shelf) then show -- same move
+        -- as the menu tap. A bare FileManagerBookInfo:new{} has no ui and
+        -- crashes in getDocProps.
+        require("lib/bookshelf_reader_park").runInFileManager(function(fm)
+            fm = fm or require("apps/filemanager/filemanager").instance
+            if fm and fm.bookinfo then
+                fm.bookinfo:show(book.filepath)
+            else
+                -- Last resort (no FM at all -- shouldn't happen once the park
+                -- has finished): a stub ui keeps getDocProps from indexing
+                -- nil, so at least the info opens rather than crashing.
+                require("apps/filemanager/filemanagerbookinfo"):new{ ui = {} }:show(book.filepath)
+            end
+        end)
     end }
 
     -- Favourite toggle keys off the default collection (Collections membership
@@ -9805,33 +9871,37 @@ function BookshelfWidget:_buildBookEditTab(book, modal, avail_w, avail_h)
 
     local delete_btn = { text = "\xE2\x9C\x95 " .. _("Delete"), callback = function()  -- ✕
         closeModal()
-        local FileManager = require("apps/filemanager/filemanager")
-        if FileManager.instance and FileManager.instance.showDeleteFileDialog then
-            FileManager.instance:showDeleteFileDialog(book.filepath, function()
-                Repo.invalidateProgressCache(book.filepath)
-                Repo.invalidateWalkCache()
-                bw:_scrubFromDrilldown(book.filepath)
-                refreshShelf()
-            end)
-        else
-            UIManager:show(require("ui/widget/confirmbox"):new{
-                text    = _("Delete file permanently?") .. "\n\n" .. book.filepath,
-                ok_text = _("Delete"),
-                ok_callback = function()
-                    if os.remove(book.filepath) then
-                        require("readhistory"):fileDeleted(book.filepath)
-                        ReadCollection:removeItem(book.filepath)
-                        Repo.invalidateProgressCache(book.filepath)
-                        Repo.invalidateWalkCache()
-                        bw:_scrubFromDrilldown(book.filepath)
-                        refreshShelf()
-                    else
-                        UIManager:show(require("ui/widget/infomessage"):new{
-                            text = _("Failed to delete file."), icon = "notice-warning" })
-                    end
-                end,
-            })
+        local function afterDelete()
+            Repo.invalidateProgressCache(book.filepath)
+            Repo.invalidateWalkCache()
+            bw:_scrubFromDrilldown(book.filepath)
+            refreshShelf()
         end
+        -- Delete goes through the FileManager's own delete dialog (sidecar +
+        -- history + collections cleanup). That needs a live FM, so finish the
+        -- park first when a reader is parked -- same rule as Show info. The
+        -- confirmbox below is a defensive last resort only (no FM at all).
+        require("lib/bookshelf_reader_park").runInFileManager(function(fm)
+            fm = fm or require("apps/filemanager/filemanager").instance
+            if fm and fm.showDeleteFileDialog then
+                fm:showDeleteFileDialog(book.filepath, afterDelete)
+            else
+                UIManager:show(require("ui/widget/confirmbox"):new{
+                    text    = _("Delete file permanently?") .. "\n\n" .. book.filepath,
+                    ok_text = _("Delete"),
+                    ok_callback = function()
+                        if os.remove(book.filepath) then
+                            require("readhistory"):fileDeleted(book.filepath)
+                            ReadCollection:removeItem(book.filepath)
+                            afterDelete()
+                        else
+                            UIManager:show(require("ui/widget/infomessage"):new{
+                                text = _("Failed to delete file."), icon = "notice-warning" })
+                        end
+                    end,
+                })
+            end
+        end)
     end }
 
     local refresh_btn = { text = _("Refresh metadata"), callback = function()
