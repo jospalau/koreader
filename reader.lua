@@ -209,7 +209,7 @@ if G_reader_settings:isTrue("apply_extra_patches") then
     --local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/screensaver-cover.lua")
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/home-collections.lua")
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/home-metadata.lua")
-    local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/reading-insights-popup.lua")
+    -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/reading-insights-popup.lua") -- In Reading insights plugin
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/kobo-style-sleepscreen-banner.lua")
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/reading-stats.lua")
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/Reading_History_Popup_Table_Plus.lua")
@@ -225,7 +225,7 @@ if G_reader_settings:isTrue("apply_extra_patches") then
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/reading-stats-popup.lua")
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/suppress-frontlight-notifications.lua")
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/typography_popup.lua")
-    local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/book_info_popup.lua")
+    -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/book_info_popup.lua") -- In Reading insights plugin
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/bookloadcover-plus.lua")
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/animation-Koreader.lua")
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/bookshelf-overlay.lua")
