@@ -1389,6 +1389,18 @@ end
 -- where you came from") is left to ReaderUI:onHome so it lands back on the
 -- FileManager, not the shelf. Returning true consumes the event; nil lets it
 -- fall through to the default handler.
+
+-- [[
+function Bookshelf:onHome()
+    if not (self.ui and self.ui.document) then return end
+    local Park = require("lib/bookshelf_reader_park")
+    -- Never do a real close to File Manager here: with the book parked,
+    -- "Home" should just flip back to the book instead of exiting for real.
+    if not Park.isParked() then return end
+    Park.unpark(_live_widget)
+    return true
+end
+
 function Bookshelf:onHome()
     if not (self.ui and self.ui.document) then return end
     if not self:_isShowing() then return end
@@ -1396,6 +1408,24 @@ function Bookshelf:onHome()
     -- Shelf visible with the reader parked underneath: "Home" means the real
     -- file manager, not the shelf already on screen (tab-callback parity).
     if Park.isParked() and Park.closeShelfToFileManager(_live_widget) then
+        return true
+    end
+    self:_safeShow()
+    return true
+end
+-- ]]
+
+function Bookshelf:onHome()
+    if not (self.ui and self.ui.document) then return end
+    local Park = require("lib/bookshelf_reader_park")
+    -- Use Park.isParked() instead of _isShowing(): the latter reports stack
+    -- membership, not visibility (see onToggleBookshelf comment above), so it
+    -- returns true even when the shelf isn't actually on screen. Only intercept
+    -- "Home" when the shelf is genuinely parked-visible over the reader.
+    if not Park.isParked() then return end
+    -- Shelf visible with the reader parked underneath: "Home" means the real
+    -- file manager, not the shelf already on screen (tab-callback parity).
+    if Park.closeShelfToFileManager(_live_widget) then
         return true
     end
     self:_safeShow()

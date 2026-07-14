@@ -378,7 +378,7 @@ local function closeOverlayWidgets()
 	for _, widget in ipairs(widgets) do
 		if widget ~= State.cover_widget then
 			local name = widget.name
-			if name == "ReaderUI" or name == "FileManager" then
+			if name == "ReaderUI" or name == "FileManager" or name == "bookshelf" then
 				break
 			end
 			local ok, err = pcall(function()
