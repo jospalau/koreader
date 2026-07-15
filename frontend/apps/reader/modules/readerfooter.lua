@@ -2482,7 +2482,7 @@ function ReaderFooter:_updateFooterText(force_repaint, full_repaint)
         else
             -- If the footer is invisible or might be hidden behind another widget, we need to repaint the full ReaderUI stack.
             UIManager:setDirty(self.view.dialog, function()
-                return self.view.currently_scrolling and "fast" or "ui", refresh_dim
+                --return self.view.currently_scrolling and "fast" or "ui", refresh_dim
             end)
         end
     end
