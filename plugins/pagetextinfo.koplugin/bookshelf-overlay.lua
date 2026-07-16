@@ -257,3 +257,33 @@ function ReaderUI:onHome()
     end
     logger.warn("[bookshelf-overlay] ReaderUI:onHome: no había original_readerui_onHome que llamar")
 end
+
+-- ---------------------------------------------------------------------------
+-- FIX: patchBookshelfOnce solo se disparaba al hacer East North
+-- (onParkAndShowBookshelf). Pero el plugin Bookshelf se auto-instancia en
+-- cuanto se abre un libro (self.bookshelf ya existe desde el arranque del
+-- lector). Si el usuario hace West South ANTES de haber aparcado nunca,
+-- BookshelfClass:onHome sigue sin parchear -> usa el onHome nativo de
+-- Bookshelf, que no muestra el MultiConfirmBox y traga el evento.
+-- Parcheamos la clase justo tras ReaderUI:init(), que es donde todos los
+-- plugins (incluido self.bookshelf) ya están instanciados, para cubrir
+-- también el primer West South de la sesión sin haber aparcado antes.
+-- ---------------------------------------------------------------------------
+local original_readerui_init = ReaderUI.init
+logger.warn("[bookshelf-overlay] original_readerui_init capturado:", tostring(original_readerui_init))
+
+function ReaderUI:init(...)
+    local ret
+    if original_readerui_init then
+        ret = original_readerui_init(self, ...)
+    end
+
+    if self.bookshelf then
+        logger.warn("[bookshelf-overlay] ReaderUI:init: self.bookshelf existe -> patchBookshelfOnce eager")
+        patchBookshelfOnce(self.bookshelf)
+    else
+        logger.warn("[bookshelf-overlay] ReaderUI:init: self.bookshelf todavía nil tras init")
+    end
+
+    return ret
+end
