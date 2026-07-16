@@ -5,11 +5,29 @@
 --
 -- 2) West South NO se reasigna: sigue siendo la acción nativa "File
 --    browser" (event Home). Cuando el libro está aparcado, SIEMPRE
---    vuelve a él en vez de cerrarlo.
+--    vuelve a él en vez de cerrarlo. Cuando NO está aparcado, se reusa el
+--    ReaderUI:onHome original (el que muestra el MultiConfirmBox de
+--    guardar progreso / TBR / salir).
+--
+-- IMPORTANTE (descubierto por logs): cuando el plugin Bookshelf ya se ha
+-- instanciado en la sesión (self.bookshelf existe), el evento "Home" NO
+-- llega directo a ReaderUI:onHome — llega primero a BookshelfClass:onHome
+-- (main.lua de bookshelf.koplugin). El onHome nativo de Bookshelf usa
+-- _isShowing()/_safeShow() y, estando el shelf no visible, no hace nada
+-- útil: simplemente "traga" el evento devolviendo true sin mostrar el
+-- MultiConfirmBox ni cerrar nada correctamente. Por eso, en la rama
+-- NOT PARKED de BookshelfClass:onHome, delegamos explícitamente en el
+-- onHome REAL de ReaderUI (capturado a nivel de módulo), usando
+-- self.ui (la instancia de ReaderUI, ver main.lua: self.ui.document)
+-- en vez de llamar al onHome nativo de Bookshelf.
+--
+-- El override de ReaderUI:onHome se deja como red de seguridad por si en
+-- algún flujo el evento SÍ llega directo a ReaderUI sin pasar por
+-- Bookshelf (p.ej. libro abierto sin que el plugin Bookshelf se haya
+-- instanciado todavía en la sesión).
 --
 -- VERSION CON LOGS: cada paso clave escribe una línea "[bookshelf-overlay]"
--- en el log de depuración, para diagnosticar por qué el segundo ciclo
--- entra/sale falla. Busca esas líneas en:
+-- en el log de depuración. Búscalas en:
 --   ☰ -> Ayuda -> Ver registro de depuración
 -- o en el archivo crash.log de la carpeta de KOReader.
 
@@ -54,6 +72,16 @@ Dispatcher:registerAction("show_bookshelf_overlay", {
 logger.warn("[bookshelf-overlay] action 'show_bookshelf_overlay' registrada")
 
 -- ---------------------------------------------------------------------------
+-- Capturamos el onHome ORIGINAL de ReaderUI (el que trae el MultiConfirmBox
+-- de guardar progreso / TBR / salir, Documento 1) a nivel de módulo, antes
+-- de que nada más lo toque. Se reusa tanto desde BookshelfClass:onHome
+-- (caso principal, ver logs) como desde el override de ReaderUI:onHome
+-- (red de seguridad).
+-- ---------------------------------------------------------------------------
+local original_readerui_onHome = ReaderUI.onHome
+logger.warn("[bookshelf-overlay] original_readerui_onHome capturado:", tostring(original_readerui_onHome))
+
+-- ---------------------------------------------------------------------------
 -- Parchea la CLASE Bookshelf (compartida por todas las instancias, presentes
 -- y futuras) UNA sola vez por arranque de KOReader. Parchear la instancia
 -- (como hacíamos antes) solo arreglaba la sesión de lectura actual: cada
@@ -73,7 +101,7 @@ local function patchBookshelfOnce(plugin)
     logger.warn("[bookshelf-overlay] patchBookshelfOnce: parcheando la CLASE Bookshelf.onHome:", tostring(BookshelfClass))
 
     local original_onHome = BookshelfClass.onHome
-    logger.warn("[bookshelf-overlay] original_onHome capturado:", tostring(original_onHome))
+    logger.warn("[bookshelf-overlay] original_onHome (Bookshelf nativo) capturado:", tostring(original_onHome))
 
     function BookshelfClass:onHome()
         logger.warn("[bookshelf-overlay] onHome() DISPARADO")
@@ -98,13 +126,30 @@ local function patchBookshelfOnce(plugin)
             return true
         end
 
-        logger.warn("[bookshelf-overlay] onHome: rama NOT PARKED -> original_onHome")
-        if original_onHome then
-            local ret = original_onHome(self)
-            logger.warn("[bookshelf-overlay] onHome: original_onHome devolvió=", tostring(ret))
+        -- NOT PARKED: el evento Home llegó al widget de Bookshelf (no a
+        -- ReaderUI directamente). El onHome nativo de Bookshelf
+        -- (original_onHome) usa _isShowing()/_safeShow() y aquí no hace
+        -- nada útil (el shelf no está visible), así que NO lo llamamos.
+        -- En su lugar delegamos en el onHome REAL de ReaderUI (el del
+        -- MultiConfirmBox), usando self.ui, que es la instancia de
+        -- ReaderUI (ver main.lua: self.ui.document).
+        logger.warn("[bookshelf-overlay] onHome: rama NOT PARKED -> delegando en ReaderUI:onHome real (self.ui)")
+        local reader_ui = self.ui
+        logger.warn("[bookshelf-overlay] onHome: reader_ui=", tostring(reader_ui))
+
+        if original_readerui_onHome and reader_ui then
+            local ret = original_readerui_onHome(reader_ui)
+            logger.warn("[bookshelf-overlay] onHome: original_readerui_onHome devolvió=", tostring(ret))
             return ret
         end
-        logger.warn("[bookshelf-overlay] onHome: no había original_onHome que llamar")
+
+        logger.warn("[bookshelf-overlay] onHome: no se pudo delegar (original_readerui_onHome=",
+            tostring(original_readerui_onHome), " reader_ui=", tostring(reader_ui), ") -> fallback original_onHome nativo")
+        if original_onHome then
+            local ret = original_onHome(self)
+            logger.warn("[bookshelf-overlay] onHome: original_onHome (fallback) devolvió=", tostring(ret))
+            return ret
+        end
     end
 
     bookshelf_patched = true
@@ -171,3 +216,44 @@ function ReaderUI:onParkAndShowBookshelf()
     return true
 end
 
+-- ---------------------------------------------------------------------------
+-- ReaderUI:onHome -- RED DE SEGURIDAD. Según los logs, el caso normal (con
+-- self.bookshelf ya instanciado) pasa por BookshelfClass:onHome de arriba,
+-- no por aquí. Este override cubre el caso en que el evento Home llegue
+-- directo a ReaderUI sin pasar por Bookshelf (p.ej. el plugin Bookshelf
+-- aún no se ha instanciado en la sesión). Mismo criterio: parked ->
+-- unpark; not parked -> onHome original (MultiConfirmBox).
+-- ---------------------------------------------------------------------------
+function ReaderUI:onHome()
+    logger.warn("[bookshelf-overlay] ReaderUI:onHome() DISPARADO (red de seguridad)")
+
+    if isDebounced("readerui_onHome") then
+        return true -- ignoramos el rebote, no tocamos nada
+    end
+
+    local ok_req, Park = pcall(require, "lib/bookshelf_reader_park")
+    logger.warn("[bookshelf-overlay] ReaderUI:onHome: require Park ok=", tostring(ok_req))
+
+    local parked = ok_req and Park and Park.isParked()
+    logger.warn("[bookshelf-overlay] ReaderUI:onHome: Park.isParked()=", tostring(parked))
+
+    if parked then
+        logger.warn("[bookshelf-overlay] ReaderUI:onHome: rama PARKED -> Park.unpark()")
+        local plugin = self.bookshelf
+        local widget = plugin and plugin._widget
+        local unpark_ok, unpark_err = pcall(function()
+            Park.unpark(widget)
+        end)
+        logger.warn("[bookshelf-overlay] ReaderUI:onHome: unpark_ok=", tostring(unpark_ok),
+            "unpark_err=", tostring(unpark_err))
+        return true
+    end
+
+    logger.warn("[bookshelf-overlay] ReaderUI:onHome: rama NOT PARKED -> original_readerui_onHome (MultiConfirmBox)")
+    if original_readerui_onHome then
+        local ret = original_readerui_onHome(self)
+        logger.warn("[bookshelf-overlay] ReaderUI:onHome: original_readerui_onHome devolvió=", tostring(ret))
+        return ret
+    end
+    logger.warn("[bookshelf-overlay] ReaderUI:onHome: no había original_readerui_onHome que llamar")
+end
