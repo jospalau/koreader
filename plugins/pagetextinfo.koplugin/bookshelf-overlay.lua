@@ -287,3 +287,38 @@ function ReaderUI:init(...)
 
     return ret
 end
+
+-- ---------------------------------------------------------------------------
+-- Mientras el libro está aparcado (Park.isParked() == true), CUALQUIER otro
+-- multiswipe/gesto que llegue a ReaderUI que no sea uno de los whitelisted
+-- (Home y ParkAndShowBookshelf, que ya tienen su propia lógica arriba) se
+-- IGNORA por completo: no ejecuta su acción original, no hace nada.
+-- Esto evita que, con el libro aparcado y el Bookshelf visible encima,
+-- gestos pensados para el lector (cambiar de capítulo, brillo, etc.) se
+-- disparen "a ciegas" sobre un documento que no se está mirando.
+-- ---------------------------------------------------------------------------
+local PARKED_EVENT_WHITELIST = {
+    Home = true,
+    ParkAndShowBookshelf = true,
+    -- añade aquí cualquier otro evento que SÍ quieras que siga funcionando
+    -- estando aparcado (p.ej. Gesture, Menu, etc.)
+}
+
+local original_readerui_handleEvent = ReaderUI.handleEvent
+logger.warn("[bookshelf-overlay] original_readerui_handleEvent capturado:", tostring(original_readerui_handleEvent))
+
+function ReaderUI:handleEvent(event)
+    local ok_req, Park = pcall(require, "lib/bookshelf_reader_park")
+    local parked = ok_req and Park and Park.isParked()
+
+    if parked and event and event.handler then
+        local event_name = event.handler:gsub("^on", "")
+        if not PARKED_EVENT_WHITELIST[event_name] then
+            logger.warn("[bookshelf-overlay] handleEvent: PARKED, ignorando evento no-whitelisted:", event_name)
+            return true -- consumido, no hace nada
+        end
+        logger.warn("[bookshelf-overlay] handleEvent: PARKED, evento whitelisted, dejando pasar:", event_name)
+    end
+
+    return original_readerui_handleEvent(self, event)
+end
