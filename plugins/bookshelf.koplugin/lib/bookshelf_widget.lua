@@ -481,7 +481,15 @@ function BookshelfWidget:handleEvent(event)
         local Park = require("lib/bookshelf_reader_park")
         if Park.isParked() then
             local rui = require("apps/reader/readerui").instance
-            if GestureZones.matchesReaderMenuZone(ev, rui) then
+            -- FIX: un multiswipe (varios trazos encadenados, p.ej. sobre
+            -- el hero card) NUNCA debe interpretarse como "zona de menú".
+            -- matchesReaderMenuZone solo mira si las coordenadas caen
+            -- dentro de una zona readermenu_*, pero esas zonas son
+            -- conceptualmente de TAP; un multiswipe que pase por esa
+            -- misma región de pantalla las activaba igualmente,
+            -- disparando Park.finishToMenu() -> cierre real del libro.
+            local is_tap = ev and ev.ges == "tap"
+            if is_tap and GestureZones.matchesReaderMenuZone(ev, rui) then
                 Park.finishToMenu()
                 return true
             end
