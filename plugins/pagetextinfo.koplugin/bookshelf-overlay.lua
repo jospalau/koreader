@@ -289,23 +289,32 @@ function ReaderUI:init(...)
 end
 
 -- ---------------------------------------------------------------------------
--- Mientras el libro está aparcado (Park.isParked() == true), CUALQUIER otro
--- multiswipe/gesto que llegue a ReaderUI que no sea uno de los whitelisted
--- (Home y ParkAndShowBookshelf, que ya tienen su propia lógica arriba) se
--- IGNORA por completo: no ejecuta su acción original, no hace nada.
--- Esto evita que, con el libro aparcado y el Bookshelf visible encima,
--- gestos pensados para el lector (cambiar de capítulo, brillo, etc.) se
--- disparen "a ciegas" sobre un documento que no se está mirando.
+-- Mientras el libro está aparcado (Park.isParked() == true), se bloquean
+-- solo los GESTOS TÁCTILES CRUDOS (tap/swipe/pan/hold/etc.) que lleguen a
+-- ReaderUI, para evitar que un toque pensado para el shelf visible encima
+-- (o un gesto "a ciegas") cambie de página/capítulo/brillo en un documento
+-- que no se está mirando. Todo lo demás (SaveSettings, eventos que abren
+-- widgets de los micromódulos como ShowCalendarView, etc.) pasa normal:
+-- una whitelist por nombre exacto se queda corta cada vez que se añade un
+-- micromódulo nuevo, así que filtramos por prefijo/substring de gesto en
+-- vez de por lista cerrada de eventos permitidos.
 -- ---------------------------------------------------------------------------
-local PARKED_EVENT_WHITELIST = {
-    Home = true,
-    ParkAndShowBookshelf = true,
-    -- añade aquí cualquier otro evento que SÍ quieras que siga funcionando
-    -- estando aparcado (p.ej. Gesture, Menu, etc.)
-}
+local GESTURE_HANDLER_PREFIXES = { "Tap", "Swipe", "Pan", "Hold", "Pinch", "Spread", "Multiswipe" }
+-- Eventos que no encajan en ningún prefijo de gesto genérico pero que en la
+-- práctica también mueven el documento parked (detectado con logging real:
+-- GoBackLink navega tras un salto de enlace/nota, causando el mismo efecto
+-- "a ciegas" que un swipe). Añadir aquí por nombre exacto según se detecten.
+local EXTRA_BLOCKED_EVENTS = { GoBackLink = true }
+
+local function isRawGestureEvent(event_name)
+    if EXTRA_BLOCKED_EVENTS[event_name] then return true end
+    for _, prefix in ipairs(GESTURE_HANDLER_PREFIXES) do
+        if event_name:find(prefix, 1, true) then return true end
+    end
+    return false
+end
 
 local original_readerui_handleEvent = ReaderUI.handleEvent
-logger.warn("[bookshelf-overlay] original_readerui_handleEvent capturado:", tostring(original_readerui_handleEvent))
 
 function ReaderUI:handleEvent(event)
     local ok_req, Park = pcall(require, "lib/bookshelf_reader_park")
@@ -313,11 +322,12 @@ function ReaderUI:handleEvent(event)
 
     if parked and event and event.handler then
         local event_name = event.handler:gsub("^on", "")
-        if not PARKED_EVENT_WHITELIST[event_name] then
-            logger.warn("[bookshelf-overlay] handleEvent: PARKED, ignorando evento no-whitelisted:", event_name)
-            return true -- consumido, no hace nada
+        print("[bookshelf-overlay] DEBUG handleEvent PARKED, event_name=", event_name)
+        if isRawGestureEvent(event_name) and event_name ~= "Home"
+                and event_name ~= "ParkAndShowBookshelf" then
+            logger.warn("[bookshelf-overlay] handleEvent: PARKED, bloqueando gesto crudo:", event_name)
+            return true
         end
-        logger.warn("[bookshelf-overlay] handleEvent: PARKED, evento whitelisted, dejando pasar:", event_name)
     end
 
     return original_readerui_handleEvent(self, event)
