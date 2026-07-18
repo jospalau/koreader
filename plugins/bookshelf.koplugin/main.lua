@@ -1036,6 +1036,11 @@ end
 -- the 1–3s onClose disk-I/O block. _suppress_close_document_show stops
 -- onCloseDocument's parallel nextTick(show) so we don't double-trigger.
 function Bookshelf:_safeShow()
+    -- For the hero card to be updated every time we show Bookshelf parked
+    -- Other option is setting local HERO_MEMO_TTL_S = 0 in bookshelf_widget.lua
+    if self._widget then
+        self._widget._hero_current_memo = nil
+    end
     if not (self.ui and self.ui.document and self.ui.onHome) then
         self:show()
         return
