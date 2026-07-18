@@ -2,7 +2,7 @@
 Reading Insights - shared popup font settings.
 
 Centralises the font choices used by both views (insights_view.lua and
-stats_view.lua), so there is exactly one "Fonts" menu and one set of
+book_stats_view.lua), so there is exactly one "Fonts" menu and one set of
 settings driving every text role in the plugin:
 
   insights_section  "Reading insights" section headers (Last week, Streaks,
@@ -15,6 +15,10 @@ settings driving every text role in the plugin:
   stats_value       "Book progress" big numbers
   stats_label       "Book progress" unit/description labels
   stats_arrow       "Book progress" chapter-bar prev/next arrow glyphs
+
+  records_value     "Records" popup row values (session/pages/streak/...)
+  records_label     "Records" popup row labels (left-hand side of each row)
+  records_small     "Records" popup sub-values (date / book title under a value)
 
 Each role has its own font *name* and *size*, independently configurable -
 unlike Colors (colors.lua), section/value/label/small are NOT shared
@@ -35,9 +39,9 @@ so a missing/renamed font file (a device without that exact bundled font)
 can never leave a role without a usable face - it just silently falls back
 towards KOReader's own default fonts instead of erroring.
 
-Loaded by main.lua via loadfile(...)( L10N ) and handed straight to both
-view modules as their third chunk argument (alongside L10N and Colors), so
-`local L10N, Colors, Fonts = ...` at the top of each view is all they need.
+Loaded by main.lua via loadfile(...)( Locale ) and handed straight to both
+view modules as their third chunk argument (alongside Locale and Colors), so
+`local Locale, Colors, Fonts = ...` at the top of each view is all they need.
 
 Exposes:
   getFace(role)          ready-to-use Font face for TextWidget/TextBoxWidget
@@ -64,22 +68,26 @@ local Menu        = require("ui/widget/menu")
 local SpinWidget  = require("ui/widget/spinwidget")
 local UIManager   = require("ui/uimanager")
 
-local L10N = ...
-local _ = L10N._
+-- Shared modules passed in by main.lua: Locale (translations), PluginUtil
+-- (plugin dir + loader) and Settings (G_reader_settings wrappers).
+local Locale, PluginUtil, Settings = ...
+local _ = Locale._
 
 -- Order (and grouping) the "Fonts" menu is built in.
 local INSIGHTS_KEYS = { "insights_section", "insights_value", "insights_label", "insights_small" }
 local STATS_KEYS     = { "stats_section", "stats_value", "stats_label", "stats_arrow" }
+local RECORDS_KEYS   = { "records_value", "records_label", "records_small" }
 local KEY_ORDER = {}
 for _, k in ipairs(INSIGHTS_KEYS) do table.insert(KEY_ORDER, k) end
 for _, k in ipairs(STATS_KEYS)     do table.insert(KEY_ORDER, k) end
+for _, k in ipairs(RECORDS_KEYS)   do table.insert(KEY_ORDER, k) end
 
 -- These match what was previously hard-coded directly in insights_view.lua
 -- (its own local getSerifFace(file, fallback_key, size) helper), so
 -- upgrading the plugin changes nothing visually until the user opens the
 -- new Fonts menu and picks something else.
 --
--- stats_view.lua's four roles never had a dedicated setting before (they
+-- book_stats_view.lua's four roles never had a dedicated setting before (they
 -- were part of the same hard-coded call sites as insights_view.lua's), so
 -- their defaults here are new, chosen a little smaller to fit the compact
 -- overlay - feel free to change them below, or via the Fonts menu.
@@ -93,6 +101,10 @@ local DEFAULTS = {
     stats_value      = { file = "NotoSans-Bold.ttf",    fallback = "tfont",             size = 26 },
     stats_label      = { file = "NotoSans-Regular.ttf", fallback = "x_smallinfofont",   size = 20 },
     stats_arrow      = { file = "NotoSans-Bold.ttf",    fallback = "tfont",             size = 22 },
+
+    records_value    = { file = "NotoSans-Bold.ttf",    fallback = "tfont",             size = 22 },
+    records_label    = { file = "NotoSans-Regular.ttf", fallback = "x_smallinfofont",   size = 20 },
+    records_small    = { file = "NotoSans-Regular.ttf", fallback = "xx_smallinfofont",  size = 15 },
 }
 
 local SETTINGS_NAME_PREFIX = "reading_insights_font_name_"
@@ -101,16 +113,11 @@ local SETTINGS_SIZE_PREFIX = "reading_insights_font_size_"
 local MIN_SIZE, MAX_SIZE = 8, 60
 
 local function readSetting(key)
-    if G_reader_settings and G_reader_settings.readSetting then
-        return G_reader_settings:readSetting(key)
-    end
-    return nil
+    return Settings.read(key, nil)
 end
 
 local function saveSetting(key, value)
-    if G_reader_settings and G_reader_settings.saveSetting then
-        G_reader_settings:saveSetting(key, value)
-    end
+    Settings.save(key, value)
 end
 
 local function normalizeName(name)
@@ -215,7 +222,7 @@ end
 
 -- Bold-weight variant of an existing role's face, at that role's current
 -- (possibly user-overridden) size. Used e.g. for the expected-finish day
--- number in the per-book calendar (stats_view.lua), so that one occasional
+-- number in the per-book calendar (book_calendar_view.lua), so that one occasional
 -- bold day number doesn't need a whole separate font role/menu entry of
 -- its own - it just piggybacks on whatever size the caller's role is set
 -- to, forcing NotoSans-Bold.ttf instead of that role's own file.
@@ -246,15 +253,10 @@ local labelFor
 -- instead of forcing the user to type an exact file name/alias.
 local FONT_EXTENSIONS = { ttf = true, otf = true, ttc = true, otc = true }
 
-local function pluginRootDir()
-    local src = debug.getinfo(1, "S").source
-    return src:match("^@(.*/)") or "./"
-end
-
 -- The plugin lives at <koreader_root>/plugins/<name>.koplugin/, so two
 -- levels up is KOReader's own bundled "fonts" directory.
 local function koreaderFontsDir()
-    return pluginRootDir() .. "../../fonts/"
+    return PluginUtil.dir .. "../../fonts/"
 end
 
 -- Scans KOReader's bundled fonts dir plus the user data dir's "fonts"
@@ -371,6 +373,10 @@ function labelFor(key)
         stats_value      = _("Values (big numbers)"),
         stats_label      = _("Labels"),
         stats_arrow      = _("Chapter-bar arrows"),
+
+        records_value    = _("Values (big numbers)"),
+        records_label    = _("Labels"),
+        records_small    = _("Sub-values (date / book title)"),
     }
     return labels[key] or key
 end
@@ -513,6 +519,11 @@ function M.buildMenu(on_change)
             text = _("Book progress"),
             keep_menu_open = true,
             sub_item_table = groupSubItemTable(STATS_KEYS, on_change),
+        },
+        {
+            text = _("Records"),
+            keep_menu_open = true,
+            sub_item_table = groupSubItemTable(RECORDS_KEYS, on_change),
         },
     }
     table.insert(sub_item_table, {
