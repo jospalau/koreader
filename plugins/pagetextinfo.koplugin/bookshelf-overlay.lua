@@ -188,6 +188,20 @@ function ReaderUI:onParkAndShowBookshelf()
     logger.warn("[bookshelf-overlay] Park.enabled forzado a true (temporalmente)")
 
     local ok, err = pcall(function()
+        local rui = plugin and plugin.ui
+        -- pagemap_current_page_label (stable page numbers) only gets written
+        -- by ReaderPageMap:onCloseDocument, which hot-parking deliberately
+        -- never fires (that's the whole point of not closing). Without this,
+        -- the hero's "page N of M" stays frozen at whatever it was on the
+        -- last REAL close/open. Mirror onCloseDocument's own write here.
+        pcall(function()
+            local pm = rui.pagemap
+            if pm and pm.has_pagemap and pm.use_page_labels then
+                rui.doc_settings:saveSetting("pagemap_last_page_label", pm:getLastPageLabel(true))
+                rui.doc_settings:saveSetting("pagemap_current_page_label",
+                    select(1, pm:getCurrentPageLabel(true)))
+            end
+        end)
         if not plugin._widget then
             -- Libro abierto directo desde el File Manager real: el widget
             -- de Bookshelf no existe todavía en esta sesión, así que no hay
@@ -200,6 +214,11 @@ function ReaderUI:onParkAndShowBookshelf()
             local park_ok = Park.park(plugin, plugin._widget)
             logger.warn("[bookshelf-overlay] Park.park manual tras cold-create =", tostring(park_ok))
         else
+            -- -- For the hero card to be updated every time we show Bookshelf parked
+            -- -- Other option is setting local HERO_MEMO_TTL_S = 0 in bookshelf_widget.lua
+            if self._widget then
+                self._widget._hero_current_memo = nil
+            end
             plugin:onToggleBookshelf() -- abre y aparca / o vuelve al libro si ya estaba aparcado
         end
     end)
