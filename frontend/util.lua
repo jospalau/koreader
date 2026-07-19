@@ -1700,12 +1700,13 @@ function util.getListAll()
                                 end
 
                                 local book_status = BookList.getBookStatus(fullpath)
-                                local in_history =  ReadHistory:getIndexByFile(fullpath)
-                                -- local has_sidecar_file = DocSettings:hasSidecarFile(fullpath)
-                                if book_status == "mbr" and in_history == nil then
-                                    book_status = "new"
-                                end
-                                table.insert(files, {FileChooser:getListItem(nil, f, fullpath, attributes, collate).path, book_status, ryear, rmonth, rday})
+                                files[#files + 1] = {
+                                    fullpath,
+                                    book_status,
+                                    ryear,
+                                    rmonth,
+                                    rday
+                                }
                                 -- files[#files + 1] = FileChooser:getListItem(nil, f, fullpath, attributes, collate).path
                             end
                     end

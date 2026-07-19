@@ -291,8 +291,11 @@ end
 -- but I define it and use it explicitly prefixing _G. on the front
 local util = require("util")
 if G_reader_settings:isTrue("top_manager_infmandhistory") then
-    _G.all_files = util.getListAll()
-    util.generateStats()
+    local util = require("util")
+    UIManager:scheduleIn(5, function()
+        _G.all_files = util.getListAll()
+        util.generateStats()
+    end)
 end
 
 _G.calibre_data = {}
