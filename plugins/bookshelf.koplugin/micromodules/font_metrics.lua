@@ -1,10 +1,10 @@
 --[[
-Start-menu / hero micro-module: font size vs x-height.
-Shows the current reading font size on the left, and the rendered
-x-height (in mm) with its comfort-range classification on the right.
-Mirrors the calculation in apps/reader/modules/topbar.lua
-(TopBar:getXHeightRangeLabel), but computed standalone here so it
-doesn't depend on the topbar instance.
+Start-menu / hero micro-module: font size, x-height, and leading (airy) info.
+Three columns: font size (left), x-height with comfort range (center),
+and leading factor with its classification (right, e.g. "airy").
+Mirrors the calculations in apps/reader/modules/topbar.lua
+(TopBar:getXHeightRangeLabel and TopBar:classifyLeading), computed
+standalone here so it doesn't depend on the topbar instance.
 Works offline. Only meaningful while a document is open.
 ]]
 local _ = require("lib/bookshelf_i18n").gettext
@@ -22,8 +22,18 @@ local function classifyXHeight(xh_mm)
     end
 end
 
--- Returns size_pt (number), x_height_mm (number), label_key, label_text
--- or nil if there's no open document / face couldn't be loaded.
+-- Idéntico a TopBar:classifyLeading
+local function classifyLeading(lf, x_height, ascender, descender)
+    if not x_height or x_height == 0 then return "invalid", _("Invalid") end
+    local safe_min = (ascender + descender) / x_height
+    if lf < safe_min then return "collision", _("Collision")
+    elseif lf < safe_min + 0.15 then return "compact", _("Compact")
+    elseif lf < safe_min + 0.4 then return "balanced", _("Balanced")
+    elseif lf < safe_min + 0.6 then return "airy", _("Airy")
+    else return "very_airy", _("Very airy")
+    end
+end
+
 local function getFontMetrics()
     local ok, ui = pcall(function()
         return require("apps/reader/readerui").instance
@@ -50,14 +60,21 @@ local function getFontMetrics()
         local x_height = Math.round(face_base.ftsize:getXHeight() * size_px)
         if not x_height or x_height == 0 then return nil end
         local x_height_mm = Math.round((x_height * (25.4 / display_dpi) * 100)) / 100
+        local xheight_key, xheight_text = classifyXHeight(x_height_mm)
 
-        local label_key, label_text = classifyXHeight(x_height_mm)
+        local line_spacing_factor = ui.document.configurable.line_spacing / 100
+        local x_height2, ascender, descender = face_base.ftsize:getAscDesc()
+        local leading_factor = math.floor(((1.2 * size_px * line_spacing_factor) / x_height) * 100) / 100
+        local leading_key, leading_text = classifyLeading(leading_factor, x_height2, ascender, descender)
 
         return {
-            size_pt     = size_pt,
-            x_height_mm = x_height_mm,
-            label_key   = label_key,
-            label_text  = label_text,
+            size_pt        = size_pt,
+            x_height_mm    = x_height_mm,
+            xheight_key    = xheight_key,
+            xheight_text   = xheight_text,
+            leading_factor = leading_factor,
+            leading_key    = leading_key,
+            leading_text   = leading_text,
         }
     end)
 
@@ -80,7 +97,7 @@ end
 return {
     key     = "xheight_size",
     title   = _("Font size / x-height"),
-    summary = _("Current font size and rendered x-height comfort range. Works offline while reading."),
+    summary = _("Current font size, x-height comfort range, and leading. Works offline while reading."),
 
     render = function(ctx)
         local width, scale_pct = ctx.width, ctx.scale
@@ -108,66 +125,61 @@ return {
             }
         end
 
-        local size_str   = string.format("%.1fpt", metrics.size_pt)
+        local size_str    = string.format("%.1fpt", metrics.size_pt)
         local xheight_str = string.format("%.2fmm", metrics.x_height_mm)
+        local leading_str = string.format("%.2f", metrics.leading_factor)
 
-        local gap    = sc(24)
-        local col_w  = math.floor((mw - gap) / 2)
-        local col_w2 = mw - gap - col_w
+        local gap    = sc(16)
+        local col_w  = math.floor((mw - gap * 2) / 3)
+        local col_w3 = mw - gap * 2 - col_w * 2
 
-        local size_sz_fit    = fitFontSize(Fonts, size_str, sc(40), sc(18), col_w,  true)
-        local xheight_sz_fit = fitFontSize(Fonts, xheight_str, sc(40), sc(18), col_w2, true)
-        local big_sz         = math.min(size_sz_fit, xheight_sz_fit)
+        local size_sz_fit    = fitFontSize(Fonts, size_str, sc(32), sc(14), col_w, true)
+        local xheight_sz_fit = fitFontSize(Fonts, xheight_str, sc(32), sc(14), col_w, true)
+        local leading_sz_fit = fitFontSize(Fonts, leading_str, sc(32), sc(14), col_w3, true)
+        local big_sz         = math.min(size_sz_fit, xheight_sz_fit, leading_sz_fit)
         local big_face, big_bold     = Fonts:getFace("cfont", big_sz, {bold=true})
-        local label_face, label_bold = Fonts:getFace("cfont", sc(20), {bold=true})
+        local label_face, label_bold = Fonts:getFace("cfont", sc(16), {bold=true})
 
-        -- Color del label de la derecha según lo cómodo que sea el x-height
-        local xheight_label_color = SM.COLOR_MUTED
-        if metrics.label_key == "perfect" and SM.COLOR_SUCCESS then
-            xheight_label_color = SM.COLOR_SUCCESS
-        elseif metrics.label_key ~= "perfect" and SM.COLOR_WARNING then
-            xheight_label_color = SM.COLOR_WARNING
+        local function labelColor(is_good)
+            if is_good and SM.COLOR_SUCCESS then
+                return SM.COLOR_SUCCESS
+            elseif not is_good and SM.COLOR_WARNING then
+                return SM.COLOR_WARNING
+            end
+            return SM.COLOR_MUTED
         end
 
-        local size_col = VerticalGroup:new{
-            align = "center",
-            TextWidget:new{
-                text      = size_str,
-                face      = big_face,
-                bold      = big_bold,
-                fgcolor   = BLACK,
-                max_width = col_w,
-            },
-            VerticalSpan:new{ width = sc(2) },
-            TextWidget:new{
-                text      = _("Font size"),
-                face      = label_face,
-                bold      = label_bold,
-                fgcolor   = SM.COLOR_MUTED,
-                max_width = col_w,
-            },
-        }
+        local xheight_label_color = labelColor(metrics.xheight_key == "perfect")
+        local leading_label_color = labelColor(
+            metrics.leading_key == "balanced" or metrics.leading_key == "airy"
+        )
 
-        local xheight_col = VerticalGroup:new{
-            align = "center",
-            TextWidget:new{
-                text      = xheight_str,
-                face      = big_face,
-                bold      = big_bold,
-                fgcolor   = BLACK,
-                max_width = col_w2,
-            },
-            VerticalSpan:new{ width = sc(2) },
-            TextWidget:new{
-                text      = metrics.label_text,
-                face      = label_face,
-                bold      = label_bold,
-                fgcolor   = xheight_label_color,
-                max_width = col_w2,
-            },
-        }
+        local function makeCol(value_str, label_text, label_color, w)
+            return VerticalGroup:new{
+                align = "center",
+                TextWidget:new{
+                    text      = value_str,
+                    face      = big_face,
+                    bold      = big_bold,
+                    fgcolor   = BLACK,
+                    max_width = w,
+                },
+                VerticalSpan:new{ width = sc(2) },
+                TextWidget:new{
+                    text      = label_text,
+                    face      = label_face,
+                    bold      = label_bold,
+                    fgcolor   = label_color,
+                    max_width = w,
+                },
+            }
+        end
 
-        local max_h = math.max(size_col:getSize().h, xheight_col:getSize().h)
+        local size_col    = makeCol(size_str, _("Font size"), SM.COLOR_MUTED, col_w)
+        local xheight_col = makeCol(xheight_str, metrics.xheight_text, xheight_label_color, col_w)
+        local leading_col = makeCol(leading_str, metrics.leading_text, leading_label_color, col_w3)
+
+        local max_h = math.max(size_col:getSize().h, xheight_col:getSize().h, leading_col:getSize().h)
 
         return HorizontalGroup:new{
             align = "top",
@@ -177,8 +189,13 @@ return {
             },
             HorizontalSpan:new{ width = gap },
             CenterContainer:new{
-                dimen = Geom:new{ w = col_w2, h = max_h },
+                dimen = Geom:new{ w = col_w, h = max_h },
                 xheight_col,
+            },
+            HorizontalSpan:new{ width = gap },
+            CenterContainer:new{
+                dimen = Geom:new{ w = col_w3, h = max_h },
+                leading_col,
             },
         }
     end,
