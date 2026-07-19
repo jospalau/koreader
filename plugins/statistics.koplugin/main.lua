@@ -602,12 +602,12 @@ local STATISTICS_DB_WPM = [[
 
 function ReaderStatistics:createDB(conn)
     -- Make it WAL, if possible
-    if Device:canUseWAL() then
-        conn:exec("PRAGMA journal_mode=WAL;")
-    else
-        conn:exec("PRAGMA journal_mode=TRUNCATE;")
-    end
-
+    -- if Device:canUseWAL() then
+    --     conn:exec("PRAGMA journal_mode=WAL;")
+    -- else
+    --     conn:exec("PRAGMA journal_mode=TRUNCATE;")
+    -- end
+    conn:exec("PRAGMA journal_mode=DELETE;")
     local sql_stmt = [[
         -- book
         CREATE TABLE IF NOT EXISTS book
