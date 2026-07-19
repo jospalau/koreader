@@ -10390,7 +10390,10 @@ function BookshelfWidget:_buildBookEditTab(book, modal, avail_w, avail_h)
                         },
                     },
                 }
-                btSection(_("TBR order"), tbr_rows)
+                btSection(
+                    T(_("TBR order (%1/%2)"), cur_idx or 0, #tbr_items),
+                    tbr_rows
+                )
             end
         end
         -- 4. Hardcover link (brand name -> heading not translated). Edition text
