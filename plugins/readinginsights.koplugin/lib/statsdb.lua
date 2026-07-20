@@ -39,7 +39,7 @@ local db_path = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
 
 -- Same PRAGMAs every opener used before: WAL journalling, a modest page
 -- cache, and in-memory temp tables, for snappy read-mostly access.
-local PRAGMAS = "PRAGMA journal_mode=WAL; PRAGMA cache_size=2000; PRAGMA temp_store=MEMORY;"
+local PRAGMAS = "PRAGMA journal_mode=DELETE; PRAGMA cache_size=2000; PRAGMA temp_store=MEMORY;"
 
 function M.path()
     return db_path
