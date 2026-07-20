@@ -2891,61 +2891,105 @@ end
 -- browser's "View in book" uses to jump to a position after opening.
 function BookshelfWidget:_openBook(book, after_open_callback)
     if not book or not book.filepath then return end
-    -- Stale records (Send-to-Kindle moved/removed the file after BIM cached
-    -- the path) crash KOReader's filemanagerbookinfo:show via lfs.attributes
-    -- on nil. ReaderUI:showReader nil-checks itself, but presenting a "file
-    -- missing" toast here is friendlier than its silent no-op.
-    -- The path to actually hand ReaderUI: a real file on disk. For Kobo virtual
-    -- records (kobo.koplugin) the path is a KOBO_VIRTUAL:// URI with no real file,
-    -- so resolve it through the plugin (decrypting on demand) first -- passing the
-    -- virtual path straight to showReader silently fails, as its showReader patch
-    -- matches a different scheme (#203).
-    local open_path = book.filepath
-    if book.is_kobo then
-        local ok_kobo, KoboSource = pcall(require, "lib/bookshelf_kobo_source")
-        local real = ok_kobo and KoboSource and KoboSource.realPathForOpen(book.filepath) or nil
-        if not real then
-            UIManager:show(require("ui/widget/infomessage"):new{
-                text    = _("Couldn't open this Kobo book."),
-                timeout = 3,
-            })
+
+    local function proceed()
+        -- Stale records (Send-to-Kindle moved/removed the file after BIM cached
+        -- the path) crash KOReader's filemanagerbookinfo:show via lfs.attributes
+        -- on nil. ReaderUI:showReader nil-checks itself, but presenting a "file
+        -- missing" toast here is friendlier than its silent no-op.
+        -- The path to actually hand ReaderUI: a real file on disk. For Kobo virtual
+        -- records (kobo.koplugin) the path is a KOBO_VIRTUAL:// URI with no real file,
+        -- so resolve it through the plugin (decrypting on demand) first -- passing the
+        -- virtual path straight to showReader silently fails, as its showReader patch
+        -- matches a different scheme (#203).
+        local open_path = book.filepath
+        if book.is_kobo then
+            local ok_kobo, KoboSource = pcall(require, "lib/bookshelf_kobo_source")
+            local real = ok_kobo and KoboSource and KoboSource.realPathForOpen(book.filepath) or nil
+            if not real then
+                UIManager:show(require("ui/widget/infomessage"):new{
+                    text    = _("Couldn't open this Kobo book."),
+                    timeout = 3,
+                })
+                return
+            end
+            -- Map the decrypted /tmp copy back to this virtual book so the hero can
+            -- show it as recently-opened (#203 pt3).
+            if Repo.noteKoboOpen then Repo.noteKoboOpen(real, book) end
+            -- Opening feedback at TAP time (the Kobo readiness poll below can
+            -- take seconds): flush pending paints so the capture sees current
+            -- pixels, then squeeze the tapped cover.
+            UIManager:forceRePaint()
+            pcall(function() self:_paintOpeningEffect(book.filepath) end)
+            -- The decrypted copy can still be mid-write when realPathForOpen returns
+            -- (#203); opening an empty file silently failed and needed the "open
+            -- another, come back" dance. Wait until it has a size -- polling ~1s up
+            -- to 5s behind a notice -- then open, or show a clear try-again message.
+            self:_openKoboWhenReady(real, after_open_callback)
             return
+        else
+            -- Stale records (Send-to-Kindle moved/removed the file after BIM cached
+            -- the path) crash filemanagerbookinfo:show via lfs.attributes on nil; a
+            -- "file missing" toast is friendlier than a silent no-op.
+            local lfs = require("libs/libkoreader-lfs")
+            if lfs.attributes(book.filepath, "mode") ~= "file" then
+                UIManager:show(require("ui/widget/infomessage"):new{
+                    text    = _("File no longer exists. The bookshelf entry is stale."),
+                    timeout = 3,
+                })
+                return
+            end
         end
-        -- Map the decrypted /tmp copy back to this virtual book so the hero can
-        -- show it as recently-opened (#203 pt3).
-        if Repo.noteKoboOpen then Repo.noteKoboOpen(real, book) end
-        -- Opening feedback at TAP time (the Kobo readiness poll below can
-        -- take seconds): flush pending paints so the capture sees current
-        -- pixels, then squeeze the tapped cover.
+        -- Opening feedback: flush pending paints so the capture sees current
+        -- pixels, then squeeze the tapped cover (validated against this book;
+        -- no-op when the tap didn't land on a visible cover). Painted before
+        -- the launch so it also precedes an unpark splice - the squeeze then
+        -- reads as the opening motion completing into the page.
         UIManager:forceRePaint()
         pcall(function() self:_paintOpeningEffect(book.filepath) end)
-        -- The decrypted copy can still be mid-write when realPathForOpen returns
-        -- (#203); opening an empty file silently failed and needed the "open
-        -- another, come back" dance. Wait until it has a size -- polling ~1s up
-        -- to 5s behind a notice -- then open, or show a clear try-again message.
-        self:_openKoboWhenReady(real, after_open_callback)
-        return
-    else
-        -- Stale records (Send-to-Kindle moved/removed the file after BIM cached
-        -- the path) crash filemanagerbookinfo:show via lfs.attributes on nil; a
-        -- "file missing" toast is friendlier than a silent no-op.
-        local lfs = require("libs/libkoreader-lfs")
-        if lfs.attributes(book.filepath, "mode") ~= "file" then
-            UIManager:show(require("ui/widget/infomessage"):new{
-                text    = _("File no longer exists. The bookshelf entry is stale."),
-                timeout = 3,
-            })
-            return
-        end
+        self:_launchReader(open_path, after_open_callback)
     end
-    -- Opening feedback: flush pending paints so the capture sees current
-    -- pixels, then squeeze the tapped cover (validated against this book;
-    -- no-op when the tap didn't land on a visible cover). Painted before
-    -- the launch so it also precedes an unpark splice - the squeeze then
-    -- reads as the opening motion completing into the page.
-    UIManager:forceRePaint()
-    pcall(function() self:_paintOpeningEffect(book.filepath) end)
-    self:_launchReader(open_path, after_open_callback)
+
+    -- Confirm-before-open: same idiom as FileManager's own MBR/TBR/finished
+    -- prompt, ported here so it fires from Bookshelf taps too (spine cover,
+    -- hero card, double-tap) since they all funnel through this function
+    -- rather than filemanagerutil.openFile.
+    local util = require("util")
+    if G_reader_settings:isTrue("top_manager_infmandhistory")
+            and book.filepath
+            and util.getFileNameSuffix(book.filepath) == "epub"
+            and _G.all_files
+            and _G.all_files[book.filepath]
+            and (_G.all_files[book.filepath].status == "mbr"
+                or _G.all_files[book.filepath].status == "tbr"
+                or _G.all_files[book.filepath].status == "new"
+                or _G.all_files[book.filepath].status == "complete") then
+        local MultiConfirmBox = require("ui/widget/multiconfirmbox")
+        local status = _G.all_files[book.filepath].status
+        local text = ", do you want to open it?"
+        if status == "mbr" then
+            text = "Book in MBR" .. text
+        elseif status == "tbr" then
+            text = "Book in TBR" .. text
+        elseif status == "new" then
+            text = "Book not opened" .. text
+        else
+            text = "Book finished" .. text
+        end
+        UIManager:show(MultiConfirmBox:new{
+            text = text,
+            choice1_text = _("Yes"),
+            choice1_callback = function()
+                proceed()
+            end,
+            choice2_text = _("Do not open it"),
+            choice2_callback = function() end,
+            cancel_callback = function() end,
+        })
+        return
+    end
+
+    proceed()
 end
 
 -- Hand a real on-disk path to the reader after the pre-read bookkeeping. Shared
