@@ -120,23 +120,14 @@ msgstr "Seite gelesen"
 msgid "pages read"
 msgstr "Seiten gelesen"
 
-msgid "week in a row"
-msgstr "Woche in Folge"
+msgid "week"
+msgstr "Woche"
 
-msgid "weeks in a row"
-msgstr "Wochen in Folge"
+msgid "weeks"
+msgstr "Wochen"
 
-msgid "day in a row"
-msgstr "Tag in Folge"
-
-msgid "days in a row"
-msgstr "Tage in Folge"
-
-msgid "No weekly streak"
-msgstr "Keine wöchentliche Serie"
-
-msgid "No daily streak"
-msgstr "Keine tägliche Serie"
+msgid "No streak"
+msgstr "Keine Serie"
 
 msgid "Current streak"
 msgstr "Aktuelle Serie"
@@ -170,6 +161,39 @@ msgstr "%1 - 1 Buch gelesen %2"
 
 msgid "%1 - books read %2"
 msgstr "%1 - Bücher gelesen %2"
+
+msgid "Reading goal"
+msgstr "Leseziel"
+
+msgid "%1 - reading goal"
+msgstr "%1 - Leseziel"
+
+msgid "book finished"
+msgstr "gelesenes Buch"
+
+msgid "books finished"
+msgstr "gelesene Bücher"
+
+msgid "book goal"
+msgstr "Buchziel"
+
+msgid "books goal"
+msgstr "Bücherziel"
+
+msgid "%1 - book finished %2"
+msgstr "%1 - 1 Buch beendet %2"
+
+msgid "%1 - books finished %2"
+msgstr "%1 - Bücher beendet %2"
+
+msgid "No books finished in %1"
+msgstr "Keine Bücher beendet in %1"
+
+msgid "Mark book finished - %1"
+msgstr "Buch als beendet markieren - %1"
+
+msgid "No books read in this year"
+msgstr "In diesem Jahr keine Bücher gelesen"
 
 msgid "Reloading data..."
 msgstr "Daten werden neu geladen..."
@@ -252,8 +276,6 @@ msgstr "Durchschnittlich gelesene Seiten pro Tag der letzten 8 Wochen"
 msgid "No reading data in the last 8 weeks"
 msgstr "Keine Lesedaten in den letzten 8 Wochen"
 
-msgid "total reading time"
-msgstr "Gesamte Lesezeit"
 
 msgid "avg time/day"
 msgstr "Ø Zeit/Tag"
@@ -800,6 +822,9 @@ msgstr "Maximale Aktivität (100 %)"
 msgid "Show long durations (24h+) as days"
 msgstr "Lange Zeitspannen (24 Std. oder mehr) als Tage anzeigen"
 
+msgid "Date format"
+msgstr "Datumsformat"
+
 msgid "Book calendar cell content"
 msgstr "Inhalt der Buchkalenderzellen"
 
@@ -865,3 +890,110 @@ msgstr "Rekorde anzeigen"
 
 msgid "Sub-values (date / book title)"
 msgstr "Unterwerte (Datum / Buchtitel)"
+
+
+
+msgid "Reading goal section"
+msgstr "Bereich „Leseziel“"
+
+msgid "Shows the number of books finished this year next to your yearly goal. Long press the goal value to change it."
+msgstr "Zeigt die Anzahl der in diesem Jahr beendeten Bücher neben dem Jahresziel. Langes Drücken auf den Zielwert ändert ihn."
+
+msgid "book to read"
+msgstr "Buch als Ziel"
+
+msgid "books to read"
+msgstr "Bücher als Ziel"
+
+msgid "* = changed by you"
+msgstr "* = von dir geändert"
+
+msgid "You changed 1 book. Go back?"
+msgstr "Du hast 1 Buch geändert. Zurück?"
+
+msgid "You changed %d books. Go back?"
+msgstr "Du hast %d Bücher geändert. Zurück?"
+
+
+msgid "Keep editing"
+msgstr "Weiter bearbeiten"
+
+msgid "Automatic"
+msgstr "Automatisch"
+
+msgid "Sizes the Reading insights bar charts so the page fits the screen without a scroll bar."
+msgstr "Passt die Balkendiagramme der Lesestatistik so an, dass die Seite ohne Bildlaufleiste auf den Bildschirm passt."
+
+msgid "Bar chart height"
+msgstr "Balkendiagrammhöhe"
+
+msgid "Last week"
+msgstr "Letzte Woche"
+
+msgid "Months"
+msgstr "Monate"
+
+msgid "Total read"
+msgstr "Insgesamt gelesen"
+
+
+msgid "Last read (newest first)"
+msgstr "Zuletzt gelesen (neueste zuerst)"
+
+msgid "Last read (oldest first)"
+msgstr "Zuletzt gelesen (älteste zuerst)"
+
+msgid "Title (A to Z)"
+msgstr "Titel (A bis Z)"
+
+msgid "Title (Z to A)"
+msgstr "Titel (Z bis A)"
+
+msgid "Books finished in %1"
+msgstr "Beendete Bücher %1"
+
+msgid "Mark books finished"
+msgstr "Bücher als beendet markieren"
+
+
+
+msgid "Add book"
+msgstr "Buch hinzufügen"
+
+msgid "Edit book"
+msgstr "Buch bearbeiten"
+
+msgid "Edit"
+msgstr "Bearbeiten"
+
+msgid "Delete"
+msgstr "Löschen"
+
+msgid "Delete \"%1\"?"
+msgstr "Löschen: \"%1\"?"
+
+msgid "Title"
+msgstr "Titel"
+
+msgid "Author"
+msgstr "Autor"
+
+msgid "Please enter a title"
+msgstr "Bitte einen Titel eingeben"
+
+
+
+msgid "Date read (%1)"
+msgstr "Lesedatum (%1)"
+
+msgid "Please enter the date as %1"
+msgstr "Bitte das Datum als %1 eingeben"
+
+msgid "Reload data"
+msgstr "Daten neu laden"
+
+msgid "Add books manually"
+msgstr "Bücher manuell hinzufügen"
+
+msgid "Add books manually - %1"
+msgstr "Bücher manuell hinzufügen - %1"
