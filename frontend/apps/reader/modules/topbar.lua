@@ -1772,7 +1772,7 @@ function TopBar:toggleBar(light_on)
             if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
                 self.ignore_corners = "\u{F0F6}"
             else
-                self.ignore_corners = "🔒"
+                self.ignore_corners = "\u{EA3D}"
             end
         else
             self.ignore_corners = ""
@@ -1918,7 +1918,7 @@ function TopBar:toggleBar(light_on)
             if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
                 self.ignore_corners = "\u{F0F6}"
             else
-                self.ignore_corners = "🔒"
+                self.ignore_corners = "\u{EA3D}"
             end
         else
             self.ignore_corners = ""
