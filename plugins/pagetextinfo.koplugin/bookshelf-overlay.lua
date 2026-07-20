@@ -202,26 +202,25 @@ function ReaderUI:onParkAndShowBookshelf()
                     select(1, pm:getCurrentPageLabel(true)))
             end
         end)
-        plugin:onToggleBookshelf()
-        -- if not plugin._widget then
-        --     -- Libro abierto directo desde el File Manager real: el widget
-        --     -- de Bookshelf no existe todavía en esta sesión, así que no hay
-        --     -- nada sobre lo que "aparcar" (_raiseInPlace necesita el
-        --     -- widget ya en el stack). Lo creamos/mostramos nosotros mismos
-        --     -- (show() no toca el documento ni el lector, solo lo tapa
-        --     -- encima) y luego registramos el park a mano.
-        --     logger.warn("[bookshelf-overlay] plugin._widget es nil -> cold-create via plugin:show()")
-        --     plugin:show()
-        --     local park_ok = Park.park(plugin, plugin._widget)
-        --     logger.warn("[bookshelf-overlay] Park.park manual tras cold-create =", tostring(park_ok))
-        -- else
-        --     -- -- For the hero card to be updated every time we show Bookshelf parked
-        --     -- -- Other option is setting local HERO_MEMO_TTL_S = 0 in bookshelf_widget.lua
-        --     if self._widget then
-        --         self._widget._hero_current_memo = nil
-        --     end
-        --     plugin:onToggleBookshelf() -- abre y aparca / o vuelve al libro si ya estaba aparcado
-        -- end
+        if not plugin._widget then
+            -- Libro abierto directo desde el File Manager real: el widget
+            -- de Bookshelf no existe todavía en esta sesión, así que no hay
+            -- nada sobre lo que "aparcar" (_raiseInPlace necesita el
+            -- widget ya en el stack). Lo creamos/mostramos nosotros mismos
+            -- (show() no toca el documento ni el lector, solo lo tapa
+            -- encima) y luego registramos el park a mano.
+            logger.warn("[bookshelf-overlay] plugin._widget es nil -> cold-create via plugin:show()")
+            plugin:show()
+            local park_ok = Park.park(plugin, plugin._widget)
+            logger.warn("[bookshelf-overlay] Park.park manual tras cold-create =", tostring(park_ok))
+        else
+            -- -- For the hero card to be updated every time we show Bookshelf parked
+            -- -- Other option is setting local HERO_MEMO_TTL_S = 0 in bookshelf_widget.lua
+            if self._widget then
+                self._widget._hero_current_memo = nil
+            end
+            plugin:onToggleBookshelf() -- abre y aparca / o vuelve al libro si ya estaba aparcado
+        end
     end)
 
     Park.enabled = original_enabled
