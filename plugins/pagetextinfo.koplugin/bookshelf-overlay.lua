@@ -210,6 +210,11 @@ function ReaderUI:onParkAndShowBookshelf()
             -- (show() no toca el documento ni el lector, solo lo tapa
             -- encima) y luego registramos el park a mano.
             logger.warn("[bookshelf-overlay] plugin._widget es nil -> cold-create via plugin:show()")
+            pcall(function() rui:saveSettings() end)   -- flush a disco PRIMERO
+            local ok_repo, Repo = pcall(require, "lib/bookshelf_book_repository")
+            if ok_repo and Repo and Repo.invalidateProgressCache then
+                Repo.invalidateProgressCache(rui.document.file)
+            end
             plugin:show()
             local park_ok = Park.park(plugin, plugin._widget)
             logger.warn("[bookshelf-overlay] Park.park manual tras cold-create =", tostring(park_ok))
