@@ -749,6 +749,8 @@ function MenuBar:init()
                 icon = config_options[c].icon,
                 width = icon_width,
                 height = icon_height,
+                padding_top = Size.padding.default,
+                padding_bottom = Size.padding.default,
                 callback = function()
                     self.config_dialog:handleEvent(Event:new("ShowConfigPanel", c))
                 end,
@@ -760,7 +762,8 @@ function MenuBar:init()
     local available_width = Screen:getWidth() - icons_width
     -- local padding = math.floor(available_width / #self.menu_items / 2) -- all for padding
     -- local padding = math.floor(available_width / #self.menu_items / 2 / 2) -- half padding, half spacing ?
-    local padding = math.min(math.floor(available_width / #self.menu_items / 2), Screen:scaleBySize(20)) -- as in TouchMenuBar
+    -- local padding = math.min(math.floor(available_width / #self.menu_items / 2), Screen:scaleBySize(20)) -- as in TouchMenuBar
+    local padding = math.floor(available_width / #self.menu_items / 2)
     if padding > 0 then
         for c = 1, #self.menu_items do
             self.menu_items[c].padding_left = padding

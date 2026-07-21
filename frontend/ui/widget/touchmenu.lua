@@ -344,6 +344,8 @@ function TouchMenuBar:init()
             callback = nil,
             padding_left = icon_padding,
             padding_right = icon_padding,
+            padding_top = Size.padding.default,
+            padding_bottom = Size.padding.default,
             menu = self.menu,
         }
 
