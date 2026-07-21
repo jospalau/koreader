@@ -357,6 +357,10 @@ function StartMenu:init()
     if Device:isTouchDevice() then
         self.ges_events = {
             TapDismiss = { GestureRange:new{ ges = "tap", range = self.dimen } },
+            -- A swipe anywhere while the start menu is open always dismisses it,
+            -- regardless of where it lands (root panel, flyout, or pager) — unlike
+            -- a tap, a swipe has no competing in-panel action to disambiguate.
+            SwipeDismiss = { GestureRange:new{ ges = "swipe", range = self.dimen } },
         }
     end
     if Device:hasKeys() then
@@ -1809,4 +1813,10 @@ function StartMenu:onTapDismiss(_arg, ges)
     self:_close()
     return true
 end
+
+function StartMenu:onSwipeDismiss(_arg, ges)
+    self:_close()
+    return true
+end
+
 return StartMenu
