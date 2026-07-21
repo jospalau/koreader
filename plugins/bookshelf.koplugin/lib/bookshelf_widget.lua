@@ -13364,35 +13364,38 @@ function BookshelfWidget:_openStartMenu(force)
     -- paints first. The re-open targets BookshelfWidget.live because the finish
     -- re-shows a fresh shelf widget; it is no longer parked, so it opens
     -- normally against the FileManager.
-    local Park = require("lib/bookshelf_reader_park")
-    if Park.isParked() then
-        local msg
-        if BookshelfSettings.nilOrTrue("show_close_msg") then
-            local ok_im, InfoMessage = pcall(require, "ui/widget/infomessage")
-            if ok_im and InfoMessage then
-                msg = InfoMessage:new{ text = _("Closing book…"), timeout = 0.0 }
-                UIManager:show(msg)
-                UIManager:setDirty(msg, function() return "partial", msg.dimen end)
-            end
-        end
-        UIManager:forceRePaint()
-        UIManager:nextTick(function()
-            Park.runInFileManager(function()
-                -- Close the message AND flush the shelf back over its region
-                -- before opening the menu: the start-menu open animation
-                -- snapshots the screen as its backdrop, so a still-present
-                -- "Closing book…" would be baked into that backdrop and show as
-                -- a fragment when the menu is later closed.
-                if msg then
-                    UIManager:close(msg)
-                    UIManager:forceRePaint()
-                end
-                local live = BookshelfWidget.live
-                if live then live:_openStartMenu(force) end
-            end)
-        end)
-        return
-    end
+    -- The Bookshelf overlay patch prevents taps from reaching the reader,
+    -- so the reader micro-modules menu does not open when tapping the menu icon while Bookshelf is parked.
+    -- Disabled to allow the Bookshelf parked micro-modules menu to be shown instead of forcing the reader to exit.
+    -- local Park = require("lib/bookshelf_reader_park")
+    -- if Park.isParked() then
+    --     local msg
+    --     if BookshelfSettings.nilOrTrue("show_close_msg") then
+    --         local ok_im, InfoMessage = pcall(require, "ui/widget/infomessage")
+    --         if ok_im and InfoMessage then
+    --             msg = InfoMessage:new{ text = _("Closing book…"), timeout = 0.0 }
+    --             UIManager:show(msg)
+    --             UIManager:setDirty(msg, function() return "partial", msg.dimen end)
+    --         end
+    --     end
+    --     UIManager:forceRePaint()
+    --     UIManager:nextTick(function()
+    --         Park.runInFileManager(function()
+    --             -- Close the message AND flush the shelf back over its region
+    --             -- before opening the menu: the start-menu open animation
+    --             -- snapshots the screen as its backdrop, so a still-present
+    --             -- "Closing book…" would be baked into that backdrop and show as
+    --             -- a fragment when the menu is later closed.
+    --             if msg then
+    --                 UIManager:close(msg)
+    --                 UIManager:forceRePaint()
+    --             end
+    --             local live = BookshelfWidget.live
+    --             if live then live:_openStartMenu(force) end
+    --         end)
+    --     end)
+    --     return
+    -- end
     local ok, StartMenu = pcall(require, "lib/bookshelf_start_menu")
     if not ok or not StartMenu then
         logger.warn("[bookshelf] start menu unavailable:", tostring(StartMenu))
