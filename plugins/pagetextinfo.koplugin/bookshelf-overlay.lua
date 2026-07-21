@@ -36,7 +36,7 @@ local ReaderUI = require("apps/reader/readerui")
 local logger = require("logger")
 local _ = require("gettext")
 
-logger.warn("[bookshelf-overlay] patch file loaded")
+logger.info("[bookshelf-overlay] patch file loaded")
 
 -- ---------------------------------------------------------------------------
 -- Debounce: el multiswipe a veces dispara el mismo gesto 2-3 veces seguidas
@@ -55,7 +55,7 @@ local function isDebounced(event_name)
     local last = _last_trigger[event_name]
     _last_trigger[event_name] = now
     if last and (now - last) < DEBOUNCE_S then
-        logger.warn("[bookshelf-overlay] DEBOUNCED:", event_name,
+        logger.info("[bookshelf-overlay] DEBOUNCED:", event_name,
             "(", tostring(now - last), "s desde el anterior)")
         return true
     end
@@ -69,7 +69,7 @@ Dispatcher:registerAction("show_bookshelf_overlay", {
     general  = true,
 })
 
-logger.warn("[bookshelf-overlay] action 'show_bookshelf_overlay' registrada")
+logger.info("[bookshelf-overlay] action 'show_bookshelf_overlay' registrada")
 
 -- ---------------------------------------------------------------------------
 -- Capturamos el onHome ORIGINAL de ReaderUI (el que trae el MultiConfirmBox
@@ -79,7 +79,7 @@ logger.warn("[bookshelf-overlay] action 'show_bookshelf_overlay' registrada")
 -- (red de seguridad).
 -- ---------------------------------------------------------------------------
 local original_readerui_onHome = ReaderUI.onHome
-logger.warn("[bookshelf-overlay] original_readerui_onHome capturado:", tostring(original_readerui_onHome))
+logger.info("[bookshelf-overlay] original_readerui_onHome capturado:", tostring(original_readerui_onHome))
 
 -- ---------------------------------------------------------------------------
 -- Parchea la CLASE Bookshelf (compartida por todas las instancias, presentes
@@ -95,33 +95,33 @@ local function patchBookshelfOnce(plugin)
 
     local BookshelfClass = getmetatable(plugin)
     if not BookshelfClass then
-        logger.warn("[bookshelf-overlay] no se pudo obtener la clase via getmetatable(plugin)")
+        logger.info("[bookshelf-overlay] no se pudo obtener la clase via getmetatable(plugin)")
         return
     end
-    logger.warn("[bookshelf-overlay] patchBookshelfOnce: parcheando la CLASE Bookshelf.onHome:", tostring(BookshelfClass))
+    logger.info("[bookshelf-overlay] patchBookshelfOnce: parcheando la CLASE Bookshelf.onHome:", tostring(BookshelfClass))
 
     local original_onHome = BookshelfClass.onHome
-    logger.warn("[bookshelf-overlay] original_onHome (Bookshelf nativo) capturado:", tostring(original_onHome))
+    logger.info("[bookshelf-overlay] original_onHome (Bookshelf nativo) capturado:", tostring(original_onHome))
 
     function BookshelfClass:onHome()
-        logger.warn("[bookshelf-overlay] onHome() DISPARADO")
+        logger.info("[bookshelf-overlay] onHome() DISPARADO")
 
         if isDebounced("onHome") then
             return true -- ignoramos el rebote, no tocamos nada
         end
 
         local ok_req, Park = pcall(require, "lib/bookshelf_reader_park")
-        logger.warn("[bookshelf-overlay] onHome: require Park ok=", tostring(ok_req))
+        logger.info("[bookshelf-overlay] onHome: require Park ok=", tostring(ok_req))
 
         local parked = ok_req and Park and Park.isParked()
-        logger.warn("[bookshelf-overlay] onHome: Park.isParked()=", tostring(parked))
+        logger.info("[bookshelf-overlay] onHome: Park.isParked()=", tostring(parked))
 
         if parked then
-            logger.warn("[bookshelf-overlay] onHome: rama PARKED -> Park.unpark()")
+            logger.info("[bookshelf-overlay] onHome: rama PARKED -> Park.unpark()")
             local unpark_ok, unpark_err = pcall(function()
                 Park.unpark(self._widget)
             end)
-            logger.warn("[bookshelf-overlay] onHome: unpark_ok=", tostring(unpark_ok),
+            logger.info("[bookshelf-overlay] onHome: unpark_ok=", tostring(unpark_ok),
                 "unpark_err=", tostring(unpark_err))
             return true
         end
@@ -133,34 +133,34 @@ local function patchBookshelfOnce(plugin)
         -- En su lugar delegamos en el onHome REAL de ReaderUI (el del
         -- MultiConfirmBox), usando self.ui, que es la instancia de
         -- ReaderUI (ver main.lua: self.ui.document).
-        logger.warn("[bookshelf-overlay] onHome: rama NOT PARKED -> delegando en ReaderUI:onHome real (self.ui)")
+        logger.info("[bookshelf-overlay] onHome: rama NOT PARKED -> delegando en ReaderUI:onHome real (self.ui)")
         local reader_ui = self.ui
-        logger.warn("[bookshelf-overlay] onHome: reader_ui=", tostring(reader_ui))
+        logger.info("[bookshelf-overlay] onHome: reader_ui=", tostring(reader_ui))
 
         if original_readerui_onHome and reader_ui then
             local ret = original_readerui_onHome(reader_ui)
-            logger.warn("[bookshelf-overlay] onHome: original_readerui_onHome devolvió=", tostring(ret))
+            logger.info("[bookshelf-overlay] onHome: original_readerui_onHome devolvió=", tostring(ret))
             return ret
         end
 
-        logger.warn("[bookshelf-overlay] onHome: no se pudo delegar (original_readerui_onHome=",
+        logger.info("[bookshelf-overlay] onHome: no se pudo delegar (original_readerui_onHome=",
             tostring(original_readerui_onHome), " reader_ui=", tostring(reader_ui), ") -> fallback original_onHome nativo")
         if original_onHome then
             local ret = original_onHome(self)
-            logger.warn("[bookshelf-overlay] onHome: original_onHome (fallback) devolvió=", tostring(ret))
+            logger.info("[bookshelf-overlay] onHome: original_onHome (fallback) devolvió=", tostring(ret))
             return ret
         end
     end
 
     bookshelf_patched = true
-    logger.warn("[bookshelf-overlay] patchBookshelfOnce: parcheado OK (clase, permanente)")
+    logger.info("[bookshelf-overlay] patchBookshelfOnce: parcheado OK (clase, permanente)")
 end
 
 -- ---------------------------------------------------------------------------
 -- East North: aparcar y mostrar / volver si ya aparcado (toggle)
 -- ---------------------------------------------------------------------------
 function ReaderUI:onParkAndShowBookshelf()
-    logger.warn("[bookshelf-overlay] onParkAndShowBookshelf() DISPARADO")
+    logger.info("[bookshelf-overlay] onParkAndShowBookshelf() DISPARADO")
 
     if isDebounced("onParkAndShowBookshelf") then
         return true -- ignoramos el rebote, no tocamos nada
@@ -168,24 +168,24 @@ function ReaderUI:onParkAndShowBookshelf()
 
     local plugin = self.bookshelf
     if not plugin then
-        logger.warn("[bookshelf-overlay] Bookshelf plugin NO está cargado (self.bookshelf es nil)")
+        logger.info("[bookshelf-overlay] Bookshelf plugin NO está cargado (self.bookshelf es nil)")
         return true
     end
-    logger.warn("[bookshelf-overlay] plugin encontrado:", tostring(plugin))
+    logger.info("[bookshelf-overlay] plugin encontrado:", tostring(plugin))
 
     patchBookshelfOnce(plugin)
 
     local ok_req, Park = pcall(require, "lib/bookshelf_reader_park")
     if not ok_req or not Park then
-        logger.warn("[bookshelf-overlay] No se pudo cargar lib/bookshelf_reader_park, ok_req=", tostring(ok_req))
+        logger.info("[bookshelf-overlay] No se pudo cargar lib/bookshelf_reader_park, ok_req=", tostring(ok_req))
         return true
     end
 
-    logger.warn("[bookshelf-overlay] isParked ANTES del toggle:", tostring(Park.isParked()))
+    logger.info("[bookshelf-overlay] isParked ANTES del toggle:", tostring(Park.isParked()))
 
     local original_enabled = Park.enabled
     Park.enabled = function() return true end
-    logger.warn("[bookshelf-overlay] Park.enabled forzado a true (temporalmente)")
+    logger.info("[bookshelf-overlay] Park.enabled forzado a true (temporalmente)")
 
     local ok, err = pcall(function()
         local rui = plugin and plugin.ui
@@ -209,7 +209,7 @@ function ReaderUI:onParkAndShowBookshelf()
             -- widget ya en el stack). Lo creamos/mostramos nosotros mismos
             -- (show() no toca el documento ni el lector, solo lo tapa
             -- encima) y luego registramos el park a mano.
-            logger.warn("[bookshelf-overlay] plugin._widget es nil -> cold-create via plugin:show()")
+            logger.info("[bookshelf-overlay] plugin._widget es nil -> cold-create via plugin:show()")
             pcall(function() rui:saveSettings() end)   -- flush a disco PRIMERO
             local ok_repo, Repo = pcall(require, "lib/bookshelf_book_repository")
             if ok_repo and Repo and Repo.invalidateProgressCache then
@@ -217,7 +217,7 @@ function ReaderUI:onParkAndShowBookshelf()
             end
             plugin:show()
             local park_ok = Park.park(plugin, plugin._widget)
-            logger.warn("[bookshelf-overlay] Park.park manual tras cold-create =", tostring(park_ok))
+            logger.info("[bookshelf-overlay] Park.park manual tras cold-create =", tostring(park_ok))
         else
             -- -- For the hero card to be updated every time we show Bookshelf parked
             -- -- Other option is setting local HERO_MEMO_TTL_S = 0 in bookshelf_widget.lua
@@ -229,13 +229,13 @@ function ReaderUI:onParkAndShowBookshelf()
     end)
 
     Park.enabled = original_enabled
-    logger.warn("[bookshelf-overlay] Park.enabled restaurado")
+    logger.info("[bookshelf-overlay] Park.enabled restaurado")
 
-    logger.warn("[bookshelf-overlay] toggle pcall ok=", tostring(ok), "err=", tostring(err))
-    logger.warn("[bookshelf-overlay] isParked DESPUÉS del toggle:", tostring(Park.isParked()))
+    logger.info("[bookshelf-overlay] toggle pcall ok=", tostring(ok), "err=", tostring(err))
+    logger.info("[bookshelf-overlay] isParked DESPUÉS del toggle:", tostring(Park.isParked()))
 
     if not ok then
-        logger.warn("[bookshelf-overlay] ERROR en toggle:", err)
+        logger.info("[bookshelf-overlay] ERROR en toggle:", err)
     end
     return true
 end
@@ -249,37 +249,37 @@ end
 -- unpark; not parked -> onHome original (MultiConfirmBox).
 -- ---------------------------------------------------------------------------
 function ReaderUI:onHome()
-    logger.warn("[bookshelf-overlay] ReaderUI:onHome() DISPARADO (red de seguridad)")
+    logger.info("[bookshelf-overlay] ReaderUI:onHome() DISPARADO (red de seguridad)")
 
     if isDebounced("readerui_onHome") then
         return true -- ignoramos el rebote, no tocamos nada
     end
 
     local ok_req, Park = pcall(require, "lib/bookshelf_reader_park")
-    logger.warn("[bookshelf-overlay] ReaderUI:onHome: require Park ok=", tostring(ok_req))
+    logger.info("[bookshelf-overlay] ReaderUI:onHome: require Park ok=", tostring(ok_req))
 
     local parked = ok_req and Park and Park.isParked()
-    logger.warn("[bookshelf-overlay] ReaderUI:onHome: Park.isParked()=", tostring(parked))
+    logger.info("[bookshelf-overlay] ReaderUI:onHome: Park.isParked()=", tostring(parked))
 
     if parked then
-        logger.warn("[bookshelf-overlay] ReaderUI:onHome: rama PARKED -> Park.unpark()")
+        logger.info("[bookshelf-overlay] ReaderUI:onHome: rama PARKED -> Park.unpark()")
         local plugin = self.bookshelf
         local widget = plugin and plugin._widget
         local unpark_ok, unpark_err = pcall(function()
             Park.unpark(widget)
         end)
-        logger.warn("[bookshelf-overlay] ReaderUI:onHome: unpark_ok=", tostring(unpark_ok),
+        logger.info("[bookshelf-overlay] ReaderUI:onHome: unpark_ok=", tostring(unpark_ok),
             "unpark_err=", tostring(unpark_err))
         return true
     end
 
-    logger.warn("[bookshelf-overlay] ReaderUI:onHome: rama NOT PARKED -> original_readerui_onHome (MultiConfirmBox)")
+    logger.info("[bookshelf-overlay] ReaderUI:onHome: rama NOT PARKED -> original_readerui_onHome (MultiConfirmBox)")
     if original_readerui_onHome then
         local ret = original_readerui_onHome(self)
-        logger.warn("[bookshelf-overlay] ReaderUI:onHome: original_readerui_onHome devolvió=", tostring(ret))
+        logger.info("[bookshelf-overlay] ReaderUI:onHome: original_readerui_onHome devolvió=", tostring(ret))
         return ret
     end
-    logger.warn("[bookshelf-overlay] ReaderUI:onHome: no había original_readerui_onHome que llamar")
+    logger.info("[bookshelf-overlay] ReaderUI:onHome: no había original_readerui_onHome que llamar")
 end
 
 -- ---------------------------------------------------------------------------
@@ -294,7 +294,7 @@ end
 -- también el primer West South de la sesión sin haber aparcado antes.
 -- ---------------------------------------------------------------------------
 local original_readerui_init = ReaderUI.init
-logger.warn("[bookshelf-overlay] original_readerui_init capturado:", tostring(original_readerui_init))
+logger.info("[bookshelf-overlay] original_readerui_init capturado:", tostring(original_readerui_init))
 
 function ReaderUI:init(...)
     local ret
@@ -303,10 +303,10 @@ function ReaderUI:init(...)
     end
 
     if self.bookshelf then
-        logger.warn("[bookshelf-overlay] ReaderUI:init: self.bookshelf existe -> patchBookshelfOnce eager")
+        logger.info("[bookshelf-overlay] ReaderUI:init: self.bookshelf existe -> patchBookshelfOnce eager")
         patchBookshelfOnce(self.bookshelf)
     else
-        logger.warn("[bookshelf-overlay] ReaderUI:init: self.bookshelf todavía nil tras init")
+        logger.info("[bookshelf-overlay] ReaderUI:init: self.bookshelf todavía nil tras init")
     end
 
     return ret
@@ -349,7 +349,7 @@ function ReaderUI:handleEvent(event)
         print("[bookshelf-overlay] DEBUG handleEvent PARKED, event_name=", event_name)
         if isRawGestureEvent(event_name) and event_name ~= "Home"
                 and event_name ~= "ParkAndShowBookshelf" then
-            logger.warn("[bookshelf-overlay] handleEvent: PARKED, bloqueando gesto crudo:", event_name)
+            logger.info("[bookshelf-overlay] handleEvent: PARKED, bloqueando gesto crudo:", event_name)
             return true
         end
     end
