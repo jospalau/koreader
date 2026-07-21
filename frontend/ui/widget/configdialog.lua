@@ -741,6 +741,12 @@ function MenuBar:init()
     local icon_height = icon_width
     local icons_width = (icon_width + 2*icon_sep_width) * #config_options
     local bar_height = icon_height + 2*Size.padding.default
+    local available_width = Screen:getWidth() - icons_width
+    -- local padding = math.floor(available_width / #self.menu_items / 2) -- all for padding
+    -- local padding = math.floor(available_width / #self.menu_items / 2 / 2) -- half padding, half spacing ?
+    -- local padding = math.min(math.floor(available_width / #self.menu_items / 2), Screen:scaleBySize(20)) -- as in TouchMenuBar
+    local padding = math.max(math.floor(available_width / #config_options / 2), 0)
+
     if not self.menu_items then
         self.menu_items = {}
         for c = 1, #config_options do
@@ -751,6 +757,8 @@ function MenuBar:init()
                 height = icon_height,
                 padding_top = Size.padding.default,
                 padding_bottom = Size.padding.default,
+                padding_left = padding,
+                padding_right = padding,
                 callback = function()
                     self.config_dialog:handleEvent(Event:new("ShowConfigPanel", c))
                 end,
@@ -759,11 +767,6 @@ function MenuBar:init()
         end
     end
     table.insert(self.config_dialog.layout, self.menu_items) -- for the focusmanager
-    local available_width = Screen:getWidth() - icons_width
-    -- local padding = math.floor(available_width / #self.menu_items / 2) -- all for padding
-    -- local padding = math.floor(available_width / #self.menu_items / 2 / 2) -- half padding, half spacing ?
-    -- local padding = math.min(math.floor(available_width / #self.menu_items / 2), Screen:scaleBySize(20)) -- as in TouchMenuBar
-    local padding = math.floor(available_width / #self.menu_items / 2)
     if padding > 0 then
         for c = 1, #self.menu_items do
             self.menu_items[c].padding_left = padding
