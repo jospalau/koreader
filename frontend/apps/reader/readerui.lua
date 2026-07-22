@@ -515,6 +515,21 @@ function ReaderUI:init()
     self.md5_checksum = nil
 
     local summary = self.doc_settings:readSetting("summary", {})
+    local Repo = require("lib/bookshelf_book_repository")
+    -- if Repo.invalidateProgressCache then Repo.invalidateProgressCache() end
+
+    -- This is so Bookshelf moves the opened book to the proper chip if its
+    -- read status changed (Reading -> Finished, etc...).
+    if summary.status ~= "reading" then
+        if Repo.invalidateBookCache then Repo.invalidateBookCache("StatusChanged") end
+        -- Warm the rebuilt cache now instead of waiting until Bookshelf opens.
+        -- A cache rebuild walks the library and may touch the filesystem
+        -- (lfs.attributes, progress metadata, sorting), which can be noticeably
+        -- slower on Android SAF and Kindle than on Kobo.
+        -- UIManager:scheduleIn(0, function()
+        Repo.getAll()
+        -- end)
+    end
     if BookList.getBookStatusString(summary.status) == nil then
         summary.status = "reading"
         summary.modified = os.date("%Y-%m-%d", os.time())
@@ -552,9 +567,6 @@ function ReaderUI:init()
     self.doc_settings:saveSetting("summary", summary)
     self.doc_settings:flush()
     --self.bookshelf:onBookMetadataChanged()
-    local Repo = require("lib/bookshelf_book_repository")
-    -- if Repo.invalidateProgressCache then Repo.invalidateProgressCache() end
-    if Repo.invalidateBookCache then Repo.invalidateBookCache("StatusChanged") end
     -- if util.getFileNameSuffix(self.document.file) == "epub" then
     --     -- There is a small delay when manipulating the cover in the coverimage plugin
     --     -- so the start_session_time in the topbar may be shown a bit delayed when opening the document
