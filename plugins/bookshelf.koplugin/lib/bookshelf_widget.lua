@@ -169,6 +169,7 @@ function BookshelfWidget:init()
     self.width  = Screen:getWidth()
     self.height = Screen:getHeight()
     self.dimen  = Geom:new{ w = self.width, h = self.height }
+    self:_refreshDitherFlag()   -- colour-panel cover saturation, #289
     self.chip   = BookshelfSettings.read("active_chip") or "recent"
     -- Cursor-based pagination: _cursor is the 1-based index of the first
     -- visible book on the current view. Primary persisted state. self.page
@@ -731,6 +732,9 @@ function BookshelfWidget:_selectChip(key)
 end
 
 function BookshelfWidget:_rebuild()
+    -- Re-read the colour-dither hint so toggling "Colour panel dithering"
+    -- takes effect on the next refresh (#289).
+    self:_refreshDitherFlag()
     -- A structural rebuild (chip switch, drill, settings change) invalidates
     -- any in-flight next-page preload — it was queued for the old view.
     if self._cancelPreload then self:_cancelPreload() end
@@ -2893,61 +2897,61 @@ function BookshelfWidget:_openBook(book, after_open_callback)
     if not book or not book.filepath then return end
 
     local function proceed()
-        -- Stale records (Send-to-Kindle moved/removed the file after BIM cached
-        -- the path) crash KOReader's filemanagerbookinfo:show via lfs.attributes
-        -- on nil. ReaderUI:showReader nil-checks itself, but presenting a "file
-        -- missing" toast here is friendlier than its silent no-op.
-        -- The path to actually hand ReaderUI: a real file on disk. For Kobo virtual
-        -- records (kobo.koplugin) the path is a KOBO_VIRTUAL:// URI with no real file,
-        -- so resolve it through the plugin (decrypting on demand) first -- passing the
-        -- virtual path straight to showReader silently fails, as its showReader patch
-        -- matches a different scheme (#203).
-        local open_path = book.filepath
-        if book.is_kobo then
-            local ok_kobo, KoboSource = pcall(require, "lib/bookshelf_kobo_source")
-            local real = ok_kobo and KoboSource and KoboSource.realPathForOpen(book.filepath) or nil
-            if not real then
-                UIManager:show(require("ui/widget/infomessage"):new{
-                    text    = _("Couldn't open this Kobo book."),
-                    timeout = 3,
-                })
-                return
-            end
-            -- Map the decrypted /tmp copy back to this virtual book so the hero can
-            -- show it as recently-opened (#203 pt3).
-            if Repo.noteKoboOpen then Repo.noteKoboOpen(real, book) end
-            -- Opening feedback at TAP time (the Kobo readiness poll below can
-            -- take seconds): flush pending paints so the capture sees current
-            -- pixels, then squeeze the tapped cover.
-            UIManager:forceRePaint()
-            pcall(function() self:_paintOpeningEffect(book.filepath) end)
-            -- The decrypted copy can still be mid-write when realPathForOpen returns
-            -- (#203); opening an empty file silently failed and needed the "open
-            -- another, come back" dance. Wait until it has a size -- polling ~1s up
-            -- to 5s behind a notice -- then open, or show a clear try-again message.
-            self:_openKoboWhenReady(real, after_open_callback)
+    -- Stale records (Send-to-Kindle moved/removed the file after BIM cached
+    -- the path) crash KOReader's filemanagerbookinfo:show via lfs.attributes
+    -- on nil. ReaderUI:showReader nil-checks itself, but presenting a "file
+    -- missing" toast here is friendlier than its silent no-op.
+    -- The path to actually hand ReaderUI: a real file on disk. For Kobo virtual
+    -- records (kobo.koplugin) the path is a KOBO_VIRTUAL:// URI with no real file,
+    -- so resolve it through the plugin (decrypting on demand) first -- passing the
+    -- virtual path straight to showReader silently fails, as its showReader patch
+    -- matches a different scheme (#203).
+    local open_path = book.filepath
+    if book.is_kobo then
+        local ok_kobo, KoboSource = pcall(require, "lib/bookshelf_kobo_source")
+        local real = ok_kobo and KoboSource and KoboSource.realPathForOpen(book.filepath) or nil
+        if not real then
+            UIManager:show(require("ui/widget/infomessage"):new{
+                text    = _("Couldn't open this Kobo book."),
+                timeout = 3,
+            })
             return
-        else
-            -- Stale records (Send-to-Kindle moved/removed the file after BIM cached
-            -- the path) crash filemanagerbookinfo:show via lfs.attributes on nil; a
-            -- "file missing" toast is friendlier than a silent no-op.
-            local lfs = require("libs/libkoreader-lfs")
-            if lfs.attributes(book.filepath, "mode") ~= "file" then
-                UIManager:show(require("ui/widget/infomessage"):new{
-                    text    = _("File no longer exists. The bookshelf entry is stale."),
-                    timeout = 3,
-                })
-                return
-            end
         end
-        -- Opening feedback: flush pending paints so the capture sees current
-        -- pixels, then squeeze the tapped cover (validated against this book;
-        -- no-op when the tap didn't land on a visible cover). Painted before
-        -- the launch so it also precedes an unpark splice - the squeeze then
-        -- reads as the opening motion completing into the page.
+        -- Map the decrypted /tmp copy back to this virtual book so the hero can
+        -- show it as recently-opened (#203 pt3).
+        if Repo.noteKoboOpen then Repo.noteKoboOpen(real, book) end
+        -- Opening feedback at TAP time (the Kobo readiness poll below can
+        -- take seconds): flush pending paints so the capture sees current
+        -- pixels, then squeeze the tapped cover.
         UIManager:forceRePaint()
         pcall(function() self:_paintOpeningEffect(book.filepath) end)
-        self:_launchReader(open_path, after_open_callback)
+        -- The decrypted copy can still be mid-write when realPathForOpen returns
+        -- (#203); opening an empty file silently failed and needed the "open
+        -- another, come back" dance. Wait until it has a size -- polling ~1s up
+        -- to 5s behind a notice -- then open, or show a clear try-again message.
+        self:_openKoboWhenReady(real, after_open_callback)
+        return
+    else
+        -- Stale records (Send-to-Kindle moved/removed the file after BIM cached
+        -- the path) crash filemanagerbookinfo:show via lfs.attributes on nil; a
+        -- "file missing" toast is friendlier than a silent no-op.
+        local lfs = require("libs/libkoreader-lfs")
+        if lfs.attributes(book.filepath, "mode") ~= "file" then
+            UIManager:show(require("ui/widget/infomessage"):new{
+                text    = _("File no longer exists. The bookshelf entry is stale."),
+                timeout = 3,
+            })
+            return
+        end
+    end
+    -- Opening feedback: flush pending paints so the capture sees current
+    -- pixels, then squeeze the tapped cover (validated against this book;
+    -- no-op when the tap didn't land on a visible cover). Painted before
+    -- the launch so it also precedes an unpark splice - the squeeze then
+    -- reads as the opening motion completing into the page.
+    UIManager:forceRePaint()
+    pcall(function() self:_paintOpeningEffect(book.filepath) end)
+    self:_launchReader(open_path, after_open_callback)
     end
 
     -- Confirm-before-open: same idiom as FileManager's own MBR/TBR/finished
@@ -4700,7 +4704,7 @@ function BookshelfWidget:_repaintSelectionHighlight(old_fp, new_fp)
         union_dimen.y = union_dimen.y - PAD
         union_dimen.w = union_dimen.w + 2 * PAD
         union_dimen.h = union_dimen.h + 2 * PAD
-        UIManager:setDirty(self, function() return "ui", union_dimen end)
+        UIManager:setDirty(self, function() return "ui", union_dimen, self.dithered end)
     else
         UIManager:setDirty(self, "ui")
     end
@@ -4763,7 +4767,7 @@ function BookshelfWidget:_refreshSpineInPlace(fp)
         end
     end
     if replaced_dimen then
-        UIManager:setDirty(self, function() return "ui", replaced_dimen end)
+        UIManager:setDirty(self, function() return "ui", replaced_dimen, self.dithered end)
     end
     return replaced
 end
@@ -5184,7 +5188,7 @@ function BookshelfWidget:_swapMicroHeroInPlace()
         UIManager:nextTick(function() pcall(function() old_hero:free() end) end)
     end
     if scope then
-        UIManager:setDirty(self, function() return "ui", scope end)
+        UIManager:setDirty(self, function() return "ui", scope, self.dithered end)
     else
         UIManager:setDirty(self, "ui")
     end
@@ -5238,7 +5242,7 @@ function BookshelfWidget:_swapHeroInPlace()
     -- previous hero rendered).
     local scope = old_hero and old_hero.dimen
     if scope then
-        UIManager:setDirty(self, function() return "ui", scope end)
+        UIManager:setDirty(self, function() return "ui", scope, self.dithered end)
     else
         UIManager:setDirty(self, "ui")
     end
@@ -5345,7 +5349,7 @@ function BookshelfWidget:_previewBook(book, tap_t)
             cover_dimen.y = cover_dimen.y - t
             cover_dimen.w = cover_dimen.w + 2 * t
             cover_dimen.h = cover_dimen.h + 2 * t
-            UIManager:setDirty(self, function() return "ui", cover_dimen end)
+            UIManager:setDirty(self, function() return "ui", cover_dimen, self.dithered end)
         end
         return
     end
@@ -6574,6 +6578,24 @@ end
 -- (swipe) route through here so the scoping can't drift between them. Prefers
 -- the hero's live painted dimen; falls back to the stashed hero geometry, then
 -- a full refresh.
+-- Colour e-ink (Kaleido / PocketBook Color / Kindle Colorsoft): book covers
+-- only pick up the panel's colour-dither waveform when the refresh that draws
+-- them carries the dither hint. UIManager honours a top-level widget's
+-- `dithered` flag on plain "ui" refreshes automatically, and via the 3rd return
+-- of closure refreshes (see uimanager.lua). KOReader's own cover browser flags
+-- itself the same way (covermenu.lua: show_parent.dithered + "ui", region,
+-- dithered). We never did, so on colour panels our covers rendered desaturated
+-- until an unrelated full refresh (idle timer, task-switch) applied the colour
+-- waveform -- #289. Flagging ourselves fixes it. Colour panels only (nil on
+-- B&W, so their refresh behaviour is unchanged); gated behind the "Colour panel
+-- dithering" performance tweak so testers can compare with/without. Re-read on
+-- each rebuild so toggling the setting takes effect on the next refresh.
+function BookshelfWidget:_refreshDitherFlag()
+    local colour = Screen.isColorEnabled and Screen:isColorEnabled()
+    self.dithered = (colour and BookshelfSettings.nilOrTrue("color_panel_dithering"))
+        or nil
+end
+
 function BookshelfWidget:_rebuildRefreshBelowHero()
     local prev_hero  = self._hero_parent and self._hero_parent[1]
     local hero_dimen = prev_hero and prev_hero.dimen
@@ -6595,7 +6617,7 @@ function BookshelfWidget:_rebuildRefreshBelowHero()
     if below_y then
         below_y = below_y + Screen:scaleBySize(4)
         UIManager:setDirty(self, function()
-            return "ui", Geom:new{ x = 0, y = below_y, w = self.width, h = self.height - below_y }
+            return "ui", Geom:new{ x = 0, y = below_y, w = self.width, h = self.height - below_y }, self.dithered
         end)
     else
         UIManager:setDirty(self, "ui")
@@ -6622,7 +6644,7 @@ function BookshelfWidget:_rebuildRefreshHeroAndChips()
         -- cleanly (same margin rationale as _rebuildRefreshBelowHero).
         bottom = bottom + Screen:scaleBySize(4)
         UIManager:setDirty(self, function()
-            return "ui", Geom:new{ x = 0, y = 0, w = self.width, h = bottom }
+            return "ui", Geom:new{ x = 0, y = 0, w = self.width, h = bottom }, self.dithered
         end)
     else
         UIManager:setDirty(self, "ui")
@@ -9638,9 +9660,9 @@ function BookshelfWidget:_refreshBucket()
     if self._overlap_group.resetLayout then self._overlap_group:resetLayout() end
     UIManager:setDirty(self, function()
         if old_dimen and old_dimen.h and old_dimen.h > 0 then
-            return "ui", old_dimen
+            return "ui", old_dimen, self.dithered
         end
-        return "ui"
+        return "ui", nil, self.dithered
     end)
 end
 
