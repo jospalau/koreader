@@ -1606,7 +1606,8 @@ function BookshelfWidget:_rebuild()
         -- fall into one of the branches above with a generic message. The
         -- filter is the actual reason there are no books, so override the
         -- placeholder when statuses are set.
-        if _tab and _tab.filter and Filter.isActive(_tab.filter) then
+        if not (_tip and _tip.kind == "search")
+            and _tab and _tab.filter and Filter.isActive(_tab.filter) then
             local label = _tab.label or self:_chipLabel()
             placeholder_text = string.format(
                 _("Nothing in %s yet \xC2\xB7 Long-press the chip to edit its filter"),
