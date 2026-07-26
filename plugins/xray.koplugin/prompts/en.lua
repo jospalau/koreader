@@ -5,8 +5,8 @@ return {
     -- Author-only prompt (For quick bio lookup)
     author_only = [[Identify and provide biography for the author of the book "%s". 
 Metadata suggests the author is "%s". 
-1
-CRITICAL: Verify the author using the BOOK TEXT CONTEXT (if provided at the end of this prompt) to ensure 100% accuracy and avoid incorrect identifications.
+
+CRITICAL: Verify the author using the BOOK TEXT CONTEXT (if provided at the end of this prompt) to ensure 100%% accuracy and avoid incorrect identifications.
 
 REQUIRED JSON FORMAT:
 {
@@ -260,6 +260,20 @@ Secondary Description: %s
 REQUIRED JSON FORMAT:
 {
   "merged_description": "Combined and polished description (Max {MAX_CHAR_DESC} chars)"
+}]],
+
+    book_type_detect = [[Book Title: %s
+Author: %s
+Series: %s
+File Description/Subject Metadata: %s
+
+TASK: Classify this book into exactly ONE of these book types based on its metadata and genre signals:
+prose_fiction, prose_nonfiction, manga, graphic_novel, children, poetry, cookbook, textbook, travel, unknown
+
+Return ONLY valid JSON:
+{
+  "book_type_label": "prose_fiction",
+  "confidence": "high"
 }]],
 
     -- Multi-Book Series Context Prompts

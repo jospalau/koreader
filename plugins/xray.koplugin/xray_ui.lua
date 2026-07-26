@@ -1,4 +1,5 @@
 -- X-Ray UI and Menu Functions
+local util = require("util")
 
 local UIManager = require("ui/uimanager")
 local InfoMessage = require("ui/widget/infomessage")
@@ -9,6 +10,8 @@ local Screen = require("device").screen
 local gettext = require("gettext")
 local orig_isRTL = gettext.isRTL
 local plugin_instance
+local B1 = "\xEF\xBF\xB2" -- PTF_BOLD_START
+local B2 = "\xEF\xBF\xB3" -- PTF_BOLD_END
 
 gettext.isRTL = function(...)
     if plugin_instance and plugin_instance:isRTL() and plugin_instance:isXRayUIActive() then
@@ -22,6 +25,9 @@ end
 
 local _ = gettext
 local plugin_path = ((...) or ""):match("(.-)[^%.]+$") or ""
+local xray_units = require(plugin_path .. "xray_units")
+local XRaySettingsCard = require(plugin_path .. "xray_settings_card")
+local utils = require(plugin_path .. "xray_utils")
 
 local M = {}
 
@@ -44,6 +50,31 @@ local Button          = require("ui/widget/button")
 local Size            = require("ui/size")
 
 local DEFAULT_POPUP_FONT_SIZE = 22
+
+-- Returns true if the text contains CJK characters (U+3000–U+9FFF, etc.)
+local function _textHasCJK(text)
+    return utils:textHasCJK(text)
+end
+
+-- Truncates a string to limit_en characters (scaled down to limit_en/3 if CJK)
+-- only if the total length exceeds threshold_en (scaled down to threshold_en/3 if CJK).
+-- Returns: truncated_text, is_truncated
+local function _getTruncatedText(text, limit_en, threshold_en)
+    return utils:getTruncatedText(text, limit_en, threshold_en)
+end
+
+
+-- Returns true if the font family name looks like a CJK font
+local function _isCJKFontFamily(family)
+    if not family then return false end
+    local fl = family:lower()
+    return fl:find("cjk") or fl:find("han") or fl:find("wenquanyi")
+        or fl:find("noto.*jp") or fl:find("noto.*sc") or fl:find("noto.*tc")
+        or fl:find("noto.*kr") or fl:find("source han") or fl:find("adobe")
+        or fl:find("kozuka") or fl:find("hiragino") or fl:find("meiryo")
+        or fl:find("yugothic") or fl:find("simhei") or fl:find("simsun")
+        or fl:find("mingliu") or fl:find("kaiti") or fl:find("fangzheng")
+end
 
 local function _getPopupFontSize(plugin)
     local size
@@ -92,7 +123,32 @@ function XRayBottomPopup:init()
     end
     local Device = require("device")
 
+    -- Check if entity text contains CJK characters
+    local text_has_cjk = false
+    if e.name and _textHasCJK(tostring(e.name)) then
+        text_has_cjk = true
+    elseif e.description and _textHasCJK(tostring(e.description)) then
+        text_has_cjk = true
+    elseif e.biography and _textHasCJK(tostring(e.biography)) then
+        text_has_cjk = true
+    elseif e.definition and _textHasCJK(tostring(e.definition)) then
+        text_has_cjk = true
+    end
+
+    -- If doc_family is CJK or the text contains CJK, apply a smaller scaling factor
+    local is_cjk = _isCJKFontFamily(doc_family) or text_has_cjk
+    if is_cjk then
+        -- Scale by 0.55 instead of the default, and apply a maximum cap of 20pt.
+        -- Since the caller passed fs = _getPopupFontSize(plugin), we scale it down.
+        fs = math.max(12, math.min(math.floor(fs * (0.55 / 0.75)), 20))
+    else
+        fs = math.max(12, math.min(fs, 20))
+    end
+
     local function getFontSafe(preferred_family, size)
+        if is_cjk or _isCJKFontFamily(preferred_family) then
+            return Font:getFace("cfont", size)
+        end
         if preferred_family and preferred_family ~= "" then
             -- Resolve the CRE face name to an actual font file path
             local ok, credoc = pcall(require, "document/credocument")
@@ -216,9 +272,8 @@ function XRayBottomPopup:init()
     local display_desc = desc_str
     local is_truncated = false
     if desc_str ~= "" then
-        if #desc_str > 400 then
-            is_truncated = true
-            display_desc = desc_str:sub(1, 350)
+        display_desc, is_truncated = _getTruncatedText(desc_str, 350, 400)
+        if is_truncated then
             local last_space = display_desc:match("^.*()%s")
             if last_space then
                 display_desc = display_desc:sub(1, last_space - 1)
@@ -267,7 +322,7 @@ function XRayBottomPopup:init()
     end
 
     -- B. Linked Entries button
-    if #related > 0 then
+    if #related > 0 and not e.is_conversion then
         local left_btn = make_btn(get_loc_t("linked_entries", "Linked Entries"), function()
             UIManager:close(self)
             if plugin and plugin.showRelatedEntities then
@@ -278,7 +333,7 @@ function XRayBottomPopup:init()
     end
 
     -- C. Find Mentions button
-    if mentions_enabled and not e.is_timeline then
+    if mentions_enabled and not e.is_timeline and not e.is_conversion then
         local right_btn = make_btn(get_loc_t("find_mentions", "Find Mentions"), function()
             UIManager:close(self)
             if plugin then
@@ -524,6 +579,7 @@ function M:showLanguageSelection()
         fr = "Français",
         ru = "Русский",
         zh_CN = "简体中文",
+        ja = "日本語",
         tr = "Türkçe",
         pt_br = "Português",
         es = "Español",
@@ -567,7 +623,7 @@ function M:resolveLanguage(code)
             supported[c] = 1
         end
     else
-        supported = { en=1, de=1, fr=1, ru=1, zh_CN=1, tr=1, pt_br=1, es=1, uk=1, hu=1, nl=1, pl=1, id=1, ar=1, sr=1 }
+        supported = { en=1, de=1, fr=1, ru=1, zh_CN=1, ja=1, tr=1, pt_br=1, es=1, uk=1, hu=1, nl=1, pl=1, id=1, ar=1, sr=1 }
     end
     
     if code == "auto" or not code then
@@ -593,7 +649,8 @@ function M:resolveLanguage(code)
             if book_lang then
                 local lang = book_lang:sub(1, 2):lower()
                 if book_lang:lower():find("zh") then lang = "zh_CN"
-                elseif book_lang:lower():find("pt") then lang = "pt_br" end
+                elseif book_lang:lower():find("pt") then lang = "pt_br"
+                elseif book_lang:lower():find("ja") or book_lang:lower():find("jp") then lang = "ja" end
                 if supported[lang] then return lang end
             end
         end
@@ -662,7 +719,8 @@ function M:checkBookLanguageMatch()
     
     local lang = book_lang:sub(1, 2):lower()
     if book_lang:find("zh") then lang = "zh_CN"
-    elseif book_lang:find("pt") then lang = "pt_br" end
+    elseif book_lang:find("pt") then lang = "pt_br"
+    elseif book_lang:find("ja") or book_lang:find("jp") then lang = "ja" end
     
     local LANGUAGE_NAMES = {
         en = "English",
@@ -670,6 +728,7 @@ function M:checkBookLanguageMatch()
         fr = "Français",
         ru = "Русский",
         zh_CN = "简体中文",
+        ja = "日本語",
         tr = "Türkçe",
         pt_br = "Português",
         es = "Español",
@@ -868,7 +927,10 @@ function M:showCharacters()
         -- Aliases are no longer listed in the main character list to reduce clutter,
         -- as they are still visible in the individual character infobox.
         local char_desc = self:resolveDescriptionForPage(char)
-        if char_desc and #char_desc > 0 and char_desc ~= "---" then text = text .. "\n  " .. char_desc:sub(1, 80) .. (#char_desc > 80 and "..." or "") end
+        if char_desc and #char_desc > 0 and char_desc ~= "---" then
+            local safe_desc, is_truncated = _getTruncatedText(char_desc, 80)
+            text = text .. "\n  " .. safe_desc .. (is_truncated and "..." or "")
+        end
         table.insert(items, { 
             text = text, 
             keep_menu_open = true,
@@ -1069,7 +1131,33 @@ function M:showCharacterDetails(character, opts)
         showBottomPopup(self, character)
         return
     end
-    local fs = _getPopupFontSize(self)
+    local base_fs = _getPopupFontSize(self)
+    local doc_family
+    if self.ui and self.ui.font then
+        doc_family = self.ui.font.font_face
+    end
+    if not doc_family and G_reader_settings then
+        doc_family = G_reader_settings:readSetting("cre_font_family")
+    end
+
+    local text_has_cjk = false
+    if character.name and _textHasCJK(tostring(character.name)) then
+        text_has_cjk = true
+    elseif character.description and _textHasCJK(tostring(character.description)) then
+        text_has_cjk = true
+    elseif character.biography and _textHasCJK(tostring(character.biography)) then
+        text_has_cjk = true
+    elseif character.definition and _textHasCJK(tostring(character.definition)) then
+        text_has_cjk = true
+    end
+
+    local is_cjk = _isCJKFontFamily(doc_family) or text_has_cjk
+    local fs
+    if is_cjk then
+        fs = math.max(12, math.min(math.floor(base_fs * 0.75), 18))
+    else
+        fs = math.max(12, math.min(base_fs, 20))
+    end
     local border_window = (Size.border and Size.border.window) or 1
     local padding_button = (Size.padding and Size.padding.button) or 10
     local padding_default = (Size.padding and Size.padding.default) or 10
@@ -1157,9 +1245,8 @@ function M:showCharacterDetails(character, opts)
     local display_desc = resolved_desc
     local is_truncated = false
     if resolved_desc and resolved_desc ~= "" and resolved_desc ~= "---" then
-        if #resolved_desc > 500 then
-            is_truncated = true
-            display_desc = resolved_desc:sub(1, 450)
+        display_desc, is_truncated = _getTruncatedText(resolved_desc, 450, 500)
+        if is_truncated then
             local last_space = display_desc:match("^.*()%s")
             if last_space then
                 display_desc = display_desc:sub(1, last_space - 1)
@@ -1287,7 +1374,33 @@ function M:showLocationDetails(loc_item, opts)
         showBottomPopup(self, loc_item)
         return
     end
-    local fs = _getPopupFontSize(self)
+    local base_fs = _getPopupFontSize(self)
+    local doc_family
+    if self.ui and self.ui.font then
+        doc_family = self.ui.font.font_face
+    end
+    if not doc_family and G_reader_settings then
+        doc_family = G_reader_settings:readSetting("cre_font_family")
+    end
+
+    local text_has_cjk = false
+    if loc_item.name and _textHasCJK(tostring(loc_item.name)) then
+        text_has_cjk = true
+    elseif loc_item.description and _textHasCJK(tostring(loc_item.description)) then
+        text_has_cjk = true
+    elseif loc_item.biography and _textHasCJK(tostring(loc_item.biography)) then
+        text_has_cjk = true
+    elseif loc_item.definition and _textHasCJK(tostring(loc_item.definition)) then
+        text_has_cjk = true
+    end
+
+    local is_cjk = _isCJKFontFamily(doc_family) or text_has_cjk
+    local fs
+    if is_cjk then
+        fs = math.max(12, math.min(math.floor(base_fs * 0.75), 18))
+    else
+        fs = math.max(12, math.min(base_fs, 20))
+    end
     local border_window = (Size.border and Size.border.window) or 1
     local padding_button = (Size.padding and Size.padding.button) or 10
     local padding_default = (Size.padding and Size.padding.default) or 10
@@ -1315,9 +1428,8 @@ function M:showLocationDetails(loc_item, opts)
     local display_desc = desc
     local is_truncated = false
     if desc and desc ~= "" then
-        if #desc > 500 then
-            is_truncated = true
-            display_desc = desc:sub(1, 450)
+        display_desc, is_truncated = _getTruncatedText(desc, 450, 500)
+        if is_truncated then
             local last_space = display_desc:match("^.*()%s")
             if last_space then
                 display_desc = display_desc:sub(1, last_space - 1)
@@ -1435,7 +1547,33 @@ function M:showTermDetails(term, opts)
         showBottomPopup(self, term)
         return
     end
-    local fs = _getPopupFontSize(self)
+    local base_fs = _getPopupFontSize(self)
+    local doc_family
+    if self.ui and self.ui.font then
+        doc_family = self.ui.font.font_face
+    end
+    if not doc_family and G_reader_settings then
+        doc_family = G_reader_settings:readSetting("cre_font_family")
+    end
+
+    local text_has_cjk = false
+    if term.name and _textHasCJK(tostring(term.name)) then
+        text_has_cjk = true
+    elseif term.description and _textHasCJK(tostring(term.description)) then
+        text_has_cjk = true
+    elseif term.biography and _textHasCJK(tostring(term.biography)) then
+        text_has_cjk = true
+    elseif term.definition and _textHasCJK(tostring(term.definition)) then
+        text_has_cjk = true
+    end
+
+    local is_cjk = _isCJKFontFamily(doc_family) or text_has_cjk
+    local fs
+    if is_cjk then
+        fs = math.max(12, math.min(math.floor(base_fs * 0.75), 18))
+    else
+        fs = math.max(12, math.min(base_fs, 20))
+    end
     local border_window = (Size.border and Size.border.window) or 1
     local padding_button = (Size.padding and Size.padding.button) or 10
     local padding_default = (Size.padding and Size.padding.default) or 10
@@ -1501,9 +1639,8 @@ function M:showTermDetails(term, opts)
     local display_definition = resolved_definition
     local is_truncated = false
     if resolved_definition and resolved_definition ~= "" and resolved_definition ~= "---" then
-        if #resolved_definition > 500 then
-            is_truncated = true
-            display_definition = resolved_definition:sub(1, 450)
+        display_definition, is_truncated = _getTruncatedText(resolved_definition, 450, 500)
+        if is_truncated then
             local last_space = display_definition:match("^.*()%s")
             if last_space then
                 display_definition = display_definition:sub(1, last_space - 1)
@@ -1539,10 +1676,11 @@ function M:showTermDetails(term, opts)
     local mentions_enabled = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.mentions_enabled ~= false
 
     local function get_relookup_row()
+        local safe_text = _getTruncatedText(opts.original_text, 30)
         return {
             {
-                text = self.loc:t("relookup_button", opts.original_text:sub(1, 30))
-                    or ("Re-lookup '" .. opts.original_text:sub(1, 30) .. "'"),
+                text = self.loc:t("relookup_button", safe_text)
+                    or ("Re-lookup '" .. safe_text .. "'"),
                 callback = function()
                     if self.active_details_dialog then UIManager:close(self.active_details_dialog); self.active_details_dialog = nil end
                     self:fetchSingleWord(opts.original_text, opts.pos0, opts.pos1)
@@ -1688,9 +1826,15 @@ function M:showTerms()
             if term.source == "series_prior" then
                 name = name .. " " .. (self.loc:t("series_prior_label") or "[Prior]")
             end
+            local subtext = nil
+            if term.definition then
+                local trunc_text, is_trunc = _getTruncatedText(term.definition, 80)
+                subtext = trunc_text .. (is_trunc and "..." or "")
+            end
+
             table.insert(items, {
                 text = "• " .. name,
-                subtext = term.definition and term.definition:sub(1, 80) .. "...",
+                subtext = subtext,
                 keep_menu_open = true,
                 separator = true,
                 callback = function()
@@ -1758,22 +1902,27 @@ function M:showTermSearch()
 end
 
 function M:showBookTypeSettings()
-    local ButtonDialog = require("ui/widget/buttondialog")
-    local info_dialog
-    
-    local function showSettings()
-        if info_dialog then UIManager:close(info_dialog) end
-        
-        local current = "auto"
-        if not self.cache_manager then self.cache_manager = require(plugin_path .. "xray_cachemanager"):new() end
-        local cache = self.book_data or self.cache_manager:loadCache(self.ui.document.file)
-        if cache and cache.book_mode_override then
-            current = cache.book_mode_override
-        else
-            current = self.ai_helper.settings.default_book_mode or "auto"
-        end
-
-        local function setType(mode)
+    XRaySettingsCard.show(self, {
+        title = self.loc:t("menu_book_mode") or "Book Type",
+        description = self.loc:t("book_mode_desc") or "Select the type for this book:",
+        options = {
+            { text = self.loc:t("book_type_auto") or "Auto-Detect", value = "auto" },
+            { text = self.loc:t("book_type_fiction") or "Fiction", value = "fiction" },
+            { text = self.loc:t("book_type_nonfiction") or "Non-Fiction", value = "non_fiction" },
+        },
+        get_current_func = function()
+            local current = "auto"
+            if not self.cache_manager then self.cache_manager = require(plugin_path .. "xray_cachemanager"):new() end
+            local cache = self.book_data or self.cache_manager:loadCache(self.ui.document.file)
+            if cache and cache.book_mode_override then
+                current = cache.book_mode_override
+            else
+                current = self.ai_helper.settings.default_book_mode or "auto"
+            end
+            return current
+        end,
+        save_func = function(mode)
+            if not self.cache_manager then self.cache_manager = require(plugin_path .. "xray_cachemanager"):new() end
             if not self.book_data then
                 self.book_data = self.cache_manager:loadCache(self.ui.document.file) or {}
             end
@@ -1781,263 +1930,72 @@ function M:showBookTypeSettings()
             cache.book_mode_override = mode
             self.cache_manager:asyncSaveCache(self.ui.document.file, cache)
             self.book_type = (mode == "auto") and nil or mode
-            UIManager:show(InfoMessage:new{ text = self.loc:t("book_type_saved") or "Book Type saved!", timeout = 3 })
             UIManager:setDirty(nil, "ui")
-            UIManager:nextTick(function() showSettings() end)
-        end
-
-        info_dialog = ButtonDialog:new{
-            title = (self.loc:t("menu_book_mode") or "Book Type") .. "\n\n" .. (self.loc:t("book_mode_desc") or "Select the type for this book:"),
-            buttons = {
-                {
-                    { 
-                        text = (current == "auto" and "[✓] " or "[  ] ") .. (self.loc:t("book_type_auto") or "Auto-Detect"), 
-                        callback = function() setType("auto") end 
-                    },
-                    { 
-                        text = (current == "fiction" and "[✓] " or "[  ] ") .. (self.loc:t("book_type_fiction") or "Fiction"), 
-                        callback = function() setType("fiction") end 
-                    },
-                    { 
-                        text = (current == "non_fiction" and "[✓] " or "[  ] ") .. (self.loc:t("book_type_nonfiction") or "Non-Fiction"), 
-                        callback = function() setType("non_fiction") end 
-                    },
-                },
-                {
-                    { 
-                        text = self.loc:t("menu_about") or "About", 
-                        callback = function()
-                            UIManager:show(InfoMessage:new{
-                                text = self.loc:t("book_type_about") or "The Book Type determines which AI extraction strategy is used.\n\n- Fiction: Focuses on characters, timeline, and world-building terms (factions, spells, lore, etc.).\n- Non-Fiction: Focuses on technical terms, concepts, and historical figures.\n\n'Auto-Detect' will let the AI decide after the first fetch.",
-                                timeout = 30
-                            })
-                        end
-                    },
-                    { text = self.loc:t("close") or "Close", callback = function() UIManager:close(info_dialog) end }
-                }
-            }
-        }
-        UIManager:show(info_dialog)
-    end
-    
-    showSettings()
+        end,
+        about_text = self.loc:t("book_type_about") or "The Book Type determines which AI extraction strategy is used.\n\n[B]• Fiction:[/B] Focuses on characters, timeline, and world-building terms (factions, spells, lore, etc.).\n[B]• Non-Fiction:[/B] Focuses on technical terms, concepts, and historical figures.\n\n[B]Auto-Detect[/B] will let the AI decide after the [B]first[/B] fetch.\n\n[B]Note:[/B] This setting is saved [B]per book[/B]. A custom choice overrides default auto-detection or global settings.",
+    })
 end
 
 function M:showMentionsSettings()
-    local ButtonDialog = require("ui/widget/buttondialog")
-    local info_dialog
-    
-    local function showSettings()
-        if info_dialog then UIManager:close(info_dialog) end
-        
-        local current_setting = self.ai_helper.settings.mentions_enabled ~= false -- default is true
-        local enabled_text = self.loc:t("mentions_enabled") or "Enabled"
-        local disabled_text = self.loc:t("mentions_disabled") or "Disabled"
-        
-        local buttons = {
-            {
-                {
-                    text = (current_setting and "[✓] " or "[  ] ") .. enabled_text,
-                    callback = function()
-                        self.ai_helper:saveSettings({ mentions_enabled = true })
-                        UIManager:setDirty(nil, "ui")
-                        UIManager:nextTick(function() showSettings() end)
-                    end
-                },
-                {
-                    text = ((not current_setting) and "[✓] " or "[  ] ") .. disabled_text,
-                    callback = function()
-                        self.ai_helper:saveSettings({ mentions_enabled = false })
-                        UIManager:setDirty(nil, "ui")
-                        UIManager:nextTick(function() showSettings() end)
-                    end
-                }
-            },
-            {
-                {
-                    text = self.loc:t("menu_about") or "About",
-                    callback = function()
-                        UIManager:show(InfoMessage:new{
-                            text = self.loc:t("mentions_setting_desc") or "Mentions scanning allows you to find every occurrence of a character or location in the book. This happens automatically in the background to ensure the reader stays responsive.\n\nDisabling this will stop all background scanning and hide the 'Find Mentions' button.",
-                            timeout = 30
-                        })
-                    end
-                },
-                {
-                    text = self.loc:t("close") or "Close",
-                    callback = function()
-                        UIManager:close(info_dialog)
-                    end
-                }
-            }
-        }
-        
-        info_dialog = ButtonDialog:new{
-            title = self.loc:t("mentions_setting_title") or "Mentions Settings",
-            text = self.loc:t("mentions_preference_desc") or "Select your preference for character and location mentions:",
-            buttons = buttons,
-        }
-        UIManager:show(info_dialog)
-    end
-    
-    showSettings()
+    local enabled_text = self.loc:t("mentions_enabled") or "Enabled"
+    local disabled_text = self.loc:t("mentions_disabled") or "Disabled"
+    XRaySettingsCard.show(self, {
+        title = self.loc:t("mentions_setting_title") or "Mentions Settings",
+        description = self.loc:t("mentions_preference_desc") or "Select your preference for character and location mentions:",
+        options = {
+            { text = enabled_text, value = true },
+            { text = disabled_text, value = false },
+        },
+        get_current_func = function()
+            return self.ai_helper.settings.mentions_enabled ~= false
+        end,
+        save_func = function(val)
+            self.ai_helper:saveSettings({ mentions_enabled = val })
+            UIManager:setDirty(nil, "ui")
+        end,
+        about_text = self.loc:t("mentions_setting_desc") or "Mentions scanning allows you to find every occurrence of a character or location in the book. This happens [B]automatically[/B] in the background to ensure the reader stays responsive.\n\nDisabling this will stop all background scanning and hide the [B]Find Mentions[/B] button.",
+    })
 end
 
 function M:showAutoDupeCheckSettings()
-    local ButtonDialog = require("ui/widget/buttondialog")
-    local InfoMessage = require("ui/widget/infomessage")
-    local info_dialog
-    
-    local function showSettings()
-        if info_dialog then UIManager:close(info_dialog) end
-        
-        local current_setting = self.ai_helper.settings.auto_dupe_check_enabled ~= false -- default is true
-        local enabled_text = self.loc:t("auto_dupe_check_enabled") or "Enabled"
-        local disabled_text = self.loc:t("auto_dupe_check_disabled") or "Disabled"
-        
-        local buttons = {
-            {
-                {
-                    text = (current_setting and "[✓] " or "[  ] ") .. enabled_text,
-                    callback = function()
-                        self.ai_helper:saveSettings({ auto_dupe_check_enabled = true })
-                        UIManager:setDirty(nil, "ui")
-                        UIManager:nextTick(function() showSettings() end)
-                    end
-                },
-                {
-                    text = ((not current_setting) and "[✓] " or "[  ] ") .. disabled_text,
-                    callback = function()
-                        self.ai_helper:saveSettings({ auto_dupe_check_enabled = false })
-                        UIManager:setDirty(nil, "ui")
-                        UIManager:nextTick(function() showSettings() end)
-                    end
-                }
-            },
-            {
-                {
-                    text = self.loc:t("menu_about") or "About",
-                    callback = function()
-                        UIManager:show(InfoMessage:new{
-                            text = self.loc:t("auto_dupe_check_setting_desc") or "When enabled, X-Ray automatically asks the AI to check for duplicate characters and locations after every data fetch. If duplicates are detected, you will be prompted to review and merge them.\n\nDisabling this will stop all background duplicate scanning. You can still merge duplicates manually via the Characters or Locations menu.\n\nNote: each check uses one AI API call. Users on free-tier or quota-limited plans may prefer to disable this.",
-                            timeout = 30
-                        })
-                    end
-                },
-                {
-                    text = self.loc:t("close") or "Close",
-                    callback = function()
-                        UIManager:close(info_dialog)
-                    end
-                }
-            }
-        }
-        
-        info_dialog = ButtonDialog:new{
-            title = self.loc:t("auto_dupe_check_setting_title") or "AI Duplicate Check",
-            text = self.loc:t("auto_dupe_check_preference_desc") or "Select your preference for automatic AI duplicate detection:",
-            buttons = buttons,
-        }
-        UIManager:show(info_dialog)
-    end
-    
-    showSettings()
+    local enabled_text = self.loc:t("auto_dupe_check_enabled") or "Enabled"
+    local disabled_text = self.loc:t("auto_dupe_check_disabled") or "Disabled"
+    XRaySettingsCard.show(self, {
+        title = self.loc:t("auto_dupe_check_setting_title") or "Duplicate Check",
+        description = self.loc:t("auto_dupe_check_preference_desc") or "Select your preference for automatic AI duplicate detection:",
+        options = {
+            { text = enabled_text, value = true },
+            { text = disabled_text, value = false },
+        },
+        get_current_func = function()
+            return self.ai_helper.settings.auto_dupe_check_enabled ~= false
+        end,
+        save_func = function(val)
+            self.ai_helper:saveSettings({ auto_dupe_check_enabled = val })
+            UIManager:setDirty(nil, "ui")
+        end,
+        about_text = self.loc:t("auto_dupe_check_setting_desc") or "When enabled, X-Ray automatically asks the AI to check for duplicate characters and locations after every data fetch. If duplicates are detected, you will be prompted to review and merge them.\n\nDisabling this will stop all background duplicate scanning. You can still merge duplicates manually via the Characters or Locations menu.\n\n[B]Note:[/B] each check uses [B]one[/B] AI API call. Users on free-tier or quota-limited plans may prefer to disable this.",
+    })
 end
 
 function M:showLinkedEntriesSettings()
-    local ButtonDialog = require("ui/widget/buttondialog")
-    local InfoMessage = require("ui/widget/infomessage")
-    local info_dialog
-    
-    local function showSettings()
-        if info_dialog then UIManager:close(info_dialog) end
-        
-        local current_setting = self.ai_helper.settings.linked_entries_enabled ~= false -- default is true
-        local enabled_text = self.loc:t("linked_entries_enabled") or "Enabled"
-        local disabled_text = self.loc:t("linked_entries_disabled") or "Disabled"
-        
-        local buttons = {
-            {
-                {
-                    text = (current_setting and "[✓] " or "[  ] ") .. enabled_text,
-                    callback = function()
-                        self.ai_helper:saveSettings({ linked_entries_enabled = true })
-                        UIManager:setDirty(nil, "ui")
-                        UIManager:nextTick(function() showSettings() end)
-                    end
-                },
-                {
-                    text = ((not current_setting) and "[✓] " or "[  ] ") .. disabled_text,
-                    callback = function()
-                        self.ai_helper:saveSettings({ linked_entries_enabled = false })
-                        UIManager:setDirty(nil, "ui")
-                        UIManager:nextTick(function() showSettings() end)
-                    end
-                }
-            },
-            {
-                {
-                    text = self.loc:t("menu_about") or "About",
-                    callback = function()
-                        UIManager:show(InfoMessage:new{
-                            text = self.loc:t("linked_entries_setting_desc") or "Linked Entries automatically connects characters, locations, and historical figures when they are mentioned in each other's descriptions.\n\nDisabling this will hide the 'Linked Entries' button from detail dialogs.",
-                            timeout = 30
-                        })
-                    end
-                },
-                {
-                    text = self.loc:t("close") or "Close",
-                    callback = function()
-                        UIManager:close(info_dialog)
-                    end
-                }
-            }
-        }
-        
-        info_dialog = ButtonDialog:new{
-            title = self.loc:t("menu_linked_entries_settings") or "Linked Entries Settings",
-            buttons = {
-                {
-                    {
-                        text = (current_setting and "[✓] " or "[  ] ") .. enabled_text,
-                        callback = function()
-                            self.ai_helper:saveSettings({ linked_entries_enabled = true })
-                            UIManager:setDirty(nil, "ui")
-                            UIManager:nextTick(function() showSettings() end)
-                        end
-                    },
-                    {
-                        text = ((not current_setting) and "[✓] " or "[  ] ") .. disabled_text,
-                        callback = function()
-                            self.ai_helper:saveSettings({ linked_entries_enabled = false })
-                            UIManager:setDirty(nil, "ui")
-                            UIManager:nextTick(function() showSettings() end)
-                        end
-                    }
-                },
-                {
-                    {
-                        text = self.loc:t("menu_about") or "About",
-                        callback = function()
-                            UIManager:show(InfoMessage:new{
-                                text = self.loc:t("linked_entries_setting_desc") or "Linked Entries automatically connects characters, locations, and historical figures when they are mentioned in each other's descriptions.\n\nDisabling this will hide the 'Linked Entries' button from detail dialogs.",
-                                timeout = 30
-                            })
-                        end
-                    },
-                    {
-                        text = self.loc:t("close") or "Close",
-                        callback = function()
-                            UIManager:close(info_dialog)
-                        end
-                    }
-                }
-            }
-        }
-        UIManager:show(info_dialog)
-    end
-    
-    showSettings()
+    local enabled_text = self.loc:t("linked_entries_enabled") or "Enabled"
+    local disabled_text = self.loc:t("linked_entries_disabled") or "Disabled"
+    XRaySettingsCard.show(self, {
+        title = self.loc:t("menu_linked_entries_settings") or "Linked Entries Settings",
+        options = {
+            { text = enabled_text, value = true },
+            { text = disabled_text, value = false },
+        },
+        get_current_func = function()
+            return self.ai_helper.settings.linked_entries_enabled ~= false
+        end,
+        save_func = function(val)
+            self.ai_helper:saveSettings({ linked_entries_enabled = val })
+            UIManager:setDirty(nil, "ui")
+        end,
+        about_text = self.loc:t("linked_entries_setting_desc") or "Linked Entries automatically connects characters, locations, and historical figures when they are mentioned in each other's descriptions.\n\nDisabling this will hide the [B]Linked Entries[/B] button from detail dialogs.",
+    })
 end
 
 function M:filterValidDuplicatePairs(list, pairs)
@@ -2443,304 +2401,155 @@ end
 
 
 function M:showAutoUpdateSettings()
-    local ButtonDialog = require("ui/widget/buttondialog")
-    local info_dialog
-    
-    local function showSettings()
-        if info_dialog then UIManager:close(info_dialog) end
-        local is_enabled = self.auto_fetch_enabled
-        local current_cooldown = self.ai_helper.settings and self.ai_helper.settings.auto_fetch_cooldown or 300
-        local page_interval = self.ai_helper.settings and self.ai_helper.settings.auto_fetch_page_interval
-        local btn_align = self:isRTL() and "right" or "left"
-        
-        info_dialog = ButtonDialog:new{
-            title = (self.loc:t("menu_auto_update_frequency") or "Auto X-Ray Settings") .. "\n\n" .. (self.loc:t("auto_update_freq_label") or "Background fetching frequency:"),
-            buttons = {
-                {
-                    {
-                        text = (is_enabled and page_interval ~= nil and page_interval > 0 and "[✓] " or "[  ] ") .. (self.loc:t("auto_update_ultra", page_interval or 25) or ("Ultra: checks every " .. (page_interval or 25) .. " pages")),
-                        align = btn_align,
-                        callback = function()
-                            local SpinWidget = require("ui/widget/spinwidget")
-                            local spin_dialog
-                            spin_dialog = SpinWidget:new{
-                                title_text = self.loc:t("auto_fetch_page_interval_prompt") or "Page Interval",
-                                value = page_interval or 25,
-                                value_min = 5,
-                                value_max = 200,
-                                value_step = 5,
-                                callback = function(spin)
-                                    local chosen = spin.value
-                                    self.auto_fetch_enabled = true
-                                    self.ai_helper:saveSettings({
-                                        auto_fetch_on_chapter = true,
-                                        auto_fetch_cooldown = 0,
-                                        auto_fetch_page_interval = chosen
-                                    })
-                                    UIManager:close(spin_dialog)
-                                    UIManager:nextTick(function() showSettings() end)
-                                end,
-                                cancel_callback = function()
-                                    UIManager:close(spin_dialog)
-                                end
-                            }
-                            UIManager:show(spin_dialog)
-                        end
-                    }
-                },
-                {
-                    {
-                        text = (is_enabled and page_interval == nil and current_cooldown == 0 and "[✓] " or "[  ] ") .. (self.loc:t("auto_update_aggressive") or "Aggressive: checks every new chapter"),
-                        align = btn_align,
-                        callback = function()
-                            self.auto_fetch_enabled = true
-                            self.ai_helper:saveSettings({ auto_fetch_on_chapter = true, auto_fetch_cooldown = 0 }, { "auto_fetch_page_interval" })
-                            UIManager:nextTick(function() showSettings() end)
-                        end
-                    }
-                },
-                {
-                    {
-                        text = (is_enabled and current_cooldown == 300 and "[✓] " or "[  ] ") .. (self.loc:t("auto_update_balanced") or "Balanced: checks at most every 5 mins"),
-                        align = btn_align,
-                        callback = function()
-                            self.auto_fetch_enabled = true
-                            self.ai_helper:saveSettings({ auto_fetch_on_chapter = true, auto_fetch_cooldown = 300 }, { "auto_fetch_page_interval" })
-                            UIManager:nextTick(function() showSettings() end)
-                        end
-                    }
-                },
-                {
-                    {
-                        text = (is_enabled and current_cooldown == 900 and "[✓] " or "[  ] ") .. (self.loc:t("auto_update_economical") or "Economical: checks at most every 15 mins"),
-                        align = btn_align,
-                        callback = function()
-                            self.auto_fetch_enabled = true
-                            self.ai_helper:saveSettings({ auto_fetch_on_chapter = true, auto_fetch_cooldown = 900 }, { "auto_fetch_page_interval" })
-                            UIManager:nextTick(function() showSettings() end)
-                        end
-                    }
-                },
-                {
-                    {
-                        text = (is_enabled and current_cooldown == 1800 and "[✓] " or "[  ] ") .. (self.loc:t("auto_update_sparse") or "Sparse: checks at most every 30 mins"),
-                        align = btn_align,
-                        callback = function()
-                            self.auto_fetch_enabled = true
-                            self.ai_helper:saveSettings({ auto_fetch_on_chapter = true, auto_fetch_cooldown = 1800 }, { "auto_fetch_page_interval" })
-                            UIManager:nextTick(function() showSettings() end)
-                        end
-                    }
-                },
-                {
-                    {
-                        text = (not is_enabled and "[✓] " or "[  ] ") .. (self.loc:t("auto_update_disabled") or "Disabled"),
-                        align = btn_align,
-                        callback = function()
-                            self.auto_fetch_enabled = false
-                            self.ai_helper:saveSettings({ auto_fetch_on_chapter = false }, { "auto_fetch_page_interval" })
-                            UIManager:nextTick(function() showSettings() end)
-                        end
-                    }
-                },
-                {
-                    {
-                        text = self.loc:t("menu_about") or "About",
-                        callback = function()
-                            UIManager:show(InfoMessage:new{
-                                text = self.loc:t("auto_update_freq_about") or "Auto-update checks for new chapter data in the background as you read.\n\nLIMITS & PERFORMANCE\nFrequent background requests can drain BATTERY LIFE and may hit AI PROVIDER RATE LIMITS.\n\nMODES\n• Ultra: Checks every N pages you configure (mid-chapter)\n• Aggressive: Checks every time you enter a new chapter\n• Balanced: Checks at most every 5 minutes (recommended)\n• Economical: Checks at most every 15 minutes\n• Sparse: Checks at most every 30 minutes\n• Disabled: No background requests\n\nNote: skipped chapters will be included in the next update.",
-                                timeout = 120
-                            })
-                        end
-                    },
-                    {
-                        text = self.loc:t("close") or "Close",
-                        callback = function()
-                            UIManager:close(info_dialog)
-                        end
-                    }
-                }
+    XRaySettingsCard.show(self, {
+        title = (self.loc:t("auto_update_freq_label") or "Background Fetching Frequency"):gsub(":$", ""),
+        description = self.loc:t("menu_auto_update_frequency") or "Auto X-Ray Settings",
+        options = function()
+            return {
+                { text = self.loc:t("auto_update_ultra", self.ai_helper.settings and self.ai_helper.settings.auto_fetch_page_interval or 25) or ("Ultra: checks every " .. (self.ai_helper.settings and self.ai_helper.settings.auto_fetch_page_interval or 25) .. " pages"), value = "ultra" },
+                { text = self.loc:t("auto_update_aggressive") or "Aggressive: checks every new chapter", value = "aggressive" },
+                { text = self.loc:t("auto_update_balanced") or "Balanced: checks at most every 5 mins", value = "balanced" },
+                { text = self.loc:t("auto_update_economical") or "Economical: checks at most every 15 mins", value = "economical" },
+                { text = self.loc:t("auto_update_sparse") or "Sparse: checks at most every 30 mins", value = "sparse" },
+                { text = self.loc:t("auto_update_disabled") or "Disabled", value = "disabled" },
             }
-        }
-        UIManager:show(info_dialog)
-    end
-    
-    showSettings()
+        end,
+        get_current_func = function()
+            local is_enabled = self.auto_fetch_enabled
+            local current_cooldown = self.ai_helper.settings and self.ai_helper.settings.auto_fetch_cooldown or 300
+            local page_interval = self.ai_helper.settings and self.ai_helper.settings.auto_fetch_page_interval
+            local current = "disabled"
+            if is_enabled then
+                if page_interval ~= nil and page_interval > 0 then
+                    current = "ultra"
+                elseif current_cooldown == 0 then
+                    current = "aggressive"
+                elseif current_cooldown == 300 then
+                    current = "balanced"
+                elseif current_cooldown == 900 then
+                    current = "economical"
+                elseif current_cooldown == 1800 then
+                    current = "sparse"
+                end
+            end
+            return current
+        end,
+        save_func = function(val, refresh_card)
+            local page_interval = self.ai_helper.settings and self.ai_helper.settings.auto_fetch_page_interval
+            if val == "ultra" then
+                local SpinWidget = require("ui/widget/spinwidget")
+                local spin_dialog
+                spin_dialog = SpinWidget:new{
+                    title_text = self.loc:t("auto_fetch_page_interval_prompt") or "Page Interval",
+                    value = page_interval or 25,
+                    value_min = 5,
+                    value_max = 200,
+                    value_step = 5,
+                    callback = function(spin)
+                        local chosen = spin.value
+                        self.auto_fetch_enabled = true
+                        self.ai_helper:saveSettings({
+                            auto_fetch_on_chapter = true,
+                            auto_fetch_cooldown = 0,
+                            auto_fetch_page_interval = chosen
+                        })
+                        UIManager:close(spin_dialog)
+                        refresh_card()
+                    end,
+                    cancel_callback = function()
+                        UIManager:close(spin_dialog)
+                    end
+                }
+                UIManager:show(spin_dialog, "full")
+                return true
+            elseif val == "aggressive" then
+                self.auto_fetch_enabled = true
+                self.ai_helper:saveSettings({ auto_fetch_on_chapter = true, auto_fetch_cooldown = 0 }, { "auto_fetch_page_interval" })
+            elseif val == "balanced" then
+                self.auto_fetch_enabled = true
+                self.ai_helper:saveSettings({ auto_fetch_on_chapter = true, auto_fetch_cooldown = 300 }, { "auto_fetch_page_interval" })
+            elseif val == "economical" then
+                self.auto_fetch_enabled = true
+                self.ai_helper:saveSettings({ auto_fetch_on_chapter = true, auto_fetch_cooldown = 900 }, { "auto_fetch_page_interval" })
+            elseif val == "sparse" then
+                self.auto_fetch_enabled = true
+                self.ai_helper:saveSettings({ auto_fetch_on_chapter = true, auto_fetch_cooldown = 1800 }, { "auto_fetch_page_interval" })
+            elseif val == "disabled" then
+                self.auto_fetch_enabled = false
+                self.ai_helper:saveSettings({ auto_fetch_on_chapter = false }, { "auto_fetch_page_interval" })
+            end
+        end,
+        about_text = self.loc:t("auto_update_freq_about") or "Auto-update checks for new chapter data in the background as you read.\n\n[B]Limits & Performance[/B]\nFrequent background requests can drain [B]battery life[/B] and may hit [B]AI provider rate limits[/B].\n\n[B]Note:[/B] skipped chapters will be automatically included in the next background update.",
+    })
 end
 
 function M:showSpoilerSettings()
-    local ButtonDialog = require("ui/widget/buttondialog")
-    local info_dialog
-    
-    local function showSettings()
-        if info_dialog then UIManager:close(info_dialog) end
-        local current_setting = self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
-        
-        info_dialog = ButtonDialog:new{
-            title = self.loc:t("spoiler_preference_title") or "Spoiler Settings",
-            text = self.loc:t("spoiler_preference_desc") or "Select your spoiler preference for X-Ray data:",
-            buttons = {
-                {
-                    {
-                        text = (current_setting == "spoiler_free" and "[✓] " or "[  ] ") .. (self.loc:t("spoiler_free_menu_option") or "Spoiler-free"),
-                        callback = function()
-                            self.ai_helper:saveSettings({ spoiler_setting = "spoiler_free" })
-                            UIManager:setDirty(nil, "ui")
-                            UIManager:nextTick(function() showSettings() end)
-                        end
-                    },
-                    {
-                        text = (current_setting == "full_book" and "[✓] " or "[  ] ") .. (self.loc:t("full_book_option") or "Full Book Mode"),
-                        callback = function()
-                            self.ai_helper:saveSettings({ spoiler_setting = "full_book" })
-                            UIManager:setDirty(nil, "ui")
-                            UIManager:nextTick(function() showSettings() end)
-                        end
-                    }
-                },
-                {
-                    {
-                        text = self.loc:t("menu_about") or "About",
-                        callback = function()
-                            UIManager:show(InfoMessage:new{
-                                text = self.loc:t("spoiler_free_about") or "Spoiler-free mode limits AI extraction to the pages you have already read (up to your current page), preventing spoilers from future chapters.\n\nFull Book Mode analyzes the entire book, which may contain spoilers.",
-                                timeout = 30
-                            })
-                        end
-                    },
-                    {
-                        text = self.loc:t("close") or "Close",
-                        callback = function()
-                            UIManager:close(info_dialog)
-                        end
-                    }
-                }
-            }
-        }
-        UIManager:show(info_dialog)
-    end
-    
-    showSettings()
-end
-
-
-function M:showDescriptionLengthSettings()
-    local menu_items = {
-        {
-            text = self.loc:t("menu_characters"),
-            callback = function() self:showEntityLengthPresets("char_desc_len", self.loc:t("menu_characters")) end,
+    XRaySettingsCard.show(self, {
+        title = self.loc:t("spoiler_preference_title") or "Spoiler Settings",
+        description = self.loc:t("spoiler_preference_desc") or "Select your spoiler preference for X-Ray data:",
+        options = {
+            { text = self.loc:t("spoiler_free_menu_option") or "Spoiler-free", value = "spoiler_free" },
+            { text = self.loc:t("full_book_option") or "Full Book Mode", value = "full_book" },
         },
-        {
-            text = self.loc:t("menu_locations"),
-            callback = function() self:showEntityLengthPresets("loc_desc_len", self.loc:t("menu_locations")) end,
-        },
-        {
-            text = self.loc:t("menu_timeline"),
-            callback = function() self:showEntityLengthPresets("timeline_event_len", self.loc:t("menu_timeline"), true) end,
-        },
-        {
-            text = self.loc:t("menu_historical_figures"),
-            callback = function() self:showEntityLengthPresets("hist_fig_bio_len", self.loc:t("menu_historical_figures")) end,
-        },
-        {
-            text = self.loc:t("menu_terms") or "Glossary",
-            callback = function() self:showEntityLengthPresets("term_def_len", self.loc:t("menu_terms") or "Glossary") end,
-        },
-    }
-
-    self.length_presets_menu = self:newMenu("length_presets_menu", {
-        title = self.loc:t("menu_desc_length_settings"),
-        item_table = menu_items,
+        get_current_func = function()
+            return self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
+        end,
+        save_func = function(val)
+            self.ai_helper:saveSettings({ spoiler_setting = val })
+            UIManager:setDirty(nil, "ui")
+        end,
+        about_text = self.loc:t("spoiler_free_about") or "Spoiler-free mode limits AI extraction to the pages you have already read (up to your current page), preventing spoilers from future chapters.\n\n[B]Full Book Mode:[/B] Analyzes the entire book, which [B]may contain spoilers[/B].",
     })
-    UIManager:show(self.length_presets_menu)
 end
 
 function M:showEntityLengthPresets(setting_key, entity_name, is_timeline)
-    local info_dialog
+    local defaults = {
+        char_desc_len    = 200,
+        loc_desc_len     = 100,
+        timeline_event_len = 80,
+        hist_fig_bio_len = 100,
+    }
 
-    local function showSettings()
-        if info_dialog then UIManager:close(info_dialog) end
+    local presets = {
+        { name = self.loc:t("desc_len_short"),      val = is_timeline and 50  or (setting_key == "char_desc_len" and 80  or 50)  },
+        { name = self.loc:t("desc_len_default"),    val = is_timeline and 80  or (setting_key == "char_desc_len" and 200 or 100) },
+        { name = self.loc:t("desc_len_detailed"),   val = is_timeline and 150 or (setting_key == "char_desc_len" and 350 or 200) },
+        { name = self.loc:t("desc_len_v_detailed"), val = is_timeline and 200 or (setting_key == "char_desc_len" and 500 or 300) },
+    }
 
-        local s = self.ai_helper and self.ai_helper.settings or {}
-        local defaults = {
-            char_desc_len    = 200,
-            loc_desc_len     = 100,
-            timeline_event_len = 80,
-            hist_fig_bio_len = 100,
-        }
-        local current_val = s[setting_key] or (is_timeline and 80 or defaults[setting_key] or 100)
-
-        local presets = {
-            { name = self.loc:t("desc_len_short"),      val = is_timeline and 50  or (setting_key == "char_desc_len" and 80  or 50)  },
-            { name = self.loc:t("desc_len_default"),    val = is_timeline and 80  or (setting_key == "char_desc_len" and 200 or 100) },
-            { name = self.loc:t("desc_len_detailed"),   val = is_timeline and 150 or (setting_key == "char_desc_len" and 350 or 200) },
-            { name = self.loc:t("desc_len_v_detailed"), val = is_timeline and 200 or (setting_key == "char_desc_len" and 500 or 300) },
-        }
-
-        local btn_align = self:isRTL() and "right" or "left"
-        local buttons = {}
-        for _, p in ipairs(presets) do
-            local label = (current_val == p.val and "[✓] " or "[  ] ") .. p.name
-            local pval = p.val
-            table.insert(buttons, {{
-                text = label,
-                align = btn_align,
-                callback = function()
-                    if self.ai_helper then
-                        local updates = {}
-                        updates[setting_key] = pval
-                        self.ai_helper:saveSettings(updates)
-                    end
-                    UIManager:nextTick(function() showSettings() end)
-                end,
-            }})
-        end
-
-        -- About text varies by entity type
-        local about_text
-        if is_timeline then
-            about_text = self.loc:t("desc_len_about_timeline") or
-                "TIMELINE — ONE EVENT PER CHAPTER (always)\n\nTimeline always has exactly one entry per chapter. This setting only affects how much detail is included in each summary.\n\n• Short (~50 chars): Brief one-phrase summary.\n• Default (~80 chars): Standard summary.\n• Detailed (~150 chars): Includes context and consequences.\n• Very Detailed (~200 chars): Full narrative description.\n\nThere is no count trade-off for the timeline."
-        elseif setting_key == "char_desc_len" then
-            about_text = self.loc:t("desc_len_about_chars") or
-                "CHARACTER DESCRIPTIONS\n\n• Short (~80 chars): Name, role, and a brief note.\n• Default (~200 chars): Standard analysis.\n• Detailed (~350 chars): Rich character study with traits and motivations.\n• Very Detailed (~500 chars): Deep analysis.\n\nTRADE-OFF\nLonger descriptions → fewer characters returned during initial/full fetches. Subsequent 'Fetch More' runs are unaffected."
-        elseif setting_key == "loc_desc_len" then
-            about_text = self.loc:t("desc_len_about_locs") or
-                "LOCATION DESCRIPTIONS\n\n• Short (~50 chars): Place name and one-line context.\n• Default (~100 chars): Standard description.\n• Detailed (~200 chars): Atmosphere, significance, and events.\n• Very Detailed (~300 chars): Full description.\n\nTRADE-OFF\nLonger descriptions → fewer locations returned during initial/full fetches."
-        else
-            about_text = self.loc:t("desc_len_about_hist") or
-                "HISTORICAL FIGURE BIOGRAPHIES\n\n• Short (~50 chars): Name and primary role.\n• Default (~100 chars): Standard biography.\n• Detailed (~200 chars): Life, significance, and book context.\n• Very Detailed (~300 chars): Comprehensive biography.\n\nTRADE-OFF\nLonger biographies → fewer historical figures returned during initial/full fetches."
-        end
-
-        table.insert(buttons, {
-            {
-                text = self.loc:t("menu_about") or "About",
-                callback = function()
-                    UIManager:show(InfoMessage:new{
-                        text = about_text,
-                        timeout = 120,
-                    })
-                end,
-            },
-            {
-                text = self.loc:t("close") or "Close",
-                callback = function()
-                    UIManager:close(info_dialog)
-                end,
-            },
-        })
-
-        info_dialog = ButtonDialog:new{
-            title = entity_name .. " — " .. (self.loc:t("menu_desc_length_settings") or "Description Length"),
-            buttons = buttons,
-        }
-        UIManager:show(info_dialog)
+    local options = {}
+    for _, p in ipairs(presets) do
+        table.insert(options, { text = p.name, value = p.val })
     end
 
-    showSettings()
+    local about_text
+    if is_timeline then
+        about_text = self.loc:t("desc_len_about_timeline") or "Controls how much detail the AI includes in each summary on the book timeline.\n\n[B]Size options[/B]\n• Short (~50 chars): Brief one-phrase summary.\n• Default (~80 chars): Standard summary.\n• Detailed (~150 chars): Includes context and consequences.\n\n[B]Note:[/B] the timeline always has exactly one entry per chapter, so there is no size trade-off."
+    elseif setting_key == "char_desc_len" then
+        about_text = self.loc:t("desc_len_about_chars") or "Controls how much detail the AI includes in each character's profile.\n\n[B]Size options[/B]\n• Short (~80 chars): Name, role, and a brief note.\n• Default (~200 chars): Standard analysis.\n• Detailed (~350 chars): Rich character study with traits and motivations.\n• Very Detailed (~500 chars): Full deep analysis.\n\n[B]Trade-off[/B]\nLonger descriptions consume more tokens, meaning [B]fewer[/B] characters are returned during initial fetches."
+    elseif setting_key == "loc_desc_len" then
+        about_text = self.loc:t("desc_len_about_locs") or "Controls how much detail the AI includes in each location's description.\n\n[B]Size options[/B]\n• Short (~50 chars): Place name and one-line context.\n• Default (~100 chars): Standard description.\n• Detailed (~200 chars): Atmosphere, significance, and events.\n• Very Detailed (~300 chars): Comprehensive description.\n\n[B]Trade-off[/B]\nLonger descriptions consume more tokens, meaning [B]fewer[/B] locations are returned during initial fetches."
+    else
+        about_text = self.loc:t("desc_len_about_hist") or "Controls how much detail the AI includes in each historical figure's biography.\n\n[B]Size options[/B]\n• Short (~50 chars): Name and primary role.\n• Default (~100 chars): Standard biography.\n• Detailed (~200 chars): Life, significance, and book context.\n• Very Detailed (~300 chars): Comprehensive biography.\n\n[B]Trade-off[/B]\nLonger biographies consume more tokens, meaning [B]fewer[/B] figures are returned during initial fetches."
+    end
+
+    XRaySettingsCard.show(self, {
+        title = entity_name .. " — " .. (self.loc:t("menu_desc_length_settings") or "Description Length"),
+        options = options,
+        get_current_func = function()
+            local current_s = self.ai_helper and self.ai_helper.settings or {}
+            return current_s[setting_key] or (is_timeline and 80 or defaults[setting_key] or 100)
+        end,
+        save_func = function(pval)
+            if self.ai_helper then
+                local updates = {}
+                updates[setting_key] = pval
+                self.ai_helper:saveSettings(updates)
+            end
+        end,
+        about_text = about_text,
+    })
 end
-
-
 
 function M:showAuthorInfo()
     if not self.author_info or not self.author_info.description or self.author_info.description == "" or self.author_info.description == (self.loc:t("msg_no_bio") or "No biography available.") then
@@ -2749,8 +2558,106 @@ function M:showAuthorInfo()
         ask_dialog = ButtonDialog:new{ title = (self.loc:t("menu_fetch_author") or "Fetch Author Info") .. "\n\n" .. (self.loc:t("no_author_data_fetch") or "No author biography available. Fetch now?"), buttons = {{{ text = self.loc:t("cancel"), callback = function() UIManager:close(ask_dialog) end }, { text = self.loc:t("fetch_button") or "Fetch", is_enter_default = true, callback = function() UIManager:close(ask_dialog); UIManager:nextTick(function() self:fetchAuthorInfo() end) end }}} }
         UIManager:show(ask_dialog); return
     end
-    local lines = { "NAME: " .. (self.author_info.name or "Unknown"), "BORN: " .. (self.author_info.birthDate or "---"), "DIED: " .. (self.author_info.deathDate or "---"), "", "BIOGRAPHY:", (self.author_info.description or "No biography available.") }
-    UIManager:show(InfoMessage:new{ text = table.concat(lines, "\n"), timeout = 30 })
+
+    local ButtonDialog = require("ui/widget/buttondialog")
+    local VerticalGroup = require("ui/widget/verticalgroup")
+    local TextBoxWidget = require("ui/widget/textboxwidget")
+    local VerticalSpan = require("ui/widget/verticalspan")
+    local Font = require("ui/font")
+    local Geom = require("ui/geometry")
+    local Screen = require("device").screen
+    
+    local dialog_width = math.floor(math.min(Screen:getWidth(), Screen:getHeight()) * 0.9)
+    local border_window = (Size.border and Size.border.window) or 1
+    local padding_button = (Size.padding and Size.padding.button) or 10
+    local padding_default = (Size.padding and Size.padding.default) or 10
+    local margin_default = (Size.margin and Size.margin.default) or 5
+    local buttontable_width = dialog_width - 2 * border_window - 2 * padding_button
+    local title_group_width = buttontable_width - 2 * (padding_default + margin_default)
+
+    local base_fs = _getPopupFontSize(self)
+    local doc_family
+    if self.ui and self.ui.font then
+        doc_family = self.ui.font.font_face
+    end
+    if not doc_family and G_reader_settings then
+        doc_family = G_reader_settings:readSetting("cre_font_family")
+    end
+
+    local text_has_cjk = false
+    if self.author_info.name and _textHasCJK(tostring(self.author_info.name)) then
+        text_has_cjk = true
+    elseif self.author_info.description and _textHasCJK(tostring(self.author_info.description)) then
+        text_has_cjk = true
+    end
+
+    local is_cjk = _isCJKFontFamily(doc_family) or text_has_cjk
+    local fs
+    if is_cjk then
+        fs = math.max(12, math.min(math.floor(base_fs * 0.75), 18))
+    else
+        fs = math.max(12, math.min(base_fs, 20))
+    end
+    local align = self:isRTL() and "right" or "left"
+    local vg_components = { align = align }
+
+    -- 1. Bold Name
+    table.insert(vg_components, TextBoxWidget:new{
+        text = self.author_info.name or "Unknown",
+        face = Font:getFace("cfont", fs),
+        width = title_group_width,
+        bold = true,
+        alignment = align,
+    })
+
+    -- 2. Metadata (Born / Died)
+    local metadata = {}
+    if self.author_info.birthDate and self.author_info.birthDate ~= "" and self.author_info.birthDate ~= "---" then
+        table.insert(metadata, (self.loc:t("author_born") or "Born: ") .. self.author_info.birthDate)
+    end
+    if self.author_info.deathDate and self.author_info.deathDate ~= "" and self.author_info.deathDate ~= "---" then
+        table.insert(metadata, (self.loc:t("author_died") or "Died: ") .. self.author_info.deathDate)
+    end
+    if #metadata > 0 then
+        local xray_theme = require(plugin_path .. "xray_theme")
+        table.insert(vg_components, VerticalSpan:new{ width = math.max(4, math.floor(fs * 0.2)) })
+        table.insert(vg_components, TextBoxWidget:new{
+            text = table.concat(metadata, "   "),
+            face = Font:getFace("cfont", fs - 4),
+            fgcolor = xray_theme.color_label_dim,
+            width = title_group_width,
+            alignment = align,
+        })
+    end
+
+    -- 3. Biography Description
+    table.insert(vg_components, VerticalSpan:new{ width = math.max(6, math.floor(fs * 0.3)) })
+    table.insert(vg_components, TextBoxWidget:new{
+        text = self.author_info.description or "No biography available.",
+        face = Font:getFace("cfont", fs),
+        width = title_group_width,
+        alignment = align,
+    })
+
+    local vg = VerticalGroup:new(vg_components)
+
+    local buttons = {
+        {
+            {
+                text = self.loc:t("close") or "Close",
+                callback = function()
+                    if self.active_details_dialog then UIManager:close(self.active_details_dialog) end
+                    self.active_details_dialog = nil
+                end,
+            }
+        }
+    }
+
+    self.active_details_dialog = ButtonDialog:new{
+        _added_widgets = { vg },
+        buttons = buttons,
+    }
+    UIManager:show(self.active_details_dialog)
 end
 
 function M:showLocations()
@@ -2937,7 +2844,6 @@ function XRayLogViewer:_rebuild()
         background = Blitbuffer.COLOR_DARK_GRAY,
     }
 
-    -- Resolution of 75% of user's selected book font size
     local function _getPopupFontSize(plugin)
         local size
         if plugin and plugin.ui and plugin.ui.font and plugin.ui.font.configurable then
@@ -2956,11 +2862,33 @@ function XRayLogViewer:_rebuild()
     end
 
     local base_fs = _getPopupFontSize(self.ui_instance and self.ui_instance.plugin)
-    local fs = math.max(12, math.floor(base_fs * 0.75))
 
-    local content_face = Font:getFace("infont", fs)
-        or Font:getFace("smallinfont", fs)
-        or Font:getFace("cfont", fs)
+    local doc_family
+    if self.ui_instance and self.ui_instance.plugin and self.ui_instance.plugin.ui and self.ui_instance.plugin.ui.font then
+        doc_family = self.ui_instance.plugin.ui.font.font_face
+    end
+    if not doc_family and G_reader_settings then
+        doc_family = G_reader_settings:readSetting("cre_font_family")
+    end
+
+    local text_has_cjk = _textHasCJK(text)
+    local is_cjk = _isCJKFontFamily(doc_family) or text_has_cjk
+
+    local fs
+    if is_cjk then
+        fs = math.max(12, math.min(math.floor(base_fs * 0.55), 14))
+    else
+        fs = math.max(12, math.min(math.floor(base_fs * 0.75), 16))
+    end
+
+    local content_face
+    if is_cjk then
+        content_face = Font:getFace("cfont", fs)
+    else
+        content_face = Font:getFace("infont", fs)
+            or Font:getFace("smallinfont", fs)
+            or Font:getFace("cfont", fs)
+    end
 
     if not content_face then
         content_face = Font:getFace("cfont", fs)
@@ -3067,7 +2995,7 @@ function XRayLogViewer:_rebuild()
         pad_bottom = pad_bottom + safe_bottom
     end
 
-    local content_h = sh - title_h - separator:getSize().h - btn_h - pad_top - pad_bottom - gap * 4
+    local content_h = sh - title_h - separator:getSize().h - btn_h - pad_top - pad_bottom - gap * 3 - (fs + 4)
 
     local content_widget = TextBoxWidget:new{
         text = text,
@@ -3136,8 +3064,8 @@ function XRayLogViewer:_reloadFromDisk()
         table.insert(all_lines, line)
     end
 
-    -- Keep only the last 100 lines for display
-    local max_lines = 100
+    -- Keep only the last 50 lines for display
+    local max_lines = 50
     local display_lines = all_lines
     local skipped = 0
     if #all_lines > max_lines then
@@ -3232,6 +3160,9 @@ function M:viewLog(page_num)
         end
     end
 
+
+
+    -- Fallback to XRayLogViewer
     -- Split into pages of 25 lines backward so the last page (most recent logs) is full
     local lines_per_page = 25
     local pages = {}
@@ -3284,58 +3215,24 @@ function M:viewLog(page_num)
 end
 
 function M:toggleXRayMode()
-    local ButtonDialog = require("ui/widget/buttondialog")
-    local info_dialog
-    
-    local function showSettings()
-        if info_dialog then UIManager:close(info_dialog) end
-        info_dialog = ButtonDialog:new{
-            title = self.loc:t("menu_xray_mode") or "X-Ray Mode Settings",
-            text = self.loc:t("xray_mode_desc"),
-            buttons = {
-                {
-                    {
-                        text = (self.xray_mode_enabled and "[✓] " or "[  ] ") .. (self.loc:t("xray_enabled_label") or "Enabled"),
-                        callback = function()
-                            self.xray_mode_enabled = true
-                            if self.ai_helper then self.ai_helper:saveSettings({ xray_mode_enabled = true }) end
-                            UIManager:setDirty(nil, "ui")
-                            UIManager:nextTick(function() showSettings() end)
-                        end
-                    },
-                    {
-                        text = (not self.xray_mode_enabled and "[✓] " or "[  ] ") .. (self.loc:t("xray_disabled_label") or "Disabled"),
-                        callback = function()
-                            self.xray_mode_enabled = false
-                            if self.ai_helper then self.ai_helper:saveSettings({ xray_mode_enabled = false }) end
-                            UIManager:setDirty(nil, "ui")
-                            UIManager:nextTick(function() showSettings() end)
-                        end
-                    }
-                },
-                {
-                    {
-                        text = self.loc:t("menu_about") or "About",
-                        callback = function()
-                            UIManager:show(InfoMessage:new{
-                                text = self.loc:t("xray_mode_desc"),
-                                timeout = 30
-                            })
-                        end
-                    },
-                    {
-                        text = self.loc:t("close") or "Close",
-                        callback = function()
-                            UIManager:close(info_dialog)
-                        end
-                    }
-                }
-            }
-        }
-        UIManager:show(info_dialog)
-    end
-    
-    showSettings()
+    local enabled_text = self.loc:t("xray_enabled_label") or "Enabled"
+    local disabled_text = self.loc:t("xray_disabled_label") or "Disabled"
+    XRaySettingsCard.show(self, {
+        title = self.loc:t("menu_xray_mode") or "X-Ray Mode Settings",
+        description = self.loc:t("xray_mode_desc"),
+        options = {
+            { text = enabled_text, value = true },
+            { text = disabled_text, value = false },
+        },
+        get_current_func = function()
+            return self.xray_mode_enabled == true
+        end,
+        save_func = function(val)
+            self.xray_mode_enabled = val
+            if self.ai_helper then self.ai_helper:saveSettings({ xray_mode_enabled = val }) end
+            UIManager:setDirty(nil, "ui")
+        end,
+    })
 end
 
 function M:showTimeline()
@@ -3425,7 +3322,29 @@ function M:showTimelineEventDetails(ev, opts)
     end
 
     -- (B) ButtonDialog path
-    local fs = _getPopupFontSize(self)
+    local base_fs = _getPopupFontSize(self)
+    local doc_family
+    if self.ui and self.ui.font then
+        doc_family = self.ui.font.font_face
+    end
+    if not doc_family and G_reader_settings then
+        doc_family = G_reader_settings:readSetting("cre_font_family")
+    end
+
+    local text_has_cjk = false
+    if ev.chapter and _textHasCJK(tostring(ev.chapter)) then
+        text_has_cjk = true
+    elseif ev.event and _textHasCJK(tostring(ev.event)) then
+        text_has_cjk = true
+    end
+
+    local is_cjk = _isCJKFontFamily(doc_family) or text_has_cjk
+    local fs
+    if is_cjk then
+        fs = math.max(12, math.min(math.floor(base_fs * 0.75), 18))
+    else
+        fs = math.max(12, math.min(base_fs, 20))
+    end
     local border_window  = (Size.border  and Size.border.window)   or 1
     local padding_button = (Size.padding and Size.padding.button)   or 10
     local padding_default= (Size.padding and Size.padding.default)  or 10
@@ -3453,9 +3372,8 @@ function M:showTimelineEventDetails(ev, opts)
     local is_truncated = false
     local TRUNCATE_AT  = 300   -- chars before we add Read More
 
-    if #event_text > TRUNCATE_AT then
-        is_truncated  = true
-        display_text  = event_text:sub(1, TRUNCATE_AT)
+    display_text, is_truncated = _getTruncatedText(event_text, TRUNCATE_AT)
+    if is_truncated then
         local last_sp = display_text:match("^.*()%s")
         if last_sp then display_text = display_text:sub(1, last_sp - 1) end
         display_text  = display_text .. " ..."
@@ -3546,7 +3464,31 @@ function M:showHistoricalFigureDetails(fig, opts)
         showBottomPopup(self, fig)
         return
     end
-    local fs = _getPopupFontSize(self)
+    local base_fs = _getPopupFontSize(self)
+    local doc_family
+    if self.ui and self.ui.font then
+        doc_family = self.ui.font.font_face
+    end
+    if not doc_family and G_reader_settings then
+        doc_family = G_reader_settings:readSetting("cre_font_family")
+    end
+
+    local text_has_cjk = false
+    if fig.name and _textHasCJK(tostring(fig.name)) then
+        text_has_cjk = true
+    elseif fig.biography and _textHasCJK(tostring(fig.biography)) then
+        text_has_cjk = true
+    elseif fig.description and _textHasCJK(tostring(fig.description)) then
+        text_has_cjk = true
+    end
+
+    local is_cjk = _isCJKFontFamily(doc_family) or text_has_cjk
+    local fs
+    if is_cjk then
+        fs = math.max(12, math.min(math.floor(base_fs * 0.75), 18))
+    else
+        fs = math.max(12, math.min(base_fs, 20))
+    end
     local border_window = (Size.border and Size.border.window) or 1
     local padding_button = (Size.padding and Size.padding.button) or 10
     local padding_default = (Size.padding and Size.padding.default) or 10
@@ -3574,9 +3516,8 @@ function M:showHistoricalFigureDetails(fig, opts)
     local display_bio = bio
     local is_truncated = false
     if bio and bio ~= "" then
-        if #bio > 500 then
-            is_truncated = true
-            display_bio = bio:sub(1, 450)
+        display_bio, is_truncated = _getTruncatedText(bio, 450, 500)
+        if is_truncated then
             local last_space = display_bio:match("^.*()%s")
             if last_space then
                 display_bio = display_bio:sub(1, last_space - 1)
@@ -3935,6 +3876,8 @@ function M:getAIModelSelectionMenu(setting_type)
             id = "gemini",
             display_name = "Gemini",
             models = {
+                { id = "gemini-3.6-flash", cost = "free" },
+                { id = "gemini-3.5-flash-lite", cost = "free" },
                 { id = "gemini-3.5-flash", cost = "free" },
                 { id = "gemini-3.1-flash-lite", cost = "free" },
                 { id = "gemini-2.5-flash", cost = "free" },
@@ -3946,6 +3889,8 @@ function M:getAIModelSelectionMenu(setting_type)
             id = "chatgpt",
             display_name = "ChatGPT",
             models = {
+                { id = "gpt-5.6-terra", cost = "paid" },
+                { id = "gpt-5.6-luna", cost = "paid" },
                 { id = "gpt-5.5", cost = "paid" },
                 { id = "gpt-5.4-mini", cost = "paid" },
                 { id = "gpt-5.4-nano", cost = "paid" },
@@ -3963,14 +3908,26 @@ function M:getAIModelSelectionMenu(setting_type)
             id = "claude",
             display_name = "Claude",
             models = {
+                { id = "claude-sonnet-5", cost = "paid" },
                 { id = "claude-sonnet-4-6", cost = "paid" },
                 { id = "claude-haiku-4-5", cost = "paid" },
             }
         }
     }
     
-    local custom1_model = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings.custom1_model or nil
-    local custom2_model = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings.custom2_model or nil
+    -- Prefer the merged provider config: it covers models configured via
+    -- xray_config.lua, not only those entered in the API Keys UI (issue #86).
+    local function getCustomSlotModel(slot)
+        local model = self.ai_helper and self.ai_helper.providers
+            and self.ai_helper.providers[slot] and self.ai_helper.providers[slot].model
+        if not model or model == "" then
+            model = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings[slot .. "_model"]
+        end
+        if model == "" then model = nil end
+        return model
+    end
+    local custom1_model = getCustomSlotModel("custom1")
+    local custom2_model = getCustomSlotModel("custom2")
     
     local menu_items = {}
     
@@ -4113,176 +4070,118 @@ function M:showCharacterSearch()
 end
 
 function M:showConfigSummary()
-    local text = (self.loc:t("menu_config_header") or "--- Current Configuration ---") .. "\n\n"
-    
     local primary = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings.primary_ai or nil
     local secondary = (self.ai_helper and self.ai_helper.settings) and self.ai_helper.settings.secondary_ai or nil
     
     local primary_label = self.loc:t("menu_primary_ai_model") or "Primary AI Model"
     local secondary_label = self.loc:t("menu_secondary_ai_model") or "Secondary AI Model"
-    local provider_label = self.loc:t("config_provider") or "  Provider: "
-    local model_label = self.loc:t("config_model") or "  Model: "
-    local default_label = self.loc:t("config_default_gemini") or "  Default (Gemini)"
+    local default_label = self.loc:t("config_default_gemini") or "Default (Gemini)"
     local set_label = self.loc:t("config_status_set") or "SET"
     local not_set_label = self.loc:t("config_status_not_set") or "NOT SET"
 
-    text = text .. primary_label .. ":\n"
-    if primary then 
-        text = text .. provider_label .. primary.provider .. "\n" .. model_label .. primary.model .. "\n\n" 
-    else 
-        text = text .. default_label .. "\n\n" 
+    local lines = {}
+    table.insert(lines, "[B]AI Model Configurations[/B]")
+    
+    table.insert(lines, "• [B]" .. primary_label .. "[/B]:")
+    if primary then
+        table.insert(lines, "  " .. primary.provider .. " (" .. primary.model .. ")")
+    else
+        table.insert(lines, "  " .. default_label)
     end
     
-    text = text .. secondary_label .. ":\n"
-    if secondary then 
-        text = text .. provider_label .. secondary.provider .. "\n" .. model_label .. secondary.model .. "\n\n" 
-    else 
-        text = text .. default_label .. "\n\n" 
+    table.insert(lines, "• [B]" .. secondary_label .. "[/B]:")
+    if secondary then
+        table.insert(lines, "  " .. secondary.provider .. " (" .. secondary.model .. ")")
+    else
+        table.insert(lines, "  " .. default_label)
     end
+    
+    table.insert(lines, "")
+    table.insert(lines, "[B]API Key Credentials[/B]")
     
     local function add(p, n)
         local c = self.ai_helper.providers[p]
-        local key_label = (self.loc:t("config_api_key_label") or "%s API Key: "):format(n)
-        text = text .. key_label .. ((c.api_key and #c.api_key > 0) and set_label or not_set_label) .. "\n"
+        local is_set = c and c.api_key and #c.api_key > 0
+        local status = is_set and "[B]" .. set_label .. "[/B]" or not_set_label
+        table.insert(lines, "• " .. n .. ": " .. status)
     end
-    add("gemini", "Google Gemini"); add("chatgpt", "ChatGPT")
-    add("deepseek", "DeepSeek"); add("claude", "Anthropic Claude")
-    add("custom1", "Custom API 1"); add("custom2", "Custom API 2")
-    
-    UIManager:show(InfoMessage:new{ text = text, timeout = 15 })
+    add("gemini", "Google Gemini")
+    add("chatgpt", "ChatGPT")
+    add("deepseek", "DeepSeek")
+    add("claude", "Anthropic Claude")
+    add("custom1", "Custom API 1")
+    add("custom2", "Custom API 2")
+
+    local XRaySettingsCard = require("xray_settings_card")
+    XRaySettingsCard.showAbout(self, self.loc:t("menu_view_config") or "View All Config Values", table.concat(lines, "\n"))
 end
 
 function M:showReasoningEffortSettings()
-    local ButtonDialog = require("ui/widget/buttondialog")
-    local info_dialog
-    
-    local function showSettings()
-        if info_dialog then UIManager:close(info_dialog) end
-        local current = self.ai_helper.settings and self.ai_helper.settings.reasoning_effort or "none"
-        
-        info_dialog = ButtonDialog:new{
-            title = self.loc:t("menu_reasoning_effort") or "AI Model Reasoning Effort",
-            text = "Controls internal 'thinking' time for supported reasoning models.",
-            buttons = {
-                {
-                    {
-                        text = (current == "none" and "[✓] " or "[  ] ") .. (self.loc:t("reasoning_unset") or "Unset (Default)"),
-                        callback = function()
-                            self.ai_helper.settings.reasoning_effort = nil
-                            self.ai_helper:saveSettings()
-                            UIManager:nextTick(function() showSettings() end)
-                        end
-                    }
-                },
-                {
-                    {
-                        text = (current == "low" and "[✓] " or "[  ] ") .. (self.loc:t("reasoning_low") or "Low"),
-                        callback = function()
-                            self.ai_helper:saveSettings({ reasoning_effort = "low" })
-                            UIManager:nextTick(function() showSettings() end)
-                        end
-                    },
-                    {
-                        text = (current == "medium" and "[✓] " or "[  ] ") .. (self.loc:t("reasoning_medium") or "Medium"),
-                        callback = function()
-                            self.ai_helper:saveSettings({ reasoning_effort = "medium" })
-                            UIManager:nextTick(function() showSettings() end)
-                        end
-                    }
-                },
-                {
-                    {
-                        text = (current == "high" and "[✓] " or "[  ] ") .. (self.loc:t("reasoning_high") or "High"),
-                        callback = function()
-                            self.ai_helper:saveSettings({ reasoning_effort = "high" })
-                            UIManager:nextTick(function() showSettings() end)
-                        end
-                    },
-                },
-                {
-                    {
-                        text = self.loc:t("about") or "About",
-                        callback = function()
-                            UIManager:show(InfoMessage:new{
-                                text = self.loc:t("reasoning_about") or "Controls 'thinking' depth for reasoning models:\n\n• Unset: No specific instruction sent; model uses its internal defaults.\n• Low: Fast, economical extraction for simple books.\n• Medium: Balanced depth for most narratives.\n• High: Detailed analysis for complex character webs.\n\nApplies to: GPT-5.x (o1/o3/gpt-5), Claude (sonnet/opus/haiku), and Gemini 2.5+.\n\nNote: DeepSeek V4 reasons inherently — this setting has no effect on it.",
-                                timeout = 12
-                            })
-                        end
-                    },
-                    {
-                        text = self.loc:t("close") or "Close",
-                        callback = function()
-                            UIManager:close(info_dialog)
-                        end
-                    }
-                }
-            }
-        }
-        UIManager:show(info_dialog)
-    end
-    
-    showSettings()
+    XRaySettingsCard.show(self, {
+        title = self.loc:t("menu_reasoning_effort") or "AI Model Reasoning Effort",
+        description = "Controls internal 'thinking' time for supported reasoning models.",
+        options = {
+            { text = self.loc:t("reasoning_unset") or "Unset (Default)", value = "none" },
+            { text = self.loc:t("reasoning_low") or "Low", value = "low" },
+            { text = self.loc:t("reasoning_medium") or "Medium", value = "medium" },
+            { text = self.loc:t("reasoning_high") or "High", value = "high" },
+        },
+        get_current_func = function()
+            return self.ai_helper.settings and self.ai_helper.settings.reasoning_effort or "none"
+        end,
+        save_func = function(val)
+            if val == "none" then
+                self.ai_helper.settings.reasoning_effort = nil
+                self.ai_helper:saveSettings()
+            else
+                self.ai_helper:saveSettings({ reasoning_effort = val })
+            end
+        end,
+        about_text = self.loc:t("reasoning_about") or "Controls [B]thinking[/B] depth for reasoning models:\n\n• Unset: No specific instruction sent; model uses its internal defaults.\n• Low: Fast, economical extraction for simple books.\n• Medium: Balanced depth for most narratives.\n• High: Detailed analysis for complex character webs.\n\n[B]Applies to:[/B] GPT-5.x (o1/o3/gpt-5), Claude (sonnet/opus/haiku), and Gemini 2.5+.\n\n[B]Note:[/B] DeepSeek V4 reasons [B]inherently[/B] — this setting has no effect on it.",
+    })
+end
+
+function M:showUnitConversionDirectionSettings()
+    XRaySettingsCard.show(self, {
+        title = self.loc:t("unit_conv_direction") or "Conversion Direction",
+        description = self.loc:t("unit_conv_direction_desc") or "Select target direction for unit conversions:",
+        options = {
+            { text = self.loc:t("unit_conv_direction_auto") or "Auto (Follow Device)", value = "auto" },
+            { text = self.loc:t("unit_conv_direction_metric") or "To Metric", value = "to_metric" },
+            { text = self.loc:t("unit_conv_direction_imperial") or "To Imperial", value = "to_imperial" },
+        },
+        get_current_func = function()
+            return self.ai_helper.settings.unit_conversion_direction or "auto"
+        end,
+        save_func = function(val)
+            self.ai_helper:saveSettings({ unit_conversion_direction = val })
+        end,
+        on_close = function()
+            if self.scanBookForUnits then self:scanBookForUnits() end
+        end,
+        about_text = self.loc:t("unit_conv_direction_about") or "Unit conversion direction determines how measurements in books (e.g. lengths, weight, temperatures) are translated:\n\n• [B]Auto (Follow Device):[/B] Automatically converts based on the 'Dimension units' system setting of your device.\n• [B]To Metric:[/B] Always converts Imperial units (e.g. miles, Fahrenheit) to Metric equivalents (e.g. kilometers, Celsius).\n• [B]To Imperial:[/B] Always converts Metric units to Imperial equivalents.",
+    })
 end
 
 function M:showBetaChannelSettings()
-    local ButtonDialog = require("ui/widget/buttondialog")
-    local info_dialog
-    
-    local function showSettings()
-        if info_dialog then UIManager:close(info_dialog) end
-        
-        local current_setting = self.ai_helper.settings.beta_channel_enabled == true
-        local enabled_text = self.loc:t("beta_enabled") or "Beta Channel Enabled"
-        local disabled_text = self.loc:t("beta_disabled") or "Stable Channel (Recommended)"
-        
-        local buttons = {
-            {
-                {
-                    text = (current_setting and "[✓] " or "[  ] ") .. enabled_text,
-                    callback = function()
-                        self.ai_helper:saveSettings({ beta_channel_enabled = true })
-                        UIManager:nextTick(function() showSettings() end)
-                    end
-                },
-                {
-                    text = ((not current_setting) and "[✓] " or "[  ] ") .. disabled_text,
-                    callback = function()
-                        self.ai_helper:saveSettings({ beta_channel_enabled = false })
-                        UIManager:nextTick(function() showSettings() end)
-                    end
-                }
-            },
-            {
-                {
-                    text = self.loc:t("menu_about") or "About",
-                    callback = function()
-                        UIManager:show(InfoMessage:new{
-                            text = self.loc:t("beta_channel_desc") or "The beta channel allows you to receive pre-release versions of the X-Ray plugin. These versions include the latest features and bug fixes but may be less stable than the regular release.",
-                            timeout = 30
-                        })
-                    end
-                },
-                {
-                    text = self.loc:t("close") or "Close",
-                    callback = function()
-                        UIManager:close(info_dialog)
-                    end
-                }
-            }
-        }
-        
-        info_dialog = ButtonDialog:new{
-            title = self.loc:t("menu_beta_channel") or "Beta Channel Settings",
-            text = self.loc:t("beta_preference_desc") or "Select your update channel preference:",
-            buttons = buttons,
-        }
-        UIManager:show(info_dialog)
-    end
-    
-    showSettings()
+    local enabled_text = self.loc:t("beta_enabled") or "Beta Channel Enabled"
+    local disabled_text = self.loc:t("beta_disabled") or "Stable Channel (Recommended)"
+    XRaySettingsCard.show(self, {
+        title = self.loc:t("menu_beta_channel") or "Beta Channel Settings",
+        description = self.loc:t("beta_preference_desc") or "Select your update channel preference:",
+        options = {
+            { text = enabled_text, value = true },
+            { text = disabled_text, value = false },
+        },
+        get_current_func = function()
+            return self.ai_helper.settings.beta_channel_enabled == true
+        end,
+        save_func = function(val)
+            self.ai_helper:saveSettings({ beta_channel_enabled = val })
+        end,
+        about_text = self.loc:t("beta_channel_desc") or "The beta channel allows you to receive pre-release versions of the X-Ray plugin. These versions include the latest features and bug fixes but may be [B]less stable[/B] than the regular release.",
+    })
 end
-
-
 
 function M:toggleSeriesContextEnabled()
     if not self.ai_helper or not self.ai_helper.settings then return end
@@ -4407,6 +4306,14 @@ function M:checkSeriesContext()
     self:log("XRayPlugin: Series: checkSeriesContext starting")
     if self.destroyed then
         self:log("XRayPlugin: Series: checkSeriesContext: plugin destroyed, skipping")
+        return
+    end
+    if self._unit_scan_in_progress then
+        self:log("XRayPlugin: Series: checkSeriesContext: unit scan in progress, deferring series check")
+        UIManager:scheduleIn(5, function()
+            if self.destroyed then return end
+            self:checkSeriesContext()
+        end)
         return
     end
     if not self.ui or not self.ui.document then
@@ -4570,6 +4477,37 @@ function M:resolveDescriptionForPage(entity, current_page)
     end
     
     return entity[desc_key] or "---"
+end
+
+function M:handleUnitConversionLookup(text)
+    local settings = self.ai_helper and self.ai_helper.settings or {}
+    local direction = settings.unit_conversion_direction or "auto"
+    if direction == "auto" then
+        direction = xray_units.getDefaultDirection()
+    end
+    local enabled_cats = {
+        length = settings.unit_cat_length ~= false,
+        weight = settings.unit_cat_weight ~= false,
+        temp = settings.unit_cat_temp ~= false,
+        volume = settings.unit_cat_volume ~= false,
+        speed = settings.unit_cat_speed ~= false,
+        area = settings.unit_cat_area ~= false,
+    }
+    local lang = self.loc and self.loc:getLanguage() or "en"
+    local matches = xray_units.detectMeasurements(text, direction, enabled_cats, lang)
+    if matches and #matches > 0 then
+        local match = matches[1]
+        local entity = {
+            name = match.original,
+            description = match.original .. " = " .. match.converted,
+            category = "Unit Conversion",
+            role = match.category:upper(),
+            is_conversion = true
+        }
+        showBottomPopup(self, entity)
+        return true
+    end
+    return false
 end
 
 return M

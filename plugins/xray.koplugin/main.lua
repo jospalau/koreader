@@ -32,6 +32,8 @@ local function applyMixin(target, source)
     end
 end
 
+local findUnitConverterMenuPath
+
 local function safeRequireMixin(name)
     local ok, mod = pcall(require, plugin_path .. name)
     if ok then
@@ -45,6 +47,7 @@ safeRequireMixin("xray_data")
 safeRequireMixin("xray_ui")
 safeRequireMixin("xray_fetch")
 safeRequireMixin("xray_mentions")
+safeRequireMixin("xray_unitscanner")
 
 
 function XRayPlugin:init()
@@ -196,7 +199,6 @@ function XRayPlugin:init()
             end)
         end
 
-        -- Register X-Ray button with new KOReader dict API (PR #15184+)
         -- Safe no-op on older versions where addToDictButtons doesn't exist.
         if self.ui and self.ui.dictionary
                 and type(self.ui.dictionary.addToDictButtons) == "function" then
@@ -312,6 +314,34 @@ function XRayPlugin:onReaderReady()
     self.last_bg_fetch_page = nil
     self.chapters_fetched = {}
     self.bg_fetch_pending = false
+
+    -- Initial unit scanner run
+    UIManager:scheduleIn(1.5, function()
+        if self.destroyed then return end
+        if self.mountUnderlineOverlay then self:mountUnderlineOverlay() end
+        if self.mountTapHandler then self:mountTapHandler() end
+        
+
+        local settings = self.ai_helper and self.ai_helper.settings or {}
+        if settings.unit_new_feature_prompt_seen ~= true then
+            self:showUnitConverterNewFeatureCard()
+        else
+            if self.scanBookForUnits and settings.unit_converter_enabled ~= false then
+                local is_auto = settings.unit_auto_scan_enabled ~= false
+                if is_auto then
+                    if self.triggerBookTypeDetection then
+                        self:triggerBookTypeDetection()
+                    else
+                        self:scanBookForUnits()
+                    end
+                else
+                    if self.triggerBookTypeDetection then
+                        self:triggerBookTypeDetection()
+                    end
+                end
+            end
+        end
+    end)
 
     -- Initialize language based on logic (auto, book, or manual)
     self:applyLanguageLogic()
@@ -539,6 +569,14 @@ function XRayPlugin:onPageUpdate(pageno)
 end
 
 function XRayPlugin:triggerBackgroundMergeFetch(chapter_title)
+    if self._unit_scan_in_progress then
+        self:log("XRayPlugin: Deferring background AI fetch because unit scan is in progress")
+        UIManager:scheduleIn(5, function()
+            if self.destroyed then return end
+            self:triggerBackgroundMergeFetch(chapter_title)
+        end)
+        return
+    end
     if self.bg_fetch_active then return end
     if not self.ui or not self.ui.document then return end
 
@@ -674,10 +712,14 @@ function XRayPlugin:autoLoadCache()
             restoreOrder(self.characters)
             restoreOrder(self.historical_figures)
             
-            -- Stage 3: Repair Page Numbers & Deduplicate (Deferred another 500ms)
-            UIManager:scheduleIn(500, function()
-                if self.destroyed then return end
-                if not self.ui or not self.ui.document then return end
+            -- Wait a tick for the dictionary popup to close gracefully, then trigger X-Ray
+            UIManager:scheduleIn(0.1, function()
+                if self.ui and self.ui.dictionary and self.ui.dictionary.dict_window then
+                    -- Trigger dictionary close safely
+                    pcall(function()
+                        self.ui.dictionary.dict_window:onClose()
+                    end)
+                end
                 self:log("XRayPlugin: Stage 3 - Repairing pages and deduplicating")
                 local toc = self.ui.document:getToc()
                 self:assignTimelinePages(self.timeline, toc, false)
@@ -847,7 +889,33 @@ function XRayPlugin:getSubMenuItems()
                     {
                         text = self.loc:t("menu_desc_length_settings") or "Description Length Settings",
                         keep_menu_open = true,
-                        callback = function() self:showDescriptionLengthSettings() end,
+                        sub_item_table = {
+                            {
+                                text = self.loc:t("menu_characters") or "Characters",
+                                keep_menu_open = true,
+                                callback = function() self:showEntityLengthPresets("char_desc_len", self.loc:t("menu_characters")) end,
+                            },
+                            {
+                                text = self.loc:t("menu_locations") or "Locations",
+                                keep_menu_open = true,
+                                callback = function() self:showEntityLengthPresets("loc_desc_len", self.loc:t("menu_locations")) end,
+                            },
+                            {
+                                text = self.loc:t("menu_timeline") or "Timeline",
+                                keep_menu_open = true,
+                                callback = function() self:showEntityLengthPresets("timeline_event_len", self.loc:t("menu_timeline"), true) end,
+                            },
+                            {
+                                text = self.loc:t("menu_historical_figures") or "Historical Figures",
+                                keep_menu_open = true,
+                                callback = function() self:showEntityLengthPresets("hist_fig_bio_len", self.loc:t("menu_historical_figures")) end,
+                            },
+                            {
+                                text = self.loc:t("menu_terms") or "Glossary",
+                                keep_menu_open = true,
+                                callback = function() self:showEntityLengthPresets("term_def_len", self.loc:t("menu_terms") or "Glossary") end,
+                            },
+                        }
                     },
                     {
                         text = self.loc:t("menu_series_context") or "Series Context",
@@ -876,6 +944,139 @@ function XRayPlugin:getSubMenuItems()
                 text = self.loc:t("menu_xray_mode"),
                 keep_menu_open = true,
                 callback = function() self:toggleXRayMode() end,
+            },
+            {
+                is_unit_converter = true,
+                text = self.loc:t("menu_unit_converter") or "Unit Converter",
+                keep_menu_open = true,
+                sub_item_table = {
+                    {
+                        text = self.loc:t("unit_conv_enabled") or "Enable Unit Converter",
+                        checked_func = function()
+                            return self.ai_helper.settings.unit_converter_enabled ~= false
+                        end,
+                        callback = function()
+                            local current = self.ai_helper.settings.unit_converter_enabled ~= false
+                            self.ai_helper:saveSettings({ unit_converter_enabled = not current })
+                            if self.scanBookForUnits then self:scanBookForUnits() end
+                        end
+                    },
+                    {
+                        text = self.loc:t("unit_scan_written_numbers") or "Scan Written Numbers (e.g. 'five miles')",
+                        keep_menu_open = true,
+                        callback = function()
+                            self:showUnitScanWrittenNumbersCard()
+                        end
+                    },
+                    {
+                        text = self.loc:t("unit_auto_scan_settings") or "Auto-Scan Settings",
+                        keep_menu_open = true,
+                        callback = function()
+                            self:showUnitAutoScanCard()
+                        end
+                    },
+                    {
+                        text = self.loc:t("unit_manual_scan_button") or "Scan/Rescan",
+                        keep_menu_open = true,
+                        callback = function()
+                            if self.scanBookForUnits then self:scanBookForUnits(true) end
+                        end,
+                        separator = true,
+                    },
+                    {
+                        text = self.loc:t("unit_book_type_filter") or "Book Type Filter",
+                        keep_menu_open = true,
+                        sub_item_table_func = function()
+                            return self:getBookTypeFilterMenu()
+                        end
+                    },
+                    {
+                        text = self.loc:t("unit_conv_direction") or "Conversion Direction",
+                        keep_menu_open = true,
+                        callback = function()
+                            self:showUnitConversionDirectionSettings()
+                        end
+                    },
+                    {
+                        text = self.loc:t("unit_conv_style_settings") or "Style & Underline Settings",
+                        keep_menu_open = true,
+                        callback = function()
+                            self:showUnitStyleCard()
+                        end
+                    },
+                    {
+                        text = self.loc:t("menu_unit_categories") or "Unit Categories",
+                        keep_menu_open = true,
+                        sub_item_table = {
+                            {
+                                text = "Length (mile, feet, inch, m, km...)",
+                                checked_func = function()
+                                    return self.ai_helper.settings.unit_cat_length ~= false
+                                end,
+                                callback = function()
+                                    local curr = self.ai_helper.settings.unit_cat_length ~= false
+                                    self.ai_helper:saveSettings({ unit_cat_length = not curr })
+                                    if self.scanBookForUnits then self:scanBookForUnits() end
+                                end
+                            },
+                            {
+                                text = "Weight / Mass (pound, ounce, kg, g...)",
+                                checked_func = function()
+                                    return self.ai_helper.settings.unit_cat_weight ~= false
+                                end,
+                                callback = function()
+                                    local curr = self.ai_helper.settings.unit_cat_weight ~= false
+                                    self.ai_helper:saveSettings({ unit_cat_weight = not curr })
+                                    if self.scanBookForUnits then self:scanBookForUnits() end
+                                end
+                            },
+                            {
+                                text = "Temperature (fahrenheit, celsius)",
+                                checked_func = function()
+                                    return self.ai_helper.settings.unit_cat_temp ~= false
+                                end,
+                                callback = function()
+                                    local curr = self.ai_helper.settings.unit_cat_temp ~= false
+                                    self.ai_helper:saveSettings({ unit_cat_temp = not curr })
+                                    if self.scanBookForUnits then self:scanBookForUnits() end
+                                end
+                            },
+                            {
+                                text = "Volume (gallon, cup, liter, ml...)",
+                                checked_func = function()
+                                    return self.ai_helper.settings.unit_cat_volume ~= false
+                                end,
+                                callback = function()
+                                    local curr = self.ai_helper.settings.unit_cat_volume ~= false
+                                    self.ai_helper:saveSettings({ unit_cat_volume = not curr })
+                                    if self.scanBookForUnits then self:scanBookForUnits() end
+                                end
+                            },
+                            {
+                                text = "Speed (mph, km/h)",
+                                checked_func = function()
+                                    return self.ai_helper.settings.unit_cat_speed ~= false
+                                end,
+                                callback = function()
+                                    local curr = self.ai_helper.settings.unit_cat_speed ~= false
+                                    self.ai_helper:saveSettings({ unit_cat_speed = not curr })
+                                    if self.scanBookForUnits then self:scanBookForUnits() end
+                                end
+                            },
+                            {
+                                text = "Area (acre, hectare, m², sq ft...)",
+                                checked_func = function()
+                                    return self.ai_helper.settings.unit_cat_area ~= false
+                                end,
+                                callback = function()
+                                    local curr = self.ai_helper.settings.unit_cat_area ~= false
+                                    self.ai_helper:saveSettings({ unit_cat_area = not curr })
+                                    if self.scanBookForUnits then self:scanBookForUnits() end
+                                end
+                            }
+                        }
+                    }
+                },
                 separator = true,
             },
             {
@@ -968,6 +1169,7 @@ end
 
 function XRayPlugin:addToMainMenu(menu_items)
     menu_items.xray = {
+        is_xray = true,
         text = _t(self, "menu_xray", "X-Ray"),
 
         sorting_hint = "tools",
@@ -977,7 +1179,1367 @@ function XRayPlugin:addToMainMenu(menu_items)
     }
 end
 
+-- Extracted functions are now loaded via mixins (xray_data, xray_ui, xray_fetch, xray_mentions)
+
+function XRayPlugin:showUnitStyleCard()
+    local Screen = require("device").screen
+    local Font = require("ui/font")
+    local Geom = require("ui/geometry")
+    local Blitbuffer = require("ffi/blitbuffer")
+    local UIManager = require("ui/uimanager")
+    local FrameContainer = require("ui/widget/container/framecontainer")
+    local InputContainer = require("ui/widget/container/inputcontainer")
+    local CenterContainer = require("ui/widget/container/centercontainer")
+    local VerticalGroup = require("ui/widget/verticalgroup")
+    local HorizontalGroup = require("ui/widget/horizontalgroup")
+    local TextWidget = require("ui/widget/textwidget")
+    local Button = require("ui/widget/button")
+    local CheckButton = require("ui/widget/checkbutton")
+    local MovableContainer = require("ui/widget/container/movablecontainer")
+    local GestureRange = require("ui/gesturerange")
+    local VerticalSpan = require("ui/widget/verticalspan")
+    local WidgetContainer = require("ui/widget/container/widgetcontainer")
+    local RenderText = require("ui/rendertext")
+    local OverlapGroup = require("ui/widget/overlapgroup")
+    local LineWidget = require("ui/widget/linewidget")
+    local Widget = require("ui/widget/widget")
+
+    local xray_theme = require(plugin_path .. "xray_theme")
+
+    local function sc(val)
+        return Screen:scaleBySize(val)
+    end
+
+    local sw = Screen:getWidth()
+    local sh = Screen:getHeight()
+    local dialog_w = math.min(sw - sc(20), sc(380))
+
+    local fs = 20
+    if G_reader_settings then
+        fs = G_reader_settings:readSetting("cre_font_size") or 20
+    end
+    -- Clamp UI fonts to reasonable sizes based on reader settings
+    local ui_font_size = math.max(14, math.min(fs, 24))
+    local label_font_size = math.max(11, math.min(fs - 4, 18))
+    local title_font_size = math.max(10, math.min(fs - 5, 15))
+
+    local overlay
+    local refresh
+
+    refresh = function()
+        if overlay then
+            UIManager:close(overlay, "ui")
+        end
+
+        local settings = self.ai_helper.settings or {}
+        local underline_style = settings.unit_underline_style or "wavy"
+        local underline_thickness = tonumber(settings.unit_underline_thickness) or 2
+        local underline_intensity = settings.unit_underline_intensity or "light"
+        local tooltip_timeout = tonumber(settings.unit_tooltip_timeout) or 4
+
+        local function saveSetting(key, val)
+            self.ai_helper:saveSettings({ [key] = val })
+            local is_visual = (key == "unit_underline_style" or key == "unit_underline_thickness" or key == "unit_underline_intensity" or key == "unit_tooltip_timeout")
+            if not is_visual then
+                if self.scanBookForUnits then self:scanBookForUnits() end
+            else
+                if self.ui and self.ui.view and self.ui.view.dialog then
+                    UIManager:setDirty(self.ui.view.dialog, "ui")
+                end
+            end
+            refresh()
+        end
+
+        local function option_row(options, current, key)
+            local row = { align = "center" }
+            for i, opt in ipairs(options) do
+                if i > 1 then
+                    table.insert(row, WidgetContainer:new{ dimen = Geom:new{ w = sc(12), h = 1 } })
+                end
+                local value = opt.value
+                local is_selected = (value == current)
+                local dot_char = is_selected and "●" or "○"
+                
+                local frame = FrameContainer:new{
+                    bordersize = is_selected and xray_theme.border_btn or sc(1),
+                    radius = xray_theme.radius_btn,
+                    padding = sc(6),
+                    color = is_selected and xray_theme.color_border or xray_theme.color_section_rule,
+                    background = xray_theme.color_bg,
+                    HorizontalGroup:new{
+                        align = "center",
+                        TextWidget:new{ text = dot_char, face = Font:getFace("cfont", ui_font_size) },
+                        WidgetContainer:new{ dimen = Geom:new{ w = sc(4), h = 1 } },
+                        TextWidget:new{ text = opt.text, face = Font:getFace("cfont", ui_font_size) },
+                    }
+                }
+                local item = InputContainer:new{ frame }
+                item.ges_events = {
+                    Tap = {
+                        GestureRange:new{
+                            ges = "tap",
+                            range = function() return frame.dimen end
+                        }
+                    }
+                }
+                item.onTap = function()
+                    saveSetting(key, value)
+                    return true
+                end
+                table.insert(row, item)
+            end
+            return HorizontalGroup:new(row)
+        end
+
+        local UnderlinePreview = Widget:extend{
+            width = 0,
+            height = 0,
+            underline_style = underline_style,
+            underline_thickness = underline_thickness,
+            underline_color_val = nil,
+            plugin = nil,
+        }
+        function UnderlinePreview:getSize()
+            return Geom:new{ w = self.width, h = self.height }
+        end
+        function UnderlinePreview:paintTo(bb, x, y)
+            local plugin = self.plugin
+            if plugin and plugin._draw_underline then
+                local grey = 150
+                if underline_intensity == "light" then
+                    grey = 200
+                elseif underline_intensity == "dark" then
+                    grey = 30
+                end
+                local Screen = require("device").screen
+                local thickness = Screen:scaleBySize(self.underline_thickness)
+                local box = { x = x, y = y, w = self.width, h = self.height }
+                plugin._draw_underline(bb, box, self.underline_style, grey, thickness, self.underline_thickness, plugin.path)
+            end
+        end
+
+        local face = Font:getFace("cfont", ui_font_size + 2)
+        local sample_text = TextWidget:new{
+            text = "walked 2 miles today",
+            face = face,
+            alignment = "center",
+        }
+        local sample_size = sample_text:getSize()
+
+        local underline_color_val
+        if underline_intensity == "light" then
+            underline_color_val = Blitbuffer.Color8(200)
+        elseif underline_intensity == "dark" then
+            underline_color_val = Blitbuffer.Color8(30)
+        else
+            underline_color_val = Blitbuffer.Color8(120)
+        end
+
+        local w_walked = RenderText:sizeUtf8Text(0, 9999, face, "walked ", false, false).x
+        local w_miles = RenderText:sizeUtf8Text(0, 9999, face, "2 miles", false, false).x
+
+        local underline_widget = UnderlinePreview:new{
+            width = w_miles,
+            height = sample_size.h,
+            underline_style = underline_style,
+            underline_thickness = underline_thickness,
+            underline_color_val = underline_color_val,
+            overlap_offset = { w_walked, 0 },
+            plugin = self,
+        }
+
+        local preview_example = OverlapGroup:new{
+            dimen = sample_size,
+            sample_text,
+            underline_widget,
+        }
+
+        local tooltip_text = "3.22 km"
+
+        local tooltip_face = Font:getFace("cfont", fs)
+        local pad_h = 28
+        local pad_v = math.floor(fs * 0.55)
+        local text_size = RenderText:sizeUtf8Text(0, 9999, tooltip_face, tooltip_text, false, false)
+        local text_w = text_size.x
+        local tooltip_max_w = dialog_w - sc(64)
+        local popup_w = math.min(tooltip_max_w, text_w + pad_h * 2)
+
+        local tb = TextWidget:new{
+            text = tooltip_text,
+            face = tooltip_face,
+        }
+
+        local border_sz = sc(2)
+        local preview_tooltip = FrameContainer:new{
+            background = Blitbuffer.COLOR_WHITE,
+            bordersize = border_sz,
+            color = Blitbuffer.COLOR_DARK_GRAY,
+            radius = 0,
+            padding_top = pad_v,
+            padding_bottom = pad_v,
+            padding_left = pad_h,
+            padding_right = pad_h,
+            width = popup_w,
+            VerticalGroup:new{
+                align = "center",
+                tb
+            }
+        }
+
+        local card_size = preview_tooltip:getSize()
+        local card_h = card_size.h
+
+        local arrow_w = sc(16)
+        local arrow_h = sc(8)
+        local _PointerArrow = self._PointerArrow
+        local preview_arrow = _PointerArrow:new{
+            width = arrow_w,
+            height = arrow_h,
+            direction = "down",
+            apex_offset = arrow_w / 2,
+            border_size = border_sz,
+            border_color = Blitbuffer.COLOR_DARK_GRAY,
+            fill_color = Blitbuffer.COLOR_WHITE,
+        }
+        preview_arrow.overlap_offset = { math.floor((popup_w - arrow_w) / 2), card_h - border_sz }
+
+        local tooltip_with_arrow = OverlapGroup:new{
+            dimen = Geom:new{ w = popup_w, h = card_h + arrow_h - border_sz },
+            preview_tooltip,
+            preview_arrow,
+        }
+
+        local preview_panel = FrameContainer:new{
+            padding = sc(8),
+            radius = xray_theme.radius_window,
+            bordersize = xray_theme.border_preview,
+            color = xray_theme.color_border,
+            background = Blitbuffer.COLOR_WHITE,
+            width = dialog_w - sc(32),
+            VerticalGroup:new{
+                align = "center",
+                HorizontalGroup:new{
+                    align = "center",
+                    tooltip_with_arrow
+                },
+                VerticalSpan:new{ width = sc(2) },
+                CenterContainer:new{
+                    dimen = Geom:new{ w = dialog_w - sc(48), h = sample_size.h },
+                    preview_example
+                }
+            }
+        }
+
+        local title_label = TextWidget:new{
+            text = self.loc:t("unit_style_preview_title") or "STYLE PREVIEW",
+            face = Font:getFace("infofont", title_font_size),
+            fgcolor = Blitbuffer.COLOR_BLACK,
+        }
+
+        local style_row_1 = option_row({
+            { text = self.loc:t("unit_underline_solid") or "Solid", value = "solid" },
+            { text = self.loc:t("unit_underline_wavy") or "Wavy", value = "wavy" }
+        }, underline_style, "unit_underline_style")
+
+        local style_row_2 = option_row({
+            { text = self.loc:t("unit_underline_dotted") or "Dotted", value = "dotted" },
+            { text = self.loc:t("unit_underline_dashed") or "Dashed", value = "dashed" }
+        }, underline_style, "unit_underline_style")
+
+        local style_row_3 = option_row({
+            { text = self.loc:t("unit_underline_double") or "Double", value = "double" },
+            { text = self.loc:t("unit_underline_invisible") or "Invisible", value = "invisible" }
+        }, underline_style, "unit_underline_style")
+
+        local thickness_row = option_row({
+            { text = "1px", value = 1 },
+            { text = "2px", value = 2 },
+            { text = "3px", value = 3 }
+        }, underline_thickness, "unit_underline_thickness")
+
+        local intensity_row = option_row({
+            { text = self.loc:t("unit_intensity_light") or "Light", value = "light" },
+            { text = self.loc:t("unit_intensity_medium") or "Medium", value = "medium" },
+            { text = self.loc:t("unit_intensity_dark") or "Dark", value = "dark" }
+        }, underline_intensity, "unit_underline_intensity")
+
+        local timeout_row = option_row({
+            { text = "2s", value = 2 },
+            { text = "4s", value = 4 },
+            { text = "8s", value = 8 },
+            { text = self.loc:t("unit_timeout_never") or "Never", value = 0 }
+        }, tooltip_timeout, "unit_tooltip_timeout")
+
+        local function span()
+            return VerticalSpan:new{ width = xray_theme.gap }
+        end
+        local function divider()
+            return LineWidget:new{
+                dimen = Geom:new{ w = dialog_w - sc(32), h = sc(1) },
+                background = xray_theme.color_section_rule,
+            }
+        end
+
+        local function label(text)
+            return TextWidget:new{
+                text = text:upper(),
+                face = Font:getFace("cfont", label_font_size),
+                fgcolor = Blitbuffer.COLOR_BLACK,
+                alignment = "left",
+            }
+        end
+
+        local close_btn = Button:new{
+            text = "Close",
+            face = Font:getFace("cfont", ui_font_size),
+            width = dialog_w - sc(32),
+            height = sc(42),
+            bordersize = xray_theme.border_btn,
+            radius = xray_theme.radius_btn,
+            callback = function()
+                self._styling_offset = nil
+                UIManager:close(overlay, "ui")
+            end
+        }
+
+        local card = FrameContainer:new{
+            padding = sc(12),
+            radius = xray_theme.radius_window,
+            bordersize = sc(2),
+            color = Blitbuffer.COLOR_BLACK,
+            background = xray_theme.color_bg,
+            width = dialog_w - sc(2),
+            VerticalGroup:new{
+                align = "left",
+                title_label,
+                span(),
+                preview_panel,
+                span(),
+                label(self.loc:t("unit_underline_style_label") or "Underline Style"),
+                style_row_1,
+                WidgetContainer:new{ dimen = Geom:new{ w = 1, h = sc(4) } },
+                style_row_2,
+                WidgetContainer:new{ dimen = Geom:new{ w = 1, h = sc(4) } },
+                style_row_3,
+                span(),
+                label(self.loc:t("unit_underline_thickness_label") or "Underline Thickness"),
+                thickness_row,
+                span(),
+                label(self.loc:t("unit_underline_intensity_label") or "Underline Intensity"),
+                intensity_row,
+                span(),
+                label(self.loc:t("unit_tooltip_timeout_label") or "Tooltip Timeout"),
+                timeout_row,
+                span(),
+                divider(),
+                span(),
+                close_btn,
+            }
+        }
+
+        local card_outer = FrameContainer:new{
+            bordersize = sc(1),
+            color = Blitbuffer.Color8(180),
+            padding = 0,
+            background = xray_theme.color_bg,
+            radius = xray_theme.radius_window,
+            width = dialog_w,
+            card
+        }
+
+        local movable = MovableContainer:new{ card_outer }
+        if self._styling_offset then
+            movable:setMovedOffset(self._styling_offset)
+        end
+
+        local orig_handleEvent = movable.handleEvent
+        movable.handleEvent = function(this, ev)
+            local res = orig_handleEvent(this, ev)
+            if ev.type == "Gesture" or ev.type == "Pan" or ev.type == "Hold" then
+                self._styling_offset = this.moved_offset
+            end
+            return res
+        end
+
+        overlay = InputContainer:new{
+            key_events = {
+                Close = { { "Back" } }
+            },
+            CenterContainer:new{
+                dimen = Geom:new{ w = sw, h = sh },
+                movable
+            }
+        }
+        function overlay:onClose()
+            self._styling_offset = nil
+            UIManager:close(overlay, "ui")
+            return true
+        end
+
+        UIManager:show(overlay, "ui")
+    end
+
+    refresh()
+end
+
+function XRayPlugin:showUnitAutoScanCard()
+    local XRaySettingsCard = require(plugin_path .. "xray_settings_card")
+    local enabled_text = self.loc:t("unit_auto_scan_enabled") or "Enabled"
+    local disabled_text = self.loc:t("unit_auto_scan_disabled") or "Disabled"
+    XRaySettingsCard.show(self, {
+        title = self.loc:t("unit_auto_scan_settings") or "Auto-Scan Settings",
+        description = self.loc:t("unit_auto_scan_desc") or "Scan books for units automatically:",
+        options = {
+            { text = enabled_text, value = true },
+            { text = disabled_text, value = false },
+        },
+        get_current_func = function()
+            return self.ai_helper.settings.unit_auto_scan_enabled ~= false
+        end,
+        save_func = function(val)
+            self.ai_helper:saveSettings({ unit_auto_scan_enabled = val })
+        end,
+        about_text = self.loc:t("unit_auto_scan_about") or "Scanning can take up to 15-20 seconds for large books. This only happens the first time the book is opened, and the results are saved for the future."
+    })
+end
+
+function XRayPlugin:showUnitScanWrittenNumbersCard()
+    local XRaySettingsCard = require(plugin_path .. "xray_settings_card")
+    local enabled_text = self.loc:t("unit_scan_written_enabled") or "Enabled"
+    local disabled_text = self.loc:t("unit_scan_written_disabled") or "Disabled"
+    XRaySettingsCard.show(self, {
+        title = self.loc:t("unit_scan_written_numbers_title") or "Scan Written Numbers",
+        description = self.loc:t("unit_scan_written_numbers_desc") or "Scan for spelled-out numbers (e.g. 'five miles'):",
+        options = {
+            { text = enabled_text, value = true },
+            { text = disabled_text, value = false },
+        },
+        get_current_func = function()
+            local settings = self.ai_helper.settings
+            if settings.unit_scan_written_numbers ~= nil then
+                return settings.unit_scan_written_numbers == true
+            end
+            local xray_utils = require(plugin_path .. "xray_utils")
+            return not xray_utils:isLowPowerForScan()
+        end,
+        save_func = function(val)
+            self.ai_helper:saveSettings({ unit_scan_written_numbers = val })
+            if self.scanBookForUnits then self:scanBookForUnits() end
+        end,
+        about_text = self.loc:t("unit_scan_written_numbers_about") or "Scanning written-out numbers (like 'five miles') requires a second full-text pass. Skipping this pass on lower-powered devices (Kindle, Kobo, PocketBook) provides a 4x to 5x scan speedup and prevents startup freezes. On faster platforms like Android or desktops, there is no noticeable slowdown."
+    })
+end
+
+-- Resolves the exact touch menu path (e.g. "4.1.8.6") to the Unit Converter submenu
+findUnitConverterMenuPath = function(self)
+    if not self.ui or not self.ui.menu then return nil end
+    local reader_menu = self.ui.menu
+    if not reader_menu.tab_item_table then
+        reader_menu:setUpdateItemTable()
+    end
+    local tab_item_table = reader_menu.tab_item_table
+    if not tab_item_table then return nil end
+
+    local function searchMenu(items, current_path)
+        for idx, item in ipairs(items) do
+            local path = current_path == "" and tostring(idx) or (current_path .. "." .. idx)
+            if item.is_unit_converter then
+                return path
+            end
+            local submenu = item.sub_item_table
+            if not submenu and type(item.sub_item_table_func) == "function" then
+                submenu = item.sub_item_table_func()
+            end
+            if submenu then
+                local found = searchMenu(submenu, path)
+                if found then
+                    return found
+                end
+            end
+        end
+        return nil
+    end
+
+    for tab_idx, tab_items in ipairs(tab_item_table) do
+        for item_idx, item in ipairs(tab_items) do
+            self:log(string.format("XRayPlugin: findUnitConverterMenuPath checking tab=%d item=%d id=%s text=%s", tab_idx, item_idx, tostring(item.id), tostring(item.text)))
+            -- Find the main "X-Ray" menu item by its sorted ID
+            if item.id == "xray" then
+                local submenu = item.sub_item_table
+                if not submenu and type(item.sub_item_table_func) == "function" then
+                    submenu = item.sub_item_table_func()
+                end
+                if submenu then
+                    local sub_path = searchMenu(submenu, "")
+                    if sub_path then
+                        local path = string.format("%d.%d.%s", tab_idx, item_idx, sub_path)
+                        self:log("XRayPlugin: findUnitConverterMenuPath resolved path: " .. tostring(path))
+                        return path
+                    end
+                end
+            end
+        end
+    end
+    self:log("XRayPlugin: findUnitConverterMenuPath failed to resolve path")
+    return nil
+end
+
+-- Shows the "New Feature" promotion card for the Unit Converter
+function XRayPlugin:showUnitConverterNewFeatureCard()
+    local Screen = require("device").screen
+    local Font = require("ui/font")
+    local Geom = require("ui/geometry")
+    local Blitbuffer = require("ffi/blitbuffer")
+    local UIManager = require("ui/uimanager")
+    local FrameContainer = require("ui/widget/container/framecontainer")
+    local InputContainer = require("ui/widget/container/inputcontainer")
+    local CenterContainer = require("ui/widget/container/centercontainer")
+    local VerticalGroup = require("ui/widget/verticalgroup")
+    local HorizontalGroup = require("ui/widget/horizontalgroup")
+    local TextWidget = require("ui/widget/textwidget")
+    local Button = require("ui/widget/button")
+    local GestureRange = require("ui/gesturerange")
+    local VerticalSpan = require("ui/widget/verticalspan")
+    local WidgetContainer = require("ui/widget/container/widgetcontainer")
+    local MovableContainer = require("ui/widget/container/movablecontainer")
+    local TextBoxWidget = require("ui/widget/textboxwidget")
+    local LineWidget = require("ui/widget/linewidget")
+    local xray_theme = require(plugin_path .. "xray_theme")
+
+    local function sc(val)
+        return Screen:scaleBySize(val)
+    end
+
+    local sw = Screen:getWidth()
+    local sh = Screen:getHeight()
+    local dialog_w = math.min(sw - sc(20), sc(460))
+
+    local fs = 20
+    if G_reader_settings then
+        fs = G_reader_settings:readSetting("cre_font_size") or 20
+    end
+    local ui_font_size = math.max(14, math.min(fs, 24))
+    local title_font_size = math.max(10, math.min(fs - 5, 15))
+
+    local overlay
+    local selected_action = "keep_enabled" -- Default selection
+
+    local function span()
+        return VerticalSpan:new{ width = xray_theme.gap }
+    end
+
+    -- 2. Main layout loop
+    local function renderCard()
+        if overlay then
+            UIManager:close(overlay, "ui")
+        end
+
+        local title_label = TextWidget:new{
+            text = (self.loc:t("new_feature") or "New Feature"):upper(),
+            face = Font:getFace("infofont", title_font_size),
+            fgcolor = xray_theme.color_label_dim or Blitbuffer.Color8(120),
+        }
+
+        local headline_label = TextWidget:new{
+            text = self.loc:t("unit_conv_headline") or "Unit Converter",
+            face = Font:getFace("cfont", ui_font_size + 2),
+            bold = true,
+            fgcolor = Blitbuffer.COLOR_BLACK,
+        }
+
+        local description_box = TextBoxWidget:new{
+            text = self.loc:t("unit_conv_new_feature_desc") or "X-Ray now detects measurements (lengths, weights, temperature) in your books and highlights them with a subtle underline. Tap any highlighted unit to see its converted value in a popup tooltip.\n\nNote: A scan is required the first time a book is opened.",
+            face = Font:getFace("cfont", ui_font_size),
+            width = dialog_w - sc(32),
+            alignment = self:isRTL() and "right" or "left",
+        }
+
+        -- Construct live preview widget elements
+        local Widget = require("ui/widget/widget")
+        local OverlapGroup = require("ui/widget/overlapgroup")
+        local RenderText = require("ui/rendertext")
+
+        local settings = self.ai_helper and self.ai_helper.settings or {}
+        local underline_style = settings.unit_underline_style or "wavy"
+        local underline_thickness = tonumber(settings.unit_underline_thickness) or 2
+        local underline_intensity = settings.unit_underline_intensity or "light"
+
+        local UnderlinePreview = Widget:extend{
+            width = 0,
+            height = 0,
+            underline_style = underline_style,
+            underline_thickness = underline_thickness,
+            underline_color_val = nil,
+            plugin = nil,
+        }
+        function UnderlinePreview:getSize()
+            return Geom:new{ w = self.width, h = self.height }
+        end
+        function UnderlinePreview:paintTo(bb, x, y)
+            local plugin = self.plugin
+            if plugin and plugin._draw_underline then
+                local grey = 150
+                if underline_intensity == "light" then
+                    grey = 200
+                elseif underline_intensity == "dark" then
+                    grey = 30
+                end
+                local thickness = Screen:scaleBySize(self.underline_thickness)
+                local box = { x = x, y = y, w = self.width, h = self.height }
+                plugin._draw_underline(bb, box, self.underline_style, grey, thickness, self.underline_thickness, plugin.path)
+            end
+        end
+
+        local preview_face = Font:getFace("cfont", ui_font_size + 2)
+        local sample_text = TextWidget:new{
+            text = "walked 2 miles today",
+            face = preview_face,
+            alignment = "center",
+        }
+        local sample_size = sample_text:getSize()
+
+        local underline_color_val
+        if underline_intensity == "light" then
+            underline_color_val = Blitbuffer.Color8(200)
+        elseif underline_intensity == "dark" then
+            underline_color_val = Blitbuffer.Color8(30)
+        else
+            underline_color_val = Blitbuffer.Color8(120)
+        end
+
+        local w_walked = RenderText:sizeUtf8Text(0, 9999, preview_face, "walked ", false, false).x
+        local w_miles = RenderText:sizeUtf8Text(0, 9999, preview_face, "2 miles", false, false).x
+
+        local underline_widget = UnderlinePreview:new{
+            width = w_miles,
+            height = sample_size.h,
+            underline_style = underline_style,
+            underline_thickness = underline_thickness,
+            underline_color_val = underline_color_val,
+            overlap_offset = { w_walked, 0 },
+            plugin = self,
+        }
+
+        local preview_example = OverlapGroup:new{
+            dimen = sample_size,
+            sample_text,
+            underline_widget,
+        }
+
+        local tooltip_text = "3.22 km"
+        local tooltip_face = Font:getFace("cfont", fs)
+        local pad_h = 28
+        local pad_v = math.floor(fs * 0.55)
+        local text_size = RenderText:sizeUtf8Text(0, 9999, tooltip_face, tooltip_text, false, false)
+        local text_w = text_size.x
+        local tooltip_max_w = dialog_w - sc(64)
+        local popup_w = math.min(tooltip_max_w, text_w + pad_h * 2)
+
+        local tb = TextWidget:new{
+            text = tooltip_text,
+            face = tooltip_face,
+        }
+
+        local border_sz = sc(2)
+        local preview_tooltip = FrameContainer:new{
+            background = Blitbuffer.COLOR_WHITE,
+            bordersize = border_sz,
+            color = Blitbuffer.COLOR_DARK_GRAY,
+            radius = 0,
+            padding_top = pad_v,
+            padding_bottom = pad_v,
+            padding_left = pad_h,
+            padding_right = pad_h,
+            width = popup_w,
+            VerticalGroup:new{
+                align = "center",
+                tb
+            }
+        }
+
+        local card_size = preview_tooltip:getSize()
+        local card_h = card_size.h
+
+        local arrow_w = sc(16)
+        local arrow_h = sc(8)
+        local _PointerArrow = self._PointerArrow
+        local preview_arrow = _PointerArrow:new{
+            width = arrow_w,
+            height = arrow_h,
+            direction = "down",
+            apex_offset = arrow_w / 2,
+            border_size = border_sz,
+            border_color = Blitbuffer.COLOR_DARK_GRAY,
+            fill_color = Blitbuffer.COLOR_WHITE,
+        }
+        preview_arrow.overlap_offset = { math.floor((popup_w - arrow_w) / 2), card_h - border_sz }
+
+        local tooltip_with_arrow = OverlapGroup:new{
+            dimen = Geom:new{ w = popup_w, h = card_h + arrow_h - border_sz },
+            preview_tooltip,
+            preview_arrow,
+        }
+
+        local preview_panel = FrameContainer:new{
+            padding = sc(8),
+            radius = xray_theme.radius_window,
+            bordersize = xray_theme.border_preview,
+            color = xray_theme.color_border,
+            background = Blitbuffer.COLOR_WHITE,
+            width = dialog_w - sc(32),
+            VerticalGroup:new{
+                align = "center",
+                HorizontalGroup:new{
+                    align = "center",
+                    tooltip_with_arrow
+                },
+                VerticalSpan:new{ width = sc(2) },
+                CenterContainer:new{
+                    dimen = Geom:new{ w = dialog_w - sc(48), h = sample_size.h },
+                    preview_example
+                }
+            }
+        }
+
+        local content_vg = VerticalGroup:new{
+            align = "left",
+            title_label,
+            span(),
+            headline_label,
+            span(),
+            description_box,
+            span(),
+            preview_panel,
+            span(),
+        }
+
+        local choices = {
+            { text = self.loc:t("unit_action_configure") or "Configure Settings...", value = "configure" },
+            { text = self.loc:t("unit_action_keep") or "Keep Enabled (Default)", value = "keep_enabled" },
+            { text = self.loc:t("unit_action_disable") or "Disable Feature", value = "disable" },
+        }
+
+        for _, choice in ipairs(choices) do
+            local is_selected = (choice.value == selected_action)
+            local dot_char = is_selected and "●" or "○"
+
+            local row_content = HorizontalGroup:new{ align = "center" }
+            if self:isRTL() then
+                table.insert(row_content, TextBoxWidget:new{
+                    text = choice.text,
+                    face = Font:getFace("cfont", ui_font_size),
+                    fgcolor = Blitbuffer.COLOR_BLACK,
+                    width = dialog_w - sc(72),
+                    alignment = "right",
+                })
+                table.insert(row_content, WidgetContainer:new{ dimen = Geom:new{ w = sc(6), h = 1 } })
+                table.insert(row_content, TextWidget:new{
+                    text = dot_char,
+                    face = Font:getFace("cfont", ui_font_size),
+                })
+            else
+                table.insert(row_content, TextWidget:new{
+                    text = dot_char,
+                    face = Font:getFace("cfont", ui_font_size),
+                })
+                table.insert(row_content, WidgetContainer:new{ dimen = Geom:new{ w = sc(6), h = 1 } })
+                table.insert(row_content, TextBoxWidget:new{
+                    text = choice.text,
+                    face = Font:getFace("cfont", ui_font_size),
+                    fgcolor = Blitbuffer.COLOR_BLACK,
+                    width = dialog_w - sc(72),
+                    alignment = "left",
+                })
+            end
+
+            local frame = FrameContainer:new{
+                bordersize = is_selected and xray_theme.border_btn or sc(1),
+                radius = xray_theme.radius_btn,
+                padding = sc(6),
+                color = is_selected and xray_theme.color_border or xray_theme.color_section_rule,
+                background = xray_theme.color_bg,
+                width = dialog_w - sc(32),
+                row_content
+            }
+
+            local item = InputContainer:new{ frame }
+            item.ges_events = {
+                Tap = {
+                    GestureRange:new{
+                        ges = "tap",
+                        range = function()
+                            return Geom:new{
+                                x = frame.dimen.x,
+                                y = frame.dimen.y,
+                                w = dialog_w - sc(32),
+                                h = frame.dimen.h
+                            }
+                        end
+                    }
+                }
+            }
+            item.onTap = function()
+                selected_action = choice.value
+                renderCard()
+                return true
+            end
+
+            table.insert(content_vg, item)
+            table.insert(content_vg, WidgetContainer:new{ dimen = Geom:new{ w = 1, h = sc(4) } })
+        end
+
+        table.insert(content_vg, span())
+        table.insert(content_vg, LineWidget:new{
+            dimen = Geom:new{ w = dialog_w - sc(32), h = sc(1) },
+            background = xray_theme.color_section_rule,
+        })
+        table.insert(content_vg, span())
+
+        -- Action Buttons (Confirm & Ask Later)
+        local confirm_btn = Button:new{
+            text = self.loc:t("confirm") or "Confirm",
+            face = Font:getFace("cfont", ui_font_size),
+            width = (dialog_w - sc(40)) / 2,
+            height = sc(42),
+            bordersize = xray_theme.border_btn,
+            radius = xray_theme.radius_btn,
+            callback = function()
+                -- Save prompted state
+                self.ai_helper:saveSettings({ unit_new_feature_prompt_seen = true })
+                UIManager:close(overlay, "ui")
+
+                if selected_action == "configure" then
+                    self.ai_helper:saveSettings({ unit_converter_enabled = true })
+                    
+                    UIManager:scheduleIn(0.1, function()
+                        if self.ui and self.ui.menu then
+                            if not self.ui.menu.menu_container then
+                                self.ui.menu:onShowMenu()
+                            end
+                            local touch_menu = self.ui.menu.menu_container and self.ui.menu.menu_container[1]
+                            if touch_menu then
+                                local path = findUnitConverterMenuPath(self)
+                                if path then
+                                    touch_menu:openMenu(path, false)
+                                end
+                            end
+                        end
+                    end)
+                elseif selected_action == "keep_enabled" then
+                    self.ai_helper:saveSettings({ unit_converter_enabled = true })
+                    if self.scanBookForUnits then self:scanBookForUnits() end
+                elseif selected_action == "disable" then
+                    self.ai_helper:saveSettings({ unit_converter_enabled = false })
+                    self:clearUnitUnderlines()
+                end
+            end
+        }
+
+        local later_btn = Button:new{
+            text = self.loc:t("ask_later") or "Ask Later",
+            face = Font:getFace("cfont", ui_font_size),
+            width = (dialog_w - sc(40)) / 2,
+            height = sc(42),
+            bordersize = xray_theme.border_btn,
+            radius = xray_theme.radius_btn,
+            callback = function()
+                UIManager:close(overlay, "ui")
+                if self.scanBookForUnits then self:scanBookForUnits() end
+            end
+        }
+
+        local btn_row = HorizontalGroup:new{
+            align = "center",
+            later_btn,
+            WidgetContainer:new{ dimen = Geom:new{ w = sc(8), h = 1 } },
+            confirm_btn,
+        }
+        table.insert(content_vg, btn_row)
+
+        local card = FrameContainer:new{
+            padding = sc(12),
+            radius = xray_theme.radius_window,
+            bordersize = sc(2),
+            color = Blitbuffer.COLOR_BLACK,
+            background = xray_theme.color_bg,
+            width = dialog_w - sc(2),
+            content_vg
+        }
+
+        local card_outer = FrameContainer:new{
+            bordersize = sc(1),
+            color = Blitbuffer.Color8(180),
+            padding = 0,
+            background = xray_theme.color_bg,
+            radius = xray_theme.radius_window,
+            width = dialog_w,
+            card
+        }
+
+        overlay = InputContainer:new{
+            key_events = {
+                Close = { { "Back" } }
+            },
+            CenterContainer:new{
+                dimen = Geom:new{ w = sw, h = sh },
+                MovableContainer:new{ card_outer }
+            }
+        }
+
+        UIManager:show(overlay, "ui")
+    end
+
+    renderCard()
+end
+
+-- --- Book Type Detection Engine ---
+
+function XRayPlugin:detectBookTypeHeuristic()
+    local book_path = self.ui and self.ui.document and self.ui.document.file
+    if not book_path then return "unknown", false end
+    
+    local ext = book_path:match("%.([^%.]+)$")
+    if ext then
+        ext = ext:lower()
+        if ext == "cbz" or ext == "cbr" or ext == "cb7" then
+            return "manga", true -- archive format for comics/manga: highly confident
+        end
+    end
+
+    local props = self.ui.document:getProps() or {}
+    local subjects = props.subject or props.Subject or ""
+    local title = (props.title or ""):lower()
+    local filename = (book_path:match("([^/\\]+)$") or ""):lower()
+
+    local manga_kw = { "manga", "graphic novel", "comic", "omnibus", "vol%.", "chapter" }
+    local poetry_kw = { "poetry", "poems", "verse", "anthology" }
+    local cookbook_kw = { "cookbook", "cook book", "recipe", "cooking" }
+    local textbook_kw = { "textbook", "text book", "academic", "manual" }
+    local travel_kw = { "travel guide", "lonely planet", "rough guide" }
+    local fiction_kw = { "fiction", "novel", "fantasy", "thriller", "mystery", "romance",
+                         "horror", "science fiction", "sci%-fi", "literary", "adventure",
+                         "short stor", "young adult", "ya fiction" }
+    local nonfiction_kw = { "nonfiction", "non%-fiction", "history", "biography", "memoir",
+                            "autobiography", "science", "self%-help", "psychology", "economics",
+                            "philosophy", "true crime", "politics", "essay" }
+
+    local function match_keywords(str, kw_list)
+        if not str or str == "" then return false end
+        str = str:lower()
+        for _, kw in ipairs(kw_list) do
+            if str:find(kw) then return true end
+        end
+        return false
+    end
+
+    -- 1. Niche checks
+    if match_keywords(subjects, manga_kw) then return "manga", true end
+    if match_keywords(title, manga_kw) or match_keywords(filename, manga_kw) then return "manga", false end
+
+    if match_keywords(subjects, poetry_kw) then return "poetry", true end
+    if match_keywords(title, poetry_kw) or match_keywords(filename, poetry_kw) then return "poetry", false end
+
+    if match_keywords(subjects, cookbook_kw) then return "cookbook", true end
+    if match_keywords(title, cookbook_kw) or match_keywords(filename, cookbook_kw) then return "cookbook", false end
+
+    if match_keywords(subjects, textbook_kw) then return "textbook", true end
+    if match_keywords(title, textbook_kw) or match_keywords(filename, textbook_kw) then return "textbook", false end
+
+    if match_keywords(subjects, travel_kw) then return "travel", true end
+    if match_keywords(title, travel_kw) or match_keywords(filename, travel_kw) then return "travel", false end
+
+    -- 2. Fiction / Non-Fiction positive checks
+    if match_keywords(subjects, fiction_kw) then return "prose_fiction", true end
+    if match_keywords(title, fiction_kw) or match_keywords(filename, fiction_kw) then return "prose_fiction", false end
+
+    if match_keywords(subjects, nonfiction_kw) then return "prose_nonfiction", true end
+    if match_keywords(title, nonfiction_kw) or match_keywords(filename, nonfiction_kw) then return "prose_nonfiction", false end
+
+    -- 3. File extension fallback
+    if ext then
+        if ext == "epub" or ext == "mobi" or ext == "azw" or ext == "azw3" or ext == "fb2" or ext == "txt" then
+            return "prose_fiction", false -- default to prose fiction (low confidence guess)
+        end
+    end
+
+    return "unknown", false
+end
+
+function XRayPlugin:getEffectiveBookType()
+    local cached = self.book_data or {}
+    if cached.book_type_label_override and cached.book_type_label_override ~= "auto" then
+        return cached.book_type_label_override
+    end
+    if cached.book_type_label and cached.book_type_label ~= "" then
+        return cached.book_type_label
+    end
+    local heur = self:detectBookTypeHeuristic()
+    if heur and heur ~= "unknown" then
+        return heur
+    end
+    return "unknown"
+end
+
+function XRayPlugin:triggerBookTypeDetection()
+    if not self.ui or not self.ui.document then return true end
+    if not self.book_data then
+        self.book_data = {}
+    end
+    local cached = self.book_data
+
+    -- Check if we already have a unit cache first to avoid scans
+    local has_unit_cache = false
+    if self.loadUnitCache then
+        has_unit_cache = self:loadUnitCache()
+    end
+
+    local function checkAndTriggerScan()
+        if has_unit_cache then
+            -- Just apply underlines, do not rescan
+            if self.applyUnitUnderlines then self:applyUnitUnderlines() end
+        else
+            -- Check if current type is disabled before scanning
+            local settings = self.ai_helper and self.ai_helper.settings or {}
+            local disabled_types = settings.unit_disabled_book_types or { "manga", "graphic_novel", "children", "poetry" }
+            local book_type = self:getEffectiveBookType()
+            local is_disabled = false
+            for _, t in ipairs(disabled_types) do
+                if t == book_type then
+                    is_disabled = true
+                    break
+                end
+            end
+            if is_disabled then
+                if self.clearUnitUnderlines then self:clearUnitUnderlines() end
+            else
+                if self.scanBookForUnits then self:scanBookForUnits() end
+            end
+        end
+    end
+
+    if cached.book_type_label and cached.book_type_label ~= "" then
+        checkAndTriggerScan()
+        -- If the cached label was not detected by AI, check if we should refine it via AI background process
+        if not cached.book_type_detected_by_ai and self.ai_helper:hasApiKey() then
+            -- Trigger AI in background to refine low-confidence or format-fallback guesses
+            local DataStorage = require("datastorage")
+            local result_file = DataStorage:getDataDir() .. "/xray/book_type_detect_res.json"
+            local props = self.ui.document:getProps() or {}
+            local title = props.title or "Unknown"
+            local author = props.authors or "Unknown"
+            local series = props.series or props.Series or "None"
+            local description = props.subject or props.Subject or "None"
+            local pid = self.ai_helper:detectBookTypeAsync(title, author, series, description, result_file)
+            if pid then
+                local function pollResult()
+                    if self.destroyed then return end
+                    local res = self.ai_helper:checkAsyncResult(result_file)
+                    if res == "pending" then
+                        UIManager:scheduleIn(1, pollResult)
+                    elseif type(res) == "table" and res.book_type_label then
+                        cached.book_type_label = res.book_type_label
+                        cached.book_type_detected_by_ai = true
+                        self.cache_manager:asyncSaveCache(self.ui.document.file, cached)
+                    end
+                end
+                UIManager:scheduleIn(1, pollResult)
+            end
+        end
+        return true
+    end
+
+    -- Run Layer 1 & 2 heuristic
+    local heur, is_confident = self:detectBookTypeHeuristic()
+    if heur ~= "unknown" then
+        cached.book_type_label = heur
+        if is_confident then
+            cached.book_type_detected_by_ai = false -- high confidence heuristic, no AI needed
+            self.cache_manager:asyncSaveCache(self.ui.document.file, cached)
+            checkAndTriggerScan()
+            return true
+        else
+            -- Low confidence heuristic, we save it as a starting point and scan
+            cached.book_type_detected_by_ai = false
+            self.cache_manager:asyncSaveCache(self.ui.document.file, cached)
+            checkAndTriggerScan()
+            
+            -- Run Layer 3 AI background refinement since confidence is low
+            if not self.ai_helper:hasApiKey() then
+                return true
+            end
+            self:log("XRayPlugin: Starting Layer 3 AI book type refinement in background...")
+            local DataStorage = require("datastorage")
+            local result_file = DataStorage:getDataDir() .. "/xray/book_type_detect_res.json"
+            local props = self.ui.document:getProps() or {}
+            local title = props.title or "Unknown"
+            local author = props.authors or "Unknown"
+            local series = props.series or props.Series or "None"
+            local description = props.subject or props.Subject or "None"
+            local pid = self.ai_helper:detectBookTypeAsync(title, author, series, description, result_file)
+            if pid then
+                local function pollResult()
+                    if self.destroyed then return end
+                    local res = self.ai_helper:checkAsyncResult(result_file)
+                    if res == "pending" then
+                        UIManager:scheduleIn(1, pollResult)
+                    elseif type(res) == "table" and res.book_type_label then
+                        self:log("XRayPlugin: Book type AI refinement complete! Result: " .. tostring(res.book_type_label))
+                        cached.book_type_label = res.book_type_label
+                        cached.book_type_detected_by_ai = true
+                        self.cache_manager:asyncSaveCache(self.ui.document.file, cached)
+                    end
+                end
+                UIManager:scheduleIn(1, pollResult)
+            end
+            return true
+        end
+    end
+
+    -- Run Layer 3 LLM classification directly if API keys exist and heuristic was unknown
+    if not self.ai_helper:hasApiKey() then
+        checkAndTriggerScan()
+        return true
+    end
+
+    self:log("XRayPlugin: Starting Layer 3 AI book type detection in background...")
+    local DataStorage = require("datastorage")
+    local result_file = DataStorage:getDataDir() .. "/xray/book_type_detect_res.json"
+    
+    local props = self.ui.document:getProps() or {}
+    local title = props.title or "Unknown"
+    local author = props.authors or "Unknown"
+    local series = props.series or props.Series or "None"
+    local description = props.subject or props.Subject or "None"
+
+    local pid, err_c, err_m = self.ai_helper:detectBookTypeAsync(title, author, series, description, result_file)
+    if not pid then
+        self:log("XRayPlugin: Book type AI detection trigger failed: " .. tostring(err_m))
+        checkAndTriggerScan()
+        return true
+    end
+
+    local function pollResult()
+        if self.destroyed then return end
+        local res = self.ai_helper:checkAsyncResult(result_file)
+        if res == "pending" then
+            UIManager:scheduleIn(1, pollResult)
+        elseif type(res) == "table" and res.book_type_label then
+            self:log("XRayPlugin: Book type AI detection complete! Result: " .. tostring(res.book_type_label))
+            cached.book_type_label = res.book_type_label
+            cached.book_type_detected_by_ai = true
+            self.cache_manager:asyncSaveCache(self.ui.document.file, cached)
+            -- Check scan triggers again now that AI classification finished
+            local has_unit_cache_now = false
+            if self.loadUnitCache then
+                has_unit_cache_now = self:loadUnitCache()
+            end
+            if not has_unit_cache_now then
+                local settings = self.ai_helper and self.ai_helper.settings or {}
+                local disabled_types = settings.unit_disabled_book_types or { "manga", "graphic_novel", "children", "poetry" }
+                local book_type = self:getEffectiveBookType()
+                local is_disabled = false
+                for _, t in ipairs(disabled_types) do
+                    if t == book_type then
+                        is_disabled = true
+                        break
+                    end
+                end
+                if is_disabled then
+                    if self.clearUnitUnderlines then self:clearUnitUnderlines() end
+                else
+                    if self.scanBookForUnits then self:scanBookForUnits() end
+                end
+            else
+                if self.applyUnitUnderlines then self:applyUnitUnderlines() end
+            end
+        else
+            self:log("XRayPlugin: Book type AI detection returned invalid or empty result: " .. tostring(res))
+            checkAndTriggerScan()
+        end
+    end
+    UIManager:scheduleIn(1, pollResult)
+    return true
+end
+
+-- --- Book Type Filter Settings Card ---
+
+-- --- Book Type Filter Dynamic Sub-Menus ---
+
+function XRayPlugin:handleBookTypeOverride(val)
+    if not self.book_data then
+        self.book_data = {}
+    end
+    self.book_data.book_type_label_override = val
+    self.cache_manager:asyncSaveCache(self.ui.document.file, self.book_data)
+
+    local cache_loaded = false
+    if self.loadUnitCache then
+        cache_loaded = self:loadUnitCache()
+    end
+
+    local settings = self.ai_helper and self.ai_helper.settings or {}
+    local disabled_types = settings.unit_disabled_book_types or { "manga", "graphic_novel", "children", "poetry" }
+    local is_disabled = false
+    local book_type = self:getEffectiveBookType()
+    for _, t in ipairs(disabled_types) do
+        if t == book_type then
+            is_disabled = true
+            break
+        end
+    end
+
+    if is_disabled then
+        if self.clearUnitUnderlines then self:clearUnitUnderlines() end
+    elseif not cache_loaded then
+        self:closeAllMenus()
+        if self.scanBookForUnits then self:scanBookForUnits() end
+    else
+        if self.applyUnitUnderlines then self:applyUnitUnderlines() end
+    end
+end
+
+function XRayPlugin:showBookTypeOverrideCard(refresh_parent)
+    local XRaySettingsCard = require(plugin_path .. "xray_settings_card")
+    local book_types = {
+        { key = "prose_fiction", text = self.loc:t("unit_book_type_prose_fiction") or "Fiction (Novels, Stories)" },
+        { key = "prose_nonfiction", text = self.loc:t("unit_book_type_prose_nonfiction") or "Non-Fiction (History, Science, etc.)" },
+        { key = "manga", text = self.loc:t("unit_book_type_manga") or "Manga" },
+        { key = "graphic_novel", text = self.loc:t("unit_book_type_graphic_novel") or "Graphic Novels & Comics" },
+        { key = "children", text = self.loc:t("unit_book_type_children") or "Children's Books" },
+        { key = "poetry", text = self.loc:t("unit_book_type_poetry") or "Poetry & Verse" },
+        { key = "cookbook", text = self.loc:t("unit_book_type_cookbook") or "Cookbooks & Recipes" },
+        { key = "textbook", text = self.loc:t("unit_book_type_textbook") or "Textbooks & Academic" },
+        { key = "travel", text = self.loc:t("unit_book_type_travel") or "Travel Guides" },
+        { key = "unknown", text = self.loc:t("unit_book_type_unknown") or "Unknown/Other" },
+    }
+
+    local override_opts = {
+        { text = self.loc:t("unit_book_type_auto") or "Auto-detect", value = "auto" }
+    }
+    for _, bt in ipairs(book_types) do
+        table.insert(override_opts, { text = bt.text, value = bt.key })
+    end
+
+    XRaySettingsCard.show(self, {
+        title = self.loc:t("unit_book_type_override") or "Override for this book",
+        options = override_opts,
+        get_current_func = function()
+            local cached = self.book_data or {}
+            return cached.book_type_label_override or "auto"
+        end,
+        save_func = function(val)
+            self:handleBookTypeOverride(val)
+            if refresh_parent then refresh_parent() end
+        end,
+    })
+end
+
+function XRayPlugin:getBookTypeFilterMenu()
+    local book_types = {
+        { key = "prose_fiction", text = self.loc:t("unit_book_type_prose_fiction") or "Fiction (Novels, Stories)" },
+        { key = "prose_nonfiction", text = self.loc:t("unit_book_type_prose_nonfiction") or "Non-Fiction (History, Science, etc.)" },
+        { key = "manga", text = self.loc:t("unit_book_type_manga") or "Manga" },
+        { key = "graphic_novel", text = self.loc:t("unit_book_type_graphic_novel") or "Graphic Novels & Comics" },
+        { key = "children", text = self.loc:t("unit_book_type_children") or "Children's Books" },
+        { key = "poetry", text = self.loc:t("unit_book_type_poetry") or "Poetry & Verse" },
+        { key = "cookbook", text = self.loc:t("unit_book_type_cookbook") or "Cookbooks & Recipes" },
+        { key = "textbook", text = self.loc:t("unit_book_type_textbook") or "Textbooks & Academic" },
+        { key = "travel", text = self.loc:t("unit_book_type_travel") or "Travel Guides" },
+        { key = "unknown", text = self.loc:t("unit_book_type_unknown") or "Unknown/Other" },
+    }
+
+    local function getDetectedStr()
+        local cached = self.book_data or {}
+        local raw = cached.book_type_label
+        local via = "AI"
+        if not raw or raw == "" then
+            raw = self:detectBookTypeHeuristic()
+            via = "Heuristic"
+        end
+        local label = "Unknown/Other"
+        for _, bt in ipairs(book_types) do
+            if bt.key == raw then label = bt.text; break end
+        end
+        -- Strip parenthetical text to prevent truncation in native menus
+        label = label:gsub("%s*%b()", "")
+        return string.format("%s (%s)", label, via)
+    end
+
+    local menu = {
+        {
+            text = (self.loc:t("unit_book_type_detected") or "Detected Book Type") .. ": " .. getDetectedStr(),
+            enabled = false,
+        },
+        {
+            text = self.loc:t("unit_book_type_override") or "Override for this book",
+            keep_menu_open = true,
+            callback = function()
+                self:showBookTypeOverrideCard()
+            end
+        },
+        {
+            text = self.loc:t("unit_book_type_manage") or "Manage Enabled Types",
+            keep_menu_open = true,
+            sub_item_table_func = function()
+                local opts = {}
+                for _, bt in ipairs(book_types) do
+                    table.insert(opts, {
+                        text = bt.text,
+                        checked_func = function()
+                            local disabled = self.ai_helper.settings.unit_disabled_book_types or { "manga", "graphic_novel", "children", "poetry" }
+                            local disabled_map = {}
+                            for _, k in ipairs(disabled) do disabled_map[k] = true end
+                            return not disabled_map[bt.key]
+                        end,
+                        callback = function()
+                            local disabled = self.ai_helper.settings.unit_disabled_book_types or { "manga", "graphic_novel", "children", "poetry" }
+                            local new_disabled = {}
+                            local found = false
+                            for _, k in ipairs(disabled) do
+                                if k == bt.key then
+                                    found = true
+                                else
+                                    table.insert(new_disabled, k)
+                                end
+                            end
+                            if not found then
+                                table.insert(new_disabled, bt.key)
+                            end
+                            self.ai_helper:saveSettings({ unit_disabled_book_types = new_disabled })
+
+                            local cache_loaded = false
+                            if self.loadUnitCache then
+                                cache_loaded = self:loadUnitCache()
+                            end
+
+                            local is_disabled = false
+                            local book_type = self:getEffectiveBookType()
+                            for _, t in ipairs(new_disabled) do
+                                if t == book_type then
+                                    is_disabled = true
+                                    break
+                                end
+                            end
+
+                            if is_disabled then
+                                if self.clearUnitUnderlines then self:clearUnitUnderlines() end
+                            elseif not cache_loaded then
+                                self:closeAllMenus()
+                                if self.scanBookForUnits then self:scanBookForUnits() end
+                            else
+                                if self.applyUnitUnderlines then self:applyUnitUnderlines() end
+                            end
+                        end
+                    })
+                end
+                return opts
+            end
+        }
+    }
+    return menu
+end
 
 -- Extracted functions are now loaded via mixins (xray_data, xray_ui, xray_fetch, xray_mentions)
 
 return XRayPlugin
+
