@@ -230,6 +230,7 @@ if G_reader_settings:isTrue("apply_extra_patches") then
     -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/animation-Koreader.lua")
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/bookshelf-overlay.lua")
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/touchmenu-icon-warmup.lua")
+    local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/track-reading-location.lua")
 end
 
 -- Inform once about color rendering on newly supported devices
