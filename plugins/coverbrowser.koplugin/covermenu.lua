@@ -93,13 +93,10 @@ function CoverMenu:updateItems(select_number, no_recalculate_dimen)
         local refresh_dimen =
             old_dimen and old_dimen:combine(self.dimen)
             or self.dimen
-        local refreshtype = "ui"
-        if self._has_cover_images and BookInfoManager:getSetting("flash_ui_cover_images") then
-            refreshtype = "flashui"
-        end
-        return refreshtype, refresh_dimen, self.show_parent.dithered
+        local d = self.show_parent.dithered
+        self.show_parent.dithered = false -- consumed here: won't linger for the next stack walk
+        return "ui", refresh_dimen, d
     end)
-
     -- As additionally done in FileChooser:updateItems()
     if self.path_items then
         self.path_items[self.path] = (self.page - 1) * self.perpage + (select_number or 1)
