@@ -88,7 +88,7 @@ function CoverMenu:updateItems(select_number, no_recalculate_dimen)
     self:updatePageInfo(select_number)
     Menu.mergeTitleBarIntoLayout(self)
 
-    self.show_parent.dithered = self._has_cover_images
+    self.show_parent.dithered = false -- self._has_cover_images
     UIManager:setDirty(self.show_parent, function()
         local refresh_dimen =
             old_dimen and old_dimen:combine(self.dimen)
