@@ -12,6 +12,7 @@ local Blitbuffer = require("ffi/blitbuffer")
 local CenterContainer = require("ui/widget/container/centercontainer")
 local ConfirmBox = require("ui/widget/confirmbox")
 local DataStorage = require("datastorage")
+local DocSettings = require("docsettings")
 local Device = require("device")
 local Dispatcher = require("dispatcher")
 local Event = require("ui/event")
@@ -62,6 +63,7 @@ local INVERT_KEY = "glimpse_invert_night"
 local NAV_BUTTONS_KEY = "glimpse_nav_buttons" -- prev/next buttons, off by default
 local CAPTIONS_KEY = "glimpse_captions"        -- caption overlay, ON by default (nilOrTrue)
 local TOP_MENU_KEY = "glimpse_top_menu_zone"   -- tap top strip → KOReader top menu, ON by default (nilOrTrue)
+local SHADOW_KEY = "glimpse_disable_shadow"    -- drop the drawer's gradient shadow, OFF by default (e-ink ghost source)
 local GESTURE_TIP_KEY = "glimpse_gesture_tip_shown" -- one-time menu-open nudge to bind a gesture
 -- Which actions appear in the viewer's ⋯ popup ("Quick Actions", configured
 -- from the plugin menu). Table order = popup order; `default` = shown unless
@@ -91,11 +93,11 @@ end
 local function _quick_label(key)
     return ({
         gallery    = _("Gallery"),
-        hide       = _("Hide Image"),
+        hide       = _("Ignore Image"),
         mode       = _("Mode switch"),
         rotate     = _("Rotate 90°"),
         showinbook = _("Show in Book"),
-        restore    = _("Restore hidden images"),
+        restore    = _("Restore ignored images"),
         prevnext   = _("Show Nav Buttons Toggle"),
         captions   = _("Show Image Captions Toggle"),
         invert     = _("Invert in Night Mode Toggle"),
@@ -285,6 +287,7 @@ end
 -- number), same as the rest of the chrome. Widens for 2+ digit numbers.
 local GlimpseBadge = Widget:extend{
     num = 1,
+    glyph = nil, -- when set, drawn instead of the number (e.g. "+" on Ignored)
     height = Screen:scaleBySize(17),
     radius = Screen:scaleBySize(4),
     stroke = Screen:scaleBySize(1),
@@ -293,7 +296,7 @@ local GlimpseBadge = Widget:extend{
 
 function GlimpseBadge:init()
     self._txt = TextWidget:new{
-        text = tostring(self.num),
+        text = self.glyph or tostring(self.num),
         face = Font:getFace("cfont", 11),
         bold = true,
         fgcolor = Blitbuffer.COLOR_BLACK,
@@ -546,6 +549,15 @@ function GlimpseTextButton:getSize()
     return Geom:new{ w = self._w, h = self.height }
 end
 
+-- Stretch (or shrink) to an explicit width; the label stays centred (see
+-- paintTo). Used to make the gallery Shown/Ignored toggle fill the bottom bar.
+function GlimpseTextButton:setWidth(w)
+    if w and w > 0 and w ~= self._w then
+        self._w = w
+        if self._bg_bb then self._bg_bb:free(); self._bg_bb = nil end
+    end
+end
+
 function GlimpseTextButton:paintTo(bb, x, y)
     self.dimen = Geom:new{ x = x, y = y, w = self._w, h = self.height }
     if not self._bg_bb then
@@ -647,6 +659,48 @@ function GlimpseMenuRow:free()
     if self.lead_wg then self.lead_wg:free() end
 end
 
+-- White rounded card with an anti-aliased border, sized to its single
+-- child. Drawn from the shared stencil rather than a FrameContainer radius,
+-- whose hard-edged rounding leaves grit in the corners at these sizes.
+-- Painted in three passes: a solid white rounded fill, then the child, then
+-- the border ring ON TOP — so full-width content (the gray row dividers)
+-- tucks under the outline instead of drawing over it (FrameContainer paints
+-- its border last for the same reason).
+local GlimpseCard = WidgetContainer:extend{
+    radius = Screen:scaleBySize(9),
+    stroke = Screen:scaleBySize(2),
+    outline = 0x00,     -- black border, matching the old FrameContainer
+}
+
+function GlimpseCard:getSize()
+    return self[1]:getSize()
+end
+
+function GlimpseCard:paintTo(bb, x, y)
+    local sz = self[1]:getSize()
+    self.dimen = Geom:new{ x = x, y = y, w = sz.w, h = sz.h }
+    if not self._fill_bb or self._bg_w ~= sz.w or self._bg_h ~= sz.h then
+        if self._fill_bb then self._fill_bb:free() end
+        if self._ring_bb then self._ring_bb:free() end
+        self._bg_w, self._bg_h = sz.w, sz.h
+        -- solid white rounded rect (outline == fill, so no visible edge yet)
+        self._fill_bb = make_rounded_stencil(sz.w, sz.h,
+            self.radius, self.stroke, 0xFF, 0xFF)
+        -- border-only ring, laid over the content afterwards
+        self._ring_bb = make_rounded_stencil(sz.w, sz.h,
+            self.radius, self.stroke, nil, self.outline)
+    end
+    bb:alphablitFrom(self._fill_bb, x, y, 0, 0, sz.w, sz.h)
+    self[1]:paintTo(bb, x, y)
+    bb:alphablitFrom(self._ring_bb, x, y, 0, 0, sz.w, sz.h)
+end
+
+function GlimpseCard:free(full)
+    if self._fill_bb then self._fill_bb:free(); self._fill_bb = nil end
+    if self._ring_bb then self._ring_bb:free(); self._ring_bb = nil end
+    WidgetContainer.free(self, full)
+end
+
 -- A small popup menu of icon+text rows, anchored to a widget (the ⋯
 -- button). White rounded card with a thin border, gray separators between
 -- rows; tap a row to fire its callback, tap outside to dismiss. Built in
@@ -721,14 +775,7 @@ function GlimpsePopupMenu:init()
 
     self.movable = MovableContainer:new{
         anchor = self.anchor,
-        FrameContainer:new{
-            background = Blitbuffer.COLOR_WHITE,
-            bordersize = Screen:scaleBySize(2),
-            radius = Screen:scaleBySize(9),
-            padding = 0,
-            margin = 0,
-            vg,
-        },
+        GlimpseCard:new{ vg },
     }
     self[1] = CenterContainer:new{
         dimen = Screen:getSize(),
@@ -813,12 +860,25 @@ local GlimpseViewer = ImageViewer:extend{
     on_restore_hidden = nil, -- function(): restore hidden images and reopen
     get_pref = nil,        -- function(meta) -> per-image prefs {rotation=}
     set_pref = nil,        -- function(meta, key, value)
+    -- Gallery tabs. The single-image view uses image/image_metas (= the
+    -- primary pool); the Gallery shows shown_* or ignored_* per active tab.
+    shown_metas = nil,     -- scanner records for the shown collection
+    shown_list = nil,      -- parallel render closures for shown_metas
+    ignored_metas = nil,   -- scanner records the filter dropped / user hid
+    ignored_list = nil,    -- parallel render closures for ignored_metas
+    primary_tab = "shown", -- which pool the single-image view is showing
+    on_ignore = nil,       -- function(meta, tab, page): move to Ignored
+    on_unignore = nil,     -- function(meta, tab, page): add back to Shown
     -- gallery masonry (⋯ → Gallery): fixed-width columns, variable heights
     gallery_cols = 3,
     -- No title bar and no button row: everything is image. Position comes
     -- from the dot pill, actions from the ⋯ button, closing from
     -- tap-outside, multiswipe or Back.
     with_title_bar = false,
+    -- Zoom ceiling as a multiple of the image's native resolution: pinch may
+    -- push a little past 100% (actual pixel size) for readability, but not so
+    -- far that upscaling turns to mush. Double-tap still stops at 100%.
+    max_zoom_of_native = 1.5,
     -- Drawer metrics from the design (design px == px at the reference DPI)
     panel_ratio = 505 / 630,               -- of screen width
     panel_vgap = 0,                        -- full height, border included
@@ -903,9 +963,20 @@ function GlimpseViewer:update()
     end
     self:_buildPill()
 
+    -- Explicit day-white backing behind the image area. KOReader's night mode
+    -- inverts the framebuffer when compositing, so this shows black in dark
+    -- mode (issue #9) rather than leaving a light gap around the image; in day
+    -- mode it just matches the white card. Logical/day polarity, flag 0.
+    local image_layer = FrameContainer:new{
+        background = Blitbuffer.COLOR_WHITE,
+        bordersize = 0,
+        padding = 0,
+        margin = 0,
+        self.image_container,
+    }
     local overlay = OverlapGroup:new{
         dimen = Geom:new{ w = self.width, h = self.height },
-        self.image_container,
+        image_layer,
     }
     -- chrome is centered/aligned on the image area (content minus the gap
     -- that keeps it clear of the rounded right edge), like the design
@@ -1001,16 +1072,14 @@ function GlimpseViewer:update()
         self._more_frame.dimen = nil
     end
     if self._pill_frame then
-        local pill_size = self._pill_frame:getSize()
-        -- the revert button is the same height as the ⋯ button, so share
-        -- its bottom inset to sit on the same baseline; the shorter dots
-        -- pill uses a larger inset so its centre still lines up
-        local bottom_inset = self:_isOverFit()
+        -- the revert button and the gallery Shown/Ignored toggle are the
+        -- same height as the ⋯ button, so share its bottom inset to sit on
+        -- the same baseline; the shorter dots pill uses a larger inset so
+        -- its centre still lines up
+        local bottom_inset = (self:_isOverFit() or self._gallery_mode)
             and btn_inset or Screen:scaleBySize(25)
-        -- centre the pill in the span between whatever sits on its left
-        -- (the Prev button, or the left inset) and the nearest right-side
-        -- chrome (⋯ / Back / Next), so a wide dot row expands to fill that
-        -- gap without ever overlapping a button
+        -- span between whatever sits on its left (the Prev button, or the
+        -- left inset) and the nearest right-side chrome (⋯ / Back / Next)
         local left_bound = Screen:scaleBySize(16)
         if self._nav_prev_frame and self._nav_prev_frame.overlap_offset then
             left_bound = self._nav_prev_frame.overlap_offset[1]
@@ -1023,10 +1092,27 @@ function GlimpseViewer:update()
                 right_bound = math.min(right_bound, f.overlap_offset[1])
             end
         end
-        self._pill_frame.overlap_offset = {
-            math.floor(left_bound + (right_bound - left_bound - pill_size.w) / 2),
-            self.height - pill_size.h - bottom_inset,
-        }
+        -- the gallery Shown/Ignored toggle STRETCHES to fill the bottom bar;
+        -- the dot pill just centres within the span
+        if self._gallery_mode and self._pill_frame.setWidth then
+            -- keep a gap from the Prev arrow when it's there, but go flush to
+            -- the left content margin when it isn't (single-page galleries have
+            -- no arrows, so the toggle should reach the same margin the arrow
+            -- would occupy — not leave a phantom gap where it used to be)
+            local pill_left = self._nav_prev_frame
+                and (left_bound + btn_gap) or left_bound
+            local pill_right = right_bound - btn_gap
+            self._pill_frame:setWidth(pill_right - pill_left)
+            self._pill_frame.overlap_offset = {
+                pill_left, self.height - self._pill_frame:getSize().h - bottom_inset,
+            }
+        else
+            local pill_size = self._pill_frame:getSize()
+            self._pill_frame.overlap_offset = {
+                math.floor(left_bound + (right_bound - left_bound - pill_size.w) / 2),
+                self.height - pill_size.h - bottom_inset,
+            }
+        end
         table.insert(overlay, self._pill_frame)
     end
     -- caption overlay, top-left on the image (toggleable, on by default)
@@ -1087,6 +1173,21 @@ function GlimpseViewer:update()
     local wfm_mode = Device:hasKaleidoWfm() and "partial" or "ui"
     local fast = self._fast_refresh
     self._fast_refresh = nil
+    -- Image switch: hard-clear this (panel-only) region so the previous
+    -- image's ink doesn't ghost through the new one. The plain "ui"/"partial"
+    -- waveforms skip the black→white→black clear cycle, so the old image
+    -- lingers. We use "full" (not "flashui") on purpose: on Kobo "flashui"
+    -- resolves to the AUTO waveform (the driver picks a light/fast flash that
+    -- leaves residue, worst on the big fills — the black Night-Mode card),
+    -- whereas "full" is true GC16, the full 16-level clearing waveform, and
+    -- is the mode the EPDC waits to *settle* between consecutive updates so
+    -- rapid switches don't accumulate ghosts. It stays region-limited (a Geom
+    -- is always passed below), so only the drawer clears, never the whole
+    -- screen; zoom/pan steps (fast) stay flashless. Consumed before the
+    -- suppress return so an open-time switch never leaves the flag dangling.
+    local flash_switch = self._flash_switch
+    self._flash_switch = nil
+    if flash_switch and not fast then wfm_mode = "full" end
     self.dithered = not fast
     if self._suppress_refresh then
         -- showViewer builds the full initial state (remembered image,
@@ -1106,6 +1207,11 @@ function GlimpseViewer:update()
     -- slot would just fall back to the class default via the metatable
     self.alpha = false
     UIManager:setDirty(self, function()
+        -- Guard a teardown race: a swipe's refresh is deferred to the next
+        -- paint tick, so an immediate close can clear main_frame.dimen before
+        -- this runs. Nil mode makes UIManager drop the (now meaningless)
+        -- refresh instead of indexing a nil dimen.
+        if not self.main_frame.dimen then return end
         return wfm_mode, self.main_frame.dimen:combine(orig_dimen), not fast
     end)
     self.alpha = alpha
@@ -1134,9 +1240,22 @@ function GlimpseViewer:_paintPanel(bb, x, y)
     --     as-is — same pixels on screen, at C speed.
     -- Night design in both: black card, white hairline edge, dark shadow
     -- (stronger/wider than day so it reads on black).
-    local night = G_reader_settings:isTrue("night_mode")
+    local night = Screen.night_mode
     local inv = bb.getInverse and bb:getInverse() == 1
-    local skey = tostring(night) .. tostring(inv)
+    -- SW-invert night mode (Android/Boox): KOReader inverts the framebuffer
+    -- when compositing our buffers onto it. Flag-matching our stencils to that
+    -- inverse flag makes the C blitter copy them RAW, BYPASSING that inversion
+    -- — which left the whole drawer white in dark mode (issue #9). So in that
+    -- case DON'T flag-match: keep the stencils in logical/day polarity and let
+    -- KOReader invert them exactly like it does every stock widget. On HW-
+    -- invert panels the fb flag is already 0, so render_inv == inv == false and
+    -- nothing changes there.
+    local render_inv = inv
+        and not (night and Device.isAndroid and Device:isAndroid())
+    local skey = tostring(night) .. tostring(render_inv)
+    -- Advanced → Disable shadow: skip the gradient entirely. The dithered
+    -- shadow is the main e-ink ghost source, so some users prefer it off.
+    local shadow_disabled = G_reader_settings:isTrue(SHADOW_KEY)
 
     -- shadow: cached DOT-PATTERN stencil (ordered/Bayer dithering, not a
     -- true alpha gradient — see SHADOW_BAYER8 above), density peak → 0
@@ -1146,14 +1265,15 @@ function GlimpseViewer:_paintPanel(bb, x, y)
     local shadow_h = h + 2 * self.panel_vgap
     -- logical shadow color is white in night (inverts to dark); with the
     -- SW-invert flag set we store the final dark value directly instead
-    local sv = inv and 0x00 or (night and 0xFF or 0x00)
+    local sv = render_inv and 0x00 or (night and 0xFF or 0x00)
     local speak = night and 1.0 or 0.5
     -- night mode gets a wider gradient so it reaches further onto the page
     -- (user tuning 2026-07-22: 2x read as reaching too far, 1.25x as too
     -- narrow — splitting the difference)
     local swidth = night and math.floor(self.shadow_width * 1.5 + 0.5) or self.shadow_width
-    if not self._shadow_bb or self._shadow_bb:getHeight() ~= shadow_h
-            or self._shadow_night ~= skey then
+    if not shadow_disabled and (not self._shadow_bb
+            or self._shadow_bb:getHeight() ~= shadow_h
+            or self._shadow_night ~= skey) then
         if self._shadow_bb then self._shadow_bb:free() end
         self._shadow_night = skey
         self._shadow_bb = Blitbuffer.new(swidth, shadow_h,
@@ -1225,13 +1345,13 @@ function GlimpseViewer:_paintPanel(bb, x, y)
                 self._shadow_bb:setPixel(i, j, Blitbuffer.ColorRGB32(sv, sv, sv, a))
             end
         end
-        self._shadow_bb:setInverse(inv and 1 or 0)
+        self._shadow_bb:setInverse(render_inv and 1 or 0)
     end
     -- consumed by interior updates (see update()): the page under the
     -- shadow wasn't repainted, so blending again would accumulate
     local skip_shadow = self._skip_shadow_paint
     self._skip_shadow_paint = nil
-    if not skip_shadow then
+    if not skip_shadow and not shadow_disabled then
         bb:alphablitFrom(self._shadow_bb, x + w - self.shadow_overlap, y,
             0, 0, swidth, shadow_h)
     end
@@ -1257,8 +1377,8 @@ function GlimpseViewer:_paintPanel(bb, x, y)
         bb:blitFrom(ucb[2], x + w - cr, cpy + h - cr, 0, 0, cr, cr)
     else
         -- match the fb's inverse flag so these copies run on the C blitter
-        ucb[1]:setInverse(inv and 1 or 0)
-        ucb[2]:setInverse(inv and 1 or 0)
+        ucb[1]:setInverse(render_inv and 1 or 0)
+        ucb[2]:setInverse(render_inv and 1 or 0)
         ucb[1]:blitFrom(bb, 0, 0, x + w - cr, cpy, cr, cr)
         ucb[2]:blitFrom(bb, 0, 0, x + w - cr, cpy + h - cr, cr, cr)
     end
@@ -1276,8 +1396,8 @@ function GlimpseViewer:_paintPanel(bb, x, y)
         -- values raw instead (flag-matched below for the C blitter).
         -- NB: screen:shot()/getPixel un-invert reads, so night shots show
         -- LOGICAL values, not the displayed ones.
-        local body = inv and 0x00 or 0xFF     -- card background
-        local edge = inv and 0xFF or 0x00     -- border
+        local body = render_inv and 0x00 or 0xFF     -- card background
+        local edge = render_inv and 0xFF or 0x00     -- border
         local c_body = Blitbuffer.ColorRGB32(body, body, body, 0xFF)
         local c_edge = Blitbuffer.ColorRGB32(edge, edge, edge, 0xFF)
         -- night edge is a hairline: thinner than the day border but at
@@ -1311,7 +1431,7 @@ function GlimpseViewer:_paintPanel(bb, x, y)
                 end
             end
         end
-        self._panel_bb:setInverse(inv and 1 or 0)
+        self._panel_bb:setInverse(render_inv and 1 or 0)
     end
     bb:alphablitFrom(self._panel_bb, x, py, 0, 0, w, h)
     self:_saveCorners(bb, x, py)
@@ -1404,9 +1524,9 @@ function GlimpseViewer:onCloseWidget()
     if self._nav_prev_frame then self._nav_prev_frame:free() end
     if self._nav_next_frame then self._nav_next_frame:free() end
     if self._close_frame then self._close_frame:free() end
-    if self._gallery_heading then
-        self._gallery_heading:free()
-        self._gallery_heading = nil
+    if self._gallery_head_wgs then
+        for _, w in ipairs(self._gallery_head_wgs) do w:free() end
+        self._gallery_head_wgs = nil
     end
     if self._gallery_badges then
         for _, b in ipairs(self._gallery_badges) do b:free() end
@@ -1422,6 +1542,7 @@ function GlimpseViewer:onCloseWidget()
         end
         self._thumb_bbs = nil
     end
+    self:_resetHiRes() -- free the zoomed image's full-res decode, if any
     -- ImageViewer.onCloseWidget() does necessary cleanup (frees self.image,
     -- title_bar, button_container, etc.) but ALSO unconditionally queues
     -- its OWN "flashui" refresh of main_frame.dimen at the very end (see
@@ -1452,12 +1573,34 @@ function GlimpseViewer:onCloseWidget()
     -- black-on-light shadow; the same banding was there in Night mode too,
     -- just far less visible against an already-dark background).
     UIManager:setDirty(nil, function()
+        -- Same teardown-race guard as update(): if the frame is already gone
+        -- by the time this deferred callback runs, drop the refresh.
+        if not self.main_frame.dimen then return end
         local d = self.main_frame.dimen:copy()
-        -- cover the shadow at its widest (night mode = 2× shadow_width)
-        d.w = math.min(Screen:getWidth() - d.x,
-            d.w + 2 * self.shadow_width - self.shadow_overlap + 1)
-        return "ui", d, true
+        -- cover the shadow at its widest (night mode = 2× shadow_width) — but
+        -- only when the shadow is on. With it off, keep the region to the
+        -- drawer so a promoted/flash refresh never reaches the book page.
+        if not G_reader_settings:isTrue(SHADOW_KEY) then
+            d.w = math.min(Screen:getWidth() - d.x,
+                d.w + 2 * self.shadow_width - self.shadow_overlap + 1)
+        end
+        -- "full": a GC16 clearing refresh over the drawer (and its shadow)
+        -- area on every close — the ghosting the drawer/shadow leaves on
+        -- e-ink, worst at night, is scrubbed as it lifts away. This is the
+        -- former "Full Refresh on Close" option, now baked in as the default
+        -- (same reliable GC16 waveform the image-switch clear uses); it stays
+        -- regional so the rest of the page is never flashed.
+        return "full", d, true
     end)
+    -- Refresh isolation (see showViewer): hand the reader back its own
+    -- ghost-clear counter, on nextTick so the close's below-repaint runs while
+    -- the count is still Glimpse's (0) and can't flash from the reader's total.
+    -- Reading then continues its cadence exactly where it left off.
+    if self._reader_refresh_count ~= nil then
+        local saved = self._reader_refresh_count
+        self._reader_refresh_count = nil
+        UIManager:nextTick(function() UIManager.refresh_count = saved end)
+    end
 end
 
 -- Forked from ImageViewer:_new_image_wg(): constant image inset (no
@@ -1475,14 +1618,32 @@ function GlimpseViewer:_new_image_wg()
     -- what fits) instead of the widget's own best-fit, which would blow
     -- it up all the way to fill the box with no cap at all.
     local wg_scale = self.scale_factor
+    local src = self.image
     if wg_scale == 0 then
         local fit = self:_computeFitScaleFactor()
         if fit and fit >= 1 then
             wg_scale = fit
         end
+    elseif wg_scale > 1 then
+        -- Zoomed past 1:1 of the capped bitmap: below this it's still
+        -- downscaling the cap (sharp) and fast, but beyond it the cap would
+        -- upscale, so swap in the sharp full-resolution decode (lazily
+        -- created, see _getHiRes) — this is what makes approaching 100% show
+        -- real detail. self.scale_factor stays expressed against the capped
+        -- bitmap everywhere (fit floor, ceiling, save/restore all in those
+        -- units); we only divide the WIDGET's scale by the resolution ratio
+        -- here so the on-screen size is byte-identical — just crisper.
+        local hi = self:_getHiRes()
+        if hi then
+            local r = hi:getWidth() / self.image:getWidth()
+            if r > 1 then
+                src = hi
+                wg_scale = wg_scale / r
+            end
+        end
     end
     self._image_wg = ImageWidget:new{
-        image = self.image,
+        image = src,
         image_disposable = false, -- we may reuse self.image
         alpha = true,
         width = max_image_w,
@@ -1491,35 +1652,56 @@ function GlimpseViewer:_new_image_wg()
         scale_factor = wg_scale,
         center_x_ratio = self._center_x_ratio,
         center_y_ratio = self._center_y_ratio,
-        -- ImageWidget's default night handling invertRects its FULL rect
-        -- (widget size, not the scaled image), which flips the drawer's
-        -- letterbox areas around the image back to white in night mode.
-        -- Opt out; the render closure implements our own global
-        -- "Invert in Night Mode" setting instead.
+        -- We bake the night-mode inversion into the decoded bitmap ourselves
+        -- (see the decode closure in showViewer), device-agnostically — the
+        -- same pixel operation ImageWidget itself would do — so opt out of
+        -- its own night handling to avoid inverting twice. (Its invertRect
+        -- also spans the full widget rect, which would flip the letterbox
+        -- around the image.) We deliberately do NOT flag-match the bitmap to
+        -- the framebuffer's night flag: matching it once tied our night
+        -- correctness to a getInverse() read that could disagree between
+        -- decode and paint, which flipped the image on some devices — the
+        -- "Invert in Night Mode reversed" bug. A plain flag-0 blit is the
+        -- same path KOReader uses for every image, correct on HW- and
+        -- SW-invert alike (only marginally slower on the rare SW-invert
+        -- device, which re-inverts during the blit).
         original_in_nightmode = false,
     }
-    -- Night (SW invert): the fb's inverse flag would push the image blit
-    -- onto the per-pixel Lua blitter on EVERY paint (mismatched flags —
-    -- same story as the panel stencils in _paintPanel). The render
-    -- closure already bakes the final raw night values into the DECODED
-    -- bitmap once (see showViewer), so every re-scaled copy only needs
-    -- its inverse flag set to match the fb — a free flag toggle instead
-    -- of the full-bitmap invertRect this hook used to do per zoom step
-    -- (which doubled night zoom cost vs day). Flag-only is also safe on
-    -- the shared source bitmap at 1:1 scale: no content is mutated.
-    local wg = self._image_wg
-    local orig_render = wg._render
-    wg._render = function(w_)
-        orig_render(w_)
-        if w_._bb and Screen.bb.getInverse and Screen.bb:getInverse() == 1
-           and w_._bb:getInverse() == 0 then
-            w_._bb:invert()
-        end
-    end
     self.image_container = CenterContainer:new{
         dimen = Geom:new{ w = avail_w, h = self.img_container_h },
         self._image_wg,
     }
+end
+
+-- Full-resolution decode of the current image, for the zoomed view. Decoded
+-- lazily on first zoom-in and cached for as long as this image is on screen
+-- (dropped by _resetHiRes on image change / invert / rotate). Returns nil —
+-- and remembers that with a `false` sentinel so it isn't retried — when there
+-- is no sharper version to be had (small images the resting cap never shrank).
+function GlimpseViewer:_getHiRes()
+    if not self.hires_decode then return nil end
+    if self._hi_bb == false then return nil end
+    if self._hi_bb then return self._hi_bb end
+    local hi = self.hires_decode(self._images_list_cur or 1)
+    if not hi then self._hi_bb = false; return nil end
+    -- only worth the extra bitmap if it's meaningfully larger than the cap
+    if self.image and hi:getWidth() <= self.image:getWidth() * 1.05 then
+        if hi.free then hi:free() end
+        self._hi_bb = false
+        return nil
+    end
+    self._hi_bb = hi
+    return hi
+end
+
+-- Drop any cached full-res decode. Call whenever self.image is replaced or
+-- re-rendered (image switch, hide, invert toggle, rotation) so the next
+-- zoom-in re-decodes against the current pixels.
+function GlimpseViewer:_resetHiRes()
+    if self._hi_bb and self._hi_bb ~= false and self._hi_bb.free then
+        self._hi_bb:free()
+    end
+    self._hi_bb = nil
 end
 
 -- Pill: as many dots as fit between the chrome buttons, "n / N" beyond. Rebuilt on
@@ -1531,17 +1713,20 @@ function GlimpseViewer:_buildPill()
     end
     self._pill_dots = nil -- only set back below when dots are actually built
     if self._gallery_mode then
-        -- gallery: explicit "Page X of Y" — dots here would read as the
-        -- single-view image indicator and confuse the two states. Inverted
-        -- (light pill, dark text), same as the "n / N" fallback below.
-        local pages = self:_galleryPages()
-        if pages <= 1 then return end
-        self._pill_frame = GlimpsePill:new{ inverted = true, inner = TextWidget:new{
-            text = T(_("Page %1 of %2"), self._gallery_page or 1, pages),
-            face = Font:getFace("cfont", 12),
-            bold = true,
-            fgcolor = Blitbuffer.COLOR_BLACK,
-        } }
+        -- Gallery bottom-center is the Shown/Ignored switch (only when there
+        -- IS an ignored pool). "Page X of Y" now lives top-left in the grid.
+        -- The button names the destination: from the collection it offers
+        -- "Show Ignored (n)", from the Ignored pool "Show Gallery (n)".
+        if self:_hasIgnoredTab() then
+            local label
+            if self._gallery_tab == "ignored" then
+                local shown_n = self.shown_metas and #self.shown_metas or 0
+                label = T(_("Show Gallery (%1)"), shown_n)
+            else
+                label = T(_("Show Ignored (%1)"), self:_ignoredCount())
+            end
+            self._pill_frame = GlimpseTextButton:new{ text = label, bold = true }
+        end
         return
     end
     if self:_isOverFit() then
@@ -1632,10 +1817,43 @@ end
 -- ratio, placed into the currently shortest column — a page is full
 -- when the next image doesn't fit any column.
 
-function GlimpseViewer:_enterGallery()
+-- The list/metas/count for the active Gallery tab (shown vs ignored). The
+-- single-image view always uses _images_list/image_metas (= the primary pool).
+function GlimpseViewer:_tabList()
+    if self._gallery_tab == "ignored" then
+        return self.ignored_list, self.ignored_metas,
+            self.ignored_metas and #self.ignored_metas or 0
+    end
+    return self.shown_list, self.shown_metas,
+        self.shown_metas and #self.shown_metas or 0
+end
+
+function GlimpseViewer:_ignoredCount()
+    return self.ignored_metas and #self.ignored_metas or 0
+end
+
+-- The Ignored tab (and hence the whole tab bar) only appears when there is
+-- something ignored — otherwise the Gallery looks exactly as it did before.
+function GlimpseViewer:_hasIgnoredTab()
+    return self:_ignoredCount() > 0
+end
+
+function GlimpseViewer:_switchGalleryTab(tab)
+    if tab == self._gallery_tab then return end
+    self._gallery_tab = tab
+    self._gallery_page = 1
+    self:update()
+end
+
+function GlimpseViewer:_enterGallery(page, tab)
     self._gallery_mode = true
+    self._gallery_tab = tab or self.primary_tab or "shown"
     local layout = self:_galleryLayout()
-    self._gallery_page = layout.page_of[self._images_list_cur or 1] or 1
+    if page then
+        self._gallery_page = math.min(math.max(page, 1), #layout.pages)
+    else
+        self._gallery_page = layout.page_of[self._images_list_cur or 1] or 1
+    end
     -- the gallery browses from the fit state; a zoomed view has been
     -- left behind anyway once the user goes looking for another image
     self.scale_factor = 0
@@ -1656,13 +1874,88 @@ function GlimpseViewer:_galleryPages()
     return #self:_galleryLayout().pages
 end
 
+-- Drawer-content origin: gallery cell/tab rects are recorded relative to it.
+function GlimpseViewer:_contentOrigin()
+    local mf = self.main_frame.dimen
+    return mf.x, mf.y + self.panel_vgap + self.panel_border
+end
+
+-- The gallery cell {x,y,w,h,idx} at pos (drawer-content space), or nil.
+function GlimpseViewer:_galleryHit(pos)
+    if not self._gallery_cells then return nil end
+    local ox, oy = self:_contentOrigin()
+    for _, c in ipairs(self._gallery_cells) do
+        if pos:intersectWith(Geom:new{
+            x = ox + c.x, y = oy + c.y, w = c.w, h = c.h }) then
+            return c
+        end
+    end
+    return nil
+end
+
+-- Long-press popup: a single action anchored just above the thumbnail —
+-- "Ignore this image" in the Gallery, "Add back to Gallery" in the
+-- Ignored pile. Kept in its own method so the gettext `_` isn't shadowed by
+-- the `_` first parameter of onHold/onTap (calling `_()` in those crashes).
+function GlimpseViewer:_openMoveMenu(cell, pos)
+    local metas = select(2, self:_tabList())
+    local meta = metas and metas[cell.idx]
+    if not meta then return end
+    local ignored = self._gallery_tab == "ignored"
+    local label, cb
+    if ignored then
+        label = _("Add back to Gallery")
+        cb = function()
+            if self.on_unignore then
+                self.on_unignore(meta, "ignored", self._gallery_page)
+            end
+        end
+    else
+        label = _("Ignore this image")
+        cb = function()
+            if self.on_ignore then
+                self.on_ignore(meta, "shown", self._gallery_page)
+            end
+        end
+    end
+    local menu
+    menu = GlimpsePopupMenu:new{
+        items = { { text = label, callback = cb } },
+        -- compact: a single short action, so shrink the row from the ⋯ menu's
+        row_h = Screen:scaleBySize(38),
+        pad_left = Screen:scaleBySize(12),
+        pad_right = Screen:scaleBySize(12),
+        -- centred on the touch point, floating a little ABOVE it: the menu
+        -- pops up so its bottom sits `lift` px clear of the finger (rises its
+        -- full height upward from there), instead of resting right on the
+        -- press. Still flips below when near the top of the screen.
+        anchor = function()
+            local w = menu.movable and menu.movable.dimen
+                and menu.movable.dimen.w or 0
+            local ox = self.main_frame.dimen.x
+            local pad = Screen:scaleBySize(4)
+            local lift = Screen:scaleBySize(14)
+            local x = math.floor((pos and pos.x or 0) - w / 2)
+            local maxx = ox + self.width - w - pad
+            if maxx < ox + pad then maxx = ox + pad end
+            x = math.max(ox + pad, math.min(x, maxx))
+            local y = (pos and pos.y or 0) - lift
+            return Geom:new{ x = x, y = y, w = 0, h = 0 }, false
+        end,
+    }
+    UIManager:show(menu, function() return "ui", menu.movable.dimen end)
+end
+
 -- Masonry layout for ALL images, computed once per viewer (the image
 -- list and drawer size are fixed while it is open) from the scanner's
 -- header-sniffed dimensions — no decoding. Returns { pages = {
 -- {cell,...}, ... }, page_of = {idx -> page} }; cell = {idx,x,y,w,h}
 -- relative to the drawer content origin (the onTap hit-test space).
 function GlimpseViewer:_galleryLayout()
-    if self._gallery_layout then return self._gallery_layout end
+    local tab = self._gallery_tab or "shown"
+    self._gallery_layouts = self._gallery_layouts or {}
+    if self._gallery_layouts[tab] then return self._gallery_layouts[tab] end
+    local _, metas, nb = self:_tabList()
     local m = self:_galleryMetrics()
     local cols = self.gallery_cols
     local col_w = math.floor(
@@ -1678,12 +1971,18 @@ function GlimpseViewer:_galleryLayout()
             for c = 1, cols do heights[c] = 0 end
         end
     end
-    for i = 1, self._images_list_nb or 1 do
-        local meta = self.image_metas and self.image_metas[i]
+    for i = 1, nb or 1 do
+        local meta = metas and metas[i]
         local iw = meta and (meta.width or meta.attr_width)
         local ih = meta and (meta.height or meta.attr_height)
         if not (iw and ih and iw > 0 and ih > 0) then iw, ih = 1, 1 end
-        local th = math.floor(thumb_w * ih / iw + 0.5)
+        -- displayed height = native scaled to the column width, but NEVER
+        -- upscaled (matches _thumb, which caps at 1×). Sizing the cell to
+        -- thumb_w * aspect instead gives a small image (icon, tiny ad) a
+        -- full-width cell it can't fill, floating it in white space and
+        -- ballooning the column so pages flush half-empty.
+        local scale = math.min(thumb_w / iw, 1)
+        local th = math.floor(ih * scale + 0.5)
         -- clamp: never taller than a full column, never too small to tap
         th = math.min(th, m.grid_h - 2 * m.inset)
         th = math.max(th, Screen:scaleBySize(24))
@@ -1710,8 +2009,32 @@ function GlimpseViewer:_galleryLayout()
     end
     flush()
     if #layout.pages == 0 then layout.pages[1] = {} end
-    self._gallery_layout = layout
+    self._gallery_layouts[tab] = layout
     return layout
+end
+
+-- Heading band geometry, derived from the actual rendered line heights so
+-- the top breathing room scales with the font (≈ a quarter of a title line)
+-- on any device. Cached for the viewer's lifetime (the faces never change).
+-- Single source of truth: _buildGallery positions the two lines from
+-- band_top/gap, _galleryMetrics starts the grid at content_top, so they stay
+-- in lockstep.
+function GlimpseViewer:_headMetrics()
+    if self._head_metrics then return self._head_metrics end
+    local t = TextWidget:new{
+        text = "Gy", face = Font:getFace("cfont", 16), bold = true }
+    local s = TextWidget:new{
+        text = "Gy", face = Font:getFace("cfont", 12), bold = true }
+    local th1, th2 = t:getSize().h, s:getSize().h
+    t:free(); s:free()
+    local band_top = Screen:scaleBySize(3) + math.floor(th1 / 4)
+    local gap = 0                              -- subtitle tucked under title
+    local below = Screen:scaleBySize(6)        -- band → grid
+    self._head_metrics = {
+        band_top = band_top, th1 = th1, gap = gap,
+        content_top = band_top + th1 + gap + th2 + below,
+    }
+    return self._head_metrics
 end
 
 -- Shared gallery geometry: the band above the grid holds the heading and
@@ -1721,17 +2044,15 @@ end
 -- top/bottom bands already keep clear of it vertically) so the grid's
 -- right margin (pad) matches its left margin exactly.
 function GlimpseViewer:_galleryMetrics()
+    local content_top = self:_headMetrics().content_top
     return {
         area_w = self.width,
         pad = Screen:scaleBySize(16),
-        -- 3 top margin (matches the heading offset) + 40 heading band + 4
-        -- margin below (tightened further from 6/40/8)
-        top = Screen:scaleBySize(3 + 40 + 4),
+        top = content_top,
         bottom = Screen:scaleBySize(60),
         gap = Screen:scaleBySize(10),
         inset = Screen:scaleBySize(4),
-        grid_h = self.img_container_h - Screen:scaleBySize(3 + 40 + 4)
-            - Screen:scaleBySize(60),
+        grid_h = self.img_container_h - content_top - Screen:scaleBySize(60),
     }
 end
 
@@ -1752,15 +2073,19 @@ end
 -- is open; the cache is freed with the viewer.
 function GlimpseViewer:_thumb(i, w, h)
     self._thumb_bbs = self._thumb_bbs or {}
-    local t = self._thumb_bbs[i]
+    -- key by tab too: index i means different images across tabs, and we
+    -- want a cached thumbnail to survive flipping tabs back and forth
+    local ckey = (self._gallery_tab or "shown") .. ":" .. i
+    local t = self._thumb_bbs[ckey]
     if t and t.w == w and t.h == h then
         return t.bb
     end
     if t and t.bb then
         t.bb:free()
-        self._thumb_bbs[i] = nil
+        self._thumb_bbs[ckey] = nil
     end
-    local src = self._images_list and self._images_list[i]
+    local list = (self:_tabList())
+    local src = list and list[i]
     local own = false
     if type(src) == "function" then
         src = src()
@@ -1777,11 +2102,10 @@ function GlimpseViewer:_thumb(i, w, h)
     else
         bb = own and src or src:copy()
     end
-    if bb and Screen.bb.getInverse and Screen.bb:getInverse() == 1
-       and bb:getInverse() == 0 then
-        bb:invert() -- flag-match the fb (content already night-baked)
-    end
-    self._thumb_bbs[i] = { bb = bb, w = w, h = h }
+    -- No fb-flag matching here (see _new_image_wg): the source is already
+    -- night-baked device-agnostically, and a plain flag-0 blit is correct on
+    -- every device.
+    self._thumb_bbs[ckey] = { bb = bb, w = w, h = h }
     return bb
 end
 
@@ -1796,40 +2120,59 @@ function GlimpseViewer:_buildGallery()
     local grid = OverlapGroup:new{
         dimen = Geom:new{ w = self.width, h = self.img_container_h },
     }
-    -- heading, top-left: how much there is to browse, and how much the
-    -- chapter scope is holding back. The Back button now lives at the
-    -- bottom, so the whole top band is free of chrome to dodge.
-    if self._gallery_heading then
-        self._gallery_heading:free()
-        self._gallery_heading = nil
+    -- Two-line header (top band, display-only — the Gallery/Ignored switch
+    -- lives on the BOTTOM bar, since the top strip is KOReader's top-menu tap
+    -- zone). Line 1: "Gallery"/"Ignored" left, "Page X of Y" right-aligned
+    -- when paged. Line 2 (smaller, grey): "N images in Gallery"/"N ignored".
+    if self._gallery_head_wgs then
+        for _, w in ipairs(self._gallery_head_wgs) do w:free() end
+    end
+    self._gallery_head_wgs = {}
+    local function addHead(wg)
+        table.insert(grid, wg)
+        table.insert(self._gallery_head_wgs, wg)
     end
     if self._gallery_badges then
         for _, b in ipairs(self._gallery_badges) do b:free() end
     end
     self._gallery_badges = {}
-    local nb = self._images_list_nb or 1
-    local hidden = self.gallery_hidden_count or 0
-    local heading_text
-    if hidden > 0 then
-        heading_text = T(_("%1 images in book this far, %2 hidden"),
-            nb, hidden)
-    else
-        heading_text = T(_("%1 images in book"), nb)
-    end
-    self._gallery_heading = TextWidget:new{
-        text = heading_text,
-        face = Font:getFace("cfont", 14),
+    local band_top = self:_headMetrics().band_top
+    local on_ignored_tab = self._gallery_tab == "ignored"
+    local active_is_primary = (self._gallery_tab or "shown")
+        == (self.primary_tab or "shown")
+    local count = select(3, self:_tabList())
+    local title_wg = TextWidget:new{
+        text = on_ignored_tab and _("Ignored") or _("Gallery"),
+        face = Font:getFace("cfont", 16),
         bold = true,
         fgcolor = Blitbuffer.COLOR_BLACK,
+    }
+    local th1 = title_wg:getSize().h
+    title_wg.overlap_offset = { m.pad, band_top }
+    addHead(title_wg)
+    if pages > 1 then
+        local page_wg = TextWidget:new{
+            text = T(_("Page %1 of %2"), self._gallery_page or 1, pages),
+            face = Font:getFace("cfont", 13),
+            bold = true,
+            fgcolor = Blitbuffer.COLOR_DARK_GRAY,
+        }
+        local psz = page_wg:getSize()
+        page_wg.overlap_offset = {
+            m.area_w - m.pad - psz.w,
+            band_top + math.floor((th1 - psz.h) / 2),
+        }
+        addHead(page_wg)
+    end
+    local sub_wg = TextWidget:new{
+        text = count == 1 and _("1 image") or T(_("%1 images"), count),
+        face = Font:getFace("cfont", 12),
+        bold = true,
+        fgcolor = Blitbuffer.COLOR_DARK_GRAY,
         max_width = m.area_w - 2 * m.pad,
     }
-    local hh = self._gallery_heading:getSize().h
-    self._gallery_heading.overlap_offset = {
-        m.pad,
-        Screen:scaleBySize(3)
-            + math.floor((Screen:scaleBySize(40) - hh) / 2),
-    }
-    table.insert(grid, self._gallery_heading)
+    sub_wg.overlap_offset = { m.pad, band_top + th1 + self:_headMetrics().gap }
+    addHead(sub_wg)
     self._gallery_cells = {}
     for _, c in ipairs(layout.pages[self._gallery_page] or {}) do
         local bb = self:_thumb(c.idx,
@@ -1838,8 +2181,9 @@ function GlimpseViewer:_buildGallery()
             -- every thumbnail gets a subtle rounded outline so adjacent
             -- images (which otherwise butt edge to edge) stay visually
             -- distinct; the current image gets a heavier black one on
-            -- top of that, same as before
-            local is_cur = c.idx == (self._images_list_cur or 1)
+            -- top of that (only on the pool the single-view is showing)
+            local is_cur = active_is_primary
+                and c.idx == (self._images_list_cur or 1)
             local cell = CenterContainer:new{
                 dimen = Geom:new{ w = c.w, h = c.h },
                 FrameContainer:new{
@@ -1862,16 +2206,18 @@ function GlimpseViewer:_buildGallery()
             table.insert(grid, cell)
             table.insert(self._gallery_cells,
                 { x = c.x, y = c.y, w = c.w, h = c.h, idx = c.idx })
-            -- reading-order badge in the thumbnail's top-left corner, so
-            -- the (masonry) layout's order is legible and a given image is
-            -- findable; added AFTER the cell so it paints on top
-            local badge = GlimpseBadge:new{ num = c.idx }
-            badge.overlap_offset = {
-                c.x + m.inset + Screen:scaleBySize(3),
-                c.y + m.inset + Screen:scaleBySize(3),
-            }
-            table.insert(grid, badge)
-            table.insert(self._gallery_badges, badge)
+            -- reading-order number badge (top-left), added AFTER the cell so
+            -- it paints on top. Only in the Gallery grid — the Ignored
+            -- grid has no badge (order there isn't meaningful).
+            if not on_ignored_tab then
+                local badge = GlimpseBadge:new{ num = c.idx }
+                badge.overlap_offset = {
+                    c.x + m.inset + Screen:scaleBySize(3),
+                    c.y + m.inset + Screen:scaleBySize(3),
+                }
+                table.insert(grid, badge)
+                table.insert(self._gallery_badges, badge)
+            end
         end
     end
     self.image_container = grid
@@ -1916,7 +2262,7 @@ function GlimpseViewer:_showMoreMenu()
     end
     if _quick_enabled("hide") then
         items[#items + 1] = {
-            text = _("Hide Image"),
+            text = _("Ignore Image"),
             icon = _PLUGIN_DIR .. "/assets/hide.svg",
             callback = function() self:_hideCurrentImage() end,
         }
@@ -1951,14 +2297,15 @@ function GlimpseViewer:_showMoreMenu()
     if _quick_enabled("showinbook") then
         items[#items + 1] = {
             text = _("Show in Book"),
-            icon = _PLUGIN_DIR .. "/assets/goto.svg",
+            icon = _PLUGIN_DIR .. "/assets/navigate.svg",
             callback = function() self:_showInBook() end,
         }
     end
     if _quick_enabled("restore") and self.hidden_count
             and self.hidden_count() > 0 then
         items[#items + 1] = {
-            text = _("Restore hidden images"),
+            text = _("Restore ignored images"),
+            icon = _PLUGIN_DIR .. "/assets/restore.svg",
             callback = function()
                 if self.on_restore_hidden then self.on_restore_hidden() end
             end,
@@ -2067,6 +2414,9 @@ function GlimpseViewer:_toggleInvert()
         end
         self._thumb_bbs = nil
     end
+    -- the cached full-res decode has the OLD polarity baked in — drop it so a
+    -- later zoom re-decodes with the new setting
+    self:_resetHiRes()
     -- re-render so the change is visible immediately (the render closure
     -- reads prefs and night mode live)
     if self.image and self.image_disposable and self.image.free then
@@ -2110,25 +2460,30 @@ function GlimpseViewer:_checkDoubleTap(ges)
     end
 end
 
--- Double-tap: photo-app convention — back to fit when zoomed, zoom in
--- when at fit, always to 2× whatever fit resolves to. Small images
--- already open boosted (up to 150% of native size, see
--- _computeFitScaleFactor), so this naturally lands them around 300% —
--- a further, deliberate step for inspecting detail, on top of the
--- bigger-by-default resting view.
+-- Double-tap: toggle between best-fit and the max zoom (150% of native,
+-- max_zoom_of_native), centered on the tapped point. From fit it jumps
+-- straight to max — the full-res decode swaps in (see _new_image_wg) so it's
+-- as sharp as the source allows; from any zoomed state it snaps back to fit.
+-- Pinch covers everything in between, stepless. (For small images the max is
+-- at or below fit, so double-tap just stays at the fit view.)
 function GlimpseViewer:onGlimpseDoubleTap(_, ges)
-    if self.scale_factor == 0 then
-        local wg = self._image_wg
-        if wg then
-            wg:getSize() -- pan math needs a rendered bb
-            local d = wg.dimen
-            local cx = d and (d.x + d.w / 2) or Screen:getWidth() / 2
-            local cy = d and (d.y + d.h / 2) or Screen:getHeight() / 2
-            self._center_x_ratio, self._center_y_ratio =
-                wg:getPanByCenterRatio(ges.pos.x - cx, ges.pos.y - cy)
-        end
-        self:_refreshScaleFactor() -- resolve fit into a number
-        self:_applyNewScaleFactor(self.scale_factor * 2)
+    local was_fit = self.scale_factor == 0
+    -- re-center the zoom on the tapped point (harmless when we end up
+    -- snapping back to fit — that path resets the center to the middle)
+    local wg = self._image_wg
+    if wg and ges and ges.pos then
+        wg:getSize() -- pan math needs a rendered bb
+        local d = wg.dimen
+        local cx = d and (d.x + d.w / 2) or Screen:getWidth() / 2
+        local cy = d and (d.y + d.h / 2) or Screen:getHeight() / 2
+        self._center_x_ratio, self._center_y_ratio =
+            wg:getPanByCenterRatio(ges.pos.x - cx, ges.pos.y - cy)
+    end
+    self:_refreshScaleFactor() -- resolve fit (scale 0) into a number
+    if was_fit then
+        -- jump to the max zoom (clamped to fit for small images by
+        -- _applyNewScaleFactor, which also enforces the same ceiling)
+        self:_applyNewScaleFactor(self:_maxScale() or self.scale_factor)
     else
         self.scale_factor = 0
         self._center_x_ratio, self._center_y_ratio = 0.5, 0.5
@@ -2228,19 +2583,21 @@ function GlimpseViewer:onTap(_, ges)
         return true
     end
     if self._gallery_mode then
-        -- thumbnail hit-test: cell rects are relative to the drawer
-        -- content origin (same space as the overlap offsets)
-        if self._gallery_cells then
-            local mf = self.main_frame.dimen
-            local ox = mf.x
-            local oy = mf.y + self.panel_vgap + self.panel_border
-            for _, c in ipairs(self._gallery_cells) do
-                if ges.pos:intersectWith(Geom:new{
-                    x = ox + c.x, y = oy + c.y, w = c.w, h = c.h }) then
-                    self:_exitGallery(c.idx)
-                    return true
-                end
-            end
+        -- the Shown/Ignored toggle (bottom-center pill)
+        if self._pill_frame and self._pill_frame.dimen
+           and ges.pos:intersectWith(self._pill_frame.dimen) then
+            self:_flashButton(self._pill_frame, function()
+                self:_switchGalleryTab(
+                    self._gallery_tab == "ignored" and "shown" or "ignored")
+            end)
+            return true
+        end
+        -- thumbnail: tap opens it ONLY when this pool is what the single-image
+        -- view shows (the primary/Gallery tab). A tap on an Ignored
+        -- thumbnail does nothing — adding it back is a long-press (see onHold).
+        local cell = self:_galleryHit(ges.pos)
+        if cell and self._gallery_tab == (self.primary_tab or "shown") then
+            self:_exitGallery(cell.idx)
         end
         return true -- no zoom surface in the gallery
     end
@@ -2310,6 +2667,12 @@ function GlimpseViewer:switchToImageNum(image_num)
     self._cur_rotation = self:_prefFor(image_num).rotation or 0
     self._fit_scale_factor = nil -- different image, different fit
     self._scale_factor_0 = nil
+    -- new image: the outgoing image's full-res decode is no longer needed
+    self:_resetHiRes()
+    -- New image content: flash the panel region on the resulting refresh so
+    -- the previous image doesn't ghost through (see the refresh policy in
+    -- update()). switchToImageNum → ImageViewer.switchToImageNum → update().
+    self._flash_switch = true
     ImageViewer.switchToImageNum(self, image_num)
     local meta = self.image_metas and self.image_metas[image_num]
     if meta and self.on_image_shown then
@@ -2346,6 +2709,28 @@ function GlimpseViewer:onSwipe(arg, ges)
         return true
     end
     return ImageViewer.onSwipe(self, arg, ges)
+end
+
+-- Upstream ImageViewer closes on ANY multiswipe (a direction-changing
+-- gesture). While panning a zoomed image, a curved or hooked drag is very
+-- easily reclassified from a pan into a multiswipe, which would close the
+-- drawer mid-pan — the "panning sometimes just closes Glimpse" bug. Glimpse
+-- closes by tapping outside the panel instead, so swallow multiswipes here.
+function GlimpseViewer:onMultiSwipe(_, ges)
+    return true
+end
+
+-- Long-press a Gallery thumbnail opens a small anchored menu with the one
+-- move action for that pool (Ignore this image / Add back to Gallery);
+-- see _openMoveMenu. Outside the gallery, defer to upstream (long-press
+-- starts a pan on a zoomed image).
+function GlimpseViewer:onHold(_, ges)
+    if self._gallery_mode then
+        local cell = self:_galleryHit(ges.pos)
+        if cell then self:_openMoveMenu(cell, ges.pos) end
+        return true
+    end
+    return ImageViewer.onHold(self, _, ges)
 end
 
 -- On the SDL emulator, mouse wheel / two-finger trackpad scroll arrives as
@@ -2445,6 +2830,11 @@ function GlimpseViewer:_applyNewScaleFactor(new_factor)
         fit = self:_computeFitScaleFactor()
         self._fit_scale_factor = fit
     end
+    -- Ceiling: pinch may push a little past 100% (up to max_zoom_of_native)
+    -- for readability, but no further — beyond that it's pure upscaling with
+    -- no new detail. Bounds both pinch and any programmatic zoom.
+    local ceil = self:_maxScale()
+    if ceil and new_factor > ceil then new_factor = ceil end
     if fit and new_factor <= fit then
         if self.scale_factor ~= 0 then
             self.scale_factor = 0
@@ -2454,6 +2844,31 @@ function GlimpseViewer:_applyNewScaleFactor(new_factor)
         return
     end
     ImageViewer._applyNewScaleFactor(self, new_factor)
+end
+
+-- The scale_factor (in capped-bitmap units) at which the image shows at
+-- exactly 100% — 1 native image pixel per screen pixel. Native dimensions
+-- come from the scanner's header sniff (meta.width); when the resting bitmap
+-- was never capped (small/medium images) 100% is just 1.0. Rotation doesn't
+-- affect the ratio (both widths are pre-rotation). Returns nil if we can't
+-- tell, leaving the memory-based extrema as the only ceiling.
+function GlimpseViewer:_nativeScale()
+    local lo = self.image
+    if not lo or not lo.getWidth then return nil end
+    local lo_w = lo:getWidth()
+    if lo_w <= 0 then return nil end
+    local meta = self.image_metas and self.image_metas[self._images_list_cur or 1]
+    local nat_w = meta and meta.width
+    if not nat_w or nat_w <= lo_w then return 1.0 end
+    return nat_w / lo_w
+end
+
+-- Zoom ceiling in capped-bitmap units: native size × the readability
+-- multiplier (max_zoom_of_native). Both the pinch clamp and the double-tap
+-- target land here.
+function GlimpseViewer:_maxScale()
+    local nat = self:_nativeScale()
+    return nat and nat * self.max_zoom_of_native
 end
 
 -- Forked from ImageWidget:panBy — the same crop-offset math on the
@@ -2504,7 +2919,7 @@ function GlimpseViewer:_hideCurrentImage()
     if nb < 1 then
         self:onClose()
         UIManager:show(Notification:new{
-            text = _("Image hidden. Restore it via the Glimpse menu."),
+            text = _("Image ignored."),
         })
         return
     end
@@ -2512,6 +2927,7 @@ function GlimpseViewer:_hideCurrentImage()
         self.image:free()
         self.image = nil
     end
+    self:_resetHiRes() -- the removed image's full-res decode is done with
     local new_cur = math.min(cur, nb)
     self._cur_rotation = self:_prefFor(new_cur).rotation or 0
     self.image = self._images_list[new_cur]
@@ -2521,7 +2937,7 @@ function GlimpseViewer:_hideCurrentImage()
     self._images_list_cur = new_cur
     self:update()
     UIManager:show(Notification:new{
-        text = _("Image hidden. Restore it via the Glimpse menu."),
+        text = _("Image ignored."),
     })
     local meta2 = self.image_metas and self.image_metas[new_cur]
     if meta2 and self.on_image_shown then
@@ -2585,6 +3001,15 @@ function Glimpse:_hiddenPaths()
             self.ui.doc_settings:readSetting("glimpse_hidden")) or {}
 end
 
+-- Images the user has explicitly pulled back INTO the collection from the
+-- Gallery's "Ignored" tab (the filter dropped them, or they were hidden).
+-- The inverse of glimpse_hidden; a path in both means "shown" wins via the
+-- partition in showViewer (add-back clears hidden and sets forced together).
+function Glimpse:_forcedPaths()
+    return (self.ui.doc_settings and
+            self.ui.doc_settings:readSetting("glimpse_forced")) or {}
+end
+
 -- Per-image, per-book viewer preferences: { [path] = {rotation=90} }
 function Glimpse:_imgPrefs()
     return (self.ui.doc_settings and
@@ -2599,6 +3024,11 @@ function Glimpse:_setImgPref(path, key, value)
     for _ in pairs(p) do has = true break end
     all[path] = has and p or nil
     self.ui.doc_settings:saveSetting("glimpse_img_prefs", all)
+    -- Flush now so a per-image rotation survives even an unclean shutdown
+    -- (sleep/battery-pull on an e-reader) rather than waiting for KOReader's
+    -- next autosave or a clean book close. Cheap: rotation is a rare,
+    -- user-initiated action, never a hot path.
+    self.ui.doc_settings:flush()
 end
 
 function Glimpse:_hiddenCount()
@@ -2678,14 +3108,22 @@ end
 -- ── scan + sidecar cache ────────────────────────────────────────────────────
 
 function Glimpse:_cachePath()
-    local dir = DataStorage:getDataDir() .. "/glimpse"
+    -- Live in the book's own sidecar (.sdr) folder, next to KOReader's
+    -- metadata, so the scan travels with the book when it's copied between
+    -- devices (getSidecarDir honours the user's metadata-location setting:
+    -- doc/dir/hash — the cache follows wherever the metadata lives). Older
+    -- builds kept a central koreader/glimpse/<key>.lua; those files are now
+    -- orphaned and simply re-scanned into the sidecar on next open.
+    local dir = DocSettings:getSidecarDir(self.ui.document.file)
     lfs.mkdir(dir)
-    local key = self.ui.document.file:gsub("[/\\]", "_"):gsub("[^%w%-%._]", "_")
-    if #key > 180 then key = key:sub(-180) end
-    return dir .. "/" .. key .. ".lua"
+    return dir .. "/glimpse.scan.lua"
 end
 
-function Glimpse:_getScan(force)
+-- cache_only: return an in-memory or valid on-disk cached scan (or nil) WITHOUT
+-- running a fresh scan. showViewer uses this to open silently on a cache hit,
+-- and only put up the "Scanning…" message (a visible e-ink double refresh) when
+-- a real scan is actually needed.
+function Glimpse:_getScan(force, cache_only)
     if self._scan and not force then
         return self._scan
     end
@@ -2706,6 +3144,7 @@ function Glimpse:_getScan(force)
             return c
         end
     end
+    if cache_only then return nil end
 
     local read_file, close = self:_makeReader()
     local ok, result, err = pcall(scanner.scan, read_file)
@@ -2800,7 +3239,12 @@ function Glimpse:showViewer(whole_book_once)
         return
     end
 
-    local scan = self._scan
+    -- Try an in-memory or valid on-disk cached scan silently first: a cache
+    -- hit opens with a single refresh. Only a genuine (slow) scan puts up the
+    -- "Scanning…" message — whose show+close forceRePaints read as a double
+    -- refresh/flash on e-ink, and used to fire on the FIRST open of every book
+    -- even when the scan was already cached.
+    local scan = self:_getScan(false, true)
     if not scan then
         local info = InfoMessage:new{ text = _("Scanning book for images…") }
         UIManager:show(info)
@@ -2824,36 +3268,65 @@ function Glimpse:showViewer(whole_book_once)
     end
 
     local level = self:getFilterLevel()
-    local imgs = scanner.filter(scan.images, level)
-
-    -- per-book hidden images (before scope, so the gallery heading can
-    -- count what the chapter scope holds back without counting these)
+    local kept_list = scanner.filter(scan.images, level)
+    local kept_paths = {}
+    for _, im in ipairs(kept_list) do kept_paths[im.path] = true end
+    local forced = self:_forcedPaths()
     local hidden = self:_hiddenPaths()
-    do
-        local kept = {}
-        for _, im in ipairs(imgs) do
-            if not hidden[im.path] then
-                kept[#kept + 1] = im
-            end
+
+    -- Partition every scanned image (kept in reading order) into the
+    -- collection the user sees ("shown") and the pool the Gallery's Ignored
+    -- tab offers ("ignored"). Shown = kept by the relevance filter OR
+    -- force-added by the user, and not hidden. Ignored = everything else:
+    -- images the filter dropped (and the user hasn't re-added) plus images
+    -- the user hid. Long-pressing a thumbnail in the Gallery moves an image
+    -- between the two (see on_ignore/on_unignore); the paths persist per book.
+    local shown_metas, ignored_metas = {}, {}
+    for _, im in ipairs(scan.images) do
+        local is_shown = (kept_paths[im.path] or forced[im.path])
+            and not hidden[im.path]
+        if is_shown then
+            shown_metas[#shown_metas + 1] = im
+        else
+            ignored_metas[#ignored_metas + 1] = im
         end
-        imgs = kept
     end
 
-    -- scope: drop images beyond the reading position
+    -- scope: drop images beyond the reading position from BOTH pools (the
+    -- Ignored tab respects spoiler scope too). scope_hidden counts what the
+    -- chapter scope holds back from the shown collection (gallery heading).
     local scope_hidden = 0
     if self:getScope() == "read_so_far" and not whole_book_once then
         local cur = self:_currentSpineIndex()
         if cur then
-            local kept = {}
-            for _, im in ipairs(imgs) do
-                if im.spine_index <= cur then
-                    kept[#kept + 1] = im
+            local function clip(list)
+                local kept = {}
+                for _, im in ipairs(list) do
+                    if im.spine_index <= cur then kept[#kept + 1] = im end
                 end
+                return kept
             end
-            scope_hidden = #imgs - #kept
-            imgs = kept
+            local before = #shown_metas
+            shown_metas = clip(shown_metas)
+            scope_hidden = before - #shown_metas
+            ignored_metas = clip(ignored_metas)
         end
     end
+
+    -- The single-image viewer works on the shown collection. When the filter
+    -- has left nothing shown but there ARE ignored images, opening is opt-in:
+    -- the empty state offers "Review filtered-out", which reopens with the
+    -- ignored pool as primary (a long-press reopen — _pending_gallery — does
+    -- the same). Otherwise the common decorative-only book (every image
+    -- correctly filtered) lands on the plain "No images" state instead of
+    -- suddenly displaying its ornaments.
+    local want_ignored_primary = self._review_ignored
+        or (self._pending_gallery ~= nil)
+    local primary_tab = "shown"
+    if #shown_metas == 0 and want_ignored_primary and #ignored_metas > 0 then
+        primary_tab = "ignored"
+    end
+    local imgs = (primary_tab == "shown") and shown_metas or ignored_metas
 
     if #imgs == 0 then
         -- Only offer "Search whole book" when the read-so-far scope is
@@ -2874,70 +3347,117 @@ function Glimpse:showViewer(whole_book_once)
                     self:showViewer(true)
                 end,
             })
+        elseif #ignored_metas > 0 then
+            -- everything in scope was filtered out (the #4 case): let the
+            -- user review and re-add from the Gallery's Ignored tab
+            local msg = #ignored_metas == 1
+                and _("No images to show — 1 was filtered out as irrelevant.")
+                or T(_("No images to show — %1 were filtered out as irrelevant."),
+                    #ignored_metas)
+            UIManager:show(ConfirmBox:new{
+                text = msg,
+                ok_text = _("Review filtered-out"),
+                ok_callback = function()
+                    self._review_ignored = true
+                    self:showViewer(whole_book_once)
+                end,
+            })
         else
             UIManager:show(InfoMessage:new{ text = _("No images to show.") })
         end
         return
     end
+    self._review_ignored = nil -- consumed once we're actually opening
 
     -- lazy render functions: one image decoded at a time, freed on switch;
     -- "invert in night mode" (a global setting) is applied here so
     -- re-renders pick up setting and night-mode changes live.
-    -- Night comes in two flavors (see _paintPanel for the long story):
-    --   * SW-invert fb (inverse flag set): the scaled copies are blitted
-    --     flag-matched and RAW (see _new_image_wg), so the decoded bitmap
-    --     must hold the FINAL raw values — the negative when the checkbox
-    --     is CHECKED, untouched when unchecked. Baking this here, once
-    --     per decode, replaces the invertRect the render hook used to run
-    --     on every re-scaled copy (it doubled night zoom cost vs day).
-    --   * HW-invert panel (flag 0): the display inverts everything, so
-    --     bake the OPPOSITE — inverted when UNCHECKED, so the double
-    --     inversion restores the original look.
+    -- Night handling (device-agnostic): whenever night mode is on and the
+    -- user has NOT ticked "Invert in Night Mode", pre-invert the image pixels
+    -- so the screen's own global night inversion brings them back to their
+    -- ORIGINAL colours — exactly what KOReader's ImageWidget does for every
+    -- image (original_in_nightmode), just baked once here instead of per
+    -- paint. Ticking the box skips the pre-invert, so the image ends up
+    -- inverted (negative) on screen. Crucially this depends only on the
+    -- SAME Screen.night_mode flag ImageWidget keys off (not getInverse() nor
+    -- the persisted setting) so our pre-invert is always paired with the
+    -- screen's actual inversion state — the old code keyed off getInverse()
+    -- and the setting, which could disagree with it and reversed the image on
+    -- some devices ("Invert in Night Mode reversed").
     local read_file, close_reader = self:_makeReader()
-    local images_list = { image_disposable = true }
-    -- Cap decoded bitmaps at 2× the drawer's content box (one C-speed,
-    -- aspect-preserving downscale at load): ImageWidget rescales from the
-    -- source bitmap on EVERY zoom/pan render, so multi-megapixel originals
-    -- make each pinch step (and the night-mode image blit) proportionally
-    -- slower. Fit and double zoom stay 1:1 sharp; only zooming beyond 2×
-    -- upscales slightly.
+    -- The RESTING (fit) view decodes each image capped at 2× the drawer's
+    -- content box (one C-speed, aspect-preserving downscale): ImageWidget
+    -- rescales from the source on EVERY zoom/pan render, so browsing and
+    -- swiping off a capped bitmap stays fast even for multi-megapixel maps.
+    -- Zooming in past fit trades that for sharpness: GlimpseViewer lazily
+    -- re-decodes THAT ONE image at full resolution (see _getHiRes /
+    -- _new_image_wg), so magnifying shows real detail instead of upscaling
+    -- the cap. The capped bitmap is only ever shown at/near fit.
     local cap_w = 2 * math.floor(Screen:getWidth() * GlimpseViewer.panel_ratio)
     local cap_h = 2 * Screen:getHeight()
-    for i, im in ipairs(imgs) do
-        images_list[i] = function()
-            local night = G_reader_settings:isTrue("night_mode")
-            local sw = Screen.bb.getInverse and Screen.bb:getInverse() == 1
-            local checked = G_reader_settings:isTrue(INVERT_KEY)
-            -- single-slot decoded-bitmap cache: reopening on the image
-            -- you left (the common "peek at the map again" flow) skips
-            -- the decode and cap-scale — on device that is most of the
-            -- open time. The key bakes in everything baked into pixels.
-            local key = im.path .. "|" .. tostring(night)
-                .. tostring(checked) .. tostring(sw)
-            local slot = self._bb_cache
-            if slot and slot.key == key and slot.bb then
-                -- hand out a copy: the viewer owns and frees what we return
-                return slot.bb:copy()
+    -- Decode + night/invert-bake one image. hires=false applies the resting
+    -- cap; hires=true keeps native resolution. The night baking is identical
+    -- both ways, so the sharp copy matches the resting copy where they overlap.
+    local function decode(im, hires)
+        local night = Screen.night_mode
+        local checked = G_reader_settings:isTrue(INVERT_KEY)
+        local bb = self:_render(read_file, im)
+        if bb and not hires then
+            local w, h = bb:getWidth(), bb:getHeight()
+            local s = math.min(1, cap_w / w, cap_h / h)
+            if s < 1 then
+                local scaled = RenderImage:scaleBlitBuffer(bb,
+                    math.floor(w * s + 0.5), math.floor(h * s + 0.5), true)
+                if scaled then bb = scaled end
             end
-            local bb = self:_render(read_file, im)
-            if bb then
-                local w, h = bb:getWidth(), bb:getHeight()
-                local s = math.min(1, cap_w / w, cap_h / h)
-                if s < 1 then
-                    local scaled = RenderImage:scaleBlitBuffer(bb,
-                        math.floor(w * s + 0.5), math.floor(h * s + 0.5), true)
-                    if scaled then bb = scaled end
-                end
-            end
-            if bb and night and (sw and checked or not sw and not checked) then
-                pcall(bb.invertRect, bb, 0, 0, bb:getWidth(), bb:getHeight())
-            end
-            if bb then
-                if slot and slot.bb then slot.bb:free() end
-                self._bb_cache = { key = key, bb = bb:copy() }
-            end
-            return bb
         end
+        -- pre-invert so the screen's night inversion restores the original,
+        -- unless the user asked for an inverted (negative) image
+        if bb and night and not checked then
+            pcall(bb.invertRect, bb, 0, 0, bb:getWidth(), bb:getHeight())
+        end
+        return bb
+    end
+    -- Build a lazy render-closure list (parallel to a metas list) — one for
+    -- the shown collection, one for the ignored pool (the Gallery tabs). Both
+    -- share the single-slot decoded-bitmap cache below, keyed by path, so a
+    -- thumbnail and the full view of the same image hit the same slot.
+    local function make_list(metas)
+        local list = { image_disposable = true }
+        for i, im in ipairs(metas) do
+            list[i] = function()
+                local night = Screen.night_mode
+                local checked = G_reader_settings:isTrue(INVERT_KEY)
+                -- single-slot decoded-bitmap cache: reopening on the image
+                -- you left (the common "peek at the map again" flow) skips
+                -- the decode and cap-scale — on device that is most of the
+                -- open time. The key bakes in everything baked into pixels.
+                local key = im.path .. "|" .. tostring(night) .. tostring(checked)
+                local slot = self._bb_cache
+                if slot and slot.key == key and slot.bb then
+                    -- hand out a copy: the viewer owns and frees what we return
+                    return slot.bb:copy()
+                end
+                local bb = decode(im, false)
+                if bb then
+                    if slot and slot.bb then slot.bb:free() end
+                    self._bb_cache = { key = key, bb = bb:copy() }
+                end
+                return bb
+            end
+        end
+        return list
+    end
+    local shown_render = make_list(shown_metas)
+    local ignored_render = make_list(ignored_metas)
+    local images_list = (primary_tab == "shown") and shown_render or ignored_render
+    -- Full-resolution decode for the zoomed view, called on demand by the
+    -- viewer (one image at a time). read_file stays valid after close_reader()
+    -- — it just reopens the libarchive fallback if the primary path misses.
+    local hires_decode = function(index)
+        local im = imgs[index]
+        if not im then return nil end
+        return decode(im, true)
     end
 
     -- reopen on the image viewed last time (per book), if still in the list
@@ -2962,6 +3482,15 @@ function Glimpse:showViewer(whole_book_once)
     viewer = GlimpseViewer:new{
         image = images_list,
         image_metas = imgs,
+        -- lazily supplies the full-res decode of the zoomed image (sharp zoom)
+        hires_decode = hires_decode,
+        -- Gallery tabs: the two pools, independent of which one is primary
+        -- (the single-image view uses `image`/`image_metas` = the primary).
+        shown_metas = shown_metas,
+        shown_list = shown_render,
+        ignored_metas = ignored_metas,
+        ignored_list = ignored_render,
+        primary_tab = primary_tab,
         -- for the gallery heading: images the chapter scope holds back
         gallery_hidden_count = scope_hidden,
         images_keep_pan_and_zoom = false,
@@ -2986,8 +3515,31 @@ function Glimpse:showViewer(whole_book_once)
             if self.ui.link then
                 self.ui.link:addCurrentLocationToStack()
             end
-            self.ui.rolling:onGotoXPointer(
-                string.format("/body/DocFragment[%d]", meta.spine_index))
+            -- Chapter-level target is always available; try to refine it to
+            -- the exact image first. The scanner's node_path is derived from
+            -- raw HTML, so crengine's normalized DOM can disagree — validate
+            -- the built xpointer resolves to THIS image (its filename appears
+            -- in the element's HTML) before trusting it, else fall back to the
+            -- chapter top (the pre-fix behaviour).
+            local target = string.format("/body/DocFragment[%d]", meta.spine_index)
+            local doc = self.ui.document
+            if meta.node_path and doc and doc.isXPointerInDocument then
+                local xp = string.format("/body/DocFragment[%d]/body/%s",
+                    meta.spine_index, meta.node_path)
+                local ok = pcall(function() return doc:isXPointerInDocument(xp) end)
+                    and doc:isXPointerInDocument(xp)
+                if ok then
+                    local fname = meta.path and meta.path:match("[^/]+$")
+                    local ok2, html = pcall(function()
+                        return doc:getHTMLFromXPointer(xp, 0)
+                    end)
+                    if ok2 and html and fname
+                            and html:find(fname, 1, true) then
+                        target = xp
+                    end
+                end
+            end
+            self.ui.rolling:onGotoXPointer(target)
         end,
         -- the viewer closed itself on a G-sensor rotation: re-layout the
         -- reader, then reopen (zoom/pan persistence restores the view)
@@ -3027,6 +3579,33 @@ function Glimpse:showViewer(whole_book_once)
             self.ui.doc_settings:delSetting("glimpse_hidden")
             if self._viewer then self._viewer:onClose() end
             self:showViewer()
+        end,
+        -- Gallery long-press, Shown tab: move this image to Ignored (hide it
+        -- and drop any force-add). Persist, then reopen back into the Gallery
+        -- on the same tab/page (the scan is cached, so the reopen is cheap).
+        on_ignore = function(meta, tab, page)
+            local h = self:_hiddenPaths(); h[meta.path] = true
+            local f = self:_forcedPaths(); f[meta.path] = nil
+            self.ui.doc_settings:saveSetting("glimpse_hidden", h)
+            self.ui.doc_settings:saveSetting("glimpse_forced", next(f) and f or nil)
+            self.ui.doc_settings:flush()
+            self._pending_gallery = { tab = tab, page = page }
+            if self._viewer then self._viewer:onClose() end
+            self:showViewer(whole_book_once)
+            UIManager:show(Notification:new{ text = _("Moved to Ignored") })
+        end,
+        -- Gallery long-press, Ignored tab: add this image back to Shown
+        -- (force-include it and clear any hide). Same reopen-into-gallery.
+        on_unignore = function(meta, tab, page)
+            local f = self:_forcedPaths(); f[meta.path] = true
+            local h = self:_hiddenPaths(); h[meta.path] = nil
+            self.ui.doc_settings:saveSetting("glimpse_forced", f)
+            self.ui.doc_settings:saveSetting("glimpse_hidden", next(h) and h or nil)
+            self.ui.doc_settings:flush()
+            self._pending_gallery = { tab = tab, page = page }
+            if self._viewer then self._viewer:onClose() end
+            self:showViewer(whole_book_once)
+            UIManager:show(Notification:new{ text = _("Added to Gallery") })
         end,
     }
     self._viewer = viewer
@@ -3068,6 +3647,23 @@ function Glimpse:showViewer(whole_book_once)
         viewer._center_y_ratio = view.cy or 0.5
         viewer:update()
     end
+    -- Land directly in the Gallery when this open is a long-press move
+    -- reopen (return to the tab/page the user was on) or the "Review
+    -- filtered-out" path (open on the Ignored tab). Done before the first
+    -- show so it paints as the gallery, not a flash from single view.
+    if self._pending_gallery then
+        local pg = self._pending_gallery
+        self._pending_gallery = nil
+        local tab = pg.tab
+        -- if the tab we were on emptied out (moved its last image), show
+        -- the other one instead of a blank grid
+        local n = (tab == "ignored") and #ignored_metas or #shown_metas
+        if n == 0 then tab = (tab == "ignored") and "shown" or "ignored" end
+        viewer:_enterGallery(pg.page, tab)
+    elseif primary_tab == "ignored" then
+        -- opened via "Review filtered-out": land in the Ignored grid
+        viewer:_enterGallery(1, "ignored")
+    end
     viewer._suppress_refresh = nil
     -- The framebuffer already shows the page exactly as-is, so skip the
     -- numeric-alpha below-repaint on open (a full crengine redraw — and
@@ -3077,12 +3673,27 @@ function Glimpse:showViewer(whole_book_once)
     -- still paints it before us, so the blend stays accumulation-free.
     -- false, not nil: nil falls back to the class alpha via the metatable.
     viewer.alpha = false
-    -- one dithered refresh covering the drawer and its gradient shadow
+    -- one dithered refresh covering the drawer (plus its gradient shadow when
+    -- the shadow is on — it falls onto the page). With the shadow OFF, refresh
+    -- ONLY the drawer, so the book area to its right is never in the region:
+    -- otherwise KOReader's periodic promotion of this refresh to a flashing
+    -- full flashes the page black even though nothing there changed.
+    local open_w = viewer._panel_w + 2
+    if not G_reader_settings:isTrue(SHADOW_KEY) then
+        open_w = viewer._panel_w
+            + 2 * viewer.shadow_width - viewer.shadow_overlap + 1
+    end
+    -- Refresh isolation: Glimpse lives in its own refresh world. Snapshot the
+    -- reader's ghost-clear counter and reset it to 0 for the session, so the
+    -- reader's accumulated count can't promote a Glimpse refresh into a
+    -- full-screen flash, and Glimpse's own refreshes don't push the reader
+    -- toward its periodic flash. The count is restored on close (onCloseWidget).
+    viewer._reader_refresh_count = UIManager.refresh_count
+    UIManager.refresh_count = 0
     UIManager:show(viewer, Device:hasKaleidoWfm() and "partial" or "ui",
         Geom:new{
             x = 0, y = 0,
-            w = math.min(Screen:getWidth(), viewer._panel_w
-                + 2 * viewer.shadow_width - viewer.shadow_overlap + 1),
+            w = math.min(Screen:getWidth(), open_w),
             h = Screen:getHeight(),
         }, nil, nil, true)
     viewer.alpha = nil -- back to the class default for later paths
@@ -3536,7 +4147,7 @@ function Glimpse:_menuItems()
         },
         {
             text = _("Quick Actions"),
-            help_text = _("Choose which actions appear in the viewer's ⋯ menu. Reset Rotation is automatic (shown while an image is rotated) and Restore hidden images only appears when some are hidden."),
+            help_text = _("Choose which actions appear in the viewer's ⋯ menu. Reset Rotation is automatic (shown while an image is rotated) and Restore ignored images only appears when some are ignored."),
             sub_item_table = (function()
                 local t = {}
                 for _, d in ipairs(QUICK_ACTIONS) do
@@ -3560,17 +4171,17 @@ function Glimpse:_menuItems()
             text_func = function()
                 local n = self:_hiddenCount()
                 if n > 0 then
-                    return T(_("Restore hidden images (%1)"), n)
+                    return T(_("Restore ignored images (%1)"), n)
                 end
-                return _("Restore hidden images")
+                return _("Restore ignored images")
             end,
-            help_text = _("Bring back images removed with 'Remove image from collection' in the viewer's ⋯ menu. Removal is remembered per book."),
+            help_text = _("Bring back images you ignored with 'Ignore Image' in the viewer's ⋯ menu (or by long-pressing in the Gallery). Remembered per book. Images the relevance filter set aside are added back individually from the Gallery's Ignored tab."),
             enabled_func = function() return self:_hiddenCount() > 0 end,
             keep_menu_open = true,
             separator = true,
             callback = function(touchmenu_instance)
                 self.ui.doc_settings:delSetting("glimpse_hidden")
-                UIManager:show(Notification:new{ text = _("Hidden images restored.") })
+                UIManager:show(Notification:new{ text = _("Ignored images restored.") })
                 if touchmenu_instance then
                     touchmenu_instance:updateItems()
                 end
@@ -3580,8 +4191,8 @@ function Glimpse:_menuItems()
             text = _("Advanced"),
             sub_item_table = {
                 {
-                    text = _("Hide irrelevant images"),
-                    help_text = _("Hide covers, publisher logos, ornaments and other non-reference imagery, keeping maps, family trees, diagrams and illustrations. Turn off to see every image in the book. A wrongly kept image can be removed via the viewer's ⋯ menu."),
+                    text = _("Ignore irrelevant images"),
+                    help_text = _("Set aside covers, publisher logos, ornaments and other non-reference imagery, keeping maps, family trees, diagrams and illustrations. Turn off to see every image in the book. Wrongly kept images can be ignored from the viewer's ⋯ menu; wrongly set-aside ones added back from the Gallery's Ignored tab."),
                     checked_func = function()
                         return self:getFilterLevel() ~= "all"
                     end,
@@ -3609,6 +4220,18 @@ function Glimpse:_menuItems()
                     end,
                     callback = function()
                         G_reader_settings:flipNilOrTrue(TOP_MENU_KEY)
+                    end,
+                    separator = true,
+                },
+                {
+                    text = _("Disable shadow"),
+                    help_text = _("Remove the drawer's drop shadow. The shadow is a dithered gradient — the main cause of e-ink ghosting behind the drawer — so turn it off if a ghost lingers after closing Glimpse. No visible effect on LCD screens."),
+                    checked_func = function()
+                        return G_reader_settings:isTrue(SHADOW_KEY)
+                    end,
+                    callback = function()
+                        G_reader_settings:saveSetting(SHADOW_KEY,
+                            not G_reader_settings:isTrue(SHADOW_KEY))
                     end,
                     separator = true,
                 },
