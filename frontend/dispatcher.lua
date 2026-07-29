@@ -1528,6 +1528,7 @@ function Dispatcher._showAsMenu(settings, exec_props, rename_callback, rename_ho
                     if rename_callback then
                         rename_callback(v, quickmenu)
                     else
+                        local current_offset = quickmenu:getScrolledOffset()
                         UIManager:close(quickmenu)
                         if util.stringStartsWith(v.key, "toggle_horizontal_vertical") then
                             keep_open_on_apply = false
@@ -1546,6 +1547,7 @@ function Dispatcher._showAsMenu(settings, exec_props, rename_callback, rename_ho
                             --end)
 
                             -- The font module is not loaded for pdfs in readerui.lua
+                            quickmenu:setScrolledOffset(current_offset)
                             if ui and ui.font and util.stringStartsWith(v.text, "Profile " .. ui.document._document:getFontFace()) then
                                 v.text = v.text .. " ✔"
                             end
