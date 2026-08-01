@@ -1,5 +1,5 @@
 --[[
-    Track Reading Location v1.0.0
+    Track Reading Location v1.1.0
 
     This patch remembers the last "confirmed" reading position (the furthest page
     you've actually read) for the book you're currently reading.
@@ -15,6 +15,9 @@
     - "Show full text": include the "Go back to page" wording.
     - "Show page number": include the page number next to the arrow.
     - "Show dismiss button": include a tappable "X" to cancel/dismiss.
+    - "Mode: Pages/Percentage": show the reference point as a page number
+      (default) or as a percentage of the book, both on the button and in
+      the "Go back to..." wording.
 
     With everything off, the button shrinks to just a small circular arrow.
 
@@ -36,9 +39,19 @@
     gesture via the gesture manager. Holding the same menu entry opens a
     settings submenu with a "Show button on screen" checkbox (to turn the
     floating button off entirely if you'd rather only use the menu/gesture),
-    the three display checkboxes described above, and "Bottom offset"/"Side
-    offset" settings to adjust how far the button is docked from the bottom
-    and side edges of the screen (applied the same way to both corners).
+    the three display checkboxes described above, a "Show shadow" checkbox
+    (toggles the button's drop shadow), "Bottom offset"/"Side offset"
+    settings to adjust how far the button is docked from the bottom and side
+    edges of the screen (applied the same way to both corners), and a
+    "Button radius" setting to adjust how rounded its corners are, from 0
+    (square) up to fully rounded (pill/circle, the default).
+
+    A second, standalone "Set current page as reading location" action is
+    also available, both as its own menu entry (right below "Go to furthest
+    reading location") and as a system action (gesture manager, profiles,
+    etc.). It accepts the current page as the new reference point on demand -
+    the same thing tapping/holding the button's "X" does - without needing an
+    active prompt to dismiss first.
 
     The reference page is saved per book, so a pending prompt will still be there
     if you close the book and reopen it later.
@@ -83,6 +96,9 @@ local SETTING_SHOW_BUTTON = "readingloc_show_floating_button"
 local SETTING_SHOW_FULL_TEXT = "readingloc_show_full_text"
 local SETTING_SHOW_PAGE_NUMBER = "readingloc_show_page_number"
 local SETTING_SHOW_DISMISS_BUTTON = "readingloc_show_dismiss_button"
+-- Whether the reference point is displayed (button + "Go back to..." wording)
+-- as a page number (default) or as a percentage of the book.
+local SETTING_MODE_PERCENTAGE = "readingloc_mode_percentage"
 
 -- The button is always docked to its fixed bottom-left/bottom-right corner.
 -- Its distance from the bottom edge, and from whichever side edge (left or
@@ -91,6 +107,18 @@ local SETTING_SHOW_DISMISS_BUTTON = "readingloc_show_dismiss_button"
 local BUTTON_BASE_MARGIN = 14
 local SETTING_OFFSET_BOTTOM = "readingloc_offset_bottom"
 local SETTING_OFFSET_SIDE = "readingloc_offset_side"
+
+-- Whether the button casts a small drop shadow (see paintButtonShadow below).
+local SETTING_SHOW_SHADOW = "readingloc_show_shadow"
+
+-- Corner radius of the button, in unscaled px like the offset settings above.
+-- Defaults intentionally oversized - bb:paintRoundedRect/paintBorder already
+-- clamp radius down to at most half the button's own height/width, so a big
+-- default always resolves to a full pill, matching the button's original
+-- hardcoded look, while still leaving smaller values (down to 0, i.e. square
+-- corners) available to the settings submenu's spinner.
+local BUTTON_RADIUS_DEFAULT = 25
+local SETTING_BUTTON_RADIUS = "readingloc_button_radius"
 
 -- Forward-declared so ReadingLocationOverlay's methods (defined next) can already
 -- reference it by the time they're actually called at runtime.
@@ -126,6 +154,20 @@ local function getPageLabel(ui, pageno)
     return tostring(pageno)
 end
 
+-- Labels a location the way the floating button/menu wording should show it:
+-- a page label (see getPageLabel above), or, when percentage mode is on, the
+-- position as a percentage of the total page count - falling back to the
+-- page label if the page count isn't available yet.
+local function getLocationLabel(ui, pageno)
+    if ReadingLocationTracker.isPercentageModeEnabled() then
+        local page_count = ReadingLocationTracker.getPageCount(ui)
+        if page_count and page_count > 0 then
+            return math.floor((pageno / page_count) * 100 + 0.5) .. "%"
+        end
+    end
+    return getPageLabel(ui, pageno)
+end
+
 --[[ ---------------------------------------------------------------------
      Floating split-button overlay (painted as part of the page, like
      KOReader's own footer/progress bar - never a separate modal window)
@@ -149,9 +191,12 @@ function ReadingLocationOverlay:_getBox(side)
     local show_full_text = ReadingLocationTracker.isFullTextEnabled()
     local show_page_number = ReadingLocationTracker.isPageNumberEnabled()
     local show_dismiss = ReadingLocationTracker.isDismissButtonEnabled()
+    local percentage_mode = ReadingLocationTracker.isPercentageModeEnabled()
+    local button_radius = ReadingLocationTracker.getButtonRadius()
     local key = table.concat({
         side, tostring(self.anchor),
         tostring(show_full_text), tostring(show_page_number), tostring(show_dismiss),
+        tostring(percentage_mode), tostring(button_radius),
     }, ":")
     if side == self._cached_side and self._box and self._box_key == key then
         return self._box
@@ -202,10 +247,16 @@ function ReadingLocationOverlay:_getButtonBox(side, show_full_text, show_page_nu
     -- Point the arrow toward the screen edge this button is docked to.
     local words = {}
     if show_full_text then
-        table.insert(words, _("Go back to page"))
+        -- "page" doesn't read well in front of a percentage ("page 42%"),
+        -- so it's dropped from the wording in that mode.
+        if ReadingLocationTracker.isPercentageModeEnabled() then
+            table.insert(words, _("Go back to"))
+        else
+            table.insert(words, _("Go back to page"))
+        end
     end
     if show_page_number then
-        table.insert(words, getPageLabel(self.ui, self.anchor))
+        table.insert(words, getLocationLabel(self.ui, self.anchor))
     end
     local label = table.concat(words, " ")
     local goback_text
@@ -278,16 +329,44 @@ function ReadingLocationOverlay:_getButtonBox(side, show_full_text, show_page_nu
     return FrameContainer:new{
         background = Blitbuffer.COLOR_WHITE,
         bordersize = Size.border.thin,
-        -- A generously large radius gets clamped down by paintRoundedRect/
-        -- paintBorder (see base/ffi/blitbuffer.lua) to exactly half the
-        -- button's own height, i.e. a pill shape - or a circle when the
-        -- content ends up about as wide as it is tall (e.g. arrow-only,
-        -- no text, no dismiss section).
-        radius = content:getSize().h,
+        -- The configured radius gets clamped down by paintRoundedRect/
+        -- paintBorder (see base/ffi/blitbuffer.lua) to at most half the
+        -- button's own height - so the default (BUTTON_RADIUS_DEFAULT,
+        -- intentionally oversized) always resolves to a pill shape, or a
+        -- circle when the content ends up about as wide as it is tall (e.g.
+        -- arrow-only, no text, no dismiss section), while a smaller value
+        -- from the settings submenu's spinner yields a less rounded button,
+        -- down to square corners at 0.
+        radius = Screen:scaleBySize(ReadingLocationTracker.getButtonRadius()),
         padding = 0,
         margin = 0,
         content,
     }
+end
+
+-- Shared by paintButtonShadow and growRegionForShadow below, so the
+-- refresh-region padding always matches how far the shadow is actually
+-- offset - drifting the two apart would leave a stale sliver of shadow on
+-- screen once the button's gone (see growRegionForShadow).
+local SHADOW_OFFSET = 2
+
+local function paintButtonShadow(bb, box_x, box_y, w, h, radius)
+    local offset = Screen:scaleBySize(SHADOW_OFFSET)
+    bb:paintRoundedRect(box_x, box_y + offset, w, h, Blitbuffer.COLOR_GRAY_9, radius)
+end
+
+-- The shadow pokes out a few pixels past the button's own bottom edge (see
+-- paintButtonShadow above) - a refresh region sized to just box_dimen would
+-- leave a stale sliver of it on screen once the button's gone, since e-ink
+-- only actually re-flashes whatever rect it's told to. Only grows downward,
+-- matching the shadow's own offset direction, and only when the shadow is
+-- actually enabled.
+local function growRegionForShadow(region)
+    if not region or not ReadingLocationTracker.isShadowEnabled() then
+        return region
+    end
+    local pad = Screen:scaleBySize(SHADOW_OFFSET)
+    return Geom:new{ x = region.x, y = region.y, w = region.w, h = region.h + pad }
 end
 
 -- Called by our ReaderView:paintTo hook on every page repaint.
@@ -343,6 +422,10 @@ function ReadingLocationOverlay:paintTo(bb, x, y)
             end
         end
 
+        local button_radius = Screen:scaleBySize(ReadingLocationTracker.getButtonRadius())
+        if ReadingLocationTracker.isShadowEnabled() then
+            paintButtonShadow(bb, box_x, box_y, w, h, button_radius)
+        end
         box:paintTo(bb, box_x, box_y)
 
         if self.preview_both_sides then
@@ -361,6 +444,9 @@ function ReadingLocationOverlay:paintTo(bb, x, y)
                 other_x = x + view_w - ow - margin_x
             end
             local other_y = y + view_h - oh - margin_y
+            if ReadingLocationTracker.isShadowEnabled() then
+                paintButtonShadow(bb, other_x, other_y, ow, oh, button_radius)
+            end
             other_box:paintTo(bb, other_x, other_y)
         end
     end)
@@ -530,6 +616,30 @@ function ReadingLocationTracker.setDismissButtonEnabled(enabled)
     G_reader_settings:saveSetting(SETTING_SHOW_DISMISS_BUTTON, enabled and true or false)
 end
 
+function ReadingLocationTracker.isShadowEnabled()
+    local v = G_reader_settings:readSetting(SETTING_SHOW_SHADOW)
+    if v == nil then
+        return true
+    end
+    return v == true
+end
+
+function ReadingLocationTracker.setShadowEnabled(enabled)
+    G_reader_settings:saveSetting(SETTING_SHOW_SHADOW, enabled and true or false)
+end
+
+function ReadingLocationTracker.isPercentageModeEnabled()
+    local v = G_reader_settings:readSetting(SETTING_MODE_PERCENTAGE)
+    if v == nil then
+        return false
+    end
+    return v == true
+end
+
+function ReadingLocationTracker.setPercentageModeEnabled(enabled)
+    G_reader_settings:saveSetting(SETTING_MODE_PERCENTAGE, enabled and true or false)
+end
+
 function ReadingLocationTracker.getBottomOffset()
     local v = G_reader_settings:readSetting(SETTING_OFFSET_BOTTOM)
     if type(v) ~= "number" then
@@ -552,6 +662,18 @@ end
 
 function ReadingLocationTracker.setSideOffset(value)
     G_reader_settings:saveSetting(SETTING_OFFSET_SIDE, value)
+end
+
+function ReadingLocationTracker.getButtonRadius()
+    local v = G_reader_settings:readSetting(SETTING_BUTTON_RADIUS)
+    if type(v) ~= "number" then
+        return BUTTON_RADIUS_DEFAULT
+    end
+    return v
+end
+
+function ReadingLocationTracker.setButtonRadius(value)
+    G_reader_settings:saveSetting(SETTING_BUTTON_RADIUS, value)
 end
 
 -- Total distance the button is docked away from the bottom edge / from
@@ -615,7 +737,13 @@ end
 -- the change against the actual floating button as the value is dragged
 -- (not just once "Apply" is tapped), and reverting it if the widget is
 -- dismissed any other way (Cancel, tapping outside, the Back key).
-local function showOffsetSpinWidget(ui, touchmenu_instance, title, info, get_offset, set_offset)
+-- `opts` (optional) overrides the spinner's bounds/default - used for the
+-- button radius setting below, which needs a non-zero "reset" value (its
+-- default is intentionally oversized so it resolves to a full pill - see
+-- BUTTON_RADIUS_DEFAULT). Omitted entirely, this keeps its original 0-200,
+-- default-0 behavior for the two offset settings.
+local function showOffsetSpinWidget(ui, touchmenu_instance, title, info, get_offset, set_offset, opts)
+    opts = opts or {}
     local original_value = get_offset()
     local applied = false
     local spin_widget
@@ -623,12 +751,12 @@ local function showOffsetSpinWidget(ui, touchmenu_instance, title, info, get_off
         title_text = title,
         info_text = info,
         value = original_value,
-        value_min = 0,
-        value_max = 200,
-        value_step = 2,
-        value_hold_step = 10,
+        value_min = opts.value_min or 0,
+        value_max = opts.value_max or 200,
+        value_step = opts.value_step or 1,
+        value_hold_step = opts.value_hold_step or 10,
         unit = "px",
-        default_value = 0,
+        default_value = opts.default_value or 0,
         callback = function(spin)
             applied = true
             set_offset(spin.value)
@@ -671,7 +799,7 @@ end
 
 function ReadingLocationTracker.onCancel(ui)
     local overlay = ui._rlt_overlay
-    local region = overlay and overlay.box_dimen
+    local region = growRegionForShadow(overlay and overlay.box_dimen)
     -- Stop tracking the old position: accept wherever we currently are.
     ui._rlt_anchor = ui._rlt_current_page or ui._rlt_anchor
     if overlay then
@@ -682,7 +810,7 @@ end
 
 function ReadingLocationTracker.onGoBack(ui)
     local overlay = ui._rlt_overlay
-    local region = overlay and overlay.box_dimen
+    local region = growRegionForShadow(overlay and overlay.box_dimen)
     local target_page = ui._rlt_anchor
     if overlay then
         overlay.visible = false
@@ -693,9 +821,40 @@ function ReadingLocationTracker.onGoBack(ui)
     end
 end
 
+-- Standalone system action: accepts the current page as the new reference
+-- point on demand, regardless of whether the floating button is currently
+-- showing (unlike onCancel, which only ever runs from an active overlay tap/
+-- hold, where the button vanishing is already visible feedback). Shows a
+-- notification here instead, since there's otherwise no visible confirmation.
+function ReadingLocationTracker.setCurrentPageAsReadingLocation(ui)
+    if not ui or type(ui._rlt_current_page) ~= "number" then
+        return
+    end
+    local overlay = ui._rlt_overlay
+    local region = overlay and overlay.visible and growRegionForShadow(overlay.box_dimen)
+    ui._rlt_anchor = ui._rlt_current_page
+    if overlay then
+        overlay.visible = false
+    end
+    refreshRegion(ui, region)
+    UIManager:show(Notification:new{
+        text = _("Current page set as reading location."),
+    })
+end
+
+-- Whether the current page already IS the tracked reading location - true
+-- when there's nothing to jump back to (goToFurthestReadingLocation) and
+-- nothing new to set (setCurrentPageAsReadingLocation). Shared by both menu
+-- entries' enabled_func, so they gray out instead of just no-op'ing/notifying
+-- when tapped.
+function ReadingLocationTracker.isAtReadingLocation(ui)
+    local anchor = ui and ui._rlt_anchor
+    local current = ui and ui._rlt_current_page
+    return not anchor or anchor == current
+end
+
 function ReadingLocationTracker.goToFurthestReadingLocation(ui)
-    local anchor = ui._rlt_anchor
-    if not anchor or anchor == ui._rlt_current_page then
+    if ReadingLocationTracker.isAtReadingLocation(ui) then
         UIManager:show(Notification:new{
             text = _("You're already at your furthest reading location."),
         })
@@ -900,6 +1059,26 @@ ReaderLink.addToMainMenu = function(self, menu_items)
                     end,
                 },
                 {
+                    text_func = function()
+                        return T(_("Mode: %1"), ReadingLocationTracker.isPercentageModeEnabled()
+                            and _("Percentage") or _("Page number"))
+                    end,
+                    -- No checked_func on this item (it's a cycling text
+                    -- toggle, not a checkbox), so TouchMenu:onMenuSelect
+                    -- would otherwise close the menu on tap - and, since it
+                    -- also skips the auto-updateItems() it does for checked/
+                    -- checked_func items, the text_func label needs a manual
+                    -- refresh here too, or it'd keep showing the old mode.
+                    keep_menu_open = true,
+                    callback = function(touchmenu_instance)
+                        ReadingLocationTracker.setPercentageModeEnabled(not ReadingLocationTracker.isPercentageModeEnabled())
+                        refreshFloatingButtonPreview(ui, ui._rlt_overlay and ui._rlt_overlay.visible)
+                        if touchmenu_instance then
+                            touchmenu_instance:updateItems()
+                        end
+                    end,
+                },
+                {
                     text = _("Show full text"),
                     checked_func = function()
                         return ReadingLocationTracker.isFullTextEnabled()
@@ -910,10 +1089,11 @@ ReaderLink.addToMainMenu = function(self, menu_items)
                     end,
                 },
                 {
-                    text = _("Show page number"),
-                    -- "Go back to page" doesn't make sense without a page
-                    -- number, so this is forced on (and locked) while
-                    -- "Show full text" is on - see isPageNumberEnabled().
+                    text = _("Show location/page number"),
+                    -- "Go back to page"/"Go back to" doesn't make sense
+                    -- without a value next to it, so this is forced on (and
+                    -- locked) while "Show full text" is on - see
+                    -- isPageNumberEnabled().
                     enabled_func = function()
                         return not ReadingLocationTracker.isFullTextEnabled()
                     end,
@@ -934,6 +1114,16 @@ ReaderLink.addToMainMenu = function(self, menu_items)
                     end,
                     callback = function()
                         ReadingLocationTracker.setDismissButtonEnabled(not ReadingLocationTracker.isDismissButtonEnabled())
+                        refreshFloatingButtonPreview(ui, ui._rlt_overlay and ui._rlt_overlay.visible)
+                    end,
+                },
+                {
+                    text = _("Show shadow"),
+                    checked_func = function()
+                        return ReadingLocationTracker.isShadowEnabled()
+                    end,
+                    callback = function()
+                        ReadingLocationTracker.setShadowEnabled(not ReadingLocationTracker.isShadowEnabled())
                         refreshFloatingButtonPreview(ui, ui._rlt_overlay and ui._rlt_overlay.visible)
                     end,
                 },
@@ -963,6 +1153,20 @@ ReaderLink.addToMainMenu = function(self, menu_items)
                             ReadingLocationTracker.setSideOffset)
                     end,
                 },
+                {
+                    text_func = function()
+                        return T(_("Button radius: %1"), ReadingLocationTracker.getButtonRadius())
+                    end,
+                    keep_menu_open = true,
+                    callback = function(touchmenu_instance)
+                        showOffsetSpinWidget(ui, touchmenu_instance,
+                            _("Button radius"),
+                            _("Corner roundness of the button, from 0 (square) up to fully rounded (pill/circle)."),
+                            ReadingLocationTracker.getButtonRadius,
+                            ReadingLocationTracker.setButtonRadius,
+                            { value_max = BUTTON_RADIUS_DEFAULT, default_value = BUTTON_RADIUS_DEFAULT })
+                    end,
+                },
             }
             table.insert(touchmenu_instance.item_table_stack, touchmenu_instance.item_table)
             item.menu_item_id = item.menu_item_id or tostring(item)
@@ -971,10 +1175,21 @@ ReaderLink.addToMainMenu = function(self, menu_items)
             touchmenu_instance:updateItems(1)
         end,
     }
+
+    menu_items.set_current_page_as_reading_location = {
+        text = _("Set current page as reading location"),
+        enabled_func = function()
+            return not ReadingLocationTracker.isAtReadingLocation(ui)
+        end,
+        callback = function()
+            ReadingLocationTracker.setCurrentPageAsReadingLocation(ui)
+        end,
+    }
 end
 
--- Place the new item right after "go_to_next_location" in the reader's
--- Navigation submenu.
+-- Place the new items right after "go_to_next_location" in the reader's
+-- Navigation submenu, in order: "go to furthest reading location", then
+-- "set current page as reading location".
 local ok_order, reader_menu_order = pcall(require, "ui/elements/reader_menu_order")
 if ok_order and reader_menu_order and reader_menu_order.navi then
     local navi = reader_menu_order.navi
@@ -987,6 +1202,7 @@ if ok_order and reader_menu_order and reader_menu_order.navi then
     end
 
     table.insert(navi, insert_at, "go_to_furthest_reading_location")
+    table.insert(navi, insert_at + 1, "set_current_page_as_reading_location")
 end
 
 -- Register as a dispatchable action so it can be bound to a gesture, a
@@ -1000,6 +1216,22 @@ Dispatcher:registerAction("go_to_furthest_reading_location", {
 
 ReaderUI.onGoToFurthestReadingLocation = function(self)
     ReadingLocationTracker.goToFurthestReadingLocation(self)
+    return true
+end
+
+-- Register as a second, standalone dispatchable action - not tied to any
+-- menu entry - so the current page can be accepted as the new reference
+-- point directly from a gesture, profile, or physical button, without first
+-- needing an active "go back" prompt to dismiss.
+Dispatcher:registerAction("set_current_page_as_reading_location", {
+    category = "none",
+    event = "SetCurrentPageAsReadingLocation",
+    title = _("Set current page as reading location"),
+    reader = true,
+})
+
+ReaderUI.onSetCurrentPageAsReadingLocation = function(self)
+    ReadingLocationTracker.setCurrentPageAsReadingLocation(self)
     return true
 end
 
