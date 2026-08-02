@@ -363,7 +363,7 @@ function OTAManager:zsync(full_dl)
             string.format('WITH_PIPEFAIL=%s', use_pipefail),
         }
         -- Honor HTTP proxy setting.
-        local http_proxy = G_reader_settings:readSetting("http_proxy")
+        local http_proxy = G_reader_settings:readSetting("http_proxy_enabled") and G_reader_settings:readSetting("http_proxy")
         if http_proxy then
             table.insert(zsync_cmd, string.format("http_proxy=%s", http_proxy))
         end
@@ -377,7 +377,9 @@ function OTAManager:zsync(full_dl)
             "-u", self:getOTAServer(),
             ota_dir .. self:getZsyncFilename(),
         })
-        return os.execute(util.shell_escape(zsync_cmd))
+        zsync_cmd = util.shell_escape(zsync_cmd)
+        logger.dbg("running zsync:", zsync_cmd)
+        return os.execute(zsync_cmd)
     end
 end
 
