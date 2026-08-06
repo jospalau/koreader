@@ -2335,4 +2335,15 @@ function Bookshelf:markMetadataDirty()
     end
 end
 
+-- Lightweight refresh for callers outside this module (e.g. readerui.lua
+-- after a status change) who want the shelf rows to reflect fresh Repo
+-- data on the CURRENTLY LIVE widget (if any), without going through
+-- softRefresh's 150ms-deferred swap or the heavy _rebuild()/full-refresh
+-- flag. No-op if Bookshelf isn't live right now.
+function Bookshelf.refreshLiveShelves()
+    if _live_widget and _live_widget._swapShelvesInPlace then
+        _live_widget:_swapShelvesInPlace()
+    end
+end
+
 return Bookshelf

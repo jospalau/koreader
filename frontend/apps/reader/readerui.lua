@@ -567,6 +567,9 @@ function ReaderUI:init()
         if Repo.invalidateBookCache then Repo.invalidateBookCache("StatusChanged") end
         if Repo.invalidateProgressCache then Repo.invalidateProgressCache() end
         Repo.getAll()
+        if self.bookshelf and self.bookshelf.refreshLiveShelves then
+            self.bookshelf.refreshLiveShelves()
+        end
         -- self.bookshelf:onBookMetadataChanged()
         -- self.bookshelf:markMetadataDirty()
         -- end)
