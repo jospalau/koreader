@@ -563,10 +563,12 @@ function ReaderUI:init()
         -- A cache rebuild walks the library and may touch the filesystem
         -- (lfs.attributes, progress metadata, sorting), which can be noticeably
         -- slower on Android SAF and Kindle than on Kobo.
-        -- UIManager:scheduleIn(0, function()
+        -- UIManager:scheduleIn(0, function(
+        if Repo.invalidateBookCache then Repo.invalidateBookCache("StatusChanged") end
+        if Repo.invalidateProgressCache then Repo.invalidateProgressCache() end
         Repo.getAll()
-        -- self.bookshelf:onBookMetadataChanged(
-        self.bookshelf:markMetadataDirty()
+        -- self.bookshelf:onBookMetadataChanged()
+        -- self.bookshelf:markMetadataDirty()
         -- end)
     end
     --self.bookshelf:onBookMetadataChanged()
