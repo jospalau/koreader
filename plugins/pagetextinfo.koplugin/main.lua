@@ -715,12 +715,12 @@ function PageTextInfo:onSwipe(_, ges)
         end
     elseif direction == "east" then
         -- local doc_settings = DocSettings:open(doc_path)
-        local reference_page = self.ui.doc_settings:readSetting("reference_page_xpointer")
-        if not reference_page then
-            local xp = self.ui.document:getXPointer()
-            self.ui.doc_settings:saveSetting("reference_page_xpointer", xp)
-            self.ui.doc_settings:flush()
-        else
+        -- local reference_page = self.ui.doc_settings:readSetting("reference_page_xpointer")
+        -- if not reference_page then
+            -- local xp = self.ui.document:getXPointer()
+            -- self.ui.doc_settings:saveSetting("reference_page_xpointer", xp)
+            -- self.ui.doc_settings:flush()
+        -- else
             --[[local pageno = self.ui.document:getPageFromXPointer(reference_page)
             local pageno_label = self.ui.pagemap:getXPointerPageLabel(reference_page)
             local toc_title = self.ui.toc:getTocTitleByPage(pageno)
@@ -742,9 +742,9 @@ function PageTextInfo:onSwipe(_, ges)
                     return true
                 end,
             })]]
-            -- UIManager:broadcastEvent(Event:new("BookshelfOpenMicroModules"))
-            UIManager:broadcastEvent(Event:new("BookshelfOpenStartMenu"))
-        end
+        -- end
+        -- UIManager:broadcastEvent(Event:new("BookshelfOpenMicroModules"))
+        UIManager:broadcastEvent(Event:new("BookshelfOpenStartMenu"))
         return
     end
     return false
