@@ -2996,12 +2996,13 @@ end
             text = text,
             choice1_text = _("Yes"),
             choice1_callback = function()
+                UIManager:setDirty(self, "full")
                 UIManager:nextTick(proceed)
             end,
             choice2_text = _("Do not open it"),
             choice2_callback = function() end,
             cancel_callback = function() end,
-        })
+        }, "full")
         return
     end
 
