@@ -8260,11 +8260,12 @@ function BookshelfWidget:_nudgeColumns(delta)
     self._nav_dirty = true
     self:_scheduleNavFlush()
     self:_clearDpadFocus()
-    -- Draft regrid so a burst of pinches steps instantly (covers rescaled from
-    -- cache, not re-decoded); the settle timer sharpens them once you stop.
-    self:_draftRebuild()
+    -- Full-quality rebuild on every step (no draft/settle two-pass): each
+    -- pinch step decodes covers at final size immediately, trading burst-zoom
+    -- responsiveness for no draft->settle flicker. See git history for the
+    -- prior draft-regrid approach if this needs revisiting.
+    self:_rebuild()
     UIManager:setDirty(self, "ui")
-    self:_scheduleCoverSettle()
     return true
 end
 
