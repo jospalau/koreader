@@ -566,7 +566,17 @@ function ReaderUI:init()
         -- UIManager:scheduleIn(0, function(
         if Repo.invalidateBookCache then Repo.invalidateBookCache("StatusChanged") end
         if Repo.invalidateProgressCache then Repo.invalidateProgressCache() end
-        Repo.getAll()
+        -- Repo.getAll() removed here (both immediate and deferred): the
+        -- refreshLiveShelves() call below already covers the visible shelf
+        -- via _swapShelvesInPlace -> _fetchChipItems (Repo.getAll/getBySource
+        -- for just the current page), so a separate full Repo.getAll() call
+        -- is unnecessary work. It also only fires when a bookshelf widget is
+        -- actually live -- fine here, since this handler exists specifically
+        -- to update the live shelf. Running the extra full getAll() at this
+        -- point -- right as the reader is also allocating for the
+        -- just-opened/closing book -- blocked the main thread for ~400ms and
+        -- triggered "realloc failed" OOM crashes on Kobo Clara Colour
+        -- (limited RAM + heavier color buffers).
         if self.bookshelf and self.bookshelf.refreshLiveShelves then
             self.bookshelf.refreshLiveShelves()
         end
