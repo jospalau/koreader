@@ -197,7 +197,7 @@ function M.decide(book)
             page_count   = want_page_count,
         }
     else
-        if require("readhistory"):getIndexByFile(book.filepath) and not require("docsettings"):hasSidecarFile(self.filepath) then
+        if require("readhistory"):getIndexByFile(book.filepath) and not require("docsettings"):hasSidecarFile(book.filepath) then
             return {
                 bar        = false,
                 bar_pct    = 0,
