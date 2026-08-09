@@ -22,11 +22,11 @@ local function sanitizeMetadata(val)
 end
 
 function M:fetchFromAI()
-    require("ui/network/manager"):runWhenOnline(function()
+    require("ui/network/manager"):runWhenOnline(function() 
         local current_page = self.ui:getCurrentPage()
         local reading_percent = math.floor((current_page / self.ui.document:getPageCount()) * 100)
         local spoiler_setting = self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
-
+        
         if spoiler_setting == "full_book" then
             self:continueWithFetch(100)
         else
@@ -36,17 +36,17 @@ function M:fetchFromAI()
 end
 
 function M:updateFromAI()
-    require("ui/network/manager"):runWhenOnline(function()
+    require("ui/network/manager"):runWhenOnline(function() 
         local current_page = self.ui:getCurrentPage()
         local reading_percent = math.floor((current_page / self.ui.document:getPageCount()) * 100)
         local spoiler_setting = self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
-
+        
         local last_fetch_page = nil
         if self.book_data and self.book_data.last_fetch_page then
             last_fetch_page = self.book_data.last_fetch_page
         end
         self:log("XRayPlugin: updateFromAI - last_fetch_page=" .. tostring(last_fetch_page))
-
+        
         if spoiler_setting == "full_book" then
             self:continueWithFetch(100, true)
         else
@@ -60,7 +60,7 @@ function M:fetchSingleWord(text, pos0, pos1)
         local current_page = self.ui:getCurrentPage()
         local reading_percent = math.floor((current_page / (self.ui.document:getPageCount() or 1)) * 100)
         local spoiler_setting = self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
-
+        
         local limit_percent = reading_percent
         if spoiler_setting == "full_book" then limit_percent = 100 end
 
@@ -83,33 +83,33 @@ function M:fetchSingleWord(text, pos0, pos1)
             UIManager:scheduleIn(0.3, function()
             if self.destroyed then return end
             if not self.chapter_analyzer then self.chapter_analyzer = require(plugin_path .. "xray_chapteranalyzer"):new() end
-
+            
             progress_msg:reportProgress(10)
-
+            
             -- 1. Distributed chapter samples (Start/Mid/End of each chapter up to current)
             -- Restored to 100, 60000 per user request
             local samples, chapter_titles = self.chapter_analyzer:getDetailedChapterSamples(self.ui, 100, 60000, limit_percent == 100)
-
+            
             progress_msg:reportProgress(30)
-
+            
             -- 2. Immediate book text (Previous and Current page for maximum context relevance)
-            local end_page = current_page + 1
+            local end_page = self.chapter_analyzer:getEndPageForCurrentPage(self.ui, current_page)
             local book_text = self.chapter_analyzer:getTextFromPageRange(self.ui, math.max(1, current_page - 1), end_page, 25000)
-
+            
             local context_prefix = "SEARCH TARGET: \"" .. text .. "\"\n"
                 .. "IMPORTANT: The reader highlighted exactly this text. It IS a meaningful term from this book.\n"
                 .. "Even if the exact phrase does not appear in the page samples below, it was highlighted on the reader's current page. Treat it as a valid term and provide its definition.\n\n"
             book_text = context_prefix .. (book_text or "")
-
+            
             -- Always inject a direct reference to ensure the AI validates the term
             if book_text and text then
                 book_text = book_text .. "\n\n[TERM HIGHLIGHTED BY READER — MUST DEFINE]: \"" .. text .. "\""
             end
-
+            
             self:log("fetchSingleWord: extracted book_text length: " .. tostring(book_text and #book_text or 0))
-
+            
             progress_msg:reportProgress(40)
-
+            
             local context = {
                 reading_percent = limit_percent,
                 chapter_samples = samples,
@@ -118,7 +118,7 @@ function M:fetchSingleWord(text, pos0, pos1)
 
             local DataStorage = require("datastorage")
             local settings_xray_dir = DataStorage:getSettingsDir() .. "/xray"
-
+            
             -- Clean up orphaned fetch files
             pcall(function()
                 local ok, lfs = pcall(require, "libs/libkoreader-lfs")
@@ -137,8 +137,8 @@ function M:fetchSingleWord(text, pos0, pos1)
             if self.destroyed then return end
 
             local result_file = settings_xray_dir .. "/sw_fetch_" .. tostring(os.time()) .. ".json"
-            local started = self.ai_helper:lookupSingleWordAsync(text, context, result_file)
-            if not started then
+            local request_pid = self.ai_helper:lookupSingleWordAsync(text, context, result_file)
+            if not request_pid then
                 if progress_msg then UIManager:close(progress_msg) end
                 self:log("XRayPlugin: Failed to start async lookup")
                 return
@@ -152,7 +152,7 @@ function M:fetchSingleWord(text, pos0, pos1)
             local function poll()
                 if self.destroyed then
                     if self.ai_helper and self.ai_helper.cancelAsyncChild then
-                        self.ai_helper:cancelAsyncChild()
+                        self.ai_helper:cancelAsyncChild(request_pid)
                     end
                     pcall(function() os.remove(result_file) end)
                     self:log("XRayPlugin: Single word lookup cancelled or plugin destroyed")
@@ -162,17 +162,17 @@ function M:fetchSingleWord(text, pos0, pos1)
                     pcall(function() os.remove(result_file) end)
                     return
                 end
-
+                
                 -- Simulate gradual progress while waiting for AI
                 if current_progress < 95 then
                     current_progress = current_progress + 5
-                    if progress_msg then
+                    if progress_msg then 
                         progress_msg:reportProgress(current_progress)
                     end
                 end
-
+                
                 poll_count = poll_count + 1
-                local data, p_err_code, p_err_msg = self.ai_helper:checkAsyncResult(result_file)
+                local data, p_err_code, p_err_msg = self.ai_helper:checkAsyncResult(result_file, request_pid)
                 if data == nil then
                     if poll_count < max_polls then
                         UIManager:scheduleIn(2, poll)
@@ -217,7 +217,7 @@ function M:_processSingleWordResult(result, text, book_text, current_page)
     if result.is_valid then
         local item = result.item
         local item_type = result.type
-
+        
         -- Ensure tables exist before trying to merge
         self.characters = self.characters or {}
         self.locations = self.locations or {}
@@ -240,13 +240,16 @@ function M:_processSingleWordResult(result, text, book_text, current_page)
             -- Resolve current chapter title for history tracking
             local chapter_title = nil
             if self.ui and self.ui.document and current_page then
-                local toc = self.ui.document:getToc()
+                local toc = utils:flattenTOC(self.ui.document:getToc())
                 if toc then
+                    local max_p = -1
                     for _, entry in ipairs(toc) do
-                        if entry.page and entry.page <= current_page then
-                            chapter_title = entry.title
-                        else
-                            break
+                        if entry.page then
+                            local p = tonumber(entry.page)
+                            if p and p <= current_page and p >= max_p then
+                                max_p = p
+                                chapter_title = entry.title
+                            end
                         end
                     end
                 end
@@ -258,7 +261,7 @@ function M:_processSingleWordResult(result, text, book_text, current_page)
                 if (existing.name or ""):lower() == (item.name or ""):lower() then
                     -- Update description/role
                     for k, v in pairs(item) do existing[k] = v end
-
+                    
                     -- Record history for single word lookup
                     local desc_key = item_type == "historical_figure" and "biography" or "description"
                     if existing[desc_key] and existing[desc_key] ~= "" then
@@ -290,11 +293,11 @@ function M:_processSingleWordResult(result, text, book_text, current_page)
                 end
                 table.insert(target_list, item)
             end
-
+            
             -- Sort and save cache
             self:sortDataByFrequency(target_list, book_text, "name")
             if not self.cache_manager then self.cache_manager = require(plugin_path .. "xray_cachemanager"):new() end
-
+            
             if not self.book_data then
                 self.book_data = self.cache_manager:loadCache(self.ui.document.file) or {}
             end
@@ -307,10 +310,10 @@ function M:_processSingleWordResult(result, text, book_text, current_page)
             updated.book_type = self.book_type or updated.book_type
             updated.author_info = self.author_info or updated.author_info
             updated.last_fetch_page = updated.last_fetch_page
-
+            
             self.cache_manager:asyncSaveCache(self.ui.document.file, updated)
         end
-
+        
         -- Always show result if it's valid, even if it didn't merge into a target_list
         self.lookup_manager:showResult(item, item_type)
     else
@@ -320,7 +323,18 @@ function M:_processSingleWordResult(result, text, book_text, current_page)
 end
 
 function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_silent)
+    self._fetch_generation = (self._fetch_generation or 0) + 1
+    local fetch_generation = self._fetch_generation
+    self._active_fetch_generation = fetch_generation
     self.bg_fetch_active = true
+
+    local function clearFetchState()
+        if self._active_fetch_generation == fetch_generation then
+            self._active_fetch_generation = nil
+            self.bg_fetch_active = false
+        end
+    end
+
     if not self.ai_helper then
         local AIHelper = require(plugin_path .. "xray_aihelper")
         self.ai_helper = AIHelper
@@ -353,6 +367,25 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
     -- (which requires an InfoMessage widget and breaks with ButtonDialog).
     local wait_msg
     local is_cancelled = false
+    local result_file
+    local request_pid
+
+    local function finishActiveRequest()
+        request_pid = nil
+        result_file = nil
+        clearFetchState()
+    end
+
+    local function cancelActiveRequest(reason)
+        if request_pid and self.ai_helper and self.ai_helper.cancelAsyncChild then
+            self.ai_helper:cancelAsyncChild(request_pid)
+        end
+        if result_file then
+            pcall(function() os.remove(result_file) end)
+        end
+        finishActiveRequest()
+        self:log("XRayPlugin: " .. reason)
+    end
 
     if not is_silent then
         local ButtonDialog = require("ui/widget/buttondialog")
@@ -366,8 +399,8 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
                 text = self.loc:t("cancel") or "Cancel",
                 callback = function()
                     is_cancelled = true
-                    self:log("XRayPlugin: Fetch cancelled by user (button pressed)")
                     if wait_msg then UIManager:close(wait_msg) end
+                    cancelActiveRequest("Fetch cancelled by user")
                 end
             }}}
         }
@@ -375,14 +408,13 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
     end
 
     UIManager:scheduleIn(0.5, function()
-        if is_cancelled or self.destroyed then self.bg_fetch_active = false; return end
+        if is_cancelled or self.destroyed then clearFetchState(); return end
         if not self.chapter_analyzer then self.chapter_analyzer = require(plugin_path .. "xray_chapteranalyzer"):new() end
 
-        if not self.ui.document then return end
         local current_page = self.ui:getCurrentPage()
         local first_missing_page = last_fetch_page
         if is_update then
-            local toc = self.ui.document:getToc() or {}
+            local toc = utils:flattenTOC(self.ui.document:getToc())
             local candidate_chapters = {}
             for i = #toc, 1, -1 do
                 local entry = toc[i]
@@ -413,7 +445,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
         local end_page_analysis = current_page
         local spoiler_setting = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
         if spoiler_setting ~= "full_book" then
-            end_page_analysis = current_page + 1
+            end_page_analysis = self.chapter_analyzer:getEndPageForCurrentPage(self.ui, current_page)
         end
         local book_text = self.chapter_analyzer:getTextForAnalysis(self.ui, 20000, nil, end_page_analysis, first_missing_page)
         local known_chapters = {}
@@ -424,8 +456,8 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
         end
 
         UIManager:scheduleIn(0, function()
-            if is_cancelled or self.destroyed then self.bg_fetch_active = false; return end
-            if not self.ui or not self.ui.document then self.bg_fetch_active = false; return end
+            if is_cancelled or self.destroyed then clearFetchState(); return end
+            if not self.ui or not self.ui.document then clearFetchState(); return end
 
             local samples, chapter_titles = self.chapter_analyzer:getDetailedChapterSamples(self.ui, 200, 150000, reading_percent == 100, first_missing_page, known_chapters)
             local annots = self.chapter_analyzer:getAnnotationsForAnalysis(self.ui)
@@ -434,7 +466,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
                 if wait_msg then UIManager:close(wait_msg) end
                 if not is_silent then UIManager:show(InfoMessage:new{ text = self.loc:t("error_extract_text") or "Error: Could not extract book text.", timeout = 5 }) end
                 self:log("XRayPlugin: Text extraction failed" .. (is_silent and " (silent)" or ""))
-                self.bg_fetch_active = false
+                clearFetchState()
                 return
             end
 
@@ -457,7 +489,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
             if not req_params then
                 if wait_msg then UIManager:close(wait_msg) end
                 self:log("XRayPlugin: Failed to build request: " .. tostring(err_msg))
-                self.bg_fetch_active = false
+                clearFetchState()
                 if not is_silent then
                     local title, text = utils:getFriendlyError(err_code, err_msg, self.loc)
                     UIManager:show(ConfirmBox:new{
@@ -487,38 +519,37 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
                 end
             end)
 
-            local result_file = settings_xray_dir .. "/bg_fetch_" .. tostring(os.time()) .. ".json"
+            result_file = settings_xray_dir .. "/bg_fetch_" .. tostring(os.time()) .. "_" .. tostring(fetch_generation) .. ".json"
             local started = self.ai_helper:makeRequestAsync(req_params, result_file)
             if not started then
                 if wait_msg then UIManager:close(wait_msg) end
                 self:log("XRayPlugin: Failed to start async fetch")
-                self.bg_fetch_active = false
+                pcall(function() os.remove(result_file) end)
+                result_file = nil
+                clearFetchState()
                 return
             end
+            request_pid = started
 
             local poll_count = 0
             local max_polls = 300 -- 10 minutes at 2s intervals
             local function poll()
                 if is_cancelled or self.destroyed then
-                    pcall(function() os.remove(result_file) end)
-                    self.bg_fetch_active = false
-                    self:log("XRayPlugin: Fetch cancelled or plugin destroyed")
+                    cancelActiveRequest(self.destroyed and "Fetch stopped because plugin was destroyed" or "Fetch cancelled")
                     return
                 end
                 if not self.ui or not self.ui.document then
-                    pcall(function() os.remove(result_file) end)
-                    self.bg_fetch_active = false
+                    cancelActiveRequest("Fetch stopped because the document was closed")
                     return
                 end
                 poll_count = poll_count + 1
-                local data, p_err_code, p_err_msg = self.ai_helper:checkAsyncResult(result_file)
+                local data, p_err_code, p_err_msg = self.ai_helper:checkAsyncResult(result_file, request_pid)
                 if data == nil then
                     if poll_count < max_polls then
                         UIManager:scheduleIn(2, poll)
                     else
                         if wait_msg then UIManager:close(wait_msg) end
-                        self.bg_fetch_active = false
-                        self:log("XRayPlugin: Fetch timed out")
+                        cancelActiveRequest("Fetch timed out")
                         if not is_silent then
                             local title, text = utils:getFriendlyError("error_timeout", nil, self.loc)
                             UIManager:show(ConfirmBox:new{
@@ -530,7 +561,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
                     end
                 elseif data == false then
                     if wait_msg then UIManager:close(wait_msg) end
-                    self.bg_fetch_active = false
+                    finishActiveRequest()
                     self:log("XRayPlugin: Fetch failed: " .. tostring(p_err_msg))
                     if not is_silent then
                         local title, text = utils:getFriendlyError(p_err_code, p_err_msg, self.loc)
@@ -542,7 +573,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
                     end
                 else
                     if wait_msg then UIManager:close(wait_msg) end
-                    self.bg_fetch_active = false
+                    finishActiveRequest()
                     self:finalizeXRayData(data, title, author, book_text, is_update, is_silent, current_page)
                 end
             end
@@ -596,13 +627,16 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
     -- Resolve current chapter title for history tracking
     local chapter_title = nil
     if self.ui and self.ui.document and current_page then
-        local toc = self.ui.document:getToc()
+        local toc = utils:flattenTOC(self.ui.document:getToc())
         if toc then
+            local max_p = -1
             for _, entry in ipairs(toc) do
-                if entry.page and entry.page <= current_page then
-                    chapter_title = entry.title
-                else
-                    break
+                if entry.page then
+                    local p = tonumber(entry.page)
+                    if p and p <= current_page and p >= max_p then
+                        max_p = p
+                        chapter_title = entry.title
+                    end
                 end
             end
         end
@@ -624,7 +658,7 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
                     -- Replace existing description with the AI's rewritten cohesive summary
                     if new_char.description and new_char.description ~= "" then
                         existing_char.description = new_char.description
-
+                        
                         -- Record history
                         existing_char.history = existing_char.history or {}
                         local dup = false
@@ -673,7 +707,7 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
                 if existing_fig.name:lower() == new_fig.name:lower() then
                     if new_fig.biography and new_fig.biography ~= "" then
                         existing_fig.biography = new_fig.biography
-
+                        
                         -- Record history
                         existing_fig.history = existing_fig.history or {}
                         local dup = false
@@ -719,7 +753,7 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
                 if existing_loc.name:lower() == new_loc.name:lower() then
                     if new_loc.description and new_loc.description ~= "" then
                         existing_loc.description = new_loc.description
-
+                        
                         -- Record history
                         existing_loc.history = existing_loc.history or {}
                         local dup = false
@@ -781,27 +815,43 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
         if final_book_data.book_type then
             self.book_type = final_book_data.book_type
         end
-        -- Merge timeline: duplicate = same chapter name AND same page.
-        local toc = self.ui.document:getToc()
-        -- Assign TOC pages to incoming events before dedup check.
-        self:assignTimelinePages(final_book_data.timeline or {}, toc, true)
-        for _, new_event in ipairs(final_book_data.timeline or {}) do
+
+        -- Segregate series_prior timeline items from current book timeline items
+        local prior_timeline = {}
+        local current_timeline = {}
+        for _, ev in ipairs(self.timeline or {}) do
+            if ev.source == "series_prior" then
+                table.insert(prior_timeline, ev)
+            else
+                table.insert(current_timeline, ev)
+            end
+        end
+
+        local toc = self.ui and self.ui.document and self.ui.document.getToc and self.ui.document:getToc() or {}
+        local incoming_timeline = final_book_data.timeline or {}
+        self:assignTimelinePages(incoming_timeline, toc, true)
+
+        for _, new_event in ipairs(incoming_timeline) do
             local found = false
             local new_norm = self:normalizeChapterName(new_event.chapter or "")
-            for _, existing_event in ipairs(self.timeline or {}) do
+            for _, existing_event in ipairs(current_timeline) do
                 local exist_norm = self:normalizeChapterName(existing_event.chapter or "")
                 if new_norm == exist_norm then
-                    -- Both pages must be present and equal to count as a duplicate
                     if new_event.page and existing_event.page and
                        tonumber(new_event.page) == tonumber(existing_event.page) then
+                        existing_event.event = new_event.event or existing_event.event
+                        existing_event.chapter = new_event.chapter or existing_event.chapter
                         found = true
                         break
                     end
                 end
             end
-            if not found then table.insert(self.timeline, new_event) end
+            if not found then table.insert(current_timeline, new_event) end
         end
-        -- Sort the merged timeline chronologically
+
+        self.timeline = {}
+        for _, ev in ipairs(current_timeline) do table.insert(self.timeline, ev) end
+        for _, ev in ipairs(prior_timeline) do table.insert(self.timeline, ev) end
         self:sortTimelineByTOC(self.timeline)
     else
         self.characters = final_book_data.characters
@@ -842,10 +892,22 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
         end
         self.terms = final_book_data.terms or {}
         self.book_type = final_book_data.book_type
-        self.timeline = final_book_data.timeline
-        -- Assign TOC pages and sort
-        local toc = self.ui.document:getToc()
-        self:assignTimelinePages(self.timeline or {}, toc, true)
+
+        -- Preserve series_prior items when non-merge update/fetch overwrites current timeline
+        local prior_timeline = {}
+        for _, ev in ipairs(self.timeline or {}) do
+            if ev.source == "series_prior" then
+                table.insert(prior_timeline, ev)
+            end
+        end
+
+        local current_timeline = final_book_data.timeline or {}
+        local toc = self.ui and self.ui.document and self.ui.document.getToc and self.ui.document:getToc() or {}
+        self:assignTimelinePages(current_timeline, toc, true)
+
+        self.timeline = {}
+        for _, ev in ipairs(current_timeline) do table.insert(self.timeline, ev) end
+        for _, ev in ipairs(prior_timeline) do table.insert(self.timeline, ev) end
         self:sortTimelineByTOC(self.timeline)
     end
 
@@ -872,7 +934,7 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
     updated_data.timeline = self.timeline
     updated_data.author_info = self.author_info or updated_data.author_info
     updated_data.last_fetch_page = current_page
-
+    
     local s = self.ai_helper and self.ai_helper.settings or {}
     updated_data.timeline_event_len = s.timeline_event_len or 80
 
@@ -880,6 +942,39 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
 
     if not self.cache_manager then self.cache_manager = require(plugin_path .. "xray_cachemanager"):new() end
     local cache_saved = self.cache_manager:asyncSaveCache(self.ui.document.file, updated_data)
+
+    -- If book is part of a series, update this book's entry in SeriesCache
+    if self.series_manager and (updated_data.series_slug or (self.ui and self.ui.document)) then
+        pcall(function()
+            local props = self.ui and self.ui.document and self.ui.document:getProps() or {}
+            local series_info = self.series_manager:detectSeries(props, title, author, nil)
+            local slug = updated_data.series_slug or (series_info and series_info.slug)
+            local index = series_info and series_info.index
+            if slug and index then
+                local cache_data = self.series_manager:loadSeriesCache(slug)
+                if cache_data and cache_data.books then
+                    local function filterCurrentOnly(tbl)
+                        local res = {}
+                        for _, item in ipairs(tbl or {}) do
+                            if item.source ~= "series_prior" then
+                                table.insert(res, item)
+                            end
+                        end
+                        return res
+                    end
+                    cache_data.books[index] = {
+                        title = title,
+                        author = author,
+                        characters = filterCurrentOnly(self.characters),
+                        locations = filterCurrentOnly(self.locations),
+                        terms = filterCurrentOnly(self.terms),
+                        timeline = filterCurrentOnly(self.timeline),
+                    }
+                    self.series_manager:saveSeriesCache(slug, cache_data)
+                end
+            end
+        end)
+    end
 
     UIManager:scheduleIn(1, function()
         if self.destroyed then return end
@@ -906,7 +1001,7 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
         local label_chars = self.loc:t("entity_label_characters") or "Characters"
         local label_locs = self.loc:t("entity_label_locations") or "Locations"
         local label_timeline = self.loc:t("menu_timeline") or "Timeline"
-        local summary = string.format("%s\n\n%s: %d\n%s: %d\n%s: %d\n\n%s",
+        local summary = string.format("%s\n\n%s: %d\n%s: %d\n%s: %d\n\n%s", 
             fetch_complete,
             label_chars, #self.characters,
             label_locs, #self.locations,
@@ -915,8 +1010,8 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
 
         local success_dialog
         local ButtonDialog = require("ui/widget/buttondialog")
-        success_dialog = ButtonDialog:new{ title = (self.loc:t("fetch_successful") or "Fetch successful") .. "\n\n" .. summary, buttons = {{{ text = self.loc:t("ok"), callback = function()
-            UIManager:close(success_dialog)
+        success_dialog = ButtonDialog:new{ title = (self.loc:t("fetch_successful") or "Fetch successful") .. "\n\n" .. summary, buttons = {{{ text = self.loc:t("ok"), callback = function() 
+            UIManager:close(success_dialog) 
         end }}} }
         UIManager:show(success_dialog)
     end
@@ -924,6 +1019,11 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
 end
 
 function M:runPostFetchDuplicateCheck(title, author, reading_percent, is_silent)
+    if self.destroyed then return end
+    if not self.ui or not self.ui.document or not self.ui.getCurrentPage then
+        self:log("XRayPlugin: Skipping duplicate check because the reader document is unavailable")
+        return
+    end
     if self._unit_scan_in_progress then
         self:log("XRayPlugin: Deferring duplicate check because unit scan is in progress")
         UIManager:scheduleIn(5, function()
@@ -938,21 +1038,29 @@ function M:runPostFetchDuplicateCheck(title, author, reading_percent, is_silent)
     local DataStorage = require("datastorage")
     local settings_xray_dir = DataStorage:getSettingsDir() .. "/xray"
 
+    -- Gather a small book text anchor for the spoiler guard.
+    -- This is done once here and shared across both list checks.
+    if not self.chapter_analyzer then
+        self.chapter_analyzer = require(plugin_path .. "xray_chapteranalyzer"):new()
+    end
+    local dup_book_text = self.chapter_analyzer:getTextForAnalysis(
+        self.ui, 15000, nil, self.ui:getCurrentPage())
+
     -- Run checks for characters and locations in sequence using async subprocesses
     local function checkListAsync(list, list_name, entity_label, on_done)
         if not list or #list < 2 then on_done(nil); return end
-
+        
         local unique_id = tostring(os.time()) .. "_" .. tostring(math.random(1000, 9999))
         local result_file = settings_xray_dir .. "/dupe_res_" .. list_name .. "_" .. unique_id .. ".json"
-
+        
         self:log("XRayPlugin: Starting async duplicate check for " .. list_name)
-        local pid = self.ai_helper:findDuplicatesAsync(title, author, list, entity_label, reading_percent, result_file)
+        local pid = self.ai_helper:findDuplicatesAsync(title, author, list, entity_label, reading_percent, result_file, dup_book_text)
         if not pid then
             self:log("XRayPlugin: Failed to start async duplicate check for " .. list_name)
             on_done(nil)
             return
         end
-
+        
         local poll_count = 0
         local max_polls = 150 -- 5 minutes at 2s intervals
         local function poll()
@@ -961,7 +1069,7 @@ function M:runPostFetchDuplicateCheck(title, author, reading_percent, is_silent)
                 return
             end
             poll_count = poll_count + 1
-            local data, p_err_code, p_err_msg = self.ai_helper:checkAsyncResult(result_file)
+            local data, p_err_code, p_err_msg = self.ai_helper:checkAsyncResult(result_file, pid)
             if data == nil then
                 if poll_count < max_polls then
                     UIManager:scheduleIn(2, poll)
@@ -989,7 +1097,7 @@ function M:runPostFetchDuplicateCheck(title, author, reading_percent, is_silent)
                 self.loc:t("entity_label_locations") or "locations",
                 function(loc_pairs)
                     local rejected_pairs = self.book_data and self.book_data.rejected_merge_pairs or {}
-
+                    
                     local function filterRejected(pairs)
                         if not pairs then return nil end
                         local filtered = {}
@@ -1039,7 +1147,7 @@ function M:runPostFetchDuplicateCheck(title, author, reading_percent, is_silent)
 end
 
 function M:fetchMoreCharacters()
-    require("ui/network/manager"):runWhenOnline(function()
+    require("ui/network/manager"):runWhenOnline(function() 
         if not self.ai_helper then
             local AIHelper = require(plugin_path .. "xray_aihelper")
             self.ai_helper = AIHelper
@@ -1051,11 +1159,11 @@ function M:fetchMoreCharacters()
         local current_page = self.ui:getCurrentPage()
         local reading_percent = math.floor((current_page / self.ui.document:getPageCount()) * 100)
         local spoiler_setting = self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
-
+        
         if spoiler_setting == "full_book" then
             reading_percent = 100
         end
-
+        
         local menu_to_close = self.char_menu
         self.char_menu = nil
 
@@ -1073,41 +1181,41 @@ function M:fetchMoreCharacters()
             }}}
         }
         UIManager:show(wait_msg)
-
+        
         UIManager:scheduleIn(0.5, function()
             if is_cancelled or self.destroyed then return end
             if not self.chapter_analyzer then self.chapter_analyzer = require(plugin_path .. "xray_chapteranalyzer"):new() end
-
+            
             -- EVEN SAMPLING: Divide the readable range into equal segments
             local current_page = self.ui:getCurrentPage()
             local pages_per_sample = 20
             local chars_per_sample = 10000
             local num_samples = 6
-
+            
             -- Track call count to shift windows on each invocation
             self.more_chars_call_count = (self.more_chars_call_count or 0) + 1
             local call_num = self.more_chars_call_count
             local offset = (call_num - 1) * pages_per_sample
             self:log("XRayPlugin: More chars call #" .. call_num .. " (offset: " .. offset .. " pages)")
-
+            
             -- Divide readable range into equal segments
             local readable_pages = math.max(1, current_page)
             local segment_size = math.floor(readable_pages / num_samples)
             if segment_size < pages_per_sample then segment_size = pages_per_sample end
-
+            
             local text_parts = {}
             for i = 0, num_samples - 1 do
                 local segment_start = i * segment_size
                 local sample_start = math.min(segment_start + offset, readable_pages - pages_per_sample)
                 sample_start = math.max(1, sample_start)
-
+                
                 -- Wrap around within the segment if the offset pushes past the segment boundary
                 local segment_end = (i + 1) * segment_size
                 if sample_start >= segment_end and i < num_samples - 1 then
                     sample_start = segment_start + ((offset) % segment_size)
                     sample_start = math.max(1, math.min(sample_start, readable_pages - pages_per_sample))
                 end
-
+                
                 if sample_start <= current_page then
                     local end_page = math.min(sample_start + pages_per_sample, current_page)
                     local sample = self.chapter_analyzer:getTextFromPageRange(self.ui, sample_start, end_page, chars_per_sample)
@@ -1118,27 +1226,27 @@ function M:fetchMoreCharacters()
                 end
             end
             local book_text = table.concat(text_parts, "\n\n---\n\n")
-
+            
             local exclude_list = {}
             for _, char in ipairs(self.characters or {}) do
                 table.insert(exclude_list, char.name)
             end
-
-            local context = {
-                reading_percent = reading_percent,
-                filename = self.ui.document.file:match("([^/\\]+)$"),
-                series = props.series or props.Series,
+            
+            local context = { 
+                reading_percent = reading_percent, 
+                filename = self.ui.document.file:match("([^/\\]+)$"), 
+                series = props.series or props.Series, 
                 book_text = book_text,
                 exclude_characters = table.concat(exclude_list, ", ")
             }
-
+            
             self.ai_helper:setTrapWidget(wait_msg)
             local more_data, error_code, error_msg = self.ai_helper:getMoreCharacters(title, author, nil, context)
             self.ai_helper:resetTrapWidget()
-
+            
             if wait_msg then UIManager:close(wait_msg) end
             if is_cancelled or error_code == "USER_CANCELLED" then return end
-
+            
             if not more_data or not more_data.characters then
                 local title, text = utils:getFriendlyError(error_code, error_msg, self.loc)
                 UIManager:show(ConfirmBox:new{
@@ -1148,7 +1256,7 @@ function M:fetchMoreCharacters()
                 })
                 return
             end
-
+            
             local new_count = 0
             for _, new_char in ipairs(more_data.characters) do
                 local found = false
@@ -1163,12 +1271,12 @@ function M:fetchMoreCharacters()
                     new_count = new_count + 1
                 end
             end
-
+            
             -- Re-sort by frequency based on the newly extracted samples
             if book_text and #book_text > 0 then
                 self:sortDataByFrequency(self.characters, book_text, "name")
             end
-
+            
             -- Save to cache
             if not self.cache_manager then self.cache_manager = require(plugin_path .. "xray_cachemanager"):new() end
             if not self.book_data then
@@ -1184,7 +1292,7 @@ function M:fetchMoreCharacters()
             updated_data.book_type = self.book_type or updated_data.book_type
             updated_data.timeline = self.timeline or updated_data.timeline
             updated_data.author_info = self.author_info or updated_data.author_info
-
+            
             self.cache_manager:asyncSaveCache(self.ui.document.file, updated_data)
 
             local current_page = self.ui and self.ui.getCurrentPage and self.ui:getCurrentPage() or 1
@@ -1197,7 +1305,7 @@ function M:fetchMoreCharacters()
                 if self.destroyed then return end
                 self:runPostFetchDuplicateCheck(title, author, reading_percent, false)
             end)
-
+            
             local added_msg = self.loc:t("msg_added_characters", new_count)
             UIManager:show(InfoMessage:new{ text = added_msg, timeout = 3 })
 
@@ -1242,23 +1350,23 @@ function M:fetchMoreTerms()
             }}}
         }
         UIManager:show(wait_msg)
-
+        
         UIManager:scheduleIn(0.5, function()
             if is_cancelled or self.destroyed then return end
             if not self.chapter_analyzer then self.chapter_analyzer = require(plugin_path .. "xray_chapteranalyzer"):new() end
-
+            
             local pages_per_sample = 20
             local chars_per_sample = 10000
             local num_samples = 6
-
+            
             self.more_terms_call_count = (self.more_terms_call_count or 0) + 1
             local call_num = self.more_terms_call_count
             local offset = (call_num - 1) * pages_per_sample
-
+            
             local readable_pages = math.max(1, current_page)
             local segment_size = math.floor(readable_pages / num_samples)
             if segment_size < pages_per_sample then segment_size = pages_per_sample end
-
+            
             local text_parts = {}
             for i = 0, num_samples - 1 do
                 local segment_start = i * segment_size
@@ -1293,7 +1401,7 @@ function M:fetchMoreTerms()
 
             if wait_msg then UIManager:close(wait_msg) end
             if is_cancelled or error_code == "USER_CANCELLED" then return end
-
+            
             if not more_data or not more_data.terms then
                 local err_title, err_text = utils:getFriendlyError(error_code, error_msg, self.loc)
                 UIManager:show(ConfirmBox:new{
@@ -1303,7 +1411,7 @@ function M:fetchMoreTerms()
                 })
                 return
             end
-
+            
             local new_count = 0
             for _, new_term in ipairs(more_data.terms) do
                 local found = false
@@ -1317,12 +1425,12 @@ function M:fetchMoreTerms()
                     new_count = new_count + 1
                 end
             end
-
+            
             self.terms = self:deduplicateByName(self.terms, "name")
             if book_text and #book_text > 0 then
                 self:sortDataByFrequency(self.terms, book_text, "name")
             end
-
+            
             if not self.cache_manager then self.cache_manager = require(plugin_path .. "xray_cachemanager"):new() end
             if not self.book_data then
                 self.book_data = self.cache_manager:loadCache(self.ui.document.file) or {}
@@ -1337,9 +1445,9 @@ function M:fetchMoreTerms()
             updated_data.book_type = self.book_type or updated_data.book_type
             updated_data.timeline = self.timeline or updated_data.timeline
             updated_data.author_info = self.author_info or updated_data.author_info
-
+            
             self.cache_manager:asyncSaveCache(self.ui.document.file, updated_data)
-
+            
             local added_msg = self.loc:t("msg_added_terms", new_count)
             UIManager:show(InfoMessage:new{ text = added_msg, timeout = 3 })
 
@@ -1374,18 +1482,18 @@ function M:fetchAuthorInfo()
     UIManager:show(wait_msg)
     UIManager:scheduleIn(0.5, function()
         if is_cancelled or self.destroyed then return end
-
+        
         if not self.chapter_analyzer then
             local ChapterAnalyzer = require(plugin_path .. "xray_chapteranalyzer")
             self.chapter_analyzer = ChapterAnalyzer:new()
         end
         local book_text = self.chapter_analyzer:getTextForAnalysis(self.ui, 1000, nil, self.ui:getCurrentPage())
         local context = { book_text = book_text }
-
+        
         self.ai_helper:setTrapWidget(wait_msg)
         local author_data, error_code, error_msg = self.ai_helper:getAuthorData(title, author, nil, context)
         self.ai_helper:resetTrapWidget()
-
+        
         if wait_msg then UIManager:close(wait_msg) end
         if is_cancelled or error_code == "USER_CANCELLED" then return end
 
@@ -1398,11 +1506,11 @@ function M:fetchAuthorInfo()
             })
             return
         end
-        self.author_info = {
-            name = sanitizeMetadata(author_data.author or author),
-            description = sanitizeMetadata(author_data.author_bio or self.loc:t("msg_no_bio") or "No biography available."),
-            birthDate = sanitizeMetadata(author_data.author_birth or "---"),
-            deathDate = sanitizeMetadata(author_data.author_death or "---")
+        self.author_info = { 
+            name = sanitizeMetadata(author_data.author or author), 
+            description = sanitizeMetadata(author_data.author_bio or self.loc:t("msg_no_bio") or "No biography available."), 
+            birthDate = sanitizeMetadata(author_data.author_birth or "---"), 
+            deathDate = sanitizeMetadata(author_data.author_death or "---") 
         }
         if not self.cache_manager then self.cache_manager = require(plugin_path .. "xray_cachemanager"):new() end
         if not self.book_data then
@@ -1414,13 +1522,13 @@ function M:fetchAuthorInfo()
         cache.author_bio = self.author_info.description
         cache.author_birth = self.author_info.birthDate
         cache.author_death = self.author_info.deathDate
-
+        
         -- Store book_type if AI detected it during author fetch
         if author_data.book_type then
             cache.book_type = author_data.book_type
             self.book_type = author_data.book_type
         end
-
+        
         self.cache_manager:asyncSaveCache(self.ui.document.file, cache)
         self:showAuthorInfo()
     end)
@@ -1428,11 +1536,11 @@ end
 
 function M:checkWeeklyUpdate()
     if not self.ai_helper or not self.ai_helper.settings then return end
-
+    
     local last_check = self.ai_helper.settings.last_update_check or 0
     local now = os.time()
     local week_seconds = 7 * 24 * 60 * 60
-
+    
     if (now - last_check) > week_seconds then
         local NetworkMgr = require("ui/network/manager")
         if NetworkMgr:isConnected() and NetworkMgr:isOnline() then
@@ -1449,10 +1557,15 @@ end
 function M:mergeSeriesContext(cache_data, series_info)
     if not cache_data or not series_info then return end
 
+    self.characters = self.characters or {}
+    self.locations = self.locations or {}
+    self.terms = self.terms or {}
+    self.timeline = self.timeline or {}
+
     local function filterPrior(tbl)
         local filtered = {}
         for _, item in ipairs(tbl or {}) do
-            if item.source ~= "series_prior" then
+            if item and item.source ~= "series_prior" then
                 table.insert(filtered, item)
             end
         end
@@ -1464,97 +1577,112 @@ function M:mergeSeriesContext(cache_data, series_info)
     self.terms = filterPrior(self.terms)
     self.timeline = filterPrior(self.timeline)
 
-    for idx = 1, series_info.index - 1 do
+    for idx = 1, (series_info.index or 1) - 1 do
         local book_data = cache_data.books and cache_data.books[idx]
         if book_data then
             for _, new_char in ipairs(book_data.characters or {}) do
-                local found = false
-                local lower_name = new_char.name:lower()
-                for _, existing_char in ipairs(self.characters) do
-                    local matches = false
-                    if existing_char.name:lower() == lower_name then
-                        matches = true
-                    else
-                        for _, alias in ipairs(existing_char.aliases or {}) do
-                            if alias:lower() == lower_name then
+                if new_char and new_char.name and new_char.name ~= "" then
+                    local found = false
+                    local lower_name = new_char.name:lower()
+                    for _, existing_char in ipairs(self.characters) do
+                        if existing_char and existing_char.name then
+                            local matches = false
+                            if existing_char.name:lower() == lower_name then
                                 matches = true
+                            else
+                                for _, alias in ipairs(existing_char.aliases or {}) do
+                                    if type(alias) == "string" and alias:lower() == lower_name then
+                                        matches = true
+                                        break
+                                    end
+                                end
+                            end
+                            
+                            if matches then
+                                found = true
+                                local prefix = string.format("[From Book %d] ", idx)
+                                if new_char.description and new_char.description ~= "" then
+                                    local exist_desc = existing_char.description or ""
+                                    if not exist_desc:find(prefix, 1, true) then
+                                        existing_char.description = prefix .. new_char.description .. "\n\n" .. exist_desc
+                                    end
+                                end
                                 break
                             end
                         end
                     end
-
-                    if matches then
-                        found = true
-                        local prefix = string.format("[From Book %d] ", idx)
-                        if new_char.description and new_char.description ~= "" then
-                            if not existing_char.description:find(prefix, 1, true) then
-                                existing_char.description = prefix .. new_char.description .. "\n\n" .. existing_char.description
-                            end
-                        end
-                        break
+                    
+                    if not found then
+                        local char_copy = {}
+                        for k, v in pairs(new_char) do char_copy[k] = v end
+                        char_copy.source = "series_prior"
+                        char_copy.source_book = idx
+                        table.insert(self.characters, char_copy)
                     end
-                end
-
-                if not found then
-                    local char_copy = {}
-                    for k, v in pairs(new_char) do char_copy[k] = v end
-                    char_copy.source = "series_prior"
-                    char_copy.source_book = idx
-                    table.insert(self.characters, char_copy)
                 end
             end
 
             for _, new_loc in ipairs(book_data.locations or {}) do
-                local found = false
-                local lower_name = new_loc.name:lower()
-                for _, existing_loc in ipairs(self.locations) do
-                    if existing_loc.name:lower() == lower_name then
-                        found = true
-                        local prefix = string.format("[From Book %d] ", idx)
-                        if new_loc.description and new_loc.description ~= "" then
-                            if not existing_loc.description:find(prefix, 1, true) then
-                                existing_loc.description = prefix .. new_loc.description .. "\n\n" .. existing_loc.description
+                if new_loc and new_loc.name and new_loc.name ~= "" then
+                    local found = false
+                    local lower_name = new_loc.name:lower()
+                    for _, existing_loc in ipairs(self.locations) do
+                        if existing_loc and existing_loc.name then
+                            if existing_loc.name:lower() == lower_name then
+                                found = true
+                                local prefix = string.format("[From Book %d] ", idx)
+                                if new_loc.description and new_loc.description ~= "" then
+                                    local exist_desc = existing_loc.description or ""
+                                    if not exist_desc:find(prefix, 1, true) then
+                                        existing_loc.description = prefix .. new_loc.description .. "\n\n" .. exist_desc
+                                    end
+                                end
+                                break
                             end
                         end
-                        break
                     end
-                end
-                if not found then
-                    local loc_copy = {}
-                    for k, v in pairs(new_loc) do loc_copy[k] = v end
-                    loc_copy.source = "series_prior"
-                    loc_copy.source_book = idx
-                    table.insert(self.locations, loc_copy)
+                    if not found then
+                        local loc_copy = {}
+                        for k, v in pairs(new_loc) do loc_copy[k] = v end
+                        loc_copy.source = "series_prior"
+                        loc_copy.source_book = idx
+                        table.insert(self.locations, loc_copy)
+                    end
                 end
             end
 
             for _, new_term in ipairs(book_data.terms or {}) do
-                local found = false
-                local lower_name = new_term.name:lower()
-                for _, existing_term in ipairs(self.terms) do
-                    if existing_term.name:lower() == lower_name then
-                        found = true
-                        local prefix = string.format("[From Book %d] ", idx)
-                        if new_term.definition and new_term.definition ~= "" then
-                            if not existing_term.definition:find(prefix, 1, true) then
-                                existing_term.definition = prefix .. new_term.definition .. "\n\n" .. existing_term.definition
+                if new_term and new_term.name and new_term.name ~= "" then
+                    local found = false
+                    local lower_name = new_term.name:lower()
+                    for _, existing_term in ipairs(self.terms) do
+                        if existing_term and existing_term.name then
+                            if existing_term.name:lower() == lower_name then
+                                found = true
+                                local prefix = string.format("[From Book %d] ", idx)
+                                if new_term.definition and new_term.definition ~= "" then
+                                    local exist_def = existing_term.definition or ""
+                                    if not exist_def:find(prefix, 1, true) then
+                                        existing_term.definition = prefix .. new_term.definition .. "\n\n" .. exist_def
+                                    end
+                                end
+                                break
                             end
                         end
-                        break
                     end
-                end
-                if not found then
-                    local term_copy = {}
-                    for k, v in pairs(new_term) do term_copy[k] = v end
-                    term_copy.source = "series_prior"
-                    term_copy.source_book = idx
-                    table.insert(self.terms, term_copy)
+                    if not found then
+                        local term_copy = {}
+                        for k, v in pairs(new_term) do term_copy[k] = v end
+                        term_copy.source = "series_prior"
+                        term_copy.source_book = idx
+                        table.insert(self.terms, term_copy)
+                    end
                 end
             end
 
             local events = {}
             for _, new_event in ipairs(book_data.timeline or {}) do
-                if new_event.event and new_event.event ~= "" then
+                if new_event and new_event.event and new_event.event ~= "" then
                     table.insert(events, new_event.event)
                 end
             end
@@ -1579,7 +1707,7 @@ function M:mergeSeriesContext(cache_data, series_info)
         end
     end
 
-    local toc = self.ui.document:getToc() or {}
+    local toc = self.ui and self.ui.document and self.ui.document.getToc and utils:flattenTOC(self.ui.document:getToc()) or {}
     self:assignTimelinePages(self.timeline, toc, true)
     self:sortTimelineByTOC(self.timeline)
 
@@ -1587,19 +1715,21 @@ function M:mergeSeriesContext(cache_data, series_info)
     if not self.cache_manager then
         self.cache_manager = require(plugin_path .. "xray_cachemanager"):new()
     end
-    local book_path = self.ui.document.file
-    if not self.book_data then
-        self.book_data = self.cache_manager:loadCache(book_path) or {}
+    local book_path = self.ui and self.ui.document and self.ui.document.file
+    if book_path then
+        if not self.book_data then
+            self.book_data = self.cache_manager:loadCache(book_path) or {}
+        end
+        local cache = self.book_data
+        cache.series_context_loaded = true
+        cache.series_slug = series_info.slug
+        cache.characters = self.characters
+        cache.locations = self.locations
+        cache.terms = self.terms
+        cache.timeline = self.timeline
+        self.cache_manager:asyncSaveCache(book_path, cache)
+        self.book_data = cache
     end
-    local cache = self.book_data
-    cache.series_context_loaded = true
-    cache.series_slug = series_info.slug
-    cache.characters = self.characters
-    cache.locations = self.locations
-    cache.terms = self.terms
-    cache.timeline = self.timeline
-    self.cache_manager:asyncSaveCache(book_path, cache)
-    self.book_data = cache
 end
 
 function M:fetchSeriesContext(is_silent, init_wait_dialog, cancel_ref)
@@ -1775,7 +1905,7 @@ function M:fetchSeriesContext(is_silent, init_wait_dialog, cancel_ref)
                     index = current_book.index
                 }
                 local prompt = self.ai_helper:createPrompt(current_book.title, current_book.author or author, context, "series_book_summary")
-
+                
                 self.ai_helper:setTrapWidget(wait_msg)
                 local result, err_code, err_msg = self.ai_helper:executeUnifiedRequest(prompt)
                 self.ai_helper:resetTrapWidget()

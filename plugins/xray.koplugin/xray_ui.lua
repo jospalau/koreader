@@ -2234,6 +2234,12 @@ function M:showAIFindDuplicatesFlow(list, list_name, entity_label)
     local spoiler_setting = self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
     if spoiler_setting == "full_book" then reading_percent = 100 end
 
+    if not self.chapter_analyzer then
+        self.chapter_analyzer = require(plugin_path .. "xray_chapteranalyzer"):new()
+    end
+    local dup_book_text = self.chapter_analyzer:getTextForAnalysis(
+        self.ui, 15000, nil, current_page)
+
     local wait_msg = InfoMessage:new{
         text = self.loc:t("ai_scanning_duplicates") or "AI is scanning for duplicates...",
         timeout = 120
@@ -2243,7 +2249,7 @@ function M:showAIFindDuplicatesFlow(list, list_name, entity_label)
     UIManager:scheduleIn(0.1, function()
         if self.destroyed then return end
         local pairs_found, err_code, err_msg = self.ai_helper:findDuplicates(
-            title, author, list, entity_label, reading_percent
+            title, author, list, entity_label, reading_percent, dup_book_text
         )
         UIManager:close(wait_msg)
 
@@ -3237,7 +3243,8 @@ end
 
 function M:showTimeline()
     if not self.timeline or #self.timeline == 0 then UIManager:show(InfoMessage:new{ text = self.loc:t("no_timeline_data"), timeout = 3 }); return end
-    local toc = self.ui.document:getToc()
+    local utils = require(plugin_path .. "xray_utils")
+    local toc = utils:flattenTOC(self.ui.document:getToc())
     self:assignTimelinePages(self.timeline, toc, true)
     self:sortTimelineByTOC(self.timeline)
     
@@ -4386,8 +4393,8 @@ function M:checkSeriesContext()
     local DataStorage = require("datastorage")
     local result_file = DataStorage:getSettingsDir() .. "/xray/bg_series_detect_" .. tostring(os.time()) .. ".json"
     
-    local started = self.ai_helper:makeRequestAsync(req_params, result_file)
-    if not started then
+    local request_pid = self.ai_helper:makeRequestAsync(req_params, result_file)
+    if not request_pid then
         self:log("XRayPlugin: Series: Async check not supported/failed (e.g. on Windows). Skipping automatic AI fallback.")
         return
     end
@@ -4404,7 +4411,7 @@ function M:checkSeriesContext()
             return
         end
         poll_count = poll_count + 1
-        local result, p_err_code, p_err_msg = self.ai_helper:checkAsyncResult(result_file)
+        local result, p_err_code, p_err_msg = self.ai_helper:checkAsyncResult(result_file, request_pid)
         if result == nil then
             if poll_count < max_polls then
                 UIManager:scheduleIn(2, pollDetect)

@@ -334,10 +334,6 @@ function XRayPlugin:onReaderReady()
                     else
                         self:scanBookForUnits()
                     end
-                else
-                    if self.triggerBookTypeDetection then
-                        self:triggerBookTypeDetection()
-                    end
                 end
             end
         end
@@ -422,12 +418,17 @@ function XRayPlugin:onPageUpdate(pageno)
             if not self.timeline or #self.timeline == 0 then
                 self:log("XRayPlugin: Cache is empty. Triggering immediate initial fetch in Ultra mode.")
                 local chapter_title = nil
-                local toc = self.ui.document:getToc()
+                local utils = require(plugin_path .. "xray_utils")
+                local toc = utils:flattenTOC(self.ui.document:getToc())
                 if toc and #toc > 0 then
+                    local max_p = -1
                     for _, entry in ipairs(toc) do
-                        if entry.page and entry.page <= pageno then
-                            chapter_title = entry.title
-                            break
+                        if entry.page then
+                            local p = tonumber(entry.page)
+                            if p and p <= pageno and p >= max_p then
+                                max_p = p
+                                chapter_title = entry.title
+                            end
                         end
                     end
                 end
@@ -462,13 +463,17 @@ function XRayPlugin:onPageUpdate(pageno)
 
         -- Resolve current chapter title from TOC if available
         local chapter_title = nil
-        local toc = self.ui.document:getToc()
+        local utils = require(plugin_path .. "xray_utils")
+        local toc = utils:flattenTOC(self.ui.document:getToc())
         if toc and #toc > 0 then
+            local max_p = -1
             for _, entry in ipairs(toc) do
-                if entry.page and entry.page <= pageno then
-                    chapter_title = entry.title
-                else
-                    break
+                if entry.page then
+                    local p = tonumber(entry.page)
+                    if p and p <= pageno and p >= max_p then
+                        max_p = p
+                        chapter_title = entry.title
+                    end
                 end
             end
         end
@@ -484,19 +489,23 @@ function XRayPlugin:onPageUpdate(pageno)
 
     -- 2. Standard chapter-based mode checks (requires TOC)
     -- Resolve current chapter title from TOC
-    local toc = self.ui.document:getToc()
+    local utils = require(plugin_path .. "xray_utils")
+    local toc = utils:flattenTOC(self.ui.document:getToc())
     if not toc or #toc == 0 then
         return
     end
 
     local chapter_title = nil
     local chapter_page = nil
+    local max_p = -1
     for _, entry in ipairs(toc) do
-        if entry.page and entry.page <= pageno then
-            chapter_title = entry.title
-            chapter_page = entry.page
-        else
-            break
+        if entry.page then
+            local p = tonumber(entry.page)
+            if p and p <= pageno and p >= max_p then
+                max_p = p
+                chapter_title = entry.title
+                chapter_page = entry.page
+            end
         end
     end
 
@@ -721,7 +730,8 @@ function XRayPlugin:autoLoadCache()
                     end)
                 end
                 self:log("XRayPlugin: Stage 3 - Repairing pages and deduplicating")
-                local toc = self.ui.document:getToc()
+                local utils = require(plugin_path .. "xray_utils")
+                local toc = utils:flattenTOC(self.ui.document:getToc())
                 self:assignTimelinePages(self.timeline, toc, false)
                 self:sortTimelineByTOC(self.timeline)
 
@@ -2187,6 +2197,16 @@ function XRayPlugin:triggerBookTypeDetection()
     end
     local cached = self.book_data
 
+    local function newBookTypeResultFile()
+        local DataStorage = require("datastorage")
+        return string.format(
+            "%s/xray/book_type_detect_res_%d_%d.json",
+            DataStorage:getDataDir(),
+            os.time(),
+            math.random(1000, 9999)
+        )
+    end
+
     -- Check if we already have a unit cache first to avoid scans
     local has_unit_cache = false
     if self.loadUnitCache then
@@ -2222,8 +2242,7 @@ function XRayPlugin:triggerBookTypeDetection()
         -- If the cached label was not detected by AI, check if we should refine it via AI background process
         if not cached.book_type_detected_by_ai and self.ai_helper:hasApiKey() then
             -- Trigger AI in background to refine low-confidence or format-fallback guesses
-            local DataStorage = require("datastorage")
-            local result_file = DataStorage:getDataDir() .. "/xray/book_type_detect_res.json"
+            local result_file = newBookTypeResultFile()
             local props = self.ui.document:getProps() or {}
             local title = props.title or "Unknown"
             local author = props.authors or "Unknown"
@@ -2233,8 +2252,8 @@ function XRayPlugin:triggerBookTypeDetection()
             if pid then
                 local function pollResult()
                     if self.destroyed then return end
-                    local res = self.ai_helper:checkAsyncResult(result_file)
-                    if res == "pending" then
+                    local res = self.ai_helper:checkAsyncResult(result_file, pid)
+                    if res == nil then
                         UIManager:scheduleIn(1, pollResult)
                     elseif type(res) == "table" and res.book_type_label then
                         cached.book_type_label = res.book_type_label
@@ -2268,8 +2287,7 @@ function XRayPlugin:triggerBookTypeDetection()
                 return true
             end
             self:log("XRayPlugin: Starting Layer 3 AI book type refinement in background...")
-            local DataStorage = require("datastorage")
-            local result_file = DataStorage:getDataDir() .. "/xray/book_type_detect_res.json"
+            local result_file = newBookTypeResultFile()
             local props = self.ui.document:getProps() or {}
             local title = props.title or "Unknown"
             local author = props.authors or "Unknown"
@@ -2279,8 +2297,8 @@ function XRayPlugin:triggerBookTypeDetection()
             if pid then
                 local function pollResult()
                     if self.destroyed then return end
-                    local res = self.ai_helper:checkAsyncResult(result_file)
-                    if res == "pending" then
+                    local res = self.ai_helper:checkAsyncResult(result_file, pid)
+                    if res == nil then
                         UIManager:scheduleIn(1, pollResult)
                     elseif type(res) == "table" and res.book_type_label then
                         self:log("XRayPlugin: Book type AI refinement complete! Result: " .. tostring(res.book_type_label))
@@ -2302,8 +2320,7 @@ function XRayPlugin:triggerBookTypeDetection()
     end
 
     self:log("XRayPlugin: Starting Layer 3 AI book type detection in background...")
-    local DataStorage = require("datastorage")
-    local result_file = DataStorage:getDataDir() .. "/xray/book_type_detect_res.json"
+    local result_file = newBookTypeResultFile()
     
     local props = self.ui.document:getProps() or {}
     local title = props.title or "Unknown"
@@ -2320,8 +2337,8 @@ function XRayPlugin:triggerBookTypeDetection()
 
     local function pollResult()
         if self.destroyed then return end
-        local res = self.ai_helper:checkAsyncResult(result_file)
-        if res == "pending" then
+        local res = self.ai_helper:checkAsyncResult(result_file, pid)
+        if res == nil then
             UIManager:scheduleIn(1, pollResult)
         elseif type(res) == "table" and res.book_type_label then
             self:log("XRayPlugin: Book type AI detection complete! Result: " .. tostring(res.book_type_label))
