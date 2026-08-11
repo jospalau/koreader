@@ -1209,6 +1209,8 @@ function Repo.buildBook(filepath)
         status     = book.status,
         rating     = book.rating,
         page_count = fallback_page_count,
+        pub_date      = book.pub_date,
+        modified_date = book.modified_date,
         expires_at = os.time() + PROGRESS_CACHE_TTL,
     }
     return book
@@ -1685,7 +1687,7 @@ function Repo.readProgress(filepath)
     if cached then
         return cached.pct, cached.status, cached.rating, cached.page_count, cached.pub_date, cached.modified_date
     end
-    local pct, status, rating, page_count
+    local pct, status, rating, page_count, pub_date
     local ok_ds, ds = pcall(function() return getDocSettings():open(filepath) end)
     if ok_ds and ds then
         local ok_pct, p = pcall(ds.readSetting, ds, "percent_finished")
