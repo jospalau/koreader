@@ -1176,9 +1176,9 @@ function ReaderUI:onHome()
                 FileManager.instance.history:sortHistoryByStatus()
                 -- FileManager.instance.history:onShowHist()
                 local Repo = require("lib/bookshelf_book_repository")
-                --UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
-                if Repo.invalidateProgressCache then Repo.invalidateProgressCache() end
-                if Repo.invalidateBookCache then Repo.invalidateBookCache("StatusChanged") end
+                UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
+                -- if Repo.invalidateProgressCache then Repo.invalidateProgressCache() end
+                -- if Repo.invalidateBookCache then Repo.invalidateBookCache("StatusChanged") end
             end,
             choice3_text = _("Just exit"),
             choice3_callback = function()
