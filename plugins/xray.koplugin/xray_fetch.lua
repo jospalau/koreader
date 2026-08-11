@@ -465,6 +465,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
     UIManager:scheduleIn(0.5, function()
         if is_cancelled or self.destroyed then clearFetchState(); return end
         if not self.chapter_analyzer then self.chapter_analyzer = require(plugin_path .. "xray_chapteranalyzer"):new() end
+        if not self.ui.document then return end
 
         local current_page = self.ui:getCurrentPage()
         local first_missing_page = last_fetch_page
