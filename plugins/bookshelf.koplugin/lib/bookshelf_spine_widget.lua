@@ -625,6 +625,12 @@ function CornerFlag:paintTo(bb, x, y)
 end
 
 local SpineWidget = InputContainer:extend{
+    -- flat_card: draw the placeholder as a BUTTON rather than a book - no
+    -- inner frame, no drop shadow. Used by the Text group style, whose tile is
+    -- a label you press, not a cover you look at; the double frame and shadow
+    -- are what make the standard placeholder read as a book, and on a folder
+    -- tile they say the wrong thing.
+    flat_card = false,
     book        = nil,
     width       = nil,
     height      = nil,
@@ -808,6 +814,10 @@ function SpineWidget:_renderShadowedCard(inner)
             thickness = SELECTED_BORDER,
             radius    = CARD_RADIUS,
         }
+    elseif self.flat_card then
+        -- A button does not cast a shadow. Suppressed here rather than by
+        -- skipping the wrapper, so selection borders, badges and glyphs all
+        -- still work on a flat tile.
     elseif not (indicators.on_hold_fade and not self.is_bulk_selected) then
         children[#children + 1] = FrameContainer:new{
             bordersize   = 0,
@@ -1979,6 +1989,8 @@ function SpineWidget:_renderFallback()
     -- placeholder kinds, so the shelf keeps one visual rhythm.
     local band_h = math.max(Screen:scaleBySize(20), card_h * 0.10)
     local motif
+    -- Artwork rather than a glyph, so the band knows to pad itself (below).
+    local motif_is_icon = false
     if self.book and self.book.opds_icon then
         -- Feed artwork renders SMOOTHLY scaled to a fixed display height a
         -- little above the glyph band. Two device rounds got here: at glyph
@@ -1995,6 +2007,7 @@ function SpineWidget:_renderFallback()
             if ok_w then
                 local iw, ih = icon_bb:getWidth(), icon_bb:getHeight()
                 if iw > 0 and ih > 0 then
+                    motif_is_icon = true
                     motif = ImageWidget:new{
                         image            = icon_bb,
                         image_disposable = false,  -- cache-owned, never free
@@ -2036,11 +2049,18 @@ function SpineWidget:_renderFallback()
     end
     -- The band stretches to whatever the motif actually is (a 2x feed icon
     -- is taller than the glyph line); glyph motifs keep the original height.
+    --
+    -- Artwork also gets breathing room above and below. A glyph carries its own
+    -- slack inside the em-box, so it never looked cramped; a bitmap is opaque
+    -- to its own edges, and stretching the band to exactly the image height put
+    -- it hard against the title above and the rule below. The centerer splits
+    -- the extra evenly, so padding the band is all this needs.
     local motif_band_h = band_h
     do
         local ok_sz, sz = pcall(function() return motif:getSize() end)
-        if ok_sz and sz and sz.h and sz.h > motif_band_h then
-            motif_band_h = sz.h
+        if ok_sz and sz and sz.h then
+            local wanted = sz.h + (motif_is_icon and 2 * Size.padding.small or 0)
+            if wanted > motif_band_h then motif_band_h = wanted end
         end
     end
     local rule_centerer = CenterContainer:new{
@@ -2087,8 +2107,13 @@ function SpineWidget:_renderFallback()
     -- second border is what makes it read as "ornate" vs a plain card.
     -- Border color follows the user's "Border color" setting so the
     -- placeholder cover ages with the rest of the chrome.
+    -- Flat: one uniform WHITE panel instead of the ornate double frame. The
+    -- inner border is dropped and both fills take the inner (brighter) tone -
+    -- white in day, the lighter grey in night - so the tile reads as a clean
+    -- button rather than the paper-tone card of a book placeholder.
+    if self.flat_card then outer_bg = inner_bg end
     local inner_frame = ColorSafeFrame:new{
-        bordersize = Size.border.thin,
+        bordersize = self.flat_card and 0 or Size.border.thin,
         color      = colors.border,
         background = inner_bg,
         padding    = content_pad,
@@ -2174,6 +2199,13 @@ SpineWidget.CARD_RADIUS     = CARD_RADIUS
 -- picks a different grey.
 SpineWidget.SHADOW_OFFSET   = SHADOW_OFFSET
 SpineWidget.shadowGray      = _shadowGray
+-- Placeholder card backgrounds (outer band, inner face), as a function for the
+-- same reason shadowGray is one: night mode picks different greys, and a caller
+-- caching the value would invert. Used by the collage tile to fill a cell it
+-- has no cover for, so an incomplete collage matches the placeholder card a
+-- coverless book would show rather than inventing a third grey.
+SpineWidget.fallbackBgs     = _fallbackBgs
+
 
 -- Per-axis chrome overhead between the widget box (self.width/self.height)
 -- and the actual cover IMAGE: the drop-shadow offset plus the 1dp card
@@ -2182,9 +2214,24 @@ SpineWidget.shadowGray      = _shadowGray
 --   img_w = slot_w - COVER_CHROME ;  box_h = round(img_w * aspect) + COVER_CHROME
 SpineWidget.COVER_CHROME = SHADOW_OFFSET + 2 * CARD_BORDER
 
--- True-aspect ceiling: 2:3 + ~10% overshoot. ~98% of real covers render
--- untrimmed under it; taller freaks clamp here so they can't blow past the row.
-SpineWidget.COVER_ASPECT_CAP = 1.65
+-- True-aspect ceiling. Every cover taller than this clamps here rather than
+-- growing the row, so the cap is a straight trade: fidelity for a handful of
+-- covers against a whole row of shelf.
+--
+-- Measured against a real 291-cover library (2026-08-14): median ~1.51, and
+--   <= 1.50  33%      <= 1.60  93.5%
+--   <= 1.55  79%      <= 1.65  97.9%
+-- The tail is thin -- three covers above 1.68 -- but there is a cluster at
+-- 1.64-1.66 that the original 1.65 was chosen to clear.
+--
+-- 1.55 is set from measured DEVICE arithmetic, not taste (issue #329). On a
+-- PW5 at 5 columns: 202px slots, 1402px of shelf available, and a row costs
+-- slot_w * cap + 37px of padding. Four rows need row_h <= 350, so the cap has
+-- to be <= 313/202 = 1.55. At 1.60 the row came to 360 and the fourth row was
+-- lost by 38px, leaving 322px of slack spread as the large inter-row gaps
+-- that issue reports. The 21% of covers above 1.55 lose at most ~6% of their
+-- height -- a few pixels of crop -- to gain a whole row of shelf.
+SpineWidget.COVER_ASPECT_CAP = 1.55
 
 -- SpineWidget.downloadedTickOffset(card_w, card_h, glyph_w, widget_h, halo_w)
 -- -> x, y

@@ -28,6 +28,7 @@ local SeriesStack     = require("lib/bookshelf_series_stack")
 local FolderStack     = require("lib/bookshelf_folder_stack")
 local Repo            = require("lib/bookshelf_book_repository")
 local BookshelfSettings = require("lib/bookshelf_settings_store")
+local StackDisplay      = require("lib/bookshelf_stack_display")
 local _               = require("lib/bookshelf_i18n").gettext
 local logger          = require("logger")
 
@@ -129,9 +130,25 @@ function ShelfRow.new(opts)
         -- slot_w is FIXED (fixed-width covers are the whole point), so the
         -- shrink/stretch dance below -- which recomputes slot_w -- must not
         -- run. The row box simply takes the parent's budgeted height (already
-        -- sized to the 1.65 cap); each cover renders at its own aspect within
-        -- it, bottom-anchored.
+        -- sized to the aspect cap); each cover renders at its own aspect
+        -- within it, bottom-anchored.
         if opts.height then slot_h = opts.height end
+        -- ...but the box must never be WIDER than a standard cover. When the
+        -- budgeted height is less than slot_w would naturally need -- few
+        -- columns, so slot_w is large, and few rows to divide the height
+        -- between, which is exactly a 2x2 expanded shelf -- the box comes out
+        -- squat, and covers filling it look stretched wide. (Reported on
+        -- device: 2 columns, true aspect on, covers visibly too wide; off,
+        -- normal, because that path recomputes slot_w to keep 2:3.)
+        --
+        -- So narrow the slot to keep at least 2:3, exactly as the non-true-
+        -- aspect branch does. Covers stay their own shape and the row simply
+        -- leaves horizontal slack, which is the same trade the shrink floor
+        -- below makes.
+        local min_h = math.floor(slot_w * 1.5)
+        if slot_h < min_h then
+            slot_w = math.floor(slot_h / 1.5)
+        end
     elseif opts.height then
         if slot_h > opts.height then
             -- Budget tighter than natural: shrink both axes to preserve
@@ -313,6 +330,14 @@ function ShelfRow.new(opts)
     -- needed so the cheap path stays cheap.
     local badge_format = BookshelfSettings.read("stack_count_badge_format")
     if badge_format ~= "finished_total" then badge_format = "total" end
+    -- How every GROUP tile in this row draws itself. Resolved ONCE, here,
+    -- from the active chip's override (opts.group_display) falling back to the
+    -- library default -- rather than by each tile asking a global setting,
+    -- which is what it used to do and which is why an OPDS catalog's folders
+    -- were stuck with whatever the filesystem's folders were set to. A caller
+    -- with no chip in play (search results) passes nothing and gets the
+    -- default.
+    local group_mode = StackDisplay.resolve(opts.group_display)
     local sel_active_global = opts.selection and opts.selection.isActive
                               and opts.selection:isActive() or false
     local show_finished = (badge_format == "finished_total")
@@ -377,14 +402,53 @@ function ShelfRow.new(opts)
         -- widgets render at the full slot_h while books render at cover_h
         -- + title; the cover bottoms then misalign within a row that
         -- mixes types.
-        local function wrap_for_title_alignment(widget)
+        -- group_name: printed in the strip below the tile, the way a book's
+        -- title is, when the tile's display mode leaves the group unnamed.
+        -- A divider card carries its name in its own band and a Text tile IS
+        -- its name, so both pass nil and keep the empty span; stack, collage
+        -- and none would otherwise be anonymous artwork. StackDisplay decides
+        -- which is which (externalLabel returns nil when the name is already
+        -- visible), so the rule is not re-derived at each of these branches.
+        --
+        -- Still gated on draw_label, i.e. on the reader's own "Show text below
+        -- covers" preference: a group name is a label like any other and does
+        -- not get to opt itself in.
+        local function wrap_for_title_alignment(widget, group_name)
             if not show_titles then return widget end
-            return VerticalGroup:new{
-                align = "center",
-                widget,
-                VerticalSpan:new{ width = title_block_h },
+            -- Deliberately the BOOK path's geometry, element for element:
+            -- cover, then a label_gap span, then the TextWidget, all inside a
+            -- container pinned to the slot dimen. Two earlier attempts drifted
+            -- from it and both showed on device -- a bare VerticalGroup took
+            -- its natural height and printed the bottom row's labels over the
+            -- footer, and a CenterContainer centred the text in the strip,
+            -- which floated every group label ~10px above the book labels
+            -- beside it (the text is taller than the floor(face_size * 1.3)
+            -- the strip is sized at, so centring pulls it up). Matching the
+            -- book path exactly is the only version that cannot drift from it.
+            local stack = VerticalGroup:new{ align = "center", widget }
+            if draw_label and type(group_name) == "string" and group_name ~= "" then
+                stack[#stack + 1] = VerticalSpan:new{ width = label_gap }
+                -- Single-line TextWidget for the same reason the book labels
+                -- use one: it ellipsises at max_width, where TextBoxWidget
+                -- would wrap to two lines and crowd the grid.
+                stack[#stack + 1] = TextWidget:new{
+                    text      = group_name,
+                    face      = title_face,
+                    bold      = title_bold,
+                    max_width = slot_w,
+                }
+            else
+                stack[#stack + 1] = VerticalSpan:new{ width = title_block_h }
+            end
+            -- Pinned to the slot, exactly as the book path pins its stack:
+            -- whatever the font metrics do, a group tile is the same height as
+            -- a book tile and cannot overflow the row.
+            return InputContainer:new{
+                dimen = Geom:new{ w = slot_w, h = slot_h },
+                stack,
             }
         end
+
         local non_book_h = show_titles and cover_h or slot_h
 
         if item and item.kind == "folder" then
@@ -398,8 +462,12 @@ function ShelfRow.new(opts)
             local folder_fp = item.first_book and item.first_book.filepath
             local sel_active = opts.selection and opts.selection.isActive
                                and opts.selection:isActive() or false
+            -- Collage needs the folder's member paths to build its grid, so
+            -- the lookup has to run for it as well as for the badge and
+            -- selection. Same walk, already cached by the repo.
+            local folder_collage = group_mode == StackDisplay.COLLAGE
             local need_lookup = item.path and
-                                (show_folder_badge or sel_active)
+                                (show_folder_badge or sel_active or folder_collage)
             local folder_fpaths
             if need_lookup then
                 folder_fpaths = Repo.getFolderBookPaths(item.path) or {}
@@ -424,7 +492,11 @@ function ShelfRow.new(opts)
                 folder_finished = finished_count(folder_fpaths, true)
             end
             row[#row + 1] = wrap_for_title_alignment(FolderStack:new{
+                display_mode = group_mode,
                 folder           = item,
+                -- Member paths for the collage grid; nil when nothing asked
+                -- for the walk, and the tile falls back to its first book.
+                book_paths       = folder_fpaths,
                 width            = slot_w,
                 height           = non_book_h,
                 on_tap           = opts.on_folder_tap,
@@ -436,7 +508,7 @@ function ShelfRow.new(opts)
                                    and partial_count(folder_k, folder_book_count)
                                    or nil,
                 finished_count   = folder_finished,
-            })
+            }, StackDisplay.externalLabel(group_mode, item.label))
         elseif item and item.kind == "opds_nav" then
             -- OPDS navigation entry (a subcatalog link, e.g. "Next page" or
             -- a browsable category): rendered as a folder-style tile via
@@ -467,6 +539,13 @@ function ShelfRow.new(opts)
             local nav_cur = opts.selected_filepath and item.filepath
                             and item.filepath == opts.selected_filepath or false
             row[#row + 1] = wrap_for_title_alignment(FolderStack:new{
+                -- ALWAYS text for a remote subcatalog, whatever the chip's
+                -- folder style says. A catalog folder has no artwork of its
+                -- own, so every image mode ends up showing a borrowed cover
+                -- from whatever happened to be cached inside it - which is
+                -- usually the wrong picture for the category, and reads as a
+                -- bug rather than a choice. The label IS the tile.
+                display_mode = StackDisplay.TEXT,
                 folder      = item,
                 width       = slot_w,
                 height      = non_book_h,
@@ -477,7 +556,13 @@ function ShelfRow.new(opts)
                 -- + repeated label are redundant over the label-placeholder;
                 -- render the bare card instead.
                 plain_if_placeholder = true,
-            })
+            -- NEVER an external label. The tile is always the text style now
+            -- (above), and a text card IS the name - printing it underneath
+            -- says everything twice. Asking group_mode here was the bug: the
+            -- tile was forced to text while the LABEL still followed the
+            -- chip's style, so a catalog whose chip was set to any other mode
+            -- got a text card with its own name repeated below it.
+            }, StackDisplay.externalLabel(StackDisplay.TEXT, item.label))
         elseif item and item.kind == "author" then
             -- Author group (SeriesStack visual, author name on the band)
             local author_fp = item.books and item.books[1] and item.books[1].filepath
@@ -487,6 +572,7 @@ function ShelfRow.new(opts)
                                 and author_fp == opts.selected_filepath or false
             local author_finished, author_finished_total = group_finished(item)
             row[#row + 1] = wrap_for_title_alignment(SeriesStack:new{
+                display_mode = group_mode,
                 series           = item,
                 width            = slot_w,
                 height           = non_book_h,
@@ -498,7 +584,7 @@ function ShelfRow.new(opts)
                 finished_count   = author_finished,
                 finished_total   = author_finished_total,
                 show_count_badge = show_group_badge,
-            })
+            }, StackDisplay.externalLabel(group_mode, item.series_name))
         elseif item and item.kind == "genre" then
             -- Genre group (SeriesStack visual, genre name on the band)
             local genre_fp = item.books and item.books[1] and item.books[1].filepath
@@ -508,6 +594,7 @@ function ShelfRow.new(opts)
                                and genre_fp == opts.selected_filepath or false
             local genre_finished, genre_finished_total = group_finished(item)
             row[#row + 1] = wrap_for_title_alignment(SeriesStack:new{
+                display_mode = group_mode,
                 series           = item,
                 width            = slot_w,
                 height           = non_book_h,
@@ -519,7 +606,7 @@ function ShelfRow.new(opts)
                 finished_count   = genre_finished,
                 finished_total   = genre_finished_total,
                 show_count_badge = show_group_badge,
-            })
+            }, StackDisplay.externalLabel(group_mode, item.series_name))
         elseif item and item.kind == "tag" then
             -- Tag / collection group (SeriesStack visual, collection
             -- name on the band)
@@ -530,6 +617,7 @@ function ShelfRow.new(opts)
                              and tag_fp == opts.selected_filepath or false
             local tag_finished, tag_finished_total = group_finished(item)
             row[#row + 1] = wrap_for_title_alignment(SeriesStack:new{
+                display_mode = group_mode,
                 series           = item,
                 width            = slot_w,
                 height           = non_book_h,
@@ -541,7 +629,7 @@ function ShelfRow.new(opts)
                 finished_count   = tag_finished,
                 finished_total   = tag_finished_total,
                 show_count_badge = show_group_badge,
-            })
+            }, StackDisplay.externalLabel(group_mode, item.series_name))
         elseif item and item.kind == "language" then
             local lang_fp = item.books and item.books[1] and item.books[1].filepath
             local lang_k    = stack_sel_count(item.books)
@@ -550,6 +638,7 @@ function ShelfRow.new(opts)
                               and lang_fp == opts.selected_filepath or false
             local lang_finished, lang_finished_total = group_finished(item)
             row[#row + 1] = wrap_for_title_alignment(SeriesStack:new{
+                display_mode = group_mode,
                 series           = item,
                 width            = slot_w,
                 height           = non_book_h,
@@ -561,7 +650,7 @@ function ShelfRow.new(opts)
                 finished_count   = lang_finished,
                 finished_total   = lang_finished_total,
                 show_count_badge = show_group_badge,
-            })
+            }, StackDisplay.externalLabel(group_mode, item.series_name))
         elseif item and item.books then
             -- SeriesGroup (has a .books array; legacy detection — kind
             -- not always set on series records).
@@ -572,6 +661,7 @@ function ShelfRow.new(opts)
                                 and series_fp == opts.selected_filepath or false
             local series_finished, series_finished_total = group_finished(item)
             row[#row + 1] = wrap_for_title_alignment(SeriesStack:new{
+                display_mode = group_mode,
                 series           = item,
                 width            = slot_w,
                 height           = non_book_h,
@@ -583,7 +673,7 @@ function ShelfRow.new(opts)
                 finished_count   = series_finished,
                 finished_total   = series_finished_total,
                 show_count_badge = show_group_badge,
-            })
+            }, StackDisplay.externalLabel(group_mode, item.series_name))
         elseif item then
             -- Single book record
             local book_bulk = opts.selection and item.filepath

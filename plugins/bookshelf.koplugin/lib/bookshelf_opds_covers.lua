@@ -179,25 +179,73 @@ function M.sweepCache()
     end
 end
 
-function M.fetchMissing(records, on_done)
-    local CoverFetch = require("lib/bookshelf_cover_fetch")
+-- needsFetch(rec) -> boolean
+-- Does this record have a cover worth downloading that is not on disk yet?
+-- Split out of fetchMissing so the caller can ask the question WITHOUT
+-- spending the download: the shelf's stepwise cover pass drives its own loop
+-- one record per tick and needs to skip cached records without paying a tick
+-- for each, and the deadline in fetchMissing must only be charged against
+-- records that were actually going to cost something.
+function M.needsFetch(rec)
     local lfs = require("libs/libkoreader-lfs")
+    local path = M.cachePath(rec)
+    if not path then return false end
+    local ok_a, a = pcall(lfs.attributes, path)
+    return not (ok_a and a)
+end
+
+-- fetchOne(rec, creds) -> boolean (did bytes land)
+-- ONE cover, blocking, no time budget of its own beyond the per-request
+-- timeouts. `creds` is a caller-owned table memoising server lookups across
+-- calls, so a run over many records of one catalog resolves it once.
+--
+-- The single download primitive: fetchMissing loops it under a deadline, and
+-- the shelf's stepwise pass calls it once per tick. Both therefore agree on
+-- which url a record's cover is and on the credential gate, which is the
+-- agreement coverUrl's comment insists on -- two implementations is exactly
+-- how that gets broken.
+-- fetchPlan(rec, creds) -> { url, path, user, password, net_opts } | nil
+-- Everything needed to fetch ONE cover, resolved in one place.
+--
+-- Exists because the fetch can now happen in a forked subprocess, which must
+-- agree with the parent about which url this record's cover is, where it
+-- caches, and which credentials may travel to it. Handing the child a plan
+-- built here keeps that agreement in the same function it has always been in
+-- -- a second copy in the widget is exactly how coverUrl's "these must agree"
+-- warning gets violated.
+function M.fetchPlan(rec, creds)
+    local path = M.cachePath(rec)
+    if not path then return nil end
+    local url = coverUrl(rec)
+    if not url then return nil end
+    local user, password = credentialsFor(rec, creds or {})
+    return {
+        url = url, path = path, user = user, password = password,
+        net_opts = { block_timeout = M.THUMB_BLOCK_TIMEOUT,
+                     total_timeout = M.THUMB_TOTAL_TIMEOUT },
+    }
+end
+
+function M.fetchOne(rec, creds)
+    local CoverFetch = require("lib/bookshelf_cover_fetch")
+    local plan = M.fetchPlan(rec, creds)
+    if not plan then return false end
+    local got = CoverFetch.download(plan.url, plan.path, plan.user,
+                                    plan.password, plan.net_opts)
+    return got and true or false
+end
+
+function M.fetchMissing(records, on_done)
     local fetched = 0
     local creds = {}
     local deadline = os.time() + M.BATCH_BUDGET
-    local net_opts = { block_timeout = M.THUMB_BLOCK_TIMEOUT,
-                       total_timeout = M.THUMB_TOTAL_TIMEOUT }
     for _i, rec in ipairs(records or {}) do
-        local path = M.cachePath(rec)
-        if path then
-            local ok_a, a = pcall(lfs.attributes, path)
-            if not (ok_a and a) then
-                if os.time() >= deadline then break end
-                local user, password = credentialsFor(rec, creds)
-                local got = CoverFetch.download(coverUrl(rec), path,
-                                                user, password, net_opts)
-                if got then fetched = fetched + 1 end
-            end
+        -- Deadline charged only against records that were going to cost a
+        -- download: a batch of already-cached records must never be abandoned
+        -- part-way just because the clock moved.
+        if M.needsFetch(rec) then
+            if os.time() >= deadline then break end
+            if M.fetchOne(rec, creds) then fetched = fetched + 1 end
         end
     end
     -- Only when this pass actually added bytes, and BEFORE on_done: the

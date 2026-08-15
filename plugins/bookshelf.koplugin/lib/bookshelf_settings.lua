@@ -703,6 +703,30 @@ function Settings:_coverDisplaySubItems()
                 BookshelfSettings.flush()
                 markDirty()
             end,
+        },
+        -- ── group tiles ──
+        -- ONE row, the library-wide default, where there used to be one per
+        -- group kind. The per-kind rows said the same thing a chip already
+        -- says -- a chip IS a kind of shelf -- and could not express two
+        -- chips on one kind wanting different tiles, nor an OPDS catalog
+        -- wanting to look unlike the filesystem's folders. That choice now
+        -- lives on the chip (long-press a chip > Folder style); this is what
+        -- a chip falls back to, and what search results use.
+        --
+        -- Sits with the label mode and true-aspect rows, not down with the
+        -- badges: these three are what decide the SHAPE of the grid, and this
+        -- one changes it as much as either.
+        {
+            text_func = function()
+                local SD = require("lib/bookshelf_stack_display")
+                return _("Default folder style: ") .. SD.labelFor(SD.defaultMode())
+            end,
+            help_text = _("How folders and stacks are drawn on any shelf that "
+                .. "has not chosen its own. Long-press a chip to override it "
+                .. "for that shelf."),
+            sub_item_table_func = function()
+                return Settings:_groupDisplaySubItems()
+            end,
             separator = true,
         },
         -- ── reading progress on covers ──
@@ -1052,6 +1076,43 @@ function Settings:_coverDisplaySubItems()
             end,
         },
     }
+end
+
+-- The library-wide group-tile style: one radio list, and the fallback for
+-- every chip that has not set its own (bookshelf_stack_display's header
+-- explains why the per-kind rows this replaced were the wrong shape).
+function Settings:_groupDisplaySubItems()
+    local StackDisplay = require("lib/bookshelf_stack_display")
+    -- Local, not the one in _coverDisplaySubItems: that one is a local INSIDE
+    -- that function, so referring to it from here would compile fine and be a
+    -- nil global call the first time anyone changed a mode.
+    local function markDirty()
+        if self._bw and self._bw._rebuild then
+            self._bw:_rebuild()
+            UIManager:setDirty(self._bw, "ui")
+        end
+    end
+    local rows = {}
+    for _i, opt in ipairs(StackDisplay.OPTIONS) do
+        local value = opt.value
+        rows[#rows + 1] = {
+            text = opt.label_func(),
+            radio = true,
+            checked_func = function()
+                return StackDisplay.defaultMode() == value
+            end,
+            keep_menu_open = true,
+            callback = function()
+                BookshelfSettings.save(StackDisplay.DEFAULT_KEY, value)
+                BookshelfSettings.flush()
+                -- Tiles are rebuilt from scratch on the next render, so the
+                -- shelf only needs marking dirty -- no cache to invalidate,
+                -- since nothing about WHICH books are in a group has changed.
+                markDirty()
+            end,
+        }
+    end
+    return rows
 end
 
 -- Colors sub-menu: progress-bar Read / Unread colors today;

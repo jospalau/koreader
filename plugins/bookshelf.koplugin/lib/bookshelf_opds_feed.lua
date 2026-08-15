@@ -334,9 +334,22 @@ local function opds2NavigationToEntry(nav)
     if type(nav) == "table" and type(nav.href) == "string" then
         link[1] = { type = OPDS2_TYPE, href = nav.href }
     end
+    -- numberOfItems, when the catalog states it. Carried because it answers a
+    -- question the shelf otherwise has to spend a whole feed fetch on: a nav
+    -- tile declaring thousands of items cannot be the one-book folder that
+    -- folder resolution is looking for. Internet Archive's category tiles
+    -- declare ~10000 apiece. Accepted from the link itself or its metadata
+    -- block; catalogs put it in both places.
+    local count
+    if type(nav) == "table" then
+        count = tonumber(nav.numberOfItems)
+            or (type(nav.metadata) == "table" and tonumber(nav.metadata.numberOfItems))
+            or nil
+    end
     return {
         title = (type(nav) == "table" and type(nav.title) == "string") and nav.title or nil,
         link = link,
+        nav_item_count = count,
     }
 end
 
@@ -403,8 +416,20 @@ function M.mapEntries(catalog, feed_url, server_key)
 
     if is_opds2 then
         out.total = tonumber(feed.metadata and feed.metadata.numberOfItems)
+        out.items_per_page = tonumber(feed.metadata and feed.metadata.itemsPerPage)
     else
         out.total = tonumber(feed["opensearch:totalResults"])
+        out.items_per_page = tonumber(feed["opensearch:itemsPerPage"])
+    end
+    -- itemsPerPage is the server TELLING US its page size, and it is the only
+    -- say the client gets: measured, Gutenberg serves 25 and ignores count,
+    -- limit, length, per_page, page_size and items, and Internet Archive
+    -- returns byte-identical responses for all of those while declaring 25 in
+    -- the feed. So it cannot be used to ask for more - but it can be used to
+    -- know what a given read-ahead depth will COST in requests, which is what
+    -- the lookahead plans against instead of guessing.
+    if out.items_per_page and out.items_per_page <= 0 then
+        out.items_per_page = nil
     end
 
     -- Search link classification (stock precedence: OSD beats a Calibre
@@ -628,6 +653,11 @@ function M.mapEntries(catalog, feed_url, server_key)
                 authors       = nav_author and { nav_author } or nil,
                 status        = "unread",
                 read_status   = "unread",
+                -- item_count: what the catalog says this subcatalog holds, or
+                -- nil when it does not say. Read by the folder-resolution
+                -- queue, which skips anything declaring more than one item -
+                -- resolving those can never flatten them into a book.
+                nav_item_count = entry.nav_item_count,
                 -- thumbnail_url / image_url: some catalogues put a cover link
                 -- directly on the nav entry itself (a category tile with its
                 -- own artwork), not just on book entries. Carrying them here
@@ -850,7 +880,14 @@ end
 -- Blocking GET with the stock plugin's header discipline (identity encoding;
 -- some servers 403 generic UAs, so socketutil's KOReader UA matters).
 -- Returns body string or nil, err. Callers wrap in Trapper.
-function M.fetch(url, username, password)
+--
+-- opts.block_timeout / opts.total_timeout override the LARGE pair for one
+-- request. Used by the per-catalog timeout setting: the LARGE pair is tuned
+-- for public catalogs that stall, and on a server on your own network a
+-- 30-second wait for something that is not running reads as a hang. Both are
+-- taken together or not at all -- a block timeout longer than the total is a
+-- pair that cannot behave, so a partial override is ignored.
+function M.fetch(url, username, password, opts)
     local http = require("socket.http")
     local ltn12 = require("ltn12")
     local socket = require("socket")
@@ -861,8 +898,17 @@ function M.fetch(url, username, password)
     -- would leave every later request in the session - KOReader's own network
     -- code included - stuck on the LARGE pair. pcall + an unconditional reset,
     -- matching CoverFetch.download's discipline.
+    -- Both or neither, and both must be positive numbers: a half-applied pair
+    -- is worse than the default one.
+    local block, total = socketutil.LARGE_BLOCK_TIMEOUT, socketutil.LARGE_TOTAL_TIMEOUT
+    if type(opts) == "table"
+            and type(opts.block_timeout) == "number" and opts.block_timeout > 0
+            and type(opts.total_timeout) == "number" and opts.total_timeout > 0
+            and opts.block_timeout <= opts.total_timeout then
+        block, total = opts.block_timeout, opts.total_timeout
+    end
     local ok_req, code, status = pcall(function()
-        socketutil:set_timeout(socketutil.LARGE_BLOCK_TIMEOUT, socketutil.LARGE_TOTAL_TIMEOUT)
+        socketutil:set_timeout(block, total)
         local c, _headers, st = socket.skip(1, http.request{
             url = url,
             headers = { ["Accept-Encoding"] = "identity", ["Accept"] = M.ACCEPT_FEED },
