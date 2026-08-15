@@ -226,6 +226,18 @@ function ReaderUI:onParkAndShowBookshelf()
             local park_ok = Park.park(plugin, plugin._widget)
             logger.dbg("[bookshelf-overlay] Park.park manual tras cold-create =", tostring(park_ok))
         else
+            -- pcall(function()
+            --     if rui and rui.document and rui.document.file then
+            --         G_reader_settings:saveSetting("lastfile", rui.document.file)
+            --     end
+            -- end)
+            pcall(function() rui:saveSettings() end)
+            -- pcall(function()
+            --     local ok_repo, Repo = pcall(require, "lib/bookshelf_book_repository")
+            --     if ok_repo and Repo and Repo.invalidateProgressCache then
+            --         Repo.invalidateProgressCache()
+            --     end
+            -- end)
             -- -- For the hero card to be updated every time we show Bookshelf parked
             -- -- Other option is setting local HERO_MEMO_TTL_S = 0 in bookshelf_widget.lua
             if plugin._widget then
