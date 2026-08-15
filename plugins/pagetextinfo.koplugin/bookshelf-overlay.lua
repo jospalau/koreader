@@ -216,15 +216,26 @@ function ReaderUI:onParkAndShowBookshelf()
                 Repo.invalidateProgressCache(rui.document.file)
             end
             plugin:show()
+            if plugin._widget then
+                plugin._widget._hero_current_memo = nil
+                plugin._widget._preview_book = nil
+            end
+            if plugin._widget and plugin._widget._rebuildRefreshHeroAndChips then
+                pcall(function() plugin._widget:_rebuildRefreshHeroAndChips() end)
+            end
             local park_ok = Park.park(plugin, plugin._widget)
             logger.dbg("[bookshelf-overlay] Park.park manual tras cold-create =", tostring(park_ok))
         else
             -- -- For the hero card to be updated every time we show Bookshelf parked
             -- -- Other option is setting local HERO_MEMO_TTL_S = 0 in bookshelf_widget.lua
-            if self._widget then
-                self._widget._hero_current_memo = nil
+            if plugin._widget then
+                plugin._widget._hero_current_memo = nil
+                plugin._widget._preview_book = nil
             end
             plugin:onToggleBookshelf() -- abre y aparca / o vuelve al libro si ya estaba aparcado
+            if plugin._widget and plugin._widget._rebuildRefreshHeroAndChips then
+                pcall(function() plugin._widget:_rebuildRefreshHeroAndChips() end)
+            end
         end
     end)
 
