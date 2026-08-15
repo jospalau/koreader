@@ -125,6 +125,7 @@ function ListMenuItem:init()
             h = self.height
         },
         linesize = self.underline_h,
+        focus_linesize = Size.line.focus_indicator,
         -- widget : will be filled in self:update()
     }
     self[1] = self._underline_container
@@ -1065,6 +1066,7 @@ function ListMenuItem:onFocus()
         self._underline_container.linesize = 1
     end
     self._underline_container.color = Blitbuffer.COLOR_BLACK
+    self._underline_container.focused = true
     return true
 end
 
@@ -1073,6 +1075,7 @@ function ListMenuItem:onUnfocus()
         self._underline_container.linesize = 0
     end
     self._underline_container.color = Blitbuffer.COLOR_WHITE
+    self._underline_container.focused = false
     return true
 end
 
