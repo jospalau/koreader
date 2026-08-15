@@ -105,6 +105,12 @@ msgstr "book read"
 msgid "books read"
 msgstr "books read"
 
+msgid "book"
+msgstr "book"
+
+msgid "books"
+msgstr "books"
+
 msgid "day/book avg"
 msgstr "day/book avg"
 
@@ -287,12 +293,6 @@ msgstr "page read today"
 
 msgid "pages read today"
 msgstr "pages read today"
-
-msgid "book read in this streak"
-msgstr "book read in this streak"
-
-msgid "books read in this streak"
-msgstr "books read in this streak"
 
 msgid "Show Reading insights"
 msgstr "Show Reading insights"
@@ -818,6 +818,15 @@ msgstr "High activity (75%)"
 msgid "Peak activity (100%)"
 msgstr "Peak activity (100%)"
 
+msgid "Reading streak calendar"
+msgstr "Reading streak calendar"
+
+msgid "Daily streak day"
+msgstr "Daily streak day"
+
+msgid "Weekly streak gap day"
+msgstr "Weekly streak gap day"
+
 msgid "Show long durations (24h+) as days"
 msgstr "Show long durations (24h+) as days"
 
@@ -886,6 +895,9 @@ msgstr "Reading insights: records"
 
 msgid "Show Records"
 msgstr "Show Records"
+
+msgid "Show Reading streak"
+msgstr "Show Reading streak"
 
 msgid "Sub-values (date / book title)"
 msgstr "Sub-values (date / book title)"

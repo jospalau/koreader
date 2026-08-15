@@ -192,6 +192,7 @@ M.Opt = {
     -- row at the bottom of the "Pace" section is shown. On by default.
     SHOW_PACE_DATES_KEY      = "reading_insights_book_show_pace_dates",
     SHOW_PACE_DATES_DEFAULT  = true,
+
 }
 
 -- Reading heatmap period length (Prefs ▸ Advanced settings ▸ how many

@@ -73,6 +73,12 @@ msgstr "已读完书籍"
 msgid "books read"
 msgstr "已读完书籍"
 
+msgid "book"
+msgstr "本书"
+
+msgid "books"
+msgstr "本书"
+
 msgid "day/book avg"
 msgstr "单书平均天数"
 msgid "days/book avg"
@@ -212,10 +218,6 @@ msgid "page read today"
 msgstr "今日阅读页数"
 msgid "pages read today"
 msgstr "今日阅读页数"
-msgid "book read in this streak"
-msgstr "本轮连续阅读完成书籍"
-msgid "books read in this streak"
-msgstr "本轮连续阅读完成书籍"
 
 msgid "Show Reading insights"
 msgstr "打开阅读统计"
@@ -591,6 +593,15 @@ msgstr "高活跃度（75%）"
 msgid "Peak activity (100%)"
 msgstr "峰值活跃度（100%）"
 
+msgid "Reading streak calendar"
+msgstr "阅读连续记录日历"
+
+msgid "Daily streak day"
+msgstr "每日连续记录日"
+
+msgid "Weekly streak gap day"
+msgstr "每周连续记录缺读日"
+
 msgid "Show long durations (24h+) as days"
 msgstr "时长超过24小时以「天」显示"
 msgid "Date format"
@@ -640,6 +651,9 @@ msgid "Reading insights: records"
 msgstr "阅读统计：阅读记录"
 msgid "Show Records"
 msgstr "查看阅读记录"
+
+msgid "Show Reading streak"
+msgstr "查看阅读连续记录"
 msgid "Sub-values (date / book title)"
 msgstr "附属信息（日期/书名）"
 

@@ -43,6 +43,13 @@ function M.build(self, deps)
             end,
         },
         {
+            text = _("Show Reading streak"),
+            keep_menu_open = false,
+            callback = function()
+                self:onShowReadingStreakPopup()
+            end,
+        },
+        {
             text = _("Show Records"),
             keep_menu_open = false,
             callback = function()

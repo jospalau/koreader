@@ -215,7 +215,7 @@ local ChapterBar = loadModule("widgets/chapterbarwidget.lua",
 -- Kept apart from the popup that draws them (see lib/insights_data.lua).
 local InsightsData = loadModule("lib/insights_data.lua",
     { Locale = Locale, StatsDb = StatsDb, Cache = InsightsCache, VS = ViewSettings,
-      Manual = ManualBooks })
+      Manual = ManualBooks, Prefs = Prefs })
 
 -- The three popups the insights view opens: its 8-week trend chart, the
 -- reading heatmaps, and the book lists. Loaded before the view because it
@@ -248,11 +248,21 @@ local Achievements = loadModule("lib/achievements.lua",
 local AchievementsView = loadModule("views/achievements_view.lua",
     { Achievements = Achievements, Locale = Locale, ListWidget = ListWidget })
 
+-- The combined current/best streak popup with its full-history calendar,
+-- opened both from the insights page's streak cells and straight from the
+-- menu. Split out of insights_view.lua; it needs only the shared data/UI
+-- modules, so it loads first and is handed to the insights view below.
+local StreakCalendar = loadModule("views/streak_calendar_view.lua", {
+    Locale = Locale, Colors = Colors, Fonts = Fonts, UI = UI,
+    Data = InsightsData, Prefs = Prefs,
+})
+
 local Insights = loadModule("views/insights_view.lua", {
     Locale = Locale, Colors = Colors, Fonts = Fonts,
     PopupUtil = PopupUtil, VS = ViewSettings, Cache = InsightsCache, UI = UI,
     Trend = Trend, Heatmap = Heatmap, BookList = BookList, Data = InsightsData,
     Manual = ManualBooks, Achievements = Achievements, AchievementsView = AchievementsView,
+    Prefs = Prefs, Streak = StreakCalendar,
 })
 local BookCalendar = loadModule("views/book_calendar_view.lua", {
     Locale = Locale, Colors = Colors, Fonts = Fonts, Prefs = Prefs,
@@ -817,6 +827,15 @@ end
 function ReadingInsights:onShowReadingRecordsPopup()
     local popup = Records.Popup:new{ ui = self.ui }
     UIManager:show(popup)
+    return true
+end
+
+-- General, like the Records popup above: the current/best streak popup is
+-- global all-time data, not tied to any open book, so it opens in both Reader
+-- view and the File manager. Same combined popup the insights page's streak
+-- cells open (views/insights_view.lua's showStreaksPopup).
+function ReadingInsights:onShowReadingStreakPopup()
+    Insights.showStreaks()
     return true
 end
 
