@@ -718,11 +718,10 @@ function filemanagerutil.showChooseDialog(title_header, caller_callback, current
     UIManager:show(dialog)
 end
 
-function filemanagerutil.openFile(ui, file, caller_pre_callback, no_dialog)
+function filemanagerutil.openFile(ui, file, caller_pre_callback, no_dialog, after_open_callback)
     if ui and ui.history and ui.history.booklist_menu then
         UIManager:close(ui.history.booklist_menu)
     end
-
     local openFile = function()
         if caller_pre_callback then
             caller_pre_callback()
@@ -739,11 +738,11 @@ function filemanagerutil.openFile(ui, file, caller_pre_callback, no_dialog)
                         ui[provider.provider]:openFile(file)
                     end
                 else -- document
-                    ui:switchDocument(file, nil, nil, provider, is_provider_forced)
+                    ui:switchDocument(file, nil, after_open_callback, provider, is_provider_forced)
                 end
             end
         else -- FM
-            ui:openFile(file)
+            ui:openFile(file, nil, nil, nil, after_open_callback)
         end
     end
 
