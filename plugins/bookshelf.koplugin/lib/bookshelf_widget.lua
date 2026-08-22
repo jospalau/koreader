@@ -10691,12 +10691,12 @@ function BookshelfWidget:_nudgeListRows(delta)
     self._nav_dirty = true
     self:_scheduleNavFlush()
     self:_clearDpadFocus()
-    -- Thumbnails are sized off the row height, so a row step resizes every
-    -- cover on the page: draft regrid rescales from cache and the settle timer
-    -- sharpens them once the pinching stops, exactly as the grid does.
-    self:_draftRebuild()
+    -- Full-quality rebuild on every step (no draft/settle two-pass): each
+    -- row step decodes covers at final size immediately, trading burst-zoom
+    -- responsiveness for no draft->settle flicker. See git history for the
+    -- prior draft-regrid approach if this needs revisiting.
+    self:_rebuild()
     UIManager:setDirty(self, "ui")
-    self:_scheduleCoverSettle()
     return true
 end
 
