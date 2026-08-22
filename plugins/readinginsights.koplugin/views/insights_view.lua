@@ -78,6 +78,16 @@ local Locale, Colors, Fonts, PopupUtil, VS, Cache, UI, Trend, Heatmap, BookList,
 -- true: today's bar in the weekly chart is black. false: all bars gray.
 local WEEKLY_CHART_HIGHLIGHT_TODAY = true
 
+-- Fill used behind a handful of section headers ("Last week", "Current
+-- streak"/"Best streak", the year header, "Achievements" when shown next
+-- to "Reading goal", and "Total read") to visually group them with the
+-- section above rather than reading as their own separate block. Backed by
+-- the user-configurable "Section header background color" (white by
+-- default, i.e. no visible fill) - see colors.lua. A function rather than
+-- a value computed once at load time, so it always reflects the current
+-- setting even if changed after this module was first loaded.
+local function HEADER_BG() return Colors.headerBg() end
+
 -- Value-based (not reference-based) equality for the small stat tables
 -- returned by the getters below. Needed because a per-minute cache refresh
 -- allocates a brand new result table every time it recomputes, even when
@@ -225,6 +235,18 @@ local function tappableCell(widget, col_width, callback)
     return cell
 end
 
+-- Same as UI.buildSectionHeader, but insets the returned widget (including
+-- its background) so its left/right edges land exactly where the section's
+-- divider lines do. buildSectionHeader on its own spans layout.full_width
+-- with the horizontal inset baked in as *internal* left/right padding, so a
+-- plain white background bleeding out to the screen edges is invisible -
+-- but a colored one (HEADER_BG) visibly overshoots the lines above/below
+-- it, which is what this wrapper avoids.
+local function buildAlignedSectionHeader(font_section, text, layout, background)
+    return UI.padded(layout.padding_h,
+        UI.buildSectionHeader(font_section, text, layout.content_width, 0, background))
+end
+
 local function buildYearHeader(popup_self, font_section, font_label, layout, year_range, selected_year)
     local prev_available = selected_year > year_range.min_year
     local next_available = selected_year < year_range.max_year
@@ -326,13 +348,18 @@ local function buildYearHeader(popup_self, font_section, font_label, layout, yea
         right_slot,
     }
 
+    -- padding_left/right were layout.padding_h here (baked into the
+    -- background-painted area, so the background bled out to the screen
+    -- edge). Moved to an external UI.padded wrap at the call site instead,
+    -- so the background aligns with the section's divider lines like every
+    -- other header background does.
     return FrameContainer:new{
-        background     = Blitbuffer.COLOR_WHITE,
+        background     = HEADER_BG(),
         bordersize     = 0,
         padding_top    = Size.padding.small,
         padding_bottom = Size.padding.small,
-        padding_left   = layout.padding_h,
-        padding_right  = layout.padding_h,
+        padding_left   = 0,
+        padding_right  = 0,
         header_content,
     }
 end
@@ -751,6 +778,13 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, year_ran
                 VerticalSpan:new{ height = Size.padding.default },
                 UI.padded(layout.padding_h, week_row),
             }
+            -- Thin divider under the avg time/day - avg pages/day row, so it
+            -- reads as visually separated from the daily bar chart below it
+            -- (mirrors the thin divider used under the yearly figures,
+            -- above the monthly chart).
+            table.insert(last_week_content, VerticalSpan:new{ height = Size.padding.default })
+            table.insert(last_week_content, UI.padded(layout.padding_h,
+                Colors.newBar(layout.content_width, Size.line.thin, Colors.separator())))
             if weekly_chart then
                 table.insert(last_week_content, VerticalSpan:new{ height = Size.padding.default })
                 table.insert(last_week_content, UI.padded(layout.padding_h, weekly_chart))
@@ -758,7 +792,7 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, year_ran
 
             -- Tapping the header toggles the chart above between reading
             -- time and pages read per day (see toggleWeeklyChartMode()).
-            local last_week_header = UI.buildSectionHeader(fonts.section, _("Last week"), layout.full_width)
+            local last_week_header = buildAlignedSectionHeader(fonts.section, _("Last week"), layout, HEADER_BG())
             local tappable_last_week_header = InputContainer:new{
                 dimen = Geom:new{ x = 0, y = 0, w = last_week_header:getSize().w, h = last_week_header:getSize().h },
                 last_week_header,
@@ -794,8 +828,8 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, year_ran
         function(n) return N_("week", "weeks", n) end, _("No streak"))
 
     -- Two-column streak header (tappable: shows date range for that streak).
-    local streak_header_left  = UI.buildSectionHeader(fonts.section, _("Current streak"), layout.col_width, 0)
-    local streak_header_right = UI.buildSectionHeader(fonts.section, _("Best streak"),    layout.col_width, 0)
+    local streak_header_left  = UI.buildSectionHeader(fonts.section, _("Current streak"), layout.col_width, 0, HEADER_BG())
+    local streak_header_right = UI.buildSectionHeader(fonts.section, _("Best streak"),    layout.col_width, 0, HEADER_BG())
     local sep_h = streak_header_left:getSize().h
 
     local tap_current_header = InputContainer:new{
@@ -818,18 +852,22 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, year_ran
         return true
     end
 
-    local streak_combined_header = FrameContainer:new{
-        background = Blitbuffer.COLOR_WHITE,
+    -- The HorizontalSpan that used to sit inside this FrameContainer (as
+    -- the left inset) is now the outer UI.padded wrap below instead, so the
+    -- gray background itself is inset to match the section's divider
+    -- lines, rather than bleeding out to the screen edge the way a plain
+    -- white background could get away with unnoticed.
+    local streak_combined_header = UI.padded(layout.padding_h, FrameContainer:new{
+        background = HEADER_BG(),
         bordersize = 0,
         padding    = 0,
         HorizontalGroup:new{
             align = "center",
-            HorizontalSpan:new{ width = layout.padding_h },
             UI.fixedCol(tap_current_header, layout.col_width),
             UI.buildColumnSeparator(layout.column_gap, sep_h),
             UI.fixedCol(tap_best_header,    layout.col_width),
         },
-    }
+    })
 
     -- Single data row: each Current/Best column is split into a days sub-cell
     -- and a weeks sub-cell (tappable, each shows its own date range), giving
@@ -894,12 +932,13 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, year_ran
         streak_combined_header,
         streak_rows, layout, { pad_row = false })
 
-    local year_header = buildYearHeader(popup_self, fonts.section, fonts.label, layout, year_range, popup_self.selected_year)
+    local year_header = UI.padded(layout.padding_h,
+        buildYearHeader(popup_self, fonts.section, fonts.label, layout, year_range, popup_self.selected_year))
     local yearly_row  = buildYearlyRow(popup_self, yearly_stats, fonts, layout)
 
     local chart = buildMonthlyChart(popup_self, monthly_data, layout, fonts)
 
-    UI.addSectionWithRow(sections, year_header, yearly_row, layout, { pad_row = false, no_bottom_line = not chart })
+    UI.addSectionWithRow(sections, year_header, yearly_row, layout, { pad_row = false, no_bottom_line = not chart, bottom_line_thin = true })
 
     if chart then
         local chart_header_text = (popup_self.mode == VS.INSIGHTS_MODE_HOURS
@@ -909,7 +948,23 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, year_ran
             or _("Days read per month")
         chart_header_text = chart_header_text
         --.. " \xe2\x80\xba"
-        local chart_header = UI.buildSectionHeader(fonts.section, chart_header_text, layout.full_width)
+        -- Styled like the label captions under a value (e.g. "pages read",
+        -- "reading time" - fonts.label/Colors.label()) rather than a bold
+        -- section title, and with no divider under it (no_top_line below),
+        -- so it reads as a lightweight caption for the chart rather than a
+        -- heavyweight section header.
+        local chart_header_text_widget = TextWidget:new{
+            text = chart_header_text, face = fonts.label, fgcolor = Colors.label(),
+        }
+        local chart_header = FrameContainer:new{
+            background     = Blitbuffer.COLOR_WHITE,
+            bordersize     = 0,
+            padding_top    = Size.padding.small,
+            padding_bottom = Size.padding.small,
+            padding_left   = Size.padding.large,
+            padding_right  = 0,
+            chart_header_text_widget,
+        }
         local tappable_chart_header = InputContainer:new{
             dimen = Geom:new{ x = 0, y = 0, w = chart_header:getSize().w, h = chart_header:getSize().h },
             chart_header,
@@ -921,7 +976,23 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, year_ran
             popup_self:cycleInsightsMode()
             return true
         end
-        UI.addSectionWithRow(sections, tappable_chart_header, chart, layout, { add_divider = true, no_bottom_line = false })
+        -- The divider below the chart depends on what comes right after it:
+        --   - GOAL_MODE_BOTH: the "Reading goal | Achievements" header/row
+        --     follows, with its own gray header background - keep the
+        --     regular thick line to separate it clearly.
+        --   - GOAL_MODE_GOAL: the goal row now follows with no header of
+        --     its own (see the goal-only branch below) - thin line, so
+        --     the row still reads as visually separated from the chart.
+        --   - GOAL_MODE_OFF: "Total read" follows instead (its own thin
+        --     top line included) - since nothing else sits between them,
+        --     use the regular thick line, same as any other section end.
+        -- no_top_line: no divider directly under the chart header - it now
+        -- reads as a plain caption for the chart rather than a section
+        -- title with its own separator line.
+        local goal_mode = VS.Opt.readGoalSectionMode()
+        UI.addSectionWithRow(sections, tappable_chart_header, chart, layout,
+            { add_divider = true, no_top_line = true,
+              no_bottom_line = false, bottom_line_thin = goal_mode == VS.Opt.GOAL_MODE_GOAL })
     end
 
     -- Long-press targets for the reading-goal section (its headers and
@@ -985,18 +1056,59 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, year_ran
             return cell
         end
 
-        -- The same small top/bottom padding buildSectionHeader wraps its
-        -- title in, so a custom header lines up vertically with every other
-        -- section header.
-        local function paddedHeader(inner)
+        -- Same small top/bottom padding buildSectionHeader wraps its title
+        -- in, but baked into each column individually (instead of once for
+        -- the whole row), so one column can get its own background (used to
+        -- gray out only "Achievements", not "Reading goal" next to it -
+        -- see HEADER_BG above) while staying the same height as the other.
+        -- `extra_left_gap`, when given, adds that much blank space *inside*
+        -- the (possibly colored) frame before the widget - used to let a
+        -- colored column's background absorb the gap before it, so it
+        -- reaches right up to the column divider instead of stopping short
+        -- with a visible white sliver in between.
+        local function headerCol(widget, background, extra_left_gap)
+            local content = widget
+            if extra_left_gap then
+                content = HorizontalGroup:new{
+                    align = "center",
+                    HorizontalSpan:new{ width = extra_left_gap },
+                    widget,
+                }
+            end
             return FrameContainer:new{
-                background     = Blitbuffer.COLOR_WHITE,
+                background     = background or Blitbuffer.COLOR_WHITE,
                 bordersize     = 0,
                 padding_top    = Size.padding.small,
                 padding_bottom = Size.padding.small,
                 padding_left   = 0,
                 padding_right  = 0,
-                UI.padded(layout.padding_h, inner),
+                content,
+            }
+        end
+
+        -- Two-column title row (goal_title | ach_title). Built by hand
+        -- rather than via UI.buildTwoColRow so the right column's
+        -- background - when given - can start right after the divider
+        -- line (covering what would otherwise be a plain gap), reaching
+        -- all the way to the line instead of floating short of it.
+        local function paddedTwoColHeader(left_widget, right_widget, right_bg)
+            local left_col  = UI.fixedCol(headerCol(left_widget), layout.col_width)
+            local row_h     = left_col:getSize().h
+            local separator = HorizontalGroup:new{
+                align = "center",
+                HorizontalSpan:new{ width = layout.column_gap },
+                Colors.newBar(Size.line.medium, row_h, Colors.separator()),
+            }
+            local right_col = UI.fixedCol(
+                headerCol(right_widget, right_bg, layout.column_gap),
+                layout.col_width + layout.column_gap, row_h)
+
+            return FrameContainer:new{
+                background = Blitbuffer.COLOR_WHITE,
+                bordersize = 0,
+                padding    = 0,
+                UI.padded(layout.padding_h,
+                    HorizontalGroup:new{ align = "center", left_col, separator, right_col }),
             }
         end
 
@@ -1016,17 +1128,27 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, year_ran
 
             local left_cell  = dataCell(left_line, openFinished)
             addHold(left_cell, openFinishedMenu)
-            local right_cell = dataCell(right_line, editGoal)
-            addHold(right_cell, editGoal)
+            -- The target figure is informational only in this mode - with
+            -- no "Achievements" column next to it to label, tap/hold used
+            -- to open the goal-edit dialog, but that made it too easy to
+            -- trigger by accident while reading the count. Leave it a
+            -- plain, non-interactive cell; the goal can still be changed
+            -- from the settings menu.
+            local right_cell = right_line
 
-            -- Single "Reading goal" header spanning the row, tap/hold behaving
-            -- like the finished-book (left) cell.
-            local header = headerCell(buildGoalYearLabel(goal_year), openFinished, layout.content_width)
-            addHold(header, openFinishedMenu)
-
-            UI.addSectionWithRow(sections, paddedHeader(header),
-                wrapRow(UI.buildTwoColRow(left_cell, right_cell, layout)),
-                layout, { pad_row = false })
+            -- Reading-goal-only mode drops the "Reading goal" header/title
+            -- row entirely - unlike the combined view below, there's no
+            -- "Achievements" column next to it to label, and tapping/
+            -- holding the finished-book cell still does what the header
+            -- used to (openFinished / openFinishedMenu), so nothing is
+            -- lost by removing the caption. No top divider of its own
+            -- either - the chart section's own (thin) bottom line, right
+            -- above, already separates it from the chart.
+            table.insert(sections, VerticalSpan:new{ height = Size.padding.default })
+            table.insert(sections, wrapRow(UI.buildTwoColRow(left_cell, right_cell, layout)))
+            table.insert(sections, VerticalSpan:new{ height = Size.padding.large })
+            table.insert(sections, UI.padded(layout.padding_h,
+                Colors.newBar(layout.content_width, Size.line.thick, Colors.separator())))
         else
             -- Combined view: "finished/target" figure + achievements count.
             local left_value = formatCount(finished_count) .. "/" .. formatCount(goal_value)
@@ -1054,7 +1176,7 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, year_ran
             local ach_title  = headerCell(_("Achievements"), openAchievements)
 
             UI.addSectionWithRow(sections,
-                paddedHeader(UI.buildTwoColRow(goal_title, ach_title, layout)),
+                paddedTwoColHeader(goal_title, ach_title, HEADER_BG()),
                 wrapRow(UI.buildTwoColRow(left_cell, right_cell, layout)),
                 layout, { pad_row = false })
         end
@@ -1103,7 +1225,7 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, year_ran
 
         -- Tapping the header opens the reading heatmap popup (moved here
         -- from tapping the year, see showReadingHeatmap / buildYearHeader).
-        local total_read_header = UI.buildSectionHeader(fonts.section, header_text, layout.full_width)
+        local total_read_header = buildAlignedSectionHeader(fonts.section, header_text, layout, HEADER_BG())
         local tappable_total_read_header = InputContainer:new{
             dimen = Geom:new{ x = 0, y = 0, w = total_read_header:getSize().w, h = total_read_header:getSize().h },
             total_read_header,

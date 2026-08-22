@@ -226,19 +226,22 @@ local function buildValueLine(font_value, font_label, col_width, time_data, labe
     }
 end
 
--- Two UI.buildSectionHeader widgets in a HorizontalGroup.
+-- Two UI.buildSectionHeader widgets in a HorizontalGroup, inset by
+-- layout.padding_h on each side (like buildAlignedSectionHeader in
+-- insights_view.lua) so a colored background lines up with the divider
+-- lines above/below instead of bleeding out to the screen edges.
 -- When show_next is false (no next chapter), the "Next chapter" label is
 -- omitted, leaving that side blank instead of showing a misleading header.
 local function buildChapterHeaders(font_section, layout, show_next)
-    local left_width          = layout.padding_h + layout.col_width + math.floor(layout.separator_width / 2)
-    local right_width         = layout.full_width - left_width
+    local left_width           = layout.col_width + math.floor(layout.separator_width / 2)
+    local right_width          = layout.content_width - left_width
     local next_chapter_padding = math.ceil(layout.separator_width / 2)
     local next_chapter_text = show_next and _("Next chapter") or ""
-    return HorizontalGroup:new{
+    return UI.padded(layout.padding_h, HorizontalGroup:new{
         align = "center",
-        UI.buildSectionHeader(font_section, _("This chapter"), left_width),
-        UI.buildSectionHeader(font_section, next_chapter_text, right_width, next_chapter_padding),
-    }
+        UI.buildSectionHeader(font_section, _("This chapter"), left_width, 0, Colors.headerBg()),
+        UI.buildSectionHeader(font_section, next_chapter_text, right_width, next_chapter_padding, Colors.headerBg()),
+    })
 end
 
 -- Main section builder.
@@ -358,7 +361,13 @@ local function buildSections(stats, fonts, layout, popup)
         )
     table.insert(sections, UI.padded(layout.padding_h,
         Colors.newBar(layout.full_width - 2 * layout.padding_h, Size.line.thick, Colors.separator())))
-    local this_book_header = UI.buildSectionHeader(fonts.section, _("This book"), layout.full_width)
+    local this_book_header_content = UI.padded(layout.padding_h,
+        UI.buildSectionHeader(fonts.section, _("This book"), layout.content_width, 0, Colors.headerBg()))
+    -- Wrapped in tappableWrap (fixed dimen), same reasoning as chapter_headers
+    -- above: a bare HorizontalGroup from UI.padded isn't guaranteed a usable
+    -- .dimen for UI.hitTest, so the "This book" tap-to-open-stats target was
+    -- unreliable without it.
+    local this_book_header = tappableWrap(this_book_header_content, this_book_header_content:getSize().w)
     if popup then
         popup._this_book_header = this_book_header
     end
@@ -398,7 +407,11 @@ local function buildSections(stats, fonts, layout, popup)
     end
     table.insert(sections, UI.padded(layout.padding_h,
         Colors.newBar(layout.full_width - 2 * layout.padding_h, Size.line.thick, Colors.separator())))
-    local pace_header = UI.buildSectionHeader(fonts.section, _("Pace"), layout.full_width)
+    local pace_header_content = UI.padded(layout.padding_h,
+        UI.buildSectionHeader(fonts.section, _("Pace"), layout.content_width, 0, Colors.headerBg()))
+    -- Same fixed-dimen wrapping as this_book_header above - without it the
+    -- "Pace" tap-to-open-calendar target was unreliable.
+    local pace_header = tappableWrap(pace_header_content, pace_header_content:getSize().w)
     if popup then popup._pace_header = pace_header end
     table.insert(sections, pace_header)
     table.insert(sections, VerticalSpan:new{ height = Size.padding.default })
