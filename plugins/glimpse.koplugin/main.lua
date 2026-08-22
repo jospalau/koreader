@@ -72,6 +72,7 @@ local SHADOW_KEY = "glimpse_disable_shadow"    -- drop the drawer's gradient sha
 local FAST_SWITCH_KEY = "glimpse_fast_image_switch" -- image switch uses a flashless partial refresh (may ghost); ON by default (nilOrTrue)
 local SUPPRESS_UNSUPPORTED_KEY = "glimpse_suppress_unsupported" -- silence the "EPUB only" notice on unsupported files, OFF by default
 local BOOKMARKS_KEY = "glimpse_include_bookmarks" -- include the user's dogear-bookmarked pages (rendered thumbnails) in the Gallery, OFF by default
+local LAYOUT_RIGHT_KEY = "glimpse_layout_right" -- drawer anchored to the RIGHT screen edge instead of the left, OFF by default
 local MAX_ZOOM_KEY = "glimpse_max_zoom"        -- zoom ceiling as a multiple of native resolution (double-tap target + pinch clamp)
 local GESTURE_TIP_KEY = "glimpse_gesture_tip_shown" -- one-time menu-open nudge to bind a gesture
 -- viewer gesture toggles (Settings → Gestures), all ON by default (nilOrTrue)
@@ -106,6 +107,7 @@ local QUICK_ACTIONS = {
     { key = "captions",   default = false },
     { key = "bookmarks",  default = false },
     { key = "invert",     default = true  },
+    { key = "layout",     default = false },
 }
 local function _quick_enabled(key)
     local cfg = G_reader_settings:readSetting(QUICK_ACTIONS_KEY)
@@ -135,6 +137,7 @@ local function _quick_label(key)
         captions   = _("Image Captions Toggle"),
         bookmarks  = _("Include Bookmarks Toggle"),
         invert     = _("Invert in Night Mode Toggle"),
+        layout     = _("Layout"),
     })[key] or key
 end
 
@@ -1316,6 +1319,10 @@ function GlimpsePopupMenu:init()
                 icon_size = self.icon_size, pad_left = self.pad_left,
             }
             row._callback = it.callback
+            -- toggle rows (a checkbox that flips a setting live) carry a getter
+            -- so onTap can refresh the glyph in place and keep the menu open
+            row._check_get = it.check_get
+            row._lead_wg = lead_wg
             self._rows[#self._rows + 1] = row
             table.insert(vg, row)
             if i < #list then
@@ -1389,6 +1396,21 @@ end
 function GlimpsePopupMenu:onTap(_, ges)
     for _, row in ipairs(self._rows) do
         if row.dimen and ges.pos:intersectWith(row.dimen) then
+            if row._check_get then
+                -- a live toggle (checkbox): apply the change immediately (the
+                -- callback flips the setting and re-lays-out the drawer beneath
+                -- us) but KEEP THE MENU OPEN, and refresh the checkbox glyph in
+                -- place so its new state shows. Lets the user flip several
+                -- settings in one visit instead of reopening the menu each time.
+                if row._callback then row._callback() end
+                if row._lead_wg and row._lead_wg.setText then
+                    row._lead_wg:setText(row._check_get() and "☑" or "☐")
+                end
+                -- repaint the menu on top of the just-updated drawer
+                UIManager:setDirty(self, "ui", self:refreshRegion())
+                return true
+            end
+            -- an action row: dismiss, then run it
             local cb = row._callback
             self:dismiss()
             if cb then cb() end
@@ -1449,6 +1471,7 @@ local GlimpseViewer = ImageViewer:extend{
     scope = nil,           -- effective scope: "read_so_far" | "whole_book"
     on_toggle_scope = nil, -- function(): flip the scope setting and reopen
     on_toggle_bookmarks = nil, -- function(): flip "include bookmarks" and reopen
+    on_choose_layout = nil, -- function(): open the Left/Right side chooser
     get_pref = nil,        -- function(meta) -> per-image prefs {rotation=}
     set_pref = nil,        -- function(meta, key, value)
     -- Gallery tabs. The single-image view uses image/image_metas (= the
@@ -1534,14 +1557,35 @@ end
 -- panel_ratio, and the dot pill and ⋯ button are OVERLAID on the image
 -- instead of stacked below it.
 function GlimpseViewer:update()
+    -- Zoom steps (pinch, +/− buttons, double-tap) only change the image and
+    -- the zoom control's dim state — never the rest of the chrome. When a full
+    -- build already exists, take the light path that rebuilds just the image
+    -- instead of tearing down and reconstructing every widget each step.
+    if self._zooming and not self._gallery_mode
+            and self._overlay and self._image_layer and self._image_layer.dimen then
+        return self:_updateImageOnly()
+    end
     self:_clean_image_wg()
-    local orig_dimen = self.main_frame.dimen
+    -- COPY, not a reference: FrameContainer:paintTo mutates self.dimen.x/y in
+    -- place on every repaint, so a bare reference would silently become the NEW
+    -- position by the time the refresh-region callback runs — collapsing
+    -- main_frame.dimen:combine(orig_dimen) to just the new rect. That breaks a
+    -- Layout side-flip, where the region must span BOTH the old and new drawer
+    -- positions to clear the old side (the old ink otherwise lingers on e-ink).
+    local orig_dimen = self.main_frame.dimen and self.main_frame.dimen:copy()
+
+    -- Layout (Settings → Layout): the drawer sits against the LEFT screen edge
+    -- by default, or the RIGHT edge when turned on. The whole panel — border,
+    -- rounded corners, gradient shadow — and all the overlaid chrome mirror
+    -- horizontally; the outer (screen) edge is always the flush/borderless one.
+    self._on_right = G_reader_settings:isTrue(LAYOUT_RIGHT_KEY)
 
     self._panel_w = math.floor(Screen:getWidth() * self.panel_ratio)
     self._panel_h = Screen:getHeight() - 2 * self.panel_vgap
-    -- content area inside the drawer's border (top/right/bottom only — the
-    -- left edge is borderless and flush with the screen); self.width/height
-    -- are what the inherited zoom/pan code sizes the image against
+    -- content area inside the drawer's border (the outer/screen edge is
+    -- borderless and flush; the inner edge facing the page carries the border
+    -- and rounded corners); self.width/height are what the inherited zoom/pan
+    -- code sizes the image against
     self.width = self._panel_w - self.panel_border
     self.height = self._panel_h - 2 * self.panel_border
 
@@ -1572,6 +1616,12 @@ function GlimpseViewer:update()
         dimen = Geom:new{ w = self.width, h = self.height },
         image_layer,
     }
+    -- kept for the light zoom repaint (_updateImageOnly): the overlay holds the
+    -- image AND all chrome (nav, ⋯, pill, zoom control, caption) in z-order, so
+    -- repainting it alone redraws everything the viewer shows without re-running
+    -- the drawer's panel/shadow paint.
+    self._overlay = overlay
+    self._image_layer = image_layer
     -- chrome is centered/aligned on the image area (content minus the gap
     -- that keeps it clear of the rounded right edge), like the design
     local image_area_w = self.width - self.image_right_gap
@@ -1819,21 +1869,60 @@ function GlimpseViewer:update()
             table.insert(overlay, self._bookmark_pill_wg)
         end
     end
+    -- Right-side layout: the whole chrome is positioned above as if the drawer
+    -- were on the left (prev arrow at the left inset, next/⋯ at the right edge,
+    -- caption top-left, the image_right_gap keeping chrome clear of the rounded
+    -- edge). Mirror every overlaid element's x within the content width in one
+    -- pass, so the flush-edge chrome lands on the (now-right) screen edge and
+    -- the rounded-edge chrome keeps its gap on the (now-left) inner edge. The
+    -- image layer itself is symmetric (centred fit) and needs no mirroring.
+    if self._on_right then
+        for _, wdg in ipairs(overlay) do
+            local off = wdg.overlap_offset
+            if off then
+                local ok, sz = pcall(wdg.getSize, wdg)
+                local ww = (ok and sz and sz.w) or 0
+                off[1] = self.width - off[1] - ww
+            end
+        end
+        -- The prev/next arrows are chevrons (‹ back, › forward): their DIRECTION
+        -- is universal, so keep ‹ on the left and › on the right. The mirror
+        -- above put ‹ at the (now-right) flush edge and › at the inner edge —
+        -- swap their positions back so the arrows read correctly. ⋯ (stacked
+        -- above the inner-edge arrow) and the pill stay mirrored.
+        local pf, nf = self._nav_prev_frame, self._nav_next_frame
+        if pf and pf.overlap_offset and nf and nf.overlap_offset then
+            pf.overlap_offset, nf.overlap_offset = nf.overlap_offset, pf.overlap_offset
+        end
+    end
     table.insert(self.frame_elements, overlay)
     self.frame_elements:resetLayout()
 
-    -- main_frame is a transparent full-height column at the left screen
-    -- edge; the drawer body (white, black border, rounded right corners)
+    -- main_frame is a transparent full-height column pinned to one screen edge;
+    -- the drawer body (white, black border, rounded corners on the inner edge)
     -- and its gradient shadow are painted by the _paintPanel hook, since
-    -- FrameContainer supports neither per-corner radii nor translucency.
+    -- FrameContainer supports neither per-corner radii nor translucency. The
+    -- border padding is on the INNER edge (right for a left drawer, left for a
+    -- right drawer); the outer edge is flush.
     self.main_frame.background = nil
     self.main_frame.radius = nil
     self.main_frame.bordersize = 0
     self.main_frame.padding = 0
-    self.main_frame.padding_left = 0
-    self.main_frame.padding_right = self.panel_border
+    self.main_frame.padding_left = self._on_right and self.panel_border or 0
+    self.main_frame.padding_right = self._on_right and 0 or self.panel_border
     self.main_frame.padding_top = self.panel_vgap + self.panel_border
     self.main_frame.padding_bottom = self.panel_vgap + self.panel_border
+    -- anchor the drawer to the chosen screen edge (every update, since the side
+    -- can change): a WidgetContainer with align=nil paints its child at its
+    -- dimen origin, so offset that origin to the right edge for a right drawer.
+    self[1].align = nil
+    if self._on_right then
+        self[1].dimen = Geom:new{ x = Screen:getWidth() - self._panel_w,
+            y = 0, w = self._panel_w, h = Screen:getHeight() }
+    else
+        self[1].dimen = Geom:new{ x = 0, y = 0,
+            w = Screen:getWidth(), h = Screen:getHeight() }
+    end
     if not self._panel_paint_hooked then
         self._panel_paint_hooked = true
         local orig_paintTo = self.main_frame.paintTo
@@ -1843,8 +1932,6 @@ function GlimpseViewer:update()
             orig_paintTo(frame, bb, x, y)
             viewer:_restoreCorners(bb, x, y)
         end
-        -- anchor the drawer to the left edge instead of centering
-        self[1].align = nil
     end
 
     -- Refresh policy (e-ink speed): the gradient shadow right of the panel
@@ -1878,9 +1965,51 @@ function GlimpseViewer:update()
         wfm_mode = "full"
     end
     self.dithered = not fast
+    -- Light image switch (default on via "Fast image switching"): the chrome is
+    -- freshly rebuilt above (pill, nav state, caption, bookmark pill all
+    -- correct) and the neighbour bitmap is already decoded (see
+    -- _prefetchNeighbors), so skip the slow dithered whole-drawer refresh and
+    -- repaint just the content overlay with a non-dithered, image-region
+    -- refresh — the same fast path zoom uses. Turning the setting OFF falls
+    -- through to the clean dithered clear below (wfm_mode already "full" then).
+    local switching = self._switching
+    self._switching = nil
+    if switching and not self._gallery_mode and not self._suppress_refresh
+            and not self._full_band_refresh
+            and self._overlay and self._image_layer
+            and G_reader_settings:nilOrTrue(FAST_SWITCH_KEY) then
+        self:_repaintOverlayFast(wfm_mode)
+        return
+    end
     if self._suppress_refresh then
         -- showViewer builds the full initial state (remembered image,
         -- restored zoom) before showing, then refreshes once
+        return
+    end
+    -- Content-changing transitions (gallery enter/exit, tab switch) repaint the
+    -- shadow and refresh its WHOLE band, like open/close — otherwise the band,
+    -- which an interior update deliberately leaves alone, can be left half-wiped
+    -- by a later promoted e-ink refresh (very visible on the right layout, where
+    -- the shadow falls toward screen-centre rather than off the far edge). The
+    -- numeric alpha repaints the page under the band first, so the shadow
+    -- re-blend stays accumulation-free (same contract as open).
+    local full_band = self._full_band_refresh
+    self._full_band_refresh = nil
+    if full_band then
+        UIManager:setDirty(self, function()
+            if not self.main_frame.dimen then return end
+            local d = self.main_frame.dimen:combine(orig_dimen)
+            if not G_reader_settings:isTrue(SHADOW_KEY) then
+                local extra = 2 * self.shadow_width - self.shadow_overlap + 1
+                if self._on_right then
+                    local nx = math.max(0, d.x - extra)
+                    d.w = d.w + (d.x - nx); d.x = nx
+                else
+                    d.w = math.min(Screen:getWidth() - d.x, d.w + extra)
+                end
+            end
+            return wfm_mode, d, not fast
+        end)
         return
     end
     -- Interior update: neither the shadow nor the page below changes, so
@@ -1916,6 +2045,9 @@ end
 function GlimpseViewer:_paintPanel(bb, x, y)
     local w, h = self._panel_w, self._panel_h
     local py = y + self.panel_vgap
+    -- Right-side layout mirrors the panel horizontally: the border and rounded
+    -- corners move to the LEFT (inner) edge and the shadow casts leftwards.
+    local on_right = self._on_right
     -- Night mode comes in two flavors:
     --   * HW invert (real e-ink panels mostly): the fb flag stays 0 and
     --     the panel inverts its output — paint the LOGICAL (day-polarity)
@@ -1941,7 +2073,9 @@ function GlimpseViewer:_paintPanel(bb, x, y)
     -- nothing changes there.
     local render_inv = inv
         and not (night and Device.isAndroid and Device:isAndroid())
-    local skey = tostring(night) .. tostring(render_inv)
+    -- side is baked into the cached stencils (border/corner/gradient sides), so
+    -- flipping Layout must rebuild them
+    local skey = tostring(night) .. tostring(render_inv) .. tostring(on_right)
     -- Advanced → Disable shadow: skip the gradient entirely. The dithered
     -- shadow is the main e-ink ghost source, so some users prefer it off.
     local shadow_disabled = G_reader_settings:isTrue(SHADOW_KEY)
@@ -2028,10 +2162,15 @@ function GlimpseViewer:_paintPanel(bb, x, y)
             -- opaque or fully transparent (a dot, or no dot)
             local level = (orig_level + bump * (peak_level - orig_level)) * 255
             local col = (i % 8) + 1
+            -- column i runs peak (panel edge) → fade. For a right drawer the
+            -- shadow casts leftwards, so write the mirror column: the peak ends
+            -- up at the buffer's RIGHT edge, which is blitted against the
+            -- panel's (left) inner edge below.
+            local ci = on_right and (swidth - 1 - i) or i
             for j = 0, shadow_h - 1 do
                 local threshold = (SHADOW_BAYER8[col][(j % 8) + 1] + 0.5) * 4
                 local a = level > threshold and 255 or 0
-                self._shadow_bb:setPixel(i, j, Blitbuffer.ColorRGB32(sv, sv, sv, a))
+                self._shadow_bb:setPixel(ci, j, Blitbuffer.ColorRGB32(sv, sv, sv, a))
             end
         end
         self._shadow_bb:setInverse(render_inv and 1 or 0)
@@ -2041,8 +2180,11 @@ function GlimpseViewer:_paintPanel(bb, x, y)
     local skip_shadow = self._skip_shadow_paint
     self._skip_shadow_paint = nil
     if not skip_shadow and not shadow_disabled then
-        bb:alphablitFrom(self._shadow_bb, x + w - self.shadow_overlap, y,
-            0, 0, swidth, shadow_h)
+        -- left drawer: cast right from the panel's right edge; right drawer:
+        -- cast left from the panel's left edge (buffer already mirrored above)
+        local sx = on_right and (x + self.shadow_overlap - swidth)
+            or (x + w - self.shadow_overlap)
+        bb:alphablitFrom(self._shadow_bb, sx, y, 0, 0, swidth, shadow_h)
     end
 
     -- Under-corner snapshots: the panel stencil's arc pixels carry
@@ -2061,15 +2203,18 @@ function GlimpseViewer:_paintPanel(bb, x, y)
         }
     end
     local ucb = self._under_corner_bbs
+    -- the rounded corners sit on the inner edge: right (x+w-cr) for a left
+    -- drawer, left (x) for a right drawer
+    local corner_x = on_right and x or (x + w - cr)
     if skip_shadow then
-        bb:blitFrom(ucb[1], x + w - cr, cpy, 0, 0, cr, cr)
-        bb:blitFrom(ucb[2], x + w - cr, cpy + h - cr, 0, 0, cr, cr)
+        bb:blitFrom(ucb[1], corner_x, cpy, 0, 0, cr, cr)
+        bb:blitFrom(ucb[2], corner_x, cpy + h - cr, 0, 0, cr, cr)
     else
         -- match the fb's inverse flag so these copies run on the C blitter
         ucb[1]:setInverse(render_inv and 1 or 0)
         ucb[2]:setInverse(render_inv and 1 or 0)
-        ucb[1]:blitFrom(bb, 0, 0, x + w - cr, cpy, cr, cr)
-        ucb[2]:blitFrom(bb, 0, 0, x + w - cr, cpy + h - cr, cr, cr)
+        ucb[1]:blitFrom(bb, 0, 0, corner_x, cpy, cr, cr)
+        ucb[2]:blitFrom(bb, 0, 0, corner_x, cpy + h - cr, cr, cr)
     end
 
     if not self._panel_bb or self._panel_bb:getWidth() ~= w
@@ -2095,21 +2240,27 @@ function GlimpseViewer:_paintPanel(bb, x, y)
         local bw = night and math.max(2, Screen:scaleBySize(1))
             or self.panel_border
         local r = self.panel_radius
-        -- border on top/right/bottom only: the left edge is flush with the
-        -- screen edge and borderless
+        -- border on three sides: top, bottom, and the INNER vertical edge
+        -- (right for a left drawer, left for a right drawer). The outer edge is
+        -- flush with the screen edge and borderless.
         self._panel_bb:paintRectRGB32(0, 0, w, h, c_body)
         self._panel_bb:paintRectRGB32(0, 0, w, bw, c_edge)
         self._panel_bb:paintRectRGB32(0, h - bw, w, bw, c_edge)
-        self._panel_bb:paintRectRGB32(w - bw, 0, bw, h, c_edge)
-        -- right corners: AA arcs — body inside, border ring, transparent
-        -- outside (the page shows in the notches)
+        self._panel_bb:paintRectRGB32(on_right and 0 or (w - bw), 0, bw, h, c_edge)
+        -- inner-edge corners: AA arcs — body inside, border ring, transparent
+        -- outside (the page shows in the notches). Circle centre and the
+        -- scanned column band both flip to the left for a right drawer.
         for cy_top = 0, 1 do
-            local ccx, ccy = w - r, cy_top == 0 and r or h - r
-            for px = w - r, w - 1 do
+            local ccx = on_right and r or (w - r)
+            local ccy = cy_top == 0 and r or h - r
+            local px_from = on_right and 0 or (w - r)
+            local px_to = on_right and (r - 1) or (w - 1)
+            for px = px_from, px_to do
                 for qy = 0, r - 1 do
                     local pyy = cy_top == 0 and qy or h - 1 - qy
                     local fx, fy = px + 0.5, pyy + 0.5
-                    if fx >= ccx and (cy_top == 0 and fy <= ccy or cy_top == 1 and fy >= ccy) then
+                    local x_out = on_right and (fx <= ccx) or (fx >= ccx)
+                    if x_out and (cy_top == 0 and fy <= ccy or cy_top == 1 and fy >= ccy) then
                         local d = math.sqrt((fx - ccx) ^ 2 + (fy - ccy) ^ 2)
                         local cov = math.min(math.max(r - d + 0.5, 0), 1)
                         local t_in = math.min(math.max((r - bw) - d + 0.5, 0), 1)
@@ -2143,17 +2294,22 @@ function GlimpseViewer:_saveCorners(bb, x, py)
             Blitbuffer.new(r, r, Blitbuffer.TYPE_BBRGB32),
         }
     end
-    self._corner_bbs[1]:blitFrom(bb, 0, 0, x + w - r, py, r, r)
-    self._corner_bbs[2]:blitFrom(bb, 0, 0, x + w - r, py + h - r, r, r)
+    -- rounded corners on the inner edge: right (x+w-r) for a left drawer, left
+    -- (x) for a right drawer
+    local corner_x = self._on_right and x or (x + w - r)
+    self._corner_bbs[1]:blitFrom(bb, 0, 0, corner_x, py, r, r)
+    self._corner_bbs[2]:blitFrom(bb, 0, 0, corner_x, py + h - r, r, r)
     for k = 1, 2 do
         local cbb = self._corner_bbs[k]
-        -- circle center in corner-local coords: (0, r) for the top-right
-        -- corner square, (0, 0) for the bottom-right one
+        -- circle centre in corner-local coords: x is the INTERIOR side of the
+        -- square (local 0 for a left drawer, local r for a right drawer); y is
+        -- r for the top corner, 0 for the bottom one
+        local ccx = self._on_right and r or 0
         local ccy = k == 1 and r or 0
         local keep_r = r - bw - self.image_padding
         for pyy = 0, r - 1 do
             for pxx = 0, r - 1 do
-                local d = math.sqrt((pxx + 0.5) ^ 2 + (pyy + 0.5 - ccy) ^ 2)
+                local d = math.sqrt((pxx + 0.5 - ccx) ^ 2 + (pyy + 0.5 - ccy) ^ 2)
                 local t_in = math.min(math.max(keep_r - d + 0.5, 0), 1)
                 if t_in > 0 then
                     local c = cbb:getPixel(pxx, pyy):getColorRGB32()
@@ -2170,8 +2326,9 @@ function GlimpseViewer:_restoreCorners(bb, x, y)
     local w, h = self._panel_w, self._panel_h
     local py = y + self.panel_vgap
     local r = self.panel_radius
-    bb:alphablitFrom(self._corner_bbs[1], x + w - r, py, 0, 0, r, r)
-    bb:alphablitFrom(self._corner_bbs[2], x + w - r, py + h - r, 0, 0, r, r)
+    local corner_x = self._on_right and x or (x + w - r)
+    bb:alphablitFrom(self._corner_bbs[1], corner_x, py, 0, 0, r, r)
+    bb:alphablitFrom(self._corner_bbs[2], corner_x, py + h - r, 0, 0, r, r)
 end
 
 -- The G-sensor's SetRotationMode event is delivered to the topmost widget
@@ -2275,8 +2432,15 @@ function GlimpseViewer:onCloseWidget()
         -- only when the shadow is on. With it off, keep the region to the
         -- drawer so a promoted/flash refresh never reaches the book page.
         if not G_reader_settings:isTrue(SHADOW_KEY) then
-            d.w = math.min(Screen:getWidth() - d.x,
-                d.w + 2 * self.shadow_width - self.shadow_overlap + 1)
+            local extra = 2 * self.shadow_width - self.shadow_overlap + 1
+            if self._on_right then
+                -- shadow casts leftwards: grow the region toward the left edge
+                local nx = math.max(0, d.x - extra)
+                d.w = d.w + (d.x - nx)
+                d.x = nx
+            else
+                d.w = math.min(Screen:getWidth() - d.x, d.w + extra)
+            end
         end
         -- "full": a GC16 clearing refresh over the drawer (and its shadow)
         -- area on every close — the ghosting the drawer/shadow leaves on
@@ -2365,6 +2529,35 @@ function GlimpseViewer:_new_image_wg()
         dimen = Geom:new{ w = avail_w, h = self.img_container_h },
         self._image_wg,
     }
+end
+
+-- Light update for zoom steps: rebuild ONLY the image widget at the new scale
+-- and swap it into the existing image layer, leaving every other widget (nav,
+-- ⋯, pill, caption) untouched. The zoom control is the sole chrome whose look
+-- depends on zoom (its +/−/fit zones dim at the limits), so refresh its flags
+-- in place. Then repaint the overlay (image + chrome, correct z-order) with a
+-- flashless "ui" refresh — no chrome reconstruction, no shadow re-blend. Falls
+-- back to a full update() if the layer refs aren't ready (should not happen:
+-- update() only routes here once a full build exists).
+function GlimpseViewer:_updateImageOnly()
+    if not (self._image_layer and self._image_layer.dimen and self._overlay) then
+        self._zooming = nil
+        return self:update()
+    end
+    self:_clean_image_wg()
+    self:_new_image_wg()
+    -- swap the freshly-scaled image into the existing layer; FrameContainer
+    -- recomputes its size from the child at paint, so nothing else to relayout
+    self._image_layer[1] = self.image_container
+    local zc = self._zoomctl_frame
+    if zc then
+        local over_fit = self:_isOverFit()
+        zc.fit_disabled = not over_fit
+        zc.minus_disabled = not over_fit
+        zc.plus_disabled = self:_isAtMax()
+        zc.inverted_zone = nil
+    end
+    self:_repaintOverlayFast("ui")
 end
 
 -- Full-resolution decode of the current image, for the zoomed view. Decoded
@@ -2547,6 +2740,7 @@ function GlimpseViewer:_switchGalleryTab(tab)
     if tab == self._gallery_tab then return end
     self._gallery_tab = tab
     self._gallery_page = 1
+    self._full_band_refresh = true
     self:update()
 end
 
@@ -2563,6 +2757,7 @@ function GlimpseViewer:_enterGallery(page, tab)
     -- left behind anyway once the user goes looking for another image
     self.scale_factor = 0
     self._center_x_ratio, self._center_y_ratio = 0.5, 0.5
+    self._full_band_refresh = true
     self:update()
 end
 
@@ -2577,6 +2772,10 @@ function GlimpseViewer:_exitGallery(idx)
     end
     self._gallery_mode = false
     if idx then self._gallery_is_root = false end
+    -- leaving the grid is a content-changing transition like entering it:
+    -- repaint the shadow band and take the full (not light-switch) refresh so
+    -- the grid can't ghost through and the shadow can't be left half-wiped
+    self._full_band_refresh = true
     if idx and idx ~= (self._images_list_cur or 1) then
         self:switchToImageNum(idx) -- runs update()
     else
@@ -2591,7 +2790,10 @@ end
 -- Drawer-content origin: gallery cell/tab rects are recorded relative to it.
 function GlimpseViewer:_contentOrigin()
     local mf = self.main_frame.dimen
-    return mf.x, mf.y + self.panel_vgap + self.panel_border
+    -- content is inset from mf.x by the inner-edge border padding: 0 on the left
+    -- for a left drawer, panel_border on the left for a right drawer
+    local left_pad = self._on_right and self.panel_border or 0
+    return mf.x + left_pad, mf.y + self.panel_vgap + self.panel_border
 end
 
 -- The gallery cell {x,y,w,h,idx} at pos (drawer-content space), or nil.
@@ -3129,6 +3331,7 @@ function GlimpseViewer:_showMoreMenu()
         items[#items + 1] = {
             text = _("Nav Buttons"),
             check = G_reader_settings:isTrue(NAV_BUTTONS_KEY),
+            check_get = function() return G_reader_settings:isTrue(NAV_BUTTONS_KEY) end,
             callback = function() self:_togglePrevNext() end,
         }
     end
@@ -3136,6 +3339,7 @@ function GlimpseViewer:_showMoreMenu()
         items[#items + 1] = {
             text = _("Zoom Controls"),
             check = G_reader_settings:isTrue(ZOOMCTL_KEY),
+            check_get = function() return G_reader_settings:isTrue(ZOOMCTL_KEY) end,
             callback = function() self:_toggleZoomControl() end,
         }
     end
@@ -3143,6 +3347,7 @@ function GlimpseViewer:_showMoreMenu()
         items[#items + 1] = {
             text = _("Image Captions"),
             check = G_reader_settings:nilOrTrue(CAPTIONS_KEY),
+            check_get = function() return G_reader_settings:nilOrTrue(CAPTIONS_KEY) end,
             callback = function() self:_toggleCaptions() end,
         }
     end
@@ -3161,7 +3366,19 @@ function GlimpseViewer:_showMoreMenu()
             -- so it lines up with the icons above it
             text = _("Invert in Night Mode"),
             check = G_reader_settings:isTrue(INVERT_KEY),
+            check_get = function() return G_reader_settings:isTrue(INVERT_KEY) end,
             callback = function() self:_toggleInvert() end,
+        }
+    end
+    if _quick_enabled("layout") then
+        items[#items + 1] = {
+            -- opens the Left/Right side chooser; the plugin reopens the drawer
+            -- on the chosen side
+            text = _("Layout"),
+            icon = _PLUGIN_DIR .. "/assets/layout.svg",
+            callback = function()
+                if self.on_choose_layout then self.on_choose_layout() end
+            end,
         }
     end
     -- Gallery is always available, set apart at the very bottom as its own
@@ -3196,8 +3413,12 @@ function GlimpseViewer:_showMoreMenu()
             local mov = menu.movable
             local w = mov and mov.dimen and mov.dimen.w or 0
             local gap = Screen:scaleBySize(10)
-            return Geom:new{ x = d.x + d.w - w, y = d.y - gap,
-                w = 0, h = d.h }, true
+            -- Left drawer: ⋯ sits at the bottom-right, so align the menu's RIGHT
+            -- edge to the button's right (it grows left, away from the screen
+            -- edge). Right drawer: ⋯ sits at the bottom-left, so align the LEFT
+            -- edges instead (it grows right), keeping the menu on-screen.
+            local x = self._on_right and d.x or (d.x + d.w - w)
+            return Geom:new{ x = x, y = d.y - gap, w = 0, h = d.h }, true
         end,
     }
     -- when the menu closes, also repaint the ⋯ button so its pressed
@@ -3361,7 +3582,10 @@ function GlimpseViewer:onGlimpseDoubleTap(_, ges)
     else
         self.scale_factor = 0
         self._center_x_ratio, self._center_y_ratio = 0.5, 0.5
+        self._fast_refresh = true
+        self._zooming = true -- snap back to fit is a zoom step too (light path)
         self:update()
+        self._zooming = nil
     end
     return true
 end
@@ -3596,10 +3820,48 @@ function GlimpseViewer:switchToImageNum(image_num)
     -- the previous image doesn't ghost through (see the refresh policy in
     -- update()). switchToImageNum → ImageViewer.switchToImageNum → update().
     self._flash_switch = true
+    -- take the light refresh path in update() (rebuild chrome, but repaint the
+    -- content overlay with a non-dithered image-region refresh instead of a
+    -- dithered whole-drawer one) — gated on "Fast image switching"
+    self._switching = true
     ImageViewer.switchToImageNum(self, image_num)
     local meta = self.image_metas and self.image_metas[image_num]
     if meta and self.on_image_shown then
         self.on_image_shown(meta, image_num)
+    end
+    self:_prefetchNeighbors()
+end
+
+-- Warm the decode cache for the images on either side of the current one, so
+-- the next arrow/swipe is a copy of an already-decoded bitmap instead of a
+-- fresh decode+cap-scale. The work runs on a short delay so the just-triggered
+-- switch refreshes first, and a generation counter cancels any prefetch left
+-- pending when the user keeps moving — only the position they settle on warms,
+-- and rapid swiping never piles up stale decodes. Calling the list closure is
+-- what populates the shared cache (see the decode closure in showViewer); the
+-- copy it returns is ours to free immediately.
+function GlimpseViewer:_prefetchNeighbors()
+    if self._gallery_mode then return end
+    -- ImageViewer keeps the closure list in _images_list; self.image is the
+    -- CURRENT decoded bitmap after a switch, not the list.
+    local list = self._images_list
+    if type(list) ~= "table" then return end
+    self._prefetch_gen = (self._prefetch_gen or 0) + 1
+    local gen = self._prefetch_gen
+    local cur = self._images_list_cur or 1
+    local nb = self._images_list_nb or 1
+    local targets = {}
+    if cur + 1 <= nb then targets[#targets + 1] = cur + 1 end
+    if cur - 1 >= 1 then targets[#targets + 1] = cur - 1 end
+    for _, idx in ipairs(targets) do
+        local fn = list[idx]
+        if type(fn) == "function" then
+            UIManager:scheduleIn(0.15, function()
+                if self._prefetch_gen ~= gen then return end
+                local ok, bb = pcall(fn)
+                if ok and bb and bb.free then bb:free() end
+            end)
+        end
     end
 end
 
@@ -3693,11 +3955,60 @@ function GlimpseViewer:onHoldRelease(_, ges)
     return true
 end
 
+-- Repaint just the overlay (image + all chrome) with the given refresh mode,
+-- WITHOUT re-running the drawer's panel/shadow paint (that only changes on
+-- open/close and re-blending it would darken the shadow). Used by the light
+-- zoom path. Non-dithered: a zoom step doesn't need it, and a lingering
+-- dithered flag on self/the image would otherwise infect the regional refresh.
+function GlimpseViewer:_repaintOverlayFast(mode)
+    -- OverlapGroup never updates its own dimen.x/y on paint, but the image
+    -- layer (a FrameContainer filling the same content area) does — so use it
+    -- for the absolute origin and the refresh region.
+    local ov, il = self._overlay, self._image_layer
+    if not (ov and il) then return false end
+    local ox, oy, region
+    if il.dimen then
+        ox, oy, region = il.dimen.x, il.dimen.y, il.dimen
+    else
+        -- fresh overlay (rebuilt this update, e.g. a light image switch): it
+        -- hasn't painted yet, so derive the content origin from the persistent
+        -- main_frame + its paddings. widgetRepaint sets il.dimen for next time.
+        local mf = self.main_frame
+        if not (mf and mf.dimen) then return false end
+        ox = mf.dimen.x + (mf.padding_left or 0)
+        oy = mf.dimen.y + (mf.padding_top or 0)
+        region = Geom:new{ x = ox, y = oy, w = self.width, h = self.height }
+    end
+    self.dithered = false
+    if self._image_wg then self._image_wg.dithered = false end
+    UIManager:widgetRepaint(ov, ox, oy)
+    -- The overlay paints the image's SQUARE corners over the panel's rounded
+    -- corner notches. A full paint fixes this in main_frame.paintTo via
+    -- _restoreCorners; the light path skips main_frame, so re-blend the saved
+    -- rounded corners here too — otherwise the drawer reads as a full rectangle
+    -- after a zoom step.
+    local mf = self.main_frame
+    if self._corner_bbs and mf and mf.dimen then
+        self:_restoreCorners(Screen.bb, mf.dimen.x, mf.dimen.y)
+    end
+    UIManager:setDirty(nil, mode, region)
+    return true
+end
+
 -- On the SDL emulator, mouse wheel / two-finger trackpad scroll arrives as
 -- a fake pan gesture tagged mousewheel_direction (real devices never send
 -- it): treat it as zoom, so pinch can be tested without a touchscreen.
--- Safe with the follow-up pan_release: upstream's onPanRelease only acts
--- when a real pan set _panning.
+--
+-- Panning otherwise falls through to the stock ImageViewer, which repositions
+-- the image once on release (onPanRelease → panBy → one clean refresh). We
+-- tried live finger-tracking (updating several times a second during the drag)
+-- but every e-ink waveform failed on device: "ui"/REAGL black-wipes (flashes)
+-- each frame, and the fast waveforms ("fast"/"a2") leave the image an
+-- unreadable merged ghost. Since panning a zoomed image changes ~the whole
+-- image area every frame, there's no small region to isolate and no waveform
+-- that is fast, non-flashing AND ghost-free at once — so we match the native
+-- viewer's jump-on-release behaviour instead. (Zoom keeps its light-update
+-- speedup; that's a discrete step, not continuous motion.)
 function GlimpseViewer:onPan(arg, ges)
     if ges and ges.mousewheel_direction and ges.mousewheel_direction ~= 0 then
         if ges.mousewheel_direction > 0 then
@@ -3787,6 +4098,11 @@ end
 function GlimpseViewer:_applyNewScaleFactor(new_factor)
     if self._gallery_mode then return end
     self._fast_refresh = true -- mid-gesture zoom step: skip dithering
+    -- Route the update() these paths trigger (here, and inside the upstream
+    -- clamp below) through the light image-only rebuild — a zoom step never
+    -- changes the surrounding chrome. Covers pinch, the +/− buttons, and
+    -- double-tap alike, since all of them land here.
+    self._zooming = true
     if self._image_wg then
         -- upstream reads the widget's extrema, which need a rendered bb
         self._image_wg:getSize()
@@ -3810,9 +4126,11 @@ function GlimpseViewer:_applyNewScaleFactor(new_factor)
             self._center_x_ratio, self._center_y_ratio = 0.5, 0.5
             self:update()
         end
+        self._zooming = nil
         return
     end
     ImageViewer._applyNewScaleFactor(self, new_factor)
+    self._zooming = nil
 end
 
 -- The scale_factor (in capped-bitmap units) at which the image shows at
@@ -3994,11 +4312,55 @@ function Glimpse:onGlimpseShow()
 end
 
 function Glimpse:onCloseDocument()
-    -- the decoded-bitmap cache slot (see showViewer) is per book
-    if self._bb_cache then
-        if self._bb_cache.bb then self._bb_cache.bb:free() end
-        self._bb_cache = nil
+    -- the decoded-bitmap cache (see showViewer) is per book
+    self:_bbCacheFree()
+end
+
+-- Small LRU of decoded, display-capped bitmaps keyed by path|night|invert.
+-- Holds the working set around the current image (prev/cur/next) so switching
+-- with the arrows or a swipe is a copy of an already-decoded bitmap instead of
+-- a fresh decode+cap-scale of a multi-megapixel map. Neighbors are warmed by
+-- GlimpseViewer:_prefetchNeighbors after a switch settles; the cap keeps the
+-- footprint bounded on low-RAM devices (the bitmaps are already display-sized).
+Glimpse.BB_CACHE_MAX = 3
+function Glimpse:_bbCacheGet(key)
+    local c = self._bb_cache
+    local e = c and c.map[key]
+    if not e then return nil end
+    c.seq = c.seq + 1
+    e.seq = c.seq
+    return e.bb
+end
+function Glimpse:_bbCachePut(key, bb)
+    local c = self._bb_cache
+    if not c then c = { map = {}, n = 0, seq = 0 }; self._bb_cache = c end
+    local prev = c.map[key]
+    if prev then
+        if prev.bb then prev.bb:free() end
+        c.n = c.n - 1
     end
+    c.seq = c.seq + 1
+    c.map[key] = { bb = bb, seq = c.seq }
+    c.n = c.n + 1
+    while c.n > Glimpse.BB_CACHE_MAX do
+        local lru_key, lru_seq
+        for k, e in pairs(c.map) do
+            if not lru_seq or e.seq < lru_seq then lru_seq, lru_key = e.seq, k end
+        end
+        if not lru_key then break end
+        if c.map[lru_key].bb then c.map[lru_key].bb:free() end
+        c.map[lru_key] = nil
+        c.n = c.n - 1
+    end
+end
+function Glimpse:_bbCacheFree()
+    local c = self._bb_cache
+    if not c then return end
+    for k, e in pairs(c.map) do
+        if e.bb then e.bb:free() end
+        c.map[k] = nil
+    end
+    self._bb_cache = nil
 end
 
 -- ── settings ────────────────────────────────────────────────────────────────
@@ -4691,12 +5053,13 @@ function Glimpse:showViewer(whole_book_once)
         if self:getScope() == "read_so_far" and not whole_book_once
                 and scope_hidden > 0 then
             local msg = scope_hidden == 1
-                and _("No images up to here yet — 1 further in the book.")
-                or T(_("No images up to here yet — %1 further in the book."),
+                and _("No images up to here yet – 1 further in the book.")
+                or T(_("No images up to here yet – %1 further in the book."),
                     scope_hidden)
             UIManager:show(ConfirmBox:new{
                 text = msg,
-                ok_text = _("Search whole book"),
+                ok_text = _("Show whole book"),
+                cancel_text = _("Close"),
                 ok_callback = function()
                     self:showViewer(true)
                 end,
@@ -4705,8 +5068,8 @@ function Glimpse:showViewer(whole_book_once)
             -- everything in scope was filtered out (the #4 case): let the
             -- user review and re-add from the Gallery's Ignored tab
             local msg = #ignored_metas == 1
-                and _("No images to show — 1 was filtered out as irrelevant.")
-                or T(_("No images to show — %1 were filtered out as irrelevant."),
+                and _("No images to show – 1 was filtered out as irrelevant.")
+                or T(_("No images to show – %1 were filtered out as irrelevant."),
                     #ignored_metas)
             UIManager:show(ConfirmBox:new{
                 text = msg,
@@ -4803,21 +5166,18 @@ function Glimpse:showViewer(whole_book_once)
             list[i] = function()
                 local night = Screen.night_mode
                 local checked = G_reader_settings:isTrue(INVERT_KEY)
-                -- single-slot decoded-bitmap cache: reopening on the image
-                -- you left (the common "peek at the map again" flow) skips
-                -- the decode and cap-scale — on device that is most of the
+                -- decoded-bitmap cache (small LRU, see _bbCacheGet): reopening
+                -- on the image you left, or switching to a prefetched neighbor,
+                -- skips the decode and cap-scale — on device that is most of the
                 -- open time. The key bakes in everything baked into pixels.
                 local key = im.path .. "|" .. tostring(night) .. tostring(checked)
-                local slot = self._bb_cache
-                if slot and slot.key == key and slot.bb then
+                local cached = self:_bbCacheGet(key)
+                if cached then
                     -- hand out a copy: the viewer owns and frees what we return
-                    return slot.bb:copy()
+                    return cached:copy()
                 end
                 local bb = decode(im, false)
-                if bb then
-                    if slot and slot.bb then slot.bb:free() end
-                    self._bb_cache = { key = key, bb = bb:copy() }
-                end
+                if bb then self:_bbCachePut(key, bb:copy()) end
                 return bb
             end
             end
@@ -4978,6 +5338,11 @@ function Glimpse:showViewer(whole_book_once)
                     or _("Bookmarked pages shown"),
             })
         end,
+        -- ⋯ → "Layout": open the Left/Right side chooser; picking a side saves
+        -- the setting and reopens the drawer on that edge (see _showLayoutDialog).
+        on_choose_layout = function()
+            self:_showLayoutDialog()
+        end,
         -- Gallery long-press, Shown tab: move this image to Ignored (hide it
         -- and drop any force-add). Persist, then reopen back into the Gallery
         -- on the same tab/page (the scan is cached, so the reopen is cheap).
@@ -5110,10 +5475,15 @@ function Glimpse:showViewer(whole_book_once)
     -- toward its periodic flash. The count is restored on close (onCloseWidget).
     viewer._reader_refresh_count = UIManager.refresh_count
     UIManager.refresh_count = 0
+    -- the region hugs the drawer's screen edge: left for a left drawer, right
+    -- for a right drawer (where the panel + its leftward shadow sit against the
+    -- right edge)
+    local open_rw = math.min(Screen:getWidth(), open_w)
+    local open_rx = viewer._on_right and (Screen:getWidth() - open_rw) or 0
     UIManager:show(viewer, Device:hasKaleidoWfm() and "partial" or "ui",
         Geom:new{
-            x = 0, y = 0,
-            w = math.min(Screen:getWidth(), open_w),
+            x = open_rx, y = 0,
+            w = open_rw,
             h = Screen:getHeight(),
         }, nil, nil, true)
     viewer.alpha = nil -- back to the class default for later paths
@@ -5285,23 +5655,53 @@ function Glimpse._confirm(text, ok_text, ok_callback, cancel_text)
     UIManager:show(dialog)
 end
 
--- Entry point (menu callback): ensure we're online, then check releases.
+-- Entry point (menu callback): ensure we're connected, then check releases.
 -- Wrapped in Trapper so the network wait shows a dismissable spinner.
+--
+-- We use runWhenCONNECTED, not runWhenOnline: runWhenOnline calls isOnline(),
+-- which does a BLOCKING DNS resolve on the UI thread (socket.dns.toip) — when
+-- the network is up but DNS isn't ready yet (common right after Wi-Fi
+-- associates on Kobo) that stalls the whole UI for seconds, and every repeat
+-- tap stalls it again. isConnected() only checks the interface has an IP (a
+-- fast sysfs read), and the real reachability test then happens inside the
+-- dismissable subprocess below (which reports a DNS/network error cleanly
+-- instead of freezing). A re-entrancy guard drops repeat taps while a check
+-- is already in flight, with a safety-net timer so it can never stick on if
+-- the connect callback never fires (e.g. the user declines the Wi-Fi prompt).
 function Glimpse:_checkForUpdate()
+    if self._update_checking then return end
+    self._update_checking = true
+    UIManager:scheduleIn(90, function() self._update_checking = nil end)
     local NetworkMgr = require("ui/network/manager")
-    NetworkMgr:runWhenOnline(function()
+    local go = function()
         local Trapper = require("ui/trapper")
-        Trapper:wrap(function() self:_runUpdateCheck(Trapper) end)
-    end)
+        Trapper:wrap(function()
+            local ok, err = pcall(function() self:_runUpdateCheck(Trapper) end)
+            self._update_checking = nil
+            if not ok then logger.warn("Glimpse update check error:", err) end
+        end)
+    end
+    if NetworkMgr.runWhenConnected then
+        NetworkMgr:runWhenConnected(go)
+    else
+        NetworkMgr:runWhenOnline(go) -- older KOReader without runWhenConnected
+    end
 end
 
 function Glimpse:_runUpdateCheck(Trapper)
     local pre = G_reader_settings:isTrue(PRERELEASE_KEY)
     local api = "https://api.github.com/repos/" .. self.github_repo
         .. (pre and "/releases?per_page=10" or "/releases/latest")
-    -- fetch in a subprocess so the UI stays responsive and dismissable
+    -- fetch in a subprocess so the UI stays responsive and dismissable. Retry
+    -- once after a short pause on failure: right after Wi-Fi associates, DNS
+    -- (resolv.conf) can lag a second or two, so the first resolve fails; the
+    -- pause happens in the subprocess, so the UI never blocks.
     local completed, body = Trapper:dismissableRunInSubprocess(function()
         local b, err = _http_fetch(api)
+        if not b then
+            require("socket").sleep(1.5)
+            b, err = _http_fetch(api)
+        end
         return b or ("ERR:" .. tostring(err))
     end, _("Checking for updates…"), true)
     if not completed then return end -- dismissed by the user
@@ -5494,6 +5894,38 @@ function Glimpse:_gestureLabel()
     return T(_("Gesture to open: %1"), table.concat(found, ", "))
 end
 
+-- Layout chooser (Settings → Layout, and the ⋯ Quick Action): pick which
+-- screen edge the drawer opens on. Applying reopens the drawer on the chosen
+-- side when it's currently open; from the plugin menu it just saves for next time.
+function Glimpse:_showLayoutDialog()
+    local RadioButtonWidget = require("ui/widget/radiobuttonwidget")
+    local on_right = G_reader_settings:isTrue(LAYOUT_RIGHT_KEY)
+    UIManager:show(RadioButtonWidget:new{
+        title_text = _("Layout"),
+        info_text = _("Which side of the screen should Glimpse open on?"),
+        width_factor = 0.9,
+        radio_buttons = {
+            { { text = _("Left"),  provider = "left",  checked = not on_right } },
+            { { text = _("Right"), provider = "right", checked = on_right } },
+        },
+        callback = function(w)
+            local want_right = w.provider == "right"
+            if want_right == on_right then return end
+            -- store nil for the default (left) so it reads as unset
+            G_reader_settings:saveSetting(LAYOUT_RIGHT_KEY, want_right or nil)
+            -- Re-lay-out the open drawer IN PLACE on the new side rather than
+            -- closing + reopening: update() reads the setting and rebuilds on
+            -- the new edge, and the full-band refresh spans the combined old+new
+            -- drawer region (the whole width on a side flip), so the old side is
+            -- cleared and the new one drawn without the panel ever disappearing.
+            if self._viewer then
+                self._viewer._full_band_refresh = true
+                self._viewer:update()
+            end
+        end,
+    })
+end
+
 function Glimpse:_menuItems()
     local function scope_item(value, text, help)
         return {
@@ -5512,7 +5944,7 @@ function Glimpse:_menuItems()
             -- (and Open Glimpse) inert, so the user can silence Glimpse
             -- without hunting through the gesture manager to unbind it
             text = _("Enable Glimpse"),
-            help_text = _("Master switch. When off, the bound gesture and the Open Glimpse entry do nothing — a quick way to silence Glimpse without unbinding its gesture."),
+            help_text = _("Master switch. When off, the bound gesture and the Open Glimpse entry do nothing – a quick way to silence Glimpse without unbinding its gesture."),
             checked_func = function()
                 return G_reader_settings:nilOrTrue(ENABLED_KEY)
             end,
@@ -5577,7 +6009,7 @@ function Glimpse:_menuItems()
             -- sits directly under Mode: it also shapes what the Gallery holds.
             -- Renamed from "Include bookmarked pages"; also a Quick Action.
             text = _("Include Bookmarks in Gallery"),
-            help_text = _("Also show the pages you've bookmarked (the dogear bookmark) in the Gallery, rendered as page thumbnails and marked with a bookmark badge, in reading order alongside the images — a quick way to keep a reference page a swipe away. Off by default. Also available from the viewer's ⋯ menu (see Quick Actions)."),
+            help_text = _("Also show the pages you've bookmarked (the dogear bookmark) in the Gallery, rendered as page thumbnails and marked with a bookmark badge, in reading order alongside the images – a quick way to keep a reference page a swipe away. Off by default. Also available from the viewer's ⋯ menu (see Quick Actions)."),
             checked_func = function()
                 return G_reader_settings:isTrue(BOOKMARKS_KEY)
             end,
@@ -5648,6 +6080,16 @@ function Glimpse:_menuItems()
                         },
                     },
                     separator = true,
+                },
+                {
+                    text_func = function()
+                        return T(_("Layout: %1"),
+                            G_reader_settings:isTrue(LAYOUT_RIGHT_KEY)
+                                and _("Right") or _("Left"))
+                    end,
+                    help_text = _("Choose which side of the screen Glimpse opens on, left or right."),
+                    keep_menu_open = true,
+                    callback = function() self:_showLayoutDialog() end,
                 },
                 {
                     text = _("Show Nav Buttons"),
@@ -5760,7 +6202,7 @@ function Glimpse:_menuItems()
                 },
                 {
                     text = _("Disable shadows"),
-                    help_text = _("Remove the drawer's drop shadow. The shadow is a dithered gradient — the main cause of e-ink ghosting behind the drawer — so turn it off if a ghost lingers after closing Glimpse. No visible effect on LCD screens."),
+                    help_text = _("Remove the drawer's drop shadow. The shadow is a dithered gradient – the main cause of e-ink ghosting behind the drawer – so turn it off if a ghost lingers after closing Glimpse. No visible effect on LCD screens."),
                     checked_func = function()
                         return G_reader_settings:isTrue(SHADOW_KEY)
                     end,
@@ -5771,7 +6213,7 @@ function Glimpse:_menuItems()
                 },
                 {
                     text = _("Fast image switching"),
-                    help_text = _("Switch between images with a quick, flashless refresh instead of a full clear. On by default: faster and no flash. Turn it off if the previous image ghosts through the next one — most noticeable on detailed maps and on slower e-ink panels. No visible effect on LCD screens."),
+                    help_text = _("Switch between images with a quick, flashless refresh instead of a full clear. On by default: faster and no flash. Turn it off if the previous image ghosts through the next one – most noticeable on detailed maps and on slower e-ink panels. No visible effect on LCD screens."),
                     checked_func = function()
                         return G_reader_settings:nilOrTrue(FAST_SWITCH_KEY)
                     end,
@@ -5815,7 +6257,7 @@ function Glimpse:_menuItems()
                 },
                 {
                     text = _("Include pre-release versions"),
-                    help_text = _("Also offer releases marked as pre-release on GitHub — test builds published before a proper release. Normal update checks never see those."),
+                    help_text = _("Also offer releases marked as pre-release on GitHub – test builds published before a proper release. Normal update checks never see those."),
                     checked_func = function()
                         return G_reader_settings:isTrue(PRERELEASE_KEY)
                     end,
