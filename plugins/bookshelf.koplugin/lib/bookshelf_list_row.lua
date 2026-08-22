@@ -1147,6 +1147,33 @@ function ListRow.lineText(record, line, template)
     -- braces render as text beside the value they were modifying.
     local tpl  = ListRow.stripWrapModifier(template or line.template)
     local text = Tokens.expand(tpl, record, nil)
+    if tpl:find("%authors_short", 1, true) and not isRemote(record) then
+        local util = require("util")
+        local calibre_data = util.loadCalibreData()
+        local fp = itemFilepath(record)
+        local fname = fp and fp:match("([^/]+)$") or ""
+        local ext   = fp and (fp:match("%.([^.]+)$") or "") or ""
+        local key   = fname:gsub("%.[^.]+$", "") .. "." .. ext
+        local cb = calibre_data[key]
+        if cb then
+            local parts = {}
+            if cb.words and cb.words ~= "" then
+                parts[#parts + 1] = "Kw: " .. tostring(math.floor(tonumber(cb.words) / 1000))
+            end
+            if cb.pubdate and cb.pubdate ~= "" then
+                parts[#parts + 1] = "PD: " .. tostring(cb.pubdate):sub(1, 4)
+            end
+            if cb.grrating and cb.grrating ~= "" then
+                parts[#parts + 1] = "GRR: " .. tostring(cb.grrating)
+            end
+            if cb.grvotes and cb.grvotes ~= "" then
+                parts[#parts + 1] = "GRV: " .. tostring(cb.grvotes)
+            end
+            if #parts > 0 then
+                text = text .. "  " .. table.concat(parts, "  ")
+            end
+        end
+    end
     -- The style tags SURVIVE this function. They used to be stripped here --
     -- [b], [i], [u] and [font=] all deleted as a vocabulary the list did not
     -- implement -- and now bookshelf_inline_style.lua turns them into runs at
