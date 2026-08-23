@@ -1491,6 +1491,18 @@ function ListRow.textLine(record, line, width, pad, template, opts)
         -- bold nil and line.bold false that idiom yields nil, because `false
         -- or nil` is nil. Harmless here and a trap everywhere else.
         if bold == nil then bold = line.bold end
+        -- A template can carry a literal newline - issue 345's Line 1 had
+        -- one between the status icons and %title. A TextWidget drawn at
+        -- natural width shapes straight through it, but its max_width
+        -- truncation (xtext makeLine) STOPS at a newline: the title
+        -- rendered fine until the line needed truncating, then vanished
+        -- entirely, leaving icon + "…". One line means one line: collapse
+        -- newlines to spaces here, the funnel every one-line segment
+        -- passes through. Wrap boxes keep theirs - TextBoxWidget honours
+        -- them properly.
+        if type(s) == "string" and s:find("\n", 1, true) then
+            s = s:gsub("%s*\n%s*", " ")
+        end
         return TextWidget:new{
             text          = s,
             face          = face or line.face,
@@ -1546,6 +1558,13 @@ function ListRow.textLine(record, line, width, pad, template, opts)
         -- truncated at what is left and the runs after it are dropped, so at
         -- most one ellipsis appears -- the same rule the two SIDES of an
         -- elastic line already follow, one level down.
+        --
+        -- "Dropped" is decided by the TRUNCATION FLAG, not by the leftover
+        -- reaching zero: a truncated run always leaves a few pixels, and the
+        -- next run offered that sliver truncates too -- TextWidget will
+        -- happily turn a bare space into an ellipsis, which is how a
+        -- truncated title grew a second "…" (issue 345, follow-up report).
+        -- getSize() runs first: _is_truncated is computed lazily inside it.
         local built, remaining = {}, max_w
         for _i, run in ipairs(runs) do
             if remaining and remaining <= 0 then break end
@@ -1553,6 +1572,7 @@ function ListRow.textLine(record, line, width, pad, template, opts)
             local w = piece(run.text, face, bold, remaining, trunc_left)
             built[#built + 1] = w
             if remaining then remaining = remaining - w:getSize().w end
+            if w._is_truncated then break end
         end
         local max_h, max_base = 0, 0
         for _i, w in ipairs(built) do
@@ -1619,11 +1639,31 @@ function ListRow.textLine(record, line, width, pad, template, opts)
         --    is better than a fragment. Low, because head-truncation degrades
         --    gracefully -- this is the floor where it stops meaning anything
         --    at all, not the point where it starts being cramped.
+        --
+        --    The floor has an ABSOLUTE leg as well as the percentage
+        --    (issue 345): 30% of a short author name is a handful of
+        --    pixels, which passed the percentage test and rendered as a
+        --    lone "…" beside the gap -- the exact fragment this rule
+        --    exists to prevent. A kept side must also have room for the
+        --    ellipsis plus about two glyphs of its own face, measured
+        --    rather than guessed so a large-type line keeps an honest
+        --    floor too.
         local MIN_KEEP = 0.3
         if (b_w + a_w) > inner_w then
             local trunc_gap = Size.padding.large
             local avail_a   = inner_w - b_w - trunc_gap
-            if a_widget and avail_a >= math.floor(a_w * MIN_KEEP) and avail_a > 0 then
+            local min_abs = 0
+            do
+                local ok, ell = pcall(RenderText.getEllipsisWidth,
+                                      RenderText, line.face)
+                local ok2, mm = pcall(RenderText.sizeUtf8Text, RenderText,
+                                      0, inner_w, line.face, "MM", true,
+                                      line.bold)
+                min_abs = ((ok and type(ell) == "number") and ell or 0)
+                    + ((ok2 and type(mm) == "table" and mm.x) or 0)
+            end
+            if a_widget and avail_a >= math.floor(a_w * MIN_KEEP)
+                    and avail_a >= min_abs and avail_a > 0 then
                 a_widget:free()
                 a_widget = seg(after, math.max(1, avail_a))
                 a_w = a_widget:getSize().w
