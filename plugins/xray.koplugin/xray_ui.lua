@@ -2779,9 +2779,65 @@ end
 
 function M:clearCache()
     if not self.cache_manager then self.cache_manager = require(plugin_path .. "xray_cachemanager"):new() end
-    self.cache_manager:clearCache(self.ui.document.file)
-    self.characters = {}; self.locations = {}; self.timeline = {}; self.historical_figures = {}; self.author_info = nil
+    if self.ui and self.ui.document and self.ui.document.file then
+        self.cache_manager:clearCache(self.ui.document.file)
+    end
+    self.characters = {}
+    self.locations = {}
+    self.timeline = {}
+    self.historical_figures = {}
+    self.terms = {}
+    self.terms_fetched = false
+    self.author_info = nil
+    self.book_data = {}
+    self.series_context_loaded = false
+    self.xray_mode_enabled = false
     UIManager:show(InfoMessage:new{ text = self.loc:t("cache_cleared"), timeout = 3 })
+end
+
+function M:clearSeriesCache()
+    local props = self.ui and self.ui.document and self.ui.document.getProps and self.ui.document:getProps() or {}
+    local function sanitizeMetadata(val)
+        if type(val) == "string" then return val
+        elseif type(val) == "table" then return table.concat(val, ", ")
+        else return "Unknown" end
+    end
+    local title = sanitizeMetadata(props.title)
+    local author = sanitizeMetadata(props.authors)
+
+    if not self.series_manager then
+        self.series_manager = require(plugin_path .. "xray_seriesmanager"):new()
+    end
+    local series_info = self.series_manager.detectSeries and self.series_manager:detectSeries(props, title, author, nil)
+    local slug = (self.book_data and self.book_data.series_slug) or (series_info and series_info.slug)
+    local series_name = (series_info and series_info.name) or (self.book_data and self.book_data.series_slug)
+
+    if not slug or slug == "" then
+        UIManager:show(InfoMessage:new{
+            text = self.loc:t("no_series_to_clear") or "No series detected for this book.",
+            timeout = 3
+        })
+        return
+    end
+
+    local cache_path = self.series_manager.getSeriesCachePath and self.series_manager:getSeriesCachePath(slug)
+    if cache_path then
+        pcall(function() os.remove(cache_path) end)
+    end
+
+    self.series_context_loaded = false
+    if self.book_data then
+        self.book_data.series_context_loaded = nil
+        self.book_data.series_context_dismissed = nil
+        if self.cache_manager and self.ui and self.ui.document and self.ui.document.file then
+            self.cache_manager:asyncSaveCache(self.ui.document.file, self.book_data)
+        end
+    end
+
+    UIManager:show(InfoMessage:new{
+        text = self.loc:t("series_cache_cleared", series_name or slug),
+        timeout = 3
+    })
 end
 
 function M:clearLogs()
@@ -3883,10 +3939,11 @@ function M:getAIModelSelectionMenu(setting_type)
             id = "gemini",
             display_name = "Gemini",
             models = {
+                { id = "gemini-3.7-flash", cost = "free" },
                 { id = "gemini-3.6-flash", cost = "free" },
                 { id = "gemini-3.5-flash-lite", cost = "free" },
                 { id = "gemini-3.5-flash", cost = "free" },
-                { id = "gemini-3.1-flash-lite", cost = "free" },
+                { id = "gemini-3.1-pro-preview", cost = "paid" },
                 { id = "gemini-2.5-flash", cost = "free" },
                 { id = "gemini-2.5-flash-lite", cost = "free" },
                 { id = "gemini-2.5-pro", cost = "paid" },
@@ -4338,12 +4395,6 @@ function M:checkSeriesContext()
         return
     end
 
-    local NetworkMgr = require("ui/network/manager")
-    if not NetworkMgr:isConnected() or not NetworkMgr:isOnline() then
-        self:log("XRayPlugin: Series: checkSeriesContext: device is offline, skipping silently.")
-        return
-    end
-
     local props = self.ui.document:getProps() or {}
     local function sanitizeMetadata(val)
         if type(val) == "string" then return val
@@ -4368,21 +4419,58 @@ function M:checkSeriesContext()
     end
 
     -- 1. Try metadata check first (without AI, passes nil for ai_helper)
-    local series_info = self.series_manager:detectSeries(props, title, author, nil)
+    local series_info = self.series_manager and self.series_manager.detectSeries and self.series_manager:detectSeries(props, title, author, nil)
+    local has_explicit_metadata_index = props and (props.series_index or props.seriesindex or props.SeriesIndex)
+    local has_title_index = series_info and self.series_manager and self.series_manager.extractIndexFromTitle and self.series_manager:extractIndexFromTitle(title, series_info.name)
+
     if series_info and series_info.name and series_info.index then
         if series_info.index > 1 then
-            self:log("XRayPlugin: Series: Metadata check found series: " .. series_info.name .. ", index=" .. tostring(series_info.index))
+            self:log("XRayPlugin: Series: Metadata/title check found series: " .. series_info.name .. ", index=" .. tostring(series_info.index))
+            
+            -- Check if all prior books are already in local SeriesCache
+            local slug = series_info.slug or (self.series_manager and self.series_manager.makeSlug and self.series_manager:makeSlug(series_info.name))
+            local cache_data = slug and self.series_manager and self.series_manager.loadSeriesCache and self.series_manager:loadSeriesCache(slug)
+            local all_priors_cached = (cache_data and cache_data.books ~= nil)
+            if all_priors_cached then
+                for p_idx = 1, series_info.index - 1 do
+                    if not cache_data.books[p_idx] then
+                        all_priors_cached = false
+                        break
+                    end
+                end
+            end
+
+            if all_priors_cached then
+                self:log("XRayPlugin: Series: All prior books already exist in local SeriesCache. Merging series context automatically.")
+                self:mergeSeriesContext(cache_data, series_info)
+                return
+            end
+
+            local NetworkMgr = require("ui/network/manager")
+            if not NetworkMgr:isConnected() or not NetworkMgr:isOnline() then
+                self:log("XRayPlugin: Series: Prior books missing from cache and device is offline, skipping silently.")
+                return
+            end
+
             self:showSeriesContextPrompt(series_info)
             return
-        else
-            self:log("XRayPlugin: Series: Metadata check found series: " .. series_info.name .. ", index=" .. tostring(series_info.index) .. " (first book). Caching check outcome.")
+        elseif series_info.has_explicit_index or has_explicit_metadata_index or has_title_index or not (props and (props.series or props.Series)) then
+            self:log("XRayPlugin: Series: Metadata/title check confirmed first book in series: " .. series_info.name .. ", index=" .. tostring(series_info.index) .. ". Caching check outcome.")
             saveSeriesChecked()
             return
+        else
+            self:log("XRayPlugin: Series: Series name found in metadata (" .. series_info.name .. "), but index unknown. Falling through to async AI check.")
         end
     end
 
-    -- 2. Fallback to AI (performed asynchronously to prevent UI freeze)
-    self:log("XRayPlugin: Series: Metadata check didn't find series. Initiating asynchronous AI check.")
+    -- 2. Fallback to AI (performed asynchronously to prevent UI freeze, requires network)
+    local NetworkMgr = require("ui/network/manager")
+    if not NetworkMgr:isConnected() or not NetworkMgr:isOnline() then
+        self:log("XRayPlugin: Series: Device is offline, skipping async AI series check silently.")
+        return
+    end
+
+    self:log("XRayPlugin: Series: Metadata check didn't conclusively resolve series/index. Initiating asynchronous AI check.")
     local prompt = self.ai_helper:createPrompt(title, author, nil, "series_detect")
     local req_params = self.ai_helper:buildComprehensiveRequest(nil, nil, nil, prompt)
     if not req_params then
@@ -4424,17 +4512,35 @@ function M:checkSeriesContext()
             -- AI returned a valid result!
             self:log("XRayPlugin: Series: Async series check result received")
             if result.is_series then
-                local name = result.series_name
-                local index = tonumber(result.book_index) or 1
+                local name = result.series_name or (series_info and series_info.name) or (props and (props.series or props.Series))
+                local title_idx = self.series_manager and self.series_manager.extractIndexFromTitle and self.series_manager:extractIndexFromTitle(title, name)
+                local index = tonumber(result.book_index) or title_idx or 1
                 if name and name ~= "" then
+                    local make_slug_fn = self.series_manager and self.series_manager.makeSlug
+                    local slug = make_slug_fn and self.series_manager:makeSlug(name) or name:lower():gsub("[%s%p]+", "_"):gsub("^_+", ""):gsub("_+$", "")
                     local ai_series_info = {
                         name = name,
                         index = index,
-                        slug = self.series_manager:makeSlug(name)
+                        slug = slug
                     }
                     self:log("XRayPlugin: Series: Async check detected series=" .. tostring(name) .. ", index=" .. tostring(index))
                     if index > 1 then
-                        self:showSeriesContextPrompt(ai_series_info)
+                        local cache_data = slug and self.series_manager and self.series_manager.loadSeriesCache and self.series_manager:loadSeriesCache(slug)
+                        local all_priors_cached = (cache_data and cache_data.books ~= nil)
+                        if all_priors_cached then
+                            for p_idx = 1, index - 1 do
+                                if not cache_data.books[p_idx] then
+                                    all_priors_cached = false
+                                    break
+                                end
+                            end
+                        end
+                        if all_priors_cached then
+                            self:log("XRayPlugin: Series: All prior books already exist in local SeriesCache. Merging series context automatically.")
+                            self:mergeSeriesContext(cache_data, ai_series_info)
+                        else
+                            self:showSeriesContextPrompt(ai_series_info)
+                        end
                     else
                         self:log("XRayPlugin: Series: Book is first in series (index=" .. tostring(index) .. "), skipping prompt. Caching check outcome.")
                         saveSeriesChecked()
