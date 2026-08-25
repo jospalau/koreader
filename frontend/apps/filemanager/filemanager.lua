@@ -1027,6 +1027,7 @@ FileManager.onRefreshContent = FileManager.onRefresh
 FileManager.onBookMetadataChanged = FileManager.onRefresh
 
 function FileManager:onHome()
+    UIManager:setSuspendRepaints(false)
     if not self.file_chooser:goHome() then
         self:setHome()
     end

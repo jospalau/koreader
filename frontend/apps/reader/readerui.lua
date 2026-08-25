@@ -1052,6 +1052,7 @@ function ReaderUI:dealWithLoadDocumentFailure()
 end
 
 function ReaderUI:onHome()
+    UIManager:setSuspendRepaints(false)
     local file = self.document.file
     if file:find("resources/arthur%-conan%-doyle%_the%-hound%-of%-the%-baskervilles.epub") then
         local DataStorage = require("datastorage")
