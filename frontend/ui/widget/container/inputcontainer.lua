@@ -418,7 +418,6 @@ function InputContainer:onInput(input, ignore_first_hold_release)
 end
 
 function InputContainer:onHome()
-    if self.name == "bookshelf" then return false end
     if self.toast then return false end -- e.g., Notifications
     -- GUARD: Only window-level widgets are allowed to participate in the daisy-chain.
     -- This prevents sub-widgets from intercepting the event and causing an infinite loop.

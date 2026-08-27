@@ -379,3 +379,26 @@ function ReaderUI:handleEvent(event)
 
     return original_readerui_handleEvent(self, event)
 end
+
+-- ---------------------------------------------------------------------------
+-- InputContainer:onHome -- Allow Bookshelf onHome() event handler to execute
+-- again. This stopped working after the official change adding support for
+-- onHome events (InputContainer:onHome added a default daisy-chain: close
+-- self via onClose() + resend Home to the next widget down the stack).
+-- Because BookshelfWidget has no onHome of its own, it inherited that
+-- default, which closed the bookshelf widget and daisy-chained Home straight
+-- to FileManager -- bypassing BookshelfClass:onHome (parked/unpark logic)
+-- entirely. Fix: for the bookshelf widget specifically, return false so the
+-- event is NOT consumed here and falls through to BookshelfClass:onHome
+-- instead, same as before onHome was added to InputContainer.
+-- ---------------------------------------------------------------------------
+local InputContainer = require("ui/widget/container/inputcontainer")
+local original_inputcontainer_onHome = InputContainer.onHome
+
+function InputContainer:onHome()
+    if self.name == "bookshelf" then
+        logger.dbg("[bookshelf-overlay] InputContainer:onHome: self.name=bookshelf -> return false, dejando pasar a BookshelfClass:onHome")
+        return false
+    end
+    return original_inputcontainer_onHome(self)
+end
