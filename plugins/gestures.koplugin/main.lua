@@ -301,7 +301,7 @@ end
 
 function Gestures:gestureTitleFunc(ges)
     local title = gestures_list[ges] or self:friendlyMultiswipeName(ges)
-    return T(_("%1   (%2)"), title, Dispatcher:menuTextFunc(self.gestures[ges]))
+    return T(_("%1   (%2)"), title, Dispatcher:menuTextFunc(self.gestures[ges], true)) -- honor cycle
 end
 
 function Gestures:genMenu(ges)
@@ -583,7 +583,7 @@ function Gestures:onShowGestureOverview()
             end
             local gest = self.gestures[ges_name]
             if gest then
-                local value = Dispatcher:menuTextFunc(gest)
+                local value = Dispatcher:menuTextFunc(gest, true) -- honor cycle
                 if value ~= nothing then
                     local key = gestures_list[ges_name] or self:friendlyMultiswipeName(ges_name)
                     local callback
@@ -605,7 +605,7 @@ function Gestures:onShowGestureOverview()
                     if gest.settings then
                         if gest.settings.show_as_quickmenu then
                             value = value .. " \u{F0CA}"
-                        elseif gest.settings.execute_one_by_one then
+                        elseif gest.settings.execute_one_by_one and not gest.settings.cycle then
                             value = value .. " \u{F051}"
                         end
                     end
