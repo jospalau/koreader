@@ -405,8 +405,14 @@ function Updater.install(zip_url, old_version, new_version, on_success, error_la
         end
         local zip_path = cache_dir .. "/bookends.koplugin.zip"
 
-        -- Try LuaSocket first, fall back to curl
-        local downloaded = false
+        -- Try LuaSocket first, fall back to curl.
+        --
+        -- `reason` carries WHY a download failed, so the message can say
+        -- something better than "Download failed." Practices here follow
+        -- storefront.koplugin's installer, which handles this well: it is
+        -- another plugin that downloads plugin zips onto e-readers, so it has
+        -- met the same failure modes.
+        local downloaded, reason = false, nil
         local ok_require, http, ltn12, socket, socketutil =
             pcall(function()
                 return require("socket/http"),
@@ -415,26 +421,88 @@ function Updater.install(zip_url, old_version, new_version, on_success, error_la
                        require("socketutil")
             end)
         if ok_require then
-            local file = io.open(zip_path, "wb")
+            -- Download to a temporary name and rename on success, so an
+            -- interrupted transfer can never leave a half-written zip sitting
+            -- where the unpack step will find it and report a corrupt archive.
+            local tmp_path = zip_path .. ".tmp"
+            pcall(os.remove, tmp_path)
+            local file = io.open(tmp_path, "wb")
             if file then
-                local ok_dl, code = pcall(function()
-                    socketutil:set_timeout(socketutil.FILE_BLOCK_TIMEOUT, socketutil.FILE_TOTAL_TIMEOUT)
-                    local c = socket.skip(1, http.request({
+                local ok_dl, code, headers, status = pcall(function()
+                    -- FILE_TOTAL_TIMEOUT is an ABSOLUTE 60s ceiling on the
+                    -- whole transfer, so it fails a download that is merely
+                    -- SLOW rather than stalled. Bookshelf hit this hardest
+                    -- (its zip is 6x larger), but the ceiling is wrong for
+                    -- both. 300s instead: bookshelf's 3MB needs ~10 KB/s and
+                    -- bookends' 485KB needs ~1.6 KB/s, which no working
+                    -- connection falls under.
+                    --
+                    -- NOT -1 (uncapped), tempting as that is. http.request
+                    -- blocks, and this runs on the UI loop with no Trapper
+                    -- and no cancel, so an unbounded transfer freezes
+                    -- KOReader until the user kills it. A ceiling that
+                    -- reports a failure beats a hang.
+                    --
+                    -- FILE_BLOCK_TIMEOUT is the idle timeout and catches a
+                    -- dead connection in 15s, but it RESETS on every chunk,
+                    -- so it alone cannot bound a connection that dribbles.
+                    socketutil:set_timeout(socketutil.FILE_BLOCK_TIMEOUT, 300)
+                    -- socketutil's sink rather than ltn12's: it enforces the
+                    -- total timeout above, surfacing a dribbling transfer as
+                    -- SINK_TIMEOUT_CODE. The socket timeout only covers the
+                    -- wait BEFORE data arrives; once chunks are flowing this
+                    -- sink is the only thing still counting. Note it decides
+                    -- at CONSTRUCTION time and degrades to a plain
+                    -- ltn12.sink.file when total_timeout is negative, so it
+                    -- has to be built after set_timeout, as it is here.
+                    local sink = socketutil.file_sink and socketutil.file_sink(file)
+                                 or ltn12.sink.file(file)
+                    local c, h, st = socket.skip(1, http.request({
                         url = zip_url,
                         method = "GET",
                         headers = {
                             ["User-Agent"] = "KOReader-Bookends/" .. old_version,
+                            ["Accept"] = "application/zip, application/octet-stream, */*",
                         },
-                        sink = ltn12.sink.file(file),
+                        sink = sink,
                         redirect = true,
                     }))
                     socketutil:reset_timeout()
-                    return c
+                    return c, h, st
                 end)
+                pcall(function() file:close() end)
                 if not ok_dl then
                     pcall(function() socketutil:reset_timeout() end)
+                    reason = _("the connection failed")
+                elseif code == socketutil.TIMEOUT_CODE
+                        or code == socketutil.SINK_TIMEOUT_CODE then
+                    reason = _("the connection timed out")
+                elseif code == socketutil.SSL_HANDSHAKE_CODE then
+                    reason = _("the secure connection failed")
+                elseif not headers then
+                    -- No response at all, as opposed to an HTTP error code.
+                    reason = _("there was no response")
+                elseif tonumber(code) ~= 200 then
+                    reason = status or ("HTTP " .. tostring(code))
+                else
+                    downloaded = true
                 end
-                downloaded = ok_dl and code == 200
+                if downloaded then
+                    pcall(os.remove, zip_path)
+                    if not os.rename(tmp_path, zip_path) then
+                        -- Rename can fail across filesystems; copy instead.
+                        local ok_copy = pcall(function()
+                            local i, o = io.open(tmp_path, "rb"), io.open(zip_path, "wb")
+                            if not (i and o) then error("copy failed") end
+                            o:write(i:read("*all")); i:close(); o:close()
+                        end)
+                        downloaded = ok_copy
+                        if not ok_copy then reason = _("the file could not be saved") end
+                    end
+                end
+                pcall(os.remove, tmp_path)
+            else
+                reason = _("the file could not be saved")
             end
         end
         -- Fallback: curl (available on Android, desktop). The -f flag makes
@@ -449,13 +517,30 @@ function Updater.install(zip_url, old_version, new_version, on_success, error_la
         end
         if not downloaded then
             pcall(os.remove, zip_path)
+            -- Say WHY where we know. "Download failed." on its own gives a
+            -- reporter nothing to tell us, and these fail for very different
+            -- reasons: a slow connection, a captive portal, a 404 on a
+            -- mistyped dev branch. The reason is appended rather than
+            -- replacing the label so the existing wording still leads.
+            -- The reasons are sentence FRAGMENTS, so they continue the label
+            -- rather than following it: "Download failed. (the connection
+            -- timed out)" puts a lowercase clause after a full stop. Dropping
+            -- a trailing stop keeps both msgids intact - reworking the label
+            -- into "Download failed:" would orphan every existing translation
+            -- of it. A locale whose stop is not "." simply keeps it, which is
+            -- no worse than before.
+            local function withReason(label)
+                if not reason then return label end
+                return (tostring(label):gsub("%.%s*$", ""))
+                       .. " (" .. tostring(reason) .. ")"
+            end
             if error_label then
                 UIManager:show(InfoMessage:new{
-                    text = error_label,
+                    text = withReason(error_label),
                     timeout = 3,
                 })
             else
-                Updater.offerReleasesPage(_("Download failed."))
+                Updater.offerReleasesPage(withReason(_("Download failed.")))
             end
             return
         end
