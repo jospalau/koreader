@@ -2036,7 +2036,15 @@ end
 
 
 function ReaderHighlight:onTranslateText(text, index)
-    Translator:showTranslation(text, true, nil, nil, true, index)
+    if not (self.highlight_dialog or index) then
+        -- 'Translate' is called as default action for new highlight.
+        -- The highlight must be cleared, otherwise it remains on screen
+        -- after "Cancel" is chosen in the "Turn on Wi-Fi" dialog.
+        -- But Translator needs selected_text to add translation to the note.
+        self.selected_text_backup = self.selected_text
+        self:clear()
+    end
+    Translator:showTranslation(text, true, nil, nil, self, index)
 end
 
 function ReaderHighlight:onTranslateCurrentPage()
@@ -2121,6 +2129,7 @@ function ReaderHighlight:onHoldRelease()
         end
 
         if self.selected_text then
+            self.highlight_dialog = nil
             if self.is_word_selection then
                 self:lookupDictWord()
             else
@@ -2142,7 +2151,6 @@ function ReaderHighlight:onHoldRelease()
                     self:onClose()
                 elseif default_highlight_action == "dictionary" then
                     self:lookupDict()
-                    self:onClose(true) -- keep selected text
                 elseif default_highlight_action == "notes" then
                     self.ui.pagetextinfo:showNote()
                     self:onClose()
