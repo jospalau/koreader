@@ -718,6 +718,40 @@ function Settings:_coverDisplaySubItems()
                 markDirty()
             end,
         },
+        {
+            text = _("Square cover corners"),
+            help_text = _("Draw covers with square corners instead of the "
+                .. "rounded card shape. Independent of the drop shadow, so a "
+                .. "flatter look can keep the shadow or drop it separately. "
+                .. "Off by default (rounded)."),
+            checked_func = function()
+                return BookshelfSettings.isTrue("cover_square_corners")
+            end,
+            keep_menu_open = true,
+            callback = function()
+                BookshelfSettings.save("cover_square_corners",
+                    not BookshelfSettings.isTrue("cover_square_corners"))
+                BookshelfSettings.flush()
+                markDirty()
+            end,
+        },
+        {
+            text = _("No cover drop shadow"),
+            help_text = _("Draw covers flat against the page instead of "
+                .. "raised off it. The pixels the shadow reserved go back to "
+                .. "the cover, so covers get slightly larger. Off by default "
+                .. "(shadow shown)."),
+            checked_func = function()
+                return BookshelfSettings.isTrue("cover_no_shadow")
+            end,
+            keep_menu_open = true,
+            callback = function()
+                BookshelfSettings.save("cover_no_shadow",
+                    not BookshelfSettings.isTrue("cover_no_shadow"))
+                BookshelfSettings.flush()
+                markDirty()
+            end,
+        },
         -- ── group tiles ──
         -- ONE row, the library-wide default, where there used to be one per
         -- group kind. The per-kind rows said the same thing a chip already
@@ -2156,6 +2190,19 @@ function Settings:_hardcoverSubItems()
         end
         local Repo = require("lib/bookshelf_book_repository")
         local filepaths = Repo.getAllFilepaths() or {}
+        -- Kindle library books are NOT on the filesystem walk (a .kfx is not in
+        -- SUPPORTED_EXT and they live outside home_dir), so a bulk auto-link
+        -- skipped every one of them -- even though linking a Kindle book
+        -- one at a time works fine. Deduped, since a converted file can land
+        -- inside home_dir and be walked as well as listed.
+        local seen = {}
+        for _i, fp in ipairs(filepaths) do seen[fp] = true end
+        for _i, fp in ipairs(Repo.kindleFilepaths() or {}) do
+            if not seen[fp] then
+                seen[fp] = true
+                filepaths[#filepaths + 1] = fp
+            end
+        end
         -- Pre-filter: drop already-linked books (cheap -- reads the link cache,
         -- no network), so only genuine candidates cost an API call.
         local candidates = {}
@@ -2674,12 +2721,11 @@ function Settings:_performanceSubItems()
         },
         {
             text = _("Clear cover cache"),
-            help_text = _("Drop all cached scaled covers from memory. "
+            help_text = _("Drop all cached scaled covers, in memory and on disk. "
                 .. "Use this when a book's cover has been updated outside "
                 .. "KOReader (e.g. a metadata-enrichment tool rewrote the "
                 .. "EPUB) and the old cover is still showing on the shelf. "
-                .. "The next render fetches fresh covers from the EPUBs. "
-                .. "Restarting KOReader has the same effect."),
+                .. "The next render fetches fresh covers from the EPUBs."),
             keep_menu_open = true,
             callback = function()
                 local ScaledCoverCache = require("lib/bookshelf_scaled_cover_cache")
@@ -5081,7 +5127,12 @@ function Settings:_tabsMenuItems()
             fresh[#fresh + 1] = new_tab
             TabModel.save(fresh)
             hideParentMenu(touchmenu_instance)
-            Editor:editTab(new_id, { on_change = function() rebuild() end })
+            -- Same as the editor's own "+": choose the source first, since it
+            -- is what the chip is FOR and what gives it its name.
+            Editor:editTab(new_id, {
+                on_change = function() rebuild() end,
+                pick_source_first = true,
+            })
         end,
     }
 
