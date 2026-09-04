@@ -160,6 +160,11 @@ end
 -- East North: aparcar y mostrar / volver si ya aparcado (toggle)
 -- ---------------------------------------------------------------------------
 function ReaderUI:onParkAndShowBookshelf()
+    if G_reader_settings:readSetting("start_with") ~= "bookshelf" then
+        local UIManager = require("ui/uimanager")
+        local Event = require("ui/event")
+        return UIManager:sendEvent(Event:new("ShowHist"))
+    end
     logger.dbg("[bookshelf-overlay] onParkAndShowBookshelf() DISPARADO")
 
     if isDebounced("onParkAndShowBookshelf") then
