@@ -268,6 +268,7 @@ function FileSearcher:showSearchResultsComplete(results, callback)
 end
 
 function FileSearcher:doSearchCompleted(show_complete, show_recent, sort)
+    self.use_patterns = true
     local search_hash = self.path .. (FileSearcher.search_string or "") ..
         tostring(self.case_sensitive) .. tostring(self.include_subfolders) .. tostring(self.include_metadata) .. select(2, FileChooser:getCollate())
     local not_cached = true -- FileSearcher.search_hash ~= search_hash I don't want to cache for this case
@@ -304,13 +305,14 @@ function FileSearcher:doSearchCompleted(show_complete, show_recent, sort)
                 if require("docsettings"):hasSidecarFile(value.path) then
                     -- local stats = doc_settings:readSetting("stats")
                     -- local book_props = require("apps/filemanager/filemanagerbookinfo").getDocProps(value.path).description
-                    local doc_settings = require("docsettings"):open(value.path)
-                    local status = doc_settings:readSetting("summary").status
-                    local modified_date = doc_settings:readSetting("summary").modified
-                    if status == "complete" then
-                        value.modified_date = modified_date
-                        value.text = modified_date .. " " .. value.text --.. value.text:gsub(string.match(value.text , "^.+(%..+)$"), "")
-                        table_complete[#table_complete+1] = value
+                   local doc_settings = require("docsettings"):open(value.path)
+                    if doc_settings then
+                        local summary = doc_settings:readSetting("summary")
+                        if summary and summary.status == "complete" then
+                            value.modified_date = summary.modified or ""
+                            value.text = value.modified_date .. " " .. value.text
+                            table_complete[#table_complete+1] = value
+                        end
                     end
                 end
             end
