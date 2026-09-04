@@ -507,8 +507,7 @@ function ScrollableContainer:onScrollableSwipe(_, ges)
     -- They may start in the content and end over the scrollbar, causing
     -- unintended large jumps when both container swipe and scrollbar interact.
     if self._v_scroll_bar then
-        if ges.direction == "east"
-            or ges.direction == "northeast"
+        if ges.direction == "northeast"
             or ges.direction == "southeast" then
             return true
         end
