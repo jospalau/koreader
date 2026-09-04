@@ -968,12 +968,12 @@ function ReaderFooter:setupTouchZones()
             id = "readerfooter_double_tap",
             ges = "double_tap",
             screen_zone = {
-                ratio_x = 0, ratio_y = 24/25, ratio_w = 1, ratio_h =25,
+                ratio_x = 0, ratio_y = 24/25, ratio_w = 1, ratio_h = 25,
             },
             handler = function(ges) return self:DoubleTapFooter(ges) end,
-            overrides = {
-                "pagetextinfo_double_tap",
-            },
+            -- overrides = {
+            --     "pagetextinfo_double_tap",
+            -- },
         },
         {
             id = "readerfooter_hold",

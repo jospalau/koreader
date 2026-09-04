@@ -789,6 +789,7 @@ function PageTextInfo:onDoubleTap(_, ges)
             end
         end
     end
+    return true
 end
 
 local function inside_box(pos, box)
