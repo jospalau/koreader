@@ -1229,7 +1229,7 @@ function ListRow.lineText(record, line, template)
     local text = Tokens.expand(tpl, record, nil)
     if tpl:find("%authors_short", 1, true) and not isRemote(record) then
         local util = require("util")
-        local calibre_data = util.loadCalibreData()
+        local calibre_data = (util.loadCalibreData and util.loadCalibreData()) or {}
         local fp = itemFilepath(record)
         local fname = fp and fp:match("([^/]+)$") or ""
         local ext   = fp and (fp:match("%.([^.]+)$") or "") or ""

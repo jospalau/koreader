@@ -778,7 +778,7 @@ function Menu:init()
     }
 
     self.paths = {}  -- per instance table to trace navigation path
-    self.calibre_data = util.loadCalibreData()
+    self.calibre_data = (util.loadCalibreData and util.loadCalibreData()) or {}
     -----------------------------------
     -- start to set up widget layout --
     -----------------------------------

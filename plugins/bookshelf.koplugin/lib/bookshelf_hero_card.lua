@@ -836,7 +836,7 @@ function HeroCard:_buildRightColumn(book, regions, state, dimen)
 
     do
         local util = require("util")
-        local calibre_data = util.loadCalibreData()
+        local calibre_data = (util.loadCalibreData and util.loadCalibreData()) or {}
         local fname = book.filepath and book.filepath:match("([^/]+)$") or ""
         local ext   = book.filepath and (book.filepath:match("%.([^.]+)$") or "") or ""
         local key   = fname:gsub("%.[^.]+$", "") .. "." .. ext

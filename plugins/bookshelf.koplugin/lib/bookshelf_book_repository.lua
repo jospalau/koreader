@@ -779,7 +779,7 @@ function Repo.buildBookMeta(filepath, opts)
     local genres, genre_sources = genreData(filepath, cb, info)
 
     local util = require("util")
-    local calibre_data = util.loadCalibreData()
+    local calibre_data = (util.loadCalibreData and util.loadCalibreData()) or {}
     local key = filename .. "." .. (filepath:match("%.([^.]+)$") or "")
     local page_count
     --if calibre_data[key] and calibre_data[key]["pages"] then
@@ -974,7 +974,7 @@ local function _buildLightMetaFromInfo(fp, info)
     end
 
     local util = require("util")
-    local calibre_data = util.loadCalibreData()
+    local calibre_data = (util.loadCalibreData and util.loadCalibreData()) or {}
     local key = filename .. "." .. (fp:match("%.([^.]+)$") or "")
     local page_count
     if calibre_data[key] and calibre_data[key]["pages"] then
@@ -1167,7 +1167,7 @@ function Repo.buildBook(filepath, opts)
     -- seeds the progress cache below, so it must match what readProgress
     -- computes (which never sees BIM's count).
     local util = require("util")
-    local calibre_data = util.loadCalibreData()
+    local calibre_data = (util.loadCalibreData and util.loadCalibreData()) or {}
     local fname = filepath:match("([^/]+)$"):gsub("%.[^.]+$", "")
     local ext   = filepath:match("%.([^.]+)$") or ""
     local key   = fname .. "." .. ext
@@ -1877,7 +1877,7 @@ function Repo.readProgress(filepath)
         end
     end
     local util = require("util")
-    local calibre_data = util.loadCalibreData()
+    local calibre_data = (util.loadCalibreData and util.loadCalibreData()) or {}
     local fname = filepath:match("([^/]+)$"):gsub("%.[^.]+$", "")
     local ext   = filepath:match("%.([^.]+)$") or ""
     local key   = fname .. "." .. ext

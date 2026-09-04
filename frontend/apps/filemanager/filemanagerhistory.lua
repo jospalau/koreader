@@ -18,7 +18,7 @@ local FileManagerHistory = WidgetContainer:extend{
 }
 
 function FileManagerHistory:init()
-    self.calibre_data = util.loadCalibreData()
+    self.calibre_data = (util.loadCalibreData and util.loadCalibreData()) or {}
     self.ui.menu:registerToMainMenu(self)
 end
 

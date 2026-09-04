@@ -743,7 +743,7 @@ function ShelfRow.new(opts)
                 stack[#stack + 1] = spine
                 if draw_label then
                     local util = require("util")
-                    local calibre_data = util.loadCalibreData()
+                    local calibre_data = (util.loadCalibreData and util.loadCalibreData()) or {}
                     local fname = item.filepath and item.filepath:match("([^/]+)$") or ""
                     local ext   = item.filepath and (item.filepath:match("%.([^.]+)$") or "") or ""
                     local key   = fname:gsub("%.[^.]+$", "") .. "." .. ext

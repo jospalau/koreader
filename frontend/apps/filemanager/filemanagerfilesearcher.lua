@@ -357,7 +357,7 @@ function FileSearcher:getList()
             table.insert(words, word)
         end
     end
-    -- local calibre_data = util.loadCalibreData()
+    -- local calibre_data = (util.loadCalibreData and util.loadCalibreData()) or {}
     if search_string ~= "*" then -- one * to show all files
         if not self.case_sensitive then
             search_string = util.stringLower(search_string)

@@ -74,7 +74,7 @@ function FileChooser:genItemTable(dirs, files, path)
     else
         pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
     end
-    if pagetextinfo.settings:isTrue("enable_change_bar_menu") then
+    if pagetextinfo and pagetextinfo.settings:isTrue("enable_change_bar_menu") then
         Icon = {
             home = "home2",
             up = BD.mirroredUILayout() and "back.top.rtl" or "back.top2",

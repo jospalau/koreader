@@ -298,7 +298,7 @@ function BookStatusWidget:genBookInfoGroup()
             text_author
         }
     )
-    local calibre_data = util.loadCalibreData()
+    local calibre_data = (util.loadCalibreData and util.loadCalibreData()) or {}
     local metadata = "Metadata"
     local __, book_name = util.splitFilePathName(self.ui.document.file)
     if calibre_data[book_name]

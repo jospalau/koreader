@@ -488,7 +488,7 @@ end
 
 -- NOTE: The only thing that will *ever* instantiate a new FileManager object is our very own showFiles below!
 function FileManager:init()
-    self.calibre_data = util.loadCalibreData()
+    self.calibre_data = (util.loadCalibreData and util.loadCalibreData()) or {}
     self.active_widgets = {}
     self.postInitCallback = {}
 
@@ -672,7 +672,7 @@ function FileManager:onToggleSelectMode(do_refresh)
     else
         pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
     end
-    if pagetextinfo.settings:isTrue("enable_change_bar_menu") then
+    if pagetextinfo and pagetextinfo.settings:isTrue("enable_change_bar_menu") then
         plus = "plus2"
         check = "check2"
     end

@@ -292,7 +292,7 @@ end
 -- Finally I am using a global variable _G.all_files. It can be defined simply as all_files = util.getListAll()
 -- but I define it and use it explicitly prefixing _G. on the front
 local util = require("util")
-if G_reader_settings:isTrue("top_manager_infmandhistory") then
+if G_reader_settings:isTrue("top_manager_infmandhistory") and util.getListAll and util.generateStats then
     _G.all_files = util.getListAll()
     util.generateStats()
 end

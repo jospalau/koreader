@@ -32,7 +32,7 @@ local FileManagerCollection = WidgetContainer:extend{
 }
 
 function FileManagerCollection:init()
-    self.calibre_data = util.loadCalibreData()
+    self.calibre_data = (util.loadCalibreData and util.loadCalibreData()) or {}
     self.show_mark = G_reader_settings:nilOrTrue("collection_show_mark")
     self.doc_props_cache = {}
     self.updated_collections = {}
