@@ -1023,13 +1023,15 @@ function SpineWidget:_renderShadowedCard(inner)
             -- throwaway bare glyph to measure the true height, then
             -- offset by -halo_w so the inner glyph's centre lands on
             -- the in-progress glyph's centre.
+
+            local glyph = CoverProgress.GLYPH_TBR .. " " .. (indicators.in_hist and indicators.in_hist or "?")
             local probe = CoverProgress.buildGlyphWidget(
-                CoverProgress.GLYPH_TBR, glyph_h,
+                glyph, glyph_h,
                 Blitbuffer.COLOR_BLACK)
             local widget_h = probe:getSize().h
             probe:free()
             local outlined = CoverProgress.buildOutlinedGlyphWidget(
-                CoverProgress.GLYPH_TBR, glyph_h, halo_w)
+                glyph, glyph_h, halo_w)
             local lift = _glyphTopLift(self.show_titles)
             local y_offset = card_h - math.floor(widget_h * lift + 0.5)
             children[#children + 1] = FrameContainer:new{

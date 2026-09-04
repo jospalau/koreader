@@ -50,8 +50,8 @@ M.FAV_GLYPH_HEART = "\u{f004}"  -- nf-fa-heart
 -- bundled symbols.ttf cmap (the same cmap lib/bookshelf_nerdfont_names.lua was
 -- generated from, where it is entry "ok_sign", code=0xF058).
 M.GLYPH_DOWNLOADED = "\u{f058}"  -- nf-fa-check_circle
-M.GLYPH_TBR = "\u{f00c}" -- tbr
-M.GLYPH_MBR = "\u{f00c}\u{f00c}" -- mbr
+M.GLYPH_TBR = "TBR" -- "\u{f00c}" -- tbr
+M.GLYPH_MBR = "MBR" -- "\u{f00c}\u{f00c}" -- mbr
 
 -- favoriteIcon(): "heart" (default) or "star", from the fav_icon setting.
 function M.favoriteIcon()
@@ -188,10 +188,30 @@ function M.decide(book)
             page_count = want_page_count,
         }
     elseif status == "tbr" then
+        local ReadHistory = require("readhistory")
+
+        local tbr_idx
+        local idx = 0
+
+        for _, entry in ipairs(ReadHistory.hist or {}) do
+            local status = _G.all_files
+                and _G.all_files[entry.file]
+                and _G.all_files[entry.file].status
+
+            if status == "tbr" then
+                idx = idx + 1
+
+                if entry.file == book.filepath then
+                    tbr_idx = idx
+                    break
+                end
+            end
+        end
          return {
             bar        = false,
             bar_pct    = 0,
             glyph      =  "tbr",
+            in_hist     = tbr_idx,
             page_count = want_page_count,
         }
     elseif status == "complete" or status == "finished" then
