@@ -401,6 +401,9 @@ Dispatcher:registerAction("show_reading_hours_daily", {
 })
 
 function ReaderUI:onShowReadingHoursDaily()
+    local util = require("util")
+    local is_pdf = self.document and util.getFileNameSuffix(self.document.file) == "pdf"
+    if is_pdf then return end
 	if self.statistics then
 		self.statistics:insertDB()
 	end

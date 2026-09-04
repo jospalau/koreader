@@ -556,6 +556,9 @@ local _orig    = ReaderUI.registerKeyEvents
 
 ReaderUI.registerKeyEvents = function(self)
     if _orig then _orig(self) end
+    local util = require("util")
+    local is_pdf = self.document and util.getFileNameSuffix(self.document.file) == "pdf"
+    if is_pdf then return end
     self.onGetTextPage = function(this)
         UIManager:show(TextInfoPopup:new{ ui = this })
         return true

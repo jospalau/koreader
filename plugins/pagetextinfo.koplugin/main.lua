@@ -4400,6 +4400,9 @@ function PageTextInfo:sendHighlightToServerForHeatmap()
 end
 
 function PageTextInfo:onToggleDoubleBar()
+    local util = require("util")
+    local is_pdf = self.document and util.getFileNameSuffix(self.document.file) == "pdf"
+    if is_pdf then return end
     if self.view.footer_visible then return end
     if self.view.topbar.settings:isTrue("show_top_bar")
     or (self.ui.bookends and self.ui.bookends.enabled) then
