@@ -1198,7 +1198,7 @@ function HeroCard:_renderFull()
         -- read entirely). One hero-sized entry is bounded by the cache's byte
         -- budget and evicted LRU like any other, so the displacement worry
         -- is negligible against eliminating the per-cycle blocking read.
-        skip_cover_cache = true,
+        -- skip_cover_cache = true,
     }
     local cover_widget = FrameContainer:new{
         bordersize   = 0,
