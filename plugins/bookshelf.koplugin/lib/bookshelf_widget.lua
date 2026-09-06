@@ -1748,12 +1748,16 @@ function BookshelfWidget:_rebuild()
     -- "Page X of Y" accurately for any reasonable user.
     local MAX_FETCH  = 400
     local all_items, _total_hint
-    if self._draft_regrid and self._draft_items_cache then
-        -- Draft regrid: only the grid geometry changed, not the book set, so
-        -- reuse the last full fetch and let the slicing below reflow it to the
-        -- new page size. Skips _fetchChipItems (the library/sort read). The
-        -- cache is repopulated by every normal (non-draft) rebuild, so it can't
-        -- go stale across a chip switch or library refresh.
+    -- Draft regrid: only the geometry changed, not the book set, so reuse the
+    -- last fetch and skip _fetchChipItems (the library/sort read). The cache is
+    -- repopulated by every normal (non-draft) rebuild, so it can't go stale
+    -- across a chip switch or a library refresh.
+    --
+    -- ...but only when it still HOLDS a page this size. A pinch that adds rows
+    -- grows VIEW_SIZE, and for a window-fetched source the cached page was cut
+    -- to the old one -- see _draftCacheServes.
+    if self._draft_regrid and self:_draftCacheServes(self._draft_items_cache,
+                                                     VIEW_SIZE) then
         all_items   = self._draft_items_cache.all_items
         _total_hint = self._draft_items_cache.total_hint
     else
@@ -6428,6 +6432,7 @@ function BookshelfWidget:_repaintSelectionHighlight(old_fp, new_fp)
             is_selected      = want_selected,
             is_bulk_selected = old_spine.is_bulk_selected or false,
             show_progress = old_spine.show_progress,
+            show_status   = old_spine.show_status,
             show_titles   = old_spine.show_titles,
             in_series     = old_spine.in_series,
         }
@@ -6580,6 +6585,7 @@ function BookshelfWidget:_refreshSpineInPlace(fp)
                     is_selected      = old_spine.is_selected or false,
                     is_bulk_selected = old_spine.is_bulk_selected or false,
                     show_progress = old_spine.show_progress,
+                    show_status   = old_spine.show_status,
                     show_titles   = old_spine.show_titles,
                     in_series     = old_spine.in_series,
                 }
@@ -9781,6 +9787,35 @@ end
 -- Landscape normal: 5, landscape expanded: 10.
 -- Expanded pages overlap _pageSize by one row so paging forward reveals
 -- one new row at the bottom while the top rows stay fixed.
+-- _draftCacheServes(cached, view_size) -- can a draft regrid reuse this fetch,
+-- or does it have to go back to the library?
+--
+-- _fetchChipItems splits its sources two ways. Most return the WHOLE list and
+-- _rebuild slices a page out of it, so one cache serves any page size. Home,
+-- folder and group drills, search, OPDS -- and every plain chip that falls
+-- through to Repo.getBySource, which is most of them -- are WINDOW-fetched:
+-- LIMIT is self:_viewSize() at fetch time, and they return that one page plus
+-- the total. _rebuild then uses that page VERBATIM (`items = all_items`, the
+-- _total_hint branch); there is no reflow to stretch it with.
+--
+-- So a pinch that adds rows was leaving the shelf half empty: total_pages came
+-- from the new VIEW_SIZE while the page itself still held only as many books
+-- as the old one asked for, and every row past its end rendered blank. Zooming
+-- the other way hid it, because a page longer than the view is simply not all
+-- drawn.
+--
+-- Being short is only wrong when there was more to have. A window that already
+-- reaches the total IS the last page, and a partial last page is correct.
+function BookshelfWidget:_draftCacheServes(cached, view_size)
+    if not (cached and cached.all_items) then return false end
+    -- Whole-list source: the slice below reflows it to any size.
+    if not cached.total_hint then return true end
+    local have = #cached.all_items
+    if have >= (view_size or 0) then return true end
+    local from = math.max(0, (self._cursor or 1) - 1)
+    return from + have >= cached.total_hint
+end
+
 function BookshelfWidget:_viewSize()
     return self:_nShelves() * self:_nCols()
 end
@@ -11043,11 +11078,10 @@ function BookshelfWidget:_nudgeListRows(delta)
     self._nav_dirty = true
     self:_scheduleNavFlush()
     self:_clearDpadFocus()
-    -- Full-quality rebuild on every step (no draft/settle two-pass): each
-    -- row step decodes covers at final size immediately, trading burst-zoom
-    -- responsiveness for no draft->settle flicker. See git history for the
-    -- prior draft-regrid approach if this needs revisiting.
-    self:_rebuild()
+    -- Thumbnails are sized off the row height, so a row step resizes every
+    -- cover on the page: draft regrid rescales from cache and the settle timer
+    -- sharpens them once the pinching stops, exactly as the grid does.
+    self:_draftRebuild()
     UIManager:setDirty(self, "ui")
     -- ...and skipped on the same terms, for the same reason. List rows build
     -- SpineWidget thumbnails like grid tiles do, so the draft tally applies
@@ -11083,11 +11117,9 @@ function BookshelfWidget:_nudgeColumns(delta)
     self._nav_dirty = true
     self:_scheduleNavFlush()
     self:_clearDpadFocus()
-    -- Full-quality rebuild on every step (no draft/settle two-pass): each
-    -- pinch step decodes covers at final size immediately, trading burst-zoom
-    -- responsiveness for no draft->settle flicker. See git history for the
-    -- prior draft-regrid approach if this needs revisiting.
-    self:_rebuild()
+    -- Draft regrid so a burst of pinches steps instantly (covers rescaled from
+    -- cache, not re-decoded); the settle timer sharpens them once you stop.
+    self:_draftRebuild()
     UIManager:setDirty(self, "ui")
     -- ...unless there was nothing to sharpen. When every drafted cover came
     -- from a cached bitmap already at least the slot size, the draft built its
@@ -13486,7 +13518,12 @@ end
 -- uppercased, taken from OpdsDownload.filenameFor rather than a second MIME
 -- table here so the label can never disagree with the filename produced.
 local function opdsAcquisitionLabel(book, acq)
-    if type(acq.title) == "string" and acq.title ~= "" then return acq.title end
+    if type(acq.title) == "string" and acq.title ~= "" then
+        -- Match the stock OPDS browser, which decodes an acquisition link's
+        -- title before showing it. Some servers put the URL-escaped filename
+        -- here, which otherwise leaks %E5%... into the Download button.
+        return require("socket.url").unescape(acq.title)
+    end
     local ok_d, D = pcall(require, "lib/bookshelf_opds_download")
     local name = ok_d and D.filenameFor(book, acq) or nil
     local ext = type(name) == "string" and name:match("%.([^.]+)$") or nil
@@ -13966,7 +14003,25 @@ function BookshelfWidget:_opdsStartDownload(book, acq, dialog)
     if dest then
         name = dest:match("([^/]+)$")
     else
-        name = util.getSafeFilename(D.filenameFor(book, acq), dir)
+        local filename = D.filenameFor(book, acq)
+        local key = type(book.filepath) == "string"
+            and book.filepath:match("^OPDS://([^/]+)/") or nil
+        local OpdsSource = require("lib/bookshelf_opds_source")
+        local OpdsFeed = require("lib/bookshelf_opds_feed")
+        local server = key and OpdsSource.getServer(key) or nil
+        if server and server.raw_names then
+            -- This is deliberately the stock browser's pre-download HEAD
+            -- lookup: server names decide the *target path*, so it has to run
+            -- before the overwrite prompt and before the GET opens a file.
+            local same_origin = OpdsFeed.sameOrigin(server.url, acq.href)
+            local server_name = D.serverFilename(acq.href, acq.type,
+                same_origin and server.username or nil,
+                same_origin and server.password or nil)
+            if type(server_name) == "string" and server_name ~= "" then
+                filename = server_name
+            end
+        end
+        name = util.getSafeFilename(filename, dir)
         dest = (dir ~= "/" and dir or "") .. "/" .. name
         -- Don't offer to overwrite a file that belongs to a DIFFERENT catalog
         -- record: filenameFor is author + title + format and getSafeFilename
