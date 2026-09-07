@@ -238,19 +238,7 @@ local function _installCalibreNotice()
     end
 end
 
-function Bookshelf:init()
-    _installBroadcastTag()
-    -- Run once per init -- no settings flag needed because the clean is
-    -- idempotent and cheap (one lfs.dir scan over the plugin root).
-    _cleanLegacyLayout()
-    _installCalibreNotice()
-    -- Bundled fonts: install (best-effort, for pickers) and seed fresh-install
-    -- defaults exactly once. Must run before any other settings write so the
-    -- "settings file present" fresh-install signal is accurate.
-    local Fonts = require("lib/bookshelf_fonts")
-    Fonts.maybeSeedFreshInstall()
-    Fonts.ensureInstalled()
-
+function Bookshelf:_warmupStartMenuModules()
     -- Warm-up: pre-render the start-menu modules off-screen once, so the
     -- first real _buildPanel doesn't pay the cost of requiring widget
     -- classes + resolving font faces for the first time (issue: first
@@ -283,7 +271,22 @@ function Bookshelf:init()
             logger.warn("[bookshelf] warmup failed:", err)
         end
     end)
+end
 
+function Bookshelf:init()
+    _installBroadcastTag()
+    -- Run once per init -- no settings flag needed because the clean is
+    -- idempotent and cheap (one lfs.dir scan over the plugin root).
+    _cleanLegacyLayout()
+    _installCalibreNotice()
+    -- Bundled fonts: install (best-effort, for pickers) and seed fresh-install
+    -- defaults exactly once. Must run before any other settings write so the
+    -- "settings file present" fresh-install signal is accurate.
+    local Fonts = require("lib/bookshelf_fonts")
+    Fonts.maybeSeedFreshInstall()
+    Fonts.ensureInstalled()
+
+    self:_warmupStartMenuModules()
     -- Cache update-related settings on the instance for the menu's text_func
     -- closures. Defaults match bookends: branch empty, source = "release",
     -- background check OFF (opt-in via the menu toggle).
@@ -2203,6 +2206,7 @@ end
 function Bookshelf:onResume()
     self:_repaintAfterWake()
     self:backgroundUpdateCheck()
+    self:_warmupStartMenuModules()
 end
 
 -- Some Kindles use a lighter "standby" mode that broadcasts
