@@ -7536,6 +7536,17 @@ local TIMER_TOKENS = {
     "date", "date_long", "date_numeric", "weekday", "weekday_short",
     "book_time_left", "book_read_time", "days_reading_book",
     "pages_per_day", "speed", "batt",
+    -- %ssh_icon / [if:ssh] change without any event to hang a repaint on:
+    -- KOReader's SSH plugin broadcasts nothing when the server starts or
+    -- stops, unlike Wi-Fi, the frontlight and night mode, which each have
+    -- their own token group below. Rendered once and never refreshed, the icon
+    -- outlived the server it was reporting and read as "it will not stop".
+    -- The minute tick is the only trigger available, and a server indicator
+    -- can afford that latency. Costs nothing for a shelf that does not use it:
+    -- _anyActiveRegionUses gates the repaint on the token really being in a
+    -- template. Both spellings, since the match is on "%name" plus a boundary
+    -- and "%ssh" would not fire for "%ssh_icon".
+    "ssh", "ssh_icon",
 }
 local FRONTLIGHT_TOKENS = { "light", "light_icon", "warmth" }
 local BATTERY_TOKENS    = { "batt", "batt_icon" }
@@ -9016,8 +9027,8 @@ end
 function BookshelfWidget:_coverAspect()
     if not BookshelfSettings.isTrue("true_cover_aspect") then return 1.5 end
     local ok, SpineWidget = pcall(require, "lib/bookshelf_spine_widget")
-    if ok and SpineWidget and SpineWidget.COVER_ASPECT_CAP then
-        return SpineWidget.COVER_ASPECT_CAP
+    if ok and SpineWidget and SpineWidget.coverAspectCap then
+        return SpineWidget.coverAspectCap()
     end
     return 1.5
 end
@@ -9864,7 +9875,21 @@ function BookshelfWidget:_setCursorToShow(global_idx)
     if not global_idx then return end
     local view = self:_viewSize()
     self._cursor = math.max(1, math.floor((global_idx - 1) / view) * view + 1)
-    self:_clampCursor()
+    -- Clamp against the ITEM TOTAL, not the page count (#369).
+    --
+    -- _clampCursor() with no total falls back to self._total_pages, which was
+    -- computed for the view size we have just LEFT -- this is called right
+    -- after a collapse or expand, which is the whole point of it. Collapsing
+    -- shrinks the view, so the real page count grows, but the stale value is
+    -- smaller and clamps the cursor DOWN.
+    --
+    -- Worst case is a folder whose books all fit on one EXPANDED page, so the
+    -- stale _total_pages is 1 and max cursor comes out as 1: tapping a book
+    -- that sits on the second COLLAPSED page sent the shelf to page 1 instead
+    -- of following it. _maxCursor derives the page count from a real total at
+    -- the current view size, so handing it one fixes the arithmetic at source.
+    -- nil when nothing has been fetched yet, which is the old behaviour.
+    self:_clampCursor(self._total_items)
     self:_syncPageFromCursor()
 end
 

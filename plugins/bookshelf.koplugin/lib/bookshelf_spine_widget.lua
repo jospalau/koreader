@@ -150,11 +150,23 @@ local SELECTED_BORDER = SHADOW_OFFSET
 -- inversion). No user control — purely a function of the active mode.
 local SHADOW_GRAY_DAY   = Blitbuffer.gray(0.5)
 local SHADOW_GRAY_NIGHT = Blitbuffer.gray(0.15)
+-- The card's drop shadow. User-settable since issue #199; the constants below
+-- stay as the floor, so a resolver that has not loaded yet (or a colour that
+-- fails to parse) paints exactly what it always did rather than nothing.
 local function _shadowGray()
+    local ok, colors = pcall(CoverProgress.resolvedColors)
+    if ok and colors and colors.card_shadow then return colors.card_shadow end
     if G_reader_settings:isTrue("night_mode") then
         return SHADOW_GRAY_NIGHT
     end
     return SHADOW_GRAY_DAY
+end
+
+-- The ring a selected / current-book cover sits on. Same fallback reasoning.
+local function _selectionColor()
+    local ok, colors = pcall(CoverProgress.resolvedColors)
+    if ok and colors and colors.selection then return colors.selection end
+    return Blitbuffer.COLOR_BLACK
 end
 
 -- Placeholder (no-image) cover backgrounds. In day these are near-white
@@ -349,7 +361,8 @@ function ShadowRect:init()
 end
 function ShadowRect:paintTo(bb, x, y)
     local radius = self.radius or CARD_RADIUS
-    bb:paintRoundedRect(x, y, self.width, self.height, _shadowGray(), radius)
+    CoverProgress.paintRoundedRect(bb, x, y, self.width, self.height,
+                                   _shadowGray(), radius)
 end
 
 -- Paints a shorter-than-box image top-anchored within a fixed
@@ -398,9 +411,9 @@ function BorderOverlay:init()
 end
 function BorderOverlay:paintTo(bb, x, y)
     local t = self.thickness
-    bb:paintRoundedRect(x - t, y - t,
+    CoverProgress.paintRoundedRect(bb, x - t, y - t,
                         self.width + 2 * t, self.height + 2 * t,
-                        self.color or Blitbuffer.COLOR_BLACK,
+                        self.color or _selectionColor(),
                         (self.radius or 0) + t)
 end
 
@@ -2116,10 +2129,11 @@ function SpineWidget:_wrapCoverInCard(cover_inner, card_w, card_h, border)
         -- (0..R, 0..R) corner squares for points OUTSIDE the radius-R
         -- arc, to fake rounded corners on top of a rectangular image.
         -- With the BorderOverlay backdrop those bg-white pixels poke
-        -- out into the black ring as four little white teeth. Invert
-        -- the mask color to match the backdrop so the corner squares
-        -- merge seamlessly with the surrounding black.
-        cover_args.bg_color = Blitbuffer.COLOR_BLACK
+        -- out into the ring as four little white teeth. Match the mask
+        -- color to the backdrop so the corner squares merge seamlessly
+        -- into it -- which means following the ring's own colour now that
+        -- it is user-settable (issue #199), not the black it used to be.
+        cover_args.bg_color = _selectionColor()
     elseif self:_squareCorners() or (self:_noShadow() and not self.force_shadow) then
         -- Square corners mean no corner mask runs at all, so there are no
         -- masked pixels for a shadow to show through; no shadow means there is
@@ -2597,6 +2611,31 @@ SpineWidget.COVER_CHROME = SHADOW_OFFSET + 2 * CARD_BORDER
 -- height -- a few pixels of crop -- to gain a whole row of shelf.
 SpineWidget.COVER_ASPECT_CAP = 1.55
 
+-- SpineWidget.coverAspectCap() -- the cap actually in force.
+--
+-- Settable since issue #330: a reader whose covers are genuinely taller than
+-- 1.55 sees them cropped, and the right cap depends on their column count and
+-- screen, which is exactly the arithmetic above. The constant stays as the
+-- DEFAULT, so it keeps documenting where 1.55 came from.
+--
+-- Read through here rather than off the field, because every caller has to
+-- agree: the row-count maths reserves height at this number and shelf_row
+-- sizes slots with it, and the two disagreeing is what made a previous retune
+-- shrink the covers without giving back the row it was tightened for.
+--
+-- Memoised on the settings generation because bookAspect calls this per cover
+-- per render. Clamped to a range that still produces a usable shelf: below
+-- ~1.2 covers stop looking like books, and above ~2.0 a row eats the screen.
+local _cap_cache, _cap_gen
+function SpineWidget.coverAspectCap()
+    local gen = BookshelfSettings.generation()
+    if _cap_cache and _cap_gen == gen then return _cap_cache end
+    local v = tonumber(BookshelfSettings.read("cover_aspect_cap"))
+    if not v or v < 1.2 or v > 2.0 then v = SpineWidget.COVER_ASPECT_CAP end
+    _cap_cache, _cap_gen = v, gen
+    return v
+end
+
 -- SpineWidget.downloadedTickOffset(card_w, card_h, glyph_w, widget_h, halo_w)
 -- -> x, y
 --
@@ -2655,7 +2694,8 @@ function SpineWidget.bookAspect(book)
         w, h = tonumber(w), tonumber(h)
         if w and h and w > 0 and h > 0 then
             local a = h / w
-            if a > SpineWidget.COVER_ASPECT_CAP then a = SpineWidget.COVER_ASPECT_CAP end
+            local cap = SpineWidget.coverAspectCap()
+            if a > cap then a = cap end
             if a < 0.5 then a = 0.5 end
             return a
         end
