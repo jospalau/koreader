@@ -263,7 +263,7 @@ function Bookshelf:init()
             local ModuleKit = require("lib/bookshelf_module_kit")
             local warm_keys = {
                 "finished_stats", "reading_time_breakdown", "reading_delta",
-                "book_info", "session_time", "wpm_session",
+                "book_info", "session_time", "wpm_session", "random_unread",
             }
             for _, key in ipairs(warm_keys) do
                 local def = Modules.get(key)
