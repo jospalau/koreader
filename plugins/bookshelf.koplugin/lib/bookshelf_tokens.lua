@@ -164,6 +164,14 @@ Tokens.CATALOGUE = {
     { category = "Style",    token = "[size=+4]",         description = _("Larger from here on; [size=12] sets an exact point size ([/size] ends it)") },
     { category = "Style",    token = "[font=NAME]",       description = _("A different font from here on: replace NAME with a font name ([/font] ends it)") },
     { category = "Device",   token = "%version_app",      description = "KOReader App Version" },
+    { category = "Progress", token = "%books_total",      description = _("Total books") },
+    { category = "Progress", token = "%books_total",      description = _("Total books") },
+    { category = "Progress", token = "%books_reading",    description = _("Books currently reading") },
+    { category = "Progress", token = "%books_tbr",        description = _("Books to be read") },
+    { category = "Progress", token = "%books_mbr",        description = _("Books maybe read") },
+    { category = "Progress", token = "%books_finished2",  description = _("Books finished") },
+    { category = "Progress", token = "%books_unread",     description = _("Books unread") },
+    { category = "Progress", token = "%books_read_this_month", description = _("Books finished this month") },
 }
 
 local function metaToken(field)
@@ -1041,7 +1049,43 @@ Tokens.expanders.disk = function(_b, s)
     return Semantics.disk(s and s.disk_bytes)
 end
 
+local function bookCountExpander(bucket)
+    return function()
+        local ok, BookCounts = pcall(require, "bookcounts")
+        if not ok then return "N/A" end
+        local _total, counts = BookCounts.getCounts()
+        return (counts and counts[bucket]) or 0
+    end
+end
+
+Tokens.expanders.books_reading  = bookCountExpander("reading")
+Tokens.expanders.books_tbr      = bookCountExpander("tbr")
+Tokens.expanders.books_mbr      = bookCountExpander("mbr")
+Tokens.expanders.books_finished2 = bookCountExpander("finished")
+Tokens.expanders.books_unread   = bookCountExpander("unread")
+
 Tokens.expanders.version_app  = function() return _G.date_and_version end
+Tokens.expanders.books_total = function()
+    local ok, BookCounts = pcall(require, "bookcounts")
+    if not ok then
+        -- pagetextinfo.koplugin hasn't run its own package.path setup yet
+        -- (or isn't loaded at all) -- add its lib path ourselves and retry.
+        local plugin_path = require("datastorage"):getFullDataDir() .. "/plugins/pagetextinfo.koplugin"
+        package.path = plugin_path .. "/?.lua;" .. package.path
+        ok, BookCounts = pcall(require, "bookcounts")
+    end
+    if not ok then return "N/A" end
+    local total = BookCounts.getTotalBooks()
+    return total or "N/A"
+end
+
+Tokens.expanders.books_read_this_month = function()
+    local ok, BookCounts = pcall(require, "bookcounts")
+    if not ok then return "N/A" end
+    return BookCounts.getFinishedThisMonth() or 0
+end
+
+
 -- %bar and %spacer are intentionally NOT in the expander table. The
 -- hero card's elastic-line renderer (buildLine in hero_card.lua) detects
 -- both tokens AFTER token expansion and splits the line into [before,
