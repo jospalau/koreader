@@ -1,11 +1,16 @@
--- Glimpse scanner: finds reference-worthy images inside an EPUB.
+-- Glimpse scanner: finds reference-worthy images inside a book.
 --
--- Pure Lua (5.1/LuaJIT compatible), no KOReader requires — the caller
--- injects `read_file(archive_path) -> string|nil`, so this module can be
--- unit-tested headlessly against an extracted EPUB (see builder/).
+-- Pure Lua (5.1/LuaJIT compatible), no KOReader requires, so it can be
+-- unit-tested headlessly (see builder/). Two source formats:
+--   EPUB  the caller injects `read_file(archive_path) -> string|nil`; the
+--         scan parses the container/OPF/HTML and reads image files by path.
+--   FB2   a single XML file passed in whole; images are base64 <binary>
+--         blocks the scan decodes itself. The viewer reads bytes back with
+--         M.fb2_read_binary(fb2, id).
 --
 -- Pipeline:
 --   M.scan(read_file)          -> { images = {...}, spine_count, opf_path }
+--   M.scan_fb2(fb2_text)       -> { images = {...}, spine_count, format }
 --   M.filter(images, level)    -> included_list, stats
 --
 -- Each image record:
@@ -24,11 +29,11 @@
 
 local M = {}
 
--- Bump when scan output format or discovery logic changes, so cached scans
--- (stored in Glimpse's sidecar) are invalidated on plugin upgrade.
+
+
 M.VERSION = 5
 
--- ── small string helpers ────────────────────────────────────────────────────
+
 
 local function trim(s)
     return (s:gsub("^%s+", ""):gsub("%s+$", ""))
@@ -58,8 +63,8 @@ local function xml_unescape(s)
     return s
 end
 
--- Join `href` onto the directory of `base` ("" for archive root) and resolve
--- "." / ".." segments. Returns a normalized archive path (no leading "/").
+
+
 local function resolve_path(base_dir, href)
     local path = href
     if not path:match("^/") and base_dir ~= "" then
@@ -81,8 +86,8 @@ local function dir_of(path)
     return path:match("^(.*)/[^/]*$") or ""
 end
 
--- Case-insensitive attribute extraction from a single tag string.
--- Handles double-quoted, single-quoted and unquoted values.
+
+
 local function attr(tag, name)
     local pat = {}
     for c in name:gmatch(".") do
@@ -99,7 +104,7 @@ local function attr(tag, name)
     if v then return xml_unescape(v) end
 end
 
--- Parse an attribute value as a pixel count ("300", "300px"); nil otherwise.
+
 local function px(v)
     if not v then return nil end
     local n = v:match("^%s*(%d+%.?%d*)%s*[pP]?[xX]?%s*$")
@@ -107,7 +112,7 @@ local function px(v)
     if n and n > 0 then return math.floor(n + 0.5) end
 end
 
--- ── binary readers ──────────────────────────────────────────────────────────
+
 
 local function be16(s, i)
     local a, b = s:byte(i, i + 1)
@@ -139,7 +144,66 @@ local function le32(s, i)
     return ((d * 256 + c) * 256 + b) * 256 + a
 end
 
--- ── image dimension sniffing ────────────────────────────────────────────────
+
+
+local B64_DEC = {}
+do
+    local a = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    for i = 1, #a do B64_DEC[a:byte(i)] = i - 1 end
+end
+
+
+
+function M.b64decode(s)
+    if type(s) ~= "string" then return "" end
+    local dec = B64_DEC
+    local byte, char, concat = string.byte, string.char, table.concat
+    local floor = math.floor
+    local out, op = {}, 0
+    local chunk, cp = {}, 0
+    local acc, nbits = 0, 0
+    for k = 1, #s do
+        local c = byte(s, k)
+        if c == 61 then break end
+        local v = dec[c]
+        if v then
+            acc = acc * 64 + v
+            nbits = nbits + 6
+            if nbits >= 8 then
+                nbits = nbits - 8
+                local shift = 2 ^ nbits
+                cp = cp + 1
+                chunk[cp] = char(floor(acc / shift) % 256)
+                acc = acc % shift
+                if cp >= 8192 then
+                    op = op + 1
+                    out[op] = concat(chunk, "", 1, cp)
+                    cp = 0
+                end
+            end
+        end
+    end
+    if cp > 0 then op = op + 1; out[op] = concat(chunk, "", 1, cp) end
+    return concat(out, "", 1, op)
+end
+
+
+local function fb2_binary_body(fb2, id)
+    for tag, body in fb2:gmatch("<[bB]inary(.-)>(.-)</[bB]inary>") do
+        if attr(tag, "id") == id then return body end
+    end
+    return nil
+end
+
+
+
+function M.fb2_read_binary(fb2, id)
+    local body = fb2_binary_body(fb2, id)
+    if not body then return nil end
+    return M.b64decode(body)
+end
+
+
 
 local function dims_png(d)
     if #d < 24 or d:sub(1, 8) ~= "\137PNG\r\n\26\n" then return nil end
@@ -159,19 +223,19 @@ local function dims_jpeg(d)
     local i = 3
     while i + 3 <= #d do
         if d:byte(i) ~= 0xFF then return nil end
-        -- skip fill bytes
+
         while d:byte(i + 1) == 0xFF and i + 1 < #d do i = i + 1 end
         local marker = d:byte(i + 1)
         if not marker then return nil end
         if marker == 0xD8 or marker == 0x01
            or (marker >= 0xD0 and marker <= 0xD7) then
-            i = i + 2 -- standalone marker, no length
+            i = i + 2
         elseif marker == 0xD9 or marker == 0xDA then
-            return nil -- EOI / start of scan without SOF: give up
+            return nil
         else
             local len = be16(d, i + 2)
             if not len or len < 2 then return nil end
-            -- SOF0..SOF15 except DHT(C4), JPG(C8), DAC(CC)
+
             if marker >= 0xC0 and marker <= 0xCF
                and marker ~= 0xC4 and marker ~= 0xC8 and marker ~= 0xCC then
                 local h, w = be16(d, i + 5), be16(d, i + 7)
@@ -226,7 +290,7 @@ local function svg_len(v)
     if unit == "in" then return math.floor(n * 96 + 0.5) end
     if unit == "cm" then return math.floor(n * 96 / 2.54 + 0.5) end
     if unit == "mm" then return math.floor(n * 9.6 / 2.54 + 0.5) end
-    return nil -- %, em, ... : not a pixel size
+    return nil
 end
 
 local function dims_svg(d)
@@ -250,7 +314,7 @@ local function dims_svg(d)
     return nil
 end
 
--- Returns width, height, format — any of which may be nil.
+
 function M.get_image_dimensions(data)
     if type(data) ~= "string" or #data == 0 then return nil, nil, nil end
     local w, h
@@ -266,10 +330,10 @@ function M.get_image_dimensions(data)
     return nil, nil, nil
 end
 
--- ── EPUB container / OPF parsing ────────────────────────────────────────────
 
--- Some producers namespace-prefix every element (<opf:item>, <opf:spine>).
--- Strip element-name prefixes so the tag patterns below match either form.
+
+
+
 local function strip_ns(xml)
     return (xml:gsub("<(%/?)[%w_%-]+:", "<%1"))
 end
@@ -277,7 +341,7 @@ end
 function M.parse_container(xml)
     if not xml then return nil end
     xml = strip_ns(xml)
-    -- first <rootfile ... full-path="..."> wins
+
     for tag in xml:gmatch("<[rR][oO][oO][tT][fF][iI][lL][eE][^>]*>") do
         local p = attr(tag, "full-path")
         if p and p ~= "" then return resolve_path("", p) end
@@ -285,10 +349,10 @@ function M.parse_container(xml)
     return nil
 end
 
--- Returns { spine = { {path=..., media=...}, ... }, cover_path = ... }
+
 function M.parse_opf(xml, opf_dir)
     xml = strip_ns(xml)
-    local items = {} -- id -> { href, media, properties }
+    local items = {}
     for tag in xml:gmatch("<[iI][tT][eE][mM][%s/][^>]*>") do
         local id = attr(tag, "id")
         local href = attr(tag, "href")
@@ -302,14 +366,14 @@ function M.parse_opf(xml, opf_dir)
     end
 
     local cover_path
-    -- EPUB3: manifest item with properties="cover-image"
+
     for _, it in pairs(items) do
         if it.properties:find("cover%-image") then
             cover_path = resolve_path(opf_dir, url_decode(it.href))
             break
         end
     end
-    -- EPUB2: <meta name="cover" content="item-id"/>
+
     if not cover_path then
         for tag in xml:gmatch("<[mM][eE][tT][aA][%s/][^>]*>") do
             local name = attr(tag, "name")
@@ -337,8 +401,8 @@ function M.parse_opf(xml, opf_dir)
         end
     end
 
-    -- EPUB2 guide: declared roles per document ("this file IS the title
-    -- page"), the most reliable chrome signal there is
+
+
     local guide = {}
     local guide_block = xml:match("<[gG][uU][iI][dD][eE][%s>].-</[gG][uU][iI][dD][eE]%s*>")
     if guide_block then
@@ -356,7 +420,7 @@ function M.parse_opf(xml, opf_dir)
     return { spine = spine, cover_path = cover_path, guide = guide }
 end
 
--- ── image extraction from one (X)HTML document ─────────────────────────────
+
 
 local function is_html_media(media, path)
     if media:find("html") or media:find("xml%+xhtml") then return true end
@@ -367,7 +431,7 @@ local function is_svg_media(media, path)
     return media:find("svg") ~= nil or path:lower():match("%.svg$") ~= nil
 end
 
--- Find <figure>...</figure> spans and their captions.
+
 local function find_figures(lower, html)
     local figures = {}
     local init = 1
@@ -393,14 +457,14 @@ local function find_figures(lower, html)
     return figures
 end
 
--- An alt/title only counts as a caption if it looks like prose, not like a
--- filename or generator boilerplate.
+
+
 function M.meaningful_text(s)
     if type(s) ~= "string" then return nil end
     s = trim(collapse_ws(s))
     if #s < 4 then return nil end
-    local l = s:lower():gsub("^%p+", ""):gsub("%p+$", "") -- "[Image]" -> "image"
-    if l:match("^%S+%.%w%w%w?%w?$") then return nil end        -- "map01.png"
+    local l = s:lower():gsub("^%p+", ""):gsub("%p+$", "")
+    if l:match("^%S+%.%w%w%w?%w?$") then return nil end
     if l:match("^images?%s*%d*$") or l:match("^img[%s_%-%d]*$") then return nil end
     if l:match("^photos?%s*%d*$") or l:match("^pictures?%s*%d*$") then return nil end
     if l:match("^picture%s*%d*$") or l:match("^illustration%s*%d*$") then return nil end
@@ -409,28 +473,28 @@ function M.meaningful_text(s)
     return s
 end
 
--- Chapter/part-opener art routinely carries the section heading as its alt
--- text ("Chapter 1 Choose the Good", "Prologue"), and title-page art an alt
--- describing the title page ("Book Title, Educated, Subtitle, ..."). Such a
--- caption marks the image as DECORATIVE — it must not earn caption relief.
+
+
+
+
 function M.decorative_caption(s)
     if type(s) ~= "string" then return false end
     local l = trim(collapse_ws(s)):lower()
-    l = l:gsub("\226\128\153", "'") -- U+2019 curly apostrophe ("Author’s")
-    -- "Creation Lake: A Novel, by Rachel Kushner. Scribner." — alt text
-    -- describing the title page ("novel" as a whole word, so "novelist"
-    -- in a genuine caption doesn't trigger it)
+    l = l:gsub("\226\128\153", "'")
+
+
+
     if l:match("%f[%a]novel%f[%A]") and l:find(" by ", 1, true) then
         return true
     end
-    -- publisher chrome described in alt text ("Penguin Random House Back
-    -- Ad logo", "reactor magazine advertisement")
+
+
     if l:match("%f[%a]logo%f[%A]") or l:find("back ad", 1, true)
        or l:match("%f[%a]advertisement%f[%A]") or l:match("%f[%a]advert%f[%A]") then
         return true
     end
-    -- caption that BEGINS with a publishing-house name ("Penguin Books",
-    -- "Penguin Random House UK") — only unambiguous names, start-anchored
+
+
     for _, pub in ipairs({
         "penguin", "random house", "harpercollins", "harper collins",
         "macmillan", "hachette", "simon & schuster", "simon and schuster",
@@ -456,12 +520,12 @@ function M.decorative_caption(s)
         or l:match("^by the same author")) and true or false
 end
 
--- Uncaptioned images whose filename betrays chrome (author photo, publisher
--- logo, title page art, back-of-book ads). Also applied to the CONTAINING
--- spine document's filename. The two-and-three-letter tokens (tp, cvi, cop,
--- adc, ata) are the big publishers' production names for title page, cover
--- image, copyright, ad card and about-the-author (e.g. Penguin Random
--- House's King_..._epub_tp_r1.jpg); they only match as whole tokens.
+
+
+
+
+
+
 function M.decorative_name(path)
     local base = (path:match("[^/]+$") or path):lower()
     return (base:match("%f[%a]author%f[%A]") or base:match("%f[%a]logo%f[%A]")
@@ -475,9 +539,9 @@ function M.decorative_name(path)
         or base:match("%f[%a]ata%f[%A]")) and true or false
 end
 
--- Publisher figure-naming conventions (f0156-01.jpg = figure at print page
--- 156; fig12.png) mark genuine figures: a positive signal worth the same
--- relief as a caption.
+
+
+
 function M.figure_name(path)
     local base = (path:match("[^/]+$") or path):lower()
     return (base:match("^f%d+%-%d+%.") or base:match("^f%d+[a-z]?%.")
@@ -485,16 +549,16 @@ function M.figure_name(path)
         or base:match("%f[%a]fig%d+%f[%A]")) and true or false
 end
 
--- A filename that names genuine reference content — a map, family tree,
--- diagram, chart, timeline, floor plan. Like figure_name, a POSITIVE signal:
--- it earns caption relief (halved size thresholds, ratio slack, and survives
--- the no-dimensions case) AND exempts the image from the front-matter portrait
--- cut, so an endpaper map in the first spine file (fantasy/history books ship
--- maps there) or a family tree a hair under the size floor is kept instead of
--- mistaken for a title page. Whole-token matches only, so "champion",
--- "planet", "streetlight" and the like don't trip it. Tiny decorative glyphs
--- that happen to match (a 45px "palm-tree" emoji) are still caught by the
--- series/size rules — this only lifts the thresholds, it never force-keeps.
+
+
+
+
+
+
+
+
+
+
 function M.reference_name(path)
     local base = (path:match("[^/]+$") or path):lower()
     return (base:match("%f[%a]maps?%f[%A]")
@@ -507,12 +571,12 @@ function M.reference_name(path)
         or base:match("%f[%a]blueprint")) and true or false
 end
 
--- A caption too weak to shield a chrome-NAMED file (titlepage.jpg,
--- *logo*, endpaper.jpg ...): decorative text, or the "<Title> by <Author>"
--- alt that publishers put on title-page art ("Hell Bent by Leigh Bardugo").
--- The by-author pattern alone is NOT decorative — a genuine caption like
--- "Painting of the valley by John Constable" must survive on a normally
--- named file — it only fails to rescue a file already flagged by name.
+
+
+
+
+
+
 function M.weak_caption(s)
     if type(s) ~= "string" then return true end
     if M.decorative_caption(s) then return true end
@@ -522,11 +586,11 @@ function M.weak_caption(s)
     return words <= 8 and l:match("%s+by%s+%a") ~= nil
 end
 
--- OPF <guide> reference types (EPUB2) and epub:type document semantics
--- (EPUB3) that declare a spine document to be publisher chrome. Deliberately
--- NOT included: "text"/"start"/"bodymatter" boundaries — genuine maps and
--- family trees often live in the front matter, so position alone is not
--- treated as chrome.
+
+
+
+
+
 local CHROME_ROLES = {
     ["cover"] = true, ["title-page"] = true, ["titlepage"] = true,
     ["half-title-page"] = true, ["halftitlepage"] = true,
@@ -540,7 +604,7 @@ function M.chrome_role(role)
     return role ~= nil and CHROME_ROLES[role] or false
 end
 
--- Sniff an epub:type document semantic out of a content document.
+
 function M.epub_type_role(html)
     local head = html:sub(1, 8192):lower()
     for v in head:gmatch("epub:type%s*=%s*[\"']([^\"']*)[\"']") do
@@ -551,30 +615,30 @@ function M.epub_type_role(html)
     return nil
 end
 
--- Returns a list of occurrences: { src, alt, title, class, attr_w, attr_h,
--- figcaption, in_figure }
--- Void elements never hold children, so they're not pushed onto the tag
--- stack when tracing element paths.
+
+
+
+
 local VOID_TAGS = {
     img = true, image = true, br = true, hr = true, meta = true, link = true,
     input = true, area = true, base = true, col = true, embed = true,
     param = true, source = true, track = true, wbr = true,
 }
 
--- Element path (a crengine xpath, relative to the fragment's <body>) for
--- every <img>/<image>, so "Show in Book" can jump to the exact image instead
--- of the chapter top. crengine indexes among SAME-TAG siblings (div[2] = 2nd
--- <div> child) and needs the full ancestor chain — there's no descendant
--- shortcut — so we walk the tags with a stack, counting per-tag siblings in
--- each parent. Keyed by the "<" offset into `html`, which matches the <img>
--- match offsets extract_images uses (same comment-stripped string; lowercase
--- doesn't shift byte offsets). Best-effort: crengine may normalize the DOM
--- (insert tbody, fix nesting), so a path can be off — the caller validates
--- each against the image's filename and falls back to the chapter if wrong.
+
+
+
+
+
+
+
+
+
+
 local function element_path_map(html)
     local paths = {}
-    local stack = {}       -- open elements: { tag=, index=, counts={} }
-    local body_depth = nil -- stack position of the fragment <body>
+    local stack = {}
+    local body_depth = nil
     local n = #html
     local pos = 1
     while pos <= n do
@@ -634,7 +698,7 @@ local function element_path_map(html)
 end
 
 function M.extract_images(html)
-    -- strip comments so commented-out markup is invisible
+
     html = html:gsub("<!%-%-.-%-%->", "")
     local lower = html:lower()
     local figures = find_figures(lower, html)
@@ -688,10 +752,10 @@ function M.extract_images(html)
     return out
 end
 
--- ── full scan ───────────────────────────────────────────────────────────────
 
--- read_file(path) -> data|nil. `scan` tries the URL-decoded path first, then
--- the raw href spelling (zip entries occasionally contain literal %20).
+
+
+
 function M.scan(read_file)
     local function read_any(a, b)
         local d = read_file(a)
@@ -717,7 +781,7 @@ function M.scan(read_file)
     end
     local book = M.parse_opf(opf, dir_of(opf_path))
 
-    local by_path = {}   -- decoded path -> record
+    local by_path = {}
     local list = {}
     local order = 0
 
@@ -729,8 +793,8 @@ function M.scan(read_file)
                 path = dec_path,
                 raw_path = raw_path,
                 spine_index = spine_index,
-                -- first occurrence's DOM path, so it matches spine_index's
-                -- document (nil for cover/SVG-doc synth records)
+
+
                 node_path = occ and occ.node_path,
                 order = order,
                 files_count = 0,
@@ -746,7 +810,7 @@ function M.scan(read_file)
             rec.files_count = rec.files_count + 1
         end
         if occ then
-            -- first occurrence's metadata wins; later ones only fill gaps
+
             rec.alt = rec.alt or M.meaningful_text(occ.alt)
             rec.title_attr = rec.title_attr or M.meaningful_text(occ.title)
             rec.classes = rec.classes or occ.class
@@ -762,8 +826,8 @@ function M.scan(read_file)
         if is_html_media(item.media, item.path) then
             local html = read_any(item.path, item.raw_path)
             if html then
-                -- declared chrome role of this document: OPF guide (EPUB2)
-                -- or epub:type semantics (EPUB3)
+
+
                 local doc_role = book.guide and book.guide[item.path]
                 if not M.chrome_role(doc_role) then
                     doc_role = M.epub_type_role(html)
@@ -782,15 +846,15 @@ function M.scan(read_file)
                 end
             end
         elseif is_svg_media(item.media, item.path) then
-            -- a whole SVG document in the spine (some books ship maps this way)
+
             local rec_path = item.path
             record(rec_path, item.raw_path, i, nil)
             by_path[rec_path].is_svg_doc = true
         end
     end
 
-    -- cover referenced only from the OPF (never inside a spine document):
-    -- synthesize an entry so "show all" can still surface it
+
+
     if book.cover_path and not by_path[book.cover_path] then
         order = order + 1
         local rec = {
@@ -806,7 +870,7 @@ function M.scan(read_file)
         list[#list + 1] = rec
     end
 
-    -- read image bytes for dimensions; finalize records
+
     for _, rec in ipairs(list) do
         local data = read_any(rec.path, rec.raw_path)
         if data then
@@ -837,37 +901,210 @@ function M.scan(read_file)
     }
 end
 
--- ── filtering ───────────────────────────────────────────────────────────────
+
+
+
+
+
+
+
+
+
+
+
+
+local function fb2_href(tag)
+    local h = attr(tag, "l:href") or attr(tag, "xlink:href")
+        or attr(tag, "href") or attr(tag, "src")
+    if h then return (h:gsub("^#", "")) end
+end
+
+function M.scan_fb2(fb2)
+    if type(fb2) ~= "string" or #fb2 == 0 then return nil, "empty" end
+
+
+
+    local bins = {}
+    for tag, body in fb2:gmatch("<[bB]inary(.-)>(.-)</[bB]inary>") do
+        local id = attr(tag, "id")
+        if id then bins[id] = { ctype = attr(tag, "content-type"), body = body } end
+    end
+
+
+    local cover_id
+    local cov = fb2:match("<[cC]overpage>(.-)</[cC]overpage>")
+    if cov then
+        local itag = cov:match("<[iI]mage(.-)/?>")
+        if itag then cover_id = fb2_href(itag) end
+    end
+
+
+
+
+
+
+
+
+    local body = fb2:match("<[bB]ody[^>]*>(.-)</[bB]ody>") or fb2
+    local list, by_id, order, chapter, depth = {}, {}, 0, 0, 0
+
+    local function record(id, chap, token)
+        local rec = by_id[id]
+        if not rec then
+            order = order + 1
+            rec = {
+                path = id, raw_path = id,
+                spine_index = chap > 0 and chap or 1,
+                order = order, files_count = 0, total_count = 0, _files = {},
+            }
+            by_id[id] = rec
+            list[#list + 1] = rec
+        end
+        rec.total_count = rec.total_count + 1
+        if not rec._files[chap] then
+            rec._files[chap] = true
+            rec.files_count = rec.files_count + 1
+        end
+        rec.title_attr = rec.title_attr or M.meaningful_text(attr(token, "title"))
+        rec.alt = rec.alt or M.meaningful_text(attr(token, "alt"))
+    end
+
+    for token in body:gmatch("<[^>]->") do
+        if token:match("^<%s*/%s*[sS][eE][cC][tT][iI][oO][nN]%s*>") then
+            if depth > 0 then depth = depth - 1 end
+        elseif token:match("^<%s*[sS][eE][cC][tT][iI][oO][nN][%s>/]") then
+            if depth == 0 then chapter = chapter + 1 end
+            if not token:match("/%s*>$") then depth = depth + 1 end
+        elseif token:match("^<%s*[iI][mM][aA][gG][eE][%s/>]")
+            or token:match("^<%s*[iI][mM][gG][%s/>]") then
+            local id = fb2_href(token)
+            if id and bins[id] then record(id, chapter, token) end
+        end
+    end
+
+
+
+    if cover_id and bins[cover_id] and not by_id[cover_id] then
+        order = order + 1
+        list[#list + 1] = {
+            path = cover_id, raw_path = cover_id, spine_index = 0,
+            order = order, files_count = 0, total_count = 0, _files = {},
+        }
+    end
+
+
+    for _, rec in ipairs(list) do
+        local bin = bins[rec.path]
+        if bin then
+            local data = M.b64decode(bin.body)
+            if data and #data > 0 then
+                rec.bytes = #data
+                local w, h, fmt = M.get_image_dimensions(data)
+                rec.width, rec.height = w, h
+                rec.format = fmt or (bin.ctype and bin.ctype:match("image/([%w]+)"))
+            end
+        end
+        if rec.path == cover_id then rec.is_cover = true end
+        rec.caption = rec.title_attr or rec.alt
+        rec._files = nil
+    end
+
+    table.sort(list, function(a, b)
+        if a.spine_index ~= b.spine_index then
+            return a.spine_index < b.spine_index
+        end
+        return a.order < b.order
+    end)
+
+    return {
+        version = M.VERSION,
+        images = list,
+        spine_count = chapter > 0 and chapter or 1,
+        cover_path = cover_id,
+        format = "fb2",
+    }
+end
+
+
+
+
+
+
+
+
+
+
+
+
+function M.scan_mobi(read_file, cover_size)
+    if type(read_file) ~= "function" then return nil, "no_reader" end
+    local list = {}
+    local n, order, misses, cover_id = 0, 0, 0, nil
+    while true do
+        n = n + 1
+        if n > 4096 then break end
+        local name = "mobi_image_" .. n
+        local data = read_file(name)
+        if data and #data > 0 then
+            misses = 0
+            order = order + 1
+            local w, h, fmt = M.get_image_dimensions(data)
+            local rec = {
+                path = name, raw_path = name,
+                spine_index = 1, order = order,
+                files_count = 1, total_count = 1,
+                bytes = #data, width = w, height = h, format = fmt,
+            }
+            if cover_size and not cover_id and #data == cover_size then
+                rec.is_cover = true
+                cover_id = name
+            end
+            list[#list + 1] = rec
+        else
+            misses = misses + 1
+            if misses >= 3 then break end
+        end
+    end
+    return {
+        version = M.VERSION,
+        images = list,
+        spine_count = 1,
+        cover_path = cover_id,
+        format = "mobi",
+    }
+end
+
+
 
 M.LEVELS = {
     strict   = { short = 350, long = 600, area = 250000, ratio = 3.0 },
     balanced = { short = 200, long = 350, area = 100000, ratio = 4.5 },
     relaxed  = { short = 120, long = 200, area = 40000,  ratio = 6.0 },
 }
-M.CAPTION_RELIEF = 0.5    -- captioned images get half-size thresholds
-M.RATIO_RELIEF = 1.5      -- ...and 50% more aspect-ratio slack
-M.MAX_SPINE_FILES = 2     -- referenced from more files = chapter ornament
-M.MIN_SERIES = 4          -- ≥ this many images with identical dimensions =
-                          -- a decorative series (chapter/part-opener art)
-M.FRONTMATTER_SPINE = 3   -- spine positions treated as front matter
--- Illustrated / reference books (non-fiction, cookbooks, science, how-to) keep
--- many figures at the standard floor; their SMALLER diagrams and charts sit
--- just under it — content here, decoration in a novel. When a book already
--- keeps this many images at "balanced", it's treated as reference-rich and
--- UNCAPTIONED images get a size-floor relief (a genuine diagram carries its
--- labels baked into the pixels, so it has no HTML caption). Captioned images
--- are left exactly as they were: they already get the stronger caption relief,
--- and a SMALL captioned image is usually a decorative drop-cap or vignette
--- (auto-generated alt), which must stay out even in a reference-rich book.
-M.REF_RICH_MIN = 8
-M.REF_RELIEF = 0.75       -- uncaptioned size thresholds ×0.75 in a ref-rich book
-M.REF_RATIO_RELIEF = 1.2  -- ...and 20% more aspect slack
+M.CAPTION_RELIEF = 0.5
+M.RATIO_RELIEF = 1.5
+M.MAX_SPINE_FILES = 2
+M.MIN_SERIES = 4
 
--- Returns included_list, stats where stats = { total=, included=,
--- excluded = { cover=n, repeated=n, series=n, decorative=n, frontmatter=n,
---              small=n, aspect=n, nosize=n },
--- reasons = { [path] = "keep" | one of the excluded keys } }.
--- level: "strict" | "balanced" | "relaxed" | "all"
+M.FRONTMATTER_SPINE = 3
+
+
+
+
+
+
+
+
+
+M.REF_RICH_MIN = 8
+M.REF_RELIEF = 0.75
+M.REF_RATIO_RELIEF = 1.2
+
+
+
+
+
+
 function M.filter(images, level)
     local function new_stats()
         return { total = #images, included = 0, reasons = {},
@@ -885,13 +1122,13 @@ function M.filter(images, level)
         return out, stats
     end
 
-    -- Pre-pass: group by exact pixel dimensions. Publishers generate
-    -- chapter/part-opener art as one unique file per chapter, all with
-    -- identical dimensions — the per-file repetition heuristic misses them,
-    -- the shared dimensions give them away. A group is decorative when any
-    -- caption repeats within it (empty and heading-style captions all count
-    -- as "no caption"); all-distinct real captions mean genuine figure
-    -- plates and the group survives.
+
+
+
+
+
+
+
     local dim_groups = {}
     for _, img in ipairs(images) do
         if img.width and img.height then
@@ -905,9 +1142,9 @@ function M.filter(images, level)
             local c = ""
             if img.caption and not M.decorative_caption(img.caption) then
                 c = trim(collapse_ws(img.caption)):lower()
-                -- within a series, a numeral-prefixed caption ("I The Man
-                -- in the Tree", "2. The Breach") is a numbered section
-                -- opener, not a figure caption
+
+
+
                 if c:match("^[ivxlcdm]+[%s%.:]") or c:match("^%d+[%s%.:]") then
                     c = ""
                 end
@@ -917,18 +1154,18 @@ function M.filter(images, level)
         end
     end
 
-    -- Classify every image against the level's size gate. `ref_rich` (set on
-    -- the second pass for illustrated books) grants UNCAPTIONED images a size
-    -- relief; captioned images are unaffected, so re-running only ever admits
-    -- MORE uncaptioned size-borderline figures (never drops a prior keep).
+
+
+
+
     local t = M.LEVELS[level] or M.LEVELS.balanced
     local function classify(ref_rich)
     local stats = new_stats()
     local out = {}
     for _, img in ipairs(images) do
         local reason
-        -- a section-heading alt ("Chapter 1 ...") marks decoration, so it
-        -- earns no caption relief
+
+
         local decorative = M.decorative_caption(img.caption)
         local captioned = ((img.caption ~= nil or img.in_figure) and not decorative)
             or M.figure_name(img.path) or M.reference_name(img.path)
@@ -942,9 +1179,9 @@ function M.filter(images, level)
                 if g and g.n >= M.MIN_SERIES and g.dup then
                     reason = "series"
                 end
-                -- uncaptioned, cover-shaped portrait art at the very start
-                -- of the book: cover variants and title pages the OPF does
-                -- not flag
+
+
+
                 if not reason and not captioned
                    and img.spine_index <= M.FRONTMATTER_SPINE then
                     local r = img.width / img.height
@@ -953,12 +1190,12 @@ function M.filter(images, level)
                     end
                 end
             end
-            -- section-heading/title-page alt text; telltale chrome
-            -- filenames (of the image or its containing document); or a
-            -- declared chrome role (OPF guide / epub:type). Chrome names
-            -- are only overridden by a STRONG caption — "<Title> by
-            -- <Author>" alt text or a publisher name does not rescue
-            -- titlepage.jpg / *logo* / endpaper.jpg.
+
+
+
+
+
+
             if not reason then
                 if decorative
                    or (M.weak_caption(img.caption)
@@ -969,9 +1206,9 @@ function M.filter(images, level)
                 end
             end
             if not reason then
-                -- effective displayed size: the smaller of file dims and any
-                -- numeric width/height attributes (a big file squeezed into
-                -- a 40px slot is decoration)
+
+
+
                 local w, h = img.width, img.height
                 if img.attr_width and img.attr_height then
                     if not (w and h) or img.attr_width * img.attr_height < w * h then
@@ -984,8 +1221,8 @@ function M.filter(images, level)
                     end
                 else
                     local long, short = math.max(w, h), math.min(w, h)
-                    -- caption relief wins when present; otherwise a reference-
-                    -- rich book grants uncaptioned figures a lighter relief
+
+
                     local relief, ratio_relief
                     if captioned then
                         relief, ratio_relief = M.CAPTION_RELIEF, M.RATIO_RELIEF
@@ -1014,15 +1251,15 @@ function M.filter(images, level)
     end
     stats.included = #out
     return out, stats
-    end -- classify
+    end
 
     local out, stats = classify(false)
-    -- Adaptive relaxation: a book that already keeps REF_RICH_MIN+ figures at
-    -- the standard floor is an illustrated/reference book, so re-run granting
-    -- uncaptioned figures the ref-rich size relief to also admit its smaller
-    -- diagrams. Only for "balanced" (the default): "strict" is a deliberate
-    -- tight choice, "relaxed"/"all" are already permissive. A pure novel keeps
-    -- almost nothing here, so it never trips the gate and stays untouched.
+
+
+
+
+
+
     if level == "balanced" and stats.included >= M.REF_RICH_MIN then
         out, stats = classify(true)
         stats.reference_rich = true
