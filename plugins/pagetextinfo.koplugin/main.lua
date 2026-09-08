@@ -1239,7 +1239,6 @@ function PageTextInfo:onReaderReady()
     -- end
     -- UIManager:unschedule(self.insertSession)
     -- UIManager:scheduleIn(600, self.insertSession)
-    self:registerDictButtons()
 end
 
 function PageTextInfo:onPageUpdate(pageno)
