@@ -19918,8 +19918,13 @@ function BookshelfWidget:_openStartMenu(force)
         logger.warn("[bookshelf] start menu unavailable:", tostring(StartMenu))
         return
     end
+    local _gt0 = _gettime()
     StartMenu.open(self, self._footer_h_last or Screen:scaleBySize(40),
         self._burger_dimen, "library")
+    local _gt1 = _gettime()
+    logger.dbg(string.format(
+    "[bookshelf perf] _openStartMenu: StartMenu.open TOTAL=%.0fms",
+    (_gt1 - _gt0) * 1000))
 end
 
 -- Open the full-screen micro-module grid (Micro-modules placement ==

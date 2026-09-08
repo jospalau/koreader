@@ -280,8 +280,12 @@ function StartMenu.open(bw, bottom_inset, burger_dimen, context, burger_art, anc
         end
     end
     -- Non-eink / animation-failed: normal instant show.
+    local _t_show0 = _gettime()
     UIManager:show(menu, "ui", menu._dirty_region)
     StartMenu._live = menu -- test/introspection hook; cleared in onCloseWidget
+    logger.dbg(string.format(
+    "[bookshelf perf] StartMenu.open: UIManager:show=%.0fms",
+    (_gettime() - _t_show0) * 1000))
 end
 
 -- Model.load() filtered by the "In start menu" micro-module surface toggle.

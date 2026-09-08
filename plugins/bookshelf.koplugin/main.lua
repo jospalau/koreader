@@ -246,6 +246,11 @@ function Bookshelf:_warmupStartMenuModules()
     -- so it doesn't delay Bookshelf's own init, and pcall'd per-module so
     -- one bad module can't block warming the rest.
     UIManager:nextTick(function()
+        local Breaker = require("lib/bookshelf_module_breaker")
+        local Store = require("lib/bookshelf_settings_store")
+        pcall(Breaker.openCrashed, Store)
+        pcall(Breaker.armOpen, Store)
+        pcall(Breaker.endOpen, Store)
         local ok, err = pcall(function()
             local Modules = require("lib/bookshelf_start_menu_modules")
             local ModuleKit = require("lib/bookshelf_module_kit")
