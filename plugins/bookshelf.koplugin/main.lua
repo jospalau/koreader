@@ -251,6 +251,12 @@ function Bookshelf:_warmupStartMenuModules()
         pcall(Breaker.openCrashed, Store)
         pcall(Breaker.armOpen, Store)
         pcall(Breaker.endOpen, Store)
+        pcall(function()
+            local MS = require("lib/bookshelf_menu_shortcut")
+            if MS.buildMenuTree then
+                MS.buildMenuTree()
+            end
+        end)
         local ok, err = pcall(function()
             local Modules = require("lib/bookshelf_start_menu_modules")
             local ModuleKit = require("lib/bookshelf_module_kit")
@@ -262,13 +268,18 @@ function Bookshelf:_warmupStartMenuModules()
                 local def = Modules.get(key)
                 if def and def.render then
                     local entry = { id = "__warmup_" .. key, type = "module", module = key }
-                    pcall(def.render, {
+                    local _rt0 = _gettime()
+                    local ok_r, widget = pcall(def.render, {
                         width = 400, height = nil, scale = 100,
                         preview = true, refresh = function() end,
                         shape = nil, entry = entry, surface = "start_menu",
                         bw = nil, menu = nil,
                         config = ModuleKit.entryConfig(entry, nil),
                     })
+                    logger.dbg(string.format("[bookshelf perf] warmup render key=%s ok=%s time=%.0fms",
+                        key, tostring(ok_r), (_gettime()-_rt0)*1000))
+                else
+                    logger.dbg(string.format("[bookshelf perf] warmup: no def/render for key=%s", key))
                 end
             end
         end)
