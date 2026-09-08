@@ -957,6 +957,7 @@ function SpineWidget:_statusIndicators()
         glyph        = ind.glyph,
         on_hold      = ind.on_hold,
         on_hold_fade = ind.on_hold_fade,
+        in_hist      = ind.in_hist,
         page_count   = false,
     }
 end
