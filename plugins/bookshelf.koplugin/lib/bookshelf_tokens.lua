@@ -172,6 +172,7 @@ Tokens.CATALOGUE = {
     { category = "Progress", token = "%books_finished2",  description = _("Books finished") },
     { category = "Progress", token = "%books_unread",     description = _("Books unread") },
     { category = "Progress", token = "%books_read_this_month", description = _("Books finished this month") },
+    { category = "Book",     token = "%calibre2{name}",   description = _("A raw column from settings/calibre.lua by name (words, pages, pubdate, grrating, grvotes, series, genre) — 'N/A' if missing") },
 }
 
 local function metaToken(field)
@@ -1085,6 +1086,39 @@ Tokens.expanders.books_read_this_month = function()
     return BookCounts.getFinishedThisMonth() or 0
 end
 
+-- ── %calibre2{field}: any raw column from settings/calibre.lua by name ─────
+-- Independent of the "calibre beta" book.calibre map above -- this reads
+-- straight from util.loadCalibreData() (settings/calibre.lua), keyed by
+-- "filename.ext" the same way the %authors_short calibre enrichment does.
+-- Field names match case-insensitively. Values are returned raw (no
+-- kilo-word conversion, no date truncation) -- format them in the template.
+-- "N/A" when there's no entry for this book, or the field is empty/missing.
+local function calibre2Field(book, field)
+    local util = require("util")
+    local calibre_data = (util.loadCalibreData and util.loadCalibreData()) or {}
+    local fp = book and book.filepath
+    local fname = fp and fp:match("([^/]+)$") or ""
+    local ext   = fp and (fp:match("%.([^.]+)$") or "") or ""
+    local key   = fname:gsub("%.[^.]+$", "") .. "." .. ext
+    local cb = calibre_data[key]
+    if not cb then return "N/A" end
+    local fkey = tostring(field or ""):gsub("^%s*#?", ""):gsub("%s*$", ""):lower()
+    local v = cb[fkey]
+    if v == nil or v == "" then return "N/A" end
+    v = tostring(v)
+    -- pubdate arrives as "YYYY-MM-DD HH:MM:SS+00:00" -- keep only the year.
+    if fkey == "pubdate" then
+        v = v:match("^(%d%d%d%d)") or v
+    end
+    return v
+end
+
+function Tokens.expandCalibre2Braces(text, book)
+    if not text:find("%calibre2{", 1, true) then return text end
+    return (text:gsub("%%calibre2{([^}]*)}", function(field)
+        return calibre2Field(book, field)
+    end))
+end
 
 -- %bar and %spacer are intentionally NOT in the expander table. The
 -- hero card's elastic-line renderer (buildLine in hero_card.lua) detects
@@ -1392,6 +1426,7 @@ function Tokens.expand(format, book, state)
     result = expandDatetimeBraces(result, state)
     result = expandConditionals(result, book, state)
     result = Tokens.expandCalibreBraces(result, book)
+    result = Tokens.expandCalibre2Braces(result, book)
     local names = tokenNamesByLengthDesc()
     for _i, name in ipairs(names) do
         -- Only rewrite the string for a token the template actually contains.
@@ -1448,6 +1483,7 @@ function Tokens.menuPreview(format, book, state)
     -- %description IS a real token, so expanding first substitutes the blurb
     -- and leaves a literal "{x4}" stranded in the middle of the preview.
     local src = Tokens.expandCalibreBraces(format or "", book)
+    src = Tokens.expandCalibre2Braces(src, book)
     src = src:gsub("(%%[%a_]+){[%w_,]*}", "%1")
     -- The same strip for the delimited %<token> form. The pattern above only
     -- matches a bare name, so "%<description>{x4}" expanded the blurb and left
