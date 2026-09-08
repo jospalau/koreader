@@ -1,6 +1,6 @@
 msgid ""
 msgstr ""
-"Language-Team: Nl\n"
+"Language-Team: Dutch\n"
 "Language: nl\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -105,7 +105,7 @@ msgstr "Sparing: controleert maximaal elke 30 min"
 msgid "auto_update_ultra"
 msgstr "Ultra: controleert elke %d pagina's"
 
-# en-hash: 0557fa923dcee4d0f86b1409f5c2167f
+# en-hash: a9d418644a14acc5d9622ca060895802
 msgid "back_to_reading"
 msgstr "Terug naar lezen"
 
@@ -196,6 +196,10 @@ msgstr "Annuleren"
 # en-hash: 261d30af0907fa3e87d73d7719d2b4ef
 msgid "character_not_found"
 msgstr "Geen personage gevonden die overeenkomt met '%s'"
+
+# en-hash: 01bc6f8efa4202821e95f4fdf6298b30
+msgid "clear"
+msgstr "Wissen"
 
 # en-hash: d3d2e617335f08df83599665eef8a418
 msgid "close"
@@ -476,6 +480,66 @@ msgstr "Volledig boek modus"
 # en-hash: 224900ca5b99a949b6fe8a5c0360f5ff
 msgid "gemini_key_hint"
 msgstr "Voer uw gratis Gemini-sleutel van Google AI Studio in (begint met AQ. of AIzaSy...):"
+
+# en-hash: 33dca68e340b8d6c21472341130cf45a
+msgid "illustration"
+msgstr "Illustratie"
+
+# en-hash: fe63191987f62b9e4806e376671ed335
+msgid "img_extract_failed"
+msgstr "Kan afbeeldingsbestand niet uitpakken."
+
+# en-hash: 30936c8b483b8b104a4ad7821ce2262b
+msgid "img_no_favorites"
+msgstr "Nog geen favorieten.\n\nGebruik het menu ⋮ bij een afbeelding om deze aan je favorieten toe te voegen."
+
+# en-hash: c3e4c8dd2122260b0c4e14d6509e62ca
+msgid "img_no_hidden"
+msgstr "Geen verborgen afbeeldingen.\n\nGebruik het menu ⋮ bij een afbeelding in de galerij om decoratieve illustraties of initialen te verbergen."
+
+# en-hash: 95407637295cd7c30378be19be6e36cb
+msgid "img_no_images"
+msgstr "Geen afbeeldingen gevonden voor dit tabblad/filter.\n\nAfbeeldingen worden geëxtraheerd of gescand uit het boek..."
+
+# en-hash: 74ab2b6d760dc64ea26012a4fca84490
+msgid "img_no_series"
+msgstr "Geen serie-referenties opgeslagen.\n\nGebruik het menu ⋮ bij een kaart om deze op te slaan in je serie-referenties."
+
+# en-hash: 8df91db55dbf3ca2b7410a0e9aa875a8
+msgid "img_no_series_detected"
+msgstr "Dit boek maakt geen deel uit van een herkende serie.\n\nSerie-referenties zijn alleen beschikbaar voor boeken in een serie."
+
+# en-hash: 52366b2ac097fd22d80d475b8b125d8c
+msgid "img_rename_title"
+msgstr "Label hernoemen"
+
+# en-hash: 393c3f5ea8ad35c02691d507bdbb31b0
+msgid "img_reveal"
+msgstr "Tonen"
+
+# en-hash: 646ef4f9024779f1a04ee945deffb8d5
+msgid "img_spoiler_confirm"
+msgstr "Deze afbeelding staat op pagina %d (voorbij je huidige leesvoortgang). Afbeelding tonen?"
+
+# en-hash: d0f2e5376298c880665077b565ffd7dd
+msgid "img_spoiler_locked"
+msgstr "Vergrendeld"
+
+# en-hash: b1c94ca2fbc3e78fc30069c8d0f01680
+msgid "img_tab_all"
+msgstr "Alles"
+
+# en-hash: d78986947356ddd37b43d57df289dee9
+msgid "img_tab_favorites"
+msgstr "Favorieten"
+
+# en-hash: 9d948e617b083222afc868add2f50ec2
+msgid "img_tab_series"
+msgstr "Reeksen"
+
+# en-hash: be53a0541a6d36f6ecb879fa2c584b08
+msgid "img_untitled"
+msgstr "Afbeelding"
 
 # en-hash: 57519cae872270f11151178ce007fd53
 msgid "import_file_not_found"
@@ -765,6 +829,10 @@ msgstr "Frequentie"
 msgid "menu_historical_figures"
 msgstr "Historische figuren"
 
+# en-hash: 073096c9e6fbe0599a7c64e0e7a665cb
+msgid "menu_images"
+msgstr "Afbeeldingen & kaarten"
+
 # en-hash: 31a20a82ddb0aada27aab20c1352115f
 msgid "menu_import_file"
 msgstr "Sleutels importeren uit xray_key.txt"
@@ -897,7 +965,7 @@ msgstr "Merge"
 msgid "merge_confirm"
 msgstr "Merge %s in %s? De secundaire invoer wordt verwijderd en de aliassen worden samengevoegd."
 
-# en-hash: f05bbbb62dd4920db1277184e3fd98ce
+# en-hash: 288650687add5951b526ac950ce45b03
 msgid "merge_duplicates"
 msgstr "Duplicaten samenvoegen..."
 
@@ -973,7 +1041,7 @@ msgstr "AI API-sleutel niet ingesteld!\n\nVoer API-sleutel in via:\nMenu → X-R
 msgid "no_author_data_fetch"
 msgstr "Geen auteursinformatie beschikbaar.\n\nWilt u deze ophalen via AI?"
 
-# en-hash: 6cbd3b9b2bb981930fa8f38f26ca5f61
+# en-hash: 18b36cd276b2c5afa9f9cdf198876b20
 msgid "no_character_data"
 msgstr "Nog geen personagegegevens.\n\nGebruik eerst 'X-Ray-gegevens ophalen'."
 
@@ -989,6 +1057,10 @@ msgstr "Geen duplicaten gevonden."
 msgid "no_historical_data"
 msgstr "Nog geen gegevens over historische figuren.\n\nGebruik eerst 'X-Ray-gegevens ophalen'.\n\nAI zal echte historische\nfiguren detecteren die in het boek worden genoemd."
 
+# en-hash: 4c58fb13d107106e3765e3f635e64517
+msgid "no_items"
+msgstr "Geen items"
+
 # en-hash: 4d0e58f2c49ca238a05d2a92486d3d70
 msgid "no_location_data"
 msgstr "Nog geen locatiegegevens. Gebruik eerst 'X-Ray-gegevens ophalen'."
@@ -1001,13 +1073,17 @@ msgstr "Geen samenvoegingen uitgevoerd."
 msgid "no_new_text"
 msgstr "Er was geen nieuwe tekst beschikbaar op je huidige positie; X-Ray is hier al bijgewerkt."
 
+# en-hash: 3ae96dc007966de2542db31b76ff72cd
+msgid "no_series_detected"
+msgstr "Geen serie gedetecteerd voor dit boek"
+
 # en-hash: f90c5e84342ce9096a0f72b0fe9c5203
 msgid "no_series_to_clear"
 msgstr "Geen serie gedetecteerd voor dit boek."
 
 # en-hash: 29503d301d509e5cfea9e97daffa9e79
 msgid "no_terms_data"
-msgstr "Nog geen termengegevens. Gebruik eerst 'X-Ray-gegevens ophalen'."
+msgstr "Nog geen termgegevens. Gebruik eerst 'Fetch X-Ray Data'."
 
 # en-hash: 0c8a85db22b4a3eadf95fe1a55f00c63
 msgid "no_timeline_data"
@@ -1036,6 +1112,10 @@ msgstr "De AI heeft %d mogelijke duplicaat/duplicaten gevonden van de laatste op
 # en-hash: d87f433b237815fa419a2ac953956c54
 msgid "plugin_description"
 msgstr "Transformeer uw leeservaring met AI-gestuurde boekanalyse, net als Amazon Kindle X-Ray!"
+
+# en-hash: 14230d11143a03f4330c6433d5032a9d
+msgid "prev"
+msgstr "Vorige"
 
 # en-hash: 136dbfc383f7b6799dbdcb4b37c65d13
 msgid "quick_menu_title"
@@ -1084,6 +1164,10 @@ msgstr "Review"
 # en-hash: c9cc8cce247e49bae79f15173ce97354
 msgid "save"
 msgstr "Opslaan"
+
+# en-hash: 06a943c59f33a34bb5924aaf72cd2995
+msgid "search"
+msgstr "Zoeken"
 
 # en-hash: 13348442cc6a27032d2b4aa28b75a5d3
 msgid "search_button"
@@ -1537,9 +1621,9 @@ msgstr "API-sleutel voor %s ontvangen en opgeslagen!"
 msgid "web_setup_title"
 msgstr "Verbinden via telefoon / pc"
 
-# en-hash: ad608bec35300c1dbb0180723f2f6b9f
+# en-hash: 4111bd6fb88b1690bc80082903801ab8
 msgid "welcome_action_ask_later"
-msgstr "Later vragen"
+msgstr "Vraag het mij later"
 
 # en-hash: a0bfb8e59e6c13fc8d990781f77694fe
 msgid "welcome_action_continue"
@@ -1593,9 +1677,9 @@ msgstr "Typ of plak uw API-sleutel met het schermtoetsenbord."
 msgid "welcome_opt_ereader_title"
 msgstr "Sleutel invoeren op e-reader"
 
-# en-hash: c3c978de8a982902e76b01a8bc5a996b
+# en-hash: 12273c89c62d45e28d60480dc913c65a
 msgid "welcome_opt_file_desc"
-msgstr "Automatisch sleutels importeren uit xray_key.txt of wiki-gids bekijken."
+msgstr "Plaats de sleutel in koreader/settings/xray_key.txt of selecteer een bestaande geconfigureerde provider."
 
 # en-hash: 5e2364ee83d001f6721276c20925e78e
 msgid "welcome_opt_file_title"
@@ -1608,6 +1692,14 @@ msgstr "Scan een QR-code om uw sleutel in te voeren via Cloud Relay of lokale wi
 # en-hash: f5d12f602967b00beea3f12412fcb3a2
 msgid "welcome_opt_phone_title"
 msgstr "Instellen vanaf telefoon / pc (Aanbevolen)"
+
+# en-hash: 97d815bfab1c9a82c9e305a76b4b559f
+msgid "welcome_opt_skip_desc"
+msgstr "Gebruik lokale woordentellingen, leesstatistieken en gecachte serie-info zonder AI."
+
+# en-hash: 93c52d3e72f67abf20b2ec1c235f5dc5
+msgid "welcome_opt_skip_title"
+msgstr "Nu overslaan (alleen offline functies)"
 
 # en-hash: 741987eccc2e46095fdd70cf9377e31e
 msgid "welcome_select_provider"

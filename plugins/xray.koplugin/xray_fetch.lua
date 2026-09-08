@@ -143,8 +143,10 @@ function M:fetchSingleWord(text, pos0, pos1)
         progress_msg = ButtonDialog:new{
             title = self.loc:t("looking_up_msg", _truncateSafe(text, 30)),
             text = text .. "\n\n" .. (self.loc:t("fetching_wait") or "This may take a moment.\nTap Cancel to stop."),
+            tap_close_callback = function() cancelLookup("Single word lookup cancelled by user") end,
             buttons = {{{
                 text = self.loc:t("cancel") or "Cancel",
+                is_enter_default = true,
                 callback = function() cancelLookup("Single word lookup cancelled by user") end,
             }}},
         }
@@ -528,8 +530,12 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
         wait_msg = ButtonDialog:new{
             title = fetch_text,
             text  = title .. "\n\n" .. (self.loc:t("fetching_wait") or "This may take a moment.\nTap Cancel to stop."),
+            tap_close_callback = function()
+                cancelActiveRequest("Fetch cancelled by user")
+            end,
             buttons = {{{
                 text = self.loc:t("cancel") or "Cancel",
+                is_enter_default = true,
                 callback = function()
                     cancelActiveRequest("Fetch cancelled by user")
                 end
@@ -1397,7 +1403,10 @@ function M:fetchMoreEntities(entity_type)
                 pcall(function() os.remove(result_file) end)
             end
             if wait_msg then
-                UIManager:close(wait_msg)
+                local dlg = wait_msg
+                wait_msg = nil
+                dlg.tap_close_callback = nil
+                UIManager:close(dlg)
             end
             if self._active_ai_dialog == wait_msg then self._active_ai_dialog = nil end
             if self._active_ai_cancel == cancelActiveRequest then self._active_ai_cancel = nil end
@@ -1406,8 +1415,12 @@ function M:fetchMoreEntities(entity_type)
 
         wait_msg = ButtonDialog:new{
             title = dialog_title_text .. "\n\n" .. title,
+            tap_close_callback = function()
+                cancelActiveRequest("Fetch cancelled by user")
+            end,
             buttons = {{{
                 text = self.loc:t("cancel") or "Cancel",
+                is_enter_default = true,
                 callback = function()
                     cancelActiveRequest("Fetch cancelled by user")
                 end
@@ -1486,7 +1499,12 @@ function M:fetchMoreEntities(entity_type)
 
             local pid, res_file = self.ai_helper:startAIRequest(title, author, context, section_name)
             if not pid then
-                if wait_msg then UIManager:close(wait_msg) end
+                if wait_msg then
+                    local dlg = wait_msg
+                    wait_msg = nil
+                    dlg.tap_close_callback = nil
+                    UIManager:close(dlg)
+                end
                 if self._active_ai_dialog == wait_msg then self._active_ai_dialog = nil end
                 if self._active_ai_cancel == cancelActiveRequest then self._active_ai_cancel = nil end
                 local err_dlg
@@ -1521,21 +1539,34 @@ function M:fetchMoreEntities(entity_type)
                     return
                 end
                 local res, err_code, err_msg = self.ai_helper:checkAsyncResult(result_file, request_pid)
+                if is_cancelled then return end
                 if res == nil then
                     UIManager:scheduleIn(1, poll)
                 else
+                    if is_cancelled then return end
                     if self._active_ai_dialog == wait_msg then self._active_ai_dialog = nil end
                     if self._active_ai_cancel == cancelActiveRequest then self._active_ai_cancel = nil end
-                    if wait_msg then UIManager:close(wait_msg) end
+                    if wait_msg then
+                        local dlg = wait_msg
+                        wait_msg = nil
+                        dlg.tap_close_callback = nil
+                        UIManager:close(dlg)
+                    end
                     pcall(function() os.remove(result_file) end)
 
+                    if is_cancelled then return end
+
                     if not res or type(res) ~= "table" then
+                        if is_cancelled then return end
                         local utils = require(plugin_path .. "xray_utils")
                         local err_title, text = utils:getFriendlyError(err_code, err_msg, self.loc)
+                        local display_msg = err_title or "Error"
+                        if text and text ~= "" then
+                            display_msg = display_msg .. "\n\n" .. text
+                        end
                         local err_box
                         err_box = ButtonDialog:new{
-                            title = err_title,
-                            text = text,
+                            title = display_msg,
                             buttons = {{{ text = self.loc:t("ok") or "OK", callback = function() if err_box then UIManager:close(err_box) end end }}}
                         }
                         UIManager:show(err_box)
@@ -1544,12 +1575,16 @@ function M:fetchMoreEntities(entity_type)
 
                     local items = is_terms and (res.terms or (not res.terms and res[1] and res)) or (res.characters or (not res.characters and res[1] and res))
                     if not items then
+                        if is_cancelled then return end
                         local utils = require(plugin_path .. "xray_utils")
                         local err_title, text = utils:getFriendlyError(err_code, err_msg, self.loc)
+                        local display_msg = err_title or "Error"
+                        if text and text ~= "" then
+                            display_msg = display_msg .. "\n\n" .. text
+                        end
                         local err_box
                         err_box = ButtonDialog:new{
-                            title = err_title,
-                            text = text,
+                            title = display_msg,
                             buttons = {{{ text = self.loc:t("ok") or "OK", callback = function() if err_box then UIManager:close(err_box) end end }}}
                         }
                         UIManager:show(err_box)
@@ -1687,7 +1722,10 @@ function M:fetchAuthorInfo()
             pcall(function() os.remove(result_file) end)
         end
         if wait_msg then
-            UIManager:close(wait_msg)
+            local dlg = wait_msg
+            wait_msg = nil
+            dlg.tap_close_callback = nil
+            UIManager:close(dlg)
         end
         if self._active_ai_dialog == wait_msg then self._active_ai_dialog = nil end
         if self._active_ai_cancel == cancelActiveRequest then self._active_ai_cancel = nil end
@@ -1696,8 +1734,12 @@ function M:fetchAuthorInfo()
 
     wait_msg = ButtonDialog:new{
         title = (self.loc:t("fetching_author", "AI") or "Fetching Author...") .. "\n\n" .. title .. " - " .. author,
+        tap_close_callback = function()
+            cancelActiveRequest("Author fetch cancelled by user")
+        end,
         buttons = {{{
             text = self.loc:t("cancel") or "Cancel",
+            is_enter_default = true,
             callback = function()
                 cancelActiveRequest("Author fetch cancelled by user")
             end
@@ -1722,7 +1764,12 @@ function M:fetchAuthorInfo()
 
         local pid, res_file = self.ai_helper:startAIRequest(title, author, context, "author_only")
         if not pid then
-            if wait_msg then UIManager:close(wait_msg) end
+            if wait_msg then
+                local dlg = wait_msg
+                wait_msg = nil
+                dlg.tap_close_callback = nil
+                UIManager:close(dlg)
+            end
             if self._active_ai_dialog == wait_msg then self._active_ai_dialog = nil end
             if self._active_ai_cancel == cancelActiveRequest then self._active_ai_cancel = nil end
             local err_dlg
@@ -1757,22 +1804,35 @@ function M:fetchAuthorInfo()
                 return
             end
             local res, err_code, err_msg = self.ai_helper:checkAsyncResult(result_file, request_pid)
+            if is_cancelled then return end
             if res == nil then
                 UIManager:scheduleIn(1, poll)
             else
+                if is_cancelled then return end
                 if self._active_ai_dialog == wait_msg then self._active_ai_dialog = nil end
                 if self._active_ai_cancel == cancelActiveRequest then self._active_ai_cancel = nil end
-                if wait_msg then UIManager:close(wait_msg) end
+                if wait_msg then
+                    local dlg = wait_msg
+                    wait_msg = nil
+                    dlg.tap_close_callback = nil
+                    UIManager:close(dlg)
+                end
                 pcall(function() os.remove(result_file) end)
+
+                if is_cancelled then return end
 
                 local author_data = (type(res) == "table" and (res.author_info or res)) or nil
                 if not author_data or not (author_data.author or author_data.name or author_data.author_bio or author_data.description) then
+                    if is_cancelled then return end
                     local utils = require(plugin_path .. "xray_utils")
                     local err_title, text = utils:getFriendlyError(err_code, err_msg, self.loc)
+                    local display_msg = err_title or "Error"
+                    if text and text ~= "" then
+                        display_msg = display_msg .. "\n\n" .. text
+                    end
                     local err_box
                     err_box = ButtonDialog:new{
-                        title = err_title,
-                        text = text,
+                        title = display_msg,
                         buttons = {{{ text = self.loc:t("ok") or "OK", callback = function() if err_box then UIManager:close(err_box) end end }}}
                     }
                     UIManager:show(err_box)

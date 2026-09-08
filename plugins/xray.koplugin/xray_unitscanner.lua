@@ -60,9 +60,29 @@ local function _getCurrentPage(plugin)
 end
 
 -- Clear underlines overlay
+function M:clearTileCaches()
+    if _wavy_tile_cache then
+        for _, tile in pairs(_wavy_tile_cache) do
+            if tile and type(tile) == "table" and type(tile.free) == "function" then
+                pcall(function() tile:free() end)
+            end
+        end
+        _wavy_tile_cache = {}
+    end
+    if _circle_tile_cache then
+        for _, tile in pairs(_circle_tile_cache) do
+            if tile and type(tile) == "table" and type(tile.free) == "function" then
+                pcall(function() tile:free() end)
+            end
+        end
+        _circle_tile_cache = {}
+    end
+end
+
 function M:clearUnitUnderlines()
     self.unit_conversion_boxes = nil
     self.unit_xp_matches = nil
+    self:clearTileCaches()
     if self.ui and self.ui.view and self.ui.view.dialog then
         UIManager:setDirty(self.ui.view.dialog, "ui")
     end
@@ -154,6 +174,22 @@ end
 
 local _wavy_svg_template
 local _wavy_tile_cache = {}
+local _circle_tile_cache = {}
+local _sidecar_dir_created = false
+
+local function _ensure_sidecar_dir(dir)
+    if _sidecar_dir_created then return end
+    local ok_lfs, lfs = pcall(require, "libs/libkoreader-lfs")
+    if not ok_lfs or type(lfs) ~= "table" then
+        ok_lfs, lfs = pcall(require, "lfs")
+    end
+    if ok_lfs and lfs and lfs.mkdir then
+        pcall(function() lfs.mkdir(dir) end)
+    else
+        pcall(function() os.execute("mkdir -p " .. dir) end)
+    end
+    _sidecar_dir_created = true
+end
 
 local function _load_wavy_template(plugin_path)
     if _wavy_svg_template then return _wavy_svg_template end
@@ -182,7 +218,7 @@ local function _wavy_tile(plugin_path, raw_width, grey)
 
     local DataStorage = require("datastorage")
     local sidecar_dir = DataStorage:getDataDir() .. "/xray"
-    os.execute("mkdir -p " .. sidecar_dir)
+    _ensure_sidecar_dir(sidecar_dir)
     local svg_path = sidecar_dir .. "/wavy_" .. key .. ".svg"
     local fh = io.open(svg_path, "w")
     if fh then fh:write(svg); fh:close() end
@@ -203,8 +239,6 @@ local function _wavy_tile(plugin_path, raw_width, grey)
     return tile
 end
 
-local _circle_tile_cache = {}
-
 local function _circle_tile(diameter, grey)
     local key = diameter .. "_" .. grey
     local cached = _circle_tile_cache[key]
@@ -217,7 +251,7 @@ local function _circle_tile(diameter, grey)
 
     local DataStorage = require("datastorage")
     local sidecar_dir = DataStorage:getDataDir() .. "/xray"
-    os.execute("mkdir -p " .. sidecar_dir)
+    _ensure_sidecar_dir(sidecar_dir)
     local svg_path = sidecar_dir .. "/circle_" .. key .. ".svg"
     local fh = io.open(svg_path, "w")
     if fh then
@@ -778,7 +812,7 @@ function M:scanBookForUnits(force)
             -- Sort all aliases descending by length to prevent prefix shadowing
             local sorted_aliases = {}
             for _, alias in ipairs(aliases) do
-                table.insert(sorted_aliases, alias:lower())
+                table.insert(sorted_aliases, xray_units.utf8Lower(alias))
             end
             table.sort(sorted_aliases, function(a, b)
                 return #a > #b
@@ -934,7 +968,7 @@ function M:scanBookForUnits(force)
             -- Sort descending by length to prevent shadowing issues (e.g. "m" matching before "mm")
             local sorted_aliases = {}
             for _, alias in ipairs(aliases) do
-                table.insert(sorted_aliases, alias:lower())
+                table.insert(sorted_aliases, xray_units.utf8Lower(alias))
             end
             table.sort(sorted_aliases, function(a, b)
                 return #a > #b
@@ -955,7 +989,7 @@ function M:scanBookForUnits(force)
                 local is_vague = false
                 
                 local matched_text = (hit.matched_text or "")
-                local lower_matched = matched_text:lower():gsub("\194\160", " "):gsub("%s+", " ")
+                local lower_matched = xray_units.utf8Lower(matched_text):gsub("\194\160", " "):gsub("\226\128\175", " "):gsub("%s+", " ")
                 
                 -- Extract unit alias using suffix_map lookup by iterating suffixes
                 local matched_alias = nil
@@ -1097,7 +1131,7 @@ function M:scanBookForUnits(force)
                     if not u then
                         for _, unit_def in ipairs(xray_units.UNITS or {}) do
                             for _, alias in ipairs(unit_def.aliases) do
-                                if alias:lower() == matched_unit then
+                                if xray_units.utf8Lower(alias) == matched_unit then
                                     u = unit_def
                                     break
                                 end
@@ -1160,9 +1194,9 @@ function M:scanBookForUnits(force)
                                 end
                                 valid = true
                                 if not is_range then
-                                    local lower_orig = original_text:gsub("−", "-"):gsub("–", "-"):gsub("—", "-"):lower():gsub("\194\160", " "):gsub("%s+", " ")
-                                    local lower_num = num_str:gsub("^%s+", ""):gsub("%s+$", ""):lower():gsub("\194\160", " "):gsub("%s+", " ")
-                                    local lower_match = hit.matched_text:lower():gsub("\194\160", " "):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
+                                    local lower_orig = xray_units.utf8Lower(original_text:gsub("−", "-"):gsub("–", "-"):gsub("—", "-")):gsub("\194\160", " "):gsub("\226\128\175", " "):gsub("%s+", " ")
+                                    local lower_num = xray_units.utf8Lower(num_str:gsub("^%s+", ""):gsub("%s+$", "")):gsub("\194\160", " "):gsub("\226\128\175", " "):gsub("%s+", " ")
+                                    local lower_match = xray_units.utf8Lower(hit.matched_text):gsub("\194\160", " "):gsub("\226\128\175", " "):gsub("%s+", " "):gsub("^%s+", ""):gsub("%s+$", "")
                                     
                                     if lower_orig ~= lower_match then
                                         if lower_orig:sub(1, #lower_num) == lower_num then
@@ -1457,6 +1491,22 @@ function UnitTooltip:init()
             }
         }
     }
+    self.key_events = {
+        Close = {
+            { "Escape" },
+            { "Back" },
+            { "q" },
+            { "Q" },
+            { "Return" },
+            { "KP_Enter" },
+            { "Select" },
+            { "Space" },
+        }
+    }
+    local Device = require("device")
+    if Device.hasKeys and Device:hasKeys() and Device.input and Device.input.group and Device.input.group.Back then
+        table.insert(self.key_events.Close, { Device.input.group.Back })
+    end
     
     local OverlapGroup = require("ui/widget/overlapgroup")
     self[1] = OverlapGroup:new{
@@ -1549,4 +1599,5 @@ end
 
 M._PointerArrow = _PointerArrow
 M._draw_underline = _draw_underline
+M.UnitTooltip = UnitTooltip
 return M

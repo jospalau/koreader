@@ -1,6 +1,6 @@
 msgid ""
 msgstr ""
-"Language-Team: Hu\n"
+"Language-Team: Hungarian\n"
 "Language: hu\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -105,7 +105,7 @@ msgstr "Ritka: legfeljebb 30 percenként ellenőrzi"
 msgid "auto_update_ultra"
 msgstr "Ultra: ellenőrzi minden %d oldalnál"
 
-# en-hash: 0557fa923dcee4d0f86b1409f5c2167f
+# en-hash: a9d418644a14acc5d9622ca060895802
 msgid "back_to_reading"
 msgstr "Vissza az olvasáshoz"
 
@@ -196,6 +196,10 @@ msgstr "Mégse"
 # en-hash: 261d30af0907fa3e87d73d7719d2b4ef
 msgid "character_not_found"
 msgstr "Nem található a következőnek megfelelő szereplő: '%s'"
+
+# en-hash: 01bc6f8efa4202821e95f4fdf6298b30
+msgid "clear"
+msgstr "Törlés"
 
 # en-hash: d3d2e617335f08df83599665eef8a418
 msgid "close"
@@ -476,6 +480,66 @@ msgstr "Teljes könyv mód"
 # en-hash: 224900ca5b99a949b6fe8a5c0360f5ff
 msgid "gemini_key_hint"
 msgstr "Adja meg ingyenes Gemini kulcsát a Google AI Studio-ból (AQ. vagy AIzaSy... kezdetű):"
+
+# en-hash: 33dca68e340b8d6c21472341130cf45a
+msgid "illustration"
+msgstr "Illusztráció"
+
+# en-hash: fe63191987f62b9e4806e376671ed335
+msgid "img_extract_failed"
+msgstr "Nem sikerült kinyerni a képfájlt."
+
+# en-hash: 30936c8b483b8b104a4ad7821ce2262b
+msgid "img_no_favorites"
+msgstr "Még nincsenek kedvencek.\n\nHasználd a ⋮ menüt bármelyik képen a kedvencekhez adáshoz."
+
+# en-hash: c3e4c8dd2122260b0c4e14d6509e62ca
+msgid "img_no_hidden"
+msgstr "Nincsenek rejtett képek.\n\nHasználd a képek ⋮ menüjét a galériában a díszítő illusztrációk vagy iniciálék elrejtéséhez."
+
+# en-hash: 95407637295cd7c30378be19be6e36cb
+msgid "img_no_images"
+msgstr "Nem található kép ehhez a laphoz/szűrőhöz.\n\nKépek kinyerése vagy beolvasása a könyvből..."
+
+# en-hash: 74ab2b6d760dc64ea26012a4fca84490
+msgid "img_no_series"
+msgstr "Nincsenek mentett sorozathivatkozások.\n\nHasználd a ⋮ menüt bármely térképen a sorozathivatkozások közé mentéshez."
+
+# en-hash: 8df91db55dbf3ca2b7410a0e9aa875a8
+msgid "img_no_series_detected"
+msgstr "Ez a könyv nem része egyetlen felismerhető sorozatnak sem.\n\nA sorozathivatkozások csak sorozatokhoz tartozó könyvek esetében érhetők el."
+
+# en-hash: 52366b2ac097fd22d80d475b8b125d8c
+msgid "img_rename_title"
+msgstr "Címke átnevezése"
+
+# en-hash: 393c3f5ea8ad35c02691d507bdbb31b0
+msgid "img_reveal"
+msgstr "Megjelenítés"
+
+# en-hash: 646ef4f9024779f1a04ee945deffb8d5
+msgid "img_spoiler_confirm"
+msgstr "Ez a kép a(z) %d. oldalon található (a jelenlegi olvasási helyed után). Megjeleníted a képet?"
+
+# en-hash: d0f2e5376298c880665077b565ffd7dd
+msgid "img_spoiler_locked"
+msgstr "Zárolva"
+
+# en-hash: b1c94ca2fbc3e78fc30069c8d0f01680
+msgid "img_tab_all"
+msgstr "Összes"
+
+# en-hash: d78986947356ddd37b43d57df289dee9
+msgid "img_tab_favorites"
+msgstr "Kedvencek"
+
+# en-hash: 9d948e617b083222afc868add2f50ec2
+msgid "img_tab_series"
+msgstr "Sorozatok"
+
+# en-hash: be53a0541a6d36f6ecb879fa2c584b08
+msgid "img_untitled"
+msgstr "Kép"
 
 # en-hash: 57519cae872270f11151178ce007fd53
 msgid "import_file_not_found"
@@ -765,6 +829,10 @@ msgstr "Gyakoriság"
 msgid "menu_historical_figures"
 msgstr "Történelmi alakok"
 
+# en-hash: 073096c9e6fbe0599a7c64e0e7a665cb
+msgid "menu_images"
+msgstr "Képek és térképek"
+
 # en-hash: 31a20a82ddb0aada27aab20c1352115f
 msgid "menu_import_file"
 msgstr "Kulcsok importálása az xray_key.txt fájlból"
@@ -897,9 +965,9 @@ msgstr "Egyesítés"
 msgid "merge_confirm"
 msgstr "Összevonja a következőt: %s a következőbe: %s? A másodlagos bejegyzés törlődik, és az álnevei beolvadnak."
 
-# en-hash: f05bbbb62dd4920db1277184e3fd98ce
+# en-hash: 288650687add5951b526ac950ce45b03
 msgid "merge_duplicates"
-msgstr "Duplikátumok összevonása..."
+msgstr "⋈ Duplikátumok egyesítése..."
 
 # en-hash: 1a0eb2431b20a745a419931f2f637210
 msgid "merge_failed"
@@ -973,9 +1041,9 @@ msgstr "Az AI API kulcs nincs beállítva!\n\nAdja meg az API kulcsot itt:\nMen�
 msgid "no_author_data_fetch"
 msgstr "Nem áll rendelkezésre szerzői információ.\n\nSzeretné lekérdezni az AI-tól?"
 
-# en-hash: 6cbd3b9b2bb981930fa8f38f26ca5f61
+# en-hash: 18b36cd276b2c5afa9f9cdf198876b20
 msgid "no_character_data"
-msgstr "Még nincsenek szereplőadatok.\n\nKérjük, használja előbb az 'X-Ray adatok lekérdezése' funkciót."
+msgstr "Nem találhatók szereplők."
 
 # en-hash: 80a4905228688f8ad8ec996803f60ffb
 msgid "no_data_prompt"
@@ -989,6 +1057,10 @@ msgstr "Nem találhatók másolatok."
 msgid "no_historical_data"
 msgstr "Még nincsenek adatok a történelmi alakokról.\n\nKérjük, használja előbb az 'X-Ray adatok lekérdezése' funkciót.\n\nAz AI felismeri a könyvben említett valós történelmi alakokat."
 
+# en-hash: 4c58fb13d107106e3765e3f635e64517
+msgid "no_items"
+msgstr "Nincsenek elemek"
+
 # en-hash: 4d0e58f2c49ca238a05d2a92486d3d70
 msgid "no_location_data"
 msgstr "Még nincsenek helyszínadatok. Kérjük, használja előbb az 'X-Ray adatok lekérdezése' funkciót."
@@ -1001,13 +1073,17 @@ msgstr "Nem történt összevonás."
 msgid "no_new_text"
 msgstr "A jelenlegi pozíciódnál nem volt új szöveg; az X-Ray itt már naprakész."
 
+# en-hash: 3ae96dc007966de2542db31b76ff72cd
+msgid "no_series_detected"
+msgstr "Nem található sorozat ehhez a könyvhöz"
+
 # en-hash: f90c5e84342ce9096a0f72b0fe9c5203
 msgid "no_series_to_clear"
 msgstr "Nem található sorozat ehhez a könyvhöz."
 
 # en-hash: 29503d301d509e5cfea9e97daffa9e79
 msgid "no_terms_data"
-msgstr "Még nincsenek kifejezésadatok. Kérjük, először használja az 'X-Ray adatok lekérése' opciót."
+msgstr "Még nincsenek kifejezésadatok. Kérjük, előbb használd a 'Fetch X-Ray Data' lehetőséget."
 
 # en-hash: 0c8a85db22b4a3eadf95fe1a55f00c63
 msgid "no_timeline_data"
@@ -1036,6 +1112,10 @@ msgstr "A MI %d lehetséges másolatot talált a legutóbbi lekérdezésből. El
 # en-hash: d87f433b237815fa419a2ac953956c54
 msgid "plugin_description"
 msgstr "Alakítsa át olvasási élményét AI-alapú könyvelemzéssel, pont mint az Amazon Kindle X-Ray!"
+
+# en-hash: 14230d11143a03f4330c6433d5032a9d
+msgid "prev"
+msgstr "Előző"
 
 # en-hash: 136dbfc383f7b6799dbdcb4b37c65d13
 msgid "quick_menu_title"
@@ -1084,6 +1164,10 @@ msgstr "Ellenőrzés"
 # en-hash: c9cc8cce247e49bae79f15173ce97354
 msgid "save"
 msgstr "Mentés"
+
+# en-hash: 06a943c59f33a34bb5924aaf72cd2995
+msgid "search"
+msgstr "Keresés"
 
 # en-hash: 13348442cc6a27032d2b4aa28b75a5d3
 msgid "search_button"
@@ -1537,9 +1621,9 @@ msgstr "A(z) %s API kulcsa sikeresen fogadva és mentve!"
 msgid "web_setup_title"
 msgstr "Csatlakozás telefonról / PC-ről"
 
-# en-hash: ad608bec35300c1dbb0180723f2f6b9f
+# en-hash: 4111bd6fb88b1690bc80082903801ab8
 msgid "welcome_action_ask_later"
-msgstr "Kérdezze később"
+msgstr "Kérdezzen később"
 
 # en-hash: a0bfb8e59e6c13fc8d990781f77694fe
 msgid "welcome_action_continue"
@@ -1593,9 +1677,9 @@ msgstr "Gépelje be vagy illessze be az API-kulcsot a képernyő-billentyűzette
 msgid "welcome_opt_ereader_title"
 msgstr "Kulcs megadása az e-olvasón"
 
-# en-hash: c3c978de8a982902e76b01a8bc5a996b
+# en-hash: 12273c89c62d45e28d60480dc913c65a
 msgid "welcome_opt_file_desc"
-msgstr "Kulcsok automatikus importálása az xray_key.txt-ből, vagy wiki útmutató megtekintése."
+msgstr "Helyezze a kulcsot a koreader/settings/xray_key.txt fájlba, vagy válasszon egy meglévő szolgáltatót."
 
 # en-hash: 5e2364ee83d001f6721276c20925e78e
 msgid "welcome_opt_file_title"
@@ -1608,6 +1692,14 @@ msgstr "Olvasson be egy QR-kódot a kulcs megadásához Cloud Relay-en vagy hely
 # en-hash: f5d12f602967b00beea3f12412fcb3a2
 msgid "welcome_opt_phone_title"
 msgstr "Beállítás telefonról / PC-ről (Ajánlott)"
+
+# en-hash: 97d815bfab1c9a82c9e305a76b4b559f
+msgid "welcome_opt_skip_desc"
+msgstr "Helyi szószám, olvasási statisztikák és gyorsítótárazott sorozat-infók használata MI nélkül."
+
+# en-hash: 93c52d3e72f67abf20b2ec1c235f5dc5
+msgid "welcome_opt_skip_title"
+msgstr "Kihagyás egyelőre (csak offline funkciók)"
 
 # en-hash: 741987eccc2e46095fdd70cf9377e31e
 msgid "welcome_select_provider"

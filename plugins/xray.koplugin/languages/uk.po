@@ -1,6 +1,6 @@
 msgid ""
 msgstr ""
-"Language-Team: Uk\n"
+"Language-Team: Ukrainian\n"
 "Language: uk\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -105,9 +105,9 @@ msgstr "Рідкісний: не частіше ніж раз на 30 хв"
 msgid "auto_update_ultra"
 msgstr "Ультра: перевіряє кожні %d сторінок"
 
-# en-hash: 0557fa923dcee4d0f86b1409f5c2167f
+# en-hash: a9d418644a14acc5d9622ca060895802
 msgid "back_to_reading"
-msgstr "Назад до читання"
+msgstr "Повернутися до читання"
 
 # en-hash: 5fcd6ed2b6f2c21bc5c936cf44c36b37
 msgid "beta_channel_desc"
@@ -196,6 +196,10 @@ msgstr "Скасувати"
 # en-hash: 261d30af0907fa3e87d73d7719d2b4ef
 msgid "character_not_found"
 msgstr "Персонаж, що відповідає '%s', не знайдений"
+
+# en-hash: 01bc6f8efa4202821e95f4fdf6298b30
+msgid "clear"
+msgstr "Очистити"
 
 # en-hash: d3d2e617335f08df83599665eef8a418
 msgid "close"
@@ -476,6 +480,66 @@ msgstr "Режим усієї книги"
 # en-hash: 224900ca5b99a949b6fe8a5c0360f5ff
 msgid "gemini_key_hint"
 msgstr "Введіть безкоштовний ключ Gemini з Google AI Studio (починається з AQ. або AIzaSy...):"
+
+# en-hash: 33dca68e340b8d6c21472341130cf45a
+msgid "illustration"
+msgstr "Ілюстрація"
+
+# en-hash: fe63191987f62b9e4806e376671ed335
+msgid "img_extract_failed"
+msgstr "Не вдалося витягти файл зображення."
+
+# en-hash: 30936c8b483b8b104a4ad7821ce2262b
+msgid "img_no_favorites"
+msgstr "Ще немає обраних.\n\nВикористовуйте меню ⋮ на будь-якому зображенні, щоб додати його до обраного."
+
+# en-hash: c3e4c8dd2122260b0c4e14d6509e62ca
+msgid "img_no_hidden"
+msgstr "Немає прихованих зображень.\n\nВикористовуйте меню ⋮ на будь-якому зображенні в галереї, щоб приховати декоративні ілюстрації або буквиці."
+
+# en-hash: 95407637295cd7c30378be19be6e36cb
+msgid "img_no_images"
+msgstr "Зображень для цієї вкладки/фільтра не знайдено.\n\nВилучення або сканування зображень із книги..."
+
+# en-hash: 74ab2b6d760dc64ea26012a4fca84490
+msgid "img_no_series"
+msgstr "Немає збережених матеріалів серії.\n\nВикористовуйте меню ⋮ на будь-якій карті, щоб зберегти її до матеріалів серії."
+
+# en-hash: 8df91db55dbf3ca2b7410a0e9aa875a8
+msgid "img_no_series_detected"
+msgstr "Ця книга не є частиною розпізнаної серії.\n\nПосилання на серію доступні лише для книг із серій."
+
+# en-hash: 52366b2ac097fd22d80d475b8b125d8c
+msgid "img_rename_title"
+msgstr "Перейменувати мітку"
+
+# en-hash: 393c3f5ea8ad35c02691d507bdbb31b0
+msgid "img_reveal"
+msgstr "Показати"
+
+# en-hash: 646ef4f9024779f1a04ee945deffb8d5
+msgid "img_spoiler_confirm"
+msgstr "Це зображення знаходиться на сторінці %d (далі за ваш поточний прогрес). Показати зображення?"
+
+# en-hash: d0f2e5376298c880665077b565ffd7dd
+msgid "img_spoiler_locked"
+msgstr "Заблоковано"
+
+# en-hash: b1c94ca2fbc3e78fc30069c8d0f01680
+msgid "img_tab_all"
+msgstr "Усі"
+
+# en-hash: d78986947356ddd37b43d57df289dee9
+msgid "img_tab_favorites"
+msgstr "Обране"
+
+# en-hash: 9d948e617b083222afc868add2f50ec2
+msgid "img_tab_series"
+msgstr "Серії"
+
+# en-hash: be53a0541a6d36f6ecb879fa2c584b08
+msgid "img_untitled"
+msgstr "Зображення"
 
 # en-hash: 57519cae872270f11151178ce007fd53
 msgid "import_file_not_found"
@@ -765,6 +829,10 @@ msgstr "Частота"
 msgid "menu_historical_figures"
 msgstr "Історичні постаті"
 
+# en-hash: 073096c9e6fbe0599a7c64e0e7a665cb
+msgid "menu_images"
+msgstr "Зображення та карти"
+
 # en-hash: 31a20a82ddb0aada27aab20c1352115f
 msgid "menu_import_file"
 msgstr "Імпортувати ключі з xray_key.txt"
@@ -897,9 +965,9 @@ msgstr "Merge"
 msgid "merge_confirm"
 msgstr "Об'єднати %s з %s? Другий запис буде видалено, а його псевдоніми поглинуто."
 
-# en-hash: f05bbbb62dd4920db1277184e3fd98ce
+# en-hash: 288650687add5951b526ac950ce45b03
 msgid "merge_duplicates"
-msgstr "Об'єднати дублікати..."
+msgstr "⋈ Об'єднати дублікати..."
 
 # en-hash: 1a0eb2431b20a745a419931f2f637210
 msgid "merge_failed"
@@ -973,9 +1041,9 @@ msgstr "API-ключ ШІ не встановлено!\n\nВведіть клю�
 msgid "no_author_data_fetch"
 msgstr "Інформація про автора відсутня.\n\nХочете отримати її через ШІ?"
 
-# en-hash: 6cbd3b9b2bb981930fa8f38f26ca5f61
+# en-hash: 18b36cd276b2c5afa9f9cdf198876b20
 msgid "no_character_data"
-msgstr "Даних про персонажів поки немає.\n\nСпочатку скористайтеся 'Отримати дані X-Ray'."
+msgstr "Персонажів не знайдено."
 
 # en-hash: 80a4905228688f8ad8ec996803f60ffb
 msgid "no_data_prompt"
@@ -989,6 +1057,10 @@ msgstr "Дублікатів не знайдено."
 msgid "no_historical_data"
 msgstr "Даних про історичні постаті поки немає.\n\nСпочатку скористайтеся 'Отримати дані X-Ray'.\n\nШІ виявить реальних історичних постатей, згаданих у книзі."
 
+# en-hash: 4c58fb13d107106e3765e3f635e64517
+msgid "no_items"
+msgstr "Немає елементів"
+
 # en-hash: 4d0e58f2c49ca238a05d2a92486d3d70
 msgid "no_location_data"
 msgstr "Даних про локації поки немає. Спочатку скористайтеся 'Отримати дані X-Ray'."
@@ -1001,13 +1073,17 @@ msgstr "Об'єднання не виконувалися."
 msgid "no_new_text"
 msgstr "У поточній позиції немає нового тексту; тут X-Ray уже оновлено."
 
+# en-hash: 3ae96dc007966de2542db31b76ff72cd
+msgid "no_series_detected"
+msgstr "Серію для цієї книги не виявлено"
+
 # en-hash: f90c5e84342ce9096a0f72b0fe9c5203
 msgid "no_series_to_clear"
 msgstr "Серію для цієї книги не виявлено."
 
 # en-hash: 29503d301d509e5cfea9e97daffa9e79
 msgid "no_terms_data"
-msgstr "Дані термінів ще відсутні. Будь ласка, спочатку скористайтеся 'Fetch X-Ray Data'."
+msgstr "Ще немає даних про терміни. Спочатку виконайте «Fetch X-Ray Data»."
 
 # en-hash: 0c8a85db22b4a3eadf95fe1a55f00c63
 msgid "no_timeline_data"
@@ -1036,6 +1112,10 @@ msgstr "ШІ знайшов %d потенційних дублікатів з м
 # en-hash: d87f433b237815fa419a2ac953956c54
 msgid "plugin_description"
 msgstr "Перетворіть свій досвід читання за допомогою аналізу книг на основі ШІ, як в Amazon Kindle X-Ray!"
+
+# en-hash: 14230d11143a03f4330c6433d5032a9d
+msgid "prev"
+msgstr "Попер."
 
 # en-hash: 136dbfc383f7b6799dbdcb4b37c65d13
 msgid "quick_menu_title"
@@ -1084,6 +1164,10 @@ msgstr "Review"
 # en-hash: c9cc8cce247e49bae79f15173ce97354
 msgid "save"
 msgstr "Зберегти"
+
+# en-hash: 06a943c59f33a34bb5924aaf72cd2995
+msgid "search"
+msgstr "Пошук"
 
 # en-hash: 13348442cc6a27032d2b4aa28b75a5d3
 msgid "search_button"
@@ -1537,7 +1621,7 @@ msgstr "Ключ API для %s отримано та збережено!"
 msgid "web_setup_title"
 msgstr "Підключення через телефон / ПК"
 
-# en-hash: ad608bec35300c1dbb0180723f2f6b9f
+# en-hash: 4111bd6fb88b1690bc80082903801ab8
 msgid "welcome_action_ask_later"
 msgstr "Запитати пізніше"
 
@@ -1593,9 +1677,9 @@ msgstr "Введіть або вставте ключ API за допомого�
 msgid "welcome_opt_ereader_title"
 msgstr "Ввести ключ на рідері"
 
-# en-hash: c3c978de8a982902e76b01a8bc5a996b
+# en-hash: 12273c89c62d45e28d60480dc913c65a
 msgid "welcome_opt_file_desc"
-msgstr "Автоматичний імпорт з xray_key.txt або перегляд посібника у вікі."
+msgstr "Помістіть ключ у koreader/settings/xray_key.txt або виберіть налаштованого провайдера."
 
 # en-hash: 5e2364ee83d001f6721276c20925e78e
 msgid "welcome_opt_file_title"
@@ -1608,6 +1692,14 @@ msgstr "Відскануйте QR-код для введення ключа че
 # en-hash: f5d12f602967b00beea3f12412fcb3a2
 msgid "welcome_opt_phone_title"
 msgstr "Налаштувати з телефона / ПК (Рекомендовано)"
+
+# en-hash: 97d815bfab1c9a82c9e305a76b4b559f
+msgid "welcome_opt_skip_desc"
+msgstr "Використовуйте локальний підрахунок слів, статистику читання та кешовані дані про серії без ШІ."
+
+# en-hash: 93c52d3e72f67abf20b2ec1c235f5dc5
+msgid "welcome_opt_skip_title"
+msgstr "Пропустити (лише офлайн-функції)"
 
 # en-hash: 741987eccc2e46095fdd70cf9377e31e
 msgid "welcome_select_provider"

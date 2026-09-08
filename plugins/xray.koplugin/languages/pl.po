@@ -1,6 +1,6 @@
 msgid ""
 msgstr ""
-"Language-Team: Pl\n"
+"Language-Team: Polish\n"
 "Language: pl\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -105,9 +105,9 @@ msgstr "Rzadki: sprawdza maksymalnie co 30 min"
 msgid "auto_update_ultra"
 msgstr "Ultra: sprawdza co %d stron"
 
-# en-hash: 0557fa923dcee4d0f86b1409f5c2167f
+# en-hash: a9d418644a14acc5d9622ca060895802
 msgid "back_to_reading"
-msgstr "Wróć do czytania"
+msgstr "Powrót do czytania"
 
 # en-hash: 5fcd6ed2b6f2c21bc5c936cf44c36b37
 msgid "beta_channel_desc"
@@ -196,6 +196,10 @@ msgstr "Anuluj"
 # en-hash: 261d30af0907fa3e87d73d7719d2b4ef
 msgid "character_not_found"
 msgstr "Nie znaleziono postaci pasującej do '%s'"
+
+# en-hash: 01bc6f8efa4202821e95f4fdf6298b30
+msgid "clear"
+msgstr "Wyczyść"
 
 # en-hash: d3d2e617335f08df83599665eef8a418
 msgid "close"
@@ -476,6 +480,66 @@ msgstr "Tryb pełnej książki"
 # en-hash: 224900ca5b99a949b6fe8a5c0360f5ff
 msgid "gemini_key_hint"
 msgstr "Wprowadź darmowy klucz Gemini z Google AI Studio (zaczyna się od AQ. lub AIzaSy...):"
+
+# en-hash: 33dca68e340b8d6c21472341130cf45a
+msgid "illustration"
+msgstr "Ilustracja"
+
+# en-hash: fe63191987f62b9e4806e376671ed335
+msgid "img_extract_failed"
+msgstr "Nie udało się wyodrębnić pliku obrazu."
+
+# en-hash: 30936c8b483b8b104a4ad7821ce2262b
+msgid "img_no_favorites"
+msgstr "Brak ulubionych.\n\nUżyj menu ⋮ na dowolnym obrazie, aby dodać go do ulubionych."
+
+# en-hash: c3e4c8dd2122260b0c4e14d6509e62ca
+msgid "img_no_hidden"
+msgstr "Brak ukrytych obrazów.\n\nUżyj menu ⋮ na dowolnym obrazie w galerii, aby ukryć dekoracyjne ilustracje lub inicjały."
+
+# en-hash: 95407637295cd7c30378be19be6e36cb
+msgid "img_no_images"
+msgstr "Nie znaleziono obrazów dla tej karty/filtra.\n\nWyciąganie lub skanowanie obrazów z książki..."
+
+# en-hash: 74ab2b6d760dc64ea26012a4fca84490
+msgid "img_no_series"
+msgstr "Brak zapisanych odniesień serii.\n\nUżyj menu ⋮ na dowolnej mapie, aby zapisać ją w odniesieniach serii."
+
+# en-hash: 8df91db55dbf3ca2b7410a0e9aa875a8
+msgid "img_no_series_detected"
+msgstr "Ta książka nie jest częścią rozpoznanej serii.\n\nOdniesienia do serii są dostępne tylko dla książek należących do serii."
+
+# en-hash: 52366b2ac097fd22d80d475b8b125d8c
+msgid "img_rename_title"
+msgstr "Zmień nazwę etykiety"
+
+# en-hash: 393c3f5ea8ad35c02691d507bdbb31b0
+msgid "img_reveal"
+msgstr "Odsłoń"
+
+# en-hash: 646ef4f9024779f1a04ee945deffb8d5
+msgid "img_spoiler_confirm"
+msgstr "Ten obraz znajduje się na stronie %d (poza Twoim obecnym postępem czytania). Odsłonić obraz?"
+
+# en-hash: d0f2e5376298c880665077b565ffd7dd
+msgid "img_spoiler_locked"
+msgstr "Zablokowano"
+
+# en-hash: b1c94ca2fbc3e78fc30069c8d0f01680
+msgid "img_tab_all"
+msgstr "Wszystkie"
+
+# en-hash: d78986947356ddd37b43d57df289dee9
+msgid "img_tab_favorites"
+msgstr "Ulubione"
+
+# en-hash: 9d948e617b083222afc868add2f50ec2
+msgid "img_tab_series"
+msgstr "Serie"
+
+# en-hash: be53a0541a6d36f6ecb879fa2c584b08
+msgid "img_untitled"
+msgstr "Obraz"
 
 # en-hash: 57519cae872270f11151178ce007fd53
 msgid "import_file_not_found"
@@ -765,6 +829,10 @@ msgstr "Częstotliwość"
 msgid "menu_historical_figures"
 msgstr "Postacie historyczne"
 
+# en-hash: 073096c9e6fbe0599a7c64e0e7a665cb
+msgid "menu_images"
+msgstr "Obrazy i mapy"
+
 # en-hash: 31a20a82ddb0aada27aab20c1352115f
 msgid "menu_import_file"
 msgstr "Importuj klucze z xray_key.txt"
@@ -897,7 +965,7 @@ msgstr "Merge"
 msgid "merge_confirm"
 msgstr "Połączyć %s z %s? Drugi wpis zostanie usunięty, a jego aliasy wchłonięte."
 
-# en-hash: f05bbbb62dd4920db1277184e3fd98ce
+# en-hash: 288650687add5951b526ac950ce45b03
 msgid "merge_duplicates"
 msgstr "Połącz duplikaty..."
 
@@ -973,7 +1041,7 @@ msgstr "Klucz API do AI nie jest ustawiony!\n\nWprowadź klucz API w:\nMenu → 
 msgid "no_author_data_fetch"
 msgstr "Brak dostępnych informacji o autorze.\n\nCzy chcesz pobrać je z AI?"
 
-# en-hash: 6cbd3b9b2bb981930fa8f38f26ca5f61
+# en-hash: 18b36cd276b2c5afa9f9cdf198876b20
 msgid "no_character_data"
 msgstr "Brak danych o postaciach.\n\nNajpierw użyj 'Pobierz dane X-Ray'."
 
@@ -989,6 +1057,10 @@ msgstr "Nie znaleziono duplikatów."
 msgid "no_historical_data"
 msgstr "Brak danych o postaciach historycznych.\n\nNajpierw użyj 'Pobierz dane X-Ray'.\n\nAI wykryje rzeczywiste postacie\nhistoryczne wspomniane w książce."
 
+# en-hash: 4c58fb13d107106e3765e3f635e64517
+msgid "no_items"
+msgstr "Brak elementów"
+
 # en-hash: 4d0e58f2c49ca238a05d2a92486d3d70
 msgid "no_location_data"
 msgstr "Brak danych o miejscach. Najpierw użyj 'Pobierz dane X-Ray'."
@@ -1001,13 +1073,17 @@ msgstr "Nie wykonano żadnych scaleń."
 msgid "no_new_text"
 msgstr "W bieżącej pozycji nie było nowego tekstu; X-Ray jest już tutaj aktualny."
 
+# en-hash: 3ae96dc007966de2542db31b76ff72cd
+msgid "no_series_detected"
+msgstr "Nie wykryto serii dla tej książki"
+
 # en-hash: f90c5e84342ce9096a0f72b0fe9c5203
 msgid "no_series_to_clear"
 msgstr "Nie wykryto serii dla tej książki."
 
 # en-hash: 29503d301d509e5cfea9e97daffa9e79
 msgid "no_terms_data"
-msgstr "Brak danych o pojęciach. Najpierw użyj 'Pobierz dane X-Ray'."
+msgstr "Brak danych pojęć. Najpierw użyj 'Fetch X-Ray Data'."
 
 # en-hash: 0c8a85db22b4a3eadf95fe1a55f00c63
 msgid "no_timeline_data"
@@ -1036,6 +1112,10 @@ msgstr "AI znalazła %d potencjalnych duplikatów z ostatniego pobierania. Zwery
 # en-hash: d87f433b237815fa419a2ac953956c54
 msgid "plugin_description"
 msgstr "Odmień swoje wrażenia z czytania dzięki analizie książek opartej na sztucznej inteligencji, zupełnie jak Amazon Kindle X-Ray!"
+
+# en-hash: 14230d11143a03f4330c6433d5032a9d
+msgid "prev"
+msgstr "Poprz."
 
 # en-hash: 136dbfc383f7b6799dbdcb4b37c65d13
 msgid "quick_menu_title"
@@ -1084,6 +1164,10 @@ msgstr "Review"
 # en-hash: c9cc8cce247e49bae79f15173ce97354
 msgid "save"
 msgstr "Zapisz"
+
+# en-hash: 06a943c59f33a34bb5924aaf72cd2995
+msgid "search"
+msgstr "Szukaj"
 
 # en-hash: 13348442cc6a27032d2b4aa28b75a5d3
 msgid "search_button"
@@ -1537,9 +1621,9 @@ msgstr "Klucz API dla %s został odebrany i zapisany!"
 msgid "web_setup_title"
 msgstr "Połącz przez telefon / PC"
 
-# en-hash: ad608bec35300c1dbb0180723f2f6b9f
+# en-hash: 4111bd6fb88b1690bc80082903801ab8
 msgid "welcome_action_ask_later"
-msgstr "Zapytaj później"
+msgstr "Zapytaj mnie później"
 
 # en-hash: a0bfb8e59e6c13fc8d990781f77694fe
 msgid "welcome_action_continue"
@@ -1593,9 +1677,9 @@ msgstr "Wpisz lub wklej klucz API za pomocą klawiatury ekranowej."
 msgid "welcome_opt_ereader_title"
 msgstr "Wprowadź klucz na czytniku"
 
-# en-hash: c3c978de8a982902e76b01a8bc5a996b
+# en-hash: 12273c89c62d45e28d60480dc913c65a
 msgid "welcome_opt_file_desc"
-msgstr "Automatycznie importuj z pliku xray_key.txt lub zobacz przewodnik wiki."
+msgstr "Umieść klucz w koreader/settings/xray_key.txt lub wybierz istniejącego dostawcę."
 
 # en-hash: 5e2364ee83d001f6721276c20925e78e
 msgid "welcome_opt_file_title"
@@ -1608,6 +1692,14 @@ msgstr "Zeskanuj kod QR, aby wprowadzić klucz przez Cloud Relay lub lokalne Wi-
 # en-hash: f5d12f602967b00beea3f12412fcb3a2
 msgid "welcome_opt_phone_title"
 msgstr "Ustaw z telefonu / komputera (Zalecane)"
+
+# en-hash: 97d815bfab1c9a82c9e305a76b4b559f
+msgid "welcome_opt_skip_desc"
+msgstr "Używaj lokalnego licznika słów, statystyk czytania i zbuforowanych informacji o serii bez SI."
+
+# en-hash: 93c52d3e72f67abf20b2ec1c235f5dc5
+msgid "welcome_opt_skip_title"
+msgstr "Pomiń na razie (tylko funkcje offline)"
 
 # en-hash: 741987eccc2e46095fdd70cf9377e31e
 msgid "welcome_select_provider"

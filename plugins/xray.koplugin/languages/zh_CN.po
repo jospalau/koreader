@@ -1,6 +1,6 @@
 msgid ""
 msgstr ""
-"Language-Team: Zh_cn\n"
+"Language-Team: Chinese (Simplified)\n"
 "Language: zh_CN\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -31,7 +31,7 @@ msgstr "成功合并了 %d 对重复项。"
 
 # en-hash: a33bcf890b6eb6b64b4e272f79e05eda
 msgid "ai_scan"
-msgstr "AI Scan"
+msgstr "AI 扫描"
 
 # en-hash: aeb5711552b5cd7ae34cc3c3393052f8
 msgid "ai_scanning_duplicates"
@@ -39,7 +39,7 @@ msgstr "AI 正在扫描重复项..."
 
 # en-hash: ad608bec35300c1dbb0180723f2f6b9f
 msgid "ask_later"
-msgstr "Ask Later"
+msgstr "稍后询问"
 
 # en-hash: bff74eab9088ad053737e6f0d424ea7e
 msgid "author_born"
@@ -105,9 +105,9 @@ msgstr "稀疏：最多每 30 分钟"
 msgid "auto_update_ultra"
 msgstr "极速：每%d页检查一次"
 
-# en-hash: 0557fa923dcee4d0f86b1409f5c2167f
+# en-hash: a9d418644a14acc5d9622ca060895802
 msgid "back_to_reading"
-msgstr "回到阅读"
+msgstr "返回阅读"
 
 # en-hash: 5fcd6ed2b6f2c21bc5c936cf44c36b37
 msgid "beta_channel_desc"
@@ -197,6 +197,10 @@ msgstr "取消"
 msgid "character_not_found"
 msgstr "未找到匹配“%s”的角色"
 
+# en-hash: 01bc6f8efa4202821e95f4fdf6298b30
+msgid "clear"
+msgstr "清除"
+
 # en-hash: d3d2e617335f08df83599665eef8a418
 msgid "close"
 msgstr "关闭"
@@ -219,7 +223,7 @@ msgstr "已设置"
 
 # en-hash: 70d9be9b139893aa6c69b5e77e614311
 msgid "confirm"
-msgstr "Confirm"
+msgstr "确认"
 
 # en-hash: af56aa659f5ec4ce42bb02c3b75dd111
 msgid "confirm_clear_all_keys"
@@ -477,6 +481,66 @@ msgstr "整本书模式"
 msgid "gemini_key_hint"
 msgstr "输入 Google AI Studio 免费获取的 Gemini 密钥（以 AQ. 或 AIzaSy... 开头）："
 
+# en-hash: 33dca68e340b8d6c21472341130cf45a
+msgid "illustration"
+msgstr "插图"
+
+# en-hash: fe63191987f62b9e4806e376671ed335
+msgid "img_extract_failed"
+msgstr "无法提取图片文件。"
+
+# en-hash: 30936c8b483b8b104a4ad7821ce2262b
+msgid "img_no_favorites"
+msgstr "暂无收藏。\n\n在任何图片上使用 ⋮ 菜单即可将其添加到收藏。"
+
+# en-hash: c3e4c8dd2122260b0c4e14d6509e62ca
+msgid "img_no_hidden"
+msgstr "没有隐藏的图片。\n\n在图库中的任何图片上使用 ⋮ 菜单即可隐藏装饰性插图或首字下沉。"
+
+# en-hash: 95407637295cd7c30378be19be6e36cb
+msgid "img_no_images"
+msgstr "未找到此标签/过滤器的图片。\n\n正在从书籍中提取或扫描图片..."
+
+# en-hash: 74ab2b6d760dc64ea26012a4fca84490
+msgid "img_no_series"
+msgstr "未保存系列参考资料。\n\n在任何地图上使用 ⋮ 菜单即可将其保存到系列参考资料中。"
+
+# en-hash: 8df91db55dbf3ca2b7410a0e9aa875a8
+msgid "img_no_series_detected"
+msgstr "本书不属于任何已识别的系列。\n\n系列参考仅适用于系列丛书。"
+
+# en-hash: 52366b2ac097fd22d80d475b8b125d8c
+msgid "img_rename_title"
+msgstr "重命名标签"
+
+# en-hash: 393c3f5ea8ad35c02691d507bdbb31b0
+msgid "img_reveal"
+msgstr "显示"
+
+# en-hash: 646ef4f9024779f1a04ee945deffb8d5
+msgid "img_spoiler_confirm"
+msgstr "该图片位于第 %d 页（超出您当前的阅读进度）。是否显示图片？"
+
+# en-hash: d0f2e5376298c880665077b565ffd7dd
+msgid "img_spoiler_locked"
+msgstr "已锁定"
+
+# en-hash: b1c94ca2fbc3e78fc30069c8d0f01680
+msgid "img_tab_all"
+msgstr "全部"
+
+# en-hash: d78986947356ddd37b43d57df289dee9
+msgid "img_tab_favorites"
+msgstr "收藏"
+
+# en-hash: 9d948e617b083222afc868add2f50ec2
+msgid "img_tab_series"
+msgstr "系列"
+
+# en-hash: be53a0541a6d36f6ecb879fa2c584b08
+msgid "img_untitled"
+msgstr "图片"
+
 # en-hash: 57519cae872270f11151178ce007fd53
 msgid "import_file_not_found"
 msgstr "在存储根目录或设置目录中未找到 xray_key.txt 文件。"
@@ -563,7 +627,7 @@ msgstr "语言已更改。重新打开菜单以查看更改。"
 
 # en-hash: 61057a0c84605444201929bdd72014f0
 msgid "later"
-msgstr "Later"
+msgstr "稍后"
 
 # en-hash: 94f97454f5a2c6bbca33f92d4818fcef
 msgid "linked_entries"
@@ -611,7 +675,7 @@ msgstr "部分匹配 — 已显示“%s”的关联信息。点击下方重新�
 
 # en-hash: 6ca35323241366b4da17cd03396f1f69
 msgid "manual_pick"
-msgstr "Manual Pick"
+msgstr "手动挑选"
 
 # en-hash: 9899bf3319fb8c6b34520d599f30281e
 msgid "mention_dismiss_btn"
@@ -765,6 +829,10 @@ msgstr "频率"
 msgid "menu_historical_figures"
 msgstr "历史人物"
 
+# en-hash: 073096c9e6fbe0599a7c64e0e7a665cb
+msgid "menu_images"
+msgstr "图片与地图"
+
 # en-hash: 31a20a82ddb0aada27aab20c1352115f
 msgid "menu_import_file"
 msgstr "从 xray_key.txt 导入密钥"
@@ -891,15 +959,15 @@ msgstr "← 返回"
 
 # en-hash: 68be4837f6c739877233e527a996dd00
 msgid "merge_button"
-msgstr "Merge"
+msgstr "合并"
 
 # en-hash: 8bb01dda315086774624ba2e7444a265
 msgid "merge_confirm"
 msgstr "确定将 %s 合并至 %s 吗？次要条目将被删除，其别名将被吸收。"
 
-# en-hash: f05bbbb62dd4920db1277184e3fd98ce
+# en-hash: 288650687add5951b526ac950ce45b03
 msgid "merge_duplicates"
-msgstr "合并重复项..."
+msgstr "⋈ 合并重复项..."
 
 # en-hash: 1a0eb2431b20a745a419931f2f637210
 msgid "merge_failed"
@@ -955,7 +1023,7 @@ msgstr "找到多个“%s”的匹配项。您指的是哪一个？"
 
 # en-hash: cafa45757baae6a9b3e4daafcc454e43
 msgid "new_feature"
-msgstr "New Feature"
+msgstr "新功能"
 
 # en-hash: 10ac3d04253ef7e1ddc73e6091c0cd55
 msgid "next"
@@ -973,9 +1041,9 @@ msgstr "未设置 AI API 密钥！\n\n请在以下路径输入密钥：\n菜单 
 msgid "no_author_data_fetch"
 msgstr "暂无作者信息。\n\n是否要通过 AI 获取？"
 
-# en-hash: 6cbd3b9b2bb981930fa8f38f26ca5f61
+# en-hash: 18b36cd276b2c5afa9f9cdf198876b20
 msgid "no_character_data"
-msgstr "暂无角色数据。\n\n请先使用“获取 X-Ray 数据”。"
+msgstr "未找到角色。"
 
 # en-hash: 80a4905228688f8ad8ec996803f60ffb
 msgid "no_data_prompt"
@@ -989,6 +1057,10 @@ msgstr "未发现重复项。"
 msgid "no_historical_data"
 msgstr "暂无历史人物数据。\n\n请先使用“获取 X-Ray 数据”。\n\nAI 将自动检测书中提及的真实历史人物。"
 
+# en-hash: 4c58fb13d107106e3765e3f635e64517
+msgid "no_items"
+msgstr "无项目"
+
 # en-hash: 4d0e58f2c49ca238a05d2a92486d3d70
 msgid "no_location_data"
 msgstr "暂无地点数据。请先使用“获取 X-Ray 数据”。"
@@ -1001,13 +1073,17 @@ msgstr "未执行任何合并。"
 msgid "no_new_text"
 msgstr "当前位置没有可用的新文本；X-Ray 在这里已经是最新的。"
 
+# en-hash: 3ae96dc007966de2542db31b76ff72cd
+msgid "no_series_detected"
+msgstr "未检测到本书的系列信息"
+
 # en-hash: f90c5e84342ce9096a0f72b0fe9c5203
 msgid "no_series_to_clear"
 msgstr "未检测到此书的系列信息。"
 
 # en-hash: 29503d301d509e5cfea9e97daffa9e79
 msgid "no_terms_data"
-msgstr "尚无术语数据。请先使用“Fetch X-Ray Data”。"
+msgstr "暂无词条数据。请先使用“Fetch X-Ray Data”。"
 
 # en-hash: 0c8a85db22b4a3eadf95fe1a55f00c63
 msgid "no_timeline_data"
@@ -1019,7 +1095,7 @@ msgstr "确定"
 
 # en-hash: 386b384e3eec6bf9bf55d32b5018de15
 msgid "pair_rejected"
-msgstr "Pair marked as not a duplicate."
+msgstr "已标记此配对不是重复项。"
 
 # en-hash: b8d4677ac13de48defd22ae1a3fe2479
 msgid "paste_clipboard_confirm"
@@ -1037,17 +1113,21 @@ msgstr "AI 发现了上次获取的 %d 个潜在重复项。现在查看吗？"
 msgid "plugin_description"
 msgstr "使用 AI 驱动的书籍分析提升您的阅读体验，就像 Kindle X-Ray 一样！"
 
+# en-hash: 14230d11143a03f4330c6433d5032a9d
+msgid "prev"
+msgstr "上一页"
+
 # en-hash: 136dbfc383f7b6799dbdcb4b37c65d13
 msgid "quick_menu_title"
 msgstr "X-Ray 快捷菜单"
 
 # en-hash: decbe415d8accca7c2c16d48a79ee934
 msgid "read_more"
-msgstr "Read More"
+msgstr "阅读更多"
 
 # en-hash: fffcb4d1e12c96b2f571f77ad25878b8
 msgid "reason"
-msgstr "Reason"
+msgstr "原因"
 
 # en-hash: 1ec7919a887b228482b4fd9a80fcd324
 msgid "reasoning_about"
@@ -1071,7 +1151,7 @@ msgstr "未设置（默认）"
 
 # en-hash: d98ac12774fca5c3cbaffe276840c55f
 msgid "reject_pair"
-msgstr "Reject"
+msgstr "拒绝"
 
 # en-hash: 88e790884cd8072ac5a804be29a0a287
 msgid "relookup_button"
@@ -1079,11 +1159,15 @@ msgstr "重新查询“%s”"
 
 # en-hash: 457dd55184faedb7885afd4009d70163
 msgid "review"
-msgstr "Review"
+msgstr "查看"
 
 # en-hash: c9cc8cce247e49bae79f15173ce97354
 msgid "save"
 msgstr "保存"
+
+# en-hash: 06a943c59f33a34bb5924aaf72cd2995
+msgid "search"
+msgstr "搜索"
 
 # en-hash: 13348442cc6a27032d2b4aa28b75a5d3
 msgid "search_button"
@@ -1151,7 +1235,7 @@ msgstr "%s API 密钥已清除。"
 
 # en-hash: 72ef2b9b6965d078e3c7f95487a82d1c
 msgid "skip"
-msgstr "Skip"
+msgstr "跳过"
 
 # en-hash: 55da95c9d6ab32f4873d13cdba88943e
 msgid "spoiler_free_about"
@@ -1175,7 +1259,7 @@ msgstr "剧透偏好"
 
 # en-hash: 11a755d598c0c417f9a36758c3da7481
 msgid "stop"
-msgstr "Stop"
+msgstr "停止"
 
 # en-hash: d725036d492c380f06f4eb32f5704bc9
 msgid "term_not_found"
@@ -1195,15 +1279,15 @@ msgstr "当前页"
 
 # en-hash: f61824b403008733ff955da48052ee04
 msgid "unit_action_configure"
-msgstr "Configure Settings..."
+msgstr "配置设置..."
 
 # en-hash: 6ee50812725a7a053ed2c5742c6ebfef
 msgid "unit_action_disable"
-msgstr "Disable Feature"
+msgstr "停用功能"
 
 # en-hash: 074331092c85358cfa576b7c8424a94e
 msgid "unit_action_keep"
-msgstr "Keep Enabled (Default)"
+msgstr "保持启用 (默认)"
 
 # en-hash: fd380cdfeb02e89fd87e81a03440d1a4
 msgid "unit_auto_scan_about"
@@ -1537,7 +1621,7 @@ msgstr "已成功接收并保存 %s 的 API 密钥！"
 msgid "web_setup_title"
 msgstr "通过手机 / 电脑连接"
 
-# en-hash: ad608bec35300c1dbb0180723f2f6b9f
+# en-hash: 4111bd6fb88b1690bc80082903801ab8
 msgid "welcome_action_ask_later"
 msgstr "稍后询问"
 
@@ -1593,7 +1677,7 @@ msgstr "使用屏幕软键盘直接输入或粘贴您的 API 密钥。"
 msgid "welcome_opt_ereader_title"
 msgstr "在电子阅读器上直接输入"
 
-# en-hash: c3c978de8a982902e76b01a8bc5a996b
+# en-hash: 12273c89c62d45e28d60480dc913c65a
 msgid "welcome_opt_file_desc"
 msgstr "从 xray_key.txt 自动导入密钥，或查看 Wiki 详细配置指南。"
 
@@ -1608,6 +1692,14 @@ msgstr "扫描二维码即可通过云端中继或局域网免打字快速填入
 # en-hash: f5d12f602967b00beea3f12412fcb3a2
 msgid "welcome_opt_phone_title"
 msgstr "通过手机 / 电脑快速设置 (推荐)"
+
+# en-hash: 97d815bfab1c9a82c9e305a76b4b559f
+msgid "welcome_opt_skip_desc"
+msgstr "无需 AI，使用本地字数统计、阅读指标及已缓存的系列信息。"
+
+# en-hash: 93c52d3e72f67abf20b2ec1c235f5dc5
+msgid "welcome_opt_skip_title"
+msgstr "暂时跳过 (仅使用离线功能)"
 
 # en-hash: 741987eccc2e46095fdd70cf9377e31e
 msgid "welcome_select_provider"

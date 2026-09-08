@@ -15,6 +15,7 @@ function SeriesManager:new(o)
     o = o or {}
     setmetatable(o, self)
     self.__index = self
+    pcall(function() o:migrateLegacySeriesCache() end)
     return o
 end
 
@@ -312,6 +313,138 @@ function SeriesManager:loadSeriesCache(slug)
         return data
     end
     return nil
+end
+
+-- Resolve series information from book_data or document metadata
+function SeriesManager:getSeriesInfo(book_data, props, title, author)
+    -- 1. Check book_data if already populated with a valid series slug
+    if book_data and book_data.series_slug and book_data.series_slug ~= "" and book_data.series_slug ~= "series" then
+        return {
+            name = book_data.series or book_data.series_slug,
+            slug = book_data.series_slug,
+            index = tonumber(book_data.series_index) or 1,
+            has_explicit_index = book_data.series_index ~= nil,
+        }
+    end
+
+    -- 2. Detect series from document props, title, and author (metadata check only, no AI)
+    local detected = self:detectSeries(props, title, author, nil)
+    if detected and detected.slug and detected.slug ~= "" and detected.slug ~= "series" then
+        return detected
+    end
+
+    return nil
+end
+
+-- Migrate any images trapped in legacy 'series.lua' to their proper series cache
+function SeriesManager:migrateLegacySeriesCache()
+    local legacy_file = self:getSeriesCachePath("series")
+    if not legacy_file then return end
+
+    if lfs then
+        local attr = lfs.attributes(legacy_file)
+        if not attr then return end
+    else
+        local f = io.open(legacy_file, "r")
+        if f then f:close() else return end
+    end
+
+    local success, legacy_data = pcall(dofile, legacy_file)
+    if success and type(legacy_data) == "table" and legacy_data.images and #legacy_data.images > 0 then
+        for _, img in ipairs(legacy_data.images) do
+            local target_slug = nil
+            local path_str = tostring(img.cached_file or ""):lower()
+            if path_str:find("hobbit") or path_str:find("tolkien") or path_str:find("middle") then
+                target_slug = "middle_earth"
+            elseif path_str:find("cormoran") or path_str:find("strike") then
+                target_slug = "cormoran_strike"
+            elseif img.source_book_title and img.source_book_title ~= "Book" then
+                target_slug = self:makeSlug(img.source_book_title)
+            end
+
+            if target_slug and target_slug ~= "series" then
+                self:saveSeriesImage(target_slug, img)
+                logger.info("SeriesManager: Migrated image '" .. tostring(img.title) .. "' from series.lua to " .. target_slug)
+            end
+        end
+    end
+
+    pcall(function() os.remove(legacy_file) end)
+end
+
+-- Save a map / diagram to series-level cache
+function SeriesManager:saveSeriesImage(slug, image_data)
+    if not slug or slug == "" or slug == "series" or not image_data then return false end
+    local data = self:loadSeriesCache(slug) or {
+        series_slug = slug,
+        images = {},
+    }
+    data.images = data.images or {}
+    
+    -- Check if image already exists in series (update or insert)
+    local found = false
+    local img_id = image_data.id or image_data.href
+    for i, existing in ipairs(data.images) do
+        local same_id = img_id and existing.id and (existing.id == img_id)
+        local same_href = image_data.href and existing.href and (existing.href == image_data.href)
+        if same_id or same_href then
+            data.images[i] = image_data
+            found = true
+            break
+        end
+    end
+    if not found then
+        table.insert(data.images, image_data)
+    end
+    
+    return self:saveSeriesCache(slug, data)
+end
+
+-- Retrieve series-level images up to max_book_index to avoid future book spoilers
+function SeriesManager:getSeriesImages(slug, max_book_index)
+    if not slug or slug == "" or slug == "series" then
+        return {}
+    end
+
+    local results = {}
+    local seen = {}
+
+    local function addImages(data, enforce_filter)
+        if not data or not data.images then return end
+        for _, img in ipairs(data.images) do
+            local uid = img.id or img.href or (img.title and (img.title .. tostring(img.page)))
+            if uid and not seen[uid] then
+                local b_idx = tonumber(img.source_book_index) or 1
+                if not enforce_filter or not max_book_index or b_idx <= tonumber(max_book_index) then
+                    seen[uid] = true
+                    table.insert(results, img)
+                end
+            end
+        end
+    end
+
+    -- Load primary series cache ONLY for the specified series slug
+    local data = self:loadSeriesCache(slug)
+    if data then
+        addImages(data, true)
+    end
+
+    return results
+end
+
+-- Remove a map / diagram from series cache
+function SeriesManager:removeSeriesImage(slug, image_id)
+    if not slug or slug == "" or slug == "series" or not image_id then return false end
+    local data = self:loadSeriesCache(slug)
+    if not data or not data.images then return false end
+    
+    for i, img in ipairs(data.images) do
+        if img.id == image_id then
+            table.remove(data.images, i)
+            return self:saveSeriesCache(slug, data)
+        end
+    end
+    return false
 end
 
 -- Stream-serialize to file

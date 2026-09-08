@@ -8,20 +8,25 @@ end
 
 local M = {
     -- Borders & Separators
-    border_line_h = sc(2),
-    border_window = sc(2),
-    border_btn = sc(2),
-    border_preview = sc(2),
+    border_line_h = sc(1),
+    border_window = sc(1),
+    border_btn = sc(1),
+    border_preview = sc(1),
+    border_focus = math.max(2, sc(3)),
 
     -- Colors
     color_border = Blitbuffer.COLOR_DARK_GRAY,
     color_bg = Blitbuffer.COLOR_WHITE,
     color_label_dim = Blitbuffer.Color8(120),
     color_section_rule = Blitbuffer.COLOR_GRAY_B,
+    color_focus_border = Blitbuffer.COLOR_BLACK,
+    color_focus_bg = Blitbuffer.Color8(215),
+    color_focus_indicator = Blitbuffer.COLOR_BLACK,
 
     -- Radii
     radius_window = 0,
     radius_btn = sc(4),
+    radius_focus = sc(4),
 
     -- Spacing
     pad_h = sc(28),

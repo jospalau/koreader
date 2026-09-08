@@ -81,7 +81,7 @@ msgid "auto_update_ultra"
 msgstr "Ultra: checks every %d pages"
 
 msgid "back_to_reading"
-msgstr "Back"
+msgstr "Back to Reading"
 
 msgid "beta_channel_desc"
 msgstr "The beta channel allows you to receive pre-release versions of the X-Ray plugin. These versions include the latest features and bug fixes but may be [B]less stable[/B] than the regular release."
@@ -148,6 +148,9 @@ msgstr "Cancel"
 
 msgid "character_not_found"
 msgstr "No character found matching '%s'"
+
+msgid "clear"
+msgstr "clear"
 
 msgid "close"
 msgstr "Close"
@@ -358,6 +361,51 @@ msgstr "Full Book Mode"
 
 msgid "gemini_key_hint"
 msgstr "Enter your free Gemini key from Google AI Studio (starts with AQ. or AIzaSy...):"
+
+msgid "illustration"
+msgstr "Illustration"
+
+msgid "img_extract_failed"
+msgstr "Could not extract image file."
+
+msgid "img_no_favorites"
+msgstr "No favorites yet.\n\nUse the ⋮ menu on any image to add it to your favorites."
+
+msgid "img_no_hidden"
+msgstr "No hidden images.\n\nUse the ⋮ menu on any image in the gallery to hide decorative illustrations or drop caps."
+
+msgid "img_no_images"
+msgstr "No images found for this tab/filter.\n\nExtracting or scanning images from book..."
+
+msgid "img_no_series"
+msgstr "No series references saved.\n\nUse the ⋮ menu on any map to save it to your series references."
+
+msgid "img_no_series_detected"
+msgstr "This book is not part of a recognized series.\n\nSeries references are only available for books in a series."
+
+msgid "img_rename_title"
+msgstr "Rename Label"
+
+msgid "img_reveal"
+msgstr "Reveal"
+
+msgid "img_spoiler_confirm"
+msgstr "This image appears on page %d (past your current reading progress). Reveal image?"
+
+msgid "img_spoiler_locked"
+msgstr "Locked"
+
+msgid "img_tab_all"
+msgstr "All"
+
+msgid "img_tab_favorites"
+msgstr "Favorites"
+
+msgid "img_tab_series"
+msgstr "Series"
+
+msgid "img_untitled"
+msgstr "Image"
 
 msgid "import_file_not_found"
 msgstr "No xray_key.txt file found in storage root or settings directory."
@@ -575,6 +623,9 @@ msgstr "Frequency"
 msgid "menu_historical_figures"
 msgstr "Historical Figures"
 
+msgid "menu_images"
+msgstr "Images & Maps"
+
 msgid "menu_import_file"
 msgstr "Import Keys from xray_key.txt"
 
@@ -675,7 +726,7 @@ msgid "merge_confirm"
 msgstr "Merge %s into %s? The secondary entry will be deleted and its aliases absorbed."
 
 msgid "merge_duplicates"
-msgstr "Merge Duplicates"
+msgstr "⋈ Merge Duplicates..."
 
 msgid "merge_failed"
 msgstr "Merge failed."
@@ -732,7 +783,7 @@ msgid "no_author_data_fetch"
 msgstr "No author biography available. Fetch now?"
 
 msgid "no_character_data"
-msgstr "No character data yet.\n\nPlease use 'Fetch X-Ray Data' first."
+msgstr "No characters found."
 
 msgid "no_data_prompt"
 msgstr "No X-Ray data found for this book. Would you like to fetch it from AI now?"
@@ -743,6 +794,9 @@ msgstr "No duplicates found."
 msgid "no_historical_data"
 msgstr "No historical figure data yet.\n\nPlease use 'Fetch X-Ray Data' first.\n\nAI will detect real historical\nfigures mentioned in the book."
 
+msgid "no_items"
+msgstr "no_items"
+
 msgid "no_location_data"
 msgstr "No location data yet. Please use 'Fetch X-Ray Data' first."
 
@@ -751,6 +805,9 @@ msgstr "No merges performed."
 
 msgid "no_new_text"
 msgstr "No new text was available at your current position; X-Ray is already up to date here."
+
+msgid "no_series_detected"
+msgstr "No series detected for this book"
 
 msgid "no_series_to_clear"
 msgstr "No series detected for this book."
@@ -778,6 +835,9 @@ msgstr "AI found %d possible duplicate location(s) from the last fetch. Review n
 
 msgid "plugin_description"
 msgstr "Transform your reading experience with AI-powered book analysis, just like Amazon Kindle X-Ray!"
+
+msgid "prev"
+msgstr "Prev"
 
 msgid "quick_menu_title"
 msgstr "X-Ray Quick Menu"
@@ -814,6 +874,9 @@ msgstr "Review"
 
 msgid "save"
 msgstr "Save"
+
+msgid "search"
+msgstr "search"
 
 msgid "search_button"
 msgstr "Search"
@@ -1155,7 +1218,7 @@ msgid "web_setup_title"
 msgstr "Connect via Phone/PC"
 
 msgid "welcome_action_ask_later"
-msgstr "Ask Later"
+msgstr "Ask Me Later"
 
 msgid "welcome_action_continue"
 msgstr "Continue"
@@ -1197,7 +1260,7 @@ msgid "welcome_opt_ereader_title"
 msgstr "Enter Key on E-Reader"
 
 msgid "welcome_opt_file_desc"
-msgstr "Auto-import keys from an xray_key.txt file, or view wiki setup instructions."
+msgstr "Place key in koreader/settings/xray_key.txt or select existing configured provider."
 
 msgid "welcome_opt_file_title"
 msgstr "Import via Text File (xray_key.txt) or Config"
@@ -1207,6 +1270,12 @@ msgstr "Scan a QR code to enter your key online via Cloud Relay or local Wi-Fi."
 
 msgid "welcome_opt_phone_title"
 msgstr "Set from Phone/PC (Recommended)"
+
+msgid "welcome_opt_skip_desc"
+msgstr "Use local word counts, reading metrics, and cached series info without AI."
+
+msgid "welcome_opt_skip_title"
+msgstr "Skip for Now (Offline Features Only)"
 
 msgid "welcome_select_provider"
 msgstr "Select AI Provider"
