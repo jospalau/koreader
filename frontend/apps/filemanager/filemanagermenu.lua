@@ -63,7 +63,6 @@ function FileManagerMenu:registerKeyEvents()
         if Device:hasFewKeys() then
             self.key_events.KeyPressShowMenu = { { { "Menu", "Right" } } }
         end
-        -- OpenLastDoc = { { "ScreenKB", "Back" } } handled by hotkeys
     end
 end
 
@@ -123,39 +122,6 @@ function FileManagerMenu:initGesListener()
             handler = function(ges) return self:onSwipeShowMenu(ges) end,
         },
     })
-end
-
-function FileManagerMenu:onOpenLastDoc()
-    local last_file = G_reader_settings:readSetting("lastfile")
-    if not last_file or lfs.attributes(last_file, "mode") ~= "file" then
-        local InfoMessage = require("ui/widget/infomessage")
-        UIManager:show(InfoMessage:new{
-            text = _("Cannot open last document"),
-        })
-        return
-    end
-    local BookList = require("ui/widget/booklist")
-    if BookList.getBookStatus(last_file) ~= "reading" then
-        local InfoMessage = require("ui/widget/infomessage")
-        local title = last_file:gsub(".epub","")
-        title = select(2, util.splitFilePathName(title))
-        UIManager:show(InfoMessage:new{
-            text = _(title .. " is not currently being read, is " .. BookList.getBookStatusString(BookList.getBookStatus(last_file))),
-        })
-        local FileManager = require("apps/filemanager/filemanager")
-        FileManager.instance.history:onShowHist()
-        return
-    end
-
-    -- Only close menu if we were called from the menu
-    if self.menu_container then
-        -- Mimic's FileManager's onShowingReader refresh optimizations
-        self.ui.tearing_down = true
-        self.ui.dithered = nil
-        self:onCloseFileManagerMenu()
-    end
-
-    self.ui:openFile(last_file)
 end
 
 -- function FileManagerMenu:onOpenRandomFav()
@@ -356,7 +322,7 @@ function FileManagerMenu:setUpdateItemTable()
                         separator = true,
                     },
                     {
-                        text = _("Show filename in Open last/previous menu items"),
+                        text = _("Show filename in Open previous menu items"),
                         checked_func = function()
                             return G_reader_settings:isTrue("open_last_menu_show_filename")
                         end,
@@ -1013,25 +979,25 @@ Tap a book in the search results to open it.]]),
     self.menu_items.open_last_document = {
         text_func = function()
             if not G_reader_settings:isTrue("open_last_menu_show_filename") or G_reader_settings:hasNot("lastfile") then
-                return _("Open last document")
+                return _("Open previous document")
             end
             local last_file = G_reader_settings:readSetting("lastfile")
             local path, file_name = util.splitFilePathName(last_file) -- luacheck: no unused
-            return T(_("Last: %1"), BD.filename(file_name))
+            return T(_("Previous: %1"), BD.filename(file_name))
         end,
         enabled_func = function()
             return G_reader_settings:has("lastfile")
         end,
         callback = function()
-            self:onOpenLastDoc()
+            self.ui:onOpenLastDoc()
         end,
         hold_callback = function()
             local last_file = G_reader_settings:readSetting("lastfile")
             UIManager:show(ConfirmBox:new{
-                text = T(_("Would you like to open the last document: %1?"), BD.filepath(last_file)),
+                text = T(_("Would you like to open the previous document: %1?"), BD.filepath(last_file)),
                 ok_text = _("OK"),
                 ok_callback = function()
-                    self:onOpenLastDoc()
+                    self.ui:onOpenLastDoc()
                 end,
             })
         end
@@ -1456,7 +1422,7 @@ function FileManagerMenu:getStartWithMenuTable()
         { _("history"), "history" },
         { _("favorites"), "favorites" },
         { _("folder shortcuts"), "folder_shortcuts" },
-        { _("last file"), "last" },
+        { _("most recent document"), "last" },
     }
     local sub_item_table = {}
     for i, v in ipairs(start_withs) do
