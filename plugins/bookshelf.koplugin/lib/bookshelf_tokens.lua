@@ -165,7 +165,6 @@ Tokens.CATALOGUE = {
     { category = "Style",    token = "[font=NAME]",       description = _("A different font from here on: replace NAME with a font name ([/font] ends it)") },
     { category = "Device",   token = "%version_app",      description = "KOReader App Version" },
     { category = "Progress", token = "%books_total",      description = _("Total books") },
-    { category = "Progress", token = "%books_total",      description = _("Total books") },
     { category = "Progress", token = "%books_reading",    description = _("Books currently reading") },
     { category = "Progress", token = "%books_tbr",        description = _("Books to be read") },
     { category = "Progress", token = "%books_mbr",        description = _("Books maybe read") },
