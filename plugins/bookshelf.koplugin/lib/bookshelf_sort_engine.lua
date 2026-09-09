@@ -538,6 +538,21 @@ SortEngine.KEYS = {
                         comparator = function(a, b)
                             return cmp(b.modified_date, a.modified_date)
                         end },
+    -- Book record: a.words (word count; nil = unknown)
+    words    = { label = tr("Word count"), short = tr("Words"),
+                 comparator = function(a, b)
+                     return cmp(a.words, b.words)
+                 end },
+    -- Book record: a.grrating (Goodreads rating; nil = unknown)
+    grrating = { label = tr("Goodreads rating"), short = tr("GR rating"),
+                 comparator = function(a, b)
+                     return cmp(a.grrating, b.grrating)
+                 end },
+    -- Book record: a.grvotes (Goodreads votes; nil = unknown)
+    grvotes  = { label = tr("Goodreads votes"), short = tr("GR votes"),
+                 comparator = function(a, b)
+                     return cmp(a.grvotes, b.grvotes)
+                 end },
 
 }
 
@@ -549,7 +564,7 @@ SortEngine.ORDER = {
     "last_opened", "date_added",
     "percent_read", "rating",
     "read_status", "read_status_active", "read_status_finished",
-    "size", "page_count", "book_count",
+    "size", "page_count", "book_count", "words", "grrating", "grvotes"
 }
 
 -- chainedComparator(priority): builds a single Lua-table-sort comparator from

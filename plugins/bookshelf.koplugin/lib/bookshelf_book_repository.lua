@@ -1004,6 +1004,10 @@ function Repo.buildBookMeta(filepath, opts)
     --page_count = page_count or info.pages
     local pub_date = _calibreField(filepath, "pubdate", function(v) return v:sub(1, 4) end)
     local modified_date = getModifiedDate(filepath)
+    local words = _calibreField(filepath, "words")
+    local grrating = _calibreField(filepath, "grrating")
+    local grvotes = _calibreField(filepath, "grvotes")
+
 
     local book = {
         filepath    = filepath,
@@ -1055,7 +1059,9 @@ function Repo.buildBookMeta(filepath, opts)
                            and info.description)
                        or nil,
         page_count  = info.pages,
-        pub_date    = pub_date or nil,
+        words       = words or nil,
+        grrating    = grrating or nil,
+        grvotes     = grvotes or nil,
         modified_date = modified_date,
     }
     -- Cache fresh records whose text metadata is present, with the
@@ -1187,6 +1193,10 @@ local function _buildLightMetaFromInfo(fp, info)
     local pub_date = _calibreField(fp, "pubdate", function(v) return v:sub(1, 4) end)
     local modified_date = getModifiedDate(fp)
 
+    local words = _calibreField(fp, "words")
+    local grrating = _calibreField(fp, "grrating")
+    local grvotes = _calibreField(fp, "grvotes")
+
     -- filename is also returned so callers like searchBooks can include
     -- it in their search haystack without paying for the heavy
     -- buildBookMeta path.
@@ -1240,7 +1250,9 @@ local function _buildLightMetaFromInfo(fp, info)
         lang        = (cb and type(cb.languages) == "table" and cb.languages[1])
                        or info.language,
         page_count  = page_count,
-        pub_date    = pub_date or nil,
+        words       = words or nil,
+        grrating    = grrating or nil,
+        grvotes     = grvotes or nil,
         modified_date = modified_date,
     }
     -- Apply the global "Use Hardcover metadata" override here too, so the
@@ -1288,7 +1300,7 @@ local _progress_cache, PROGRESS_CACHE_TTL
 -- it had just been working on. The comment above buildBook's seed already
 -- demanded the two mirror each other; this makes it structural rather than a
 -- promise.
-local function _writeProgressCache(filepath, pct, status, rating, page_count, page_num, pub_date, modified_date)
+local function _writeProgressCache(filepath, pct, status, rating, page_count, page_num, pub_date, modified_date, words, grrating, grvotes)
     _progress_cache[filepath] = {
         pct        = pct,
         status     = status,
@@ -1297,6 +1309,9 @@ local function _writeProgressCache(filepath, pct, status, rating, page_count, pa
         page_num   = page_num,
         pub_date   = pub_date,
         modified_date = modified_date,
+        words       = words,
+        grrating    = grrating,
+        grvotes     = grvotes,
         expires_at = os.time() + PROGRESS_CACHE_TTL,
     }
 end
@@ -1451,7 +1466,7 @@ function Repo.buildBook(filepath, opts)
     -- only for a book BIM counted, which is fixed-layout and reaches an exact
     -- rung long before the division.
     _writeProgressCache(filepath, tonumber(book.book_pct), book.status,
-                        book.rating, fallback_page_count, book.page_num, pub_date, modified_date)
+                        book.rating, fallback_page_count, book.page_num, book.pub_date, book.modified_date, book.words, book.grrating, book.grvotes)
     return book
 end
 
@@ -2131,9 +2146,9 @@ function Repo.readProgress(filepath)
     local now = os.time()
     local cached = _progress_cache[filepath]
     if cached then
-        return cached.pct, cached.status, cached.rating, cached.page_count, cached.pub_date, cached.modified_date
+        return cached.pct, cached.status, cached.rating, cached.page_count, cached.pub_date, cached.modified_date, cached.words, cached.grrating, cached.grvotes
     end
-    local pct, status, rating, page_count, pub_date
+    local pct, status, rating, page_count, pub_date, modified_date, words, grrating, grvotes
     local ok_ds, ds = pcall(function() return getDocSettings():open(filepath) end)
     if ok_ds and ds then
         local ok_pct, p = pcall(ds.readSetting, ds, "percent_finished")
@@ -2166,7 +2181,7 @@ function Repo.readProgress(filepath)
         end
     end
 
--- #159: last-resort filename fallback (see pageCountFromFilename), matching
+    -- #159: last-resort filename fallback (see pageCountFromFilename), matching
     -- buildBook's progress-cache seed so the sort key / badge agree.
 
     if not page_count then
@@ -2174,7 +2189,11 @@ function Repo.readProgress(filepath)
         page_count = _calibreField(filepath, "pages")
     end
     pub_date = _calibreField(filepath, "pubdate", function(v) return v:sub(1, 4) end)
-    local modified_date = getModifiedDate(filepath)
+    modified_date = getModifiedDate(filepath)
+    words = _calibreField(filepath, "words")
+    grrating = _calibreField(filepath, "grrating")
+    grvotes = _calibreField(filepath, "grvotes")
+
     -- Normalise to bookshelf canonical status values. KOReader's End-of-book
     -- dialog and Book Status widget store 'complete' / 'abandoned' in
     -- summary.status; bookshelf's filter UI / sort engine refer to the
@@ -2195,8 +2214,8 @@ function Repo.readProgress(filepath)
         if n < 1 then n = 1 end
         page_num = n
     end
-    _writeProgressCache(filepath, pct, status, rating, page_count, page_num, pub_date, modified_date)
-    return pct, status, rating, page_count, pub_date, modified_date
+    _writeProgressCache(filepath, pct, status, rating, page_count, page_num, pub_date, modified_date, words, grrating, grvotes)
+    return pct, status, rating, page_count, pub_date, modified_date, words, grrating, grvotes
 end
 
 -- Repo.progressFor(filepath) -> pct, status, rating, page_count, opened, page_num
@@ -3412,6 +3431,9 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
         if k == "page_count"   then needs.page_count = true end
         if k == "pub_date"     then needs.pub_date    = true end
         if k == "modified_date" then needs.modified_date    = true end
+        if k == "words"        then needs.words    = true end
+        if k == "grrating"     then needs.grrating    = true end
+        if k == "grvotes"      then needs.grvotes    = true end
         -- Folder cards carry no book_count until we count their contents
         -- (issue 90: "sort folders by number of files").
         if k == "book_count"   then needs.book_count = true end
@@ -3550,7 +3572,7 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
             end
         end
     end
-    if needs.percent or needs.status or needs.rating or needs.page_count or needs.pub_date or needs.modified_date then
+    if needs.percent or needs.status or needs.rating or needs.page_count or needs.pub_date or needs.modified_date or needs.words or needs.grrating or needs.words then
         -- Route through Repo.readProgress so steady-state re-runs of this
         -- prefetch (cache TTL expired, but progress cache still warm) skip
         -- the per-file DocSettings:open() cost. readProgress also handles
@@ -3568,13 +3590,16 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
         -- actually reorders. Only written when that key is in the priority.
         for _i, e in ipairs(entries) do
             if e.attr and e.attr.mode == "file" then
-                local pct, status, rating, page_count, pub_date, modified_date = Repo.readProgress(e.fp)
+                local pct, status, rating, page_count, pub_date, modified_date, words, grrating, grvotes = Repo.readProgress(e.fp)
                 e._pct    = pct
                 e._status = status
                 if needs.rating     then e.rating     = rating     end
                 if needs.page_count then e.page_count = page_count end
                 if needs.pub_date then e.pub_date = pub_date end
                 if needs.modified_date then e.modified_date = modified_date end
+                if needs.words then e.words = words end
+                if needs.grrating then e.grrating = grrating end
+                if needs.grvotes then e.grvotes = grvotes end
             end
         end
     end
