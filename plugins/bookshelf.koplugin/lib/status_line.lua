@@ -53,11 +53,10 @@ end
 --- The status region's defaults. Must stay identical to what bookshelf renders
 --- out of the box; that is the whole point of vendoring rather than copying.
 StatusLine.DEFAULTS = {
-    template  = "\xef\x82\xa0 %disk[if:batt]  %batt_icon%batt[/if]"
-             .. "[if:light]  %light_icon%light_pct[/if]  %wifi_icon  %time_12h",
+    template  = "%time_24h %books_finished2/%books_total  TR %books_tbr RM %books_read_this_month %spacer [if:batt]  %batt_icon%batt[/if][if:light]  %light_icon%light_pct[/if]  %wifi_icon",
     font_face = nil,
     font_size = 14,
-    bold      = false,
+    bold      = true,
     uppercase = false,
     alignment = "right",
 }

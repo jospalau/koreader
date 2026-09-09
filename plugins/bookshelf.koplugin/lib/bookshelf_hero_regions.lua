@@ -180,7 +180,13 @@ function Regions.read()
     local raw = readRaw()
     local out = {}
     for _i, key in ipairs(Regions.ORDER) do
-        out[key] = resolveOne(key, raw[key])
+        if key == "status" then
+            -- HARDCODED: status ignores whatever is stored in
+            -- settings.reader.lua; it always comes from Regions.DEFAULTS.status.
+            out[key] = resolveOne(key, nil)
+        else
+            out[key] = resolveOne(key, raw[key])
+        end
     end
     _read_cache = out
     return out
