@@ -650,6 +650,7 @@ local function _calibreMetadataFor(filepath)
     return CalibreMeta.entryFor(filepath,
                                 BookshelfSettings.read("calibre_metadata"))
 end
+
 -- getModifiedDate(filepath): "YYYY-MM-DD" si el libro está marcado como
 -- terminado en _G.all_files (poblado por filemanagermenu.lua, sin coste de
 -- DocSettings:open()), o nil si no está terminado / no hay dato.
@@ -662,6 +663,22 @@ local function getModifiedDate(filepath)
         end
     end
     return string.format("%04d-%02d-%02d", 1900, 1, 1)
+end
+
+-- _calibreField(filepath, field [, transform]): valor de un campo de
+-- metadata.calibre para este libro, o nil si no existe / no hay fila para
+-- esa key. `transform` opcional (p.ej. para pub_date, que solo quiere el
+-- año). Resuelve calibre_data y key internamente a partir del filepath, así
+-- que el caller no repite ese boilerplate en cada sitio.
+local function _calibreField(filepath, field, transform)
+    local util = require("util")
+    local calibre_data = (util.loadCalibreData and util.loadCalibreData()) or {}
+    local filename = (filepath:match("([^/]+)$") or filepath):gsub("%.[^.]+$", "")
+    local key = filename .. "." .. (filepath:match("%.([^.]+)$") or "")
+    local row = calibre_data[key]
+    if not row or row[field] == nil then return nil end
+    if transform then return transform(row[field]) end
+    return row[field]
 end
 
 -- ─── buildBook ────────────────────────────────────────────────────────────────
@@ -983,18 +1000,9 @@ function Repo.buildBookMeta(filepath, opts)
     -- override (when chosen, or auto + sync) is applied later by enrichBook.
     local genres, genre_sources = genreData(filepath, cb, info)
 
-    local util = require("util")
-    local calibre_data = (util.loadCalibreData and util.loadCalibreData()) or {}
-    local key = filename .. "." .. (filepath:match("%.([^.]+)$") or "")
-    local page_count
-    --if calibre_data[key] and calibre_data[key]["pages"] then
-    --    page_count = calibre_data[key]["pages"]
-    --end
+    local page_count = _calibreField(filepath, "pages") -- or info.pages
     --page_count = page_count or info.pages
-    local pub_date
-    if calibre_data[key] and calibre_data[key]["pubdate"] then
-        pub_date = calibre_data[key]["pubdate"]:sub(1, 4)
-    end
+    local pub_date = _calibreField(filepath, "pubdate", function(v) return v:sub(1, 4) end)
     local modified_date = getModifiedDate(filepath)
 
     local book = {
@@ -1175,18 +1183,8 @@ local function _buildLightMetaFromInfo(fp, info)
         title = filename
     end
 
-    local util = require("util")
-    local calibre_data = (util.loadCalibreData and util.loadCalibreData()) or {}
-    local key = filename .. "." .. (fp:match("%.([^.]+)$") or "")
-    local page_count
-    if calibre_data[key] and calibre_data[key]["pages"] then
-        page_count = calibre_data[key]["pages"]
-    end
-    page_count = page_count or info.pages
-    local pub_date
-    if calibre_data[key] and calibre_data[key]["pubdate"] then
-        pub_date = calibre_data[key]["pubdate"]:sub(1, 4)
-    end
+    local page_count = _calibreField(fp, "pages")
+    local pub_date = _calibreField(fp, "pubdate", function(v) return v:sub(1, 4) end)
     local modified_date = getModifiedDate(fp)
 
     -- filename is also returned so callers like searchBooks can include
@@ -1397,16 +1395,8 @@ function Repo.buildBook(filepath, opts)
     -- sidecar-derived count (unopened reflowable books). ds-or-filename also
     -- seeds the progress cache below, so it must match what readProgress
     -- computes (which never sees BIM's count).
-    local util = require("util")
-    local calibre_data = (util.loadCalibreData and util.loadCalibreData()) or {}
-    local fname = filepath:match("([^/]+)$"):gsub("%.[^.]+$", "")
-    local ext   = filepath:match("%.([^.]+)$") or ""
-    local key   = fname .. "." .. ext
-    local page_count_calibre
-    if calibre_data[key] and calibre_data[key]["pages"] then
-        page_count_calibre = calibre_data[key]["pages"]
-    end
-    local fallback_page_count = ds_page_count or page_count_calibre -- pageCountFromFilename(filepath)
+    print(filepath)
+    local fallback_page_count = ds_page_count or _calibreField(filepath, "pages") -- pageCountFromFilename(filepath)
     if not book.page_count then
         book.page_count = fallback_page_count
     end
@@ -2175,23 +2165,15 @@ function Repo.readProgress(filepath)
             if ok_lp then page_num = tonumber(last_page) end
         end
     end
-    local util = require("util")
-    local calibre_data = (util.loadCalibreData and util.loadCalibreData()) or {}
-    local fname = filepath:match("([^/]+)$"):gsub("%.[^.]+$", "")
-    local ext   = filepath:match("%.([^.]+)$") or ""
-    local key   = fname .. "." .. ext
+
 -- #159: last-resort filename fallback (see pageCountFromFilename), matching
     -- buildBook's progress-cache seed so the sort key / badge agree.
 
     if not page_count then
         --page_count = pageCountFromFilename(filepath)
-        if calibre_data[key] and calibre_data[key]["pages"] then
-            page_count = calibre_data[key]["pages"]
+        page_count = _calibreField(filepath, "pages")
     end
-    end
-    if calibre_data[key] and calibre_data[key]["pubdate"] then
-        pub_date = calibre_data[key]["pubdate"]:sub(1, 4)
-    end
+    pub_date = _calibreField(filepath, "pubdate", function(v) return v:sub(1, 4) end)
     local modified_date = getModifiedDate(filepath)
     -- Normalise to bookshelf canonical status values. KOReader's End-of-book
     -- dialog and Book Status widget store 'complete' / 'abandoned' in
