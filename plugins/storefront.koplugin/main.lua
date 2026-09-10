@@ -101,6 +101,11 @@ local INCLUDE_ZERO_STAR_FORKS_KEY = "include_zero_star_forks"
 local PATCH_CACHE_TTL = 10 * 60
 local MIN_CATALOG_CHECK_INTERVAL = 300
 local DEFAULT_SORT_MODE = "stars_desc"
+local MAX_SHA1_FILE_BYTES = 20 * 1024 * 1024
+
+local _session_bg_checks_done = false
+local _catalog_retry_timer_fn = nil
+local _catalog_show_timer_fn = nil
 
 local PluginPaths = require("storefront_plugin_paths")
 local PATCHES_ROOT = DataStorage:getDataDir() .. "/patches"
@@ -271,9 +276,14 @@ local function showRestartConfirmation(message, force)
 
     local overlay
 
+    local can_restart = true
+    if Device and type(Device.canRestart) == "function" then
+        can_restart = Device:canRestart()
+    end
+
     local cancel_text = _("Restart later")
-    local ok_text = _("Restart now")
-    local btn_texts = { cancel_text, ok_text }
+    local ok_text = can_restart and _("Restart now") or _("OK")
+    local btn_texts = can_restart and { cancel_text, ok_text } or { ok_text }
 
     local btn_gap = sc(8)
     local padding_per_btn = sc(12)
@@ -355,20 +365,23 @@ local function showRestartConfirmation(message, force)
     local btn_widths = calcProportionalWidths(btn_texts, inner_w, btn_gap, btn_font_size, padding_per_btn)
     local btn_h = sc(58)
 
-    local cancel_btn = Button:new{
-        text = cancel_text,
-        text_font_size = btn_font_size,
-        text_font_bold = true,
-        bordersize = sc(1),
-        border_color = Blitbuffer.COLOR_BLACK,
-        radius = storefront_theme.radius_btn or sc(4),
-        padding = 0,
-        height = btn_h,
-        width = btn_widths[1],
-        callback = function()
-            if overlay then UIManager:close(overlay, "ui") end
-        end,
-    }
+    local cancel_btn
+    if can_restart then
+        cancel_btn = Button:new{
+            text = cancel_text,
+            text_font_size = btn_font_size,
+            text_font_bold = true,
+            bordersize = sc(1),
+            border_color = Blitbuffer.COLOR_BLACK,
+            radius = storefront_theme.radius_btn or sc(4),
+            padding = 0,
+            height = btn_h,
+            width = btn_widths[1],
+            callback = function()
+                if overlay then UIManager:close(overlay, "ui") end
+            end,
+        }
+    end
 
     local ok_btn = Button:new{
         text = ok_text,
@@ -382,22 +395,48 @@ local function showRestartConfirmation(message, force)
         radius = storefront_theme.radius_btn or sc(4),
         padding = 0,
         height = btn_h,
-        width = btn_widths[2],
+        width = can_restart and btn_widths[2] or btn_widths[1],
         callback = function()
             if overlay then UIManager:close(overlay, "ui") end
-            UIManager:restartKOReader()
+            if not can_restart then
+                return
+            end
+
+            local sf = Storefront.instance or Storefront
+            if sf then
+                if sf.closeBrowserMenu then pcall(function() sf:closeBrowserMenu() end) end
+                if sf.closeUpdatesDialog then pcall(function() sf:closeUpdatesDialog(true) end) end
+                if sf.closePatchUpdatesDialog then pcall(function() sf:closePatchUpdatesDialog(true) end) end
+            end
+
+            local Event = require("ui/event")
+            UIManager:nextTick(function()
+                if UIManager.broadcastEvent then
+                    UIManager:broadcastEvent(Event:new("Restart"))
+                elseif UIManager.restartKOReader then
+                    UIManager:restartKOReader()
+                end
+            end)
         end,
     }
     if ok_btn.label_widget then
         ok_btn.label_widget.fgcolor = Blitbuffer.COLOR_WHITE
     end
 
-    local btn_row = HorizontalGroup:new{
-        align = "center",
-        cancel_btn,
-        HorizontalSpan:new{ width = btn_gap },
-        ok_btn,
-    }
+    local btn_row
+    if can_restart then
+        btn_row = HorizontalGroup:new{
+            align = "center",
+            cancel_btn,
+            HorizontalSpan:new{ width = btn_gap },
+            ok_btn,
+        }
+    else
+        btn_row = HorizontalGroup:new{
+            align = "center",
+            ok_btn,
+        }
+    end
 
     local content_vg = VerticalGroup:new{
         align = "center",
@@ -431,10 +470,13 @@ local function showRestartConfirmation(message, force)
         table.insert(key_events.Close, { Input.group.Back })
     end
 
+    local layout = can_restart and { { cancel_btn, ok_btn } } or { { ok_btn } }
+    local selected = can_restart and { x = 2, y = 1 } or { x = 1, y = 1 }
+
     overlay = R.FocusManager:new{
         dimen = Geom:new{ w = sw, h = sh },
-        layout = { { cancel_btn, ok_btn } },
-        selected = { x = 2, y = 1 },
+        layout = layout,
+        selected = selected,
         key_events = key_events,
         CenterContainer:new{
             dimen = Geom:new{ w = sw, h = sh },
@@ -442,7 +484,9 @@ local function showRestartConfirmation(message, force)
         },
     }
 
-    cancel_btn.show_parent = overlay
+    if cancel_btn then
+        cancel_btn.show_parent = overlay
+    end
     ok_btn.show_parent     = overlay
 
     overlay.onClose = function()
@@ -604,7 +648,7 @@ function Storefront:showConfirmDialog(opts)
 end
 
 local function showFetchingProgress(message)
-    if G_storefront_batch_updating then
+    if _G.G_storefront_batch_updating then
         return {
             close = function() end
         }
@@ -700,6 +744,7 @@ local function showFetchingProgress(message)
 end
 
 function Storefront:showRestartConfirmation(message)
+    Storefront.instance = self
     return showRestartConfirmation(message, true)
 end
 
@@ -1042,6 +1087,11 @@ local function computeFileSha1(path)
     if not path or path == "" then
         return nil
     end
+    local ok_lfs2, lfs2 = pcall(require, "libs/libkoreader-lfs")
+    local fsize = ok_lfs2 and lfs2 and lfs2.attributes and lfs2.attributes(path, "size")
+    if fsize and fsize > MAX_SHA1_FILE_BYTES then
+        return nil
+    end
     local file = io.open(path, "rb")
     if not file then
         return nil
@@ -1109,6 +1159,21 @@ end
 function Storefront:togglePatchDisabled(filename, skip_prompt)
     if not filename or filename == "" then return false, "" end
     local old_path = PATCHES_ROOT .. "/" .. filename
+    if lfs.attributes(old_path, "mode") ~= "file" then
+        if filename:match("%.disabled$") then
+            local alt = filename:gsub("%.disabled$", "")
+            if lfs.attributes(PATCHES_ROOT .. "/" .. alt, "mode") == "file" then
+                filename = alt
+                old_path = PATCHES_ROOT .. "/" .. filename
+            end
+        else
+            local alt = filename .. ".disabled"
+            if lfs.attributes(PATCHES_ROOT .. "/" .. alt, "mode") == "file" then
+                filename = alt
+                old_path = PATCHES_ROOT .. "/" .. filename
+            end
+        end
+    end
     if lfs.attributes(old_path, "mode") ~= "file" then return false, "" end
 
     local new_filename
@@ -1123,12 +1188,29 @@ function Storefront:togglePatchDisabled(filename, skip_prompt)
     local ok, err = os.rename(old_path, new_path)
     if ok then
         local records = getPatchRecordsMap()
-        local rec = records[filename]
+        local rec = records[filename] or records[new_filename] or records[filename:gsub("%.disabled$", "")]
         if rec then
             InstallStore.removePatch(filename)
+            InstallStore.removePatch(new_filename)
+            InstallStore.removePatch(filename:gsub("%.disabled$", ""))
             rec.filename = new_filename
             InstallStore.upsertPatch(new_filename, rec)
+        else
+            InstallStore.bumpGeneration()
         end
+        if invalidateInstalledPatchesCache then
+            invalidateInstalledPatchesCache()
+        end
+        if self.invalidateInstalledPatchesCache then
+            self:invalidateInstalledPatchesCache()
+        end
+        if self.invalidateInstalledPluginsCache then
+            self:invalidateInstalledPluginsCache()
+        end
+        self._installed_tab_items_cache = nil
+        self._installed_lookup_cache = nil
+        self._tab_menu_items_cache = nil
+
         local is_now_disabled = not is_disabled
         if not skip_prompt then
             self:reopenBrowser(nil, function()
@@ -1158,24 +1240,29 @@ local function deleteDirectoryRecursive(path)
     if attr.mode ~= "directory" then
         return os.remove(path), "Not a directory"
     end
-    for entry in lfs.dir(path) do
-        if entry ~= "." and entry ~= ".." then
-            local full_path = path .. "/" .. entry
-            local entry_attr = lfs.attributes(full_path)
-            if entry_attr then
-                if entry_attr.mode == "directory" then
-                    local ok, err = deleteDirectoryRecursive(full_path)
-                    if not ok then
-                        return false, err
-                    end
-                else
-                    local ok, err = os.remove(full_path)
-                    if not ok then
-                        return false, err
+    local read_ok, read_err = pcall(function()
+        for entry in lfs.dir(path) do
+            if entry ~= "." and entry ~= ".." then
+                local full_path = path .. "/" .. entry
+                local entry_attr = lfs.attributes(full_path)
+                if entry_attr then
+                    if entry_attr.mode == "directory" then
+                        local ok, err = deleteDirectoryRecursive(full_path)
+                        if not ok then
+                            error(err or "Failed to delete subdirectory")
+                        end
+                    else
+                        local ok, err = os.remove(full_path)
+                        if not ok then
+                            error(err or "Failed to remove file")
+                        end
                     end
                 end
             end
         end
+    end)
+    if not read_ok then
+        return false, read_err
     end
     return lfs.rmdir(path)
 end
@@ -1446,6 +1533,13 @@ local function invalidateInstalledPluginsCache()
     if ok_fm and font_mgr and type(font_mgr.invalidateInstalledFontsCache) == "function" then
         font_mgr.invalidateInstalledFontsCache()
     end
+    local ok_pm, patch_mgr = pcall(require, "storefront_patch_mgr")
+    if ok_pm and patch_mgr and type(patch_mgr.invalidateInstalledPatchesCache) == "function" then
+        patch_mgr.invalidateInstalledPatchesCache()
+    end
+    if Storefront and type(Storefront.invalidateInstalledPatchesCache) == "function" then
+        pcall(Storefront.invalidateInstalledPatchesCache, Storefront)
+    end
 end
 
 function Storefront:invalidateInstalledPluginsCache()
@@ -1605,10 +1699,36 @@ function Storefront:sanitizeRemoteInfo()
     end
 end
 
+local function isPreReleaseAllowedForPlugin(repo, record, dirname)
+    local keys = {}
+    if repo then
+        if repo.name then table.insert(keys, repo.name) end
+        if repo.full_name then table.insert(keys, repo.full_name) end
+    end
+    if record then
+        if record.repo then table.insert(keys, record.repo) end
+        if record.repo_full_name then table.insert(keys, record.repo_full_name) end
+        if record.dirname then table.insert(keys, record.dirname) end
+    end
+    if dirname then table.insert(keys, dirname) end
+    for _, key in ipairs(keys) do
+        if InstallStore.isPreReleaseAllowed(key) then
+            return true
+        end
+    end
+    return false
+end
+
+function Storefront:isPreReleaseAllowedForPlugin(repo, record, dirname)
+    return isPreReleaseAllowedForPlugin(repo, record, dirname)
+end
+
 function Storefront:populateRemoteInfoFromCatalog()
     self:ensureUpdatesState()
-    local installed = listInstalledPlugins()
-    local records = InstallStore.getRecords()
+    local installed = (self.listInstalledPlugins and self:listInstalledPlugins()) or listInstalledPlugins()
+    local records = (InstallStore.list and InstallStore.list())
+        or (InstallStore.getRecords and InstallStore.getRecords())
+        or {}
     local remote_info = self.updates_state.remote_info or {}
     local updated_count = 0
 
@@ -1623,7 +1743,26 @@ function Storefront:populateRemoteInfoFromCatalog()
                 cached_repo = Cache.getRepoByName(record.owner, record.repo)
             end
             if cached_repo then
+                local is_storefront = plugin.dirname == "storefront.koplugin"
+                    or (record.repo and record.repo:lower():match("storefront%.koplugin"))
+                local allow_beta = false
+                if is_storefront then
+                    local ok_ab, about_dialog = pcall(require, "storefront_about_dialog")
+                    if ok_ab and about_dialog and type(about_dialog.getChannel) == "function" then
+                        allow_beta = about_dialog.getChannel() == "beta"
+                    end
+                end
+                local allow_prerelease = allow_beta or isPreReleaseAllowedForPlugin(cached_repo, record, plugin.dirname)
                 local cat_rel = cached_repo.latest_release or (cached_repo.data and cached_repo.data.latest_release)
+                local pre_rel = cached_repo.latest_prerelease or (cached_repo.data and cached_repo.data.latest_prerelease)
+                if allow_prerelease and pre_rel and pre_rel.tag_name then
+                    local pre_ts = pre_rel.published_at and parseGitHubTimestamp(pre_rel.published_at) or 0
+                    local stable_ts = cat_rel and cat_rel.published_at and parseGitHubTimestamp(cat_rel.published_at) or 0
+                    local pre_newer = cat_rel and cat_rel.tag_name and isVersionNewer(pre_rel.tag_name, cat_rel.tag_name)
+                    if pre_newer or pre_ts >= stable_ts or not cat_rel then
+                        cat_rel = pre_rel
+                    end
+                end
                 local cat_tag = (cat_rel and cat_rel.tag_name)
                     or cached_repo.version
                     or (cached_repo.data and (cached_repo.data.version or cached_repo.data.tag_name or cached_repo.data.latest_version))
@@ -1790,29 +1929,7 @@ function Storefront:getPatchUpdatesSummaryText(summary)
     return table.concat(parts, " • ")
 end
 
-local function isPreReleaseAllowedForPlugin(repo, record, dirname)
-    local keys = {}
-    if repo then
-        if repo.name then table.insert(keys, repo.name) end
-        if repo.full_name then table.insert(keys, repo.full_name) end
-    end
-    if record then
-        if record.repo then table.insert(keys, record.repo) end
-        if record.repo_full_name then table.insert(keys, record.repo_full_name) end
-        if record.dirname then table.insert(keys, record.dirname) end
-    end
-    if dirname then table.insert(keys, dirname) end
-    for _, key in ipairs(keys) do
-        if InstallStore.isPreReleaseAllowed(key) then
-            return true
-        end
-    end
-    return false
-end
 
-function Storefront:isPreReleaseAllowedForPlugin(repo, record, dirname)
-    return isPreReleaseAllowedForPlugin(repo, record, dirname)
-end
 
 function Storefront:collectUpdateSummary()
     self:ensureUpdatesState()
@@ -1913,8 +2030,27 @@ function Storefront:collectUpdateSummary()
                 cached_repo = Cache.getRepoByName(record.owner, record.repo)
             end
             if cached_repo then
-                -- Pull release tag from catalog: prefer top-level latest_release, then data.latest_release, then version fields
+                local is_storefront = plugin.dirname == "storefront.koplugin"
+                    or (record.repo and record.repo:lower():match("storefront%.koplugin"))
+                local allow_beta = false
+                if is_storefront then
+                    local ok_ab, about_dialog = pcall(require, "storefront_about_dialog")
+                    if ok_ab and about_dialog and type(about_dialog.getChannel) == "function" then
+                        allow_beta = about_dialog.getChannel() == "beta"
+                    end
+                end
+                local allow_pre_for_plugin = allow_beta or isPreReleaseAllowedForPlugin(cached_repo, record, plugin.dirname)
+                -- Pull release tag from catalog: prefer top-level latest_release / latest_prerelease, then data, then version fields
                 local cat_rel = cached_repo.latest_release or (cached_repo.data and cached_repo.data.latest_release)
+                local pre_rel = cached_repo.latest_prerelease or (cached_repo.data and cached_repo.data.latest_prerelease)
+                if allow_pre_for_plugin and pre_rel and pre_rel.tag_name then
+                    local pre_ts = pre_rel.published_at and parseGitHubTimestamp(pre_rel.published_at) or 0
+                    local stable_ts = cat_rel and cat_rel.published_at and parseGitHubTimestamp(cat_rel.published_at) or 0
+                    local pre_newer = cat_rel and cat_rel.tag_name and isVersionNewer(pre_rel.tag_name, cat_rel.tag_name)
+                    if pre_newer or pre_ts >= stable_ts or not cat_rel then
+                        cat_rel = pre_rel
+                    end
+                end
                 local cat_tag = (cat_rel and cat_rel.tag_name)
                     or cached_repo.version
                     or (cached_repo.data and (cached_repo.data.version or cached_repo.data.tag_name or cached_repo.data.latest_version))
@@ -1929,7 +2065,6 @@ function Storefront:collectUpdateSummary()
                     -- unless the plugin explicitly allows prereleases.
                     local existing_tag = remote and remote.release_tag_name
                     local cat_is_prerelease = isPreReleaseTag(cat_tag)
-                    local allow_pre_for_plugin = isPreReleaseAllowedForPlugin(nil, record, plugin.dirname)
                     local catalog_tag_is_usable = not cat_is_prerelease or allow_pre_for_plugin
 
                     local should_use_catalog = catalog_tag_is_usable and (
@@ -2974,13 +3109,6 @@ end
 
 function Storefront:_scanUpdatesForDirectApi(tracked)
     NetworkMgr:runWhenOnline(function()
-        local CatalogClient = require("storefront_net_catalog")
-        CatalogClient.fetchAndUpdateCacheAsync(nil, function(ok, err)
-            if ok then
-                self:softRefreshCurrentBrowserView()
-            end
-        end)
-
         local Trapper = require("ui/trapper")
         local ltn12 = require("ltn12")
         local GitHub = require("storefront_net_github")
@@ -3824,10 +3952,12 @@ function Storefront:promptUpdateAction(plugin, record)
             callback = function()
                 UIManager:close(info_box)
                 self:enablePlugin(plugin.dirname)
-                showRestartConfirmation(string.format(_("Plugin '%s' enabled."), plugin.name or plugin.dirname))
                 if self.updates_menu then
                     self:updateUpdatesDialog()
                 end
+                self:refreshCurrentBrowserTab(function()
+                    showRestartConfirmation(string.format(_("Plugin '%s' enabled."), plugin.name or plugin.dirname))
+                end)
             end,
         })
     else
@@ -3837,10 +3967,12 @@ function Storefront:promptUpdateAction(plugin, record)
             callback = function()
                 UIManager:close(info_box)
                 self:disablePlugin(plugin.dirname)
-                showRestartConfirmation(string.format(_("Plugin '%s' disabled."), plugin.name or plugin.dirname))
                 if self.updates_menu then
                     self:updateUpdatesDialog()
                 end
+                self:refreshCurrentBrowserTab(function()
+                    showRestartConfirmation(string.format(_("Plugin '%s' disabled."), plugin.name or plugin.dirname))
+                end)
             end,
         })
     end
@@ -3981,10 +4113,12 @@ function Storefront:promptPatchUpdateAction(patch_item)
                 UIManager:close(info_box)
                 local ok = self:enablePatch(patch.filename)
                 if ok then
-                    showRestartConfirmation(string.format(_("Patch '%s' enabled."), patch.filename))
                     if self.patch_updates_menu then
                         self:updatePatchUpdatesDialog()
                     end
+                    self:refreshCurrentBrowserTab(function()
+                        showRestartConfirmation(string.format(_("Patch '%s' enabled."), patch.filename))
+                    end)
                 else
                     UIManager:show(InfoMessage:new{
                         text = string.format(_("Failed to enable patch '%s'."), patch.filename),
@@ -4001,10 +4135,12 @@ function Storefront:promptPatchUpdateAction(patch_item)
                 UIManager:close(info_box)
                 local ok = self:disablePatch(patch.filename)
                 if ok then
-                    showRestartConfirmation(string.format(_("Patch '%s' disabled."), patch.filename))
                     if self.patch_updates_menu then
                         self:updatePatchUpdatesDialog()
                     end
+                    self:refreshCurrentBrowserTab(function()
+                        showRestartConfirmation(string.format(_("Patch '%s' disabled."), patch.filename))
+                    end)
                 else
                     UIManager:show(InfoMessage:new{
                         text = string.format(_("Failed to disable patch '%s'."), patch.filename),
@@ -8127,6 +8263,14 @@ function Storefront:dismissProgressMessage(target)
 end
 
 function Storefront:closeBrowserMenu()
+    if _catalog_show_timer_fn then
+        UIManager:unschedule(_catalog_show_timer_fn)
+        _catalog_show_timer_fn = nil
+    end
+    if _catalog_retry_timer_fn then
+        UIManager:unschedule(_catalog_retry_timer_fn)
+        _catalog_retry_timer_fn = nil
+    end
     self:dismissProgressMessage()
     if self.browser_menu then
         UIManager:close(self.browser_menu)
@@ -8289,10 +8433,14 @@ end
 -- On other tabs, falls back to softRefreshCurrentBrowserView — just
 -- marking the frame dirty is sufficient because catalog-tab content
 -- is rebuilt from the cache which is already invalidated.
-function Storefront:refreshCurrentBrowserTab()
+function Storefront:refreshCurrentBrowserTab(callback)
     self:softRefreshCurrentBrowserView()
-    self._browser_refresh_mode_hint = "partial"
-    self:reopenBrowser()
+    if self.browser_menu then
+        self._browser_refresh_mode_hint = "partial"
+        self:reopenBrowser(nil, callback)
+    elseif callback then
+        UIManager:nextTick(callback)
+    end
 end
 
 function Storefront:maybeCheckCatalogBackground()
@@ -8371,8 +8519,8 @@ function Storefront:showBrowser(kind)
     local current_tab = self.browser_state.tab or "Plugins"
     
     -- Schedule deferred update and catalog background checks ONCE per session on launch (zero launch delay)
-    if not self._session_bg_checks_done then
-        self._session_bg_checks_done = true
+    if not _session_bg_checks_done then
+        _session_bg_checks_done = true
         UIManager:nextTick(function()
             pcall(function() self:syncPendingFontDownloads() end)
             pcall(function() self:maybeAutoCheckUpdates() end)
@@ -8380,9 +8528,14 @@ function Storefront:showBrowser(kind)
 
         local now = os.time()
         if not self._last_catalog_check_time or (now - self._last_catalog_check_time) >= MIN_CATALOG_CHECK_INTERVAL then
-            UIManager:scheduleIn(1.5, function()
+            if _catalog_show_timer_fn then
+                UIManager:unschedule(_catalog_show_timer_fn)
+            end
+            _catalog_show_timer_fn = function()
+                _catalog_show_timer_fn = nil
                 pcall(function() self:maybeCheckCatalogBackground() end)
-            end)
+            end
+            UIManager:scheduleIn(1.5, _catalog_show_timer_fn)
         end
     end
 
@@ -9891,8 +10044,8 @@ function Storefront:init()
         StorefrontSettings:flush()
     end
 
-    if not G_session_init_done then
-        G_session_init_done = true
+    if not _G.G_session_init_done then
+        _G.G_session_init_done = true
 
         -- Cleanup legacy test files from plugin directory if updating from an older version
         local plugin_dir = self.path or (PluginPaths.getDefaultPluginsRoot() .. "/storefront.koplugin")
@@ -10065,7 +10218,11 @@ function Storefront:init()
                     if Storefront.instance and not Storefront.instance._init_catalog_retried then
                         Storefront.instance._init_catalog_retried = true
                         local UIManager = require("ui/uimanager")
-                        UIManager:scheduleIn(60, function()
+                        if _catalog_retry_timer_fn then
+                            UIManager:unschedule(_catalog_retry_timer_fn)
+                        end
+                        _catalog_retry_timer_fn = function()
+                            _catalog_retry_timer_fn = nil
                             logger.info("Storefront init: retrying background catalog update after delay...")
                             if StorefrontLogger then StorefrontLogger.info("Storefront init: retrying background catalog update after delay...") end
                             CatalogClient.fetchAndUpdateCacheAsync(nil, function(retry_ok, retry_err)
@@ -10083,7 +10240,8 @@ function Storefront:init()
                                     end
                                 end
                             end)
-                        end)
+                        end
+                        UIManager:scheduleIn(60, _catalog_retry_timer_fn)
                     end
                 end
             end)

@@ -296,7 +296,9 @@ function storefront_utils.calcDynamicFontSize(text, max_width, face_name, max_fo
     return min_font_size
 end
 
-function storefront_utils.calcGroupFontSize(texts, total_avail_width, gap, face_name, padding_per_item, max_font_size, min_font_size)
+function storefront_utils.calcGroupFontSize(
+    texts, total_avail_width, gap, face_name, padding_per_item, max_font_size, min_font_size
+)
     face_name = face_name or "cfont"
     local Device = require("device")
     local Font = require("ui/font")
@@ -315,8 +317,8 @@ function storefront_utils.calcGroupFontSize(texts, total_avail_width, gap, face_
         local total_w = gaps_total
         for _, text in ipairs(texts) do
             local tw = TextWidget:new{ text = text, face = face, bold = true }
-            local sz = tw.getSize and tw:getSize()
-            local tw_w = (sz and sz.w) or (#text * 8)
+            local tw_sz = tw.getSize and tw:getSize()
+            local tw_w = (tw_sz and tw_sz.w) or (#text * 8)
             total_w = total_w + tw_w + padding_per_item
         end
         if total_w <= total_avail_width then
@@ -394,8 +396,15 @@ function storefront_utils.createButton(opts)
     local initial_font_size = opts.text_font_size or 18
     local chosen_font_size = initial_font_size
 
+    local pad_h = opts.padding_h or opts.padding
+    local pad_v = opts.padding_v or opts.padding
+    if not pad_h and not pad_v and not btn_w then
+        pad_h = sc(12)
+        pad_v = sc(6)
+    end
+
     if btn_w and opts.text and opts.text ~= "" then
-        local max_text_w = math.max(10, btn_w - sc(16))
+        local max_text_w = math.max(10, btn_w - (pad_h and (2 * pad_h) or sc(16)))
         for sz = initial_font_size, 10, -1 do
             local test_face = Font:getFace(face_name, sz)
             local tw = TextWidget:new{
@@ -419,7 +428,9 @@ function storefront_utils.createButton(opts)
         text_font_bold = (opts.bold ~= false),
         bordersize = border_size,
         border_color = border_color,
-        padding = 0,
+        padding = opts.padding or (btn_w and 0 or nil),
+        padding_h = pad_h,
+        padding_v = pad_v,
         radius = radius,
         width = btn_w,
         height = btn_h,
@@ -453,7 +464,6 @@ function storefront_utils.showConfirmDialog(opts)
     local UIManager = require("ui/uimanager")
     local TextBoxWidget = require("ui/widget/textboxwidget")
     local FrameContainer = require("ui/widget/container/framecontainer")
-    local InputContainer = require("ui/widget/container/inputcontainer")
     local HorizontalGroup = require("ui/widget/horizontalgroup")
     local HorizontalSpan = require("ui/widget/horizontalspan")
     local VerticalGroup = require("ui/widget/verticalgroup")
@@ -478,7 +488,9 @@ function storefront_utils.showConfirmDialog(opts)
     local overlay
 
     local title_text = opts.title or _("Confirm")
-    local dynamic_title_size = storefront_utils.calcDynamicFontSize(title_text, inner_w, "NotoSerif-Regular.ttf", title_font_size, 12, true)
+    local dynamic_title_size = storefront_utils.calcDynamicFontSize(
+        title_text, inner_w, "NotoSerif-Regular.ttf", title_font_size, 12, true
+    )
     local title_label = TextBoxWidget:new{
         text = title_text,
         face = Font:getFace("NotoSerif-Regular.ttf", dynamic_title_size),
@@ -505,8 +517,12 @@ function storefront_utils.showConfirmDialog(opts)
     local btn_gap = sc(12)
     local cancel_text = opts.cancel_text or _("Cancel")
     local ok_text = opts.ok_text or _("OK")
-    local btn_font_size = storefront_utils.calcGroupFontSize({ cancel_text, ok_text }, inner_w, btn_gap, "cfont", sc(16), 18, 10)
-    local btn_widths = storefront_utils.calcProportionalBtnWidths({ cancel_text, ok_text }, inner_w, btn_gap, btn_font_size, "cfont")
+    local btn_font_size = storefront_utils.calcGroupFontSize(
+        { cancel_text, ok_text }, inner_w, btn_gap, "cfont", sc(16), 18, 10
+    )
+    local btn_widths = storefront_utils.calcProportionalBtnWidths(
+        { cancel_text, ok_text }, inner_w, btn_gap, btn_font_size, "cfont"
+    )
 
     local FocusManager = require("ui/widget/focusmanager")
 

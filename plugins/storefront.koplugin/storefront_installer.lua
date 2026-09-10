@@ -152,7 +152,11 @@ local function downloadToFile(url, local_path)
         local in_f = io.open(temp_path, "rb")
         local out_f = io.open(local_path, "wb")
         if in_f and out_f then
-            out_f:write(in_f:read("*all"))
+            while true do
+                local chunk = in_f:read(16384)
+                if not chunk then break end
+                out_f:write(chunk)
+            end
             in_f:close()
             out_f:close()
             pcall(os.remove, temp_path)
@@ -691,12 +695,21 @@ function M:init(Storefront)
                         Cache.getRepo("plugin", repo.full_name or repo.name)
                         or (repo.owner and repo.name and Cache.getRepo("plugin", repo.owner .. "/" .. repo.name))
                     )
-                    local catalog_release = (catalog_mode == "static" and not allow_prerelease) and (
-                        (repo and repo.latest_release)
-                        or (repo and repo.data and repo.data.latest_release)
-                        or (catalog_repo and catalog_repo.latest_release)
-                        or (catalog_repo and catalog_repo.data and catalog_repo.data.latest_release)
-                    ) or nil
+                    local catalog_release = nil
+                    if catalog_mode == "static" then
+                        if allow_prerelease then
+                            catalog_release = (repo and repo.latest_prerelease)
+                                or (repo and repo.data and repo.data.latest_prerelease)
+                                or (catalog_repo and catalog_repo.latest_prerelease)
+                                or (catalog_repo and catalog_repo.data and catalog_repo.data.latest_prerelease)
+                        end
+                        if not catalog_release then
+                            catalog_release = (repo and repo.latest_release)
+                                or (repo and repo.data and repo.data.latest_release)
+                                or (catalog_repo and catalog_repo.latest_release)
+                                or (catalog_repo and catalog_repo.data and catalog_repo.data.latest_release)
+                        end
+                    end
 
                     local has_catalog_assets = catalog_release and type(catalog_release) == "table"
                         and catalog_release.assets and type(catalog_release.assets) == "table" and #catalog_release.assets > 0

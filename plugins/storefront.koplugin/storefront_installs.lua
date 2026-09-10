@@ -104,10 +104,16 @@ end
 function InstallStore.list()
     return readStore().plugins
 end
+InstallStore.getRecords = InstallStore.list
 
 -- Monotonic counter bumped on every write, so callers can cache data derived
 -- from the store (e.g. an installed-repo lookup) and know when to rebuild it.
 function InstallStore.getGeneration()
+    return generation
+end
+
+function InstallStore.bumpGeneration()
+    generation = generation + 1
     return generation
 end
 
@@ -214,6 +220,7 @@ function InstallStore.remove(plugin_id)
     end
     local data = readStore()
     if data.plugins[plugin_id] == nil then
+        InstallStore.bumpGeneration()
         return true
     end
     data.plugins[plugin_id] = nil
@@ -226,6 +233,7 @@ function InstallStore.removePatch(filename)
     end
     local data = readStore()
     if data.patches[filename] == nil then
+        InstallStore.bumpGeneration()
         return true
     end
     data.patches[filename] = nil
