@@ -115,8 +115,12 @@ function ReadingHoursWindow:init()
 		local ok, pre_result = pcall(conn.exec, conn, sql_stmt)
 		conn:close()
 
-		if not ok or not pre_result or not pre_result.date then
+		if not ok then
 			return nil, "Failed to query statistics database"
+		end
+
+		if not pre_result or not pre_result.date or #pre_result.date == 0 then
+			return nil, "No reading over the last 30 days"
 		end
 
 		local lookup = {}
@@ -318,7 +322,16 @@ function ReadingHoursWindow:init()
 	local content, error_msg = buildWindow()
 
 	if not content then
-		UIManager:show(InfoMessage:new({ text = _(error_msg or "Unknown error") }))
+		self[1] = FrameContainer:new({
+			background = Blitbuffer.COLOR_WHITE,
+			TextWidget:new({ text = "", face = Font:getFace("cfont", 1) }),
+		})
+
+		UIManager:nextTick(function()
+			UIManager:close(self)
+			UIManager:show(InfoMessage:new({ text = _(error_msg or "Unknown error") }))
+		end)
+
 		return
 	end
 
