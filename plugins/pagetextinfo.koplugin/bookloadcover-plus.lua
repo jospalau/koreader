@@ -843,6 +843,8 @@ local function makeCoverImageWidget(cover_bb)
 	})
 end
 
+local Device = require("device")
+
 local function showCover(filepath, options)
 	if not filepath or filepath == "" then
 		return false
@@ -861,6 +863,10 @@ local function showCover(filepath, options)
 	end
 
 	local cover_widget = makeCoverImageWidget(cover_bb)
+
+	if Device:isKobo() and Device:info() == "Kobo_io" then
+		require("ffi/util").usleep(250 * 1000)
+	end
 
 	local ok, err = pcall(function()
 		UIManager:show(cover_widget, "full")
