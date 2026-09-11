@@ -212,6 +212,10 @@ local function _probe(rui)
     local shelf_topmost = _parked_plugin and top == _parked_plugin._widget
     if idle >= IDLE_FINISH_S and shelf_topmost then
         _finishCore("idle")
+        local InfoMessage = require("ui/widget/infomessage")
+        UIManager:show(InfoMessage:new{
+            text = "Reading session ended due to inactivity",
+        })
         return
     end
     _pending_probe = function() _probe(rui) end
