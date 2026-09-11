@@ -3902,17 +3902,23 @@ end
         else
             text = "Book finished" .. text
         end
+        if Device:isKobo() and Device:info() == "Kobo_io" then
+            require("ffi/util").usleep(400 * 1000)
+            local Screen = require("device").screen
+            Screen:refreshFull(0, 0, Screen:getWidth(), Screen:getHeight())
+        end
         UIManager:show(MultiConfirmBox:new{
             text = text,
             choice1_text = _("Yes"),
             choice1_callback = function()
-                UIManager:setDirty(self, "full")
+                -- UIManager:setDirty(self, "full")
                 UIManager:nextTick(proceed)
             end,
             choice2_text = _("Do not open it"),
             choice2_callback = function() end,
             cancel_callback = function() end,
-        }, "full")
+        }, (Device:isKobo() and Device:info() == "Kobo_io") and "partial" or "full")
+
         return
     end
 
