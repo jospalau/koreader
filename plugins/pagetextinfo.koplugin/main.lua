@@ -4160,6 +4160,7 @@ function PageTextInfo:onSyncBooks()
                         require("readhistory"):reload(true)
                         util.generateStats()
                         require("apps/filemanager/filemanager").instance.file_chooser:refreshPath()
+                        UIManager:broadcastEvent(Event:new("BookMetadataChanged"))
                     end
                 end,
             })
