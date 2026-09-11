@@ -210,14 +210,21 @@ SortEngine.effectivePercent = effective_percent
 -- would make the answer depend on the order the members happen to be in.
 -- First-seen wins a tie, so the result is stable rather than pairs()-dependent.
 --
--- Author cards are unaffected in practice: every member shares the author the
--- card is named after, so the modal IS that author -- and reading it from
--- metadata is sturdier than parsing the display label. Genre and collection
--- cards change from "the genre name parsed as a surname" to "the modal author
--- of its books", which is a different arbitrary answer to a question that has
+-- Author cards do NOT take this path: a member's `author` field is the
+-- book's FIRST author, so on a co-authored book the modal member author is
+-- the wrong person for every card but the first author's (the second
+-- author's card sorted under the first author's surname, right beside it).
+-- Author shapes therefore carry the card's own name as `author`, which the
+-- fallback chain prefers over this function. Genre and collection cards
+-- change from "the genre name parsed as a surname" to "the modal author of
+-- its books", which is a different arbitrary answer to a question that has
 -- no meaningful one; neither orders genres usefully.
 local function groupAuthor(b)
-    local books = b.books
+    -- BOTH member field names. A live group carries `books`; the SERIES shape
+    -- that is cached and handed to the comparator carries `books_meta`, which
+    -- is a different rebuild of the same list. Reading only `books` meant this
+    -- returned nil for exactly the shelf the issue was about.
+    local books = b.books or b.books_meta
     if type(books) ~= "table" or #books == 0 then return nil end
     local counts, order = {}, {}
     for i = 1, #books do

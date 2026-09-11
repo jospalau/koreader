@@ -228,11 +228,27 @@ local function _customMetaPossible(filepath)
     return false
 end
 
--- The KOReader custom Keywords override (.sdr custom_props.keywords) for a book,
--- or nil when none is set. An explicit empty string is preserved (the user
--- cleared the keywords) so the embedded source reads as "no genres", not a
--- fall-back to the file's own keywords.
-local function _customKeywords(filepath)
+-- KOReader's custom metadata for a book (.sdr custom_metadata.lua's
+-- custom_props table), or nil when the book has none.
+--
+-- KOReader lets any of title / authors / series / series_index / language /
+-- keywords / description be overwritten per book from Book information, and
+-- marks each overwritten field with a pencil. Every stock view shows those
+-- values: extendProps merges custom_props over the document's own props, and
+-- BIM stores the merged result at extraction time. Plugins that import
+-- metadata KOReader cannot read itself (a ComicInfo importer for CBZ files,
+-- issue #381) write here too, which is the whole reason the mechanism exists.
+--
+-- This is the most explicit statement of what a book is that we have, so it
+-- outranks both Calibre and BIM in _resolveTextMeta below. Only `keywords`
+-- was read before, which left the shelf as the one place in KOReader still
+-- showing a title the user had already corrected everywhere else.
+--
+-- Values are non-empty strings: KOReader's editor refuses an empty one and
+-- removes the key instead. `keywords` is the exception -- our own genre
+-- editor writes "" to mean "cleared" -- so that field keeps nil-vs-empty
+-- semantics and the others test for a non-empty string.
+local function _customPropsFor(filepath)
     if not filepath then return nil end
     local ok, DocSettings = pcall(require, "docsettings")
     if not (ok and DocSettings and DocSettings.findCustomMetadataFile) then return nil end
@@ -268,8 +284,14 @@ local function _customKeywords(filepath)
     local ok2, cp = pcall(function()
         return DocSettings.openSettingsFile(cmf):readSetting("custom_props")
     end)
-    if ok2 and type(cp) == "table" and cp.keywords ~= nil then return cp.keywords end
+    if ok2 and type(cp) == "table" then return cp end
     return nil
+end
+
+-- A custom prop that is worth using: KOReader stores non-empty strings only.
+local function _cpText(cp, key)
+    local v = cp and cp[key]
+    return (type(v) == "string" and v ~= "") and v or nil
 end
 
 -- Per-source genre lists (each nil when that source has none for this book).
@@ -277,8 +299,11 @@ local function _calibreGenres(cb)
     if cb and type(cb.tags) == "table" and #cb.tags > 0 then return splitGenreTags(cb.tags) end
     return nil
 end
-local function _embeddedGenres(filepath, info)
-    local kw = _customKeywords(filepath)
+local function _embeddedGenres(filepath, info, cp)
+    -- nil vs "" matters here (see _customPropsFor): "" is the user clearing
+    -- the keywords, which must read as "no genres" rather than falling back
+    -- to the file's own.
+    local kw = cp and cp.keywords
     if kw == nil then kw = info and info.keywords end
     if kw and kw ~= "" then return splitGenreTags(kw) end
     return nil
@@ -290,15 +315,95 @@ end
 -- Hardcover.enrichBook then overrides (and stamps sources.hardcover). No
 -- preference = auto priority calibre > embedded (the previous behaviour).
 -- Returns: resolved_list, sources_table { calibre=, embedded= }.
-local function genreData(filepath, cb, info)
+local function genreData(filepath, cb, info, cp)
     local calibre  = _calibreGenres(cb)
-    local embedded = _embeddedGenres(filepath, info)
+    local embedded = _embeddedGenres(filepath, info, cp)
     local pref = BookshelfSettings.genreSource and BookshelfSettings.genreSource(filepath)
     local resolved
     if pref == "calibre"  and calibre  then resolved = calibre
     elseif pref == "embedded" and embedded then resolved = embedded
     else resolved = calibre or embedded end
     return resolved, { calibre = calibre, embedded = embedded }
+end
+
+-- ─── textual metadata resolution ─────────────────────────────────────────────
+-- One place where a book's title / authors / series / language are decided,
+-- for BOTH record builders (buildBookMeta and _buildLightMetaFromInfo). They
+-- carried a copy of this chain each, and a copy that drifts is exactly how the
+-- shelf and the chips built from it end up disagreeing about the same book.
+--
+-- Priority: KOReader custom metadata > Calibre > BIM > filename.
+--
+--   * custom metadata is the user (or a plugin acting for them) saying what
+--     this book IS -- the only source here that is a statement rather than an
+--     extraction, and the one every other KOReader view already shows.
+--   * Calibre next, when the beta is on: a curated library beats what
+--     crengine could scrape out of the file.
+--   * BIM, then the filename, unchanged.
+--
+-- Returns a table so callers can pick what they need; every field may be nil
+-- except title, which always resolves (filename last).
+local function _resolveTextMeta(filepath, cb, info, cp)
+    info = info or {}
+    local out = {}
+
+    -- Series. BIM stores it as "<name> #<n>" with series_index alongside;
+    -- Calibre and KOReader's editor both store a bare name plus an index.
+    local cp_series = _cpText(cp, "series")
+    local cb_series = cb and type(cb.series) == "string" and cb.series ~= "" and cb.series
+    if cp_series then
+        out.series_name = cp_series
+    elseif cb_series then
+        out.series_name = cb_series
+    elseif info.series then
+        -- Guard empty / whitespace / name-less ("#3") embedded series: the
+        -- Calibre branch above already drops cb.series == "", so mirror it
+        -- here. Without this an empty series_name bucketed the book into a
+        -- junk single-book series stack even though KOReader's book info
+        -- shows the series as N/A (issue #127, non-Calibre libraries).
+        local sname = info.series:gsub(" #%d+$", "")
+        sname = sname:match("^%s*(.-)%s*$")  -- trim
+        if sname ~= "" then out.series_name = sname end
+        out.series_num = info.series:match(" #(%d+)$")
+    end
+    -- The number is resolved independently of the name: a custom or Calibre
+    -- name with BIM still holding the only index is a real combination.
+    local cp_index = _cpText(cp, "series_index")
+    if cp_index then
+        out.series_num = cp_index
+    elseif cb and type(cb.series_index) == "number" then
+        out.series_num = tostring(cb.series_index)
+    elseif info.series_index then
+        out.series_num = tostring(info.series_index)
+    elseif info.series and not out.series_num then
+        out.series_num = info.series:match(" #(%d+)$")
+    end
+
+    -- Authors. Custom and BIM store one string (newline-separated for
+    -- several); Calibre stores an array.
+    local cp_authors = _cpText(cp, "authors")
+    if cp_authors then
+        out.authors = splitAuthors(cp_authors, filepath)
+    elseif cb and type(cb.authors) == "table" and #cb.authors > 0 then
+        out.authors = {}
+        for _i, name in ipairs(cb.authors) do
+            out.authors[#out.authors + 1] = name
+        end
+    else
+        out.authors = splitAuthors(info.authors, filepath)
+    end
+
+    out.filename = (filepath:match("([^/]+)$") or filepath):gsub("%.[^.]+$", "")
+    out.title = _cpText(cp, "title")
+                 or (cb and type(cb.title) == "string" and cb.title ~= "" and cb.title)
+                 or (info.title and info.title ~= "" and info.title)
+                 or out.filename
+
+    out.lang = _cpText(cp, "language")
+                or (cb and type(cb.languages) == "table" and cb.languages[1])
+                or info.language
+
+    return out
 end
 
 -- Write an edit of the embedded genres to KOReader's custom Keywords override
@@ -440,6 +545,84 @@ local function getBookInfoMgr()
     local ok, mod = pcall(require, "bookinfomanager")
     _bim_cache = (ok and mod) or false
     return _bim_cache or nil
+end
+
+-- ─── BIM handle recovery ─────────────────────────────────────────────────────
+-- BookInfoManager:openDbConnection() is not atomic: it assigns self.db_conn
+-- and only THEN prepares the three statements it caches. When one of those
+-- prepares throws -- SQLite cannot grow its WAL on a full volume, and a PW5
+-- with 0 bytes free on /mnt/us raises "disk I/O error" right there -- db_conn
+-- is left SET while get_stmt still points at the previous connection's
+-- (already closed) statement. Every getBookInfo after that takes the early
+-- return in openDbConnection and binds the dead statement:
+-- "ljsqlite3[misuse] object is closed", once per book, for the rest of the
+-- session. Measured on a device: one transient I/O error, then 247 failures.
+--
+-- What the user sees is not an error but missing art: covers already in our
+-- own cache keep painting, so the shelf looks healthy, and only the paths
+-- that need a FRESH decode come back empty -- the hero above all. That is
+-- the "books with covers on the shelf that show no cover in the hero"
+-- report this exists for.
+--
+-- closeDbConnection() nils db_conn, so the next call re-opens and re-prepares
+-- from scratch. One reset per cooldown window: when the volume really is
+-- full the reopen fails again, and resetting per book would turn a broken
+-- database into a reset storm on the slowest devices we run on.
+local BIM_RESET_COOLDOWN_S = 5
+local _bim_reset_at
+local _bim_fail_logged_at
+
+local function _resetBimConnection(bim)
+    if not bim or type(bim.closeDbConnection) ~= "function" then return false end
+    local now = os.time()
+    if _bim_reset_at and (now - _bim_reset_at) < BIM_RESET_COOLDOWN_S then
+        return false
+    end
+    _bim_reset_at = now
+    local ok = pcall(function() bim:closeDbConnection() end)
+    if not ok then
+        -- ljsqlite3's close() raises on an already-closed handle, and
+        -- closeDbConnection only nils db_conn once close() has returned.
+        -- Clear it here too, or openDbConnection keeps taking its early
+        -- return and the session never recovers. The three cached statements
+        -- are deliberately left alone: openDbConnection overwrites all of
+        -- them, and a nil there would crash BIM's own unguarded call sites.
+        bim.db_conn = nil
+    end
+    return true
+end
+
+-- One warn per cooldown window, then debug. A poisoned handle fails once per
+-- book, and 247 warnings with tracebacks is both unreadable and a stream of
+-- writes to a volume that, in the case this recovers from, has no room left.
+local function _logBimFailure(what, filepath, err)
+    local now = os.time()
+    if not _bim_fail_logged_at or (now - _bim_fail_logged_at) >= BIM_RESET_COOLDOWN_S then
+        _bim_fail_logged_at = now
+        logger.warn("[bookshelf] BIM", what, "failed for", tostring(filepath),
+                    ":", tostring(err))
+    else
+        logger.dbg("[bookshelf] BIM", what, "failed for", tostring(filepath),
+                   ":", tostring(err))
+    end
+end
+
+-- getBookInfo with that recovery around it. Returns the info table (nil when
+-- BIM has no row) and, on failure, the error message. Never raises.
+local function _bimGetBookInfo(bim, filepath, want_cover, what)
+    if not bim or type(bim.getBookInfo) ~= "function" then return nil end
+    local ok, res = pcall(bim.getBookInfo, bim, filepath, want_cover)
+    if ok then return res end
+    if _resetBimConnection(bim) then
+        local ok2, res2 = pcall(bim.getBookInfo, bim, filepath, want_cover)
+        if ok2 then
+            logger.info("[bookshelf] BIM connection reset; read recovered")
+            return res2
+        end
+        res = res2
+    end
+    _logBimFailure(what or "getBookInfo", filepath, res)
+    return nil, res
 end
 
 local _hardcover_cache
@@ -776,6 +959,11 @@ function Repo.getSortKey(chip)
     return _SORT_DEFAULT[chip]
 end
 
+-- Forward declaration: the raw batched-row accessor lives with the light
+-- meta cache further down, but buildBookMeta (below) reads it, and Lua
+-- upvalue scoping needs the local to exist before that body is compiled.
+local _batchInfoFor
+
 -- buildBookMeta(filepath [, opts])
 -- opts.want_cover: when false, ask BIM with get_cover=false so the zstd
 -- decompression + Blitbuffer allocation are skipped entirely (see
@@ -857,6 +1045,7 @@ local function _reattachKindleIdentity(book, filepath)
 end
 
 function Repo.buildBookMeta(filepath, opts)
+    local _bm_t0 = _gettime()
     if not filepath then return nil end
     -- OPDS://server/id is a pseudo-path for a remote catalog entry -- there
     -- is no file behind it. BIM/Calibre/filename fallbacks below would
@@ -875,6 +1064,11 @@ function Repo.buildBookMeta(filepath, opts)
         return nil
     end
     local want_cover = not opts or opts.want_cover ~= false
+    -- Repo.suppress_covers: a fetch-scoped override the spine shelf sets
+    -- around its page fetches -- a spine paints no cover, so attaching one
+    -- to every record on the page is pure disk I/O (measured: ~200 cover
+    -- reads per page turn on a 192-book chip).
+    if want_cover and Repo.suppress_covers then want_cover = false end
     -- Last-chance cover gate. Callers that know better already pass
     -- want_cover=false when ScaledCoverCache holds the book (opts.lazy_cover
     -- on the paged fetchers), but not every route into buildBookMeta does,
@@ -912,12 +1106,22 @@ function Repo.buildBookMeta(filepath, opts)
     -- (Calibre JSON, filename-derived title) still populate the
     -- record; a later rebuild after BIM finishes will fill in the
     -- gaps.
-    local ok_bim, info_or_err = pcall(bim.getBookInfo, bim, filepath, want_cover)
-    if not ok_bim then
-        logger.warn("[bookshelf] BIM getBookInfo failed for", filepath, ":",
-                    tostring(info_or_err))
+    -- Batched-row fast path: when no cover decode is wanted, take the text
+    -- columns from the light map's raw row cache (one blob-free SELECT for
+    -- the whole library, snapshot-backed) instead of a per-book SELECT --
+    -- whose row drags the compressed cover blob off disk even with
+    -- get_cover=false, ~20ms/record on device flash and the bulk of a
+    -- cover/list page turn's fetch. Misses (new imports, books outside the
+    -- batch, BIM mid-write) fall back to the live query below; metadata
+    -- edits clear the batch wholesale (invalidateLightMeta), the same
+    -- freshness the shelf's light records already have.
+    local info
+    if not want_cover and _batchInfoFor then
+        info = _batchInfoFor(filepath)
     end
-    local info = (ok_bim and info_or_err) or {}
+    if not info then
+        info = _bimGetBookInfo(bim, filepath, want_cover) or {}
+    end
     -- Sticky-record cache. BIM's getBookInfo SELECT has a "WHERE
     -- in_progress=0" guard, so a row that's mid-extraction returns
     -- nil. Without this fallback, every cover-only re-extraction
@@ -946,59 +1150,24 @@ function Repo.buildBookMeta(filepath, opts)
     -- page_count. Where Calibre has no entry for a book (non-Calibre
     -- libraries, or new books not yet imported), we fall back to BIM.
     local cb = _calibreMetadataFor(filepath)
+    -- One read of the book's custom metadata, shared by the text resolution
+    -- and the genre source below (the genre path used to make this read on
+    -- its own, so this is the same I/O, not more).
+    local cp = _customPropsFor(filepath)
 
-    -- Series — KOReader's BIM stores `info.series` as "<name> #<n>"
-    -- with series_index as the bare number; Calibre stores series +
-    -- series_index as separate fields. Prefer Calibre when present.
-    local series_name, series_num
-    local cb_series = cb and type(cb.series) == "string" and cb.series ~= "" and cb.series
-    if cb_series then
-        series_name = cb_series
-    elseif info.series then
-        -- Guard empty / whitespace / name-less ("#3") embedded series: the
-        -- Calibre branch above already drops cb.series == "", so mirror it
-        -- here. Without this an empty series_name bucketed the book into a
-        -- junk single-book series stack even though KOReader's book info
-        -- shows the series as N/A (issue #127, non-Calibre libraries).
-        local sname = info.series:gsub(" #%d+$", "")
-        sname = sname:match("^%s*(.-)%s*$")  -- trim
-        if sname ~= "" then series_name = sname end
-        series_num = info.series:match(" #(%d+)$")
-    end
-    if cb and type(cb.series_index) == "number" then
-        series_num = tostring(cb.series_index)
-    elseif info.series_index then
-        series_num = tostring(info.series_index)
-    elseif info.series and not series_num then
-        series_num = info.series:match(" #(%d+)$")
-    end
-
-    -- Authors
-    local authors
-    if cb and type(cb.authors) == "table" and #cb.authors > 0 then
-        authors = {}
-        for _i, name in ipairs(cb.authors) do
-            authors[#authors + 1] = name
-        end
-    else
-        authors = splitAuthors(info.authors, filepath)
-    end
-
-    local filename = (filepath:match("([^/]+)$") or filepath):gsub("%.[^.]+$", "")
-    -- Title chain: Calibre → BIM → filename
-    local title
-    if cb and type(cb.title) == "string" and cb.title ~= "" then
-        title = cb.title
-    elseif info.title and info.title ~= "" then
-        title = info.title
-    else
-        title = filename
-    end
+    -- Title / authors / series / language: custom metadata > Calibre > BIM >
+    -- filename, resolved in _resolveTextMeta so the light-meta builder cannot
+    -- disagree with this one.
+    local text = _resolveTextMeta(filepath, cb, info, cp)
+    local series_name, series_num = text.series_name, text.series_num
+    local authors  = text.authors
+    local filename = text.filename
+    local title    = text.title
 
     -- Genres honour the per-book source preference (calibre / embedded /
     -- hardcover); with none set, auto priority Calibre > embedded. The Hardcover
     -- override (when chosen, or auto + sync) is applied later by enrichBook.
-    local genres, genre_sources = genreData(filepath, cb, info)
+    local genres, genre_sources = genreData(filepath, cb, info, cp)
 
     local page_count = _calibreField(filepath, "pages") -- or info.pages
     --page_count = page_count or info.pages
@@ -1046,13 +1215,14 @@ function Repo.buildBookMeta(filepath, opts)
         -- e.g. "1072x1448". Used by the Hardcover enricher to decide whether
         -- the embedded cover is lower resolution than Hardcover's.
         cover_sizetag = info.cover_sizetag,
-        lang        = (cb and type(cb.languages) == "table" and cb.languages[1])
-                       or info.language,
-        -- A description the OPDS download flow saved for this file wins: the
-        -- catalog's blurb is why the user can see one at all for a Gutenberg
-        -- book (its embedded EPUB description is usually empty). Falls through
-        -- to Calibre comments, then BIM's extracted description.
-        description = _opdsDownloadDescription(filepath)
+        lang        = text.lang,
+        -- A description the user wrote themselves wins outright. Then the one
+        -- the OPDS download flow saved for this file: the catalog's blurb is
+        -- why the user can see one at all for a Gutenberg book (its embedded
+        -- EPUB description is usually empty). Falls through to Calibre
+        -- comments, then BIM's extracted description.
+        description = _cpText(cp, "description")
+                       or _opdsDownloadDescription(filepath)
                        or ((cb and type(cb.comments) == "string" and cb.comments ~= "")
                            and cb.comments)
                        or (info.description and info.description ~= ""
@@ -1087,7 +1257,28 @@ function Repo.buildBookMeta(filepath, opts)
     end
     _applyCoverOverrides(book)
     _reattachKindleIdentity(book, filepath)
+    -- Per-turn accounting for the shelf turn summary: how many full record
+    -- builds a fetch cost, their total time, and how many decoded a cover
+    -- (the expensive half). Drained by Repo.drainBuildStats.
+    Repo._turn_builds   = (Repo._turn_builds or 0) + 1
+    Repo._turn_build_ms = (Repo._turn_build_ms or 0)
+                          + (_gettime() - _bm_t0) * 1000
+    if want_cover then
+        Repo._turn_covers = (Repo._turn_covers or 0) + 1
+    end
     return book
+end
+
+-- drainBuildStats() -> n, ms, covers since the last drain. Feeds the
+-- cover/list "shelf turn" INFO line so a slow fetch is attributable from
+-- a stock crash.log: n full builds, their total cost, and how many paid
+-- the BIM cover decode (vs served metadata-only).
+function Repo.drainBuildStats()
+    local n  = Repo._turn_builds or 0
+    local ms = Repo._turn_build_ms or 0
+    local c  = Repo._turn_covers or 0
+    Repo._turn_builds, Repo._turn_build_ms, Repo._turn_covers = 0, 0, 0
+    return n, ms, c
 end
 
 -- Repo.getCoverBB(filepath) — lazy cover accessor for callers that
@@ -1111,15 +1302,19 @@ function Repo.getCoverBB(filepath)
     if type(filepath) == "string" and filepath:find("^OPDS://") then return nil end
     local bim = getBookInfoMgr()
     if not bim then return nil end
-    local ok_bim, info_or_err = pcall(bim.getBookInfo, bim, filepath, true)
-    if not ok_bim then
-        logger.warn("[bookshelf] BIM getBookInfo (cover only) failed for",
-                    filepath, ":", tostring(info_or_err))
-        return nil
-    end
-    local info = info_or_err or {}
+    local info = _bimGetBookInfo(bim, filepath, true, "getBookInfo (cover only)")
+    if not info then return nil end
     if info.ignore_cover then return nil end
     return info.cover_bb
+end
+
+-- Exported so the widget's own BIM reads (extraction queueing, the
+-- post-extraction poll) share this recovery and its throttled log rather
+-- than each carrying a bare pcall. Returns info, err -- err is set only when
+-- the read genuinely failed, which callers use to tell "BIM has no row for
+-- this book" from "BIM is not answering right now".
+function Repo.bimGetBookInfo(bim, filepath, want_cover, what)
+    return _bimGetBookInfo(bim, filepath, want_cover, what)
 end
 
 -- Text-only metadata for the library walk phases of getSeriesGroups /
@@ -1145,50 +1340,18 @@ end
 local function _buildLightMetaFromInfo(fp, info)
     info = info or {}
     local cb = _calibreMetadataFor(fp)
+    local cp = _customPropsFor(fp)
 
-    local series_name, series_num
-    local cb_series = cb and type(cb.series) == "string" and cb.series ~= "" and cb.series
-    if cb_series then
-        series_name = cb_series
-    elseif info.series then
-        -- Guard empty / whitespace / name-less ("#3") embedded series: the
-        -- Calibre branch above already drops cb.series == "", so mirror it
-        -- here. Without this an empty series_name bucketed the book into a
-        -- junk single-book series stack even though KOReader's book info
-        -- shows the series as N/A (issue #127, non-Calibre libraries).
-        local sname = info.series:gsub(" #%d+$", "")
-        sname = sname:match("^%s*(.-)%s*$")  -- trim
-        if sname ~= "" then series_name = sname end
-        series_num = info.series:match(" #(%d+)$")
-    end
-    if cb and type(cb.series_index) == "number" then
-        series_num = tostring(cb.series_index)
-    elseif info.series_index then
-        series_num = tostring(info.series_index)
-    elseif info.series and not series_num then
-        series_num = info.series:match(" #(%d+)$")
-    end
+    -- Same resolution as buildBookMeta, from the same function: the chips are
+    -- built from these records and the shelf from those, so a book that is
+    -- "Kelly Thompson" in one has to be "Kelly Thompson" in the other.
+    local text = _resolveTextMeta(fp, cb, info, cp)
+    local series_name, series_num = text.series_name, text.series_num
+    local authors  = text.authors
+    local filename = text.filename
+    local title    = text.title
 
-    local authors
-    if cb and type(cb.authors) == "table" and #cb.authors > 0 then
-        authors = {}
-        for _i, name in ipairs(cb.authors) do authors[#authors + 1] = name end
-    else
-        authors = splitAuthors(info.authors, fp)
-    end
-
-    local genres, genre_sources = genreData(fp, cb, info)
-
-    local filename = (fp:match("([^/]+)$") or fp):gsub("%.[^.]+$", "")
-    local title
-    if cb and type(cb.title) == "string" and cb.title ~= "" then
-        title = cb.title
-    elseif info.title and info.title ~= "" then
-        title = info.title
-    else
-        title = filename
-    end
-
+    local genres, genre_sources = genreData(fp, cb, info, cp)
     local page_count = _calibreField(fp, "pages")
     local pub_date = _calibreField(fp, "pubdate", function(v) return v:sub(1, 4) end)
     local modified_date = getModifiedDate(fp)
@@ -1247,10 +1410,11 @@ local function _buildLightMetaFromInfo(fp, info)
         genres      = genres,
         genre_sources = genre_sources,
         title       = title,
-        lang        = (cb and type(cb.languages) == "table" and cb.languages[1])
-                       or info.language,
+        lang        = text.lang,
         page_count  = page_count,
         words       = words or nil,
+        pub_date    = pub_date or nil,
+        modified_date = modified_date or nil,
         grrating    = grrating or nil,
         grvotes     = grvotes or nil,
         modified_date = modified_date,
@@ -1270,13 +1434,8 @@ local function _buildBookMetaLight(fp)
     if not fp then return nil end
     local bim  = getBookInfoMgr()
     if not bim then return nil end  -- CoverBrowser disabled (#49)
-    -- pcall-guarded; see buildBookMeta for rationale (#63/#71).
-    local ok_bim, info_or_err = pcall(bim.getBookInfo, bim, fp, false)
-    if not ok_bim then
-        logger.warn("[bookshelf] BIM getBookInfo (light) failed for", fp, ":",
-                    tostring(info_or_err))
-    end
-    local info = (ok_bim and info_or_err) or {}
+    -- Guarded; see buildBookMeta for rationale (#63/#71).
+    local info = _bimGetBookInfo(bim, fp, false, "getBookInfo (light)") or {}
     return _buildLightMetaFromInfo(fp, info)
 end
 
@@ -1330,6 +1489,60 @@ local function pageCountFromFilename(filepath)
     local n = base:match("[Pp]%((%d+)%)")
     return n and tonumber(n) or nil
 end
+-- Public alias: the page-count scanner classifies filename-counted books
+-- as their own (free) category before probing anything heavier.
+Repo.pageCountFromFilename = pageCountFromFilename
+
+-- _scannedPageCount(filepath) -> the count the "Extract page counts" scan
+-- found for this book, or nil.
+--
+-- The scan persists into the shelf's own page-count store rather than into the
+-- book's sidecar, deliberately: a count for a never-opened book must not be
+-- the reason a sidecar appears, since stock KOReader reads one as "this has
+-- been read". (The publisher-list case is the exception -- it also writes
+-- pagemap_doc_pages, the key ReaderPageMap owns.) So for most books that store
+-- is the ONLY place a scanned count lives, and anything answering "how many
+-- pages" has to look there. Without this the scan showed up in the spine
+-- widths, which read the store directly, and nowhere else -- device report:
+-- "our page count scan worked for book spine width but doesn't populate the
+-- page_count token".
+--
+-- Required lazily: the shelf module requires this one back, and a load-time
+-- pair would be a cycle. By the time anything asks for a page count both are
+-- loaded. Costs a table lookup; the store only stats a sidecar to validate
+-- entries that came FROM one, which a scanned count did not.
+local function _scannedPageCount(filepath)
+    if not filepath then return nil end
+    local ok, SpineShelf = pcall(require, "lib/bookshelf_spine_shelf")
+    if not ok or type(SpineShelf) ~= "table"
+            or type(SpineShelf.cachedProgress) ~= "function" then
+        return nil
+    end
+    local ok2, pages = pcall(SpineShelf.cachedProgress, filepath)
+    return ok2 and tonumber(pages) or nil
+end
+
+-- Repo.pageCountFor(filepath, known) -> a page count, or nil.
+--
+-- The TAIL of the page-count ladder, in one place. `known` is whatever the
+-- caller already has -- BookInfoManager's count, or the sidecar's -- and wins
+-- when it is a real number. After it come the two sources that need no file
+-- open and no database read:
+--
+--   1. a p(<n>) marker in the filename (#159), free and explicit
+--   2. the "Extract page counts" scan's store, which holds an ESTIMATE for
+--      most books (see _scannedPageCount)
+--
+-- Every consumer asks the same question and each had grown its own ending:
+-- the hero's had both rungs, the lazy resolver's sidecar branch had only the
+-- second, and the two got patched separately twice in two days. Owning the
+-- order here is the point -- callers supply what they know and stop deciding.
+function Repo.pageCountFor(filepath, known)
+    known = tonumber(known)
+    if known and known > 0 then return known end
+    return pageCountFromFilename(filepath) or _scannedPageCount(filepath)
+end
+
 
 -- opts is forwarded verbatim to buildBookMeta; opts.want_cover=false skips
 -- BIM's zstd decode and Blitbuffer allocation for callers that never look at
@@ -2047,6 +2260,12 @@ local function _resetLightMetaProgress(rec)
     rec._pct              = nil
     rec.rating            = nil
     rec.read_status       = nil
+    -- The spine plan bakes the sidecar's status onto the record (and flags
+    -- it checked) so paints skip DocSettings; these are the same cached
+    -- objects, so a status edit must strip that too or the plan's
+    -- `if src.status == nil` guard keeps serving the old status.
+    rec.status                = nil
+    rec._spine_status_checked = nil
 end
 
 function Repo.invalidateProgressCache(filepath)
@@ -2082,6 +2301,12 @@ function Repo.invalidateProgressCache(filepath)
                 local rec = entry.map[filepath]
                 if rec then _resetLightMetaProgress(rec) end
             end
+        end
+        -- Downstream caches (the spine shelf persists status and rendered
+        -- pixels per book) register here; without this a status edit left
+        -- the old reading glyph on the spine.
+        if Repo.on_book_invalidated then
+            pcall(Repo.on_book_invalidated, filepath)
         end
     else
         _progress_cache = {}
@@ -2179,7 +2404,20 @@ function Repo.readProgress(filepath)
             if ok_lp then page_num = tonumber(last_page) end
         end
     end
-
+    -- Bookshelf's own persisted page-count store: the bulk scanner's
+    -- answers for never-opened books (publisher page lists, Hardcover
+    -- links, headless renders), kept OUT of sidecars because creating one
+    -- marks a book as opened in stock KOReader. Served here so EVERY
+    -- consumer of readProgress -- %pages, %bar{rel}, list lines, sort
+    -- keys -- sees them, not just spine widths. Above the filename guess:
+    -- a scanned count is real, the filename one is folklore.
+    if not page_count then
+        local ok_ss, SS = pcall(require, "lib/bookshelf_spine_shelf")
+        if ok_ss and SS and SS.cachedProgress then
+            local pp = select(1, SS.cachedProgress(filepath))
+            if pp then page_count = tonumber(pp) end
+        end
+    end
     -- #159: last-resort filename fallback (see pageCountFromFilename), matching
     -- buildBook's progress-cache seed so the sort key / badge agree.
 
@@ -2255,7 +2493,12 @@ function Repo.progressFor(filepath)
     if not filepath then return nil, nil, nil, nil, false end
     if _hasSidecar(filepath) then
         local pct, status, rating, pages, page_num = Repo.readProgress(filepath)
-        return pct, status, rating, pages, true, page_num
+        -- An opened book usually knows its own count. When it does not -- a
+        -- reflowable opened but never paged far enough for KOReader to commit
+        -- a total -- it takes the same ending as an unopened one, which this
+        -- branch used to skip half of.
+        return pct, status, rating, Repo.pageCountFor(filepath, pages),
+               true, page_num
     end
     -- No sidecar means never opened: no percentage, status or rating exists to
     -- read. A page count still can -- pageCountFromFilename (#159) is a match
@@ -2264,7 +2507,7 @@ function Repo.progressFor(filepath)
     -- sort key instead of going blank exactly where the sort has a value.
     -- No sidecar means never opened, so there is no current page either --
     -- page_num stays nil rather than being synthesised as page 1.
-    return nil, nil, nil, pageCountFromFilename(filepath), false, nil
+    return nil, nil, nil, Repo.pageCountFor(filepath), false, nil
 end
 
 -- Repo.fileSizeFor(filepath) -> bytes, or nil.
@@ -2727,7 +2970,12 @@ local function _loadBatchBookInfoFromBim()
     local conn = bim.db_conn
     if not conn or type(conn.exec) ~= "function" then return nil end
 
-    local sql = "SELECT directory, filename, title, authors, series, series_index, keywords, language " ..
+    -- Every TEXT/INTEGER column buildBookMeta reads, so a batched row can
+    -- stand in for a live getBookInfo(fp, false) row (the fast path in
+    -- buildBookMeta). Still no cover_* blob columns: their inline pages are
+    -- what makes the per-book SELECT expensive in the first place.
+    local sql = "SELECT directory, filename, title, authors, series, series_index, keywords, language, " ..
+                "pages, description, has_meta, has_cover, ignore_cover, ignore_meta, cover_sizetag " ..
                 "FROM bookinfo WHERE in_progress=0;"
     local rows
     local ok, err = pcall(function() rows = conn:exec(sql) end)
@@ -2738,17 +2986,33 @@ local function _loadBatchBookInfoFromBim()
     if not rows then return {} end  -- empty DB
 
     -- ljsqlite3:exec returns column-major arrays: rows[col_index][row_index].
+    -- col() tolerates a result with fewer columns than the SELECT names
+    -- (a stubbed exec, or an exec that ignores the SQL): missing columns
+    -- read as nil fields, which every consumer already handles.
+    local function col(c, i)
+        local a = rows[c]
+        return a and a[i] or nil
+    end
     local n = (rows[1] and #rows[1]) or 0
     local map = {}
     for i = 1, n do
-        local fp = (rows[1][i] or "") .. (rows[2][i] or "")
+        local fp = (col(1, i) or "") .. (col(2, i) or "")
         map[fp] = {
-            title        = rows[3][i],
-            authors      = rows[4][i],
-            series       = rows[5][i],
-            series_index = rows[6][i],
-            keywords     = rows[7][i],
-            language     = rows[8][i],
+            title        = col(3, i),
+            authors      = col(4, i),
+            series       = col(5, i),
+            series_index = col(6, i),
+            keywords     = col(7, i),
+            language     = col(8, i),
+            -- tonumber: INTEGER comes back as cdata<int64_t>, which the
+            -- snapshot codec can't round-trip and callers can't compare.
+            pages        = tonumber(col(9, i)),
+            description  = col(10, i),
+            has_meta     = col(11, i),
+            has_cover    = col(12, i),
+            ignore_cover = col(13, i),
+            ignore_meta  = col(14, i),
+            cover_sizetag = col(15, i),
         }
     end
     return map
@@ -2765,7 +3029,11 @@ end
 -- SELECT, which re-saves. Only the RAW rows are persisted — the derived
 -- light records fold in Calibre metadata at derive time, which must stay
 -- fresh independently of BIM.
-local LIGHTMETA_SNAPSHOT_VERSION = 1
+-- v2: rows gained pages/description/has_meta/has_cover/ignore_cover/
+-- ignore_meta/cover_sizetag (the buildBookMeta batch fast path needs the
+-- full text row). The version is baked into the fingerprint, so a v1
+-- snapshot from before the upgrade fails the match and regenerates.
+local LIGHTMETA_SNAPSHOT_VERSION = 2
 
 local function _bimDbFingerprint()
     local ok, DataStorage = pcall(require, "datastorage")
@@ -2789,19 +3057,28 @@ local function _lightMetaPersist()
     return ok_new and p or nil
 end
 
--- Returns the persisted raw row map when the BIM db hasn't changed since it
--- was saved, else nil.
+-- Returns the persisted raw row map and whether it is FRESH (the BIM db is
+-- unchanged since it was saved). A snapshot of the same FORMAT version whose
+-- db fingerprint has moved comes back too, flagged stale: the caller serves
+-- it at once and refreshes in the background (see _scheduleLightMetaRefresh).
+-- Stale rows are right for every book that didn't change, and a book the
+-- rows don't know falls back to the per-book path anyway; what they must
+-- never be is an OLDER FORMAT -- those rows lack columns the fast paths
+-- read -- so a version-prefix mismatch is nil, not stale.
 local function _loadRowSnapshot()
     local fingerprint = _bimDbFingerprint()
     if not fingerprint then return nil end
     local p = _lightMetaPersist()
     if not p then return nil end
     local ok, t = pcall(p.load, p)
-    if ok and type(t) == "table"
-            and t.fingerprint == fingerprint
-            and type(t.rows) == "table" then
-        return t.rows
+    if not (ok and type(t) == "table" and type(t.rows) == "table"
+            and type(t.fingerprint) == "string") then
+        return nil
     end
+    if t.fingerprint == fingerprint then return t.rows, true end
+    local want_v = fingerprint:match("^(v%d+):")
+    local have_v = t.fingerprint:match("^(v%d+):")
+    if want_v and have_v and want_v == have_v then return t.rows, false end
     return nil
 end
 
@@ -2812,6 +3089,47 @@ local function _saveRowSnapshot(rows)
     local p = _lightMetaPersist()
     if not p then return end
     pcall(p.save, p, { fingerprint = fingerprint, rows = rows })
+end
+
+-- Background refresh of a stale snapshot. The batch SELECT over a big
+-- bookinfo table is the one launch cost we have seen reach 15 seconds (slow
+-- SD / colour panels' larger cover blobs, issue 262), and the snapshot only
+-- dodges it while the db is untouched -- any cover extraction between boots
+-- brought it straight back onto the launch path. Now the shelf opens on the
+-- stale rows and this runs a little later on the UI loop: it still blocks
+-- for the read's duration when it runs, but after the first paint and the
+-- first taps, not before them. One refresh in flight at a time; the fresh
+-- rows are saved and the derived map dropped, so the next reader loads the
+-- fresh snapshot (a zstd load, not a table scan).
+local LIGHTMETA_REFRESH_DELAY_S = 2
+local _lightmeta_refresh_pending = false
+-- The rows a completed refresh produced, this session. _getLightMetaCache
+-- prefers them over anything on disk, so the fresh map does NOT depend on
+-- the snapshot save succeeding -- a read-only data dir or a full disk would
+-- otherwise leave the stale snapshot in place and re-arm a full table read
+-- every two seconds for the whole session. Set once: a session refreshes
+-- at most once.
+local _lightmeta_fresh_rows = nil
+local function _scheduleLightMetaRefresh()
+    if _lightmeta_refresh_pending or _lightmeta_fresh_rows then return end
+    local ok_um, UIManager = pcall(require, "ui/uimanager")
+    if not (ok_um and type(UIManager) == "table" and UIManager.scheduleIn) then
+        return   -- no event loop (standalone/tests): the stale rows stand
+    end
+    _lightmeta_refresh_pending = true
+    UIManager:scheduleIn(LIGHTMETA_REFRESH_DELAY_S, function()
+        _lightmeta_refresh_pending = false
+        local _t0 = _gettime()
+        local ok, rows = pcall(_loadBatchBookInfoFromBim)
+        if ok and rows then
+            _lightmeta_fresh_rows = rows
+            pcall(_saveRowSnapshot, rows)   -- best effort; memory is authoritative now
+            Repo.invalidateLightMeta()
+            logger.dbg(string.format(
+                "[bookshelf perf] light_meta: background refresh %.0fms rows=%d",
+                (_gettime() - _t0) * 1000, (function() local n = 0 for _ in pairs(rows) do n = n + 1 end return n end)()))
+        end
+    end)
 end
 
 -- _getLightMetaCache(home, depth) — returns a fp → light-record map for every
@@ -2840,12 +3158,21 @@ local function _getLightMetaCache(home, depth)
     local _t0 = _gettime()
     -- Disk snapshot first: skips the blob-page-heavy SELECT entirely when
     -- the BIM db is unchanged since last save (the common cold boot).
-    local snapshot = _loadRowSnapshot()
+    -- Rows a completed background refresh left in memory outrank the disk
+    -- snapshot (see _lightmeta_fresh_rows); then the snapshot; then the live
+    -- batch, saved for next time.
+    local snapshot, fresh
+    if _lightmeta_fresh_rows then
+        snapshot, fresh = _lightmeta_fresh_rows, true
+    else
+        snapshot, fresh = _loadRowSnapshot()
+    end
     local _t_load = _gettime()
     local row_map = snapshot or _loadBatchBookInfoFromBim()
     if row_map and not snapshot then
         _saveRowSnapshot(row_map)
     end
+    local stale = (snapshot ~= nil) and not fresh
     local meta_map
     local count = 0
     local skipped = 0
@@ -2923,6 +3250,10 @@ local function _getLightMetaCache(home, depth)
     -- BIM for the same failed query on every chip switch.
     _light_meta_cache[key] = {
         map = meta_map,
+        -- RAW batched rows, unscoped by home prefix: buildBookMeta's batch
+        -- fast path serves any book BIM knows from here (same data a live
+        -- getBookInfo would return, minus the cover blob).
+        rows = row_map,
         count = count,
         expires_at = now + WALK_CACHE_TTL,
     }
@@ -2930,8 +3261,33 @@ local function _getLightMetaCache(home, depth)
         "[bookshelf perf] light_meta: MISS build=%.0fms (read=%.0f map=%.0f) cached=%d source=%s",
         (_gettime() - _t0) * 1000, (_t_load - _t0) * 1000,
         (_gettime() - _t_load) * 1000, count,
-        snapshot and "snapshot" or (row_map and "batch" or "fallback")))
+        snapshot and (fresh and "snapshot" or "stale-snapshot")
+                 or (row_map and "batch" or "fallback")))
+    if stale then _scheduleLightMetaRefresh() end
     return meta_map
+end
+
+-- _batchInfoFor(fp) — the RAW batched BIM row for a book: the same text
+-- columns a live getBookInfo(fp, false) returns, from the one blob-free
+-- SELECT (snapshot-backed) the light map is derived from. Serves
+-- buildBookMeta's no-cover path so a full record build costs a table
+-- lookup instead of a per-book SQLite SELECT, whose row drags the
+-- compressed cover blob off disk even when no cover was asked for
+-- (~20ms/record on device flash). nil on a miss (new import, BIM
+-- mid-write, batch unavailable); the caller falls back to live BIM.
+-- Freshness matches the light records the shelf already renders from:
+-- metadata edits clear the whole cache (invalidateLightMeta).
+_batchInfoFor = function(fp)
+    if type(fp) ~= "string" then return nil end
+    local home  = G_reader_settings:readSetting("home_dir") or "/"
+    local depth = BookshelfSettings.read("latest_walk_depth") or 3
+    local key   = (home or "/") .. ":" .. tostring(depth or 0)
+    local entry = _light_meta_cache[key]
+    if not entry then
+        _getLightMetaCache(home, depth)
+        entry = _light_meta_cache[key]
+    end
+    return entry and entry.rows and entry.rows[fp] or nil
 end
 
 -- Walk-time helper: prefer the cache, fall back to per-book on miss. Walk
@@ -2943,6 +3299,19 @@ local function _lightMetaForFp(cache, fp)
         if hit then return hit end
     end
     return _buildBookMetaLight(fp)
+end
+
+-- Public light-record lookup for consumers holding only a filepath (the
+-- spine shelf's stack-member stubs): one memoised map hit once the batch
+-- SELECT has run, nil when the batch doesn't know the file -- the caller
+-- falls back to a full build. Returns the SHARED cached record: read from
+-- it, never mutate it (see _resetLightMetaProgress for why).
+function Repo.lightMetaFor(filepath)
+    if type(filepath) ~= "string" then return nil end
+    local home  = G_reader_settings:readSetting("home_dir") or "/"
+    local depth = BookshelfSettings.read("latest_walk_depth") or 3
+    local cache = _getLightMetaCache(home, depth)
+    return cache and cache[filepath] or nil
 end
 
 -- Flat list of every book filepath in the library: the same depth-capped
@@ -3320,20 +3689,29 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
         local hit_light_cache = Filter.isActive(filter) and _getLightMetaCache(home_lc, depth_lc) or nil
         local shapes_for_slice, total = _filterAllShapes(entry.shapes, filter, hit_light_cache)
         local out   = {}
-        local stop  = _hydrationStop(offset, limit, total, total, "getAll", opts and opts.light_only)
-        -- Letter-jump path: serve light metadata for the slice instead of
-        -- full _safeBuildBookMeta records. Book shapes only carry .fp, so a
-        -- batched light-meta lookup supplies the sort-key fields (title /
-        -- author / series); folder shapes already carry their label. The
-        -- caller only reads those to find a page boundary and never renders
-        -- these records, so skipping the heavy build is safe.
-        if opts and opts.light_only then
+        local light = (opts and opts.light_only) or Repo.spine_light
+        local stop  = _hydrationStop(offset, limit, total, total, "getAll", light)
+        -- Light path, two callers: the letter-jump (opts.light_only, never
+        -- rendered) and the SPINE shelf (Repo.spine_light -- it renders
+        -- colour + text, never a cover; looks sample lazily by filepath).
+        -- Book shapes only carry .fp, so a batched light-meta lookup
+        -- supplies the display/sort fields (title / author / series);
+        -- folder shapes already carry their label, plus a LIGHT first_book
+        -- so a wrapper folder can still stand as its book on the spine
+        -- shelf. Before this branch honoured spine_light, an all/folder
+        -- chip shown as spines paid a full _safeBuildBookMeta per record
+        -- AND the 512 hydrate clamp broke its pagination.
+        if light then
             local light_cache = hit_light_cache or _getLightMetaCache(home_lc, depth_lc)
             for i = offset + 1, stop do
                 local shape = shapes_for_slice[i]
                 if shape.kind == "folder" then
                     out[#out + 1] = { kind = "folder", path = shape.path,
-                                      label = shape.label, name = shape.label }
+                                      label = shape.label, name = shape.label,
+                                      first_book = shape.first_book_fp
+                                          and _lightMetaForFp(light_cache,
+                                                              shape.first_book_fp)
+                                          or nil }
                 else
                     local b = _lightMetaForFp(light_cache, shape.fp)
                     out[#out + 1] = b or { fp = shape.fp, filepath = shape.fp }
@@ -3476,12 +3854,7 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
                     -- whole prefetch sweep -- fall back to filename for the
                     -- failing entry and keep going. get_cover=false skips
                     -- the zstd decompression + Blitbuffer allocation.
-                    local ok, fresh = pcall(bim.getBookInfo, bim, e.fp, false)
-                    if ok and fresh then
-                        info = fresh
-                    elseif not ok then
-                        logger.warn("[bookshelf] getBookInfo failed for", e.fp, ":", fresh)
-                    end
+                    info = _bimGetBookInfo(bim, e.fp, false) or info
                 end
                 if info then
                     if needs.title and not e.doc_props then
@@ -3718,23 +4091,27 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
     local miss_light_cache = Filter.isActive(filter) and _getLightMetaCache(miss_lc_home, miss_lc_depth) or nil
     local shapes_for_slice, total = _filterAllShapes(shapes, filter, miss_light_cache)
     local out  = {}
-    local stop = _hydrationStop(offset, limit, total, total, "getAll", opts and opts.light_only)
-    -- Light path, same as the HIT branch above. It has to be here too: a
-    -- light_only caller passes limit = 10000 and _hydrationStop deliberately
-    -- lifts the MAX_HYDRATE ceiling for it, so falling through to the full
-    -- build below would decode a cover BlitBuffer for every book in the
-    -- folder and free none of them -- the OOM shape light_only exists to
-    -- avoid, reached whenever the walk cache is cold for this path (first
-    -- visit, or the TTL lapsed) and a "Go to letter" jump is the call that
-    -- warms it.
-    if opts and opts.light_only then
+    local miss_light = (opts and opts.light_only) or Repo.spine_light
+    local stop = _hydrationStop(offset, limit, total, total, "getAll", miss_light)
+    -- Light path, same as the HIT branch above (letter-jump AND the spine
+    -- shelf). It has to be here too: a light caller passes limit = 10000
+    -- and _hydrationStop deliberately lifts the MAX_HYDRATE ceiling for it,
+    -- so falling through to the full build below would decode a cover
+    -- BlitBuffer for every book in the folder and free none of them -- the
+    -- OOM shape light_only exists to avoid, reached whenever the walk cache
+    -- is cold for this path (first visit, or the TTL lapsed).
+    if miss_light then
         local light_cache = miss_light_cache
                             or _getLightMetaCache(miss_lc_home, miss_lc_depth)
         for i = offset + 1, stop do
             local shape = shapes_for_slice[i]
             if shape.kind == "folder" then
                 out[#out + 1] = { kind = "folder", path = shape.path,
-                                  label = shape.label, name = shape.label }
+                                  label = shape.label, name = shape.label,
+                                  first_book = shape.first_book_fp
+                                      and _lightMetaForFp(light_cache,
+                                                          shape.first_book_fp)
+                                      or nil }
             else
                 local b = _lightMetaForFp(light_cache, shape.fp)
                 out[#out + 1] = b or { fp = shape.fp, filepath = shape.fp }
@@ -4014,6 +4391,31 @@ local function _groupShapeCmp(priority_or_key)
     return SortEngine.chainedComparator(priority)
 end
 
+-- _attachFlattenedCounts(out, sorted, offset) -- spine mode flattens stacks,
+-- so its footer counts BOOKS; every group window carries the flattened
+-- totals as fields on the page table (the opds_open_ended pattern).
+-- books_before is relative to the window's offset, which is the shelf
+-- cursor at fetch time. Group shapes carry filepaths (cached shapes) or
+-- books (freshly built, e.g. getTags); standalones count as one.
+local function _attachFlattenedCounts(out, sorted, offset)
+    local total, before = 0, 0
+    for i = 1, #sorted do
+        local s = sorted[i]
+        local n = 1
+        if s and not s.standalone then
+            if s.filepaths and #s.filepaths > 0 then
+                n = #s.filepaths
+            elseif s.books and #s.books > 0 then
+                n = #s.books
+            end
+        end
+        total = total + n
+        if i <= (offset or 0) then before = before + n end
+    end
+    out.spine_books_total  = total
+    out.spine_books_before = before
+end
+
 function Repo.getTags(limit, offset, sort_priority_override, filter, opts)
     local rc = getCollections()
     if not rc.coll then return {}, 0 end
@@ -4081,6 +4483,7 @@ function Repo.getTags(limit, offset, sort_priority_override, filter, opts)
     offset      = offset or 0
     local stop  = _hydrationStop(offset, limit, total, total, "getTags", opts and opts.light_only)
     local out   = {}
+    _attachFlattenedCounts(out, groups, offset)
     -- Upgrade each visible group's FRONT book (the one whose cover the
     -- SeriesStack renders) to a full record. Covers already in
     -- ScaledCoverCache skip the BIM zstd decode; SpineWidget repaints
@@ -4091,7 +4494,11 @@ function Repo.getTags(limit, offset, sort_priority_override, filter, opts)
     end
     for i = offset + 1, stop do
         local g = groups[i]
-        if not light_only and g.books[1] and g.books[1].filepath then
+        -- Spine shelf (Repo.spine_light): collections flatten into member
+        -- spines, so the front cover is never rendered -- skip the full
+        -- build like the _hydrateGroupShape spine branch does.
+        if not light_only and not Repo.spine_light
+                and g.books[1] and g.books[1].filepath then
             local fp = g.books[1].filepath
             local meta_opts
             if ScaledCoverCache and ScaledCoverCache:has(fp) then
@@ -4138,6 +4545,25 @@ local function hydrateSeriesShape(shape, filter, light_only)
     local books = {}
     if light_only then
         for i = 1, #order do books[i] = { filepath = order[i] } end
+    elseif Repo.spine_light then
+        -- Spine shelf: series flatten into member spines, so the front cover
+        -- below is never rendered -- yet every series-chip fetch paid a full
+        -- buildBookMeta per series up to the 512 clamp (the clamp WARN on
+        -- every series open). Same cure as _hydrateGroupShape: COPIES of the
+        -- cached light meta (copies, because the spine plan bakes status onto
+        -- the records it renders and the shape cache has no strip protection).
+        local by_fp = {}
+        if meta then for _i, m in ipairs(meta) do by_fp[m.filepath] = m end end
+        for i = 1, #order do
+            local src = by_fp[order[i]]
+            if src then
+                local b = {}
+                for k, v in pairs(src) do b[k] = v end
+                books[i] = b
+            else
+                books[i] = { filepath = order[i] }
+            end
+        end
     else
         for i, fp in ipairs(order) do
             if i <= 1 then
@@ -4296,6 +4722,8 @@ local function _seriesReadout(group_shapes, standalone_shapes, filter,
                         series_num  = m.series_num,
                         genres      = m.genres,
                         lang        = m.lang,
+                        author      = m.author,
+                        author_sort = m.author_sort,
                         latest      = s.latest,
                         book_count  = 1,
                     })
@@ -4307,7 +4735,9 @@ local function _seriesReadout(group_shapes, standalone_shapes, filter,
     local total = #sorted
     local out   = {}
     offset      = offset or 0
-    local stop  = _hydrationStop(offset, limit, total, 8, "getSeriesGroups", light_only)
+    _attachFlattenedCounts(out, sorted, offset)
+    local stop  = _hydrationStop(offset, limit, total, 8, "getSeriesGroups",
+                                 light_only or Repo.spine_light)
     for i = offset + 1, stop do
         local s = sorted[i]
         if s.standalone then
@@ -4317,8 +4747,19 @@ local function _seriesReadout(group_shapes, standalone_shapes, filter,
                                   filename = s.filename, series_name = s.series_name }
             else
                 -- Plain Book record: shelf_row renders it as a single cover
-                -- and taps open the book, same as any book-list chip.
-                local b = Repo.buildBookMeta(s.filepath)
+                -- and taps open the book, same as any book-list chip. The
+                -- spine shelf renders no cover, so a copy of the light record
+                -- serves it (full build as the fallback for a book the batch
+                -- doesn't know).
+                local b
+                if Repo.spine_light then
+                    local light = Repo.lightMetaFor(s.filepath)
+                    if light then
+                        b = {}
+                        for k, v in pairs(light) do b[k] = v end
+                    end
+                end
+                b = b or Repo.buildBookMeta(s.filepath)
                 if b then out[#out + 1] = b end
             end
         else
@@ -4499,6 +4940,14 @@ function Repo.getSeriesGroups(limit, offset, sort_priority_override, filter, opt
                 series_name = group.series_name,
                 genres      = b.genres,
                 lang        = b.lang,
+                -- The author, so a shelf of series can be SORTED by it
+                -- (#351). THIS is the structure the comparator sees: the
+                -- shape cached here is what _groupShapeCmp sorts, not the
+                -- group.books it was built from. Adding the author to that
+                -- one alone left this rebuild dropping it again, and the
+                -- sort went on reading the series TITLE as a person's name.
+                author      = b.author,
+                author_sort = b.author_sort,
             }
         end
         shapes[#shapes + 1] = {
@@ -4670,6 +5119,28 @@ local function _hydrateGroupShape(shape, within_priority, filter, light_only)
     local books = {}
     if light_only then
         for i = 1, #order do books[i] = { filepath = order[i] } end
+    elseif Repo.spine_light then
+        -- Spine shelf: groups FLATTEN into member spines, so the front-book
+        -- cover the branch below decodes is never rendered -- yet every page
+        -- turn on an authors/genres chip paid a full buildBookMeta (BIM read
+        -- + cover decode) per group, up to the 512 clamp (device report:
+        -- paging the author shelf felt slow; the same disease getBySource's
+        -- spine_light branch cured for library chips). Serve COPIES of the
+        -- cached light meta instead: title/author/series fields are all the
+        -- spine plan reads, and it BAKES status onto the records it renders,
+        -- so handing out the cached shape's own books_meta references would
+        -- smear one render's baked status into the next fetch (the stale-
+        -- glyph lesson, e7559e6).
+        for i = 1, #order do
+            local src = meta and meta[i]
+            if src and src.filepath == order[i] then
+                local b = {}
+                for k, v in pairs(src) do b[k] = v end
+                books[i] = b
+            else
+                books[i] = { filepath = order[i] }
+            end
+        end
     else
         for i, fp in ipairs(order) do
             if i <= 1 then
@@ -5042,6 +5513,15 @@ local function _cacheGroupShapes(list, kind)
         shapes[#shapes + 1] = {
             kind         = kind,
             series_name  = group.series_name,
+            -- An AUTHOR card sorts under the author it is NAMED AFTER, so
+            -- carry that name as the shape's own author. Without it the
+            -- comparator falls back to the modal MEMBER author -- and a
+            -- member's `author` field is the book's FIRST author, so a
+            -- co-authored book filed the second author's card under the
+            -- first author's surname, right next to it on the shelf
+            -- (device report: "Halper, Phil" sorted between the A's,
+            -- glued to "Afshordi").
+            author       = kind == "author" and group.series_name or nil,
             filepaths    = fps,
             books_meta   = books_meta,
             latest       = group.latest,
@@ -5093,7 +5573,9 @@ function Repo.getAuthors(limit, offset, sort_priority_override, filter, opts)
     local total = #sorted
     local out   = {}
     offset      = offset or 0
-    local stop  = _hydrationStop(offset, limit, total, 8, "getAuthors", opts and opts.light_only)
+    _attachFlattenedCounts(out, sorted, offset)
+    local stop  = _hydrationStop(offset, limit, total, 8, "getAuthors",
+                                 (opts and opts.light_only) or Repo.spine_light)
     for i = offset + 1, stop do
         out[#out + 1] = _hydrateGroupShape(sorted[i], within, filter, opts and opts.light_only)
     end
@@ -5136,7 +5618,9 @@ function Repo.getGenres(limit, offset, sort_priority_override, filter, opts)
     local total = #sorted
     local out   = {}
     offset      = offset or 0
-    local stop  = _hydrationStop(offset, limit, total, 8, "getGenres", opts and opts.light_only)
+    _attachFlattenedCounts(out, sorted, offset)
+    local stop  = _hydrationStop(offset, limit, total, 8, "getGenres",
+                                 (opts and opts.light_only) or Repo.spine_light)
     for i = offset + 1, stop do
         out[#out + 1] = _hydrateGroupShape(sorted[i], within, filter, opts and opts.light_only)
     end
@@ -5598,7 +6082,8 @@ function Repo.getFormats(limit, offset, sort_priority_override, filter, opts)
     local total = #sorted
     local out   = {}
     offset      = offset or 0
-    local stop  = _hydrationStop(offset, limit, total, 8, "getFormats", opts and opts.light_only)
+    local stop  = _hydrationStop(offset, limit, total, 8, "getFormats",
+                                 (opts and opts.light_only) or Repo.spine_light)
     for i = offset + 1, stop do
         out[#out + 1] = _hydrateGroupShape(sorted[i], within, filter, opts and opts.light_only)
     end
@@ -5641,7 +6126,9 @@ function Repo.getLanguages(limit, offset, sort_priority_override, filter, opts)
     local total = #sorted
     local out   = {}
     offset      = offset or 0
-    local stop  = _hydrationStop(offset, limit, total, 8, "getLanguages", opts and opts.light_only)
+    _attachFlattenedCounts(out, sorted, offset)
+    local stop  = _hydrationStop(offset, limit, total, 8, "getLanguages",
+                                 (opts and opts.light_only) or Repo.spine_light)
     for i = offset + 1, stop do
         out[#out + 1] = _hydrateGroupShape(sorted[i], within, filter, opts and opts.light_only)
     end
@@ -5767,7 +6254,8 @@ function Repo.getRatings(limit, offset, sort_priority_override, filter, opts)
     local total = #sorted
     local out   = {}
     offset      = offset or 0
-    local stop  = _hydrationStop(offset, limit, total, 8, "getRatings", opts and opts.light_only)
+    local stop  = _hydrationStop(offset, limit, total, 8, "getRatings",
+                                 (opts and opts.light_only) or Repo.spine_light)
     for i = offset + 1, stop do
         out[#out + 1] = _hydrateGroupShape(sorted[i], within, filter, opts and opts.light_only)
     end
@@ -6714,9 +7202,15 @@ function Repo.getBySource(source, filter, sort_priority, offset, limit, opts)
         -- order) and rehydrate just the visible page.
         local total = #cached_paths
         local from  = (offset or 0) + 1
-        local to    = _hydrationStop(offset or 0, limit, total, total, "getBySource", opts and opts.light_only)
+        local to    = _hydrationStop(offset or 0, limit, total, total, "getBySource",
+                                     (opts and opts.light_only) or Repo.spine_light)
         local page  = {}
-        if opts and opts.light_only then
+        -- Repo.spine_light: the spine shelf renders colour + text, never a
+        -- cover, so its pages hydrate from the batched light metadata (one
+        -- SELECT) instead of a full _safeBuildBookMeta per record -- which
+        -- measured ~20ms/record on device flash, i.e. the whole of a slow
+        -- page turn on a 'library' chip.
+        if (opts and opts.light_only) or Repo.spine_light then
             -- Letter-jump path: the caller only reads sort-key fields
             -- (title / author / series) to locate a page boundary and never
             -- renders these records, so skip the heavy _safeBuildBookMeta
@@ -7188,9 +7682,11 @@ function Repo.getBySource(source, filter, sort_priority, offset, limit, opts)
     -- Light records are released for GC after this function returns.
     local total = #paths
     local from  = (offset or 0) + 1
-    local to    = _hydrationStop(offset or 0, limit, total, total, "getBySource", opts and opts.light_only)
+    local to    = _hydrationStop(offset or 0, limit, total, total, "getBySource",
+                                 (opts and opts.light_only) or Repo.spine_light)
     local page  = {}
-    if opts and opts.light_only then
+    -- See the HIT slice above: spine pages serve light records.
+    if (opts and opts.light_only) or Repo.spine_light then
         -- Letter-jump path: the sorted light candidates already carry the
         -- sort-key fields the caller needs, so hand back that slice directly
         -- rather than re-hydrating full records (covers etc.) it won't use.
