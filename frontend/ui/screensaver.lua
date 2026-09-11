@@ -492,9 +492,13 @@ function Screensaver:show()
             Screen:refreshFull(0, 0, screen_w, screen_h)
 
             -- On Kobo, on sunxi SoCs with a recent kernel, wait a tiny bit more to avoid weird refresh glitches...
-            if Device:isKobo() and Device:isSunxi() then
+            if Device:isKobo() and Device:info() == "Kobo_io" then -- and Device:isSunxi() then
                 ffiUtil.usleep(150 * 1000)
             end
+
+            UIManager:tickAfterNext(function()
+                UIManager:setDirty(nil, "full")
+            end)
         end
     else
         -- nil it, in case user switched ScreenSaver modes during our lifetime.

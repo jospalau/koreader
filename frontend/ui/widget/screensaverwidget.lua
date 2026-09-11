@@ -67,7 +67,12 @@ function ScreenSaverWidget:onCloseWidget()
     end
 
     -- Make it full-screen (self.main_frame.dimen might be in a different orientation, and it's already full-screen anyway...)
-    UIManager:setDirty(nil, "full")
+    UIManager:tickAfterNext(function()
+        if Device:isKobo() and Device:info() == "Kobo_io" then
+            require("ffi/util").usleep(500 * 1000)
+        end
+        UIManager:setDirty(nil, "full")
+    end)
 
     -- Will come after the Resume event, iff screensaver_delay is set.
     -- Comes *before* it otherwise.
