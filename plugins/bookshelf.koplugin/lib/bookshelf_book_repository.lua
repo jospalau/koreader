@@ -1410,7 +1410,6 @@ function Repo.buildBook(filepath, opts)
     -- sidecar-derived count (unopened reflowable books). ds-or-filename also
     -- seeds the progress cache below, so it must match what readProgress
     -- computes (which never sees BIM's count).
-    print(filepath)
     local fallback_page_count = ds_page_count or _calibreField(filepath, "pages") -- pageCountFromFilename(filepath)
     if not book.page_count then
         book.page_count = fallback_page_count
