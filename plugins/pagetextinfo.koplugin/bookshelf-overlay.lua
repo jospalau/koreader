@@ -160,6 +160,15 @@ end
 -- East North: aparcar y mostrar / volver si ya aparcado (toggle)
 -- ---------------------------------------------------------------------------
 function ReaderUI:onParkAndShowBookshelf()
+    local util = require("ffi/util")
+
+    local function now_ms()
+        local sec, usec = util.gettime()
+        return sec * 1000 + usec / 1000
+    end
+
+    local __t_start = now_ms()
+
     if G_reader_settings:readSetting("start_with") ~= "bookshelf" then
         local UIManager = require("ui/uimanager")
         local Event = require("ui/event")
@@ -194,6 +203,7 @@ function ReaderUI:onParkAndShowBookshelf()
 
     local ok, err = pcall(function()
         local rui = plugin and plugin.ui
+
         -- pagemap_current_page_label (stable page numbers) only gets written
         -- by ReaderPageMap:onCloseDocument, which hot-parking deliberately
         -- never fires (that's the whole point of not closing). Without this,
@@ -202,11 +212,17 @@ function ReaderUI:onParkAndShowBookshelf()
         pcall(function()
             local pm = rui.pagemap
             if pm and pm.has_pagemap and pm.use_page_labels then
-                rui.doc_settings:saveSetting("pagemap_last_page_label", pm:getLastPageLabel(true))
-                rui.doc_settings:saveSetting("pagemap_current_page_label",
-                    select(1, pm:getCurrentPageLabel(true)))
+                rui.doc_settings:saveSetting(
+                    "pagemap_last_page_label",
+                    pm:getLastPageLabel(true)
+                )
+                rui.doc_settings:saveSetting(
+                    "pagemap_current_page_label",
+                    select(1, pm:getCurrentPageLabel(true))
+                )
             end
         end)
+
         if not plugin._widget then
             -- Libro abierto directo desde el File Manager real: el widget
             -- de Bookshelf no existe todavía en esta sesión, así que no hay
@@ -215,28 +231,59 @@ function ReaderUI:onParkAndShowBookshelf()
             -- (show() no toca el documento ni el lector, solo lo tapa
             -- encima) y luego registramos el park a mano.
             logger.dbg("[bookshelf-overlay] plugin._widget es nil -> cold-create via plugin:show()")
-            pcall(function() rui:saveSettings() end)   -- flush a disco PRIMERO
+
+            pcall(function()
+                rui:saveSettings()
+            end)
+
+            logger.dbg(string.format(
+                "[TIMING] until saveSettings: %.3f ms",
+                now_ms() - __t_start
+            ))
+
             local ok_repo, Repo = pcall(require, "lib/bookshelf_book_repository")
             if ok_repo and Repo and Repo.invalidateProgressCache then
                 Repo.invalidateProgressCache(rui.document.file)
             end
+
             plugin:show()
+
+            logger.dbg(string.format(
+                "[TIMING] until show: %.3f ms",
+                now_ms() - __t_start
+            ))
+
             if plugin._widget then
                 plugin._widget._hero_current_memo = nil
                 plugin._widget._preview_book = nil
             end
+
             if plugin._widget and plugin._widget._rebuildRefreshHeroAndChips then
-                pcall(function() plugin._widget:_rebuildRefreshHeroAndChips() end)
+                pcall(function()
+                    plugin._widget:_rebuildRefreshHeroAndChips()
+                end)
             end
+
+            logger.dbg(string.format(
+                "[TIMING] until _rebuildRefreshHeroAndChips: %.3f ms",
+                now_ms() - __t_start
+            ))
+
             local park_ok = Park.park(plugin, plugin._widget)
-            logger.dbg("[bookshelf-overlay] Park.park manual tras cold-create =", tostring(park_ok))
+            logger.dbg(
+                "[bookshelf-overlay] Park.park manual tras cold-create =",
+                tostring(park_ok)
+            )
+
         else
             -- pcall(function()
             --     if rui and rui.document and rui.document.file then
             --         G_reader_settings:saveSetting("lastfile", rui.document.file)
             --     end
             -- end)
-            pcall(function() rui:saveSettings() end)
+            pcall(function()
+                rui:saveSettings()
+            end)
             -- pcall(function()
             --     local ok_repo, Repo = pcall(require, "lib/bookshelf_book_repository")
             --     if ok_repo and Repo and Repo.invalidateProgressCache then
@@ -249,22 +296,81 @@ function ReaderUI:onParkAndShowBookshelf()
                 plugin._widget._hero_current_memo = nil
                 plugin._widget._preview_book = nil
             end
+
+            -- Esto mide realmente cuánto tarda onToggleBookshelf().
+            local __toggle_start = now_ms()
+
             plugin:onToggleBookshelf() -- abre y aparca / o vuelve al libro si ya estaba aparcado
-            if plugin._widget and plugin._widget._rebuildRefreshHeroAndChips then
-                pcall(function() plugin._widget:_rebuildRefreshHeroAndChips() end)
+            logger.dbg(string.format(
+                "[TIMING] until toggle: %.3f ms",
+                now_ms() - __toggle_start
+            ))
+
+            local UIManager = require("ui/uimanager")
+
+            local t_start = now_ms()
+            local previous = t_start
+            local tick = 0
+
+            local function measureNextTick()
+                tick = tick + 1
+
+                UIManager:nextTick(function()
+                    local current = now_ms()
+
+                    logger.dbg(string.format(
+                        "[TIMING] nextTick %d: +%.3f ms (total %.3f ms)",
+                        tick,
+                        current - previous,
+                        current - t_start
+                    ))
+
+                    previous = current
+
+                    if tick < 10 then
+                        measureNextTick()
+                    end
+                end)
             end
+
+            -- measureNextTick()
+            if plugin._widget and plugin._widget._rebuildRefreshHeroAndChips then
+                pcall(function()
+                    plugin._widget:_rebuildRefreshHeroAndChips()
+                end)
+            end
+
+            logger.dbg(string.format(
+                "[TIMING] until _rebuildRefreshHeroAndChips: %.3f ms",
+                now_ms() - __t_start
+            ))
         end
     end)
 
     Park.enabled = original_enabled
     logger.dbg("[bookshelf-overlay] Park.enabled restaurado")
 
-    logger.dbg("[bookshelf-overlay] toggle pcall ok=", tostring(ok), "err=", tostring(err))
-    logger.dbg("[bookshelf-overlay] isParked DESPUÉS del toggle:", tostring(Park.isParked()))
+    logger.dbg(
+        "[bookshelf-overlay] toggle pcall ok=",
+        tostring(ok),
+        "err=",
+        tostring(err)
+    )
+
+    logger.dbg(
+        "[bookshelf-overlay] isParked DESPUÉS del toggle:",
+        tostring(Park.isParked())
+    )
 
     if not ok then
         logger.warn("[bookshelf-overlay] ERROR en toggle:", err)
     end
+
+    logger.dbg(string.format(
+        "[TIMING] SYNC TIME: %.3f ms",
+        now_ms() - __t_start
+    ))
+
     return true
 end
 
