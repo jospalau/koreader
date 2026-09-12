@@ -3694,6 +3694,7 @@ end
 function BookshelfWidget:_openBook(book, after_open_callback)
     if not book or not book.filepath then return end
     local function proceed()
+    self._tap_selected_fp = nil
     -- OPDS records carry an "OPDS://server/id" pseudo-path, not a file: there
     -- is nothing on disk to hand ReaderUI. Open the catalog book modal instead
     -- (what the feed said about it, plus a download button per format, plus
@@ -3903,7 +3904,7 @@ end
 
         local function restore_focus()
             self._mbr_confirm_pending = nil
-            self:_rebuildRefreshHeroAndChips()
+            self:_swapHeroInPlace()
         end
 
         -- The confirm box itself opens 500ms after the tap, e.g. so the
@@ -4182,7 +4183,7 @@ function BookshelfWidget:_buildHero(content_w, hero_cover_w, hero_cover_h, hero_
                 self:_swapHeroInPlace()
                 return
             end
-            self._tap_selected_fp = nil
+            -- self._tap_selected_fp = nil
             self:_openBook(b)
         end,
         -- A genuine double tap opens directly, skipping the stage-then-open
