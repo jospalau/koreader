@@ -3910,7 +3910,7 @@ end
         -- cover-squeeze tap feedback plays first instead of being cut off
         -- by the dialog appearing instantly.
         UIManager:scheduleIn(0.5, function()
-            UIManager:show(require("ui/widget/confirmbox"):new{
+            UIManager:show(require("ui/widget/confirmboxyesno"):new{
                 text = text,
                 ok_text = _("Yes"),
                 ok_callback = function()
