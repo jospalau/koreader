@@ -3904,7 +3904,6 @@ end
 
         local function restore_focus()
             self._mbr_confirm_pending = nil
-            self:_swapHeroInPlace()
         end
 
         -- The confirm box itself opens 500ms after the tap, e.g. so the
@@ -3919,7 +3918,7 @@ end
                     UIManager:nextTick(proceed)
                 end,
                 cancel_callback = restore_focus,
-            })
+            }, "full")
         end)
         return
     end
