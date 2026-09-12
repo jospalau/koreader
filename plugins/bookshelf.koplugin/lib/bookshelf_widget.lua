@@ -3875,11 +3875,6 @@ function BookshelfWidget:_openBook(book, after_open_callback)
     pcall(function() self:_paintOpeningEffect(book.filepath) end)
     self:_launchReader(open_path, after_open_callback)
 end
-
-    -- Confirm-before-open: same idiom as FileManager's own MBR/TBR/finished
-    -- prompt, ported here so it fires from Bookshelf taps too (spine cover,
-    -- hero card, double-tap) since they all funnel through this function
-    -- rather than filemanagerutil.openFile.
     local util = require("util")
     if G_reader_settings:isTrue("top_manager_infmandhistory")
             and book.filepath
@@ -3890,7 +3885,10 @@ end
                 or _G.all_files[book.filepath].status == "tbr"
                 or _G.all_files[book.filepath].status == "new"
                 or _G.all_files[book.filepath].status == "complete") then
-        local MultiConfirmBox = require("ui/widget/multiconfirmbox")
+        if self._mbr_confirm_pending == book.filepath then
+            return
+        end
+        self._mbr_confirm_pending = book.filepath
         local status = _G.all_files[book.filepath].status
         local text = ", do you want to open it?"
         if status == "mbr" then
@@ -3902,26 +3900,28 @@ end
         else
             text = "Book finished" .. text
         end
-        if Device:isKobo() and Device:info() == "Kobo_io" then
-            require("ffi/util").usleep(400 * 1000)
-            local Screen = require("device").screen
-            Screen:refreshFull(0, 0, Screen:getWidth(), Screen:getHeight())
-        end
-        UIManager:show(MultiConfirmBox:new{
-            text = text,
-            choice1_text = _("Yes"),
-            choice1_callback = function()
-                -- UIManager:setDirty(self, "full")
-                UIManager:nextTick(proceed)
-            end,
-            choice2_text = _("Do not open it"),
-            choice2_callback = function() end,
-            cancel_callback = function() end,
-        }, (Device:isKobo() and Device:info() == "Kobo_io") and "partial" or "full")
 
+        local function restore_focus()
+            self._mbr_confirm_pending = nil
+            self:_rebuildRefreshHeroAndChips()
+        end
+
+        -- The confirm box itself opens 500ms after the tap, e.g. so the
+        -- cover-squeeze tap feedback plays first instead of being cut off
+        -- by the dialog appearing instantly.
+        UIManager:scheduleIn(0.5, function()
+            UIManager:show(require("ui/widget/confirmbox"):new{
+                text = text,
+                ok_text = _("Yes"),
+                ok_callback = function()
+                    self._mbr_confirm_pending = nil
+                    UIManager:nextTick(proceed)
+                end,
+                cancel_callback = restore_focus,
+            })
+        end)
         return
     end
-
     proceed()
 end
 
