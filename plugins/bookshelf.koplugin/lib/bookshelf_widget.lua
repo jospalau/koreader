@@ -2183,6 +2183,7 @@ function BookshelfWidget:_rebuild()
     -- so everything downstream (the vgroup splice, the slack absorber, the
     -- cover-dim readback, _swapShelvesInPlace's in-place swap) is mode-agnostic.
     local rows
+    self._spine_badges = nil
     if self:_isListMode() then
         rows = self:_buildListRows(items, content_w, shelf_h, book_gap, n_shelves)
     elseif self:_isSpineMode() then
@@ -2499,6 +2500,18 @@ function BookshelfWidget:_rebuild()
             }
             overlap_group[#overlap_group + 1] = a
         end
+    end
+    -- Section badges paint LAST of all, over the rows and over the footer.
+    -- A badge hangs below its plank by design (a shop's shelf-edge label
+    -- hangs in front of the books), and at a large UI size it hangs further
+    -- than the inter-row gap -- painted in row order the next row's books
+    -- and the footer cut it off. Reads the list at paint time so an in-place
+    -- shelf swap cannot leave it painting badges from rows that are gone.
+    do
+        local bw = self
+        overlap_group[#overlap_group + 1] =
+            require("lib/bookshelf_spine_shelf").badgeOverlay(
+                function() return bw._spine_badges end, self.width, self.height)
     end
     self[1] = overlap_group
     local _perf_t4 = _gettime()
@@ -5330,6 +5343,10 @@ function BookshelfWidget:_buildSpineRows(items, content_w, shelf_h, PAD, n_rows)
         rows[r] = SpineShelf.rowWidget{
             plan              = plan,
             row               = plan.rows[r],
+            -- Badges paint in the shelf's overlay, after everything else:
+            -- they hang below their plank and would otherwise be painted
+            -- over by the next row's books and by the footer.
+            defer_badges      = true,
             lift_headroom     = lift_head,
             -- For an empty row's ornament seed: the page's identity + the
             -- row's index (see rowWidget).
@@ -5345,6 +5362,14 @@ function BookshelfWidget:_buildSpineRows(items, content_w, shelf_h, PAD, n_rows)
             selection         = self._selection,
         }
     end
+    -- Collected fresh on every build, INCLUDING an in-place shelf swap, so
+    -- the overlay never holds badges belonging to rows that are gone.
+    local badges = {}
+    for r = 1, #rows do
+        local b = rows[r]._shelf_badges
+        if b then badges[#badges + 1] = b end
+    end
+    self._spine_badges = badges
     -- Preloader hint: covers are only painted face-out, at spine height.
     rows[1].cover_w = math.floor(shelf_h / 1.5)
     rows[1].cover_h = shelf_h
@@ -5728,16 +5753,46 @@ function BookshelfWidget:_buildPaginationFooter(content_w, label_h, total_pages)
     -- flipped (first/last page reached or left): only then does the footer
     -- need refreshing beyond the page label (see _swapShelvesInPlace).
     self._footer_nav_state = { back = can_step_back, fwd = can_step_forward }
+    -- Size the counter's slot from the WIDEST value it could ever show on
+    -- this shelf, never the current one -- that is what keeps the chevrons
+    -- still while you page. A fixed share meant the counter's width had
+    -- nothing to do with the counter, so a long range in a wide UI font at a
+    -- high DPI wrapped onto two lines while the chevrons sat in slots several
+    -- times wider than their icons. See lib/bookshelf_footer_slots.lua.
+    local slots
+    do
+        local FooterSlots = require("lib/bookshelf_footer_slots")
+        -- Either branch of the range logic below can supply the total; the
+        -- larger is the safe bound, and the open-ended form ("of 249+") is
+        -- the wider of the two texts.
+        local counter_total = math.max(tonumber(self._spine_books_total) or 0,
+                                       tonumber(self._total_items) or 0)
+        local probe = FooterSlots.probeNumber(counter_total)
+        local page_need = slot(SLOT_PAGE)
+        pcall(function()
+            local TextWidget = require("ui/widget/textwidget")
+            local probe_tw = TextWidget:new{
+                text = T(_("%1\xe2\x80\x8a-\xe2\x80\x8a%2 of %3+"), probe, probe, probe),
+                face = BFont:getFace(BFont.getUIFontFace() or "cfont", 15),
+            }
+            -- The button's own frame either side of the text.
+            page_need = probe_tw:getSize().w
+                        + 2 * (bm("page") + bs("page") + Screen:scaleBySize(6))
+            probe_tw:free()
+        end)
+        slots = FooterSlots.widths(nav_strip_w, page_need,
+                                   chev_size + Screen:scaleBySize(12))
+    end
     local first = Button:new{
         icon = "chevron.first", icon_width = chev_size, icon_height = chev_size,
-        width      = slot(SLOT_EDGE),
+        width      = slots.edge,
         callback   = go_page(1),
         margin     = bm("first"), bordersize = bs("first"), radius = br("first"),
         enabled    = can_step_back, show_parent = self,
     }
     local prev = Button:new{
         icon = "chevron.left",  icon_width = chev_size, icon_height = chev_size,
-        width         = slot(SLOT_STEP),
+        width         = slots.step,
         callback      = step(-1),
         hold_callback = skip(-1),
         margin        = bm("prev"), bordersize = bs("prev"), radius = br("prev"),
@@ -5788,7 +5843,7 @@ function BookshelfWidget:_buildPaginationFooter(content_w, label_h, total_pages)
         -- stores a resolvable face, so the name can be passed straight in.
         text_font_face = BFont.getUIFontFace() or "cfont",
         text_font_size = 15,
-        width         = slot(SLOT_PAGE),
+        width         = slots.page,
         callback      = function() bw:_openPageJump() end,
         -- Long-press: flip covers <-> list. The only footer button that
         -- reached this file without a hold -- prev/next already spend theirs
@@ -5800,7 +5855,7 @@ function BookshelfWidget:_buildPaginationFooter(content_w, label_h, total_pages)
     self._page_text_button = page_text
     local next_btn = Button:new{
         icon = "chevron.right", icon_width = chev_size, icon_height = chev_size,
-        width         = slot(SLOT_STEP),
+        width         = slots.step,
         callback      = step(1),
         hold_callback = skip(1),
         margin        = bm("next"), bordersize = bs("next"), radius = br("next"),
@@ -5815,7 +5870,7 @@ function BookshelfWidget:_buildPaginationFooter(content_w, label_h, total_pages)
     -- last page that has books either way.
     local last = Button:new{
         icon = "chevron.last", icon_width = chev_size, icon_height = chev_size,
-        width      = slot(SLOT_EDGE),
+        width      = slots.edge,
         callback   = open_ended and function() bw:_opdsWalkToEnd() end
                                  or function()
                                         -- Live count at tap time: the map may
