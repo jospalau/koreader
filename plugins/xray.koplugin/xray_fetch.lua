@@ -11,6 +11,22 @@ local function _truncateSafe(text, limit)
     return (utils:getTruncatedText(text, limit))
 end
 
+local function _getCurrentPage(plugin)
+    if not plugin or not plugin.ui then return 1 end
+    if plugin.ui.getCurrentPage then
+        local ok, p = pcall(function() return plugin.ui:getCurrentPage() end)
+        if ok and type(p) == "number" then return p end
+    end
+    if plugin.ui.paging and plugin.ui.paging.getCurrentPage then
+        local ok, p = pcall(function() return plugin.ui.paging:getCurrentPage() end)
+        if ok and type(p) == "number" then return p end
+    end
+    if plugin.ui.document and plugin.ui.document.getCurrentPage then
+        local ok, p = pcall(function() return plugin.ui.document:getCurrentPage() end)
+        if ok and type(p) == "number" then return p end
+    end
+    return 1
+end
 
 local M = {}
 
@@ -92,13 +108,13 @@ function M:fetchSingleWord(text, pos0, pos1)
     text = tostring(text or "")
 
     require("ui/network/manager"):runWhenOnline(function()
-        if self.destroyed or not self.ui or not self.ui.document or not self.ui.getCurrentPage then return end
+        if self.destroyed or not self.ui or not self.ui.document then return end
 
         if self._active_ai_cancel or (self.ai_helper and self.ai_helper._async_child_pid) then
             self:cancelActiveAIRequest("Previous AI request replaced by single word lookup")
         end
 
-        local current_page = self.ui:getCurrentPage()
+        local current_page = _getCurrentPage(self)
         local total_pages = (type(self.ui.document.getPageCount) == "function" and self.ui.document:getPageCount()) or 1
         local reading_percent = math.floor((current_page / math.max(1, total_pages)) * 100)
         local spoiler_setting = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
@@ -114,6 +130,7 @@ function M:fetchSingleWord(text, pos0, pos1)
                 local title, text_msg = utils:getFriendlyError("error_api", "invalid api key", self.loc)
                 local err_dlg
                 err_dlg = ButtonDialog:new{
+                    modal = true,
                     title = title,
                     text = text_msg,
                     buttons = {{{ text = self.loc:t("ok") or "OK", callback = function() if err_dlg then UIManager:close(err_dlg) end end }}}
@@ -128,7 +145,7 @@ function M:fetchSingleWord(text, pos0, pos1)
         local result_file
         local is_cancelled = false
         local progress_msg
-        local function cancelLookup(reason)
+        local function cancelLookup(reason, notify_user)
             if is_cancelled then return end
             is_cancelled = true
             if request_pid and self.ai_helper and self.ai_helper.cancelAsyncChild then
@@ -139,8 +156,12 @@ function M:fetchSingleWord(text, pos0, pos1)
             if self._active_ai_dialog == progress_msg then self._active_ai_dialog = nil end
             if self._active_ai_cancel == cancelLookup then self._active_ai_cancel = nil end
             self:log("XRayPlugin: " .. (reason or "Single word lookup cancelled"))
+            if notify_user then
+                UIManager:show(InfoMessage:new{ text = notify_user, timeout = 5 })
+            end
         end
         progress_msg = ButtonDialog:new{
+            modal = true,
             title = self.loc:t("looking_up_msg", _truncateSafe(text, 30)),
             text = text .. "\n\n" .. (self.loc:t("fetching_wait") or "This may take a moment.\nTap Cancel to stop."),
             tap_close_callback = function() cancelLookup("Single word lookup cancelled by user") end,
@@ -161,13 +182,13 @@ function M:fetchSingleWord(text, pos0, pos1)
         UIManager:scheduleIn(0.3, function()
             if is_cancelled then return end
             if self.destroyed or not self.ui or not self.ui.document then
-                cancelLookup("Single word lookup cancelled because the document or plugin is unavailable")
+                cancelLookup("Single word lookup cancelled because the document or plugin is unavailable", self.loc and self.loc:t("document_unavailable") or "Document unavailable")
                 return
             end
             UIManager:scheduleIn(0.3, function()
             if is_cancelled then return end
             if self.destroyed or not self.ui or not self.ui.document then
-                cancelLookup("Single word lookup cancelled because the document or plugin is unavailable")
+                cancelLookup("Single word lookup cancelled because the document or plugin is unavailable", self.loc and self.loc:t("document_unavailable") or "Document unavailable")
                 return
             end
             if not self.chapter_analyzer then self.chapter_analyzer = require(plugin_path .. "xray_chapteranalyzer"):new() end
@@ -217,7 +238,7 @@ function M:fetchSingleWord(text, pos0, pos1)
 
             if is_cancelled then return end
             if self.destroyed or not self.ui or not self.ui.document then
-                cancelLookup("Single word lookup cancelled because the document or plugin is unavailable")
+                cancelLookup("Single word lookup cancelled because the document or plugin is unavailable", self.loc and self.loc:t("document_unavailable") or "Document unavailable")
                 return
             end
 
@@ -227,16 +248,18 @@ function M:fetchSingleWord(text, pos0, pos1)
             end
 
             result_file = settings_xray_dir .. "/sw_fetch_" .. tostring(os.time()) .. ".json"
-            request_pid = self.ai_helper:lookupSingleWordAsync(text, context, result_file)
+            local pid, err_code, err_msg = self.ai_helper:lookupSingleWordAsync(text, context, result_file)
+            request_pid = pid
             if not request_pid then
                 if progress_msg then UIManager:close(progress_msg) end
                 if self._active_ai_dialog == progress_msg then self._active_ai_dialog = nil end
                 if self._active_ai_cancel == cancelLookup then self._active_ai_cancel = nil end
-                self:log("XRayPlugin: Failed to start async lookup")
+                self:log("XRayPlugin: Failed to start async lookup: " .. tostring(err_msg or err_code))
                 local ButtonDialog = require("ui/widget/buttondialog")
-                local title, text_msg = utils:getFriendlyError("error_api", "Failed to start background process", self.loc)
+                local title, text_msg = utils:getFriendlyError(err_code or "error_api", err_msg or "Failed to start background process", self.loc)
                 local err_dlg
                 err_dlg = ButtonDialog:new{
+                    modal = true,
                     title = title,
                     text = text_msg,
                     buttons = {{{ text = self.loc:t("ok") or "OK", callback = function() if err_dlg then UIManager:close(err_dlg) end end }}}
@@ -250,12 +273,12 @@ function M:fetchSingleWord(text, pos0, pos1)
             local function poll()
                 if is_cancelled then return end
                 if self.destroyed or not self.ui or not self.ui.document then
-                    cancelLookup("Single word lookup cancelled because the document or plugin is unavailable")
+                    cancelLookup("Single word lookup cancelled because the document or plugin is unavailable", self.loc and self.loc:t("document_unavailable") or "Document unavailable")
                     return
                 end
 
                 if not self.ai_helper or not self.ai_helper.checkAsyncResult then
-                    cancelLookup("Single word lookup stopped because the AI helper is unavailable")
+                    cancelLookup("Single word lookup stopped because the AI helper is unavailable", self.loc and self.loc:t("error_api") or "AI service unavailable")
                     return
                 end
                 local data, p_err_code, p_err_msg = self.ai_helper:checkAsyncResult(result_file, request_pid)
@@ -268,6 +291,7 @@ function M:fetchSingleWord(text, pos0, pos1)
                         local title, text_msg = utils:getFriendlyError("error_timeout", nil, self.loc)
                         local err_dlg
                         err_dlg = ButtonDialog:new{
+                            modal = true,
                             title = title,
                             text = text_msg,
                             buttons = {{{ text = self.loc:t("ok") or "OK", callback = function() if err_dlg then UIManager:close(err_dlg) end end }}}
@@ -283,6 +307,7 @@ function M:fetchSingleWord(text, pos0, pos1)
                     local title, text_msg = utils:getFriendlyError(p_err_code, p_err_msg, self.loc)
                     local err_dlg
                     err_dlg = ButtonDialog:new{
+                        modal = true,
                         title = title,
                         text = text_msg,
                         buttons = {{{ text = self.loc:t("ok") or "OK", callback = function() if err_dlg then UIManager:close(err_dlg) end end }}}
@@ -318,9 +343,13 @@ function M:_processSingleWordResult(result, text, book_text, current_page)
         return
     end
 
-    if result.is_valid then
+    if result.is_valid == true or result.is_valid == "true" then
         local item = result.item
-        local item_type = result.type
+        local raw_type = tostring(result.type or ""):lower():gsub("%s+", "_")
+        local item_type = raw_type
+        if item_type == "historical" or item_type == "historicalfigure" then
+            item_type = "historical_figure"
+        end
         if type(item) ~= "table" or not item.name then
             local err = result.error_message or self.loc:t("entity_not_found", safe_text:sub(1, 20))
             UIManager:show(InfoMessage:new{ text = err, timeout = 5 })
@@ -434,16 +463,32 @@ function M:_processSingleWordResult(result, text, book_text, current_page)
     end
 end
 
-function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_silent)
-    if self.destroyed or not self.ui or not self.ui.document then return end
+function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_silent, batch_end_page, on_complete_cb)
+    local completed = false
+    local function notifyComplete(success, err_code, err_msg)
+        if completed then return end
+        completed = true
+        if on_complete_cb then
+            pcall(on_complete_cb, success, err_code, err_msg)
+        end
+    end
+
+    if self.destroyed or not self.ui or not self.ui.document then
+        notifyComplete(false, "cancelled")
+        return
+    end
     local doc_file = self.ui.document.file
-    if not doc_file then return end
+    if not doc_file then
+        notifyComplete(false, "cancelled")
+        return
+    end
 
     local has_active_request = self._active_ai_cancel
         or (self.ai_helper and self.ai_helper._async_child_pid)
     if is_silent and has_active_request then
         self.bg_fetch_pending = false
         self:log("XRayPlugin: Skipping background fetch because another AI request is active")
+        notifyComplete(false, "busy")
         return
     elseif not is_silent and has_active_request then
         self:cancelActiveAIRequest("Previous AI request replaced by manual fetch")
@@ -518,6 +563,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
         end
         finishActiveRequest()
         self:log("XRayPlugin: " .. reason)
+        notifyComplete(false, "cancelled", reason)
     end
 
     self._active_ai_cancel = cancelActiveRequest
@@ -528,6 +574,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
             and (self.loc:t("updating_ai", self.ai_provider or "AI") or "Updating X-Ray...")
             or  (self.loc:t("fetching_ai",  self.ai_provider or "AI") or "Fetching X-Ray...")
         wait_msg = ButtonDialog:new{
+            modal = true,
             title = fetch_text,
             text  = title .. "\n\n" .. (self.loc:t("fetching_wait") or "This may take a moment.\nTap Cancel to stop."),
             tap_close_callback = function()
@@ -556,7 +603,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
         if not self.chapter_analyzer then self.chapter_analyzer = require(plugin_path .. "xray_chapteranalyzer"):new() end
         if not self.ui.document then return end
 
-        local current_page = self.ui:getCurrentPage()
+        local current_page = batch_end_page or self.ui:getCurrentPage()
         local first_missing_page = last_fetch_page
         if is_update then
             local toc = utils:flattenTOC(self.ui.document:getToc())
@@ -589,9 +636,21 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
 
         local end_page_analysis = current_page
         local spoiler_setting = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.spoiler_setting or "spoiler_free"
-        if spoiler_setting ~= "full_book" then
+        if spoiler_setting ~= "full_book" or batch_end_page then
             end_page_analysis = self.chapter_analyzer:getEndPageForCurrentPage(self.ui, current_page)
         end
+
+        -- A cached page can outlive pagination changes or be ahead of the
+        -- reader's current position. In that case an incremental XPointer
+        -- range would be empty/reversed; use the current chapter context.
+        local stale_cached_position = false
+        if first_missing_page and first_missing_page > end_page_analysis then
+            stale_cached_position = true
+            self:log("XRayPlugin: Ignoring stale last_fetch_page=" .. tostring(first_missing_page)
+                .. " beyond analysis boundary=" .. tostring(end_page_analysis))
+            first_missing_page = nil
+        end
+
         local book_text = self.chapter_analyzer:getTextForAnalysis(self.ui, 20000, nil, end_page_analysis, first_missing_page)
         local known_chapters = {}
         if is_update and self.timeline then
@@ -609,19 +668,9 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
                 return
             end
 
-            -- A cached page can outlive pagination changes or be ahead of the
-            -- reader's current position. In that case an incremental XPointer
-            -- range would be empty/reversed; use the current chapter context.
-            local stale_cached_position = false
-            if first_missing_page and first_missing_page > end_page_analysis then
-                stale_cached_position = true
-                self:log("XRayPlugin: Ignoring stale last_fetch_page=" .. tostring(first_missing_page)
-                    .. " beyond analysis boundary=" .. tostring(end_page_analysis))
-                first_missing_page = nil
-            end
-
+            local is_full_book = (reading_percent == 100 and not batch_end_page)
             local samples, chapter_titles = self.chapter_analyzer:getDetailedChapterSamples(
-                self.ui, 200, 150000, reading_percent == 100, first_missing_page, known_chapters, current_page)
+                self.ui, 200, 150000, is_full_book, first_missing_page, known_chapters, current_page)
             local annots = self.chapter_analyzer:getAnnotationsForAnalysis(self.ui)
 
             if (not book_text or #book_text < 10) and not samples then
@@ -635,6 +684,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
                 if not is_silent then UIManager:show(InfoMessage:new{ text = message, timeout = 5 }) end
                 self:log("XRayPlugin: Text extraction failed" .. (is_silent and " (silent)" or ""))
                 finishActiveRequest()
+                notifyComplete(false, "error_extract")
                 return
             end
 
@@ -658,6 +708,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
                 if wait_msg then UIManager:close(wait_msg) end
                 self:log("XRayPlugin: Failed to build request: " .. tostring(err_msg))
                 finishActiveRequest()
+                notifyComplete(false, err_code, err_msg)
                 if not is_silent then
                     if not self.ai_helper:hasApiKey() and self.showWelcomeCard then
                         self:showWelcomeCard()
@@ -702,6 +753,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
                 pcall(function() os.remove(result_file) end)
                 result_file = nil
                 finishActiveRequest()
+                notifyComplete(false, "error_start")
                 return
             end
             request_pid = started
@@ -729,6 +781,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
                             local title, text = utils:getFriendlyError("error_timeout", nil, self.loc)
                             local err_box
                             err_box = ButtonDialog:new{
+                                modal = true,
                                 title = title,
                                 text = text,
                                 buttons = {{{ text = self.loc:t("ok") or "OK", callback = function() if err_box then UIManager:close(err_box) end end }}}
@@ -740,11 +793,13 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
                     if wait_msg then UIManager:close(wait_msg) end
                     finishActiveRequest()
                     self:log("XRayPlugin: Fetch failed: " .. tostring(p_err_msg))
+                    notifyComplete(false, p_err_code, p_err_msg)
                     if not is_silent then
                         local ButtonDialog = require("ui/widget/buttondialog")
                         local title, text = utils:getFriendlyError(p_err_code, p_err_msg, self.loc)
                         local err_box
                         err_box = ButtonDialog:new{
+                            modal = true,
                             title = title,
                             text = text,
                             buttons = {{{ text = self.loc:t("ok") or "OK", callback = function() if err_box then UIManager:close(err_box) end end }}}
@@ -755,6 +810,7 @@ function M:continueWithFetch(reading_percent, is_update, last_fetch_page, is_sil
                     if wait_msg then UIManager:close(wait_msg) end
                     finishActiveRequest()
                     self:finalizeXRayData(data, title, author, book_text, is_update, is_silent, current_page)
+                    notifyComplete(true)
                 end
             end
             UIManager:scheduleIn(2, poll)
@@ -859,6 +915,11 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
                             })
                         end
                     end
+                    if existing_char.source == "series_prior" then
+                        existing_char.is_series = true
+                        existing_char.from_series = true
+                        existing_char.source = nil
+                    end
                     found = true
                     break
                 end
@@ -909,6 +970,11 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
                         end
                     end
                     existing_fig.role = new_fig.role
+                    if existing_fig.source == "series_prior" then
+                        existing_fig.is_series = true
+                        existing_fig.from_series = true
+                        existing_fig.source = nil
+                    end
                     found = true
                     break
                 end
@@ -953,6 +1019,11 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
                                 description = new_loc.description
                             })
                         end
+                    end
+                    if existing_loc.source == "series_prior" then
+                        existing_loc.is_series = true
+                        existing_loc.from_series = true
+                        existing_loc.source = nil
                     end
                     found = true
                     break
@@ -1011,6 +1082,9 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
         local toc = self.ui and self.ui.document and self.ui.document.getToc and self.ui.document:getToc() or {}
         local incoming_timeline = final_book_data.timeline or {}
         self:assignTimelinePages(incoming_timeline, toc, true)
+        if self.filterOrphanTimelineEvents then
+            incoming_timeline = self:filterOrphanTimelineEvents(incoming_timeline, toc)
+        end
 
         for _, new_event in ipairs(incoming_timeline) do
             local found = false
@@ -1028,6 +1102,10 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
                 end
             end
             if not found then table.insert(current_timeline, new_event) end
+        end
+
+        if self.filterOrphanTimelineEvents then
+            current_timeline = self:filterOrphanTimelineEvents(current_timeline, toc)
         end
 
         self.timeline = {}
@@ -1085,6 +1163,9 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
         local current_timeline = final_book_data.timeline or {}
         local toc = self.ui and self.ui.document and self.ui.document.getToc and self.ui.document:getToc() or {}
         self:assignTimelinePages(current_timeline, toc, true)
+        if self.filterOrphanTimelineEvents then
+            current_timeline = self:filterOrphanTimelineEvents(current_timeline, toc)
+        end
 
         self.timeline = {}
         for _, ev in ipairs(current_timeline) do table.insert(self.timeline, ev) end
@@ -1135,40 +1216,28 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
             local slug = updated_data.series_slug or (series_info and series_info.slug)
             local index = series_info and series_info.index
             if slug and index then
-                local cache_data = self.series_manager:loadSeriesCache(slug)
-                if cache_data and cache_data.books then
-                    local function filterCurrentOnly(tbl)
-                        local res = {}
-                        for _, item in ipairs(tbl or {}) do
-                            if item.source ~= "series_prior" then
-                                table.insert(res, item)
-                            end
-                        end
-                        return res
-                    end
-                    cache_data.books[index] = {
-                        title = title,
-                        author = author,
-                        characters = filterCurrentOnly(self.characters),
-                        locations = filterCurrentOnly(self.locations),
-                        terms = filterCurrentOnly(self.terms),
-                        timeline = filterCurrentOnly(self.timeline),
-                    }
-                    self.series_manager:saveSeriesCache(slug, cache_data)
+                self.series_manager:syncBookToSeriesCache(slug, index, {
+                    title = title,
+                    author = author,
+                    characters = self.characters,
+                    locations = self.locations,
+                    terms = self.terms,
+                    timeline = self.timeline,
+                }, doc_file)
 
-                    local s_setting = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.series_context_enabled
-                    if s_setting ~= false and index > 1 then
-                        local all_priors_cached = true
-                        for p_idx = 1, index - 1 do
-                            if not cache_data.books[p_idx] then
-                                all_priors_cached = false
-                                break
-                            end
+                local cache_data = self.series_manager:loadSeriesCache(slug)
+                local s_setting = self.ai_helper and self.ai_helper.settings and self.ai_helper.settings.series_context_enabled
+                if s_setting ~= false and index > 1 and cache_data and cache_data.books then
+                    local all_priors_cached = true
+                    for p_idx = 1, index - 1 do
+                        if not cache_data.books[p_idx] then
+                            all_priors_cached = false
+                            break
                         end
-                        if all_priors_cached then
-                            self:log("XRayPlugin: Series: Post-fetch auto-restoring cached series context for " .. tostring(slug))
-                            self:mergeSeriesContext(cache_data, series_info)
-                        end
+                    end
+                    if all_priors_cached then
+                        self:log("XRayPlugin: Series: Post-fetch auto-restoring cached series context for " .. tostring(slug))
+                        self:mergeSeriesContext(cache_data, series_info)
                     end
                 end
             end
@@ -1209,7 +1278,7 @@ function M:finalizeXRayData(final_book_data, title, author, book_text, is_update
 
         local success_dialog
         local ButtonDialog = require("ui/widget/buttondialog")
-        success_dialog = ButtonDialog:new{ title = (self.loc:t("fetch_successful") or "Fetch successful") .. "\n\n" .. summary, buttons = {{{ text = self.loc:t("ok"), callback = function()
+        success_dialog = ButtonDialog:new{ modal = true, title = (self.loc:t("fetch_successful") or "Fetch successful") .. "\n\n" .. summary, buttons = {{{ text = self.loc:t("ok"), callback = function()
             UIManager:close(success_dialog)
         end }}} }
         UIManager:show(success_dialog)
@@ -1351,6 +1420,10 @@ function M:fetchMoreEntities(entity_type)
         local doc_file = self.ui.document.file
         if not doc_file then return end
 
+        if self._active_ai_cancel or (self.ai_helper and self.ai_helper._async_child_pid) then
+            self:cancelActiveAIRequest("Previous AI request replaced by user fetch")
+        end
+
         if not self.ai_helper then
             local AIHelper = require(plugin_path .. "xray_aihelper")
             self.ai_helper = AIHelper
@@ -1360,6 +1433,7 @@ function M:fetchMoreEntities(entity_type)
             local ButtonDialog = require("ui/widget/buttondialog")
             local key_dlg
             key_dlg = ButtonDialog:new{
+                modal = true,
                 title = self.loc:t("error_no_api_key") or "API Key Required",
                 buttons = {{{ text = self.loc:t("ok") or "OK", callback = function() if key_dlg then UIManager:close(key_dlg) end end }}}
             }
@@ -1385,7 +1459,6 @@ function M:fetchMoreEntities(entity_type)
             or  (self.loc:t("extracting_more_characters") or "Extracting additional characters...")
 
         local menu_to_close = is_terms and self.terms_menu or self.char_menu
-        if is_terms then self.terms_menu = nil else self.char_menu = nil end
 
         local wait_msg
         local request_pid
@@ -1414,6 +1487,7 @@ function M:fetchMoreEntities(entity_type)
         end
 
         wait_msg = ButtonDialog:new{
+            modal = true,
             title = dialog_title_text .. "\n\n" .. title,
             tap_close_callback = function()
                 cancelActiveRequest("Fetch cancelled by user")
@@ -1497,8 +1571,9 @@ function M:fetchMoreEntities(entity_type)
                 exclude_terms = is_terms and table.concat(exclude_list, ", ") or nil,
             }
 
-            local pid, res_file = self.ai_helper:startAIRequest(title, author, context, section_name)
+            local pid, res_file_or_err, err_msg = self.ai_helper:startAIRequest(title, author, context, section_name)
             if not pid then
+                local err_code = res_file_or_err
                 if wait_msg then
                     local dlg = wait_msg
                     wait_msg = nil
@@ -1507,17 +1582,23 @@ function M:fetchMoreEntities(entity_type)
                 end
                 if self._active_ai_dialog == wait_msg then self._active_ai_dialog = nil end
                 if self._active_ai_cancel == cancelActiveRequest then self._active_ai_cancel = nil end
+
+                local friendly_title, friendly_text = utils:getFriendlyError(err_code, err_msg, self.loc)
+                local display_msg = friendly_title or (self.loc:t("error") or "Error")
+                if friendly_text and friendly_text ~= "" then
+                    display_msg = display_msg .. "\n\n" .. friendly_text
+                end
                 local err_dlg
                 err_dlg = ButtonDialog:new{
-                    title = self.loc:t("error") or "Error",
-                    text = res_file or (self.loc:t("error_api") or "API Error"),
+                    modal = true,
+                    title = display_msg,
                     buttons = {{{ text = self.loc:t("ok") or "OK", callback = function() if err_dlg then UIManager:close(err_dlg) end end }}}
                 }
                 UIManager:show(err_dlg)
                 return
             end
             request_pid = pid
-            result_file = res_file
+            result_file = res_file_or_err
 
             local request_started_at = os.time()
             local request_timeout = 600
@@ -1531,6 +1612,7 @@ function M:fetchMoreEntities(entity_type)
                     cancelActiveRequest("Fetch timed out")
                     local to_dlg
                     to_dlg = ButtonDialog:new{
+                        modal = true,
                         title = self.loc:t("error") or "Error",
                         text = self.loc:t("error_timeout") or "Request timed out",
                         buttons = {{{ text = self.loc:t("ok") or "OK", callback = function() if to_dlg then UIManager:close(to_dlg) end end }}}
@@ -1566,6 +1648,7 @@ function M:fetchMoreEntities(entity_type)
                         end
                         local err_box
                         err_box = ButtonDialog:new{
+                            modal = true,
                             title = display_msg,
                             buttons = {{{ text = self.loc:t("ok") or "OK", callback = function() if err_box then UIManager:close(err_box) end end }}}
                         }
@@ -1584,6 +1667,7 @@ function M:fetchMoreEntities(entity_type)
                         end
                         local err_box
                         err_box = ButtonDialog:new{
+                            modal = true,
                             title = display_msg,
                             buttons = {{{ text = self.loc:t("ok") or "OK", callback = function() if err_box then UIManager:close(err_box) end end }}}
                         }
@@ -1663,8 +1747,10 @@ function M:fetchMoreEntities(entity_type)
                         UIManager:close(menu_to_close)
                     end
                     if is_terms then
+                        self.terms_menu = nil
                         self:showTerms()
                     else
+                        self.char_menu = nil
                         self:showCharacters()
                     end
                 end
@@ -1687,6 +1773,10 @@ function M:fetchAuthorInfo()
     local doc_file = self.ui.document.file
     if not doc_file then return end
 
+    if self._active_ai_cancel or (self.ai_helper and self.ai_helper._async_child_pid) then
+        self:cancelActiveAIRequest("Previous AI request replaced by author info fetch")
+    end
+
     if not self.ai_helper then
         local AIHelper = require(plugin_path .. "xray_aihelper")
         self.ai_helper = AIHelper
@@ -1696,6 +1786,7 @@ function M:fetchAuthorInfo()
         local ButtonDialog = require("ui/widget/buttondialog")
         local key_dlg
         key_dlg = ButtonDialog:new{
+            modal = true,
             title = self.loc:t("error_no_api_key") or "API Key Required",
             buttons = {{{ text = self.loc:t("ok") or "OK", callback = function() if key_dlg then UIManager:close(key_dlg) end end }}}
         }
@@ -1733,6 +1824,7 @@ function M:fetchAuthorInfo()
     end
 
     wait_msg = ButtonDialog:new{
+        modal = true,
         title = (self.loc:t("fetching_author", "AI") or "Fetching Author...") .. "\n\n" .. title .. " - " .. author,
         tap_close_callback = function()
             cancelActiveRequest("Author fetch cancelled by user")
@@ -1762,8 +1854,9 @@ function M:fetchAuthorInfo()
         local book_text = self.chapter_analyzer:getTextForAnalysis(self.ui, 1000, nil, self.ui:getCurrentPage())
         local context = { book_text = book_text }
 
-        local pid, res_file = self.ai_helper:startAIRequest(title, author, context, "author_only")
+        local pid, res_file_or_err, err_msg = self.ai_helper:startAIRequest(title, author, context, "author_only")
         if not pid then
+            local err_code = res_file_or_err
             if wait_msg then
                 local dlg = wait_msg
                 wait_msg = nil
@@ -1772,17 +1865,23 @@ function M:fetchAuthorInfo()
             end
             if self._active_ai_dialog == wait_msg then self._active_ai_dialog = nil end
             if self._active_ai_cancel == cancelActiveRequest then self._active_ai_cancel = nil end
+
+            local friendly_title, friendly_text = utils:getFriendlyError(err_code, err_msg, self.loc)
+            local display_msg = friendly_title or (self.loc:t("error") or "Error")
+            if friendly_text and friendly_text ~= "" then
+                display_msg = display_msg .. "\n\n" .. friendly_text
+            end
             local err_dlg
             err_dlg = ButtonDialog:new{
-                title = self.loc:t("error") or "Error",
-                text = res_file or (self.loc:t("error_api") or "API Error"),
+                modal = true,
+                title = display_msg,
                 buttons = {{{ text = self.loc:t("ok") or "OK", callback = function() if err_dlg then UIManager:close(err_dlg) end end }}}
             }
             UIManager:show(err_dlg)
             return
         end
         request_pid = pid
-        result_file = res_file
+        result_file = res_file_or_err
 
         local request_started_at = os.time()
         local request_timeout = 600
@@ -1796,6 +1895,7 @@ function M:fetchAuthorInfo()
                 cancelActiveRequest("Author fetch timed out")
                 local to_dlg
                 to_dlg = ButtonDialog:new{
+                    modal = true,
                     title = self.loc:t("error") or "Error",
                     text = self.loc:t("error_timeout") or "Request timed out",
                     buttons = {{{ text = self.loc:t("ok") or "OK", callback = function() if to_dlg then UIManager:close(to_dlg) end end }}}
@@ -1832,6 +1932,7 @@ function M:fetchAuthorInfo()
                     end
                     local err_box
                     err_box = ButtonDialog:new{
+                        modal = true,
                         title = display_msg,
                         buttons = {{{ text = self.loc:t("ok") or "OK", callback = function() if err_box then UIManager:close(err_box) end end }}}
                     }
@@ -1913,9 +2014,15 @@ function M:mergeSeriesContext(cache_data, series_info)
     self.terms = filterPrior(self.terms)
     self.timeline = filterPrior(self.timeline)
 
+    local doc_file = self.ui and self.ui.document and self.ui.document.file
+    local props = self.ui and self.ui.document and self.ui.document.getProps and self.ui.document:getProps() or {}
+    local cur_title = props.title or (self.book_data and (self.book_data.book_title or self.book_data.title))
+
     for idx = 1, (series_info.index or 1) - 1 do
+        local book_path_for_idx = cache_data.book_paths and cache_data.book_paths[idx]
+        local is_self = (doc_file and book_path_for_idx and doc_file == book_path_for_idx)
         local book_data = cache_data.books and cache_data.books[idx]
-        if book_data then
+        if book_data and not is_self and (not cur_title or not book_data.title or book_data.title:lower() ~= cur_title:lower()) then
             for _, new_char in ipairs(book_data.characters or {}) do
                 if new_char and new_char.name and new_char.name ~= "" then
                     local found = false
@@ -1936,11 +2043,14 @@ function M:mergeSeriesContext(cache_data, series_info)
 
                             if matches then
                                 found = true
+                                existing_char.is_series = true
+                                existing_char.from_series = true
                                 local prefix = string.format("[From Book %d] ", idx)
-                                if new_char.description and new_char.description ~= "" then
+                                local clean_desc = (new_char.description or ""):gsub("^%[From Book %d+%]%s*", "")
+                                if clean_desc ~= "" then
                                     local exist_desc = existing_char.description or ""
                                     if not exist_desc:find(prefix, 1, true) then
-                                        existing_char.description = prefix .. new_char.description .. "\n\n" .. exist_desc
+                                        existing_char.description = prefix .. clean_desc .. "\n\n" .. exist_desc
                                     end
                                 end
                                 break
@@ -1952,7 +2062,10 @@ function M:mergeSeriesContext(cache_data, series_info)
                         local char_copy = {}
                         for k, v in pairs(new_char) do char_copy[k] = v end
                         char_copy.source = "series_prior"
+                        char_copy.is_series = true
+                        char_copy.from_series = true
                         char_copy.source_book = idx
+                        char_copy.sort_order = 10000 + idx * 1000 + (tonumber(char_copy.sort_order) or #self.characters)
                         table.insert(self.characters, char_copy)
                     end
                 end
@@ -1966,11 +2079,14 @@ function M:mergeSeriesContext(cache_data, series_info)
                         if existing_loc and existing_loc.name then
                             if existing_loc.name:lower() == lower_name then
                                 found = true
+                                existing_loc.is_series = true
+                                existing_loc.from_series = true
                                 local prefix = string.format("[From Book %d] ", idx)
-                                if new_loc.description and new_loc.description ~= "" then
+                                local clean_desc = (new_loc.description or ""):gsub("^%[From Book %d+%]%s*", "")
+                                if clean_desc ~= "" then
                                     local exist_desc = existing_loc.description or ""
                                     if not exist_desc:find(prefix, 1, true) then
-                                        existing_loc.description = prefix .. new_loc.description .. "\n\n" .. exist_desc
+                                        existing_loc.description = prefix .. clean_desc .. "\n\n" .. exist_desc
                                     end
                                 end
                                 break
@@ -1981,6 +2097,8 @@ function M:mergeSeriesContext(cache_data, series_info)
                         local loc_copy = {}
                         for k, v in pairs(new_loc) do loc_copy[k] = v end
                         loc_copy.source = "series_prior"
+                        loc_copy.is_series = true
+                        loc_copy.from_series = true
                         loc_copy.source_book = idx
                         table.insert(self.locations, loc_copy)
                     end
@@ -1995,11 +2113,14 @@ function M:mergeSeriesContext(cache_data, series_info)
                         if existing_term and existing_term.name then
                             if existing_term.name:lower() == lower_name then
                                 found = true
+                                existing_term.is_series = true
+                                existing_term.from_series = true
                                 local prefix = string.format("[From Book %d] ", idx)
-                                if new_term.definition and new_term.definition ~= "" then
+                                local clean_def = (new_term.definition or ""):gsub("^%[From Book %d+%]%s*", "")
+                                if clean_def ~= "" then
                                     local exist_def = existing_term.definition or ""
                                     if not exist_def:find(prefix, 1, true) then
-                                        existing_term.definition = prefix .. new_term.definition .. "\n\n" .. exist_def
+                                        existing_term.definition = prefix .. clean_def .. "\n\n" .. exist_def
                                     end
                                 end
                                 break
@@ -2010,6 +2131,8 @@ function M:mergeSeriesContext(cache_data, series_info)
                         local term_copy = {}
                         for k, v in pairs(new_term) do term_copy[k] = v end
                         term_copy.source = "series_prior"
+                        term_copy.is_series = true
+                        term_copy.from_series = true
                         term_copy.source_book = idx
                         table.insert(self.terms, term_copy)
                     end
@@ -2045,7 +2168,21 @@ function M:mergeSeriesContext(cache_data, series_info)
 
     local toc = self.ui and self.ui.document and self.ui.document.getToc and utils:flattenTOC(self.ui.document:getToc()) or {}
     self:assignTimelinePages(self.timeline, toc, true)
+    if self.filterOrphanTimelineEvents then
+        self.timeline = self:filterOrphanTimelineEvents(self.timeline, toc)
+    end
     self:sortTimelineByTOC(self.timeline)
+
+    -- Re-sort characters by frequency against current book text if available
+    local book_text = self.book_text
+    if (not book_text or #book_text < 100) and self.chapter_analyzer and self.ui and self.ui.document then
+        pcall(function()
+            book_text = self.chapter_analyzer:getTextForAnalysis(self.ui, 50000, nil, 100, nil)
+        end)
+    end
+    if self.characters and #self.characters > 0 then
+        self:sortDataByFrequency(self.characters, book_text or "", "name")
+    end
 
     self.series_context_loaded = true
     if not self.cache_manager then
@@ -2160,7 +2297,36 @@ function M:fetchSeriesContext(is_silent, init_wait_dialog, cancel_ref)
         end
     end
 
-    if #missing_books == 0 then
+    local missing_books = {}
+    local books_needing_timeline_summary = {}
+    local doc_file = self.ui and self.ui.document and self.ui.document.file
+
+    for _, book in ipairs(prior_books) do
+        local idx = book.index
+        local cached_book = cache_data.books and cache_data.books[idx]
+
+        -- If missing or if existing is from LLM, check local device storage first!
+        if not cached_book or cached_book.source ~= "local_xray" then
+            local local_book = self.series_manager and self.series_manager.findLocalBookXRay and self.series_manager:findLocalBookXRay(series_info, idx, doc_file, book.title, self.cache_manager)
+            if local_book then
+                cached_book = local_book
+                cache_data.books[idx] = local_book
+                self:log("XRayPlugin: Series: Found local X-Ray data on device for Book " .. tostring(idx) .. ": " .. tostring(book.title))
+            end
+        end
+
+        if cached_book then
+            self:log("XRayPlugin: Series: Cache HIT for book index " .. tostring(idx) .. " (" .. (cached_book.source or "cached") .. "): " .. tostring(book.title))
+            if cached_book.source == "local_xray" and cached_book.timeline and #cached_book.timeline > 1 and not cached_book.timeline_summarized then
+                table.insert(books_needing_timeline_summary, { index = idx, book = cached_book })
+            end
+        else
+            self:log("XRayPlugin: Series: Cache MISS for book index " .. tostring(idx) .. ": " .. tostring(book.title))
+            table.insert(missing_books, book)
+        end
+    end
+
+    if #missing_books == 0 and #books_needing_timeline_summary == 0 then
         self:log("XRayPlugin: Series: All prior books are already cached. Merging context immediately.")
         closeInitWait()
         self:mergeSeriesContext(cache_data, series_info)
@@ -2175,9 +2341,27 @@ function M:fetchSeriesContext(is_silent, init_wait_dialog, cancel_ref)
         return
     end
 
-    self:log("XRayPlugin: Series: Needs to fetch " .. tostring(#missing_books) .. " missing books from AI. Running when online.")
+    local NetworkMgr = require("ui/network/manager")
+    local is_online = NetworkMgr and NetworkMgr.isOnline and NetworkMgr:isOnline()
+    if #missing_books == 0 and not is_online then
+        self:log("XRayPlugin: Series: Device offline. Merging local series context with raw chapter timeline events.")
+        closeInitWait()
+        self:mergeSeriesContext(cache_data, series_info)
+        if not is_silent then
+            local count = series_info.index - 1
+            local loaded_msg = self.loc:t("series_context_loaded", count)
+            UIManager:show(InfoMessage:new{
+                text = loaded_msg,
+                timeout = 5
+            })
+        end
+        return
+    end
 
-    require("ui/network/manager"):runWhenOnline(function()
+    local total_tasks = #books_needing_timeline_summary + #missing_books
+    self:log("XRayPlugin: Series: Needs " .. tostring(#books_needing_timeline_summary) .. " timeline summaries and " .. tostring(#missing_books) .. " AI book fetches. Running when online.")
+
+    NetworkMgr:runWhenOnline(function()
         closeInitWait()
         if cancel_ref and cancel_ref.cancelled then
             self:log("XRayPlugin: Series: runWhenOnline fired after user cancelled")
@@ -2193,6 +2377,7 @@ function M:fetchSeriesContext(is_silent, init_wait_dialog, cancel_ref)
 
             local progress_text = self.loc:t("fetching_series_context", current_idx, total_count)
             wait_msg = ButtonDialog:new{
+                modal = true,
                 title = progress_text .. "\n\n" .. book_title .. "\n\n" .. (self.loc:t("fetching_wait") or "This may take a moment.\nTap Cancel to stop."),
                 buttons = {{{
                     text = self.loc:t("cancel") or "Cancel",
@@ -2211,14 +2396,14 @@ function M:fetchSeriesContext(is_silent, init_wait_dialog, cancel_ref)
             UIManager:show(wait_msg)
         end
 
-        local function fetchNext(step_idx)
+        local function processNextTask(task_idx)
             if is_cancelled then
                 self:log("XRayPlugin: Series: fetch series context cancelled by user.")
                 return
             end
 
-            if step_idx > #missing_books then
-                self:log("XRayPlugin: Series: All missing books fetched. Saving series cache and merging context.")
+            if task_idx > total_tasks then
+                self:log("XRayPlugin: Series: All series tasks completed. Saving series cache and merging context.")
                 if wait_msg then UIManager:close(wait_msg) end
                 self.series_manager:saveSeriesCache(slug, cache_data)
                 self:mergeSeriesContext(cache_data, series_info)
@@ -2234,9 +2419,59 @@ function M:fetchSeriesContext(is_silent, init_wait_dialog, cancel_ref)
                 return
             end
 
-            local current_book = missing_books[step_idx]
-            self:log("XRayPlugin: Series: Fetching AI context for book " .. tostring(current_book.index) .. " (" .. tostring(step_idx) .. "/" .. tostring(#missing_books) .. "): " .. tostring(current_book.title))
-            showProgress(step_idx, #missing_books, current_book.title)
+            -- Tasks 1..#books_needing_timeline_summary: summarize local timelines
+            if task_idx <= #books_needing_timeline_summary then
+                local item = books_needing_timeline_summary[task_idx]
+                local current_book = item.book
+                self:log("XRayPlugin: Series: Summarizing local chapter events for Book " .. tostring(item.index) .. " (" .. tostring(task_idx) .. "/" .. tostring(total_tasks) .. "): " .. tostring(current_book.title))
+                showProgress(task_idx, total_tasks, current_book.title or ("Book " .. tostring(item.index)))
+
+                UIManager:scheduleIn(0.5, function()
+                    coroutine.wrap(function()
+                        if is_cancelled or self.destroyed or not self.ui or not self.ui.document then return end
+
+                        local event_lines = {}
+                        for _, ev in ipairs(current_book.timeline or {}) do
+                            if ev.event and ev.event ~= "" then
+                                table.insert(event_lines, string.format("[%s] %s", ev.chapter or "Event", ev.event))
+                            end
+                        end
+                        local events_text = table.concat(event_lines, "\n\n")
+
+                        local context = {
+                            series_name = series_info.name,
+                            index = item.index,
+                            events_text = events_text
+                        }
+                        local prompt = self.ai_helper:createPrompt(current_book.title, current_book.author or author, context, "local_timeline_summary")
+                        self.ai_helper:setTrapWidget(wait_msg)
+                        local result, err_code, err_msg = self.ai_helper:executeUnifiedRequest(prompt)
+                        self.ai_helper:resetTrapWidget()
+
+                        if is_cancelled then return end
+
+                        if result and result.timeline and #result.timeline > 0 then
+                            self:log("XRayPlugin: Series: Synthesized full book summary for local Book " .. tostring(item.index))
+                            current_book.timeline = result.timeline
+                            current_book.timeline_summarized = true
+                            cache_data.books[item.index].timeline = result.timeline
+                            cache_data.books[item.index].timeline_summarized = true
+                            self.series_manager:saveSeriesCache(slug, cache_data)
+                        else
+                            self:log("XRayPlugin: Series: Local timeline summary AI call skipped/failed (err: " .. tostring(err_msg) .. "). Keeping raw chapter events.")
+                        end
+
+                        processNextTask(task_idx + 1)
+                    end)()
+                end)
+                return
+            end
+
+            -- Remaining tasks: fetch missing books from AI via series_book_summary
+            local missing_idx = task_idx - #books_needing_timeline_summary
+            local current_book = missing_books[missing_idx]
+            self:log("XRayPlugin: Series: Fetching AI context for book " .. tostring(current_book.index) .. " (" .. tostring(task_idx) .. "/" .. tostring(total_tasks) .. "): " .. tostring(current_book.title))
+            showProgress(task_idx, total_tasks, current_book.title)
 
             UIManager:scheduleIn(0.5, function()
                 coroutine.wrap(function()
@@ -2262,6 +2497,7 @@ function M:fetchSeriesContext(is_silent, init_wait_dialog, cancel_ref)
                             local err_title, err_text = utils:getFriendlyError(err_code, err_msg, self.loc)
                             local err_box
                             err_box = ButtonDialog:new{
+                                modal = true,
                                 title = err_title,
                                 text = err_text,
                                 buttons = {{{ text = self.loc:t("ok") or "OK", callback = function() if err_box then UIManager:close(err_box) end end }}}
@@ -2279,15 +2515,16 @@ function M:fetchSeriesContext(is_silent, init_wait_dialog, cancel_ref)
                         characters = result.characters or {},
                         locations = result.locations or {},
                         terms = result.terms or {},
-                        timeline = result.timeline or {}
+                        timeline = result.timeline or {},
+                        source = "llm_summary"
                     }
 
-                    fetchNext(step_idx + 1)
+                    processNextTask(task_idx + 1)
                 end)()
             end)
         end
 
-        fetchNext(1)
+        processNextTask(1)
     end)
 end
 

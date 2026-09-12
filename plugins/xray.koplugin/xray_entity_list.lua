@@ -119,7 +119,7 @@ local function createIconButton(opts)
         padding = 0,
         bordersize = is_focused and (theme.border_focus or sc(2)) or (opts.bordersize or 0),
         color = is_focused and (theme.color_focus_border or Blitbuffer.COLOR_BLACK) or (opts.color or Blitbuffer.COLOR_DARK_GRAY),
-        background = is_focused and (theme.color_focus_bg or Blitbuffer.Color8(215)) or (opts.background or Blitbuffer.COLOR_WHITE),
+        background = is_focused and (theme.color_focus_bg or Blitbuffer.Color8(215)) or opts.background,
         radius = opts.radius or sc(6),
         CenterContainer:new{
             dimen = Geom:new{ w = btn_w, h = btn_h },
@@ -138,7 +138,7 @@ local EntityListOverlay = InputContainer:extend{
     sh = nil,
     plugin = nil,
     entity = nil,
-    mode = "characters", -- "characters", "terms", "locations", "historical_figures", "timeline", "mentions"
+    mode = "characters", -- "characters", "terms", "locations", "historical_figures", "timeline", "mentions", "linked_entries"
     raw_items = nil,
     items = nil,
     current_page = 1,
@@ -195,70 +195,145 @@ function EntityListOverlay:init()
         self.prior_collapsed = self.plugin.series_prior_timeline_collapsed
     end
 
+    if self.plugin and self.plugin.entity_sort_mode and self.plugin.entity_sort_mode[self.mode] then
+        self.sort_mode = self.plugin.entity_sort_mode[self.mode]
+    end
+
     self:prepareItems()
     self:buildUI()
 end
 
-function EntityListOverlay:prepareItems()
-    local raw = self.raw_items or {}
-    local filtered = {}
-
-    -- Apply search query if present
-    if self.search_query and self.search_query ~= "" then
-        local q = self.search_query:lower()
-        for _, it in ipairs(raw) do
-            local name = (it.name or it.chapter or ""):lower()
-            local desc = (it.description or it.definition or it.biography or it.event or it.snippet or ""):lower()
-            if name:find(q, 1, true) or desc:find(q, 1, true) then
-                table.insert(filtered, it)
+local function getFirstAppearancePage(entity)
+    if not entity then return 999999 end
+    if tonumber(entity.first_page) and tonumber(entity.first_page) > 0 then
+        return tonumber(entity.first_page)
+    end
+    if tonumber(entity.page) and tonumber(entity.page) > 0 then
+        return tonumber(entity.page)
+    end
+    local min_p = 999999
+    if entity.mentions and type(entity.mentions) == "table" and #entity.mentions > 0 then
+        for _, m in ipairs(entity.mentions) do
+            local p = tonumber(m.page)
+            if p and p > 0 and p < min_p then
+                min_p = p
             end
         end
-    else
-        for _, it in ipairs(raw) do
-            table.insert(filtered, it)
+    end
+    if min_p < 999999 then return min_p end
+    if entity.history and type(entity.history) == "table" and #entity.history > 0 then
+        for _, h in ipairs(entity.history) do
+            local p = tonumber(h.page)
+            if p and p > 0 and p < min_p then
+                min_p = p
+            end
+        end
+    end
+    return min_p
+end
+
+function EntityListOverlay:prepareItems()
+    local raw = self.raw_items or {}
+    local entries = {}
+
+    -- Apply search query if present
+    local q = (self.search_query and self.search_query ~= "") and self.search_query:lower() or nil
+    for idx, it in ipairs(raw) do
+        local entity = (self.mode == "linked_entries" and it.item) or it
+        local name = (entity.name or entity.chapter or ""):lower()
+        local desc = (entity.description or entity.definition or entity.biography or entity.event or entity.snippet or ""):lower()
+        if not q or (name:find(q, 1, true) or desc:find(q, 1, true)) then
+            table.insert(entries, { item = it, _orig_idx = idx })
         end
     end
 
     -- Sorting (timeline and mentions have their own sequence, others use sort modes)
     if self.mode == "mentions" then
-        table.sort(filtered, function(a, b)
-            return (tonumber(a.page) or 0) < (tonumber(b.page) or 0)
+        table.sort(entries, function(a, b)
+            local pa = tonumber(a.item.page) or 0
+            local pb = tonumber(b.item.page) or 0
+            if pa == pb then return a._orig_idx < b._orig_idx end
+            return pa < pb
         end)
     elseif self.mode ~= "timeline" then
         if self.sort_mode == "alphabetical" then
-            table.sort(filtered, function(a, b)
-                local na = (a.name or ""):lower()
-                local nb = (b.name or ""):lower()
+            table.sort(entries, function(a, b)
+                local ea = (self.mode == "linked_entries" and a.item.item) or a.item
+                local eb = (self.mode == "linked_entries" and b.item.item) or b.item
+                local na = (ea.name or ea.chapter or ""):lower()
+                local nb = (eb.name or eb.chapter or ""):lower()
+                if na == nb then return a._orig_idx < b._orig_idx end
                 return na < nb
             end)
         elseif self.sort_mode == "appearance" then
-            table.sort(filtered, function(a, b)
-                local pa = tonumber(a.first_page or a.page) or 999999
-                local pb = tonumber(b.first_page or b.page) or 999999
-                if pa == pb then
-                    return (a.sort_order or 99999) < (b.sort_order or 99999)
+            table.sort(entries, function(a, b)
+                local ea = (self.mode == "linked_entries" and a.item.item) or a.item
+                local eb = (self.mode == "linked_entries" and b.item.item) or b.item
+                local pa = getFirstAppearancePage(ea)
+                local pb = getFirstAppearancePage(eb)
+                if pa ~= pb then
+                    return pa < pb
                 end
-                return pa < pb
+                local oa = tonumber(ea.sort_order)
+                local ob = tonumber(eb.sort_order)
+                if oa and ob and oa ~= ob then
+                    return oa < ob
+                elseif oa and not ob then
+                    return true
+                elseif ob and not oa then
+                    return false
+                end
+                return a._orig_idx < b._orig_idx
             end)
         else
             -- Default: Frequency of mentions
-            table.sort(filtered, function(a, b)
-                local sa = tonumber(a._sort_score) or (a.sort_order and (10000 - a.sort_order)) or 0
-                local sb = tonumber(b._sort_score) or (b.sort_order and (10000 - b.sort_order)) or 0
-                if sa == sb then
-                    local ma = (a.mentions and #a.mentions) or 0
-                    local mb = (b.mentions and #b.mentions) or 0
-                    if ma == mb then
-                        return (a.name or ""):lower() < (b.name or ""):lower()
-                    end
+            table.sort(entries, function(a, b)
+                local ea = (self.mode == "linked_entries" and a.item.item) or a.item
+                local eb = (self.mode == "linked_entries" and b.item.item) or b.item
+
+                -- 1. Real mention count if mentions have been scanned
+                local ma = (ea.mentions and #ea.mentions) or 0
+                local mb = (eb.mentions and #eb.mentions) or 0
+                if ma ~= mb then
                     return ma > mb
                 end
-                return sa > sb
+
+                -- 2. sort_order stamped during AI frequency analysis / cache load (1, 2, 3...)
+                local oa = tonumber(ea.sort_order)
+                local ob = tonumber(eb.sort_order)
+                if oa and ob and oa ~= ob then
+                    return oa < ob
+                elseif oa and not ob then
+                    return true
+                elseif ob and not oa then
+                    return false
+                end
+
+                -- 3. _sort_score if calculated and positive
+                local sa = tonumber(ea._sort_score) or 0
+                local sb = tonumber(eb._sort_score) or 0
+                if sa > 0 or sb > 0 then
+                    if sa ~= sb then
+                        return sa > sb
+                    end
+                end
+
+                -- 4. Guaranteed stable fallback to natural list order in raw_items
+                return a._orig_idx < b._orig_idx
             end)
         end
     end
 
+    local filtered = {}
+    for _, entry in ipairs(entries) do
+        table.insert(filtered, entry.item)
+    end
     self.items = filtered
+end
+
+function EntityListOverlay:onShow()
+    UIManager:setDirty(self, "ui")
+    return true
 end
 
 function EntityListOverlay:onTap(arg, ges)
@@ -458,6 +533,8 @@ function EntityListOverlay:onOpenFocused()
                 self.current_page = 1
                 self:buildUI()
                 UIManager:setDirty(self, "ui")
+            elseif item.is_current_header then
+                -- Static section header, no action
             else
                 self:onItemSelect(item)
             end
@@ -557,6 +634,8 @@ function EntityListOverlay:handleEvent(ev)
                         self.current_page = 1
                         self:buildUI()
                         UIManager:setDirty(self, "ui")
+                    elseif it.is_current_header then
+                        -- Static section header, no action
                     else
                         self:onItemSelect(it)
                     end
@@ -576,6 +655,7 @@ function EntityListOverlay:close()
         elseif self.mode == "historical_figures" then self.plugin.hf_menu = nil
         elseif self.mode == "timeline" then self.plugin.timeline_menu = nil
         elseif self.mode == "mentions" then self.plugin.mentions_menu = nil
+        elseif self.mode == "linked_entries" then self.plugin.active_related_menu = nil
         end
     end
     UIManager:close(self, "ui")
@@ -634,7 +714,7 @@ function EntityListOverlay:showSortDialog()
     local function _tr(key, default)
         if not loc or not loc.t then return default end
         local res = loc:t(key)
-        if not res or res == key or res:find("^sort_") then return default end
+        if not res or res == key then return default end
         return res
     end
 
@@ -650,9 +730,14 @@ function EntityListOverlay:showSortDialog()
             {
                 {
                     text = check_freq .. _tr("sort_frequency", "Frequency of Mentions (Default)"),
+                    align = "left",
                     callback = function()
                         UIManager:close(sort_dialog)
                         self.sort_mode = "frequency"
+                        if self.plugin then
+                            self.plugin.entity_sort_mode = self.plugin.entity_sort_mode or {}
+                            self.plugin.entity_sort_mode[self.mode] = self.sort_mode
+                        end
                         self.current_page = 1
                         self:prepareItems()
                         self:buildUI()
@@ -663,9 +748,14 @@ function EntityListOverlay:showSortDialog()
             {
                 {
                     text = check_app .. _tr("sort_appearance", "Order of Appearance"),
+                    align = "left",
                     callback = function()
                         UIManager:close(sort_dialog)
                         self.sort_mode = "appearance"
+                        if self.plugin then
+                            self.plugin.entity_sort_mode = self.plugin.entity_sort_mode or {}
+                            self.plugin.entity_sort_mode[self.mode] = self.sort_mode
+                        end
                         self.current_page = 1
                         self:prepareItems()
                         self:buildUI()
@@ -676,9 +766,14 @@ function EntityListOverlay:showSortDialog()
             {
                 {
                     text = check_az .. _tr("sort_alphabetical", "Alphabetical (A–Z)"),
+                    align = "left",
                     callback = function()
                         UIManager:close(sort_dialog)
                         self.sort_mode = "alphabetical"
+                        if self.plugin then
+                            self.plugin.entity_sort_mode = self.plugin.entity_sort_mode or {}
+                            self.plugin.entity_sort_mode[self.mode] = self.sort_mode
+                        end
                         self.current_page = 1
                         self:prepareItems()
                         self:buildUI()
@@ -748,12 +843,163 @@ function EntityListOverlay:renderRow(item, content_w, row_h, is_focused, idx)
     local loc = p and p.loc
     local is_timeline = (self.mode == "timeline")
     local is_mentions = (self.mode == "mentions")
+    local is_prior = (item.source == "series_prior")
+
+    if is_timeline and is_prior then
+        local raw_ch = item.chapter or ""
+        local num_match, name_match = raw_ch:match("^%[?Book%s+(%d+)%s*:%s*(.-)%]?$")
+        local title_str = "Prior Book"
+        if num_match and name_match and name_match ~= "" then
+            title_str = string.format("Book %s: %s", num_match, name_match)
+        else
+            local num_only = raw_ch:match("^%[?Book%s+(%d+)%]?$")
+            if num_only then
+                title_str = "Book " .. num_only
+            elseif item.source_book then
+                title_str = string.format("Book %d: %s", item.source_book, raw_ch:gsub("^%[", ""):gsub("%]$", ""))
+            else
+                title_str = (raw_ch ~= "") and raw_ch:gsub("^%[", ""):gsub("%]$", "") or "Prior Book"
+            end
+        end
+
+        local pad_left = sc(28)
+        local pad_right = sc(16)
+        local inner_w = content_w - pad_left - pad_right
+
+        local recap_pill = FrameContainer:new{
+            padding = 0,
+            padding_left = sc(6),
+            padding_right = sc(6),
+            padding_top = sc(1),
+            padding_bottom = sc(1),
+            bordersize = 0,
+            radius = sc(3),
+            background = Blitbuffer.Color8(220),
+            TextWidget:new{
+                text = "Recap",
+                face = Font:getFace("cfont", 11),
+                bold = true,
+                fgcolor = Blitbuffer.Color8(60),
+            },
+        }
+
+        local title_widget = TextWidget:new{
+            text = title_str,
+            face = Font:getFace("cfont", 18),
+            bold = true,
+            fgcolor = Blitbuffer.COLOR_BLACK,
+            max_width = inner_w - sc(70),
+        }
+
+        local title_row = HorizontalGroup:new{
+            align = "center",
+            title_widget,
+            HorizontalSpan:new{ width = sc(8) },
+            recap_pill,
+        }
+
+        local desc_str = item.event or ""
+        desc_str = desc_str:gsub("%s+", " "):match("^%s*(.-)%s*$") or ""
+        if #desc_str > 185 then
+            desc_str = desc_str:sub(1, 180) .. "..."
+        end
+
+        local desc_widget = nil
+        if desc_str ~= "" and desc_str ~= "---" then
+            desc_widget = TextWidget:new{
+                text = desc_str,
+                face = Font:getFace("cfont", 14),
+                fgcolor = Blitbuffer.Color8(50),
+                max_width = inner_w,
+            }
+        end
+
+        local card_items = {
+            VerticalSpan:new{ width = sc(3) },
+            title_row,
+        }
+        if desc_widget then
+            table.insert(card_items, VerticalSpan:new{ width = sc(1) })
+            table.insert(card_items, desc_widget)
+        end
+        table.insert(card_items, VerticalSpan:new{ width = sc(3) })
+
+        local main_vg = VerticalGroup:new(card_items)
+        main_vg.align = "left"
+
+        local is_card_focused = is_focused and (self.focus_zone == "cards")
+        local main_vg_h = (main_vg.getSize and main_vg:getSize().h) or math.max(sc(24), row_h - sc(14))
+
+        local row_frame = FrameContainer:new{
+            padding = 0,
+            bordersize = is_card_focused and sc(2) or 0,
+            color = Blitbuffer.COLOR_BLACK,
+            background = is_card_focused and Blitbuffer.Color8(220) or Blitbuffer.Color8(246),
+            width = content_w,
+            height = row_h,
+            CenterContainer:new{
+                dimen = Geom:new{ w = content_w, h = row_h },
+                LeftContainer:new{
+                    dimen = Geom:new{ w = inner_w, h = main_vg_h },
+                    main_vg,
+                },
+            },
+        }
+
+        local row_item = InputContainer:new{
+            dimen = Geom:new{ w = content_w, h = row_h },
+            row_frame,
+        }
+        row_item.overlay = self
+
+        function row_item:getSize()
+            return self.dimen
+        end
+
+        function row_item:paintTo(bb, x, y)
+            self.dimen = Geom:new{ x = x, y = y, w = content_w, h = row_h }
+            local ov = self.overlay
+            local focused = (ov and ov.focus_zone == "cards" and ov.focused_index == idx)
+            row_frame.bordersize = focused and sc(2) or 0
+            row_frame.color = Blitbuffer.COLOR_BLACK
+            row_frame.background = focused and Blitbuffer.Color8(220) or Blitbuffer.Color8(246)
+            if self[1] then self[1]:paintTo(bb, x, y) end
+        end
+
+        row_item.ges_events = {
+            Tap = {
+                GestureRange:new{
+                    ges = "tap",
+                    range = function() return row_item.dimen end,
+                }
+            }
+        }
+
+        row_item.onTap = function()
+            local ov = self
+            ov.focus_zone = nil
+            ov.focused_index = nil
+            if ov.onItemSelect then
+                ov:onItemSelect(item)
+            end
+            return true
+        end
+
+        return row_item
+    end
+
     local pad_h = sc(16)
     local inner_w = content_w - (pad_h * 2)
 
+    local is_linked = (self.mode == "linked_entries")
+    local actual_item = (is_linked and item.item) or item
+    local item_type = (is_linked and item.type) or nil
+    local is_prior_item = (actual_item and (actual_item.source == "series_prior" or actual_item.is_series or actual_item.from_series))
+
     -- 1. Primary line (Bold Name/Title, mimicking the Dialog title)
     local title_str = ""
-    local is_prior = (item.source == "series_prior")
+    local prior_pill = nil
+    local type_pill = nil
     if is_timeline then
         title_str = item.chapter or "Event"
         if item.page and tonumber(item.page) then
@@ -764,21 +1010,119 @@ function EntityListOverlay:renderRow(item, content_w, row_h, is_focused, idx)
         if item.chapter and item.chapter ~= "" then
             title_str = title_str .. " — " .. item.chapter
         end
-    else
-        title_str = item.name or "???"
-        if is_prior then
-            local prior_lbl = (loc and loc:t("series_prior_label")) or "[Prior]"
-            title_str = title_str .. " " .. prior_lbl
+    elseif is_linked then
+        title_str = actual_item.name or "???"
+
+        local type_lbl = "Entity"
+        if item_type == "character" then
+            type_lbl = (loc and loc:t("entity_type_character")) or "Character"
+        elseif item_type == "location" then
+            type_lbl = (loc and loc:t("entity_type_location")) or "Location"
+        elseif item_type == "historical" or item_type == "historical_figures" then
+            type_lbl = (loc and loc:t("entity_type_historical")) or "Historical Figure"
+        elseif item_type == "term" or item_type == "terms" then
+            type_lbl = (loc and loc:t("entity_type_term")) or "Term"
+        elseif type(item_type) == "string" and #item_type > 0 then
+            type_lbl = item_type:sub(1,1):upper() .. item_type:sub(2)
         end
+
+        type_pill = FrameContainer:new{
+            background = Blitbuffer.Color8(235),
+            bordersize = sc(1),
+            color = Blitbuffer.Color8(180),
+            radius = sc(3),
+            padding_top = sc(1),
+            padding_bottom = sc(1),
+            padding_left = sc(6),
+            padding_right = sc(6),
+            TextWidget:new{
+                text = type_lbl,
+                face = Font:getFace("cfont", 11),
+                bold = true,
+                fgcolor = Blitbuffer.Color8(60),
+            },
+        }
+
+        if is_prior_item then
+            local prior_lbl = (loc and loc:t("series_prior_label")) or "Series"
+            prior_lbl = prior_lbl:gsub("^%[", ""):gsub("%]$", "")
+            if prior_lbl == "" or prior_lbl:lower() == "prior" then
+                prior_lbl = "Series"
+            end
+            prior_pill = FrameContainer:new{
+                background = Blitbuffer.Color8(230),
+                bordersize = sc(1),
+                color = Blitbuffer.Color8(180),
+                radius = sc(3),
+                padding_top = sc(1),
+                padding_bottom = sc(1),
+                padding_left = sc(6),
+                padding_right = sc(6),
+                TextWidget:new{
+                    text = prior_lbl,
+                    face = Font:getFace("cfont", 11),
+                    bold = true,
+                    fgcolor = Blitbuffer.Color8(60),
+                },
+            }
+        end
+    else
+        title_str = actual_item.name or "???"
+        if is_prior_item then
+            local prior_lbl = (loc and loc:t("series_prior_label")) or "Series"
+            prior_lbl = prior_lbl:gsub("^%[", ""):gsub("%]$", "")
+            if prior_lbl == "" or prior_lbl:lower() == "prior" then
+                prior_lbl = "Series"
+            end
+            prior_pill = FrameContainer:new{
+                background = Blitbuffer.Color8(230),
+                bordersize = sc(1),
+                color = Blitbuffer.Color8(180),
+                radius = sc(3),
+                padding_top = sc(1),
+                padding_bottom = sc(1),
+                padding_left = sc(6),
+                padding_right = sc(6),
+                TextWidget:new{
+                    text = prior_lbl,
+                    face = Font:getFace("cfont", 11),
+                    bold = true,
+                    fgcolor = Blitbuffer.Color8(60),
+                },
+            }
+        end
+    end
+
+    local pills = {}
+    if type_pill then table.insert(pills, type_pill) end
+    if prior_pill then table.insert(pills, prior_pill) end
+
+    local pills_w = 0
+    for _, pill in ipairs(pills) do
+        local ps = (pill.getSize and pill:getSize().w) or sc(60)
+        pills_w = pills_w + ps + sc(6)
     end
 
     local title_widget = TextWidget:new{
         text = title_str,
-        face = Font:getFace("cfont", 17),
+        face = Font:getFace("cfont", 22),
         bold = true,
         fgcolor = Blitbuffer.COLOR_BLACK,
-        max_width = inner_w,
+        max_width = (#pills > 0) and (inner_w - pills_w) or inner_w,
     }
+
+    local title_row_widget
+    if #pills > 0 then
+        local row_elements = { title_widget }
+        for _, pill in ipairs(pills) do
+            table.insert(row_elements, HorizontalSpan:new{ width = sc(6) })
+            table.insert(row_elements, pill)
+        end
+        title_row_widget = HorizontalGroup:new(row_elements)
+        title_row_widget.align = "center"
+    else
+        title_row_widget = title_widget
+    end
 
     -- 2. Description (Dark, readable single-line text)
     local desc_str = ""
@@ -786,6 +1130,18 @@ function EntityListOverlay:renderRow(item, content_w, row_h, is_focused, idx)
         desc_str = item.event or ""
     elseif is_mentions then
         desc_str = item.snippet or ""
+    elseif is_linked then
+        if item_type == "term" then
+            desc_str = actual_item.definition or actual_item.description or ""
+        elseif item_type == "historical" then
+            desc_str = actual_item.biography or actual_item.description or ""
+        else
+            if p and p.resolveDescriptionForPage then
+                desc_str = p:resolveDescriptionForPage(actual_item) or ""
+            else
+                desc_str = actual_item.description or actual_item.biography or ""
+            end
+        end
     elseif self.mode == "terms" then
         desc_str = item.definition or item.description or ""
     else
@@ -804,7 +1160,7 @@ function EntityListOverlay:renderRow(item, content_w, row_h, is_focused, idx)
     if desc_str ~= "" and desc_str ~= "---" then
         desc_widget = TextWidget:new{
             text = desc_str,
-            face = Font:getFace("cfont", 13),
+            face = Font:getFace("cfont", 15),
             fgcolor = Blitbuffer.Color8(40),
             max_width = inner_w,
         }
@@ -812,10 +1168,10 @@ function EntityListOverlay:renderRow(item, content_w, row_h, is_focused, idx)
 
     local text_items = {
         VerticalSpan:new{ width = sc(3) },
-        title_widget,
+        title_row_widget,
     }
     if desc_widget then
-        table.insert(text_items, VerticalSpan:new{ width = sc(3) })
+        table.insert(text_items, VerticalSpan:new{ width = sc(1) })
         table.insert(text_items, desc_widget)
     end
     table.insert(text_items, VerticalSpan:new{ width = sc(3) })
@@ -898,8 +1254,40 @@ function EntityListOverlay:onItemSelect(item)
         p:showHistoricalFigureDetails(item, { source = "menu" })
     elseif self.mode == "timeline" then
         p:showTimelineEventDetails(item, { source = "menu" })
+    elseif self.mode == "linked_entries" then
+        local actual_item = item.item or item
+        local item_type = item.type
+        local opts = self.opts or { source = "menu" }
+        if item_type == "character" then
+            p:showCharacterDetails(actual_item, opts)
+        elseif item_type == "location" then
+            p:showLocationDetails(actual_item, opts)
+        elseif item_type == "historical" then
+            p:showHistoricalFigureDetails(actual_item, opts)
+        elseif item_type == "term" then
+            p:showTermDetails(actual_item, opts)
+        end
     elseif self.mode == "mentions" then
-        local return_pg = p.return_page_origin or (p.getCurrentPage and p:getCurrentPage()) or (p._getCurrentPage and p._getCurrentPage(p))
+        local return_pg = p.return_page_origin
+        if not return_pg and p then
+            if p.getCurrentPage then
+                local ok, val = pcall(function() return p:getCurrentPage() end)
+                if ok and val then return_pg = val end
+            end
+            if not return_pg and p.ui then
+                if p.ui.getCurrentPage then
+                    local ok, val = pcall(function() return p.ui:getCurrentPage() end)
+                    if ok and val then return_pg = val end
+                elseif p.ui.paging and p.ui.paging.getCurrentPage then
+                    local ok, val = pcall(function() return p.ui.paging:getCurrentPage() end)
+                    if ok and val then return_pg = val end
+                elseif p.ui.document and p.ui.document.getCurrentPage then
+                    local ok, val = pcall(function() return p.ui.document:getCurrentPage() end)
+                    if ok and val then return_pg = val end
+                end
+            end
+            return_pg = return_pg or p.last_pageno or 1
+        end
         p.return_page_origin = return_pg
         p.pending_return_banner = {
             return_page = return_pg,
@@ -910,7 +1298,11 @@ function EntityListOverlay:onItemSelect(item)
         p:closeAllMenus()
         local Event = require("ui/event")
         UIManager:nextTick(function()
-            p.ui:handleEvent(Event:new("GotoPage", item.page))
+            if p.ui and p.ui.handleEvent then
+                p.ui:handleEvent(Event:new("GotoPage", item.page))
+            elseif p.ui and p.ui.document and p.ui.document.gotoPage then
+                p.ui.document:gotoPage(item.page)
+            end
         end)
     end
 end
@@ -922,9 +1314,9 @@ function EntityListOverlay:buildUI()
     local loc = p and p.loc
 
     -- ── 1. Top Header Bar (Storefront style touch buttons) ────────────────────
-    local btn_size = sc(22)
-    local btn_w = sc(42)
-    local btn_h = sc(42)
+    local btn_size = sc(26)
+    local btn_w = sc(48)
+    local btn_h = sc(48)
     local btn_gap = sc(4)
 
     local title_text_str = "Characters"
@@ -941,6 +1333,15 @@ function EntityListOverlay:buildUI()
         local title_tmpl = (loc and loc:t("mentions_title")) or "Mentions: %s"
         if title_tmpl == "mentions_title" then title_tmpl = "Mentions: %s" end
         title_text_str = title_tmpl:format(ent_name)
+    elseif self.mode == "linked_entries" then
+        local ent_name = (self.entity and (self.entity.name or self.entity.chapter)) or nil
+        if ent_name and ent_name ~= "" then
+            local title_tmpl = (loc and loc:t("linked_with_title")) or "Linked with: %s"
+            if title_tmpl == "linked_with_title" then title_tmpl = "Linked with: %s" end
+            title_text_str = title_tmpl:format(ent_name)
+        else
+            title_text_str = (loc and loc:t("linked_entries")) or "Linked Entries"
+        end
     else
         title_text_str = (loc and loc:t("menu_characters")) or "Characters"
     end
@@ -1036,7 +1437,7 @@ function EntityListOverlay:buildUI()
 
     local title_w = TextWidget:new{
         text = header_title,
-        face = Font:getFace("cfont", is_filtered and 15 or 18),
+        face = Font:getFace("cfont", is_filtered and 18 or 24),
         bold = true,
         fgcolor = Blitbuffer.COLOR_BLACK,
         max_width = title_max_w,
@@ -1062,13 +1463,13 @@ function EntityListOverlay:buildUI()
     end
 
     local header_row = OverlapGroup:new{
-        dimen = Geom:new{ w = row_w, h = sc(48) },
+        dimen = Geom:new{ w = row_w, h = sc(52) },
         LeftContainer:new{
-            dimen = Geom:new{ w = title_container_w, h = sc(48) },
+            dimen = Geom:new{ w = title_container_w, h = sc(52) },
             title_left_widget,
         },
         RightContainer:new{
-            dimen = Geom:new{ w = row_w, h = sc(48) },
+            dimen = Geom:new{ w = row_w, h = sc(52) },
             header_actions_group,
         },
     }
@@ -1076,8 +1477,8 @@ function EntityListOverlay:buildUI()
     local header_frame = FrameContainer:new{
         padding_left = sc(16),
         padding_right = sc(16),
-        padding_top = sc(10),
-        padding_bottom = sc(4),
+        padding_top = sc(12),
+        padding_bottom = sc(6),
         bordersize = 0,
         width = sw,
         VerticalGroup:new{
@@ -1093,12 +1494,12 @@ function EntityListOverlay:buildUI()
 
     -- ── 2. Content Height Budgeting & Pagination ──────────────────────────────
     local header_h = header_frame:getSize().h
-    local footer_h = sc(44)
+    local footer_h = sc(48)
     local avail_content_h = sh - header_h - footer_h
 
     local is_timeline = (self.mode == "timeline")
     local is_mentions = (self.mode == "mentions")
-    local row_h = (is_timeline or is_mentions) and sc(60) or sc(58)
+    local row_h = sc(64)
     local divider_h = sc(1)
     local items_per_page = math.max(1, math.floor(avail_content_h / (row_h + divider_h)))
 
@@ -1106,13 +1507,18 @@ function EntityListOverlay:buildUI()
     local display_items = {}
     if is_timeline then
         local has_prior = false
+        local prior_count = 0
         for _, it in ipairs(self.items or {}) do
-            if it.source == "series_prior" then has_prior = true; break end
+            if it.source == "series_prior" then
+                has_prior = true
+                prior_count = prior_count + 1
+            end
         end
         if has_prior then
             table.insert(display_items, {
                 is_prior_header = true,
                 collapsed = self.prior_collapsed,
+                count = prior_count,
             })
         end
         for _, it in ipairs(self.items or {}) do
@@ -1120,7 +1526,30 @@ function EntityListOverlay:buildUI()
                 if not self.prior_collapsed then
                     table.insert(display_items, it)
                 end
-            else
+            end
+        end
+        if has_prior and not self.prior_collapsed then
+            local has_current = false
+            for _, it in ipairs(self.items or {}) do
+                if it.source ~= "series_prior" then
+                    has_current = true
+                    break
+                end
+            end
+            if has_current then
+                local doc_props = (self.ui and self.ui.document and self.ui.document.getProps and self.ui.document:getProps())
+                    or (self.plugin and self.plugin.ui and self.plugin.ui.document and self.plugin.ui.document.getProps and self.plugin.ui.document:getProps())
+                local cur_book_title = (self.plugin and self.plugin.book_data and (self.plugin.book_data.book_title or self.plugin.book_data.title))
+                    or (doc_props and doc_props.title)
+                local cur_header_title = (cur_book_title and cur_book_title ~= "") and ("Current Book: " .. cur_book_title) or "Current Book Timeline"
+                table.insert(display_items, {
+                    is_current_header = true,
+                    title = cur_header_title,
+                })
+            end
+        end
+        for _, it in ipairs(self.items or {}) do
+            if it.source ~= "series_prior" then
                 table.insert(display_items, it)
             end
         end
@@ -1161,6 +1590,15 @@ function EntityListOverlay:buildUI()
                 if none_tmpl == "mentions_none" then none_tmpl = "No mentions found for '%s' yet." end
                 empty_str = none_tmpl:format((self.entity and self.entity.name) or "this entity")
             end
+        elseif self.mode == "linked_entries" then
+            local ent_name = (self.entity and (self.entity.name or self.entity.chapter)) or nil
+            if ent_name and ent_name ~= "" then
+                local none_tmpl = (loc and loc:t("linked_none")) or "No linked entries found for '%s'."
+                if none_tmpl == "linked_none" then none_tmpl = "No linked entries found for '%s'." end
+                empty_str = none_tmpl:format(ent_name)
+            else
+                empty_str = (loc and loc:t("no_linked_entries")) or "No linked entries found"
+            end
         elseif self.search_query and self.search_query ~= "" then
             empty_str = "No items matching \"" .. self.search_query .. "\""
         end
@@ -1186,8 +1624,14 @@ function EntityListOverlay:buildUI()
                     is_icon = true,
                     alpha = true,
                 }
+                local raw_header = (loc and loc:t("series_prior_books_header")) or "Prior Books in Series"
+                local clean_header = raw_header:gsub("^%s*[─%-–—]+%s*", ""):gsub("%s*[─%-–—]+%s*$", "")
+                if clean_header == "" or clean_header:lower() == "prior books" then
+                    clean_header = "Prior Books in Series"
+                end
+                local header_title = string.format("%s (%d)", clean_header, it.count or 0)
                 local prior_txt = TextWidget:new{
-                    text = (loc and loc:t("series_prior_books_header")) or "Prior Books in Series",
+                    text = header_title,
                     face = Font:getFace("cfont", 15),
                     bold = true,
                     fgcolor = Blitbuffer.COLOR_BLACK,
@@ -1200,16 +1644,16 @@ function EntityListOverlay:buildUI()
                 }
                 local is_sec_focused = (self.focus_zone == "cards" and idx == self.focused_index)
                 local sec_frame = FrameContainer:new{
-                    padding = sc(8),
+                    padding = 0,
                     padding_left = sc(16),
                     padding_right = sc(16),
-                    bordersize = 0,
-                    background = is_sec_focused and Blitbuffer.Color8(235) or Blitbuffer.Color8(246),
-                    radius = is_sec_focused and sc(4) or 0,
+                    bordersize = is_sec_focused and sc(2) or 0,
+                    color = Blitbuffer.COLOR_BLACK,
+                    background = is_sec_focused and Blitbuffer.Color8(220) or Blitbuffer.Color8(240),
                     width = sw,
-                    height = sc(40),
+                    height = sc(38),
                     LeftContainer:new{
-                        dimen = Geom:new{ w = sw - sc(32), h = sc(40) },
+                        dimen = Geom:new{ w = sw - sc(32), h = sc(38) },
                         sec_row,
                     },
                 }
@@ -1223,7 +1667,55 @@ function EntityListOverlay:buildUI()
                     self:buildUI()
                     UIManager:setDirty(self, "ui")
                 end)
+                sec_item.onBeforePaint = function()
+                    local focused = (self.focus_zone == "cards" and idx == self.focused_index)
+                    sec_frame.bordersize = focused and sc(2) or 0
+                    sec_frame.color = Blitbuffer.COLOR_BLACK
+                    sec_frame.background = focused and Blitbuffer.Color8(220) or Blitbuffer.Color8(240)
+                end
                 table.insert(page_content_vg, sec_item)
+                if idx < #page_items then
+                    table.insert(page_content_vg, CenterContainer:new{
+                        dimen = Geom:new{ w = sw, h = sc(1) },
+                        LineWidget:new{
+                            background = Blitbuffer.Color8(180),
+                            dimen = Geom:new{ w = sw - sc(32), h = sc(1) },
+                        },
+                    })
+                end
+            elseif it.is_current_header then
+                local cur_txt = TextWidget:new{
+                    text = it.title or "Current Book Timeline",
+                    face = Font:getFace("cfont", 15),
+                    bold = true,
+                    fgcolor = Blitbuffer.COLOR_BLACK,
+                    max_width = sw - sc(32),
+                }
+                local is_cur_focused = (self.focus_zone == "cards" and idx == self.focused_index)
+                local cur_frame = FrameContainer:new{
+                    padding = 0,
+                    padding_left = sc(16),
+                    padding_right = sc(16),
+                    bordersize = is_cur_focused and sc(2) or 0,
+                    color = Blitbuffer.COLOR_BLACK,
+                    background = is_cur_focused and Blitbuffer.Color8(220) or Blitbuffer.Color8(240),
+                    width = sw,
+                    height = sc(36),
+                    LeftContainer:new{
+                        dimen = Geom:new{ w = sw - sc(32), h = sc(36) },
+                        cur_txt,
+                    },
+                }
+                local cur_item = makeTapItem(cur_frame, function()
+                    -- Static transition header
+                end)
+                cur_item.onBeforePaint = function()
+                    local focused = (self.focus_zone == "cards" and idx == self.focused_index)
+                    cur_frame.bordersize = focused and sc(2) or 0
+                    cur_frame.color = Blitbuffer.COLOR_BLACK
+                    cur_frame.background = focused and Blitbuffer.Color8(220) or Blitbuffer.Color8(240)
+                end
+                table.insert(page_content_vg, cur_item)
                 if idx < #page_items then
                     table.insert(page_content_vg, CenterContainer:new{
                         dimen = Geom:new{ w = sw, h = sc(1) },
@@ -1258,8 +1750,9 @@ function EntityListOverlay:buildUI()
     }
 
     -- ── 3. Footer Bar with Storefront Pagination ──────────────────────────────
-    local nav_btn_size = sc(20)
-    local nav_btn_w = sc(38)
+    local nav_btn_size = sc(22)
+    local nav_btn_w = sc(40)
+    local nav_btn_h = sc(38)
 
     local is_prev_focused = (self.focus_zone == "footer" and self.footer_focus_idx == 1)
     local is_page_focused = (self.focus_zone == "footer" and self.footer_focus_idx == 2)
@@ -1269,7 +1762,7 @@ function EntityListOverlay:buildUI()
         icon = "chevron-left.svg",
         size = nav_btn_size,
         width = nav_btn_w,
-        height = nav_btn_w,
+        height = nav_btn_h,
         is_focused = is_prev_focused,
         allow_flash = false,
         callback = function()
@@ -1305,7 +1798,7 @@ function EntityListOverlay:buildUI()
         icon = "chevron-right.svg",
         size = nav_btn_size,
         width = nav_btn_w,
-        height = nav_btn_w,
+        height = nav_btn_h,
         is_focused = is_next_focused,
         allow_flash = false,
         callback = function()

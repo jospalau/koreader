@@ -233,6 +233,9 @@ msgstr "Short"
 msgid "desc_len_v_detailed"
 msgstr "Very Detailed"
 
+msgid "document_unavailable"
+msgstr "Document unavailable"
+
 msgid "dont_ask_again"
 msgstr "Don't ask again"
 
@@ -244,6 +247,18 @@ msgstr "locations"
 
 msgid "entity_not_found"
 msgstr "'%s' was not found as a character or location."
+
+msgid "entity_type_character"
+msgstr "Character"
+
+msgid "entity_type_historical"
+msgstr "Historical Figure"
+
+msgid "entity_type_location"
+msgstr "Location"
+
+msgid "entity_type_term"
+msgstr "Term"
 
 msgid "entity_ui_style_both"
 msgstr "Modern Popup (Both)"
@@ -264,13 +279,22 @@ msgid "error"
 msgstr "Error"
 
 msgid "error_api"
-msgstr "API Error"
+msgstr "AI service unavailable"
 
 msgid "error_api_key_desc"
 msgstr "The API key provided was rejected. Please check your settings and ensure the key is correct."
 
 msgid "error_api_key_title"
 msgstr "Invalid API Key"
+
+msgid "error_busy_author"
+msgstr "Another AI request is already running.\n\nCancel it and fetch author info instead?"
+
+msgid "error_busy_desc"
+msgstr "Another AI request is already running in the background. Please wait for it to finish or try again shortly."
+
+msgid "error_busy_title"
+msgstr "Request in Progress"
 
 msgid "error_extract_text"
 msgstr "Error: Could not extract book text."
@@ -289,6 +313,9 @@ msgstr "Model Not Found"
 
 msgid "error_no_api_key"
 msgstr "API Key Required"
+
+msgid "error_opening_gallery"
+msgstr "Failed to open image gallery"
 
 msgid "error_parse_desc"
 msgstr "The AI returned a response that could not be processed. This might be a temporary glitch."
@@ -484,6 +511,12 @@ msgstr "Enabled"
 
 msgid "linked_entries_setting_desc"
 msgstr "Linked Entries automatically connects characters, locations, and historical figures when they are mentioned in each other's descriptions.\n\nDisabling this will hide the [B]Linked Entries[/B] button from detail dialogs."
+
+msgid "linked_none"
+msgstr "No linked entries found for '%s'."
+
+msgid "linked_with_title"
+msgstr "Linked with: %s"
 
 msgid "local_setup_title"
 msgstr "Connect via Local Wi-Fi"
@@ -797,6 +830,9 @@ msgstr "No historical figure data yet.\n\nPlease use 'Fetch X-Ray Data' first.\n
 msgid "no_items"
 msgstr "no_items"
 
+msgid "no_linked_entries"
+msgstr "No linked entries found"
+
 msgid "no_location_data"
 msgstr "No location data yet. Please use 'Fetch X-Ray Data' first."
 
@@ -928,6 +964,18 @@ msgstr "%s API key cleared."
 
 msgid "skip"
 msgstr "Skip"
+
+msgid "sort_alphabetical"
+msgstr "Alphabetical (A–Z)"
+
+msgid "sort_appearance"
+msgstr "Order of Appearance"
+
+msgid "sort_by"
+msgstr "Sort By"
+
+msgid "sort_frequency"
+msgstr "Frequency of Mentions (Default)"
 
 msgid "spoiler_free_about"
 msgstr "Spoiler-free mode limits AI extraction to the pages you have already read (up to your current page), preventing spoilers from future chapters.\n\n[B]Full Book Mode:[/B] Analyzes the entire book, which [B]may contain spoilers[/B]."
@@ -1136,6 +1184,9 @@ msgstr "Wavy"
 msgid "updater_available_header"
 msgstr "X-Ray %s is available!\nYou have %s."
 
+msgid "updater_btn_back"
+msgstr "Back"
+
 msgid "updater_btn_cancel"
 msgstr "Cancel"
 
@@ -1150,6 +1201,9 @@ msgstr "Open in browser"
 
 msgid "updater_btn_restart"
 msgstr "Restart"
+
+msgid "updater_btn_view_notes"
+msgstr "View full release notes"
 
 msgid "updater_cancelled_check"
 msgstr "Update check cancelled."
@@ -1183,6 +1237,9 @@ msgstr "Error checking for updates: %s"
 
 msgid "updater_no_asset"
 msgstr "No automatic update file was found.\n\nOpen the releases page on GitHub?"
+
+msgid "updater_release_notes_title"
+msgstr "X-Ray %s Release Notes"
 
 msgid "updater_success_restart"
 msgstr "X-Ray %s successfully installed.\n\nRestart KOReader to apply the update?"

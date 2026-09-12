@@ -309,6 +309,10 @@ msgstr "短"
 msgid "desc_len_v_detailed"
 msgstr "非常详细"
 
+# en-hash: 2896e8f581f9181834e98580adf8cfff
+msgid "document_unavailable"
+msgstr "文档不可用"
+
 # en-hash: 7be0e84edd4626f6b7d42f1e8174f118
 msgid "dont_ask_again"
 msgstr "不再询问此书"
@@ -324,6 +328,22 @@ msgstr "地点"
 # en-hash: b972b14200d0fad941304c0b361a18f0
 msgid "entity_not_found"
 msgstr "未发现 '%s' 为角色或地点。"
+
+# en-hash: 76a40e4f974fd895a0a2598c1cee28b4
+msgid "entity_type_character"
+msgstr "角色"
+
+# en-hash: adb9c82a7733b6bc485275e01bba6eac
+msgid "entity_type_historical"
+msgstr "历史人物"
+
+# en-hash: ce5bf551379459c1c61d2a204061c455
+msgid "entity_type_location"
+msgstr "地点"
+
+# en-hash: cf5f3091e30dee6597885d8c0e0c357f
+msgid "entity_type_term"
+msgstr "术语"
 
 # en-hash: 76e73569f84e76aa9de514fea51ef9f3
 msgid "entity_ui_style_both"
@@ -349,9 +369,9 @@ msgstr "现代弹窗 (仅菜单)"
 msgid "error"
 msgstr "错误"
 
-# en-hash: fba0f8a108268b90efc2ccf92a27a646
+# en-hash: 6b844e936008c2aafa83c80176622884
 msgid "error_api"
-msgstr "API 错误"
+msgstr "AI 服务不可用"
 
 # en-hash: 68007307953d58fd56bdcd07d62f3e3f
 msgid "error_api_key_desc"
@@ -360,6 +380,18 @@ msgstr "提供的 API Key 被拒绝。请检查您的设置并确保 Key 正确�
 # en-hash: 4b6886b5038ca14e978a72f01df1fe6d
 msgid "error_api_key_title"
 msgstr "API Key 无效"
+
+# en-hash: d1345ddd7c09ae874feee020dcdb908f
+msgid "error_busy_author"
+msgstr "另一个 AI 请求已在运行。\n\n是否取消它并改为获取作者信息？"
+
+# en-hash: 97b2ecd6aa810d21be9204847d173957
+msgid "error_busy_desc"
+msgstr "另一个 AI 请求已在后台运行。请等待其完成，或稍后重试。"
+
+# en-hash: 1838029eb098962dd8f401b27abd347c
+msgid "error_busy_title"
+msgstr "正在处理请求"
 
 # en-hash: 8a92a303055af14321f3cc7f644623fe
 msgid "error_extract_text"
@@ -384,6 +416,10 @@ msgstr "模型未找到"
 # en-hash: 52f3d028dbfc9859df0fd3417eb58d75
 msgid "error_no_api_key"
 msgstr "需要 API 密钥"
+
+# en-hash: 64a497eb7dda1c38fdb732a8ea236bae
+msgid "error_opening_gallery"
+msgstr "打开图库失败"
 
 # en-hash: e7b0af2be5bf56ed033f222a42ffd884
 msgid "error_parse_desc"
@@ -644,6 +680,14 @@ msgstr "已启用"
 # en-hash: f2cb4c8134446083c3d2859f02c963f6
 msgid "linked_entries_setting_desc"
 msgstr "“关联条目”会在角色、地点和历史人物在彼此的描述中被提到时自动建立连接。\n\n禁用此功能将隐藏详情对话框中的“关联条目”按钮。"
+
+# en-hash: 75c2e35dd42abd75cdb8a9d4b0da8c20
+msgid "linked_none"
+msgstr "未找到 '%s' 的关联条目。"
+
+# en-hash: 87388d7588da3ecf170e33b01d82dc2f
+msgid "linked_with_title"
+msgstr "关联: %s"
 
 # en-hash: 08ea860427184895725e398c5ef821b1
 msgid "local_setup_title"
@@ -1061,6 +1105,10 @@ msgstr "暂无历史人物数据。\n\n请先使用“获取 X-Ray 数据”。\
 msgid "no_items"
 msgstr "无项目"
 
+# en-hash: 0f1e243d0830d654feef580caac9fd88
+msgid "no_linked_entries"
+msgstr "未找到关联条目"
+
 # en-hash: 4d0e58f2c49ca238a05d2a92486d3d70
 msgid "no_location_data"
 msgstr "暂无地点数据。请先使用“获取 X-Ray 数据”。"
@@ -1236,6 +1284,22 @@ msgstr "%s API 密钥已清除。"
 # en-hash: 72ef2b9b6965d078e3c7f95487a82d1c
 msgid "skip"
 msgstr "跳过"
+
+# en-hash: 4b4ec0f3a3872375ea37068549e8584f
+msgid "sort_alphabetical"
+msgstr "按字母顺序 (A–Z)"
+
+# en-hash: 1a82af45993146d81d8a45f98ad29745
+msgid "sort_appearance"
+msgstr "按出现顺序"
+
+# en-hash: 059a1aa256b770eca2d69c096f759ad0
+msgid "sort_by"
+msgstr "排序方式"
+
+# en-hash: ff14265adbb6186636bff92477cb34aa
+msgid "sort_frequency"
+msgstr "提及频率 (默认)"
 
 # en-hash: 55da95c9d6ab32f4873d13cdba88943e
 msgid "spoiler_free_about"
@@ -1513,6 +1577,10 @@ msgstr "波浪线"
 msgid "updater_available_header"
 msgstr "X-Ray %s 已发布！\n您当前的版本是 %s。"
 
+# en-hash: 0557fa923dcee4d0f86b1409f5c2167f
+msgid "updater_btn_back"
+msgstr "返回"
+
 # en-hash: ea4788705e6873b424c65e91c2846b19
 msgid "updater_btn_cancel"
 msgstr "取消"
@@ -1532,6 +1600,10 @@ msgstr "在浏览器中打开"
 # en-hash: 51cfbcff36da74a9fc47f3a5140f99f2
 msgid "updater_btn_restart"
 msgstr "重启"
+
+# en-hash: f90c6e6f2d986a10f351292ffa2968ab
+msgid "updater_btn_view_notes"
+msgstr "查看完整更新说明"
 
 # en-hash: 092dc0fe2a1709895d0ffb03306ab644
 msgid "updater_cancelled_check"
@@ -1576,6 +1648,10 @@ msgstr "检查更新时出错：%s"
 # en-hash: 4764ffed7fe43c5174fe97c69cb933ee
 msgid "updater_no_asset"
 msgstr "未找到自动更新文件。\n\n是否在 GitHub 上打开发布页面？"
+
+# en-hash: 83cae54ea5a5d1ac7469aef85cccbd23
+msgid "updater_release_notes_title"
+msgstr "X-Ray %s 更新说明"
 
 # en-hash: fa243c194c72bb2d6c10dfad7c375cf3
 msgid "updater_success_restart"

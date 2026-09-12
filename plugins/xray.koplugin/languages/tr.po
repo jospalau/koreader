@@ -309,6 +309,10 @@ msgstr "Kısa"
 msgid "desc_len_v_detailed"
 msgstr "Çok Detaylı"
 
+# en-hash: 2896e8f581f9181834e98580adf8cfff
+msgid "document_unavailable"
+msgstr "Belge kullanılamıyor"
+
 # en-hash: 7be0e84edd4626f6b7d42f1e8174f118
 msgid "dont_ask_again"
 msgstr "Bu kitap için bir daha sorma"
@@ -324,6 +328,22 @@ msgstr "konumlar"
 # en-hash: b972b14200d0fad941304c0b361a18f0
 msgid "entity_not_found"
 msgstr "'%s' bir karakter veya konum olarak bulunamadı."
+
+# en-hash: 76a40e4f974fd895a0a2598c1cee28b4
+msgid "entity_type_character"
+msgstr "Karakter"
+
+# en-hash: adb9c82a7733b6bc485275e01bba6eac
+msgid "entity_type_historical"
+msgstr "Tarihi Şahsiyet"
+
+# en-hash: ce5bf551379459c1c61d2a204061c455
+msgid "entity_type_location"
+msgstr "Konum"
+
+# en-hash: cf5f3091e30dee6597885d8c0e0c357f
+msgid "entity_type_term"
+msgstr "Terim"
 
 # en-hash: 76e73569f84e76aa9de514fea51ef9f3
 msgid "entity_ui_style_both"
@@ -349,9 +369,9 @@ msgstr "Modern Popup (Sadece menü)"
 msgid "error"
 msgstr "Hata"
 
-# en-hash: fba0f8a108268b90efc2ccf92a27a646
+# en-hash: 6b844e936008c2aafa83c80176622884
 msgid "error_api"
-msgstr "API Hatası"
+msgstr "Yapay zeka hizmeti kullanılamıyor"
 
 # en-hash: 68007307953d58fd56bdcd07d62f3e3f
 msgid "error_api_key_desc"
@@ -360,6 +380,18 @@ msgstr "Sağlanan API anahtarı reddedildi. Lütfen ayarlarınızı kontrol edin
 # en-hash: 4b6886b5038ca14e978a72f01df1fe6d
 msgid "error_api_key_title"
 msgstr "Geçersiz API Key"
+
+# en-hash: d1345ddd7c09ae874feee020dcdb908f
+msgid "error_busy_author"
+msgstr "Zaten başka bir yapay zeka isteği çalışıyor.\n\nİptal edip bunun yerine yazar bilgilerini getirmek ister misiniz?"
+
+# en-hash: 97b2ecd6aa810d21be9204847d173957
+msgid "error_busy_desc"
+msgstr "Arka planda zaten başka bir yapay zeka isteği çalışıyor. Lütfen bitmesini bekleyin veya kısa süre sonra tekrar deneyin."
+
+# en-hash: 1838029eb098962dd8f401b27abd347c
+msgid "error_busy_title"
+msgstr "İstek İşleniyor"
 
 # en-hash: 8a92a303055af14321f3cc7f644623fe
 msgid "error_extract_text"
@@ -384,6 +416,10 @@ msgstr "Model Bulunamadı"
 # en-hash: 52f3d028dbfc9859df0fd3417eb58d75
 msgid "error_no_api_key"
 msgstr "API Anahtarı Gerekli"
+
+# en-hash: 64a497eb7dda1c38fdb732a8ea236bae
+msgid "error_opening_gallery"
+msgstr "Resim galerisi açılamadı"
 
 # en-hash: e7b0af2be5bf56ed033f222a42ffd884
 msgid "error_parse_desc"
@@ -644,6 +680,14 @@ msgstr "Etkin"
 # en-hash: f2cb4c8134446083c3d2859f02c963f6
 msgid "linked_entries_setting_desc"
 msgstr "Bağlantılı Girdiler; karakterler, konumlar ve tarihi şahsiyetler birbirlerinin açıklamalarında geçtiklerinde onları otomatik olarak bağlar.\n\nBunu devre dışı bırakmak, detay diyaloglarından 'Bağlantılı Girdiler' düğmesini gizleyecektir."
+
+# en-hash: 75c2e35dd42abd75cdb8a9d4b0da8c20
+msgid "linked_none"
+msgstr "'%s' için bağlantılı öge bulunamadı."
+
+# en-hash: 87388d7588da3ecf170e33b01d82dc2f
+msgid "linked_with_title"
+msgstr "Şununla bağlantılı: %s"
 
 # en-hash: 08ea860427184895725e398c5ef821b1
 msgid "local_setup_title"
@@ -1061,6 +1105,10 @@ msgstr "Henüz tarihi kişi verisi yok.\n\nLütfen önce 'X-Ray Verilerini Çek'
 msgid "no_items"
 msgstr "Öge yok"
 
+# en-hash: 0f1e243d0830d654feef580caac9fd88
+msgid "no_linked_entries"
+msgstr "Bağlantılı öge bulunamadı"
+
 # en-hash: 4d0e58f2c49ca238a05d2a92486d3d70
 msgid "no_location_data"
 msgstr "Henüz mekan verisi yok. Lütfen önce 'X-Ray Verilerini Çek' seçeneğini kullanın."
@@ -1236,6 +1284,22 @@ msgstr "%s API anahtarı temizlendi."
 # en-hash: 72ef2b9b6965d078e3c7f95487a82d1c
 msgid "skip"
 msgstr "Skip"
+
+# en-hash: 4b4ec0f3a3872375ea37068549e8584f
+msgid "sort_alphabetical"
+msgstr "Alfabetik (A–Z)"
+
+# en-hash: 1a82af45993146d81d8a45f98ad29745
+msgid "sort_appearance"
+msgstr "Görünüm Sırası"
+
+# en-hash: 059a1aa256b770eca2d69c096f759ad0
+msgid "sort_by"
+msgstr "Sıralama"
+
+# en-hash: ff14265adbb6186636bff92477cb34aa
+msgid "sort_frequency"
+msgstr "Bahsedilme Sıklığı (Varsayılan)"
 
 # en-hash: 55da95c9d6ab32f4873d13cdba88943e
 msgid "spoiler_free_about"
@@ -1513,6 +1577,10 @@ msgstr "Dalgalı"
 msgid "updater_available_header"
 msgstr "X-Ray %s mevcut!\nSizde %s var."
 
+# en-hash: 0557fa923dcee4d0f86b1409f5c2167f
+msgid "updater_btn_back"
+msgstr "Geri"
+
 # en-hash: ea4788705e6873b424c65e91c2846b19
 msgid "updater_btn_cancel"
 msgstr "İptal"
@@ -1532,6 +1600,10 @@ msgstr "Tarayıcıda aç"
 # en-hash: 51cfbcff36da74a9fc47f3a5140f99f2
 msgid "updater_btn_restart"
 msgstr "Yeniden Başlat"
+
+# en-hash: f90c6e6f2d986a10f351292ffa2968ab
+msgid "updater_btn_view_notes"
+msgstr "Sürüm notlarının tamamını görüntüle"
 
 # en-hash: 092dc0fe2a1709895d0ffb03306ab644
 msgid "updater_cancelled_check"
@@ -1576,6 +1648,10 @@ msgstr "Güncelleme kontrolü hatası: %s"
 # en-hash: 4764ffed7fe43c5174fe97c69cb933ee
 msgid "updater_no_asset"
 msgstr "Otomatik güncelleme dosyası bulunamadı.\n\nGitHub üzerindeki sürümler sayfasını açmak ister misiniz?"
+
+# en-hash: 83cae54ea5a5d1ac7469aef85cccbd23
+msgid "updater_release_notes_title"
+msgstr "X-Ray %s Sürüm Notları"
 
 # en-hash: fa243c194c72bb2d6c10dfad7c375cf3
 msgid "updater_success_restart"

@@ -134,6 +134,26 @@ function XRayBottomPopup:init()
 end
 
 function XRayBottomPopup:_rebuild()
+    if self._font_fallback then
+        self:_buildContent()
+        return
+    end
+
+    local ok, err = pcall(function() self:_buildContent() end)
+    if not ok then
+        if self.plugin and self.plugin.log then
+            self.plugin:log("XRayPlugin: XRayBottomPopup:_rebuild failed (" .. tostring(err) .. "), retrying with cfont fallback")
+        end
+        self._font_fallback = true
+        local ok2, err2 = pcall(function() self:_buildContent() end)
+        if not ok2 and self.plugin and self.plugin.log then
+            self.plugin:log("XRayPlugin: XRayBottomPopup fallback rebuild also failed: " .. tostring(err2))
+        end
+        self._font_fallback = nil
+    end
+end
+
+function XRayBottomPopup:_buildContent()
     local sw = Screen:getWidth()
     local sh = Screen:getHeight()
     local fs  = self.font_size
@@ -147,11 +167,13 @@ function XRayBottomPopup:_rebuild()
     local e = self.entity or {}
 
     local doc_family
-    if self.plugin and self.plugin.ui and self.plugin.ui.font then
-        doc_family = self.plugin.ui.font.font_face
-    end
-    if not doc_family and G_reader_settings then
-        doc_family = G_reader_settings:readSetting("cre_font_family")
+    if not self._font_fallback then
+        if self.plugin and self.plugin.ui and self.plugin.ui.font then
+            doc_family = self.plugin.ui.font.font_face
+        end
+        if not doc_family and G_reader_settings then
+            doc_family = G_reader_settings:readSetting("cre_font_family")
+        end
     end
     local Device = require("device")
 
@@ -176,7 +198,7 @@ function XRayBottomPopup:_rebuild()
     end
 
     local function getFontSafe(preferred_family, size)
-        if is_cjk or _isCJKFontFamily(preferred_family) then
+        if self._font_fallback or is_cjk or _isCJKFontFamily(preferred_family) then
             return Font:getFace("cfont", size)
         end
         if preferred_family and preferred_family ~= "" then
@@ -360,7 +382,7 @@ function XRayBottomPopup:_rebuild()
             cb = function()
                 UIManager:close(self)
                 if plugin and plugin.showRelatedEntities then
-                    plugin:showRelatedEntities(related)
+                    plugin:showRelatedEntities(related, nil, e)
                 end
             end,
         })
@@ -1204,17 +1226,24 @@ function M:closeAllMenus()
     end
 
     -- 1. Close all custom plugin modals instantly
-    local menus = {
-        self.mentions_menu, self.char_menu, self.loc_menu,
-        self.timeline_menu, self.hf_menu, self.xray_menu,
-        self.terms_menu, self.active_details_dialog, self.return_banner
-    }
-    for i = 1, 9 do
-        if menus[i] then pcall(function() UIManager:close(menus[i]) end) end
+    local function closeWidget(w)
+        if w then pcall(function() UIManager:close(w) end) end
     end
+    closeWidget(self.mentions_menu)
+    closeWidget(self.char_menu)
+    closeWidget(self.loc_menu)
+    closeWidget(self.timeline_menu)
+    closeWidget(self.hf_menu)
+    closeWidget(self.xray_menu)
+    closeWidget(self.terms_menu)
+    closeWidget(self.active_details_dialog)
+    closeWidget(self.return_banner)
+    closeWidget(self.active_related_menu)
+
     self.mentions_menu = nil; self.char_menu = nil; self.loc_menu = nil
     self.timeline_menu = nil; self.hf_menu = nil; self.xray_menu = nil
     self.terms_menu = nil; self.active_details_dialog = nil; self.return_banner = nil
+    self.active_related_menu = nil
     
     local function executeClear()
         -- 2. Dismiss native KOReader top menu stack
@@ -1280,6 +1309,7 @@ function M:showCharacters()
                 local ButtonDialog = require("ui/widget/buttondialog")
                 local prompt_dlg
                 prompt_dlg = ButtonDialog:new{
+                    modal = true,
                     title = string.format(
                         self.loc:t("pending_duplicates_prompt") or
                         "AI found %d possible duplicate character(s) from the last fetch. Review now?",
@@ -1405,51 +1435,33 @@ function M:findRelatedEntities(text, exclude_name)
     return related
 end
 
-function M:showRelatedEntities(related, opts)
-    local items = {}
-    if self.active_related_menu then
-        UIManager:close(self.active_related_menu)
-        self.active_related_menu = nil
+function M:showRelatedEntities(related, opts, source_entity)
+    if self.active_details_dialog then
+        local d = self.active_details_dialog
+        self.active_details_dialog = nil
+        pcall(function() UIManager:close(d) end)
     end
 
-    for _, entry in ipairs(related) do
-        local item = entry.item
-        local item_type = entry.type
-        local display_type = item_type:sub(1,1):upper() .. item_type:sub(2)
-        table.insert(items, {
-            text = (item.name or "???") .. " (" .. display_type .. ")",
-            callback = function()
-                -- Close both the linked entries menu and any open detail dialog
-                -- before opening the new entity's detail.
-                if self.active_related_menu then
-                    UIManager:close(self.active_related_menu)
-                    self.active_related_menu = nil
-                end
-                if self.active_details_dialog then
-                    UIManager:close(self.active_details_dialog)
-                    self.active_details_dialog = nil
-                end
-                if item_type == "character" then
-                    self:showCharacterDetails(item, opts)
-                elseif item_type == "location" then
-                    self:showLocationDetails(item, opts)
-                elseif item_type == "historical" then
-                    self:showHistoricalFigureDetails(item, opts)
-                elseif item_type == "term" then
-                    self:showTermDetails(item, opts)
-                end
-            end
-        })
+    if self.active_related_menu then
+        local m = self.active_related_menu
+        self.active_related_menu = nil
+        pcall(function() UIManager:close(m) end)
     end
-    
-    self.active_related_menu = self:newMenu("active_related_menu", {
-        title = self.loc:t("linked_entries") or "Linked Entries",
-        item_table = items,
+
+    local entity = source_entity or (opts and (opts.entity or opts.item))
+
+    local EntityListOverlay = require(plugin_path .. "xray_entity_list")
+    self.active_related_menu = EntityListOverlay:new{
+        plugin = self,
+        mode = "linked_entries",
+        entity = entity,
+        raw_items = related or {},
+        opts = opts,
         on_close_callback = function()
             self.active_related_menu = nil
-        end
-    })
-    UIManager:show(self.active_related_menu)
+        end,
+    }
+    UIManager:show(self.active_related_menu, "ui")
 end
 
 function M:showCharacterDetails(character, opts)
@@ -1602,7 +1614,8 @@ function M:showCharacterDetails(character, opts)
                 {
                     text = self.loc:t("linked_entries") or "Linked Entries",
                     callback = function()
-                        self:showRelatedEntities(related, opts)
+                        if self.active_details_dialog then UIManager:close(self.active_details_dialog); self.active_details_dialog = nil end
+                        self:showRelatedEntities(related, opts, character)
                     end,
                 }
             },
@@ -1791,7 +1804,8 @@ function M:showLocationDetails(loc_item, opts)
                 {
                     text = self.loc:t("linked_entries") or "Linked Entries",
                     callback = function()
-                        self:showRelatedEntities(related, opts)
+                        if self.active_details_dialog then UIManager:close(self.active_details_dialog); self.active_details_dialog = nil end
+                        self:showRelatedEntities(related, opts, loc_item)
                     end,
                 }
             },
@@ -2035,7 +2049,8 @@ function M:showTermDetails(term, opts)
                 {
                     text = self.loc:t("linked_entries") or "Linked Entries",
                     callback = function()
-                        self:showRelatedEntities(related, opts)
+                        if self.active_details_dialog then UIManager:close(self.active_details_dialog); self.active_details_dialog = nil end
+                        self:showRelatedEntities(related, opts, term)
                     end,
                 }
             },
@@ -2453,6 +2468,7 @@ function M:walkDuplicatePairs(list, list_name, pairs_found)
 
         local confirm_dialog
         confirm_dialog = ButtonDialog:new{
+            modal = true,
             title = confirm_text,
             buttons = {{
                 {
@@ -2599,19 +2615,24 @@ function M:showMergeFlow(list, list_name)
     local InfoMessage = require("ui/widget/infomessage")
     
     local primary_dialog, secondary_dialog
+    local showPrimaryPicker, pickSecondary
     
-    local function pickSecondary(primary_item)
+    pickSecondary = function(primary_item)
         local buttons = {}
         for _, item in ipairs(list) do
             if item.name ~= primary_item.name then
                 local secondary_name = item.name
                 table.insert(buttons, {{
                     text = secondary_name,
+                    align = "left",
                     callback = function()
-                        UIManager:close(secondary_dialog)
-                        secondary_dialog = nil
+                        if secondary_dialog then
+                            UIManager:close(secondary_dialog)
+                            secondary_dialog = nil
+                        end
                         local confirm
                         confirm = ButtonDialog:new{
+                            modal = true,
                             title = string.format(
                                 self.loc:t("merge_confirm") or "Merge %s into %s? The secondary entry will be deleted and its aliases absorbed.",
                                 secondary_name, primary_item.name
@@ -2705,45 +2726,58 @@ function M:showMergeFlow(list, list_name)
         table.insert(buttons, {{
             text = self.loc:t("merge_back") or "← Back",
             callback = function()
-                UIManager:close(secondary_dialog)
-                secondary_dialog = nil
-                UIManager:show(primary_dialog)
+                if secondary_dialog then
+                    UIManager:close(secondary_dialog)
+                    secondary_dialog = nil
+                end
+                showPrimaryPicker()
             end
         }})
         
         secondary_dialog = ButtonDialog:new{
+            modal = true,
             title = self.loc:t("merge_pick_secondary") or "Choose the entry to REMOVE",
             buttons = buttons
         }
         UIManager:show(secondary_dialog)
     end
     
-    local buttons = {}
-    for _, item in ipairs(list) do
-        local primary_item = item
+    showPrimaryPicker = function()
+        local buttons = {}
+        for _, item in ipairs(list) do
+            local primary_item = item
+            table.insert(buttons, {{
+                text = item.name,
+                align = "left",
+                callback = function()
+                    if primary_dialog then
+                        UIManager:close(primary_dialog)
+                        primary_dialog = nil
+                    end
+                    pickSecondary(primary_item)
+                end
+            }})
+        end
+        
         table.insert(buttons, {{
-            text = item.name,
+            text = self.loc:t("close") or "Close",
             callback = function()
-                UIManager:close(primary_dialog)
-                primary_dialog = nil
-                pickSecondary(primary_item)
+                if primary_dialog then
+                    UIManager:close(primary_dialog)
+                    primary_dialog = nil
+                end
             end
         }})
+        
+        primary_dialog = ButtonDialog:new{
+            modal = true,
+            title = self.loc:t("merge_pick_primary") or "Choose the entry to KEEP",
+            buttons = buttons
+        }
+        UIManager:show(primary_dialog)
     end
-    
-    table.insert(buttons, {{
-        text = self.loc:t("close") or "Close",
-        callback = function()
-            UIManager:close(primary_dialog)
-            primary_dialog = nil
-        end
-    }})
-    
-    primary_dialog = ButtonDialog:new{
-        title = self.loc:t("merge_pick_primary") or "Choose the entry to KEEP",
-        buttons = buttons
-    }
-    UIManager:show(primary_dialog)
+
+    showPrimaryPicker()
 end
 
 
@@ -2843,6 +2877,12 @@ function M:showSpoilerSettings()
         end,
         save_func = function(val)
             self.ai_helper:saveSettings({ spoiler_setting = val })
+            if val == "full_book" and self.auto_fetch_enabled then
+                if self.isCatchUpNeeded and self:isCatchUpNeeded() then
+                    self.pending_background_fetch = true
+                    self:scheduleBackgroundCatchUp(2)
+                end
+            end
             UIManager:setDirty(nil, "ui")
         end,
         about_text = self.loc:t("spoiler_free_about") or "Spoiler-free mode limits AI extraction to the pages you have already read (up to your current page), preventing spoilers from future chapters.\n\n[B]Full Book Mode:[/B] Analyzes the entire book, which [B]may contain spoilers[/B].",
@@ -2902,7 +2942,7 @@ function M:showAuthorInfo()
     if not self.author_info or not self.author_info.description or self.author_info.description == "" or self.author_info.description == (self.loc:t("msg_no_bio") or "No biography available.") then
         local ButtonDialog = require("ui/widget/buttondialog")
         local ask_dialog
-        ask_dialog = ButtonDialog:new{ title = (self.loc:t("menu_fetch_author") or "Fetch Author Info") .. "\n\n" .. (self.loc:t("no_author_data_fetch") or "No author biography available. Fetch now?"), buttons = {{{ text = self.loc:t("cancel"), callback = function() UIManager:close(ask_dialog) end }, { text = self.loc:t("fetch_button") or "Fetch", is_enter_default = true, callback = function() UIManager:close(ask_dialog); UIManager:nextTick(function() self:fetchAuthorInfo() end) end }}} }
+        ask_dialog = ButtonDialog:new{ modal = true, title = (self.loc:t("menu_fetch_author") or "Fetch Author Info") .. "\n\n" .. (self.loc:t("no_author_data_fetch") or "No author biography available. Fetch now?"), buttons = {{{ text = self.loc:t("cancel"), callback = function() UIManager:close(ask_dialog) end }, { text = self.loc:t("fetch_button") or "Fetch", is_enter_default = true, callback = function() UIManager:close(ask_dialog); UIManager:nextTick(function() self:fetchAuthorInfo() end) end }}} }
         UIManager:show(ask_dialog); return
     end
 
@@ -3038,6 +3078,7 @@ function M:showLocations()
                 local ButtonDialog = require("ui/widget/buttondialog")
                 local prompt_dlg
                 prompt_dlg = ButtonDialog:new{
+                    modal = true,
                     title = string.format(
                         self.loc:t("pending_duplicates_prompt") or
                         "AI found %d possible duplicate location(s) from the last fetch. Review now?",
@@ -3077,6 +3118,7 @@ function M:showAbout()
     local ButtonDialog = require("ui/widget/buttondialog")
     local about_dlg
     about_dlg = ButtonDialog:new{
+        modal = true,
         title = body,
         buttons = {{
             {
@@ -3678,6 +3720,9 @@ function M:showTimeline()
     local utils = require(plugin_path .. "xray_utils")
     local toc = utils:flattenTOC(self.ui.document:getToc())
     self:assignTimelinePages(self.timeline, toc, true)
+    if self.filterOrphanTimelineEvents then
+        self.timeline = self:filterOrphanTimelineEvents(self.timeline, toc)
+    end
     self:sortTimelineByTOC(self.timeline)
 
     if self.timeline_menu then
@@ -3791,7 +3836,8 @@ function M:showTimelineEventDetails(ev, opts)
                 {
                     text     = self.loc:t("linked_entries") or "Linked Entries",
                     callback = function()
-                        self:showRelatedEntities(related, opts)
+                        if self.active_details_dialog then UIManager:close(self.active_details_dialog); self.active_details_dialog = nil end
+                        self:showRelatedEntities(related, opts, ev)
                     end,
                 },
                 {
@@ -3938,7 +3984,8 @@ function M:showHistoricalFigureDetails(fig, opts)
                 {
                     text = self.loc:t("linked_entries") or "Linked Entries",
                     callback = function()
-                        self:showRelatedEntities(related, opts)
+                        if self.active_details_dialog then UIManager:close(self.active_details_dialog); self.active_details_dialog = nil end
+                        self:showRelatedEntities(related, opts, fig)
                     end,
                 }
             },
@@ -4293,15 +4340,7 @@ function M:showWelcomeCard(force)
                     UIManager:close(overlay, "ui")
                     overlay = nil
                 end
-                if selected_action == "phone_pc" then
-                    self:showWebSetupQrDialog()
-                elseif selected_action == "ereader" then
-                    self:promptApiKeyInput("gemini")
-                elseif selected_action == "file_config" then
-                    self:checkFileKeyImport()
-                elseif selected_action == "skip" then
-                    self:setSetting("welcome_dismissed", true)
-                end
+                self:handleWelcomeAction(selected_action)
             end
         }
         table.insert(content_vg, continue_btn)
@@ -4333,10 +4372,12 @@ function M:showWelcomeCard(force)
             background = is_dont_ask_focused and (xray_theme.color_focus_bg or Blitbuffer.Color8(230)) or nil,
             radius = xray_theme.radius_btn or sc(4),
             callback = function()
-                self:setSetting("welcome_dismissed", true)
                 if overlay then
                     UIManager:close(overlay, "ui")
                     overlay = nil
+                end
+                if self.ai_helper and self.ai_helper.saveSettings then
+                    self.ai_helper:saveSettings({ welcome_wizard_dont_ask = true, welcome_wizard_dismissed = true })
                 end
             end
         }
@@ -4493,6 +4534,11 @@ function M:handleWelcomeAction(action)
     elseif action == "file_config" then
         self:showConfigFileGuide()
 
+    elseif action == "skip" then
+        if self.ai_helper and self.ai_helper.saveSettings then
+            self.ai_helper:saveSettings({ welcome_wizard_dismissed = true })
+        end
+
     elseif action == "all_providers" then
         if self.openReaderMenuToPath then
             self:openReaderMenuToPath("api_keys")
@@ -4535,6 +4581,7 @@ function M:showEnterKeyProviderDialog()
     })
 
     dlg = ButtonDialog:new{
+        modal = true,
         title = self.loc:t("welcome_select_provider") or "Select AI Provider",
         buttons = buttons,
     }
@@ -5031,6 +5078,7 @@ function M:getAPIKeysMenu()
                 local ButtonDialog = require("ui/widget/buttondialog")
                 local confirm_dlg
                 confirm_dlg = ButtonDialog:new{
+                    modal = true,
                     title = string.format(self.loc:t("paste_clipboard_confirm") or "Use the API key found in clipboard for %s?", prov_label) .. "\n\n" .. preview,
                     buttons = {
                         {
@@ -5109,6 +5157,7 @@ function M:getAPIKeysMenu()
             local ButtonDialog = require("ui/widget/buttondialog")
             local confirm
             confirm = ButtonDialog:new{
+                modal = true,
                 title = self.loc:t("confirm_clear_all_keys") or "Are you sure you want to clear all configured API keys and custom endpoints?\n\nThis will remove all saved keys from this device.",
                 buttons = {
                     {
@@ -6038,21 +6087,32 @@ function M:checkSeriesContext()
         if series_info.index > 1 then
             self:log("XRayPlugin: Series: Metadata/title check found series: " .. series_info.name .. ", index=" .. tostring(series_info.index))
             
-            -- Check if all prior books are already in local SeriesCache
+            -- Check if all prior books are already in local SeriesCache or on local disk
             local slug = series_info.slug or (self.series_manager and self.series_manager.makeSlug and self.series_manager:makeSlug(series_info.name))
-            local cache_data = slug and self.series_manager and self.series_manager.loadSeriesCache and self.series_manager:loadSeriesCache(slug)
-            local all_priors_cached = (cache_data and cache_data.books ~= nil)
-            if all_priors_cached then
-                for p_idx = 1, series_info.index - 1 do
-                    if not cache_data.books[p_idx] then
-                        all_priors_cached = false
-                        break
+            local cache_data = slug and self.series_manager and self.series_manager.loadSeriesCache and self.series_manager:loadSeriesCache(slug) or { series_slug = slug, books = {} }
+            cache_data.books = cache_data.books or {}
+
+            -- Try to discover any missing prior books on local disk first
+            local doc_file = self.ui and self.ui.document and self.ui.document.file
+            for p_idx = 1, series_info.index - 1 do
+                if not cache_data.books[p_idx] or cache_data.books[p_idx].source ~= "local_xray" then
+                    local local_book = self.series_manager and self.series_manager.findLocalBookXRay and self.series_manager:findLocalBookXRay(series_info, p_idx, doc_file, nil, self.cache_manager)
+                    if local_book then
+                        cache_data.books[p_idx] = local_book
                     end
                 end
             end
 
+            local all_priors_cached = true
+            for p_idx = 1, series_info.index - 1 do
+                if not cache_data.books[p_idx] then
+                    all_priors_cached = false
+                    break
+                end
+            end
+
             if all_priors_cached then
-                self:log("XRayPlugin: Series: All prior books already exist in local SeriesCache. Merging series context automatically.")
+                self:log("XRayPlugin: Series: All prior books resolved locally. Merging series context automatically.")
                 self:mergeSeriesContext(cache_data, series_info)
                 return
             end
@@ -6132,18 +6192,29 @@ function M:checkSeriesContext()
                     }
                     self:log("XRayPlugin: Series: Async check detected series=" .. tostring(name) .. ", index=" .. tostring(index))
                     if index > 1 then
-                        local cache_data = slug and self.series_manager and self.series_manager.loadSeriesCache and self.series_manager:loadSeriesCache(slug)
-                        local all_priors_cached = (cache_data and cache_data.books ~= nil)
-                        if all_priors_cached then
-                            for p_idx = 1, index - 1 do
-                                if not cache_data.books[p_idx] then
-                                    all_priors_cached = false
-                                    break
+                        local cache_data = slug and self.series_manager and self.series_manager.loadSeriesCache and self.series_manager:loadSeriesCache(slug) or { series_slug = slug, books = {} }
+                        cache_data.books = cache_data.books or {}
+
+                        local doc_file = self.ui and self.ui.document and self.ui.document.file
+                        for p_idx = 1, index - 1 do
+                            if not cache_data.books[p_idx] or cache_data.books[p_idx].source ~= "local_xray" then
+                                local local_book = self.series_manager and self.series_manager.findLocalBookXRay and self.series_manager:findLocalBookXRay(ai_series_info, p_idx, doc_file, nil, self.cache_manager)
+                                if local_book then
+                                    cache_data.books[p_idx] = local_book
                                 end
                             end
                         end
+
+                        local all_priors_cached = true
+                        for p_idx = 1, index - 1 do
+                            if not cache_data.books[p_idx] then
+                                all_priors_cached = false
+                                break
+                            end
+                        end
+
                         if all_priors_cached then
-                            self:log("XRayPlugin: Series: All prior books already exist in local SeriesCache. Merging series context automatically.")
+                            self:log("XRayPlugin: Series: All prior books resolved locally. Merging series context automatically.")
                             self:mergeSeriesContext(cache_data, ai_series_info)
                         else
                             self:showSeriesContextPrompt(ai_series_info)
@@ -6175,7 +6246,17 @@ function M:resolveDescriptionForPage(entity, current_page)
     end
     
     -- Default current_page fallback
-    current_page = current_page or self.last_pageno or (self.ui and self.ui:getCurrentPage()) or 999999
+    local doc_page = nil
+    if self.ui then
+        if type(self.ui.getCurrentPage) == "function" then
+            local ok, p = pcall(function() return self.ui:getCurrentPage() end)
+            if ok and p then doc_page = p end
+        elseif self.ui.document and type(self.ui.document.getCurrentPage) == "function" then
+            local ok, p = pcall(function() return self.ui.document:getCurrentPage() end)
+            if ok and p then doc_page = p end
+        end
+    end
+    current_page = current_page or self.last_pageno or doc_page or 999999
     
     -- Traverse history and find the latest entry where entry.page <= current_page
     local best_entry = nil
@@ -6349,15 +6430,24 @@ function M:showImages(opts)
     end
 
     local ImageGallery = require(plugin_path .. "xray_image_gallery")
-    local gallery = ImageGallery:new{
-        plugin = self,
-        current_page = opts.current_page or 1,
-        view_mode = self.image_view_mode,
-        tab = self.image_tab,
-        filter_mode = self.image_filter_mode,
-    }
-    self.image_gallery_overlay = gallery
-    UIManager:show(gallery, "ui")
+    local ok_gallery, gallery = pcall(function()
+        return ImageGallery:new{
+            plugin = self,
+            current_page = opts.current_page or 1,
+            view_mode = self.image_view_mode,
+            tab = self.image_tab,
+            filter_mode = self.image_filter_mode,
+        }
+    end)
+    if ok_gallery and gallery then
+        self.image_gallery_overlay = gallery
+        UIManager:show(gallery, "ui")
+    else
+        logger.warn("XRayPlugin: Failed to open image gallery:", tostring(gallery))
+        if self.notify then
+            self:notify(self.loc and self.loc:t("error_opening_gallery") or "Failed to open image gallery", 3)
+        end
+    end
 end
 
 function M:renameImageDialog(image_entry, on_success)
@@ -6707,7 +6797,7 @@ function M:showImageActions(image_entry)
         local display_title = image_entry.title or (self.loc:t("img_untitled") or "Image")
         local title_label = TextBoxWidget:new{
             text = (image_entry.is_favorite and "★ " or "") .. display_title,
-            face = Font:getFace("NotoSerif-Regular.ttf", 20),
+            face = Font:getFace("cfont", 20),
             bold = true,
             fgcolor = Blitbuffer.COLOR_BLACK,
             width = inner_w,
@@ -6899,9 +6989,12 @@ function M:showImageActions(image_entry)
         end
     end
 
-    -- Initial build: only resolve page if missing or non-positive
-    if (not image_entry.page or tonumber(image_entry.page) <= 0) and self.image_manager and self.image_manager.resolveImagePage then
-        self.image_manager:resolveImagePage(self.ui, image_entry)
+    -- Initial build: resolve page if missing, non-positive, or if spine cache is already warm
+    if self.image_manager and self.image_manager.resolveImagePage then
+        local is_warm = self.image_manager._epub_spine_cache and self.ui and self.ui.document and self.ui.document.file and self.image_manager._epub_spine_cache[self.ui.document.file] ~= nil
+        if not image_entry.page or tonumber(image_entry.page) <= 0 or (is_warm and not image_entry.page_resolved) then
+            self.image_manager:resolveImagePage(self.ui, image_entry)
+        end
     end
     buildActionItemsList()
     local card = buildDialogWidget()
@@ -7111,8 +7204,8 @@ end
 
 function M:jumpToImagePage(page, image_entry)
     local pg = tonumber(page)
-    if (not pg or pg <= 0) and image_entry and self.image_manager and self.image_manager.resolveImagePage then
-        local resolved = self.image_manager:resolveImagePage(self.ui, image_entry)
+    if image_entry and self.image_manager and self.image_manager.resolveImagePage and (not image_entry.page_resolved or not pg or pg <= 0) then
+        local resolved = self.image_manager:resolveImagePage(self.ui, image_entry, true)
         if resolved and resolved > 0 then pg = resolved end
         if self.cache_manager and self.ui and self.ui.document and self.ui.document.file and self.book_data then
             self.cache_manager:asyncSaveCache(self.ui.document.file, self.book_data)

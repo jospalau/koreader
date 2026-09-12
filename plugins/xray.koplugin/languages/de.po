@@ -309,6 +309,10 @@ msgstr "Kurz"
 msgid "desc_len_v_detailed"
 msgstr "Sehr detailliert"
 
+# en-hash: 2896e8f581f9181834e98580adf8cfff
+msgid "document_unavailable"
+msgstr "Dokument nicht verfügbar"
+
 # en-hash: 7be0e84edd4626f6b7d42f1e8174f118
 msgid "dont_ask_again"
 msgstr "Für dieses Buch nicht mehr fragen"
@@ -324,6 +328,22 @@ msgstr "Orte"
 # en-hash: b972b14200d0fad941304c0b361a18f0
 msgid "entity_not_found"
 msgstr "'%s' wurde nicht als Charakter oder Ort gefunden."
+
+# en-hash: 76a40e4f974fd895a0a2598c1cee28b4
+msgid "entity_type_character"
+msgstr "Charakter"
+
+# en-hash: adb9c82a7733b6bc485275e01bba6eac
+msgid "entity_type_historical"
+msgstr "Historische Persönlichkeit"
+
+# en-hash: ce5bf551379459c1c61d2a204061c455
+msgid "entity_type_location"
+msgstr "Ort"
+
+# en-hash: cf5f3091e30dee6597885d8c0e0c357f
+msgid "entity_type_term"
+msgstr "Begriff"
 
 # en-hash: 76e73569f84e76aa9de514fea51ef9f3
 msgid "entity_ui_style_both"
@@ -349,9 +369,9 @@ msgstr "Modernes Popup (nur Menü)"
 msgid "error"
 msgstr "Fehler"
 
-# en-hash: fba0f8a108268b90efc2ccf92a27a646
+# en-hash: 6b844e936008c2aafa83c80176622884
 msgid "error_api"
-msgstr "API-Fehler"
+msgstr "KI-Dienst nicht verfügbar"
 
 # en-hash: 68007307953d58fd56bdcd07d62f3e3f
 msgid "error_api_key_desc"
@@ -360,6 +380,18 @@ msgstr "Der bereitgestellte API-Schlüssel wurde abgelehnt. Bitte überprüfen S
 # en-hash: 4b6886b5038ca14e978a72f01df1fe6d
 msgid "error_api_key_title"
 msgstr "Ungültiger API Key"
+
+# en-hash: d1345ddd7c09ae874feee020dcdb908f
+msgid "error_busy_author"
+msgstr "Eine andere KI-Anfrage läuft bereits.\n\nAbbrechen und stattdessen Autoren-Infos abrufen?"
+
+# en-hash: 97b2ecd6aa810d21be9204847d173957
+msgid "error_busy_desc"
+msgstr "Eine andere KI-Anfrage läuft bereits im Hintergrund. Bitte warten Sie, bis diese abgeschlossen ist, oder versuchen Sie es in Kürze erneut."
+
+# en-hash: 1838029eb098962dd8f401b27abd347c
+msgid "error_busy_title"
+msgstr "Anfrage läuft"
 
 # en-hash: 8a92a303055af14321f3cc7f644623fe
 msgid "error_extract_text"
@@ -384,6 +416,10 @@ msgstr "Modell nicht gefunden"
 # en-hash: 52f3d028dbfc9859df0fd3417eb58d75
 msgid "error_no_api_key"
 msgstr "API-Schlüssel erforderlich"
+
+# en-hash: 64a497eb7dda1c38fdb732a8ea236bae
+msgid "error_opening_gallery"
+msgstr "Fehler beim Öffnen der Bildergalerie"
 
 # en-hash: e7b0af2be5bf56ed033f222a42ffd884
 msgid "error_parse_desc"
@@ -644,6 +680,14 @@ msgstr "Aktiviert"
 # en-hash: f2cb4c8134446083c3d2859f02c963f6
 msgid "linked_entries_setting_desc"
 msgstr "Verknüpfte Einträge verbindet automatisch Charaktere, Orte und historische Personen, wenn sie in den Beschreibungen der jeweils anderen erwähnt werden.\n\nWenn Sie dies deaktivieren, wird die Schaltfläche 'Verknüpfte Einträge' in den Detaildialogen ausgeblendet."
+
+# en-hash: 75c2e35dd42abd75cdb8a9d4b0da8c20
+msgid "linked_none"
+msgstr "Keine verknüpften Einträge für '%s' gefunden."
+
+# en-hash: 87388d7588da3ecf170e33b01d82dc2f
+msgid "linked_with_title"
+msgstr "Verknüpft mit: %s"
 
 # en-hash: 08ea860427184895725e398c5ef821b1
 msgid "local_setup_title"
@@ -1061,6 +1105,10 @@ msgstr "Noch keine Daten zu historischen Personen.\n\nBitte nutzen Sie zuerst 'X
 msgid "no_items"
 msgstr "Keine Elemente"
 
+# en-hash: 0f1e243d0830d654feef580caac9fd88
+msgid "no_linked_entries"
+msgstr "Keine verknüpften Einträge gefunden"
+
 # en-hash: 4d0e58f2c49ca238a05d2a92486d3d70
 msgid "no_location_data"
 msgstr "Noch keine Ortsdaten. Bitte nutzen Sie zuerst 'X-Ray Daten abrufen'."
@@ -1236,6 +1284,22 @@ msgstr "%s-API-Schlüssel gelöscht."
 # en-hash: 72ef2b9b6965d078e3c7f95487a82d1c
 msgid "skip"
 msgstr "Überspringen"
+
+# en-hash: 4b4ec0f3a3872375ea37068549e8584f
+msgid "sort_alphabetical"
+msgstr "Alphabetisch (A–Z)"
+
+# en-hash: 1a82af45993146d81d8a45f98ad29745
+msgid "sort_appearance"
+msgstr "Reihenfolge des Erscheinens"
+
+# en-hash: 059a1aa256b770eca2d69c096f759ad0
+msgid "sort_by"
+msgstr "Sortieren nach"
+
+# en-hash: ff14265adbb6186636bff92477cb34aa
+msgid "sort_frequency"
+msgstr "Häufigkeit der Nennungen (Standard)"
 
 # en-hash: 55da95c9d6ab32f4873d13cdba88943e
 msgid "spoiler_free_about"
@@ -1513,6 +1577,10 @@ msgstr "Wellig"
 msgid "updater_available_header"
 msgstr "X-Ray %s ist verfügbar!\nSie haben %s."
 
+# en-hash: 0557fa923dcee4d0f86b1409f5c2167f
+msgid "updater_btn_back"
+msgstr "Zurück"
+
 # en-hash: ea4788705e6873b424c65e91c2846b19
 msgid "updater_btn_cancel"
 msgstr "Abbrechen"
@@ -1532,6 +1600,10 @@ msgstr "Im Browser öffnen"
 # en-hash: 51cfbcff36da74a9fc47f3a5140f99f2
 msgid "updater_btn_restart"
 msgstr "Neustart"
+
+# en-hash: f90c6e6f2d986a10f351292ffa2968ab
+msgid "updater_btn_view_notes"
+msgstr "Vollständige Versionshinweise anzeigen"
 
 # en-hash: 092dc0fe2a1709895d0ffb03306ab644
 msgid "updater_cancelled_check"
@@ -1576,6 +1648,10 @@ msgstr "Fehler beim Suchen nach Updates: %s"
 # en-hash: 4764ffed7fe43c5174fe97c69cb933ee
 msgid "updater_no_asset"
 msgstr "Keine automatische Update-Datei gefunden.\n\nReleases-Seite auf GitHub öffnen?"
+
+# en-hash: 83cae54ea5a5d1ac7469aef85cccbd23
+msgid "updater_release_notes_title"
+msgstr "X-Ray %s Versionshinweise"
 
 # en-hash: fa243c194c72bb2d6c10dfad7c375cf3
 msgid "updater_success_restart"
