@@ -18356,6 +18356,7 @@ function BookshelfWidget:_buildBookEditTab(book, modal, avail_w, avail_h)
                                 ReadHistory.hist = h
                                 ReadHistory:_flush()
                                 Repo.invalidateWalkCache()
+                                bw._spine_fetch_cache = nil
                                 refreshInPlace()
                             end,
                         },
@@ -18374,6 +18375,7 @@ function BookshelfWidget:_buildBookEditTab(book, modal, avail_w, avail_h)
                                 ReadHistory.hist = h
                                 ReadHistory:_flush()
                                 Repo.invalidateWalkCache()
+                                bw._spine_fetch_cache = nil
                                 refreshInPlace()
                             end,
                         },
