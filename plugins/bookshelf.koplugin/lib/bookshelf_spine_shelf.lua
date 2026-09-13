@@ -1447,7 +1447,6 @@ function SpineBookSlot:_renderIntoAt(bb, x, y, night)
         local used = _paintLevelText(bb, x, cur_top, spine_w, glyph, face, night)
         if used > 0 then cur_top = cur_top + used + math.floor(pad / 2) end
     end
-
     -- Favourite star under it (face-out favourites show the cover instead).
     if e.favourite and not e.face_out then
         local gsize = _glyphSizeDp(w_dp, e.ref_w_dp, GLYPH_FAV)
