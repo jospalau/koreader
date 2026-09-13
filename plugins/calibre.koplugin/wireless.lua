@@ -13,6 +13,7 @@ local FFIUtil = require("ffi/util")
 local InputDialog = require("ui/widget/inputdialog")
 local InfoMessage = require("ui/widget/infomessage")
 local NetworkMgr = require("ui/network/manager")
+local ReadCollection = require("readcollection")
 local Trapper = require("ui/trapper")
 local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
@@ -52,6 +53,8 @@ local OPCODES = {
     CALIBRE_BUSY              = 18,
     SET_LIBRARY_INFO          = 19,
     ERROR                     = 20,
+    GET_COLLECTIONS           = 21,
+    UPDATE_COLLECTIONS        = 22,
 }
 
 -- Mark some strings for translation.
@@ -466,6 +469,10 @@ function CalibreWireless:onReceiveJSON(data)
                 self:sendToCalibre(arg)
             elseif opcode == OPCODES.DISPLAY_MESSAGE then
                 self:serverFeedback(arg)
+            elseif opcode == OPCODES.GET_COLLECTIONS then
+                self:getCollections(arg)
+            elseif opcode == OPCODES.UPDATE_COLLECTIONS then
+                self:updateCollections(arg)
             elseif opcode == OPCODES.NOOP then
                 self:noop(arg)
             end
@@ -894,6 +901,89 @@ function CalibreWireless:isCalibreAtLeast(x, y, z)
         return ((a * 100000) + (b * 1000)) + c
     end
     return semanticVersion(v[1], v[2] or 0, v[3] or 0) >= semanticVersion(x, y, z)
+end
+
+function CalibreWireless:getCollections(arg)
+    local collections = {}
+    for collection_name, collection in pairs(ReadCollection.coll) do
+        local files = rapidjson.array()
+        for file in pairs(collection) do
+            table.insert(files, file)
+        end
+        collections[collection_name] = files
+    end
+    self:sendJsonData("OK", {collections = collections})
+end
+
+function CalibreWireless:updateCollections(arg)
+    if not arg or type(arg) ~= "table" then
+        logger.warn("CalibreWireless: invalid UPDATE_COLLECTIONS payload")
+        return
+    end
+
+    local updated_collections = {}
+
+    -- Remove collections first so that membership changes cannot recreate
+    -- a collection which Calibre explicitly wants removed.
+    if arg.remove_collections then
+        for _, coll_name in ipairs(arg.remove_collections) do
+            if ReadCollection.coll[coll_name] then
+                ReadCollection:removeCollection(coll_name)
+                updated_collections[coll_name] = true
+            end
+        end
+    end
+
+    -- Explicit collection additions are needed for empty collections.
+    if arg.add_collections then
+        for _, coll_name in ipairs(arg.add_collections) do
+            if not ReadCollection.coll[coll_name] then
+                ReadCollection:addCollection(coll_name)
+                updated_collections[coll_name] = true
+            end
+        end
+    end
+
+    -- Add individual book memberships.
+    if arg.add then
+        for coll_name, files in pairs(arg.add) do
+            local coll = ReadCollection.coll[coll_name]
+            if coll then
+                for _, file in ipairs(files) do
+                    if lfs.attributes(file, "mode") == "file"
+                        and not ReadCollection:isFileInCollection(file, coll_name)
+                    then
+                        ReadCollection:addItem(file, coll_name)
+                        updated_collections[coll_name] = true
+                    end
+                end
+            else
+                logger.warn("CalibreWireless: collection missing for add:", coll_name)
+            end
+        end
+    end
+
+    -- Remove individual book memberships.
+    if arg.remove then
+        for coll_name, files in pairs(arg.remove) do
+            local coll = ReadCollection.coll[coll_name]
+            if coll then
+                for _, file in ipairs(files) do
+                    if ReadCollection:removeItem(file, coll_name, true) then
+                        updated_collections[coll_name] = true
+                    end
+                end
+            else
+                logger.warn("CalibreWireless: collection missing for remove:", coll_name)
+            end
+        end
+    end
+
+    if next(updated_collections) then
+        ReadCollection:write(updated_collections)
+    end
+
+    self:sendJsonData("OK", {})
 end
 
 return CalibreWireless
