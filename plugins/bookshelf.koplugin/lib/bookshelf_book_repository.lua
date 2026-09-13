@@ -1229,10 +1229,11 @@ function Repo.buildBookMeta(filepath, opts)
                            and info.description)
                        or nil,
         page_count  = info.pages,
+        pub_date    = pub_date or nil,
+        modified_date = modified_date or nil,
         words       = words or nil,
         grrating    = grrating or nil,
         grvotes     = grvotes or nil,
-        modified_date = modified_date,
     }
     -- Cache fresh records whose text metadata is present, with the
     -- cover_bb stripped. ImageWidget marks the cover_bb's
@@ -1412,12 +1413,11 @@ local function _buildLightMetaFromInfo(fp, info)
         title       = title,
         lang        = text.lang,
         page_count  = page_count,
-        words       = words or nil,
         pub_date    = pub_date or nil,
         modified_date = modified_date or nil,
+        words       = words or nil,
         grrating    = grrating or nil,
         grvotes     = grvotes or nil,
-        modified_date = modified_date,
     }
     -- Apply the global "Use Hardcover metadata" override here too, so the
     -- genre / author / series chips (built from these light records) switch
