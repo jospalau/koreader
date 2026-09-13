@@ -51,7 +51,9 @@ M.FAV_GLYPH_HEART = "\u{f004}"  -- nf-fa-heart
 -- generated from, where it is entry "ok_sign", code=0xF058).
 M.GLYPH_DOWNLOADED = "\u{f058}"  -- nf-fa-check_circle
 M.GLYPH_TBR = "TBR" -- "\u{f00c}" -- tbr
+M.GLYPH_TBRI = "\u{f00c}" -- tbr icon
 M.GLYPH_MBR = "MBR" -- "\u{f00c}\u{f00c}" -- mbr
+M.GLYPH_MBRI = "\u{f00c}\u{f00c}" -- mbr icon
 
 -- favoriteIcon(): "heart" (default) or "star", from the fav_icon setting.
 function M.favoriteIcon()

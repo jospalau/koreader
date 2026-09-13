@@ -1072,7 +1072,7 @@ local function _paintLevelText(bb, x, y, box_w, text, face, night)
 end
 
 local function _statusGlyph(book)
-    if book and book._spine_status_checked and book.status == nil then
+    if book and book._spine_status_checked and (book.status == nil and not require("readhistory"):getIndexByFile(book.filepath)) then
         -- Checked at plan time and genuinely never opened: nothing for
         -- decide() to say, and its lazy fallback would re-open the sidecar.
         return nil
@@ -1083,6 +1083,12 @@ local function _statusGlyph(book)
     if d.glyph == "in_progress" then return CoverProgress.GLYPH_BOOKMARK end
     if d.glyph == "complete_bookmark" or d.glyph == "complete_tickbox" then
         return CoverProgress.GLYPH_BOOKMARK_CHECK
+    end
+    if d.glyph == "tbr" then
+        return CoverProgress.GLYPH_TBRI
+    end
+    if d.glyph == "mbr" then
+        return CoverProgress.GLYPH_MBRI
     end
     if d.on_hold then return CoverProgress.GLYPH_PAUSE_CIRCLE end
     return nil
@@ -1441,6 +1447,7 @@ function SpineBookSlot:_renderIntoAt(bb, x, y, night)
         local used = _paintLevelText(bb, x, cur_top, spine_w, glyph, face, night)
         if used > 0 then cur_top = cur_top + used + math.floor(pad / 2) end
     end
+
     -- Favourite star under it (face-out favourites show the cover instead).
     if e.favourite and not e.face_out then
         local gsize = _glyphSizeDp(w_dp, e.ref_w_dp, GLYPH_FAV)
