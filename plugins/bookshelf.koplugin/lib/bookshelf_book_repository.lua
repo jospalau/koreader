@@ -75,16 +75,21 @@ end
 -- of the tag itself ("hurt/comfort" -- issue #240), so it must NOT split.
 -- Normalise the spaced form to the newline delimiter up front, then split
 -- on the remaining separators with bare "/" no longer among them.
--- _displayFolderLabel(name) -> the folder's name with a calibre-style
--- trailing article flipped to the front: "Locked Tomb, The" reads as
--- "The Locked Tomb" (issue 341). DISPLAY ONLY - sort still keys off the
--- on-disk name, which is exactly the article-insensitive ordering that
--- naming convention exists to buy. Only the three English articles, in
+-- _flipTrailingArticle(name) -> the name with a calibre-style trailing
+-- article flipped to the front: "Locked Tomb, The" reads as "The Locked
+-- Tomb" (issue 341). Used for folder labels and, since it is the same
+-- convention, series card labels.
+--
+-- DISPLAY ONLY - sort still keys off the raw name, which is exactly the
+-- article-insensitive ordering that naming convention exists to buy: the
+-- book belongs under L, and flipping in place would put it back under T
+-- and throw that away. Hence a separate label field at each call site
+-- rather than rewriting the value. Only the three English articles, in
 -- the capitalised form calibre writes; a lowercase ", the" or an
 -- initial with a dot ("Smith, A.") is left alone. A bare "Smith, A"
 -- author folder is the one known collision and judged rarer than the
 -- title folders this exists for.
-local function _displayFolderLabel(name)
+local function _flipTrailingArticle(name)
     if type(name) ~= "string" then return name end
     local stem, article = name:match("^(.-),%s+(The)$")
     if not stem then stem, article = name:match("^(.-),%s+(An)$") end
@@ -1193,6 +1198,13 @@ function Repo.buildBookMeta(filepath, opts)
         -- libraries; cachedSurname falls back to parsing `author` then.
         author_sort = cb and type(cb.author_sort) == "string"
                        and cb.author_sort ~= "" and cb.author_sort or nil,
+        -- Calibre's own sort title ("Locked Tomb, The"), computed with its
+        -- language-aware rules. Powers the "Title (sort)" order, so a shelf
+        -- that ignores leading articles uses the reader's metadata instead of
+        -- us guessing at English grammar (issue 401). nil for non-Calibre
+        -- libraries; cachedTitleSortKey falls back to the plain title there.
+        title_sort  = cb and type(cb.title_sort) == "string"
+                       and cb.title_sort ~= "" and cb.title_sort or nil,
         -- Field map behind the %calibre{name} token (built in slim(), so
         -- nil on the >8MB load_calibre fallback path and for non-Calibre
         -- libraries -- the token answers empty there).
@@ -1407,6 +1419,13 @@ local function _buildLightMetaFromInfo(fp, info)
         -- buildBookMeta path.
         author_sort = cb and type(cb.author_sort) == "string"
                        and cb.author_sort ~= "" and cb.author_sort or nil,
+        -- Calibre's own sort title ("Locked Tomb, The"), computed with its
+        -- language-aware rules. Powers the "Title (sort)" order, so a shelf
+        -- that ignores leading articles uses the reader's metadata instead of
+        -- us guessing at English grammar (issue 401). nil for non-Calibre
+        -- libraries; cachedTitleSortKey falls back to the plain title there.
+        title_sort  = cb and type(cb.title_sort) == "string"
+                       and cb.title_sort ~= "" and cb.title_sort or nil,
         calibre     = cb and type(cb.calibre) == "table" and cb.calibre or nil,
         genres      = genres,
         genre_sources = genre_sources,
@@ -2451,7 +2470,7 @@ function Repo.readProgress(filepath)
         page_num = n
     end
     _writeProgressCache(filepath, pct, status, rating, page_count, page_num, pub_date, modified_date, words, grrating, grvotes)
-    return pct, status, rating, page_count, pub_date, modified_date, words, grrating, grvotes
+    return pct, status, rating, page_count, page_num, pub_date, modified_date, words, grrating, grvotes
 end
 
 -- Repo.progressFor(filepath) -> pct, status, rating, page_count, opened, page_num
@@ -4130,7 +4149,7 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
                 shapes[#shapes + 1] = {
                     kind          = "folder",
                     path          = e.fp,
-                    label         = _displayFolderLabel(e.name),
+                    label         = _flipTrailingArticle(e.name),
                     first_book_fp = first_fp,
                 }
             end
@@ -4633,6 +4652,9 @@ local function hydrateSeriesShape(shape, filter, light_only)
     end
     return {
         series_name  = shape.series_name,
+        -- Display only; series_name above stays raw so the sort keeps the
+        -- article-insensitive order. Same split folders use (label vs name).
+        label        = _flipTrailingArticle(shape.series_name),
         books        = books,
         latest       = shape.latest,
         latest_added = shape.latest_added or 0,
@@ -6014,7 +6036,7 @@ function Repo.getFolderChoices()
     local out = {}
     for path in pairs(seen) do
         local basename = path:match("([^/]+)$") or path
-        out[#out + 1] = { value = path, label = _displayFolderLabel(basename), subtitle = path }
+        out[#out + 1] = { value = path, label = _flipTrailingArticle(basename), subtitle = path }
     end
     table.sort(out, function(a, b) return a.value:lower() < b.value:lower() end)
     return out
@@ -6482,7 +6504,7 @@ function Repo.searchAll(query)
                     folders[#folders + 1] = {
                         kind       = "folder",
                         path       = dir,
-                        label      = _displayFolderLabel(basename),
+                        label      = _flipTrailingArticle(basename),
                         first_book = first_book,
                     }
                 end
