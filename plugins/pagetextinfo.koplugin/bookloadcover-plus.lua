@@ -744,12 +744,18 @@ local function getCoverSize(cover_bb)
 	return nil, nil
 end
 
+local function getDitheredOption()
+    local Screen = require("device").screen
+	return Screen.hw_dithering or nil
+end
+
 local function makeStretchCoverWidget(cover_bb, screen_w, screen_h)
 	return ImageWidget:new({
 		image = cover_bb,
 		width = screen_w,
 		height = screen_h,
 		alpha = true,
+        dithered = getDitheredOption(),
 		image_disposable = false,
 	})
 end
@@ -870,7 +876,9 @@ local function showCover(filepath, options)
 
 	local ok, err = pcall(function()
 		UIManager:show(cover_widget, "full")
-		UIManager:forceRePaint()
+        if options.reason == "close" then
+		    UIManager:forceRePaint()
+        end
 	end)
 
 	if not ok then
