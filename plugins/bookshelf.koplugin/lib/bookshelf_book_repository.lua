@@ -536,11 +536,13 @@ local _bim_cache
 
 -- Last-good Book records keyed by filepath, used by buildBookMeta to
 -- mask BIM's transient "in_progress=1" wipe of metadata fields during
--- a re-extraction. Persists across renders and across invalidateBookCache
--- (the per-chip caches clear, but each book's record stays so a refresh
--- cycle doesn't flicker to fallback rendering). Memory: one record per
--- visited filepath; typical session sees a few hundred entries at
--- ~500 bytes each, so well under 1 MB on a 17k-book library.
+-- a re-extraction. Persists across renders AND across invalidateBookCache
+-- on purpose: "refresh-metadata" and "scanAllMetadata" invalidate the book
+-- cache at the very moment BIM is re-extracting, and this record is what
+-- keeps the spine from flickering to fallback rendering in that window.
+-- Cleared only with the walk cache (the library's files changed), which
+-- bounds it to the files of one library scan rather than the life of the
+-- process; a few hundred visited records at ~500 bytes is well under 1 MB.
 local _meta_record_cache = {}
 
 local function getBookInfoMgr()
@@ -1881,10 +1883,17 @@ local _genres_cache    = {}
 local _formats_cache   = {}
 local _ratings_cache   = {}
 local _languages_cache = {}
+-- SHAPE_CACHE_MAX: LRU cap for the two per-folder x per-sort "shape" caches
+-- below. Left unbounded, one entry accumulates per folder visited times each
+-- sort/filter combination for the life of the process; entries are cheap
+-- (filepath lists + folder labels), so 48 is generous headroom rather than a
+-- tight budget. Oldest-inserted key is evicted first.
+local SHAPE_CACHE_MAX = 48
 -- getAll result cache. FileChooser:genItemTableFromPath is expensive (2–5s
 -- on large home dirs); caches the shape (filepaths + folder labels) with the
 -- same TTL and invalidation path as the walk cache.
 local _all_cache       = {}  -- { [key] = { shapes = {...}, expires_at = number } }
+local _all_cache_order = {}  -- insertion order backing the SHAPE_CACHE_MAX eviction
 -- getBySource result cache. For custom-kind tabs (genre, folder, collection,
 -- etc.) the predicate walk + per-book _safeBuildBookMeta is expensive (full
 -- library sweep on every pagination tap). Cache the post-filter, post-sort
@@ -1892,6 +1901,75 @@ local _all_cache       = {}  -- { [key] = { shapes = {...}, expires_at = number 
 -- within a tab is a cheap slice of the cached list. Invalidated by
 -- invalidateBookCache (editor Save) and invalidateWalkCache (onCloseDocument).
 local _bySource_cache  = {}  -- { [key] = candidates }
+local _bySource_cache_order = {}  -- insertion order backing the SHAPE_CACHE_MAX eviction
+
+-- _capInsert(cache, order, key, value): assign `value` at `cache[key]` and
+-- record the insertion in `order`, the eviction queue backing the
+-- SHAPE_CACHE_MAX cap. Any existing occurrence of `key` in `order` is
+-- removed first, so refilling an already-cached key moves it to the newest
+-- position instead of duplicating it (which would let it dodge eviction out
+-- of turn); the oldest keys are then dropped from both `cache` and `order`
+-- while `order` holds more than SHAPE_CACHE_MAX entries. Returns true when
+-- `key` was not already in `cache` (a fresh insert) and false for a refill --
+-- the test seams below use this to probe membership without a mutating
+-- second write.
+local function _capInsert(cache, order, key, value)
+    local existed = cache[key] ~= nil
+    cache[key] = value
+    for i = #order, 1, -1 do
+        if order[i] == key then
+            table.remove(order, i)
+            break
+        end
+    end
+    order[#order + 1] = key
+    while #order > SHAPE_CACHE_MAX do
+        local oldest = table.remove(order, 1)
+        cache[oldest] = nil
+    end
+    return not existed
+end
+
+-- Test seam: live-entry counts for the three session-long caches flagged by
+-- the 2026-09-16 memory inventory as having no size bound (_all_cache,
+-- _bySource_cache, _meta_record_cache). Lets tests assert the LRU cap holds
+-- and that invalidation actually empties the meta-record cache, without
+-- reaching into this file's local state directly.
+function Repo._shapeCacheCounts()
+    local function _count(t)
+        local n = 0
+        for _k in pairs(t) do n = n + 1 end
+        return n
+    end
+    return {
+        all       = _count(_all_cache),
+        by_source = _count(_bySource_cache),
+        meta      = _count(_meta_record_cache),
+    }
+end
+
+-- Test seam: drive the same capped-insert helper the production fill sites
+-- use (Repo.getAll's MISS branch for "all", Repo.getBySource's MISS branch
+-- for "by_source"), so a test can fill 48+ distinct keys without contriving
+-- that many real folder/sort combinations through the public API. `which`
+-- is "all" or "by_source". Returns the same true/false _capInsert does.
+function Repo._shapeCachePut(which, key, value)
+    if which == "all" then
+        return _capInsert(_all_cache, _all_cache_order, key, value)
+    elseif which == "by_source" then
+        return _capInsert(_bySource_cache, _bySource_cache_order, key, value)
+    end
+    return nil
+end
+
+-- Test seam: non-mutating read of a cached shape entry (companion to
+-- Repo._shapeCachePut), so a test can confirm exactly which keys survived
+-- an eviction round without the side effect of touching insertion order.
+function Repo._shapeCacheGet(which, key)
+    if which == "all" then return _all_cache[key] end
+    if which == "by_source" then return _bySource_cache[key] end
+    return nil
+end
 -- Light-meta cache: filepath → light record (output of _buildLightMetaFromInfo).
 -- Populated once per (home, depth) by a single batch BIM SELECT that replaces
 -- the per-book prepared-statement loop. Three walk consumers — getSeriesGroups
@@ -2129,10 +2207,17 @@ function Repo.invalidateWalkCache()
     _ratings_cache    = {}
     _languages_cache  = {}
     _all_cache        = {}
+    _all_cache_order  = {}
     _bySource_cache   = {}
+    _bySource_cache_order = {}
     _light_meta_cache = {}
     _folder_book_paths_cache = {}
     _progress_cache   = {}
+    -- Sticky last-good Book records (see the declaration above) have no
+    -- other invalidation path; a walk invalidation is the broadest signal
+    -- this repository has, so clear them here rather than let them grow
+    -- for the life of the process.
+    _meta_record_cache = {}
     -- Sidecar dirs may have appeared/vanished (sideload, new books), so the
     -- custom-metadata fast gate must re-list on the next derive.
     _invalidateCustomMetaGate()
@@ -2184,6 +2269,7 @@ end
 -- caches are untouched (their data isn't affected by these settings).
 function Repo.invalidateAllCache()
     _all_cache = {}
+    _all_cache_order = {}
 end
 
 -- invalidateFavoritesCache(): drop only _bySource_cache entries keyed on
@@ -2355,7 +2441,10 @@ function Repo.invalidateBookCache(reason)
     _ratings_cache    = {}
     _languages_cache  = {}
     _all_cache        = {}
+    _all_cache_order  = {}
     _bySource_cache   = {}
+    _bySource_cache_order = {}
+    -- _meta_record_cache deliberately survives this: see its declaration.
     if logger and logger.dbg then
         logger.dbg("[bookshelf] cache invalidated: " .. tostring(reason))
     end
@@ -2863,7 +2952,9 @@ local function cachedWalk(home, depth)
             _formats_cache   = {}
             _ratings_cache   = {}
             _all_cache       = {}
+            _all_cache_order = {}
             _bySource_cache  = {}
+            _bySource_cache_order = {}
             _light_meta_cache = {}
             _folder_book_paths_cache = {}
         end
@@ -3568,6 +3659,82 @@ function Repo.clearFolderHasBooksCache()
     _folderHasBooks_cache = {}
 end
 
+-- folderCoverPaths(path, sort_priority, limit, opts) -> filepaths
+--
+-- The books a folder TILE should show, in the order the folder itself would
+-- show them: the cover is the first book you meet on opening the folder, and
+-- a collage is the first four (maintainer, on #409).
+--
+-- It was the first path the library walk happened to return, which is disk
+-- order and spans every depth under the folder, so a book buried three levels
+-- down could front a folder whose first page shows something else entirely.
+-- The reporter read that as "sorted by filename" because disk order usually
+-- looks like it.
+--
+-- Two rules, in this order:
+--   * a book sitting IN the folder beats one in a subfolder, because that is
+--     what opening the folder puts in front of you;
+--   * within each of those, the chip's own sort decides, so the tile and the
+--     folder agree about what comes first.
+-- Deeper books are still the fallback: a folder holding nothing but
+-- subfolders has to show something, and before this it showed one of those.
+--
+-- Cost is per folder on the VISIBLE page, not per folder in the chip: the
+-- immediate children are sorted (a handful, normally) and the deeper list is
+-- only touched when the immediate one cannot fill the limit.
+--
+-- opts.match(fp) -> boolean filters candidates, so a filtered chip fronts its
+-- folders with a book that actually matches the filter, as it did before.
+-- opts.light_cache is the shared light-metadata map when the caller has one.
+function Repo.folderCoverPaths(path, sort_priority, limit, opts)
+    limit = limit or 4
+    if not path or path == "" or limit <= 0 then return {} end
+    opts = opts or {}
+    local all = Repo.getFolderBookPaths(path) or {}
+    if #all == 0 then return {} end
+
+    local prefix = path
+    if prefix:sub(-1) ~= "/" then prefix = prefix .. "/" end
+    local match = opts.match
+    local here, below = {}, {}
+    for i = 1, #all do
+        local fp = all[i]
+        if not match or match(fp) then
+            local rest = fp:sub(#prefix + 1)
+            if rest:find("/", 1, true) then below[#below + 1] = fp
+            else here[#here + 1] = fp end
+        end
+    end
+
+    local function record(fp)
+        local rec = opts.light_cache and _lightMetaForFp(opts.light_cache, fp)
+                    or _buildBookMetaLight(fp)
+        return rec or { filepath = fp }
+    end
+    local function ordered(list)
+        if #list < 2 or not sort_priority or #sort_priority == 0 then return list end
+        local recs = {}
+        for i = 1, #list do recs[i] = record(list[i]) end
+        table.sort(recs, SortEngine.chainedComparator(sort_priority))
+        local out = {}
+        for i = 1, #recs do out[i] = recs[i].filepath end
+        return out
+    end
+
+    local out = {}
+    for _i, fp in ipairs(ordered(here)) do
+        if #out >= limit then break end
+        out[#out + 1] = fp
+    end
+    if #out < limit then
+        for _i, fp in ipairs(ordered(below)) do
+            if #out >= limit then break end
+            out[#out + 1] = fp
+        end
+    end
+    return out
+end
+
 -- getFolderBookPaths(path): list of every book filepath under `path` at
 -- any depth (subject to the latest_walk_depth setting that bounds the
 -- underlying cachedWalk). Used by selection-mode plumbing — both the
@@ -3707,6 +3874,29 @@ end
 -- cached. Avoids the wasted BIM zstd decompress on warm-cache
 -- pagination. Ignored on the MISS path (full library walk) because
 -- the cache hasn't seen those shapes yet.
+-- allHasBooks(path) -> true | false | nil
+-- Whether the all/folder set at `path` (the library root when nil) holds a
+-- BOOK anywhere in it, read off the shape list getAll cached when it last
+-- served that path; nil when it never has. The shelf asks this after a
+-- windowed fetch whose page showed folders only, so the label strip is
+-- decided for the whole set rather than for the page (see
+-- BookshelfWidget:_noteGridLabels). The cache is keyed on path AND sort, but
+-- every sort order's entry holds the same shapes, so the first one will do.
+function Repo.allHasBooks(path)
+    path = path or _resolveLibraryRoot()
+    if not path then return nil end
+    local prefix = path .. "\0"
+    for key, entry in pairs(_all_cache) do
+        if key:sub(1, #prefix) == prefix and type(entry.shapes) == "table" then
+            for _i, shape in ipairs(entry.shapes) do
+                if shape.kind == "book" then return true end
+            end
+            return false
+        end
+    end
+    return nil
+end
+
 function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
     local _t0 = _gettime()
     offset = offset or 0
@@ -3729,6 +3919,29 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
     -- through SortEngine.chainedComparator(priority) below.
     local sort_key = (priority and priority[1] and priority[1].key)
                   or Repo.getSortKey("all")
+    -- The tile books for one folder, ordered as that folder would show them
+    -- (#409). Built here so it captures this fetch's own sort and filter, and
+    -- called only from the page-slice loops below, so the work is per folder
+    -- ON SCREEN rather than per folder in the chip. The filter predicate is
+    -- compiled at most once per fetch, and only when one is active: a
+    -- filtered chip must front its folders with a book that matches, which is
+    -- what the shape-level leader did before.
+    local _cover_match_built, _cover_match
+    local function _folderCoverFps(folder_path)
+        if not _cover_match_built then
+            _cover_match_built = true
+            if Filter.isActive(filter) then
+                local compiled = Filter.compile(filter, Repo.filterOpts())
+                _cover_match = function(fp)
+                    local rec = _buildBookMetaLight(fp) or { filepath = fp }
+                    return _recordMatches(rec, compiled)
+                end
+            end
+        end
+        local ok, fps = pcall(Repo.folderCoverPaths, folder_path, priority, 4,
+                              { match = _cover_match })
+        return (ok and fps) or {}
+    end
     -- reverse only applies on the fallback path; chip sort_priority
     -- encodes per-level reverse internally. `mixed` (folders interleaved
     -- with files, instead of partitioned folders-first) follows
@@ -3801,17 +4014,23 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
         for i = offset + 1, stop do
             local shape = shapes_for_slice[i]
             if shape.kind == "folder" then
+                -- The tile's books, in the order the folder would show them
+                -- (Repo.folderCoverPaths): the lead one is the cover, and a
+                -- collage takes the set. shape.first_book_fp -- disk order,
+                -- any depth -- is the fallback for a folder that yields none.
+                local cover_fps = _folderCoverFps(shape.path)
+                local lead = cover_fps[1] or shape.first_book_fp
                 local fb_opts
-                if ScaledCoverCache and shape.first_book_fp
-                        and ScaledCoverCache:has(shape.first_book_fp) then
+                if ScaledCoverCache and lead and ScaledCoverCache:has(lead) then
                     fb_opts = { want_cover = false }
                 end
-                local fb = shape.first_book_fp and _safeBuildBookMeta(shape.first_book_fp, fb_opts)
+                local fb = lead and _safeBuildBookMeta(lead, fb_opts)
                 out[#out + 1] = {
                     kind       = "folder",
                     path       = shape.path,
                     label      = shape.label,
                     first_book = fb,
+                    cover_fps  = cover_fps,
                 }
             else
                 local meta_opts
@@ -4155,7 +4374,8 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
             end
         end
     end
-    _all_cache[cache_key] = { shapes = shapes, expires_at = now + WALK_CACHE_TTL }
+    _capInsert(_all_cache, _all_cache_order, cache_key,
+               { shapes = shapes, expires_at = now + WALK_CACHE_TTL })
     -- Hydrate the requested page slice exactly as the HIT path does.
     -- Filter-aware: collapse to visible shapes first when active.
     local miss_lc_home  = G_reader_settings:readSetting("home_dir") or "/"
@@ -4197,12 +4417,16 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
     for i = offset + 1, stop do
         local shape = shapes_for_slice[i]
         if shape.kind == "folder" then
-            local fb = shape.first_book_fp and _safeBuildBookMeta(shape.first_book_fp)
+            -- Same ordering as the slice above; see _folderCoverFps.
+            local cover_fps = _folderCoverFps(shape.path)
+            local lead = cover_fps[1] or shape.first_book_fp
+            local fb = lead and _safeBuildBookMeta(lead)
             out[#out + 1] = {
                 kind       = "folder",
                 path       = shape.path,
                 label      = shape.label,
                 first_book = fb,
+                cover_fps  = cover_fps,
             }
         else
             local b = _safeBuildBookMeta(shape.fp)
@@ -7887,7 +8111,7 @@ function Repo.getBySource(source, filter, sort_priority, offset, limit, opts)
     -- always fresh.
     local paths = {}
     for _i, b in ipairs(candidates) do paths[#paths + 1] = b.filepath end
-    _bySource_cache[cache_key] = paths
+    _capInsert(_bySource_cache, _bySource_cache_order, cache_key, paths)
 
     -- candidates is light metadata (no covers). For the visible slice,
     -- rebuild with the full _safeBuildBookMeta path so covers render.
