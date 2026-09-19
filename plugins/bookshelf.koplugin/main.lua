@@ -3119,6 +3119,9 @@ function Bookshelf:deletePluginSettings()
 end
 
 function Bookshelf:onBookshelfRefresh()
+    if _live_widget then
+        _live_widget._spine_fetch_cache = nil
+    end
     self:onBookMetadataChanged()
 end
 
