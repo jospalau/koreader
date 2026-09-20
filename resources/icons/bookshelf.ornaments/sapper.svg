@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- bookshelf:seed=4 -->
+<!-- A small Bridgeburner-inspired sapper. -->
+<!-- bookshelf:overhang=0 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 106">
+
+  <!-- boots / ground shadow -->
+  <ellipse cx="30" cy="96" rx="16" ry="3.2" fill="#211d1b"/>
+
+  <!-- rear cloak -->
+  <path d="M18 53
+           C14 62 13 76 16 91
+           L24 94
+           L30 78
+           L36 94
+           L44 91
+           C47 75 46 61 42 53 Z"
+        fill="#39413d"
+        stroke="#171b1a"
+        stroke-width="1.3"
+        stroke-linejoin="round"/>
+
+  <!-- backpack -->
+  <path d="M12 52
+           C9 55 9 68 12 75
+           L19 73
+           L20 53 Z"
+        fill="#70553b"
+        stroke="#2b2119"
+        stroke-width="1.2"
+        stroke-linejoin="round"/>
+
+  <!-- backpack straps -->
+  <path d="M19 52 C16 61 17 72 21 78"
+        fill="none"
+        stroke="#2b2119"
+        stroke-width="2"/>
+  <path d="M41 52 C44 62 43 71 40 78"
+        fill="none"
+        stroke="#2b2119"
+        stroke-width="2"/>
+
+  <!-- hood -->
+  <path d="M18 42
+           C18 29 22 18 30 15
+           C38 18 42 29 42 42
+           L38 49
+           L22 49 Z"
+        fill="#353b38"
+        stroke="#171b1a"
+        stroke-width="1.3"
+        stroke-linejoin="round"/>
+
+  <!-- face -->
+  <path d="M23 34
+           C24 27 28 24 30 24
+           C34 24 38 28 37 36
+           L35 45
+           L30 49
+           L25 45 Z"
+        fill="#b77952"
+        stroke="#35251d"
+        stroke-width="1.1"
+        stroke-linejoin="round"/>
+
+  <!-- hood opening -->
+  <path d="M20 35
+           C22 28 27 23 30 23
+           C34 23 39 29 40 35
+           C35 32 27 31 20 35 Z"
+        fill="#171b1a"/>
+
+  <!-- nose / beard -->
+  <path d="M29 34 L27 39 L31 40"
+        fill="none"
+        stroke="#704532"
+        stroke-width="1"/>
+  <path d="M24 42
+           C27 47 33 48 36 42
+           C34 44 27 44 24 42 Z"
+        fill="#352c28"/>
+
+  <!-- neck -->
+  <path d="M26 46 H34 V54 H26 Z"
+        fill="#9d6245"
+        stroke="#35251d"
+        stroke-width="1"/>
+
+  <!-- torso / leather coat -->
+  <path d="M21 51
+           C25 48 35 48 39 51
+           L43 73
+           L17 73 Z"
+        fill="#51463a"
+        stroke="#201d19"
+        stroke-width="1.3"
+        stroke-linejoin="round"/>
+
+  <!-- chest straps -->
+  <path d="M22 51 L29 72"
+        stroke="#29231d"
+        stroke-width="2.2"
+        fill="none"/>
+  <path d="M38 51 L31 72"
+        stroke="#29231d"
+        stroke-width="2.2"
+        fill="none"/>
+
+  <!-- belt -->
+  <path d="M17 69 H43 V74 H17 Z"
+        fill="#6d5238"
+        stroke="#292019"
+        stroke-width="1"/>
+
+  <!-- belt buckle -->
+  <rect x="27.5" y="69" width="5" height="5"
+        rx="0.7"
+        fill="#b38b48"
+        stroke="#4a351e"
+        stroke-width="0.8"/>
+
+  <!-- left arm -->
+  <path d="M21 53
+           C17 57 16 64 18 70
+           L22 69
+           L26 57 Z"
+        fill="#45423a"
+        stroke="#201d19"
+        stroke-width="1.2"
+        stroke-linejoin="round"/>
+
+  <!-- right arm -->
+  <path d="M39 53
+           C43 57 44 64 42 70
+           L38 69
+           L34 57 Z"
+        fill="#45423a"
+        stroke="#201d19"
+        stroke-width="1.2"
+        stroke-linejoin="round"/>
+
+  <!-- hands -->
+  <ellipse cx="20" cy="70" rx="2.5" ry="3"
+           fill="#a86d4d" stroke="#35251d" stroke-width="0.9"/>
+  <ellipse cx="40" cy="70" rx="2.5" ry="3"
+           fill="#a86d4d" stroke="#35251d" stroke-width="0.9"/>
+
+  <!-- fiddle held at the side -->
+  <path d="M46 57
+           C42 54 42 50 46 48
+           C50 47 52 51 49 54
+           C53 57 52 62 48 63
+           C44 63 43 59 46 57 Z"
+        fill="#8c4b2c"
+        stroke="#321f16"
+        stroke-width="1.1"/>
+
+  <!-- fiddle neck -->
+  <path d="M47 49 L48 29"
+        stroke="#43291b"
+        stroke-width="2"
+        stroke-linecap="round"/>
+
+  <!-- fiddle bow -->
+  <path d="M52 28 L45 67"
+        stroke="#b99b6a"
+        stroke-width="1"
+        fill="none"/>
+
+  <!-- legs -->
+  <path d="M22 73 L20 92 L27 94 L30 76 Z"
+        fill="#303531"
+        stroke="#171b1a"
+        stroke-width="1.2"/>
+  <path d="M30 76 L33 94 L40 92 L38 73 Z"
+        fill="#303531"
+        stroke="#171b1a"
+        stroke-width="1.2"/>
+
+  <!-- boots -->
+  <path d="M19 90 L27 91 L29 97 H18 Z"
+        fill="#29241f"
+        stroke="#161411"
+        stroke-width="1"/>
+  <path d="M33 91 L41 90 L43 97 H32 Z"
+        fill="#29241f"
+        stroke="#161411"
+        stroke-width="1"/>
+
+  <!-- small brass sapper detail -->
+  <circle cx="15" cy="61" r="2"
+          fill="#a8864b"
+          stroke="#40321e"
+          stroke-width="0.8"/>
+
+</svg>

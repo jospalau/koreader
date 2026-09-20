@@ -45,7 +45,7 @@ local M = {}
 -- KOReader does not create icons/ itself (it is absent from datastorage's
 -- initDataDir list and iconwidget only reads it if it happens to exist), so
 -- the parent is created alongside the ornaments folder.
-M.PARENT        = "icons"
+M.PARENT        = "resources/icons"
 M.SUBDIR        = "bookshelf.ornaments"
 M.TEMPLATE_NAME = "template.svg"
 M.MIN_GAP_DP    = 48     -- a gap narrower than this stays empty
