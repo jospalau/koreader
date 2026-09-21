@@ -1458,7 +1458,7 @@ function SpineWidget:_renderShadowedCard(inner)
         end
     end
 
-    if indicators.glyph == "tbr" then
+    if indicators.glyph == "tbr" and not glyph_top_left then
         local glyph_h = _glyphSize(card_w)
         local glyph_w = self:_glyphWidth(glyph_h)
         if glyph_w <= card_w * 0.4 then
@@ -1497,7 +1497,7 @@ function SpineWidget:_renderShadowedCard(inner)
         end
     end
 
-    if indicators.glyph == "mbr" then
+    if indicators.glyph == "mbr" and not glyph_top_left then
         local glyph_h = _glyphSize(card_w)
         local glyph_w = self:_glyphWidth(glyph_h)
         if glyph_w <= card_w * 0.4 then
