@@ -33,6 +33,7 @@ count stays clear of Lua's 200-per-scope limit (see those files' headers).
 ]]--
 
 local Dispatcher = require("dispatcher")
+local InfoMessage = require("ui/widget/infomessage")
 local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local Device = require("device")
@@ -210,6 +211,9 @@ local ListWidget = loadModule("widgets/booklistwidget.lua",
 local ChapterBar = loadModule("widgets/chapterbarwidget.lua",
     { Colors = Colors, Fonts = Fonts, UI = UI })
 
+local ProgressBar = loadModule("widgets/progressbarwidget.lua",
+    { Colors = Colors })
+
 -- The insights popup's figures: streaks, yearly/monthly aggregates, the
 -- last-week and 8-week series, all-time totals and the reading-goal count.
 -- Kept apart from the popup that draws them (see lib/insights_data.lua).
@@ -254,7 +258,7 @@ local AchievementsView = loadModule("views/achievements_view.lua",
 -- modules, so it loads first and is handed to the insights view below.
 local StreakCalendar = loadModule("views/streak_calendar_view.lua", {
     Locale = Locale, Colors = Colors, Fonts = Fonts, UI = UI,
-    Data = InsightsData, Prefs = Prefs,
+    Data = InsightsData, Prefs = Prefs, VS = ViewSettings,
 })
 
 -- Records: the queries and their cache (lib/records_data.lua, loaded above
@@ -276,13 +280,13 @@ local Insights = loadModule("views/insights_view.lua", {
     Prefs = Prefs, Streak = StreakCalendar, Records = Records,
 })
 local BookCalendar = loadModule("views/book_calendar_view.lua", {
-    Locale = Locale, Colors = Colors, Fonts = Fonts, Prefs = Prefs,
+    Locale = Locale, Colors = Colors, Fonts = Fonts, Prefs = Prefs, VS = ViewSettings,
     BookProgress = BookProgress, UI = UI, CalendarData = BookCalendarData,
 })
 local StatsPopup = loadModule("views/book_stats_view.lua", {
     Locale = Locale, Colors = Colors, Fonts = Fonts, Prefs = Prefs,
     BookProgress = BookProgress, BookCalendar = BookCalendar,
-    ChapterInfo = ChapterInfo, ChapterBar = ChapterBar, UI = UI,
+    ChapterInfo = ChapterInfo, ChapterBar = ChapterBar, ProgressBar = ProgressBar, UI = UI,
     BookStatsData = BookStatsData, VS = ViewSettings,
 })
 local Updater = loadModule("lib/updater.lua", { Locale = Locale })
@@ -901,10 +905,29 @@ end
 -- above) is enough to open it directly, without going through the insights
 -- popup first.
 function ReadingInsights:onShowReadingHeatmapPopup()
-    UIManager:show(Heatmap.Popup:new{
-        popup_self   = { getDailyReadingDataForRange = heatmapGetDailyReadingDataForRange },
-        periods_back = 0,
-    })
+    -- Same stale-cache proxy views/insights_view.lua's showReadingHeatmap
+    -- uses: no way to time a blocking call before making it, so a miss on
+    -- the exact mirrors getHeatmapData checks is the best available signal
+    -- that this open is about to run the full calendar + day-part queries
+    -- synchronously on the UI thread instead of returning instantly.
+    local start_t, end_t = Heatmap.getHeatmapPeriodRange(0)
+    local key = os.date("%Y-%m-%d", start_t) .. ".." .. os.date("%Y-%m-%d", end_t)
+    local cache_hit = InsightsCache.ENABLE_CACHE
+        and InsightsCache._stale_daily_map[key] and InsightsCache._stale_weekday_hour_map[key]
+
+    local popup_self = { getDailyReadingDataForRange = heatmapGetDailyReadingDataForRange }
+
+    if cache_hit then
+        UIManager:show(Heatmap.Popup:new{ popup_self = popup_self, periods_back = 0 })
+        return true
+    end
+
+    local msg = InfoMessage:new{ text = _("Loading data…") }
+    UIManager:show(msg)
+    UIManager:scheduleIn(0.1, function()
+        UIManager:show(Heatmap.Popup:new{ popup_self = popup_self, periods_back = 0 })
+        UIManager:close(msg)
+    end)
     return true
 end
 
@@ -991,6 +1014,7 @@ function ReadingInsights:_menuDeps()
         Locale                      = Locale,
         ViewSettings                = ViewSettings,
         ChapterBar                  = ChapterBar,
+        ProgressBar                 = ProgressBar,
         SCREENSAVER_TYPE_VALUE      = SCREENSAVER_TYPE_VALUE,
         patchScreensaverMenuBuilder = patchScreensaverMenuBuilder,
         readScreensaverLabelMode    = readScreensaverLabelMode,

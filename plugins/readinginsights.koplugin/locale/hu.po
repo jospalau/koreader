@@ -845,6 +845,9 @@ msgstr "Napi sorozat napja"
 msgid "Weekly streak gap day"
 msgstr "Heti sorozat kihagyott napja"
 
+msgid "Book progress bar"
+msgstr "Könyv előrehaladás-sáv"
+
 msgid "Show long durations (24h+) as days"
 msgstr "24 óra feletti időtartamok napokban"
 
@@ -1652,6 +1655,24 @@ msgstr "Fejezetek oldalanként"
 msgid "How many chapters the chapter bar shows at once before paging with the arrows."
 msgstr "Hány fejezetet mutat egyszerre a fejezetsáv, mielőtt a nyilakkal lapozni kell."
 
+msgid "Progress bar"
+msgstr "Előrehaladás-sáv"
+
+msgid "Show progress bar"
+msgstr "Előrehaladás-sáv megjelenítése"
+
+msgid "Show the progress bar in the \"This book\" section."
+msgstr "Az előrehaladás-sáv megjelenítése a „Könyv” szakaszban."
+
+msgid "Progress bar height"
+msgstr "Előrehaladás-sáv magassága"
+
+msgid "Read portion color"
+msgstr "Elolvasott rész színe"
+
+msgid "Unread portion color"
+msgstr "El nem olvasott rész színe"
+
 msgid "Custom value"
 msgstr "Egyéni érték"
 
@@ -1669,3 +1690,54 @@ msgstr "A hamburger menü (a fejléc bal oldalán) megjelenítése, amely gyors 
 
 msgid "Couldn't open Records: "
 msgstr "Nem sikerült megnyitni a Rekordokat: "
+
+msgid "Week"
+msgstr "Hét"
+
+msgid "Show week numbers"
+msgstr "Hetek számának megjelenítése"
+
+msgid "Add a \"Week\" column with each row's week number to the reading streak and Book progress calendars."
+msgstr "„Hét” oszlop hozzáadása, amely soronként a hét számát mutatja az olvasási sorozat és a könyvhaladási naptárakon."
+
+msgid "Popup position"
+msgstr "Ablak helyzete"
+
+msgid "Top of the screen"
+msgstr "Képernyő tetején"
+
+msgid "Centered"
+msgstr "Középen"
+
+msgid "A bordered box in the middle of the screen, as wide as the Book progress calendar."
+msgstr "Keretes ablak a képernyő közepén, olyan széles, mint a könyvhaladási naptár."
+
+msgid "Read row"
+msgstr "„Elolvasva” sor"
+
+msgid "Reading time row"
+msgstr "Olvasási idő sor"
+
+msgid "Read today row"
+msgstr "„Olvasott idő ma” sor"
+
+msgid "Show the \"This chapter\" column (reading time or pages left in the chapter). If this and \"Next chapter\" are both off, the whole chapter section is hidden."
+msgstr "A „Aktuális fejezet” oszlop megjelenítése (a fejezetből hátralévő olvasási idő vagy oldalszám). Ha ez és a „Következő fejezet” is ki van kapcsolva, a teljes fejezet szekció eltűnik."
+
+msgid "Show the \"Next chapter\" column. If this and \"This chapter\" are both off, the whole chapter section is hidden."
+msgstr "A „Következő fejezet” oszlop megjelenítése. Ha ez és az „Aktuális fejezet” is ki van kapcsolva, a teljes fejezet szekció eltűnik."
+
+msgid "Show the row with the read percentage and page count in the \"This book\" section. If every part of the section is off, its header is hidden too."
+msgstr "Az elolvasott százalékot és oldalszámot mutató sor megjelenítése a „Könyv” szekcióban. Ha a szekció minden eleme ki van kapcsolva, a fejléc is eltűnik."
+
+msgid "Show the row with the time read so far and the reading time left in the \"This book\" section. If every part of the section is off, its header is hidden too."
+msgstr "Az eddig olvasott és a hátralévő olvasási időt mutató sor megjelenítése a „Könyv” szekcióban. Ha a szekció minden eleme ki van kapcsolva, a fejléc is eltűnik."
+
+msgid "Show the row with today's reading time and the average time per day in the \"Pace\" section. If this and the started / expected finish row are both off, the whole \"Pace\" section is hidden."
+msgstr "A mai olvasási időt és a napi átlagot mutató sor megjelenítése a „Haladás” szakaszban. Ha ez és a „kezdve / várható befejezés” sor is ki van kapcsolva, a teljes „Haladás” szekció eltűnik."
+
+msgid "All chapters"
+msgstr "Összes fejezet"
+
+msgid "Draw every chapter in one row, without paging."
+msgstr "Minden fejezet kirajzolása egyetlen sorban, lapozás nélkül."

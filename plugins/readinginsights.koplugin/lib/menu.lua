@@ -385,6 +385,19 @@ function M.build(self, deps)
         },
     })
 
+    -- Extra "Week" column (ISO week number) on the Reading streak calendar
+    -- and the Book progress calendar. Off by default - see
+    -- ViewSettings.readShowWeekNumbers.
+    table.insert(date_time_sub_item_table, {
+        text = _("Show week numbers"),
+        help_text = _("Add a \"Week\" column with each row's week number to the reading streak and Book progress calendars."),
+        keep_menu_open = true,
+        checked_func = function() return deps.ViewSettings.readShowWeekNumbers() end,
+        callback = function()
+            deps.ViewSettings.saveShowWeekNumbers(not deps.ViewSettings.readShowWeekNumbers())
+        end,
+    })
+
     -- "Reading insight popup": everything that changes what the insights
     -- popup itself shows. Inserted into Advanced settings below, after the
     -- "Date & time" group.
@@ -658,6 +671,92 @@ function M.build(self, deps)
     -- gates in book_stats_view.lua).
     local book_progress_sub_item_table = {}
 
+    -- Where the popup sits: hanging from the top edge, full width (the
+    -- original look), or as a bordered box in the middle of the screen at
+    -- the same width as the Book progress calendar.
+    table.insert(book_progress_sub_item_table, {
+        text_func = function()
+            local Opt = deps.ViewSettings.Opt
+            local pos = (Opt.readBookPopupPosition() == Opt.BOOK_POPUP_POSITION_CENTER)
+                and _("Centered") or _("Top of the screen")
+            return _("Popup position") .. ": " .. pos
+        end,
+        keep_menu_open = true,
+        separator = true,
+        sub_item_table = {
+            {
+                text = _("Top of the screen"),
+                keep_menu_open = true,
+                radio = true,
+                checked_func = function()
+                    local Opt = deps.ViewSettings.Opt
+                    return Opt.readBookPopupPosition() == Opt.BOOK_POPUP_POSITION_TOP
+                end,
+                callback = function()
+                    local Opt = deps.ViewSettings.Opt
+                    Opt.saveBookPopupPosition(Opt.BOOK_POPUP_POSITION_TOP)
+                end,
+            },
+            {
+                text = _("Centered"),
+                help_text = _("A bordered box in the middle of the screen, as wide as the Book progress calendar."),
+                keep_menu_open = true,
+                radio = true,
+                checked_func = function()
+                    local Opt = deps.ViewSettings.Opt
+                    return Opt.readBookPopupPosition() == Opt.BOOK_POPUP_POSITION_CENTER
+                end,
+                callback = function()
+                    local Opt = deps.ViewSettings.Opt
+                    Opt.saveBookPopupPosition(Opt.BOOK_POPUP_POSITION_CENTER)
+                end,
+            },
+        },
+    })
+
+    -- Which parts of each section are shown. When every part of a section is
+    -- off, its header disappears too (chapter section, "This book", "Pace").
+    table.insert(book_progress_sub_item_table, {
+        text = _("This chapter"),
+        help_text = _("Show the \"This chapter\" column (reading time or pages left in the chapter). If this and \"Next chapter\" are both off, the whole chapter section is hidden."),
+        keep_menu_open = true,
+        checked_func = function() return deps.ViewSettings.Opt.readShowChapterCurrent() end,
+        callback = function()
+            deps.ViewSettings.Opt.saveShowChapterCurrent(not deps.ViewSettings.Opt.readShowChapterCurrent())
+        end,
+    })
+
+    table.insert(book_progress_sub_item_table, {
+        text = _("Next chapter"),
+        help_text = _("Show the \"Next chapter\" column. If this and \"This chapter\" are both off, the whole chapter section is hidden."),
+        keep_menu_open = true,
+        separator = true,
+        checked_func = function() return deps.ViewSettings.Opt.readShowChapterNext() end,
+        callback = function()
+            deps.ViewSettings.Opt.saveShowChapterNext(not deps.ViewSettings.Opt.readShowChapterNext())
+        end,
+    })
+
+    table.insert(book_progress_sub_item_table, {
+        text = _("Read row"),
+        help_text = _("Show the row with the read percentage and page count in the \"This book\" section. If every part of the section is off, its header is hidden too."),
+        keep_menu_open = true,
+        checked_func = function() return deps.ViewSettings.Opt.readShowBookReadRow() end,
+        callback = function()
+            deps.ViewSettings.Opt.saveShowBookReadRow(not deps.ViewSettings.Opt.readShowBookReadRow())
+        end,
+    })
+
+    table.insert(book_progress_sub_item_table, {
+        text = _("Reading time row"),
+        help_text = _("Show the row with the time read so far and the reading time left in the \"This book\" section. If every part of the section is off, its header is hidden too."),
+        keep_menu_open = true,
+        checked_func = function() return deps.ViewSettings.Opt.readShowBookTimeRow() end,
+        callback = function()
+            deps.ViewSettings.Opt.saveShowBookTimeRow(not deps.ViewSettings.Opt.readShowBookTimeRow())
+        end,
+    })
+
     table.insert(book_progress_sub_item_table, {
         text = _("Chapter bar"),
         help_text = _("Show the chapter bar chart in the \"This book\" section."),
@@ -670,7 +769,8 @@ function M.build(self, deps)
 
     -- Chapters per page: how many chapter columns the chapter bar shows at
     -- once before the arrows/swipe page to the next batch (ChapterBar.PAGE_SIZE
-    -- was hardcoded to 25). Four preset radio choices plus a "Custom value…"
+    -- was hardcoded to 25). "All chapters" (no paging), four preset radio
+    -- choices plus a "Custom value…"
     -- entry that opens a SpinWidget for anything in between; the header shows
     -- whichever value is in force.
     do
@@ -685,11 +785,21 @@ function M.build(self, deps)
             }
         end
         local page_size_sub_item_table = {}
+        -- "All chapters": one column per chapter, no paging (no 100 cap).
+        table.insert(page_size_sub_item_table, {
+            text = _("All chapters"),
+            help_text = _("Draw every chapter in one row, without paging."),
+            keep_menu_open = true,
+            radio = true,
+            checked_func = function() return deps.ChapterBar.isAllChapters() end,
+            callback = function() deps.ChapterBar.savePageSizeSetting(deps.ChapterBar.PAGE_SIZE_ALL) end,
+        })
         for _idx, n in ipairs(presets) do
             table.insert(page_size_sub_item_table, presetEntry(n))
         end
         table.insert(page_size_sub_item_table, {
             text_func = function()
+                if deps.ChapterBar.isAllChapters() then return _("Custom value") end
                 return _("Custom value") .. ": " .. tostring(deps.ChapterBar.readPageSizeSetting())
             end,
             keep_menu_open = true,
@@ -697,7 +807,8 @@ function M.build(self, deps)
                 local SpinWidget = require("ui/widget/spinwidget")
                 UIManager:show(SpinWidget:new{
                     title_text    = _("Chapters per page"),
-                    value         = deps.ChapterBar.readPageSizeSetting(),
+                    value         = deps.ChapterBar.isAllChapters() and deps.ChapterBar.DEFAULT_PAGE_SIZE
+                                    or deps.ChapterBar.readPageSizeSetting(),
                     value_min     = deps.ChapterBar.MIN_PAGE_SIZE,
                     value_max     = deps.ChapterBar.MAX_PAGE_SIZE,
                     value_step    = 1,
@@ -713,6 +824,9 @@ function M.build(self, deps)
         })
         table.insert(book_progress_sub_item_table, {
             text_func = function()
+                if deps.ChapterBar.isAllChapters() then
+                    return _("Chapters per page") .. ": " .. _("All chapters")
+                end
                 return _("Chapters per page") .. ": " .. tostring(deps.ChapterBar.readPageSizeSetting())
             end,
             help_text = _("How many chapters the chapter bar shows at once before paging with the arrows."),
@@ -720,6 +834,49 @@ function M.build(self, deps)
             sub_item_table = page_size_sub_item_table,
         })
     end
+
+    -- "Progress bar": the filled bar shown between the "This book" header
+    -- and the percentage row (widgets/progressbarwidget.lua). On/off toggle
+    -- and the bar's height live here; its two colors moved to the top-level
+    -- Colors menu (Colors > Book progress bar), alongside every other color
+    -- in the plugin, instead of being duplicated here.
+    do
+        local progress_bar_sub_item_table = {}
+
+        table.insert(progress_bar_sub_item_table, {
+            text = _("Show progress bar"),
+            help_text = _("Show the progress bar in the \"This book\" section."),
+            keep_menu_open = true,
+            checked_func = function() return deps.ViewSettings.Opt.readShowProgressBar() end,
+            callback = function()
+                deps.ViewSettings.Opt.saveShowProgressBar(not deps.ViewSettings.Opt.readShowProgressBar())
+            end,
+        })
+
+        table.insert(progress_bar_sub_item_table, buildBarHeightMenuEntry(
+            _("Progress bar height"),
+            deps.ProgressBar.readHeightSetting,
+            deps.ProgressBar.saveHeightSetting,
+            deps.ProgressBar.DEFAULT_HEIGHT,
+            1, 200
+        ))
+
+        table.insert(book_progress_sub_item_table, {
+            text = _("Progress bar"),
+            keep_menu_open = true,
+            sub_item_table = progress_bar_sub_item_table,
+        })
+    end
+
+    table.insert(book_progress_sub_item_table, {
+        text = _("Read today row"),
+        help_text = _("Show the row with today's reading time and the average time per day in the \"Pace\" section. If this and the started / expected finish row are both off, the whole \"Pace\" section is hidden."),
+        keep_menu_open = true,
+        checked_func = function() return deps.ViewSettings.Opt.readShowPaceToday() end,
+        callback = function()
+            deps.ViewSettings.Opt.saveShowPaceToday(not deps.ViewSettings.Opt.readShowPaceToday())
+        end,
+    })
 
     table.insert(book_progress_sub_item_table, {
         text = _("Started / expected finish row"),
