@@ -53,26 +53,6 @@ local function _natAspect()
         and SpineWidget.coverAspectCap() or 1.5
 end
 
--- _renderDottedRule(width, thickness)
--- Returns a Widget subclass instance that paints a dotted horizontal rule via
--- bb:fillRect. Dot spacing is 3dp (1dp dot, 2dp gap). Uses COLOR_BLACK.
-function ShelfRow._renderDottedRule(width, thickness)
-    local DottedRule = Widget:extend{}
-
-    function DottedRule:init()
-        self.dimen = Geom:new{ w = width, h = thickness }
-    end
-
-    function DottedRule:paintTo(bb, x, y)
-        -- Walk across the width placing 1×thickness filled rects every 3px.
-        for px = 0, width - 1, 3 do
-            bb:paintRect(x + px, y, 1, thickness, Blitbuffer.COLOR_BLACK)
-        end
-    end
-
-    return DottedRule:new{}
-end
-
 -- ShelfRow.new(opts)
 -- opts: {
 --   width         number   total row width in pixels
@@ -861,7 +841,12 @@ function ShelfRow.new(opts)
                     stack[#stack + 1] = VerticalSpan:new{ width = cover_h - spine_h }
                 end
                 stack[#stack + 1] = spine
-                if draw_label then
+                -- Never a label under a PLACEHOLDER cover: the fallback card
+                -- already shows the title (and author) larger and centred, so a
+                -- line below would just repeat it. Reserve the strip height
+                -- anyway (the else branch) so cover bottoms stay aligned with
+                -- the labelled covers in the same row.
+                if draw_label and not spine.is_fallback then
                     local util = require("util")
                     local calibre_data = (util.loadCalibreData and util.loadCalibreData()) or {}
                     local fname = item.filepath and item.filepath:match("([^/]+)$") or ""
