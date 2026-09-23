@@ -582,6 +582,8 @@ function FileManager:onSwipeFM(ges)
     elseif direction == "east" then
         self.file_chooser:onPrevPage()
     elseif direction == "north" then
+        local is_bookshelf = (UIManager:getTopmostVisibleWidget() or {}).name == "bookshelf"
+        if is_bookshelf then return false end
         local x = ges.pos and ges.pos.x or (ges.start_pos and ges.start_pos.x)
         local w = Screen:getWidth()
 
