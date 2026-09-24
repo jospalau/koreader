@@ -1,16 +1,16 @@
-# Book Card plugin translation (en)
+# Book card plugin translation (en)
 msgid ""
 msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 
-msgid "Book Card"
-msgstr "Book Card"
+msgid "Book card"
+msgstr "Book card"
 
-msgid "Book Card: preview"
-msgstr "Book Card: preview"
+msgid "Book card: preview"
+msgstr "Book card: preview"
 
-msgid "Book Card is a new sleep screen for KOReader, heavily inspired by the idea and visual design of CrossPoint's sleep screen implementation."
-msgstr "Book Card is a new sleep screen for KOReader, heavily inspired by the idea and visual design of CrossPoint's sleep screen implementation."
+msgid "Book card is a new sleep screen for KOReader, heavily inspired by the idea and visual design of CrossPoint's sleep screen implementation."
+msgstr "Book card is a new sleep screen for KOReader, heavily inspired by the idea and visual design of CrossPoint's sleep screen implementation."
 
 msgid "About"
 msgstr "About"
@@ -39,6 +39,12 @@ msgstr "Always dark"
 msgid "Rounded cover corners"
 msgstr "Rounded cover corners"
 
+msgid "Cover"
+msgstr "Cover"
+
+msgid "Cover shadow"
+msgstr "Cover shadow"
+
 msgid "Cover / statistics spacing"
 msgstr "Cover / statistics spacing"
 
@@ -62,6 +68,21 @@ msgstr "Card elements"
 
 msgid "Statistics"
 msgstr "Statistics"
+
+msgid "Reorder"
+msgstr "Reorder"
+
+msgid "Reorder statistics"
+msgstr "Reorder statistics"
+
+msgid "Text background grouping"
+msgstr "Text background grouping"
+
+msgid "Individually"
+msgstr "Individually"
+
+msgid "Grouped (default)"
+msgstr "Grouped (default)"
 
 msgid "Clear cached data"
 msgstr "Clear cached data"
@@ -213,9 +234,6 @@ msgstr "Notify on wake when update available"
 msgid "Update available"
 msgstr "Update available"
 
-msgid "Installed version"
-msgstr "Installed version"
-
 msgid "Developer updates"
 msgstr "Developer updates"
 
@@ -246,11 +264,11 @@ msgstr "Installed: v"
 msgid "Reset"
 msgstr "Reset"
 
-msgid "This will clear the development branch setting and install the latest stable release of Book Card, then restart KOReader. Continue?"
-msgstr "This will clear the development branch setting and install the latest stable release of Book Card, then restart KOReader. Continue?"
+msgid "This will clear the development branch setting and install the latest stable release of Book card, then restart KOReader. Continue?"
+msgstr "This will clear the development branch setting and install the latest stable release of Book card, then restart KOReader. Continue?"
 
-msgid "Book Card update available: v"
-msgstr "Book Card update available: v"
+msgid "Book card update available: v"
+msgstr "Book card update available: v"
 
 msgid "No update source is configured yet."
 msgstr "No update source is configured yet."
@@ -267,8 +285,8 @@ msgstr "Checking for updates..."
 msgid "Could not check for updates."
 msgstr "Could not check for updates."
 
-msgid "Book Card is up to date."
-msgstr "Book Card is up to date."
+msgid "Book card is up to date."
+msgstr "Book card is up to date."
 
 msgid "Version: "
 msgstr "Version: "
@@ -300,8 +318,8 @@ msgstr "Download failed."
 msgid "Installation failed: "
 msgstr "Installation failed: "
 
-msgid "Book Card updated to v"
-msgstr "Book Card updated to v"
+msgid "Book card updated to v"
+msgstr "Book card updated to v"
 
 msgid "Restart KOReader now?"
 msgstr "Restart KOReader now?"
@@ -432,3 +450,155 @@ msgstr "Reset all colors to default"
 msgid "Reset all colors to follow the theme again?"
 msgstr "Reset all colors to follow the theme again?"
 
+msgid "Wallpaper"
+msgstr "Wallpaper"
+
+msgid "None"
+msgstr "None"
+
+msgid "Random"
+msgstr "Random"
+
+msgid "No images in {dir}"
+msgstr "No images in {dir}"
+
+msgid "Images are loaded from {dir}"
+msgstr "Images are loaded from {dir}"
+
+msgid "Text background opacity"
+msgstr "Text background opacity"
+
+msgid "Off"
+msgstr "Off"
+
+msgid "Low"
+msgstr "Low"
+
+msgid "Moderate"
+msgstr "Moderate"
+
+msgid "High"
+msgstr "High"
+
+msgid "Solid"
+msgstr "Solid"
+msgid "Daily Avg (pages)"
+msgstr "Daily Avg (pages)"
+
+msgid "%d page"
+msgstr "%d page"
+
+msgid "%d pages"
+msgstr "%d pages"
+
+msgid "Advanced Settings"
+msgstr "Advanced Settings"
+
+msgid "Layout"
+msgstr "Layout"
+
+msgid "Cover beside statistics (default)"
+msgstr "Cover beside statistics (default)"
+
+msgid "Cover centered, statistics grid below"
+msgstr "Cover centered, statistics grid below"
+
+msgid "Orientation"
+msgstr "Orientation"
+
+msgid "Force portrait"
+msgstr "Force portrait"
+
+msgid "Force landscape"
+msgstr "Force landscape"
+
+msgid "Margins"
+msgstr "Margins"
+
+msgid "Side padding"
+msgstr "Side padding"
+
+msgid "Top padding"
+msgstr "Top padding"
+
+msgid "Bottom padding"
+msgstr "Bottom padding"
+
+msgid "Image export (Android wallpaper / PocketBook logo)"
+msgstr "Image export (Android wallpaper / PocketBook logo)"
+
+msgid "Save as image, kept up to date"
+msgstr "Save as image, kept up to date"
+
+msgid "On Android, KOReader's own sleep screen (above) never shows, because locking the screen hands over to Android's own lock screen instead. Turn this on and Book card keeps a picture of the card on disk, refreshed automatically; set that picture as your Android wallpaper the normal way (from the Photos/Gallery app, or a wallpaper-changer app pointed at the folder below)."
+msgstr "On Android, KOReader's own sleep screen (above) never shows, because locking the screen hands over to Android's own lock screen instead. Turn this on and Book card keeps a picture of the card on disk, refreshed automatically; set that picture as your Android wallpaper the normal way (from the Photos/Gallery app, or a wallpaper-changer app pointed at the folder below)."
+
+msgid "Refresh interval"
+msgstr "Refresh interval"
+
+msgid "Every 5 minutes"
+msgstr "Every 5 minutes"
+
+msgid "Every 15 minutes"
+msgstr "Every 15 minutes"
+
+msgid "Every 30 minutes"
+msgstr "Every 30 minutes"
+
+msgid "Every hour"
+msgstr "Every hour"
+
+msgid "min"
+msgstr "min"
+
+msgid "Also copy to folder"
+msgstr "Also copy to folder"
+
+msgid "Also copy to a shared folder…"
+msgstr "Also copy to a shared folder…"
+
+msgid "Choose a folder to also save the image to"
+msgstr "Choose a folder to also save the image to"
+
+msgid "Image will also be copied to:\n{path}\n\nOn Android, point your system wallpaper picker (or a wallpaper-changer app) at this folder."
+msgstr "Image will also be copied to:\n{path}\n\nOn Android, point your system wallpaper picker (or a wallpaper-changer app) at this folder."
+
+msgid "Stop copying to that extra folder"
+msgstr "Stop copying to that extra folder"
+
+msgid "Also save as PocketBook power-off / boot logo"
+msgstr "Also save as PocketBook power-off / boot logo"
+
+msgid "Save image now"
+msgstr "Save image now"
+
+msgid "Image saved to: {path}"
+msgstr "Image saved to: {path}"
+
+msgid "Image updated."
+msgstr "Image updated."
+
+msgid "Could not update the image."
+msgstr "Could not update the image."
+
+msgid "Could not create the image export folder."
+msgstr "Could not create the image export folder."
+
+
+msgid "Could not write the image file."
+msgstr "Could not write the image file."
+
+msgid "Could not draw the card as an image (see the log for details)."
+msgstr "Could not draw the card as an image (see the log for details)."
+
+msgid "Highlighted quote"
+msgstr "Highlighted quote"
+
+msgid "Quote color"
+msgstr "Quote color"
+
+msgid "Also save when opening a book"
+msgstr "Also save when opening a book"
+
+msgid "Image format"
+msgstr "Image format"

@@ -1,16 +1,16 @@
-# Book Card plugin translation (hu)
+# Book card plugin translation (hu)
 msgid ""
 msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 
-msgid "Book Card"
-msgstr "Book Card"
+msgid "Book card"
+msgstr "Book card"
 
-msgid "Book Card: preview"
-msgstr "Book Card: előnézet"
+msgid "Book card: preview"
+msgstr "Book card: előnézet"
 
-msgid "Book Card is a new sleep screen for KOReader, heavily inspired by the idea and visual design of CrossPoint's sleep screen implementation."
-msgstr "A Book Card egy új alvóképernyő a KOReaderhez, amelyet nagyban ihletett a CrossPoint alvóképernyő-megvalósításának ötlete és vizuális megjelenése."
+msgid "Book card is a new sleep screen for KOReader, heavily inspired by the idea and visual design of CrossPoint's sleep screen implementation."
+msgstr "A Book card egy új alvóképernyő a KOReaderhez, amelyet nagyban ihletett a CrossPoint alvóképernyő-megvalósításának ötlete és vizuális megjelenése."
 
 msgid "About"
 msgstr "Névjegy"
@@ -39,6 +39,12 @@ msgstr "Mindig sötét"
 msgid "Rounded cover corners"
 msgstr "Lekerekített borítósarkok"
 
+msgid "Cover"
+msgstr "Borító"
+
+msgid "Cover shadow"
+msgstr "Borító árnyéka"
+
 msgid "Cover / statistics spacing"
 msgstr "Borító / statisztika térköz"
 
@@ -62,6 +68,21 @@ msgstr "Kártyaelemek"
 
 msgid "Statistics"
 msgstr "Statisztikák"
+
+msgid "Reorder"
+msgstr "Sorrend módosítása"
+
+msgid "Reorder statistics"
+msgstr "Statisztikák sorrendje"
+
+msgid "Text background grouping"
+msgstr "Szöveghátér csoportosítása"
+
+msgid "Individually"
+msgstr "Egyenként"
+
+msgid "Grouped (default)"
+msgstr "Csoportosítva (alapértelmezett)"
 
 msgid "Clear cached data"
 msgstr "Gyorsítótár törlése"
@@ -213,9 +234,6 @@ msgstr "Értesítés ébresztéskor, ha van frissítés"
 msgid "Update available"
 msgstr "Frissítés érhető el"
 
-msgid "Installed version"
-msgstr "Telepített verzió"
-
 msgid "Developer updates"
 msgstr "Fejlesztői frissítések"
 
@@ -246,11 +264,11 @@ msgstr "Telepítve: v"
 msgid "Reset"
 msgstr "Visszaállítás"
 
-msgid "This will clear the development branch setting and install the latest stable release of Book Card, then restart KOReader. Continue?"
-msgstr "Ez törli a fejlesztői ág beállítást, telepíti a Book Card legújabb stabil kiadását, majd újraindítja a KOReadert. Folytatod?"
+msgid "This will clear the development branch setting and install the latest stable release of Book card, then restart KOReader. Continue?"
+msgstr "Ez törli a fejlesztői ág beállítást, telepíti a Book card legújabb stabil kiadását, majd újraindítja a KOReadert. Folytatod?"
 
-msgid "Book Card update available: v"
-msgstr "Book Card frissítés érhető el: v"
+msgid "Book card update available: v"
+msgstr "Book card frissítés érhető el: v"
 
 msgid "No update source is configured yet."
 msgstr "Még nincs beállítva frissítési forrás."
@@ -267,8 +285,8 @@ msgstr "Frissítések keresése..."
 msgid "Could not check for updates."
 msgstr "Nem sikerült frissítéseket keresni."
 
-msgid "Book Card is up to date."
-msgstr "A Book Card naprakész."
+msgid "Book card is up to date."
+msgstr "A Book card naprakész."
 
 msgid "Version: "
 msgstr "Verzió: "
@@ -300,8 +318,8 @@ msgstr "A letöltés sikertelen."
 msgid "Installation failed: "
 msgstr "A telepítés sikertelen: "
 
-msgid "Book Card updated to v"
-msgstr "A Book Card frissítve: v"
+msgid "Book card updated to v"
+msgstr "A Book card frissítve: v"
 
 msgid "Restart KOReader now?"
 msgstr "Újraindítod most a KOReadert?"
@@ -432,3 +450,155 @@ msgstr "Összes szín visszaállítása alapértelmezettre"
 msgid "Reset all colors to follow the theme again?"
 msgstr "Visszaállítod az összes színt, hogy újra a témát kövessék?"
 
+msgid "Wallpaper"
+msgstr "Háttérkép"
+
+msgid "None"
+msgstr "Nincs"
+
+msgid "Random"
+msgstr "Véletlenszerű"
+
+msgid "No images in {dir}"
+msgstr "Nincs kép a következő mappában: {dir}"
+
+msgid "Images are loaded from {dir}"
+msgstr "A képek innen töltődnek be: {dir}"
+
+msgid "Text background opacity"
+msgstr "Szöveg mögötti háttér átlátszósága"
+
+msgid "Off"
+msgstr "Kikapcsolva"
+
+msgid "Low"
+msgstr "Alacsony"
+
+msgid "Moderate"
+msgstr "Közepes"
+
+msgid "High"
+msgstr "Magas"
+
+msgid "Solid"
+msgstr "Teljes"
+msgid "Daily Avg (pages)"
+msgstr "Napi átlag (oldal)"
+
+msgid "%d page"
+msgstr "%d oldal"
+
+msgid "%d pages"
+msgstr "%d oldal"
+
+msgid "Advanced Settings"
+msgstr "További beállítások"
+
+msgid "Layout"
+msgstr "Elrendezés"
+
+msgid "Cover beside statistics (default)"
+msgstr "Borító a statisztika mellett (alapértelmezett)"
+
+msgid "Cover centered, statistics grid below"
+msgstr "Borító középen, statisztika rács alatta"
+
+msgid "Orientation"
+msgstr "Tájolás"
+
+msgid "Force portrait"
+msgstr "Álló kényszerítése"
+
+msgid "Force landscape"
+msgstr "Fekvő kényszerítése"
+
+msgid "Margins"
+msgstr "Margók"
+
+msgid "Side padding"
+msgstr "Oldalsó margó"
+
+msgid "Top padding"
+msgstr "Felső margó"
+
+msgid "Bottom padding"
+msgstr "Alsó margó"
+
+msgid "Image export (Android wallpaper / PocketBook logo)"
+msgstr "Kép exportálása (Android háttérkép / PocketBook logó)"
+
+msgid "Save as image, kept up to date"
+msgstr "Mentés képként, folyamatosan frissítve"
+
+msgid "On Android, KOReader's own sleep screen (above) never shows, because locking the screen hands over to Android's own lock screen instead. Turn this on and Book card keeps a picture of the card on disk, refreshed automatically; set that picture as your Android wallpaper the normal way (from the Photos/Gallery app, or a wallpaper-changer app pointed at the folder below)."
+msgstr "Androidon a KOReader saját alvóképernyője (fent) sosem jelenik meg, mert képernyőzáráskor Android saját zárolási képernyője veszi át a helyét. Ezt bekapcsolva a Book card egy képet tart a lemezen a kártyáról, amit automatikusan frissít; ezt a képet a szokásos módon állíthatod be Android háttérképként (a Galéria/Fotók alkalmazásból, vagy egy háttérkép-váltogató appal, amely az alábbi mappát figyeli)."
+
+msgid "Refresh interval"
+msgstr "Frissítési gyakoriság"
+
+msgid "Every 5 minutes"
+msgstr "5 percenként"
+
+msgid "Every 15 minutes"
+msgstr "15 percenként"
+
+msgid "Every 30 minutes"
+msgstr "30 percenként"
+
+msgid "Every hour"
+msgstr "Óránként"
+
+msgid "min"
+msgstr "perc"
+
+msgid "Also copy to folder"
+msgstr "Másolás ide is"
+
+msgid "Also copy to a shared folder…"
+msgstr "Másolás egy megosztott mappába is…"
+
+msgid "Choose a folder to also save the image to"
+msgstr "Válaszd ki a mappát, ahova a kép is bekerüljön"
+
+msgid "Image will also be copied to:\n{path}\n\nOn Android, point your system wallpaper picker (or a wallpaper-changer app) at this folder."
+msgstr "A kép ide is bemásolódik:\n{path}\n\nAndroidon a rendszer háttérkép-választóját (vagy egy háttérkép-váltogató appot) irányítsd erre a mappára."
+
+msgid "Stop copying to that extra folder"
+msgstr "Extra mappába másolás leállítása"
+
+msgid "Also save as PocketBook power-off / boot logo"
+msgstr "Mentés PocketBook kikapcsolási / indítási logóként is"
+
+msgid "Save image now"
+msgstr "Kép mentése most"
+
+msgid "Image saved to: {path}"
+msgstr "A kép ide mentődik: {path}"
+
+msgid "Image updated."
+msgstr "A kép frissült."
+
+msgid "Could not update the image."
+msgstr "A kép frissítése nem sikerült."
+
+msgid "Could not create the image export folder."
+msgstr "Nem sikerült létrehozni a kép exportálási mappáját."
+
+
+msgid "Could not write the image file."
+msgstr "Nem sikerült írni a képfájlt."
+
+msgid "Could not draw the card as an image (see the log for details)."
+msgstr "Nem sikerült a kártyát képként megrajzolni (a részletekért lásd a naplót)."
+
+msgid "Highlighted quote"
+msgstr "Kiemelt idézet"
+
+msgid "Quote color"
+msgstr "Idézet színe"
+
+msgid "Also save when opening a book"
+msgstr "Mentés könyv megnyitásakor is"
+
+msgid "Image format"
+msgstr "Képformátum"

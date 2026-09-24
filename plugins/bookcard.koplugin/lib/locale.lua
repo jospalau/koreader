@@ -1,5 +1,5 @@
 --[[
-Book Card - localisation and number/date/duration formatting.
+Book card - localisation and number/date/duration formatting.
 
 Translations live in locale/<lang>.po and are looked up BEFORE KOReader's own
 gettext, so the plugin can add strings without touching KOReader's catalogs.
@@ -126,7 +126,7 @@ function M.formatNumber(n, decimals)
     decimals = decimals or 0
     local s = string.format("%." .. decimals .. "f", n)
     if M.langBase() == "hu" or M.langBase() == "de" or M.langBase() == "fr"
-            or M.langBase() == "pt" or M.langBase() == "uk" then
+            or M.langBase() == "pt" or M.langBase() == "uk" or M.langBase() == "es" then
         s = s:gsub("%.", ",")
     end
     return s
