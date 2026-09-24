@@ -1186,7 +1186,9 @@ function Repo.buildBookMeta(filepath, opts)
                       and cb.series or nil
     local page_count = _calibreField(filepath, "pages") -- or info.pages
     --page_count = page_count or info.pages
-    local pub_date = _calibreField(filepath, "pubdate", function(v) return v:sub(1, 4) end)
+    local pub_date = _calibreField(filepath, "pubdate", function(v)
+        return tonumber(tostring(v):sub(1, 4))
+    end)
     local modified_date = getModifiedDate(filepath)
     local words = _calibreField(filepath, "words")
     local grrating = _calibreField(filepath, "grrating")
@@ -1376,7 +1378,9 @@ local function _buildLightMetaFromInfo(fp, info)
 
     local genres, genre_sources = genreData(fp, cb, info, cp)
     local page_count = _calibreField(fp, "pages")
-    local pub_date = _calibreField(fp, "pubdate", function(v) return v:sub(1, 4) end)
+    local pub_date = _calibreField(fp, "pubdate", function(v)
+        return tonumber(tostring(v):sub(1, 4))
+    end)
     local modified_date = getModifiedDate(fp)
 
     local words = _calibreField(fp, "words")
@@ -2517,7 +2521,9 @@ function Repo.readProgress(filepath)
     local now = os.time()
     local cached = _progress_cache[filepath]
     if cached then
-        return cached.pct, cached.status, cached.rating, cached.page_count, cached.pub_date, cached.modified_date, cached.words, cached.grrating, cached.grvotes
+        return cached.pct, cached.status, cached.rating, cached.page_count,
+        cached.page_num, cached.pub_date, cached.modified_date,
+        cached.words, cached.grrating, cached.grvotes
     end
     local pct, status, rating, page_count, pub_date, modified_date, words, grrating, grvotes
     local ok_ds, ds = pcall(function() return getDocSettings():open(filepath) end)
@@ -2579,7 +2585,9 @@ function Repo.readProgress(filepath)
         -- if page_count then page_src = "filename" end
         page_count = _calibreField(filepath, "pages")
     end
-    pub_date = _calibreField(filepath, "pubdate", function(v) return v:sub(1, 4) end)
+    pub_date = _calibreField(filepath, "pubdate", function(v)
+        return tonumber(tostring(v):sub(1, 4))
+    end)
     modified_date = getModifiedDate(filepath)
     words = _calibreField(filepath, "words")
     grrating = _calibreField(filepath, "grrating")
@@ -4351,7 +4359,7 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
         -- actually reorders. Only written when that key is in the priority.
         for _i, e in ipairs(entries) do
             if e.attr and e.attr.mode == "file" then
-                local pct, status, rating, page_count, pub_date, modified_date, words, grrating, grvotes = Repo.readProgress(e.fp)
+                local pct, status, rating, page_count, _page_num, pub_date, modified_date, words, grrating, grvotes = Repo.readProgress(e.fp)
                 e._pct    = pct
                 e._status = status
                 if needs.rating     then e.rating     = rating     end
