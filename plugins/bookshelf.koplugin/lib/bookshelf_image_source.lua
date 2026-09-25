@@ -265,6 +265,23 @@ local function _autoDiscoverStackImage(kind, name)
         memo[dkey] = dir_ok
     end
     if not dir_ok then return nil end
+    -- One listing of the folder, indexed by lower-cased file name, instead of
+    -- a stat per candidate: up to 16 per stack (two spellings x eight
+    -- extensions), paid for every new stack on a page -- 9% of a Genres page
+    -- turn on a PW5 with an image library (jit.p). Lower-cased because the
+    -- stats were effectively case-blind where most readers keep their images
+    -- (FAT/exFAT storage); the listed name is returned, so the path is real.
+    local ikey = "idx\1" .. base
+    local index = memo[ikey]
+    if index == nil then
+        index = {}
+        pcall(function()
+            for entry in lfs.dir(base) do
+                if entry ~= "." and entry ~= ".." then index[entry:lower()] = entry end
+            end
+        end)
+        memo[ikey] = index
+    end
     local candidates = { name }
     local slug = _slug(name)
     if slug ~= "" and slug ~= name then
@@ -272,9 +289,10 @@ local function _autoDiscoverStackImage(kind, name)
     end
     for _, stem in ipairs(candidates) do
         for _, ext in ipairs(LIBRARY_EXTS) do
-            local p = base .. stem .. "." .. ext
-            if lfs.attributes(p, "mode") == "file" then
-                return p
+            local real = index[(stem .. "." .. ext):lower()]
+            if real then
+                local p = base .. real
+                if lfs.attributes(p, "mode") == "file" then return p end
             end
         end
     end
@@ -567,7 +585,12 @@ end
 local _size_tag_memo = {}
 function ImageSource.imageSizeTag(path)
     if type(path) ~= "string" or path == "" then return nil end
-    local memo = _size_tag_memo[path]
+    -- Keyed on the file's mtime too: a folder's cover.jpg can be replaced in
+    -- place by a differently shaped picture, and the true-aspect tile has to
+    -- follow it the way loadImage's cache does.
+    local mtime = lfs.attributes(path, "modification") or 0
+    local mkey = path .. "\0" .. tostring(mtime)
+    local memo = _size_tag_memo[mkey]
     if memo ~= nil then return memo or nil end
     local w, h
     local ok = pcall(function()
@@ -607,10 +630,10 @@ function ImageSource.imageSizeTag(path)
     end)
     if ok and w and h and w > 0 and h > 0 then
         local tag = w .. "x" .. h
-        _size_tag_memo[path] = tag
+        _size_tag_memo[mkey] = tag
         return tag
     end
-    _size_tag_memo[path] = false
+    _size_tag_memo[mkey] = false
     return nil
 end
 
