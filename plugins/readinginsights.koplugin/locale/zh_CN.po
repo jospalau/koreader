@@ -196,6 +196,7 @@ msgid "reading time"
 msgstr "阅读时长"
 msgid "No streak dates"
 msgstr "无连续阅读日期"
+
 msgid "CalendarView not available"
 msgstr "日历视图无法使用"
 
@@ -515,8 +516,6 @@ msgid "Notify on wake when update available"
 msgstr "唤醒时如有新版本弹出提示"
 msgid "Update available"
 msgstr "发现新版本"
-msgid "Installed version"
-msgstr "已安装版本"
 msgid "Developer updates"
 msgstr "开发版更新"
 msgid "Development branch"
@@ -1461,3 +1460,18 @@ msgstr "所有章节"
 
 msgid "Draw every chapter in one row, without paging."
 msgstr "在一行中绘制所有章节，不分页。"
+
+msgid "Next 2 chapters"
+msgstr "接下来2章"
+
+msgid "Next chapters shown"
+msgstr ""
+
+msgid "How many upcoming chapters the \"Next chapter\" column's reading-time estimate covers. With \"2\", once a second chapter follows the next one, the header switches to \"Next 2 chapters\" and shows both chapters' times, e.g. \"00:10 | 00:28\". Falls back to a single chapter when there is no chapter after the next one, or no next chapter at all."
+msgstr ""
+
+msgid "1 (default)"
+msgstr ""
+
+msgid "2"
+msgstr ""

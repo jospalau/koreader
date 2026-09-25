@@ -57,13 +57,25 @@ Exposes:
                          or reset, so the caller can refresh open popups
 ]]--
 
-local ConfirmBox  = require("ui/widget/confirmbox")
-local Font        = require("ui/font")
-local InfoMessage = require("ui/widget/infomessage")
-local InputDialog = require("ui/widget/inputdialog")
-local Menu        = require("ui/widget/menu")
-local SpinWidget  = require("ui/widget/spinwidget")
-local UIManager   = require("ui/uimanager")
+local Screen          = require("device").screen
+local CheckButton     = require("ui/widget/checkbutton")
+local ConfirmBox      = require("ui/widget/confirmbox")
+local Font            = require("ui/font")
+local FrameContainer  = require("ui/widget/container/framecontainer")
+local Geom            = require("ui/geometry")
+local HorizontalSpan  = require("ui/widget/horizontalspan")
+local InfoMessage     = require("ui/widget/infomessage")
+local InputContainer  = require("ui/widget/container/inputcontainer")
+local InputDialog     = require("ui/widget/inputdialog")
+local LeftContainer   = require("ui/widget/container/leftcontainer")
+local Size            = require("ui/size")
+local SortWidget      = require("ui/widget/sortwidget")
+local SpinWidget      = require("ui/widget/spinwidget")
+local UIManager       = require("ui/uimanager")
+local VerticalSpan    = require("ui/widget/verticalspan")
+local gettext         = require("gettext")
+local C_              = gettext.pgettext
+local Tmpl            = require("ffi/util").template
 
 -- Shared modules passed in by main.lua: Locale (translations), PluginUtil
 -- (plugin dir + loader) and Prefs (G_reader_settings wrappers).
@@ -251,113 +263,303 @@ local labelFor
 
 -- Font-file discovery, so the menu can offer a pick-from-list option
 -- instead of forcing the user to type an exact file name/alias.
-local FONT_EXTENSIONS = { ttf = true, otf = true, ttc = true, otc = true }
-
--- The plugin lives at <koreader_root>/plugins/<name>.koplugin/, so two
--- levels up is KOReader's own bundled "fonts" directory.
-local function koreaderFontsDir()
-    return PluginUtil.dir .. "../../fonts/"
-end
-
--- Scans KOReader's bundled fonts dir plus the user data dir's "fonts"
--- folder (where sideloaded/custom fonts usually live) for font files.
--- Never errors: if lfs or a directory isn't available, just returns
--- whatever was found up to that point (possibly nothing).
-local function scanDirForFonts(lfs, dir, found, seen)
-    -- lfs.dir() itself normally doesn't error even for a missing directory -
-    -- the error only surfaces once the returned iterator is actually
-    -- called - so the whole loop (not just the initial lfs.dir() call)
-    -- has to run inside pcall.
-    pcall(function()
-        for entry in lfs.dir(dir) do
-            local ext = entry:match("%.([%a]+)$")
-            if ext and FONT_EXTENSIONS[ext:lower()] and not seen[entry] then
-                seen[entry] = true
-                table.insert(found, entry)
-            end
-        end
-    end)
-end
-
+--
+-- Delegates to KOReader's own "fontlist" module instead of scanning
+-- directories by hand: fontlist already knows every path KOReader itself
+-- treats as a font source (its bundle, the platform's external font dir,
+-- and any extra folders the user has added in KOReader's own font
+-- settings), so this sees exactly what KOReader and the other plugins
+-- (e.g. Book card) see -- no separate, narrower directory list to keep in
+-- sync.
 local function scanFontFiles()
-    local ok_lfs, lfs = pcall(require, "libs/libkoreader-lfs")
-    if not ok_lfs then ok_lfs, lfs = pcall(require, "lfs") end
-    if not ok_lfs then return {} end
+    local ok_fl, FontList = pcall(require, "fontlist")
+    if not ok_fl or not FontList then return {} end
+    local ok_list, list = pcall(FontList.getFontList, FontList)
+    if not ok_list or not list then return {} end
+    return list
+end
 
-    local dirs = { koreaderFontsDir() }
-    local ok_ds, DataStorage = pcall(require, "datastorage")
-    if ok_ds and DataStorage.getDataDir then
-        table.insert(dirs, DataStorage:getDataDir() .. "/fonts/")
-    end
+-- Last path component of a font entry (the entries KOReader's fontlist
+-- returns may be full paths; this plugin's own defaults are bare file
+-- names).
+local function baseName(path)
+    return (tostring(path):match("([^/\\]+)$")) or tostring(path)
+end
 
-    local found, seen = {}, {}
-    for _, dir in ipairs(dirs) do
-        -- Skip directories that don't exist/aren't readable, so we never
-        -- even attempt to iterate them.
-        local ok_attr, attr = pcall(lfs.attributes, dir, "mode")
-        if ok_attr and attr == "directory" then
-            scanDirForFonts(lfs, dir, found, seen)
-        end
-    end
-    table.sort(found, function(a, b) return a:lower() < b:lower() end)
-    return found
+-- Splits a file name into its extension-less "stem" and its extension
+-- (lowercased, no dot). Used to recognize that e.g. "NotoSans-Regular.ttf"
+-- and "NotoSans-Regular.woff2" are the *same* font shipped in different
+-- formats, not two different fonts.
+local function splitExt(name)
+    local stem, ext = name:match("^(.*)%.([^.]+)$")
+    if not stem then return name, "" end
+    return stem, ext:lower()
+end
+
+-- What to actually show the user for a stored name/path: just the font's
+-- own file-name stem, no folder path and no extension (e.g. a stored value
+-- of "/mnt/onboard/fonts/NotoSans-Bold.ttf" displays as "NotoSans-Bold").
+-- The real value (with path/extension, whatever buildFace/persist needs)
+-- is never changed by this - it's a display-only helper.
+local function displayStem(name)
+    return (splitExt(baseName(name)))
+end
+
+-- Preference order when the same font stem is found in more than one
+-- format: pick the single "best" one to show/use, instead of listing every
+-- format as a separate entry. Anything not listed here sorts after woff2.
+local EXT_RANK = { ttf = 1, ttc = 2, otf = 3, woff2 = 4, woff = 5 }
+local function extRank(ext)
+    return EXT_RANK[ext] or 99
 end
 
 -- Builds the list of selectable names for one role's picker menu: this
 -- role's own default file first, then every font file found on disk -
--- de-duplicated, in that priority order. KOReader's internal font-alias
--- keys (Font.fontmap, e.g. "tfont", "cfont") are deliberately left out of
--- this list - they're only used as silent fallbacks in buildFace, not
--- meant to be picked directly, and would just clutter/confuse the top of
--- the list with cryptic short names.
+-- de-duplicated BY FONT STEM (file name without extension, case-
+-- insensitive), so the same font shipped as e.g. .ttf/.otf/.woff/.woff2,
+-- or living in several folders (bundle, external fonts dir, user-added
+-- folders...), shows up only once - preferring .ttf, then .ttc, .otf,
+-- .woff2, .woff (EXT_RANK above), then whatever's left. KOReader's
+-- internal font-alias keys (Font.fontmap, e.g. "tfont", "cfont") are
+-- deliberately left out of this list - they're only used as silent
+-- fallbacks in buildFace, not meant to be picked directly.
+--
+-- Returns a list of { name = <value to persist>, label = <shown in menu> }.
 local function getPickerEntries(key)
     local entries, seen = {}, {}
 
     local default_file = M.getDefaultName(key)
-    table.insert(entries, default_file)
-    seen[default_file] = true
+    table.insert(entries, { name = default_file, label = displayStem(default_file) })
+    seen[displayStem(default_file):lower()] = true
 
+    -- best[stem] = { name = file, label = <display stem>, rank = extRank(ext) }
+    local best = {}
     for _, file in ipairs(scanFontFiles()) do
-        if not seen[file] then
-            seen[file] = true
-            table.insert(entries, file)
+        if type(file) == "string" and file ~= "" then
+            local base = baseName(file)
+            local stem_disp, ext = splitExt(base)
+            local stem_key = stem_disp:lower()
+            if not seen[stem_key] then
+                local rank = extRank(ext)
+                local current = best[stem_key]
+                if not current or rank < current.rank then
+                    best[stem_key] = { name = file, label = stem_disp, rank = rank }
+                end
+            end
         end
+    end
+
+    local found = {}
+    for _, e in pairs(best) do
+        table.insert(found, e)
+    end
+    table.sort(found, function(a, b)
+        local la, lb = a.label:lower(), b.label:lower()
+        if la == lb then return a.label < b.label end
+        return la < lb
+    end)
+    for _, e in ipairs(found) do
+        table.insert(entries, { name = e.name, label = e.label })
     end
 
     return entries
 end
 
--- Pick-from-list font chooser: shows every discoverable font file
--- (this role's default plus every font file found on disk) as a
--- checkable Menu, so the user usually never has to type a font name by
--- hand. The free-text InputDialog (showNameInputDialog below) is kept as
--- a separate "Custom" entry for names this scan can't find (e.g. unusual
+-- Pick-from-list font chooser ------------------------------------------
+--
+-- Shows every discoverable font file (this role's default plus every font
+-- file found on disk) as a full-screen paged list with as many fonts on
+-- each page as fit on the screen, and every font's name is drawn in that
+-- font's own typeface, so the reader sees what a font looks like before
+-- choosing it. Tapping a row selects that font and closes the list.
+--
+-- Built the same way as widgets/booklistwidget.lua: a thin subclass of
+-- KOReader's own SortWidget (title bar, page navigation footer, close
+-- button, swipe/Back handling) with reordering switched off and our own
+-- row widget.
+--
+-- The free-text InputDialog (showNameInputDialog below) is kept as a
+-- separate "Custom" entry for names this scan can't find (e.g. unusual
 -- install locations, or a KOReader font alias like "tfont"/"cfont").
+
+-- Size the font names are drawn at: KOReader's own list-item size
+-- ("smallinfofont"), i.e. the same size the plain font list used before.
+local function sampleSizeDefault()
+    local sizemap = Font.sizemap
+    return (sizemap and sizemap.smallinfofont) or 22
+end
+
+-- Sample face for one picker row. Never errors: a font file that can't be
+-- loaded simply shows its name in KOReader's default UI font.
+local function sampleFace(font_name, size)
+    local ok, face = pcall(Font.getFace, Font, font_name, size)
+    if ok and face then return face end
+    return Font:getFace("smallinfofont")
+end
+
+-- One row: KOReader's own radio button (ui/widget/checkbutton in "radio"
+-- mode: the standard "◉ " / "◯ " mark on the left, then the label) - the
+-- same widget KOReader's radio-button dialogs are built from - with the
+-- font's name drawn in that font.
+local FontPickerItem = InputContainer:extend{
+    item        = nil,
+    width       = nil,
+    height      = nil,
+    face        = nil,
+    show_parent = nil,
+}
+
+function FontPickerItem:init()
+    self.dimen = Geom:new{ x = 0, y = 0, w = self.width, h = self.height }
+
+    local button = CheckButton:new{
+        text        = self.item.text,
+        radio       = true,
+        checked     = (self.item.checked_func and self.item.checked_func()) and true or false,
+        face        = self.face or Font:getFace("smallinfofont"),
+        width       = self.width - Size.padding.default,
+        single_line = true,
+        bordersize  = 0,
+        margin      = 0,
+        padding     = 0,
+        show_parent = self.show_parent or self,
+        parent      = self.show_parent or self,
+        callback    = function()
+            if self.item.callback then
+                self.item.callback()
+            end
+        end,
+    }
+
+    self[1] = FrameContainer:new{
+        padding           = 0,
+        bordersize        = 0,
+        focusable         = true,
+        focus_border_size = Size.border.thin,
+        LeftContainer:new{
+            dimen = Geom:new{ w = self.width, h = self.height },
+            button,
+        },
+    }
+end
+
+local FontPickerWidget = SortWidget:extend{
+    modal             = true,
+    covers_fullscreen = true,
+    sort_disabled     = true,
+}
+
+function FontPickerWidget:init()
+    self.show_page = self.show_page or 1
+    SortWidget.init(self)
+
+    -- No cancel / accept buttons in the footer: same-width spacers instead,
+    -- so the page navigation stays centred (see BookListWidget:init).
+    self.page_info[1] = HorizontalSpan:new{ width = self.footer_button_width }
+    self.page_info[#self.page_info] = HorizontalSpan:new{ width = self.footer_button_width }
+    local footer_row = self.layout and self.layout[#self.layout]
+    if footer_row and #footer_row > 2 then
+        table.remove(footer_row, 1)
+        table.remove(footer_row)
+    end
+
+    self:_fitRows()
+end
+
+-- SortWidget works out for itself how many rows fit on a page; keep that
+-- as it is and just open on the page that holds the currently selected font.
+function FontPickerWidget:_fitRows()
+    local per_page = math.max(1, self.items_per_page or 1)
+    self.pages = math.max(1, math.ceil(#self.item_table / per_page))
+
+    for idx, item in ipairs(self.item_table) do
+        if item.checked_func and item.checked_func() then
+            self.show_page = math.ceil(idx / per_page)
+            break
+        end
+    end
+    if self.show_page > self.pages then self.show_page = self.pages end
+    if self.show_page < 1 then self.show_page = 1 end
+
+    self:_populateItems()
+end
+
+function FontPickerWidget:_close()
+    UIManager:close(self)
+    UIManager:setDirty(nil, "ui")
+    return true
+end
+
+function FontPickerWidget:onClose()         return self:_close() end
+function FontPickerWidget:onReturn()        return self:_close() end
+function FontPickerWidget:onCancelOrClose() return self:_close() end
+
+-- Lays out one page of rows (a copy of SortWidget's own, without the
+-- item-moving parts, with FontPickerItem in place of SortItemWidget).
+function FontPickerWidget:_populateItems()
+    self.main_content:clear()
+    self.layout = { self.layout[#self.layout] } -- keep the footer row
+
+    local size       = sampleSizeDefault()
+    local idx_offset = (self.show_page - 1) * self.items_per_page
+    local page_last  = math.min(idx_offset + self.items_per_page, #self.item_table)
+    for idx = idx_offset + 1, page_last do
+        local item = self.item_table[idx]
+        table.insert(self.main_content, VerticalSpan:new{ width = self.item_margin })
+        local row = FontPickerItem:new{
+            height      = self.item_height,
+            width       = self.item_width,
+            item        = item,
+            face        = sampleFace(item.font_name or item.text, size),
+            show_parent = self,
+        }
+        table.insert(self.layout, #self.layout, { row })
+        table.insert(self.main_content, row)
+    end
+    self:moveFocusTo(1, 1)
+
+    self.footer_page:setText(
+        Tmpl(C_("Pagination", "%1 / %2"), self.show_page, self.pages),
+        self.footer_center_width)
+    if self.pages > 1 then
+        self.footer_page:enable()
+    else
+        self.footer_page:disableWithoutDimming()
+    end
+    self.footer_left:enableDisable(self.show_page > 1)
+    self.footer_right:enableDisable(self.show_page < self.pages)
+    self.footer_first_up:enableDisable(self.show_page > 1)
+    self.footer_last_down:enableDisable(self.show_page < self.pages)
+
+    UIManager:setDirty(self, function()
+        return "ui", self.dimen
+    end)
+end
+
 local function showFontPickerMenu(key, touchmenu_instance, on_change)
     local entries = getPickerEntries(key)
     local item_table = {}
-    for _, name in ipairs(entries) do
+    local picker
+    for _idx, entry in ipairs(entries) do
         table.insert(item_table, {
-            text = name,
+            text      = entry.label,
+            font_name = entry.name,
             checked_func = function()
-                return (M.getName(key) or M.getDefaultName(key)) == name
+                local current = M.getName(key) or M.getDefaultName(key)
+                return displayStem(current):lower() == entry.label:lower()
+            end,
+            callback = function()
+                M.setName(key, entry.name)
+                picker:_close()
+                if touchmenu_instance then touchmenu_instance:updateItems() end
+                if on_change then on_change() end
             end,
         })
     end
 
-    local picker
-    picker = Menu:new{
-        title = labelFor(key) .. ": " .. _("Choose a font"),
+    picker = FontPickerWidget:new{
+        title      = labelFor(key) .. ": " .. _("Choose a font"),
         item_table = item_table,
-        single_line = true,
-        is_popout = false,
-        is_borderless = true,
-        onMenuSelect = function(_, item)
-            M.setName(key, item.text)
-            UIManager:close(picker)
-            if touchmenu_instance then touchmenu_instance:updateItems() end
-            if on_change then on_change() end
-        end,
     }
     UIManager:show(picker)
 end
@@ -452,7 +654,7 @@ local function roleSubItemTable(key, on_change)
     return {
         {
             text_func = function()
-                return _("Font") .. ": " .. (M.getName(key) or M.getDefaultName(key))
+                return _("Font") .. ": " .. displayStem(M.getName(key) or M.getDefaultName(key))
             end,
             keep_menu_open = true,
             callback = function(touchmenu_instance)
@@ -495,7 +697,7 @@ local function groupSubItemTable(keys, on_change)
             text_func = function()
                 local name = M.getName(key) or M.getDefaultName(key)
                 local size = M.getSize(key) or M.getDefaultSize(key)
-                return labelFor(key) .. ": " .. name .. " @ " .. tostring(size)
+                return labelFor(key) .. ": " .. displayStem(name) .. " @ " .. tostring(size)
             end,
             keep_menu_open = true,
             sub_item_table = roleSubItemTable(key, on_change),
