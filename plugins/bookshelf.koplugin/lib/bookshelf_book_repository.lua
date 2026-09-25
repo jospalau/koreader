@@ -4474,7 +4474,7 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
         -- actually reorders. Only written when that key is in the priority.
         for _i, e in ipairs(entries) do
             if e.attr and e.attr.mode == "file" then
-                local pct, status, rating, page_count, _page_num, pub_date, modified_date, words, grrating, grvotes = Repo.readProgress(e.fp)
+                local pct, status, rating, page_count, _page_num, _page_src, pub_date, modified_date, words, grrating, grvotes = Repo.readProgress(e.fp)
                 e._pct    = pct
                 e._status = status
                 if needs.rating     then e.rating     = rating     end
