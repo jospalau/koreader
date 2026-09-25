@@ -4482,6 +4482,7 @@ end
 
         local function restore_focus()
             self._mbr_confirm_pending = nil
+            self:_swapShelvesInPlace()
         end
 
         -- The confirm box itself opens 500ms after the tap, e.g. so the
