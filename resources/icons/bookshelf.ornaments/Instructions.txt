@@ -1,0 +1,25 @@
+Autumn ornament pack for Bookshelf (KOReader)
+=============================================
+
+12 autumn ornaments to sit on your shelves between your books. They are
+drawn to suit both colour and black and white e-ink screens.
+
+Installing
+----------
+1. Connect your e-reader to your computer.
+2. Open the koreader folder, then icons, then bookshelf.ornaments.
+   (On a Kindle this is /koreader/icons/bookshelf.ornaments.)
+   If bookshelf.ornaments is not there yet, create it.
+3. Copy the whole Autumn folder from this zip into bookshelf.ornaments,
+   so you end up with bookshelf.ornaments/Autumn/Owl.png and so on.
+4. On the e-reader, open the Bookshelf menu and go to
+   Background and colours > Ornaments.
+5. Tap the Autumn tab and make sure the pack is switched on.
+
+Ornaments stand in the gaps on spine shelves. From the Ornaments screen
+you can tap any ornament to switch it off or on, or switch the whole pack
+off and on with the button at the bottom.
+
+Needs Bookshelf v5.2 or later (earlier versions do not read ornament packs).
+
+Illustrations are AI generated and hand tweaked.

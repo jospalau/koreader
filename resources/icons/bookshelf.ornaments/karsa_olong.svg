@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- bookshelf:seed=7 -->
+<!-- A Teblor warrior, blood-oil skin, stone sword. -->
+<!-- bookshelf:overhang=0 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 106">
+
+  <!-- ground shadow -->
+  <ellipse cx="30" cy="97" rx="17" ry="3.4" fill="#211d1b"/>
+
+  <!-- stone sword, slung across the back -->
+  <path d="M44 20 L52 12 L54 14 L46 22 Z"
+        fill="#8f8778"
+        stroke="#332f28"
+        stroke-width="1"
+        stroke-linejoin="round"/>
+  <path d="M14 62 L44 24"
+        stroke="#726a5c"
+        stroke-width="5.5"
+        stroke-linecap="square"/>
+  <path d="M14 62 L44 24"
+        stroke="#a89c86"
+        stroke-width="2"
+        stroke-linecap="square"/>
+  <path d="M12 58 L18 66"
+        stroke="#4c3a24"
+        stroke-width="4"
+        stroke-linecap="round"/>
+
+  <!-- rear fur mantle -->
+  <path d="M17 52
+           C13 63 12 78 15 92
+           L23 95
+           L30 80
+           L37 95
+           L45 92
+           C48 76 47 61 43 52 Z"
+        fill="#5c3b28"
+        stroke="#241811"
+        stroke-width="1.3"
+        stroke-linejoin="round"/>
+
+  <!-- braided topknot -->
+  <path d="M27 12 C26 8 27 5 30 4 C33 5 34 8 33 12 Z"
+        fill="#161311"/>
+  <path d="M29 4 L28 16 M31 4 L32 16"
+        stroke="#050403"
+        stroke-width="1"/>
+
+  <!-- head -->
+  <path d="M22 30
+           C22 21 25 16 30 16
+           C35 16 38 21 38 30
+           L36 41
+           L30 45
+           L24 41 Z"
+        fill="#9c3d2c"
+        stroke="#2e130c"
+        stroke-width="1.2"
+        stroke-linejoin="round"/>
+
+  <!-- brow ridge / tattoo lines -->
+  <path d="M23 27 C26 25 34 25 37 27"
+        fill="none"
+        stroke="#5c1710"
+        stroke-width="1"/>
+  <path d="M25 35 L23 40 M35 35 L37 40"
+        fill="none"
+        stroke="#5c1710"
+        stroke-width="1"/>
+
+  <!-- neck -->
+  <path d="M25 42 H35 V54 H25 Z"
+        fill="#8f3627"
+        stroke="#2e130c"
+        stroke-width="1"/>
+
+  <!-- torso, bare chest with hide harness -->
+  <path d="M18 50
+           C23 46 37 46 42 50
+           L46 74
+           L14 74 Z"
+        fill="#a5432f"
+        stroke="#2e130c"
+        stroke-width="1.3"
+        stroke-linejoin="round"/>
+
+  <!-- hide harness straps -->
+  <path d="M20 50 L28 73" stroke="#3a2416" stroke-width="2.4" fill="none"/>
+  <path d="M40 50 L32 73" stroke="#3a2416" stroke-width="2.4" fill="none"/>
+
+  <!-- waist wrap -->
+  <path d="M14 70 H46 V76 H14 Z"
+        fill="#6b4a2c"
+        stroke="#241811"
+        stroke-width="1"/>
+
+  <!-- left arm, corded -->
+  <path d="M18 52
+           C12 57 10 66 13 73
+           L18 72
+           L23 57 Z"
+        fill="#9c3d2c"
+        stroke="#2e130c"
+        stroke-width="1.2"
+        stroke-linejoin="round"/>
+
+  <!-- right arm -->
+  <path d="M42 52
+           C48 57 50 66 47 73
+           L42 72
+           L37 57 Z"
+        fill="#9c3d2c"
+        stroke="#2e130c"
+        stroke-width="1.2"
+        stroke-linejoin="round"/>
+
+  <!-- bracers -->
+  <path d="M13 68 H19 V73 H13 Z" fill="#4c3a24" stroke="#241811" stroke-width="0.8"/>
+  <path d="M41 68 H47 V73 H41 Z" fill="#4c3a24" stroke="#241811" stroke-width="0.8"/>
+
+  <!-- hands -->
+  <ellipse cx="16" cy="73" rx="2.6" ry="3.1" fill="#8f3627" stroke="#2e130c" stroke-width="0.9"/>
+  <ellipse cx="44" cy="73" rx="2.6" ry="3.1" fill="#8f3627" stroke="#2e130c" stroke-width="0.9"/>
+
+  <!-- legs, hide wraps -->
+  <path d="M20 74 L17 93 L25 95 L28 77 Z"
+        fill="#5c4530"
+        stroke="#241811"
+        stroke-width="1.2"/>
+  <path d="M32 77 L35 95 L43 93 L40 74 Z"
+        fill="#5c4530"
+        stroke="#241811"
+        stroke-width="1.2"/>
+
+  <!-- bindings -->
+  <path d="M18 84 L25 85 M35 85 L42 84"
+        stroke="#241811"
+        stroke-width="1"/>
+
+  <!-- bare feet, wrapped -->
+  <path d="M16 92 L25 93 L26 98 H15 Z"
+        fill="#3d2c1c"
+        stroke="#161010"
+        stroke-width="1"/>
+  <path d="M34 93 L43 92 L44 98 H33 Z"
+        fill="#3d2c1c"
+        stroke="#161010"
+        stroke-width="1"/>
+
+</svg>
