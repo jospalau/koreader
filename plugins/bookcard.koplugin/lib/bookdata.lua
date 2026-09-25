@@ -36,7 +36,13 @@ sidecar, streaks, reader type) and finishes the derived numbers.
 card fields:
   file, title, authors, series, series_index
   percent (0..100), current_page, total_pages, status ("complete" / ...), pages_left
+  chapter_pages_left  pages left in the CURRENT chapter (live document only,
+                       via ui.toc:getChapterPagesLeft, falling back to the
+                       whole book's pages left when there's no usable
+                       chapter TOC data - nil otherwise)
   avg_time (secs/page), total_time (secs), days_read, pages_read
+  today_time (secs read TODAY, this book only, per-page capped like total_time)
+  all_books_time (secs read TODAY across EVERY book, same per-page cap)
   started_ts, last_read_ts, finished_date
   streak_days, streak_weeks, hour_bucket, book_id
   highlights_count
@@ -46,7 +52,7 @@ card fields:
   cover_file / has_cover
  derived by finalize():
   finished, time_left_secs, daily_avg_secs, daily_avg_pages, pages_per_min,
-  est_finish_ts, finished_ts, span_days
+  est_finish_ts, finished_ts, span_days, chapter_time_left_secs
 ]]--
 
 local deps = ...
@@ -344,6 +350,19 @@ local function fillBookStats(conn, card, book_id)
 
     r = StatsDb.first(conn, string.format("SELECT pages FROM book WHERE id = %d", book_id), 1)
     if r and num(r[1]) and num(r[1]) > 0 then card.stats_pages = num(r[1]) end
+
+    -- Today only, this book: same per-page cap as the all-time total above,
+    -- just restricted to today's local date.
+    r = StatsDb.first(conn, string.format([[
+        SELECT sum(durations)
+        FROM (
+            SELECT min(sum(duration), %d) AS durations
+            FROM page_stat
+            WHERE id_book = %d
+              AND date(start_time, 'unixepoch', 'localtime') = date('now', 'localtime')
+            GROUP BY page
+        )]], maxSec(), book_id), 1)
+    if r then card.today_time = num(r[1]) end
 end
 
 -- ---- streaks (Reading Insights' Data.calculateStreaks) ---------------------
@@ -414,6 +433,18 @@ end
 -- Streaks span all books; the reader type (part of day) is scoped to this
 -- book alone (card.book_id), when known.
 function M.readGlobal(conn, card)
+    -- Today only, across every book (same per-page cap as a single book's
+    -- today_time, just not restricted to id_book).
+    local total_row = StatsDb.first(conn, string.format([[
+        SELECT sum(durations)
+        FROM (
+            SELECT min(sum(duration), %d) AS durations
+            FROM page_stat
+            WHERE date(start_time, 'unixepoch', 'localtime') = date('now', 'localtime')
+            GROUP BY id_book, page
+        )]], maxSec()), 1)
+    if total_row then card.all_books_time = num(total_row[1]) end
+
     local rows = StatsDb.all(conn,
         "SELECT DISTINCT date(start_time, 'unixepoch', 'localtime') AS d FROM page_stat_data ORDER BY d DESC", 1)
     local dates = {}
@@ -517,6 +548,14 @@ function M.finalize(card)
         end
     end
 
+    -- Time left in the current chapter: same pages-left * avg_time formula
+    -- as the whole-book figure above, just fed by chapter_pages_left
+    -- instead of pages_left (see collectLive).
+    card.chapter_time_left_secs = nil
+    if not card.finished and card.chapter_pages_left and card.avg_time then
+        card.chapter_time_left_secs = math.max(0, card.chapter_pages_left * card.avg_time)
+    end
+
     -- Day the book was finished: the "finished" date in the book's own
     -- status if it has one, otherwise the last day it was read.
     card.finished_ts = nil
@@ -579,6 +618,23 @@ function M.collectLive(ui)
     local ok_left, pages_left = pcall(doc.getTotalPagesLeft, doc, pageno)
     if ok_left then card.pages_left = num(pages_left) end
     if live_avg and live_avg > 0 then card.avg_time = live_avg end
+
+    -- Pages left in the CURRENT chapter: the same call (with the same
+    -- second argument) and fallback Reading Insights' ChapterInfo.
+    -- getChapterPagesLeft uses - falls back to the whole book's pages
+    -- left when the TOC has no usable chapter data. Only available with
+    -- a live document (ui.toc/ui.document), so this - and the time it
+    -- derives in finalize() - stays nil for a card rebuilt from the
+    -- sidecar/statistics DB with no book open.
+    if ui.toc and ui.toc.getChapterPagesLeft then
+        local ok_ch, chapter_left = pcall(ui.toc.getChapterPagesLeft, ui.toc, pageno, true)
+        if ok_ch and chapter_left ~= nil then
+            card.chapter_pages_left = num(chapter_left)
+        elseif ui.document then
+            local ok_doc, doc_left = pcall(ui.document.getTotalPagesLeft, ui.document, pageno)
+            if ok_doc then card.chapter_pages_left = num(doc_left) end
+        end
+    end
 
     -- Highlight count + a random quote: from the live, in-memory settings
     -- (most current).

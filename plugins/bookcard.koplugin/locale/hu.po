@@ -150,6 +150,12 @@ msgstr "Olvasási idő"
 msgid "Time Left"
 msgstr "Hátralévő idő"
 
+msgid "Ch. Pages Left"
+msgstr "Fej. oldal hátra"
+
+msgid "Ch. Time Left"
+msgstr "Fej. idő hátra"
+
 msgid "Progress"
 msgstr "Haladás"
 
@@ -482,6 +488,7 @@ msgstr "Magas"
 
 msgid "Solid"
 msgstr "Teljes"
+
 msgid "Daily Avg (pages)"
 msgstr "Napi átlag (oldal)"
 
@@ -567,7 +574,7 @@ msgid "Stop copying to that extra folder"
 msgstr "Extra mappába másolás leállítása"
 
 msgid "Also save as PocketBook power-off / boot logo"
-msgstr "Mentés PocketBook kikapcsolási / indítási logóként is"
+msgstr "Mentés PocketBook kikapcsolási / boot logóként is"
 
 msgid "Save image now"
 msgstr "Kép mentése most"
@@ -602,3 +609,12 @@ msgstr "Mentés könyv megnyitásakor is"
 
 msgid "Image format"
 msgstr "Képformátum"
+
+msgid "Read Today"
+msgstr "Ma olvasva"
+
+msgid "Read Today (This Book)"
+msgstr "Ma olvasva (ez a könyv)"
+
+msgid "Read Today (All Books)"
+msgstr "Ma olvasva (minden könyv)"
