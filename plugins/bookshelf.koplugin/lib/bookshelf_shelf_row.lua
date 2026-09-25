@@ -581,8 +581,7 @@ function ShelfRow.new(opts)
                 end
             end
             local folder_bulk = folder_k > 0
-            local folder_cur  = opts.selected_filepath and folder_fp
-                                and folder_fp == opts.selected_filepath or false
+            local folder_cur = false
             local folder_finished
             if show_finished and show_folder_badge and folder_fpaths then
                 folder_finished = finished_count(folder_fpaths, true)
