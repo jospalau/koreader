@@ -4510,7 +4510,7 @@ end
                     UIManager:nextTick(proceed)
                 end,
                 cancel_callback = restore_focus,
-            })
+            }, "full")
         end)
         return
     end

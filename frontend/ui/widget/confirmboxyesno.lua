@@ -236,12 +236,6 @@ function ConfirmBoxYesNo:onShow()
     end
 end
 
-function ConfirmBoxYesNo:onCloseWidget()
-    UIManager:setDirty(nil, function()
-        return "ui", self.movable.dimen
-    end)
-end
-
 function ConfirmBoxYesNo:onClose()
     -- Call cancel_callback, parent may expect a choice
     self.cancel_callback()
