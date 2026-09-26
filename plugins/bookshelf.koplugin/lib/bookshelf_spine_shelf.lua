@@ -687,7 +687,7 @@ local function _heightJitterFrac(key)
     key = key or ""
     local h = 5381
     for i = 1, #key do h = (h * 33 + key:byte(i)) % 16777213 end
-    local steps = (h % 41) - 20
+    local steps = (h % 181) - 90
     return 1 + steps / 500
 end
 
