@@ -4494,7 +4494,7 @@ end
 
         local function restore_focus()
             self._mbr_confirm_pending = nil
-            UIManager:setDirty(self, function() return "ui", nil, self.dithered end)
+            UIManager:setDirty(self, function() return "full", nil, self.dithered and not self:_isSpineMode() end)
             -- self:_swapShelvesInPlace()
         end
 
