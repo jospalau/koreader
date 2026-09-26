@@ -679,6 +679,18 @@ local function _fallbackLook(label)
     return { r = r, g = g, b = b, aspect = nil, sampled = false }
 end
 
+-- _heightJitterFrac(key) -> multiplier in [0.96, 1.04]
+-- Deterministic per book (same hash style as _fallbackLook) so a spine's
+-- height stays fixed across repaints/scrolls, but varies slightly book to
+-- book for a less uniform, more "real shelf" look.
+local function _heightJitterFrac(key)
+    key = key or ""
+    local h = 5381
+    for i = 1, #key do h = (h * 33 + key:byte(i)) % 16777213 end
+    local steps = (h % 41) - 20
+    return 1 + steps / 500
+end
+
 local function _aspectFromSizetag(tag)
     if type(tag) ~= "string" then return nil end
     local w, h = tag:match("^(%d+)x(%d+)$")
@@ -3353,6 +3365,10 @@ function SpineShelf.plan(items, opts)
         _t_look = _t_look + (_gettime() - _tl)
         local aspect = look.aspect
         local h = SpineLayout.spineHeight(budget, aspect)
+        local jitter_key = (bk and bk.filepath) or (src and src.filepath) or label
+        h = math.floor(h * _heightJitterFrac(jitter_key) + 0.5)
+        if h < 1 then h = 1 end
+        if h > budget then h = budget end
         local _tf = _gettime()
         local fav = bk.filepath ~= nil and _isFavourite(bk.filepath)
         _t_fav = _t_fav + (_gettime() - _tf)
