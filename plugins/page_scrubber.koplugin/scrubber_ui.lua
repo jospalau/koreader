@@ -50,9 +50,10 @@ local function _(text)
     return _dict[text] or text
 end
 
-local GridSimpleView  = require("grid_simple_view")
-local ProgressSlider  = require("progress_slider")
-local Screen          = Device.screen
+local GridSimpleView    = require("grid_simple_view")
+local ProgressSlider    = require("progress_slider")
+local ScrubberWallpaper = require("scrubber_wallpaper")
+local Screen            = Device.screen
 
 local function flatten_keys(...)
     local keys = {}
@@ -89,6 +90,52 @@ end
 
 local function paintRoundRect(bb, x, y, w, h, r, color)
     paintCornerRect(bb, x, y, w, h, r, color, true, true, true, true)
+end
+
+-- Algoritmo de división en franjas horizontales exactas estilo Bookshelf
+local function _roundedSpans(x, y, w, h, r)
+    r = math.min(r or 0, math.floor(w / 2), math.floor(h / 2))
+    if r <= 0 then
+        return { { x = x, y = y, w = w, h = h } }
+    end
+
+    local spans = {}
+    for i = 0, r - 1 do
+        local dy = r - i - 0.5
+        local inset = math.floor(r - math.sqrt(r * r - dy * dy) + 0.5)
+        local sw = w - inset * 2
+        if sw > 0 then
+            spans[#spans + 1] = { x = x + inset, y = y + i,         w = sw, h = 1 }
+            spans[#spans + 1] = { x = x + inset, y = y + h - 1 - i, w = sw, h = 1 }
+        end
+    end
+    local mid_h = h - r * 2
+    if mid_h > 0 then
+        spans[#spans + 1] = { x = x, y = y + r, w = w, h = mid_h }
+    end
+    return spans
+end
+
+-- Tintado nativo por C (blendRectRGB32) con cero alocación de memoria
+local function paintTranslucentPill(bb, x, y, w, h, r, strength)
+    if not bb or w <= 0 or h <= 0 then return end
+    strength = strength or 0.80 -- 80% de blanco para asegurar contraste
+    local alpha = math.floor(255 * strength + 0.5)
+
+    local no_cbb = type(bb.canUseCbb) == "function" and not bb:canUseCbb()
+    local opaque = alpha >= 255 or not bb.blendRectRGB32 or no_cbb
+
+    if opaque then
+        paintRoundRect(bb, x, y, w, h, r, Blitbuffer.COLOR_WHITE)
+        return
+    end
+
+    local tint = Blitbuffer.ColorRGB32(255, 255, 255, alpha)
+    local spans = _roundedSpans(x, y, w, h, r)
+    for i = 1, #spans do
+        local s = spans[i]
+        bb:blendRectRGB32(s.x, s.y, s.w, s.h, tint)
+    end
 end
 
 local function paintTopSquareBottomRounded(bb, x, y, w, h, r, color)
@@ -137,6 +184,28 @@ local function paintTripleText(tw, bb, x, y)
     tw:paintTo(bb, x, y + 1)
 end
 
+local function paintTextWithHalo(tw, bb, x, y, halo_radius)
+    local r = halo_radius or 1
+    local max_r = math.max(1, math.floor(r + 0.5))
+    local orig_fg = tw.fgcolor
+    tw.fgcolor = Blitbuffer.COLOR_WHITE
+
+    -- Barrido circular denso: cubre diagonales e intermedias eliminando huecos y pixelado
+    local r_sq = max_r * max_r + max_r
+    for dx = -max_r, max_r do
+        for dy = -max_r, max_r do
+            if dx ~= 0 or dy ~= 0 then
+                if (dx * dx + dy * dy) <= r_sq then
+                    tw:paintTo(bb, x + dx, y + dy)
+                end
+            end
+        end
+    end
+
+    tw.fgcolor = orig_fg
+    tw:paintTo(bb, x, y)
+end
+
 local function processTile(tile, req_w, req_h)
     if not tile or not tile.bb then return nil end
     -- Protege la lectura de dimensiones contra buffers C en estado transitorio
@@ -147,7 +216,12 @@ local function processTile(tile, req_w, req_h)
         local ok, scaled = pcall(function() return tile.bb:scale(req_w, req_h) end)
         if ok and scaled then return { bb = scaled, is_scaled = true } end
     end
-    return { bb = tile.bb, is_scaled = false }
+    
+    -- Aislar memoria: copiamos el buffer nativo para evitar SIGSEGV si el motor limpia su caché
+    local ok_cp, copied = pcall(function() return tile.bb:copy() end)
+    if ok_cp and copied then return { bb = copied, is_scaled = true } end
+    
+    return nil
 end
 
 local function isDocRTL(ui)
@@ -234,7 +308,19 @@ function PageScrubber:init()
         end
     end
     self._is_comic = is_comic
-    self.is_rtl = isDocRTL(ui)
+    local manual_rtl = nil
+    if ui and ui.doc_settings then
+        manual_rtl = ui.doc_settings:readSetting("page_scrubber_rtl")
+    end
+    if manual_rtl == nil and G_reader_settings then
+        manual_rtl = G_reader_settings:readSetting("page_scrubber_rtl")
+    end
+
+    if manual_rtl ~= nil then
+        self.is_rtl = (manual_rtl == true)
+    else
+        self.is_rtl = isDocRTL(ui)
+    end
 
     local scale_factor = self.ui_scale or 1
     self.S = function(val)
@@ -283,6 +369,10 @@ function PageScrubber:init()
     self._cached_notes = nil
     self._page_data   = {}
     
+    -- Búfer de precarga deslizante estilo Zen OS (hasta 8 miniaturas en RAM)
+    self._tile_cache = {}
+    self._max_cached_tiles = 8
+    
     self._is_busy     = true
     self._tasks_in_flight = 0
     self._pending_grid_update = false
@@ -315,6 +405,7 @@ function PageScrubber:init()
     local top_h     = S(58)
     local top_bar_y = 0
     self._top_bar_dimen = Geom:new{ x = 0, y = top_bar_y, w = sw, h = top_h }
+    self._top_bar_bg_color = 0xFFEAEAEA -- Gris tenue (92% luminosidad)
 
     self.font_ch    = Font:getFace("cfont", S_GRANDE)
     self.font_title = Font:getFace("cfont", S_GRANDE) 
@@ -392,14 +483,14 @@ function PageScrubber:init()
     self.tw_ch_l      = createSafeIcon("\u{EBAD}", "skip-back.svg", S(32))
     self.tw_ch_r      = createSafeIcon("\u{EBAC}", "skip-forward.svg", S(32))
 
-    local font_ctrl_carets = Font:getFace("cfont", S(20))
+    local ctrl_icon_sz = S(24)
     local mark_icon_sz = S(42) 
     
-    self.tw_ctrl_prev = TextWidget:new{ text = "\u{F0D9}", face = font_ctrl_carets, fgcolor = Blitbuffer.COLOR_BLACK }
+    self.tw_ctrl_prev = createSafeIcon("‹", "chevron-left.svg", ctrl_icon_sz)
     self.icon_mark_empty = createSafeIcon("\u{F097}", "gravity-ui--bookmark.svg", mark_icon_sz)
     self.icon_mark_filled = createSafeIcon("\u{F02E}", "gravity-ui--bookmark-fill.svg", mark_icon_sz)
     self.tw_ctrl_mark = self.icon_mark_filled 
-    self.tw_ctrl_next = TextWidget:new{ text = "\u{F0DA}", face = font_ctrl_carets, fgcolor = Blitbuffer.COLOR_BLACK }
+    self.tw_ctrl_next = createSafeIcon("›", "chevron-right.svg", ctrl_icon_sz)
 
     local tab_icon_sz = S(24)
     self.icon_tab_bm   = createSafeIcon("\u{E7B9}", "majesticons--book.svg", tab_icon_sz)
@@ -572,7 +663,7 @@ function PageScrubber:init()
 
     self.ctrl_y_pos = current_y
 
-    local side_sz = S(30)
+    local side_sz = S(36)
     local ctrl_sp = S(10)
     local total_ctrl_w = side_sz * 2 + mark_sz + ctrl_sp * 2
     local ctrl_x = math.floor((sw - total_ctrl_w) / 2)
@@ -580,9 +671,9 @@ function PageScrubber:init()
     self._ctrl_row_x1 = ctrl_x + total_ctrl_w
     self._ctrl_row_h = mark_sz
 
-    self._ctrl_prev_dimen = Geom:new{ x = ctrl_x, y = self.ctrl_y_pos + math.floor((mark_sz - side_sz)/2), w = side_sz, h = side_sz }
+    self._ctrl_prev_dimen = Geom:new{ x = ctrl_x, y = self.ctrl_y_pos, w = side_sz, h = side_sz }
     self._ctrl_mark_dimen = Geom:new{ x = ctrl_x + side_sz + ctrl_sp, y = self.ctrl_y_pos, w = mark_sz, h = mark_sz }
-    self._ctrl_next_dimen = Geom:new{ x = ctrl_x + side_sz + mark_sz + ctrl_sp * 2, y = self.ctrl_y_pos + math.floor((mark_sz - side_sz)/2), w = side_sz, h = side_sz }
+    self._ctrl_next_dimen = Geom:new{ x = ctrl_x + side_sz + mark_sz + ctrl_sp * 2, y = self.ctrl_y_pos, w = side_sz, h = side_sz }
 
     local g6_btn_w = S(50)
     self._gsix_prev_dimen = Geom:new{ x = pad * 2, y = self.ctrl_y_pos, w = g6_btn_w, h = mark_sz }
@@ -625,27 +716,85 @@ function PageScrubber:init()
     end
 
     if not self._grid_disabled then
-        -- Retraso inteligente: 500ms para cómics pesados, 50ms para EPUBs.
-        -- Permite que el motor gráfico asiente la lectura antes de pedir miniaturas.
-        local start_delay = self._is_comic and 0.5 or 0.05
-        UIManager:scheduleIn(start_delay, function()
-            if not self._closing then
-                if self.ui and self.ui.thumbnail and self.ui.thumbnail.tidyCache then
-                    pcall(function() self.ui.thumbnail:tidyCache() end)
-                end
-                self:_updateGridPages()
-            end
-        end)
+        if self._is_comic then
+            UIManager:scheduleIn(0.35, function()
+                if not self._closing then self:_updateGridPages() end
+            end)
+        else
+            UIManager:nextTick(function()
+                if not self._closing then self:_updateGridPages() end
+            end)
+        end
     end
 end
 
 function PageScrubber:_freeTile(slot)
-    if slot and slot.is_scaled and slot.tile_bb then
-        pcall(function() slot.tile_bb:free() end)
-    end
+    -- Los buffers ahora son gestionados por self._tile_cache
     if slot then
         slot.tile_bb = nil
         slot.is_scaled = false
+    end
+end
+
+function PageScrubber:_cacheTile(page, bb, is_scaled, w, h)
+    if not page or not bb then return end
+    self._tile_cache[page] = {
+        bb = bb,
+        is_scaled = is_scaled,
+        w = w,
+        h = h,
+        last_used = os.clock(),
+    }
+
+    -- Poda LRU: mantener el consumo de memoria acotado
+    local count = 0
+    local oldest_page = nil
+    local oldest_time = math.huge
+
+    for p, item in pairs(self._tile_cache) do
+        count = count + 1
+        -- Proteger las páginas actualmente en pantalla o adyacentes inmediatas
+        local is_protected = (math.abs(p - self._cur_page) <= 1)
+        if not is_protected and item.last_used < oldest_time then
+            oldest_time = item.last_used
+            oldest_page = p
+        end
+    end
+
+            if count > (self._max_cached_tiles or 8) and oldest_page then
+                self._tile_cache[oldest_page] = nil
+            end
+
+end
+
+function PageScrubber:_preloadNeighborPages()
+    if self._closing or self._grid_disabled then return end
+    local thumbnail = self.ui and self.ui.thumbnail
+    if not thumbnail or not thumbnail.getPageThumbnail then return end
+
+    local expected_req_w = (self._view_mode == "grid") and self._grid_item_w or self._thumb_req_split_w
+    local expected_req_h = (self._view_mode == "grid") and self._grid_item_h or self._thumb_req_split_h
+    if not expected_req_w or not expected_req_h then return end
+
+    -- En Simple Grid se precargan [P+1, P-1, P+2, P-2]. En modo Grid [P+2, P-2].
+    local offsets = (self._view_mode == "grid") and { 2, -2, 3, -3 } or { 1, -1, 2, -2 }
+    if self.is_rtl then
+        for i = 1, #offsets do offsets[i] = -offsets[i] end
+    end
+
+    local preload_batch = "page_scrubber_preload_" .. tostring(self._grid_instance_id)
+
+    for _, off in ipairs(offsets) do
+        local target_p = self._cur_page + off
+        if target_p >= 1 and target_p <= self._total_pages and not self._tile_cache[target_p] then
+            thumbnail:getPageThumbnail(target_p, expected_req_w, expected_req_h, preload_batch, function(tile, resp_batch)
+                if self._closing or not tile or not tile.bb then return end
+                local processed = processTile(tile, expected_req_w, expected_req_h)
+                if processed and processed.bb then
+                    self:_cacheTile(target_p, processed.bb, processed.is_scaled, expected_req_w, expected_req_h)
+                end
+            end)
+        end
     end
 end
 
@@ -1030,6 +1179,110 @@ function PageScrubber:onSelect()
     return true
 end
 
+function PageScrubber:_removeBookmarkDirectly(target_page)
+    local p = tonumber(target_page)
+    if not p then return false end
+    local ui = self.ui
+    local removed = false
+
+    -- 1. Intentar mediante la API de ReaderBookmark si existe
+    if ui.bookmark then
+        local bk = ui.bookmark
+        if type(bk.removeBookmark) == "function" then
+            pcall(function() bk:removeBookmark(p); removed = true end)
+        end
+        if not removed and type(bk.getBookmarkIndex) == "function" then
+            local ok, idx = pcall(function() return bk:getBookmarkIndex(p) end)
+            if ok and idx then
+                if type(bk.removeItemByIndex) == "function" then
+                    pcall(function() bk:removeItemByIndex(idx); removed = true end)
+                elseif type(bk.removeBookmarkByIndex) == "function" then
+                    pcall(function() bk:removeBookmarkByIndex(idx); removed = true end)
+                end
+            end
+        end
+    end
+
+    -- 2. Limpieza en la lista unificada de anotaciones
+    if ui.annotation and type(ui.annotation.annotations) == "table" then
+        local anns = ui.annotation.annotations
+        for i = #anns, 1, -1 do
+            local item = anns[i]
+            local item_p = self:_getNumericalPage(item)
+            if item_p and math.floor(item_p) == p then
+                local is_bm = (item.bookmark == true) or (item.type == "bookmark") or (not item.drawer and not item.highlight and not item.note)
+                if is_bm then
+                    table.remove(anns, i)
+                    removed = true
+                end
+            end
+        end
+        if removed and type(ui.annotation.saveAnnotations) == "function" then
+            pcall(function() ui.annotation:saveAnnotations() end)
+        end
+    end
+
+    -- 3. Limpieza en tablas secundarias de bookmarks
+    if ui.bookmark then
+        local bk = ui.bookmark
+        local lists = { bk.bookmarks, bk._bookmarks }
+        for _, list in ipairs(lists) do
+            if type(list) == "table" then
+                for i = #list, 1, -1 do
+                    local item = list[i]
+                    local item_p = self:_getNumericalPage(item) or tonumber(item)
+                    if item_p and math.floor(item_p) == p then
+                        table.remove(list, i)
+                        removed = true
+                    end
+                end
+            end
+        end
+        if type(bk.saveBookmarks) == "function" then
+            pcall(function() bk:saveBookmarks() end)
+        elseif type(bk.onSaveSettings) == "function" then
+            pcall(function() bk:onSaveSettings() end)
+        end
+    end
+
+    -- 4. Limpieza en las propiedades del documento y doc_settings
+    if ui.doc_props and type(ui.doc_props.bookmarks) == "table" then
+        local dp_bms = ui.doc_props.bookmarks
+        for i = #dp_bms, 1, -1 do
+            local item = dp_bms[i]
+            local item_p = self:_getNumericalPage(item) or tonumber(item)
+            if item_p and math.floor(item_p) == p then
+                table.remove(dp_bms, i)
+                removed = true
+            end
+        end
+    end
+
+    if ui.doc_settings and type(ui.doc_settings.readSetting) == "function" then
+        local set_bms = ui.doc_settings:readSetting("bookmarks")
+        if type(set_bms) == "table" then
+            local mod = false
+            for i = #set_bms, 1, -1 do
+                local item = set_bms[i]
+                local item_p = self:_getNumericalPage(item) or tonumber(item)
+                if item_p and math.floor(item_p) == p then
+                    table.remove(set_bms, i)
+                    mod = true
+                    removed = true
+                end
+            end
+            if mod and type(ui.doc_settings.saveSetting) == "function" then
+                pcall(function()
+                    ui.doc_settings:saveSetting("bookmarks", set_bms)
+                    if ui.doc_settings.flush then ui.doc_settings:flush() end
+                end)
+            end
+        end
+    end
+
+    return removed
+end
+
 function PageScrubber:_safeBookmarkToggle(target_page)
     if self._closing or self._toggling_bm then return end
     self._toggling_bm = true
@@ -1056,7 +1309,7 @@ function PageScrubber:_safeBookmarkToggle(target_page)
                 return
             end
 
-            -- Disparamos el evento nativo de KOReader que guarda y actualiza el marcador
+            -- Disparamos el evento nativo de KOReader que guarda y actualiza el marcador real
             pcall(function() self.ui:handleEvent(Event:new("ToggleBookmark")) end)
 
             UIManager:scheduleIn(0.25, function()
@@ -1064,7 +1317,7 @@ function PageScrubber:_safeBookmarkToggle(target_page)
                     self._toggling_bm = false
                     return
                 end
-                -- Si se desmarcó una página remota de la lista, devolvemos crengine a la página en vista
+                -- Si se desmarcó/marcó una página remota, devolvemos crengine a la página en vista
                 if origin_view_page and origin_view_page ~= p then
                     if self.ui.view and self.ui.view.state then
                         self.ui.view.state.page = -1
@@ -1126,78 +1379,118 @@ function PageScrubber:_findNextBookmark()
 end
 
 function PageScrubber:_getDisplayPageInfo(raw_page)
+    local fallback_p = tostring(raw_page)
     local ui = self.ui
-    if not ui then return raw_page, self._total_pages end
+    if not ui then return fallback_p, self._total_pages end
 
-    if ui.pagemap and type(ui.pagemap.wantsPageLabels) == "function" and ui.pagemap:wantsPageLabels() then
-        -- 1. Total estable
-        if not self._stable_total then
-            if type(ui.pagemap.getLastPageLabel) == "function" then
-                local ok, l = pcall(ui.pagemap.getLastPageLabel, ui.pagemap, true)
-                if ok and l and l ~= "" then self._stable_total = tonumber(l) or l end
-            end
-            if not self._stable_total and type(ui.pagemap.getCurrentPageLabel) == "function" then
-                local ok, _, _, count = pcall(ui.pagemap.getCurrentPageLabel, ui.pagemap)
-                if ok and count and count > 0 then self._stable_total = count end
-            end
+    local pagemap = ui.pagemap
+    local doc = ui.document
+
+    -- Detectar si el documento posee páginas estables (activadas o nativas)
+    local has_labels = false
+    if pagemap then
+        if type(pagemap.wantsPageLabels) == "function" and pagemap:wantsPageLabels() then
+            has_labels = true
+        elseif type(pagemap.hasPageLabels) == "function" and pagemap:hasPageLabels() then
+            has_labels = true
         end
-        local disp_total = self._stable_total or self._total_pages
-
-        -- 2. Si la página consultada es el origen exacto donde se abrió el scrubber, usar siempre la etiqueta activa
-        if raw_page == self._origin_page then
-            if not self._origin_stable_raw and type(ui.pagemap.getCurrentPageLabel) == "function" then
-                local ok, l, idx = pcall(ui.pagemap.getCurrentPageLabel, ui.pagemap, true)
-                if not (ok and l and l ~= "") then
-                    ok, l, idx = pcall(ui.pagemap.getCurrentPageLabel, ui.pagemap, false)
-                end
-                local val = (ok and l and l ~= "" and l) or (ok and idx and idx > 0 and idx)
-                if val then
-                    self._origin_stable_raw = tostring(val)
-                    self._origin_stable_num = tonumber(val)
-                end
-            end
-            if self._origin_stable_raw then
-                return self._origin_stable_raw, disp_total
-            end
-        end
-
-        -- 3. Consulta estricta de etiqueta de página al módulo pagemap
-        if type(ui.pagemap.getPageLabel) == "function" then
-            local ok, l = pcall(ui.pagemap.getPageLabel, ui.pagemap, raw_page, true)
-            if ok and l and l ~= "" then return tostring(l), disp_total end
-        end
-
-        -- 4. Extremos directos
-        local tot_screens = self._total_pages or 1
-        local tot_stable = tonumber(disp_total) or tot_screens
-        local orig_screen = self._origin_page or 1
-        local orig_stable = self._origin_stable_num
-
-        if raw_page <= 1 then
-            return "1", disp_total
-        elseif raw_page >= tot_screens then
-            return tostring(tot_stable), disp_total
-        end
-
-        -- 5. Progresión lineal continua sin saltos artificiales
-        local progress = (tot_screens > 1) and ((raw_page - 1) / (tot_screens - 1)) or 0
-        local base_stable = 1 + progress * (tot_stable - 1)
-
-        if orig_stable and orig_screen > 1 and orig_screen < tot_screens then
-            local orig_progress = (orig_screen - 1) / (tot_screens - 1)
-            local orig_base = 1 + orig_progress * (tot_stable - 1)
-            local delta = orig_stable - orig_base
-            local weight = math.sin(progress * math.pi)
-            base_stable = base_stable + (delta * weight)
-        end
-
-        local result = math.floor(base_stable + 0.5)
-        result = math.max(1, math.min(tot_stable, result))
-
-        return tostring(result), disp_total
     end
 
-    return raw_page, self._total_pages
+    if not has_labels then
+        return fallback_p, self._total_pages
+    end
+
+    -- 1. Total de páginas según la última etiqueta física del libro (ej: 879 en vez de 905)
+    if not self._stable_total then
+        if pagemap and type(pagemap.getLastPageLabel) == "function" then
+            local ok, l = pcall(pagemap.getLastPageLabel, pagemap, true)
+            if ok and l and l ~= "" then self._stable_total = tostring(l) end
+        end
+        if not self._stable_total and pagemap and type(pagemap.getPageLabelProps) == "function" then
+            local ok, last_idx = pcall(pagemap.getPageLabelProps, pagemap)
+            if ok and last_idx and tonumber(last_idx) then
+                self._stable_total = tostring(last_idx)
+            end
+        end
+    end
+    local disp_total = self._stable_total or tostring(self._total_pages)
+
+    -- 2. Caché en memoria para respuesta en 0 ms
+    if not self._page_label_cache then
+        self._page_label_cache = {}
+    end
+    if self._page_label_cache[raw_page] then
+        return self._page_label_cache[raw_page], disp_total
+    end
+
+    local resolved_label = nil
+
+    -- 3. Método nativo para EPUB (resolución real vía XPointer con anticipación en pantalla actual)
+    if doc and type(doc.getPageXPointer) == "function" and pagemap and type(pagemap.getXPointerPageLabel) == "function" then
+        -- Etiqueta al tope de la pantalla
+        local ok_xp, xp = pcall(doc.getPageXPointer, doc, raw_page)
+        if ok_xp and xp then
+            local ok_lbl, lbl = pcall(pagemap.getXPointerPageLabel, pagemap, xp, true)
+            if ok_lbl and lbl and lbl ~= "" then
+                resolved_label = lbl
+            end
+        end
+
+        -- Detección de salto a mitad de pantalla: consultar el límite con la siguiente
+        local cand_lbl = nil
+        local ok_next_xp, next_xp = pcall(doc.getPageXPointer, doc, raw_page + 1)
+        if ok_next_xp and next_xp then
+            local ok_cand, clbl = pcall(pagemap.getXPointerPageLabel, pagemap, next_xp, true)
+            if ok_cand and clbl and clbl ~= "" then
+                cand_lbl = clbl
+            end
+        elseif pagemap and type(pagemap.getLastPageLabel) == "function" then
+            local ok_last, llbl = pcall(pagemap.getLastPageLabel, pagemap, true)
+            if ok_last and llbl and llbl ~= "" then
+                cand_lbl = llbl
+            end
+        end
+
+        -- Si la etiqueta cambió antes de la página siguiente, verificar si nació en esta misma pantalla
+        if cand_lbl and cand_lbl ~= resolved_label and type(pagemap.getPageLabelProps) == "function" then
+            local ok_props, idx, label_pn = pcall(pagemap.getPageLabelProps, pagemap, cand_lbl)
+            if ok_props and label_pn and label_pn == raw_page then
+                resolved_label = cand_lbl
+            end
+        end
+    end
+
+    -- 4. Método nativo para PDF / formatos fijos (doc:getPageLabel)
+    if not resolved_label and doc and type(doc.getPageLabel) == "function" then
+        local ok, lbl = pcall(doc.getPageLabel, doc, raw_page)
+        if ok and lbl and lbl ~= "" then
+            resolved_label = lbl
+        end
+    end
+
+    -- 5. Fallback directo al pagemap
+    if not resolved_label and pagemap and type(pagemap.getPageLabel) == "function" then
+        local ok, lbl = pcall(pagemap.getPageLabel, pagemap, raw_page, true)
+        if ok and lbl and lbl ~= "" then
+            resolved_label = lbl
+        end
+    end
+
+    -- 6. Limpieza de caracteres invisibles y guardado en memoria
+    if resolved_label then
+        if pagemap and type(pagemap.cleanPageLabel) == "function" then
+            local ok_clean, cleaned = pcall(pagemap.cleanPageLabel, pagemap, resolved_label)
+            if ok_clean and cleaned and cleaned ~= "" then
+                resolved_label = cleaned
+            end
+        end
+        local res = tostring(resolved_label)
+        self._page_label_cache[raw_page] = res
+        return res, disp_total
+    end
+
+    self._page_label_cache[raw_page] = fallback_p
+    return fallback_p, disp_total
 end
 
 function PageScrubber:_updateTexts()
@@ -1252,6 +1545,9 @@ function PageScrubber:_updateGridPages()
     elseif self._view_mode == "grid_six" then
         self._grid_dimen.y = self._top_bar_dimen.y + self._top_bar_dimen.h + S(26)
         self._grid_dimen.h = self._bar_dimen.y - self._grid_dimen.y - S(26)
+    elseif self._view_mode == "grid_simple" then
+        self._grid_dimen.y = 0
+        self._grid_dimen.h = self._bar_dimen.y
     else
         self._grid_dimen.y = self._booktitle_y + self.tw_booktitle:getSize().h + S(8)
         self._grid_dimen.h = self._bar_dimen.y - self._grid_dimen.y
@@ -1330,156 +1626,117 @@ function PageScrubber:_updateGridPages()
         end
     end
 
-    self._grid_batch_seq = self._grid_batch_seq + 1
-    local batch_id = "page_scrubber_grid_" .. self._grid_instance_id .. "_" .. tostring(self._grid_batch_seq)
+    self._grid_batch_seq = (self._grid_batch_seq or 0) + 1
+    local current_seq = self._grid_batch_seq
+    local batch_id = "page_scrubber_grid_" .. self._grid_instance_id .. "_" .. tostring(current_seq)
     self._grid_batch_id = batch_id
 
-    -- Cancelación nativa de lotes obsoletos usando el API oficial de ReaderThumbnail
+    -- Cancelación nativa de lotes de secuencias anteriores
     if thumbnail and thumbnail.cancelPageThumbnailRequests and type(thumbnail.thumbnails_requests) == "table" then
         for b_id in pairs(thumbnail.thumbnails_requests) do
-            if type(b_id) == "string" and b_id:find("^page_scrubber_") and b_id ~= batch_id then
+            if type(b_id) == "string" and b_id:find("^page_scrubber_grid_") and not b_id:find("_" .. tostring(current_seq) .. "_") then
                 thumbnail:cancelPageThumbnailRequests(b_id)
             end
         end
     end
 
-    local old_tiles = self._grid_tiles or {}
     self._grid_tiles = {}
     local missing = {}
 
     local expected_req_w = (self._view_mode == "grid") and self._grid_item_w or self._thumb_req_split_w
     local expected_req_h = (self._view_mode == "grid") and self._grid_item_h or self._thumb_req_split_h
 
+    local function resolveSlot(idx, page, mode)
+        local valid = page and page >= 1 and page <= self._total_pages
+        local slot = { page = valid and page or nil, loading = valid, is_scaled = false, mode = mode }
+        if valid then
+            local cached = self._tile_cache[page]
+            if cached and cached.bb and cached.w == expected_req_w and cached.h == expected_req_h then
+                slot.tile_bb = cached.bb
+                slot.is_scaled = cached.is_scaled
+                slot.loading = false
+                cached.last_used = os.clock()
+            end
+        end
+        self._grid_tiles[idx] = slot
+        if valid and not slot.tile_bb then
+            missing[#missing + 1] = idx
+        end
+    end
+
     if self._view_mode == "grid" then
         local nb_items = self._grid_cols * self._grid_rows
         for idx = 1, nb_items do
             local offset_p = idx - 2
-            if self.is_rtl then
-                offset_p = -offset_p
-            end
-            local page = self._cur_page + offset_p
-            local valid = page >= 1 and page <= self._total_pages
-            
-            self._grid_tiles[idx] = { page = valid and page or nil, loading = valid, is_scaled = false, mode = "grid" }
-            
-            if valid then
-                for old_idx, old_slot in pairs(old_tiles) do
-                    if old_slot.page == page and old_slot.tile_bb and old_slot.mode == "grid" then
-                        self._grid_tiles[idx].tile_bb = old_slot.tile_bb
-                        self._grid_tiles[idx].is_scaled = old_slot.is_scaled
-                        self._grid_tiles[idx].loading = false
-                        old_tiles[old_idx] = nil 
-                        break
-                    end
-                end
-            end
-        end
-        local missing_order = self.is_rtl and { 2, 1, 3 } or { 2, 3, 1 }
-        for _, idx in ipairs(missing_order) do
-            local slot = self._grid_tiles[idx]
-            if slot and slot.page and not slot.tile_bb then missing[#missing + 1] = idx end
+            if self.is_rtl then offset_p = -offset_p end
+            resolveSlot(idx, self._cur_page + offset_p, "grid")
         end
     elseif self._view_mode == "grid_six" then
         for idx = 1, 6 do
-            local page = self._cur_page + (idx - 2)
-            local valid = page >= 1 and page <= self._total_pages
-            
-            self._grid_tiles[idx] = { page = valid and page or nil, loading = valid, is_scaled = false, mode = "grid_six" }
-            
-            if valid then
-                for old_idx, old_slot in pairs(old_tiles) do
-                    if old_slot.page == page and old_slot.tile_bb and old_slot.mode == "grid_six" then
-                        self._grid_tiles[idx].tile_bb = old_slot.tile_bb
-                        self._grid_tiles[idx].is_scaled = old_slot.is_scaled
-                        self._grid_tiles[idx].loading = false
-                        old_tiles[old_idx] = nil 
-                        break
-                    end
-                end
-            end
-        end
-        for idx = 1, 6 do
-            local slot = self._grid_tiles[idx]
-            if slot and slot.page and not slot.tile_bb then missing[#missing + 1] = idx end
+            resolveSlot(idx, self._cur_page + (idx - 2), "grid_six")
         end
     else
-        local page = self._cur_page
-        local valid = page >= 1 and page <= self._total_pages
-        self._grid_tiles[2] = { page = valid and page or nil, loading = valid, is_scaled = false, mode = self._view_mode }
-        
-        if valid then
-            for old_idx, old_slot in pairs(old_tiles) do
-                -- Si la página ya está en memoria (aunque venga del grid normal), la reutilizamos de inmediato
-                if old_slot.page == page and old_slot.tile_bb then
-                    self._grid_tiles[2].tile_bb = old_slot.tile_bb
-                    self._grid_tiles[2].is_scaled = old_slot.is_scaled
-                    self._grid_tiles[2].loading = false
-                    old_tiles[old_idx] = nil 
-                    break
-                end
-            end
-        end
+        resolveSlot(2, self._cur_page, self._view_mode)
+    end
 
-        -- Carga directa para Split View: evita la cola por lotes y los descartes por timeout
-        if self._view_mode == "split" then
-            for _, old_slot in pairs(old_tiles) do self:_freeTile(old_slot) end
+    -- Si todas las miniaturas necesarias están en memoria, refrescar pantalla en un único ciclo
+    local center_missing = nil
+    local side_missing = {}
 
-            if self._grid_tiles[2] and self._grid_tiles[2].page and not self._grid_tiles[2].tile_bb then
-                self._is_busy = true
-                self._tasks_in_flight = 1
-
-                local req_w = expected_req_w
-                local req_h = expected_req_h
-                local req_page = page
-
-                thumbnail:getPageThumbnail(req_page, req_w, req_h, batch_id, function(tile, resp_batch_id)
-                    self._is_busy = false
-                    self._tasks_in_flight = 0
-
-                    if self._closing or resp_batch_id ~= self._grid_batch_id then
-                        if self._pending_grid_update and not self._closing then
-                            self._pending_grid_update = false
-                            self:_updateGridPages()
-                        end
-                        return
-                    end
-
-                    local processed = processTile(tile, req_w, req_h)
-                    if processed and processed.bb and self._grid_tiles[2] then
-                        self._grid_tiles[2].tile_bb = processed.bb
-                        self._grid_tiles[2].is_scaled = processed.is_scaled
-                        self._grid_tiles[2].loading = false
-                        self._grid_tiles[2].error = nil
-                    elseif self._grid_tiles[2] then
-                        self._grid_tiles[2].loading = false
-                        self._grid_tiles[2].error = true
-                    end
-                    UIManager:setDirty(self, "ui", self._grid_dimen)
-
-                    if self._pending_grid_update and not self._closing then
-                        self._pending_grid_update = false
-                        self:_updateGridPages()
-                    end
-                end)
-            else
-                self._is_busy = false
-                self._tasks_in_flight = 0
-            end
-            UIManager:setDirty(self, "ui", self._grid_dimen)
-            return
-        end
-
+    if self._view_mode == "grid" then
         if self._grid_tiles[2] and self._grid_tiles[2].page and not self._grid_tiles[2].tile_bb then
-            missing[#missing + 1] = 2
+            center_missing = 2
+        end
+        local side_order = self.is_rtl and { 1, 3 } or { 3, 1 }
+        for _, idx in ipairs(side_order) do
+            local slot = self._grid_tiles[idx]
+            if slot and slot.page and not slot.tile_bb then
+                table.insert(side_missing, idx)
+            end
+        end
+    elseif self._view_mode == "grid_six" then
+        if self._grid_tiles[2] and self._grid_tiles[2].page and not self._grid_tiles[2].tile_bb then
+            center_missing = 2
+        end
+        for _, idx in ipairs({ 3, 1, 4, 5, 6 }) do
+            local slot = self._grid_tiles[idx]
+            if slot and slot.page and not slot.tile_bb then
+                table.insert(side_missing, idx)
+            end
+        end
+    else
+        if self._grid_tiles[2] and self._grid_tiles[2].page and not self._grid_tiles[2].tile_bb then
+            center_missing = 2
         end
     end
 
-    for _, old_slot in pairs(old_tiles) do self:_freeTile(old_slot) end
+    local total_missing = (center_missing and 1 or 0) + #side_missing
 
-    if #missing == 0 then
+    -- En cualquier caso, plasmamos el estado actual (nueva selección de lista y página cargada/cargando)
+    if self._view_mode == "split" then
+        UIManager:setDirty(self, "ui", self.dimen)
+    elseif self._view_mode == "grid_simple" then
+        local r = self._gs_panel_dimen or self._grid_dimen
+        if r then
+            local pad = S(6)
+            local safe_r = Geom:new{
+                x = math.max(0, r.x - pad),
+                y = math.max(0, r.y - pad),
+                w = math.min(sw - math.max(0, r.x - pad), r.w + pad * 2),
+                h = math.min(sh - math.max(0, r.y - pad), r.h + pad * 2 + S(6)),
+            }
+            UIManager:setDirty(self, "ui", safe_r)
+        else
+            UIManager:setDirty(self, "ui", self.dimen)
+        end
+    else
+        UIManager:setDirty(self, "ui", self._grid_dimen)
+    end
+
+    if total_missing == 0 then
         self._is_busy = false
         self._tasks_in_flight = 0
-        UIManager:setDirty(self, "ui", self._grid_dimen)
+        self:_preloadNeighborPages()
         if self._pending_grid_update and not self._closing then
             self._pending_grid_update = false
             self:_updateGridPages()
@@ -1488,29 +1745,12 @@ function PageScrubber:_updateGridPages()
     end
 
     self._is_busy = true
-    self._tasks_in_flight = #missing
-
-    local function scheduleCoalescedDirty()
-        if self._coalesced_dirty_scheduled then return end
-        self._coalesced_dirty_scheduled = true
-        UIManager:scheduleIn(0.04, function()
-            self._coalesced_dirty_scheduled = false
-            if not self._closing and self._grid_batch_id == batch_id then
-                UIManager:setDirty(self, "ui", self._grid_dimen)
-            end
-        end)
-    end
+    self._tasks_in_flight = total_missing
 
     local function checkFinished()
         if self._tasks_in_flight <= 0 then
             self._is_busy = false
-            if not self._closing and self._grid_batch_id == batch_id then
-                if self._view_mode == "grid_six" then
-                    UIManager:setDirty(nil, "ui")
-                else
-                    UIManager:setDirty(self, "ui", self._grid_dimen)
-                end
-            end
+            self:_preloadNeighborPages()
             if self._pending_grid_update and not self._closing then
                 self._pending_grid_update = false
                 self:_updateGridPages()
@@ -1518,57 +1758,117 @@ function PageScrubber:_updateGridPages()
         end
     end
 
-    -- Despachamos todas las peticiones en paralelo (modo ZenOS) sin recursividad
-    for _, idx in ipairs(missing) do
-        local slot = self._grid_tiles[idx]
-        local req_page = slot.page
-        if req_page then
-            local timed_out = false
-            
-            UIManager:scheduleIn(6.9, function()
-                if self._closing or timed_out or self._grid_batch_id ~= batch_id then return end
-                timed_out = true
-                if slot.loading then
-                    slot.loading = false
-                    slot.error = true
-                    scheduleCoalescedDirty()
-                    self._tasks_in_flight = self._tasks_in_flight - 1
-                    checkFinished()
+    local function refreshSlotIndividually(slot_idx)
+        if self._closing or self._grid_batch_seq ~= current_seq then return end
+        local r = nil
+        if self._view_mode == "grid" and self._gridSlotDimen then
+            local slot_d = self:_gridSlotDimen(slot_idx)
+            if slot_d then
+                local pad_b = self.S(4)
+                r = Geom:new{ x = slot_d.x - pad_b, y = slot_d.y - pad_b, w = slot_d.w + pad_b * 2, h = slot_d.h + pad_b * 2 }
+            end
+        elseif self._view_mode == "grid_six" then
+            local mod_req = (sw > sh) and "grid_six_landscape_view" or "grid_six_view"
+            local ok_m, G6Mod = pcall(require, mod_req)
+            if ok_m and G6Mod and G6Mod.getSlotDimens then
+                local slots = G6Mod.getSlotDimens(self)
+                if slots and slots[slot_idx] then
+                    local slot_d = slots[slot_idx]
+                    local pad_b = self.S(4)
+                    r = Geom:new{ x = slot_d.x - pad_b, y = slot_d.y - pad_b, w = slot_d.w + pad_b * 2, h = slot_d.h + pad_b * 2 }
                 end
-            end)
-
-            thumbnail:getPageThumbnail(req_page, expected_req_w, expected_req_h, batch_id,
-                function(tile, resp_batch_id, async_response)
-                    if self._closing or timed_out then return end
-                    if resp_batch_id ~= batch_id or self._grid_batch_id ~= batch_id then 
-                        return 
-                    end
-                    
-                    timed_out = true
-                    local processed = processTile(tile, expected_req_w, expected_req_h)
-                    
-                    if processed and processed.bb then
-                        slot.tile_bb = processed.bb
-                        slot.is_scaled = processed.is_scaled
-                        slot.loading = false
-                        slot.error = nil
-                    else
-                        slot.loading = false
-                        slot.error = true
-                    end
-                    
-                    scheduleCoalescedDirty()
-                    self._tasks_in_flight = self._tasks_in_flight - 1
-                    checkFinished()
-                end
-            )
+            end
+        elseif self._view_mode == "grid_simple" then
+            local p_dim = self._gs_panel_dimen or self._grid_dimen
+            if p_dim then
+                local pad = self.S(6)
+                r = Geom:new{
+                    x = math.max(0, p_dim.x - pad),
+                    y = math.max(0, p_dim.y - pad),
+                    w = math.min(sw - math.max(0, p_dim.x - pad), p_dim.w + pad * 2),
+                    h = math.min(sh - math.max(0, p_dim.y - pad), p_dim.h + pad * 2 + self.S(6)),
+                }
+            end
+        elseif self._view_mode == "split" then
+            r = self._grid_dimen
+        end
+        if r then
+            UIManager:setDirty(self, "ui", r)
         else
-            self._tasks_in_flight = self._tasks_in_flight - 1
-            checkFinished()
+            UIManager:setDirty(self, "ui", self._grid_dimen)
         end
     end
 
-    UIManager:setDirty(self, "ui", self._grid_dimen)
+    local function requestSlot(idx, req_batch_id, on_complete)
+        local slot = self._grid_tiles[idx]
+        if not slot or not slot.page then
+            self._tasks_in_flight = self._tasks_in_flight - 1
+            checkFinished()
+            if on_complete then on_complete() end
+            return
+        end
+
+        local req_page = slot.page
+        local timed_out = false
+
+        UIManager:scheduleIn(6.9, function()
+            if self._closing or timed_out or self._grid_batch_seq ~= current_seq then return end
+            timed_out = true
+            if slot.loading then
+                slot.loading = false
+                slot.error = true
+                refreshSlotIndividually(idx)
+                self._tasks_in_flight = self._tasks_in_flight - 1
+                checkFinished()
+                if on_complete then on_complete() end
+            end
+        end)
+
+        thumbnail:getPageThumbnail(req_page, expected_req_w, expected_req_h, req_batch_id,
+            function(tile, resp_batch_id)
+                if self._closing or timed_out or self._grid_batch_seq ~= current_seq then return end
+                timed_out = true
+
+                local processed = processTile(tile, expected_req_w, expected_req_h)
+                if processed and processed.bb and self._grid_tiles[idx] then
+                    self._grid_tiles[idx].tile_bb = processed.bb
+                    self._grid_tiles[idx].is_scaled = processed.is_scaled
+                    self._grid_tiles[idx].loading = false
+                    self._grid_tiles[idx].error = nil
+                    self:_cacheTile(req_page, processed.bb, processed.is_scaled, expected_req_w, expected_req_h)
+                elseif self._grid_tiles[idx] then
+                    self._grid_tiles[idx].loading = false
+                    self._grid_tiles[idx].error = true
+                end
+
+                refreshSlotIndividually(idx)
+                self._tasks_in_flight = self._tasks_in_flight - 1
+                checkFinished()
+                if on_complete then on_complete() end
+            end
+        )
+    end
+
+    local function requestSideSlots()
+        if self._closing or self._grid_batch_seq ~= current_seq then return end
+        for _, idx in ipairs(side_missing) do
+            requestSlot(idx, batch_id .. "_s")
+        end
+    end
+
+    -- 1. Si falta el centro, se pide con exclusividad y espera a que termine para pedir los costados
+    if center_missing then
+        requestSlot(center_missing, batch_id .. "_c", function()
+            if #side_missing > 0 then
+                requestSideSlots()
+            end
+        end)
+    else
+        -- 2. Si el centro ya estaba en caché, despacha los costados de inmediato
+        if #side_missing > 0 then
+            requestSideSlots()
+        end
+    end
 end
 
 function PageScrubber:_waitForIdle(callback)
@@ -1580,6 +1880,9 @@ function PageScrubber:_waitForIdle(callback)
 end
 
 function PageScrubber:_invalidateGridTilesForPage(page)
+    if self._tile_cache then
+        self._tile_cache[page] = nil
+    end
     for idx, slot in pairs(self._grid_tiles) do
         if slot.page == page then
             self:_freeTile(slot)
@@ -1763,13 +2066,13 @@ function PageScrubber:_paintSplitView(bb, title_strip_y, title_strip_h)
     local sw, sh = Screen:getWidth(), Screen:getHeight()
     local S = self.S
     
-    bb:paintRect(gd.x, gd.y, gd.w, gd.h, Blitbuffer.COLOR_WHITE)
-    
     local shadow_offset = S(4)
     local box_radius = S(12)
+    local b_thick = S(3)
     -- Atados dinámicamente a tu configuración base:
     local font_sz_chiquito = self.S_BOTTOM_GRAY and (self.S_BOTTOM_GRAY - S(4)) or S(10)
     local S_MEDIANO = self.S_BOTTOM_GRAY or S(14) 
+
     
     local real_top_y = title_strip_y
     local real_available_h = (gd.y + gd.h) - real_top_y
@@ -1855,6 +2158,7 @@ function PageScrubber:_paintSplitView(bb, title_strip_y, title_strip_h)
     local hl_count = #(self._cached_hl or {})
     local note_count = #(self._cached_notes or {})
 
+    local b_thick = S(3)
     local tab_sp = S(6)
     local current_tab_x = pr_x
     local r = math.floor(tab_h / 2)
@@ -1864,7 +2168,7 @@ function PageScrubber:_paintSplitView(bb, title_strip_y, title_strip_h)
     local sort_tab_w = sort_tsz.w + S(16)
 
     paintRoundRect(bb, current_tab_x, tab_draw_y, sort_tab_w, tab_h, r, Blitbuffer.COLOR_BLACK)
-    paintRoundRect(bb, current_tab_x + S(1), tab_draw_y + S(1), sort_tab_w - S(2), tab_h - S(2), math.max(1, r - S(1)), Blitbuffer.COLOR_WHITE)
+    paintRoundRect(bb, current_tab_x + b_thick, tab_draw_y + b_thick, sort_tab_w - b_thick*2, tab_h - b_thick*2, math.max(1, r - b_thick), Blitbuffer.COLOR_WHITE)
 
     local stx = current_tab_x + math.floor((sort_tab_w - sort_tsz.w) / 2)
     local sty = tab_draw_y + math.floor((tab_h - sort_tsz.h) / 2)
@@ -1900,9 +2204,10 @@ function PageScrubber:_paintSplitView(bb, title_strip_y, title_strip_h)
                 -- Relleno negro sólido completo sin marco blanco interno
                 paintRoundRect(bb, current_tab_x, tab_draw_y, tab_w, tab_h, r, Blitbuffer.COLOR_BLACK)
             else
-                -- Pestaña inactiva: fondo blanco con borde fino negro
+                -- Pestaña inactiva: borde fino refinado (S(1) o S(2))
+                local thin_b = S(1)
                 paintRoundRect(bb, current_tab_x, tab_draw_y, tab_w, tab_h, r, Blitbuffer.COLOR_BLACK)
-                paintRoundRect(bb, current_tab_x + S(1), tab_draw_y + S(1), tab_w - S(2), tab_h - S(2), math.max(1, r - S(1)), Blitbuffer.COLOR_WHITE)
+                paintRoundRect(bb, current_tab_x + thin_b, tab_draw_y + thin_b, tab_w - thin_b*2, tab_h - thin_b*2, math.max(1, r - thin_b), Blitbuffer.COLOR_WHITE)
             end
 
             local ix = current_tab_x + math.floor((tab_w - content_w) / 2)
@@ -1937,26 +2242,14 @@ function PageScrubber:_paintSplitView(bb, title_strip_y, title_strip_h)
     local card_w = pr_w
     local card_h = pr_h + status_h
     
-    paintTopSquareBottomRounded(bb, card_x, card_y, card_w, card_h, box_radius, Blitbuffer.COLOR_BLACK)
-    local b_thick = S(3) 
-    paintTopSquareBottomRounded(bb, card_x + b_thick, card_y + b_thick, card_w - b_thick*2, card_h - b_thick*2, math.max(1, box_radius - b_thick), Blitbuffer.COLOR_WHITE)
+    paintRoundRect(bb, card_x, card_y, card_w, card_h, box_radius, Blitbuffer.COLOR_BLACK)
+    paintRoundRect(bb, card_x + b_thick, card_y + b_thick, card_w - b_thick*2, card_h - b_thick*2, math.max(1, box_radius - b_thick), Blitbuffer.COLOR_WHITE)
 
     local tile = self._grid_tiles[2] or {}
     if tile.tile_bb then
         local target_w = pr_w - b_thick*2
         local target_h = pr_h - b_thick
         local tw, th = tile.tile_bb:getWidth(), tile.tile_bb:getHeight()
-
-        if math.abs(tw - target_w) > 6 or math.abs(th - target_h) > 6 then
-            local ok, sc = pcall(function() return tile.tile_bb:scale(target_w, target_h) end)
-            if ok and sc then
-                -- Si ya había una imagen escalada antes en este slot, la liberamos
-                if tile.is_scaled then pcall(function() tile.tile_bb:free() end) end
-                tile.tile_bb = sc
-                tile.is_scaled = true
-                tw, th = sc:getWidth(), sc:getHeight()
-            end
-        end
 
         local src_x, src_y = 0, 0
         local blit_w, blit_h = tw, th
@@ -1980,6 +2273,22 @@ function PageScrubber:_paintSplitView(bb, title_strip_y, title_strip_h)
         
         if blit_w > 0 and blit_h > 0 then
             bb:blitFrom(tile.tile_bb, ox, oy, src_x, src_y, blit_w, blit_h)
+
+            -- Recorte suave de las esquinas superiores de la miniatura para no deformar la curva
+            local r_in = math.max(1, box_radius - b_thick)
+            for j = 0, box_radius - 1 do
+                local arc_out = math.ceil(math.sqrt(box_radius*box_radius - (box_radius - j - 0.5)*(box_radius - j - 0.5)))
+                local arc_in = 0
+                if j >= b_thick and (j - b_thick) < r_in then
+                    local k = j - b_thick
+                    arc_in = math.ceil(math.sqrt(r_in*r_in - (r_in - k - 0.5)*(r_in - k - 0.5)))
+                end
+                local w_c = arc_out - arc_in
+                if w_c > 0 then
+                    bb:paintRect(card_x + box_radius - arc_out, card_y + j, w_c, 1, Blitbuffer.COLOR_BLACK)
+                    bb:paintRect(card_x + card_w - box_radius + arc_in, card_y + j, w_c, 1, Blitbuffer.COLOR_BLACK)
+                end
+            end
         end
 
     elseif tile.error then
@@ -2331,11 +2640,9 @@ function PageScrubber:_paintSplitView(bb, title_strip_y, title_strip_h)
         if tonumber(b) == tonumber(fixed_page) then is_page_bmed = true end
     end
 
-    if is_f_sel then
-        paintRoundRect(bb, lm_x, fx_y, lm_w, fx_h, box_radius, Blitbuffer.COLOR_BLACK)
-    else
-        paintRoundRect(bb, lm_x, fx_y, lm_w, fx_h, box_radius, Blitbuffer.COLOR_BLACK)
-        paintRoundRect(bb, lm_x + S(2), fx_y + S(2), lm_w - S(4), fx_h - S(4), math.max(1, box_radius - S(2)), Blitbuffer.COLOR_WHITE)
+    paintRoundRect(bb, lm_x, fx_y, lm_w, fx_h, box_radius, Blitbuffer.COLOR_BLACK)
+    if not is_f_sel then
+        paintRoundRect(bb, lm_x + b_thick, fx_y + b_thick, lm_w - b_thick*2, fx_h - b_thick*2, math.max(1, box_radius - b_thick), Blitbuffer.COLOR_WHITE)
     end
     
     local active_fixed_icon = is_page_bmed and self.icon_box_minus_fill or self.icon_box_plus
@@ -2518,11 +2825,11 @@ function PageScrubber:_paintSplitView(bb, title_strip_y, title_strip_h)
 
     self._split_rows = {}
 
-    -- Volvemos a la tarjeta flotante con las 4 esquinas redondeadas (mucho más armónico)
+    -- Tarjeta flotante con 4 esquinas redondeadas y grosor b_thick unificado
     paintRoundRect(bb, lm_x, menu_y, lm_w, exact_menu_h, box_radius, Blitbuffer.COLOR_BLACK)
-    paintRoundRect(bb, lm_x + S(2), menu_y + S(2), lm_w - S(4), exact_menu_h - S(4), math.max(1, box_radius - S(2)), Blitbuffer.COLOR_WHITE)
+    paintRoundRect(bb, lm_x + b_thick, menu_y + b_thick, lm_w - b_thick*2, exact_menu_h - b_thick*2, math.max(1, box_radius - b_thick), Blitbuffer.COLOR_WHITE)
 
-    bb:paintRect(lm_x + S(2), menu_y + header_h - S(1), lm_w - S(4), S(1), Blitbuffer.COLOR_BLACK)
+    bb:paintRect(lm_x + b_thick, menu_y + header_h - S(1), lm_w - b_thick*2, S(1), Blitbuffer.COLOR_BLACK)
 
     if not self._tw_header_page then
         self._tw_header_page = TextWidget:new{ text = _("Page"), face = Font:getFace("cfont", font_sz_chiquito), bold = true, fgcolor = Blitbuffer.COLOR_BLACK }
@@ -2614,19 +2921,18 @@ function PageScrubber:_paintSplitView(bb, title_strip_y, title_strip_h)
             local physical_row = i - start_idx + 1
     
             if is_r_sel then
-                -- Solo redondeamos si esta fila toca físicamente el fondo de la caja contenedora
                 local is_touching_bottom = (not needs_pagination) and (physical_row == num_rows)
                 
                 if is_touching_bottom then
-                    paintTopSquareBottomRounded(bb, lm_x + S(2), current_row_y, lm_w - S(4), row_h - S(2), math.max(1, box_radius - S(2)), Blitbuffer.COLOR_BLACK)
+                    paintTopSquareBottomRounded(bb, lm_x + b_thick, current_row_y, lm_w - b_thick*2, row_h - b_thick, math.max(1, box_radius - b_thick), Blitbuffer.COLOR_BLACK)
                 else
-                    bb:paintRect(lm_x + S(2), current_row_y, lm_w - S(4), row_h, Blitbuffer.COLOR_BLACK)
+                    bb:paintRect(lm_x + b_thick, current_row_y, lm_w - b_thick*2, row_h, Blitbuffer.COLOR_BLACK)
                 end
             end
             
             -- Línea Hairline divisoria color Gris Claro extendida de lado a lado
             if not is_r_sel and i < end_idx then
-                bb:paintRect(lm_x + S(2), current_row_y + row_h - 1, lm_w - S(4), 1, Blitbuffer.COLOR_LIGHT_GRAY)
+                bb:paintRect(lm_x + b_thick, current_row_y + row_h - 1, lm_w - b_thick*2, 1, Blitbuffer.COLOR_LIGHT_GRAY)
             end
             
             local active_row_icon = (self._active_tab == "bookmarks") and self.icon_box_minus or self.icon_box_arrow
@@ -2711,7 +3017,7 @@ function PageScrubber:_paintSplitView(bb, title_strip_y, title_strip_h)
             local pag_y = list_y + (num_rows - 1) * row_h
             
             -- Línea horizontal completa, negra e idéntica a la que está debajo de "Page"
-            bb:paintRect(lm_x + S(2), pag_y, lm_w - S(4), S(1), Blitbuffer.COLOR_BLACK)
+            bb:paintRect(lm_x + b_thick, pag_y, lm_w - b_thick*2, S(1), Blitbuffer.COLOR_BLACK)
             
             local pag_str = cur_page .. " / " .. total_pages
             if not self._tw_pagination then
@@ -2923,7 +3229,7 @@ function PageScrubber:_previewPage(page, is_dragging)
     self._slider.value = self._cur_page
     self:_updateTexts()
 
-    -- Actualizamos los números de página de los slots de inmediato para evitar desincronizaciones
+    -- Actualizamos los números lógicos de los slots de inmediato
     if self._view_mode == "grid_six" and self._grid_tiles then
         for idx = 1, 6 do
             local p = self._cur_page + (idx - 2)
@@ -2940,20 +3246,49 @@ function PageScrubber:_previewPage(page, is_dragging)
         end
     end
 
-    UIManager:setDirty(self, "ui", self.dimen)
-
-    -- Semáforo de retención exclusivo para el grid de 3 páginas (y arrastre de slider)
-    if self._is_busy then
-        if (self._view_mode == "grid_six" or self._view_mode == "split") and not is_dragging then
-            self._is_busy = false
-            self._tasks_in_flight = 0
-        else
-            self._pending_grid_update = true
-            return
+    -- 1. Comportamiento durante el arrastre continuo (evita parpadeos y svalora CPU)
+    if is_dragging then
+        if self._grid_tiles and not self._scrubbing_blank then
+            self._scrubbing_blank = true
+            for idx, slot in pairs(self._grid_tiles) do
+                slot.tile_bb = nil
+                slot.loading = true
+            end
+            UIManager:setDirty(self, "ui", self._grid_dimen)
         end
+
+        UIManager:setDirty(self, "fast", self._bar_dimen)
+
+        self._drag_token = (self._drag_token or 0) + 1
+        local my_token = self._drag_token
+
+        UIManager:scheduleIn(0.25, function()
+            if self._closing or self._drag_token ~= my_token then return end
+            self._scrubbing_blank = false
+            if not self._grid_disabled then
+                self:_updateGridPages()
+            end
+        end)
+        return
     end
 
-    if not self._grid_disabled then self:_updateGridPages() end
+    -- 2. Salto normal de página / tap directo
+    self._scrubbing_blank = false
+    self._drag_token = (self._drag_token or 0) + 1
+    self._is_busy = false
+    self._tasks_in_flight = 0
+    self._pending_grid_update = false
+
+    -- La barra inferior (capítulo, página, slider) se actualiza en cada cambio
+    if self._bar_dimen then
+        UIManager:setDirty(self, "ui", self._bar_dimen)
+    end
+
+    if not self._grid_disabled then 
+        self:_updateGridPages() 
+    else
+        UIManager:setDirty(self, "ui", self.dimen)
+    end
 end
 
 function PageScrubber:_reopenWithMode(new_mode, target_page)
@@ -2961,6 +3296,22 @@ function PageScrubber:_reopenWithMode(new_mode, target_page)
     self._closing = true
     self:_cancelHold()
     
+    -- Abortamos inmediatamente cualquier decodificación en vuelo para evitar crasheos de memoria en C
+    self._slider._dragging = false
+    self._is_busy = false
+    self._tasks_in_flight = 0
+    self._grid_batch_seq = (self._grid_batch_seq or 0) + 1
+    self._grid_batch_id = "safe_reopen_" .. tostring(os.time())
+
+    local thumbnail = self.ui and self.ui.thumbnail
+    if thumbnail and thumbnail.cancelPageThumbnailRequests and type(thumbnail.thumbnails_requests) == "table" then
+        for b_id in pairs(thumbnail.thumbnails_requests) do
+            if type(b_id) == "string" and b_id:find("^page_scrubber_") then
+                thumbnail:cancelPageThumbnailRequests(b_id)
+            end
+        end
+    end
+
     local ui = self.ui
     local origin = self._origin_page
     local scale = self.ui_scale or 1.0
@@ -2971,39 +3322,23 @@ function PageScrubber:_reopenWithMode(new_mode, target_page)
     UIManager:close(self)
     UIManager:setDirty(nil, "full")
     
-    if new_mode == "grid_simple" then
-        UIManager:scheduleIn(0.05, function()
-            local ScrubberUI = require("scrubber_ui")
-            local new_widget = ScrubberUI:new{
-                ui = ui,
-                document = ui.document,
-                initial_view_mode = new_mode,
-                initial_tab = tab,
-                transparent_bg = is_trans,
-                ui_scale = scale,
-                initial_origin = origin,
-                initial_page = target_page,
-                base_mode = base_md,
-            }
-            UIManager:show(new_widget)
-        end)
-    else
-        UIManager:nextTick(function()
-            local ScrubberUI = require("scrubber_ui")
-            local new_widget = ScrubberUI:new{
-                ui = ui,
-                document = ui.document,
-                initial_view_mode = new_mode,
-                initial_tab = tab,
-                transparent_bg = false,
-                ui_scale = scale,
-                initial_origin = origin,
-                initial_page = target_page,
-                base_mode = base_md,
-            }
-            UIManager:show(new_widget)
-        end)
-    end
+    -- Para grid_simple damos 0.15s para que KOReader pinte limpiamente la hoja del libro de fondo
+    local delay = is_trans and 0.15 or 0.08
+    UIManager:scheduleIn(delay, function()
+        local ScrubberUI = require("scrubber_ui")
+        local new_widget = ScrubberUI:new{
+            ui = ui,
+            document = ui.document,
+            initial_view_mode = new_mode,
+            initial_tab = tab,
+            transparent_bg = is_trans,
+            ui_scale = scale,
+            initial_origin = origin,
+            initial_page = target_page,
+            base_mode = base_md,
+        }
+        UIManager:show(new_widget)
+    end)
 end
 
 function PageScrubber:_showUIScaleSpinner()
@@ -3053,10 +3388,15 @@ end
 function PageScrubber:_flashAndDo(btn_id, rect, action_func)
     if self._closing then return end
     self._pressed_btn = btn_id
-    UIManager:setDirty(self, "ui", rect)
+    if rect then
+        UIManager:setDirty(self, "ui", rect)
+    end
     UIManager:scheduleIn(0.05, function()
         self._pressed_btn = nil
         action_func()
+        if rect and not self._closing then
+            UIManager:setDirty(self, "ui", rect)
+        end
     end)
 end
 
@@ -3097,7 +3437,7 @@ function PageScrubber:_openNoteTextEditor()
                             end
                         end)
                         self:_extractAnnotations()
-                        UIManager:setDirty(self, "ui", self.dimen)
+                        UIManager:setDirty(self, "ui", self._grid_dimen)
                         UIManager:close(dialog)
                     end
                 }
@@ -3225,8 +3565,13 @@ function PageScrubber:_paintToImpl(bb, x, y)
     local pad = S(16)
     local is_landscape = sw > sh
 
+    local has_wallpaper = false
     if not self.transparent_bg then
-        bb:paintRect(0, 0, sw, sh, Blitbuffer.COLOR_WHITE)
+        -- Solo se copia el fondo completo si no es un repintado parcial localizado
+        has_wallpaper = ScrubberWallpaper.paintTo(bb, sw, sh, Screen.night_mode)
+        if not has_wallpaper then
+            bb:paintRect(0, 0, sw, sh, Blitbuffer.COLOR_WHITE)
+        end
     end
 
     -- MODO HORIZONTAL PROTEGIDO (SIMPLE GRID)
@@ -3242,6 +3587,9 @@ function PageScrubber:_paintToImpl(bb, x, y)
     if is_landscape and (self._view_mode == "split" or self._view_mode == "grid" or self._view_mode == "grid_six") then
         local td = self._top_bar_dimen
         bb:paintRect(td.x, td.y, td.w, td.h, Blitbuffer.COLOR_WHITE)
+        if has_wallpaper then
+            bb:paintRect(td.x, td.y + td.h - S(2), td.w, S(2), Blitbuffer.COLOR_BLACK)
+        end
 
         if self._view_mode == "split" then
             local ok_req, SplitLandscapeView = pcall(require, "split_landscape_view")
@@ -3363,17 +3711,62 @@ function PageScrubber:_paintToImpl(bb, x, y)
         local grid_y = self._grid_dimen and self._grid_dimen.y or title_strip_y
         local title_strip_h = math.max(0, grid_y - title_strip_y)
         
-        if title_strip_h > 0 then
+        if not has_wallpaper and title_strip_h > 0 then
             bb:paintRect(0, title_strip_y, sw, title_strip_h, Blitbuffer.COLOR_WHITE)
         end
 
-        -- Barra superior sin contorno: fondo blanco plano continuo
+        -- Barra superior: fondo blanco con línea divisoria si hay wallpaper
         bb:paintRect(td.x, td.y, td.w, td.h, Blitbuffer.COLOR_WHITE)
+        if has_wallpaper then
+            bb:paintRect(td.x, td.y + td.h - S(2), td.w, S(2), Blitbuffer.COLOR_BLACK)
+        end
         
         if self._view_mode == "grid" or self._view_mode == "grid_six" then
             if self._view_mode ~= "grid_six" then
                 local title_x = pad
-                self.tw_booktitle:paintTo(bb, title_x, self._booktitle_y)
+                if has_wallpaper then
+                    local pill_mode = "border"
+                    if G_reader_settings then
+                        local s_val = G_reader_settings:readSetting("page_scrubber_title_bg")
+                        if s_val == false or s_val == "false" or s_val == 0 or s_val == "off" or s_val == "none" then
+                            pill_mode = "off"
+                        elseif s_val == "no_border" or s_val == "borderless" then
+                            pill_mode = "no_border"
+                        elseif s_val == "translucent" or s_val == "opacity" or s_val == "semi_transparent" then
+                            pill_mode = "translucent"
+                        elseif s_val == true or s_val == "true" or s_val == 1 or s_val == "border" then
+                            pill_mode = "border"
+                        end
+                    end
+
+                    if pill_mode == "border" or pill_mode == "no_border" or pill_mode == "translucent" then
+                        local tsz = self.tw_booktitle:getSize()
+                        local pad_h = S(12)
+                        local pad_v = S(4)
+                        local pill_w = tsz.w + pad_h * 2
+                        local pill_h = tsz.h + pad_v * 2
+                        local pill_x = title_x
+                        local pill_y = self._booktitle_y - pad_v
+                        local r = math.floor(pill_h / 2)
+                        local b = S(2)
+
+                        if pill_mode == "border" then
+                            paintRoundRect(bb, pill_x, pill_y, pill_w, pill_h, r, Blitbuffer.COLOR_BLACK)
+                            paintRoundRect(bb, pill_x + b, pill_y + b, pill_w - b*2, pill_h - b*2, math.max(1, r - b), Blitbuffer.COLOR_WHITE)
+                        elseif pill_mode == "translucent" then
+                            paintTranslucentPill(bb, pill_x, pill_y, pill_w, pill_h, r, 0.82)
+                        else
+                            paintRoundRect(bb, pill_x, pill_y, pill_w, pill_h, r, Blitbuffer.COLOR_WHITE)
+                        end
+                        self.tw_booktitle.fgcolor = Blitbuffer.COLOR_BLACK
+                        self.tw_booktitle:paintTo(bb, pill_x + pad_h, self._booktitle_y)
+                    else
+                        paintTextWithHalo(self.tw_booktitle, bb, title_x, self._booktitle_y, self.S(2))
+                    end
+                else
+                    self.tw_booktitle.fgcolor = Blitbuffer.COLOR_BLACK
+                    self.tw_booktitle:paintTo(bb, title_x, self._booktitle_y)
+                end
             end
 
             if not self._grid_disabled then
@@ -3469,7 +3862,7 @@ function PageScrubber:_paintToImpl(bb, x, y)
     local can_next_ch = self.ui.toc and self.ui.toc:getNextChapter(current_display) ~= nil
 
     local function drawFloatingBtnBottom(btn_id, dimen, tw, is_disabled)
-        if is_disabled then return end
+        if is_disabled or not dimen or not tw then return end
         
         local cx = dimen.x + math.floor(dimen.w / 2)
         local cy = dimen.y + math.floor(dimen.h / 2)
@@ -3485,12 +3878,10 @@ function PageScrubber:_paintToImpl(bb, x, y)
         if btn_id == "ctrl_mark" then 
             y_offset = -S(1) - 1 
             if self._view_mode == "grid_simple" then
-                y_offset = y_offset - 1 -- Sube exactamente 1 píxel el ícono en el Simple Grid
+                y_offset = y_offset - 1
             end
         end
 
-        -- EFECTO TÁCTIL EN LOS BOTONES DE ABAJO
-        -- Excluimos "ctrl_mark", "gsix_prev" y "gsix_next"
         local is_pressed = (self._pressed_btn == btn_id and btn_id ~= "ctrl_mark" and btn_id ~= "gsix_prev" and btn_id ~= "gsix_next")
         local draw_x = cx - math.floor(tsz.w / 2)
         local draw_y = cy - math.floor(tsz.h / 2) + y_offset
@@ -3499,11 +3890,16 @@ function PageScrubber:_paintToImpl(bb, x, y)
             local is_bm_ctrl = (btn_id == "ctrl_prev" or btn_id == "ctrl_next")
             if is_bm_ctrl then
                 local btn_rad = math.floor(math.min(dimen.w, dimen.h) / 2)
-                local bg_y = dimen.y + y_offset - S(2)
-                paintRoundRect(bb, dimen.x, bg_y, dimen.w, dimen.h, btn_rad, Blitbuffer.COLOR_BLACK)
-                tw.fgcolor = Blitbuffer.COLOR_WHITE
-                tw:paintTo(bb, draw_x, draw_y)
-                tw.fgcolor = Blitbuffer.COLOR_BLACK
+                paintRoundRect(bb, dimen.x, dimen.y, dimen.w, dimen.h, btn_rad, Blitbuffer.COLOR_BLACK)
+                if tw.text then
+                    tw.fgcolor = Blitbuffer.COLOR_WHITE
+                    tw:paintTo(bb, draw_x, draw_y)
+                    tw.fgcolor = Blitbuffer.COLOR_BLACK
+                else
+                    bb:paintRect(draw_x, draw_y, tsz.w, tsz.h, Blitbuffer.COLOR_WHITE)
+                    tw:paintTo(bb, draw_x, draw_y)
+                    bb:invertRect(draw_x, draw_y, tsz.w, tsz.h)
+                end
             else
                 local pad = S(6)
                 paintRoundRect(bb, draw_x - pad, draw_y - pad, tsz.w + pad*2, tsz.h + pad*2, S(8), Blitbuffer.COLOR_BLACK)
@@ -3516,19 +3912,59 @@ function PageScrubber:_paintToImpl(bb, x, y)
         end
     end
 
-    drawFloatingBtnBottom("ch_l", self._prev_ch_dimen, self.tw_ch_l, not can_prev_ch)
-    drawFloatingBtnBottom("ch_r", self._next_ch_dimen, self.tw_ch_r, not can_next_ch)
+    local side_margin_btn = pad + S(6)
+    local ch_btn_sz = self._cbtn_sz or S(46)
+    local ch_btn_y = self.ch_y_pos + S(2)
+
+    local show_ch_l, show_ch_r
+    if self.is_rtl then
+        show_ch_l = can_next_ch
+        show_ch_r = can_prev_ch
+    else
+        show_ch_l = can_prev_ch
+        show_ch_r = can_next_ch
+    end
+
+    if show_ch_l then
+        self._prev_ch_dimen = Geom:new{ x = side_margin_btn, y = ch_btn_y, w = ch_btn_sz, h = ch_btn_sz }
+        drawFloatingBtnBottom("ch_l", self._prev_ch_dimen, self.tw_ch_l, false)
+    else
+        self._prev_ch_dimen = nil
+    end
+
+    if show_ch_r then
+        self._next_ch_dimen = Geom:new{ x = sw - side_margin_btn - ch_btn_sz, y = ch_btn_y, w = ch_btn_sz, h = ch_btn_sz }
+        drawFloatingBtnBottom("ch_r", self._next_ch_dimen, self.tw_ch_r, false)
+    else
+        self._next_ch_dimen = nil
+    end
 
     if self._view_mode == "grid_six" then
         local btn_w = S(50)
         local mark_sz = S(36)
-        if not self._gsix_prev_dimen then
+
+        local can_page_l, can_page_r
+        if self.is_rtl then
+            can_page_l = (self._cur_page < self._total_pages)
+            can_page_r = (self._cur_page > 1)
+        else
+            can_page_l = (self._cur_page > 1)
+            can_page_r = (self._cur_page < self._total_pages)
+        end
+
+        if can_page_l then
             self._gsix_prev_dimen = Geom:new{ x = pad * 2, y = self.ctrl_y_pos, w = btn_w, h = mark_sz }
-            self._gsix_next_dimen = Geom:new{ x = sw - pad * 2 - btn_w, y = self.ctrl_y_pos, w = btn_w, h = mark_sz }
+            drawFloatingBtnBottom("gsix_prev", self._gsix_prev_dimen, self.icon_gs_chevron_left, false)
+        else
+            self._gsix_prev_dimen = nil
         end
         
-        drawFloatingBtnBottom("gsix_prev", self._gsix_prev_dimen, self.icon_gs_chevron_left, self._cur_page <= 1)
-        drawFloatingBtnBottom("gsix_next", self._gsix_next_dimen, self.icon_gs_chevron_right, self._cur_page >= self._total_pages)
+        if can_page_r then
+            self._gsix_next_dimen = Geom:new{ x = sw - pad * 2 - btn_w, y = self.ctrl_y_pos, w = btn_w, h = mark_sz }
+            drawFloatingBtnBottom("gsix_next", self._gsix_next_dimen, self.icon_gs_chevron_right, false)
+        else
+            self._gsix_next_dimen = nil
+        end
 
         if self._cur_page ~= self._origin_page then
             local bg_face = Font:getFace("cfont", self.S_BOTTOM_GRAY or S(14))
@@ -3562,19 +3998,24 @@ function PageScrubber:_paintToImpl(bb, x, y)
         local is_bmed_page = self:_isCurrentPageBookmarked(self._cur_page)
         self.tw_ctrl_mark = is_bmed_page and self.icon_mark_filled or self.icon_mark_empty
 
-        local has_prev_bm = self:_findPrevBookmark() ~= nil
-        local has_next_bm = self:_findNextBookmark() ~= nil
+        local has_left_bm, has_right_bm
+        if self.is_rtl then
+            has_left_bm  = (self:_findNextBookmark() ~= nil)
+            has_right_bm = (self:_findPrevBookmark() ~= nil)
+        else
+            has_left_bm  = (self:_findPrevBookmark() ~= nil)
+            has_right_bm = (self:_findNextBookmark() ~= nil)
+        end
 
-        drawFloatingBtnBottom("ctrl_prev", self._ctrl_prev_dimen, self.tw_ctrl_prev, not has_prev_bm)
+        drawFloatingBtnBottom("ctrl_prev", self._ctrl_prev_dimen, self.tw_ctrl_prev, not has_left_bm)
         
-        -- CAMBIO PARA EL GRID SIMPLE: Cambiamos el ícono del marcador por el ícono del grid
         if self._view_mode == "grid_simple" then
             drawFloatingBtnBottom("ctrl_mark", self._ctrl_mark_dimen, self.tw_gallery, false)
         else
             drawFloatingBtnBottom("ctrl_mark", self._ctrl_mark_dimen, self.tw_ctrl_mark, false)
         end
         
-        drawFloatingBtnBottom("ctrl_next", self._ctrl_next_dimen, self.tw_ctrl_next, not has_next_bm)
+        drawFloatingBtnBottom("ctrl_next", self._ctrl_next_dimen, self.tw_ctrl_next, not has_right_bm)
     end
 
     if self._view_mode ~= "grid_six" then
@@ -3588,7 +4029,7 @@ function PageScrubber:_paintToImpl(bb, x, y)
     local infox = math.floor((sw - isz.w) / 2)
 
     if self._view_mode == "grid_simple" then
-        local btn_center_y = self._prev_ch_dimen.y + math.floor(self._prev_ch_dimen.h / 2)
+        local btn_center_y = ch_btn_y + math.floor(ch_btn_sz / 2)
         local new_ch_y = btn_center_y - math.floor(csz_tw.h / 2)
 
         self.tw_chapter:paintTo(bb, ctx, new_ch_y)
@@ -3612,7 +4053,7 @@ function PageScrubber:_paintToImpl(bb, x, y)
     
     if self._view_mode == "grid_simple" then
         local slider_h = self._slider:getSize().h
-        local espacio_arriba = self._prev_ch_dimen.y + self._prev_ch_dimen.h
+        local espacio_arriba = ch_btn_y + ch_btn_sz
         local espacio_abajo = self.ctrl_y_pos
         local nuevo_slider_y = espacio_arriba + math.floor((espacio_abajo - espacio_arriba - slider_h) / 2)
         
@@ -3632,6 +4073,15 @@ function PageScrubber:_closeReturn()
     self._tasks_in_flight = 0
     self._grid_batch_seq = (self._grid_batch_seq or 0) + 1
     self._grid_batch_id = "safe_close_" .. tostring(os.time())
+
+    local thumbnail = self.ui and self.ui.thumbnail
+    if thumbnail and thumbnail.cancelPageThumbnailRequests and type(thumbnail.thumbnails_requests) == "table" then
+        for b_id in pairs(thumbnail.thumbnails_requests) do
+            if type(b_id) == "string" and b_id:find("^page_scrubber_") then
+                thumbnail:cancelPageThumbnailRequests(b_id)
+            end
+        end
+    end
     
     UIManager:nextTick(function()
         if self._cur_page ~= self._origin_page then
@@ -3642,7 +4092,7 @@ function PageScrubber:_closeReturn()
     end)
 end
 
-function PageScrubber:_closeStay()
+function PageScrubber:_closeStay(on_closed_callback)
     if self._closing then return end
     self._closing = true
     self:_cancelHold()
@@ -3652,11 +4102,28 @@ function PageScrubber:_closeStay()
     self._tasks_in_flight = 0
     self._grid_batch_seq = (self._grid_batch_seq or 0) + 1
     self._grid_batch_id = "safe_close_" .. tostring(os.time())
-    
-    UIManager:nextTick(function()
+
+    local thumbnail = self.ui and self.ui.thumbnail
+    if thumbnail and thumbnail.cancelPageThumbnailRequests and type(thumbnail.thumbnails_requests) == "table" then
+        for b_id in pairs(thumbnail.thumbnails_requests) do
+            if type(b_id) == "string" and b_id:find("^page_scrubber_") then
+                thumbnail:cancelPageThumbnailRequests(b_id)
+            end
+        end
+    end
+
+    if on_closed_callback then
         UIManager:close(self)
         UIManager:setDirty(nil, "full")
-    end)
+        UIManager:scheduleIn(0.18, function()
+            pcall(on_closed_callback)
+        end)
+    else
+        UIManager:nextTick(function()
+            UIManager:close(self)
+            UIManager:setDirty(nil, "full")
+        end)
+    end
 end
 
 function PageScrubber:_closeAndShow(event_name, event_data)
@@ -3669,58 +4136,92 @@ function PageScrubber:_closeAndShow(event_name, event_data)
     self._tasks_in_flight = 0
     self._grid_batch_seq = (self._grid_batch_seq or 0) + 1
     self._grid_batch_id = "safe_close_" .. tostring(os.time())
+
+    -- Cancelación inmediata de decodificación en segundo plano para evitar colisiones en C
+    local thumbnail = self.ui and self.ui.thumbnail
+    if thumbnail and thumbnail.cancelPageThumbnailRequests and type(thumbnail.thumbnails_requests) == "table" then
+        for b_id in pairs(thumbnail.thumbnails_requests) do
+            if type(b_id) == "string" and b_id:find("^page_scrubber_") then
+                thumbnail:cancelPageThumbnailRequests(b_id)
+            end
+        end
+    end
     
     UIManager:close(self)
     UIManager:setDirty(nil, "full")
-    UIManager:scheduleIn(0.15, function()
-        pcall(function() self.ui:handleEvent(Event:new(event_name, event_data)) end)
+
+    -- El scrubber se desmonta y la pantalla refresca el libro antes de abrir la acción
+    UIManager:scheduleIn(0.18, function()
+        pcall(function()
+            if type(event_name) == "function" then
+                event_name(event_data)
+            elseif type(event_name) == "table" then
+                if event_name.callback then
+                    event_name.callback(event_data)
+                elseif event_name.action then
+                    event_name.action(event_data)
+                elseif event_name.event then
+                    self.ui:handleEvent(Event:new(event_name.event, event_name.arg or event_data))
+                else
+                    self.ui:handleEvent(event_name)
+                end
+            elseif type(event_name) == "string" then
+                self.ui:handleEvent(Event:new(event_name, event_data))
+            end
+        end)
     end)
 end
+
+-- Alias de seguridad para lanzadores de acciones
+PageScrubber.executeAction = PageScrubber._closeAndShow
+PageScrubber.executeScrubberAction = PageScrubber._closeAndShow
+PageScrubber._closeAndRun = PageScrubber._closeAndShow
 
 function PageScrubber:_startHold(action)
     self._hold_active = true
     self._hold_token = self._hold_token + 1
     local current_token = self._hold_token
-    
-    local delay = 0.55
-    local max_steps = 20
-    local steps = 0
+
+    local initial_delay = 0.20  -- Arranca rápido una vez reconocido el toque
+    local repeat_delay  = 0.65  -- Ritmo constante para darle tiempo a la tinta de pintar bien el texto
 
     local function rep()
         if not self._hold_active or self._closing or self._hold_token ~= current_token then 
             self:_cancelHold()
             return 
         end
-        
-        steps = steps + 1
-        if steps > max_steps then
-            self:_cancelHold()
+
+        -- Si el renderizado previo aún está trabajando, esperamos un momento para no colisionar la pantalla
+        if self._is_busy then
+            UIManager:scheduleIn(0.08, rep)
             return
         end
-        
+
         local target_page = self._cur_page
         local jump = (self._view_mode == "grid_six") and 6 or 1
-        
+
         if action == "prev" then 
             if target_page > 1 then 
                 self._force_menu_sync = true
                 self:_previewPage(self._cur_page - jump, false) 
             else 
-                self:_cancelHold(); return 
+                self:_cancelHold()
+                return 
             end
         elseif action == "next" then 
             if target_page < self._total_pages then 
                 self._force_menu_sync = true
                 self:_previewPage(self._cur_page + jump, false) 
             else 
-                self:_cancelHold(); return 
+                self:_cancelHold()
+                return 
             end
         end
-        
-        UIManager:scheduleIn(delay, rep)
+
+        UIManager:scheduleIn(repeat_delay, rep)
     end
-    
-    UIManager:scheduleIn(delay, rep)
+
+    UIManager:scheduleIn(initial_delay, rep)
 end
 
 function PageScrubber:_cancelHold()
@@ -3767,14 +4268,16 @@ function PageScrubber:onTap(_, ges)
         if self._gsix_prev_dimen and ges.pos:intersectWith(self._gsix_prev_dimen) then
             self:_flashAndDo("gsix_prev", self._gsix_prev_dimen, function()
                 self._force_menu_sync = true
-                self:_previewPage(self._cur_page - 6, false)
+                local delta = self.is_rtl and 6 or -6
+                self:_previewPage(self._cur_page + delta, false)
             end)
             return true
         end
         if self._gsix_next_dimen and ges.pos:intersectWith(self._gsix_next_dimen) then
             self:_flashAndDo("gsix_next", self._gsix_next_dimen, function()
                 self._force_menu_sync = true
-                self:_previewPage(self._cur_page + 6, false)
+                local delta = self.is_rtl and -6 or 6
+                self:_previewPage(self._cur_page + delta, false)
             end)
             return true
         end
@@ -3827,18 +4330,24 @@ function PageScrubber:onTap(_, ges)
             self:_flashAndDo("bm", self._bm_dimen, function() 
                 if self._view_mode == "split" then
                     self._view_mode = "grid"
-                    self:_clearGridTiles()
-                    self:_previewPage(self._cur_page, false)
-                    UIManager:setDirty(nil, "full")
+                    self:_clearGridTiles(true)
+                    self._is_busy = false
+                    self._tasks_in_flight = 0
+                    self:_updateTexts()
+                    self:_updateGridPages()
+                    UIManager:setDirty(self, "full", self.dimen)
                 else
                     self._view_mode = "split"
                     self._active_tab = "bookmarks"
                     self._split_fixed_page = self._cur_page
                     self._split_bm_page = self.initial_bm_page or 1
                     self._force_menu_sync = true
-                    self:_clearGridTiles()
-                    self:_previewPage(self._cur_page, false)
-                    UIManager:setDirty(nil, "full")
+                    self:_clearGridTiles(true)
+                    self._is_busy = false
+                    self._tasks_in_flight = 0
+                    self:_updateTexts()
+                    self:_updateGridPages()
+                    UIManager:setDirty(self, "full", self.dimen)
                 end
             end)
             return true
@@ -3944,14 +4453,14 @@ function PageScrubber:onTap(_, ges)
         if self._btn_delete_dimen and ges.pos:intersectWith(self._btn_delete_dimen) then
             self._show_delete_confirm = not self._show_delete_confirm
             self._show_type_picker = false
-            UIManager:setDirty(self, "ui", self.dimen)
+            UIManager:setDirty(self, "ui", self._grid_dimen)
             return true
         end
 
         if self._btn_type_dimen and ges.pos:intersectWith(self._btn_type_dimen) then
             self._show_type_picker = not self._show_type_picker
             self._show_delete_confirm = false
-            UIManager:setDirty(self, "ui", self.dimen)
+            UIManager:setDirty(self, "ui", self._grid_dimen)
             return true
         end
 
@@ -3964,12 +4473,12 @@ function PageScrubber:onTap(_, ges)
 
         if self._show_delete_confirm then
             self._show_delete_confirm = false
-            UIManager:setDirty(self, "ui", self.dimen)
+            UIManager:setDirty(self, "ui", self._grid_dimen)
         end
 
         if self._show_type_picker then
             self._show_type_picker = false
-            UIManager:setDirty(self, "ui", self.dimen)
+            UIManager:setDirty(self, "ui", self._grid_dimen)
         end
 
         if self._tab_sort_dimen and ges.pos:intersectWith(self._tab_sort_dimen) then
@@ -4049,14 +4558,17 @@ function PageScrubber:onTap(_, ges)
                     self:_reopenWithMode("grid_simple", tgt_page)
                 else
                     self._view_mode = "grid"
-                    self:_clearGridTiles()
-                    self._force_menu_sync = true
-                    self:_previewPage(tgt_page, false)
-                    UIManager:setDirty(nil, "full")
+                    self:_clearGridTiles(true)
+                    self._is_busy = false
+                    self._tasks_in_flight = 0
+                    self:_updateTexts()
+                    self:_updateGridPages()
+                    UIManager:setDirty(self, "full", self.dimen)
                 end
             else
                 self._force_menu_sync = true
                 self:_previewPage(tgt_page, false)
+                UIManager:setDirty(self, "ui", self.dimen)
             end
             return true
         end
@@ -4064,14 +4576,14 @@ function PageScrubber:onTap(_, ges)
         if self._split_prev_dimen and ges.pos:intersectWith(self._split_prev_dimen) then
             self:_flashAndDo("split_prev", self._split_prev_dimen, function()
                 self._split_bm_page = math.max(1, (self._split_bm_page or 1) - 1)
-                UIManager:setDirty(self, "ui", self.dimen)
+                UIManager:setDirty(self, "ui", self._grid_dimen)
             end)
             return true
         end
         if self._split_next_dimen and ges.pos:intersectWith(self._split_next_dimen) then
             self:_flashAndDo("split_next", self._split_next_dimen, function()
                 self._split_bm_page = (self._split_bm_page or 1) + 1
-                UIManager:setDirty(self, "ui", self.dimen)
+                UIManager:setDirty(self, "ui", self._grid_dimen)
             end)
             return true
         end
@@ -4104,14 +4616,17 @@ function PageScrubber:onTap(_, ges)
                                 self:_reopenWithMode("grid_simple", row.page)
                             else
                                 self._view_mode = "grid"
-                                self:_clearGridTiles()
-                                self._force_menu_sync = true
-                                self:_previewPage(row.page, false)
-                                UIManager:setDirty(nil, "full")
+                                self:_clearGridTiles(true)
+                                self._is_busy = false
+                                self._tasks_in_flight = 0
+                                self:_updateTexts()
+                                self:_updateGridPages()
+                                UIManager:setDirty(self, "full", self.dimen)
                             end
                         else
                             self._force_menu_sync = true
                             self:_previewPage(row.page, false)
+                            UIManager:setDirty(self, "ui", self.dimen)
                         end
                     else
                         -- En Destacados y Notas: solo sale al lector si se pulsa el MISMO ítem que ya estaba seleccionado
@@ -4122,10 +4637,12 @@ function PageScrubber:onTap(_, ges)
                                 self:_reopenWithMode("grid_simple", row.page)
                             else
                                 self._view_mode = "grid"
-                                self:_clearGridTiles()
-                                self._force_menu_sync = true
-                                self:_previewPage(row.page, false)
-                                UIManager:setDirty(nil, "full")
+                                self:_clearGridTiles(true)
+                                self._is_busy = false
+                                self._tasks_in_flight = 0
+                                self:_updateTexts()
+                                self:_updateGridPages()
+                                UIManager:setDirty(self, "full", self.dimen)
                             end
                         else
                             -- Cambia entre (1), (2), (3) manteniendo los botones ocultos hasta pulsar el lápiz
@@ -4146,10 +4663,12 @@ function PageScrubber:onTap(_, ges)
                 self:_reopenWithMode("grid_simple", self._cur_page)
             else
                 self._view_mode = "grid"
-                self:_clearGridTiles()
-                self._force_menu_sync = true
-                self:_previewPage(self._cur_page, false)
-                UIManager:setDirty(nil, "full")
+                self:_clearGridTiles(true)
+                self._is_busy = false
+                self._tasks_in_flight = 0
+                self:_updateTexts()
+                self:_updateGridPages()
+                UIManager:setDirty(self, "full", self.dimen)
             end
             return true
         end
@@ -4179,8 +4698,9 @@ function PageScrubber:onTap(_, ges)
                 self:_clearGridTiles(true)
                 self._is_busy = false
                 self._tasks_in_flight = 0
-                self:_previewPage(self._cur_page, false)
-                UIManager:setDirty(nil, "full")
+                self:_updateTexts()
+                self:_updateGridPages()
+                UIManager:setDirty(self, "full", self.dimen)
             end)
             return true
         end
@@ -4222,7 +4742,12 @@ function PageScrubber:onTap(_, ges)
     end
 
     if self._ctrl_prev_dimen and ges.pos:intersectWith(self._ctrl_prev_dimen) then
-        local target = self.is_rtl and self:_findNextBookmark() or self:_findPrevBookmark()
+        local target
+        if self.is_rtl then
+            target = self:_findNextBookmark()
+        else
+            target = self:_findPrevBookmark()
+        end
         if target then
             self:_flashAndDo("ctrl_prev", self._ctrl_prev_dimen, function()
                 self._force_menu_sync = true
@@ -4248,7 +4773,12 @@ function PageScrubber:onTap(_, ges)
     end
     
     if self._ctrl_next_dimen and ges.pos:intersectWith(self._ctrl_next_dimen) then
-        local target = self.is_rtl and self:_findPrevBookmark() or self:_findNextBookmark()
+        local target
+        if self.is_rtl then
+            target = self:_findPrevBookmark()
+        else
+            target = self:_findNextBookmark()
+        end
         if target then
             self:_flashAndDo("ctrl_next", self._ctrl_next_dimen, function()
                 self._force_menu_sync = true
@@ -4275,17 +4805,7 @@ function PageScrubber:onTap(_, ges)
         end
     end
 
-    if self._grid_back_dimen and ges.pos:intersectWith(self._grid_back_dimen) then
-        self:_flashAndDo("grid_back", self._grid_back_dimen, function()
-            self._force_menu_sync = true
-            self:_previewPage(self._origin_page, false)
-        end)
-        return true
-    end
-
-    if self._bar_dimen and ges.pos:intersectWith(self._bar_dimen) then return true end
-    if self._top_bar_dimen and ges.pos:intersectWith(self._top_bar_dimen) then return true end
-
+    -- Evaluación prioritaria de las tarjetas de la grilla antes de descartar por barra inferior
     if self._view_mode == "grid" and not self._grid_disabled and self._grid_dimen and ges.pos:intersectWith(self._grid_dimen) then
         local nb_items = self._grid_cols * self._grid_rows
         for idx = 1, nb_items do
@@ -4311,6 +4831,17 @@ function PageScrubber:onTap(_, ges)
         end
         return true
     end
+
+    if self._grid_back_dimen and ges.pos:intersectWith(self._grid_back_dimen) then
+        self:_flashAndDo("grid_back", self._grid_back_dimen, function()
+            self._force_menu_sync = true
+            self:_previewPage(self._origin_page, false)
+        end)
+        return true
+    end
+
+    if self._bar_dimen and ges.pos:intersectWith(self._bar_dimen) then return true end
+    if self._top_bar_dimen and ges.pos:intersectWith(self._top_bar_dimen) then return true end
 
     if self._grid_disabled and self._grid_dimen and ges.pos:intersectWith(self._grid_dimen) then
         if ges.pos.intersectWith and ges.pos:intersectWith(self._fallback_prev_dimen) then
@@ -4342,10 +4873,14 @@ function PageScrubber:onPanRelease(_, ges)
     self:_cancelHold()
     if self._closing then return end
     self._last_drag_time = os.clock()
-    local on_bar = self._bar_dimen and ges.pos and (ges.pos.y >= self._bar_dimen.y - self.S(10))
-    if on_bar and self._slider and self._slider:handlePanRelease(ges) then
+    self._scrubbing_blank = false
+    self._drag_token = (self._drag_token or 0) + 1
+
+    local was_dragging = self._slider and self._slider._dragging
+    if self._slider and was_dragging then
+        self._slider:handlePanRelease(ges)
         if not self._grid_disabled then self:_updateGridPages() end
-        UIManager:setDirty(nil, "full")
+        UIManager:setDirty(self, "partial")
         return true
     end
     return true
@@ -4353,12 +4888,15 @@ end
 
 function PageScrubber:onRelease(_, ges)
     self:_cancelHold()
-    local on_bar = self._bar_dimen and ges.pos and (ges.pos.y >= self._bar_dimen.y - self.S(10))
-    if on_bar and self._slider and self._slider._dragging then
+    self._scrubbing_blank = false
+    self._drag_token = (self._drag_token or 0) + 1
+
+    local was_dragging = self._slider and self._slider._dragging
+    if self._slider and was_dragging then
         self._last_drag_time = os.clock()
         self._slider:handlePanRelease(ges)
         if not self._grid_disabled then self:_updateGridPages() end
-        UIManager:setDirty(nil, "full")
+        UIManager:setDirty(self, "partial")
     end
     return true
 end
@@ -4373,8 +4911,9 @@ function PageScrubber:onPinch(_, ges)
         self:_clearGridTiles(true)
         self._is_busy = false
         self._tasks_in_flight = 0
-        self:_previewPage(self._cur_page, false)
-        UIManager:setDirty(nil, "full")
+        self:_updateTexts()
+        self:_updateGridPages()
+        UIManager:setDirty(self, "full", self.dimen)
     end
     return true
 end
@@ -4389,8 +4928,9 @@ function PageScrubber:onSpread(_, ges)
         self:_clearGridTiles(true)
         self._is_busy = false
         self._tasks_in_flight = 0
-        self:_previewPage(self._cur_page, false)
-        UIManager:setDirty(nil, "full")
+        self:_updateTexts()
+        self:_updateGridPages()
+        UIManager:setDirty(self, "full", self.dimen)
     end
     return true
 end
@@ -4407,9 +4947,10 @@ function PageScrubber:onSwipe(_, ges)
     -- El slider SOLO debe capturar swipes realizados dentro de la barra inferior
     local on_bar = self._bar_dimen and ges.pos and (ges.pos.y >= self._bar_dimen.y - self.S(10))
     if on_bar and self._slider and self._slider:handleSwipe(ges) then
+        self._scrubbing_blank = false
         self._force_menu_sync = true
         if not self._grid_disabled then self:_updateGridPages() end
-        UIManager:setDirty(nil, "full")
+        UIManager:setDirty(self, "partial")
         return true
     end
 
@@ -4506,9 +5047,12 @@ function PageScrubber:onHold(_, ges)
             self._split_selected_item = nil
             self._force_menu_sync = true
             self:_extractAnnotations()
-            self:_clearGridTiles()
-            self:_previewPage(self._cur_page, false)
-            UIManager:setDirty(nil, "full")
+            self:_clearGridTiles(true)
+            self._is_busy = false
+            self._tasks_in_flight = 0
+            self:_updateTexts()
+            self:_updateGridPages()
+            UIManager:setDirty(self, "full", self.dimen)
             return true
         end
 
@@ -4608,8 +5152,12 @@ function PageScrubber:onHold(_, ges)
                                 self._split_fixed_page = target_page
                                 self._split_bm_page = self.initial_bm_page or 1
                                 self._force_menu_sync = true
-                                self:_clearGridTiles()
-                                self:_previewPage(target_page, false)
+                                self:_clearGridTiles(true)
+                                self._is_busy = false
+                                self._tasks_in_flight = 0
+                                self:_updateTexts()
+                                self:_updateGridPages()
+                                UIManager:setDirty(self, "full", self.dimen)
                             end
                             return true
                         end
@@ -4630,8 +5178,12 @@ function PageScrubber:onHold(_, ges)
                 self._split_fixed_page = self._cur_page
                 self._split_bm_page = self.initial_bm_page or 1
                 self._force_menu_sync = true
-                self:_clearGridTiles()
-                self:_previewPage(self._cur_page, false)
+                self:_clearGridTiles(true)
+                self._is_busy = false
+                self._tasks_in_flight = 0
+                self:_updateTexts()
+                self:_updateGridPages()
+                UIManager:setDirty(self, "full", self.dimen)
                 return true
             end
         end
@@ -4647,13 +5199,19 @@ function PageScrubber:onHold(_, ges)
 end
 
 function PageScrubber:onHoldRelease(_, ges)
+    local was_holding = self._hold_active
     self:_cancelHold()
+    if was_holding then
+        if not self._grid_disabled then self:_updateGridPages() end
+        UIManager:setDirty(self, "ui")
+    end
     return true
 end
 
 function PageScrubber:onCloseWidget()
     self._closing = true
     self:_cancelHold()
+    self._drag_token = (self._drag_token or 0) + 1
     
     self._slider._dragging = false
     self._is_busy = false
@@ -4672,8 +5230,13 @@ function PageScrubber:onCloseWidget()
     end
 
     if not self._grid_disabled then
-        for _, slot in pairs(self._grid_tiles) do
-            self:_freeTile(slot)
+        if self._tile_cache then
+            for _, item in pairs(self._tile_cache) do
+                if item.is_scaled and item.bb then
+                    pcall(function() item.bb:free() end)
+                end
+            end
+            self._tile_cache = {}
         end
         self._grid_tiles = {}
         UIManager:scheduleIn(0.01, function()
@@ -4681,6 +5244,10 @@ function PageScrubber:onCloseWidget()
                 pcall(function() self.ui.thumbnail:tidyCache() end)
             end
         end)
+    end
+
+    if ScrubberWallpaper and ScrubberWallpaper.free then
+        ScrubberWallpaper.free()
     end
 
     if self._old_can_do then Device.canDoSwipeAnimation = self._old_can_do end

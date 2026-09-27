@@ -198,6 +198,10 @@ end
 function ScrubberSettings:saveSetting(key, val)
     if key == "page_scrubber_rtl" and self.ui and self.ui.doc_settings then
         self.ui.doc_settings:saveSetting("page_scrubber_rtl", val)
+        if self.ui.doc_settings.flush then
+            pcall(function() self.ui.doc_settings:flush() end)
+        end
+        return
     end
     if G_reader_settings then
         G_reader_settings:saveSetting(key, val)
@@ -210,21 +214,81 @@ function ScrubberSettings:getPageDefinition(page_id)
         return {
             title = "",
             items = {
+                { text = _("Layout"), icon = "square-arrow-right-enter.svg", kind = "submenu", target = "layout" },
                 { text = _("Reading Pop-Ups"), icon = "notepad-text.svg", kind = "submenu", target = "popups" },
+                { text = _("Scrubber Actions"), icon = "warehouse.svg", kind = "submenu", target = "scrubber_actions" },
+                { text = _("Export notes of this document"), icon = "book-marked.svg", kind = "action", action = function() self:exportNotes() end },
+            }
+        }
+
+    elseif page_id == "layout" then
+        local is_rtl_active = function()
+            local doc_val = self.ui and self.ui.doc_settings and self.ui.doc_settings:readSetting("page_scrubber_rtl")
+            if doc_val ~= nil then
+                return doc_val == true
+            end
+            if self.scrubber_ui and self.scrubber_ui.is_rtl ~= nil then
+                return self.scrubber_ui.is_rtl
+            end
+            return false
+        end
+
+        return {
+            title = _("Layout"),
+            items = {
                 {
-                    text = _("Show chapter marks in slider"), icon = "step-forward.svg", kind = "toggle",
-                    setting = "page_scrubber_show_chapter_marks", default = true,
+                    text = _("3-Page Grid: Show full pages"),
+                    icon = "gallery-horizontal.svg",
+                    kind = "toggle",
+                    setting = "page_scrubber_full_page_grid",
+                    default = false,
+                },
+                {
+                    text = _("Show chapter marks in slider"),
+                    icon = "step-forward.svg",
+                    kind = "toggle",
+                    setting = "page_scrubber_show_chapter_marks",
+                    default = true,
                     on_change = function()
                         if self.scrubber_ui and self.scrubber_ui._updateChapterMarks then
                             self.scrubber_ui:_updateChapterMarks()
                         end
                     end,
                 },
-                { text = _("3-Page Grid: Show full pages"), icon = "gallery-horizontal.svg", kind = "toggle", setting = "page_scrubber_full_page_grid", default = false },
                 { text = _("Text size"), icon = "pencil-ruler.svg", kind = "submenu", target = "text_size" },
                 { text = _("UI Scale (%)"), icon = "search.svg", kind = "action", action = function() self:openScaleDialog() end },
-                { text = _("Scrubber Actions"), icon = "warehouse.svg", kind = "submenu", target = "scrubber_actions" },
-                { text = _("Export notes of this document"), icon = "book-marked.svg", kind = "action", action = function() self:exportNotes() end },
+                { text = _("Wallpaper"), icon = "layout-grid.svg", kind = "submenu", target = "wallpaper" },
+                {
+                    text = "RTL",
+                    icon = "arrow-left.svg",
+                    kind = "toggle",
+                    setting = "page_scrubber_rtl",
+                    read_func = is_rtl_active,
+                    on_change = function(new_val)
+                        if self.ui and self.ui.doc_settings then
+                            self.ui.doc_settings:saveSetting("page_scrubber_rtl", new_val)
+                            if self.ui.doc_settings.flush then
+                                pcall(function() self.ui.doc_settings:flush() end)
+                            end
+                        end
+                        if self.scrubber_ui then
+                            self.scrubber_ui.is_rtl = new_val
+                            if self.scrubber_ui._slider then
+                                self.scrubber_ui._slider.is_rtl = new_val
+                            end
+                            if self.scrubber_ui._clearGridTiles then
+                                self.scrubber_ui:_clearGridTiles(true)
+                            end
+                            if self.scrubber_ui._updateGridPages then
+                                self.scrubber_ui:_updateGridPages()
+                            end
+                            if self.scrubber_ui._updateTexts then
+                                self.scrubber_ui:_updateTexts()
+                            end
+                            UIManager:setDirty(self.scrubber_ui, "ui")
+                        end
+                    end,
+                },
             }
         }
 
@@ -290,8 +354,8 @@ function ScrubberSettings:getPageDefinition(page_id)
         }
 
     elseif page_id == "popups" then
-        local dict_enabled = self:readSetting("page_scrubber_floating_dict_enabled", true)
-        local sel_enabled = self:readSetting("page_scrubber_selection_menu_enabled", true)
+        local dict_enabled = self:readSetting("page_scrubber_floating_dict_enabled", false)
+        local sel_enabled = self:readSetting("page_scrubber_selection_menu_enabled", false)
 
         return {
             title = _("Reading Pop-Ups"),
@@ -301,7 +365,8 @@ function ScrubberSettings:getPageDefinition(page_id)
                     icon = "globe.svg",
                     kind = "toggle",
                     setting = "page_scrubber_floating_dict_enabled",
-                    default = true,
+                    default = false,
+                    bold = true,
                 },
                 {
                     text = _("Buttons in dictionary"),
@@ -319,11 +384,19 @@ function ScrubberSettings:getPageDefinition(page_id)
                     disabled = not dict_enabled,
                 },
                 {
+                    text = _("Dictionary text size"),
+                    icon = "pencil-ruler.svg",
+                    kind = "submenu",
+                    target = "dict_text_size",
+                    disabled = not dict_enabled,
+                },
+                {
                     text = _("Scrubber Selection Menu"),
                     icon = "crop.svg",
                     kind = "toggle",
                     setting = "page_scrubber_selection_menu_enabled",
-                    default = true,
+                    default = false,
+                    bold = true,
                 },
                 {
                     text = _("Position of selection menu"),
@@ -360,6 +433,19 @@ function ScrubberSettings:getPageDefinition(page_id)
         }
         return { title = _("Buttons in dictionary"), items = items }
 
+    elseif page_id == "dict_text_size" then
+        local cur = self:readSetting("page_scrubber_dict_font_size", "normal")
+        return {
+            title = _("Dictionary text size"),
+            items = {
+                { text = _("Very small"), icon = nil, kind = "radio", setting = "page_scrubber_dict_font_size", val = "very_small", checked = (cur == "very_small") },
+                { text = _("Small"), icon = nil, kind = "radio", setting = "page_scrubber_dict_font_size", val = "small", checked = (cur == "small") },
+                { text = _("Normal"), icon = nil, kind = "radio", setting = "page_scrubber_dict_font_size", val = "normal", checked = (cur == "normal") },
+                { text = _("Large"), icon = nil, kind = "radio", setting = "page_scrubber_dict_font_size", val = "large", checked = (cur == "large") },
+                { text = _("Very large"), icon = nil, kind = "radio", setting = "page_scrubber_dict_font_size", val = "very_large", checked = (cur == "very_large") },
+            }
+        }
+
     elseif page_id == "sel_buttons" then
         local items = {
             { text = _("AI Assistant"), icon = "sparkles.svg", kind = "toggle", setting = "page_scrubber_sel_show_ai", default = true },
@@ -393,6 +479,120 @@ function ScrubberSettings:getPageDefinition(page_id)
                 { text = _("Large"), icon = nil, kind = "radio", setting = "page_scrubber_text_size", val = "large", checked = (cur == "large") },
             }
         }
+
+    elseif page_id == "wallpaper" then
+        local cur = self:readSetting("page_scrubber_wallpaper", "none")
+        local is_none = (cur == "none" or cur == nil or cur == "")
+
+        return {
+            title = _("Wallpaper"),
+            items = {
+                {
+                    text = _("Choose wallpaper"),
+                    icon = "sparkles.svg",
+                    kind = "submenu",
+                    target = "choose_wallpaper",
+                },
+                {
+                    text = _("Book title background"),
+                    icon = "contrast.svg",
+                    kind = "submenu",
+                    target = "title_bg",
+                    disabled = is_none,
+                },
+            }
+        }
+
+    elseif page_id == "choose_wallpaper" then
+        local ScrubberWallpaper = require("scrubber_wallpaper")
+        local cur = self:readSetting("page_scrubber_wallpaper", "none")
+        local is_none = (cur == "none" or cur == nil or cur == "")
+
+        local items = {
+            {
+                text = _("None"),
+                icon = nil,
+                kind = "radio",
+                setting = "page_scrubber_wallpaper",
+                val = "none",
+                checked = is_none,
+            },
+        }
+
+        local list = ScrubberWallpaper.list()
+        for _, wp in ipairs(list) do
+            table.insert(items, {
+                text = wp.label,
+                icon = nil,
+                kind = "radio",
+                setting = "page_scrubber_wallpaper",
+                val = wp.id,
+                checked = (cur == wp.id),
+            })
+        end
+
+        table.insert(items, {
+            text = _("Add wallpaper"),
+            icon = "folder.svg",
+            kind = "action",
+            action = function() self:showWallpaperFolderInfo() end,
+        })
+
+        return {
+            title = _("Choose wallpaper"),
+            items = items,
+        }
+
+    elseif page_id == "title_bg" then
+        local raw = self:readSetting("page_scrubber_title_bg", "border")
+        local cur = "border"
+        if raw == "no_border" or raw == "borderless" then
+            cur = "no_border"
+        elseif raw == "translucent" or raw == "opacity" or raw == "semi_transparent" then
+            cur = "translucent"
+        elseif raw == "off" or raw == "none" or raw == false or raw == "false" or raw == 0 then
+            cur = "off"
+        elseif raw == "border" or raw == true or raw == "true" or raw == 1 then
+            cur = "border"
+        end
+
+        return {
+            title = _("Book title background"),
+            items = {
+                {
+                    text = _("With border"),
+                    icon = nil,
+                    kind = "radio",
+                    setting = "page_scrubber_title_bg",
+                    val = "border",
+                    checked = (cur == "border"),
+                },
+                {
+                    text = _("No border"),
+                    icon = nil,
+                    kind = "radio",
+                    setting = "page_scrubber_title_bg",
+                    val = "no_border",
+                    checked = (cur == "no_border"),
+                },
+                {
+                    text = _("Translucent"),
+                    icon = nil,
+                    kind = "radio",
+                    setting = "page_scrubber_title_bg",
+                    val = "translucent",
+                    checked = (cur == "translucent"),
+                },
+                {
+                    text = _("Off"),
+                    icon = nil,
+                    kind = "radio",
+                    setting = "page_scrubber_title_bg",
+                    val = "off",
+                    checked = (cur == "off"),
+                },
+            }
+        }
     end
 
     return { title = "", items = {} }
@@ -400,7 +600,7 @@ end
 
 function ScrubberSettings:calculateGlobalCardWidth()
     local sw = Screen:getWidth()
-    local pages = { "main", "popups", "dict_buttons", "sel_buttons", "sel_pos", "text_size", "scrubber_actions", "actions_launcher" }
+    local pages = { "main", "layout", "wallpaper", "choose_wallpaper", "title_bg", "popups", "dict_buttons", "dict_text_size", "sel_buttons", "sel_pos", "text_size", "scrubber_actions", "actions_launcher" }
     local max_item_w = 0
 
     for _, pid in ipairs(pages) do
@@ -559,6 +759,10 @@ function ScrubberSettings:getActionIcon(act)
     id = id:lower()
     cat = cat:lower()
     title = title:lower()
+
+    if id:find("rtl") or title:find("rtl") then
+        return "arrow-left.svg"
+    end
 
     if id:find("exit") or id:find("back") or id:find("prev_loc") or id:find("history_back")
             or title:find("exit") or title:find("salir") or title:find("volver")
@@ -745,7 +949,7 @@ function ScrubberSettings:getAvailableActions()
                     or is_metadata_archive
                     or is_characters_corners
                     or is_highlight_cycle
-                    or (aid:find("page_scrubber") and not aid:find("simple_grid"))
+                    or (aid:find("page_scrubber") and not aid:find("simple_grid") and not aid:find("rtl"))
                     or aid:find("touch_input")
                     or aid:find("overlap")
                     or aid:find("next_chapter")
@@ -1220,6 +1424,22 @@ function ScrubberSettings:executeAction(action_id)
     end)
 end
 
+function ScrubberSettings:showWallpaperFolderInfo()
+    local ScrubberWallpaper = require("scrubber_wallpaper")
+    local own_dir = ScrubberWallpaper.getOwnDir() or "koreader/settings/page_scrubber/wallpapers"
+    local info_text = _("To add your own wallpapers, copy images (.png, .jpg) to:")
+        .. "\n\n" .. own_dir .. "/\n\n"
+        .. _("Shared folders also detected:") .. "\n"
+        .. "• koreader/settings/bookshelf/wallpapers/\n"
+        .. "• koreader/settings/simpleui/sui_wallpapers/\n"
+        .. "• /mnt/us/Wallpapers/"
+
+    UIManager:show(ConfirmBox:new{
+        text = info_text,
+        ok_text = _("OK"),
+    })
+end
+
 function ScrubberSettings:openScaleDialog()
     local cur = math.floor((self:readSetting("page_scrubber_ui_scale", 1.0) * 100) + 0.5)
     local spin = SpinWidget:new{
@@ -1448,6 +1668,7 @@ function ScrubberSettings:paintTo(bb, x, y)
         local tw_item = TextWidget:new{
             text = tostring(item.text or ""),
             face = Font:getFace("cfont", scaleText(11)),
+            bold = item.bold == true,
             fgcolor = text_color,
             max_width = max_tw,
             truncate_with_ellipsis = true
@@ -1566,8 +1787,44 @@ function ScrubberSettings:onTap(arg1, arg2)
                 elseif it.kind == "radio" then
                     self:saveSetting(it.setting, it.val)
 
+                    if it.setting == "page_scrubber_title_bg" then
+                        local scrubber = self.scrubber_ui
+                        UIManager:close(self)
+                        if scrubber then
+                            if scrubber._closeStay then
+                                pcall(function() scrubber:_closeStay() end)
+                            else
+                                pcall(function() UIManager:close(scrubber) end)
+                            end
+                        else
+                            UIManager:setDirty(nil, "full")
+                        end
+                        return true
+                    end
+
                     if it.setting == "page_scrubber_text_size" then
                         self:reopenEntireScrubber()
+                        return true
+                    end
+
+                    if it.setting == "page_scrubber_wallpaper" then
+                        local ok_wp, ScrubberWallpaper = pcall(require, "scrubber_wallpaper")
+                        if ok_wp and ScrubberWallpaper and ScrubberWallpaper.free then
+                            ScrubberWallpaper.free()
+                        end
+
+                        -- Cierra inmediatamente ajustes y el scrubber completo para limpiar toda la RAM
+                        local scrubber = self.scrubber_ui
+                        UIManager:close(self)
+                        if scrubber then
+                            if scrubber._closeStay then
+                                pcall(function() scrubber:_closeStay() end)
+                            else
+                                pcall(function() UIManager:close(scrubber) end)
+                            end
+                        else
+                            UIManager:setDirty(nil, "full")
+                        end
                         return true
                     end
 

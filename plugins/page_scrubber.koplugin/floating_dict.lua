@@ -340,16 +340,27 @@ local function getBookRawFontSize(ui)
     return size or 26
 end
 
+local function getDictFontScale()
+    if not G_reader_settings then return 1.0 end
+    local pref = G_reader_settings:readSetting("page_scrubber_dict_font_size") or "normal"
+    if pref == "very_small" then return 0.70
+    elseif pref == "small" then return 0.85
+    elseif pref == "large" then return 1.15
+    elseif pref == "very_large" then return 1.30
+    end
+    return 1.0 -- "normal" (la del medio, escala actual 1:1)
+end
+
 local function getDictFontSize(ui)
     local base_fs = getBookRawFontSize(ui) or 26
-    -- Tamaño exacto 1:1 con la letra del libro
-    return scale(math.max(8, base_fs))
+    local font_scale = getDictFontScale()
+    return scale(math.max(8, math.floor(base_fs * font_scale + 0.5)))
 end
 
 local function getMetaFontSize(ui)
     local base_fs = getBookRawFontSize(ui) or 26
-    -- Exactamente 1 punto más chica que la letra del libro
-    return scale(math.max(7, base_fs - 1))
+    local font_scale = getDictFontScale()
+    return scale(math.max(7, math.floor((base_fs - 1) * font_scale + 0.5)))
 end
 
 local function getDictLineHeight(ui)
@@ -408,8 +419,7 @@ p, div, li { line-height: %s !important; margin: 0 0 0.28em 0; }
 ol, ul { padding-left: 1.35em; margin-top: 0.18em; margin-bottom: 0.28em; }
 
 .floatingdictionary-word { font-size: 1.20em !important; font-weight: bold !important; line-height: 1.20em !important; color: #000000 !important; }
-.floatingdictionary-meta { margin-top: 0.20em; font-size: %dpx !important; color: #111111 !important; font-style: italic; text-transform: uppercase; line-height: 1.25em !important; }
-.floatingdictionary-separator { border-top: 1px solid #666; margin: 0.35em 0 0.45em 0; }
+.floatingdictionary-meta { margin-top: 0.20em; margin-bottom: 0.35em; font-size: %dpx !important; color: #111111 !important; font-style: italic; text-transform: uppercase; line-height: 1.25em !important; }
 .search-content, .search-content * { font-size: 1.0em !important; line-height: %s !important; color: #000000 !important; }
 .search-content { font-weight: normal !important; }
 .search-content b, .search-content strong { font-weight: bold !important; }
@@ -829,7 +839,6 @@ function FloatingDictionaryPopup:init()
 
     local html_body = string.format([[
         <div class="floatingdictionary-meta">%s%s</div>
-        <div class="floatingdictionary-separator"></div>
         <div class="search-content">%s</div>
     ]], dict_indicator, htmlEscape(dict_name), def_body)
 
@@ -1075,7 +1084,7 @@ function FloatingDictionaryPopup:init()
     local max_word_w = title_avail_w - edit_btn_sz - title_gap
 
     local base_fs = getBookRawFontSize(ui_instance) or 26
-    local word_fs = scale(base_fs + 4) -- Un poco más grande que el texto del libro
+    local word_fs = scale(math.max(10, math.floor((base_fs + 4) * getDictFontScale() + 0.5)))
     local word_face = getBookFace(ui_instance, word_fs, true)
     local raw_display_word = tostring(entry.word or self.text or ""):gsub("\n", " ")
 
@@ -1333,7 +1342,6 @@ function FloatingDictionaryPopup:switchDict(new_idx)
 
     local html_body = string.format([[
         <div class="floatingdictionary-meta">%s%s</div>
-        <div class="floatingdictionary-separator"></div>
         <div class="search-content">%s</div>
     ]], dict_indicator, htmlEscape(dict_name), def_body)
 
@@ -2302,7 +2310,7 @@ function FloatingDict:isEnabled()
         local val = G_reader_settings:readSetting(SETTING_DICT_ENABLED)
         if val ~= nil then return val == true end
     end
-    return true
+    return false
 end
 
 function FloatingDict:setEnabled(state)
@@ -2317,7 +2325,7 @@ function FloatingDict:isSelectionMenuEnabled()
         local val = G_reader_settings:readSetting(SETTING_SELECTION_ENABLED)
         if val ~= nil then return val == true end
     end
-    return true
+    return false
 end
 
 function FloatingDict:setSelectionMenuEnabled(state)

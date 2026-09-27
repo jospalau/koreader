@@ -28,7 +28,6 @@ local function paintCornerRect(bb, x, y, w, h, r, color, round_tl, round_tr, rou
     r = math.min(r, math.floor(w / 2), math.floor(h / 2))
     if r <= 0 then bb:paintRect(x, y, w, h, color); return end
     bb:paintRect(x + r, y, w - 2*r, h, color)
-    bb:paintRect(x + r, y, w - 2*r, h, color)
     bb:paintRect(x, y + r, r, math.max(1, h - 2*r), color)
     bb:paintRect(x + w - r, y + r, r, math.max(1, h - 2*r), color)
     if not round_tl then bb:paintRect(x, y, r, r, color) end
@@ -266,15 +265,10 @@ function TocLandscapeView.updateLayout(toc)
     toc._prev_ch_dimen = nil
     toc._next_ch_dimen = nil
 
-    -- 4 botones de navegación centrados exactamente debajo de los puntos de página del lateral derecho
-    local rd_center_x = toc._lnd_right_dimen.x + math.floor(toc._lnd_right_dimen.w / 2)
-    local right_4_w = b_sz * 4 + gap_b * 3
-    local r_start = rd_center_x - math.floor(right_4_w / 2)
-
-    toc._first_toc_dimen = Geom:new{ x = r_start, y = l1_y + math.floor((l1_h - b_sz)/2), w = b_sz, h = b_sz }
-    toc._prev_toc_dimen  = Geom:new{ x = r_start + b_sz + gap_b, y = l1_y + math.floor((l1_h - b_sz)/2), w = b_sz, h = b_sz }
-    toc._next_toc_dimen  = Geom:new{ x = r_start + (b_sz + gap_b) * 2, y = l1_y + math.floor((l1_h - b_sz)/2), w = b_sz, h = b_sz }
-    toc._last_toc_dimen  = Geom:new{ x = r_start + (b_sz + gap_b) * 3, y = l1_y + math.floor((l1_h - b_sz)/2), w = b_sz, h = b_sz }
+    toc._first_toc_dimen = nil
+    toc._prev_toc_dimen  = nil
+    toc._next_toc_dimen  = nil
+    toc._last_toc_dimen  = nil
 end
 
 function TocLandscapeView.paint(toc, bb)
@@ -340,34 +334,37 @@ function TocLandscapeView.paint(toc, bb)
     toc.tw_author:paintTo(bb, ax, cur_y + 1)
     cur_y = cur_y + toc.tw_author:getSize().h + S(2)
 
-    local ch_idx = toc:_getChapterIndexForPage(toc._cur_page)
-    local ch = toc._filtered_toc and toc._filtered_toc[ch_idx]
-    if ch then
-        local flat_idx = 1
-        for i, fch in ipairs(toc._flat_toc) do
-            if fch.page == ch.page and fch.title == ch.title then flat_idx = i; break end
-        end
-        local cur_depth = ch.depth or 0
-        local next_p = toc._total_pages
-        for j = flat_idx + 1, #toc._flat_toc do
-            if (toc._flat_toc[j].depth or 0) <= cur_depth then
-                next_p = toc._flat_toc[j].page
-                break
+    local is_scrubbing = (toc._slider and toc._slider._dragging) or toc._repeat_running
+    if not is_scrubbing then
+        local ch_idx = toc:_getActiveChapterIndex()
+        local ch = toc._filtered_toc and toc._filtered_toc[ch_idx]
+        if ch then
+            local flat_idx = 1
+            for i, fch in ipairs(toc._flat_toc) do
+                if fch.page == ch.page and fch.title == ch.title then flat_idx = i; break end
             end
-        end
-        local pages_len = math.max(0, next_p - ch.page)
-        local stats = toc.ui and toc.ui.statistics
-        local time_str = (pages_len > 0 and stats and type(stats.getTimeForPages) == "function") and stats:getTimeForPages(pages_len) or nil
+            local cur_depth = ch.depth or 0
+            local next_p = toc._total_pages
+            for j = flat_idx + 1, #toc._flat_toc do
+                if (toc._flat_toc[j].depth or 0) <= cur_depth then
+                    next_p = toc._flat_toc[j].page
+                    break
+                end
+            end
+            local pages_len = math.max(0, next_p - ch.page)
+            local stats = toc.ui and toc.ui.statistics
+            local time_str = (pages_len > 0 and stats and type(stats.getTimeForPages) == "function") and stats:getTimeForPages(pages_len) or nil
 
-        if time_str and time_str ~= "" then
-            if not toc._tw_lnd_time then
-                toc._tw_lnd_time = TextWidget:new{ text = "", face = toc.font_author, fgcolor = Blitbuffer.COLOR_DARK_GRAY }
+            if time_str and time_str ~= "" then
+                if not toc._tw_lnd_time then
+                    toc._tw_lnd_time = TextWidget:new{ text = "", face = toc.font_author, fgcolor = Blitbuffer.COLOR_DARK_GRAY }
+                end
+                toc._tw_lnd_time:setText(time_str)
+                local tx = ld.x + inner_pad
+                toc._tw_lnd_time:paintTo(bb, tx, cur_y)
+                toc._tw_lnd_time:paintTo(bb, tx + 1, cur_y)
+                toc._tw_lnd_time:paintTo(bb, tx, cur_y + 1)
             end
-            toc._tw_lnd_time:setText(time_str)
-            local tx = ld.x + inner_pad
-            toc._tw_lnd_time:paintTo(bb, tx, cur_y)
-            toc._tw_lnd_time:paintTo(bb, tx + 1, cur_y)
-            toc._tw_lnd_time:paintTo(bb, tx, cur_y + 1)
         end
     end
 
@@ -392,7 +389,8 @@ function TocLandscapeView.paint(toc, bb)
 
     local start_idx = (toc._toc_page - 1) * toc._items_per_page + 1
     local end_idx   = math.min(toc._toc_page * toc._items_per_page, total_items)
-    local active_ch_idx = toc:_getActiveChapterIndex()
+    local is_scrubbing = (toc._slider and toc._slider._dragging) or toc._repeat_running
+    local active_ch_idx = is_scrubbing and -1 or toc:_getActiveChapterIndex()
     local origin_ch_idx = toc:_getChapterIndexForPage(toc._origin_page)
 
     toc._toc_rows = {}
@@ -473,19 +471,52 @@ function TocLandscapeView.paint(toc, bb)
     end
 
     if total_pages > 1 then
-        local dot_r = math.max(2, math.floor(S(2.5)))
-        local pitch = S(11)
-        local pill_widget = GlimpsePill:new{
-            padding_h = S(9), height = S(21), radius = S(8), stroke = S(2),
-            inner = GlimpseDots:new{ nb = total_pages, cur = toc._toc_page, pitch = math.floor(pitch), dot_r = dot_r, height = S(10) }
-        }
+        local dot_r = math.floor(S(2.5))
+        if dot_r < 2 then dot_r = 2 end
+        local natural_pitch = S(11)
+        local min_pitch = 2 * dot_r + S(3)
+
+        -- Cálculo simétrico de espacio disponible respetando los botones a los lados
+        local rd_right = rd.x + rd.w
+        local right_reserved = toc._toggle_expand_dimen and (rd_right - toc._toggle_expand_dimen.x + S(8)) or S(16)
+        local left_reserved = toc._filter_dimen and ((toc._filter_dimen.x + toc._filter_dimen.w) - rd.x + S(8)) or S(16)
+        local side_max = math.max(right_reserved, left_reserved)
+        local budget = rd.w - (side_max * 2)
+        local pitch = natural_pitch
+
+        if total_pages > 1 then
+            pitch = math.min(natural_pitch, (budget - 2 * dot_r) / (total_pages - 1))
+        end
+
+        local is_dots = (pitch >= min_pitch)
+        local pill_widget
+        if is_dots then
+            pill_widget = GlimpsePill:new{
+                padding_h = S(9), height = S(21), radius = S(8), stroke = S(2),
+                inner = GlimpseDots:new{ nb = total_pages, cur = toc._toc_page, pitch = math.floor(pitch), dot_r = dot_r, height = S(10) }
+            }
+        else
+            pill_widget = GlimpsePill:new{
+                padding_h = S(9), height = S(21), radius = S(8), stroke = S(2),
+                inner = TextWidget:new{
+                    text = toc._toc_page .. " / " .. total_pages,
+                    face = Font:getFace("cfont", S(11)),
+                    bold = true,
+                    fgcolor = Blitbuffer.COLOR_BLACK,
+                }
+            }
+        end
+
         local psz = pill_widget:getSize()
         local px = rd.x + math.floor((rd.w - psz.w) / 2)
         local py = toc._bot_internal_y + math.floor((toc._bot_internal_h - psz.h) / 2)
+        local r_max = math.floor(dot_r * 1.5)
         toc._pill_dimen = Geom:new{ x = px, y = py, w = psz.w, h = psz.h }
-        toc._pill_info = { is_dots = true, nb = total_pages, pitch = pitch, r_max = math.floor(dot_r * 1.5), pad_h = S(9) }
+        toc._pill_info = { is_dots = is_dots, nb = total_pages, pitch = pitch, r_max = r_max, pad_h = S(9) }
         pill_widget:paintTo(bb, px, py)
         pill_widget:free()
+    else
+        toc._pill_dimen = nil
     end
 
     if toc._toggle_expand_dimen then
@@ -532,18 +563,14 @@ function TocLandscapeView.paint(toc, bb)
         local bar_pad_y = S(6)
         local l1_y = bd.y + bar_pad_y
 
-        local function drawBtnWithPress(btn_id, dim, widget, widget_inv, y_off, is_disabled)
+        local function drawBtnWithPress(btn_id, dim, widget, widget_inv, y_off)
             if not dim or not widget then return end
-            local is_p = (toc._pressed_btn == btn_id and not is_disabled and btn_id ~= "prev_ch" and btn_id ~= "next_ch")
+            local is_p = (toc._pressed_btn == btn_id)
             local wsz = widget:getSize()
             local wx = dim.x + math.floor((dim.w - wsz.w)/2)
             local wy = dim.y + math.floor((dim.h - wsz.h)/2) + (y_off or 0)
 
-            if is_disabled then
-                widget.fgcolor = Blitbuffer.COLOR_LIGHT_GRAY
-                widget:paintTo(bb, wx, wy)
-                widget.fgcolor = Blitbuffer.COLOR_BLACK
-            elseif is_p then
+            if is_p then
                 paintRoundRect(bb, dim.x, dim.y, dim.w, dim.h, S(8), Blitbuffer.COLOR_BLACK)
                 if widget_inv then
                     widget_inv:paintTo(bb, wx, wy)
@@ -562,9 +589,10 @@ function TocLandscapeView.paint(toc, bb)
         local has_prev_toc = (toc._toc_page > 1)
         local has_next_toc = (toc._toc_page < total_pages)
 
-        -- 1. Métricas del capítulo activo (Marcadores y Destacados)
-        local ch_idx = toc:_getChapterIndexForPage(toc._cur_page)
+        -- 1. Métricas del capítulo activo (Páginas, Marcadores y Destacados)
+        local ch_idx = toc:_getActiveChapterIndex()
         local bm_cnt, hl_cnt = 0, 0
+        local start_page, end_page
         if ch_idx and toc._filtered_toc and toc._filtered_toc[ch_idx] then
             local ch = toc._filtered_toc[ch_idx]
             local flat_idx = 1
@@ -572,7 +600,7 @@ function TocLandscapeView.paint(toc, bb)
                 if fch.page == ch.page and fch.title == ch.title then flat_idx = i; break end
             end
             local cur_depth = ch.depth or 0
-            local end_page = toc._total_pages
+            end_page = toc._total_pages
             for j = flat_idx + 1, #toc._flat_toc do
                 local next_ch = toc._flat_toc[j]
                 if (next_ch.depth or 0) <= cur_depth then
@@ -580,7 +608,7 @@ function TocLandscapeView.paint(toc, bb)
                     break
                 end
             end
-            local start_page = ch.page
+            start_page = ch.page
             if end_page < start_page then end_page = start_page end
 
             if toc.parent_scrubber and toc.parent_scrubber._cached_hl then
@@ -635,12 +663,48 @@ function TocLandscapeView.paint(toc, bb)
             end
         end
 
+        -- Cálculo de páginas con soporte para subcapítulos y stable pages (pagemap)
+        local ch_pages = 0
+        if start_page and end_page then
+            local ui = toc.ui
+            if ui and ui.pagemap and type(ui.pagemap.wantsPageLabels) == "function" and ui.pagemap:wantsPageLabels() and ui.toc and type(ui.toc.getPagePagemapIndex) == "function" then
+                local p_start = ui.toc:getPagePagemapIndex(start_page)
+                local p_end = ui.toc:getPagePagemapIndex(end_page + 1) or ui.toc:getPagePagemapIndex(end_page)
+                if p_start and p_end and p_end >= p_start then
+                    ch_pages = (p_end - p_start)
+                    if ch_pages == 0 then ch_pages = 1 end
+                end
+            end
+            if ch_pages == 0 then
+                ch_pages = math.max(1, end_page - start_page + 1)
+            end
+        else
+            ch_pages = 0
+        end
+
         local l1_cy = l1_y + math.floor(l1_h / 2)
         local icon_gap = S(6)
-        local group_gap = S(24)
+        local group_gap = S(18)
         local cur_left_x = pad_x + S(8)
 
-        -- 2. LATERAL IZQUIERDO: [gravity-ui--bookmark.svg] N  y  [pin.svg] N
+        -- 2. LATERAL IZQUIERDO: [book-open-text.svg] (Solo ícono al arrastrar, número al soltar)
+        if toc.icon_stat_pages and toc._tw_stat_pages_cnt then
+            local isz = toc.icon_stat_pages:getSize()
+            if is_scrubbing or ch_pages <= 0 then
+                toc.icon_stat_pages:paintTo(bb, cur_left_x, l1_cy - math.floor(isz.h / 2))
+                cur_left_x = cur_left_x + isz.w + group_gap
+            else
+                toc._tw_stat_pages_cnt:setText(tostring(ch_pages))
+                toc._tw_stat_pages_cnt.fgcolor = Blitbuffer.COLOR_BLACK
+
+                local tsz = toc._tw_stat_pages_cnt:getSize()
+
+                toc.icon_stat_pages:paintTo(bb, cur_left_x, l1_cy - math.floor(isz.h / 2))
+                toc._tw_stat_pages_cnt:paintTo(bb, cur_left_x + isz.w + icon_gap, l1_cy - math.floor(tsz.h / 2))
+                cur_left_x = cur_left_x + isz.w + icon_gap + tsz.w + group_gap
+            end
+        end
+
         if toc.icon_stat_bm and toc._tw_stat_bm_cnt then
             toc._tw_stat_bm_cnt:setText(tostring(bm_cnt))
             local col = (bm_cnt > 0) and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_DARK_GRAY
@@ -713,11 +777,33 @@ function TocLandscapeView.paint(toc, bb)
             toc._grid_back_dimen = nil
         end
 
-        -- 4. LATERAL DERECHO: [<<] [<] [>] [>>]
-        drawBtnWithPress("first_toc", toc._first_toc_dimen, toc.icon_toc_first, toc.icon_toc_first_inv, 0, not has_prev_toc)
-        drawBtnWithPress("prev_toc", toc._prev_toc_dimen, toc.icon_toc_prev, toc.icon_toc_prev_inv, 0, not has_prev_toc)
-        drawBtnWithPress("next_toc", toc._next_toc_dimen, toc.icon_toc_next, toc.icon_toc_next_inv, 0, not has_next_toc)
-        drawBtnWithPress("last_toc", toc._last_toc_dimen, toc.icon_toc_last, toc.icon_toc_last_inv, 0, not has_next_toc)
+        -- 4. LATERAL DERECHO: [<<] [<] [>] [>>] (desaparición dinámica idéntica al modo vertical)
+        local b_sz = S(34)
+        local gap_b = S(8)
+        local rd_center_x = toc._lnd_right_dimen.x + math.floor(toc._lnd_right_dimen.w / 2)
+        local right_4_w = b_sz * 4 + gap_b * 3
+        local r_start = rd_center_x - math.floor(right_4_w / 2)
+        local btn_y = l1_y + math.floor((l1_h - b_sz) / 2)
+
+        if has_prev_toc then
+            toc._first_toc_dimen = Geom:new{ x = r_start, y = btn_y, w = b_sz, h = b_sz }
+            toc._prev_toc_dimen  = Geom:new{ x = r_start + b_sz + gap_b, y = btn_y, w = b_sz, h = b_sz }
+            drawBtnWithPress("first_toc", toc._first_toc_dimen, toc.icon_toc_first, toc.icon_toc_first_inv, 0)
+            drawBtnWithPress("prev_toc", toc._prev_toc_dimen, toc.icon_toc_prev, toc.icon_toc_prev_inv, 0)
+        else
+            toc._first_toc_dimen = nil
+            toc._prev_toc_dimen  = nil
+        end
+
+        if has_next_toc then
+            toc._next_toc_dimen  = Geom:new{ x = r_start + (b_sz + gap_b) * 2, y = btn_y, w = b_sz, h = b_sz }
+            toc._last_toc_dimen  = Geom:new{ x = r_start + (b_sz + gap_b) * 3, y = btn_y, w = b_sz, h = b_sz }
+            drawBtnWithPress("next_toc", toc._next_toc_dimen, toc.icon_toc_next, toc.icon_toc_next_inv, 0)
+            drawBtnWithPress("last_toc", toc._last_toc_dimen, toc.icon_toc_last, toc.icon_toc_last_inv, 0)
+        else
+            toc._next_toc_dimen = nil
+            toc._last_toc_dimen = nil
+        end
 
         -- Nivel 2: Slider a todo lo ancho con altura coincidente con Grid
         local l2_y = l1_y + l1_h + bar_gap

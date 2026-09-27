@@ -262,4 +262,71 @@ msgstr "Nessuna azione di sistema disponibile."
 msgid "Action unavailable in this document or view."
 msgstr "Azione non disponibile in questo documento o visualizzazione."
 
+# Layout & Sfondo
+msgid "Layout"
+msgstr "Layout"
 
+msgid "Wallpaper"
+msgstr "Sfondo"
+
+msgid "Choose wallpaper"
+msgstr "Scegli sfondo"
+
+msgid "Add wallpaper"
+msgstr "Aggiungi sfondo"
+
+msgid "None"
+msgstr "Nessuno"
+
+# Sfondo titolo libro
+msgid "Book title background"
+msgstr "Sfondo del titolo del libro"
+
+msgid "With border"
+msgstr "Con bordo"
+
+msgid "No border"
+msgstr "Senza bordo"
+
+msgid "Translucent"
+msgstr "Traslucido"
+
+msgid "Off"
+msgstr "Disattivato"
+
+# Info cartelle
+msgid "To add your own wallpapers, copy images (.png, .jpg) to:"
+msgstr "Per aggiungere i tuoi sfondi, copia le immagini (.png, .jpg) in:"
+
+msgid "Shared folders also detected:"
+msgstr "Cartelle condivise rilevate:"
+
+# Sistema
+msgid "System Error exporting notes."
+msgstr "Errore di sistema durante l'esportazione delle note."
+
+# Gesti e azioni dello Scrubber / RTL
+msgid "Page Scrubber: Index (Table of Content)"
+msgstr "Page Scrubber: Indice (Sommario)"
+
+msgid "Page Scrubber: Toggle RTL"
+msgstr "Page Scrubber: Alterna RTL"
+
+msgid "Page Scrubber: RTL (ON)"
+msgstr "Page Scrubber: RTL (ATTIVATO)"
+
+msgid "Page Scrubber: RTL (OFF)"
+msgstr "Page Scrubber: RTL (DISATTIVATO)"
+
+# Dimensioni del dizionario
+msgid "Dictionary text size"
+msgstr "Dimensione testo del dizionario"
+
+msgid "Very small"
+msgstr "Molto piccolo"
+
+msgid "Normal"
+msgstr "Normale"
+
+msgid "Very large"
+msgstr "Molto grande"

@@ -11,15 +11,23 @@ local Device          = require("device")
 -- Lector de .po en vivo
 local _dict = {}
 local _lang = "en"
+local full_lang = "en"
 if G_reader_settings then
     local l = G_reader_settings:readSetting("language")
-    if type(l) == "string" then _lang = l:sub(1, 2) end
+    if type(l) == "string" then
+        full_lang = l
+        _lang = l:sub(1, 2)
+    end
 end
 
 if _lang ~= "en" then
     local plugin_path = debug.getinfo(1, "S").source:match("^@?(.*[/\\])") or "./"
-    local po_path = plugin_path .. "locales/" .. _lang .. ".po"
+    local po_path = plugin_path .. "locales/" .. full_lang .. ".po"
     local f = io.open(po_path, "r")
+    if not f and _lang ~= full_lang then
+        po_path = plugin_path .. "locales/" .. _lang .. ".po"
+        f = io.open(po_path, "r")
+    end
     if f then
         local current_id
         for line in f:lines() do
@@ -62,6 +70,8 @@ function PageScrubberPlugin:init()
     Dispatcher:registerAction("page_scrubber_menu_bm_action", { category = "none", event = "PageScrubberMenuBM", title = _("Page Scrubber: Menu (Bookmarks)"), reader = true })
     Dispatcher:registerAction("page_scrubber_menu_hl_action", { category = "none", event = "PageScrubberMenuHL", title = _("Page Scrubber: Menu (Highlights)"), reader = true })
     Dispatcher:registerAction("page_scrubber_toc_action", { category = "none", event = "PageScrubberToc", title = _("Page Scrubber: Index"), reader = true })
+    Dispatcher:registerAction("page_scrubber_toc_expanded_action", { category = "none", event = "PageScrubberTocExpanded", title = _("Page Scrubber: Index (Table of Content)"), reader = true })
+    Dispatcher:registerAction("page_scrubber_toggle_rtl_action", { category = "none", event = "PageScrubberToggleRTL", title = _("Page Scrubber: Toggle RTL"), reader = true })
 
     if self.ui.menu then self.ui.menu:registerToMainMenu(self) end
 
@@ -147,6 +157,54 @@ function ReaderUI:onPageScrubberToc()
     end)
 end
 
+function ReaderUI:onPageScrubberTocExpanded()
+    local ui = self
+    if not ui.document then return end
+    UIManager:nextTick(function()
+        local ScrubberToc = require("scrubber_toc")
+        local cur_page = (ui.view and ui.view.state and ui.view.state.page) or 1
+        UIManager:show(ScrubberToc:new{
+            ui = ui,
+            initial_page = cur_page,
+            initial_origin = cur_page,
+            initial_expanded = true,
+        })
+        if Device:isKindle() then UIManager:setDirty(nil, "full") end
+    end)
+end
+
+function ReaderUI:onPageScrubberToggleRTL()
+    local ui = self
+    if not ui.document or not ui.doc_settings then return true end
+
+    local doc_val = ui.doc_settings:readSetting("page_scrubber_rtl")
+    local is_rtl = false
+    if doc_val ~= nil then
+        is_rtl = (doc_val == true)
+    else
+        if ui.doc_settings:readSetting("inverse_reading_order") == true then
+            is_rtl = true
+        else
+            local dir = tostring(ui.doc_settings:readSetting("reading_direction") or ""):upper()
+            is_rtl = (dir == "R2L" or dir == "RTL")
+        end
+    end
+
+    local new_val = not is_rtl
+    ui.doc_settings:saveSetting("page_scrubber_rtl", new_val)
+    if ui.doc_settings.flush then
+        pcall(function() ui.doc_settings:flush() end)
+    end
+
+    local InfoMessage = require("ui/widget/infomessage")
+    local msg = new_val and _("Page Scrubber: RTL (ON)") or _("Page Scrubber: RTL (OFF)")
+    UIManager:show(InfoMessage:new{
+        text = msg,
+        timeout = 1.5,
+    })
+    return true
+end
+
 function PageScrubberPlugin:addToMainMenu(menu_items)
     local my_menu = {
         text = "Page Scrubber",
@@ -167,7 +225,8 @@ function PageScrubberPlugin:addToMainMenu(menu_items)
             { text = _("Page Scrubber: Multi-Grid"), callback = function() self.ui:onPageScrubberMultiGrid() end },
             { text = _("Page Scrubber: Menu (Bookmarks)"), callback = function() self.ui:onPageScrubberMenuBM() end },
             { text = _("Page Scrubber: Menu (Highlights)"), callback = function() self.ui:onPageScrubberMenuHL() end },
-            { text = _("Page Scrubber: Index"), callback = function() self.ui:onPageScrubberToc() end }
+            { text = _("Page Scrubber: Index"), callback = function() self.ui:onPageScrubberToc() end },
+            { text = _("Page Scrubber: Index (Table of Content)"), callback = function() self.ui:onPageScrubberTocExpanded() end },
         }
     }
 
