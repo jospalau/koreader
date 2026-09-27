@@ -2592,7 +2592,6 @@ function Repo.readProgress(filepath)
     -- page_src: which rung answered the page count -- "stable", "render",
     -- "store" or "filename". The sixth return; the spine's thickness needs
     -- to know (issue 387, SpineShelf.thicknessPages).
-
     local pct, status, rating, page_count, page_num, page_src, pub_date, modified_date, words, grrating, grvotes
     local ok_ds, ds = pcall(function() return getDocSettings():open(filepath) end)
     if ok_ds and ds then
@@ -5588,9 +5587,15 @@ _recordMatches = function(b, compiled)
     local need_rating = compiled.ratings  ~= nil
     if (need_status and b._status == nil) or (need_rating and b.rating == nil) then
         if b.filepath and _hasSidecar(b.filepath) then
-            local _pct, status, rating = Repo.readProgress(b.filepath)
+            -- Keep everything this read returns: it sets _progress_fetched,
+            -- and the sort's prefetch skips a record so marked. Dropping the
+            -- percentage here is how a filtered shelf sorted by Progress came
+            -- out in title order (issue 463).
+            local pct, status, rating, page_count = Repo.readProgress(b.filepath)
             if b._status == nil then b._status = _normalizeStatus(status) end
             if b.rating  == nil then b.rating  = rating end
+            if b._pct    == nil then b._pct    = pct end
+            if b.page_count == nil then b.page_count = page_count end
         else
             if b._status == nil then b._status = "unread" end
             -- no sidecar => never opened => unrated; leave b.rating nil
