@@ -76,16 +76,18 @@ function FileSearcher:onShowFileSearch(search_string, callbackfunc)
     --     local cls = mt and mt.__index and (mt.__index.name or tostring(mt.__index)) or "?"
     --     logger.dbg("  stack[" .. i .. "]:", w.name or tostring(w), "class:", cls)
     -- end
-    local search_dialog, check_button_case, check_button_subfolders, check_button_patterns, check_button_metadata
+    local search_dialog
+    local check_button_case, check_button_patterns, check_button_metadata, check_button_content, check_button_subfolders
     local function _doSearch()
         local search_str = search_dialog:getInputText()
         if search_str == "" then return end
         FileSearcher.search_string = search_str
         UIManager:close(search_dialog)
         self.case_sensitive = check_button_case.checked
-        self.include_subfolders = check_button_subfolders.checked
         self.use_patterns = check_button_patterns.checked
         self.include_metadata = check_button_metadata and check_button_metadata.checked
+        self.include_content = check_button_content and check_button_content.checked
+        self.include_subfolders = check_button_subfolders.checked
         local Trapper = require("ui/trapper")
         Trapper:wrap(function()
             self:doSearch()
@@ -130,12 +132,6 @@ function FileSearcher:onShowFileSearch(search_string, callbackfunc)
         parent = search_dialog,
     }
     search_dialog:addWidget(check_button_case)
-    check_button_subfolders = CheckButton:new{
-        text = _("Include subfolders"),
-        checked = self.include_subfolders,
-        parent = search_dialog,
-    }
-    search_dialog:addWidget(check_button_subfolders)
     check_button_patterns = CheckButton:new{
         text = _("Use patterns"),
         checked = self.use_patterns,
@@ -150,6 +146,20 @@ function FileSearcher:onShowFileSearch(search_string, callbackfunc)
         }
         search_dialog:addWidget(check_button_metadata)
     end
+    if not self.ui.document then -- avoid 2 instances of crengine
+        check_button_content = CheckButton:new{
+            text = _("Also search in book content (slow)"),
+            checked = self.include_content,
+            parent = search_dialog,
+        }
+        search_dialog:addWidget(check_button_content)
+    end
+    check_button_subfolders = CheckButton:new{
+        text = _("Include subfolders"),
+        checked = self.include_subfolders,
+        parent = search_dialog,
+    }
+    search_dialog:addWidget(check_button_subfolders)
     UIManager:show(search_dialog)
     search_dialog:onShowKeyboard()
     return true
@@ -192,8 +202,8 @@ end
 
 function FileSearcher:doSearch(callbackfunc)
     local search_hash = FileSearcher.search_path .. (FileSearcher.search_string or "") ..
-    tostring(self.case_sensitive) .. tostring(self.include_subfolders) ..
-    tostring(self.use_patterns) .. tostring(self.include_metadata) .. select(2, FileChooser:getCollate())
+    tostring(self.case_sensitive) .. tostring(self.use_patterns) ..
+    tostring(self.include_metadata) .. tostring(self.include_content) .. tostring(self.include_subfolders) .. select(2, FileChooser:getCollate())
     local not_cached = FileSearcher.search_hash ~= search_hash
     if not_cached then
         local Trapper = require("ui/trapper")
@@ -220,8 +230,9 @@ function FileSearcher:doSearch(callbackfunc)
             dirs[i] = fc:getListItem(nil, f, fullpath, attributes, collate)
         end
         for i, v in ipairs(files) do
-            local f, fullpath, attributes = unpack(v)
+            local f, fullpath, attributes, found_pos = unpack(v)
             files[i] = fc:getListItem(nil, f, fullpath, attributes, collate)
+            files[i].found_pos = type(found_pos) ~= "boolean" and found_pos or nil
         end
         FileSearcher.search_results = fc:genItemTable(dirs, files)
     end
@@ -415,8 +426,9 @@ function FileSearcher:getList()
                             end
                         else
                             -- print(fullpath)
-                            if self:isFileMatch(f, fullpath, search_string, true) then
-                                table.insert(dirs, { f, fullpath, attributes })
+                            local found_pos = self:isFileMatch(f, fullpath, search_string, true)
+                            if found_pos then
+                                table.insert(files, { f, fullpath, attributes, found_pos })
                                 -- local file = FileChooser:getListItem(nil, f, fullpath, attributes, collate)
                                 -- file.pages = calibre_data[file.text] and calibre_data[file.text].pages or 0
                                 -- file.words = calibre_data[file.text] and calibre_data[file.text].words or 0
@@ -454,12 +466,18 @@ function FileSearcher:isFileMatch(filename, fullpath, search_string, is_file)
             return true
         end
     end
-    if self.include_metadata and is_file and DocumentRegistry:hasProvider(fullpath) then
-        local book_props = self.ui.bookinfo:getDocProps(fullpath, nil, true) -- do not open the document
-        if next(book_props) ~= nil then
-            return self.ui.bookinfo:findInProps(book_props, search_string, self.case_sensitive)
-        else
-            self.no_metadata_count = self.no_metadata_count + 1
+    if is_file and (self.include_metadata or self.include_content) and DocumentRegistry:hasProvider(fullpath) then
+        if self.include_metadata then
+            local book_props = self.ui.bookinfo:getDocProps(fullpath, nil, true) -- do not open the document
+            if next(book_props) ~= nil then
+                return self.ui.bookinfo:findInProps(book_props, search_string, self.case_sensitive)
+            else
+                self.no_metadata_count = self.no_metadata_count + 1
+            end
+        end
+        if self.include_content then
+            local ReaderUI = require("apps/reader/readerui")
+            return ReaderUI:findTextInBookContent(self, fullpath, search_string)
         end
     end
 end
@@ -562,7 +580,10 @@ function FileSearcher:onMenuSelect(item, callback)
         end
     else
         if item.is_file then
-            if DocumentRegistry:hasProvider(item.path, nil, true) then
+            if item.found_pos then -- found in book content
+                filemanagerutil.showSearchResultsOpenFileDialog(self.ui, item.text, item.path,
+                    FileSearcher.search_string, item.found_pos, self.close_callback)
+            elseif DocumentRegistry:hasProvider(item.path, nil, true) then
                 if G_reader_settings:isTrue("top_manager_infmandhistory")
                 and item.path
                 and util.getFileNameSuffix(item.path) == "epub"

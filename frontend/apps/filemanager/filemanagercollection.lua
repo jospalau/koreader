@@ -16,7 +16,6 @@ local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local ffiUtil = require("ffi/util")
 local filemanagerutil = require("apps/filemanager/filemanagerutil")
 local Topbar = require("apps/reader/modules/topbar")
-local logger = require("logger")
 local util = require("util")
 local _ = require("gettext")
 local N_ = _.ngettext
@@ -290,64 +289,11 @@ function FileManagerCollection:onMenuSelect(item)
                         choice1_text = _("Yes"),
                         choice1_callback = function()
                             local coll_settings = ReadCollection.coll_settings[self.path]
-                            local pos = coll_settings and coll_settings.find_results and coll_settings.find_results[item.file]
-                            if pos then -- 'search results' collection
+                            local found_pos = coll_settings and coll_settings.find_results and coll_settings.find_results[item.file]
+                            if found_pos then -- 'search results' collection
                                 local search_str = coll_settings.find_results[1]
-                                local open_file_dialog
-                                open_file_dialog = ButtonDialog:new{
-                                    title = BD.filename(item.text),
-                                    title_align = "center",
-                                    buttons = {
-                                        {{
-                                            text = _("Open"),
-                                            callback = function()
-                                                UIManager:close(open_file_dialog)
-                                                filemanagerutil.openFile(self.ui, item.file, self.close_callback)
-                                            end,
-                                        }},
-                                        {{
-                                            text = _("Open at first search result"),
-                                            callback = function()
-                                                UIManager:close(open_file_dialog)
-                                                local after_open_callback = function(ui)
-                                                    ui.link:addCurrentLocationToStack()
-                                                    ui.search.last_search_text = search_str
-                                                    if ui.rolling and type(pos) == "string" then
-                                                        ui.rolling:onGotoXPointer(pos, pos)
-                                                    elseif ui.paging and type(pos) == "number" then
-                                                        ui.paging:onGotoPage(pos)
-                                                    end
-                                                end
-                                                filemanagerutil.openFile(self.ui, item.file, self.close_callback, true, after_open_callback)
-                                            end,
-                                        }},
-                                        {{
-                                            text = _("Open and search forward"),
-                                            callback = function()
-                                                UIManager:close(open_file_dialog)
-                                                local after_open_callback = function(ui)
-                                                    UIManager:nextTick(function()
-                                                        ui.search:searchCallback(0, search_str)
-                                                    end)
-                                                end
-                                                filemanagerutil.openFile(self.ui, item.file, self.close_callback, true, after_open_callback)
-                                            end,
-                                        }},
-                                        {{
-                                            text = _("Open and search all results"),
-                                            callback = function()
-                                                UIManager:close(open_file_dialog)
-                                                local after_open_callback = function(ui)
-                                                    UIManager:nextTick(function()
-                                                        ui.search:searchCallback(nil, search_str)
-                                                    end)
-                                                end
-                                                filemanagerutil.openFile(self.ui, item.file, self.close_callback, true, after_open_callback)
-                                            end,
-                                        }},
-                                    },
-                                }
-                                UIManager:show(open_file_dialog)
+                                filemanagerutil.showSearchResultsOpenFileDialog(self.ui, item.text, item.file,
+                                    search_str, found_pos, self.close_callback)
                             else -- usual collection
                                 filemanagerutil.openFile(self.ui, item.file, self.close_callback)
                             end
@@ -362,64 +308,11 @@ function FileManagerCollection:onMenuSelect(item)
                     return true
                 else
                     local coll_settings = ReadCollection.coll_settings[self.path]
-                    local pos = coll_settings and coll_settings.find_results and coll_settings.find_results[item.file]
-                    if pos then -- 'search results' collection
+                    local found_pos = coll_settings and coll_settings.find_results and coll_settings.find_results[item.file]
+                    if found_pos then -- 'search results' collection
                         local search_str = coll_settings.find_results[1]
-                        local open_file_dialog
-                        open_file_dialog = ButtonDialog:new{
-                            title = BD.filename(item.text),
-                            title_align = "center",
-                            buttons = {
-                                {{
-                                    text = _("Open"),
-                                    callback = function()
-                                        UIManager:close(open_file_dialog)
-                                        filemanagerutil.openFile(self.ui, item.file, self.close_callback)
-                                    end,
-                                }},
-                                {{
-                                    text = _("Open at first search result"),
-                                    callback = function()
-                                        UIManager:close(open_file_dialog)
-                                        local after_open_callback = function(ui)
-                                            ui.link:addCurrentLocationToStack()
-                                            ui.search.last_search_text = search_str
-                                            if ui.rolling and type(pos) == "string" then
-                                                ui.rolling:onGotoXPointer(pos, pos)
-                                            elseif ui.paging and type(pos) == "number" then
-                                                ui.paging:onGotoPage(pos)
-                                            end
-                                        end
-                                        filemanagerutil.openFile(self.ui, item.file, self.close_callback, true, after_open_callback)
-                                    end,
-                                }},
-                                {{
-                                    text = _("Open and search forward"),
-                                    callback = function()
-                                        UIManager:close(open_file_dialog)
-                                        local after_open_callback = function(ui)
-                                            UIManager:nextTick(function()
-                                                ui.search:searchCallback(0, search_str)
-                                            end)
-                                        end
-                                        filemanagerutil.openFile(self.ui, item.file, self.close_callback, true, after_open_callback)
-                                    end,
-                                }},
-                                {{
-                                    text = _("Open and search all results"),
-                                    callback = function()
-                                        UIManager:close(open_file_dialog)
-                                        local after_open_callback = function(ui)
-                                            UIManager:nextTick(function()
-                                                ui.search:searchCallback(nil, search_str)
-                                            end)
-                                        end
-                                        filemanagerutil.openFile(self.ui, item.file, self.close_callback, true, after_open_callback)
-                                    end,
-                                }},
-                            },
-                        }
-                        UIManager:show(open_file_dialog)
+                        filemanagerutil.showSearchResultsOpenFileDialog(self.ui, item.text, item.file,
+                            search_str, found_pos, self.close_callback)
                     else -- usual collection
                         filemanagerutil.openFile(self.ui, item.file, self.close_callback)
                     end
@@ -1279,9 +1172,13 @@ function FileManagerCollection:updateCollListItemTable(do_init, item_number, tog
         if #item_table > 1 then
             if toggle_sort ~= nil then
                 if toggle_sort then
-                    table.sort(item_table, function(v1, v2) return (ReadCollection.coll_settings[v1.text] and ReadCollection.coll_settings[v2.text]) and ReadCollection.coll_settings[v1.text].number_files > ReadCollection.coll_settings[v2.text].number_files  end)
+                    table.sort(item_table, function(v1, v2) return ((ReadCollection.coll_settings[v1.name]
+                    and ReadCollection.coll_settings[v1.name].number_files) or 0) > ((ReadCollection.coll_settings[v2.name]
+                    and ReadCollection.coll_settings[v2.name].number_files) or 0) end)
                 else
-                    table.sort(item_table, function(v1, v2) return (ReadCollection.coll_settings[v1.text] and ReadCollection.coll_settings[v2.text]) and ReadCollection.coll_settings[v1.text].number_files < ReadCollection.coll_settings[v2.text].number_files  end)
+                    table.sort(item_table, function(v1, v2) return ((ReadCollection.coll_settings[v1.name]
+                    and ReadCollection.coll_settings[v1.name].number_files) or 0) < ((ReadCollection.coll_settings[v2.name]
+                    and ReadCollection.coll_settings[v2.name].number_files) or 0) end)
                 end
             end
         end
@@ -1962,36 +1859,8 @@ function FileManagerCollection:searchCollections(coll_name)
             return true
         end
         if self.include_content then
-            logger.dbg("Search in book:", file)
             local ReaderUI = require("apps/reader/readerui")
-            local provider = ReaderUI:extendProvider(file, DocumentRegistry:getProvider(file))
-            local document = DocumentRegistry:openDocument(file, provider)
-            if document then
-                local loaded, found
-                if document.loadDocument then -- CRE
-                    -- We will be half-loading documents and may mess with crengine's state.
-                    -- Fortunately, this is run in a subprocess, so we won't be affecting the
-                    -- main process's crengine state or any document opened in the main
-                    -- process (we furthermore prevent this feature when one is opened).
-                    -- To avoid creating half-rendered/invalid cache files, it's best to disable
-                    -- crengine saving of such cache files.
-                    if not self.is_cre_cache_disabled then
-                        local cre = require("document/credocument"):engineInit()
-                        cre.initCache("", 0, true, 40)
-                        self.is_cre_cache_disabled = true
-                    end
-                    loaded = document:loadDocument()
-                else
-                    loaded = true
-                end
-                if loaded then
-                    found = document:findText(self.search_str, 0, 0, not self.case_sensitive, 1, false, 1)
-                end
-                document:close()
-                if type(found) == "table" then
-                    return found.page or found[1]["start"]
-                end
-            end
+            return ReaderUI:findTextInBookContent(self, file, self.search_str)
         end
         return false
     end
@@ -2015,7 +1884,7 @@ function FileManagerCollection:searchCollections(coll_name)
                     if order_idx == nil then -- new
                         table.insert(_files_found_order, {
                             file = file,
-                            pos = match_cache[file],
+                            found_pos = match_cache[file],
                             coll_order = coll_order,
                             item_order = item.order,
                         })
@@ -2062,8 +1931,8 @@ function FileManagerCollection:searchCollections(coll_name)
         local coll_settings = ReadCollection.coll_settings[new_coll_name]
         coll_settings.find_results = { self.search_str }
         for _, v in ipairs(files_found_order) do
-            if type(v.pos) ~= "boolean" then -- found in book content
-                coll_settings.find_results[v.file] = v.pos
+            if type(v.found_pos) ~= "boolean" then -- found in book content
+                coll_settings.find_results[v.file] = v.found_pos
             end
         end
         if self.coll_list ~= nil then
