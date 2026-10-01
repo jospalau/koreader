@@ -15,6 +15,14 @@
 -- testo "CARATTERE: Lora" (etichetta tradotta in MAIUSCOLO + ":" + nome
 -- originale del font), senza sottolineatura, e si aggiorna non appena si
 -- sceglie un altro font nel modale.
+-- All'estrema destra della stessa riga c'è l'etichetta cliccabile
+-- "PROFILI" (stessa altezza del label font): un tap apre una finestra
+-- ancorata in basso con i profili salvati (stessa sorgente del plugin
+-- profiles.koplugin: settings/profiles.lua); un tap su un profilo lo
+-- esegue subito con Dispatcher:execute e aggiorna la riga del font.
+-- La finestra profili è larga quanto quella dei font (bordo a bordo:
+-- vedi showProfilesList) e non mostra alcuna spunta: i nomi dei profili
+-- vengono elencati e basta (lo ✓ resta solo sulla lista font).
 
 local CreOptions = require("ui/data/creoptions")
 local ReaderFont = require("apps/reader/modules/readerfont")
@@ -47,6 +55,16 @@ local logger = require("logger")
 -- della modalità, che NON esistono nei .mo di KOReader.
 local gettext = require("gettext")
 local _ = gettext
+-- Lettura ed esecuzione dei profili: stesse API di profiles.koplugin
+-- (LuaSettings sul file + Dispatcher:execute), senza dipendere dal plugin.
+local DataStorage = require("datastorage")
+local LuaSettings = require("luasettings")
+local Dispatcher = require("dispatcher")
+-- Solo per il ripristino d'emergenza in executeProfile: stesse chiamate
+-- di uscita di Dispatcher:execute (Event per BatchedUpdateDone,
+-- Notification per resetNotifySource).
+local Event = require("ui/event")
+local Notification = require("ui/widget/notification")
 
 local SHORTCUT_NAME = "font_face_shortcut"
 -- Etichetta tradotta e messa in maiuscolo, con i due punti:
@@ -55,6 +73,10 @@ local SHORTCUT_NAME = "font_face_shortcut"
 -- fuori dai loop dove la variabile `_` di gettext verrebbe oscurata.
 local SHORTCUT_LABEL = _("Font")
 local SHORTCUT_LABEL_UPPER = Utf8Proc.uppercase_dumb(SHORTCUT_LABEL) .. ":"
+-- Etichetta "PROFILI" a destra della riga scorciatoia: msgid "Profiles"
+-- già presente nei cataloghi gettext di KOReader (it_IT → "Profili").
+local PROFILES_LABEL = _("Profiles")
+local PROFILES_LABEL_UPPER = Utf8Proc.uppercase_dumb(PROFILES_LABEL)
 -- Stessa size della riga nel ConfigDialog (item_font_size): il FontFaceObj
 -- del font attivo viene creato a questa size → pass-through in Font:getFace.
 local SHORTCUT_PREVIEW_SIZE = 20
@@ -65,6 +87,10 @@ local active_mode_dialog = nil
 -- definita in fondo al file. Con `local` dichiarato PRIMA della funzione che
 -- la usa, l'assegnazione successiva viene vista dall'upvalue.
 local showModeChooser
+-- Stessa logica per il modale profili: il pulsante PROFILI creato in
+-- postProcessShortcutRow (riga molto prima della definizione) deve
+-- risolvere il nome come upvalue, non come globale (nil → errore al tap).
+local showProfilesList
 
 -- ─── 0. Modalità preferita (persistente) + etichette tradotte ───────────────
 -- Chiave: G_reader_settings["fonts_menu_mode"] = "bottom" | "floating".
@@ -75,6 +101,8 @@ local MODE_SETTING = "fonts_menu_mode"
 local MODE_BOTTOM = "bottom"
 local MODE_FLOATING = "floating"
 -- Stesso checkmark di ui/widget/button.lua (Button.checkmark): due spazi + ✓
+-- (usato dal modale "Finestra libera/in basso"; la lista font usa il ✓ di
+-- Button checked_func; la lista profili NON ha alcuna spunta).
 local MODE_CHECKMARK = "  \u{2713}"
 
 local function getFontMenuMode()
@@ -87,6 +115,11 @@ end
 
 local function setFontMenuMode(mode)
     G_reader_settings:saveSetting(MODE_SETTING, mode)
+    -- flush() immediato: senza, la scelta restava solo in RAM e veniva
+    -- persa se KOReader non chiudeva pulitamente (settings.reader.lua viene
+    -- scaricato solo in 3 punti: ReaderUI:saveSettings, uscita da
+    -- filemanager) → al riavvio tornava la modalità precedente.
+    G_reader_settings:flush()
 end
 
 -- Etichette delle due modalità. I msgid NON sono nei cataloghi KOReader
@@ -183,6 +216,81 @@ local function modeLabel(mode)
     end
     local fallback = MODE_LABELS.en
     return fallback[mode]
+end
+
+-- Messaggio per la lista profili vuota: lo stesso msgid NON esiste nei
+-- cataloghi .mo di KOReader, quindi (come per MODE_LABELS) tabella interna
+-- con tutte le lingue shipplate, risolta per prefisso con currentLangCode()
+-- (stesse chiavi di MODE_LABELS) e fallback su "en".
+local NO_PROFILES_MSG = {
+    en = "No profiles",
+    af_ZA = "Geen profiele",
+    ar = "لا توجد ملفات تعريف",
+    be = "Няма профіляў",
+    bg_BG = "Няма профили",
+    bn = "কোনো প্রোফাইল নেই",
+    ca = "No hi ha perfils",
+    cs = "Žádné profily",
+    cy = "Dim proffiliau",
+    da = "Ingen profiler",
+    de = "Keine Profile",
+    el = "Δεν υπάρχουν προφίλ",
+    en_GB = "No profiles",
+    eo = "Neniu profilo",
+    es = "Sin perfiles",
+    et = "Profiile pole",
+    eu = "Ez dago profilik",
+    fa = "هیچ پروفایلی وجود ندارد",
+    fi = "Ei profiileja",
+    fr = "Aucun profil",
+    ga = "Ná bíonn próifílí",
+    gl = "Sen perfis",
+    he = "אין פרופילים",
+    hi = "कोई प्रोफ़ाइल नहीं",
+    hr = "Nema profila",
+    hu = "Nincsenek profilok",
+    ia = "Nulle profilo",
+    id = "Tidak ada profil",
+    ie = "Nul profil",
+    it_IT = "Nessun profilo",
+    ja = "プロファイルなし",
+    ka = "პროფილები არ არის",
+    kab = "Ulac tawilayin",
+    kn = "ಯಾವುದೇ ಪ್ರೊಫೈಲ್‌ಗಳಿಲ್ಲ",
+    ko_KR = "프로필 없음",
+    lt_LT = "Profilių nėra",
+    lv = "Nav profilu",
+    mk = "Нема профили",
+    ms = "Tiada profil",
+    nb_NO = "Ingen profiler",
+    nl_NL = "Geen profielen",
+    ["or"] = "କୌଣସି ପ୍ରୋଫାଇଲ୍ ନାହିଁ", -- codice lingua "or" (riservata in Lua)
+    pl = "Brak profili",
+    pt_BR = "Nenhum perfil",
+    pt_PT = "Sem perfis",
+    ro = "Niciun profil",
+    ro_MD = "Niciun profil",
+    ru = "Нет профилей",
+    si = "පැතිකඩ නැත",
+    sk = "Žiadne profily",
+    sl = "Ni profilov",
+    sr = "Нема профила",
+    sv = "Inga profiler",
+    th = "ไม่มีโปรไฟล์",
+    tr = "Profil yok",
+    uk = "Немає профілів",
+    ur = "کوئی پروفائل نہیں",
+    vi = "Không có hồ sơ",
+    zh_CN = "无配置文件",
+    zh_TW = "無設定檔",
+}
+
+local function noProfilesMessage()
+    local message = NO_PROFILES_MSG[currentLangCode()]
+    if message then
+        return message
+    end
+    return NO_PROFILES_MSG.en
 end
 
 -- ─── 1. Iniezione opzione nel pannello Dimensione font (solo CreOptions) ───
@@ -311,13 +419,17 @@ end
 -- ─── 1c. Post-processo della riga scorciatoia (dopo ogni update) ────────────
 -- 1) niente sottolineatura (linesize = 0, altezza contenitore invariata)
 -- 2) ConfigDialog usa CenterContainer per gli item → la riga finisce al centro:
---    sostituiamo il container con LeftContainer (stessa dimen → solo paint).
+--    sostituiamo il container con un OverlapGroup (stessa dimen → solo paint)
+--    che a sinistra centra verticalmente il gruppo di item del label font
+--    (LeftContainer) e a destra, con overlap_offset calcolato sulla STESSA
+--    formula di LeftContainer, mette il pulsante cliccabile "PROFILI": il
+--    testo del pulsante è così allineato al pixel con il testo del label.
 -- 3) LONG-PRESS sulla riga → modale di scelta della modalità (sostituisce il
 --    ConfirmBox "imposta come predefinito", che qui proponeva uno 0 senza
 --    senso): l'override è sull'istanza dell'OptionTextItem (il dispatch usa
 --    self[event.handler], vedi eventlistener.lua), flag per non ripeterlo.
 
-local function postProcessShortcutRow(config_panel)
+local function postProcessShortcutRow(config_panel, reader_font)
     local config_option = config_panel and config_panel[1]
     local vertical_group = config_option and config_option[1]
     if not vertical_group then return end
@@ -363,14 +475,66 @@ local function postProcessShortcutRow(config_panel)
         -- Già applicato?
         if center.__fonts_menu_left then goto continue end
 
-        horizontal_group[1] = LeftContainer:new{
-            dimen = center.dimen,
-            FrameContainer:new{
-                padding = 0,
-                padding_left = Size.padding.fullscreen,
-                bordersize = 0,
-                center[1], -- option_items_group
+        -- Altezza/larghezza della riga: h serve per l'offset verticale del
+        -- pulsante, w per posizionarlo a destra (stessa x di overlap_align).
+        local h = center.dimen.h
+        local w = center.dimen.w
+
+        -- Testo PROFILI cliccabile a destra (senza bordo, sembra testo normale).
+        -- Allineamento verticale PERFETTO con il label: LeftContainer centra
+        -- il GRUPPO (group_h = text_h + linesize + 2*padding, con padding
+        -- NEGATIVO della sottolineatura → group_h < text_h), mentre il testo
+        -- sta in CIMA al gruppo (UnderlineContainer vertical_align = "top"):
+        --   top_label = floor((h - group_h)/2)   (LeftContainer:paintTo)
+        -- Un pulsante con height = h centrerebbe il solo testo in h → scarto
+        -- di pochi pixel. Usiamo invece altezza NATURALE (= altezza del
+        -- testo: padding_v = 0, bordo 0 → top del testo = top del pulsante)
+        -- e overlap_offset con l'identica formula → allineamento al pixel,
+        -- qualunque siano group_h, font, scale o lingua.
+        local found_reader_font = reader_font -- cattura per la closure
+        -- Font del documento attivo: STESSA FontFaceObj usata dal label
+        -- "CARATTERE: nome" (item_font_face = activeDocFontFace →
+        -- Font:getFace pass-through a size invariata), così il testo è
+        -- omogeneo a sinistra e a destra. Fallback "cfont": è il font con
+        -- cui ConfigDialog disegna il label quando item_font_face è nil.
+        local profiles_face = activeDocFontFace(reader_font, SHORTCUT_PREVIEW_SIZE)
+        local profiles_btn = Button:new{
+            text = PROFILES_LABEL_UPPER,
+            bordersize = 0,
+            margin = 0,
+            padding = 0,
+            padding_h = Size.padding.fullscreen, -- distanza dal bordo destro
+            -- niente height: altezza naturale del frame = altezza del testo
+            text_font_face = profiles_face or "cfont",
+            text_font_size = SHORTCUT_PREVIEW_SIZE, -- stessa size del label font
+            text_font_bold = false,
+            callback = function()
+                showProfilesList(found_reader_font)
+            end,
+        }
+        -- x = w - btn_w (equivale a overlap_align = "right").
+        -- y = stessa formula verticale di LeftContainer:paintTo applicata
+        -- all'option_items_group (center[1], child del LeftContainer).
+        profiles_btn.overlap_offset = {
+            w - profiles_btn:getSize().w,
+            math.floor((h - center[1]:getSize().h) / 2),
+        }
+
+        horizontal_group[1] = OverlapGroup:new{
+            dimen = Geom:new{ w = w, h = h },
+            -- Sinistra: label font (LeftContainer centra verticalmente,
+            -- padding_left simmetrico al padding_h del pulsante)
+            LeftContainer:new{
+                dimen = Geom:new{ w = w, h = h },
+                FrameContainer:new{
+                    padding = 0,
+                    padding_left = Size.padding.fullscreen,
+                    bordersize = 0,
+                    center[1], -- option_items_group
+                },
             },
+            -- Destra: testo PROFILI (cliccabile, senza bordo)
+            profiles_btn,
         }
         horizontal_group[1].__fonts_menu_left = true
         ::continue::
@@ -404,7 +568,9 @@ if not ConfigDialog._fonts_menu_unified_patch then
         end
         raw_update(self)
         if self.config_panel then
-            postProcessShortcutRow(self.config_panel)
+            -- reader_font serve al pulsante PROFILI: dopo l'esecuzione di un
+            -- profilo, showProfilesList lo usa per aggiornare la riga font.
+            postProcessShortcutRow(self.config_panel, self.ui and self.ui.font)
         end
     end
     ConfigDialog._fonts_menu_unified_patch = true
@@ -698,6 +864,170 @@ local function showFontList(reader_font)
     end
     if floating then
         applyFontsHeader(dialog)
+    end
+    UIManager:show(dialog)
+end
+
+-- ─── 2b. Esecuzione di un profilo (tap su una voce della lista) ──────────────
+-- Stessa chiamata di "Execute" nel menu del plugin profiles.koplugin:
+--   Dispatcher:execute(profile, { qm_show = false })
+-- Attenzione al routing degli eventi: UIManager:sendEvent (uimanager.lua)
+-- dà l'evento solo al widget in cima allo stack e, se nessuno lo consuma,
+-- ai soli widget is_always_active / con active_widgets. Con il ConfigDialog
+-- aperto (è is_always_active, vedi readerconfig.lua) l'evento "SetFont" /
+-- "ConfigChange" finisce su di lui — che non lo gestisce — e ReaderUI
+-- (quindi ReaderFont, ReaderCoptListener, ...) NON lo riceve mai: il
+-- profilo "non si applica". Rendiamo ReaderUI is_always_active SOLO per la
+-- durata sincrona di execute (gli eventi arrivano ai moduli come quando
+-- ReaderUI è in cima, tipico caso scorciatoia/gesture) e poi ripristiniamo.
+-- Dispatcher:init() è idempotente e garantisce che settingsList abbia gli
+-- eventi parsati da CreOptions (senza, es. font_size non ha event → niente).
+local function executeProfile(profile, reader_font)
+    Dispatcher:init()
+    local ui = reader_font and reader_font.ui
+    local was_always_active = ui and ui.is_always_active
+    if ui then ui.is_always_active = true end
+    local ok, err = pcall(Dispatcher.execute, Dispatcher, profile, { qm_show = false })
+    if ui then ui.is_always_active = was_always_active end
+    if not ok then
+        -- Dispatcher:execute, se interrotto a metà, NON esegue la sua
+        -- uscita normale (dispatcher.lua: resetNotifySource →
+        -- setSilentMode(false) → broadcast "BatchedUpdateDone"): senza
+        -- ripristino resterebbero attivi, in ordine:
+        --   * Notification.notify_source = SOURCE_DISPATCHER (le
+        --     notifiche successive mascherate);
+        --   * silent mode (nessun repaint);
+        --   * ReaderRolling.batched_update_count bloccato a > 0 →
+        --     onUpdatePos() si rifiuta di re-renderizzare il documento
+        --     per SEMPRE (cambi font/dimensione ignorati).
+        -- Facciamo quindi esattamente la sequenza di uscita di
+        -- Dispatcher:execute. broadcastEvent(BatchedUpdateDone) è
+        -- innocuo anche se non era partito BatchedUpdate: il contatore
+        -- di ReaderRolling viene clampato a 0 e schedula un solo
+        -- updatePos one-shot (UIManager:tickAfterNext).
+        Notification:resetNotifySource()
+        UIManager:setSilentMode(false)
+        UIManager:broadcastEvent(Event:new("BatchedUpdateDone"))
+        logger.err("fonts-menu-patch: errore nell'esecuzione del profilo: ", err)
+    end
+    -- true = esecuzione riuscita (la lista profili non la usa: niente ✓ da
+    -- aggiornare, ma resta utile a eventuali altri chiamanti/log).
+    return ok
+end
+
+-- ─── 2c. Modale profili (tap su "PROFILI" a destra della riga font) ─────────
+-- Elenco dei profili salvati dall'utente (settings/profiles.lua, stessa
+-- sorgente di plugins/profiles.koplugin): uno per riga, in ordine alfabetico,
+-- tap → esecuzione immediata (vedi executeProfile, stessa chiamata di
+-- "Esegui" nel menu del plugin).
+-- Finestra ancorata in basso identica alla lista font in modalità "bottom".
+-- Molto più semplice della lista font: niente header, niente stato di scroll
+-- da conservare, niente reinit dopo il callback.
+-- Larghezza: stessa formula della lista font, ma con correzione post-init
+-- (vedi sotto) perché qui la lista NON scorre (pochi profili) e ButtonDialog
+-- aggiungerebbe la scrollbar solo in quel caso → pannello più stretto.
+-- Nessun ✓ in elenco: solo i nomi dei profili.
+
+local active_profiles_dialog = nil
+
+showProfilesList = function(reader_font)
+    -- Single-instance: chiudi eventuale modale già aperta
+    if active_profiles_dialog then
+        local old = active_profiles_dialog
+        active_profiles_dialog = nil
+        old:onClose()
+    end
+
+    -- Rilettura del file a ogni apertura: LuaSettings:open NON fa cache (fa
+    -- dofile e restituisce un'istanza nuova) → i profili sono sempre quelli
+    -- correnti e la nostra tabella non è mai condivisa con il plugin
+    -- (nessuna interferenza, nessun flush nostro).
+    local profiles_settings = LuaSettings:open(
+        DataStorage:getSettingsDir() .. "/profiles.lua")
+    local data = profiles_settings.data
+
+    -- Nessun profilo salvato → solo un messaggio (niente modale vuota)
+    if not data or not next(data) then
+        local InfoMessage = require("ui/widget/infomessage")
+        UIManager:show(InfoMessage:new{
+            text = noProfilesMessage(),
+        })
+        return
+    end
+
+    -- Stessa normalizzazione del plugin (solo sulla NOSTRA istanza, mai
+    -- flushata): serve a Dispatcher:execute per il template
+    -- "Executing profile: %1" quando una profile ha settings.notify
+    -- senza settings.name.
+    for name, profile in pairs(data) do
+        if type(profile) == "table" and profile.settings
+                and profile.settings.name == nil then
+            profile.settings.name = name
+        end
+    end
+
+    -- Un pulsante per profilo (ordine alfabetico grazie a orderedPairs).
+    -- NIENTE ✓ sui profili: la lista mostra solo i nomi (lo ✓ resta solo
+    -- nella lista font e nel modale modalità).
+    local ffiUtil = require("ffi/util")
+    local buttons = {}
+    for name, profile in ffiUtil.orderedPairs(data) do
+        table.insert(buttons, {{
+            text = name,
+            align = "left",
+            callback = function()
+                logger.info("fonts-menu-patch: tap su profilo '" .. tostring(name) .. "'")
+                -- Chiudi il modale profili PRIMA di eseguire
+                if active_profiles_dialog then
+                    local old = active_profiles_dialog
+                    active_profiles_dialog = nil
+                    old:onClose()
+                end
+                -- Esegui il profilo (stessa chiamata di "Esegui" nel menu)
+                executeProfile(profile, reader_font)
+                -- Il profilo può aver cambiato carattere/dimensione:
+                -- la riga "CARATTERE: ..." si aggiorna subito
+                refreshShortcutFontRow(reader_font)
+            end,
+        }})
+    end
+
+    -- Modale ancorata in basso (stessa BottomButtonDialog della lista font)
+    local dialog = BottomButtonDialog:new{
+        buttons = buttons,
+        rows_per_page = 6,
+        width = math.floor(
+            Screen:getWidth() - ScrollableContainer:getScrollbarWidth()),
+        dismissable = true, -- tap fuori (o Back) chiude solo il modale
+    }
+    -- Allargamento a tutta la larghezza dello schermo (come la lista font).
+    -- ButtonDialog somma la scrollbar FUORI da self.width, ma SOLO se la
+    -- lista scorre: la lista font (decine di font, sempre > 6 righe) scorre
+    -- sempre → larghezza esterna = Screen width; qui con pochi profili NON
+    -- scorre (nessun cropping_widget) → il pannello resterebbe più stretto
+    -- di scrollbar_width (3 * scaleBySize(6) ≈ 18-36 px, ~9-18 px per lato).
+    -- Senza scroll serve quindi self.width = Screen width (con scroll la
+    -- formula qui sopra è già esatta: non si tocca).
+    if not dialog.cropping_widget and (dialog.width or 0) < Screen:getWidth() then
+        dialog.width = Screen:getWidth()
+        -- Layout delle frecce: reinit() creerebbe un nuovo ButtonTable, ma
+        -- ButtonDialog:init tiene self.layout se già presente → azzeralo
+        -- così i dispositivi con DPad puntano ai pulsanti nuovi.
+        dialog.layout = nil
+        dialog:reinit() -- reinit → BottomButtonDialog:init → BottomContainer
+        logger.info("fonts-menu-patch: lista profili allargata a tutta larghezza")
+    end
+    active_profiles_dialog = dialog
+    -- Pulizia single-instance su OGNI percorso di chiusura (UIManager:close
+    -- invia sempre CloseWidget → onCloseWidget)
+    local raw_onCloseWidget = dialog.onCloseWidget
+    function dialog:onCloseWidget(...)
+        if active_profiles_dialog == dialog then
+            active_profiles_dialog = nil
+        end
+        if raw_onCloseWidget then
+            return raw_onCloseWidget(self, ...)
+        end
     end
     UIManager:show(dialog)
 end
