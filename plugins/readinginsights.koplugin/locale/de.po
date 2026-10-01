@@ -462,6 +462,9 @@ msgstr "Seite verbleibend"
 msgid "pages left"
 msgstr "Seiten verbleibend"
 
+msgid "p"
+msgstr "S."
+
 msgid "page per minute"
 msgstr "Seite pro Minute"
 
@@ -907,6 +910,15 @@ msgstr "Rekorde anzeigen"
 
 msgid "Show Reading streak"
 msgstr "Lesesträhne anzeigen"
+
+msgid "Menu items"
+msgstr "Menüeinträge"
+
+msgid "Reading streak"
+msgstr "Lesestreak"
+
+msgid "Tick the popups that should be listed under Tools > Reading insights. The book popups only appear while a book is open."
+msgstr "Wähle die Popups aus, die unter Werkzeuge > Reading insights aufgelistet werden. Die Buch-Popups erscheinen nur, solange ein Buch geöffnet ist."
 
 msgid "Reading insights: reading streak"
 msgstr "Leseeinblicke: Lesesträhne"
@@ -1746,13 +1758,124 @@ msgid "Next 2 chapters"
 msgstr "Nächste 2 Kapitel"
 
 msgid "Next chapters shown"
-msgstr ""
+msgstr "Angezeigte nächste Kapitel"
 
 msgid "How many upcoming chapters the \"Next chapter\" column's reading-time estimate covers. With \"2\", once a second chapter follows the next one, the header switches to \"Next 2 chapters\" and shows both chapters' times, e.g. \"00:10 | 00:28\". Falls back to a single chapter when there is no chapter after the next one, or no next chapter at all."
-msgstr ""
+msgstr "Wie viele kommende Kapitel die Lesezeitschätzung der Spalte „Nächstes Kapitel“ abdeckt. Bei „2“ wechselt die Kopfzeile zu „Nächste 2 Kapitel“ und zeigt die Zeiten beider Kapitel, sobald auf das nächste noch ein weiteres Kapitel folgt, z. B. „00:10 | 00:28“. Fällt auf ein einzelnes Kapitel zurück, wenn nach dem nächsten kein weiteres Kapitel folgt oder es gar kein nächstes Kapitel gibt."
 
 msgid "1 (default)"
-msgstr ""
+msgstr "1 (Standard)"
 
 msgid "2"
-msgstr ""
+msgstr "2"
+
+msgid "Chapter bar style"
+msgstr "Stil der Kapitelleiste"
+
+msgid "Chapter bars"
+msgstr "Kapitelbalken"
+
+msgid "Skim bar"
+msgstr "Sprungleiste"
+
+msgid "Skim bar height"
+msgstr "Höhe der Sprungleiste"
+
+msgid "Choose how the chapter bar is drawn: one bar per chapter, or a single bar like the one in KOReader's \"Skim to\" dialog."
+msgstr "Wähle, wie die Kapitelleiste gezeichnet wird: ein Balken pro Kapitel oder ein einzelner Balken wie im „Skim to“-Dialog von KOReader."
+
+msgid "One bar per chapter, as tall as the chapter is long."
+msgstr "Ein Balken pro Kapitel, so hoch wie das Kapitel lang ist."
+
+msgid "A single bar like KOReader's \"Skim to\" dialog: filled up to the current page, chapter separators and the position marker. Uses the active and inactive bar colors."
+msgstr "Ein einzelner Balken wie im „Skim to“-Dialog von KOReader: bis zur aktuellen Seite gefüllt, mit Kapiteltrennern und Positionsmarke. Verwendet die aktive und die inaktive Balkenfarbe."
+
+msgid "Book section style"
+msgstr "Stil des Buchbereichs"
+
+msgid "Classic"
+msgstr "Klassisch"
+
+msgid "Donut chart"
+msgstr "Ringdiagramm"
+
+msgid "How the \"This book\" section looks. \"Classic\" keeps the rows and the progress bar. \"Donut chart\" shows a large donut with the read percentage on the left and the pages, the time read and the reading time left stacked on the right (the progress bar is replaced by the donut)."
+msgstr "Wie der Bereich „Dieses Buch“ aussieht. „Klassisch“ behält die Zeilen und den Fortschrittsbalken bei. „Ringdiagramm“ zeigt links ein großes Ringdiagramm mit dem gelesenen Prozentsatz und rechts untereinander die Seiten, die gelesene Zeit und die verbleibende Lesezeit (der Fortschrittsbalken wird durch das Ringdiagramm ersetzt)."
+
+msgid "Show Book info"
+msgstr "Buchinfo anzeigen"
+
+msgid "Reading insights: book info"
+msgstr "Leseeinblicke: Buchinfo"
+
+msgid "Book info"
+msgstr "Buchinfo"
+
+msgid "Show cover"
+msgstr "Cover anzeigen"
+
+msgid "Show the book's cover on the left."
+msgstr "Zeigt das Cover links an."
+
+msgid "Rounded corners"
+msgstr "Abgerundete Ecken"
+
+msgid "Round the corners of the cover."
+msgstr "Rundet die Ecken des Covers ab."
+
+msgid "Cover shadow"
+msgstr "Cover-Schatten"
+
+msgid "Draw a drop shadow behind the cover."
+msgstr "Zeichnet einen Schlagschatten hinter das Cover."
+
+msgid "Cover border"
+msgstr "Cover-Rahmen"
+
+msgid "Draw a thin frame around the cover."
+msgstr "Zeichnet einen dünnen Rahmen um das Cover."
+
+msgid "Cover size"
+msgstr "Cover-Größe"
+
+msgid "Small"
+msgstr "Klein"
+
+msgid "Medium"
+msgstr "Mittel"
+
+msgid "Large"
+msgstr "Groß"
+
+msgid "Size of the cover in the Book info popup. Medium is the default size; Small is half of it and Large is one and a half times it."
+msgstr "Größe des Covers im Buchinfo-Popup. Mittel ist die Standardgröße; Klein ist halb so groß und Groß anderthalbmal so groß."
+
+msgid "Show author"
+msgstr "Autor anzeigen"
+
+msgid "Show the author line. Several authors are joined with a language-appropriate \"and\"."
+msgstr "Zeigt die Autorenzeile an. Mehrere Autoren werden mit einem passenden „und“ verbunden."
+
+msgid "Show series"
+msgstr "Reihe anzeigen"
+
+msgid "Show the series line (series name and the book's number in it) when the book is part of a series."
+msgstr "Zeigt die Reihenzeile (Name der Reihe und Nummer des Buches) an, wenn das Buch zu einer Reihe gehört."
+
+msgid "Series"
+msgstr "Reihe"
+
+msgid "and"
+msgstr "und"
+
+msgid "{series} / #{index}"
+msgstr "{series} / #{index}"
+
+msgid "Show description"
+msgstr "Beschreibung anzeigen"
+
+msgid "Show the book's description under the author / series, as far down as the bottom of the cover, cut with an ellipsis when it does not fit. Tap it to read the full description. While this is on, the popup is as wide as it can be."
+msgstr "Zeigt die Beschreibung des Buches unter Autor / Reihe an, bis zum unteren Rand des Covers; passt sie nicht, wird sie mit Auslassungspunkten abgeschnitten. Tippen, um die vollständige Beschreibung zu lesen. Solange dies aktiv ist, ist das Popup so breit wie möglich."
+
+msgid "Description"
+msgstr "Beschreibung"

@@ -4,7 +4,7 @@ Reading Insights - progress bar widget for the book progress view.
 A single horizontal bar shown in the "This book" section, between the
 section header and the percentage/pages row: filled from the left with the
 already-read portion, the rest filled with the unread portion. On/off and
-its two colors are user-configurable (Settings > Advanced settings > Book
+its two colors are user-configurable (Settings > Book
 progress popup > Progress bar); this module only owns the bar's height
 setting, the same way chapterbarwidget.lua owns its own height setting -
 the on/off toggle lives in lib/insights_settings.lua (Opt.readShowProgressBar)
@@ -34,7 +34,7 @@ local Colors = deps.Colors
 local M = {}
 
 local SETTINGS_KEY_HEIGHT = "reading_insights_progress_bar_height"
-M.DEFAULT_HEIGHT = 1
+M.DEFAULT_HEIGHT = 3
 
 function M.readHeightSetting()
     if G_reader_settings and G_reader_settings.readSetting then

@@ -471,6 +471,9 @@ msgstr "hátralévő oldal"
 msgid "pages left"
 msgstr "hátralévő oldal"
 
+msgid "p"
+msgstr "old."
+
 msgid "page per minute"
 msgstr "oldal percenként"
 
@@ -499,10 +502,10 @@ msgid "days of reading left"
 msgstr "nap van hátra"
 
 msgid "day since started"
-msgstr "napja elkezdve"
+msgstr "napja elkezdett"
 
 msgid "days since started"
-msgstr "napja elkezdve"
+msgstr "napja elkezdett"
 
 msgid "Colors"
 msgstr "Színek"
@@ -916,6 +919,15 @@ msgstr "Rekordok megjelenítése"
 
 msgid "Show Reading streak"
 msgstr "Olvasási sorozat megjelenítése"
+
+msgid "Menu items"
+msgstr "Menüelemek"
+
+msgid "Reading streak"
+msgstr "Olvasási sorozat"
+
+msgid "Tick the popups that should be listed under Tools > Reading insights. The book popups only appear while a book is open."
+msgstr "Pipáld be, mely ablakok jelenjenek meg az Eszközök > Reading insights menüben. A könyves ablakok csak megnyitott könyvnél jelennek meg."
 
 msgid "Reading insights: reading streak"
 msgstr "Reading insights: olvasási sorozat"
@@ -1753,3 +1765,114 @@ msgstr "1 (alapértelmezett)"
 
 msgid "2"
 msgstr "2"
+
+msgid "Chapter bar style"
+msgstr "Fejezetsáv stílusa"
+
+msgid "Chapter bars"
+msgstr "Fejezetoszlopok"
+
+msgid "Skim bar"
+msgstr "Ugrósáv"
+
+msgid "Skim bar height"
+msgstr "Ugrósáv magassága"
+
+msgid "Choose how the chapter bar is drawn: one bar per chapter, or a single bar like the one in KOReader's \"Skim to\" dialog."
+msgstr "Válaszd ki, hogyan jelenjen meg a fejezetsáv: fejezetenként egy oszlop, vagy egyetlen sáv, mint a KOReader „Ugrás” (Skim to) ablakában."
+
+msgid "One bar per chapter, as tall as the chapter is long."
+msgstr "Fejezetenként egy oszlop, olyan magas, amilyen hosszú a fejezet."
+
+msgid "A single bar like KOReader's \"Skim to\" dialog: filled up to the current page, chapter separators and the position marker. Uses the active and inactive bar colors."
+msgstr "Egyetlen sáv, mint a KOReader „Ugrás” (Skim to) ablakában: az aktuális oldalig kitöltve, fejezetelválasztókkal és a pozíciójelölővel. Az aktív és inaktív sávszínt használja."
+
+msgid "Book section style"
+msgstr "Könyv szekció stílusa"
+
+msgid "Classic"
+msgstr "Klasszikus"
+
+msgid "Donut chart"
+msgstr "Kördiagram"
+
+msgid "How the \"This book\" section looks. \"Classic\" keeps the rows and the progress bar. \"Donut chart\" shows a large donut with the read percentage on the left and the pages, the time read and the reading time left stacked on the right (the progress bar is replaced by the donut)."
+msgstr "A „Könyv” szekció megjelenése. A „Klasszikus” megtartja a sorokat és a folyamatjelző sávot. A „Kördiagram” bal oldalt egy nagy kördiagramot mutat az elolvasott százalékkal, jobb oldalt egymás alatt az oldalszámot, az eddigi olvasási időt és a hátralévő időt (a folyamatjelző sávot a kördiagram váltja fel)."
+
+msgid "Show Book info"
+msgstr "Könyvinformáció megnyitása"
+
+msgid "Reading insights: book info"
+msgstr "Reading insights: könyvinformáció"
+
+msgid "Book info"
+msgstr "Könyvinformáció"
+
+msgid "Show cover"
+msgstr "Borító megjelenítése"
+
+msgid "Show the book's cover on the left."
+msgstr "A könyv borítójának megjelenítése bal oldalt."
+
+msgid "Rounded corners"
+msgstr "Lekerekített sarkok"
+
+msgid "Round the corners of the cover."
+msgstr "A borító sarkainak lekerekítése."
+
+msgid "Cover shadow"
+msgstr "Borító árnyéka"
+
+msgid "Draw a drop shadow behind the cover."
+msgstr "Árnyék rajzolása a borító mögé."
+
+msgid "Cover border"
+msgstr "Borító kerete"
+
+msgid "Draw a thin frame around the cover."
+msgstr "Vékony keret rajzolása a borító köré."
+
+msgid "Cover size"
+msgstr "Borító mérete"
+
+msgid "Small"
+msgstr "Kicsi"
+
+msgid "Medium"
+msgstr "Közepes"
+
+msgid "Large"
+msgstr "Nagy"
+
+msgid "Size of the cover in the Book info popup. Medium is the default size; Small is half of it and Large is one and a half times it."
+msgstr "A borító mérete a Könyvinformáció ablakban. A közepes az alapértelmezett méret, a kicsi ennek a fele, a nagy pedig másfélszerese."
+
+msgid "Show author"
+msgstr "Szerző megjelenítése"
+
+msgid "Show the author line. Several authors are joined with a language-appropriate \"and\"."
+msgstr "A szerző sorának megjelenítése. Több szerzőt a nyelvnek megfelelő „és” köt össze."
+
+msgid "Show series"
+msgstr "Sorozat megjelenítése"
+
+msgid "Show the series line (series name and the book's number in it) when the book is part of a series."
+msgstr "A sorozat sorának megjelenítése (a sorozat neve és a könyv sorszáma), ha a könyv sorozat része."
+
+msgid "Series"
+msgstr "Sorozat"
+
+msgid "and"
+msgstr "és"
+
+msgid "{series} / #{index}"
+msgstr "{series} / #{index}"
+
+msgid "Show description"
+msgstr "Leírás megjelenítése"
+
+msgid "Show the book's description under the author / series, as far down as the bottom of the cover, cut with an ellipsis when it does not fit. Tap it to read the full description. While this is on, the popup is as wide as it can be."
+msgstr "A könyv leírásának megjelenítése a szerző / sorozat alatt, a borító aljáig; ha nem fér ki, három ponttal zárul. Rákoppintva a teljes leírás elolvasható. Amíg ez be van kapcsolva, az ablak a lehető legszélesebb."
+
+msgid "Description"
+msgstr "Leírás"

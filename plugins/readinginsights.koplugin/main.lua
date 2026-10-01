@@ -16,6 +16,12 @@ This plugin adds two views, each implemented in its own file:
     reading, and its gesture/dispatcher action only shows up for assignment
     under Reader gestures (not File manager gestures).
 
+  book_info_view.lua
+    "Book info" - small centered popup with the open book's cover (framed,
+    rounded, with a shadow), title, author(s) and series. Book-view only,
+    like the overlay above; also opened by tapping the "This book" header
+    of that overlay.
+
 This file itself only does the wiring: it loads the shared translation
 module (locale.lua) and both view modules, registers the two dispatcher
 actions (for gesture/shortcut assignment), builds the Tools menu entries,
@@ -214,6 +220,16 @@ local ChapterBar = loadModule("widgets/chapterbarwidget.lua",
 local ProgressBar = loadModule("widgets/progressbarwidget.lua",
     { Colors = Colors })
 
+-- The donut (ring) chart shown in the "This book" section when the "Donut
+-- chart" book section style is selected.
+local Donut = loadModule("widgets/donutwidget.lua",
+    { Colors = Colors })
+
+-- The single-bar "skim" alternative to the chapter bar chart, drawn like
+-- KOReader's own Skim dialog but in the plugin's colors.
+local SkimBar = loadModule("widgets/skimbarwidget.lua",
+    { Colors = Colors })
+
 -- The insights popup's figures: streaks, yearly/monthly aggregates, the
 -- last-week and 8-week series, all-time totals and the reading-goal count.
 -- Kept apart from the popup that draws them (see lib/insights_data.lua).
@@ -286,8 +302,19 @@ local BookCalendar = loadModule("views/book_calendar_view.lua", {
 local StatsPopup = loadModule("views/book_stats_view.lua", {
     Locale = Locale, Colors = Colors, Fonts = Fonts, Prefs = Prefs,
     BookProgress = BookProgress, BookCalendar = BookCalendar,
-    ChapterInfo = ChapterInfo, ChapterBar = ChapterBar, ProgressBar = ProgressBar, UI = UI,
+    ChapterInfo = ChapterInfo, ChapterBar = ChapterBar, ProgressBar = ProgressBar,
+    Donut = Donut, SkimBar = SkimBar, UI = UI,
     BookStatsData = BookStatsData, VS = ViewSettings,
+})
+-- The Book info popup: cover + title / author / series. Its data (authors
+-- joined with a language-appropriate "and", the series line, the cover
+-- image) lives in lib/bookinfo_data.lua; the cover's rounded, shadowed
+-- frame is drawn by widgets/coverframe.lua (the Book card plugin's widget).
+local BookInfoData = loadModule("lib/bookinfo_data.lua", { Locale = Locale })
+local CoverFrame   = loadModule("widgets/coverframe.lua")
+local BookInfo = loadModule("views/book_info_view.lua", {
+    Locale = Locale, Colors = Colors, Fonts = Fonts, VS = ViewSettings,
+    Data = BookInfoData, CoverFrame = CoverFrame,
 })
 local Updater = loadModule("lib/updater.lua", { Locale = Locale })
 local About   = loadModule("views/about.lua",
@@ -331,6 +358,15 @@ function ReadingInsights:onDispatcherRegisterActions()
         category = "none",
         event    = "ShowBookCalendarPopup",
         title    = _("Reading insights: book progress calendar"),
+        reader   = true,
+    })
+    -- reader = true: the Book info popup (cover, title, author, series)
+    -- needs the open book, so - like the two actions above - it is only
+    -- assignable in book view.
+    Dispatcher:registerAction("reading_book_info_popup", {
+        category = "none",
+        event    = "ShowBookInfoPopup",
+        title    = _("Reading insights: book info"),
         reader   = true,
     })
     -- general = true (not reader): records are personal, all-time data
@@ -976,6 +1012,20 @@ function ReadingInsights:onShowReadingStatsPopup()
     return true
 end
 
+-- Book-view only, like the popups around it: the small Book info popup
+-- (cover, title, author, series). Also what tapping the "This book" header
+-- of the Book progress popup sends (see book_stats_view.lua).
+-- `on_close` (optional, passed along by the Book progress popup) runs when
+-- the popup is closed, so that popup can reopen itself.
+function ReadingInsights:onShowBookInfoPopup(on_close)
+    if not self:_hasOpenDocument() then return true end
+    UIManager:show(BookInfo:new{
+        ui       = self.ui,
+        on_close = type(on_close) == "function" and on_close or nil,
+    })
+    return true
+end
+
 -- Book-view only, same restriction as onShowReadingStatsPopup above: opens
 -- the Book progress calendar directly, without going through "This
 -- book" first.
@@ -1017,6 +1067,7 @@ function ReadingInsights:_menuDeps()
         ViewSettings                = ViewSettings,
         ChapterBar                  = ChapterBar,
         ProgressBar                 = ProgressBar,
+        SkimBar                     = SkimBar,
         SCREENSAVER_TYPE_VALUE      = SCREENSAVER_TYPE_VALUE,
         patchScreensaverMenuBuilder = patchScreensaverMenuBuilder,
         readScreensaverLabelMode    = readScreensaverLabelMode,

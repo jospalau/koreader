@@ -462,6 +462,9 @@ msgstr "page restante"
 msgid "pages left"
 msgstr "pages restantes"
 
+msgid "p"
+msgstr "p."
+
 msgid "page per minute"
 msgstr "page par minute"
 
@@ -907,6 +910,15 @@ msgstr "Afficher les records"
 
 msgid "Show Reading streak"
 msgstr "Afficher la série de lecture"
+
+msgid "Menu items"
+msgstr "Éléments du menu"
+
+msgid "Reading streak"
+msgstr "Série de lecture"
+
+msgid "Tick the popups that should be listed under Tools > Reading insights. The book popups only appear while a book is open."
+msgstr "Cochez les fenêtres à afficher dans Outils > Reading insights. Les fenêtres du livre n'apparaissent que lorsqu'un livre est ouvert."
 
 msgid "Reading insights: reading streak"
 msgstr "Statistiques de lecture : série de lecture"
@@ -1746,13 +1758,124 @@ msgid "Next 2 chapters"
 msgstr "2 chapitres suivants"
 
 msgid "Next chapters shown"
-msgstr ""
+msgstr "Chapitres suivants affichés"
 
 msgid "How many upcoming chapters the \"Next chapter\" column's reading-time estimate covers. With \"2\", once a second chapter follows the next one, the header switches to \"Next 2 chapters\" and shows both chapters' times, e.g. \"00:10 | 00:28\". Falls back to a single chapter when there is no chapter after the next one, or no next chapter at all."
-msgstr ""
+msgstr "Nombre de chapitres à venir couverts par l'estimation du temps de lecture de la colonne « Chapitre suivant ». Avec « 2 », dès qu'un deuxième chapitre suit le prochain, l'en-tête passe à « 2 chapitres suivants » et affiche le temps des deux chapitres, p. ex. « 00:10 | 00:28 ». Revient à un seul chapitre s'il n'y a pas de chapitre après le suivant, ou pas de chapitre suivant du tout."
 
 msgid "1 (default)"
-msgstr ""
+msgstr "1 (par défaut)"
 
 msgid "2"
-msgstr ""
+msgstr "2"
+
+msgid "Chapter bar style"
+msgstr "Style de la barre de chapitres"
+
+msgid "Chapter bars"
+msgstr "Barres de chapitres"
+
+msgid "Skim bar"
+msgstr "Barre de saut"
+
+msgid "Skim bar height"
+msgstr "Hauteur de la barre de saut"
+
+msgid "Choose how the chapter bar is drawn: one bar per chapter, or a single bar like the one in KOReader's \"Skim to\" dialog."
+msgstr "Choisissez comment la barre de chapitres est dessinée : une barre par chapitre, ou une barre unique comme dans la boîte de dialogue « Skim to » de KOReader."
+
+msgid "One bar per chapter, as tall as the chapter is long."
+msgstr "Une barre par chapitre, aussi haute que le chapitre est long."
+
+msgid "A single bar like KOReader's \"Skim to\" dialog: filled up to the current page, chapter separators and the position marker. Uses the active and inactive bar colors."
+msgstr "Une barre unique comme dans la boîte de dialogue « Skim to » de KOReader : remplie jusqu'à la page actuelle, avec les séparateurs de chapitres et le marqueur de position. Utilise les couleurs de barre active et inactive."
+
+msgid "Book section style"
+msgstr "Style de la section du livre"
+
+msgid "Classic"
+msgstr "Classique"
+
+msgid "Donut chart"
+msgstr "Graphique en anneau"
+
+msgid "How the \"This book\" section looks. \"Classic\" keeps the rows and the progress bar. \"Donut chart\" shows a large donut with the read percentage on the left and the pages, the time read and the reading time left stacked on the right (the progress bar is replaced by the donut)."
+msgstr "Apparence de la section « Ce livre ». « Classique » conserve les lignes et la barre de progression. « Graphique en anneau » affiche à gauche un grand anneau avec le pourcentage lu et, à droite, les uns sous les autres, les pages, le temps de lecture écoulé et le temps de lecture restant (la barre de progression est remplacée par l'anneau)."
+
+msgid "Show Book info"
+msgstr "Afficher les infos du livre"
+
+msgid "Reading insights: book info"
+msgstr "Statistiques de lecture : infos du livre"
+
+msgid "Book info"
+msgstr "Infos du livre"
+
+msgid "Show cover"
+msgstr "Afficher la couverture"
+
+msgid "Show the book's cover on the left."
+msgstr "Affiche la couverture du livre à gauche."
+
+msgid "Rounded corners"
+msgstr "Coins arrondis"
+
+msgid "Round the corners of the cover."
+msgstr "Arrondit les coins de la couverture."
+
+msgid "Cover shadow"
+msgstr "Ombre de la couverture"
+
+msgid "Draw a drop shadow behind the cover."
+msgstr "Dessine une ombre portée derrière la couverture."
+
+msgid "Cover border"
+msgstr "Cadre de la couverture"
+
+msgid "Draw a thin frame around the cover."
+msgstr "Dessine un fin cadre autour de la couverture."
+
+msgid "Cover size"
+msgstr "Taille de la couverture"
+
+msgid "Small"
+msgstr "Petite"
+
+msgid "Medium"
+msgstr "Moyenne"
+
+msgid "Large"
+msgstr "Grande"
+
+msgid "Size of the cover in the Book info popup. Medium is the default size; Small is half of it and Large is one and a half times it."
+msgstr "Taille de la couverture dans la fenêtre Infos du livre. Moyenne est la taille par défaut ; Petite en est la moitié et Grande une fois et demie."
+
+msgid "Show author"
+msgstr "Afficher l'auteur"
+
+msgid "Show the author line. Several authors are joined with a language-appropriate \"and\"."
+msgstr "Affiche la ligne de l'auteur. Plusieurs auteurs sont reliés par un « et » adapté à la langue."
+
+msgid "Show series"
+msgstr "Afficher la série"
+
+msgid "Show the series line (series name and the book's number in it) when the book is part of a series."
+msgstr "Affiche la ligne de la série (nom de la série et numéro du livre) lorsque le livre en fait partie."
+
+msgid "Series"
+msgstr "Série"
+
+msgid "and"
+msgstr "et"
+
+msgid "{series} / #{index}"
+msgstr "{series} / n°{index}"
+
+msgid "Show description"
+msgstr "Afficher la description"
+
+msgid "Show the book's description under the author / series, as far down as the bottom of the cover, cut with an ellipsis when it does not fit. Tap it to read the full description. While this is on, the popup is as wide as it can be."
+msgstr "Affiche la description du livre sous l'auteur / la série, jusqu'au bas de la couverture ; elle est coupée par des points de suspension si elle ne tient pas. Touchez-la pour lire la description complète. Tant que cette option est active, la fenêtre a sa largeur maximale."
+
+msgid "Description"
+msgstr "Description"

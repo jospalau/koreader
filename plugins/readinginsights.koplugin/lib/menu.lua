@@ -34,65 +34,58 @@ local _ = Locale._
 local M = {}
 
 function M.build(self, deps)
-    local sub_item_table = {
-        {
-            text = _("Show Reading insights"),
-            keep_menu_open = false,
-            callback = function()
-                self:onShowReadingInsightsPopup()
-            end,
-        },
-        {
-            text = _("Show Reading streak"),
-            keep_menu_open = false,
-            callback = function()
-                self:onShowReadingStreakPopup()
-            end,
-        },
-        {
-            text = _("Show Reading heatmap"),
-            keep_menu_open = false,
-            callback = function()
-                self:onShowReadingHeatmapPopup()
-            end,
-        },
-        {
-            text = _("Show Records"),
-            keep_menu_open = false,
-            callback = function()
-                self:onShowReadingRecordsPopup()
-            end,
-        },
-        {
-            text = _("Show Achievements"),
-            keep_menu_open = false,
-            callback = function()
-                self:onShowReadingAchievements()
-            end,
-        },
+    -- The "Show ..." entries. Which of them are listed is set under
+    -- Settings > Advanced settings > "Menu items"; the list is rebuilt each
+    -- time the menu opens (sub_item_table_func at the bottom), so a change
+    -- shows up right away. The three book entries also need an open book.
+    local popup_entries = {
+        { key = "insights",      label = _("Reading insights"),
+          text = _("Show Reading insights"),
+          open = function() self:onShowReadingInsightsPopup() end },
+        { key = "streak",        label = _("Reading streak"),
+          text = _("Show Reading streak"),
+          open = function() self:onShowReadingStreakPopup() end },
+        { key = "heatmap",       label = _("Reading heatmap"),
+          text = _("Show Reading heatmap"),
+          open = function() self:onShowReadingHeatmapPopup() end },
+        { key = "records",       label = _("Records"),
+          text = _("Show Records"),
+          open = function() self:onShowReadingRecordsPopup() end },
+        { key = "achievements",  label = _("Achievements"),
+          text = _("Show Achievements"),
+          open = function() self:onShowReadingAchievements() end },
+        { key = "book_progress", label = _("Book progress"), book = true,
+          text = _("Show Book progress"),
+          open = function() self:onShowReadingStatsPopup() end },
+        { key = "book_info",     label = _("Book info"), book = true,
+          text = _("Show Book info"),
+          open = function() self:onShowBookInfoPopup() end },
+        { key = "book_calendar", label = _("Book progress calendar"), book = true,
+          text = _("Show Book progress calendar"),
+          open = function() self:onShowBookCalendarPopup() end },
     }
 
-    local has_open_document = self:_hasOpenDocument()
-    if has_open_document then
-        table.insert(sub_item_table, {
-            text = _("Show Book progress"),
-            keep_menu_open = false,
-            callback = function()
-                self:onShowReadingStatsPopup()
-            end,
-        })
-        table.insert(sub_item_table, {
-            text = _("Show Book progress calendar"),
-            keep_menu_open = false,
-            callback = function()
-                self:onShowBookCalendarPopup()
-            end,
-        })
+    local function buildPopupEntries()
+        local items = {}
+        local has_open_document = self:_hasOpenDocument()
+        for _idx, e in ipairs(popup_entries) do
+            if deps.ViewSettings.Opt.readMenuItem(e.key)
+                and (has_open_document or not e.book) then
+                table.insert(items, {
+                    text = e.text,
+                    keep_menu_open = false,
+                    callback = e.open,
+                })
+            end
+        end
+        -- Separator after the "open a popup" entries, before the
+        -- settings submenu below.
+        if #items > 0 then items[#items].separator = true end
+        return items
     end
 
-    -- Separator after the two "open a popup" entries, before the
-    -- settings submenu below.
-    sub_item_table[#sub_item_table].separator = true
+    -- Everything below the popup entries (Settings, Updates, About).
+    local sub_item_table = {}
 
     local settings_sub_item_table = {}
 
@@ -235,19 +228,44 @@ function M.build(self, deps)
         sub_item_table = deps.Fonts.buildMenu(),
     })
 
-    -- "Advanced settings": less commonly touched settings, tucked away in
-    -- their own submenu. A separator is placed above this entry itself (set
-    -- on the preceding "Fonts" entry) to set it apart from the rest of the
-    -- Settings menu.
+    -- Settings menu layout, top to bottom:
+    --   Sleep-screen indicator, Full-screen refresh      (behaviour)
+    --   Colors, Fonts                                    (appearance)
+    --   ---------------------------------------------
+    --   Reading insight popup, Book progress popup,
+    --   Book progress calendar                           (one submenu per view)
+    --   ---------------------------------------------
+    --   Advanced settings                                (less commonly touched)
     --
-    -- Two settings that apply to everything the plugin draws sit at the top
-    -- (bar chart height, long durations as days), then the rest grouped by
-    -- what it affects, one submenu each: "Date & time" (how dates and times
-    -- are spelled out anywhere), "Reading insight popup" and "Book progress
-    -- calendar". Dividers separate the three blocks: under the pair at the
-    -- top, and under "Date & time" (the only group that reaches outside the
-    -- two popups below it).
+    -- "Advanced settings" holds what applies to everything the plugin
+    -- draws: bar chart height, long durations as days, and the "Date &
+    -- time" group (how dates and times are spelled out anywhere). The
+    -- divider above the per-view block is the one set on the "Fonts"
+    -- entry; the divider under it is set on "Book progress calendar".
     local advanced_settings_sub_item_table = {}
+
+    -- "Menu items": tick the popups that should be listed under Tools >
+    -- Reading insights (all of them by default).
+    local menu_items_sub_item_table = {}
+    for _idx, e in ipairs(popup_entries) do
+        table.insert(menu_items_sub_item_table, {
+            text = e.label,
+            keep_menu_open = true,
+            checked_func = function()
+                return deps.ViewSettings.Opt.readMenuItem(e.key)
+            end,
+            callback = function()
+                deps.ViewSettings.Opt.saveMenuItem(e.key, not deps.ViewSettings.Opt.readMenuItem(e.key))
+            end,
+        })
+    end
+    table.insert(advanced_settings_sub_item_table, {
+        text = _("Menu items"),
+        help_text = _("Tick the popups that should be listed under Tools > Reading insights. The book popups only appear while a book is open."),
+        keep_menu_open = true,
+        separator = true,
+        sub_item_table = menu_items_sub_item_table,
+    })
 
     table.insert(advanced_settings_sub_item_table, {
         text = _("Bar chart height"),
@@ -300,6 +318,16 @@ function M.build(self, deps)
                 deps.ChapterBar.saveHeightSetting,
                 deps.ChapterBar.DEFAULT_HEIGHT,
                 10, 200
+            ),
+            -- The skim-style chapter bar's height lives here with the other
+            -- chart heights (it used to sit under Book progress popup >
+            -- Chapter bar style).
+            buildBarHeightMenuEntry(
+                _("Book progress") .. ": " .. _("Skim bar"),
+                deps.SkimBar.readHeightSetting,
+                deps.SkimBar.saveHeightSetting,
+                deps.SkimBar.DEFAULT_HEIGHT,
+                deps.SkimBar.MIN_HEIGHT, deps.SkimBar.MAX_HEIGHT
             ),
         },
     })
@@ -650,16 +678,15 @@ function M.build(self, deps)
         })
     end
 
-    -- The three groups, in the order they appear under Advanced settings.
-    -- Both tables above are complete by now.
+    -- "Date & time" closes off Advanced settings; the three per-view groups
+    -- go directly into the Settings menu, under Fonts.
     table.insert(advanced_settings_sub_item_table, {
         text = _("Date & time"),
         keep_menu_open = true,
-        separator = true,
         sub_item_table = date_time_sub_item_table,
     })
 
-    table.insert(advanced_settings_sub_item_table, {
+    table.insert(settings_sub_item_table, {
         text = _("Reading insight popup"),
         keep_menu_open = true,
         sub_item_table = insights_popup_sub_item_table,
@@ -714,6 +741,49 @@ function M.build(self, deps)
         },
     })
 
+    -- "This book" section style: the original rows, or a donut (default)
+    -- chart with the read percentage on the left and pages / time read /
+    -- time left stacked on the right (widgets/donutwidget.lua).
+    table.insert(book_progress_sub_item_table, {
+        text_func = function()
+            local Opt = deps.ViewSettings.Opt
+            local style = (Opt.readBookSectionStyle() == Opt.BOOK_SECTION_STYLE_DONUT)
+                and _("Donut chart") or _("Classic")
+            return _("Book section style") .. ": " .. style
+        end,
+        help_text = _("How the \"This book\" section looks. \"Classic\" keeps the rows and the progress bar. \"Donut chart\" shows a large donut with the read percentage on the left and the pages, the time read and the reading time left stacked on the right (the progress bar is replaced by the donut)."),
+        keep_menu_open = true,
+        separator = true,
+        sub_item_table = {
+            {
+                text = _("Classic"),
+                keep_menu_open = true,
+                radio = true,
+                checked_func = function()
+                    local Opt = deps.ViewSettings.Opt
+                    return Opt.readBookSectionStyle() == Opt.BOOK_SECTION_STYLE_CLASSIC
+                end,
+                callback = function()
+                    local Opt = deps.ViewSettings.Opt
+                    Opt.saveBookSectionStyle(Opt.BOOK_SECTION_STYLE_CLASSIC)
+                end,
+            },
+            {
+                text = _("Donut chart"),
+                keep_menu_open = true,
+                radio = true,
+                checked_func = function()
+                    local Opt = deps.ViewSettings.Opt
+                    return Opt.readBookSectionStyle() == Opt.BOOK_SECTION_STYLE_DONUT
+                end,
+                callback = function()
+                    local Opt = deps.ViewSettings.Opt
+                    Opt.saveBookSectionStyle(Opt.BOOK_SECTION_STYLE_DONUT)
+                end,
+            },
+        },
+    })
+
     -- Which parts of each section are shown. When every part of a section is
     -- off, its header disappears too (chapter section, "This book", "Pace").
     table.insert(book_progress_sub_item_table, {
@@ -762,11 +832,22 @@ function M.build(self, deps)
         },
     })
 
+
+    -- With the "Donut chart" Book section style the donut row always shows
+    -- the pages and the times, so the two toggles below are greyed out and
+    -- displayed as checked. The saved values are left untouched: switching
+    -- back to "Classic" restores whatever was set there.
+    local function isDonutStyle()
+        local Opt = deps.ViewSettings.Opt
+        return Opt.readBookSectionStyle() == Opt.BOOK_SECTION_STYLE_DONUT
+    end
+
     table.insert(book_progress_sub_item_table, {
         text = _("Read row"),
         help_text = _("Show the row with the read percentage and page count in the \"This book\" section. If every part of the section is off, its header is hidden too."),
         keep_menu_open = true,
-        checked_func = function() return deps.ViewSettings.Opt.readShowBookReadRow() end,
+        enabled_func = function() return not isDonutStyle() end,
+        checked_func = function() return isDonutStyle() or deps.ViewSettings.Opt.readShowBookReadRow() end,
         callback = function()
             deps.ViewSettings.Opt.saveShowBookReadRow(not deps.ViewSettings.Opt.readShowBookReadRow())
         end,
@@ -776,7 +857,8 @@ function M.build(self, deps)
         text = _("Reading time row"),
         help_text = _("Show the row with the time read so far and the reading time left in the \"This book\" section. If every part of the section is off, its header is hidden too."),
         keep_menu_open = true,
-        checked_func = function() return deps.ViewSettings.Opt.readShowBookTimeRow() end,
+        enabled_func = function() return not isDonutStyle() end,
+        checked_func = function() return isDonutStyle() or deps.ViewSettings.Opt.readShowBookTimeRow() end,
         callback = function()
             deps.ViewSettings.Opt.saveShowBookTimeRow(not deps.ViewSettings.Opt.readShowBookTimeRow())
         end,
@@ -791,6 +873,44 @@ function M.build(self, deps)
             deps.ViewSettings.Opt.saveShowChapterBar(not deps.ViewSettings.Opt.readShowChapterBar())
         end,
     })
+
+    -- Chapter bar style: the per-chapter bar chart (default), or a single
+    -- bar drawn like KOReader's "Skim to" dialog (widgets/skimbarwidget.lua),
+    -- in the plugin's active / inactive colors.
+    do
+        local function styleEntry(text, help, style)
+            return {
+                text = text,
+                help_text = help,
+                keep_menu_open = true,
+                radio = true,
+                checked_func = function()
+                    return deps.ViewSettings.Opt.readChapterBarStyle() == style
+                end,
+                callback = function()
+                    deps.ViewSettings.Opt.saveChapterBarStyle(style)
+                end,
+            }
+        end
+        local Opt = deps.ViewSettings.Opt
+        table.insert(book_progress_sub_item_table, {
+            text_func = function()
+                local name = (Opt.readChapterBarStyle() == Opt.CHAPTER_BAR_STYLE_SKIM)
+                    and _("Skim bar") or _("Chapter bars")
+                return _("Chapter bar style") .. ": " .. name
+            end,
+            help_text = _("Choose how the chapter bar is drawn: one bar per chapter, or a single bar like the one in KOReader's \"Skim to\" dialog."),
+            keep_menu_open = true,
+            sub_item_table = {
+                styleEntry(_("Chapter bars"),
+                    _("One bar per chapter, as tall as the chapter is long."),
+                    Opt.CHAPTER_BAR_STYLE_BARS),
+                styleEntry(_("Skim bar"),
+                    _("A single bar like KOReader's \"Skim to\" dialog: filled up to the current page, chapter separators and the position marker. Uses the active and inactive bar colors."),
+                    Opt.CHAPTER_BAR_STYLE_SKIM),
+            },
+        })
+    end
 
     -- Chapters per page: how many chapter columns the chapter bar shows at
     -- once before the arrows/swipe page to the next batch (ChapterBar.PAGE_SIZE
@@ -886,9 +1006,15 @@ function M.build(self, deps)
             1, 200
         ))
 
+        -- Greyed out with the "Donut chart" section style: the donut
+        -- replaces the linear progress bar, so its settings have no effect.
         table.insert(book_progress_sub_item_table, {
             text = _("Progress bar"),
             keep_menu_open = true,
+            enabled_func = function()
+                local Opt = deps.ViewSettings.Opt
+                return Opt.readBookSectionStyle() ~= Opt.BOOK_SECTION_STYLE_DONUT
+            end,
             sub_item_table = progress_bar_sub_item_table,
         })
     end
@@ -913,10 +1039,91 @@ function M.build(self, deps)
         end,
     })
 
-    table.insert(advanced_settings_sub_item_table, {
+    table.insert(settings_sub_item_table, {
         text = _("Book progress popup"),
         keep_menu_open = true,
         sub_item_table = book_progress_sub_item_table,
+    })
+
+    -- "Book info" popup: which parts of the small cover + title / author /
+    -- series popup are shown. Cover frame options (rounded corners, shadow,
+    -- border) only matter while the cover itself is on, so they grey out
+    -- with it. Fonts live under Settings > Fonts > Book info.
+    local function bookInfoToggle(name, text, help_text, depends_on_cover, separator)
+        return {
+            text = text,
+            help_text = help_text,
+            keep_menu_open = true,
+            separator = separator,
+            enabled_func = depends_on_cover and function()
+                return deps.ViewSettings.Opt.readBookInfo("cover")
+            end or nil,
+            checked_func = function()
+                return deps.ViewSettings.Opt.readBookInfo(name)
+            end,
+            callback = function()
+                deps.ViewSettings.Opt.saveBookInfo(name, not deps.ViewSettings.Opt.readBookInfo(name))
+            end,
+        }
+    end
+    -- Cover size: small (50%) / medium (100%, default) / large (150%).
+    -- Greyed out together with the cover itself.
+    local function coverSizeRadio(size, text)
+        return {
+            text = text,
+            keep_menu_open = true,
+            radio = true,
+            checked_func = function()
+                return deps.ViewSettings.Opt.readBookInfoCoverSize() == size
+            end,
+            callback = function()
+                deps.ViewSettings.Opt.saveBookInfoCoverSize(size)
+            end,
+        }
+    end
+    local coverSizeItem = {
+        text_func = function()
+            local Opt = deps.ViewSettings.Opt
+            local size = Opt.readBookInfoCoverSize()
+            local label = (size == Opt.BOOK_INFO_COVER_SIZE_SMALL and _("Small"))
+                or (size == Opt.BOOK_INFO_COVER_SIZE_LARGE and _("Large"))
+                or _("Medium")
+            return _("Cover size") .. ": " .. label
+        end,
+        help_text = _("Size of the cover in the Book info popup. Medium is the default size; Small is half of it and Large is one and a half times it."),
+        keep_menu_open = true,
+        enabled_func = function()
+            return deps.ViewSettings.Opt.readBookInfo("cover")
+        end,
+        sub_item_table = {
+            coverSizeRadio(deps.ViewSettings.Opt.BOOK_INFO_COVER_SIZE_SMALL, _("Small")),
+            coverSizeRadio(deps.ViewSettings.Opt.BOOK_INFO_COVER_SIZE_MEDIUM, _("Medium")),
+            coverSizeRadio(deps.ViewSettings.Opt.BOOK_INFO_COVER_SIZE_LARGE, _("Large")),
+        },
+    }
+    local book_info_sub_item_table = {
+        bookInfoToggle("cover", _("Show cover"),
+            _("Show the book's cover on the left."),
+            false, true),
+        coverSizeItem,
+        bookInfoToggle("rounded", _("Rounded corners"),
+            _("Round the corners of the cover."), true),
+        bookInfoToggle("shadow", _("Cover shadow"),
+            _("Draw a drop shadow behind the cover."), true),
+        bookInfoToggle("border", _("Cover border"),
+            _("Draw a thin frame around the cover."), true, true),
+        bookInfoToggle("author", _("Show author"),
+            _("Show the author line. Several authors are joined with a language-appropriate \"and\"."), false),
+        bookInfoToggle("series", _("Show series"),
+            _("Show the series line (series name and the book's number in it) when the book is part of a series."), false),
+        bookInfoToggle("description", _("Show description"),
+            _("Show the book's description under the author / series, as far down as the bottom of the cover, cut with an ellipsis when it does not fit. Tap it to read the full description. While this is on, the popup is as wide as it can be."), false),
+    }
+
+    table.insert(settings_sub_item_table, {
+        text = _("Book info"),
+        keep_menu_open = true,
+        sub_item_table = book_info_sub_item_table,
     })
 
     local book_calendar_sub_item_table = {}
@@ -966,9 +1173,10 @@ function M.build(self, deps)
         },
     })
 
-    table.insert(advanced_settings_sub_item_table, {
+    table.insert(settings_sub_item_table, {
         text = _("Book progress calendar"),
         keep_menu_open = true,
+        separator = true,
         sub_item_table = book_calendar_sub_item_table,
     })
 
@@ -1006,7 +1214,13 @@ function M.build(self, deps)
     return {
         text = _("Reading insights"),
         sorting_hint = "tools",
-        sub_item_table = sub_item_table,
+        sub_item_table_func = function()
+            local items = buildPopupEntries()
+            for _idx, item in ipairs(sub_item_table) do
+                table.insert(items, item)
+            end
+            return items
+        end,
     }
 
     --[[

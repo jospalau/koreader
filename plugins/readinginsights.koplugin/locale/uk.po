@@ -477,6 +477,9 @@ msgstr "сторінка залишилась"
 msgid "pages left"
 msgstr "сторінок залишилось"
 
+msgid "p"
+msgstr "стор."
+
 msgid "page per minute"
 msgstr "сторінка на хвилину"
 
@@ -942,6 +945,15 @@ msgstr "Показати рекорди"
 
 msgid "Show Reading streak"
 msgstr "Показати серію читання"
+
+msgid "Menu items"
+msgstr "Пункти меню"
+
+msgid "Reading streak"
+msgstr "Серія читання"
+
+msgid "Tick the popups that should be listed under Tools > Reading insights. The book popups only appear while a book is open."
+msgstr "Позначте вікна, які мають відображатися в меню Інструменти > Reading insights. Вікна книги з’являються лише коли відкрито книгу."
 
 msgid "Reading insights: reading streak"
 msgstr "Аналітика читання: серія читання"
@@ -1795,13 +1807,124 @@ msgid "Next 2 chapters"
 msgstr "Наступні 2 глави"
 
 msgid "Next chapters shown"
-msgstr ""
+msgstr "Кількість показаних наступних глав"
 
 msgid "How many upcoming chapters the \"Next chapter\" column's reading-time estimate covers. With \"2\", once a second chapter follows the next one, the header switches to \"Next 2 chapters\" and shows both chapters' times, e.g. \"00:10 | 00:28\". Falls back to a single chapter when there is no chapter after the next one, or no next chapter at all."
-msgstr ""
+msgstr "Скільки наступних глав охоплює оцінка часу читання у стовпці «Наступна глава». Якщо вибрано «2» і після наступної глави є ще одна, заголовок перемикається на «Наступні 2 глави» та показує час обох глав, напр. «00:10 | 00:28». Якщо після наступної глави немає іншої або наступної глави взагалі немає, показується одна глава."
 
 msgid "1 (default)"
-msgstr ""
+msgstr "1 (типово)"
 
 msgid "2"
-msgstr ""
+msgstr "2"
+
+msgid "Chapter bar style"
+msgstr "Стиль панелі глав"
+
+msgid "Chapter bars"
+msgstr "Стовпці глав"
+
+msgid "Skim bar"
+msgstr "Панель переходу"
+
+msgid "Skim bar height"
+msgstr "Висота панелі переходу"
+
+msgid "Choose how the chapter bar is drawn: one bar per chapter, or a single bar like the one in KOReader's \"Skim to\" dialog."
+msgstr "Виберіть, як малюється панель глав: один стовпець на главу або одна смуга, як у діалозі «Skim to» KOReader."
+
+msgid "One bar per chapter, as tall as the chapter is long."
+msgstr "Один стовпець на главу, висота якого відповідає довжині глави."
+
+msgid "A single bar like KOReader's \"Skim to\" dialog: filled up to the current page, chapter separators and the position marker. Uses the active and inactive bar colors."
+msgstr "Одна смуга, як у діалозі «Skim to» KOReader: заповнена до поточної сторінки, з роздільниками глав і маркером позиції. Використовує кольори активної та неактивної панелі."
+
+msgid "Book section style"
+msgstr "Стиль розділу книги"
+
+msgid "Classic"
+msgstr "Класичний"
+
+msgid "Donut chart"
+msgstr "Кільцева діаграма"
+
+msgid "How the \"This book\" section looks. \"Classic\" keeps the rows and the progress bar. \"Donut chart\" shows a large donut with the read percentage on the left and the pages, the time read and the reading time left stacked on the right (the progress bar is replaced by the donut)."
+msgstr "Вигляд розділу «Ця книга». «Класичний» зберігає рядки та смугу прогресу. «Кільцева діаграма» показує ліворуч велику кільцеву діаграму з відсотком прочитаного, а праворуч одне під одним — сторінки, час читання та час читання, що залишився (смугу прогресу замінює діаграма)."
+
+msgid "Show Book info"
+msgstr "Показати відомості про книгу"
+
+msgid "Reading insights: book info"
+msgstr "Аналітика читання: відомості про книгу"
+
+msgid "Book info"
+msgstr "Відомості про книгу"
+
+msgid "Show cover"
+msgstr "Показати обкладинку"
+
+msgid "Show the book's cover on the left."
+msgstr "Показує обкладинку книги ліворуч."
+
+msgid "Rounded corners"
+msgstr "Округлені кути"
+
+msgid "Round the corners of the cover."
+msgstr "Округлює кути обкладинки."
+
+msgid "Cover shadow"
+msgstr "Тінь обкладинки"
+
+msgid "Draw a drop shadow behind the cover."
+msgstr "Малює тінь позаду обкладинки."
+
+msgid "Cover border"
+msgstr "Рамка обкладинки"
+
+msgid "Draw a thin frame around the cover."
+msgstr "Малює тонку рамку навколо обкладинки."
+
+msgid "Cover size"
+msgstr "Розмір обкладинки"
+
+msgid "Small"
+msgstr "Малий"
+
+msgid "Medium"
+msgstr "Середній"
+
+msgid "Large"
+msgstr "Великий"
+
+msgid "Size of the cover in the Book info popup. Medium is the default size; Small is half of it and Large is one and a half times it."
+msgstr "Розмір обкладинки у вікні відомостей про книгу. Середній — розмір за замовчуванням; малий удвічі менший, а великий у півтора раза більший."
+
+msgid "Show author"
+msgstr "Показати автора"
+
+msgid "Show the author line. Several authors are joined with a language-appropriate \"and\"."
+msgstr "Показує рядок автора. Кількох авторів з'єднує «та» відповідно до мови."
+
+msgid "Show series"
+msgstr "Показати серію"
+
+msgid "Show the series line (series name and the book's number in it) when the book is part of a series."
+msgstr "Показує рядок серії (назва серії та номер книги), якщо книга є її частиною."
+
+msgid "Series"
+msgstr "Серія"
+
+msgid "and"
+msgstr "та"
+
+msgid "{series} / #{index}"
+msgstr "{series} / №{index}"
+
+msgid "Show description"
+msgstr "Показувати опис"
+
+msgid "Show the book's description under the author / series, as far down as the bottom of the cover, cut with an ellipsis when it does not fit. Tap it to read the full description. While this is on, the popup is as wide as it can be."
+msgstr "Показує опис книги під автором / серією аж до нижнього краю обкладинки; якщо він не вміщується, обрізається з трьома крапками. Торкніться його, щоб прочитати повний опис. Поки цей параметр увімкнено, вікно має максимальну ширину."
+
+msgid "Description"
+msgstr "Опис"

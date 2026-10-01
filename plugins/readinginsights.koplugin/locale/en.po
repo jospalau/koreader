@@ -456,6 +456,9 @@ msgstr "page left"
 msgid "pages left"
 msgstr "pages left"
 
+msgid "p"
+msgstr "pgs."
+
 msgid "page per minute"
 msgstr "page per minute"
 
@@ -901,6 +904,15 @@ msgstr "Show Records"
 
 msgid "Show Reading streak"
 msgstr "Show Reading streak"
+
+msgid "Menu items"
+msgstr "Menu items"
+
+msgid "Reading streak"
+msgstr "Reading streak"
+
+msgid "Tick the popups that should be listed under Tools > Reading insights. The book popups only appear while a book is open."
+msgstr "Tick the popups that should be listed under Tools > Reading insights. The book popups only appear while a book is open."
 
 msgid "Reading insights: reading streak"
 msgstr "Reading insights: reading streak"
@@ -1726,3 +1738,144 @@ msgstr "1 (default)"
 
 msgid "2"
 msgstr "2"
+
+msgid "Chapter bar style"
+msgstr "Chapter bar style"
+
+msgid "Chapter bars"
+msgstr "Chapter bars"
+
+msgid "Skim bar"
+msgstr "Skim bar"
+
+msgid "Skim bar height"
+msgstr "Skim bar height"
+
+msgid "Choose how the chapter bar is drawn: one bar per chapter, or a single bar like the one in KOReader's \"Skim to\" dialog."
+msgstr "Choose how the chapter bar is drawn: one bar per chapter, or a single bar like the one in KOReader's \"Skim to\" dialog."
+
+msgid "One bar per chapter, as tall as the chapter is long."
+msgstr "One bar per chapter, as tall as the chapter is long."
+
+msgid "A single bar like KOReader's \"Skim to\" dialog: filled up to the current page, chapter separators and the position marker. Uses the active and inactive bar colors."
+msgstr "A single bar like KOReader's \"Skim to\" dialog: filled up to the current page, chapter separators and the position marker. Uses the active and inactive bar colors."
+
+msgid "Morning"
+msgstr "Morning"
+
+msgid "Chart"
+msgstr "Chart"
+
+msgid "Heatmap"
+msgstr "Heatmap"
+
+msgid "Evening"
+msgstr "Evening"
+
+msgid "Afternoon"
+msgstr "Afternoon"
+
+msgid "Time of day"
+msgstr "Time of day"
+
+msgid "Night"
+msgstr "Night"
+
+msgid "Time of day view"
+msgstr "Time of day view"
+
+msgid "seconds"
+msgstr "seconds"
+
+msgid "second"
+msgstr "second"
+
+msgid "Book section style"
+msgstr "Book section style"
+
+msgid "Classic"
+msgstr "Classic"
+
+msgid "Donut chart"
+msgstr "Donut chart"
+
+msgid "How the \"This book\" section looks. \"Classic\" keeps the rows and the progress bar. \"Donut chart\" shows a large donut with the read percentage on the left and the pages, the time read and the reading time left stacked on the right (the progress bar is replaced by the donut)."
+msgstr "How the \"This book\" section looks. \"Classic\" keeps the rows and the progress bar. \"Donut chart\" shows a large donut with the read percentage on the left and the pages, the time read and the reading time left stacked on the right (the progress bar is replaced by the donut)."
+
+msgid "Show Book info"
+msgstr "Show Book info"
+
+msgid "Reading insights: book info"
+msgstr "Reading insights: book info"
+
+msgid "Book info"
+msgstr "Book info"
+
+msgid "Show cover"
+msgstr "Show cover"
+
+msgid "Show the book's cover on the left."
+msgstr "Show the book's cover on the left."
+
+msgid "Rounded corners"
+msgstr "Rounded corners"
+
+msgid "Round the corners of the cover."
+msgstr "Round the corners of the cover."
+
+msgid "Cover shadow"
+msgstr "Cover shadow"
+
+msgid "Draw a drop shadow behind the cover."
+msgstr "Draw a drop shadow behind the cover."
+
+msgid "Cover border"
+msgstr "Cover border"
+
+msgid "Draw a thin frame around the cover."
+msgstr "Draw a thin frame around the cover."
+
+msgid "Cover size"
+msgstr "Cover size"
+
+msgid "Small"
+msgstr "Small"
+
+msgid "Medium"
+msgstr "Medium"
+
+msgid "Large"
+msgstr "Large"
+
+msgid "Size of the cover in the Book info popup. Medium is the default size; Small is half of it and Large is one and a half times it."
+msgstr "Size of the cover in the Book info popup. Medium is the default size; Small is half of it and Large is one and a half times it."
+
+msgid "Show author"
+msgstr "Show author"
+
+msgid "Show the author line. Several authors are joined with a language-appropriate \"and\"."
+msgstr "Show the author line. Several authors are joined with a language-appropriate \"and\"."
+
+msgid "Show series"
+msgstr "Show series"
+
+msgid "Show the series line (series name and the book's number in it) when the book is part of a series."
+msgstr "Show the series line (series name and the book's number in it) when the book is part of a series."
+
+msgid "Series"
+msgstr "Series"
+
+msgid "and"
+msgstr "and"
+
+msgid "{series} / #{index}"
+msgstr "{series} / #{index}"
+
+msgid "Show description"
+msgstr "Show description"
+
+msgid "Show the book's description under the author / series, as far down as the bottom of the cover, cut with an ellipsis when it does not fit. Tap it to read the full description. While this is on, the popup is as wide as it can be."
+msgstr "Show the book's description under the author / series, as far down as the bottom of the cover, cut with an ellipsis when it does not fit. Tap it to read the full description. While this is on, the popup is as wide as it can be."
+
+msgid "Description"
+msgstr "Description"

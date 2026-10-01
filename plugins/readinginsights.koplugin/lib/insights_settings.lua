@@ -169,7 +169,7 @@ M.Opt = {
     SHOW_GOAL_KEY     = "reading_insights_show_reading_goal",
     SHOW_GOAL_DEFAULT = true,
 
-    -- What the reading-goal section shows (Settings > Advanced settings >
+    -- What the reading-goal section shows (Settings > 
     -- Reading insight popup > "Reading goal section"):
     --   "both"      (default) finished/target figure + achievements count
     --   "goal_only" the old two-cell view: finished count | yearly target
@@ -180,7 +180,7 @@ M.Opt = {
     GOAL_MODE_OFF  = "off",
 
     -- What the right-hand cell of the "Reading goal" section counts
-    -- (Settings > Advanced settings > Reading insight popup > "Reading goal
+    -- (Settings > Reading insight popup > "Reading goal
     -- display"). "total" (default) shows the year's goal itself - "30 books
     -- to read"; "remaining" shows how many of it are still left after the
     -- finished books on the left - "18 books left". Either way it is the
@@ -191,7 +191,7 @@ M.Opt = {
     GOAL_DISPLAY_REMAINING = "remaining",
 
     -- How often the achievements re-evaluate in the background (Settings >
-    -- Advanced settings > Reading insight popup > "Achievement refresh").
+    -- Reading insight popup > "Achievement refresh").
     -- "daily" (default): at most once per calendar day; "every_open": on
     -- every insights popup open. Either way the heavy re-scan only actually
     -- runs when the reading data changed since the last evaluation; a
@@ -204,6 +204,15 @@ M.Opt = {
     -- all chapters, in the "This book" section) is shown. On by default.
     SHOW_CHAPTER_BAR_KEY     = "reading_insights_book_show_chapter_bar",
     SHOW_CHAPTER_BAR_DEFAULT = true,
+
+    -- Book progress popup: how that chapter bar is drawn. "bars" (default,
+    -- unchanged look) is the per-chapter bar chart; "skim" is a single bar
+    -- like the one in KOReader's "Skim to" dialog - filled up to the current
+    -- page, a separator at every chapter start and the position marker (see
+    -- widgets/skimbarwidget.lua).
+    CHAPTER_BAR_STYLE_KEY  = "reading_insights_book_chapter_bar_style",
+    CHAPTER_BAR_STYLE_BARS = "bars",
+    CHAPTER_BAR_STYLE_SKIM = "skim",
 
     -- Book progress popup: whether the "started … / expected finish" date
     -- row at the bottom of the "Pace" section is shown. On by default.
@@ -240,15 +249,25 @@ M.Opt = {
     -- Book progress popup: where it is placed on screen. "top" (default) is
     -- the original full-width sheet hanging from the top edge; "center" is a
     -- bordered box in the middle of the screen, as wide as the Book progress
-    -- calendar (94% of the screen width). Settings > Advanced settings >
+    -- calendar (94% of the screen width). Settings > 
     -- Book progress popup > "Popup position".
     BOOK_POPUP_POSITION_KEY    = "reading_insights_book_popup_position",
     BOOK_POPUP_POSITION_TOP    = "top",
     BOOK_POPUP_POSITION_CENTER = "center",
 
+    -- Book progress popup, "This book" section: "classic" is the original
+    -- rows (percent + pages, time read + time left, optional progress bar);
+    -- "donut" replaces them with one large donut chart (percentage in the
+    -- middle, "read" beside it) on the left and, after the column divider,
+    -- pages / time read / time left stacked on the right. Settings >
+    -- Book progress popup > "Book section style".
+    BOOK_SECTION_STYLE_KEY     = "reading_insights_book_section_style",
+    BOOK_SECTION_STYLE_CLASSIC = "classic",
+    BOOK_SECTION_STYLE_DONUT   = "donut",
+
     -- Reading insights popup: whether the title bar's hamburger menu (top
     -- left - quick access to the streak/heatmap/records/achievements
-    -- popups) is shown at all (Settings > Advanced settings > Reading
+    -- popups) is shown at all (Settings > Reading
     -- insight popup > "Hamburger menu"). On by default.
     SHOW_HAMBURGER_MENU_KEY     = "reading_insights_show_hamburger_menu",
     SHOW_HAMBURGER_MENU_DEFAULT = false,
@@ -547,6 +566,16 @@ function M.Opt.saveShowChapterBar(value)
     M.saveBoolSetting(M.Opt.SHOW_CHAPTER_BAR_KEY, value)
 end
 
+function M.Opt.readChapterBarStyle()
+    local v = Prefs.read(M.Opt.CHAPTER_BAR_STYLE_KEY, nil)
+    if v == M.Opt.CHAPTER_BAR_STYLE_SKIM then return M.Opt.CHAPTER_BAR_STYLE_SKIM end
+    return M.Opt.CHAPTER_BAR_STYLE_BARS
+end
+
+function M.Opt.saveChapterBarStyle(value)
+    Prefs.save(M.Opt.CHAPTER_BAR_STYLE_KEY, value)
+end
+
 function M.Opt.readShowPaceDates()
     return M.readBoolSetting(M.Opt.SHOW_PACE_DATES_KEY, M.Opt.SHOW_PACE_DATES_DEFAULT)
 end
@@ -586,6 +615,18 @@ function M.Opt.saveBookPopupPosition(value)
     Prefs.save(M.Opt.BOOK_POPUP_POSITION_KEY, value)
 end
 
+function M.Opt.readBookSectionStyle()
+    local v = Prefs.read(M.Opt.BOOK_SECTION_STYLE_KEY, nil)
+    -- Default (nothing saved yet) is the donut chart; an explicit "classic"
+    -- choice is saved and kept.
+    if v == M.Opt.BOOK_SECTION_STYLE_CLASSIC then return M.Opt.BOOK_SECTION_STYLE_CLASSIC end
+    return M.Opt.BOOK_SECTION_STYLE_DONUT
+end
+
+function M.Opt.saveBookSectionStyle(value)
+    Prefs.save(M.Opt.BOOK_SECTION_STYLE_KEY, value)
+end
+
 function M.Opt.readShowProgressBar()
     return M.readBoolSetting(M.Opt.SHOW_PROGRESS_BAR_KEY, M.Opt.SHOW_PROGRESS_BAR_DEFAULT)
 end
@@ -604,6 +645,80 @@ end
 
 function M.Opt.saveShowHamburgerMenu(value)
     M.saveBoolSetting(M.Opt.SHOW_HAMBURGER_MENU_KEY, value)
+end
+
+-- Book info popup (Settings > Book info). Every option is an on/off toggle
+-- that defaults to on; the keys are listed once here so the popup
+-- (views/book_info_view.lua) and the menu (lib/menu.lua) share them.
+--   cover    show the cover on the left
+--   rounded  rounded cover corners
+--   shadow   drop shadow behind the cover
+--   border   thin frame around the cover
+--   author   author line
+--   series   series line
+--   description  the book's description under the author / series, down to
+--                the bottom of the cover (tap it for the full text)
+M.Opt.BOOK_INFO_KEYS = {
+    cover   = "reading_insights_book_info_cover",
+    rounded = "reading_insights_book_info_rounded",
+    shadow  = "reading_insights_book_info_shadow",
+    border  = "reading_insights_book_info_border",
+    author  = "reading_insights_book_info_author",
+    series  = "reading_insights_book_info_series",
+    description = "reading_insights_book_info_description",
+}
+
+function M.Opt.readBookInfo(name)
+    local key = M.Opt.BOOK_INFO_KEYS[name]
+    if not key then return true end
+    return M.readBoolSetting(key, true)
+end
+
+function M.Opt.saveBookInfo(name, value)
+    local key = M.Opt.BOOK_INFO_KEYS[name]
+    if not key then return end
+    M.saveBoolSetting(key, value and true or false)
+end
+
+-- Book info popup cover size (Settings > Book info > "Cover size"). "medium"
+-- is the original size (the default); "small" is half of it and "large" is
+-- one and a half times it. The popup (views/book_info_view.lua) multiplies
+-- its cover box by BOOK_INFO_COVER_SCALE[size].
+M.Opt.BOOK_INFO_COVER_SIZE_KEY    = "reading_insights_book_info_cover_size"
+M.Opt.BOOK_INFO_COVER_SIZE_SMALL  = "small"
+M.Opt.BOOK_INFO_COVER_SIZE_MEDIUM = "medium"
+M.Opt.BOOK_INFO_COVER_SIZE_LARGE  = "large"
+M.Opt.BOOK_INFO_COVER_SCALE = {
+    small  = 0.5,
+    medium = 1.0,
+    large  = 1.5,
+}
+
+function M.Opt.readBookInfoCoverSize()
+    local v = Prefs.read(M.Opt.BOOK_INFO_COVER_SIZE_KEY, nil)
+    if M.Opt.BOOK_INFO_COVER_SCALE[v] then return v end
+    return M.Opt.BOOK_INFO_COVER_SIZE_MEDIUM
+end
+
+function M.Opt.saveBookInfoCoverSize(value)
+    if not M.Opt.BOOK_INFO_COVER_SCALE[value] then return end
+    Prefs.save(M.Opt.BOOK_INFO_COVER_SIZE_KEY, value)
+end
+
+-- Tools > Reading insights: which "Show ..." entries are listed (Settings >
+-- Advanced settings > "Menu items"). All on by default; this only affects
+-- the menu, the gesture / dispatcher actions keep working either way.
+M.Opt.MENU_ITEM_ORDER = {
+    "insights", "streak", "heatmap", "records", "achievements",
+    "book_progress", "book_info", "book_calendar",
+}
+
+function M.Opt.readMenuItem(name)
+    return M.readBoolSetting("reading_insights_menu_item_" .. name, true)
+end
+
+function M.Opt.saveMenuItem(name, value)
+    M.saveBoolSetting("reading_insights_menu_item_" .. name, value and true or false)
 end
 
 function M.Opt.readAchievementRefresh()

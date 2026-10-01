@@ -344,6 +344,9 @@ msgid "page left"
 msgstr "剩余页数"
 msgid "pages left"
 msgstr "剩余页数"
+
+msgid "p"
+msgstr "页"
 msgid "page per minute"
 msgstr "每分钟页数"
 msgid "pages per minute"
@@ -665,6 +668,15 @@ msgstr "查看阅读记录"
 
 msgid "Show Reading streak"
 msgstr "查看阅读连续记录"
+
+msgid "Menu items"
+msgstr "菜单项"
+
+msgid "Reading streak"
+msgstr "连续阅读"
+
+msgid "Tick the popups that should be listed under Tools > Reading insights. The book popups only appear while a book is open."
+msgstr "勾选要在“工具 > Reading insights”下列出的弹窗。与图书相关的弹窗仅在打开图书时显示。"
 
 msgid "Reading insights: reading streak"
 msgstr "阅读统计：阅读连续记录"
@@ -1465,13 +1477,124 @@ msgid "Next 2 chapters"
 msgstr "接下来2章"
 
 msgid "Next chapters shown"
-msgstr ""
+msgstr "显示的后续章节数"
 
 msgid "How many upcoming chapters the \"Next chapter\" column's reading-time estimate covers. With \"2\", once a second chapter follows the next one, the header switches to \"Next 2 chapters\" and shows both chapters' times, e.g. \"00:10 | 00:28\". Falls back to a single chapter when there is no chapter after the next one, or no next chapter at all."
-msgstr ""
+msgstr "“下一章”列的阅读时间估算涵盖多少个后续章节。选择“2”时，如果下一章之后还有一章，标题会切换为“接下来2章”，并同时显示两章的时间，例如“00:10 | 00:28”。若下一章之后没有章节，或根本没有下一章，则只显示单个章节。"
 
 msgid "1 (default)"
-msgstr ""
+msgstr "1（默认）"
 
 msgid "2"
-msgstr ""
+msgstr "2"
+
+msgid "Chapter bar style"
+msgstr "章节条样式"
+
+msgid "Chapter bars"
+msgstr "逐章条形"
+
+msgid "Skim bar"
+msgstr "跳转条"
+
+msgid "Skim bar height"
+msgstr "跳转条高度"
+
+msgid "Choose how the chapter bar is drawn: one bar per chapter, or a single bar like the one in KOReader's \"Skim to\" dialog."
+msgstr "选择章节条的绘制方式：每章一根条，或像 KOReader“Skim to”对话框那样的单一条。"
+
+msgid "One bar per chapter, as tall as the chapter is long."
+msgstr "每章一根条，条的高度与章节长度成正比。"
+
+msgid "A single bar like KOReader's \"Skim to\" dialog: filled up to the current page, chapter separators and the position marker. Uses the active and inactive bar colors."
+msgstr "单一条，如同 KOReader“Skim to”对话框：填充至当前页，带有章节分隔线和位置标记。使用活动与非活动条形颜色。"
+
+msgid "Book section style"
+msgstr "本书区域样式"
+
+msgid "Classic"
+msgstr "经典"
+
+msgid "Donut chart"
+msgstr "环形图"
+
+msgid "How the \"This book\" section looks. \"Classic\" keeps the rows and the progress bar. \"Donut chart\" shows a large donut with the read percentage on the left and the pages, the time read and the reading time left stacked on the right (the progress bar is replaced by the donut)."
+msgstr "“本书”区域的显示样式。“经典”保留原有的行和进度条。“环形图”在左侧显示带有已读百分比的大号环形图，右侧自上而下依次显示页数、已读时间和剩余阅读时间（进度条由环形图取代）。"
+
+msgid "Show Book info"
+msgstr "显示图书信息"
+
+msgid "Reading insights: book info"
+msgstr "阅读统计：图书信息"
+
+msgid "Book info"
+msgstr "图书信息"
+
+msgid "Show cover"
+msgstr "显示封面"
+
+msgid "Show the book's cover on the left."
+msgstr "在左侧显示书籍封面。"
+
+msgid "Rounded corners"
+msgstr "圆角"
+
+msgid "Round the corners of the cover."
+msgstr "将封面的四角变为圆角。"
+
+msgid "Cover shadow"
+msgstr "封面阴影"
+
+msgid "Draw a drop shadow behind the cover."
+msgstr "在封面后绘制投影。"
+
+msgid "Cover border"
+msgstr "封面边框"
+
+msgid "Draw a thin frame around the cover."
+msgstr "在封面周围绘制细边框。"
+
+msgid "Cover size"
+msgstr "封面大小"
+
+msgid "Small"
+msgstr "小"
+
+msgid "Medium"
+msgstr "中"
+
+msgid "Large"
+msgstr "大"
+
+msgid "Size of the cover in the Book info popup. Medium is the default size; Small is half of it and Large is one and a half times it."
+msgstr "图书信息弹窗中封面的大小。“中”为默认大小；“小”为其一半，“大”为其 1.5 倍。"
+
+msgid "Show author"
+msgstr "显示作者"
+
+msgid "Show the author line. Several authors are joined with a language-appropriate \"and\"."
+msgstr "显示作者行。多位作者会用符合当前语言的“和”连接。"
+
+msgid "Show series"
+msgstr "显示系列"
+
+msgid "Show the series line (series name and the book's number in it) when the book is part of a series."
+msgstr "当书籍属于某个系列时，显示系列行（系列名称及本书序号）。"
+
+msgid "Series"
+msgstr "系列"
+
+msgid "and"
+msgstr "和"
+
+msgid "{series} / #{index}"
+msgstr "{series} / 第{index}本"
+
+msgid "Show description"
+msgstr "显示简介"
+
+msgid "Show the book's description under the author / series, as far down as the bottom of the cover, cut with an ellipsis when it does not fit. Tap it to read the full description. While this is on, the popup is as wide as it can be."
+msgstr "在作者/系列下方显示书籍简介，直至封面底部；放不下时以省略号截断。点按简介可阅读完整内容。启用此项时，弹窗将采用最大宽度。"
+
+msgid "Description"
+msgstr "简介"
