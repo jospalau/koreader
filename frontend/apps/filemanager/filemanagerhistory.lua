@@ -404,7 +404,8 @@ function FileManagerHistory:onMenuHold(item)
         end
     end
 
-    local title = BD.filename(item.text):gsub(".epub","")
+    -- local title = BD.filename(item.text):gsub(".epub","")
+    local title = book_props and (book_props.title or book_props.display_title)
     if self.calibre_data[item.text]
         and self.calibre_data[item.text]["pubdate"]
         and self.calibre_data[item.text]["words"]
@@ -417,7 +418,7 @@ function FileManagerHistory:onMenuHold(item)
     end
 
     self.file_dialog = ButtonDialog:new{
-        title = title,
+        title = title and self.ui.bookinfo.combineAuthorsTitle(book_props.authors, title, true) or BD.filename(item.text),
         title_align = "center",
         buttons = buttons,
     }
