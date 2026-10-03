@@ -1227,7 +1227,7 @@ function SpineShelf.isUnread(src)
         return false
     end
     local st = src.status
-    return st == nil or st == "new" or st == "unread"
+    return st == nil or st == "new" or st == "unread" or st == "tbr"
 end
 
 -- isUnreadStandalone(src) -> unread, and in no series (issue 470).
