@@ -4599,6 +4599,7 @@ end
             self._mbr_confirm_pending = nil
             -- UIManager:setDirty(self, function() return "full", nil, self.dithered and not self:_isSpineMode() end)
             -- self:_swapShelvesInPlace()
+            UIManager:setDirty(self, "ui")
         end
 
         -- The confirm box itself opens 500ms after the tap, e.g. so the
@@ -4615,6 +4616,7 @@ end
                 cancel_callback = restore_focus,
             }, "full")
         end)
+
         return
     end
     proceed()
