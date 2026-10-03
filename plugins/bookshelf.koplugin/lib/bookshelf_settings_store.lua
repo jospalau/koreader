@@ -24,7 +24,11 @@ local LuaSettings = require("luasettings")
 local logger      = require("logger")
 local lfs         = require("libs/libkoreader-lfs")
 
-local SETTINGS_PATH = DataStorage:getSettingsDir() .. "/bookshelf.lua"
+-- settings/bookshelf/settings.lua (lib/bookshelf_paths). Until 5.3 it was
+-- settings/bookshelf.lua; lib/bookshelf_storage_move brings it over, before
+-- this module loads (main.lua runs the move first).
+local Paths = require("lib/bookshelf_paths")
+local SETTINGS_PATH = Paths.settingsFile("settings.lua")
 
 local _file_present_at_load = lfs.attributes(SETTINGS_PATH, "mode") ~= nil
 
@@ -69,9 +73,9 @@ local _settings = nil
 
 -- Large values are routed to their OWN files (not bookshelf.lua), so saving an
 -- ordinary preference doesn't rewrite them:
---   * "micromodule_*" keys      -> bookshelf_micromodules.lua
---   * "hardcover_links" (cache) -> bookshelf_hardcover_links.lua
---   * "opds_cache" (cache)      -> bookshelf_opds.lua
+--   * "micromodule_*" keys      -> settings/bookshelf/micromodule_data.lua
+--   * "hardcover_links" (cache) -> settings/bookshelf/hardcover_links.lua
+--   * "opds_cache" (cache)      -> cache/bookshelf/opds.lua
 -- subStoreFor(key) returns the destination store or nil (= the main file).
 -- Sub-stores are lazy-required so they aren't pulled in until a routed key is
 -- touched (and so the standalone test runner can stub them).
@@ -81,11 +85,11 @@ local function mm()
     return _mm
 end
 local function hc()
-    _hc = _hc or require("lib/bookshelf_file_store").new("bookshelf_hardcover_links.lua")
+    _hc = _hc or require("lib/bookshelf_file_store").new(Paths.settingsFile("hardcover_links.lua"))
     return _hc
 end
 local function opds()
-    _opds = _opds or require("lib/bookshelf_file_store").new("bookshelf_opds.lua")
+    _opds = _opds or require("lib/bookshelf_file_store").new(Paths.cacheFile("opds.lua"))
     return _opds
 end
 local function subStoreFor(key)
@@ -97,6 +101,21 @@ local function subStoreFor(key)
 end
 
 function Store.wasPresent() return _file_present_at_load end
+
+-- view() -> a readSetting-shaped view of this store, for code written against
+-- a LuaSettings object: lib/status_line, which is shared word for word with
+-- Bookends and still names the three status-line keys by their old
+-- settings.reader.lua names, read here under their new ones.
+local VIEW_NAMES = {
+    bookshelf_hero_regions     = "hero_regions",
+    bookshelf_status_in_reader = "status_in_reader",
+    bookshelf_reader_status_h  = "reader_status_h",
+}
+local _view
+function Store.view()
+    _view = _view or { readSetting = function(_self, k) return Store.read(VIEW_NAMES[k] or k) end }
+    return _view
+end
 
 local function _migrate(s)
     if s:readSetting("migrated") then return end
@@ -164,11 +183,42 @@ local function _relocateAux(s)
     s:flush()
 end
 
+-- One-shot (5.3): the three status-line settings lived in KOReader's
+-- settings.reader.lua, so a backup of settings/bookshelf/ missed them. Moved
+-- into this file; a value already here wins. Bookends reads them too, and
+-- follows them here in its own update.
+local READER_KEYS = {
+    bookshelf_hero_regions     = "hero_regions",
+    bookshelf_status_in_reader = "status_in_reader",
+    bookshelf_reader_status_h  = "reader_status_h",
+}
+local function _moveReaderKeys(s)
+    if type(G_reader_settings) ~= "table" then return end
+    local moved = s:readSetting("reader_keys_moved")
+    local cleared = false
+    for old, new in pairs(READER_KEYS) do
+        local v = G_reader_settings:readSetting(old)
+        if v ~= nil then
+            -- Copied once. Cleared whenever still there: a KOReader killed
+            -- before it saved its file brings the old entries back from disk.
+            if not moved and s:readSetting(new) == nil then s:saveSetting(new, v) end
+            G_reader_settings:delSetting(old)
+            cleared = true
+        end
+    end
+    if cleared and G_reader_settings.flush then pcall(function() G_reader_settings:flush() end) end
+    if not moved then
+        s:saveSetting("reader_keys_moved", true)
+        s:flush()
+    end
+end
+
 local function _open()
     if _settings then return _settings end
     _settings = LuaSettings:open(SETTINGS_PATH)
     _migrate(_settings)
     _relocateAux(_settings)
+    _moveReaderKeys(_settings)
     return _settings
 end
 

@@ -1492,12 +1492,39 @@ function Settings:_wallpaperMenu()
     -- so the row and the screen agree by construction.
     local function wallpaperLabel(setting, fallback)
         local name = BookshelfSettings.read(setting)
+        -- Full screen has three states: unset is Same as default (the
+        -- fallback), false is None. Reading false as unset showed None as
+        -- "Same as default", and the full screen shelves stayed bare.
+        if name == false and setting == Wallpaper.FULL_SETTING then return _("None") end
         if type(name) ~= "string" or name == "" then return fallback end
+        -- A pack's wallpaper is named by its pack; with the pack off the shelf
+        -- shows the reader's own from before it, so the row names that.
+        local TP = require("lib/bookshelf_theme_pack")
+        if TP.isPackName(name) then
+            if TP.variantName(name, false, false) then
+                return T(_("%1 pack"), name:match("^theme%-pack\1([^\1]+)") or "?")
+            end
+            name = BookshelfSettings.read(setting .. "_own")
+            if type(name) ~= "string" or name == "" or TP.isPackName(name) then return fallback end
+        end
         if not Wallpaper.pathFor(name) then return fallback end
         return name:match("^(.+)%.[^%.]+$") or name
     end
+    -- The picture rows open the wallpaper picker (large previews, the packs'
+    -- pictures beside the reader's own).
+    local function openPicker(key)
+        return function(touchmenu_instance)
+            local restore = self:_hidePickerMenu(touchmenu_instance)
+            require("lib/bookshelf_wallpaper_browser").show(key, function()
+                if self._bw and self._bw._rebuild then
+                    self._bw:_rebuild()
+                    UIManager:setDirty(self._bw, "ui")
+                end
+            end, restore)
+        end
+    end
 
-    return {
+    local items = {
         -- The page ground. Useful on its own, with no wallpaper at all -- and
         -- it is what shows through any region the picture is kept out of.
         -- Shares the colours menu's picker, day/night key suffix included.
@@ -1506,9 +1533,8 @@ function Settings:_wallpaperMenu()
                 return T(_("Default wallpaper image: %1"),
                          wallpaperLabel(Wallpaper.SETTING, _("None")))
             end,
-            sub_item_table_func = function()
-                return self:_wallpaperSubItems(Wallpaper.SETTING)
-            end,
+            keep_menu_open = true,
+            callback = openPicker(Wallpaper.SETTING),
         },
         {
             text_func = function()
@@ -1519,9 +1545,8 @@ function Settings:_wallpaperMenu()
                 .. "view is wall-to-wall covers and spines, where a backdrop "
                 .. "that reads well behind the top panel is often too busy. "
                 .. "A shelf with its own picture keeps it in both views."),
-            sub_item_table_func = function()
-                return self:_wallpaperSubItems(Wallpaper.FULL_SETTING)
-            end,
+            keep_menu_open = true,
+            callback = openPicker(Wallpaper.FULL_SETTING),
         },
         {
             text = _("Invert wallpaper in night mode"),
@@ -1611,6 +1636,7 @@ function Settings:_wallpaperMenu()
             end,
         },
     }
+    return items
 end
 
 
@@ -1649,8 +1675,25 @@ function Settings:_shelfThemeLabel()
     return cur
 end
 
+-- _themePackLabel() -> the theme pack in use, by its name, or nil.
+function Settings:_themePackLabel()
+    local ok, TP = pcall(require, "lib/bookshelf_theme_pack")
+    if not (ok and TP and TP.currentTheme) then return nil end
+    local pack = TP.currentTheme()
+    if not pack then return nil end
+    for _i, th in ipairs(TP.themePacks()) do
+        if th.pack == pack then return th.name end
+    end
+    return pack
+end
+
+-- The Shelf theme menu: Auto / Light / Dark, then (when any are installed) a
+-- second group, No theme pack and each theme pack (bookshelf_theme_pack).
+-- Built each time it opens, after a rescan, so a pack copied in since
+-- start-up shows without a restart.
 function Settings:_shelfThemeSubItems()
     local CP = require("lib/bookshelf_cover_progress")
+    local TP = require("lib/bookshelf_theme_pack")
     local rows = {}
     for _i, t in ipairs(Settings.SHELF_THEMES) do
         local value = t.value
@@ -1669,6 +1712,71 @@ function Settings:_shelfThemeSubItems()
             end,
         }
     end
+    -- Add theme...: where theme packs go and where to get them, like the
+    -- collection's Add ornaments. The shop link is a parameter, not part of
+    -- the msgid, so a translation cannot break it.
+    local function addThemeRow()
+        return {
+            text = _("Add theme\xE2\x80\xA6"),
+            keep_menu_open = true,
+            callback = function()
+                local InfoMessage = require("ui/widget/infomessage")
+                -- A findable path: the settings dir can be relative.
+                local dir = require("lib/bookshelf_ornaments").dir() or "?"
+                local ok, util = pcall(require, "ffi/util")
+                local real = ok and util.realpath and util.realpath(dir)
+                UIManager:show(InfoMessage:new{
+                    text = T(_("A theme pack brings a wallpaper, a plank, colors and ornaments together, and is chosen here. To add one, copy its folder into\n%1\nthen open this menu again.\n\nReady-made theme packs:\n%2"),
+                        real or dir, "ko-fi.com/andyhazz/shop"),
+                })
+            end,
+        }
+    end
+    TP.rescan()
+    local packs = TP.themePacks()
+    rows[#rows].separator = true
+    if #packs == 0 then
+        rows[#rows + 1] = addThemeRow()
+        return rows
+    end
+    -- A theme is the whole look (wallpaper, plank, colours, light or dark):
+    -- the shelf is built again and the whole screen refreshed.
+    local function done(touchmenu_instance, text)
+        self:_markDirty()
+        UIManager:setDirty("all", "full")
+        if text then
+            local InfoMessage = require("ui/widget/infomessage")
+            UIManager:show(InfoMessage:new{ text = text, timeout = 2 })
+        end
+        if touchmenu_instance then touchmenu_instance:updateItems() end
+    end
+    rows[#rows + 1] = {
+        text = _("No theme pack"),
+        radio = true,
+        checked_func = function() return TP.currentTheme() == nil end,
+        keep_menu_open = true,
+        callback = function(touchmenu_instance)
+            if TP.currentTheme() == nil then return end
+            TP.clearTheme()
+            done(touchmenu_instance, _("Theme pack off"))
+        end,
+    }
+    for _i, th in ipairs(packs) do
+        local pack, name = th.pack, th.name
+        rows[#rows + 1] = {
+            text = name,
+            help_text = th.description,
+            radio = true,
+            checked_func = function() return TP.currentTheme() == pack end,
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                TP.chooseTheme(pack)
+                done(touchmenu_instance, T(_("%1 theme on"), name))
+            end,
+        }
+    end
+    rows[#rows].separator = true
+    rows[#rows + 1] = addThemeRow()
     return rows
 end
 
@@ -1717,118 +1825,6 @@ function Settings:_scrimSubItems()
 end
 
 
--- _wallpaperSubItems() - the LIBRARY default wallpaper.
---
--- "None" first and always, so turning it off never depends on finding a row
--- among a long list of files. Everything else is whatever is in the folder;
--- when that is empty the list says so rather than showing a lone None and
--- leaving the reader wondering whether the feature is broken.
--- key: which image this picker sets -- Wallpaper.SETTING for the library
--- default, Wallpaper.FULL_SETTING for full screen shelves. One builder, so
--- the two lists cannot drift in behaviour or ordering.
-function Settings:_wallpaperSubItems(key)
-    local Wallpaper = require("lib/bookshelf_wallpaper")
-    key = key or Wallpaper.SETTING
-    -- Its own copy: markDirty is a nested local in the sibling sub-item
-    -- builders, not a file-level function, so naming it here would read a nil
-    -- global and only fail when a reader tapped a row.
-    local function apply()
-        -- Drop the decoded bitmap. bg() keys on the path so a DIFFERENT image
-        -- would re-decode anyway, but choosing None leaves nothing to ask for
-        -- and the old ~2MB would otherwise sit there for the session.
-        pcall(function() Wallpaper.free() end)
-        if self._bw and self._bw._rebuild then
-            self._bw:_rebuild()
-            UIManager:setDirty(self._bw, "ui")
-        end
-    end
-    local items = {}
-    -- The full screen image has THREE states, so it needs a row for each:
-    -- unset (follow the default), false (no picture here), or a filename.
-    -- Without this row a reader who picked one could never get back to
-    -- following the default -- None would only ever mean "bare".
-    if key == Wallpaper.FULL_SETTING then
-        items[#items + 1] = {
-            text = _("Same as default"),
-            checked_func = function()
-                return BookshelfSettings.read(key) == nil
-            end,
-            radio = true,
-            keep_menu_open = true,
-            callback = function(touchmenu_instance)
-                BookshelfSettings.delete(key)
-                BookshelfSettings.flush()
-                apply()
-                if touchmenu_instance then touchmenu_instance:updateItems() end
-            end,
-        }
-    end
-    items[#items + 1] = {
-        text = _("None"),
-        checked_func = function()
-            local v = BookshelfSettings.read(key)
-            if key == Wallpaper.FULL_SETTING then return v == false end
-            return not (type(v) == "string" and v ~= "")
-        end,
-        radio = true,
-        keep_menu_open = true,
-        callback = function(touchmenu_instance)
-            BookshelfSettings.save(key, false)
-            BookshelfSettings.flush()
-            apply()
-            if touchmenu_instance then touchmenu_instance:updateItems() end
-        end,
-    }
-    -- WHERE THE PICTURES COME FROM, shown whether or not there are any.
-    --
-    -- It used to appear only when the folder was empty, on the reasoning that
-    -- a reader with pictures already knows where they live. Bundling one
-    -- breaks that: the folder is never empty on a fresh install, so the line
-    -- that names the folder would never be seen by the readers who most need
-    -- it -- they would have to delete the shipped picture to find out how to
-    -- add their own (maintainer).
-    --
-    -- A disabled row at the END rather than the top: it is a footnote to the
-    -- list, and the reader is here to pick a picture first.
-    local function folderHint()
-        local dir = Wallpaper.dir() or "?"
-        local user = Wallpaper.userDir()
-        return {
-            text    = user and T(_("Images are loaded from %1 and %2"), dir, user)
-                           or T(_("Images are loaded from %1"), dir),
-            enabled = false,
-        }
-    end
-    local list = Wallpaper.list()
-    if #list == 0 then
-        items[#items + 1] = {
-            text = T(_("No images in %1"), Wallpaper.dir() or "?"),
-            enabled = false,
-        }
-        return items
-    end
-    for _i, item in ipairs(list) do
-        items[#items + 1] = {
-            text = item.label,
-            checked_func = function()
-                return BookshelfSettings.read(key) == item.name
-            end,
-            radio = true,
-            keep_menu_open = true,
-            callback = function(touchmenu_instance)
-                BookshelfSettings.save(key, item.name)
-                BookshelfSettings.flush()
-                apply()
-                if touchmenu_instance then touchmenu_instance:updateItems() end
-            end,
-            -- Divider above the footnote, so it reads as a note rather than
-            -- as one more thing that might be pickable.
-            separator = (_i == #list) or nil,
-        }
-    end
-    items[#items + 1] = folderHint()
-    return items
-end
 
 -- ── The colour picker, shared ──────────────────────────────────────────────
 --
@@ -1928,12 +1924,124 @@ function Settings:_colorValueLabel(raw_key, _default_pct)
     return p and (p .. "%") or _("default")
 end
 
+-- _pickPlank(touchmenu_instance, refresh, before) -- the plank's colour
+-- dialog, opened by the plank picker's Plain color. The plank is the colour
+-- once a colour is picked; Revert puts back the plank that was there before
+-- (before: the choice the picker replaced; bookshelf_theme_pack).
+-- on_done (optional): the dialog closed, however; the plank picker passes it
+-- to come back to itself instead of to the menu, which it keeps hidden.
+function Settings:_pickPlank(touchmenu_instance, refresh, before, on_done)
+    local TP = require("lib/bookshelf_theme_pack")
+    refresh = refresh or function() self:_markDirty() end
+    before = before or TP.plankChoice()
+    return self:_pickColor("spine_plank_color", "plank", 45,
+        _("Shelf plank color (% black)"), touchmenu_instance, refresh, nil, {
+            on_colour = function() TP.choosePlank("colour") end,
+            revert = function() TP.choosePlank(before) end,
+            on_done = on_done,
+        })
+end
+
+-- _hidePickerMenu(touchmenu_instance) -> restore: KOReader's menu out of the
+-- way while a picker whose choices show on the shelf is open, and a closure
+-- that brings it back, once, with its rows refreshed. Through the plugin's
+-- hideMenu, which only hides a real menu container: a duck-typed shim (a menu
+-- shortcut from the start menu, bookshelf_menu_host) is refreshed instead of
+-- being pushed onto the window stack, where it would crash the next paint.
+function Settings:_hidePickerMenu(touchmenu_instance)
+    local plugin = self._plugin
+    local restore
+    if plugin and plugin.hideMenu then
+        restore = plugin:hideMenu(touchmenu_instance)
+    else
+        restore = function()
+            if touchmenu_instance and touchmenu_instance.updateItems then touchmenu_instance:updateItems() end
+        end
+    end
+    local done = false
+    return function()
+        if done then return end
+        done = true
+        restore()
+    end
+end
+
+-- _plankRow(markDirty) -> the "Shelf plank" row: names the plank in use and
+-- opens the plank picker. In Accent colors and next to the wallpaper rows.
+function Settings:_plankRow(markDirty)
+    markDirty = markDirty or function() self:_markDirty() end
+    return {
+        text_func = function()
+            local lbl = require("lib/bookshelf_theme_pack").plankRowLabel()
+            return T(_("Shelf plank: %1"),
+                lbl or (_("color") .. " " .. self:_colorValueLabel("spine_plank_color")))
+        end,
+        help_text = _("The plank the Spines style stands its books on: a plain"
+            .. " color, the built-in oak, or a plank from an ornament pack."),
+        keep_menu_open = true,
+        callback = function(touchmenu_instance)
+            local restore = self:_hidePickerMenu(touchmenu_instance)
+            require("lib/bookshelf_plank_browser").show({
+                on_closed = restore,
+                -- Each tap in the picker: the shelf behind shows the plank at
+                -- once. Only its rows are rebuilt (the hero and chips do not
+                -- change), unless the tap switched a pack on, which brings
+                -- its ornaments: then the whole shelf.
+                on_change = function(full)
+                    local bw = self._bw
+                    if not full and bw and bw._swapShelvesInPlace and bw._isSpineMode
+                            and bw:_isSpineMode() then
+                        bw:_swapShelvesInPlace()
+                        UIManager:setDirty(bw, "ui")   -- the band under the last row too
+                    else
+                        markDirty()
+                    end
+                end,
+                pick_colour = function(before, on_done)
+                    self:_pickPlank(touchmenu_instance, markDirty, before, on_done)
+                end,
+            })
+        end,
+        -- Long-press: the plank colour back to the default, as on the other
+        -- colour rows.
+        hold_callback = function(touchmenu_instance)
+            local CoverProgress = require("lib/bookshelf_cover_progress")
+            local suffix = CoverProgress.modeSuffix and CoverProgress.modeSuffix() or ""
+            BookshelfSettings.delete("spine_plank_color" .. suffix)
+            markDirty()
+            if touchmenu_instance then touchmenu_instance:updateItems() end
+        end,
+    }
+end
+
+-- wood.on_done (optional): runs once when the dialog closes, however, and the
+-- menu is then left alone (the caller keeps it hidden): the palette is handed
+-- a stand-in menu whose refresh is on_done, the % dialog an on_close.
+-- wood (optional, the plank only): { on_colour = fn, revert = fn } -- picking
+-- a colour makes the plank the colour (on_colour), Revert restores the plank
+-- that was there. special_tile / extra_button (a palette tile, a button in
+-- the greyscale dialog) are still passed through when given.
 function Settings:_pickColor(raw_key, field, default_pct, title,
-                             touchmenu_instance, refresh, anchor)
+                             touchmenu_instance, refresh, anchor, wood)
     local CoverProgress = require("lib/bookshelf_cover_progress")
     local Color         = require("lib/bookshelf_color")
     local Screen        = require("device").screen
         refresh = refresh or function() self:_markDirty() end
+        -- wood.on_done: once, when the dialog closes; the caller's menu is
+        -- not touched (see above).
+        local on_done, menu_for_dialog = nil, touchmenu_instance
+        if wood and wood.on_done then
+            local fired = false
+            on_done = function()
+                if fired then return end
+                fired = true
+                wood.on_done()
+            end
+            menu_for_dialog = { updateItems = on_done }
+        end
+        -- The % dialog closes through on_done instead, and is given no menu.
+        local nudge_menu = touchmenu_instance
+        if on_done then nudge_menu = nil end
         -- Suffix routes day vs night-mode storage to separate keys so
         -- editing in night mode doesn't clobber the user's day colors
         -- and vice versa. Mirrors CoverProgress.resolvedColors().
@@ -1959,12 +2067,15 @@ function Settings:_pickColor(raw_key, field, default_pct, title,
                 local g = string.format("%02X", shown.grey)
                 current_hex = "#" .. g .. g .. g
             end
+            -- With the wood on, no colour swatch is the current choice.
+            if wood and wood.special_tile and wood.special_tile.selected then current_hex = nil end
             self._plugin:showColorPicker(
                 title, current_hex, Color.defaultHexFor(field),
                 function(new_hex)
                     local stored = Color.toStorageShape(new_hex)
                     if night then stored = Color.invertValue(stored) end
                     BookshelfSettings.save(key, stored)
+                    if wood and wood.on_colour then wood.on_colour() end
                     refresh()
                 end,
                 function()
@@ -1977,9 +2088,10 @@ function Settings:_pickColor(raw_key, field, default_pct, title,
                     else
                         BookshelfSettings.save(key, original)
                     end
+                    if wood and wood.revert then wood.revert() end
                     refresh()
                 end,
-                touchmenu_instance)
+                menu_for_dialog, nil, nil, wood and wood.special_tile or nil)
             return
         end
 
@@ -1995,14 +2107,17 @@ function Settings:_pickColor(raw_key, field, default_pct, title,
         self:showNudgeDialog(title, current, 0, 100, default_pct, "%",
             function(val)
                 BookshelfSettings.save(key, { grey = _screenPctToByte(val) })
+                -- A nudge picks a grey, so the wood goes off -- except when the
+                -- nudge is the wood button's own re-apply (wood.toggling).
+                if wood and wood.on_colour and not wood.toggling then wood.on_colour() end
                 refresh()
             end,
-            nil, nil, nil, touchmenu_instance,
+            on_done, nil, nil, nudge_menu,
             function()
                 BookshelfSettings.delete(key)
                 refresh()
             end,
-            _("Default"), nil, anchor)
+            _("Default"), wood and wood.extra_button or nil, anchor)
     end
 
 -- Ornaments: where the pieces come from, and how many are installed. There is
@@ -2022,12 +2137,15 @@ function Settings:_ornamentsRow()
     return {
         text_func = function()
             local O = orn()
-            local n = 0
+            local n, total = 0, 0
             if O and O.list then
                 local ok, list = pcall(O.list)
                 n = (ok and list) and #list or 0
+                local ok_a, all = pcall(function() return #O.listAll() end)
+                total = ok_a and all or n
             end
-            return T(_("Ornaments: %1"), n)
+            local icon = (O and O.COLLECTION_ICON) and (O.COLLECTION_ICON .. "  ") or ""
+            return icon .. T(_("Ornament collection: %1/%2 enabled"), n, total)
         end,
         help_text_func = function()
             local O = orn()
@@ -2056,7 +2174,38 @@ function Settings:_ornamentsRow()
     }
 end
 
--- "Background and colors": theme, the background itself, ornaments, and the
+-- New ornaments first or last in the deck (lib/bookshelf_ornament_deck): first
+-- by default, so a reader who adds some sees them; last for a shelf that stays
+-- put, where everything already there keeps its place (maintainer).
+function Settings:_newOrnamentsRow()
+    local Deck = require("lib/bookshelf_ornament_deck")
+    local function choice(label, value)
+        return {
+            text = label,
+            checked_func = function()
+                return Deck.newAtStart() == (value == "start")
+            end,
+            radio = true,
+            keep_menu_open = true,
+            callback = function()
+                BookshelfSettings.save(Deck.NEW_AT_KEY, value)
+                BookshelfSettings.flush()
+            end,
+        }
+    end
+    return {
+        text_func = function()
+            return T(_("New ornaments: %1"), Deck.newAtStart() and _("first") or _("last"))
+        end,
+        help_text = _("Where ornaments you add join the order they are dealt onto the shelf in. First: you see them straight away, and the pieces already there move along to make room. Last: your shelf stays as it is, and the new ones come round in their turn."),
+        sub_item_table = {
+            choice(_("First, so you see them"), "start"),
+            choice(_("Last, so your shelf stays put"), "end"),
+        },
+    }
+end
+
+-- "Wallpaper, ornaments and colors": theme, the background itself, ornaments, and the
 -- accent colours. These were spread across two menus and a third level -- the
 -- theme under Colors, the background colour and panel shading under Wallpaper
 -- -- and read as unrelated settings even though they are only ever set
@@ -2066,13 +2215,16 @@ end
 -- Text size stays under Settings. A name broad enough to pull that in would
 -- pull in everything eventually ("that feels a bit of a slippery slope").
 function Settings:_backgroundSubItems()
-    local rows = { self:_shelfThemeRow() }
-    rows[#rows].separator = true
+    -- The theme (light or dark, theme packs) is a top-level row of its own
+    -- above this menu now (main.lua bookshelf_theme).
+    local rows = {}
     for _i, row in ipairs(self:_wallpaperMenu()) do
         rows[#rows + 1] = row
     end
+    rows[#rows + 1] = self:_plankRow()
     rows[#rows].separator = true
     rows[#rows + 1] = self:_ornamentsRow()
+    rows[#rows + 1] = self:_newOrnamentsRow()
     rows[#rows].separator = true
     rows[#rows + 1] = {
         -- The long list of accents (progress bar, bookmarks, favourites,
@@ -2086,25 +2238,23 @@ function Settings:_backgroundSubItems()
     return rows
 end
 
--- The shelf's light/dark choice. Its own builder because it is shown in
--- "Background and colors" rather than in the accent-colour list: theme,
--- background colour and panel shading were in three different menus and read
--- as unrelated settings (maintainer). One definition, so the two cannot drift.
-function Settings:_shelfThemeRow()
-    return {
-        text_func = function()
-            return T(_("Shelf theme: %1"), self:_shelfThemeLabel())
-        end,
-        help_text = _("Light or dark colors for the shelf, independently "
+-- The Shelf theme row's label and help, for the top-level row (main.lua
+-- bookshelf_theme): light or dark, and the theme pack in use.
+function Settings:_shelfThemeText()
+    local pack = self:_themePackLabel()
+    if pack then return T(_("Shelf theme: %1, %2"), self:_shelfThemeLabel(), pack) end
+    return T(_("Shelf theme: %1"), self:_shelfThemeLabel())
+end
+
+function Settings:_shelfThemeHelp()
+    return _("Light or dark colors for the shelf, independently "
             .. "of KOReader's night mode -- so you can keep the rest of "
             .. "KOReader light and still have a dark shelf.\n\nCovers, "
             .. "wallpaper and ornaments are pictures and are never "
-            .. "inverted; only the shelf's own colors change."),
-        keep_menu_open = true,
-        sub_item_table_func = function()
-            return self:_shelfThemeSubItems()
-        end,
-    }
+            .. "inverted; only the shelf's own colors change."
+            .. "\n\nTheme packs installed in the ornaments folder are "
+            .. "listed below: choosing one uses its wallpaper, plank, colors "
+            .. "and ornaments together. No theme pack puts your own back.")
 end
 
 function Settings:_colorsSubItems()
@@ -2179,7 +2329,7 @@ function Settings:_colorsSubItems()
         BookshelfSettings.delete(base .. suffix)
     end
 
-    return {
+    local items = {
         {
             text_func = function()
                 -- Matches _isNight / modeSuffix, so the label names the
@@ -2486,25 +2636,12 @@ function Settings:_colorsSubItems()
                 if touchmenu_instance then touchmenu_instance:updateItems() end
             end,
         },
-        {
-            text_func = function()
-                return _("Shelf plank color") .. ": " .. valueLabel("plank")
-            end,
-            help_text = _("Color of the shelf plank the Spines style stands"
-                .. " its books on. The lit top surface and shaded front edge"
-                .. " are both tinted from this one color. Default light oak."),
-            keep_menu_open = true,
-            callback = function(touchmenu_instance)
-                pickColor("spine_plank_color", "plank", 45,
-                    _("Shelf plank color (% black)"), touchmenu_instance)
-            end,
-            hold_callback = function(touchmenu_instance)
-                deleteModeKey("spine_plank_color")
-                markDirty()
-                if touchmenu_instance then touchmenu_instance:updateItems() end
-            end,
-            separator = true,   -- end of the covers and the shelf itself band
-        },
+        (function()
+            local row = self:_plankRow(markDirty)
+            row.separator = true   -- end of the covers and the shelf itself band
+            row._plank_row = true   -- a pack's colors do not make it read-only
+            return row
+        end)(),
         {
             text_func = function()
                 return _("Folder overlay background") .. ": " .. valueLabel("folder_bg")
@@ -2612,6 +2749,53 @@ function Settings:_colorsSubItems()
             end,
         },
     }
+    -- The Color theme: the reader's own colors or a pack's, chosen here (a
+    -- pack's Apply pack theme chooses it too). While a pack's are in use the
+    -- rows below show them and are read-only: they edit the reader's OWN
+    -- colors, which come back exactly when Your own is chosen. The day/night
+    -- switch (row 1) and the plank row stay live.
+    local TP = require("lib/bookshelf_theme_pack")
+    local theme_row = {
+        text_func = function()
+            return T(_("Color theme: %1"), TP.activeColoursPack() or _("Your own"))
+        end,
+        help_text = _("Your own colors, or a pack's. While a pack's colors are in use the rows below show them; choosing Your own brings yours back exactly as they were."),
+        sub_item_table_func = function()
+            local sub = { {
+                text = _("Your own"),
+                checked_func = function() return TP.activeColoursPack() == nil end,
+                callback = function() TP.setColoursPack(nil); markDirty() end,
+            } }
+            local Orn = require("lib/bookshelf_ornaments")
+            for _i, p in ipairs(TP.colourThemes()) do
+                sub[#sub + 1] = {
+                    -- An off pack lends nothing: marked, and choosing it
+                    -- switches the pack on (as the pickers do).
+                    text_func = function()
+                        return Orn.isPackOff(p) and T(_("%1 (off)"), p) or p
+                    end,
+                    checked_func = function() return TP.activeColoursPack() == p end,
+                    callback = function()
+                        if Orn.isPackOff(p) then Orn.setPackOff(p, false) end
+                        TP.setColoursPack(p); markDirty()
+                    end,
+                }
+            end
+            return sub
+        end,
+        separator = true,
+    }
+    for i, it in ipairs(items) do
+        if i > 1 and not it._plank_row then
+            local was = it.enabled_func
+            it.enabled_func = function()
+                if TP.activeColoursPack() then return false end
+                return was == nil or was()
+            end
+        end
+    end
+    table.insert(items, 1, theme_row)
+    return items
 end
 
 -- _showScaleNudge(touchmenu_instance, spec) -- the font-scale nudge dialog.
@@ -2762,7 +2946,7 @@ function Settings:_settingsSubItems()
         end,
     }
     -- Colors and Wallpaper both left this menu for the top-level
-    -- "Background and colors" (see _backgroundSubItems): the theme, the
+    -- "Wallpaper, ornaments and colors" (see _backgroundSubItems): the theme, the
     -- background and the accents are only ever set together, and being three
     -- levels apart made them read as unrelated.
     -- Bookshelf UI font: promoted here from Advanced to sit with the other
@@ -3454,7 +3638,7 @@ function Settings:_performanceSubItems()
                 return BookshelfSettings.read("spine_no_shadows", false) == true
             end,
             keep_menu_open = true,
-            callback = function()
+            callback = function(touchmenu_instance)
                 local off = BookshelfSettings.read("spine_no_shadows", false) == true
                 BookshelfSettings.save("spine_no_shadows", not off)
                 -- The depth is built into the shelf PLAN (the recess is a
@@ -3465,6 +3649,39 @@ function Settings:_performanceSubItems()
                     local SpineShelf = require("lib/bookshelf_spine_shelf")
                     if SpineShelf.dropPlanCache then SpineShelf.dropPlanCache() end
                 end)
+                -- And the shelf on screen has to be rebuilt from it, or the
+                -- flip shows nothing until something else rebuilds it.
+                if self._bw and self._bw._rebuild then self._bw:_rebuild() end
+                UIManager:setDirty("all", "full")
+                if touchmenu_instance then touchmenu_instance:updateItems() end
+            end,
+        },
+        {
+            -- Plank designs (the built-in Oak, on by default, or a pack's) are
+            -- optional and cost a black and white Kindle ~35ms per spine-shelf
+            -- tap, so they can be switched off here (maintainer). The row says
+            -- which one is in use; choosing a plank elsewhere switches them
+            -- back on (bookshelf_theme_pack.setDesignsOn).
+            text_func = function()
+                local lbl = require("lib/bookshelf_theme_pack").plankRowLabel()
+                if not lbl then return _("Plank designs: none in use") end
+                return T(_("Plank designs: %1"), lbl)
+            end,
+            help_text = _("Draw the plank design you have chosen (Oak, or one "
+                .. "from an ornament pack) on spine shelves. Drawing it is slow "
+                .. "on some black and white e-readers; turn this off to use the "
+                .. "plain plank color instead. Choosing a plank again, in the "
+                .. "Shelf plank picker, turns this back on."),
+            checked_func = function()
+                return require("lib/bookshelf_theme_pack").designsOn()
+            end,
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                local TP = require("lib/bookshelf_theme_pack")
+                TP.setDesignsOn(not TP.designsOn())
+                if self._bw and self._bw._rebuild then self._bw:_rebuild() end
+                UIManager:setDirty("all", "full")   -- the band under the last row
+                if touchmenu_instance then touchmenu_instance:updateItems() end
             end,
         },
         {
@@ -3737,24 +3954,18 @@ function Settings:_behaviourSubItems()
             }
         end,
     }
+    -- Every one of Bookshelf's own gestures, each switchable: to find out
+    -- what there is, and to lock a device down (maintainer: "for kids").
+    -- Absorbs issue 366's "Swipe down leaves full screen shelves" row (same
+    -- setting). Tapping a book and swiping pages are not in it: without them
+    -- the shelf cannot be used.
     items[#items + 1] = {
-        -- Issue 366: for readers who live in full screen and kept landing
-        -- back in the top panel by accident.
-        text = _("Swipe down leaves full screen shelves"),
-        help_text = _("When enabled, swiping down in full screen shelves brings"
-            .. " the top panel back. Turn off to stay in full screen: the"
-            .. " swipe then refreshes the library, as it does with the top"
-            .. " panel showing, and the top panel comes back when you tap the"
-            .. " book icon at the start of the shelf bar, or with a gesture"
-            .. " set to Bookshelf: full screen shelves on or off."),
-        checked_func   = function()
-            return BookshelfSettings.nilOrTrue("expanded_swipe_back")
-        end,
-        keep_menu_open = true,
-        callback = function()
-            BookshelfSettings.save("expanded_swipe_back",
-                not BookshelfSettings.nilOrTrue("expanded_swipe_back"))
-            BookshelfSettings.flush()
+        text = _("Bookshelf gestures"),
+        help_text = _("Switch off any of Bookshelf's own gestures. A gesture"
+            .. " switched off does nothing on the shelf. Tapping a book and"
+            .. " swiping between pages always work."),
+        sub_item_table_func = function()
+            return require("lib/bookshelf_gestures").menuItems()
         end,
     }
     items[#items + 1] = {
@@ -4196,15 +4407,14 @@ function Settings:_whileReadingSubItems()
         text      = _("Show status line"),
         help_text = _("Puts Bookshelf's status line across the top of the reader, drawn by the same code that draws it on the shelf, so it reads the same in both. Edit the line itself under Settings > Status line. If you also use Bookends, its top row and any top-anchored progress bar move down to make space."),
         checked_func = function()
-            return require("lib/status_line").showInReader(G_reader_settings)
+            return require("lib/status_line").showInReader(BookshelfSettings.view())
         end,
         callback = function()
             local StatusLine = require("lib/status_line")
-            local on = not StatusLine.showInReader(G_reader_settings)
-            G_reader_settings:saveSetting(StatusLine.SHOW_IN_READER_KEY, on)
-            -- Flushed, like Regions.write does: saveSetting is in-memory only,
-            -- and a switch the user just flipped should survive a hard reset.
-            G_reader_settings:flush()
+            local on = not StatusLine.showInReader(BookshelfSettings.view())
+            -- save() flushes: a switch the user just flipped should survive a
+            -- hard reset.
+            BookshelfSettings.save("status_in_reader", on)
             refreshReaderStatusLine()
         end,
         separator = true,
@@ -4353,7 +4563,8 @@ function Settings:_advancedSubItems()
             -- Calibre library built from filenames ended up overriding
             -- correct metadata with a chapter title as the author (#381).
             help_text = _("For users with a Calibre-managed library. "
-                .. "Reads the metadata.calibre file in your home folder to "
+                .. "Reads the metadata.calibre file in your home folder, or "
+                .. "the folder above it, to "
                 .. "fill in title, authors, series, tags, language and "
                 .. "description for every book at once, with no per-book "
                 .. "extraction. Calibre's values take priority over the "
@@ -4743,6 +4954,14 @@ function Settings:_openLayoutEditor(touchmenu_instance)
         tap_close_callback = cancel,
     }
     if dialog.movable then dialog.movable.ges_events = {} end
+    -- dismissable = false leaves Back unbound (ButtonDialog binds it only for
+    -- dismissable dialogs), so on a keys-only device it did nothing (GitHub
+    -- issue 361). Back is Cancel here: revert and close.
+    local Device = require("device")
+    if Device:hasKeys() then
+        dialog.key_events.BSSizeBack = { { Device.input.group.Back } }
+        dialog.onBSSizeBack = function() cancel() return true end
+    end
     UIManager:show(dialog)
 end
 
@@ -5703,6 +5922,20 @@ function Settings:_updateSubItems()
                     end,
                     enabled_func   = function() return false end,
                     keep_menu_open = true,
+                    separator      = true,
+                },
+                {
+                    -- For pack makers: a pack alone on the shelves, to
+                    -- adjust before giving it out (lib/bookshelf_pack_editor).
+                    text = _("Pack editor\xE2\x80\xA6"),
+                    callback = function(touchmenu_instance)
+                        if touchmenu_instance then UIManager:close(touchmenu_instance) end
+                        local ok_bw, BW = pcall(require, "lib/bookshelf_widget")
+                        local bw = (ok_bw and BW.live) or self._bw
+                        UIManager:nextTick(function()
+                            require("lib/bookshelf_pack_editor").choose(bw)
+                        end)
+                    end,
                 },
             },
         },

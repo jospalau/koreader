@@ -82,9 +82,27 @@ function Swatch:paintTo(bb, x, y)
     bb:paintBorder(x, y, self.side, self.side, bw, bc, r)
 end
 
+-- woodSwatch(path, side) -> a side x side bitmap of a plank design's own
+-- wood (its middle band: top surface and front face), or nil.
+local function woodSwatch(path, side)
+    local ok, bb = pcall(function()
+        local RenderImage = require("ui/renderimage")
+        local src = RenderImage:renderImageFile(path, false)
+        if not src then return nil end
+        local band = math.floor(src:getHeight() / 3)
+        local sq = Blitbuffer.new(band, band, Blitbuffer.TYPE_BBRGB32)
+        sq:blitFrom(src, 0, 0, math.floor(band / 2), band, band, band)
+        src:free()
+        return RenderImage:scaleBlitBuffer(sq, side, side)
+    end)
+    return ok and bb or nil
+end
+
 -- nullTile: a labelled white tile used as the "No background" sentinel.
 -- Rendered at grid position [0,0] of the palette when null_tile is set.
-local function nullTile(label, selected, side, on_tap)
+-- With image_path (a plank design), the tile shows that wood, its label on a
+-- white strip along the bottom.
+local function nullTile(label, selected, side, on_tap, image_path)
     local nt_face, nt_bold = BFont:getFace("ffont", 12)
     local tw = TextWidget:new{
         text      = label,
@@ -92,13 +110,31 @@ local function nullTile(label, selected, side, on_tap)
         bold      = nt_bold,
         max_width = side - 2 * Space.padding.small,
     }
+    local wood = image_path and woodSwatch(image_path, side)
+    local inner
+    if wood then
+        local ImageWidget  = require("ui/widget/imagewidget")
+        local OverlapGroup = require("ui/widget/overlapgroup")
+        local strip_h = tw:getSize().h + 2 * Space.padding.small
+        local strip = FrameContainer:new{
+            bordersize = 0, padding = 0, margin = 0, radius = 0,
+            background = Blitbuffer.COLOR_WHITE,
+            CenterContainer:new{ dimen = Geom:new{ w = side, h = strip_h }, tw },
+        }
+        strip.overlap_offset = { 0, side - strip_h }
+        inner = OverlapGroup:new{
+            dimen = Geom:new{ w = side, h = side },
+            ImageWidget:new{ image = wood, image_disposable = true, width = side, height = side },
+            strip,
+        }
+    end
     local frame = FrameContainer:new{
         bordersize = selected and Size.border.thick or Size.border.thin,
         padding    = 0,
         margin     = 0,
         radius     = 0,
         background = Blitbuffer.COLOR_WHITE,
-        CenterContainer:new{
+        inner or CenterContainer:new{
             dimen = Geom:new{ w = side, h = side },
             tw,
         },
@@ -173,6 +209,10 @@ local ColorPaletteWidget = FocusManager:extend{
     revert_callback  = nil,
     ok_callback      = nil,
     null_tile        = nil,
+    -- special_tile { label, image, selected, on_tap }: a non-colour choice at
+    -- the start of the hex row, "[tile] or # RRGGBB" (the plank's built-in
+    -- wood). Not in the grid: the grid is colours only.
+    special_tile     = nil,
     -- When set, a "White" footer button appears that taps apply_callback with
     -- this hex and closes the picker (one-tap commit, like Default but to
     -- a fixed color rather than off). Used by the background-color picker
@@ -263,11 +303,16 @@ function ColorPaletteWidget:update()
         local hgroup = HorizontalGroup:new{ align = "center" }
         -- Prepend the null tile at grid position [0,0] of the first row only.
         if row_idx == 1 and self.null_tile then
-            local sel = (self.selected_hex == nil)
+            local sel = self.null_tile.selected
+            if sel == nil then sel = (self.selected_hex == nil) end
             hgroup[#hgroup + 1] = nullTile(self.null_tile.label, sel, side, function()
                 self.null_tile.on_tap()
-            end)
+            end, self.null_tile.image)
             hgroup[#hgroup + 1] = HorizontalSpan:new{ width = gap }
+        elseif self.null_tile then
+            -- The rows below the tile keep its column empty, so the grid stays
+            -- six aligned columns rather than each row centring on its own.
+            hgroup[#hgroup + 1] = HorizontalSpan:new{ width = side + gap }
         end
         for col_idx, hex in ipairs(row_hexes) do
             if col_idx > 1 then
@@ -276,6 +321,7 @@ function ColorPaletteWidget:update()
             local is_selected = (hex == self.selected_hex)
             hgroup[#hgroup + 1] = swatchTile(hex, is_selected, side, function(tapped_hex)
                 self.selected_hex = tapped_hex
+                if self.special_tile then self.special_tile.selected = false end
                 if self.apply_callback then self.apply_callback(tapped_hex) end
                 self:update()
             end)
@@ -336,12 +382,22 @@ function ColorPaletteWidget:update()
         -- Left margin matches the palette's horizontal gutter (padding.fullscreen)
         -- so the "#" prefix aligns with the leftmost column of swatches.
         HorizontalSpan:new{ width = Space.padding.fullscreen },
+    }
+    if self.special_tile then
+        local st = self.special_tile
+        hex_row[#hex_row + 1] = nullTile(st.label, st.selected, side, function() st.on_tap() end, st.image)
+        hex_row[#hex_row + 1] = HorizontalSpan:new{ width = Space.padding.large }
+        hex_row[#hex_row + 1] = TextWidget:new{ text = _("or"), face = hex_face,
+                                                fgcolor = Blitbuffer.COLOR_BLACK }
+        hex_row[#hex_row + 1] = HorizontalSpan:new{ width = Space.padding.large }
+    end
+    for _i, w in ipairs({
         hash_label,
         HorizontalSpan:new{ width = Space.padding.small },
         self.hex_input,
         HorizontalSpan:new{ width = Space.padding.large },
         self.preview_swatch,
-    }
+    }) do hex_row[#hex_row + 1] = w end
 
     -- Footer row: Cancel | Default | [White] | Apply, matching the preset-library
     -- modal's Close | Manage… | Apply pattern (no button borders, LineWidget
@@ -473,6 +529,7 @@ function ColorPaletteWidget:onHexSubmit()
         return
     end
     self.selected_hex = hex
+    if self.special_tile then self.special_tile.selected = false end
     if self.apply_callback then self.apply_callback(hex) end
     -- Tear down the keyboard so the user lands back on the palette /
     -- footer-row buttons rather than being stuck in the keyboard. update()
@@ -488,7 +545,11 @@ function ColorPaletteWidget:onShow()
 end
 
 -- Public entry point.
-local function showColorPicker(bookshelf, title, current_hex, default_hex, on_apply, on_default, on_revert, touchmenu_instance, null_tile_label, white_hex)
+-- special_tile (optional): { label, selected, on_tap, image } -- a labelled tile
+-- before the hex field ("[tile] or # RRGGBB") that is not a colour: the
+-- plank's built-in wood. Tapping
+-- it runs on_tap and closes; it shows selected while `selected` is true.
+local function showColorPicker(bookshelf, title, current_hex, default_hex, on_apply, on_default, on_revert, touchmenu_instance, null_tile_label, white_hex, special_tile)
     local restoreMenu = bookshelf:hideMenu(touchmenu_instance)
 
     local closed = false
@@ -517,6 +578,16 @@ local function showColorPicker(bookshelf, title, current_hex, default_hex, on_ap
             UIManager:close(widget, "ui")
             finish()
         end,
+        special_tile     = special_tile and {
+            label    = special_tile.label,
+            image    = special_tile.image,
+            selected = special_tile.selected and true or false,
+            on_tap   = function()
+                UIManager:close(widget, "ui")
+                special_tile.on_tap()
+                finish()
+            end,
+        } or nil,
         null_tile        = null_tile_label and {
             label  = null_tile_label,
             on_tap = function()
@@ -536,8 +607,8 @@ end
 
 local M = {}
 function M.attach(Bookshelf)
-    function Bookshelf:showColorPicker(title, current_hex, default_hex, on_apply, on_default, on_revert, touchmenu_instance, null_tile_label, white_hex)
-        showColorPicker(self, title, current_hex, default_hex, on_apply, on_default, on_revert, touchmenu_instance, null_tile_label, white_hex)
+    function Bookshelf:showColorPicker(title, current_hex, default_hex, on_apply, on_default, on_revert, touchmenu_instance, null_tile_label, white_hex, special_tile)
+        showColorPicker(self, title, current_hex, default_hex, on_apply, on_default, on_revert, touchmenu_instance, null_tile_label, white_hex, special_tile)
     end
 end
 return M

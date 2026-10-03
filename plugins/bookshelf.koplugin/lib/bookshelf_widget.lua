@@ -37,6 +37,9 @@ local ChipBar   = require("lib/bookshelf_chip_bar")
 local BandMetrics = require("lib/bookshelf_band_metrics")
 local ShelfRow    = require("lib/bookshelf_shelf_row")
 local SpineWidget = require("lib/bookshelf_spine_widget")
+-- Which of Bookshelf's own gestures the reader has switched off (Settings >
+-- Behavior > Bookshelf gestures).
+local Gestures    = require("lib/bookshelf_gestures")
 -- Covers-or-list, and the two setting keys that decide it. At file scope
 -- because _viewMode()/_isListMode() are on the hot path -- several calls per
 -- geometry pass, dozens per rebuild -- and a per-call require() of a
@@ -106,9 +109,10 @@ local SHELF_HEIGHT_FRAC = {
 -- to the hero. 1.0 = no shrink-to-cram (covers keep natural width, fill the row).
 local SHELF_PACK_FLOOR = 1.0
 -- Hero cover never wider than this fraction of content_w, so the title/details
--- column keeps the rest. Relaxed from 0.50 so a tall (large) hero's cover can
--- fill its card better while still leaving room for details.
-local HERO_COVER_MAX_FRAC = 0.58
+-- column keeps the rest. Back to half (it was 0.58): a panel grown by the swipe
+-- down (issue 465) had its cover fill most of it and squeeze the details into
+-- a narrow column (maintainer).
+local HERO_COVER_MAX_FRAC = 0.50
 
 -- _footerReserveH() — vertical space the screen-anchored pagination footer
 -- occupies. _rebuild reserves exactly this at the bottom of the layout
@@ -234,6 +238,36 @@ function BookshelfWidget:init()
     self.width  = Screen:getWidth()
     self.height = Screen:getHeight()
     self.dimen  = Geom:new{ w = self.width, h = self.height }
+    -- The 5.3 betas' borrowed pack wallpaper becomes an ordinary choice, once.
+    if not BookshelfWidget._themes_migrated then
+        BookshelfWidget._themes_migrated = true
+        pcall(function() require("lib/bookshelf_theme_pack").migrate() end)
+    end
+    -- An ornament on the shelf: long-press adjusts it, a tap runs its action
+    -- if it has one. The pieces know nothing of this widget, so they are
+    -- handed these (the live shelf's, replaced by each new one).
+    do
+        local shelf = self
+        require("lib/bookshelf_ornaments").handlers = {
+            hold = function(entry, _placement, piece)
+                if not Gestures.on("ornament_hold") then return false end
+                require("lib/bookshelf_ornament_menu").show(entry, shelf, piece)
+                return true
+            end,
+            tap = function(entry)
+                if not Gestures.on("ornament_tap") then return false end
+                UIManager:nextTick(function()
+                    -- "zoom": the piece full screen, with its info under it.
+                    if entry.tap.zoom then
+                        require("lib/bookshelf_ornament_zoom").show(entry, shelf)
+                    else
+                        require("lib/bookshelf_action_exec").dispatch(entry.tap, shelf)
+                    end
+                end)
+                return true
+            end,
+        }
+    end
     -- Per-book invalidation from the repo (status edits, history removal,
     -- cover changes) must reach the spine shelf's own caches -- the
     -- persisted status behind the glyphs, the hydration answers, the
@@ -244,7 +278,9 @@ function BookshelfWidget:init()
         pcall(function()
             require("lib/bookshelf_spine_shelf").invalidateBook(fp)
         end)
-        bw._spine_fetch_cache = nil
+        -- Expired, not dropped: the list is the same, so the refetch keeps
+        -- where each page starts in the ornament deck (_spineCachedFetch).
+        bw:_expireSpineFetch()
         -- The extraction kickoff memo holds "this book's BIM row is
         -- complete" verdicts; a metadata edit / cover change can make
         -- that stale for this book.
@@ -601,6 +637,18 @@ function BookshelfWidget:handleEvent(event)
         -- unaffected.
         if Device.screen_saver_lock then return false end
 
+        -- An edge swipe or corner hold the reader gave its own action in
+        -- KOReader's Gestures runs that action, ahead of bookshelf's own use
+        -- of the gesture (GestureZones.tryUserFirst; GitHub issue 476).
+        do
+            local host = require("apps/filemanager/filemanager").instance
+            if not host then
+                local Park = require("lib/bookshelf_reader_park")
+                if Park.isParked() then host = require("apps/reader/readerui").instance end
+            end
+            if host and GestureZones.tryUserFirst(event.args[1], host) then return true end
+        end
+
         -- Children first: let our own widget tree (chevron buttons, chip
         -- strip, hero, shelf covers, swipe zones) consume the gesture
         -- before falling through to FM. KOReader's normal dispatch is
@@ -610,7 +658,13 @@ function BookshelfWidget:handleEvent(event)
 
         local fm = require("apps/filemanager/filemanager").instance
         local ev = event.args[1]
-        if fm then return GestureZones.tryFMZones(ev, fm) end
+        -- A tap nothing took (empty shelf, the wall between rows, a gap
+        -- between spines) drops a lifted book back onto the shelf. Last, so
+        -- KOReader's corner taps and the reader's own zones keep theirs.
+        if fm then
+            if GestureZones.tryFMZones(ev, fm) then return true end
+            return self:_dropLiftOnTap(ev)
+        end
         -- Hot parking: no FileManager exists while a reader is parked
         -- beneath the shelf. A menu-intent gesture (the reader's top-strip
         -- menu zones) converts on the spot: finish the deferred close and
@@ -727,7 +781,7 @@ function BookshelfWidget:_serializeDrillPath()
                 or e.kind == "genre" or e.kind == "tag"
                 or e.kind == "format" or e.kind == "rating"
                 or e.kind == "language" then
-            out[#out + 1] = { kind = e.kind, label = e.label }
+            out[#out + 1] = { kind = e.kind, label = e.label, whole = e.whole or nil }
         elseif e.kind == "opds_nav" then
             -- A drilled subcatalog, by identity: the pair that addresses its
             -- window, so the restore can ask whether it has anything cached
@@ -856,7 +910,7 @@ function BookshelfWidget:_restoreDrillPath(saved)
             local g = Repo.findGroup(e.kind, e.label)
             if g then
                 self._drilldown_path[#self._drilldown_path + 1] = {
-                    kind = e.kind, label = e.label, payload = g,
+                    kind = e.kind, label = e.label, payload = g, whole = e.whole,
                 }
             end
         elseif e.kind == "opds_nav" and e.server_key and e.feed_url then
@@ -894,7 +948,7 @@ function BookshelfWidget:_restoreDrillPath(saved)
                 end
                 if #books > 0 then
                     self._drilldown_path[#self._drilldown_path + 1] = {
-                        kind = "tag", label = e.label,
+                        kind = "tag", label = e.label, whole = e.whole,
                         payload = { kind = "tag", series_name = e.label, books = books },
                     }
                 end
@@ -1814,15 +1868,7 @@ function BookshelfWidget:_rebuild()
                     -- else refreshed it (device report: "a lifted book is not
                     -- always dropped when the currently reading button is
                     -- tapped").
-                    if prior_rect then
-                        local pad = math.max(Screen:scaleBySize(12),
-                                             self._spine_lift_headroom or 0)
-                        prior_rect.y = math.max(0, prior_rect.y - pad)
-                        prior_rect.h = prior_rect.h + pad
-                        UIManager:setDirty(self, function()
-                            return "ui", prior_rect, self.dithered
-                        end)
-                    end
+                    if prior_rect then self:_dirtyDroppedBook(prior_rect) end
                 end
                 return
             end
@@ -1872,6 +1918,7 @@ function BookshelfWidget:_rebuild()
             self:_drillBackTo(depth)
         end,
         on_hold = function(key)
+            if not Gestures.on("edit_shelf") then return end
             -- The modules chip isn't an editable tab; its long-press opens the
             -- micro-module options menu instead of the tab editor.
             if key == "modules" then
@@ -2485,6 +2532,12 @@ function BookshelfWidget:_rebuild()
         }
         grid_top_extra, grid_between, grid_last = s.top - top_base, s.between, s.last
     end
+    -- Where a page's first row hangs its top-anchored pieces from: the bottom
+    -- of the top panel, the visible gap above row 1 (maintainer). The panel's
+    -- bleed covers part of the span; with no panel the chip strip's frame
+    -- paints 2 x border below what it declares.
+    local hang_top_gap = (hide_chip_bar and hero_chip_pad or PAD) + grid_top_extra
+        - math.max(top_panel_bleed or 0, (not hide_chip_bar) and 2 * Size.border.thin or 0)
     inner_vgroup[#inner_vgroup + 1] = VerticalSpan:new{
         width = hero_chip_pad + (hide_chip_bar and (list_top_extra + grid_top_extra) or 0) }
     if not hide_chip_bar then
@@ -2539,6 +2592,7 @@ function BookshelfWidget:_rebuild()
 
     local shelf_first_idx = #inner_vgroup + 1
     local list_rows = self:_isListMode()
+    self:_hangUnder(rows, shelf_h + grid_between, hang_top_gap)
     local ListRow   = list_rows and require("lib/bookshelf_list_row") or nil
     for r = 1, n_shelves do
         inner_vgroup[#inner_vgroup + 1] = rows[r]
@@ -2668,6 +2722,12 @@ function BookshelfWidget:_rebuild()
         -- is followed by exactly one gap widget (a VerticalSpan, or the
         -- hairline divider in list mode), so subsequent rows live at +2.
         shelf_top_idx        = shelf_first_idx,
+        -- Row top to row top, for pieces that hang from the shelf above
+        -- (_hangUnder), which a swap in place has to place again.
+        row_pitch            = shelf_h + grid_between,
+        -- ...and the gap above row 1 its pieces hang from (the top panel's
+        -- bottom), which the page-turn refresh has to reach.
+        hang_top_gap         = hang_top_gap,
         shelf_bottom_idx     = shelf_first_idx + 2 * (n_shelves - 1),
         footer_overlap_idx   = footer_idx,
         -- Screen-y where the shelf rows begin (pre_rows_h includes the
@@ -3309,6 +3369,20 @@ function BookshelfWidget:_pollExtraction()
             local ScaledCoverCache = require("lib/bookshelf_scaled_cover_cache")
             for fp in pairs(ready_cover_paths) do ScaledCoverCache:drop(fp) end
         end
+        -- A spine shelf keeps its own caches of each book (look, hydration,
+        -- rendered pixels) and of the page fetch, all taken from the
+        -- stand-in record painted before extraction: the file name as
+        -- title, which for an OPDS download ("Author - Title") put the
+        -- author on the spine with authors off (GitHub issue 477), and the
+        -- grey default look. Drop them for the books now ready, as a
+        -- metadata edit does (_refreshSpineSlotInPlace).
+        if self:_isSpineMode() then
+            local SpineShelf = require("lib/bookshelf_spine_shelf")
+            if SpineShelf.invalidateBook then
+                for fp in pairs(ready_paths) do SpineShelf.invalidateBook(fp) end
+            end
+            self:_expireSpineFetch()
+        end
         -- _swapShelvesInPlace re-fetches Book records (which re-query
         -- BIM) and re-arms polling for whatever is still missing.
         self:_swapShelvesInPlace()
@@ -3492,7 +3566,19 @@ function BookshelfWidget:_fetchChipItems(n, want_all)
         -- its new last-opened position. Idempotent while paging (order is stable
         -- unless a book was opened).
         self:_applyWithinGroupSort(tip.payload)
+        -- And the chip's filter, on every fetch too: the same restore rebuilds
+        -- .books from the group's whole membership (a collection's every
+        -- member), so an Unread shelf showed its finished books after a book
+        -- closed, until the collection was entered again (GitHub issue 479).
+        -- On a copy: the payload stays the group, the filter only what shows.
+        local chip_tab = require("lib/bookshelf_tab_model").getById(self.chip)
         local books = tip.payload.books or {}
+        -- Not for a group opened from book details (`whole`): that asks for
+        -- the whole series, tag or collection, whichever shelf is underneath
+        -- (GitHub issue 480).
+        if chip_tab and chip_tab.filter and Repo.applyFilter and not tip.whole then
+            books = Repo.applyFilter(books, chip_tab.filter)
+        end
         local total = #books
         -- Cursor-based: offset is 0-based, cursor is 1-based. Clamp upstream
         -- in _rebuild keeps cursor within range; defensive guard here too.
@@ -3619,9 +3705,18 @@ function BookshelfWidget:_wallpaperName()
         -- own image: see Wallpaper.resolveFor for the precedence. That is the
         -- ONLY thing that can change the picture now -- the per-shelf override
         -- is gone, so moving between chips never changes what is behind them.
+        local full = self._expanded and true or false
+        -- A pack's wallpaper is a choice like any other; its name picks the
+        -- pack's variant for this view (full screen, dark). Its pack off or
+        -- gone: the reader's own choice from before it, or for full screen
+        -- the default's (bookshelf_theme_pack.shownWallpaper).
+        local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
+        if ok_t and TP and TP.shownWallpaper then
+            local dark = require("lib/bookshelf_cover_progress").theme()
+            return TP.shownWallpaper(full, dark and true or false)
+        end
         return Wallpaper.resolveFor(BookshelfSettings.read(Wallpaper.FULL_SETTING),
-                                    BookshelfSettings.read(Wallpaper.SETTING),
-                                    self._expanded and true or false)
+                                    BookshelfSettings.read(Wallpaper.SETTING), full)
     end)
     return ok and name or nil
 end
@@ -3640,8 +3735,13 @@ function BookshelfWidget:_wallpaperWidget()
         -- preInvert: whether the cached picture holds the file's negative --
         -- the frame's own inversion undone, and one more when the reader
         -- asked for the picture inverted at night (Wallpaper.showsNegative).
-        return Wallpaper.bg(name, self.width, self.height,
-                            Wallpaper.preInvert(Screen.night_mode and true or false))
+        -- A pack's DARK variant was drawn for the night look: show it as drawn,
+        -- so only the frame's own inversion is undone and the reader's
+        -- invert-at-night is not applied on top.
+        local pre = Wallpaper.preInvert(Screen.night_mode and true or false)
+        local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
+        if ok_t and TP and TP.isDarkName(name) then pre = Screen.night_mode and true or false end
+        return Wallpaper.bg(name, self.width, self.height, pre)
     end)
     return ok and w or nil
 end
@@ -3656,7 +3756,10 @@ function BookshelfWidget:_pageGroundColor()
         local Wallpaper     = require("lib/bookshelf_wallpaper")
         local CoverProgress = require("lib/bookshelf_cover_progress")
         local suffix = CoverProgress.modeSuffix and CoverProgress.modeSuffix() or ""
-        local raw = BookshelfSettings.read(Wallpaper.BG_SETTING .. suffix)
+        -- A pack's borrowed page colour first (bookshelf_theme_pack).
+        local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
+        local raw = ok_t and TP and TP.colourOverride(Wallpaper.BG_SETTING, suffix ~= "")
+                    or BookshelfSettings.read(Wallpaper.BG_SETTING .. suffix)
         if type(raw) ~= "table" then return nil end
         -- grey is stored in PAINT space already (the picker's % black helper
         -- does the night-mode flip on the way in), so it is used as-is.
@@ -4817,15 +4920,25 @@ function BookshelfWidget:_buildHero(content_w, hero_cover_w, hero_cover_h, hero_
         -- A genuine double tap opens directly, skipping the stage-then-open
         -- confirmation (#271). Inert unless the user enabled KOReader's
         -- global double tap.
-        on_double_tap = function(b) self:_openOnDoubleTap(b) end,
+        on_double_tap = function(b)
+            if not Gestures.on("double_tap") then return end
+            self:_openOnDoubleTap(b)
+        end,
         on_hold      = function(b)
             if self._selection:isActive() then
                 return true  -- suppress: no per-book menu in select mode
             end
+            if not Gestures.on("top_panel_hold") then return true end
             self:_showBookDetail(b, { active = "edit" })
         end,
-        on_description_tap = function(b) self:_showFullDescription(b) end,
-        on_rating_change   = function(b, r) self:_setBookRating(b, r) end,
+        on_description_tap = function(b)
+            if not Gestures.on("description") then return end
+            self:_showFullDescription(b)
+        end,
+        on_rating_change   = function(b, r)
+            if not Gestures.on("rate") then return end
+            self:_setBookRating(b, r)
+        end,
         -- Left tappable even when the Hardcover plugin is disabled: reviews
         -- are served cache-first (fetchReviews returns within-TTL cached
         -- reviews without touching the API), so a book whose reviews were
@@ -5716,6 +5829,10 @@ function BookshelfWidget:_shelfCallbacks()
         -- unifies the d-pad focus cell, the open-double pending tap, and the
         -- hero preview.
         selected_filepath = self:_selectedFilepath(),
+        -- Whether a lifted book shows on this page, for a spine slot to let a
+        -- tap on the wall above it through to _dropLift (SpineBookSlot:onTap).
+        -- Not in bulk selection, where every tap is a pick.
+        lift_shown        = function() return bw:_liftShown() end,
         -- Expanded mode is "browse to open" — single tap opens the book.
         -- Normal mode is "preview, then commit" — tap shelf cover stages it
         -- in the hero, tap hero opens.
@@ -5792,27 +5909,31 @@ function BookshelfWidget:_shelfCallbacks()
         -- Double tap on a shelf cover opens directly (#271), whether the
         -- cover is a bare SpineWidget (collapsed) or wrapped in a titled
         -- slot (expanded).
-        on_book_open      = function(b) bw:_openOnDoubleTap(b) end,
+        on_book_open      = function(b)
+            if not Gestures.on("double_tap") then return end
+            bw:_openOnDoubleTap(b)
+        end,
         on_book_hold      = function(b)
             if bw._selection:isActive() then
                 return true  -- suppress: no per-book menu in select mode
             end
+            if not Gestures.on("book_hold") then return true end
             bw:_showBookDetail(b, { active = "edit" })
         end,
         on_series_tap     = function(s) bw:_expandSeries(s) end,
-        on_series_hold    = function(s) bw:_openGroupMenu(s, "series") end,
+        on_series_hold    = function(s) if Gestures.on("group_hold") then bw:_openGroupMenu(s, "series") end end,
         on_author_tap     = function(g) bw:_expandAuthor(g) end,
-        on_author_hold    = function(g) bw:_openGroupMenu(g, "author") end,
+        on_author_hold    = function(g) if Gestures.on("group_hold") then bw:_openGroupMenu(g, "author") end end,
         on_genre_tap      = function(g) bw:_expandGenre(g) end,
-        on_genre_hold     = function(g) bw:_openGroupMenu(g, "genre") end,
+        on_genre_hold     = function(g) if Gestures.on("group_hold") then bw:_openGroupMenu(g, "genre") end end,
         on_tag_tap        = function(g) bw:_expandTag(g) end,
-        on_tag_hold       = function(g) bw:_openGroupMenu(g, "tag") end,
+        on_tag_hold       = function(g) if Gestures.on("group_hold") then bw:_openGroupMenu(g, "tag") end end,
         on_language_tap   = function(g) bw:_expandLanguage(g) end,
-        on_language_hold  = function(g) bw:_openGroupMenu(g, "language") end,
+        on_language_hold  = function(g) if Gestures.on("group_hold") then bw:_openGroupMenu(g, "language") end end,
         on_folder_tap     = function(f) bw:_expandFolder(f) end,
-        on_folder_hold    = function(f) bw:_openGroupMenu(f, "folder") end,
+        on_folder_hold    = function(f) if Gestures.on("group_hold") then bw:_openGroupMenu(f, "folder") end end,
         on_opds_nav_tap   = function(n) bw:_expandOpdsNav(n) end,
-        on_opds_nav_hold  = function(n) bw:_openOpdsNavMenu(n) end,
+        on_opds_nav_hold  = function(n) if Gestures.on("group_hold") then bw:_openOpdsNavMenu(n) end end,
     }
 end
 
@@ -6082,6 +6203,99 @@ function BookshelfWidget:_spinePlanBase(content_w, shelf_h, all_items)
     }
 end
 
+-- _rowsRegionTop(shelf_top, d) -> where a page turn's repaint starts: the
+-- PAD band above row 1 (cover badges overhang into it), or higher, up to
+-- the top panel's bottom, where row 1's hanging pieces reach.
+function BookshelfWidget._rowsRegionTop(shelf_top, d)
+    return math.max(0, shelf_top - math.max(d and d.PAD or 0, d and d.hang_top_gap or 0))
+end
+
+-- _hangUnder(rows, pitch, top_gap): a piece that hangs from the shelf above is painted
+-- by the ROW ABOVE, before its plank, so that plank and its shadow are in
+-- front of it (maintainer). Its offset was worked out against its own row, so
+-- it moves down by one row pitch (row top to row top). Spine rows carry the
+-- list (SpineShelf.rowWidget's _hanging); other views' rows have none.
+function BookshelfWidget:_hangUnder(rows, pitch, top_gap)
+    -- A page's first row has no shelf above: its top-anchored pieces hang
+    -- from the bottom of the top panel, top_gap above the row (maintainer).
+    -- Raised past it (a height nudge up), the part above is cut off, so a
+    -- piece never paints over the panel.
+    if top_gap and rows[1] then
+        for _i, n in ipairs(rows[1]._orn_list or {}) do
+            if n.t ~= 0 then
+                local off = n.w.overlap_offset or { 0, 0 }
+                local y = off[2] - math.floor(n.t * (top_gap - (n.gap or 0)) + 0.5)
+                local pl = n.w.placement
+                if y < -top_gap and pl and pl.h then
+                    local cut = -top_gap - y
+                    n.w.placement = setmetatable({ crop = { x = 0, y = cut, w = pl.w, h = math.max(1, pl.h - cut) } },
+                                                 { __index = pl })
+                    y = -top_gap
+                end
+                n.w.overlap_offset = { off[1], y }
+            end
+        end
+    end
+    -- A piece anchored to the top was placed against the layout's nominal
+    -- row gap (SpineShelf.ornamentY); the real one, with the screen's slack
+    -- spread into it (GridMargins), is only known now. Each row noted those
+    -- (t = 1): move each by the difference, so it meets the shelf above
+    -- exactly. A piece anchored to the bottom is measured from its own plank
+    -- and needs nothing.
+    for r = 2, #rows do
+        for _i, n in ipairs(rows[r] and rows[r]._orn_list or {}) do
+            local slack = (pitch - (n.rh or 0)) - (n.gap or 0)
+            local dy = math.floor(n.t * slack + 0.5)
+            if dy ~= 0 then
+                local off = n.w.overlap_offset or { 0, 0 }
+                n.w.overlap_offset = { off[1], off[2] - dy }
+                local c = n.part and n.part.placement and n.part.placement.crop
+                if c then
+                    local rise = -n.w.overlap_offset[2]
+                    c.y, c.h = rise, math.max(1, (n.part.placement.h or 0) - rise)
+                end
+            end
+        end
+    end
+    -- A piece lowered to dangle past the next row's top would be covered by
+    -- that row's books, which paint later (device report). The row below
+    -- paints the part past its top AFTER its books, and this row keeps only
+    -- the rest, so no part is painted twice.
+    local Orn
+    for r = 1, #rows - 1 do
+        for _i, n in ipairs(rows[r] and rows[r]._orn_list or {}) do
+            local pl = n.w.placement
+            local y = (n.w.overlap_offset or { 0, 0 })[2] or 0
+            if n.dangle and pl and pl.h and y + pl.h > pitch and y < pitch and rows[r + 1] then
+                Orn = Orn or require("lib/bookshelf_ornaments")
+                local keep = pitch - y
+                n.w.placement = setmetatable({ crop = { x = 0, y = 0, w = pl.w, h = keep } }, { __index = pl })
+                local below = Orn.Ornament:new{
+                    placement = setmetatable({ crop = { x = 0, y = keep, w = pl.w, h = pl.h - keep } },
+                                             { __index = pl }),
+                    night = n.w.night,
+                }
+                below.overlap_offset = { (n.w.overlap_offset or { 0 })[1], 0 }
+                table.insert(rows[r + 1], below)
+            end
+        end
+    end
+    for r = 1, #rows do if rows[r] then rows[r]._orn_list = nil end end
+    for r = 2, #rows do
+        local hang = rows[r] and rows[r]._hanging
+        local above = rows[r - 1]
+        if hang and #hang > 0 and above then
+            for i = #hang, 1, -1 do
+                local w_ = hang[i]
+                local off = w_.overlap_offset or { 0, 0 }
+                w_.overlap_offset = { off[1], off[2] + pitch }
+                table.insert(above, 1, w_)
+            end
+            rows[r]._hanging = {}
+        end
+    end
+end
+
 function BookshelfWidget:_buildSpineRows(items, content_w, shelf_h, PAD, n_rows)
     local SpineShelf = require("lib/bookshelf_spine_shelf")
     local shared = self:_shelfCallbacks()
@@ -6099,6 +6313,8 @@ function BookshelfWidget:_buildSpineRows(items, content_w, shelf_h, PAD, n_rows)
     -- (SpineShelf.rowEndBase): synced from the cursor before the rows are
     -- planned, so a page turn plans with the page it is turning to.
     opts.page_index = self.page
+    -- Where this page starts in the ornament deck (see _ornStartState).
+    opts.orn_state   = self:_ornStartState({ content_w = content_w, shelf_h = shelf_h })
     -- "First unread in series" across the whole shelf, not per screen (issue
     -- 458): series already claimed by a book before this page start taken.
     -- Only when that reason is on; the pagination pass plans from the top and
@@ -6120,6 +6336,15 @@ function BookshelfWidget:_buildSpineRows(items, content_w, shelf_h, PAD, n_rows)
     -- plan) and how many of that item's spines are already behind us.
     self._spine_next_item = plan.next_item
     self._spine_next_skip = plan.next_skip or 0
+    -- The next page starts where this one ended: recorded, so paging on
+    -- never needs the page map.
+    do
+        local c = self._spine_fetch_cache
+        if c and self._spine_fetch_live ~= false and plan.orn_end and plan.next_item then
+            c.page_orn = c.page_orn or {}
+            c.page_orn[self:_ornKey(self._cursor + (plan.next_item - 1), plan.next_skip or 0)] = plan.orn_end
+        end
+    end
     self:_noteSpineRows(plan)
     -- Book-unit count for the footer range: plan entries ARE books.
     self._spine_books_shown = plan.rows[#plan.rows]
@@ -6164,11 +6389,9 @@ function BookshelfWidget:_buildSpineRows(items, content_w, shelf_h, PAD, n_rows)
             -- over by the next row's books and by the footer.
             defer_badges      = true,
             lift_headroom     = lift_head,
-            -- For an empty row's ornament seed: the page's identity + the
-            -- row's index (see rowWidget).
             row_index         = r,
-            page_key          = plan.entries[1] and plan.entries[1].book
-                                and plan.entries[1].book.filepath or nil,
+            -- An empty plank's piece, dealt by the plan after the books.
+            bare_piece        = plan.bare and plan.bare[r],
             width             = content_w,
             height            = shelf_h,
             gap               = gap,
@@ -6314,15 +6537,101 @@ function BookshelfWidget:_spineCachedFetch(n)
     local key = tostring(self.chip) .. "|" .. tip_sig
     local c = self._spine_fetch_cache
     if c and c.key == key and (os.time() - c.at) <= 30 then
+        self._spine_fetch_live = true
         return c.items, nil
     end
     local items, hint = self:_fetchChipItems(n, true)
     items = items or {}
     if type(items) == "table" and items.opds_open_ended then
+        -- A feed window does not replace the cache, so what is left in it is
+        -- another chip's: the ornament deal states must not be read from it
+        -- or recorded into it (see _ornStartState).
+        self._spine_fetch_live = false
         return items, hint
     end
-    self._spine_fetch_cache = { key = key, items = items, at = os.time() }
+    -- The ornament deal states (see _ornStartState) depend only on the list:
+    -- a refetch that brings back the same list keeps them, or every page
+    -- turn after the TTL would rebuild the whole page map to find its start.
+    local sig = self:_spineItemsSig(items)
+    local keep = (c and c.key == key and c.items_sig == sig) and c or nil
+    -- A CHANGED list (a book just closed: its status, its progress) drops the
+    -- other pages' states, which it may have moved, but the page on screen
+    -- keeps dealing as it did: the shelf must not reshuffle under the reader
+    -- a few seconds after a book closes (maintainer).
+    local page_orn = keep and keep.page_orn or nil
+    if not keep and c and c.key == key then
+        local here = self:_ornKey(self._cursor or 1, self:_spineSkip())
+        local st = c.page_orn and c.page_orn[here]
+        -- The cursor is a POSITION; the page is its first BOOK. A list that
+        -- came back reordered (Home sorts by last opened, so opening a book
+        -- moves it to the front and shifts every book before its old place
+        -- along one) keeps the page on its first book (maintainer: the shelf
+        -- must not shift under the reader).
+        self:_anchorSpineCursor(c.items, items)
+        if st then
+            page_orn = { [self:_ornKey(self._cursor or 1, self:_spineSkip())] = st }
+            keep = c
+        end
+    end
+    self._spine_fetch_live = true
+    self._spine_fetch_cache = { key = key, items = items, at = os.time(), items_sig = sig,
+                                page_orn = page_orn,
+                                orn_sig = keep and keep.orn_sig or nil,
+                                orn_epoch = keep and keep.orn_epoch or nil }
     return items, nil
+end
+
+-- _anchorSpineCursor(old, new): after a refetch that changed the list, put
+-- the cursor back on the page's first book. The anchor is the first book of
+-- the old page that moved by at most one place: a single book moved to the
+-- front (Home's last-opened sort) shifts the books before its old place by
+-- exactly one and the rest not at all, so the old first book is found where
+-- it now is -- unless it IS the book that moved, which is skipped, and the
+-- page starts at the book that followed it. Anything more reordered than
+-- that keeps the cursor where it was.
+function BookshelfWidget:_anchorSpineCursor(old, new)
+    if type(old) ~= "table" or type(new) ~= "table" then return end
+    local cur, skip = self._cursor or 1, self:_spineSkip()
+    if cur <= 1 and skip == 0 then return end
+    local function id(it)
+        return type(it) == "table" and (it.filepath or it.path or it.name or it.text) or it
+    end
+    local at = {}
+    for j = 1, #new do
+        local k = id(new[j])
+        if k ~= nil and at[k] == nil then at[k] = j end
+    end
+    for i = cur, math.min(#old, cur + 40) do
+        local j = at[id(old[i])]
+        if j and math.abs(j - i) <= 1 then
+            if j ~= cur or i ~= cur then
+                self:_setSpineCursor(j, (i == cur) and skip or 0)
+            end
+            return
+        end
+    end
+end
+
+-- _expireSpineFetch(): the next fetch goes to the source again (a book's
+-- record changed), but a list that comes back the same keeps its ornament
+-- page states; dropping the cache outright made every return from a book at
+-- page > 1 rebuild the whole page map.
+function BookshelfWidget:_expireSpineFetch()
+    local c = self._spine_fetch_cache
+    if c then c.at = -math.huge end
+end
+
+-- _spineItemsSig(items) -> a string naming the list: its books (or groups,
+-- by first path and size) in order. Cheap next to the map build it saves.
+function BookshelfWidget:_spineItemsSig(items)
+    local parts = {}
+    for i = 1, #(items or {}) do
+        local it = items[i]
+        local id = type(it) == "table" and (it.filepath or it.path or it.name or it.text) or it
+        local n = type(it) == "table" and it.books and #it.books or 0
+        parts[i] = tostring(id) .. "#" .. n
+    end
+    return table.concat(parts, "\0")
 end
 
 -- _spineUpdateBookCounts(all_items, total_hint) — the footer's range reads
@@ -6384,13 +6693,13 @@ end
 -- pass it: jump to page, jump to last, and the no-history back-step. They are
 -- deliberate presses, they pay once, and the answer is cached for the footer
 -- and everything else afterwards.
-function BookshelfWidget:_spinePageFirsts(build)
+function BookshelfWidget:_spinePageFirsts(build, dims)
     local c = self._spine_fetch_cache
     if c and c.page_firsts and c.firsts_shelves == self:_nShelves() then
         return c.page_firsts
     end
     if not build then return nil end
-    local d = self._shelf_dims
+    local d = dims or self._shelf_dims
     if not d or not d.content_w or not d.shelf_h then return nil end
     local items = c and c.items
     if not items then
@@ -6417,6 +6726,11 @@ function BookshelfWidget:_spinePageFirsts(build)
         -- renders, so the greedy boundaries are the ones the real pages follow.
         opts.balance       = false
         local plan = SpineShelf.plan(items, opts)
+        -- Every page's start in the ornament deck (see _ornStartState).
+        if c then
+            c.page_orn = c.page_orn or {}
+            for k, st in pairs(plan.page_orn or {}) do c.page_orn[k] = st end
+        end
         local pages = SpineLayout.paginate(plan.rows, self:_nShelves())
         local out = {}
         for i = 1, #pages do
@@ -6433,6 +6747,84 @@ function BookshelfWidget:_spinePageFirsts(build)
         return firsts
     end
     return nil
+end
+
+-- ── Ornament deal states ───────────────────────────────────────────────
+-- The nth slot on a chip holds the nth card (lib/bookshelf_ornament_deck),
+-- so a page must know how far through the deck it starts. The first page
+-- starts from nothing; a page reached by paging on starts where the one
+-- before ended (recorded by that page's render); anything else asks the page
+-- map, which records every page's start while it plans the whole chip.
+function BookshelfWidget:_ornKey(cursor, skip)
+    return tostring(cursor) .. ":" .. tostring(skip or 0)
+end
+
+-- _ornSig(): what a recorded state depends on besides the books: the level,
+-- the saved order (swap, shuffle, a new piece), the enabled pool and the
+-- shelves per page.
+function BookshelfWidget:_ornSig()
+    local ok, Orn = pcall(require, "lib/bookshelf_ornaments")
+    local Deck = require("lib/bookshelf_ornament_deck")
+    -- The pool by identity: Orn.list() hands out the same table while
+    -- nothing is switched, a new one when anything is (a count alone missed
+    -- one piece off and another on).
+    local pool = (ok and Orn) and tostring(Orn.list()) or ""
+    local f = (ok and Orn) and Orn.frequency() or 0
+    return table.concat({ Deck.levelOf(f), Deck.generation(), self:_nShelves(), pool }, "|")
+end
+
+function BookshelfWidget:_ornStartState(dims)
+    local Deck = require("lib/bookshelf_ornament_deck")
+    local cur, skip = self._cursor or 1, self:_spineSkip()
+    local c = self._spine_fetch_cache
+    -- An open-ended feed's window: the cache belongs to another chip.
+    if not c or self._spine_fetch_live == false then return Deck.newState() end
+    c.page_orn = c.page_orn or {}
+    local key = self:_ornKey(cur, skip)
+    -- Something the states depend on changed (a swap, a piece switched on or
+    -- off, the level): forget them all but THIS page's, so the piece being
+    -- edited stays where it is. A shuffle keeps nothing.
+    local sig = self:_ornSig()
+    if c.orn_sig ~= sig then
+        local keep = (c.orn_epoch == Deck.epoch()) and c.page_orn[key] or nil
+        c.page_orn, c.page_firsts = {}, nil
+        if keep then c.page_orn[key] = keep end
+        c.orn_sig, c.orn_epoch = sig, Deck.epoch()
+    end
+    if cur <= 1 and skip == 0 then return Deck.newState() end
+    if c.page_orn[key] then return Deck.copyState(c.page_orn[key]) end
+    self:_spinePageFirsts(true, dims)
+    c = self._spine_fetch_cache or c
+    if c.page_orn and c.page_orn[key] then return Deck.copyState(c.page_orn[key]) end
+    -- No map (a windowed source) or it disagrees: the nearest page before.
+    local best, best_c
+    for k, st in pairs(c.page_orn or {}) do
+        local kc, ks = k:match("^(%d+):(%d+)$")
+        kc, ks = tonumber(kc), tonumber(ks)
+        if kc and (kc < cur or (kc == cur and ks <= skip)) and (not best_c or kc > best_c) then
+            best, best_c = st, kc
+        end
+    end
+    logger.warn("[bookshelf] ornaments: no deal state for page", key, best and "(nearest earlier)" or "(from the start)")
+    -- Kept: once a page has borrowed a state, that is its state. Borrowing
+    -- afresh on the next render found a different page nearer by (the map
+    -- complete by then, or a page recorded since) and the pieces on screen
+    -- swapped half a minute after a book was closed (maintainer, PW5).
+    local st = best and Deck.copyState(best) or Deck.newState()
+    c.page_orn[key] = Deck.copyState(st)
+    return st
+end
+
+-- _dropOrnPages(keep_current): after a change to a piece's size or padding,
+-- which moves where later pages break. The page on screen keeps its start
+-- so the piece being nudged does not jump; the rest is re-learnt.
+function BookshelfWidget:_dropOrnPages(keep_current)
+    local c = self._spine_fetch_cache
+    if not c then return end
+    local key = self:_ornKey(self._cursor or 1, self:_spineSkip())
+    local keep = keep_current and c.page_orn and c.page_orn[key] or nil
+    c.page_firsts, c.page_orn = nil, {}
+    if keep then c.page_orn[key] = keep end
 end
 
 -- _spineCursorForPage(p) / _spinePrevPageCursor(cur) — page-map lookups.
@@ -6731,7 +7123,10 @@ function BookshelfWidget:_buildPaginationFooter(content_w, label_h, total_pages)
         if target < 1            then target = 1 end
         if target > total_pages  then target = total_pages end
         if target == self.page then return nil end
-        return go_page(target)
+        local go = go_page(target)
+        -- Asked on each hold, not when the footer is built, so the switch
+        -- takes effect without a rebuild.
+        return function() if Gestures.on("skip_ten") then go() end end
     end
     -- margin/bordersize swap: every button allocates the same outer footprint
     -- (margin + bordersize = focus_border) so moving focus never shifts layout.
@@ -6864,11 +7259,15 @@ function BookshelfWidget:_buildPaginationFooter(content_w, label_h, total_pages)
         text_font_face = BFont.getUIFontFace() or "cfont",
         text_font_size = 15,
         width         = slots.page,
-        callback      = function() bw:_openPageJump() end,
+        callback      = function()
+            if Gestures.on("page_jump") then bw:_openPageJump() end
+        end,
         -- Long-press: flip covers <-> list. The only footer button that
         -- reached this file without a hold -- prev/next already spend theirs
         -- on skip-ten-pages.
-        hold_callback = function() bw:_flipViewMode() end,
+        hold_callback = function()
+            if Gestures.on("style_cycle") then bw:_flipViewMode() end
+        end,
         margin        = bm("page"), bordersize = bs("page"), radius = br("page"),
         show_parent = self,
     })
@@ -6919,7 +7318,18 @@ function BookshelfWidget:_buildPaginationFooter(content_w, label_h, total_pages)
     -- card, a tag is a pill. A footer chevron is an icon sitting on the page,
     -- and its white frame is not an affordance, it is just a white box over
     -- the picture. There is nothing to opt into here.
-    require("lib/bookshelf_wallpaper").unfill(self:groundIsPainted(),
+    --
+    -- A pack's plank design counts too: its lower band hangs under the last
+    -- row, into the footer, and on a plain page the fills showed as white
+    -- boxes over it (maintainer, on device).
+    local under = self:groundIsPainted()
+    if not under then
+        local ok_d, d = pcall(function()
+            return require("lib/bookshelf_spine_shelf").activePlankDesign()
+        end)
+        under = ok_d and d ~= nil
+    end
+    require("lib/bookshelf_wallpaper").unfill(under and true or false,
         first, prev, page_text, next_btn, last)
     -- AFTER unfill, which is what turns the icons into alpha bitmaps and
     -- wraps the disabled ones. This recolours the enabled ones for a manually
@@ -7464,7 +7874,13 @@ function BookshelfWidget:_jumpScanList()
     -- available guess, as before.
     if tip and tip.payload and tip.payload.books then
         local within_key = sp and sp[2] and sp[2].key
-        return tip.payload.books, within_key or chip_key, "drilldown-payload"
+        -- Filtered as _fetchChipItems filters what shows (issue 479), so the
+        -- jump list names only books that are on the shelf.
+        local books = tip.payload.books
+        if tab and tab.filter and Repo.applyFilter and not tip.whole then
+            books = Repo.applyFilter(books, tab.filter)
+        end
+        return books, within_key or chip_key, "drilldown-payload"
     end
 
     -- Folder drill: the drilled path's listing, with the chip's filter and
@@ -7860,6 +8276,7 @@ function BookshelfWidget:_swapShelvesInPlace()
     local ListRow      = list_rows and require("lib/bookshelf_list_row") or nil
     local VerticalSpan = list_rows and require("ui/widget/verticalspan") or nil
     local old_rows = {}
+    if d.row_pitch then self:_hangUnder(rows, d.row_pitch, d.hang_top_gap) end
     for r = 1, n_shelves do
         local idx = d.shelf_top_idx + 2 * (r - 1)
         old_rows[r] = self._inner_vgroup[idx]
@@ -7994,7 +8411,7 @@ function BookshelfWidget:_swapShelvesInPlace()
     if _wipe_dir then self._full_refresh_pending = nil end
     local wiped = false
     if anim_steps then
-        local ry = math.max(0, shelf_top - (d and d.PAD or 0))
+        local ry = BookshelfWidget._rowsRegionTop(shelf_top, d)
         -- Rows only when the footer's band is known: the footer is handled
         -- separately below so its icons don't wipe on every turn.
         local rh = self.height - ry
@@ -8043,7 +8460,7 @@ function BookshelfWidget:_swapShelvesInPlace()
             -- glyphs' above-cover pixels on the panel -- the ghost borders /
             -- hearts reported on reader return. Starting the region a PAD
             -- higher sweeps them.
-            local ry = math.max(0, shelf_top - (d and d.PAD or 0))
+            local ry = BookshelfWidget._rowsRegionTop(shelf_top, d)
             if footer_rect and footer_band and footer_band.y > ry then
                 -- Rows band + only the changed part of the footer. The
                 -- widget repaint covers both; the flash covers just these.
@@ -8806,7 +9223,7 @@ function BookshelfWidget:_refreshSpineSlotInPlace(fp)
                         slot.entry.series_num = tostring(fresh.series_num)
                     end
                     -- The cached page fetch still holds the stale record.
-                    self._spine_fetch_cache = nil
+                    self:_expireSpineFetch()
                     if slot.dimen then
                         union = union or slot.dimen:copy()
                     end
@@ -10723,11 +11140,67 @@ function BookshelfWidget:_chipKeyNeighbour(key, direction)
     return keys[((idx - 1 + direction) % n) + 1]
 end
 
+-- _spineItemRows() -> rows, n | nil
+-- On a spine shelf, which row each book on THIS page sits on (rows[i] for
+-- _page_items[i]) and how many books the page shows. The D-pad's grid arms
+-- otherwise work in cover-grid terms, _nShelves() * _nCols() slots with rows
+-- _nCols() apart, and a spine page holds far more books than that in rows of
+-- varying length: Right from the 8th spine turned the page and Down jumped 4
+-- books, so most of each shelf could not be reached (Reddit report). A spine
+-- page's items run on to the end of the chip; the render notes which of them
+-- it laid out (_noteSpineRows), and only rows noted for this very page and
+-- shelf are trusted. nil off spine mode, or before this page has rendered.
+function BookshelfWidget:_spineItemRows()
+    if not self:_isSpineMode() then return nil end
+    local sr = self._spine_rows
+    if not (sr and sr.row_of and sr.chip == self.chip and sr.c == self._cursor
+            and sr.s == self:_spineSkip()) then
+        return nil
+    end
+    local rows, n = {}, 0
+    for i, it in ipairs(self._page_items or {}) do
+        local r = it.filepath and sr.row_of[it.filepath]
+        if not r and type(it.books) == "table" then
+            -- A flattened group spans spines: it sits where it starts.
+            for _j, b in ipairs(it.books) do
+                r = b.filepath and sr.row_of[b.filepath]
+                if r then break end
+            end
+        end
+        if not r then break end
+        rows[i] = r
+        n = i
+    end
+    if n == 0 then return nil end
+    return rows, n
+end
+
+-- _spineRowStep(rows, n, cur, dir) -> the book on the row above (dir -1) or
+-- below (+1) at the same place along it, clamped to that row's length; nil
+-- when there is no such row on the page.
+function BookshelfWidget._spineRowStep(rows, n, cur, dir)
+    local r = rows[cur]
+    if not r then return nil end
+    local start = cur
+    while start > 1 and rows[start - 1] == r do start = start - 1 end
+    local first, last
+    for i = 1, n do
+        if rows[i] == r + dir then
+            first = first or i
+            last = i
+        end
+    end
+    if not first then return nil end
+    return math.min(first + (cur - start), last)
+end
+
 function BookshelfWidget:_moveCursor(delta)
     local items = self._page_items
     if not items or #items == 0 then return true end
     local n_cols    = self:_nCols()
-    local view_size = self:_nShelves() * n_cols
+    -- A spine page's own book count, not the cover grid's slot count.
+    local _rows, spine_n = self:_spineItemRows()
+    local view_size = spine_n or (self:_nShelves() * n_cols)
     local cur       = self._cursor_idx or 1
     local new_idx   = cur + delta
 
@@ -10736,8 +11209,17 @@ function BookshelfWidget:_moveCursor(delta)
             self:_markOpdsNav()
             self:_advanceCursor(-1)
             self:_syncPageFromCursor()
-            self._cursor_idx = view_size
+            -- A spine page's length is known only once it is laid out: land on
+            -- its first book, then move to its last now that the rows exist.
+            self._cursor_idx = spine_n and 1 or view_size
             self:_swapShelvesInPlace()
+            if spine_n then
+                local _r, prev_n = self:_spineItemRows()
+                if prev_n and prev_n > 1 then
+                    self._cursor_idx = prev_n
+                    self:_swapShelvesInPlace()
+                end
+            end
         end
         return true
     end
@@ -10772,9 +11254,27 @@ function BookshelfWidget:_swapFooterInPlace()
     -- refresh must cover the footer band only. A whole-widget "ui" here
     -- repainted the hero above on every d-pad focus move / page turn --
     -- the same flash class as issue #124.
+    --
+    -- Placed on the screen here, not copied from the row's dimen: the
+    -- BottomContainer paints the row without writing its position back, so
+    -- that dimen sat at 0,0 and every footer focus move refreshed a band
+    -- across the TOP of the screen. On e-ink the focus ring never showed
+    -- (GitHub issue 361). Full width: the row is centred inside it. Taller
+    -- by the buttons' hit extension: centring the grown buttons lifts the
+    -- focus ring a few px above the row (4 px on a PW5), and a ring edge
+    -- left unrefreshed reads as a stray line.
     local old = self._overlap_group[d.footer_overlap_idx]
     local old_row = old and old[1]
-    local footer_band = old_row and old_row.dimen and old_row.dimen:copy() or nil
+    local footer_band
+    if old_row and old_row.getSize then
+        local row_h = old_row:getSize().h
+        local over  = Screen:scaleBySize(12)
+        local x0 = self.dimen and self.dimen.x or 0
+        local y0 = self.dimen and self.dimen.y or 0
+        local bottom = y0 + self.height - d.FOOTER_BOTTOM_MARGIN
+        local top = math.max(y0, bottom - row_h - over)
+        footer_band = Geom:new{ x = x0, y = top, w = self.width, h = bottom - top }
+    end
     local new_row    = self:_buildFooterRow(d.content_w, total, d.FOOTER_H)
     local new_anchor = BottomContainer:new{
         dimen = Geom:new{ w = self.width, h = self.height - d.FOOTER_BOTTOM_MARGIN },
@@ -10809,7 +11309,16 @@ function BookshelfWidget:onBSFocusUp()
 
     if self._focus_zone == "grid" then
         local n_cols = self:_nCols()
-        if self._cursor_idx and self._cursor_idx <= n_cols then
+        -- On a spine shelf the top row is the noted first row, however many
+        -- books it holds (see _spineItemRows).
+        local spine_rows, spine_n = self:_spineItemRows()
+        local on_top
+        if spine_rows then
+            on_top = (spine_rows[self._cursor_idx or 1] or 1) <= 1
+        else
+            on_top = self._cursor_idx and self._cursor_idx <= n_cols
+        end
+        if self._cursor_idx and on_top then
             if not self._chip_bar_hidden then
                 self._focus_zone = "chips"
                 if #self._drilldown_path > 0 then
@@ -10838,6 +11347,14 @@ function BookshelfWidget:onBSFocusUp()
                 self._cursor_idx = nil
                 self:_swapShelvesInPlace()   -- clear cursor border from grid
                 self:_swapHeroInPlace()
+            end
+            return true
+        end
+        if spine_rows then
+            local target = self._spineRowStep(spine_rows, spine_n, self._cursor_idx, -1)
+            if target then
+                self._cursor_idx = target
+                self:_swapShelvesInPlace()
             end
             return true
         end
@@ -10972,7 +11489,11 @@ function BookshelfWidget:onBSFocusDown()
         -- the bottom row `below` is past view_size, so target stays nil.
         local target
         local below = cur + n_cols
-        if below <= view_size then
+        -- A spine shelf steps by its noted rows (see _spineItemRows).
+        local spine_rows, spine_n = self:_spineItemRows()
+        if spine_rows then
+            target = self._spineRowStep(spine_rows, spine_n, cur, 1)
+        elseif below <= view_size then
             if items[below] then
                 target = below
             else
@@ -12547,7 +13068,12 @@ function BookshelfWidget:_baseShelves()
             -- row). Spine rows are far shorter than cover rows;
             -- _collapsedSpineSplit's min_band guard already protects a
             -- genuinely tiny screen by shrinking the hero, never the pin.
-            return math.max(1, math.min(math.floor(n), 6))
+            -- Rows a swipe down on the top panel took (issue 465) come off
+            -- this count as well: otherwise the panel grows and the same
+            -- rows just get shorter (maintainer). Without a pin the count
+            -- below is the cover grid's, which the swipe already lowered.
+            local taken = tonumber(BookshelfSettings.read("top_panel_rows_taken")) or 0
+            return math.max(1, math.min(math.floor(n), 6) - math.max(0, taken))
         end
     end
     local max_fit = self:_maxShelfRows()
@@ -13079,6 +13605,68 @@ function BookshelfWidget:_selectedFilepath()
     if self._tap_selected_fp then return self._tap_selected_fp end
     if self._preview_book then return self._preview_book.filepath end
     return nil
+end
+
+-- _liftShown() -> the rect of a lifted book on this page that a tap on empty
+-- space would put back, or nil.
+function BookshelfWidget:_liftShown()
+    if self._cursor_idx then return nil end
+    if self._selection and self._selection.isActive and self._selection:isActive() then return nil end
+    local fp = self:_selectedFilepath()
+    return fp and self:_shelfSlotRect(fp) or nil
+end
+
+-- _dirtyDroppedBook(rect): refresh where a lifted book was and where it lands.
+-- rect is the book as it was painted, lifted. Above it: the headroom a lift
+-- can rise into. Below it: the same again, as the book comes back down by its
+-- lift -- a face-out cover's foot lands below the rect, over the shadow its
+-- lift left on the plank, and without this that strip kept the shadow
+-- (device report).
+function BookshelfWidget:_dirtyDroppedBook(rect)
+    local pad = math.max(Screen:scaleBySize(12), self._spine_lift_headroom or 0)
+    local y0 = math.max(0, rect.y - pad)
+    local y1 = rect.y + rect.h + pad + Screen:scaleBySize(6)
+    rect.y, rect.h = y0, y1 - y0
+    UIManager:setDirty(self, function() return "ui", rect, self.dithered end)
+end
+
+-- _dropLift() -> true when it put a lifted book back on the shelf: the first
+-- tap of "tap twice to open", or the book the hero is previewing (the hero
+-- goes back to the book being read, as the Currently reading chip does).
+-- Only a lift that shows on this page: a previewed book elsewhere is left
+-- as it is. A d-pad cursor is not a lift; the keys move it.
+function BookshelfWidget:_dropLift()
+    local rect = self:_liftShown()
+    if not rect then return false end
+    local fp = self:_selectedFilepath()
+    if self._tap_selected_fp then
+        self._tap_selected_fp = nil
+        self:_repaintSelectionHighlight(fp, nil)
+        return true
+    end
+    self._hero_mode = "current"
+    self._preview_book = nil
+    self:_rebuildRefreshHeroAndChips()
+    -- The hero band is refreshed above; the row the book stood out of is not
+    -- in it (see the Currently reading chip).
+    self:_dirtyDroppedBook(rect)
+    return true
+end
+
+-- _dropLiftOnTap(ev): a plain tap that nothing else took drops a lifted
+-- book (maintainer: "tapping anywhere off the book in empty space should
+-- drop the book back onto the shelf").
+function BookshelfWidget:_dropLiftOnTap(ev)
+    if not ev or ev.ges ~= "tap" then return false end
+    -- The shelf's empty space, not the hero's: a tap on the previewed book's
+    -- own card (its description, say) must not swap it for another book.
+    local hd = self._hero_card and self._hero_card.dimen
+    local p = ev.pos
+    if hd and hd.y and p and p.x >= hd.x and p.x < hd.x + hd.w
+            and p.y >= hd.y and p.y < hd.y + hd.h then
+        return false
+    end
+    return self:_dropLift()
 end
 
 -- _globalIndexOfFilepath(fp) — 1-based index of a book VISIBLE on the current
@@ -13680,6 +14268,16 @@ end
 -- per-collection layouts (~10-100 dirs) without paying for outliers.
 local FILE_POLL_MAX_SUBDIRS = 200
 
+-- _ornamentStamp() -> the ornament folders' stamp, or nil while the ornament
+-- module has not been loaded (no spine shelf yet, so nothing to refresh).
+-- Stats only; see Ornaments.folderStamp.
+local function _ornamentStamp()
+    local Orn = package.loaded["lib/bookshelf_ornaments"]
+    if not (Orn and Orn.folderStamp) then return nil end
+    local ok, stamp = pcall(function() return Orn.folderStamp() end)
+    return ok and stamp or nil
+end
+
 local function _snapshotHomeDirs()
     local home = G_reader_settings:readSetting("home_dir")
     if not home or home == "" then return nil end
@@ -13753,6 +14351,10 @@ function BookshelfWidget:_startFilePoll()
     -- be compared against.
     if self._home_dir_mtimes == nil then
         self._home_dir_mtimes = _snapshotHomeDirs()
+    end
+    -- The ornament folders' stamp, kept the same way (see _ornamentStamp).
+    if self._orn_stamp == nil then
+        self._orn_stamp = _ornamentStamp()
     end
     self._file_poll_fn    = function() self:_filePollTick() end
     -- The first tick after a start or a resume is prompt whatever the idle
@@ -13862,6 +14464,30 @@ function BookshelfWidget:_filePollTick()
         end
     end
     self._home_dir_mtimes = snap or prev
+    -- Ornaments piggyback on the same tick (maintainer): a piece copied into
+    -- the ornaments folder, or a pack added, shows on the shelf without
+    -- leaving it. A stat per folder; the cached list is dropped so the next
+    -- plan rescans, and the deck takes the new pieces in.
+    local orn_changed = false
+    local Orn = package.loaded["lib/bookshelf_ornaments"]
+    if Orn and Orn.folderStamp then
+        local ok_s, stamp = pcall(function() return Orn.folderStamp() end)
+        if ok_s and stamp then
+            if self._orn_stamp ~= nil and Orn.stampChanged(self._orn_stamp, stamp) then
+                orn_changed = true
+                Orn.invalidate()
+            end
+            self._orn_stamp = stamp
+        end
+    end
+    if orn_changed and not changed and self:_isSpineMode() then
+        logger.dbg("[bookshelf] file poll detected an ornament folder change; rebuilding")
+        UIManager:nextTick(function()
+            if self._file_poll_fn == nil then return end  -- widget torn down
+            self:_rebuild()
+            UIManager:setDirty(self, "ui")
+        end)
+    end
     if changed then
         logger.dbg("[bookshelf] file poll detected dir mtime change; rebuilding")
         local Repo = require("lib/bookshelf_book_repository")
@@ -14185,6 +14811,7 @@ function BookshelfWidget:onSwipeNextPage(_, ges)
     -- the preview to the next book as before (pages flip automatically when the
     -- next book lives on a different shelf page).
     if self:_isHeroSwipe(ges) then
+        if not Gestures.on("top_panel_swipe") then return false end
         if self._hero_mode == "micro" then
             if (self._hero_pages or 1) > 1 then
                 require("lib/bookshelf_hero_modules")._gotoPage(self, 1)
@@ -14200,6 +14827,7 @@ end
 
 function BookshelfWidget:onSwipePrevPage(_, ges)
     if self:_isHeroSwipe(ges) then
+        if not Gestures.on("top_panel_swipe") then return false end
         if self._hero_mode == "micro" then
             if (self._hero_pages or 1) > 1 then
                 require("lib/bookshelf_hero_modules")._gotoPage(self, -1)
@@ -14278,6 +14906,17 @@ function BookshelfWidget:onBookshelfToggleHero()
     -- and setting the field directly skipped that, the OPDS nav arming, and
     -- the cursor clamp that keeps a short shelf reachable (issue 369).
     self:_setExpanded(not self._expanded)
+    self:_rebuild()
+    UIManager:setDirty(self, "ui")
+    return true
+end
+
+function BookshelfWidget:onBookshelfShuffleOrnaments()
+    -- A new saved order: every page's start in the deck, and the page map
+    -- (the pieces' widths decide where pages break), are re-learnt. The page
+    -- on screen keeps its first book; what follows it may move.
+    require("lib/bookshelf_ornament_deck").shuffle()
+    self:_dropOrnPages(false)
     self:_rebuild()
     UIManager:setDirty(self, "ui")
     return true
@@ -14659,9 +15298,15 @@ function BookshelfWidget:_nudgeSpineRows(delta)
     return true
 end
 
-function BookshelfWidget:onShelfSpread() return self:_nudgeColumns(-1) end
+function BookshelfWidget:onShelfSpread()
+    if not Gestures.on("density") then return false end
+    return self:_nudgeColumns(-1)
+end
 -- Pinch (fingers together) = zoom out = smaller covers = more columns.
-function BookshelfWidget:onShelfPinch() return self:_nudgeColumns(1) end
+function BookshelfWidget:onShelfPinch()
+    if not Gestures.on("density") then return false end
+    return self:_nudgeColumns(1)
+end
 
 -- Set the expand/collapse state AND remember it (home_expanded), so the home
 -- screen comes back the way the user last left it. Only the deliberate
@@ -14712,10 +15357,84 @@ function BookshelfWidget:_setExpanded(expanded)
     BookshelfSettings.flush()
 end
 
+-- ── Rows from the top panel (issue 465) ─────────────────────────────────────
+-- A swipe down on the top panel takes a row off the shelf and the panel grows
+-- into the space; a swipe up there gives back the rows taken that way, and
+-- once there are none to give back it goes to full screen shelves as it always
+-- did (maintainer: "add a row only if you previously removed a row").
+--
+-- Always the COVER GRID's row count (bookshelf_rows, the Rows editor's), in
+-- every view: the top panel is the cover grid's in all of them, so it keeps
+-- its size across a view switch, and spines and lists fit their rows into
+-- whatever the panel leaves, as they always have (maintainer: "all other shelf
+-- styles are sized based on the number of cover rows").
+function BookshelfWidget:_coverRows()
+    return _asCoverGrid(function() return self:_baseShelves() end) or 1
+end
+
+-- _nudgeCoverRows(delta, before_rebuild): the cover grid's collapsed row
+-- count, a step. before_rebuild (optional) runs only when the count moves,
+-- after it is saved and BEFORE the shelf is rebuilt, for state the rebuild
+-- must already see (the top panel's taken count, which a spine shelf's own
+-- row count is lowered by: _baseShelves).
+function BookshelfWidget:_nudgeCoverRows(delta, before_rebuild)
+    local cur = self:_coverRows()
+    local max = _asCoverGrid(function() return self:_maxShelfRows() end) or cur
+    local new = math.max(ROWS_MIN, math.min(max, cur + delta))
+    if new == cur then return true end
+    BookshelfSettings.saveDeferred("bookshelf_rows", new)
+    if before_rebuild then before_rebuild() end
+    self._nav_dirty = true
+    self:_scheduleNavFlush()
+    self:_clearDpadFocus()
+    if self:_isListMode() or self:_isSpineMode() then
+        self:_rebuild()
+        UIManager:setDirty(self, "ui")
+        return true
+    end
+    -- Covers resize: the draft regrid and its settle, as the pinch does.
+    self:_draftRebuild()
+    UIManager:setDirty(self, "ui")
+    if not SpineWidget.draftWasLossless() then
+        self:_scheduleCoverSettle()
+    end
+    return true
+end
+
+-- _topPanelRowStep(dir) -> handled. dir -1: take a row (consumed even at the
+-- minimum, so the swipe never falls through to something else). dir +1: give
+-- one back, or false when none is owed (the caller goes full screen). A count
+-- that cannot grow any more (the reader set it in the Rows editor meanwhile)
+-- forgets what it owed.
+function BookshelfWidget:_topPanelRowStep(dir)
+    local n = tonumber(BookshelfSettings.read("top_panel_rows_taken")) or 0
+    if dir > 0 and n <= 0 then return false end
+    -- The count is saved before the rebuild the nudge runs: a spine shelf's
+    -- own row count reads it there, and saved after, the rows would stay put
+    -- on the swipe down and be one short on the swipe up.
+    local moved = false
+    self:_nudgeCoverRows(dir, function()
+        moved = true
+        local left = n - dir
+        BookshelfSettings.saveDeferred("top_panel_rows_taken", left > 0 and left or nil)
+    end)
+    if not moved and dir > 0 then
+        BookshelfSettings.saveDeferred("top_panel_rows_taken", nil)
+    end
+    if dir > 0 then return moved end
+    return true
+end
+
 function BookshelfWidget:onSwipeShelvesUp(_, ges)
     -- Collapses the hero to the thin strip in both modes; in micro mode this
     -- hides the module grid (swipe-down / modules-chip restores it).
     if self._expanded then return false end
+    -- Started on the top panel with rows owed: give one back instead.
+    if self:_isHeroSwipe(ges) and Gestures.on("top_panel_rows")
+            and self:_topPanelRowStep(1) then
+        return true
+    end
+    if not Gestures.on("full_screen_up") then return false end
     local _diag_t0 = _gettime()
     self:_setExpanded(true)
     self:_rebuild()
@@ -14766,11 +15485,17 @@ function BookshelfWidget:onSwipeShelvesDown(_, ges)
             (_gettime() - _diag_t0) * 1000, self.chip))
         return true
     end
+    -- Started on the top panel: one row fewer, the panel grows (issue 465).
+    -- The range already leaves out the top 1/8, where KOReader's own menu
+    -- swipe starts, so that still reaches KOReader.
+    if self:_isHeroSwipe(ges) and Gestures.on("top_panel_rows") then
+        return self:_topPanelRowStep(-1)
+    end
     -- Only claim the gesture for a refresh when it started in the shelf
-    -- area. Returning false elsewhere (top edge, chip strip, hero) lets
-    -- KOReader's top-of-screen menu swipe-down through to its handler
-    -- and leaves the hero's own gesture surface alone.
+    -- area. Returning false elsewhere (top edge, chip strip) lets
+    -- KOReader's top-of-screen menu swipe-down through to its handler.
     if not self:_isShelfSwipe(ges) then return false end
+    if not Gestures.on("refresh") then return false end
     self:_refreshLibrary()
     return true
 end
@@ -18736,7 +19461,9 @@ function BookshelfWidget:_buildPillSpecs(book, collection_set, close_cb, filter)
                                       books = { book }, latest = 0 }
                         end
                         _navResetAndClose()
-                        bw:_expandAuthor(group)
+                        -- `whole`: the pill asks for all of it, not the
+                        -- shelf's filtered slice (GitHub issue 480).
+                        bw:_expandAuthor(group, true)
                     end),
                 }
             end
@@ -18763,7 +19490,7 @@ function BookshelfWidget:_buildPillSpecs(book, collection_set, close_cb, filter)
                               books = { book }, latest = 0 }
                 end
                 _navResetAndClose()
-                bw:_expandSeries(group)
+                bw:_expandSeries(group, true)
             end),
         }
     end
@@ -18799,7 +19526,7 @@ function BookshelfWidget:_buildPillSpecs(book, collection_set, close_cb, filter)
                 end
                 _navResetAndClose()
                 bw:_expandTag({ kind = "tag", series_name = coll_name,
-                                books = books, latest = 0 })
+                                books = books, latest = 0 }, true)
             end),
         }
     end
@@ -18835,7 +19562,7 @@ function BookshelfWidget:_buildPillSpecs(book, collection_set, close_cb, filter)
                                       books = { book }, latest = 0 }
                         end
                         _navResetAndClose()
-                        bw:_expandGenre(group)
+                        bw:_expandGenre(group, true)
                     end),
                 }
             end
@@ -19407,12 +20134,65 @@ end
 -- forceRePaint is the whole point. setDirty only queues, and the caller's work
 -- runs before UIManager next paints - so the border would appear at the same
 -- instant as the view it was supposed to precede, which is no feedback at all.
+--
+-- The tile alone, and undithered (issue 448). It was a whole-screen refresh
+-- carrying the widget's dither hint, and on a colour Kobo with HW dithering
+-- on, a Book stack folder's page edges beside the ring came out as black and
+-- white noise. The mark is a black ring: nothing in it needs dithering.
+-- UIManager ORs the widget's `dithered` into every refresh of the repaint,
+-- so the hint is cleared for this one and put back after.
 function BookshelfWidget:_markTapped(fp)
     if not fp or self._tap_selected_fp == fp then return end
+    -- Before the rebuild: the painted tiles carry their rects, the new ones
+    -- will not until they paint, in the same places.
+    local rect = self:_tapTileRect(fp)
     self._tap_selected_fp = fp
     self:_rebuild()
-    UIManager:setDirty(self, "ui")
+    if rect then
+        -- The ring paints outside the tile, as in _repaintSelectionHighlight.
+        local PAD = Screen:scaleBySize(4)
+        rect = Geom:new{ x = rect.x - PAD, y = rect.y - PAD,
+                         w = rect.w + 2 * PAD, h = rect.h + 2 * PAD }
+        UIManager:setDirty(self, function() return "ui", rect, false end)
+    else
+        UIManager:setDirty(self, "ui")
+    end
+    local keep = self.dithered
+    self.dithered = nil
     UIManager:forceRePaint()
+    self.dithered = keep
+end
+
+-- _tapTileRect(fp) -> the painted rect of the tile _markTapped marks, or nil.
+-- A folder tile is keyed on its first book, so it is matched before its front
+-- cover: the cover's rect leaves out the pile of page edges behind it. From the
+-- shelf ROWS only, as _shelfSlotRect: the hero carries a .book too, usually
+-- this very book, and its rect is not where the ring is drawn.
+function BookshelfWidget:_tapTileRect(fp)
+    local function find(node, depth)
+        if type(node) ~= "table" or depth > 16 then return nil end
+        local f = node.folder
+        if type(f) == "table" and f.first_book and f.first_book.filepath == fp
+                and node.dimen and node.dimen.w then
+            return node.dimen
+        end
+        if type(node.book) == "table" and node.book.filepath == fp
+                and node.dimen and node.dimen.w then
+            return node.dimen
+        end
+        for _i, c in ipairs(node) do
+            local g = find(c, depth + 1)
+            if g then return g end
+        end
+        return nil
+    end
+    local d = self._shelf_dims
+    if not (self._inner_vgroup and d) then return nil end
+    for r = 1, (d.n_shelves or 1) do
+        local g = find(self._inner_vgroup[(d.shelf_top_idx or 1) + 2 * (r - 1)], 0)
+        if g then return g:copy() end
+    end
+    return nil
 end
 
 -- Open a scrollable viewer with the full book description. Same
@@ -20811,7 +21591,10 @@ function BookshelfWidget:_buildBookCoverTab(book, show_parent, avail_w, avail_h,
     col[#col + 1] = toolbar_row
     col[#col + 1] = VerticalSpan:new{ width = tb_gap }
 
-    local focus_tables = {}
+    -- D-pad rows, top to bottom: the two buttons, then each grid row. focusRow
+    -- takes a list of ROWS: a flat list made every cover cell a row of its own,
+    -- so focus sat on an unpainted child and Press crashed (GitHub issue 361).
+    local focus_tables = { focusRow({ { device_btn, online_btn } }) }
     if total == 0 then
         col[#col + 1] = CenterContainer:new{
             dimen = Geom:new{ w = content_w, h = math.max(cell_h, Screen:scaleBySize(80)) },
@@ -20858,7 +21641,7 @@ function BookshelfWidget:_buildBookCoverTab(book, show_parent, avail_w, avail_h,
                 grid[#grid + 1] = VerticalSpan:new{ width = gap }; grid_h = grid_h + gap
             end
             grid[#grid + 1] = row_group; grid_h = grid_h + cell_h
-            if #row_layout > 0 then focus_tables[#focus_tables + 1] = focusRow(row_layout) end
+            if #row_layout > 0 then focus_tables[#focus_tables + 1] = focusRow({ row_layout }) end
         end
         local grid_block_h = rows * cell_h + (rows - 1) * gap
         if grid_h < grid_block_h then
@@ -21666,7 +22449,7 @@ function BookshelfWidget:_showBookDetail(book, opts)
                                             or { kind = "genre", series_name = gname,
                                                  books = { book }, latest = 0 }
                                         self._drilldown_path = {}
-                                        self:_expandGenre(group)
+                                        self:_expandGenre(group, true)
                                     end,
                                     on_hold = function() holdMenu(gname) end,
                                 }
@@ -22982,6 +23765,15 @@ function BookshelfWidget:_openGroupMenu(group, kind)
         table.insert(buttons, row)
     end
 
+    -- Page counts for just this stack's books (issue 459): the same dialog as
+    -- the settings menu's, scoped. A folder counts every book under it.
+    table.insert(buttons, {
+        { text = _("Extract page counts\xE2\x80\xA6"), callback = function()
+            close_dialog()
+            require("lib/bookshelf_page_count_dialog").showScoped(display_name, bw_ref:_resolveStackPaths(group), bw_ref)
+        end },
+    })
+
     dialog = ButtonDialog:new{
         title          = display_name,
         title_align    = "center",
@@ -23291,41 +24083,45 @@ end
 -- field (they predate it), which is what the fallback is for -- and any kind
 -- added later that falls through the same way is recorded correctly by
 -- default rather than silently becoming a series.
-function BookshelfWidget:_expandSeries(series)
+function BookshelfWidget:_expandSeries(series, whole)
     if not series or not series.series_name then return end
     self:_applyWithinGroupSort(series)
     self:_drillInto{
         kind    = series.kind or "series",
+        whole   = whole or nil,
         label   = series.series_name,
         payload = series,
     }
 end
 
-function BookshelfWidget:_expandAuthor(group)
+function BookshelfWidget:_expandAuthor(group, whole)
     if not group or not group.series_name then return end
     self:_applyWithinGroupSort(group)
     self:_drillInto{
         kind    = "author",
+        whole   = whole or nil,
         label   = group.series_name,
         payload = group,
     }
 end
 
-function BookshelfWidget:_expandGenre(group)
+function BookshelfWidget:_expandGenre(group, whole)
     if not group or not group.series_name then return end
     self:_applyWithinGroupSort(group)
     self:_drillInto{
         kind    = "genre",
+        whole   = whole or nil,
         label   = group.series_name,
         payload = group,
     }
 end
 
-function BookshelfWidget:_expandTag(group)
+function BookshelfWidget:_expandTag(group, whole)
     if not group or not group.series_name then return end
     self:_applyWithinGroupSort(group)
     self:_drillInto{
         kind    = "tag",
+        whole   = whole or nil,
         label   = group.series_name,
         payload = group,
     }

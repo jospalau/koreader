@@ -735,7 +735,7 @@ SortEngine.KEYS = {
 -- usefulness on a typical library view, not alphabetically.
 SortEngine.ORDER = {
     "title", "filename", "author_surname", "author_name",
-    "series_name", "series_index", "series_combined",
+    "series_name", "series_index", "series_combined", "series_or_title",
     "last_opened", "date_added",
     "percent_read", "rating",
     "read_status", "read_status_active", "read_status_finished",

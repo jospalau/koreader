@@ -1,64 +1,54 @@
 -- bookshelf_ornaments.lua
--- Ornaments: user-supplied SVGs that stand in the gaps of a spine shelf, the
--- way a shop dresses a half-empty shelf with a plant or a figurine.
+-- Ornaments: PNGs and SVGs that stand in the gaps of a spine shelf, the way a
+-- shop dresses a half-empty shelf with a plant or a figurine.
 --
--- Deliberately undocumented -- a thing to find. The first spine render creates
--- <KOReader data dir>/icons/bookshelf.ornaments/ holding template.svg (a
--- potted plant, carrying the conventions in its comments) and cactus.svg; both
--- are ordinary ornaments, and any *.svg or *.png dropped beside them joins the
--- pool. The template's comment block is the whole documentation, so anything
--- a reader needs to know has to end up in there.
--- The template is written only when the folder is first created -- a user who
--- deletes the plant keeps it deleted.
+-- WHERE (M.dir): koreader/settings/bookshelf/ornaments, beside the wallpapers,
+-- since v5.3; koreader/icons/bookshelf.ornaments is still read (see THE
+-- FOLDERS). Loose files and one level of pack folders; a pack may carry a
+-- theme/ (lib/bookshelf_theme_pack) and an ornaments.json. The first render
+-- seeds template.svg (a potted plant, its comments the SVG conventions) and
+-- cactus.svg; a deleted seed stays deleted.
 --
--- INSIDE icons/ on purpose. That is KOReader's own user-asset directory (see
--- iconwidget.lua, which prepends <data dir>/icons to its search path), so it
--- is where a reader already goes to manage SVGs of their own. A
--- bookshelf.ornaments/ folder in the root of KOReader's storage would be one
--- plugin helping itself to the top level (maintainer ruling). Still namespaced
--- by the folder name, so it cannot collide with an icon a reader drops in, and
--- still outside plugins/, so a plugin update never touches it.
+-- WHAT A PIECE IS (listAll -> entries). Measured from its file: aspect (SVG
+-- viewBox, PNG IHDR) and the directives an artist can put in it: overhang
+-- (the lowest N units/pixels hang over the plank's front), night=invert
+-- (chalk in the dark look; also cat.invert.png). Then ornaments.json, per
+-- field (see ornaments.json below): scale, lift, pad, night, mirror, tap. Rendering is KOReader's
+-- RenderImage (nanosvg for SVG, MuPDF for PNG, unpremultiplied here), so for
+-- SVG: bold solid shapes, no text, filters or masks.
 --
--- Conventions the SVG follows (also in the template): the bottom of the
--- viewBox is the plank surface the ornament stands on; a comment
--- "bookshelf:overhang=N" declares that the lowest N viewBox units hang below
--- the surface, over the plank's front (a paw, a trailing vine). Rendering is
--- KOReader's own RenderImage (nanosvg), so: bold solid shapes, no text, no
--- filters, no masks. Night mode pre-inverts the bitmap, alpha kept.
---
--- A PNG has none of those channels, so it gets the defaults: aspect from the
--- IHDR chunk, overhang always 0, and the night flag from the filename
--- (cat.invert.png). See parsePngHeader. Nothing else about the pipeline
--- differs -- same pick(), same cache, same widget -- because the only thing
--- that actually varies is how an entry is measured and which RenderImage call
--- draws it.
---
--- Placement is deterministic per page composition (seeded by the row's first
--- book and its index range), so an ornament stays put while a page is looked
--- at and changes across pages; about half the eligible gaps stay empty.
+-- WHERE A PIECE GOES (pick). The shelf asks at four kinds of slot: a row's
+-- end and a section break (both planned, so the books make room for the
+-- piece), a bare plank under a short page, and packing slack left at a row's
+-- end (render only). Each asks with a seed that holds for that slot, so a
+-- page keeps its pieces while it is looked at. The per-shelf frequency sets
+-- the odds; THE DECK decides which piece; sizeFor how big.
 
 local logger = require("logger")
 local Widget = require("ui/widget/widget")
 
 local M = {}
 
--- KOReader does not create icons/ itself (it is absent from datastorage's
--- initDataDir list and iconwidget only reads it if it happens to exist), so
--- the parent is created alongside the ornaments folder.
-M.PARENT        = "resources/icons"
+-- THE FOLDERS. Since v5.3 the ornaments live beside the wallpapers, in
+-- koreader/settings/bookshelf/ornaments, so one folder backs up (or moves to
+-- another device) everything Bookshelf (maintainer). Until then they lived in
+-- koreader/icons/bookshelf.ornaments, which is still read and never moved or
+-- created; where both hold the same file, the new folder's copy wins. The
+-- help, the browser and the README name only the new one.
+M.NEW_PARENT    = "bookshelf"
+M.NEW_SUBDIR    = "ornaments"
+-- The old one. KOReader does not create icons/ itself.
+M.PARENT        = "icons"
 M.SUBDIR        = "bookshelf.ornaments"
 M.TEMPLATE_NAME = "template.svg"
-M.MIN_GAP_DP    = 48     -- a gap narrower than this stays empty
-M.MIN_H_DP      = 28     -- and an ornament that would come out smaller isn't placed
-M.MIN_H_FRAC    = 0.45   -- ...nor one shrunk (to fit a narrow gap) below this share
-                         -- of the books' height: ornaments scale with the shelf,
-                         -- a speck beside tall books looked wrong (user report)
+-- The ornament collection's icon (U+F0F4): its settings row and the button
+-- in a piece's long-press menu that opens it (maintainer).
+M.COLLECTION_ICON = "\xEF\x83\xB4"
 M.HEIGHT_FRAC   = 0.8    -- height as a fraction of the books' stand height
 -- THE ROW END, where width is the scarce thing and height is not.
 --
 -- The slot used to be a stand-height SQUARE. Anything wider than that was
--- shrunk to fit and, once the shrinking took it under MIN_H_FRAC, dropped --
--- so a broad ornament simply never appeared, and nothing on screen said why
+-- shrunk to fit and, past a floor, dropped -- so a broad ornament simply never appeared, and nothing on screen said why
 -- (maintainer: "users will wonder why their ornament never appears if it's
 -- just over some hidden limit"). The square is not a rule anybody chose; it
 -- is just what falls out of using the height for the width too.
@@ -73,28 +63,23 @@ M.HEIGHT_FRAC   = 0.8    -- height as a fraction of the books' stand height
 -- seat a book (SpineLayout.fillRows seats at least one), and with only a
 -- sliver left that book gets painted past the end of the plank, which is what
 -- the device showed. The slot itself is worked out in bookshelf_spine_shelf.
--- A section break stays an aside: it widens a gap BETWEEN two books, in the
--- middle of a row, where a big piece reads as a hole rather than as an end
--- piece. A quarter of the row is as much as that is allowed to take.
-M.ASIDE_SHARE   = 0.25
--- ...and a piece that spreads across a row-end slot may stand shorter than
--- one wedged into a gap between books. There is nothing above a row end to
--- crowd, so a low wide piece reads as an ornament rather than as a mistake,
--- where the same piece squeezed between two spines would not.
-M.ROW_END_MIN_H_FRAC = 0.3
-M.CHANCE        = 0.5    -- fraction of eligible gaps that get an ornament
-M.GROUP_CHANCE  = 0.08   -- ...and of the gaps BETWEEN sections on a grouping
-                         -- chip, which are far more numerous: the same odds
-                         -- there would put a plant between every other series
+-- The widest a piece stands by default, anywhere: its stand height, in book
+-- heights (ASIDE_STANDS). A wider piece is scaled down to it, never left out.
+-- Measured against the BOOKS, not the row, so taller rows (fewer of them)
+-- grow the ornaments with the books: it was a quarter of the row, which stayed
+-- the same width while the books grew around it (maintainer). At the PW5's two
+-- rows the two agree (280px against 284px). Only a reader's own size nudge
+-- takes a piece past it, up to the whole row.
+M.ASIDE_STANDS  = 1.0
+function M.maxWidth(stand_h, row_w)
+    return math.max(0, math.min(row_w or 0, math.floor((stand_h or 0) * M.ASIDE_STANDS)))
+end
 M.CACHE_MAX     = 12     -- rendered bitmaps kept (path x size x night)
 
 -- ── Frequency ──────────────────────────────────────────────────────
 --
--- A MULTIPLIER on the odds above, not a replacement for them. The two base
--- chances are deliberately far apart -- a grouping chip's section breaks are
--- far more numerous than the gaps on a plain shelf, so identical odds would
--- put a plant between every other series -- and that relationship should hold
--- at every setting. Scaling both keeps it.
+-- The level names a PATTERN of slots (lib/bookshelf_ornament_deck):
+-- Rarely, Often, Always. Off places nothing.
 -- The PER-SHELF key: a chip carries its own number in its tab record. There
 -- is deliberately no library-wide setting behind it. A default that every
 -- shelf can override is a trap -- change the default later and nothing
@@ -102,142 +87,6 @@ M.CACHE_MAX     = 12     -- rendered bitmaps kept (path x size x night)
 -- A shelf that has never been touched holds nothing and gets FREQ_DEFAULT.
 M.FREQ_SETTING  = "ornament_frequency"
 M.FREQ_DEFAULT  = 1
-
--- Above this, ornaments stop waiting for a gap wide enough and have a place
--- RESERVED at the end of each shelf (see SpineShelf.plan). Below it they are
--- opportunistic, which is what "occasional" has always meant here.
-M.FREQ_RESERVE_AT = 1.5
--- The odds a RESERVED row end (see SpineShelf.plan) actually takes a piece,
--- before pick() scales them by the level: Often (2) keeps about half its
--- row ends, Lots (3) about five in six. Maintainer: "allow some rows even on
--- 'lots' setting to be occasionally filled with books". A row that rolls
--- nothing gives nothing up, so the odd bookless row costs no shelf.
-M.ROW_END_CHANCE = 0.28
-
--- Odds that survive pick()'s scaling by the level, for the one placement that
--- is a promise rather than a roll. A plain 1 would not do: pick multiplies by
--- the frequency, so at Rarely a "certainty" of 1 comes back out as 0.5.
-M.CHANCE_CERTAIN = math.huge
-
--- ── The group channel has its own curve ───────────────────────────────────
---
--- One level scales every channel, but the channels do not offer the same
--- NUMBER of chances. A plain shelf offers a couple of row ends per page; a
--- grouping chip can offer thirty section breaks. Multiplying both by the same
--- number gives the two complaints that arrived one after the other: nothing
--- at all on a packed plain shelf, and "set ornaments to rarely appear and I
--- have 4 on screen right now" on a chip full of small groups.
---
--- So the section-break channel is damped at the lower levels rather than
--- following the level directly. Per gap, and across a page holding thirty of
--- them:
---
---     level        per gap    expected on such a page
---     Rarely        1.6%              0.5
---     Often         5.6%              1.7
---     Always       16.0%              4.8
---
--- Not a per-screen CAP, which is what this wanted to be: the section-break
--- placement widens the gap it stands in, so it changes how many books fit,
--- and a cap counted per screen would give plan()'s two callers different
--- answers and break page boundaries again (see pageGuaranteed). A curve is a
--- pure function of the level, so both passes still agree.
-M.GROUP_LEVEL = { [0] = 0, [0.5] = 0, [1] = 0.7, [2] = 2 }
-
--- The row end gets a curve too, and for the same reason: it is the channel
--- that was actually doing the work on a grouped chip (instrumented: six
--- placements at 0.28 against one section break at 0.08), so damping the
--- section breaks alone left Rarely at "9 ornaments across 11 pages... often 2
--- on a page", which is not rare.
---
--- ZERO at Rarely. That setting is then exactly its promise -- one page in
--- four stands a piece, and no other channel adds to it -- which is both rare
--- and predictable. Everything above it keeps a roll on top of the promise.
-M.ROW_END_LEVEL = { [0] = 0, [0.5] = 0, [1] = 0.7, [2] = 2 }
-
-local function levelFrom(curve)
-    local f = M.frequency()
-    local best, dist = 0, math.huge
-    for level, mul in pairs(curve) do
-        local d = math.abs(level - f)
-        if d < dist then best, dist = mul, d end
-    end
-    return best
-end
-
-function M.rowEndLevel() return levelFrom(M.ROW_END_LEVEL) end
-
--- ── A ceiling for the channels that can have one ──────────────────────────
---
--- The curve above thins the section breaks, but the other channels keep
--- adding: the promised row end, the odd row end that rolls one anyway, the
--- leftover slack beside a short row. Measured on a grouped chip at Rarely
--- that came to about two a page, which is not what "rarely" promises.
---
--- So the channels that do NOT affect packing take a hard per-screen ceiling,
--- counting everything already standing (a section-break piece is placed
--- earlier, in plan, and counts against it). Only those channels: the
--- section-break piece widens the gap it stands in, so capping it would give
--- plan()'s two callers different answers and break page boundaries -- the
--- constraint that also ruled out a cap for the group channel.
-M.PAGE_BUDGET = { [0] = 0, [0.5] = 1, [1] = 2, [2] = 4 }
-
-function M.pageBudget()
-    local f = M.frequency()
-    local best, dist = 0, math.huge
-    for level, n in pairs(M.PAGE_BUDGET) do
-        local d = math.abs(level - f)
-        if d < dist then best, dist = n, d end
-    end
-    return best
-end
-
--- budgetLeft() -> how many more a screen may take, for budgeted channels.
-function M.budgetLeft()
-    local n = 0
-    for _k in pairs(M._used) do n = n + 1 end
-    return M.pageBudget() - n
-end
-
-function M.groupLevel() return levelFrom(M.GROUP_LEVEL) end
-
--- ── The per-PAGE promise ──────────────────────────────────────────────────
---
--- Every other placement is opportunistic: a piece appears where a gap happens
--- to be wide enough. On a plain shelf that can mean almost never. A shelf with
--- no groups has no section breaks at all -- the default Home shelf, flattened
--- folders, is exactly that -- and a densely packed row leaves a few dozen
--- pixels at its end, under MIN_GAP_DP. Both channels empty, at every level
--- below the top one: "set to often, there was only one ornament in total on
--- the whole shelf" (maintainer).
---
--- So a level also says how often a PAGE is promised a piece, and a promised
--- page stands one at a row end whether or not a gap turned up. One page in N:
-M.PAGE_PERIOD = { [0] = 0, [0.5] = 4, [1] = 2, [2] = 1 }
-
-function M.pagePeriod()
-    local f = M.frequency()
-    local best, dist = 0, math.huge
-    for level, period in pairs(M.PAGE_PERIOD) do
-        local d = math.abs(level - f)
-        if d < dist then best, dist = period, d end
-    end
-    return best
-end
-
--- pageGuaranteed(page) -> is THIS page promised a piece?
---
--- Hashed from the page's ORDINAL, not from its books. The ordinal is the one
--- thing both of plan()'s callers agree on: the render knows it, and the
--- pagination pass derives it from the row index. Seeding on anything else --
--- the page's first book, say -- gives the two passes different answers, and
--- they then pack differently and disagree about where pages start.
-function M.pageGuaranteed(page)
-    local period = M.pagePeriod()
-    if period <= 0 then return false end
-    if period == 1 then return true end
-    return (M.hash("page:" .. tostring(page)) % period) == 0
-end
 
 -- The shelf on screen may pin its own frequency, so the value is pushed in
 -- rather than read from the library setting alone: a chip's pin is resolved
@@ -256,29 +105,6 @@ function M.frequency()
     return pinned
 end
 
--- ── One of each, per screen ───────────────────────────────────────
---
--- Placements are seeded independently -- a section break knows the two books
--- either side of it, a row end knows its row -- so nothing stopped two of them
--- landing on the same file. With a folder of three that is not unlikely; it
--- reads as a mistake rather than as decoration, which is the maintainer's
--- report.
---
--- A set rather than a counter: the question is only "is this one already
--- standing on this screen", and when every entry is spoken for a repeat still
--- beats a blank gap.
-M._used = {}
-
--- beginScreen() -- forget what is standing, for a screen about to be built.
--- Called from SpineShelf.plan, which runs once per page and before any row.
-function M.beginScreen()
-    M._used = {}
-end
-
--- reservesRowEnds() -> should a shelf keep a slot free at its end?
-function M.reservesRowEnds()
-    return M.frequency() >= M.FREQ_RESERVE_AT
-end
 
 
 M.TEMPLATE_SVG = [==[<?xml version="1.0" encoding="UTF-8"?>
@@ -334,6 +160,11 @@ M.TEMPLATE_SVG = [==[<?xml version="1.0" encoding="UTF-8"?>
     silhouette would sink into that black, so for one of those add a line
     above the svg tag in the form of the overhang line, with night=invert
     in place of overhang=0: it is then shown light, like the spine titles.
+  - Something that HANGS (a bat, a spider on its thread): long-press it on
+    the shelf and raise its height to 100%, which puts the top of the
+    drawing against the shelf above, whatever the shelf size.
+  - A .png can carry these too, as text chunks with the keyword bookshelf
+    (overhang=N in the picture's own pixels, night=invert).
 -->
 <!-- bookshelf:overhang=0 -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 106">
@@ -421,14 +252,56 @@ function M.dataDir()
     return nil
 end
 
+-- settingsDir(): KOReader's settings folder (koreader/settings). A test that
+-- names a data folder gets the settings folder inside it, as KOReader has it.
+function M.settingsDir()
+    if M._settings_dir then return M._settings_dir end
+    if M._data_dir then return M._data_dir .. "/settings" end
+    local ok, DataStorage = pcall(require, "datastorage")
+    if ok and DataStorage and DataStorage.getSettingsDir then
+        local ok2, d = pcall(DataStorage.getSettingsDir, DataStorage)
+        if ok2 and type(d) == "string" and d ~= "" then return d end
+    end
+    local d = M.dataDir()
+    return d and (d .. "/settings") or nil
+end
+
+-- dir(): the ornaments folder, the one to tell people about.
+function M.dir()
+    local s = M.settingsDir()
+    return s and (s .. "/" .. M.NEW_PARENT .. "/" .. M.NEW_SUBDIR) or nil
+end
+
+-- legacyDir(): where they lived before v5.3; read, never created.
 function M.parentDir()
     local d = M.dataDir()
     return d and (d .. "/" .. M.PARENT) or nil
 end
-
-function M.dir()
+function M.legacyDir()
     local p = M.parentDir()
     return p and (p .. "/" .. M.SUBDIR) or nil
+end
+
+-- roots() -> the folders that exist, the new one first.
+function M.roots()
+    local fs = lfs()
+    local out = {}
+    if not fs then return out end
+    for _i, d in ipairs({ M.dir(), M.legacyDir() }) do
+        if d and fs.attributes(d, "mode") == "directory" then out[#out + 1] = d end
+    end
+    return out
+end
+
+-- packDir(pack) -> the folder a pack lives in (the new one if both have it).
+function M.packDir(pack)
+    local fs = lfs()
+    if not (fs and pack) then return nil end
+    for _i, r in ipairs(M.roots()) do
+        local p = r .. "/" .. pack
+        if fs.attributes(p, "mode") == "directory" then return p end
+    end
+    return nil
 end
 
 -- refreshSeeds(d, fs): rewrite OUR seed files where they exist at an older
@@ -457,6 +330,10 @@ end
 -- -- a deleted seed stays deleted, their own files are never read -- with one
 -- exception: a seed of OURS still present at an older version is rewritten
 -- (refreshSeeds), so improvements to the artwork reach existing installs.
+--
+-- The new folder is always made, so the path the browser and the help show
+-- exists; the seeds go into it only on a fresh install. A reader with the old
+-- folder already has theirs there, and a second template would be a stray.
 M._ensured = false
 function M.ensureTemplate()
     if M._ensured then return end
@@ -464,20 +341,29 @@ function M.ensureTemplate()
     local d = M.dir()
     local fs = lfs()
     if not (d and fs) then return end
+    local old = M.legacyDir()
+    local has_old = old and fs.attributes(old, "mode") == "directory"
+    if has_old then pcall(refreshSeeds, old, fs) end
     if fs.attributes(d, "mode") ~= nil then
         pcall(refreshSeeds, d, fs)
         return
     end
-    -- The parent may not exist: KOReader only creates icons/ if a reader has
-    -- made it themselves. mkdir is not recursive, so do it a level at a time,
-    -- and tolerate an existing parent.
-    local parent = M.parentDir()
-    if parent and fs.attributes(parent, "mode") == nil then
-        pcall(fs.mkdir, parent)
-        if fs.attributes(parent, "mode") ~= "directory" then return end
+    -- settings/ exists wherever KOReader runs; bookshelf/ may not yet.
+    -- mkdir is not recursive, so a level at a time.
+    local settings = M.settingsDir()
+    local parent = settings and (settings .. "/" .. M.NEW_PARENT)
+    for _i, p in ipairs({ settings, parent }) do
+        if p and fs.attributes(p, "mode") == nil then
+            pcall(fs.mkdir, p)
+            if fs.attributes(p, "mode") ~= "directory" then return end
+        end
     end
     local ok_mk = pcall(fs.mkdir, d)
     if not ok_mk or fs.attributes(d, "mode") ~= "directory" then return end
+    if has_old then
+        logger.dbg("[bookshelf] ornaments folder created (the old one stays in use too):", d)
+        return
+    end
     for _i, seed in ipairs(M.SEED_FILES) do
         local f = io.open(d .. "/" .. seed.name, "w")
         if f then f:write(seed.svg); f:close() end
@@ -544,16 +430,18 @@ end
 -- folder -- which matters, because list() runs on every folder mtime change
 -- and a decode is orders of magnitude dearer than a read.
 --
--- OVERHANG IS ALWAYS 0. An SVG can declare that its lowest N units hang over
--- the plank's front, because it was drawn for this shelf. A PNG is a picture
--- someone had; it stands on the plank. That also leaves the full stand height
--- available to the artwork, and a transparent margin inside the image sets an
--- ornament back if it wants to be set back -- which is the maintainer's
--- reasoning for leaving the placement alone rather than pushing rasters to the
--- face-out plane.
+-- DIRECTIVES come from tEXt chunks before the image data: keyword "bookshelf",
+-- text "overhang=N" or "night=invert" (one per chunk, or several in
+-- one separated by spaces or semicolons). N is in the image's own pixels, the
+-- raster's equivalent of an SVG's viewBox units. A PNG with none -- a picture
+-- someone had -- stands on the plank as it always did: overhang 0. The
+-- ornament packs write them (the leaves under an apple basket hanging over
+-- the plank front, a contact shadow reaching onto it).
 --
--- The night flag is not in the bytes either; list() takes it from the
--- filename. It is returned false here so the shape matches parseHeader.
+-- Only chunks inside `bytes` are seen (list() reads 8KB, and a tool that puts
+-- its tEXt after the image data is not supported -- the pack builder writes
+-- them straight after IHDR). The filename night flag (cat.invert.png) is
+-- applied by the caller on top of whatever this returns.
 function M.parsePngHeader(bytes)
     if type(bytes) ~= "string" or #bytes < 24 then return nil end
     if bytes:sub(1, 8) ~= "\137PNG\r\n\026\n" then return nil end
@@ -563,7 +451,37 @@ function M.parsePngHeader(bytes)
     if bytes:sub(13, 16) ~= "IHDR" then return nil end
     local w, h = be32(bytes, 17), be32(bytes, 21)
     if not (w and h) or w <= 0 or h <= 0 then return nil end
-    return w / h, 0, false
+    local text = M.pngDirectives(bytes)
+    local over = tonumber(text:match("bookshelf:overhang%s*=%s*([%d%.]+)")) or 0
+    if over < 0 then over = 0 end
+    if over > h then over = h end
+    local night = text:match("bookshelf:night%s*=%s*invert") ~= nil
+    return w / h, over / h, night
+end
+
+-- pngDirectives(bytes) -> "bookshelf:<directive>" lines from the "bookshelf"
+-- tEXt chunks ahead of the image data, or "". Walks the chunk list from the
+-- one after IHDR; stops at IDAT/IEND, at a chunk that runs past `bytes`, or at
+-- a length no real header chunk has.
+function M.pngDirectives(bytes)
+    local out = {}
+    local pos = 9                                   -- first chunk, 1-based
+    while pos + 8 <= #bytes do
+        local len, typ = be32(bytes, pos), bytes:sub(pos + 4, pos + 7)
+        if not len or len > 65536 or typ == "IDAT" or typ == "IEND" then break end
+        if pos + 11 + len > #bytes + 4 then break end
+        if typ == "tEXt" then
+            local data = bytes:sub(pos + 8, pos + 7 + len)
+            local z = data:find("\0", 1, true)
+            if z and data:sub(1, z - 1) == "bookshelf" then
+                for d in data:sub(z + 1):gmatch("[^;%s]+") do
+                    out[#out + 1] = "bookshelf:" .. d
+                end
+            end
+        end
+        pos = pos + 12 + len                        -- length, type, data, crc
+    end
+    return table.concat(out, "\n")
 end
 
 -- pngSize(bytes) -> width, height from the IHDR, or nil.
@@ -630,11 +548,26 @@ local function readSet(key)
     return (ok and type(v) == "table") and v or {}
 end
 
+-- While the ornaments browser is open (beginDeferred .. endDeferred), switches
+-- are written in memory only and flushed once at the end: a save flushes the
+-- whole settings file, and a reader tapping through a pack paid that per tap.
+M._defer = false
+function M.beginDeferred() M._defer = true end
+function M.endDeferred()
+    M._defer = false
+    local st = store()
+    if st and st.flush then pcall(st.flush) end
+end
+
 local function saveSet(key, set)
     local st = store()
     if not st then return end
-    local empty = next(set) == nil
-    pcall(function() st.save(key, (not empty) and set or nil) end)
+    local v = (next(set) ~= nil) and set or nil
+    if M._defer and st.saveDeferred then
+        pcall(function() st.saveDeferred(key, v) end)
+    else
+        pcall(function() st.save(key, v) end)
+    end
     M._list_cache, M._list_key = nil, nil   -- the next list() re-filters
 end
 
@@ -677,9 +610,9 @@ local function entryFor(path, relpath, file, pack)
             return nil
         end
         aspect, over, night_invert = M.parsePngHeader(head)
-        -- A PNG has nowhere to write "bookshelf:night=invert", so the name
-        -- carries it: cat.invert.png. The only channel that needs no tooling.
-        night_invert = lname:match("%.invert%.png$") ~= nil
+        -- The name can carry the night flag too: cat.invert.png, the one
+        -- channel that needs no tooling.
+        night_invert = night_invert or lname:match("%.invert%.png$") ~= nil
     else
         -- sizeOf rather than parseHeader: it falls back to the renderer's own
         -- natural size when the header carries no usable viewBox or size.
@@ -707,10 +640,10 @@ local function entryFor(path, relpath, file, pack)
             .. "come out blank. Drop the picture in as a "
             .. ".png instead: " .. tostring(relpath))
     end
-    -- name is the relative path: unique across packs, and what the rotation
-    -- and the on/off state key on. file is the bare file name, for display.
+    -- name is the relative path: unique across packs, and what the deck, the
+    -- on/off state and ornaments.json key on. file is the bare file name, for display.
     return { path = path, name = relpath, file = file, pack = pack,
-             aspect = aspect, overhang = over, night_invert = night_invert }
+             aspect = aspect, overhang = over or 0, night_invert = night_invert }
 end
 
 -- displayName(entry) -> the file name without its extension (or the
@@ -721,65 +654,435 @@ function M.displayName(entry)
     return base ~= "" and base or f
 end
 
--- listAll() -> every ornament in the folder and its packs, switched off or
--- not, sorted by pack (loose ones first) then name; and the pack names.
--- Cached on the folders' own scan keys.
-function M.listAll()
-    local d = M.dir()
-    local fs = lfs()
-    if not (d and fs) then return {}, {} end
-    -- ONE listing of the folder for its files and its packs together: a FUSE
-    -- directory listing was measured at 340ms on a tired Kindle, and this runs
-    -- once per scan TTL. Same key as AssetFolder.scan: the folder's mtime and
-    -- its sorted names.
-    local mtime = fs.attributes(d, "modification")
-    if not mtime then return {}, {} end
-    local names, packs = {}, {}
-    local ok_l = pcall(function()
-        for name in fs.dir(d) do
-            if name:sub(1, 1) ~= "." then
-                local ext = name:match("%.([^%.]+)$")
-                if ext and ORNAMENT_EXTS[ext:lower()] then
-                    names[#names + 1] = name
-                elseif fs.attributes(d .. "/" .. name, "mode") == "directory" then
-                    packs[#packs + 1] = name
+-- ── ornaments.json ──────────────────────────────────────────────────────────
+-- Placement that belongs to an ornament FILE, so it follows the piece onto
+-- every shelf: one file in each pack (what the pack ships) and one in the
+-- ornaments folder (the reader's own changes, keyed "Pack/file.png" for a
+-- pack's piece, and never written into a pack's file, so updating a pack does
+-- not wipe them). Per field, the reader's file beats the old folder's, which
+-- beats the pack's, which beats a PNG/SVG directive, which beats the default.
+--
+-- Units hold at any DPI and shelf size: scale against the default size, lift
+-- in the piece's own height (+ up), pad in the books' stand height (each
+-- side, - tightens it against the books).
+M.JSON_NAME = "ornaments.json"
+M.FIELDS = {
+    -- 5%, not half: a reader may want a piece small (maintainer). Not zero,
+    -- which would leave its slot empty while it still takes its turn.
+    scale  = { kind = "number", min = 0.05, max = 4, default = 1 },
+    -- What the piece is pinned to: "bottom" stands it on its own plank,
+    -- "top" puts its drawing's top against the underside of the shelf above
+    -- (a bat, a broomstick), whatever the piece's or the shelf's size.
+    anchor = { kind = "enum", values = { bottom = true, top = true }, default = "bottom" },
+    -- Height: how far from its anchor, in the shelf's stand height (+ up), so
+    -- a step moves every piece the same distance (see SpineShelf.ornamentY).
+    -- It used to be a share of the room left above the piece, which shrank
+    -- to nothing for one filling the shelf (maintainer: "for a tall
+    -- ornament ... the % height doesn't act usefully").
+    lift   = { kind = "number", min = -1, max = 1.5, default = 0 },
+    pad    = { kind = "number", min = -1,  max = 2, default = 0 },
+    night  = { kind = "enum", values = { invert = true, off = true } },
+    mirror = { kind = "enum", values = { off = true, always = true, alternate = true }, default = "off" },
+    -- A stored action ({ action, plugin, internal, label }), or "zoom": the
+    -- piece full screen with its info under it (lib/bookshelf_ornament_zoom).
+    tap    = { kind = "tap" },
+    -- Text for the zoom view: what the piece is (a print's title, artist,
+    -- notes). Without it the zoom view shows the piece's name.
+    info   = { kind = "string" },
+}
+M.INFO_MAX = 4000
+
+-- cleanField(name, v) -> a usable value, or nil when v is not one.
+function M.cleanField(name, v)
+    local f = M.FIELDS[name]
+    if not f then return nil end
+    if f.kind == "number" then
+        if type(v) ~= "number" or v ~= v then return nil end
+        return math.max(f.min, math.min(f.max, v))
+    elseif f.kind == "boolean" then
+        if type(v) ~= "boolean" then return nil end
+        return v
+    elseif f.kind == "enum" then
+        return (type(v) == "string" and f.values[v]) and v or nil
+    elseif f.kind == "table" then
+        return type(v) == "table" and v or nil
+    elseif f.kind == "tap" then
+        if v == "zoom" then return { zoom = true } end
+        return type(v) == "table" and v or nil
+    elseif f.kind == "string" then
+        if type(v) ~= "string" or v == "" then return nil end
+        return (#v > M.INFO_MAX) and v:sub(1, M.INFO_MAX) or v
+    end
+end
+
+local function decodeJson(text)
+    if M._decode then return M._decode(text) end
+    local ok, rj = pcall(require, "rapidjson")
+    if ok and rj and rj.decode then return rj.decode(text) end
+    return require("json").decode(text)
+end
+
+-- readJson(path) -> the file's table, or {} (absent, unreadable, not JSON:
+-- the last two logged, and the ornaments still stand on their defaults).
+function M.readJson(path)
+    local f = io.open(path, "r")
+    if not f then return {} end
+    local text = f:read("*a")
+    f:close()
+    local ok, t = pcall(decodeJson, text)
+    if not ok or type(t) ~= "table" then
+        logger.warn("[bookshelf] ornaments: could not read", path, tostring(t))
+        return {}
+    end
+    return t
+end
+
+-- The reader's size, padding and height are ADJUSTMENTS to what the layers
+-- under it say (a pack's own values): size multiplies, padding and height
+-- add, so a pack maker's settings are the reader's 100% and 0%, and Reset goes
+-- back to them (maintainer). The rest simply replace.
+M.RELATIVE = { scale = "mul", pad = "add", lift = "add" }
+
+-- applyLayers(e, layers): merge the settings layers (highest first) over the
+-- directives already on e, and derive what the painters read.
+local function applyLayers(e, layers)
+    local function from(i, name)
+        local layer = layers[i]
+        local rec = layer and layer[e.lookup and e.lookup[i] or e.name]
+        if type(rec) == "table" and rec[name] ~= nil then
+            local v = M.cleanField(name, rec[name])
+            if v ~= nil then return v end
+            logger.warn("[bookshelf] ornaments: ignoring", name, "=", tostring(rec[name]), "for", e.name)
+        end
+        return nil
+    end
+    local function get(name)
+        local rel = M.RELATIVE[name]
+        for i = 1, #layers do
+            if not (rel and i == e._reader_at) then
+                local v = from(i, name)
+                if v ~= nil then
+                    if rel and e._reader_at then
+                        local r = from(e._reader_at, name)
+                        if r ~= nil then
+                            v = (rel == "mul") and v * r or v + r
+                            -- Thousandths: 1.5 x 0.8 is 1.2, not 1.2000000000000002.
+                            v = M.cleanField(name, math.floor(v * 1000 + 0.5) / 1000)
+                        end
+                    end
+                    return v
                 end
             end
         end
-    end)
-    if not ok_l then return {}, {} end
-    table.sort(names)
-    table.sort(packs)
-    local key = tostring(mtime) .. "|" .. table.concat(names, "\0")
-    local pack_names = {}
-    for _i, pack in ipairs(packs) do
-        local pn, pk = AssetFolder.scan(fs, d .. "/" .. pack, ORNAMENT_EXTS)
-        pack_names[pack] = pn or {}
-        key = key .. "\1" .. pack .. "\2" .. tostring(pk)
+        -- Nothing under the reader's: its own value, from the default.
+        if rel and e._reader_at then return from(e._reader_at, name) end
+        return nil
     end
+    e.scale  = get("scale") or 1
+    e.anchor = get("anchor") or "bottom"
+    e.lift   = get("lift") or 0
+    e.pad    = get("pad") or 0
+    local night = get("night")
+    if night ~= nil then e.night_invert = (night == "invert") end
+    e.mirror = get("mirror") or "off"
+    e.tap    = get("tap")
+    e.info   = get("info")
+end
+
+M._applyLayers = applyLayers
+
+-- The directive-only values, kept so a re-apply (a reader's nudge) starts
+-- from what the file itself says rather than from the last merge.
+local function keepDirectives(e)
+    if e._dir then return end
+    e._dir = { night_invert = e.night_invert }
+end
+local function reapply(e)
+    if not (e and e._layers) then return end
+    -- The reader's layer is looked up now, not kept from the scan: a reload
+    -- (its mtime changed) replaces M._reader, and an entry scanned before it
+    -- would otherwise go on reading the old table.
+    if e._reader_at then e._layers[e._reader_at] = M.readerTable() end
+    e.night_invert = e._dir.night_invert
+    pcall(applyLayers, e, e._layers)
+end
+
+-- ── The reader's own file: <ornaments folder>/ornaments.json ────────────────
+-- Held in memory while a long-press menu edits it (every nudge re-applies the
+-- piece at once, no rescan), and written when the menu closes.
+function M.readerPath()
+    local d = M.dir()
+    return d and (d .. "/" .. M.JSON_NAME) or nil
+end
+function M.readerTable()
+    local path = M.readerPath()
+    local fs = lfs()
+    local mt = path and fs and fs.attributes(path, "modification")
+    if M._reader and M._reader_mtime == mt then return M._reader end
+    if M._reader and M._reader_dirty then return M._reader end
+    M._reader = path and M.readJson(path) or {}
+    M._reader_mtime = mt
+    return M._reader
+end
+
+-- readerValue(entry, field) -> the reader's own value for a field, or its
+-- default: for size, padding and height the reader's ADJUSTMENT (see
+-- M.RELATIVE), 100% / 0% at the pack's own value, which the menu shows.
+function M.readerValue(entry, field)
+    local rec = entry and entry.name and M.readerTable()[entry.name]
+    local v = type(rec) == "table" and M.cleanField(field, rec[field]) or nil
+    if v == nil then v = M.FIELDS[field] and M.FIELDS[field].default end
+    return v
+end
+
+-- readerGet(name) -> the reader's record for a piece (a copy), or {}.
+function M.readerGet(name)
+    local rec = M.readerTable()[name]
+    local out = {}
+    if type(rec) == "table" then for k, v in pairs(rec) do out[k] = v end end
+    return out
+end
+
+-- readerSet(entry, field, value): one field of the reader's record (nil
+-- removes it; an empty record is dropped), applied to the piece at once.
+-- current(entry) -> the live entry for the same piece. A rescan (the reader's
+-- own save changes the file's mtime, which is in the scan key) builds new
+-- entries, and the shelf draws from those; a menu opened on a piece before it
+-- holds the old one (device report: edits that did nothing, then "reverted").
+function M.current(entry)
+    if not (entry and entry.name) then return entry end
+    local all = M.listAll()
+    for _i, e in ipairs(all or {}) do
+        if e.name == entry.name then return e end
+    end
+    return entry
+end
+
+-- reapplyAll(entry): the reader's record, applied to the given entry AND
+-- every other held for the same piece: listAll()'s, and list()'s, which the
+-- shelf draws from and which may still be the older set until SCAN_TTL runs
+-- out (a save changes the file's mtime, and so the scan key).
+local function reapplyAll(entry)
+    reapply(entry)
+    local done = { [entry] = true }
+    for _c, cache in ipairs({ M._all_cache or {}, M._list_cache or {} }) do
+        for _i, e in ipairs(cache) do
+            if not done[e] and e.name == entry.name then done[e] = true; reapply(e) end
+        end
+    end
+end
+
+function M.readerSet(entry, field, value)
+    if not (entry and entry.name and M.FIELDS[field]) then return end
+    local t = M.readerTable()
+    local rec = type(t[entry.name]) == "table" and t[entry.name] or {}
+    rec[field] = value
+    t[entry.name] = next(rec) and rec or nil
+    M._reader_dirty = true
+    reapplyAll(entry)
+end
+
+-- readerReset(entry): the reader's record for the piece goes; the pack's
+-- values (or the defaults) show again.
+function M.readerReset(entry)
+    if not (entry and entry.name) then return end
+    local t = M.readerTable()
+    if t[entry.name] ~= nil then
+        t[entry.name] = nil
+        M._reader_dirty = true
+    end
+    reapplyAll(entry)
+end
+
+local function encodeJson(t)
+    if M._encode then return M._encode(t) end
+    local ok, rj = pcall(require, "rapidjson")
+    if ok and rj and rj.encode then return rj.encode(t, { pretty = true, sort_keys = true }) end
+    return require("json").encode(t)
+end
+
+-- saveReader() -> true when written (or nothing to write).
+function M.saveReader()
+    if not M._reader_dirty then return true end
+    local path = M.readerPath()
+    if not path then return false end
+    local ok, text = pcall(encodeJson, M._reader or {})
+    if not ok or type(text) ~= "string" then
+        logger.warn("[bookshelf] ornaments: could not encode", path, tostring(text))
+        return false
+    end
+    local f = io.open(path, "w")
+    if not f then
+        logger.warn("[bookshelf] ornaments: could not write", path)
+        return false
+    end
+    f:write(text); f:write("\n"); f:close()
+    M._reader_dirty = false
+    local fs = lfs()
+    M._reader_mtime = fs and fs.attributes(path, "modification") or nil
+    return true
+end
+
+-- commitPack(pack) -> how many pieces' records moved. The pack editor's
+-- save (lib/bookshelf_pack_editor): the reader's records for the pack's
+-- pieces ("Pack/file.png") move into the pack's own ornaments.json (keyed by
+-- file name), field by field over what the pack had, so the pack ships with
+-- them; they leave the reader's file, where they would go on winning.
+function M.commitPack(pack)
+    local pdir = pack and M.packDir(pack)
+    if not pdir then return 0 end
+    local t = M.readerTable()
+    local prefix = pack .. "/"
+    local path = pdir .. "/" .. M.JSON_NAME
+    local pj = M.readJson(path)
+    local moved = {}
+    for key, rec in pairs(t) do
+        if type(key) == "string" and key:sub(1, #prefix) == prefix and type(rec) == "table" then
+            local file = key:sub(#prefix + 1)
+            local out = type(pj[file]) == "table" and pj[file] or {}
+            -- Adjustments fold into the pack's values (M.RELATIVE); the rest
+            -- replace them.
+            for k, v in pairs(rec) do
+                local rel = M.RELATIVE[k]
+                local base = M.cleanField(k, out[k])
+                if rel and base ~= nil and type(v) == "number" then
+                    v = M.cleanField(k, (rel == "mul") and base * v or base + v)
+                    v = math.floor(v * 1000 + 0.5) / 1000
+                end
+                out[k] = v
+            end
+            pj[file] = out
+            moved[#moved + 1] = key
+        end
+    end
+    if #moved == 0 then return 0 end
+    -- The pack's file first: the reader's records go only once it is written.
+    local ok, text = pcall(encodeJson, pj)
+    local f = ok and type(text) == "string" and io.open(path, "w")
+    if not f then
+        logger.warn("[bookshelf] ornaments: could not write", path)
+        return 0
+    end
+    f:write(text); f:write("\n"); f:close()
+    for _i, key in ipairs(moved) do t[key] = nil end
+    local n = #moved
+    M._reader_dirty = true
+    M.saveReader()
+    M.invalidate()
+    return n
+end
+
+-- listAll() -> every ornament in the folders and their packs, switched off
+-- or not, sorted by pack (loose ones first) then name; and the pack names.
+-- Both folders are read (see M.dir); a relative path present in both is the
+-- new folder's. Cached on the folders' own scan keys.
+function M.listAll()
+    local fs = lfs()
+    local roots = M.roots()
+    if not fs or #roots == 0 then return {}, {} end
+    -- ONE listing of each folder for its files and its packs together: a FUSE
+    -- directory listing was measured at 340ms on a tired Kindle, and this runs
+    -- once per scan TTL. Same key as AssetFolder.scan: the folder's mtime and
+    -- its sorted names.
+    local key_parts = {}
+    local watch = {}                        -- every folder scanned, for folderStamp
+    local loose, loose_root = {}, {}        -- name -> true, name -> root
+    local pack_set, pack_files = {}, {}     -- pack -> true; pack -> { file -> root }
+    for _r, d in ipairs(roots) do
+        local mtime = fs.attributes(d, "modification")
+        local names, packs = {}, {}
+        local ok_l = mtime and pcall(function()
+            for name in fs.dir(d) do
+                if name:sub(1, 1) ~= "." then
+                    local ext = name:match("%.([^%.]+)$")
+                    if ext and ORNAMENT_EXTS[ext:lower()] then
+                        names[#names + 1] = name
+                    elseif fs.attributes(d .. "/" .. name, "mode") == "directory" then
+                        packs[#packs + 1] = name
+                    end
+                end
+            end
+        end)
+        if ok_l then
+            watch[#watch + 1] = d
+            table.sort(names)
+            table.sort(packs)
+            key_parts[#key_parts + 1] = d .. "\3" .. tostring(mtime) .. "|" .. table.concat(names, "\0")
+                .. "\5" .. tostring(fs.attributes(d .. "/" .. M.JSON_NAME, "modification"))
+            for _i, n in ipairs(names) do
+                if not loose[n] then loose[n], loose_root[n] = true, d end
+            end
+            for _i, pack in ipairs(packs) do
+                watch[#watch + 1] = d .. "/" .. pack
+                local pn, pk = AssetFolder.scan(fs, d .. "/" .. pack, ORNAMENT_EXTS)
+                key_parts[#key_parts + 1] = "\1" .. pack .. "\2" .. tostring(pk) .. "\5"
+                    .. tostring(fs.attributes(d .. "/" .. pack .. "/" .. M.JSON_NAME, "modification"))
+                pack_set[pack] = true
+                pack_files[pack] = pack_files[pack] or {}
+                for _j, file in ipairs(pn or {}) do
+                    if not pack_files[pack][file] then pack_files[pack][file] = d end
+                end
+            end
+        end
+    end
+    local key = table.concat(key_parts, "\4")
+    M._watch = watch
     if M._all_cache and M._all_key == key then return M._all_cache, M._all_packs end
+    local names = {}
+    for n in pairs(loose) do names[#names + 1] = n end
+    table.sort(names)
+    local packs = {}
+    for p in pairs(pack_set) do packs[#packs + 1] = p end
+    table.sort(packs)
     local out = {}
     local ok = pcall(function()
         for _i = 1, #names do
-            local e = entryFor(d .. "/" .. names[_i], names[_i], names[_i], nil)
+            local n = names[_i]
+            local e = entryFor(loose_root[n] .. "/" .. n, n, n, nil)
             if e then out[#out + 1] = e end
         end
         for _i, pack in ipairs(packs) do
-            for _j, file in ipairs(pack_names[pack]) do
+            local files = {}
+            for f in pairs(pack_files[pack]) do files[#files + 1] = f end
+            table.sort(files)
+            for _j, file in ipairs(files) do
                 local rel = pack .. "/" .. file
-                local e = entryFor(d .. "/" .. rel, rel, file, pack)
+                local e = entryFor(pack_files[pack][file] .. "/" .. rel, rel, file, pack)
                 if e then out[#out + 1] = e end
             end
         end
     end)
     if not ok then out = {} end
+    -- The settings layers. The root files of both folders, then each pack's
+    -- own file, read from the folder its piece came from.
+    local root_json, reader_at = {}, nil
+    for _r, d in ipairs(roots) do
+        if d == M.dir() then reader_at = _r end
+        root_json[_r] = (d == M.dir()) and M.readerTable() or M.readJson(d .. "/" .. M.JSON_NAME)
+    end
+    local pack_json = {}
+    for _i, e in ipairs(out) do
+        local layers = {}
+        for _r = 1, #roots do layers[#layers + 1] = root_json[_r] end
+        local lookup = {}
+        for _r = 1, #roots do lookup[_r] = e.name end
+        if e.pack then
+            local pdir = e.path:match("^(.*)/[^/]+$")
+            if pack_json[pdir] == nil then pack_json[pdir] = M.readJson(pdir .. "/" .. M.JSON_NAME) end
+            layers[#layers + 1] = pack_json[pdir]
+            lookup[#layers] = e.file
+        end
+        e.lookup, e._layers, e._reader_at = lookup, layers, reader_at
+        keepDirectives(e)
+        pcall(applyLayers, e, layers)
+    end
     M._all_cache, M._all_key, M._all_packs = out, key, packs
     return out, packs
 end
 
 -- list() -> the ornaments the shelf may place: every one in listAll() that is
 -- not switched off and whose pack is not. Sorted by name (relative path),
--- which the rotation relies on.
+-- which the deck's pool key relies on.
 function M.list()
     local now = M._clock()
     if M._list_cache and M._list_at and M.SCAN_TTL > 0
@@ -789,7 +1092,7 @@ function M.list()
     local all = M.listAll()
     M._list_at = now
     local off, packs_off = readSet(M.OFF_KEY), readSet(M.PACKS_OFF_KEY)
-    -- The same table while nothing changed: the rotation and the plan key on
+    -- The same table while nothing changed: the deck and the plan key on
     -- it, and re-filtering every render would hand out a new one each time.
     local sig = {}
     for k in pairs(off) do sig[#sig + 1] = k end
@@ -815,6 +1118,32 @@ function M.delete(entry)
     if set[entry.name] then set[entry.name] = nil; saveSet(M.OFF_KEY, set) end
     M._all_cache, M._all_key, M._list_cache, M._list_key = nil, nil, nil, nil
     return true
+end
+
+-- folderStamp() -> { [folder] = mtime } for each folder the last scan walked
+-- (the roots and every pack); before any scan, the roots alone. Stats only,
+-- never a listing, so the shelf's new-file poll can ask every few seconds.
+M._watch = nil
+function M.folderStamp()
+    local fs = lfs()
+    if not fs then return {} end
+    local out = {}
+    for _i, d in ipairs(M._watch or M.roots()) do
+        out[d] = fs.attributes(d, "modification") or false
+    end
+    return out
+end
+
+-- stampChanged(prev, now) -> whether an ornament folder changed between two
+-- stamps. Only folders in both count: a folder that is new to the watch list
+-- arrived because a scan found it, and a new pack ALSO changes its root's
+-- mtime, which is in both. A folder that went missing is a change.
+function M.stampChanged(prev, now)
+    if type(prev) ~= "table" or type(now) ~= "table" then return false end
+    for d, m in pairs(prev) do
+        if now[d] == nil or now[d] ~= m then return true end
+    end
+    return false
 end
 
 -- invalidate(): forget the cached lists (the browser, after a change).
@@ -936,185 +1265,75 @@ function M.hash(s)
     return bxor(h, math.floor(h / 65536))
 end
 
--- pick(seed, gap_px, stand_h, entries, o) -> placement or nil.
---   gap_px  : free width at the row's end, already net of margins/padding
---   stand_h : the books' stand height (feet at y = stand_h in row coords)
---   entries : pool (default M.list())
---   o.min_gap, o.min_h : px floors; o.min_h_frac : floor as a share of
---   stand_h (default M.MIN_H_FRAC); o.max_below : how far below the feet the
---   overhang may reach (the plank's surface strip + front face)
--- rotationFor(seed, count) -> which ornament this seed gets.
---
--- A ROTATION rather than a hash of the seed. With two or three files in the
--- folder a hashed choice clusters badly -- the same one turns up several
--- times running while another goes unseen for pages (user report: "I've not
--- seen the cacti for a while") -- because the hash is spread over gaps, not
--- over the handful of ornaments it indexes. Handing them out in turn gives
--- every file an equal share by construction.
---
--- Stable per seed, because pick() runs again on every repaint of the same row
--- and an ornament that changed between repaints would flicker: a seed keeps
--- the place it was given, and only a seed never seen before advances the
--- rotation. Bounded, because page turns mint new seeds forever; on overflow
--- the map is dropped, which at worst re-rolls ornaments the reader has
--- paged away from.
-M._rot   = {}
-M._rot_n = 0
-M.ROT_MAX = 512
--- Where in the folder the rotation begins.
---
--- It used to begin at the first file every time, so the first piece a reader
--- saw after every restart was whichever name sorts first, and a folder of
--- many ornaments always introduced itself in the same order. The rotation
--- still hands them out in turn -- that is what gives every file an equal
--- share -- it just no longer starts from the same end (maintainer: "it should
--- cycle through them all, starting at a random position in the file list").
---
--- os.time() rather than math.random: no reseeding, so nothing else that draws
--- random numbers is disturbed by when ornaments happen to be first asked for.
-M._rot_start = nil
--- How far the rotation JUMPS between one turn and the next.
---
--- Taking turns in file order gives every piece an equal share, which is the
--- point, but it also means two turns handed out together land side by side in
--- the folder -- so the two rows of one page showed neighbouring files, and the
--- next page carried on from there ("png's 2 and 3 appear on page 2 and on
--- page 3"). Stepping by a number COPRIME to the set size still visits every
--- piece exactly once per cycle; it just does not visit them in folder order.
--- The first candidate coprime to the count wins, so the step adapts to
--- however many pieces happen to fit.
-M.ROT_STRIDES = { 7, 5, 3, 2 }
-local function gcd(a, b) while b ~= 0 do a, b = b, a % b end return a end
-function M.rotationStride(count)
-    for _i = 1, #M.ROT_STRIDES do
-        local st = M.ROT_STRIDES[_i]
-        if st < count and gcd(st, count) == 1 then return st end
-    end
-    return 1
-end
 
-function M.rotationFor(seed, count)
-    if not count or count <= 1 then return 1 end
-    if not M._rot_start then M._rot_start = os.time() end
-    local key = tostring(seed)
-    local had = M._rot[key]
-    if had then return ((had - 1) % count) + 1 end
-    if M._rot_n >= M.ROT_MAX then M._rot, M._rot_n = {}, 0 end
-    local idx = ((M._rot_n * M.rotationStride(count) + M._rot_start) % count) + 1
-    M._rot[key] = idx
-    M._rot_n = M._rot_n + 1
-    return idx
-end
+-- Which slots hold a piece, and which piece: lib/bookshelf_ornament_deck.
 
--- Deterministic for a seed. placement = { entry, w, h, above, below, side }.
--- o.chance overrides M.CHANCE (the between-sections gaps use lower odds).
-function M.pick(seed, gap_px, stand_h, entries, o)
+-- sizeFor(entry, cap_px, stand_h, o) -> w, h of a dealt piece. 80% of the
+-- books' stand height, times the piece's scale; no wider than the cap
+-- (grown with the scale, up to o.max_room); the file's own overhang kept on
+-- the plank. Never refuses: space is always made (maintainer), so a slot
+-- whose turn it is always shows its piece, however small that comes out.
+function M.sizeFor(entry, cap_px, stand_h, o)
     o = o or {}
-    entries = entries or M.list()
-    if #entries == 0 then return nil end
-    if (gap_px or 0) < (o.min_gap or 0) then return nil end
-    local h = M.hash(tostring(seed))
-    -- Scaled here rather than at each call site, so every placement -- the
-    -- gaps on a plain shelf, the breaks between sections, the bare plank under
-    -- a half-filled page -- moves together with one setting.
-    -- o.level lets a channel use its own curve instead of the raw level; see
-    -- M.GROUP_LEVEL for why the section breaks need one.
-    -- A budgeted channel stops once the screen has its fill. Checked before
-    -- the odds so a full screen costs nothing.
-    if o.budgeted and M.budgetLeft() <= 0 then return nil end
-    local level = o.level or M.frequency()
-    local chance = (o.chance or M.CHANCE) * level
-    if chance <= 0 then return nil end
-    if chance < 1 and (h % 100) >= math.floor(chance * 100) then return nil end
-    -- SIZE IS PART OF THE CHOICE, not a test applied after it.
-    --
-    -- This used to pick one entry -- the next in the rotation that was not
-    -- already standing on this screen -- work out its size, and give up if it
-    -- came out too small. With a folder of similar pieces that is invisible.
-    -- With a mixed folder it means the WIDE ones never appear and, worse, the
-    -- gaps they were chosen for stay empty: a reader who adds a dozen
-    -- ornaments sees the same two over and over, because those two are the
-    -- ones that happen to fit a row end (reported with twelve test pieces in
-    -- the folder: "I still have cacti and the template plant on the same ends
-    -- of the shelfs on pages 2 and 3").
-    --
-    -- So the walk keeps going until it finds one that FITS. The rotation still
-    -- decides where the walk starts, which is what gives every file its turn;
-    -- what changed is that an entry which cannot fit this particular gap steps
-    -- aside instead of taking the slot and leaving it empty.
-    local function sizeFor(entry)
-        local height = math.floor((stand_h or 0) * M.HEIGHT_FRAC)
-        local width  = math.floor(height * entry.aspect)
-        if width > gap_px then
-            width  = gap_px
-            height = math.floor(width / entry.aspect)
-        end
-        if entry.overhang > 0 and o.max_below then
-            -- Shrink so the overhang never reaches past the plank's front.
-            local below = height * entry.overhang
-            if below > o.max_below then
-                height = math.floor(o.max_below / entry.overhang)
-                width  = math.floor(height * entry.aspect)
-            end
-        end
-        local frac  = o.min_h_frac or M.MIN_H_FRAC
-        local min_h = math.max(o.min_h or 1, math.floor((stand_h or 0) * frac))
-        if height < min_h or width < 1 then return nil end
-        return width, height
+    local scale = entry.scale or 1
+    local aspect = entry.aspect or 1
+    local cap = math.floor((cap_px or 0) * scale)
+    if o.max_room then cap = math.min(cap, o.max_room) end
+    cap = math.max(1, cap)
+    local height = math.floor((stand_h or 0) * M.HEIGHT_FRAC * scale)
+    local width  = math.floor(height * aspect)
+    if width > cap then
+        width  = cap
+        height = math.floor(width / aspect)
     end
-    -- WHICH PIECES CAN STAND HERE, before the rotation gets a say.
-    --
-    -- The rotation used to index the WHOLE folder and the fit test came
-    -- afterwards: a turn that landed on a piece too wide for this gap walked
-    -- forward to the next one that fitted. That sounds harmless and is not.
-    -- The walk always steps the same way, so a piece that never fits hands its
-    -- turn to the same successor every time, for good. Measured on the
-    -- device with a fourteen-file folder: the two widest files (8:1 and 9:1,
-    -- which come out 121px against a 124px floor) donated every one of their
-    -- turns to entries 1 and 2, so those two stood three times as often as
-    -- anything else and turned up on page after page -- "I still have cacti
-    -- and the template plant on the same ends of the shelfs on pages 2 and 3".
-    --
-    -- Sizing everything first and rotating through what FITS gives every
-    -- eligible piece exactly one turn in the cycle and takes the walk
-    -- direction out of it. The fit set is a function of gap_px and stand_h,
-    -- both of which the two planning passes agree on for a given seed, so the
-    -- count behind the rotation is stable and the passes still match.
-    local fits = {}
-    for _i = 1, #entries do
-        local cand = entries[_i]
-        local w, h = sizeFor(cand)
-        if w then fits[#fits + 1] = { entry = cand, w = w, h = h } end
-    end
-    if #fits == 0 then return nil end
-    -- Seeded choice first, then walk on within the fitting set. Walking
-    -- (rather than re-hashing) keeps the seed's influence: the same screen
-    -- composed the same way still lands the same way.
-    local idx = M.rotationFor(seed, #fits)
-    local entry, width, height
-    for step = 0, #fits - 1 do
-        local cand = fits[((idx - 1 + step) % #fits) + 1]
-        if not M._used[cand.entry.name or cand.entry.path] then
-            entry, width, height = cand.entry, cand.w, cand.h
-            break
+    -- The FILE's overhang sizes the piece; a reader's height nudge only moves
+    -- it (the sink, in place), or nudging the height would resize it.
+    local over = entry.overhang or 0
+    if over > 0 and o.max_below then
+        if height * over > o.max_below then
+            height = math.floor(o.max_below / over)
+            width  = math.floor(height * aspect)
         end
     end
-    if not entry then
-        -- Every fitting piece is already standing on this screen. A repeat
-        -- still reads better than a hole, so take the turn's own piece.
-        local cand = fits[idx]
-        entry, width, height = cand.entry, cand.w, cand.h
+    return math.max(1, width), math.max(1, height)
+end
+
+-- place(entry, cap_px, stand_h, o, deal_no) -> where a dealt piece stands.
+-- o.max_room : the widest a scaled-up piece may go (the whole row);
+-- o.max_below : how far below the feet an overhang may reach (the plank's
+-- surface strip + front face). deal_no counts this piece's deals on the
+-- chip, for "mirror every other time".
+function M.place(entry, cap_px, stand_h, o, deal_no)
+    o = o or {}
+    if not entry then return nil end
+    local width, height = M.sizeFor(entry, cap_px, stand_h, o)
+    -- Below the plank's surface: the file's own overhang, sized by sizeFor
+    -- to stay on the plank. The anchor and height (entry.anchor, entry.lift)
+    -- are placed by the shelf, which knows where the shelf above is
+    -- (SpineShelf.ornamentY).
+    local below = math.floor(height * (entry.overhang or 0))
+    if o.max_below and below > o.max_below then below = o.max_below end
+    local anchor = (entry.anchor == "top") and "top" or "bottom"
+    local offset = entry.lift or 0
+    -- Where the drawing's top is inside the picture: the top anchor meets the
+    -- shelf above with the DRAWING, not the file's transparent top room.
+    local content_top = 0
+    if anchor == "top" and entry.path then
+        local _l, ct = M.contentBox(entry)
+        if ct then content_top = math.floor(ct * height + 0.5) end
     end
-    local below = math.floor(height * entry.overhang)
-    -- Marked only now: pick bails out above on several paths (too short, too
-    -- narrow, the odds), and an entry that never stood must not be counted as
-    -- standing -- that would push the next gap onto a different file for no
-    -- reason and, with a small folder, exhaust the pool.
-    M._used[entry.name or entry.path] = true
+    -- Mirror from the piece's CURRENT setting, so a change in its menu
+    -- reaches pieces already standing.
+    local mirror = entry.mirror == "always"
+                   or (entry.mirror == "alternate" and (deal_no or 1) % 2 == 0)
     return {
-        entry = entry, w = width, h = height,
+        entry = entry, w = width, h = height, anchor = anchor, offset = offset,
+        content_top = content_top,
         above = height - below, below = below,
-        side  = (math.floor(h / 10000) % 2 == 0) and "right" or "left",
+        mirror = mirror,
+        -- Extra room each side, in px (negative: tighter, even behind the
+        -- books beside it); the shelf adds it to its own pad (SpineShelf.ornPad).
+        pad_px = math.floor((entry.pad or 0) * (stand_h or 0) + 0.5),
     }
 end
 
@@ -1123,17 +1342,80 @@ end
 -- frees for real.
 M._cache = {}
 M._cache_order = {}
+-- unpremultiply(bb) -- straight alpha from premultiplied, in place.
+--
+-- MuPDF decodes a PNG with every pixel's colour already multiplied by its
+-- alpha; KOReader's own ImageWidget knows and blits those with
+-- pmulalphablitFrom. Everything here blends as STRAIGHT alpha (alphablitFrom,
+-- and the night pre-invert), so a premultiplied bitmap darkened each
+-- half-transparent pixel twice: soft edges and baked shadows came out darker
+-- than drawn (measured: a white ramp at 50% alpha on grey rendered 127, not
+-- 192). Converting once, at render, fixes every blit of the cached bitmap.
+--
+-- Fast path: walk the bytes of an unrotated RGB32 or grey+alpha (BB8A)
+-- bitmap directly, which is what a PNG decodes to. Per-pixel getPixelP calls
+-- measured 29 ms for a 250x460 ornament on a PW5, paid on every first render.
+function M.unpremultiply(bb)
+    local done = pcall(function()
+        local ffi = require("ffi")
+        local t = bb.getType and bb:getType()
+        if not (bb.data and bb.stride and bb.getRotation and bb:getRotation() == 0
+                and not (bb.getInverse and bb:getInverse() == 1)) then
+            error("slow path")
+        end
+        local bpp = (t == 5) and 4 or ((t == 2) and 2 or nil)   -- RGB32, BB8A
+        if not bpp then error("slow path") end
+        local p = ffi.cast("uint8_t*", bb.data)
+        local w, h, stride = bb:getWidth(), bb:getHeight(), tonumber(bb.stride)
+        local floor = math.floor
+        for y = 0, h - 1 do
+            local row = p + y * stride
+            for x = 0, w - 1 do
+                local o = x * bpp
+                local a = row[o + bpp - 1]
+                if a > 0 and a < 255 then
+                    local k = 255 / a
+                    for c = 0, bpp - 2 do
+                        local v = floor(row[o + c] * k + 0.5)
+                        row[o + c] = v > 255 and 255 or v
+                    end
+                end
+            end
+        end
+    end)
+    if done then return end
+    pcall(function()
+        for yy = 0, bb:getHeight() - 1 do
+            for xx = 0, bb:getWidth() - 1 do
+                local p = bb:getPixelP(xx, yy)
+                local a = p.alpha
+                if a and a > 0 and a < 255 then
+                    p.r = math.min(255, math.floor(p.r * 255 / a + 0.5))
+                    p.g = math.min(255, math.floor(p.g * 255 / a + 0.5))
+                    p.b = math.min(255, math.floor(p.b * 255 / a + 0.5))
+                end
+            end
+        end
+    end)
+end
+
 local function defaultRender(path, w, h)
     local RenderImage = require("ui/renderimage")
     if path:lower():match("%.svg$") then
-        return RenderImage:renderSVGImageFile(path, w, h)
+        -- NanoSVG hands back straight alpha (is_straight true); MuPDF, when it
+        -- renders the SVG instead, premultiplied.
+        local bb, is_straight = RenderImage:renderSVGImageFile(path, w, h)
+        if bb and not is_straight then M.unpremultiply(bb) end
+        return bb
     end
     -- A raster. want_frames FALSE: asking for frames hands back a list of
     -- functions instead of a blitbuffer, which is an animation's shape, not an
     -- ornament's. The renderer scales to the size we ask for, so a small PNG
     -- is upscaled to the shelf's standard ornament height exactly as an SVG
     -- would be (maintainer's call: every file a reader drops in shows up).
-    return RenderImage:renderImageFile(path, false, w, h)
+    local bb = RenderImage:renderImageFile(path, false, w, h)
+    if bb then M.unpremultiply(bb) end
+    return bb
 end
 -- render(entry, w, h, inverting) -> a bitmap ready to blit, or nil.
 --
@@ -1157,7 +1439,7 @@ end
 -- plank. The cache is keyed on what was painted, the one thing that
 -- distinguishes two renders of one file at one size. RGB32 invert keeps the
 -- alpha, so the shelf still shows through.
-function M.render(entry, w, h, inverting)
+function M.render(entry, w, h, inverting, mirror)
     inverting = inverting and true or false
     local dark = inverting
     pcall(function()
@@ -1183,6 +1465,7 @@ function M.render(entry, w, h, inverting)
                   and not picture and dark
     local paint_inverted = (chalk and true or false) ~= inverting
     local key = entry.path .. "|" .. w .. "x" .. h .. (paint_inverted and "|i" or "")
+                .. (mirror and "|m" or "")
     local bb = M._cache[key]
     if bb then return bb end
     local ok, res = pcall(M._render or defaultRender, entry.path, w, h)
@@ -1194,6 +1477,7 @@ function M.render(entry, w, h, inverting)
     if paint_inverted and bb.invertRect then
         pcall(function() bb:invertRect(0, 0, bb:getWidth(), bb:getHeight()) end)
     end
+    if mirror then bb = M.flipped(bb) or bb end
     M._cache[key] = bb
     M._cache_order[#M._cache_order + 1] = key
     while #M._cache_order > M.CACHE_MAX do
@@ -1203,6 +1487,22 @@ function M.render(entry, w, h, inverting)
         if ob and ob.free then pcall(function() ob:free() end) end
     end
     return bb
+end
+
+-- flipped(bb) -> a left-to-right mirror of bb (bb itself is freed), or nil.
+-- Blitbuffer has no flip; a column at a time through blitFrom is a plain
+-- copy (alpha included) and runs once per size, before the cache keeps it.
+function M.flipped(bb)
+    local ok, out = pcall(function()
+        local BB = require("ffi/blitbuffer")
+        local w, h = bb:getWidth(), bb:getHeight()
+        local dst = BB.new(w, h, bb:getType())
+        for x = 0, w - 1 do dst:blitFrom(bb, w - 1 - x, 0, x, 0, 1, h) end
+        return dst
+    end)
+    if not ok or not out then return nil end
+    if bb.free then pcall(function() bb:free() end) end
+    return out
 end
 
 -- contentBox(entry) -> l, t, r, b as fractions (0..1) of the image, the part
@@ -1252,7 +1552,13 @@ function M.contentBox(entry)
 end
 
 -- The widget: blits the cached render at paint time. Inert to gestures.
-M.Ornament = Widget:extend{
+-- The piece on the shelf. It takes a long-press (its menu) and, when it has
+-- a tap action, a tap; anything else falls through to the shelf. The shelf
+-- hands the handlers in once (M.handlers = { hold = fn(entry), tap =
+-- fn(entry) }), since a piece knows nothing of the widget it stands in.
+local ok_ic, InputContainer = pcall(require, "ui/widget/container/inputcontainer")
+M.handlers = {}
+M.Ornament = ((ok_ic and InputContainer) or Widget):extend{
     placement = nil,
     night     = false,
 }
@@ -1260,16 +1566,115 @@ M.Ornament = Widget:extend{
 function M.Ornament:init()
     local p = self.placement
     self.dimen = require("ui/geometry"):new{ w = p.w, h = p.h }
+    local ok_g, GestureRange = pcall(require, "ui/gesturerange")
+    if ok_g and GestureRange then
+        self.ges_events = {
+            HoldOrnament = { GestureRange:new{ ges = "hold", range = self.dimen } },
+            TapOrnament  = { GestureRange:new{ ges = "tap",  range = self.dimen } },
+        }
+    end
+end
+
+function M.Ornament:onHoldOrnament()
+    local h = M.handlers.hold
+    if not h then return false end
+    return h(self.placement.entry, self.placement, self.dimen) and true or false
+end
+
+function M.Ornament:onTapOrnament()
+    local h = M.handlers.tap
+    if not (h and self.placement.entry.tap) then return false end
+    return h(self.placement.entry) and true or false
 end
 
 function M.Ornament:paintTo(bb, x, y)
     self.dimen.x, self.dimen.y = x, y
-    local p = self.placement
-    local img = M.render(p.entry, p.w, p.h, self.night)
+    M.paintPlacement(bb, x, y, self.placement, self.night)
+end
+
+-- paintPlacement(bb, x, y, p, night): a placement's picture at x, y. The
+-- shelf's pieces and the long-press menu's preview both paint through here.
+-- A placement with a crop (the menu's picture) paints only the drawing.
+function M.paintPlacement(bb, x, y, p, night)
+    local img = M.render(p.entry, p.w, p.h, night, p.mirror)
     if not img then return end
+    local c = p.crop
     pcall(function()
-        bb:alphablitFrom(img, x, y, 0, 0, p.w, p.h)
+        if c then bb:alphablitFrom(img, x, y, c.x, c.y, c.w, c.h)
+        else bb:alphablitFrom(img, x, y, 0, 0, p.w, p.h) end
     end)
+end
+
+-- silhouette(src, v, frac, BB) -> a copy of src in one flat grey v, at frac
+-- of its alpha: the drawing's shape as a shadow (the long-press menu's
+-- picture casts one). Pre-inverted like everything painted: v = 255 at night
+-- shows dark on an inverting panel. Per pixel, so the caller caches it.
+function M.silhouette(src, v, frac, BB)
+    BB = BB or require("ffi/blitbuffer")
+    local w, h = src:getWidth(), src:getHeight()
+    local dst = BB.new(w, h, BB.TYPE_BBRGB32)
+    for y = 0, h - 1 do
+        for x = 0, w - 1 do
+            local c = src:getPixel(x, y):getColorRGB32()
+            local a = math.floor((c.alpha or 255) * frac)
+            if a > 0 then dst:setPixel(x, y, BB.ColorRGB32(v, v, v, a)) end
+        end
+    end
+    return dst
+end
+
+-- shadowFor(pl, night) -> the silhouette of a placement's picture, cached per
+-- file, size, flip and night (a nudge redraws the menu; the picture's size
+-- does not change with it).
+M.SHADOW_ALPHA = 0.35
+M._shadows, M._shadow_order = {}, {}
+function M.shadowFor(pl, night)
+    local key = table.concat({ pl.entry.path or pl.entry.name, pl.w, pl.h,
+                               tostring(pl.mirror), tostring(night) }, "|")
+    if M._shadows[key] then return M._shadows[key] end
+    local img = M.render(pl.entry, pl.w, pl.h, night, pl.mirror)
+    if not img then return nil end
+    local ok, sh = pcall(M.silhouette, img, night and 255 or 0, M.SHADOW_ALPHA)
+    if not ok or not sh then return nil end
+    M._shadows[key] = sh
+    M._shadow_order[#M._shadow_order + 1] = key
+    while #M._shadow_order > 4 do
+        local old = table.remove(M._shadow_order, 1)
+        local ob = M._shadows[old]
+        M._shadows[old] = nil
+        if ob and ob.free then pcall(function() ob:free() end) end
+    end
+    return sh
+end
+
+-- previewPlacement(entry, h, max_w) -> the piece at a fixed height, as its
+-- long-press menu shows it: its own shape and mirroring, not its size, lift
+-- or hang on the shelf (those are what the menu is changing), and no wider
+-- than the dialog.
+-- Sized by the DRAWING (contentBox), not by the file: a PNG's transparent
+-- room is right on the shelf and wasted here, as in the browser. pl.crop is
+-- the drawn part, in the rendered picture's px.
+function M.previewPlacement(entry, h, max_w)
+    local proxy = setmetatable({ scale = 1, pad = 0, lift = 0, anchor = "bottom" },
+                               { __index = entry })
+    local l, t, r, b
+    if entry.path then l, t, r, b = M.contentBox(entry) end
+    local fw = (l and r) and math.max(0.05, r - l) or 1
+    local fh = (t and b) and math.max(0.05, b - t) or 1
+    -- Render big enough that the drawn part comes out h tall, no wider than
+    -- max_w.
+    local H = h / fh
+    local aspect = entry.aspect or 1
+    if H * aspect * fw > max_w then H = max_w / (aspect * fw) end
+    local pl = M.place(proxy, math.floor(H * aspect + 0.5), H / M.HEIGHT_FRAC, {}, 1)
+    pl.entry = entry
+    if l then
+        local cx, cy = math.floor(l * pl.w + 0.5), math.floor(t * pl.h + 0.5)
+        pl.crop = { x = cx, y = cy,
+                    w = math.max(1, math.floor(r * pl.w + 0.5) - cx),
+                    h = math.max(1, math.floor(b * pl.h + 0.5) - cy) }
+    end
+    return pl
 end
 
 return M

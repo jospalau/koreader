@@ -144,6 +144,9 @@ end
 -- removal), so we don't paint a corpse.
 function LibraryModal:onCloseWidget()
     UIManager:setDirty("all", "ui")
+    -- config.on_closed: the caller's once-per-close hook, however the modal
+    -- was closed (a footer button, the title's X, Back).
+    if self.config and self.config.on_closed then pcall(self.config.on_closed) end
 end
 
 -- Stub for InputText's parent contract. Upstream inputtext.lua:157 calls
@@ -319,6 +322,15 @@ function LibraryModal:onTapDismissKeyboard(_arg, ges)
         return true
     end
     return false
+end
+
+-- rowsForShare(share) -> a rows_per_page whose grid area is about that share
+-- of the screen's height: the modal's grid is rows_per_page cards of 64dp,
+-- so a fixed count is a different share at every DPI and screen size.
+function LibraryModal.rowsForShare(share)
+    local Screen = Device.screen
+    local unit = Screen:scaleBySize(64) + MARGIN
+    return math.max(2, math.floor(Screen:getHeight() * share / unit))
 end
 
 function LibraryModal:_buildFrame()
@@ -1145,6 +1157,25 @@ function LibraryModal:_renderFooter(content_width)
     return vg
 end
 
+-- _repaintIfResized(old): a refresh that changed the modal's size (it is
+-- sized to its content, centred) leaves part of where it was uncovered, and
+-- the modal's own dirty rect does not reach it: the windows underneath are
+-- repainted there (PW5: a copy of the title bar stayed on screen). old is the
+-- rectangle the last refresh recorded (self._shown_rect, centred as the
+-- CenterContainer centres it): frame.dimen will not do, FrameContainer sizes
+-- it once at its first paint and only moves it after, so it is also dropped
+-- on a resize, or taps outside the modal are judged by the old size.
+function LibraryModal:_repaintIfResized(old)
+    local size = self.frame:getSize()
+    local Screen = Device.screen
+    self._shown_rect = { x = math.floor((Screen:getWidth() - size.w) / 2),
+                         y = math.floor((Screen:getHeight() - size.h) / 2),
+                         w = size.w, h = size.h }
+    if not old or (size.w == old.w and size.h == old.h) then return end
+    self.frame.dimen = nil
+    UIManager:setDirty("all", "ui", Geom:new{ x = old.x, y = old.y, w = old.w, h = old.h })
+end
+
 -- Swipe paging, same convention as the main shelf: west = next, east = prev.
 -- _total_pages is set by the grid/list area render; clamp so a swipe at an
 -- edge is a no-op. Returns true to consume the gesture.
@@ -1176,6 +1207,8 @@ function LibraryModal:refresh()
     local chips = self:_renderChipStrip(cw)
     local pagination = self:_renderPagination(cw)
     local footer = self:_renderFooter(cw)
+    -- Where the modal was, for _repaintIfResized below.
+    local old = self._shown_rect
 
     -- Sized to fit content rather than a screen fraction, so the dialog isn't
     -- bigger than necessary. Uses the row renderer's intrinsic card height
@@ -1243,6 +1276,7 @@ function LibraryModal:refresh()
     end
 
     self.frame[1] = body
+    self:_repaintIfResized(old)
     -- The grid highlights its own focused cell inline (cell_renderer reads
     -- self._dpad_idx at render time above), but footer buttons are stock
     -- Button instances rebuilt fresh every refresh() -- their onFocus/invert

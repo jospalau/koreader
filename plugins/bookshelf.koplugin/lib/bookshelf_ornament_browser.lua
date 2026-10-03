@@ -5,7 +5,7 @@
 --
 -- A pack is a subfolder of the ornaments folder (lib/bookshelf_ornaments);
 -- the chips across the top are All (every ornament) and one per pack.
--- With a pack's chip selected the footer switches the whole pack off or on.
+-- The footer's Select all / Select none switch every ornament on the tab.
 --
 --   tap        switch that ornament off / on
 --   long-press switch it, or delete it
@@ -44,8 +44,8 @@ local function O() return require("lib/bookshelf_ornaments") end
 
 -- An ornament's PICTURE is faded while it will not be placed, whether switched
 -- off itself or through its pack: the grid reads as "what the shelf uses".
--- Only the picture: the "Off" / "Pack off" label under it is what says why,
--- so it stays at full strength (maintainer).
+-- Only the picture: the checkbox over it (and "Pack off" under it) is what
+-- says why, so they stay at full strength (maintainer).
 local Faded = Widget:extend{ child = nil, fade = 0.6 }
 function Faded:getSize() return self.child:getSize() end
 function Faded:paintTo(bb, x, y)
@@ -75,10 +75,10 @@ function Browser._renderCell(item, dimen)
     local state_face = Font:getFace("cfont", 13)
     local inner_w = dimen.w - 2 * (border + pad)
     local label = TextWidget:new{ text = O().displayName(e), face = label_face, max_width = inner_w }
-    -- The state line is there only on a card that is off (its picture is
-    -- faded too); a card that is on gives its picture that room.
-    local state = (item.off or item.pack_off) and TextWidget:new{
-        text = item.off and _("Off") or _("Pack off"),
+    -- On or off is the checkbox in the corner; the only state line left is
+    -- a pack that is off, which a piece's own box cannot say.
+    local state = item.pack_off and TextWidget:new{
+        text = _("Pack off"),
         face = state_face, fgcolor = Blitbuffer.COLOR_BLACK, max_width = inner_w,
     } or nil
     local text_h = label:getSize().h + (state and state:getSize().h or 0)
@@ -119,7 +119,14 @@ function Browser._renderCell(item, dimen)
         background = Blitbuffer.COLOR_WHITE,
         CenterContainer:new{ dimen = Geom:new{ w = inner_w, h = inner_h }, body },
     }
-    return card
+    -- The checkbox, over the card's top right corner: ticked when the piece
+    -- is on, grey when its pack is off (a tap switches the pack on too).
+    local Marks = require("lib/bookshelf_marks")
+    local OverlapGroup = require("ui/widget/overlapgroup")
+    local box = Marks.Check:new{ checked = not item.off, enabled = not item.pack_off }
+    local cs, bs = card:getSize(), box:getSize()
+    box.overlap_offset = { cs.w - bs.w - border - Space.padding.small, border + Space.padding.small }
+    return OverlapGroup:new{ dimen = Geom:new{ w = cs.w, h = cs.h }, card, box }
 end
 
 function Browser:_items()
@@ -137,26 +144,59 @@ function Browser:_items()
     return out
 end
 
-function Browser:_changed()
-    O().invalidate()
+-- _toggle(item): switch an ornament on or off. (Planks are chosen in the
+-- plank picker, wallpapers in the wallpaper picker.)
+function Browser:_toggle(item)
+    O().setOff(item.entry.name, not item.off)
+    self:_changed()
+end
+
+-- _pick(item): pick mode (the long-press menu's Swap). The chosen piece
+-- takes the slot; a switched-off one, or one in a switched-off pack, is
+-- switched on, or the swap would put nothing there.
+function Browser:_pick(item)
+    if item.off then O().setOff(item.entry.name, false) end
+    if item.pack_off and item.entry.pack then O().setPackOff(item.entry.pack, false) end
+    self.opts.pick(item.entry)
+    self._dirty = true
+    self._close()
+end
+
+-- _changed(rescan): redraw the browser after a switch. The shelf behind is
+-- rebuilt once, when the browser closes (see show): it is almost all covered,
+-- and rebuilding it per tap made tapping through a pack slow. rescan (after a
+-- delete) re-lists the folders; a switch only changes what is filtered out.
+function Browser:_changed(rescan)
+    local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
+    if rescan then
+        O().invalidate()
+        if ok_t and TP then TP.invalidate() end
+    elseif ok_t and TP then
+        -- Which plank shows is memoised; a switch must be seen at once.
+        TP.forgetChoice()
+    end
+    self._dirty = true
     self.items = self:_items()
+    if self._config then self._config.footer_rows = self:_footerRows() end
     if self.modal then self.modal:refresh() end
-    if self.on_change then pcall(self.on_change) end
 end
 
 function Browser:_chips()
     local Orn = O()
-    local _all, packs = Orn.listAll()
+    local all, packs = Orn.listAll()
     -- All, then one per pack. No tab for the loose ornaments on their own:
     -- All already shows them, and a tab is for something you switch as one
-    -- (maintainer).
+    -- (maintainer). Nor for a pack with no ornaments: a planks-only pack's
+    -- designs are in the plank picker, and its tab here was an empty page.
+    local has = {}
+    for _i, e in ipairs(all or {}) do if e.pack then has[e.pack] = true end end
     local chips = { { key = ALL, label = _("All"), is_active = self.chip == ALL } }
     for _i, pack in ipairs(packs) do
-        chips[#chips + 1] = {
+        if has[pack] then chips[#chips + 1] = {
             key = pack,
             label = Orn.isPackOff(pack) and T(_("%1 (off)"), pack) or pack,
             is_active = self.chip == pack,
-        }
+        } end
     end
     return chips
 end
@@ -173,47 +213,119 @@ function Browser:_confirmDelete(item)
             if not O().delete(item.entry) then
                 UIManager:show(InfoMessage:new{ text = _("Could not delete the file."), timeout = 3 })
             end
-            self:_changed()
+            self:_changed(true)
         end,
     })
 end
 
 function Browser:_longTap(item)
     local d
-    d = ButtonDialog:new{
-        title = item.entry.name,
-        buttons = {
-            {{
-                text = item.off and _("Switch on") or _("Switch off"),
-                callback = function()
-                    UIManager:close(d)
-                    O().setOff(item.entry.name, not item.off)
-                    self:_changed()
-                end,
-            }},
-            {{
-                text = _("Delete\xe2\x80\xa6"),
-                callback = function()
-                    UIManager:close(d)
-                    self:_confirmDelete(item)
-                end,
-            }},
-        },
+    local buttons = {
+        {{
+            text = item.off and _("Switch on") or _("Switch off"),
+            callback = function()
+                UIManager:close(d)
+                self:_toggle(item)
+            end,
+        }},
     }
+    buttons[#buttons + 1] = {{
+        text = _("Delete\xe2\x80\xa6"),
+        callback = function()
+            UIManager:close(d)
+            self:_confirmDelete(item)
+        end,
+    }}
+    d = ButtonDialog:new{ title = item.entry.name, buttons = buttons }
     UIManager:show(d)
 end
 
--- show(on_change): on_change() runs after anything changed, so the caller can
--- redraw the shelf.
-function Browser.show(on_change)
-    local self = setmetatable({ chip = ALL, on_change = on_change }, { __index = Browser })
+-- _addButton() -> Add ornaments...: where to put them, how a folder becomes a
+-- pack, and where to get ready-made packs. On the All tab.
+function Browser:_addButton()
+    return {
+        key = "add",
+        label = _("Add ornaments\xe2\x80\xa6"),
+        on_tap = function()
+            UIManager:show(InfoMessage:new{
+                -- The shop URL is a parameter, not part of the
+                -- msgid, so a translation cannot break it.
+                text = T(_("Put PNG or SVG files in\n%1\n\nA folder of them inside it becomes a pack, with its own tab here.\n\nReady-made packs:\n%2"),
+                    (function()
+                        -- A findable path: the settings dir can be relative.
+                        local d = O().dir() or "?"
+                        local ok, util = pcall(require, "ffi/util")
+                        local real = ok and util.realpath and util.realpath(d)
+                        return real or d
+                    end)(),
+                    "ko-fi.com/andyhazz/shop"),
+            })
+        end,
+    }
+end
+
+-- _selectButton(on) -> Select all (on) or Select none: every ornament on the
+-- tab on or off (maintainer: plainer than Switch pack on/off, which is the
+-- theme packs' job now).
+function Browser:_selectButton(on)
+    return {
+        key = on and "all" or "none",
+        label = on and _("Select all") or _("Select none"),
+        on_tap = function() self:_setAll(on) end,
+    }
+end
+
+-- _setAll(on): every ornament on this tab on or off, one by one. Select all
+-- also switches on a pack a theme had switched off, or its ornaments would be
+-- on and still not show.
+function Browser:_setAll(on)
+    local Orn = O()
+    for _i, item in ipairs(self.items or {}) do
+        local e = item.entry
+        if e then
+            Orn.setOff(e.name, not on)
+            if on and e.pack and Orn.isPackOff(e.pack) then Orn.setPackOff(e.pack, false) end
+        end
+    end
+    self:_changed()
+end
+
+-- _footerRows() -> the footer, one row: Select all, Select none and Apply
+-- (Add ornaments first on the All tab; Cancel alone when picking a
+-- replacement). A pack's theme is chosen in the Shelf theme menu, not here
+-- (bookshelf_theme_pack.chooseTheme).
+function Browser:_footerRows()
+    local close = { key = "close", label = self.opts.pick and _("Cancel") or _("Apply"), on_tap = self._close }
+    -- Choosing a replacement: nothing to switch here, only a way out.
+    if self.opts.pick then return { { close } } end
+    if self:_isPack(self.chip) then
+        return { { self:_selectButton(true), self:_selectButton(false), close } }
+    end
+    return { { self:_addButton(), self:_selectButton(true), self:_selectButton(false), close } }
+end
+
+-- show(on_change, opts): on_change() runs once when the browser closes, if
+-- anything changed, so the caller can redraw the shelf. opts.pick(entry)
+-- turns it into a chooser (the long-press menu's Swap): tapping a piece
+-- picks it and closes.
+function Browser.show(on_change, opts)
+    local self = setmetatable({ chip = ALL, on_change = on_change, opts = opts or {} },
+                              { __index = Browser })
+    O().beginDeferred()
     self.items = self:_items()
     local function cols() return Screen:getWidth() > Screen:getHeight() and 4 or 3 end
     local function close()
         if self.modal then UIManager:close(self.modal); self.modal = nil end
     end
+    -- However it closes (Close, the title's X, Back): write the switches and
+    -- rebuild the shelf once.
+    local function closed()
+        O().endDeferred()
+        if not self._dirty then return end
+        if self.on_change then pcall(self.on_change) end
+    end
     local config = {
-        title = _("Ornaments"),
+        title = self.opts.pick and _("Swap for") or _("Ornament collection"),
         no_search = true,
         grid_cols = cols,
         cells_per_page = function() return cols() * 3 end,
@@ -222,11 +334,11 @@ function Browser.show(on_change)
         on_chip_tap = function(key)
             self.chip = key
             self.items = self:_items()
+            if self._config then self._config.footer_rows = self:_footerRows() end
         end,
         cell_renderer = Browser._renderCell,
         on_cell_tap = function(item)
-            O().setOff(item.entry.name, not item.off)
-            self:_changed()
+            if self.opts.pick then self:_pick(item) else self:_toggle(item) end
         end,
         cell_long_tap = function(item) self:_longTap(item) end,
         item_count = function() return #self.items end,
@@ -243,41 +355,11 @@ function Browser.show(on_change)
                 },
             }
         end,
-        footer_actions = {
-            {
-                -- On a pack's chip: switch the whole pack. Anywhere else it
-                -- says how to add ornaments and make packs. It was a greyed
-                -- "Pack" there, which said nothing about what it was for, and
-                -- with no packs yet could never be used (maintainer).
-                key = "pack",
-                label_func = function()
-                    if not self:_isPack(self.chip) then return _("Add ornaments\xe2\x80\xa6") end
-                    return O().isPackOff(self.chip) and _("Switch pack on") or _("Switch pack off")
-                end,
-                on_tap = function()
-                    if not self:_isPack(self.chip) then
-                        UIManager:show(InfoMessage:new{
-                            -- The shop URL is a parameter, not part of the
-                            -- msgid, so a translation cannot break it.
-                            text = T(_("Put PNG or SVG files in\n%1\n\nA folder of them inside it becomes a pack: it gets its own tab here, and can be switched on or off as a whole.\n\nReady-made packs:\n%2"),
-                                (function()
-                                    -- A findable path: the settings dir can be relative.
-                                    local d = O().dir() or "?"
-                                    local ok, util = pcall(require, "ffi/util")
-                                    local real = ok and util.realpath and util.realpath(d)
-                                    return real or d
-                                end)(),
-                                "ko-fi.com/andyhazz/shop"),
-                        })
-                        return
-                    end
-                    O().setPackOff(self.chip, not O().isPackOff(self.chip))
-                    self:_changed()
-                end,
-            },
-            { key = "close", label = _("Close"), on_tap = close },
-        },
+        footer_rows = {},
+        on_closed = closed,
     }
+    self._close, self._config = close, config
+    config.footer_rows = self:_footerRows()
     self.modal = LibraryModal:new{ config = config }
     UIManager:show(self.modal)
     return self

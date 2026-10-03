@@ -29,6 +29,15 @@
 --     which is required so the close-document hook fires inside the Reader.
 
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
+-- First of all: a KOReader older than Bookshelf needs gets a stub plugin that
+-- says so, instead of a crash somewhere in what follows.
+do
+    local Gate = require("lib/bookshelf_version_gate")
+    if Gate.tooOld() then return Gate.stub(WidgetContainer) end
+end
+-- Before ANY store opens its file: bring bookshelf's files over from the old
+-- flat layout into settings/bookshelf/ and cache/bookshelf/ (5.3).
+require("lib/bookshelf_storage_move").run()
 local BookshelfSettings = require("lib/bookshelf_settings_store")
 local UIManager       = require("ui/uimanager")
 local logger          = require("logger")
@@ -49,7 +58,7 @@ local Bookshelf = WidgetContainer:extend{
 -- action, which probes addToMainMenu and hosts these in this order.
 -- Display order, banded with separators (set on the last item of each band in
 -- addToMainMenu): actions (Open) | customise (Shelf size, Chips) | configure
--- (Hardcover, Settings) | meta (Updates, About). Background and colors
+-- (Hardcover, Settings) | meta (Updates, About). Wallpaper, ornaments and colors
 -- joined the customise band in 5.1: it is what a reader changes to make the
 -- shelf look like theirs, and it was buried two levels down under Settings. The detail-view editor and
 -- collection manager moved under Settings in 4.0, and the selection-mode
@@ -61,6 +70,7 @@ Bookshelf.MENU_ORDER = {
     "bookshelf_toggle",
     "bookshelf_shelf_size",
     "bookshelf_shelf_tabs",
+    "bookshelf_theme",
     "bookshelf_background",
     "bookshelf_hardcover",
     "bookshelf_settings",
@@ -808,9 +818,23 @@ function Bookshelf:buildMenuItems(menu_items)
     -- Settings > Colors and Settings > Wallpaper and ornaments, which put the
     -- theme, the background colour and the panel shading in three different
     -- menus (maintainer). Text size stays under Settings on purpose.
+    -- The look as a whole, a row of its own above the parts (maintainer,
+    -- 2026-10-02): light or dark, and the installed theme packs, which choose
+    -- wallpaper, plank, colours and ornaments together.
+    menu_items.bookshelf_theme = {
+        text_func = function()
+            return MenuIcons.label(MenuIcons.THEME, S:_shelfThemeText())
+        end,
+        help_text = S:_shelfThemeHelp(),
+        sub_item_table_func = function()
+            S._bw = _live_widget
+            return S:_shelfThemeSubItems()
+        end,
+    }
+
     menu_items.bookshelf_background = {
         text                = MenuIcons.label(MenuIcons.APPEARANCE,
-                                  _("Background and colors")),
+                                  _("Wallpaper, ornaments and colors")),
         sub_item_table_func = function()
             S._bw = _live_widget
             return S:_backgroundSubItems()
@@ -1167,6 +1191,15 @@ function Bookshelf:onDispatcherRegisterActions()
     -- drilled into: this also drops the drilldown and returns to page 1, so a
     -- gesture bound to it always lands on the same view -- the home-screen
     -- gesture other home-replacement plugins offer.
+    -- A fresh deal of the ornaments, same books (maintainer: "a gesture to
+    -- shuffle ornaments to get a new layout without having to change
+    -- anything else"). An action to bind, not a built-in gesture.
+    Dispatcher:registerAction("bookshelf_shuffle_ornaments", {
+        category = "none",
+        event    = "BookshelfShuffleOrnaments",
+        title    = _("Bookshelf: shuffle ornaments"),
+        general  = true,
+    })
     Dispatcher:registerAction("bookshelf_go_home", {
         category = "none",
         event    = "BookshelfGoHome",
@@ -2458,7 +2491,8 @@ function Bookshelf:scanPageCounts(opts)
     -- Classified inside the job (classify, below), a sidecar read per opened
     -- book, so the shelf answers taps from the first moment instead of
     -- freezing before the status line even appears.
-    local fps = Repo.getAllFilepaths and Repo.getAllFilepaths() or {}
+    -- opts.paths scopes the scan to one folder or stack's books (issue 459).
+    local fps = opts.paths or (Repo.getAllFilepaths and Repo.getAllFilepaths()) or {}
     local skipped = 0
     local todo = {}
 
@@ -2585,7 +2619,29 @@ function Bookshelf:scanPageCounts(opts)
 
     -- A Lua error mid-scan must still end the job, or the status line would
     -- show its progress until KOReader restarts.
-    Trapper:wrap(function() local ok_run, err_run = xpcall(function()
+    -- holdAwake(on): a scan runs for minutes, and the device suspended in the
+    -- middle of one (issue 459's crash.log). AutoSuspend reads
+    -- PluginShare.pause_auto_suspend, not UIManager's standby count, so both
+    -- are held; the flag's earlier value (Keep-alive may have set it) comes
+    -- back. Idempotent both ways, so a wait can let go and take it again.
+    local held_prev
+    local function holdAwake(on)
+        local ok_ps, PluginShare = pcall(require, "pluginshare")
+        if on and held_prev == nil then
+            held_prev = (ok_ps and PluginShare.pause_auto_suspend) and true or false
+            if ok_ps then PluginShare.pause_auto_suspend = true end
+            pcall(function() UIManager:preventStandby() end)
+        elseif not on and held_prev ~= nil then
+            if ok_ps then PluginShare.pause_auto_suspend = held_prev end
+            held_prev = nil
+            pcall(function() UIManager:allowStandby() end)
+        end
+    end
+
+    Trapper:wrap(function()
+    -- Every exit below comes back through here.
+    holdAwake(true)
+    local ok_run, err_run = xpcall(function()
         local job = Progress.begin{
             title  = lookupTitle(),
             icons  = SCAN_ICONS,
@@ -2760,7 +2816,12 @@ function Bookshelf:scanPageCounts(opts)
         for i, fp in ipairs(todo) do
             -- Not while a book is open: each render is seconds of CPU the
             -- reader would feel. A parked reader (under the shelf) is fine.
-            while Progress.reading() and not job.stopped do breathe(2) end
+            -- The reader's session is not the scan's to keep awake.
+            if Progress.reading() then
+                holdAwake(false)
+                while Progress.reading() and not job.stopped do breathe(2) end
+                holdAwake(true)
+            end
             if job.stopped then
                 report.cancelled = true
                 break
@@ -2775,6 +2836,10 @@ function Bookshelf:scanPageCounts(opts)
             -- once on a device short of memory and then start.
             local completed, pages_s
             local elapsed = 0
+            -- At info level, before the fork: a scan that stalls on one book
+            -- leaves that book as the last line of crash.log (issue 459's
+            -- log named nothing).
+            logger.info(string.format("bookshelf: page count render %d/%d: %s", i, #todo, fp))
             for attempt = 1, 2 do
                 local t0 = _gettime()
                 job.in_run = true
@@ -2811,6 +2876,7 @@ function Bookshelf:scanPageCounts(opts)
                 break
             end
             processed = i
+            logger.info(string.format("bookshelf: page count render %d/%d took %.1fs", i, #todo, elapsed))
             local pages = tonumber(pages_s)
             if pages and pages > 0 then
                 -- A render count is layout-derived, not publisher truth:
@@ -2839,6 +2905,7 @@ function Bookshelf:scanPageCounts(opts)
         require("logger").warn("bookshelf: page count scan failed:", err_run)
         Progress.finish()
     end
+    holdAwake(false)
     end)
 end
 
@@ -3298,33 +3365,40 @@ end
 -- delete plugin settings". (Available in KOReader nightly via upstream
 -- PR #15240, expected in the next stable release.) Anything outside the
 -- install directory we need to clean up:
---   - <settings_dir>/bookshelf.lua (the LuaSettings file the store writes)
---     plus the routed sub-store files (micromodules / hardcover links /
---     opds cache) and the Hardcover module's settings + sqlite cache
---   - the cover / cache directories the plugin grows under settings_dir
+--   - our settings files in settings/bookshelf/ (the main settings file, the
+--     micro-module data, Hardcover links and cache, page counts) and all of
+--     cache/bookshelf/ (lib/bookshelf_paths), plus anything an older version
+--     left in the flat layout. The reader's content folders stay.
 --   - any legacy bookshelf_* keys in G_reader_settings that the migration
 --     never moved (e.g. user deleted the plugin before ever opening it
 --     post-upgrade)
 function Bookshelf:deletePluginSettings()
+    local Paths = require("lib/bookshelf_paths")
+    -- Our settings and caches (lib/bookshelf_paths). The reader's content in
+    -- settings/bookshelf/ (wallpapers, ornaments, quotes, micro-modules) is
+    -- left, as before; so are other plugins' files (the Hardcover sync
+    -- plugin's settings, which bookshelf only reads and adds to).
+    local sdir = Paths.settingsDir()
+    for _i, f in ipairs({ "settings.lua", "micromodule_data.lua", "hardcover_links.lua",
+                          "book_facts.sqlite3", "hardcover.sqlite3" }) do
+        for _j, c in ipairs({ "", ".old", "-wal", "-shm", "-journal" }) do
+            os.remove(sdir .. "/" .. f .. c)
+        end
+    end
+    local ok_ffi, ffiutil = pcall(require, "ffi/util")
+    if ok_ffi and ffiutil and type(ffiutil.purgeDir) == "function" then
+        pcall(ffiutil.purgeDir, Paths.cacheDir())
+    end
+    -- Anything an older bookshelf left in the flat layout.
     local DataStorage = require("datastorage")
     local settings_dir = DataStorage:getSettingsDir()
-    for _i, f in ipairs({
-        "bookshelf.lua",
-        "bookshelf_micromodules.lua",       -- bookshelf_settings_store sub-stores
-        "bookshelf_hardcover_links.lua",
-        "bookshelf_opds.lua",
-        "bookshelf_changelog.lua",          -- cached release notes
-        "hardcoversync_settings.lua",       -- bookshelf_hardcover settings
-    }) do
-        os.remove(settings_dir .. "/" .. f)
-        os.remove(settings_dir .. "/" .. f .. ".old")
+    for _i, f in ipairs({ "bookshelf.lua", "bookshelf_micromodules.lua", "bookshelf_hardcover_links.lua",
+                          "bookshelf_opds.lua", "bookshelf_changelog.lua", "bookshelf_book_facts.sqlite3",
+                          "bookshelf_hardcover.sqlite3", "bookshelf_opds.sqlite3", "bookshelf_hero_inflight" }) do
+        for _j, c in ipairs({ "", ".old", "-wal", "-shm", "-journal" }) do
+            os.remove(settings_dir .. "/" .. f .. c)
+        end
     end
-    os.remove(settings_dir .. "/bookshelf_hardcover.sqlite3")
-    -- Cover working dir (incl. the OPDS cover cache), the updater's download
-    -- scratch dir, and the Hardcover enrichment cover dir. purgeDir is
-    -- recursive; pcall so a missing dir (or an older KOReader without the
-    -- helper) can't abort the remaining cleanup.
-    local ok_ffi, ffiutil = pcall(require, "ffi/util")
     if ok_ffi and ffiutil and type(ffiutil.purgeDir) == "function" then
         for _i, d in ipairs({ "bookshelf_covers", "bookshelf_cache", "bookshelf_hardcover" }) do
             pcall(ffiutil.purgeDir, settings_dir .. "/" .. d)

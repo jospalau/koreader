@@ -691,6 +691,7 @@ function Editor:editTab(tab_id, opts)
 
     local dialog
     local frame
+    local current_bt   -- the ButtonTable on screen; rebuilt on every edit
 
     -- rebuild() -- swap frame[1] in-place so the button labels and enabled
     -- states refresh without touching the MovableContainer. The anchor-based
@@ -758,7 +759,9 @@ function Editor:editTab(tab_id, opts)
                             label_dialog.deny_keyboard_hiding = true
                         end
                         -- Shelf labels render literally (no token
-                        -- expansion), so dynamic %tokens are excluded.
+                        -- expansion), so dynamic %tokens are excluded. The
+                        -- SVG icon folder is offered (svg): an [icon=NAME]
+                        -- in a label draws that image (issue 469).
                         IconsLibrary:show(function(glyph)
                             if label_dialog then
                                 label_dialog.deny_keyboard_hiding = false
@@ -772,7 +775,7 @@ function Editor:editTab(tab_id, opts)
                             if label_dialog and label_dialog.onShowKeyboard then
                                 pcall(function() label_dialog:onShowKeyboard() end)
                             end
-                        end, { dynamic = false })
+                        end, { dynamic = false, svg = true })
                     end,
                 },
             }
@@ -1234,6 +1237,13 @@ function Editor:editTab(tab_id, opts)
             buttons = non_empty_buttons,
             zero_sep = true,
         }
+        -- FocusManager repaints `show_parent or self` on a D-pad move, and the
+        -- table is not on the window stack, so without this the highlight never
+        -- moved on screen (GitHub issue 361). Set after new{} so the Buttons
+        -- keep their touch flash path exactly as before. The first build runs
+        -- before the dialog exists: its creation below catches that one up.
+        button_table.show_parent = dialog
+        current_bt = button_table
 
         -- Dynamic title: shows the tab's current label so the user can see
         -- which tab they're editing at a glance, even while the Label
@@ -1296,6 +1306,7 @@ function Editor:editTab(tab_id, opts)
     -- and stays there because rebuild() only swaps frame[1] (the content),
     -- never the MovableContainer.
     dialog = InputContainer:new{}
+    if current_bt then current_bt.show_parent = dialog end
 
     if Device:isTouchDevice() then
         dialog.ges_events = dialog.ges_events or {}
@@ -1529,6 +1540,60 @@ function Editor:_pickFaceRecentCount(draft, on_change, back)
     }}
     d = ButtonDialog:new{
         title          = _("Recently added"),
+        title_align    = "left",
+        use_info_style = false,
+        buttons        = rows,
+        anchor         = _highAnchor(function() return d end),
+    }
+    UIManager:show(d)
+end
+
+-- _pickFaceCollection(draft, on_change, back) -- which collection the "In a
+-- collection" face-out reason reads (issue 470). Favourites is left out: it
+-- is a reason of its own. Picking one switches the reason on; `back` reopens
+-- the face-out dialog.
+function Editor:_pickFaceCollection(draft, on_change, back)
+    local SS = require("lib/bookshelf_spine_shelf")
+    local Kit = require("lib/bookshelf_module_kit")
+    local d
+    local cur = SS.faceOutSpec(draft.spine_face_out).collection
+    local names = {}
+    local ok, rc = pcall(require, "readcollection")
+    if ok and rc and rc.coll then
+        local default_name = rc.default_collection_name
+        for name in pairs(rc.coll) do
+            if name ~= default_name then names[#names + 1] = name end
+        end
+    end
+    table.sort(names, function(a, b) return a:lower() < b:lower() end)
+    local rows = {}
+    if #names == 0 then
+        rows[#rows + 1] = {{ text = _("No collections yet"), enabled = false }}
+    end
+    for _i, name in ipairs(names) do
+        rows[#rows + 1] = { Kit.radioRow{
+            label   = name,
+            active  = (cur == name),
+            on_pick = function()
+                local spec = SS.faceOutSpec(draft.spine_face_out)
+                spec.collection = name
+                spec.all = nil
+                draft.spine_face_out = spec
+                if on_change then on_change() end
+                UIManager:close(d)
+                if back then back() end
+            end,
+        } }
+    end
+    rows[#rows + 1] = {{
+        text = _("Back"),
+        callback = function()
+            UIManager:close(d)
+            if back then back() end
+        end,
+    }}
+    d = ButtonDialog:new{
+        title          = _("In a collection"),
         title_align    = "left",
         use_info_style = false,
         buttons        = rows,
@@ -1806,6 +1871,8 @@ function Editor:_pickGroupDisplay(draft, on_change, chrome)
                 first_unread = _("First unread in series"),
                 reading   = _("Currently reading"),
                 unread    = _("Unread"),
+                standalone = _("Unread standalone"),
+                collection = _("In a collection"),
                 all       = _("All books"),
             }
             -- The row reads out the SET, not one mode: "Favorites + Reading".
@@ -1827,6 +1894,8 @@ function Editor:_pickGroupDisplay(draft, on_change, chrome)
                         if spec.recent then
                             parts[#parts + 1] = T(_("Newest %1"), spec.recent)
                         end
+                    elseif k == "collection" then
+                        if spec.collection then parts[#parts + 1] = spec.collection end
                     elseif spec[k] then
                         parts[#parts + 1] = FACE_LABELS[k]
                     end
@@ -1846,7 +1915,7 @@ function Editor:_pickGroupDisplay(draft, on_change, chrome)
                     if spec[k] then n = n + 1; only = k end
                 end
                 if n == 0 then draft.spine_face_out = false
-                elseif n == 1 and only ~= "recent" then
+                elseif n == 1 and only ~= "recent" and only ~= "collection" then
                     draft.spine_face_out = (only == "favorites") and nil or only
                 else
                     draft.spine_face_out = spec
@@ -1873,6 +1942,7 @@ function Editor:_pickGroupDisplay(draft, on_change, chrome)
                     local TICK, BLANK = "\xE2\x9C\x93 ", "\xE2\x80\x83 "
                     local function isOn(spec, k)
                         if k == "recent" then return spec.recent ~= nil end
+                        if k == "collection" then return spec.collection ~= nil end
                         return spec[k] == true
                     end
                     local function recentLabel(spec)
@@ -1880,6 +1950,18 @@ function Editor:_pickGroupDisplay(draft, on_change, chrome)
                     end
                     local function countLabel(spec)
                         return T(_("How many: %1"), spec.recent or SS.FACE_RECENT_DEFAULT)
+                    end
+                    local function whichLabel(spec)
+                        if spec.collection then
+                            -- Deleted or renamed since: say so, rather than
+                            -- a tick on a shelf that faces nothing out.
+                            local ok_rc, rc = pcall(require, "readcollection")
+                            if ok_rc and rc and rc.coll and rc.coll[spec.collection] == nil then
+                                return T(_("Collection: %1 (not found)"), spec.collection)
+                            end
+                            return T(_("Collection: %1"), spec.collection)
+                        end
+                        return _("Choose collection")
                     end
                     local function label(spec, k)
                         local text = (k == "recent") and recentLabel(spec) or FACE_LABELS[k]
@@ -1913,6 +1995,7 @@ function Editor:_pickGroupDisplay(draft, on_change, chrome)
                         if count then
                             if spec.recent then count:enable() else count:disable() end
                         end
+                        set("face_which", whichLabel(spec))
                         UIManager:setDirty(sub, function() return "ui", sub.movable.dimen end)
                     end
                     local function changed()
@@ -1921,16 +2004,25 @@ function Editor:_pickGroupDisplay(draft, on_change, chrome)
                     end
                     -- TOGGLES. A book can be a favourite AND newly added, so
                     -- each row flips one reason and the set builds up.
+                    local pickCollection
                     local function toggle(k)
                         return {
                             id   = "face_" .. k,
                             text = label(faceOutSpec(), k),
                             callback = function()
                                 local nspec = faceOutSpec()
+                                -- Switching the collection reason ON needs a
+                                -- name, so it asks for one first.
+                                if k == "collection" and not nspec.collection then
+                                    pickCollection()
+                                    return
+                                end
                                 nspec.all = nil     -- a reason un-picks "All"
                                 if k == "recent" then
                                     nspec.recent = (nspec.recent == nil)
                                         and SS.FACE_RECENT_DEFAULT or nil
+                                elseif k == "collection" then
+                                    nspec.collection = nil
                                 else
                                     nspec[k] = (not nspec[k]) or nil
                                 end
@@ -1950,6 +2042,7 @@ function Editor:_pickGroupDisplay(draft, on_change, chrome)
                             -- series" are the same question asked of a
                             -- shelf you have started or one you have not.
                             { toggle("unread"), toggle("reading") },
+                            { toggle("standalone"), toggle("favorites") },
                             { toggle("first"),  toggle("first_unread") },
                             -- How many count as "recently added", as a button
                             -- the reader can see: a 20-book shelf and a
@@ -1963,13 +2056,15 @@ function Editor:_pickGroupDisplay(draft, on_change, chrome)
                                         if on_change then on_change() end
                                     end, showFace)
                                 end } },
-                            -- Favourites sits with the two that are not
-                            -- reasons but answers on their own: it is the
-                            -- odd one out of the reasons (nothing to do with
-                            -- reading or series) and the bottom row is where
-                            -- the whole-shelf answers live.
-                            { toggle("favorites"),
-                              { id = "face_all", text = allLabel(spec),
+                            -- A collection the reader picks (a To read list,
+                            -- say), with the button that changes which one.
+                            { toggle("collection"),
+                              { id = "face_which", text = whichLabel(spec),
+                                callback = function() pickCollection() end } },
+                            -- The two that are not reasons but answers on
+                            -- their own: the bottom row is where the
+                            -- whole-shelf answers live.
+                            { { id = "face_all", text = allLabel(spec),
                                 callback = function()
                                     draft.spine_face_out = "all"
                                     changed()
@@ -2000,6 +2095,12 @@ function Editor:_pickGroupDisplay(draft, on_change, chrome)
                             anchor         = _highAnchor(function() return sub end),
                         }
                         UIManager:show(sub)
+                    end
+                    pickCollection = function()
+                        UIManager:close(sub)
+                        self:_pickFaceCollection(draft, function()
+                            if on_change then on_change() end
+                        end, showFace)
                     end
                     showFace()
                 end,
