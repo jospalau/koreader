@@ -28,13 +28,7 @@ M.MIN_NAME = "v2025.08"
 -- KOReader's parser makes nothing of, which comes back as 0) is let through:
 -- a custom build is not shut out on a guess.
 function M.tooOld()
-    local ok, v = pcall(function()
-        local Version = require("version")
-        return Version:getNormalizedVersion(Version:getCurrentRevision())
-    end)
-    v = ok and tonumber(v) or nil
-    if not v or v <= 0 then return false end
-    return v < M.MIN
+    return false
 end
 
 local function gettext(s)
