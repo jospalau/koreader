@@ -66,7 +66,12 @@ function FileManagerMenu:registerKeyEvents()
     end
 end
 
-FileManagerMenu.onPhysicalKeyboardConnected = FileManagerMenu.registerKeyEvents
+function FileManagerMenu:onPhysicalKeyboardConnected()
+    self.key_events = {}
+    self:registerKeyEvents()
+    self:onRebuildMenu()
+end
+FileManagerMenu.onPhysicalKeyboardDisconnected = FileManagerMenu.onPhysicalKeyboardConnected
 
 -- NOTE: FileManager emits a SetDimensions on init, it's our only caller
 function FileManagerMenu:initGesListener()
@@ -1513,6 +1518,31 @@ function FileManagerMenu:onCloseFileManagerMenu()
     UIManager:close(self.menu_container)
     self.menu_container = nil
     return true
+end
+
+function FileManagerMenu:teardownMenu()
+    if self.menu_container then
+        self:onCloseFileManagerMenu()
+    end
+    self.tab_item_table = nil
+end
+
+function FileManagerMenu:onRebuildMenu()
+    local was_open = self.menu_container ~= nil
+    local state
+    if was_open and self.menu_container[1] then
+        state = self.menu_container[1]:getState()
+    end
+    self:teardownMenu()
+
+    if was_open then
+        self:onShowMenu(nil, true)
+        local menu = self.menu_container[1]
+        if state and menu.restoreState then
+            menu:restoreState(state.path_stack, state.page)
+        end
+        UIManager:show(self.menu_container)
+    end
 end
 
 function FileManagerMenu:_getTabIndexFromLocation(ges)
