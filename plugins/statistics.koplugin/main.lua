@@ -348,8 +348,6 @@ function ReaderStatistics:onDocumentRerendered()
         -- But won't work right away since I avoid inserting in db if less than:
         -- MIN_TIME_VALID_SESSION = 180
         -- MIN_PAGES_VALID_SESSION = 3
-        -- The Book map needs the pages field in the book table updated so the view can retrieve data
-        self:updateBookPages()
         -- Flush volatile stats to DB for current book, and update pagecount and average time per page stats
         self:insertDB(new_pagecount)
     end
@@ -1151,7 +1149,6 @@ function ReaderStatistics:insertDB(updated_pagecount)
     -- Something could be done in ReaderStatistics:init() so self:resetVolatileStats() is not called
     -- But it is not that important
     if duration_raw < self.min_time_valid_session or self._total_pages < self.min_pages_valid_session then
-        self:updateBookPages()
         return
     end
     -- The current page stat, having yet no duration, will be ignored
@@ -3154,19 +3151,6 @@ function ReaderStatistics:onPosUpdate(pos, pageno)
     if self.curr_page ~= pageno then
         self:onPageUpdate(pageno)
     end
-end
-
-function ReaderStatistics:updateBookPages()
-    local id_book = self.id_curr_book
-    local new_pagecount = self.document:getPageCount()
-    local conn = SQ3.open(db_location)
-    local sql_stmt = [[
-        UPDATE book
-        SET    pages = ?
-        WHERE  id = ?;
-    ]]
-    stmt = conn:prepare(sql_stmt)
-    stmt:reset():bind(new_pagecount, id_book):step()
 end
 
 function ReaderStatistics:onPageUpdate(pageno)
