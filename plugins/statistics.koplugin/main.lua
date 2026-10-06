@@ -244,7 +244,7 @@ function ReaderStatistics:init()
 
     if ReaderStatistics.preserved_initial_read_today then
         self._initial_read_today = ReaderStatistics.preserved_initial_read_today
-        ReaderStatistics.preserved_initial_read_todays= nil
+        ReaderStatistics.preserved_initial_read_today = nil
     end
 
     if self.ui.view and self.start_current_period then
