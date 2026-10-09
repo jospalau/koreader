@@ -89,7 +89,7 @@ end
 -- Weekday names (os.date("*t").wday: 1=Sunday .. 7=Saturday) a "kezdve" /
 -- "várható befejezés" felugró dátumsorokhoz. Nem magyar nyelveknél _()-n
 -- keresztül fordítva; magyarnál a lenti kisbetűs alakok kellenek, mert a
--- teljes dátum után a nap neve kisbetűvel áll ("2026.06.24. szerda").
+-- teljes dátum után a nap neve kisbetűvel áll ("2026. 06. 24., szerda").
 local WEEKDAY_NAMES = {
     "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
 }
@@ -97,7 +97,7 @@ local WEEKDAY_NAMES_HU_LC = {
     "vasárnap", "hétfő", "kedd", "szerda", "csütörtök", "péntek", "szombat",
 }
 
-local function formatEventDateTime(timestamp)
+local function formatEventDateTime(timestamp, always_full)
     if not timestamp then return "" end
     local t   = os.date("*t", timestamp)
     local now = os.date("*t")
@@ -107,16 +107,20 @@ local function formatEventDateTime(timestamp)
     end
     local day_diff = math.floor((midnight(t) - midnight(now)) / 86400 + 0.5)
 
-    if day_diff == 0  then return _("Today") end
-    if day_diff == -1 then return _("Yesterday") end
-    if day_diff == 1  then return _("Tomorrow") end
+    -- always_full: skip the relative shortcuts (Today / Yesterday /
+    -- Tomorrow / bare weekday) and always give "weekday + full date".
+    if not always_full then
+        if day_diff == 0  then return _("Today") end
+        if day_diff == -1 then return _("Yesterday") end
+        if day_diff == 1  then return _("Tomorrow") end
+    end
 
     local function mondayOf(tt)
         local days_since_monday = (tt.wday + 5) % 7  -- tt.wday: 1=Sun..7=Sat
         return os.time{ year = tt.year, month = tt.month, day = tt.day - days_since_monday,
                         hour = 0, min = 0, sec = 0 }
     end
-    local same_week = mondayOf(t) == mondayOf(now)
+    local same_week = (not always_full) and mondayOf(t) == mondayOf(now)
     local is_hu = (getLangBase() == "hu")
 
     if same_week then
@@ -126,10 +130,12 @@ local function formatEventDateTime(timestamp)
     -- The date itself follows the configured date format (Settings ▸
     -- Advanced settings ▸ Date & time ▸ "Date format"); only where the
     -- weekday goes stays language-bound, since Hungarian wants it after
-    -- the date and in lower case ("2026.06.24. szerda").
+    -- the date and in lower case ("2026. 06. 24., szerda").
     local date_str = Locale.formatDateFromTS(timestamp)
     if is_hu then
-        return date_str .. " " .. WEEKDAY_NAMES_HU_LC[t.wday]
+        -- Hungarian: "2026. 10. 05., hétfő" - formatDate already writes the
+        -- spaced "2026. 10. 05." form, so only the comma and weekday follow.
+        return date_str .. ", " .. WEEKDAY_NAMES_HU_LC[t.wday]
     end
     return _(WEEKDAY_NAMES[t.wday]) .. ", " .. date_str
 end
@@ -1424,7 +1430,7 @@ function ReadingStatsPopup:onTapClose(arg, ges_ev)
 
         if UI.hitTest(self._started_widget, x, y) and self._stats and self._stats.started_timestamp then
             UIManager:show(InfoMessage:new{
-                text = _("Started:") .. " " .. formatEventDateTime(self._stats.started_timestamp),
+                text = _("Started:") .. " " .. formatEventDateTime(self._stats.started_timestamp, true),
             })
             return true
         end

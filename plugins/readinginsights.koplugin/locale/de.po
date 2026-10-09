@@ -99,12 +99,6 @@ msgstr "Tag gelesen"
 msgid "days read"
 msgstr "Tage gelesen"
 
-msgid "book read"
-msgstr "Buch gelesen"
-
-msgid "books read"
-msgstr "Bücher gelesen"
-
 msgid "book"
 msgstr "Buch"
 
@@ -144,29 +138,26 @@ msgstr "Beste Serie"
 msgid "Days read per month"
 msgstr "Lesetage pro Monat"
 
-msgid "Time read per month"
+msgid "Reading time per month"
 msgstr "Lesezeit pro Monat"
 
-msgid "Books read per month"
-msgstr "Gelesene Bücher pro Monat"
+msgid "Books per month"
+msgstr "Bücher pro Monat"
 
 msgid "Unknown"
 msgstr "Unbekannt"
 
-msgid "No books read"
-msgstr "Keine Bücher gelesen"
+msgid "No books"
+msgstr "Keine Bücher"
 
-msgid "No books read in %1"
-msgstr "Keine Bücher gelesen in %1"
+msgid "No books in %1"
+msgstr "Keine Bücher in %1"
 
-msgid "No books read in "
-msgstr "Keine Bücher gelesen in "
+msgid "%1 - %2 book"
+msgstr "%1: %2 Buch"
 
-msgid "%1 - book read %2"
-msgstr "%1 - 1 Buch gelesen %2"
-
-msgid "%1 - books read %2"
-msgstr "%1 - Bücher gelesen %2"
+msgid "%1 - %2 books"
+msgstr "%1: %2 Bücher"
 
 msgid "Reading goal"
 msgstr "Leseziel"
@@ -198,13 +189,16 @@ msgstr "Keine Bücher beendet in %1"
 msgid "Mark book finished - %1"
 msgstr "Buch als beendet markieren - %1"
 
-msgid "No books read in this year"
-msgstr "In diesem Jahr keine Bücher gelesen"
+msgid "No books this year"
+msgstr "In diesem Jahr keine Bücher"
 
 msgid "Reloading data..."
 msgstr "Daten werden neu geladen..."
 
 msgid "Reading insights"
+msgstr "Leseeinblicke"
+
+msgid "Reading insights popup title"
 msgstr "Leseeinblicke"
 
 msgid "Reading insights: all time statistics"
@@ -216,17 +210,14 @@ msgstr "Leseeinblicke: aktueller Buchfortschritt"
 msgid "Reading insights: book progress calendar"
 msgstr "Leseeinblicke: Buchfortschrittskalender"
 
-msgid "All books read %1"
-msgstr "Alle gelesenen Bücher %1"
+msgid "All books %1"
+msgstr "Alle Bücher: %1"
 
-msgid "TOTAL READ"
-msgstr "GESAMT GELESEN"
+msgid "daily avg page"
+msgstr "Ø Seiten/Tag"
 
-msgid "LAST WEEK"
-msgstr "LETZTE WOCHE"
-
-msgid "avg/day"
-msgstr "Ø/Tag"
+msgid "daily avg pages"
+msgstr "Ø Seiten/Tag"
 
 msgid "Today"
 msgstr "Heute"
@@ -255,14 +246,17 @@ msgstr "Sa"
 msgid "Sun"
 msgstr "So"
 
-msgid "read time avg/day"
-msgstr "Ø Lesezeit/Tag"
+msgid "daily avg time"
+msgstr "Ø Zeit/Tag"
 
 msgid "reading time"
 msgstr "Lesezeit"
 
 msgid "No streak dates"
 msgstr "Keine Serien-Daten"
+
+msgid "Last read: %1"
+msgstr "Zuletzt gelesen: %1"
 
 msgid "CalendarView not available"
 msgstr "Kalenderansicht nicht verfügbar"
@@ -317,6 +311,9 @@ msgstr "4 Monate"
 
 msgid "6 months"
 msgstr "6 Monate"
+
+msgid "12 months"
+msgstr "12 Monate"
 
 msgid "Time format"
 msgstr "Zeitformat"
@@ -800,11 +797,8 @@ msgstr "Die neueste Version enthält keine herunterladbare ZIP-Datei."
 msgid "Reading heatmap"
 msgstr "Lese-Heatmap"
 
-msgid "Time of day heatmap"
-msgstr "Tageszeit-Heatmap"
-
-msgid "Calendar heatmap"
-msgstr "Kalender-Heatmap"
+msgid "Reading calendar"
+msgstr "Lesekalender"
 
 msgid "Less"
 msgstr "Weniger"
@@ -971,7 +965,7 @@ msgstr "Letzte Woche"
 msgid "Months"
 msgstr "Monate"
 
-msgid "Total read"
+msgid "All time"
 msgstr "Insgesamt gelesen"
 
 msgid "Last read (newest first)"
@@ -1649,8 +1643,14 @@ msgstr "Nachmittag"
 msgid "Evening"
 msgstr "Abend"
 
-msgid "Reading time by time of day"
-msgstr "Lesezeit nach Tageszeit"
+msgid "When you read"
+msgstr "Wann du liest"
+
+msgid "Days of the week"
+msgstr "Wochentage"
+
+msgid "You read most around %1"
+msgstr "Am meisten liest du gegen %1"
 
 msgid "Book progress popup"
 msgstr "Buchfortschritt-Fenster"
@@ -1879,3 +1879,57 @@ msgstr "Zeigt die Beschreibung des Buches unter Autor / Reihe an, bis zum untere
 
 msgid "Description"
 msgstr "Beschreibung"
+
+msgid "No reading on %1"
+msgstr "Am %1 wurde nicht gelesen"
+
+msgid "of annual goal"
+msgstr "vom Jahresziel"
+
+msgid "Latest"
+msgstr "Zuletzt"
+
+msgid "Rating"
+msgstr "Bewertung"
+
+msgid "Date"
+msgstr "Datum"
+
+msgid "Reading time"
+msgstr "Lesezeit"
+
+msgid "Pages read"
+msgstr "Gelesene Seiten"
+
+msgid "Rating (stars)"
+msgstr "Bewertung (Sterne)"
+
+msgid "Rating (highest first)"
+msgstr "Bewertung (beste zuerst)"
+
+msgid "Rating (lowest first)"
+msgstr "Bewertung (schlechteste zuerst)"
+
+msgid "Show in the right column"
+msgstr "In der rechten Spalte anzeigen"
+
+msgid "Clear rating"
+msgstr "Bewertung löschen"
+
+msgid "This book has no checksum, so its rating can't be saved"
+msgstr "Dieses Buch hat keine Prüfsumme, daher kann seine Bewertung nicht gespeichert werden"
+
+msgid "e.g. Dune #2"
+msgstr "z. B. Dune #2"
+
+msgid "Please enter the number in the series as a number (e.g. 2 or 2.5)"
+msgstr "Bitte die Nummer in der Reihe als Zahl eingeben (z. B. 2 oder 2.5)"
+
+msgid "Finished"
+msgstr "Beendet"
+
+msgid "Data reloaded"
+msgstr "Daten neu geladen"
+
+msgid "Data reloaded. New achievements: %1"
+msgstr "Daten neu geladen. Neue Erfolge: %1"

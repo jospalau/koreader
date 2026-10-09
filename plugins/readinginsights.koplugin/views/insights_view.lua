@@ -13,10 +13,10 @@ Sections, top to bottom:
   - Monthly chart per-month bars; the header cycles hours/days/books
   - Reading goal  finished books vs. a per-year target (can be switched off
                   in Settings > Advanced settings)
-  - Total read    all-time totals
+  - All time    all-time totals
 
 Gestures:
-  - Tap "Total read" header            reading heatmap (swipe there to page
+  - Tap "All time" header            reading heatmap (swipe there to page
                                        through older periods)
   - Tap yearly value or monthly bar    book list for that period
   - Tap monthly chart header           cycle hours/days/books
@@ -81,7 +81,7 @@ local WEEKLY_CHART_HIGHLIGHT_TODAY = true
 
 -- Fill used behind a handful of section headers ("Last week", "Current
 -- streak"/"Best streak", the year header, "Achievements" when shown next
--- to "Reading goal", and "Total read") to visually group them with the
+-- to "Reading goal", and "All time") to visually group them with the
 -- section above rather than reading as their own separate block. Backed by
 -- the user-configurable "Section header background color" (white by
 -- default, i.e. no visible fill) - see colors.lua. A function rather than
@@ -120,8 +120,8 @@ local formatCount  = Locale.formatCount
 -- Format a YYYY-MM-DD string in the configured date format (Settings ▸
 -- Advanced settings ▸ Date & time ▸ "Date format" - see
 -- Locale.formatDate).
--- no_trailing_dot: the "2026.07.20." pattern only - omit the final dot
--- (used for the first date in a range).
+-- no_trailing_dot: ignored (kept for compatibility); every date keeps its
+-- final dot, also the first date of a range.
 local function formatDateForDisplay(date_str, no_trailing_dot)
     if not date_str then return "?" end
     return Locale.formatDate(date_str, no_trailing_dot)
@@ -130,6 +130,15 @@ end
 local MONTH_NAMES_SHORT = {
     _("Jan"), _("Feb"), _("Mar"), _("Apr"), _("May"), _("Jun"),
     _("Jul"), _("Aug"), _("Sep"), _("Oct"), _("Nov"), _("Dec"),
+}
+-- Hungarian month abbreviations for the monthly bar chart only: lower case
+-- ("jan.", "febr.", ...), the way they are normally written in running
+-- text. A lookup table rather than string.lower(), which can't lower-case
+-- accented capitals like "Á". Everywhere else the shared, capitalised
+-- _("Jan") ... _("Dec") strings stay as they were.
+local MONTH_NAMES_SHORT_HU_LC = {
+    "jan.", "febr.", "márc.", "ápr.", "máj.", "jún.",
+    "júl.", "aug.", "szept.", "okt.", "nov.", "dec.",
 }
 local ReadingInsightsPopup
 
@@ -286,7 +295,7 @@ local function buildYearHeader(popup_self, font_section, font_label, layout, yea
     -- Year navigation is done via swipe on the whole popup (see
     -- onSwipe/_goToYear) and by tapping the previous/next year slot on either
     -- side of the centre year (the InputContainer wrappers below). The reading
-    -- heatmap opens from the "Total read" header instead of from tapping the
+    -- heatmap opens from the "All time" header instead of from tapping the
     -- year (see showReadingHeatmap and buildInsightsSections).
 
     local function makeSlot(yr, arrow_glyph, left, visible, on_tap)
@@ -405,7 +414,7 @@ local function buildYearlyRow(popup_self, yearly_stats, fonts, layout)
         left_value, left_unit = splitDurationValueUnit(yr_secs, _("reading time"))
     elseif popup_self.mode == VS.INSIGHTS_MODE_BOOKS then
         left_value = formatCount(yearly_stats.books_started)
-        left_unit  = N_("book read", "books read", yearly_stats.books_started)
+        left_unit  = N_("book", "books", yearly_stats.books_started)
     else
         left_value = formatCount(yearly_stats.days)
         left_unit  = N_("day read", "days read", yearly_stats.days)
@@ -553,6 +562,11 @@ local function buildMonthlyChart(popup_self, monthly_data, layout, fonts)
             }
             local month_data       = m
             local month_year_label = m.label_full .. " " .. popup_self.selected_year
+            if getLangBase() == "hu" then
+                -- Hungarian: "2026. január" (year first, lower-case month),
+                -- matching the calendar headers.
+                month_year_label = tostring(popup_self.selected_year) .. ". " .. m.label_full
+            end
             tappable_bar.ges_events = {
                 Tap  = { GestureRange:new{ ges = "tap",  range = tappable_bar.dimen } },
             }
@@ -566,7 +580,12 @@ local function buildMonthlyChart(popup_self, monthly_data, layout, fonts)
 
             table.insert(bars_row, tappable_bar)
 
-            local month_label_widget = TextWidget:new{ text = m.label, face = font_small, fgcolor = Colors.small() }
+            local month_label_text = m.label
+            if getLangBase() == "hu" then
+                local mn = tonumber(tostring(m.month):match("%-(%d%d)$"))
+                month_label_text = MONTH_NAMES_SHORT_HU_LC[mn] or m.label
+            end
+            local month_label_widget = TextWidget:new{ text = month_label_text, face = font_small, fgcolor = Colors.small() }
             table.insert(month_labels_row, CenterContainer:new{
                 dimen = Geom:new{ w = bar_width, h = month_label_widget:getSize().h },
                 month_label_widget,
@@ -742,7 +761,7 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, year_ran
         if has_week then
 
             local avg_secs = lw.avg_seconds or 0
-            local week_time_val, week_time_unit_full = splitDurationValueUnit(avg_secs, _("read time avg/day"))
+            local week_time_val, week_time_unit_full = splitDurationValueUnit(avg_secs, _("daily avg time"))
 
             local avg_pages_rounded
             if lw.avg_pages >= 10 then
@@ -751,14 +770,7 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, year_ran
                 avg_pages_rounded = math.floor(lw.avg_pages * 10 + 0.5) / 10
             end
             local week_pages_val  = formatNumber(avg_pages_rounded, avg_pages_rounded ~= math.floor(avg_pages_rounded) and 1 or 0)
-            local pages_unit_base = N_("page read", "pages read", avg_pages_rounded)
-            local avg_day_str = _("avg/day")
-            local week_pages_unit
-            if getLangBase() == "hu" then
-                week_pages_unit = avg_day_str
-            else
-                week_pages_unit = pages_unit_base .. " " .. avg_day_str
-            end
+            local week_pages_unit = N_("daily avg page", "daily avg pages", avg_pages_rounded)
 
             local total_secs = (lw.avg_seconds or 0) * 7
             local total_time_val, total_time_unit = splitDurationValueUnit(total_secs, _("reading time"))
@@ -982,9 +994,9 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, year_ran
 
     if chart then
         local chart_header_text = (popup_self.mode == VS.INSIGHTS_MODE_HOURS
-            and _("Time read per month"))
+            and _("Reading time per month"))
             or (popup_self.mode == VS.INSIGHTS_MODE_BOOKS
-            and _("Books read per month"))
+            and _("Books per month"))
             or _("Days read per month")
         chart_header_text = chart_header_text
         --.. " \xe2\x80\xba"
@@ -1016,23 +1028,17 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, year_ran
             popup_self:cycleInsightsMode()
             return true
         end
-        -- The divider below the chart depends on what comes right after it:
-        --   - GOAL_MODE_BOTH: the "Reading goal | Achievements" header/row
-        --     follows, with its own gray header background - keep the
-        --     regular thick line to separate it clearly.
-        --   - GOAL_MODE_GOAL: the goal row now follows with no header of
-        --     its own (see the goal-only branch below) - thin line, so
-        --     the row still reads as visually separated from the chart.
-        --   - GOAL_MODE_OFF: "Total read" follows instead (its own thin
-        --     top line included) - since nothing else sits between them,
-        --     use the regular thick line, same as any other section end.
+        -- The divider below the chart depends on what follows it:
+        --   - reading goal on: its row follows with no header of its own,
+        --     so a thin line keeps it visually tied to the chart section.
+        --   - otherwise (achievements header, or "All time" when both
+        --     sections are off): the regular thick line.
         -- no_top_line: no divider directly under the chart header - it now
         -- reads as a plain caption for the chart rather than a section
         -- title with its own separator line.
-        local goal_mode = VS.Opt.readGoalSectionMode()
         UI.addSectionWithRow(sections, tappable_chart_header, chart, layout,
-            { add_divider = true, no_top_line = true,
-              no_bottom_line = false, bottom_line_thin = goal_mode == VS.Opt.GOAL_MODE_GOAL })
+            { add_divider = true, no_top_line = true, no_bottom_line = false,
+              bottom_line_thin = VS.Opt.readShowReadingGoal() })
     end
 
     -- Long-press targets for the reading-goal section (its headers and
@@ -1041,8 +1047,14 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, year_ran
     -- { w = widget, fn = function }.
     popup_self._goal_hold_targets = {}
 
-    if VS.Opt.readShowReadingGoal() then
-        local mode           = VS.Opt.readGoalSectionMode()
+    -- The reading-goal and achievements sections are switched on/off
+    -- independently (Settings > Reading insight popup). With the goal on it
+    -- comes first (a headerless row); the achievements section follows below
+    -- it, with a header of its own. With both off nothing is drawn.
+    local show_goal = VS.Opt.readShowReadingGoal()
+    local show_ach  = VS.Opt.readShowAchievements() and Achievements ~= nil
+
+    if show_goal or show_ach then
         local goal_year      = popup_self.selected_year
         local finished_count = goal_finished_count or 0
         local goal_value     = VS.readReadingGoal(goal_year)
@@ -1150,68 +1162,68 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, year_ran
             }
         end
 
-        if mode == VS.Opt.GOAL_MODE_GOAL then
-            -- Old two-cell view: finished-book count | this year's target.
-            local left_line = buildValueLine(fonts.value, fonts.label, layout.col_width,
-                formatCount(finished_count), N_("book finished", "books finished", finished_count))
+        if show_goal then
+            -- No header of its own: "24/30 books finished" | "80% of
+            -- annual goal". Tapping either cell opens the finished books,
+            -- long press opens the finished-books menu.
+            local percent = 0
+            if goal_value > 0 then
+                percent = math.floor(finished_count / goal_value * 100 + 0.5)
+            end
+            local left_value = formatCount(finished_count) .. "/" .. formatCount(goal_value)
+            local left_line  = buildValueLine(fonts.value, fonts.label, layout.col_width,
+                left_value, N_("book finished", "books finished", finished_count))
             local right_line = buildValueLine(fonts.value, fonts.label, layout.col_width,
-                formatCount(goal_value), N_("book to read", "books to read", goal_value))
+                formatCount(percent) .. "%", _("of annual goal"))
 
             local left_cell  = dataCell(left_line, openFinished)
             addHold(left_cell, openFinishedMenu)
-            -- The target figure is informational only in this mode - with
-            -- no "Achievements" column next to it to label, tap/hold used
-            -- to open the goal-edit dialog, but that made it too easy to
-            -- trigger by accident while reading the count. Leave it a
-            -- plain, non-interactive cell; the goal can still be changed
-            -- from the settings menu.
-            local right_cell = right_line
+            local right_cell = dataCell(right_line, openFinished)
+            addHold(right_cell, openFinishedMenu)
 
-            -- Reading-goal-only mode drops the "Reading goal" header/title
-            -- row entirely - unlike the combined view below, there's no
-            -- "Achievements" column next to it to label, and tapping/
-            -- holding the finished-book cell still does what the header
-            -- used to (openFinished / openFinishedMenu), so nothing is
-            -- lost by removing the caption. No top divider of its own
-            -- either - the chart section's own (thin) bottom line, right
-            -- above, already separates it from the chart.
             table.insert(sections, VerticalSpan:new{ height = Size.padding.default })
             table.insert(sections, wrapRow(UI.buildTwoColRow(left_cell, right_cell, layout)))
             table.insert(sections, VerticalSpan:new{ height = Size.padding.large })
             table.insert(sections, UI.padded(layout.padding_h,
                 Colors.newBar(layout.content_width, Size.line.thick, Colors.separator())))
-        else
-            -- Combined view: "finished/target" figure + achievements count.
-            local left_value = formatCount(finished_count) .. "/" .. formatCount(goal_value)
-            local left_line  = buildValueLine(fonts.value, fonts.label, layout.col_width,
-                left_value, N_("book finished", "books finished", finished_count))
+        end
 
-            local earned_count = Achievements and Achievements.earnedCount() or 0
-            local ach_total    = Achievements and Achievements.totalCount() or 0
+        if show_ach then
+            -- Header "Achievements | Latest", then: "earned/total earned" |
+            -- name of the most recently earned achievement.
+            local earned_count = Achievements.earnedCount()
+            local ach_total    = Achievements.totalCount()
             -- Trailing star = achievements earned since the list was last
             -- opened (see Achievements.newCount); tapping opens & clears it.
-            local has_new      = Achievements and Achievements.newCount() > 0
-            local right_value  = formatCount(earned_count) .. "/" .. formatCount(ach_total)
+            local has_new      = Achievements.newCount() > 0
+            local left_value   = formatCount(earned_count) .. "/" .. formatCount(ach_total)
                                  .. (has_new and " ★" or "")
-            local right_line   = buildValueLine(fonts.value, fonts.label, layout.col_width,
-                right_value, _("earned"))
+            local left_line    = buildValueLine(fonts.value, fonts.label, layout.col_width,
+                left_value, _("earned"))
 
-            local left_cell  = dataCell(left_line, openFinished)
-            addHold(left_cell, openFinishedMenu)
+            -- The latest achievement's icon + name, in the regular (non-bold)
+            -- explanatory-text face used for the unit labels.
+            local latest = Achievements.latest()
+            local right_line = TextBoxWidget:new{
+                text      = latest and (latest.icon .. "  " .. latest.title) or "–",
+                face      = fonts.label,
+                fgcolor   = Colors.label(),
+                width     = layout.col_width,
+                alignment = "left",
+            }
+
+            local left_cell  = dataCell(left_line, openAchievements)
             local right_cell = dataCell(right_line, openAchievements)
 
-            -- Two-column header: "Reading goal" (behaves like the left cell)
-            -- and "Achievements" (opens the list, like the right cell).
-            local goal_title = headerCell(buildGoalYearLabel(goal_year), openFinished)
-            addHold(goal_title, openFinishedMenu)
-            local ach_title  = headerCell(_("Achievements"), openAchievements)
+            local ach_title    = headerCell(_("Achievements"), openAchievements)
+            local latest_title = headerCell(_("Latest"), openAchievements)
 
             UI.addSectionWithRow(sections,
-                paddedTwoColHeader(goal_title, ach_title, HEADER_BG()),
+                paddedTwoColHeader(ach_title, latest_title, HEADER_BG()),
                 wrapRow(UI.buildTwoColRow(left_cell, right_cell, layout)),
                 layout, { pad_row = false })
         end
-    end -- if VS.Opt.readShowReadingGoal()
+    end -- if show_goal or show_ach
 
     do
         local all_hours = all_time_stats and all_time_stats.hours or 0
@@ -1252,7 +1264,7 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, year_ran
         local all_time_row = UI.buildTwoColRow(left_cell, right_cell, layout)
 
         local all_book_count = all_time_stats and all_time_stats.book_count or 0
-        local header_text = _("Total read")
+        local header_text = _("All time")
 
         -- Tapping the header opens the reading heatmap popup (moved here
         -- from tapping the year, see showReadingHeatmap / buildYearHeader).
@@ -1318,7 +1330,7 @@ function ReadingInsightsPopup:getDailyReadingDataForRange(start_t, end_t, shared
     return merged
 end
 
--- Opens the "Reading heatmap" popup - tap the "Total read" header (see
+-- Opens the "Reading heatmap" popup - tap the "All time" header (see
 -- buildInsightsSections) to open it, starting on the most recent
 -- half-year; swipe left/right inside the popup to page through older/
 -- newer half-years as far back as there's data.
@@ -1493,6 +1505,36 @@ local function sortByLastRead(books)
     return books
 end
 
+-- The hand-added books of a year (lib/manual_books.lua) as book-shaped
+-- records, no reading time and no pages. Only the finished-books list
+-- shows them.
+local function manualBooksForYear(year)
+    local out = {}
+    for _idx, e in ipairs(Manual.list(year)) do
+        local date = e.date or ""
+        do
+            table.insert(out, {
+                title     = e.title,
+                -- No author and no reading time in these lists: the row is
+                -- shown as a bare title (see BookList.showBookList's
+                -- `manual` branch).
+                authors   = e.authors or "",
+                series       = e.series or "",
+                series_index = e.series_index or "",
+                date_known   = date ~= "",
+                duration  = 0,
+                pages     = 0,
+                rating    = e.rating or 0,
+                manual_id   = e.id,
+                manual_year = year,
+                last_read = e.read_ts or e.ts or 0,
+                manual    = true,
+            })
+        end
+    end
+    return out
+end
+
 local function getFinishedBooksForYearCombined(popup_self, year)
     local base_books = Data.getFinishedBooksForYear(year)
     local overrides = VS.readFinishedOverrides(year)
@@ -1502,18 +1544,7 @@ local function getFinishedBooksForYearCombined(popup_self, year)
     -- are appended here, as book-shaped entries with no reading time, so
     -- this list matches the goal count (which adds them the same way, see
     -- Data.applyFinishedOverrides).
-    local manual_books = {}
-    for _idx, e in ipairs(Manual.list(year)) do
-        table.insert(manual_books, {
-            title     = e.title,
-            -- No author and no reading time in this list: the row is shown
-            -- as a bare title (see BookList.showBookList's `manual` branch).
-            authors   = "",
-            duration  = 0,
-            last_read = e.read_ts or e.ts or 0,
-            manual    = true,
-        })
-    end
+    local manual_books = manualBooksForYear(year)
 
     if not next(overrides) then
         if #manual_books == 0 then return base_books end
@@ -1627,10 +1658,10 @@ end
 function ReadingInsightsPopup:showBooksForMonth(year_month, month_label_full)
     local books = self:getBooksForMonth(year_month)
     local total_secs = Data.sumDuration(books)
-    local title = T(N_("%1 - book read %2", "%1 - books read %2", #books), month_label_full, formatCount(#books)) .. " (" .. formatHHMMSS(total_secs) .. ")"
+    local title = T(N_("%1 - %2 book", "%1 - %2 books", #books), month_label_full, formatCount(#books)) .. " (" .. formatHHMMSS(total_secs) .. ")"
     BookList.showBooksForPeriod(
         self, books,
-        T(_("No books read in %1"), month_label_full),
+        T(_("No books in %1"), month_label_full),
         title)
 end
 
@@ -1814,8 +1845,8 @@ function ReadingInsightsPopup:showAllBooks()
     local total_secs = Data.sumDuration(books)
     BookList.showBooksForPeriod(
         self, books,
-        _("No books read"),
-        T(_("All books read %1"), formatCount(#books)) .. " (" .. formatHHMMSS(total_secs) .. ")")
+        _("No books"),
+        T(_("All books %1"), formatCount(#books)) .. " (" .. formatHHMMSS(total_secs) .. ")")
 end
 
 function ReadingInsightsPopup:showBooksForYear(year)
@@ -1823,8 +1854,8 @@ function ReadingInsightsPopup:showBooksForYear(year)
     local total_secs = Data.sumDuration(books)
     BookList.showBooksForPeriod(
         self, books,
-        _("No books read in ") .. year,
-        T(N_("%1 - book read %2", "%1 - books read %2", #books), year, formatCount(#books)) .. " (" .. formatHHMMSS(total_secs) .. ")")
+        T(_("No books in %1"), tostring(year)),
+        T(N_("%1 - %2 book", "%1 - %2 books", #books), year, formatCount(#books)) .. " (" .. formatHHMMSS(total_secs) .. ")")
 end
 
 -- Tap target for the reading-goal section's left cell ("N book(s)
@@ -1904,7 +1935,13 @@ end
 -- with a text indicator configured, appends it, e.g. "Reading insights
 -- (sleeping…)".
 function ReadingInsightsPopup:_titleBarText()
-    local title = _("Reading insights")
+    -- Popup header has its own translation key, so the Tools menu entry can
+    -- stay "Reading insights" while the popup shows the localised title.
+    -- Falls back to "Reading insights" if a language lacks the key.
+    local title = _("Reading insights popup title")
+    if title == "Reading insights popup title" then
+        title = _("Reading insights")
+    end
     if self.readonly and self.screensaver_label and self.screensaver_label ~= "" then
         title = title .. " (" .. self.screensaver_label .. ")"
     end
@@ -2390,13 +2427,13 @@ end
 -- loop.
 function ReadingInsightsPopup:_scheduleAchievementsRefresh()
     if not Achievements then return end
-    -- Only worth doing when the popup actually shows the achievements count,
-    -- i.e. the goal section is in "both" mode. In "goal_only"/"off" the count
-    -- isn't drawn, so skip even the cheap fingerprint query here - the list
+    -- Only worth doing when the popup actually shows the achievements
+    -- section. When it's switched off the count isn't drawn, so skip even
+    -- the cheap fingerprint query here - the list
     -- (reachable via "Show Achievements") recomputes on its own force-reload,
     -- and a full popup title-bar reload still re-scans regardless (see the
     -- Achievements.recompute call in the reload path).
-    if VS.Opt.readGoalSectionMode() ~= VS.Opt.GOAL_MODE_BOTH then return end
+    if not VS.Opt.readShowAchievements() then return end
     if self._ach_refresh_scheduled then return end
     self._ach_refresh_scheduled = true
     UIManager:scheduleIn(0.1, function()
@@ -2582,23 +2619,33 @@ function ReadingInsightsPopup:onHold(arg, ges_ev)
 
     local title_h = self._title_bar_height
     if title_h and pos.y <= title_h then
+        -- The "Reloading data..." message stays up for the whole reload (the
+        -- UI is busy while the database is re-scanned and the achievements
+        -- are re-dated), and a short result message follows it.
         local msg = InfoMessage:new{ text = _("Reloading data...") }
         UIManager:show(msg)
         UIManager:scheduleIn(0.5, function()
-            UIManager:close(msg)
+            local before = Achievements and Achievements.earnedCount() or 0
             Cache.clearAllCache()
             -- A full reload is the one place achievements are re-evaluated
             -- against the (now uncached) database - see lib/achievements.lua.
             -- Newly earned ones get persisted; the rebuilt goal section then
             -- reads the updated count from the file.
             if Achievements then pcall(Achievements.recompute) end
+            local gained = (Achievements and Achievements.earnedCount() or 0) - before
             self._streaks         = nil
             self._yearly          = nil
             self._monthly         = nil
             self._all_time        = nil
             self._last_week       = nil
             self._last_week_daily = nil
+            UIManager:close(msg)
             self:_loadAndRebuild()
+            local text = _("Data reloaded")
+            if gained > 0 then
+                text = T(_("Data reloaded. New achievements: %1"), tostring(gained))
+            end
+            UIManager:show(InfoMessage:new{ text = text, timeout = 3 })
         end)
         return true
     end

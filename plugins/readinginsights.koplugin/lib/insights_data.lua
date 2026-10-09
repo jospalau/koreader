@@ -65,7 +65,7 @@ local MONTH_NAMES_SHORT = {
     _("Jul"), _("Aug"), _("Sep"), _("Oct"), _("Nov"), _("Dec"),
 }
 local MONTH_NAMES_FULL = {
-    _("January"), _("February"), _("March"), _("April"), _("May"), _("June"),
+    _("January"), _("February"), _("March"), _("April"), _("May "), _("June"),
     _("July"), _("August"), _("September"), _("October"), _("November"), _("December"),
 }
 
@@ -504,6 +504,10 @@ function M.calculateStreaks(shared_conn)
             today_confirmed = true
         end
         streaks._today_confirmed = today_confirmed
+
+        -- Most recent day with any reading (nil on an empty database); the
+        -- streak popup shows it as "Last read" under the current streak.
+        streaks.last_read_date = dates[1]
 
         return streaks
     end)
@@ -1294,6 +1298,85 @@ function M.getFinishedBookCountForYear(year, shared_conn)
     return M.applyFinishedOverrides(year_key, count)
 end
 
+-- Book-list cache validity -------------------------------------------
+--
+-- A short string that changes whenever anything a book list is made of
+-- changes; the lists are cached under it (see "Book-list cache" in
+-- lib/insights_cache.lua). One pass of plain aggregates over page_stat - no
+-- strftime, no grouping, no joins - plus a glance at the small book table
+-- (a retitled or re-paginated book alters the rows too).
+--
+-- lo/hi (epoch seconds, hi exclusive) narrow the page_stat part to one
+-- period. That is what lets a past month or year stay cached while new
+-- reading goes on: nothing the period's list shows can come from rows
+-- outside it, so new rows outside it don't touch the stamp. Without bounds
+-- the whole table is covered (all-books list, finished-books list - the
+-- latter depends on each book's *last* entry, wherever that falls).
+--
+-- Returns nil when the probe can't be read, in which case the caller just
+-- skips the cache for this call.
+function M._bookListStamp(conn, lo, hi)
+    local where = ""
+    if lo and hi then
+        where = string.format(" WHERE start_time >= %d AND start_time < %d",
+            math.floor(lo), math.floor(hi))
+    end
+    local parts = {}
+    local _r1, ran1 = StatsDb.withStatement(conn,
+        "SELECT COUNT(*), COALESCE(SUM(duration), 0), COALESCE(MAX(start_time), 0) FROM page_stat" .. where,
+        function(stmt)
+            for row in stmt:rows() do
+                parts[1] = tostring(tonumber(row[1]) or 0)
+                parts[2] = tostring(tonumber(row[2]) or 0)
+                parts[3] = tostring(tonumber(row[3]) or 0)
+            end
+        end)
+    -- Period lists show only a book's id and title, so for those just the
+    -- books read in the period count - a new book, or a re-paginated one
+    -- elsewhere in the library, must not throw away every past month's list.
+    -- The unbounded lists (all books, finished) also depend on page counts
+    -- (the 99% rule), so they look at the whole table.
+    local book_sql
+    if lo and hi then
+        book_sql = string.format([[
+            SELECT COUNT(*), 0, COALESCE(SUM(LENGTH(title)), 0) FROM book
+            WHERE id IN (SELECT DISTINCT id_book FROM page_stat
+                         WHERE start_time >= %d AND start_time < %d)
+        ]], math.floor(lo), math.floor(hi))
+    else
+        book_sql = "SELECT COUNT(*), COALESCE(SUM(pages), 0), COALESCE(SUM(LENGTH(title)), 0) FROM book"
+    end
+    local _r2, ran2 = StatsDb.withStatement(conn, book_sql,
+        function(stmt)
+            for row in stmt:rows() do
+                parts[4] = tostring(tonumber(row[1]) or 0)
+                parts[5] = tostring(tonumber(row[2]) or 0)
+                parts[6] = tostring(tonumber(row[3]) or 0)
+            end
+        end)
+    if not (ran1 and ran2) or #parts ~= 6 then return nil end
+    return table.concat(parts, ":")
+end
+
+-- [lo, hi) epoch bounds, in local time, of the period getBooksForPeriod is
+-- asked about: "%Y" with "2025", or "%Y-%m" with "2025-03". Anything else
+-- gives nil,nil and the list is built uncached.
+function M._periodBounds(period_format, period_value)
+    if period_format == "%Y" then
+        local y = tonumber(period_value)
+        if not y then return nil, nil end
+        return os.time{ year = y,     month = 1, day = 1, hour = 0, min = 0, sec = 0 },
+               os.time{ year = y + 1, month = 1, day = 1, hour = 0, min = 0, sec = 0 }
+    elseif period_format == "%Y-%m" then
+        local y, m = tostring(period_value):match("^(%d+)-(%d+)$")
+        y, m = tonumber(y), tonumber(m)
+        if not y or not m then return nil, nil end
+        return os.time{ year = y, month = m,     day = 1, hour = 0, min = 0, sec = 0 },
+               os.time{ year = y, month = m + 1, day = 1, hour = 0, min = 0, sec = 0 }
+    end
+    return nil, nil
+end
+
 -- Same "last entry >= 99%" definition as getFinishedBookCountForYear above,
 -- but returns the book rows themselves (for the goal section's "N book(s)
 -- finished" tap → book list). Not cached: only queried on demand, when the
@@ -1301,6 +1384,11 @@ end
 function M.getFinishedBooksForYear(year)
     local books = {}
     return StatsDb.withDb(books, function(conn)
+        local cache_key = "finished2:" .. tostring(year)
+        local stamp     = M._bookListStamp(conn)
+        local hit       = Cache.getBookList(cache_key, stamp)
+        if hit then return hit end
+
         local sql = string.format([[
             WITH last_entry AS (
                 SELECT id_book, MAX(start_time) AS last_time
@@ -1317,26 +1405,96 @@ function M.getFinishedBooksForYear(year)
             SELECT book.title, book.id AS id_book, lp.last_time AS last_time,
                    (SELECT SUM(duration) FROM page_stat
                     WHERE id_book = book.id
-                      AND strftime('%%Y', start_time, 'unixepoch', 'localtime') = '%s') AS duration_sec
+                      AND strftime('%%Y', start_time, 'unixepoch', 'localtime') = '%s') AS duration_sec,
+                   (SELECT COUNT(DISTINCT page) FROM page_stat
+                    WHERE id_book = book.id
+                      AND strftime('%%Y', start_time, 'unixepoch', 'localtime') = '%s') AS pages_read,
+                   book.md5 AS md5
             FROM last_page lp
             JOIN book ON book.id = lp.id_book
             WHERE book.pages > 0
               AND CAST(lp.last_page AS REAL) / book.pages >= 0.99
               AND strftime('%%Y', lp.last_time, 'unixepoch', 'localtime') = '%s'
             ORDER BY lp.last_time DESC
-        ]], tostring(year), tostring(year))
-        StatsDb.withStatement(conn, sql, function(stmt)
+        ]], tostring(year), tostring(year), tostring(year))
+        local _res, ran = StatsDb.withStatement(conn, sql, function(stmt)
             for row in stmt:rows() do
                 table.insert(books, {
                     title    = row[1] or _("Unknown"),
                     authors  = "",
                     id_book  = tonumber(row[2]),
                     duration = tonumber(row[4]) or 0,
+                    pages    = tonumber(row[5]) or 0,
+                    md5      = row[6],
                     last_read = tonumber(row[3]) or 0,
                 })
             end
         end)
+        if ran then Cache.setBookList(cache_key, stamp, books) end
         return books
+    end)
+end
+
+-- When a book counts as finished, for lists that are not the finished-books
+-- list (month, year, all-books, day): the timestamp of the entry it was
+-- finished on, or nil when it doesn't count as finished. The same rules as
+-- the finished-books list apply - the last entry reached 99% of the book,
+-- in the year that entry falls in, unless the reader unticked it there; or
+-- the reader ticked it by hand for a year the book has activity in (the
+-- date is then the last entry of that year). Overrides are per year, so
+-- every year the book was read in is looked at; the latest date wins.
+function M.getFinishedTimestamp(id_book)
+    id_book = tonumber(id_book)
+    if not id_book then return nil end
+    return StatsDb.withDb(nil, function(conn)
+        local last_time, last_page, pages
+        local sql_last = string.format([[
+            SELECT le.last_time, MAX(ps.page), book.pages
+            FROM (SELECT MAX(start_time) AS last_time
+                  FROM page_stat WHERE id_book = %d) le
+            JOIN page_stat ps ON ps.id_book = %d AND ps.start_time = le.last_time
+            JOIN book ON book.id = %d
+        ]], id_book, id_book, id_book)
+        StatsDb.withStatement(conn, sql_last, function(stmt)
+            for row in stmt:rows() do
+                last_time = tonumber(row[1])
+                last_page = tonumber(row[2])
+                pages     = tonumber(row[3])
+            end
+        end)
+
+        local auto_year
+        local auto = false
+        if last_time then
+            auto_year = os.date("%Y", last_time)
+            auto = (pages or 0) > 0 and (last_page or 0) / pages >= 0.99
+        end
+
+        local per_year = {}
+        local sql_years = string.format([[
+            SELECT strftime('%%Y', start_time, 'unixepoch', 'localtime'),
+                   MAX(start_time)
+            FROM page_stat WHERE id_book = %d
+            GROUP BY 1
+        ]], id_book)
+        StatsDb.withStatement(conn, sql_years, function(stmt)
+            for row in stmt:rows() do
+                if row[1] then per_year[tostring(row[1])] = tonumber(row[2]) end
+            end
+        end)
+
+        local key = tostring(id_book)
+        local best
+        for year, year_last in pairs(per_year) do
+            local v = VS.readFinishedOverrides(year)[key]
+            if auto and year == auto_year and v ~= false then
+                if not best or last_time > best then best = last_time end
+            end
+            if v == true and year_last then
+                if not best or year_last > best then best = year_last end
+            end
+        end
+        return best
     end)
 end
 
@@ -1631,16 +1789,24 @@ end
 function M.getBooksForPeriod(period_format, period_value)
     local books = {}
     return StatsDb.withDb(books, function(conn)
+        -- Same period, same stamp -> same list: skip the query entirely.
+        local cache_key = "period2:" .. period_format .. ":" .. tostring(period_value)
+        local lo, hi    = M._periodBounds(period_format, period_value)
+        local stamp     = (lo and hi) and M._bookListStamp(conn, lo, hi) or nil
+        local hit       = Cache.getBookList(cache_key, stamp)
+        if hit then return hit end
+
         -- De-duplicated reading time per book for the period.
         -- period_format inserted via concatenation to avoid %% escape conflicts.
         local sql = [[
             SELECT book.title, book.authors,
                    COUNT(DISTINCT ps_dedup.page) AS pages_read,
                    SUM(ps_dedup.period_sum) AS duration_sec,
-                   fin.finish_time,
+                   NULL AS finish_time,
                    MAX(ps_dedup.last_read) AS last_read_time,
                    day_counts.days_read,
-                   book.id AS id_book
+                   book.id AS id_book,
+                   book.md5 AS md5
             FROM (
                 SELECT id_book, page,
                        SUM(duration) AS period_sum,
@@ -1650,14 +1816,6 @@ function M.getBooksForPeriod(period_format, period_value)
                 GROUP BY id_book, page
             ) ps_dedup
             JOIN book ON ps_dedup.id_book = book.id
-            LEFT JOIN (
-                SELECT ps2.id_book, MAX(ps2.start_time) AS finish_time
-                FROM page_stat ps2
-                JOIN book b2 ON ps2.id_book = b2.id
-                WHERE b2.pages > 0
-                GROUP BY ps2.id_book
-                HAVING MAX(ps2.page) >= b2.pages
-            ) fin ON ps_dedup.id_book = fin.id_book
             LEFT JOIN (
                 SELECT id_book,
                        COUNT(DISTINCT date(start_time, 'unixepoch', 'localtime')) AS days_read
@@ -1669,7 +1827,7 @@ function M.getBooksForPeriod(period_format, period_value)
             ORDER BY MAX(ps_dedup.last_read) DESC
         ]]
 
-        StatsDb.withStatement(conn, sql, function(stmt)
+        local _res, ran = StatsDb.withStatement(conn, sql, function(stmt)
             for row in stmt:rows() do
                 table.insert(books, {
                     title     = row[1] or _("Unknown"),
@@ -1678,12 +1836,14 @@ function M.getBooksForPeriod(period_format, period_value)
                     duration  = tonumber(row[4]) or 0,
                     days_read = tonumber(row[7]) or 0,
                     id_book   = tonumber(row[8]),
+                    md5       = row[9],
                     -- Last reading entry for this book in the period; what
                     -- the book lists sort on by default.
                     last_read = tonumber(row[6]) or 0,
                 })
             end
         end)
+        if ran then Cache.setBookList(cache_key, stamp, books) end
         return books
     end)
 end
@@ -1691,12 +1851,17 @@ end
 function M.getAllBooks()
     local books = {}
     return StatsDb.withDb(books, function(conn)
+        local stamp = M._bookListStamp(conn)
+        local hit   = Cache.getBookList("all2", stamp)
+        if hit then return hit end
+
         local sql = [[
             SELECT book.title, book.authors,
                    COUNT(DISTINCT ps_dedup.page) AS pages_read,
                    SUM(ps_dedup.period_sum) AS duration_sec,
                    MAX(ps_dedup.last_read) AS last_read_time,
-                   book.id AS id_book
+                   book.id AS id_book,
+                   book.md5 AS md5
             FROM (
                 SELECT id_book, page,
                        SUM(duration) AS period_sum,
@@ -1708,7 +1873,7 @@ function M.getAllBooks()
             GROUP BY ps_dedup.id_book
             ORDER BY last_read_time DESC
         ]]
-        StatsDb.withStatement(conn, sql, function(stmt)
+        local _res, ran = StatsDb.withStatement(conn, sql, function(stmt)
             for row in stmt:rows() do
                 table.insert(books, {
                     title    = row[1] or _("Unknown"),
@@ -1716,10 +1881,12 @@ function M.getAllBooks()
                     pages    = tonumber(row[3]) or 0,
                     duration = tonumber(row[4]) or 0,
                     id_book  = tonumber(row[6]),
+                    md5      = row[7],
                     last_read = tonumber(row[5]) or 0,
                 })
             end
         end)
+        if ran then Cache.setBookList("all2", stamp, books) end
         return books
     end)
 end

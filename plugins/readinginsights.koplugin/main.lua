@@ -209,6 +209,13 @@ local InsightsCache = loadModule("lib/insights_cache.lua")
 -- every finished-book figure.
 local ManualBooks   = loadModule("lib/manual_books.lua")
 
+-- Star ratings of the books, read from the books' own sidecar files (the
+-- statistics DB has none) - shown and sorted on in the book lists.
+local Ratings       = loadModule("lib/ratings.lua")
+
+-- The star rating popup (five stars in a row, tap or slide to set).
+local RatingDialog = loadModule("widgets/ratingdialog.lua", { Locale = Locale })
+
 -- The shared list widget every book list popup is drawn with: sort menu in
 -- the title bar, paged rows, optional checkboxes and cancel/accept buttons.
 local ListWidget = loadModule("widgets/booklistwidget.lua",
@@ -250,7 +257,8 @@ local Heatmap = loadModule("views/heatmap_view.lua", {
 local BookList = loadModule("views/booklist_view.lua", {
     Colors = Colors, Locale = Locale, VS = ViewSettings, UI = UI,
     Data = InsightsData, Cache = InsightsCache,
-    ListWidget = ListWidget, Manual = ManualBooks,
+    ListWidget = ListWidget, Manual = ManualBooks, Ratings = Ratings,
+    RatingDialog = RatingDialog, BookStatsData = BookStatsData,
 })
 
 -- Records data (the queries + their cache) is loaded before the insights
@@ -275,6 +283,7 @@ local AchievementsView = loadModule("views/achievements_view.lua",
 local StreakCalendar = loadModule("views/streak_calendar_view.lua", {
     Locale = Locale, Colors = Colors, Fonts = Fonts, UI = UI,
     Data = InsightsData, Prefs = Prefs, VS = ViewSettings,
+    BookList = BookList,
 })
 
 -- Records: the queries and their cache (lib/records_data.lua, loaded above
@@ -310,12 +319,17 @@ local StatsPopup = loadModule("views/book_stats_view.lua", {
 -- joined with a language-appropriate "and", the series line, the cover
 -- image) lives in lib/bookinfo_data.lua; the cover's rounded, shadowed
 -- frame is drawn by widgets/coverframe.lua (the Book card plugin's widget).
-local BookInfoData = loadModule("lib/bookinfo_data.lua", { Locale = Locale })
+local BookInfoData = loadModule("lib/bookinfo_data.lua",
+    { Locale = Locale, BookStatsData = BookStatsData })
 local CoverFrame   = loadModule("widgets/coverframe.lua")
 local BookInfo = loadModule("views/book_info_view.lua", {
     Locale = Locale, Colors = Colors, Fonts = Fonts, VS = ViewSettings,
     Data = BookInfoData, CoverFrame = CoverFrame,
+    Ratings = Ratings, RatingDialog = RatingDialog,
 })
+-- A tap on a row of a book list opens this popup for that book (the lists
+-- are loaded before it, so they get it handed over here).
+BookList.bindBookInfo(BookInfo)
 local Updater = loadModule("lib/updater.lua", { Locale = Locale })
 local About   = loadModule("views/about.lua",
     { Locale = Locale, Updater = Updater, PopupUtil = PopupUtil })
@@ -936,7 +950,7 @@ end
 -- General, like the Records/Streak popups above: the heatmap is built from
 -- all-time reading data, not tied to any open book, so it opens in both
 -- Reader view and the File manager. Same full-screen popup the insights
--- page's "Total read" header opens (views/insights_view.lua's
+-- page's "All time" header opens (views/insights_view.lua's
 -- showReadingHeatmap) - Heatmap.Popup only ever calls
 -- getDailyReadingDataForRange on the "popup_self" it's given, so a minimal
 -- stand-in table with just that one method (heatmapGetDailyReadingDataForRange

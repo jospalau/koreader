@@ -114,12 +114,6 @@ msgstr "день читання"
 msgid "days read"
 msgstr "днів читання"
 
-msgid "book read"
-msgstr "книга прочитана"
-
-msgid "books read"
-msgstr "книг прочитано"
-
 msgid "book"
 msgstr "книга"
 
@@ -159,29 +153,26 @@ msgstr "Найкраща серія"
 msgid "Days read per month"
 msgstr "Днів читання на місяць"
 
-msgid "Time read per month"
+msgid "Reading time per month"
 msgstr "Час читання на місяць"
 
-msgid "Books read per month"
-msgstr "Книг прочитано на місяць"
+msgid "Books per month"
+msgstr "Книг на місяць"
 
 msgid "Unknown"
 msgstr "Невідомо"
 
-msgid "No books read"
-msgstr "Книг не прочитано"
+msgid "No books"
+msgstr "Книг немає"
 
-msgid "No books read in %1"
-msgstr "Книг не прочитано в %1"
+msgid "No books in %1"
+msgstr "Книг немає в %1"
 
-msgid "No books read in "
-msgstr "Книг не прочитано в "
+msgid "%1 - %2 book"
+msgstr "%1 - книг: %2"
 
-msgid "%1 - book read %2"
-msgstr "%1 - прочитано книгу %2"
-
-msgid "%1 - books read %2"
-msgstr "%1 - прочитано книг %2"
+msgid "%1 - %2 books"
+msgstr "%1 - книг: %2"
 
 msgid "Reading goal"
 msgstr "Ціль читання"
@@ -213,13 +204,16 @@ msgstr "Жодної книги не завершено в %1"
 msgid "Mark book finished - %1"
 msgstr "Позначити книгу завершеною - %1"
 
-msgid "No books read in this year"
-msgstr "Цього року книг не прочитано"
+msgid "No books this year"
+msgstr "Цього року книг немає"
 
 msgid "Reloading data..."
 msgstr "Перезавантаження даних..."
 
 msgid "Reading insights"
+msgstr "Аналітика читання"
+
+msgid "Reading insights popup title"
 msgstr "Аналітика читання"
 
 msgid "Reading insights: all time statistics"
@@ -231,17 +225,14 @@ msgstr "Аналітика читання: прогрес поточної кн�
 msgid "Reading insights: book progress calendar"
 msgstr "Аналітика читання: календар прогресу книги"
 
-msgid "All books read %1"
-msgstr "Усі книги прочитано %1"
+msgid "All books %1"
+msgstr "Усі книги: %1"
 
-msgid "TOTAL READ"
-msgstr "ВСЬОГО ПРОЧИТАНО"
+msgid "daily avg page"
+msgstr "сер. сторінок/день"
 
-msgid "LAST WEEK"
-msgstr "МИНУЛИЙ ТИЖДЕНЬ"
-
-msgid "avg/day"
-msgstr "сер./день"
+msgid "daily avg pages"
+msgstr "сер. сторінок/день"
 
 msgid "Today"
 msgstr "Сьогодні"
@@ -270,14 +261,17 @@ msgstr "Сб"
 msgid "Sun"
 msgstr "Нд"
 
-msgid "read time avg/day"
-msgstr "сер. час читання/день"
+msgid "daily avg time"
+msgstr "сер. час/день"
 
 msgid "reading time"
 msgstr "час читання"
 
 msgid "No streak dates"
 msgstr "Немає дат серії"
+
+msgid "Last read: %1"
+msgstr "Востаннє прочитано: %1"
 
 msgid "CalendarView not available"
 msgstr "CalendarView недоступний"
@@ -310,7 +304,7 @@ msgid "pages read today"
 msgstr "сторінок прочитано сьогодні"
 
 msgid "Show Reading insights"
-msgstr "Показати Аналітику читання"
+msgstr "Показати аналітику читання"
 
 msgid "Full-screen refresh on open/close"
 msgstr "Повноекранне оновлення при відкритті/закритті"
@@ -332,6 +326,9 @@ msgstr "4 місяці"
 
 msgid "6 months"
 msgstr "6 місяців"
+
+msgid "12 months"
+msgstr "12 місяців"
 
 msgid "Time format"
 msgstr "Формат часу"
@@ -828,11 +825,8 @@ msgstr "В останньому релізі немає завантажуван
 msgid "Reading heatmap"
 msgstr "Теплокарта читання"
 
-msgid "Time of day heatmap"
-msgstr "Теплокарта часу доби"
-
-msgid "Calendar heatmap"
-msgstr "Теплокарта календаря"
+msgid "Reading calendar"
+msgstr "Календар читання"
 
 msgid "Less"
 msgstr "Менше"
@@ -981,10 +975,10 @@ msgstr ""
 "значення цілі, щоб змінити його."
 
 msgid "book to read"
-msgstr "книга до прочитання"
+msgstr "цільова книга"
 
 msgid "books to read"
-msgstr "книг до прочитання"
+msgstr "цільових книг"
 
 msgid "* = changed by you"
 msgstr "* = змінено вами"
@@ -1020,7 +1014,7 @@ msgstr "Минулий тиждень"
 msgid "Months"
 msgstr "Місяці"
 
-msgid "Total read"
+msgid "All time"
 msgstr "Всього прочитано"
 
 msgid "Last read (newest first)"
@@ -1698,8 +1692,14 @@ msgstr "День"
 msgid "Evening"
 msgstr "Вечір"
 
-msgid "Reading time by time of day"
-msgstr "Час читання за часом доби"
+msgid "When you read"
+msgstr "Коли ви читаєте"
+
+msgid "Days of the week"
+msgstr "Дні тижня"
+
+msgid "You read most around %1"
+msgstr "Найбільше ви читаєте близько %1"
 
 msgid "Book progress popup"
 msgstr "Спливне вікно прогресу книги"
@@ -1928,3 +1928,57 @@ msgstr "Показує опис книги під автором / серією 
 
 msgid "Description"
 msgstr "Опис"
+
+msgid "No reading on %1"
+msgstr "За %1 читання немає"
+
+msgid "of annual goal"
+msgstr "від річної мети"
+
+msgid "Latest"
+msgstr "Останнє"
+
+msgid "Rating"
+msgstr "Оцінка"
+
+msgid "Date"
+msgstr "Дата"
+
+msgid "Reading time"
+msgstr "Час читання"
+
+msgid "Pages read"
+msgstr "Прочитано сторінок"
+
+msgid "Rating (stars)"
+msgstr "Оцінка (зірки)"
+
+msgid "Rating (highest first)"
+msgstr "Оцінка (спочатку найвища)"
+
+msgid "Rating (lowest first)"
+msgstr "Оцінка (спочатку найнижча)"
+
+msgid "Show in the right column"
+msgstr "Показувати в правому стовпці"
+
+msgid "Clear rating"
+msgstr "Очистити оцінку"
+
+msgid "This book has no checksum, so its rating can't be saved"
+msgstr "У цієї книги немає контрольної суми, тому її оцінку не можна зберегти"
+
+msgid "e.g. Dune #2"
+msgstr "напр. Dune #2"
+
+msgid "Please enter the number in the series as a number (e.g. 2 or 2.5)"
+msgstr "Введіть номер у серії числом (напр. 2 або 2.5)"
+
+msgid "Finished"
+msgstr "Завершено"
+
+msgid "Data reloaded"
+msgstr "Дані перезавантажено"
+
+msgid "Data reloaded. New achievements: %1"
+msgstr "Дані перезавантажено. Нові досягнення: %1"

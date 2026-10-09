@@ -431,38 +431,23 @@ function M.build(self, deps)
     -- "Date & time" group.
     local insights_popup_sub_item_table = {}
 
-    -- What the reading-goal section shows: the goal + achievements, the goal
-    -- only (old two-cell view), or nothing. When off it isn't drawn or
-    -- queried; achievements stay reachable via "Show Achievements".
+    -- The reading-goal and achievements sections of the popup, each with its
+    -- own checkbox. A hidden goal section isn't drawn or queried; the
+    -- achievements list stays reachable via "Show Achievements" either way.
     do
-        local Opt  = deps.ViewSettings.Opt
-        local BOTH = Opt.GOAL_MODE_BOTH
-        local GOAL = Opt.GOAL_MODE_GOAL
-        local OFF  = Opt.GOAL_MODE_OFF
-        local function modeEntry(value, text)
-            return {
-                text = text,
-                keep_menu_open = true,
-                radio = true,
-                checked_func = function() return Opt.readGoalSectionMode() == value end,
-                callback = function() Opt.saveGoalSectionMode(value) end,
-            }
-        end
+        local Opt = deps.ViewSettings.Opt
         table.insert(insights_popup_sub_item_table, {
-            text_func = function()
-                local m = Opt.readGoalSectionMode()
-                local label = (m == GOAL and _("Reading goal only"))
-                    or (m == OFF and _("Off"))
-                    or _("Reading goal & achievements")
-                return _("Reading goal section") .. ": " .. label
-            end,
+            text = _("Reading goal"),
+            keep_menu_open = true,
+            checked_func = function() return Opt.readShowReadingGoal() end,
+            callback = function() Opt.saveShowReadingGoal(not Opt.readShowReadingGoal()) end,
+        })
+        table.insert(insights_popup_sub_item_table, {
+            text = _("Achievements"),
             keep_menu_open = true,
             separator = true,
-            sub_item_table = {
-                modeEntry(BOTH, _("Reading goal & achievements")),
-                modeEntry(GOAL, _("Reading goal only")),
-                modeEntry(OFF,  _("Off")),
-            },
+            checked_func = function() return Opt.readShowAchievements() end,
+            callback = function() Opt.saveShowAchievements(not Opt.readShowAchievements()) end,
         })
     end
 
@@ -482,6 +467,7 @@ function M.build(self, deps)
             local label
             if months == 3 then label = _("3 months")
             elseif months == 6 then label = _("6 months")
+            elseif months == 12 then label = _("12 months")
             else label = _("4 months") end
             return _("Reading heatmap range") .. ": " .. label
         end,
@@ -507,6 +493,13 @@ function M.build(self, deps)
                 radio = true,
                 checked_func = function() return deps.ViewSettings.readHeatmapMonthsSetting() == 6 end,
                 callback = function() deps.ViewSettings.saveHeatmapMonthsSetting(6) end,
+            },
+            {
+                text = _("12 months"),
+                keep_menu_open = true,
+                radio = true,
+                checked_func = function() return deps.ViewSettings.readHeatmapMonthsSetting() == 12 end,
+                callback = function() deps.ViewSettings.saveHeatmapMonthsSetting(12) end,
             },
         },
     })

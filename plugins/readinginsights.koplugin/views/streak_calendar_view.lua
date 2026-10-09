@@ -17,6 +17,8 @@ Calendar cell shading (see buildStreakMonthGrid):
 
 Gestures on the popup:
   - Tap a ‹ / › arrow, swipe left/right, or Left/Right keys   page one month
+  - Tap a day in the calendar                                  list of the books read that day
+                                                               (or a notice if nothing was read)
   - Any other tap / swipe / key                                close
 
 All display data is precomputed by M.show and stashed on the StreakDatePopup
@@ -48,8 +50,9 @@ local InfoMessage = require("ui/widget/infomessage")
 -- Locale/Colors/Fonts/UI/Data/Prefs the insights view uses, so this popup
 -- reads the same colors, fonts and reading data.
 local deps = ...
-local Locale, Colors, Fonts, UI, Data, Prefs, VS =
-    deps.Locale, deps.Colors, deps.Fonts, deps.UI, deps.Data, deps.Prefs, deps.VS
+local Locale, Colors, Fonts, UI, Data, Prefs, VS, BookList =
+    deps.Locale, deps.Colors, deps.Fonts, deps.UI, deps.Data, deps.Prefs, deps.VS, deps.BookList
+local T = require("ffi/util").template
 
 local _            = Locale._
 local N_           = Locale.N_
@@ -58,8 +61,8 @@ local formatCount  = Locale.formatCount
 
 -- Format a YYYY-MM-DD string in the configured date format (Settings ▸
 -- Advanced settings ▸ Date & time ▸ "Date format" - see Locale.formatDate).
--- no_trailing_dot: the "2026.07.20." pattern only - omit the final dot (used
--- for the first date in a range).
+-- no_trailing_dot: ignored (kept for compatibility); every date keeps its
+-- final dot, also the first date of a range.
 local function formatDateForDisplay(date_str, no_trailing_dot)
     if not date_str then return "?" end
     return Locale.formatDate(date_str, no_trailing_dot)
@@ -209,6 +212,15 @@ local function buildStreakMonthGrid(year, month, read_set, fonts, cell, week_sta
     local grid_w  = week_prefix_w + 7 * cell
     local row_gap = Screen:scaleBySize(6)
     local grid = VerticalGroup:new{ align = "center" }
+    -- Geometry + dates of the day cells, handed back to the caller so it can
+    -- build one tap zone per day (tap a day -> that day's book list).
+    --   top        y offset of the first week row inside the grid
+    --   row_pitch  distance between the tops of two consecutive week rows
+    --   dates[r][c] the "YYYY-MM-DD" of week row r (1..6), column c (1..7)
+    local day_meta = {
+        cell = cell, grid_w = grid_w, week_prefix_w = week_prefix_w,
+        row_pitch = cell + row_gap, dates = {},
+    }
 
     -- The optional "Week" column prefix: a gray label/number cell, then a
     -- thin gray separator line, then a bit of breathing room either side -
@@ -246,6 +258,7 @@ local function buildStreakMonthGrid(year, month, read_set, fonts, cell, week_sta
     end
     table.insert(grid, header_row)
     table.insert(grid, Colors.newBar(grid_w, Size.padding.small, Blitbuffer.COLOR_WHITE))
+    day_meta.top = header_row:getSize().h + Size.padding.small
 
     local days_in_month, lead_blanks = streakMonthShape(year, month, week_start_wd)
 
@@ -281,6 +294,7 @@ local function buildStreakMonthGrid(year, month, read_set, fonts, cell, week_sta
         end
 
         local row = HorizontalGroup:new{}
+        day_meta.dates[r + 1] = {}
         if show_week then
             -- ISO week number of the row's first (leftmost) column, whatever
             -- the configured week-start day - a row is one calendar week
@@ -294,6 +308,7 @@ local function buildStreakMonthGrid(year, month, read_set, fonts, cell, week_sta
         for col = 0, 6 do
             local cell_day = base + col
             local day_str  = cellDate(cell_day)
+            day_meta.dates[r + 1][col + 1] = day_str
             local is_this_month = (cell_day >= 1 and cell_day <= days_in_month)
             -- Read day -> daily-streak fill; other day in a week with reading ->
             -- weekly-streak gap fill; everything else -> white.
@@ -322,7 +337,7 @@ local function buildStreakMonthGrid(year, month, read_set, fonts, cell, week_sta
         table.insert(grid, row)
     end
 
-    return grid
+    return grid, day_meta
 end
 
 -- The list of { year, month } the streak spans, oldest first. One entry is one
@@ -843,6 +858,79 @@ local function showStreakHistory(streaks, which)
     showHistoryPopup(title_str, days, stats)
 end
 
+-- Tapping a streak's days or weeks cell: a notice with both its daily and its
+-- weekly length and date range:
+--   3 days / <range> / 1 week / <range>
+-- `which` is "current" or "best". A weekly streak is stored as the start dates
+-- of its first and last week, so its range ends on the last day of that final
+-- week (for the running week that is its upcoming last day, not today). A
+-- part with no streak shows "-" as its range.
+local function showStreakRange(streaks, which)
+    streaks = streaks or {}
+    local dash = "\xE2\x80\x93"
+    local function part(unit)
+        local dates = streaks[which .. "_" .. unit .. "_dates"]
+        local n = streaks[which .. "_" .. unit] or 0
+        local unit_label = (unit == "weeks") and N_("week", "weeks", n) or N_("day", "days", n)
+        local range = dash
+        if dates and dates.start then
+            local from_date, to_date = dates.start, dates.end_
+            if unit == "weeks" then
+                local y, m, d = Data.parseDateYMD(to_date)
+                if y then
+                    to_date = os.date("%Y-%m-%d", os.time{ year = y, month = m, day = d, hour = 12 } + 6 * 86400)
+                end
+            end
+            range = formatDateForDisplay(from_date, true) .. " " .. dash .. " " .. formatDateForDisplay(to_date)
+        end
+        return formatCount(n) .. " " .. unit_label .. "\n" .. range
+    end
+    UIManager:show(InfoMessage:new{
+        text = part("days") .. "\n" .. part("weeks"),
+    })
+end
+
+-- KOReader's statistics plugin (its getBookStat() builds the per-book stats
+-- page a tapped list row opens). This popup isn't handed a ui, so look the
+-- plugin up on the live ReaderUI (inside a book) or FileManager (file browser).
+-- nil if neither has it; rows then simply aren't tappable.
+local function findStatsPlugin()
+    for _, mod in ipairs({ "apps/reader/readerui", "apps/filemanager/filemanager" }) do
+        local ok, M = pcall(require, mod)
+        local inst = ok and M and M.instance
+        if inst and inst.statistics and inst.statistics.getBookStat then
+            return inst.statistics
+        end
+    end
+    return nil
+end
+
+-- Tapping a day in the calendar: the books read on that day with the time
+-- spent on each, in the same list the insights page uses for a month/year
+-- ("2026. 03. 12: 2 books read (7:20:31)"). A day with no reading at all
+-- gets a notice instead.
+local function showDayBooks(date_str)
+    local date_label = formatDateForDisplay(date_str)
+    local books = Data.getBooksForPeriod("%Y-%m-%d", date_str) or {}
+    if #books == 0 then
+        UIManager:show(InfoMessage:new{
+            text = T(_("No reading on %1"), date_label),
+        })
+        return
+    end
+    -- "2026. 03. 12." -> "2026. 03. 12" so the title reads "2026. 03. 12: 2 ..."
+    -- (the dot would otherwise sit right in front of the colon).
+    local title_date = (date_label:gsub("%.$", ""))
+    local title = T(N_("%1 - %2 book", "%1 - %2 books", #books),
+            title_date, formatCount(#books))
+        .. " (" .. Locale.formatDuration(Data.sumDuration(books), false) .. ")"
+    -- The streak popup (and the insights popup under it) are modal, and
+    -- KOReader's UIManager keeps modal widgets above non-modal ones, so the
+    -- list is shown modal too (opts.modal) to land on top. The popups stay
+    -- open underneath untouched; closing the list simply reveals them again.
+    BookList.showBookList(title, books, nil, findStatsPlugin(), { modal = true })
+end
+
 -- The streaks popup itself: a modal box laying out (top to bottom) one pageable
 -- calendar month with the reading/streaks marked, then current and best streak
 -- side by side (name, date range, days | weeks). The calendar pages one month
@@ -890,6 +978,9 @@ function StreakDatePopup:_rebuild()
     -- from the header's on-screen position below; since the calendar is the
     -- first thing in the box, that header sits right under the box padding.
     self._nav_zones = {}
+    self._day_zones = {}
+    self._cell_zones = {}
+    self._grid_meta = nil
     self._left_w, self._right_w, self._header_h = nil, nil, 0
     if self.months and #self.months > 0 then
         -- Day squares sit flush (no gap between days), so the whole grid is
@@ -911,8 +1002,11 @@ function StreakDatePopup:_rebuild()
         local next_available = self.month_index < #self.months
         local header, left_w, right_w, header_h =
             buildStreakCalHeader(title_str, cont_w, fonts.section, prev_available, next_available)
-        local grid = buildStreakMonthGrid(mo.year, mo.month, self.read_set,
+        local grid, grid_meta = buildStreakMonthGrid(mo.year, mo.month, self.read_set,
             fonts, cell, self.week_start_wd, show_week, week_col_w)
+        grid_meta.header_h = header_h
+        grid_meta.drawn_w  = grid:getSize().w
+        self._grid_meta = grid_meta
 
         table.insert(content, header)
         table.insert(content, VerticalSpan:new{ height = Size.padding.default })
@@ -921,26 +1015,30 @@ function StreakDatePopup:_rebuild()
         table.insert(content, CenterContainer:new{
             dimen = Geom:new{ w = cont_w, h = grid:getSize().h }, grid,
         })
-        -- Explicit white spacer (not a VerticalSpan) so there is a clear gap
-        -- between the calendar and the divider line below it.
-        table.insert(content, Colors.newBar(cont_w, Size.padding.large, Blitbuffer.COLOR_WHITE))
-        table.insert(content, Colors.newBar(cont_w, Size.line.thick, Colors.separator()))
-        table.insert(content, VerticalSpan:new{ height = Size.padding.large })
-
         self._header_h = header_h
         self._left_w   = prev_available and left_w or nil
         self._right_w  = next_available and right_w or nil
     end
 
+    -- Once, right under the calendar: the most recent reading day (left-aligned). Then the
+    -- divider line, then the current / best streak section.
+    table.insert(content, VerticalSpan:new{ height = Size.padding.default })
+    local last_read_w = TextWidget:new{ text = self.last_read_str, face = fonts.label, fgcolor = Colors.label() }
+    table.insert(content, UI.fixedCol(last_read_w, cont_w))
+    -- Explicit white spacer (not a VerticalSpan) so there is a clear gap
+    -- between the line above and the divider line below it.
+    table.insert(content, Colors.newBar(cont_w, Size.padding.large, Blitbuffer.COLOR_WHITE))
+    table.insert(content, Colors.newBar(cont_w, Size.line.thick, Colors.separator()))
+    table.insert(content, VerticalSpan:new{ height = Size.padding.large })
+
     -- Below the calendar: current and best streak side by side.
     --   [ Current streak | Best streak ]   section headers
-    --   [ date range     | date range   ]
     --   ---------------------------------   thin divider
     --   [ days | weeks   | days | weeks ]
     -- The days|weeks value line (fonts.value) is the tallest of the three text
     -- roles here, so its line height sets a single row height (row_h) that the
-    -- section-header and date rows above are also pinned to - all three rows
-    -- then read as the same height, with their text vertically centred.
+    -- section-header row above is also pinned to - both rows then read as
+    -- the same height, with their text vertically centred.
     local inner_gap = math.floor(layout.column_gap / 2)
     local half_col  = math.floor((col_w - inner_gap) / 2)
     local row_h = buildValueLine(fonts.value, fonts.label, half_col, "0", N_("day", "days", 0)):getSize().h
@@ -957,15 +1055,6 @@ function StreakDatePopup:_rebuild()
         UI.fixedCol(cur_hdr,  col_w, row_h),
         UI.fixedCol(best_hdr, col_w, row_h),
         layout))
-    table.insert(content, VerticalSpan:new{ height = Size.padding.default })
-
-    local cur_date  = TextWidget:new{ text = self.cur_date_str,  face = fonts.label, fgcolor = Colors.label() }
-    local best_date = TextWidget:new{ text = self.best_date_str, face = fonts.label, fgcolor = Colors.label() }
-    table.insert(content, UI.buildTwoColRow(
-        UI.fixedCol(cur_date,  col_w, row_h),
-        UI.fixedCol(best_date, col_w, row_h),
-        layout))
-
     table.insert(content, VerticalSpan:new{ height = Size.padding.large })
     table.insert(content, Colors.newBar(cont_w, Size.line.thin, Colors.separator()))
     table.insert(content, VerticalSpan:new{ height = Size.padding.large })
@@ -1021,6 +1110,32 @@ function StreakDatePopup:_rebuild()
         })
     end
 
+    -- One tap zone per day cell of the calendar (6 week rows x 7 columns).
+    -- Position: the grid is centered under the header, which is followed by
+    -- Size.padding.default; inside the grid the weekday header row and the
+    -- first week row follow (day_meta.top), then each further row sits
+    -- day_meta.row_pitch lower. Tapping a day opens that day's book list.
+    local gm = self._grid_meta
+    if gm then
+        local grid_x = header_x + math.floor((cont_w - gm.drawn_w) / 2)
+        local grid_y = header_y + gm.header_h + Size.padding.default + gm.top
+        for r = 0, 5 do
+            for c = 0, 6 do
+                local date = gm.dates[r + 1] and gm.dates[r + 1][c + 1]
+                if date then
+                    table.insert(self._day_zones, {
+                        dimen = Geom:new{
+                            x = grid_x + gm.week_prefix_w + c * gm.cell,
+                            y = grid_y + r * gm.row_pitch,
+                            w = gm.cell, h = gm.cell,
+                        },
+                        date = date,
+                    })
+                end
+            end
+        end
+    end
+
     -- Tap zones for the "Current streak" / "Best streak" columns themselves
     -- - tapping either opens that streak's per-day history popup (see
     -- StreakDatePopup:onTap below). Measured from the actual laid-out
@@ -1038,6 +1153,27 @@ function StreakDatePopup:_rebuild()
         { dimen = Geom:new{ x = header_x, y = section_y, w = col_w, h = section_h }, which = "current" },
         { dimen = Geom:new{ x = header_x + cont_w - col_w, y = section_y, w = col_w, h = section_h }, which = "best" },
     }
+
+    -- The days | weeks cells (the last row of that section): tapping one shows
+    -- that streak's date range instead of opening the history. Checked before
+    -- _streak_zones in onTap, so the rest of the section still opens it.
+    local stats_h = content[streak_section_end_idx]:getSize().h
+    local stats_y = section_y + section_h - stats_h
+    local half_w  = math.floor(col_w / 2)
+    self._cell_zones = {}
+    for _i, col in ipairs({
+        { which = "current", x = header_x },
+        { which = "best",    x = header_x + cont_w - col_w },
+    }) do
+        table.insert(self._cell_zones, {
+            dimen = Geom:new{ x = col.x, y = stats_y, w = half_w, h = stats_h },
+            which = col.which, unit = "days",
+        })
+        table.insert(self._cell_zones, {
+            dimen = Geom:new{ x = col.x + half_w, y = stats_y, w = col_w - half_w, h = stats_h },
+            which = col.which, unit = "weeks",
+        })
+    end
 end
 
 function StreakDatePopup:_goToMonth(delta)
@@ -1067,10 +1203,24 @@ function StreakDatePopup:onTap(arg, ges_ev)
                 return self:_goToMonth(zone.delta)
             end
         end
+        for _, zone in ipairs(self._cell_zones or {}) do
+            local d = zone.dimen
+            if x >= d.x and x < d.x + d.w and y >= d.y and y <= d.y + d.h then
+                showStreakRange(self.streaks, zone.which)
+                return true
+            end
+        end
         for _, zone in ipairs(self._streak_zones or {}) do
             local d = zone.dimen
             if x >= d.x and x <= d.x + d.w and y >= d.y and y <= d.y + d.h then
                 showStreakHistory(self.streaks, zone.which)
+                return true
+            end
+        end
+        for _, zone in ipairs(self._day_zones or {}) do
+            local d = zone.dimen
+            if x >= d.x and x < d.x + d.w and y >= d.y and y < d.y + d.h then
+                showDayBooks(zone.date)
                 return true
             end
         end
@@ -1123,14 +1273,16 @@ local function showStreaksPopup(streaks)
     local col_width = layout.col_width
     local content_width = layout.content_width
 
-    -- Each streak's date range comes from its daily-streak span; "–" when there
-    -- is no such streak yet.
-    local function rangeStr(dates)
-        if not dates or not dates.start then return "\xE2\x80\x93" end
-        return formatDateForDisplay(dates.start, true) .. " \xE2\x80\x93 " .. formatDateForDisplay(dates.end_)
+    -- The most recent reading day overall, shown once under the calendar
+    -- ("-" when nothing has been read yet).
+    local last_read = streaks.last_read_date
+        or (streaks.current_days_dates and streaks.current_days_dates.end_)
+    if not last_read then
+        local max_t = Data.getMaxStartTime()
+        if max_t and max_t > 0 then last_read = os.date("%Y-%m-%d", max_t) end
     end
-    local cur_date_str  = rangeStr(streaks.current_days_dates)
-    local best_date_str = rangeStr(streaks.best_days_dates)
+    local last_read_str = T(_("Last read: %1"),
+        last_read and formatDateForDisplay(last_read) or "\xE2\x80\x93")
 
     -- Calendar span: from the month of the very first reading record up to
     -- today, so the whole history pages through with its reading marked. The
@@ -1167,8 +1319,7 @@ local function showStreaksPopup(streaks)
         inner_padding = inner_padding,
 
         streaks       = streaks,
-        cur_date_str  = cur_date_str,
-        best_date_str = best_date_str,
+        last_read_str = last_read_str,
         cur_days      = streaks.current_days  or 0,
         cur_weeks     = streaks.current_weeks or 0,
         best_days     = streaks.best_days     or 0,

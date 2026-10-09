@@ -179,6 +179,15 @@ M.Opt = {
     GOAL_MODE_GOAL = "goal_only",
     GOAL_MODE_OFF  = "off",
 
+    -- Independent on/off switches for the two sections (Settings > Reading
+    -- insight popup > "Reading goal" / "Achievements"), both on by default.
+    -- They replace the single three-way mode above; when a switch has never
+    -- been touched it falls back to what the old mode implied, so existing
+    -- setups keep looking the same (see readShowReadingGoal /
+    -- readShowAchievements).
+    SHOW_GOAL_ROW_KEY = "reading_insights_goal_row_enabled",
+    SHOW_ACH_ROW_KEY  = "reading_insights_achievements_row_enabled",
+
     -- What the right-hand cell of the "Reading goal" section counts
     -- (Settings > Reading insight popup > "Reading goal
     -- display"). "total" (default) shows the year's goal itself - "30 books
@@ -275,14 +284,14 @@ M.Opt = {
 }
 
 -- Reading heatmap period length (Prefs ▸ Advanced settings ▸ how many
--- months the heatmap grid shows at once - 3, 4 or 6). Read by
+-- months the heatmap grid shows at once - 3, 4, 6 or 12). Read by
 -- getHeatmapPeriodRange below every time a heatmap page is built, so a
 -- change takes effect the next time the popup (re)opens/pages.
 M.SETTINGS_KEY_HEATMAP_MONTHS = "reading_insights_heatmap_months_per_period"
 
 M.DEFAULT_HEATMAP_MONTHS      = 6
 
-M.VALID_HEATMAP_MONTHS        = { [3] = true, [4] = true, [6] = true }
+M.VALID_HEATMAP_MONTHS        = { [3] = true, [4] = true, [6] = true, [12] = true }
 
 function M.readHeatmapMonthsSetting()
     local v = M.readNumSetting(M.SETTINGS_KEY_HEATMAP_MONTHS, M.DEFAULT_HEATMAP_MONTHS)
@@ -537,15 +546,30 @@ function M.Opt.saveGoalSectionMode(value)
     Prefs.save(M.Opt.GOAL_MODE_KEY, value)
 end
 
--- Whether the reading-goal section is drawn at all. Kept as its own function
--- because several call sites (the section build, the finished-book query in
--- _loadAndRebuild) gate on it; it's just "mode isn't off" now.
+-- Whether the "Reading goal" section is drawn. Several call sites (the
+-- section build, the finished-book query in _loadAndRebuild) gate on it.
+-- Unset -> derived from the legacy three-way mode (only "off" hides it).
 function M.Opt.readShowReadingGoal()
+    local v = Prefs.read(M.Opt.SHOW_GOAL_ROW_KEY, nil)
+    if v ~= nil then return v == true end
     return M.Opt.readGoalSectionMode() ~= M.Opt.GOAL_MODE_OFF
 end
 
 function M.Opt.saveShowReadingGoal(value)
-    M.saveBoolSetting(M.Opt.SHOW_GOAL_KEY, value)
+    Prefs.save(M.Opt.SHOW_GOAL_ROW_KEY, value and true or false)
+end
+
+-- Whether the "Achievements" section (earned count | latest achievement) is
+-- drawn, independently of the reading goal. Unset -> derived from the legacy
+-- mode (only "both" showed achievements).
+function M.Opt.readShowAchievements()
+    local v = Prefs.read(M.Opt.SHOW_ACH_ROW_KEY, nil)
+    if v ~= nil then return v == true end
+    return M.Opt.readGoalSectionMode() == M.Opt.GOAL_MODE_BOTH
+end
+
+function M.Opt.saveShowAchievements(value)
+    Prefs.save(M.Opt.SHOW_ACH_ROW_KEY, value and true or false)
 end
 
 function M.Opt.readGoalDisplay()
@@ -617,10 +641,10 @@ end
 
 function M.Opt.readBookSectionStyle()
     local v = Prefs.read(M.Opt.BOOK_SECTION_STYLE_KEY, nil)
-    -- Default (nothing saved yet) is the donut chart; an explicit "classic"
+    -- Default (nothing saved yet) is the classic style; an explicit "donut"
     -- choice is saved and kept.
-    if v == M.Opt.BOOK_SECTION_STYLE_CLASSIC then return M.Opt.BOOK_SECTION_STYLE_CLASSIC end
-    return M.Opt.BOOK_SECTION_STYLE_DONUT
+    if v == M.Opt.BOOK_SECTION_STYLE_DONUT then return M.Opt.BOOK_SECTION_STYLE_DONUT end
+    return M.Opt.BOOK_SECTION_STYLE_CLASSIC
 end
 
 function M.Opt.saveBookSectionStyle(value)

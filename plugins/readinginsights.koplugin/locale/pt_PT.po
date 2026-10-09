@@ -99,12 +99,6 @@ msgstr "dia lido"
 msgid "days read"
 msgstr "dias lidos"
 
-msgid "book read"
-msgstr "livro lido"
-
-msgid "books read"
-msgstr "livros lidos"
-
 msgid "book"
 msgstr "livro"
 
@@ -144,29 +138,26 @@ msgstr "Melhor sequência"
 msgid "Days read per month"
 msgstr "Dias lidos por mês"
 
-msgid "Time read per month"
+msgid "Reading time per month"
 msgstr "Tempo lido por mês"
 
-msgid "Books read per month"
-msgstr "Livros lidos por mês"
+msgid "Books per month"
+msgstr "Livros por mês"
 
 msgid "Unknown"
 msgstr "Desconhecido"
 
-msgid "No books read"
-msgstr "Nenhum livro lido"
+msgid "No books"
+msgstr "Nenhum livro"
 
-msgid "No books read in %1"
-msgstr "Nenhum livro lido em %1"
+msgid "No books in %1"
+msgstr "Nenhum livro em %1"
 
-msgid "No books read in "
-msgstr "Nenhum livro lido em "
+msgid "%1 - %2 book"
+msgstr "%1 - %2 livro"
 
-msgid "%1 - book read %2"
-msgstr "%1 - livro lido %2"
-
-msgid "%1 - books read %2"
-msgstr "%1 - livros lidos %2"
+msgid "%1 - %2 books"
+msgstr "%1 - %2 livros"
 
 msgid "Reading goal"
 msgstr "Meta de leitura"
@@ -198,14 +189,17 @@ msgstr "Nenhum livro concluído em %1"
 msgid "Mark book finished - %1"
 msgstr "Marcar livro como concluído - %1"
 
-msgid "No books read in this year"
-msgstr "Nenhum livro lido este ano"
+msgid "No books this year"
+msgstr "Nenhum livro este ano"
 
 msgid "Reloading data..."
 msgstr "A recarregar dados..."
 
 msgid "Reading insights"
 msgstr "Reading Insights"
+
+msgid "Reading insights popup title"
+msgstr "Estatísticas de leitura"
 
 msgid "Reading insights: all time statistics"
 msgstr "Reading Insights: estatísticas globais"
@@ -216,17 +210,14 @@ msgstr "Reading Insights: progresso do livro atual"
 msgid "Reading insights: book progress calendar"
 msgstr "Reading Insights: calendário de progresso do livro"
 
-msgid "All books read %1"
-msgstr "Todos os livros lidos %1"
+msgid "All books %1"
+msgstr "Todos os livros: %1"
 
-msgid "TOTAL READ"
-msgstr "TOTAL LIDO"
+msgid "daily avg page"
+msgstr "pág. méd./dia"
 
-msgid "LAST WEEK"
-msgstr "ÚLTIMA SEMANA"
-
-msgid "avg/day"
-msgstr "méd./dia"
+msgid "daily avg pages"
+msgstr "pág. méd./dia"
 
 msgid "Today"
 msgstr "Hoje"
@@ -255,14 +246,17 @@ msgstr "Sáb"
 msgid "Sun"
 msgstr "Dom"
 
-msgid "read time avg/day"
-msgstr "tempo de leitura méd./dia"
+msgid "daily avg time"
+msgstr "tempo méd./dia"
 
 msgid "reading time"
 msgstr "tempo de leitura"
 
 msgid "No streak dates"
 msgstr "Sem datas de sequência"
+
+msgid "Last read: %1"
+msgstr "Última leitura: %1"
 
 msgid "CalendarView not available"
 msgstr "CalendarView não disponível"
@@ -295,7 +289,7 @@ msgid "pages read today"
 msgstr "páginas lidas hoje"
 
 msgid "Show Reading insights"
-msgstr "Mostrar Reading Insights"
+msgstr "Mostrar estatísticas de leitura"
 
 msgid "Full-screen refresh on open/close"
 msgstr "Atualização de ecrã inteiro ao abrir/fechar"
@@ -317,6 +311,9 @@ msgstr "4 meses"
 
 msgid "6 months"
 msgstr "6 meses"
+
+msgid "12 months"
+msgstr "12 meses"
 
 msgid "Time format"
 msgstr "Formato da hora"
@@ -800,11 +797,8 @@ msgstr "A versão mais recente não possui ficheiro zip para transferência."
 msgid "Reading heatmap"
 msgstr "Mapa de calor de leitura"
 
-msgid "Time of day heatmap"
-msgstr "Mapa de calor por hora do dia"
-
-msgid "Calendar heatmap"
-msgstr "Mapa de calor em calendário"
+msgid "Reading calendar"
+msgstr "Calendário de leitura"
 
 msgid "Less"
 msgstr "Menos"
@@ -939,10 +933,10 @@ msgid "Shows the number of books finished this year next to your yearly goal. Lo
 msgstr "Mostra o número de livros concluídos este ano ao lado da sua meta anual. Prima continuamente o valor da meta para o alterar."
 
 msgid "book to read"
-msgstr "livro para ler"
+msgstr "livro como meta"
 
 msgid "books to read"
-msgstr "livros para ler"
+msgstr "livros como meta"
 
 msgid "* = changed by you"
 msgstr "* = alterado por si"
@@ -971,7 +965,7 @@ msgstr "Última semana"
 msgid "Months"
 msgstr "Meses"
 
-msgid "Total read"
+msgid "All time"
 msgstr "Total lido"
 
 msgid "Last read (newest first)"
@@ -1649,8 +1643,14 @@ msgstr "Tarde"
 msgid "Evening"
 msgstr "Noitinha"
 
-msgid "Reading time by time of day"
-msgstr "Tempo de leitura por período do dia"
+msgid "When you read"
+msgstr "Quando lês"
+
+msgid "Days of the week"
+msgstr "Dias da semana"
+
+msgid "You read most around %1"
+msgstr "Lês mais por volta das %1"
 
 msgid "Book progress popup"
 msgstr "Janela de progresso do livro"
@@ -1879,3 +1879,57 @@ msgstr "Mostra a descrição do livro abaixo do autor / série, até à base da 
 
 msgid "Description"
 msgstr "Descrição"
+
+msgid "No reading on %1"
+msgstr "Sem leitura em %1"
+
+msgid "of annual goal"
+msgstr "da meta anual"
+
+msgid "Latest"
+msgstr "Mais recente"
+
+msgid "Rating"
+msgstr "Classificação"
+
+msgid "Date"
+msgstr "Data"
+
+msgid "Reading time"
+msgstr "Tempo de leitura"
+
+msgid "Pages read"
+msgstr "Páginas lidas"
+
+msgid "Rating (stars)"
+msgstr "Classificação (estrelas)"
+
+msgid "Rating (highest first)"
+msgstr "Classificação (mais alta primeiro)"
+
+msgid "Rating (lowest first)"
+msgstr "Classificação (mais baixa primeiro)"
+
+msgid "Show in the right column"
+msgstr "Mostrar na coluna da direita"
+
+msgid "Clear rating"
+msgstr "Limpar classificação"
+
+msgid "This book has no checksum, so its rating can't be saved"
+msgstr "Este livro não tem soma de verificação, por isso a classificação não pode ser guardada"
+
+msgid "e.g. Dune #2"
+msgstr "p. ex. Dune #2"
+
+msgid "Please enter the number in the series as a number (e.g. 2 or 2.5)"
+msgstr "Introduza o número na série como um número (p. ex. 2 ou 2.5)"
+
+msgid "Finished"
+msgstr "Concluído"
+
+msgid "Data reloaded"
+msgstr "Dados recarregados"
+
+msgid "Data reloaded. New achievements: %1"
+msgstr "Dados recarregados. Novas conquistas: %1"
