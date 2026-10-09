@@ -17,6 +17,7 @@ local UIManager       = require("ui/uimanager")
 local logger          = require("logger")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local Widget          = require("ui/widget/widget")
+local ok_hatch, Hatching = pcall(require, "hatching")
 
 -- Lector de .po en vivo
 local _dict = {}
@@ -216,10 +217,13 @@ function GlimpsePill:free(...)
     WidgetContainer.free(self, ...)
 end
 
+-- true: la tarjeta de preview (miniatura + contorno) se oculta mientras se arrastra el knob.
+-- false: se queda visible como en la versión original (para probar si es la causa).
+local HIDE_CARD_WHILE_DRAGGING = false
+
 local ScrubberToc = InputContainer:extend{
     name = "scrubber_toc",
     transparent = true,
-    alpha = 0.25,
 }
 
 function ScrubberToc:init()
@@ -518,6 +522,19 @@ function ScrubberToc:init()
     self._thumb_req_w = preview_w - (pr_b_thick * 2)
     self._thumb_req_h = preview_h - (pr_b_thick * 2)
 
+    -- Tamaño real que va a tener la miniatura, calculado de antemano para que el
+    -- contorno no se achique cuando aparece la página
+    self._cached_thumb_w, self._cached_thumb_h = self:_predictThumbSize(self._thumb_req_w, self._thumb_req_h)
+    do
+        local pr_w = self._cached_thumb_w + (pr_b_thick * 2)
+        local pr_h = self._cached_thumb_h + (pr_b_thick * 2)
+        self._preview_dimen = Geom:new{
+            x = math.floor((sw - pr_w) / 2),
+            y = self.slider_y_pos - pr_h - S(4),
+            w = pr_w, h = pr_h,
+        }
+    end
+
     self._normal_panel_h = preview_y - S(10)
 
     local py = #self.tw_titles > 1 and S(8) or S(16)
@@ -737,6 +754,61 @@ function ScrubberToc:_getNextChapterPage()
     return best
 end
 
+-- Proporción (ancho/alto) real de las miniaturas, recordada entre aperturas del índice.
+-- Se usa para saber el tamaño que va a tener la miniatura ANTES de que llegue, así el
+-- contorno de la preview no cambia de alto cuando aparece la página.
+function ScrubberToc:_thumbAspectKey()
+    return (self._sw and self._sh and self._sw > self._sh)
+        and "page_scrubber_thumb_aspect_l" or "page_scrubber_thumb_aspect_p"
+end
+
+function ScrubberToc:_predictThumbSize(req_w, req_h)
+    local key = self:_thumbAspectKey()
+    ScrubberToc._thumb_aspect = ScrubberToc._thumb_aspect or {}
+    local aspect = ScrubberToc._thumb_aspect[key]
+    if not aspect and G_reader_settings then
+        aspect = tonumber(G_reader_settings:readSetting(key))
+    end
+    if not aspect then
+        -- Primera vez: estimamos con las dimensiones del documento
+        pcall(function()
+            local dim
+            if self.ui.rolling and self.ui.view and self.ui.view.visible_area then
+                dim = self.ui.view.visible_area
+            elseif self.ui.document and self.ui.document.getPageDimensions then
+                dim = self.ui.document:getPageDimensions(self._cur_page or 1, 1, 0)
+            end
+            if dim and dim.w and dim.h and dim.w > 0 and dim.h > 0 then
+                aspect = dim.w / dim.h
+            end
+        end)
+    end
+    if not aspect or aspect <= 0 then return req_w, req_h end
+    -- La página entra dentro de req_w x req_h conservando su proporción
+    local w, h = req_w, math.floor(req_w / aspect)
+    if h > req_h then
+        h = req_h
+        w = math.floor(req_h * aspect)
+    end
+    return math.max(1, w), math.max(1, h)
+end
+
+function ScrubberToc:_rememberThumbAspect(bb)
+    if not bb then return end
+    local w, h = bb:getWidth(), bb:getHeight()
+    if w <= 0 or h <= 0 then return end
+    local aspect = w / h
+    local key = self:_thumbAspectKey()
+    ScrubberToc._thumb_aspect = ScrubberToc._thumb_aspect or {}
+    ScrubberToc._thumb_aspect[key] = aspect
+    if G_reader_settings then
+        local saved = tonumber(G_reader_settings:readSetting(key))
+        if not saved or math.abs(saved - aspect) > 0.002 then
+            G_reader_settings:saveSetting(key, aspect)
+        end
+    end
+end
+
 function ScrubberToc:_updatePreviewTile()
     if self._closing or (self._is_expanded and self._sw <= self._sh) then return end
     local thumbnail = self.ui.thumbnail
@@ -752,8 +824,10 @@ function ScrubberToc:_updatePreviewTile()
 
     thumbnail:getPageThumbnail(page, req_w, req_h, batch_id, function(tile, resp_batch_id)
         if self._closing or resp_batch_id ~= self._current_batch_id then return end
+        if self._slider and self._slider._dragging then return end
         local processed = processTile(tile, req_w, req_h)
         if processed and processed.bb then
+            self:_rememberThumbAspect(processed.bb)
             if self._preview_tile and self._preview_tile.is_scaled and self._preview_tile.bb then
                 pcall(function() self._preview_tile.bb:free() end)
             end
@@ -795,15 +869,21 @@ function ScrubberToc:_previewPage(page, is_dragging, explicit_toc_idx)
             self._preview_tile = nil
         end
 
-        -- Modo fast limitado estrictamente a la barra inferior sólida
-        if self._bar_dimen then
-            UIManager:setDirty(self, "fast", self._bar_dimen)
-        else
-            UIManager:setDirty(self, "fast", self.dimen)
+        -- Primer frame del arrastre: refrescamos tarjeta + barra juntas (un solo
+        -- rectángulo continuo) para que la miniatura y su contorno se borren
+        -- de la pantalla sin dejar la barra a medias. Los frames siguientes
+        -- solo refrescan la barra.
+        local region = self._bar_dimen or self.dimen
+        if HIDE_CARD_WHILE_DRAGGING and not self._card_hidden and self._preview_dimen and self._bar_dimen then
+            local top = math.max(0, math.min(self._preview_dimen.y, self._bar_dimen.y) - self.S(8))
+            region = Geom:new{ x = 0, y = top, w = self._sw, h = self._sh - top }
+            self._card_hidden = true
         end
+        UIManager:setDirty(self, "fast", region)
         return
     else
         -- Al soltar: sincronizamos la lista de capítulos, seleccionamos el actual y pedimos la miniatura
+        self._card_hidden = false
         self:_syncTocPageWithCurrentPage()
 
         self._drag_token = (self._drag_token or 0) + 1
@@ -980,7 +1060,17 @@ end
 function ScrubberToc:paintTo(bb, x, y)
     if self._closing then return end
     local ok, err = pcall(function() self:_paintToImpl(bb, x, y) end)
-    if not ok then logger.warn("scrubber_toc paintTo error:", err) end
+    if not ok then
+        logger.warn("scrubber_toc paintTo error:", err)
+        -- Si el pintado falla a mitad de camino, la barra inferior nunca llega a
+        -- pintarse y se ve lo que hay detrás (libro / grid). Dejamos al menos el
+        -- fondo blanco y el borde para que no "desaparezca".
+        local bd = self._bar_dimen
+        if bd and not self._is_expanded and not (self._sw and self._sh and self._sw > self._sh) then
+            bb:paintRect(bd.x, bd.y, bd.w, bd.h, Blitbuffer.COLOR_WHITE)
+            bb:paintRect(bd.x, bd.y, bd.w, self.S(3), Blitbuffer.COLOR_BLACK)
+        end
+    end
 end
 
 function ScrubberToc:_paintToImpl(bb, x, y)
@@ -1006,9 +1096,13 @@ function ScrubberToc:_paintToImpl(bb, x, y)
     if not self._is_expanded then
         -- Solo se mezcla la transparencia en reposo; se omite durante el arrastre
         if not is_scrubbing then
-            local gap_y = pd.h
+            -- Arranca más arriba para cubrir las esquinas redondeadas (y la sombra) de la
+            -- solapa; la solapa se pinta después, así que el tinte no tapa el ToC.
+            local gap_y = math.max(0, pd.h - tab_radius - shadow_offset)
             local gap_h = bd.y - gap_y
-            if gap_h > 0 and bb.blendRectRGB32 then
+            if gap_h > 0 and ok_hatch and Hatching and bb.hatchRect then
+                Hatching.paint(bb, 0, gap_y, sw, gap_h)
+            elseif gap_h > 0 and bb.blendRectRGB32 then
                 local tint = Blitbuffer.ColorRGB32(255, 255, 255, 215)
                 bb:blendRectRGB32(0, gap_y, sw, gap_h, tint)
             elseif gap_h > 0 then
@@ -1016,8 +1110,6 @@ function ScrubberToc:_paintToImpl(bb, x, y)
             end
         end
 
-        -- Sombra gris
-        paintBottomRoundedTab(bb, 0, shadow_offset, sw, pd.h, tab_radius, Blitbuffer.COLOR_GRAY)
         -- Solapa redondeada normal
         paintBottomRoundedTab(bb, 0, 0, sw, pd.h, tab_radius, Blitbuffer.COLOR_BLACK)
         paintBottomRoundedTab(bb, b_thick, 0, sw - (b_thick * 2), pd.h - b_thick, math.max(1, tab_radius - b_thick), Blitbuffer.COLOR_WHITE)
@@ -1582,13 +1674,22 @@ function ScrubberToc:_paintToImpl(bb, x, y)
         local pr_y = self.slider_y_pos - pr_h - S(4)
         self._preview_dimen = Geom:new{ x = pr_x, y = pr_y, w = pr_w, h = pr_h }
 
-        paintRoundRect(bb, pr_x, pr_y + S(3), pr_w, pr_h, pr_radius, Blitbuffer.COLOR_DARK_GRAY)
-        paintRoundRect(bb, pr_x, pr_y, pr_w, pr_h, pr_radius, Blitbuffer.COLOR_BLACK)
+        local slider_dragging = HIDE_CARD_WHILE_DRAGGING and self._slider and self._slider._dragging
 
         local ox = pr_x + pr_b_thick
         local oy = pr_y + pr_b_thick
 
-        if is_scrubbing then
+        if slider_dragging then
+            -- Arrastrando el knob: no se pinta nada (ni sombra, ni contorno, ni página).
+            -- Reaparece sola al soltar, cuando _previewPage(..., false) pide el refresh.
+        else
+            paintRoundRect(bb, pr_x, pr_y + S(3), pr_w, pr_h, pr_radius, Blitbuffer.COLOR_DARK_GRAY)
+            paintRoundRect(bb, pr_x, pr_y, pr_w, pr_h, pr_radius, Blitbuffer.COLOR_BLACK)
+        end
+
+        if slider_dragging then
+            -- nada
+        elseif is_scrubbing then
             -- Durante el arrastre: marco blanco liso sin números
             paintRoundRect(bb, ox, oy, inner_w, inner_h, inner_r, Blitbuffer.COLOR_WHITE)
         elseif self._preview_tile and self._preview_tile.bb then

@@ -979,6 +979,23 @@ local FloatingDictionaryPopup = InputContainer:extend({
     text = nil, results = nil, boxes = nil, anchor_top = false, anchor_left = false, is_landscape = false,
     highlight_obj = nil, plugin = nil, current_result_idx = 1,
 })
+-- Al tocar una acción, el popup se cierra ANTES de ejecutarla, y al cerrarse borra la
+-- selección de texto (highlight.selected_text = nil). Corremos fn con la selección que
+-- el popup guardó al abrirse, y después la volvemos a limpiar.
+function FloatingDictionaryPopup.withRestoredSelection(self_obj, fn)
+    local hl = self_obj.highlight_obj
+    local restored = false
+    if hl and not hl.selected_text and self_obj.selected_text then
+        hl.selected_text = self_obj.selected_text
+        restored = true
+    end
+    local ok, err = pcall(fn)
+    if restored and hl.selected_text == self_obj.selected_text then
+        hl.selected_text = nil
+    end
+    return ok, err
+end
+
 function FloatingDictionaryPopup:init()
     self.dialog = self.dialog or self
     local screen_width = Screen:getWidth()
@@ -1218,7 +1235,8 @@ function FloatingDictionaryPopup:init()
                         else
                             -- Plugins de reproducción/acción (TTS, audiolibros, etc.): ejecutan y cierran el panel
                             UIManager:close(self)
-                            pcall(spec.external_callback)
+                            -- el cierre del popup borró la selección: se la restauramos al plugin
+                            self:withRestoredSelection(spec.external_callback)
                         end
                     end
                 })
@@ -2319,7 +2337,7 @@ end
 -- ==========================================
 -- LÓGICA COMPARTIDA DE ACCIONES NATIVAS
 -- ==========================================
-local function saveCustomHighlight(self_obj, style)
+local function saveCustomHighlightInner(self_obj, style)
     local hl = self_obj.highlight_obj
     if not hl then return end
     
@@ -2403,6 +2421,12 @@ local function saveCustomHighlight(self_obj, style)
     if hl.clear then pcall(function() hl:clear() end) end
 end
 
+local function saveCustomHighlight(self_obj, style)
+    FloatingDictionaryPopup.withRestoredSelection(self_obj, function()
+        saveCustomHighlightInner(self_obj, style)
+    end)
+end
+
 local function invokeAction(self_obj, action_name)
     local hl = self_obj.highlight_obj
     local text = self_obj.text
@@ -2456,7 +2480,10 @@ local function invokeAction(self_obj, action_name)
                     local NetworkMgr = require("ui/network/manager")
                     NetworkMgr:runWhenOnline(function()
                         UIManager:nextTick(function()
-                            assistant.assistant_dialog:show(text)
+                            -- AI Assistant (v1.18) exposes showAskDialog(), not show(); try both.
+                            local dlg = assistant.assistant_dialog
+                            if dlg.showAskDialog then dlg:showAskDialog(text)
+                            elseif dlg.show then dlg:show(text) end
                         end)
                     end)
                 else
@@ -2465,11 +2492,12 @@ local function invokeAction(self_obj, action_name)
                     end
                 end
             elseif action_name == "wiki" then
-                if hl and hl.lookupWikipedia then hl:lookupWikipedia()
-                elseif hl and hl.wikipediaHighlightedWord then hl:wikipediaHighlightedWord(text)
-                else self_obj.plugin.ui:handleEvent(Event:new("LookupWikipedia", text)) end
+                -- The popup was already closed above, which clears hl.selected_text,
+                -- so hl:lookupWikipedia() would silently no-op. Use the stored text.
+                self_obj.plugin.ui:handleEvent(Event:new("LookupWikipedia", text))
             elseif action_name == "search" then
-                if hl and hl.onHighlightSearch then hl:onHighlightSearch()
+                -- Same as wiki: hl:onHighlightSearch() needs hl.selected_text, already cleared.
+                if self_obj.plugin.ui.search and self_obj.plugin.ui.search.searchText then self_obj.plugin.ui.search:searchText(text)
                 elseif self_obj.plugin.ui.search then self_obj.plugin.ui.search:onShowFulltextSearchInput(text)
                 else self_obj.plugin.ui:handleEvent(Event:new("ShowFulltextSearchInput", text)) end
             elseif action_name == "dict" then
