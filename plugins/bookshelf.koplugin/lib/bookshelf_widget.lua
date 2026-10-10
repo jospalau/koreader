@@ -230,6 +230,19 @@ function BookshelfWidget._coverNeedsResize(info, specs)
 end
 
 function BookshelfWidget:init()
+    -- A registered source that has fetched more (lib/bookshelf_sources,
+    -- ui.bookshelf:sourceChanged) redraws the shelf, but only while that
+    -- source is what is on screen. One named slot, so a later widget replaces
+    -- this one's listener rather than stacking beside it.
+    require("lib/bookshelf_sources").onChanged("widget", function(id)
+        if self._closed then return end
+        local src = self:_currentRegisteredSource()
+        if not ((src and (id == nil or src.kind == id)) or self:_shelvesHoldSource(id)) then return end
+        UIManager:nextTick(function()
+            if self._closed then return end
+            self:_rebuild(); UIManager:setDirty(self, "ui")
+        end)
+    end)
     -- Diag: cradle init so the cold-start trace shows init time
     -- distinct from the _rebuild it triggers at the end. Two markers
     -- (entry, post-settings-and-gesture-setup) plus the existing
@@ -238,17 +251,17 @@ function BookshelfWidget:init()
     self.width  = Screen:getWidth()
     self.height = Screen:getHeight()
     self.dimen  = Geom:new{ w = self.width, h = self.height }
-    -- The 5.3 betas' borrowed pack wallpaper becomes an ordinary choice, once.
-    if not BookshelfWidget._themes_migrated then
-        BookshelfWidget._themes_migrated = true
-        pcall(function() require("lib/bookshelf_theme_pack").migrate() end)
-    end
     -- An ornament on the shelf: long-press adjusts it, a tap runs its action
     -- if it has one. The pieces know nothing of this widget, so they are
     -- handed these (the live shelf's, replaced by each new one).
     do
         local shelf = self
         require("lib/bookshelf_ornaments").handlers = {
+            -- A piece never takes a gesture in the footer's band: its
+            -- buttons (the start menu, page turns) are under it.
+            blocked = function(pos)
+                return pos.y >= shelf.height - _footerReserveH()
+            end,
             hold = function(entry, _placement, piece)
                 if not Gestures.on("ornament_hold") then return false end
                 require("lib/bookshelf_ornament_menu").show(entry, shelf, piece)
@@ -347,6 +360,8 @@ function BookshelfWidget:init()
     -- via Repo.findGroup / Repo.buildBookMeta so cover_bbs are fresh
     -- (see memory feedback_image_disposable_shared_book).
     self._drilldown_path = {}
+    -- A shelf left half-created by a session that stopped inside its editor.
+    pcall(function() require("lib/bookshelf_tab_model").prunePending() end)
     local saved_drill = BookshelfSettings.read("drill_path")
     if type(saved_drill) == "table" then
         self._pending_restore_drill = saved_drill
@@ -1009,7 +1024,14 @@ end
 -- not there is a feed to fetch. A chip edit that touched nothing about a
 -- catalog simply spends it on a render that had nothing to fetch, which is the
 -- same no-op every non-OPDS chip tap already performs.
-function BookshelfWidget:_afterChipEdit()
+function BookshelfWidget:_afterChipEdit(info)
+    -- A changed source: the folder the reader had drilled into belongs to the
+    -- old one (a Komga series under "All Series" is not in "On Deck").
+    if info and info.source_changed and next(self._drilldown_path or {}) then
+        self._drilldown_path = {}
+        self._cursor = 1
+        self:_syncPageFromCursor()
+    end
     self:_markOpdsNav()
     -- Chip settings (sort, filter, density) change what a fetch returns.
     self._spine_fetch_cache = nil
@@ -1017,7 +1039,26 @@ function BookshelfWidget:_afterChipEdit()
     UIManager:setDirty(self, "ui")
 end
 
+-- _syncShelfTheme() -> true when the shelf about to be built looks different
+-- from the last one: it may wear its own theme (bookshelf_theme_pack). Named
+-- FIRST in _rebuild, so every colour, wallpaper and plank read of this build
+-- is the shelf's; a different look bumps the settings generation (the caches
+-- keyed on it rebuild) and asks for a full-screen refresh, the wallpaper and
+-- chrome having changed under the whole screen.
+function BookshelfWidget:_syncShelfTheme()
+    local ok, TP = pcall(require, "lib/bookshelf_theme_pack")
+    if not (ok and TP and TP.setShelf) then return false end
+    local changed = TP.setShelf(self.chip)
+    if changed and self._shelf_theme_seen then
+        self._ground_memo = nil
+        UIManager:setDirty("all", "full")
+    end
+    self._shelf_theme_seen = true
+    return changed
+end
+
 function BookshelfWidget:_rebuild()
+    self:_syncShelfTheme()
     -- The night state this tree is baked for, and so no night rebuild is
     -- pending any more (see _followScreenNight).
     self._built_night = Screen.night_mode and true or false
@@ -1083,6 +1124,11 @@ function BookshelfWidget:_rebuild()
     -- a font nudge, a pinch, a chip switch, a rotation. One table, cleared in
     -- one place, so a stale entry cannot outlive the layout it described.
     self._list_geom_memo = nil
+    -- Before anything is sized: a collapsed list or spine shelf's hero is the
+    -- cover grid's, and that depends on the grid's label note for this set.
+    if not self._expanded and (self:_isListMode() or self:_isSpineMode()) then
+        self:_ensureGridLabels()
+    end
     -- FIRST LIST RENDER: take up the slack once, before anything is built.
     -- "yes I think we want that first render scale implemented, if there's a
     -- list on screen" -- so it is gated on list mode, which means a session
@@ -1169,6 +1215,8 @@ function BookshelfWidget:_rebuild()
         self._pending_restore_drill = nil
         self._drilldown_path = {}
         self._cursor = 1
+        -- Out of any shelf of shelves too, to the top-level shelf.
+        self.chip = require("lib/bookshelf_tab_model").rootOf(self.chip)
     end
     if self._pending_restore_drill then
         local saved = self._pending_restore_drill
@@ -1309,20 +1357,14 @@ function BookshelfWidget:_rebuild()
         end
         active_chips[#active_chips + 1] = { key = tab.id, label = display }
     end
-    -- Kobo virtual library: a synthetic nav chip, present only when the user has
-    -- opted into the beta AND OGKevin's kobo.koplugin is installed + active (Kobo
-    -- devices only). isAvailable() is cheap + false everywhere else, so the chip
-    -- never appears on non-Kobo devices or without the opt-in.
-    if BookshelfSettings.isTrue("kobo_shelf") then
-        local ok_kobo, KoboSource = pcall(require, "lib/bookshelf_kobo_source")
-        if ok_kobo and KoboSource and KoboSource.isAvailable() then
-            active_chips[#active_chips + 1] = { key = "kobo", label = _("Kobo") }
-        end
-    end
     -- Hide the strip when 0 or 1 chips are enabled (a single full-width
     -- chip is just a non-interactive label) AND no drill-down is active
     -- (the breadcrumb still needs the strip's slot for back-navigation).
+    -- Inside a sub-shelf the strip is a breadcrumb back up the chain, so it
+    -- stays whatever the chip count (see _shelfChain).
+    local shelf_chain = self:_shelfChain()
     local hide_chip_bar = (#active_chips <= 1) and (#self._drilldown_path == 0)
+                          and #shelf_chain == 0
     -- Defensive: the user can disable every tab via the editor.
     -- Fall back to all defaults so the shelves still have a data source
     -- even when the strip is hidden.
@@ -1334,11 +1376,16 @@ function BookshelfWidget:_rebuild()
     -- If the currently-selected chip was just disabled, switch to the
     -- first surviving chip so render doesn't try to fetch from a
     -- disabled chip's data source.
+    -- A sub-shelf is never in the strip itself; it counts as present while
+    -- the top-level shelf it sits under is.
+    local root_chip = shelf_chain[1] and shelf_chain[1].id or self.chip
     local active_in_set = false
     for _i, c in ipairs(active_chips) do
-        if c.key == self.chip then active_in_set = true; break end
+        if c.key == root_chip then active_in_set = true; break end
     end
     if not active_in_set then
+        shelf_chain = {}
+        root_chip = nil
         -- Skip action chips (current, search) — they have no data source.
         -- Fall back to the first nav chip instead.
         self.chip = active_chips[1].key
@@ -1349,6 +1396,7 @@ function BookshelfWidget:_rebuild()
         -- _persistNavState owns the coalesced flush. A sync save here
         -- cost a full settings-file write (~140ms on Kindle flash).
         BookshelfSettings.saveDeferred("active_chip", self.chip)
+        root_chip = self.chip
     end
     -- Append a search "chip" (icon-only, action-on-tap rather than
     -- chip-switch). Always appended last so it sits at the right edge.
@@ -1657,11 +1705,26 @@ function BookshelfWidget:_rebuild()
     -- the chevron separators make the nesting obvious, and the names
     -- themselves are clear enough in context that prefixing every
     -- crumb with "Author: ", "Series: ", "Folder: " read as noise.
-    if #self._drilldown_path > 0 then
+    for _i, entry in ipairs(self._drilldown_path) do
+        if entry.kind == "search" then in_search_mode = true end
+    end
+    -- Inside a sub-shelf the crumbs start with the shelves on the way down:
+    -- the chip pill is the top-level shelf, then each shelf below it, then
+    -- whatever is drilled into on the shelf on screen. Search is its own
+    -- mode with its own pill, so it shows only its query.
+    local shelf_crumbs = in_search_mode and 0 or #shelf_chain
+    self._shelf_crumbs = shelf_crumbs
+    if shelf_crumbs > 0 or #self._drilldown_path > 0 then
         breadcrumb_path = {}
-        for i, entry in ipairs(self._drilldown_path) do
-            breadcrumb_path[i] = { label = entry.label }
-            if entry.kind == "search" then in_search_mode = true end
+        if shelf_crumbs > 0 then
+            for k = 2, #shelf_chain do
+                breadcrumb_path[#breadcrumb_path + 1] = { label = shelf_chain[k].label }
+            end
+            local here = TabModel.getById(self.chip)
+            breadcrumb_path[#breadcrumb_path + 1] = { label = here and here.label or self.chip }
+        end
+        for _i, entry in ipairs(self._drilldown_path) do
+            breadcrumb_path[#breadcrumb_path + 1] = { label = entry.label }
         end
     end
     -- Search-mode chip pill: shows the search nerd-font glyph (U+F002)
@@ -1677,6 +1740,9 @@ function BookshelfWidget:_rebuild()
     else
         local _t = TabModel.getById(self.chip)
         chip_pill_label = (_t and _t.label) or self.chip
+        if shelf_crumbs > 0 then
+            chip_pill_label = shelf_chain[1].label or shelf_chain[1].id
+        end
         -- When a drilldown is active AND the deepest entry's kind is a
         -- different "view" than the active chip's source.kind, override
         -- the chip pill label so the breadcrumb reads correctly. Example:
@@ -1714,7 +1780,8 @@ function BookshelfWidget:_rebuild()
             -- own kind (so the user can still tap "Authors" chip → drill
             -- into an author group, and the breadcrumb reads "Authors >
             -- X" via the chip's own label, no override needed).
-            if plural_for_chip[chip_kind] ~= tip.kind and DRILL_LABEL[tip.kind] then
+            if shelf_crumbs == 0
+                    and plural_for_chip[chip_kind] ~= tip.kind and DRILL_LABEL[tip.kind] then
                 chip_pill_label = DRILL_LABEL[tip.kind]
             end
         end
@@ -1734,13 +1801,14 @@ function BookshelfWidget:_rebuild()
         has_wallpaper     = self:wallpaperButtonsTransparent(),
         -- The FACT of a painted ground, for the tap flash's refresh mode.
         painted_ground    = self:groundIsPainted(),
-        -- The strip goes opaque whenever the reader has not asked for
-        -- transparency, whatever the panel's own shading is set to: at
-        -- Transparent shading, or with Transparent shelf menu on.
-        solid_ground      = self:wallpaperScrimStrength() > 0
-                            and not BookshelfSettings.isTrue("chip_bar_transparent"),
-        active            = self.chip,
-        selected_key      = self.chip,   -- seeds the chip page (infinite-chips)
+        -- The bar is left out only when the reader chose Shelf menu
+        -- background: Transparent. Panel shading is the panels' and no
+        -- longer clears it too (maintainer, 2026-10-09: Transparent shading
+        -- made the bar transparent though it was not set to be; a reader
+        -- who had that look keeps it, migration step 5).
+        solid_ground      = require("lib/bookshelf_theme_pack").partRead("chip_bar_transparent") ~= true,
+        active            = root_chip or self.chip,
+        selected_key      = root_chip or self.chip,   -- seeds the chip page (infinite-chips)
         focused_key       = self._chip_cursor_key,
         width             = content_w,
         height            = chip_h,
@@ -1915,7 +1983,7 @@ function BookshelfWidget:_rebuild()
                 self:_openSearchDialog(query)
                 return
             end
-            self:_drillBackTo(depth)
+            self:_navBackTo(depth)
         end,
         on_hold = function(key)
             if not Gestures.on("edit_shelf") then return end
@@ -1931,7 +1999,7 @@ function BookshelfWidget:_rebuild()
             if key ~= self.chip then self:_selectChip(key) end
             local Editor = require("lib/bookshelf_chip_editor")
             Editor:editTab(key, {
-                on_change = function() self:_afterChipEdit() end,
+                on_change = function(info) self:_afterChipEdit(info) end,
                 bw        = self,
             })
         end,
@@ -2118,7 +2186,19 @@ function BookshelfWidget:_rebuild()
             local builtin_kinds = { all=1, library=1, recent=1, latest=1,
                 series=1, authors=1, genres=1, tags=1, formats=1,
                 ratings=1, favorites=1 }
-            if _source_kind and not builtin_kinds[_source_kind] then
+            if _source_kind == "none" then
+                -- A new shelf with no source yet (behind its source picker,
+                -- or left without one): there is nothing to long-press for,
+                -- only a source to choose (shelf of shelves demo, 2026-10-10).
+                placeholder_text = _("Choose a source to keep this new shelf.")
+            elseif _source_kind and not builtin_kinds[_source_kind] and _tab and _tab.parent then
+                -- A shelf inside a shelf of shelves has no name in the shelf
+                -- menu above: it is edited from its tile in the shelf it
+                -- sits in.
+                placeholder_text = string.format(
+                    _("No books in %s yet \xC2\xB7 Go back and long-press its tile to edit its source or filter"),
+                    _tab.label or self.chip)
+            elseif _source_kind and not builtin_kinds[_source_kind] then
                 placeholder_text = string.format(
                     -- "the shelf" reads as the shelf AREA, which is not
                     -- what takes the long press: the shelf's own name in the
@@ -2136,9 +2216,15 @@ function BookshelfWidget:_rebuild()
         -- placeholder when statuses are set.
         if _tab and _tab.filter and Filter.isActive(_tab.filter) then
             local label = _tab.label or self:_chipLabel()
-            placeholder_text = string.format(
-                _("Nothing in %s yet \xC2\xB7 Long-press it in the shelf menu above to edit its filter"),
-                label)
+            if _tab.parent then
+                placeholder_text = string.format(
+                    _("Nothing in %s yet \xC2\xB7 Go back and long-press its tile to edit its filter"),
+                    label)
+            else
+                placeholder_text = string.format(
+                    _("Nothing in %s yet \xC2\xB7 Long-press it in the shelf menu above to edit its filter"),
+                    label)
+            end
         end
 
         -- Blitbuffer.gray semantics: 0 = white, 1 = black (i.e. "blackness level").
@@ -2586,7 +2672,8 @@ function BookshelfWidget:_rebuild()
             -- Panelling just the rows would then leave the gaps between them
             -- on bare picture, so the panel runs the whole way, exactly as the
             -- full-screen micro-module view does.
-            list_full = self:_isListMode() and true or false,
+            -- And Covers, when the reader asks (Panel shading, issue 483).
+            list_full = self:_fullPanel(),
         })
     end
 
@@ -2783,7 +2870,11 @@ function BookshelfWidget:_rebuild()
         local bw = self
         overlap_group[#overlap_group + 1] =
             require("lib/bookshelf_spine_shelf").badgeOverlay(
-                function() return bw._spine_badges end, self.width, self.height)
+                function() return bw._spine_badges end, self.width, self.height,
+                -- A sub-shelf's run badge opens that shelf; a long-press
+                -- edits it.
+                function(id) bw:_enterSubShelf(id) end,
+                function(id) bw:_editSubShelf(id) end)
     end
     self[1] = overlap_group
     local _perf_t4 = _gettime()
@@ -2904,6 +2995,14 @@ function BookshelfWidget:_kickOffMissingMetaExtraction(items, slot_w, slot_h, he
     -- already-extracted library. Queueing extraction a frame later changes
     -- nothing about the outcome; the turn no longer waits on it.
     local run = function()
+        -- A getBookInfo wrapper (a fallback-cover user patch) installed after
+        -- this screen was built: rebuild once so its covers are asked for
+        -- (issue 500). Runs after the paint, like the rest of this.
+        if Repo.coverHookArrived and Repo.coverHookArrived() then
+            Repo.invalidateBookCache("cover-hook")
+            self:_rebuild(); UIManager:setDirty(self, "ui")
+            return
+        end
         pcall(function()
             self:_kickOffMissingMetaExtractionNow(
                 items, slot_w, slot_h, hero_w, hero_h)
@@ -3576,8 +3675,9 @@ function BookshelfWidget:_fetchChipItems(n, want_all)
         -- Not for a group opened from book details (`whole`): that asks for
         -- the whole series, tag or collection, whichever shelf is underneath
         -- (GitHub issue 480).
-        if chip_tab and chip_tab.filter and Repo.applyFilter and not tip.whole then
-            books = Repo.applyFilter(books, chip_tab.filter)
+        -- On the members' real records: they are stubs (issue 485).
+        if chip_tab and chip_tab.filter and Repo.filterMembers and not tip.whole then
+            books = Repo.filterMembers(books, chip_tab.filter)
         end
         local total = #books
         -- Cursor-based: offset is 0-based, cursor is 1-based. Clamp upstream
@@ -3611,6 +3711,15 @@ function BookshelfWidget:_fetchChipItems(n, want_all)
     local LIMIT     = want_all and SELECT_ALL_LIMIT or self:_viewSize()
     local TabModel  = require("lib/bookshelf_tab_model")
     local tab       = TabModel.getById(self.chip)
+    if not tip and TabModel.isShelves(tab) then
+        -- On a spine shelf every sub-shelf's books stand out on the shelf,
+        -- a labelled run per sub-shelf; elsewhere, a tile per sub-shelf.
+        if Repo.spine_light then
+            local spilled = self:_subShelfSpill(tab)
+            return spilled, #spilled
+        end
+        return self:_subShelfItems(tab, offset, LIMIT)
+    end
     if tip and tip.kind == "folder" then
         -- Drilldown inheritance: the chip's sort_priority levels 2+ drive
         -- the order of books inside the drilled-into folder, mirroring how
@@ -3648,6 +3757,9 @@ function BookshelfWidget:_fetchChipItems(n, want_all)
         end
         return Repo.getAll(tip.payload.path, LIMIT, offset, within,
                            tab and tab.filter or nil, fetch_opts)
+    end
+    if tip and tip.kind == "source_nav" then
+        return Repo.getBySource(self:_sourceNavSource(tip, tab), nil, nil, offset, LIMIT, fetch_opts)
     end
     if tip and tip.kind == "opds_nav" then
         -- Drilled into a navigation entry: the same cache-only OPDS branch the
@@ -3706,10 +3818,9 @@ function BookshelfWidget:_wallpaperName()
         -- ONLY thing that can change the picture now -- the per-shelf override
         -- is gone, so moving between chips never changes what is behind them.
         local full = self._expanded and true or false
-        -- A pack's wallpaper is a choice like any other; its name picks the
-        -- pack's variant for this view (full screen, dark). Its pack off or
-        -- gone: the reader's own choice from before it, or for full screen
-        -- the default's (bookshelf_theme_pack.shownWallpaper).
+        -- The shelf's theme's wallpaper, else the reader's own; a pack's
+        -- picture picks its variant for this view (full screen, dark)
+        -- (bookshelf_theme_pack.shownWallpaper).
         local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
         if ok_t and TP and TP.shownWallpaper then
             local dark = require("lib/bookshelf_cover_progress").theme()
@@ -3756,10 +3867,16 @@ function BookshelfWidget:_pageGroundColor()
         local Wallpaper     = require("lib/bookshelf_wallpaper")
         local CoverProgress = require("lib/bookshelf_cover_progress")
         local suffix = CoverProgress.modeSuffix and CoverProgress.modeSuffix() or ""
-        -- A pack's borrowed page colour first (bookshelf_theme_pack).
+        -- As the shelf paints every colour (bookshelf_theme_pack.colour):
+        -- Plain's default ground, the theme's page colour, the reader's
+        -- edit (unset is the default ground) or their own.
         local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
-        local raw = ok_t and TP and TP.colourOverride(Wallpaper.BG_SETTING, suffix ~= "")
-                    or BookshelfSettings.read(Wallpaper.BG_SETTING .. suffix)
+        local raw
+        if ok_t and TP and TP.colour then
+            raw = TP.colour(Wallpaper.BG_SETTING .. suffix)
+        else
+            raw = BookshelfSettings.read(Wallpaper.BG_SETTING .. suffix)
+        end
         if type(raw) ~= "table" then return nil end
         -- grey is stored in PAINT space already (the picker's % black helper
         -- does the night-mode flip on the way in), so it is used as-is.
@@ -3812,9 +3929,8 @@ function BookshelfWidget:wallpaperButtonsTransparent()
     if not self:groundIsPainted() then return false end
     local ok, Wallpaper = pcall(require, "lib/bookshelf_wallpaper")
     if not ok then return false end
-    return Wallpaper.transparentButtons(function(k)
-        return BookshelfSettings.read(k)
-    end)
+    -- Part of the theme on screen, with Panel shading (Wallpaper.partRead).
+    return Wallpaper.transparentButtons(Wallpaper.partRead)
 end
 
 -- _chromeInk() -> the colour hand-painted chrome glyphs should use.
@@ -3977,6 +4093,81 @@ function BookshelfWidget:footerPanelRect()
     return f[1], f[2], f[3], f[4], f[5], f[6], f[7]
 end
 
+-- _paintFooterPanel(bb) -- the footer's panel: the blurred picture when Blur
+-- is on (Wallpaper.panel) and the tint, at footerPanelRect. Painted by the
+-- footer row itself, AFTER the rows: the footer floats in front of the shelf.
+-- (Behind it was tried for 5.4 and dropped: with a single shelf row the
+-- bottom plank's design covered the footer entirely.)
+--
+-- INSET, where the top panel is OUTSET, and the asymmetry is the point.
+-- The hero card's box is its CONTENT box, so its panel has to grow to put
+-- a margin round it; the footer row is full-bleed and bottom-anchored, so its
+-- panel has to shrink instead. Both land half the layout padding from the
+-- screen edge, which is what makes the two panels' left edges line up. No
+-- inset at the top: the layout reserves footer_h, so shelf content stops at
+-- the row's top edge and the panel cannot tint the last book on the page.
+--
+-- Suppressed when the shelf's own panel already runs down over the footer
+-- (list mode): those pixels are tinted once already, and a second pass
+-- would leave the footer a darker band inside the panel.
+function BookshelfWidget:_paintFooterPanel(bb)
+    local ok_w, Wallpaper = pcall(require, "lib/bookshelf_wallpaper")
+    if not ok_w then return end
+    local strength = (self._panel_covers_footer or self:_groundState().panel_redundant) and 0
+                     or self:wallpaperScrimStrength()
+    local px, py, pw, ph, radius, _s, colour
+    if strength > 0 then px, py, pw, ph, radius, _s, colour = self:footerPanelRect() end
+    if not px then return end
+    Wallpaper.panel(bb, px, py, pw, ph, colour, strength, radius, self:hasWallpaper())
+end
+
+-- _keepBurgerUnder(bb, x, y, w, h) -- copy what is on screen under the start
+-- menu button BEFORE the footer's buttons paint, for the start menu's close X.
+--
+-- The X replaces the hamburger, so it has to erase it first, and over a
+-- painted ground the eraser used to replay the picture and the panel's tint.
+-- That is not the whole truth when the bottom shelf's plank design reaches
+-- into the footer under the button (Cats' sofa fringe, by the left corner):
+-- the replay wiped the tinted fringe and left a seam for as long as the menu
+-- was open. A copy taken here, after the footer's panel and before its
+-- buttons, is exactly the frame minus the buttons, the blur included. Small
+-- (the side strip by the footer's height, ~180x90 on a PW5), one blit per
+-- paint, buffer reused; only while a ground is painted, which is the only
+-- time the start menu uses an eraser at all.
+function BookshelfWidget:_keepBurgerUnder(bb, x, y, w, h)
+    if not (bb and bb.getWidth) or w <= 0 or h <= 0 then return end
+    if bb:getWidth() ~= self.width or bb:getHeight() ~= self.height then return end
+    if not self:groundIsPainted() then self._burger_under = nil; return end
+    local s = self._burger_under
+    pcall(function()
+        if not (s and s.bb and s.w == w and s.h == h and s.bb:getType() == bb:getType()) then
+            if s and s.bb then s.bb:free() end
+            s = { bb = Blitbuffer.new(w, h, bb:getType()), w = w, h = h }
+        end
+        s.x, s.y = x, y
+        s.bb:blitFrom(bb, 0, 0, x, y, w, h)
+        self._burger_under = s
+    end)
+end
+
+-- burgerUnder(menu) -> { bb, x, y, w, h } from _keepBurgerUnder, or nil.
+-- Only while the shelf is what the start menu opens over: the topmost window
+-- other than the menu itself must be this widget. The full-screen
+-- micro-module view opens the same menu over its own copy of the footer, and
+-- the shelf's copy would paste the shelf over it.
+function BookshelfWidget:burgerUnder(menu)
+    local s = self._burger_under
+    if not (s and s.bb) then return nil end
+    local stack = UIManager._window_stack or {}
+    for i = #stack, 1, -1 do
+        local wd = stack[i] and stack[i].widget
+        if wd ~= menu then
+            return (wd == self) and s or nil
+        end
+    end
+    return nil
+end
+
 function BookshelfWidget:_footerPanelRectRaw(strength)
     if not strength or strength <= 0 then return nil end
     local ok_cp, CoverProgress = pcall(require, "lib/bookshelf_cover_progress")
@@ -4005,12 +4196,12 @@ function BookshelfWidget:wallpaperScrimStrength()
     return self:_groundState().strength
 end
 
+-- Panel shading is part of the theme on screen (2026-10-09): read through
+-- the seam (Wallpaper.partRead), so a pack's own shading paints on its shelf.
 function BookshelfWidget:_scrimStrengthRaw()
     local ok, Wallpaper = pcall(require, "lib/bookshelf_wallpaper")
     if not ok then return 0 end
-    return Wallpaper.scrimStrength(function(k)
-        return BookshelfSettings.read(k)
-    end)
+    return Wallpaper.scrimStrength(Wallpaper.partRead)
 end
 
 -- hasWallpaper() -> is there something behind the page right now?
@@ -4049,6 +4240,12 @@ function BookshelfWidget:_pageColourStored()
         local Wallpaper = require("lib/bookshelf_wallpaper")
         local CP        = require("lib/bookshelf_cover_progress")
         local suffix    = CP.modeSuffix and CP.modeSuffix() or ""
+        -- The page colour the shelf on screen paints (bookshelf_theme_pack
+        -- .colour): its theme's, none on Plain, else the reader's own.
+        local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
+        if ok_t and TP and TP.colour then
+            return type(TP.colour(Wallpaper.BG_SETTING .. suffix)) == "table"
+        end
         return type(BookshelfSettings.read(Wallpaper.BG_SETTING .. suffix)) == "table"
     end)
     return (ok and set) and true or false
@@ -4387,188 +4584,14 @@ end
 function BookshelfWidget:_openBook(book, after_open_callback)
     if not book or not book.filepath then return end
     local function proceed()
-    self._tap_selected_fp = nil
-    -- OPDS records carry an "OPDS://server/id" pseudo-path, not a file: there
-    -- is nothing on disk to hand ReaderUI. Open the catalog book modal instead
-    -- (what the feed said about it, plus a download button per format, plus
-    -- Open when a previous download is still on disk). Guarded before every
-    -- file probe below, and matched on the path prefix so a hero-hydrated
-    -- record (flags stripped) is caught too.
-    if self:_isRemoteRecord(book) then
-        self:_showRemoteBookInfo(book)
-        return
+        self._tap_selected_fp = nil
+        self:_openBookInner(book, after_open_callback)
     end
-    -- Stale records (Send-to-Kindle moved/removed the file after BIM cached
-    -- the path) crash KOReader's filemanagerbookinfo:show via lfs.attributes
-    -- on nil. ReaderUI:showReader nil-checks itself, but presenting a "file
-    -- missing" toast here is friendlier than its silent no-op.
-    -- The path to actually hand ReaderUI: a real file on disk. For Kobo virtual
-    -- records (kobo.koplugin) the path is a KOBO_VIRTUAL:// URI with no real file,
-    -- so resolve it through the plugin (decrypting on demand) first -- passing the
-    -- virtual path straight to showReader silently fails, as its showReader patch
-    -- matches a different scheme (#203).
-    local open_path = book.filepath
-    if book.is_kobo then
-        local ok_kobo, KoboSource = pcall(require, "lib/bookshelf_kobo_source")
-        local real = ok_kobo and KoboSource and KoboSource.realPathForOpen(book.filepath) or nil
-        if not real then
-            UIManager:show(require("ui/widget/infomessage"):new{
-                text    = _("Couldn't open this Kobo book."),
-                timeout = 3,
-            })
-            return
-        end
-        -- Map the decrypted /tmp copy back to this virtual book so the hero can
-        -- show it as recently-opened (#203 pt3).
-        if Repo.noteKoboOpen then Repo.noteKoboOpen(real, book) end
-        -- Opening feedback at TAP time (the Kobo readiness poll below can
-        -- take seconds): flush pending paints so the capture sees current
-        -- pixels, then squeeze the tapped cover.
-        UIManager:forceRePaint()
-        pcall(function() self:_paintOpeningEffect(book.filepath) end)
-        -- The decrypted copy can still be mid-write when realPathForOpen returns
-        -- (#203); opening an empty file silently failed and needed the "open
-        -- another, come back" dance. Wait until it has a size -- polling ~1s up
-        -- to 5s behind a notice -- then open, or show a clear try-again message.
-        self:_openKoboWhenReady(real, after_open_callback)
-        return
-    elseif book.is_kindle then
-        -- Kindle library record (issue #355). The filepath is real -- either the
-        -- Kindle's own .kfx/.azw3 or kindle.koplugin's converted EPUB -- but a
-        -- KFX still has to be converted (and usually decrypted) before KOReader
-        -- can read it, and Bookshelf calls ReaderUI:showReader directly, so it
-        -- never passes through the plugin's own openFile patch. Resolve it here
-        -- instead.
-        --
-        -- A book that still needs converting blocks everything for minutes (4m40s
-        -- for a 1.5MB book on a PW5), and the plugin inhibits input while it
-        -- works, so the screen sits there dead. Unwarned, that reads as a crash
-        -- -- it did to the maintainer, on this exact book. Ask first, so the wait
-        -- is a decision rather than a mystery, and so a mis-tap can be undone.
-        -- Only ever asked once per book: after this the EPUB is cached and the
-        -- open is instant.
-        if book.kindle_needs_prepare and not book._kindle_prepare_ok then
-            -- Names the plugin doing the work, deliberately. A multi-minute
-            -- freeze on a book tap needs an obvious owner: without one it reads
-            -- as Bookshelf being broken, and a user who wants to understand or
-            -- report it has nothing to go on. "Kindle Virtual Library" is the
-            -- name that appears in KOReader's own plugin list, so it is the name
-            -- that leads somewhere.
-            UIManager:show(require("ui/widget/confirmbox"):new{
-                text = _("This Kindle book has to be converted before KOReader can read it.\n\n"
-                    .. "The Kindle Virtual Library plugin does the conversion. It can take "
-                    .. "a few minutes, it can't be stopped once started, and the screen "
-                    .. "won't respond while it works.\n\n"
-                    .. "It only happens the first time you open a book."),
-                ok_text = _("Convert"),
-                ok_callback = function()
-                    -- Re-enter with the question answered, but NOT from inside
-                    -- this callback: ConfirmBox runs ok_callback and only then
-                    -- closes itself (confirmbox.lua -- ok_callback(), then
-                    -- UIManager:close). The conversion blocks for minutes and
-                    -- paints its own "Preparing…" progress, so running it here
-                    -- draws that progress on top of a dialog still on screen.
-                    -- Next tick, once the close has actually happened.
-                    book._kindle_prepare_ok = true
-                    UIManager:nextTick(function()
-                        self:_openBook(book, after_open_callback)
-                    end)
-                end,
-            })
-            return
-        end
-        -- Tap feedback, but only when the open can actually be quick. A cover
-        -- squeeze says "your book is opening now": ahead of a multi-minute
-        -- conversion that is a lie, and it would be a second thing painting over
-        -- the plugin's own progress message. A blocked book is about to refuse,
-        -- so it gets no animation either.
-        if not (book.kindle_blocked or book.kindle_needs_prepare) then
-            UIManager:forceRePaint()
-            pcall(function() self:_paintOpeningEffect(book.filepath) end)
-        end
-        local ok_kindle, KindleSource = pcall(require, "lib/bookshelf_kindle_source")
-        local real, reason
-        if ok_kindle and KindleSource then
-            real, reason = KindleSource.realPathForOpen(book)
-        end
-        if not real then
-            -- Two kinds of reason: a short key we phrase ourselves, or a
-            -- sentence the plugin already phrased for the reader (which knows
-            -- far more about why a particular book would not open).
-            -- Name the format and say what DOES work. Two reasons users need
-            -- this: it makes clear the limit is the Kindle plugin's converter
-            -- rather than Bookshelf, and it tells them the rest of their library
-            -- may well be fine -- worth knowing if the first book they try is
-            -- one of the handful that can't work.
-            local fmt = (book.format or ""):upper()
-            local text, brief
-            if reason == "drm" then
-                text = T(_("This is a protected %1 file, which can't be opened.\n\n"
-                    .. "The Kindle plugin can only unlock KFX books. Protected MOBI "
-                    .. "and AZW books can't be converted by any KOReader plugin, so "
-                    .. "those have to be read in the Kindle app.\n\n"
-                    .. "Your KFX books should open normally."), fmt ~= "" and fmt or "Kindle")
-            elseif reason == "unsupported" then
-                -- KOReader registers no provider for this extension (.azw3 has
-                -- none, so even an unprotected one is refused). Nothing here can
-                -- change that, but say so rather than letting ReaderUI bounce the
-                -- user out to the file browser.
-                text = T(_("KOReader can't read %1 files.\n\n"
-                    .. "It reads KFX books (prepared by the Kindle plugin) and "
-                    .. "unprotected MOBI and AZW books.\n\n"
-                    .. "Your other Kindle books should open normally."), fmt ~= "" and fmt or "these")
-            elseif reason == "unavailable" or reason == nil then
-                text = _("The Kindle library isn't available right now.")
-                brief = true
-            else
-                -- The plugin's own sentence. It knows far more about why this
-                -- particular book would not open, and some of its reasons run to
-                -- two sentences with an instruction in them.
-                text = tostring(reason)
-            end
-            -- Only a one-liner gets the short timeout. These explanations run to
-            -- three paragraphs -- what the format is, what the converter can do,
-            -- and the reassurance that the rest of the library is fine -- and
-            -- four seconds is not enough to read that, let alone take it in.
-            --
-            -- Untimed relies on the reader being able to dismiss it: InfoMessage
-            -- binds a whole-screen tap on a touch device and any key on a keyed
-            -- one. Generic device defaults both capabilities to "no" and each
-            -- device opts in, so a device declaring neither -- or one that has
-            -- been misdetected -- would be stuck with a message nothing clears.
-            -- Fall back to a long timeout there rather than a short one: still
-            -- readable, still self-clearing.
-            local can_dismiss = Device:isTouchDevice() or Device:hasKeys()
-            UIManager:show(require("ui/widget/infomessage"):new{
-                text    = text,
-                timeout = brief and 4 or (can_dismiss and nil or 20),
-            })
-            return
-        end
-        self:_launchReader(real, after_open_callback)
-        return
-    else
-        -- Stale records (Send-to-Kindle moved/removed the file after BIM cached
-        -- the path) crash filemanagerbookinfo:show via lfs.attributes on nil; a
-        -- "file missing" toast is friendlier than a silent no-op.
-        local lfs = require("libs/libkoreader-lfs")
-        if lfs.attributes(book.filepath, "mode") ~= "file" then
-            UIManager:show(require("ui/widget/infomessage"):new{
-                text    = _("File no longer exists. The bookshelf entry is stale."),
-                timeout = 3,
-            })
-            return
-        end
+    if book._skip_mbr_confirm then
+        book._skip_mbr_confirm = nil
+        return proceed()
     end
-    -- Opening feedback: flush pending paints so the capture sees current
-    -- pixels, then squeeze the tapped cover (validated against this book;
-    -- no-op when the tap didn't land on a visible cover). Painted before
-    -- the launch so it also precedes an unpark splice - the squeeze then
-    -- reads as the opening motion completing into the page.
-    UIManager:forceRePaint()
-    pcall(function() self:_paintOpeningEffect(book.filepath) end)
-    self:_launchReader(open_path, after_open_callback)
-end
+
     local util = require("util")
     if G_reader_settings:isTrue("top_manager_infmandhistory")
             and book.filepath
@@ -4583,6 +4606,7 @@ end
             return
         end
         self._mbr_confirm_pending = book.filepath
+
         local status = _G.all_files[book.filepath].status
         local text = ", do you want to open it?"
         if status == "mbr" then
@@ -4619,7 +4643,222 @@ end
 
         return
     end
+
     proceed()
+end
+
+-- _openBookInner(book, after_open_callback) — the original _openBook body,
+-- unchanged. _openBook above asks the MBR/TBR question first and then lands here.
+function BookshelfWidget:_openBookInner(book, after_open_callback)
+    if not book or not book.filepath then return end
+    -- OPDS records carry an "OPDS://server/id" pseudo-path, not a file: there
+    -- is nothing on disk to hand ReaderUI. Open the catalog book modal instead
+    -- (what the feed said about it, plus a download button per format, plus
+    -- Open when a previous download is still on disk). Guarded before every
+    -- file probe below, and matched on the path prefix so a hero-hydrated
+    -- record (flags stripped) is caught too.
+    -- A book from a registered source (the Kindle's own library, the Kobo
+    -- store's, or another plugin's: lib/bookshelf_sources) opens the way its
+    -- source says, before the OPDS test below: a plugin's remote record is a
+    -- remote record too, but its source owns the download. `open` answers
+    -- true when it handled everything itself (it may call ctx.open(path)
+    -- later, once a download lands), or a real path for us to open; anything
+    -- else falls through to the file.
+    local open_path = book.filepath
+    local Sources = require("lib/bookshelf_sources")
+    local owner = Sources.ownerOf(book)
+    local spec = owner and Sources.get(owner)
+    if spec and spec.open then
+        local ok, res = Sources.call(spec, "open", book, {
+            widget = self, after_open = after_open_callback,
+            open = function(path)
+                if type(path) == "string" and path ~= "" then
+                    self:_launchReader(path, after_open_callback)
+                end
+            end,
+        })
+        if ok and res == true then return end
+        if ok and type(res) == "string" and res ~= "" then open_path = res end
+    end
+    if open_path == book.filepath and self:_isRemoteRecord(book) then
+        if self:_sourceRemote(book) then self:_showSourceInfo(book, after_open_callback) return end
+        self:_showRemoteBookInfo(book)
+        return
+    end
+    -- Stale records (Send-to-Kindle moved/removed the file after BIM cached
+    -- the path) crash KOReader's filemanagerbookinfo:show via lfs.attributes
+    -- on nil. ReaderUI:showReader nil-checks itself, but presenting a "file
+    -- missing" toast here is friendlier than its silent no-op.
+    if open_path == book.filepath then
+        -- Stale records (Send-to-Kindle moved/removed the file after BIM cached
+        -- the path) crash filemanagerbookinfo:show via lfs.attributes on nil; a
+        -- "file missing" toast is friendlier than a silent no-op.
+        local lfs = require("libs/libkoreader-lfs")
+        if lfs.attributes(book.filepath, "mode") ~= "file" then
+            UIManager:show(require("ui/widget/infomessage"):new{
+                text    = _("File no longer exists. The bookshelf entry is stale."),
+                timeout = 3,
+            })
+            return
+        end
+    end
+    -- Opening feedback: flush pending paints so the capture sees current
+    -- pixels, then squeeze the tapped cover (validated against this book;
+    -- no-op when the tap didn't land on a visible cover). Painted before
+    -- the launch so it also precedes an unpark splice - the squeeze then
+    -- reads as the opening motion completing into the page.
+    UIManager:forceRePaint()
+    pcall(function() self:_paintOpeningEffect(book.filepath) end)
+    self:_launchReader(open_path, after_open_callback)
+end
+
+-- _openKoboBook(book, after_open_callback) -> true. The Kobo source's open
+-- (lib/bookshelf_builtin_sources): a KOBO_VIRTUAL:// record has no real file, so
+-- it is resolved through kobo.koplugin first. Every path answers true, handled.
+function BookshelfWidget:_openKoboBook(book, after_open_callback)
+    local ok_kobo, KoboSource = pcall(require, "lib/bookshelf_kobo_source")
+    local real = ok_kobo and KoboSource and KoboSource.realPathForOpen(book.filepath) or nil
+    if not real then
+        UIManager:show(require("ui/widget/infomessage"):new{
+            text    = _("Couldn't open this Kobo book."),
+            timeout = 3,
+        })
+        return true
+    end
+    -- Map the decrypted /tmp copy back to this virtual book so the hero can
+    -- show it as recently-opened (#203 pt3).
+    if Repo.noteKoboOpen then Repo.noteKoboOpen(real, book) end
+    -- Opening feedback at TAP time (the Kobo readiness poll below can
+    -- take seconds): flush pending paints so the capture sees current
+    -- pixels, then squeeze the tapped cover.
+    UIManager:forceRePaint()
+    pcall(function() self:_paintOpeningEffect(book.filepath) end)
+    -- The decrypted copy can still be mid-write when realPathForOpen returns
+    -- (#203); opening an empty file silently failed and needed the "open
+    -- another, come back" dance. Wait until it has a size -- polling ~1s up
+    -- to 5s behind a notice -- then open, or show a clear try-again message.
+    self:_openKoboWhenReady(real, after_open_callback)
+    return true
+end
+
+-- _openKindleBook(book, after_open_callback) -> true. The Kindle source's open
+-- (lib/bookshelf_builtin_sources). Every path answers true: this owns the
+-- open, including its refusals.
+function BookshelfWidget:_openKindleBook(book, after_open_callback)
+    -- Kindle library record (issue #355). The filepath is real -- either the
+    -- Kindle's own .kfx/.azw3 or kindle.koplugin's converted EPUB -- but a
+    -- KFX still has to be converted (and usually decrypted) before KOReader
+    -- can read it, and Bookshelf calls ReaderUI:showReader directly, so it
+    -- never passes through the plugin's own openFile patch. Resolve it here
+    -- instead.
+    --
+    -- A book that still needs converting blocks everything for minutes (4m40s
+    -- for a 1.5MB book on a PW5), and the plugin inhibits input while it
+    -- works, so the screen sits there dead. Unwarned, that reads as a crash
+    -- -- it did to the maintainer, on this exact book. Ask first, so the wait
+    -- is a decision rather than a mystery, and so a mis-tap can be undone.
+    -- Only ever asked once per book: after this the EPUB is cached and the
+    -- open is instant.
+    if book.kindle_needs_prepare and not book._kindle_prepare_ok then
+        -- Names the plugin doing the work, deliberately. A multi-minute
+        -- freeze on a book tap needs an obvious owner: without one it reads
+        -- as Bookshelf being broken, and a user who wants to understand or
+        -- report it has nothing to go on. "Kindle Virtual Library" is the
+        -- name that appears in KOReader's own plugin list, so it is the name
+        -- that leads somewhere.
+        UIManager:show(require("ui/widget/confirmbox"):new{
+            text = _("This Kindle book has to be converted before KOReader can read it.\n\n"
+                .. "The Kindle Virtual Library plugin does the conversion. It can take "
+                .. "a few minutes, it can't be stopped once started, and the screen "
+                .. "won't respond while it works.\n\n"
+                .. "It only happens the first time you open a book."),
+            ok_text = _("Convert"),
+            ok_callback = function()
+                -- Re-enter with the question answered, but NOT from inside
+                -- this callback: ConfirmBox runs ok_callback and only then
+                -- closes itself (confirmbox.lua -- ok_callback(), then
+                -- UIManager:close). The conversion blocks for minutes and
+                -- paints its own "Preparing…" progress, so running it here
+                -- draws that progress on top of a dialog still on screen.
+                -- Next tick, once the close has actually happened.
+                book._kindle_prepare_ok = true
+                UIManager:nextTick(function()
+                    self:_openBook(book, after_open_callback)
+                end)
+            end,
+        })
+        return true
+    end
+    -- Tap feedback, but only when the open can actually be quick. A cover
+    -- squeeze says "your book is opening now": ahead of a multi-minute
+    -- conversion that is a lie, and it would be a second thing painting over
+    -- the plugin's own progress message. A blocked book is about to refuse,
+    -- so it gets no animation either.
+    if not (book.kindle_blocked or book.kindle_needs_prepare) then
+        UIManager:forceRePaint()
+        pcall(function() self:_paintOpeningEffect(book.filepath) end)
+    end
+    local ok_kindle, KindleSource = pcall(require, "lib/bookshelf_kindle_source")
+    local real, reason
+    if ok_kindle and KindleSource then
+        real, reason = KindleSource.realPathForOpen(book)
+    end
+    if not real then
+        -- Two kinds of reason: a short key we phrase ourselves, or a
+        -- sentence the plugin already phrased for the reader (which knows
+        -- far more about why a particular book would not open).
+        -- Name the format and say what DOES work. Two reasons users need
+        -- this: it makes clear the limit is the Kindle plugin's converter
+        -- rather than Bookshelf, and it tells them the rest of their library
+        -- may well be fine -- worth knowing if the first book they try is
+        -- one of the handful that can't work.
+        local fmt = (book.format or ""):upper()
+        local text, brief
+        if reason == "drm" then
+            text = T(_("This is a protected %1 file, which can't be opened.\n\n"
+                .. "The Kindle plugin can only unlock KFX books. Protected MOBI "
+                .. "and AZW books can't be converted by any KOReader plugin, so "
+                .. "those have to be read in the Kindle app.\n\n"
+                .. "Your KFX books should open normally."), fmt ~= "" and fmt or "Kindle")
+        elseif reason == "unsupported" then
+            -- KOReader registers no provider for this extension (.azw3 has
+            -- none, so even an unprotected one is refused). Nothing here can
+            -- change that, but say so rather than letting ReaderUI bounce the
+            -- user out to the file browser.
+            text = T(_("KOReader can't read %1 files.\n\n"
+                .. "It reads KFX books (prepared by the Kindle plugin) and "
+                .. "unprotected MOBI and AZW books.\n\n"
+                .. "Your other Kindle books should open normally."), fmt ~= "" and fmt or "these")
+        elseif reason == "unavailable" or reason == nil then
+            text = _("The Kindle library isn't available right now.")
+            brief = true
+        else
+            -- The plugin's own sentence. It knows far more about why this
+            -- particular book would not open, and some of its reasons run to
+            -- two sentences with an instruction in them.
+            text = tostring(reason)
+        end
+        -- Only a one-liner gets the short timeout. These explanations run to
+        -- three paragraphs -- what the format is, what the converter can do,
+        -- and the reassurance that the rest of the library is fine -- and
+        -- four seconds is not enough to read that, let alone take it in.
+        --
+        -- Untimed relies on the reader being able to dismiss it: InfoMessage
+        -- binds a whole-screen tap on a touch device and any key on a keyed
+        -- one. Generic device defaults both capabilities to "no" and each
+        -- device opts in, so a device declaring neither -- or one that has
+        -- been misdetected -- would be stuck with a message nothing clears.
+        -- Fall back to a long timeout there rather than a short one: still
+        -- readable, still self-clearing.
+        local can_dismiss = Device:isTouchDevice() or Device:hasKeys()
+        UIManager:show(require("ui/widget/infomessage"):new{
+            text    = text,
+            timeout = brief and 4 or (can_dismiss and nil or 20),
+        })
+        return true
+    end
+    self:_launchReader(real, after_open_callback)
+    return true
 end
 
 -- Hand a real on-disk path to the reader after the pre-read bookkeeping. Shared
@@ -5208,16 +5447,67 @@ end
 -- change; the stored key keeps its 3.x name so explicit choices carry over,
 -- and the old grid_shelf_labels checkbox is retired (its content already
 -- followed this mode, so the mode alone now decides).
+--
+-- "custom" is the reader's own token template (lib/bookshelf_cover_label.lua).
+-- While its editor is open the draft outranks the saved mode, so choosing
+-- Custom from Title or None previews the strip before anything is saved.
 function BookshelfWidget:_shelfLabelMode()
     local mode = BookshelfSettings.read("expanded_shelf_label")
-    if mode == "none" then return nil end
-    if mode ~= "author" and mode ~= "series" then mode = "title" end
+    if self._cover_label_preview then mode = "custom" end
+    -- Books on None, groups on (Show text below groups, issue 486): the strip
+    -- is still there, for the groups. "none" says so to ShelfRow (no book
+    -- labels) while the layout, which only asks whether there IS a strip,
+    -- budgets one.
+    if mode == "none" and not self:_groupLabelMode() then return nil end
+    if mode ~= "author" and mode ~= "series" and mode ~= "custom" and mode ~= "none" then
+        mode = "title"
+    end
     -- A chip that prints no label budgets no strip (see _gridDrawsLabels):
     -- every tile reserves the strip so cover bottoms line up across a row that
     -- mixes books and folders, but a chip of divider-style folders alone was
     -- reserving a blank band under every row for nothing.
     if not self:_gridDrawsLabels() then return nil end
     return mode
+end
+
+-- _groupLabelMode() -> "author" / "custom", or nil for None: Cover display >
+-- Show text below groups (issue 486). While the groups' editor is open its
+-- draft outranks the saved choice, as the books' does.
+function BookshelfWidget:_groupLabelMode()
+    if self._group_label_preview then return "custom" end
+    return require("lib/bookshelf_cover_label").groupMode()
+end
+
+-- _groupLabelLine() -> the groups' Custom line in effect (the draft while its
+-- editor is open, else the saved one).
+function BookshelfWidget:_groupLabelLine()
+    if self._group_label_preview then return self._group_label_preview end
+    return require("lib/bookshelf_cover_label").groupLine()
+end
+
+-- _previewGroupLabel(line) -- the groups' editor preview: draw `line` under
+-- the group tiles, or drop the override when nil.
+function BookshelfWidget:_previewGroupLabel(line)
+    self._group_label_preview = line
+    self:_rebuild()
+    UIManager:setDirty(self, "ui")
+end
+
+-- _coverLabelLine() -> the Custom label in effect: the editor's draft while it
+-- is open, else the saved one. The one read, so the rows and the preview
+-- cannot disagree about which template they are drawing.
+function BookshelfWidget:_coverLabelLine()
+    if self._cover_label_preview then return self._cover_label_preview end
+    return require("lib/bookshelf_cover_label").line()
+end
+
+-- _previewCoverLabel(line) -- draw `line` as the Custom label instead of the
+-- saved one, or drop the override when nil. A rebuild, because the labels are
+-- built with the rows, and choosing Custom from None adds the strip itself.
+function BookshelfWidget:_previewCoverLabel(line)
+    self._cover_label_preview = line
+    self:_rebuild()
+    UIManager:setDirty(self, "ui")
 end
 
 -- _gridLabelsKey() -> string
@@ -5230,6 +5520,15 @@ function BookshelfWidget:_gridLabelsKey()
     local pay  = tip and tip.payload
     return tostring(self.chip) .. "|" .. #path .. "|" .. tostring(tip and tip.kind)
         .. "|" .. tostring(pay and (pay.path or pay.query or pay.name or pay.id))
+        -- The tile style too: it decides whether a folder card prints its
+        -- name below itself, and the library-wide one can change from the
+        -- menu while the shelf shows another style, which notes nothing.
+        .. "|" .. tostring(require("lib/bookshelf_stack_display").resolve(self:_groupDisplayMode()))
+        -- And the two label choices that decide it: books on None print
+        -- nothing, and a group's text can need the strip on its own.
+        .. "|" .. tostring(BookshelfSettings.read("expanded_shelf_label") == "none"
+                           and not self._cover_label_preview)
+        .. "|" .. tostring(self:_groupLabelMode())
 end
 
 -- _gridDrawsLabels() -> bool
@@ -5240,8 +5539,8 @@ end
 -- extra rebuild (see _rebuild), whereas skipping one that is needed would
 -- print labels over the footer.
 function BookshelfWidget:_gridDrawsLabels()
-    local m = self._grid_labels
-    if m and m.key == self:_gridLabelsKey() then return m.value end
+    local m = self._grid_labels and self._grid_labels[self:_gridLabelsKey()]
+    if m then return m.value end
     return true
 end
 
@@ -5259,7 +5558,10 @@ end
 -- the footer.
 function BookshelfWidget:_noteGridLabels(items, windowed)
     local StackDisplay = require("lib/bookshelf_stack_display")
-    local v = StackDisplay.anyExternalLabel(items, self:_groupDisplayMode()) and true or false
+    local books_none = BookshelfSettings.read("expanded_shelf_label") == "none"
+                       and not self._cover_label_preview
+    local v = StackDisplay.anyExternalLabel(items, self:_groupDisplayMode(),
+        { books = not books_none, groups = self:_groupLabelMode() }) and true or false
     if not v and windowed then
         local path = self._drilldown_path or {}
         local tip  = path[#path]
@@ -5269,8 +5571,56 @@ function BookshelfWidget:_noteGridLabels(items, windowed)
         if has == nil then has = true end
         v = has
     end
-    self._grid_labels = { key = self:_gridLabelsKey(), value = v }
+    -- One note per item set, not one for the last set seen: switching chips
+    -- in the cover grid re-ran the rows of every label-free chip once more
+    -- (the note was the other chip's), and a list or spine shelf would fetch
+    -- for it again on every switch (_ensureGridLabels). `gen` is the
+    -- repository's data generation, which _ensureGridLabels checks: a book
+    -- closing can change what a set holds.
+    local Repo = require("lib/bookshelf_book_repository")
+    self._grid_labels = self._grid_labels or {}
+    self._grid_labels[self:_gridLabelsKey()] = {
+        value = v, gen = Repo.dataGeneration and Repo.dataGeneration() }
     return v
+end
+
+-- _ensureGridLabels() -- the note above, for a list or spine shelf.
+--
+-- Both size their hero as the COVER GRID would (_listCollapsedHeroHeight and
+-- _collapsedSpineSplit ask _collapsedGridSplit under _asCoverGrid), so the
+-- hero does not jump between styles. The grid's hero depends on whether this
+-- item set prints a label under its tiles (_shelfLabelMode), and only the cover
+-- grid's own fetch ever noted that. So a shelf not yet shown as Covers this
+-- session sized its hero on the "labels" guess, and the first visit to Covers
+-- corrected it. Measured on the rig (tutorial recording, Home in Spines): the
+-- hero came back 462 > 516 px after Spines > Covers > List > Spines, the rows
+-- shorter, the page 1-46 instead of 1-43 and the ornaments moved.
+--
+-- So ask the grid's question here, before anything is sized: its own fetch,
+-- pinned to Covers, at page one, with covers off -- the note wants the item
+-- shapes, not their pictures. Once per item set and data generation. Skipped
+-- for a catalogue (OPDS, a fetch-mode source): its fetch reads feed windows,
+-- which are the network's business, and those shelves never stand as spines.
+function BookshelfWidget:_ensureGridLabels()
+    local key = self:_gridLabelsKey()
+    local gen = Repo.dataGeneration and Repo.dataGeneration()
+    local m = self._grid_labels and self._grid_labels[key]
+    if m and m.gen == gen then return end
+    local tab = require("lib/bookshelf_tab_model").getById(self.chip)
+    local kind = tab and tab.source and tab.source.kind
+    if kind == "opds" or (kind and require("lib/bookshelf_sources").isPaged(kind)) then
+        return
+    end
+    local cursor, quiet = self._cursor, Repo.suppress_covers
+    self._cursor = 1
+    Repo.suppress_covers = true
+    local got = _asCoverGrid(function()
+        local items, hint = self:_fetchChipItems(400)
+        return { items = items or {}, windowed = hint ~= nil }
+    end)
+    self._cursor = cursor
+    Repo.suppress_covers = quiet
+    if got then self:_noteGridLabels(got.items, got.windowed) end
 end
 
 -- ─── List view ───────────────────────────────────────────────────────────────
@@ -5337,7 +5687,9 @@ function BookshelfWidget:_viewMode()
     -- catalogue after choosing Spines -- degrades to the covers default.
     if chip_mode == ViewMode.SPINES then
         local tab = require("lib/bookshelf_tab_model").getById(self.chip)
-        if tab and tab.source and tab.source.kind == "opds" then
+        -- A fetch-mode registered source (a server catalogue) is the same case.
+        if tab and tab.source and (tab.source.kind == "opds"
+                or require("lib/bookshelf_sources").isPaged(tab.source.kind)) then
             chip_mode = nil
         end
     end
@@ -5415,6 +5767,17 @@ function BookshelfWidget:_isSpineMode()
     return ViewMode.isSpines(self:_viewMode())
 end
 
+-- _fullPanel() -> does the top panel run on behind the shelf and the footer?
+-- Always in list mode (its rows have no ground of their own); on Covers
+-- shelves when the theme on screen has Wallpaper > "Panel behind Covers
+-- shelves" ticked (issue 483); never on spines, which stand on their planks.
+function BookshelfWidget:_fullPanel()
+    if self:_isListMode() then return true end
+    if self:_viewMode() ~= ViewMode.COVERS then return false end
+    local ok, Wallpaper = pcall(require, "lib/bookshelf_wallpaper")
+    return (ok and Wallpaper and Wallpaper.coversPanel()) and true or false
+end
+
 -- _flipViewMode() -- the footer-hold gesture: pin THIS CHIP to the other mode.
 --
 -- It used to write the shelf-wide boolean for the current state (expanded or
@@ -5459,7 +5822,8 @@ function BookshelfWidget:_flipViewMode()
         target = ViewMode.COVERS
     elseif self:_isListMode() then
         local tab = TabModel.getById(self.chip)
-        local is_opds = tab and tab.source and tab.source.kind == "opds"
+        local is_opds = tab and tab.source and (tab.source.kind == "opds"
+            or require("lib/bookshelf_sources").isPaged(tab.source.kind))
         target = is_opds and ViewMode.COVERS or ViewMode.SPINES
     else
         target = ViewMode.LIST
@@ -5902,6 +6266,9 @@ function BookshelfWidget:_shelfCallbacks()
                 if bw:_isRemoteRecord(b) and bw._hero_mode ~= "micro"
                         and bw._preview_book
                         and bw._preview_book.filepath == b.filepath then
+                    -- A registered source's record: its commit is the
+                    -- source's own open (a download, say).
+                    if bw:_sourceRemote(b) then bw:_openBook(b) return end
                     bw:_showRemoteBookInfo(b)
                     return
                 end
@@ -6070,12 +6437,11 @@ function BookshelfWidget:_buildShelfRows(items, content_w, shelf_h, PAD, n_rows)
         -- _buildShelfRows runs in its own scope; the TabModel local
         -- inside _rebuild isn't visible here. Require lazily so the
         -- dependency stays explicit and idempotent.
-        local TabModel = require("lib/bookshelf_tab_model")
-        for _i, c in ipairs(TabModel.getActive()) do
-            if c.id == self.chip and c.source and c.source.kind == "single_series" then
-                in_series = true
-                break
-            end
+        -- getById, not a scan of getActive: a sub-shelf is not in the strip
+        -- but is the shelf on screen all the same.
+        local c = require("lib/bookshelf_tab_model").getById(self.chip)
+        if c and c.source and c.source.kind == "single_series" then
+            in_series = true
         end
     end
 
@@ -6092,6 +6458,10 @@ function BookshelfWidget:_buildShelfRows(items, content_w, shelf_h, PAD, n_rows)
         selection         = bw._selection,
         show_titles       = (label_mode ~= nil),
         label_mode        = label_mode,
+        label_line        = (label_mode == "custom") and self:_coverLabelLine() or nil,
+        -- Text below groups (issue 486): false = None.
+        group_label_mode  = self:_groupLabelMode() or false,
+        group_label_line  = (self:_groupLabelMode() == "custom") and self:_groupLabelLine() or nil,
         in_series         = in_series,
         group_display     = self:_groupDisplayMode(),
     }
@@ -6202,6 +6572,14 @@ function BookshelfWidget:_spinePlanBase(content_w, shelf_h, all_items)
         face_out        = self:_spineFaceOut(),
         face_recent_set = self:_spineFaceRecent(all_items),
         thickness_pct   = self:_chipListValue("spine_thickness_pct"),
+        -- Whose ornament deck the pieces are dealt from: every shelf has its
+        -- own (lib/bookshelf_ornament_deck). Here, so the render and the
+        -- page map deal from the same one.
+        orn_shelf       = self.chip,
+        -- The strip above a row, which a hanging piece's room includes
+        -- (plan's hang_room); the same gap _buildSpineRows' lift_headroom is
+        -- measured from.
+        hang_gap        = self:_rowGap((self:_layoutPrimitives())),
     }
 end
 
@@ -6772,7 +7150,12 @@ function BookshelfWidget:_ornSig()
     -- one piece off and another on).
     local pool = (ok and Orn) and tostring(Orn.list()) or ""
     local f = (ok and Orn) and Orn.frequency() or 0
-    return table.concat({ Deck.levelOf(f), Deck.generation(), self:_nShelves(), pool }, "|")
+    -- And the shelf's theme, which picks its pool (Orn.listFor) without
+    -- touching Orn.list() or the deck: choosing one for the shelf on screen
+    -- must not leave later pages dealing from the old pool's states.
+    local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
+    local look = (ok_t and TP and TP.shelfKey) and TP.shelfKey() or ""
+    return table.concat({ Deck.levelOf(f), Deck.generation(), self:_nShelves(), pool, look }, "|")
 end
 
 function BookshelfWidget:_ornStartState(dims)
@@ -7776,49 +8159,26 @@ function BookshelfWidget:_buildFooterRow(content_w, total_pages, footer_h)
             self._micromod_dimen = nil
         end
     end
-    -- The footer's own panel, matching the top panel's.
+    -- The footer's own panel, matching the top panel's (_paintFooterPanel).
     --
     -- Wrapped as a paintTo on the instance rather than in a FrameContainer:
     -- callers read row.dimen and swap the row in place, and an extra container
     -- would change that contract for a fill.
     --
-    -- INSET, where the top panel is OUTSET, and the asymmetry is the point.
-    -- The hero card's box is its CONTENT box, so its panel has to grow to put
-    -- a margin round it; this row is full-bleed and bottom-anchored, so its
-    -- panel has to shrink instead. Both land half the layout padding from the
-    -- screen edge, which is what makes the two panels' left edges line up.
-    --
-    -- Shrinking is also what keeps the tint off the shelf: this row is
-    -- anchored over main_frame in the OverlapGroup and its top overlaps the
-    -- last shelf row, so a panel drawn at the row's full height would blend
-    -- over the bottom of the last book on the page.
-    -- Suppressed when the shelf's own panel already runs down over the footer
-    -- (list mode): those pixels are tinted once already, and a second pass
-    -- would leave the footer a darker band inside the panel.
-    local strength = (self._panel_covers_footer or self:_groundState().panel_redundant) and 0
-                     or self:wallpaperScrimStrength()
-    if strength > 0 then
-        local ok, CoverProgress = pcall(require, "lib/bookshelf_cover_progress")
-        local ok_w, Wallpaper = pcall(require, "lib/bookshelf_wallpaper")
-        if ok and ok_w and CoverProgress and CoverProgress.resolvedColors then
-            local ok_c, colors = pcall(CoverProgress.resolvedColors)
-            if ok_c and colors and colors.panel_bg then
-                local inner = row.paintTo
-                local ground = colors.panel_bg
-                -- Geometry from footerPanelRect, in screen coordinates, so
-                -- the overlay's copy of this panel cannot drift from it. No
-                -- inset at the top, and none is needed: the layout reserves
-                -- footer_h, so shelf content stops exactly at this row's top
-                -- edge and the panel cannot tint the last book on the page.
-                row.paintTo = function(slf, bb, x, y)
-                    local px, py, pw, ph, radius = self:footerPanelRect()
-                    if px then
-                        Wallpaper.scrim(bb, px, py, pw, ph, ground, strength, radius)
-                    end
-                    return inner(slf, bb, x, y)
-                end
-            end
+    -- The panel goes down first, over whatever of the bottom row reaches into
+    -- the footer, then the copy under the start menu button, then the buttons.
+    local burger_side = (not self._selection:isActive())
+        and self:_startMenuPosition() or "off"
+    local side_w = math.floor((self.width - math.floor(content_w * 0.75)) / 2)
+    local inner = row.paintTo
+    row.paintTo = function(slf, bb, x, y)
+        self:_paintFooterPanel(bb)
+        if burger_side == "left" or burger_side == "right" then
+            self:_keepBurgerUnder(bb,
+                burger_side == "right" and (x + self.width - side_w) or x, y,
+                side_w, footer_h)
         end
+        return inner(slf, bb, x, y)
     end
     self._footer_h_last = footer_h
     self._footer_row_widget = row
@@ -7879,8 +8239,8 @@ function BookshelfWidget:_jumpScanList()
         -- Filtered as _fetchChipItems filters what shows (issue 479), so the
         -- jump list names only books that are on the shelf.
         local books = tip.payload.books
-        if tab and tab.filter and Repo.applyFilter and not tip.whole then
-            books = Repo.applyFilter(books, tab.filter)
+        if tab and tab.filter and Repo.filterMembers and not tip.whole then
+            books = Repo.filterMembers(books, tab.filter)
         end
         return books, within_key or chip_key, "drilldown-payload"
     end
@@ -7901,6 +8261,14 @@ function BookshelfWidget:_jumpScanList()
         return ok and fetched or nil,
                eff and eff[1] and eff[1].key,
                ok and "getAll-folder" or ("getAll-ERR:" .. tostring(fetched))
+    end
+
+    -- A registered source's folder: the source orders it, so no sort key.
+    if tip and tip.kind == "source_nav" then
+        local ok, fetched = pcall(Repo.getBySource, self:_sourceNavSource(tip, tab),
+            nil, nil, 0, BIG_LIMIT, fetch_opts)
+        return ok and fetched or nil, nil,
+               ok and "getBySource-source_nav" or ("getBySource-ERR:" .. tostring(fetched))
     end
 
     -- OPDS subcatalog drill: the subcatalog's own cached window. Feed order
@@ -10035,11 +10403,9 @@ function BookshelfWidget:_attachTopPanel(vgroup, opts)
     vgroup.paintTo = function(slf, bb, x, y)
         local px, py = x - bleed, y - bleed
         local w2, h2 = pw, ph
-        -- Kept for the rule below: the footer's top edge, which only exists
-        -- as a boundary while this one panel covers it. Only the Y is taken
-        -- from the panel; the rule's width is the CONTENT's, so it lines up
-        -- with the chip strip above rather than with the panel, which bleeds
-        -- past it on both sides.
+        -- Kept for the gap below: the footer's top edge, which only exists
+        -- as a boundary while this one panel covers it. The gap runs the
+        -- panel's full width.
         local rule_y
         if list_full then
             -- Width and bottom from the footer's own definition, so this
@@ -10056,30 +10422,24 @@ function BookshelfWidget:_attachTopPanel(vgroup, opts)
         -- negative origin rounds the wrong pixels.
         if px < 0 then w2 = w2 + px; px = 0 end
         if py < 0 then h2 = h2 + py; py = 0 end
-        Wallpaper.scrim(bb, px, py, w2, h2, ground, strength, radius)
+        -- The blurred picture under the tint when Blur is on and a picture
+        -- is what is behind it (Wallpaper.panel).
+        local frost = self:hasWallpaper()
+        Wallpaper.panel(bb, px, py, w2, h2, ground, strength, radius, frost)
+        -- A 1px gap across the panel where the footer begins: the picture
+        -- (or the page colour) shows through, so the footer reads as its own
+        -- bar without a second panel (maintainer, 2026-10-04: in place of
+        -- the hairline rule this used to draw). Put back bare
+        -- (restoreBare), and registered with the panel below, so a later
+        -- restore does not tint it again.
+        if rule_y then
+            Wallpaper.restoreBare(bb, px, rule_y, w2, 1)
+        end
         -- Tell restore() where the tint is. Anything that puts the picture
         -- back inside this rect has to put the TINTED picture back, or it
         -- punches a bright hole in the panel -- which is what the hero
-        -- cover's rounded corners were doing.
-        Wallpaper.setPanel(px, py, w2, h2, ground, strength, radius)
-        -- A hairline where the footer panel's top edge would be.
-        --
-        -- In this mode the footer has no panel of its own -- the one above
-        -- swallowed it, deliberately, so the area is not tinted twice -- and
-        -- that leaves its glyphs in the same unbroken surface as the shelf
-        -- above, with nothing to sit against. They read as misaligned rather
-        -- than as a bar. The full-screen micro module met this first and
-        -- answered it the same way (lib/bookshelf_micro_fullscreen.lua, the
-        -- footer rule): a rule restores the boundary without splitting the
-        -- panel back into two objects. Same colour and thickness as that one,
-        -- so the two views are a matched pair.
-        --
-        -- Painted BEFORE the content: the footer row draws over it, so a
-        -- glyph that reaches the edge is not cut by the rule.
-        if rule_y then
-            bb:paintRect(x, rule_y, content_w, Size.line.medium,
-                         Blitbuffer.gray(0.4))
-        end
+        -- cover's rounded corners were doing. The gap row stays bare.
+        Wallpaper.setPanel(px, py, w2, h2, ground, strength, radius, rule_y, frost)
         return inner_paint(slf, bb, x, y)
     end
     return true
@@ -10533,6 +10893,7 @@ end
 -- BookshelfWidget instance is closed for any reason. main.lua wires the
 -- callback in show().
 function BookshelfWidget:onCloseWidget()
+    self._closed = true   -- the registered-source listener (init) stands down
     self:_stopStatusTimer()
     -- Invalidate any pending Kobo prepare-poll (_openKoboWhenReady). The poll
     -- closure captures self and would otherwise call _launchReader on this
@@ -11016,11 +11377,20 @@ end
 -- can sleep cleanly with no pending callbacks; re-arm + immediate tick
 -- on wake so visible state catches up without the user waiting up to
 -- a full minute.
+-- A picker that keeps its choices in memory while it is open (the Theme
+-- library, the ornament collection: Orn.beginDeferred) writes them as it
+-- closes; a suspend or KOReader's autosave while one is open lands them too.
+local function flushOpenPickers()
+    local Orn = package.loaded["lib/bookshelf_ornaments"]
+    if Orn and Orn._defer then BookshelfSettings.flush() end
+end
+
 function BookshelfWidget:onSuspend()
     self:_stopStatusTimer()
     -- Suspend can be followed by a SIGTERM (Kindle frame switch) that never
     -- reaches onCloseWidget, so land deferred nav state here too.
     self:_flushNavStateNow()
+    flushOpenPickers()
 end
 
 -- KOReader broadcasts onFlushSettings on its periodic autosave and on a
@@ -11029,6 +11399,7 @@ end
 -- settings, independent of the debounce timer.
 function BookshelfWidget:onFlushSettings()
     self:_flushNavStateNow()
+    flushOpenPickers()
 end
 
 function BookshelfWidget:onResume()
@@ -11115,9 +11486,12 @@ end
 function BookshelfWidget:_chipNeighbour(direction)
     local keys = self._active_chip_keys
     if not keys or #keys <= 1 then return nil end
+    -- From inside a sub-shelf, the neighbours are those of the top-level
+    -- shelf it sits under.
+    local here = require("lib/bookshelf_tab_model").rootOf(self.chip)
     local idx
     for i, k in ipairs(keys) do
-        if k == self.chip then idx = i; break end
+        if k == here then idx = i; break end
     end
     if not idx then return keys[1] end
     -- Lua's % on negatives follows the sign of the divisor, so
@@ -11323,7 +11697,7 @@ function BookshelfWidget:onBSFocusUp()
         if self._cursor_idx and on_top then
             if not self._chip_bar_hidden then
                 self._focus_zone = "chips"
-                if #self._drilldown_path > 0 then
+                if self:_navDepth() > 0 then
                     local zones = self._chip_bar and self._chip_bar._breadcrumb_zones
                     if zones and #zones > 0 then
                         self._crumb_cursor_depth = zones[#zones].depth
@@ -11434,7 +11808,7 @@ function BookshelfWidget:onBSFocusDown()
         self:_swapHeroInPlace()
         if not self._chip_bar_hidden then
             self._focus_zone = "chips"
-            if #self._drilldown_path > 0 then
+            if self:_navDepth() > 0 then
                 local zones = self._chip_bar and self._chip_bar._breadcrumb_zones
                 if zones and #zones > 0 then
                     self._crumb_cursor_depth = zones[#zones].depth
@@ -11609,7 +11983,7 @@ function BookshelfWidget:onBSFocusLeft()
     end
 
     if self._focus_zone == "chips" then
-        if #self._drilldown_path > 0 then
+        if self:_navDepth() > 0 then
             local zones = self._chip_bar and self._chip_bar._breadcrumb_zones
             if zones then
                 local cur_i
@@ -11678,7 +12052,7 @@ function BookshelfWidget:onBSFocusRight()
     end
 
     if self._focus_zone == "chips" then
-        if #self._drilldown_path > 0 then
+        if self:_navDepth() > 0 then
             local zones = self._chip_bar and self._chip_bar._breadcrumb_zones
             if zones then
                 local cur_i
@@ -11751,7 +12125,7 @@ function BookshelfWidget:onBSKbPress()
     end
 
     if self._focus_zone == "chips" then
-        if #self._drilldown_path > 0 then
+        if self:_navDepth() > 0 then
             -- Breadcrumb mode: fire on_breadcrumb for the focused zone depth.
             local depth = self._crumb_cursor_depth
             if depth ~= nil and self._chip_bar and self._chip_bar.on_breadcrumb then
@@ -11951,7 +12325,7 @@ function BookshelfWidget:onBSKbHold()
     end
     if self._focus_zone == "chips" then
         -- Breadcrumb mode: no edit affordance, mirror touch behaviour.
-        if #self._drilldown_path > 0 then return true end
+        if self:_navDepth() > 0 then return true end
         local key = self._chip_cursor_key
         if not key then return true end
         -- Action chips (current, search) don't expose an editor on
@@ -14281,7 +14655,7 @@ local function _ornamentStamp()
 end
 
 local function _snapshotHomeDirs()
-    local home = G_reader_settings:readSetting("home_dir")
+    local home = require("lib/bookshelf_home_dir").get()
     if not home or home == "" then return nil end
     local lfs = require("libs/libkoreader-lfs")
     local snap = {}
@@ -14661,8 +15035,9 @@ function BookshelfWidget:_paginatePrev()
     -- "go up a level" (mirrors tapping the previous breadcrumb crumb /
     -- the chip pill at depth 1). Discoverable escape from drill-down
     -- without aiming at the breadcrumb.
-    if #self._drilldown_path > 0 then
-        self:_drillBackTo(#self._drilldown_path - 1)
+    local nav_n = self:_navDepth()
+    if nav_n > 0 then
+        self:_navBackTo(nav_n - 1)
         return true
     end
     -- Top level + page 1 + chip strip visible: stay in the chip and wrap to
@@ -14852,9 +15227,9 @@ function BookshelfWidget:onPrevPage() return self:_paginatePrev() end
 -- Returning false at top level lets the event keep falling through to
 -- whatever KOReader would do without us (unchanged behaviour).
 function BookshelfWidget:onBSDrillBack()
-    local n = self._drilldown_path and #self._drilldown_path or 0
+    local n = self:_navDepth()
     if n > 0 then
-        self:_drillBackTo(n - 1)
+        self:_navBackTo(n - 1)
         return true
     end
     return false
@@ -14914,10 +15289,11 @@ function BookshelfWidget:onBookshelfToggleHero()
 end
 
 function BookshelfWidget:onBookshelfShuffleOrnaments()
-    -- A new saved order: every page's start in the deck, and the page map
-    -- (the pieces' widths decide where pages break), are re-learnt. The page
-    -- on screen keeps its first book; what follows it may move.
-    require("lib/bookshelf_ornament_deck").shuffle()
+    -- A new saved order for THIS shelf's deck: every page's start in the
+    -- deck, and the page map (the pieces' widths decide where pages break),
+    -- are re-learnt. The page on screen keeps its first book; what follows it
+    -- may move. Other shelves keep theirs.
+    require("lib/bookshelf_ornament_deck").shuffle(self.chip)
     self:_dropOrnPages(false)
     self:_rebuild()
     UIManager:setDirty(self, "ui")
@@ -15530,6 +15906,21 @@ function BookshelfWidget:_refreshLibrary()
         self:_opdsRefresh(_opds_tab)
         return
     end
+    -- A registered source with its own refresh (a server catalogue): ask it,
+    -- for the level on screen, and redraw when it says there is news.
+    do
+        local src = self:_currentRegisteredSource()
+        local Sources = require("lib/bookshelf_sources")
+        local spec = src and Sources.get(src.kind)
+        if spec and spec.refresh then
+            Sources.call(spec, "refresh", src, src.drill, function()
+                UIManager:nextTick(function()
+                    self:_rebuild(); UIManager:setDirty(self, "ui")
+                end)
+            end)
+            return
+        end
+    end
     local InfoMessage = require("ui/widget/infomessage")
     local Repo        = require("lib/bookshelf_book_repository")
     local msg = InfoMessage:new{
@@ -15573,7 +15964,46 @@ function BookshelfWidget:_isRemoteRecord(book)
     local fp = is_path and book or book.filepath
     if type(fp) == "string" and fp:find("^OPDS://") then return true end
     if not is_path and book.is_remote and book.opds then return true end
+    -- A registered source's own remote records (lib/bookshelf_sources
+    -- remote_prefix), e.g. a server catalogue's books before download.
+    if require("lib/bookshelf_sources").isRemotePath(fp) then return true end
     return false
+end
+
+-- _sourceRemote(book) -> spec, id for a remote record that belongs to a
+-- registered source (not OPDS, which has its own modal), else nil.
+function BookshelfWidget:_sourceRemote(book)
+    if type(book) ~= "table" or type(book.filepath) ~= "string" then return nil end
+    if book.filepath:find("^OPDS://") then return nil end
+    local Sources = require("lib/bookshelf_sources")
+    if not Sources.isRemotePath(book.filepath) then return nil end
+    local id = Sources.ownerOf(book)
+    return id and Sources.get(id), id
+end
+
+-- _showSourceInfo(book, after_open): long-press on a registered source's
+-- remote record. The source's own `info` when it has one; otherwise what the
+-- record says. ctx.open is the same as `open` gets, so a download started from
+-- the source's dialog can open the book when it lands.
+function BookshelfWidget:_showSourceInfo(book, after_open)
+    local spec = self:_sourceRemote(book)
+    local Sources = require("lib/bookshelf_sources")
+    if spec and spec.info then
+        local ok = Sources.call(spec, "info", book, {
+            widget = self, after_open = after_open,
+            open = function(path)
+                if type(path) == "string" and path ~= "" then
+                    self:_launchReader(path, after_open)
+                end
+            end,
+        })
+        if ok then return end
+    end
+    local lines = { book.display_title or book.title or "" }
+    local author = book.authors or book.author
+    if type(author) == "table" then author = table.concat(author, ", ") end
+    if author and author ~= "" then lines[#lines + 1] = author end
+    UIManager:show(require("ui/widget/infomessage"):new{ text = table.concat(lines, "\n") })
 end
 
 -- _hydrateBook(book) -> book
@@ -19128,7 +19558,7 @@ function BookshelfWidget:_buildBookMenuHeader(book, override_width, pill_specs, 
     if rich and book.filepath then
         local shown = book.filepath
         local ok_gs, gs = pcall(function() return G_reader_settings end)
-        local home = ok_gs and gs and gs:readSetting("home_dir")
+        local home = ok_gs and gs and require("lib/bookshelf_home_dir").get()
         if type(home) == "string" then
             home = home:gsub("/+$", "")
             if home ~= "" and shown:sub(1, #home + 1) == home .. "/" then
@@ -19577,7 +20007,7 @@ function BookshelfWidget:_buildPillSpecs(book, collection_set, close_cb, filter)
     do
         local ok_gs, gs = pcall(function() return G_reader_settings end)
         if ok_gs and gs then
-            home_dir = gs:readSetting("home_dir")
+            home_dir = require("lib/bookshelf_home_dir").get()
             if type(home_dir) == "string" then
                 home_dir = home_dir:gsub("/+$", "")
             end
@@ -21821,7 +22251,7 @@ function BookshelfWidget:_pickBookCoverFromDevice(book, modal, state)
     local PathChooser = require("ui/widget/pathchooser")
     local ImageSource = require("lib/bookshelf_image_source")
     local bw = self
-    local start_path = G_reader_settings:readSetting("home_dir")
+    local start_path = require("lib/bookshelf_home_dir").get()
         or (book.filepath:match("^(.*)/[^/]+$")) or "/"
     UIManager:show(PathChooser:new{
         title            = _("Choose cover image"),
@@ -21888,6 +22318,7 @@ function BookshelfWidget:_showBookDetail(book, opts)
     -- same read-only viewer the tap path shows. Path-prefix match, so a
     -- hero-hydrated record with its flags stripped is caught too.
     if self:_isRemoteRecord(book) then
+        if self:_sourceRemote(book) then self:_showSourceInfo(book) return end
         self:_showRemoteBookInfo(book)
         return
     end
@@ -23433,6 +23864,7 @@ end
 -- to clear it. Offered from any row of the catalogue, which is where a reader
 -- who wants out of a too-deep start will be standing.
 function BookshelfWidget:_openOpdsNavMenu(rec)
+    if rec and rec.source_nav then return end
     if not (rec and rec.opds and rec.opds.feed_url) then return end
     local tab = require("lib/bookshelf_tab_model").getById(self.chip)
     if not (tab and tab.source and tab.source.kind == "opds") then return end
@@ -23487,6 +23919,9 @@ function BookshelfWidget:_openGroupMenu(group, kind)
     -- Select/Deselect button is state-aware and applies its action
     -- directly (no second confirm).
     if not group then return end
+    -- A shelf of shelves' tiles: long-press edits the shelf, as on a chip.
+    if group.subshelf_id then return self:_editSubShelf(group.subshelf_id) end
+    if group.add_subshelf then return self:_addSubShelf() end
     -- kind isn't always carried on the group record itself. Folder
     -- shapes have group.kind = "folder", but the hydrated series /
     -- author / genre / tag / format groups returned by
@@ -23808,7 +24243,7 @@ function BookshelfWidget:_pickFolderImage(folder_path)
     local PathChooser = require("ui/widget/pathchooser")
     local ImageSource = require("lib/bookshelf_image_source")
     local bw = self
-    local start_path = G_reader_settings:readSetting("home_dir") or folder_path
+    local start_path = require("lib/bookshelf_home_dir").get() or folder_path
     local chooser
     chooser = PathChooser:new{
         title            = _("Choose folder image"),
@@ -23847,7 +24282,7 @@ function BookshelfWidget:_pickStackImage(kind, name)
     -- Open the picker rooted at the image library so the user lands
     -- in the right place when they've already organised files there.
     local start_path = ImageSource.getImageLibraryPath()
-        or G_reader_settings:readSetting("home_dir") or "/"
+        or require("lib/bookshelf_home_dir").get() or "/"
     local chooser
     chooser = PathChooser:new{
         title            = _("Choose image"),
@@ -23953,6 +24388,256 @@ function BookshelfWidget:_drillBackTo(depth)
     self:_markOpdsNav()
     self:_rebuild()
     UIManager:setDirty(self, "ui")
+end
+
+-- ── Shelf of shelves: going in and out ───────────────────────────────────────
+-- A sub-shelf is a shelf in its own right (TabModel's "Shelf of shelves"), so
+-- opening one makes it the active chip: every per-shelf setting then reads
+-- its own record, exactly as for a top-level shelf. The way back up is the
+-- parent chain, which the breadcrumb shows ahead of any drill; nothing about
+-- it needs storing, since a relaunch on a sub-shelf rebuilds the chain from
+-- the records.
+
+-- _shelfChain() -> the shelves above the one on screen, outermost first;
+-- empty on a top-level shelf.
+function BookshelfWidget:_shelfChain()
+    return require("lib/bookshelf_tab_model").ancestorsOf(self.chip)
+end
+
+-- _shelfCrumbCount() -> how many crumbs the shelf chain contributes: one per
+-- level below the top-level shelf, the shelf on screen included. None in
+-- search mode, which shows only its query.
+function BookshelfWidget:_shelfCrumbCount()
+    for _i, e in ipairs(self._drilldown_path or {}) do
+        if e.kind == "search" then return 0 end
+    end
+    return #self:_shelfChain()
+end
+
+-- _navDepth() -> every level the breadcrumb can climb: shelves, then drills.
+function BookshelfWidget:_navDepth()
+    return self:_shelfCrumbCount() + #(self._drilldown_path or {})
+end
+
+-- _navBackTo(depth) -- the breadcrumb's own numbering: 0 is the chip pill
+-- (the top-level shelf), then one crumb per shelf below it, then the drills
+-- on the shelf on screen. A depth inside the drills pops drills; one inside
+-- the shelf chain opens that shelf.
+function BookshelfWidget:_navBackTo(depth)
+    depth = math.max(0, depth or 0)
+    local S = self:_shelfCrumbCount()
+    if depth >= S then return self:_drillBackTo(depth - S) end
+    local chain = self:_shelfChain()
+    local target = chain[depth + 1]
+    if not target then return self:_drillBackTo(0) end
+    self:_openShelf(target.id)
+end
+
+-- _openShelf(id, going_in) -- make `id` the shelf on screen. Going in starts
+-- the sub-shelf at its first page and remembers where its parent was;
+-- coming back up returns the parent to that page.
+function BookshelfWidget:_openShelf(id, going_in)
+    self._shelf_cursors = self._shelf_cursors or {}
+    local cursor = 1
+    if going_in then
+        self._shelf_cursors[self.chip] = self._cursor
+    else
+        cursor = self._shelf_cursors[id] or 1
+    end
+    self:_markOpdsNav()
+    self._opds_fail_url, self._opds_fail_err = nil, nil
+    self:_clearDpadFocus()
+    self._tap_selected_fp = nil
+    self._drilldown_path = {}
+    self.chip    = id
+    self._cursor = cursor
+    self:_syncPageFromCursor()
+    BookshelfSettings.saveDeferred("active_chip", id)
+    self:_rebuild()
+    UIManager:setDirty(self, "ui")
+end
+
+function BookshelfWidget:_enterSubShelf(id)
+    if not id or not require("lib/bookshelf_tab_model").getById(id) then return end
+    self:_openShelf(id, true)
+end
+
+-- _addSubShelf([parent_id]) -- the "+" tile: a new shelf inside the one on
+-- screen (or `parent_id`), opened straight into the editor at its source
+-- picker, as "+ Add new shelf" does for a top-level one. The new shelf is
+-- opened behind the editor so its choices preview on it.
+function BookshelfWidget:_addSubShelf(parent_id)
+    local TabModel = require("lib/bookshelf_tab_model")
+    parent_id = parent_id or self.chip
+    if not TabModel.getById(parent_id) then return end
+    local tabs = TabModel.load()
+    -- No source yet, pending until saved (TabModel.newTab): backing out of the
+    -- editor removes it and returns to the shelf the "+" was tapped on.
+    local new_tab = TabModel.newTab(tabs, _("New shelf"))
+    local new_id = new_tab.id
+    TabModel.insertChild(tabs, parent_id, new_tab)
+    TabModel.save(tabs)
+    local back = self.chip
+    if parent_id == self.chip then
+        self:_openShelf(new_id, true)
+    else
+        self:_selectChip(new_id)
+    end
+    local Editor = require("lib/bookshelf_chip_editor")
+    Editor:editTab(new_id, {
+        bw = self,
+        pick_source_first = true,
+        on_change = function(info) self:_afterChipEdit(info) end,
+        on_discard = function()
+            if TabModel.getById(back) then self:_openShelf(back) else self:_afterChipEdit() end
+        end,
+    })
+end
+
+-- _editSubShelf(id) -- long-press on a sub-shelf's tile: its editor, over
+-- the shelf of shelves it sits on, so a rename or a style change shows on
+-- the tile behind.
+function BookshelfWidget:_editSubShelf(id)
+    local Editor = require("lib/bookshelf_chip_editor")
+    Editor:editTab(id, {
+        bw = self,
+        on_change = function(info) self:_afterChipEdit(info) end,
+    })
+end
+
+-- _subShelfCoverFps(tab, n) -> up to `n` filepaths of the books a shelf
+-- opens on, for its tile's cover / collage. A shelf of shelves borrows from
+-- its own shelves, depth first. Remote records (OPDS, a synthetic key) have
+-- no local cover and are skipped.
+function BookshelfWidget:_subShelfCoverFps(tab, n, depth)
+    local TabModel = require("lib/bookshelf_tab_model")
+    local out = {}
+    depth = depth or 0
+    if not tab or depth > 8 then return out end
+    local function add(fp)
+        if #out < n and type(fp) == "string" and not fp:match("^%a+://") then
+            out[#out + 1] = fp
+        end
+    end
+    if TabModel.isShelves(tab) then
+        for _i, c in ipairs(TabModel.childrenOf(tab.id)) do
+            for _j, fp in ipairs(self:_subShelfCoverFps(c, n - #out, depth + 1)) do add(fp) end
+            if #out >= n then break end
+        end
+        return out
+    end
+    local ok, items = pcall(Repo.getBySource, tab.source, tab.filter,
+                            tab.sort_priority, 0, n, { lazy_cover = true })
+    if not ok or type(items) ~= "table" then return out end
+    for _i, it in ipairs(items) do
+        if type(it) == "table" then
+            if it.filepath then add(it.filepath)
+            elseif type(it.books) == "table" and it.books[1] then add(it.books[1].filepath)
+            elseif type(it.first_book) == "table" then add(it.first_book.filepath) end
+        end
+        if #out >= n then break end
+    end
+    return out
+end
+
+-- _subShelfSpill(tab) -> a shelf of shelves as a spine shelf shows it: the
+-- books of every shelf inside it, each shelf in its own order and with its
+-- own filters, as a run labelled with its name (the section tag every spine
+-- run reads), then the "+" tile. A shelf of shelves inside it spills its
+-- shelves the same way, in place. A grouped shelf's groups are flattened in
+-- their order: the run is the shelf, not its groups.
+--
+-- Every record is a COPY before it is tagged: several sources hand out
+-- shared, memoised records, and a section tag left on one would label that
+-- book on every other shelf that shows it.
+function BookshelfWidget:_subShelfSpill(tab)
+    local TabModel = require("lib/bookshelf_tab_model")
+    local out = {}
+    local function add(rec, label, id)
+        if type(rec) ~= "table" or type(rec.filepath) ~= "string" then return end
+        local src = rec
+        -- A group's members can be bare { filepath } stubs.
+        if rec.title == nil and Repo.lightMetaFor then
+            src = Repo.lightMetaFor(rec.filepath) or rec
+        end
+        local b = {}
+        for k, v in pairs(src) do b[k] = v end
+        b.cover_bb           = nil
+        b.shelf_section      = label
+        b.shelf_section_path = nil
+        b.shelf_subshelf     = id
+        out[#out + 1] = b
+    end
+    local function spill(t, depth)
+        if depth > 8 then return end
+        for _i, c in ipairs(TabModel.childrenOf(t.id)) do
+            if TabModel.isShelves(c) then
+                spill(c, depth + 1)
+            else
+                local label = c.label or ""
+                if c.icon and c.icon ~= "" then label = c.icon .. " " .. label end
+                local ok, items = pcall(Repo.getBySource, c.source, c.filter,
+                    c.sort_priority, 0, SELECT_ALL_LIMIT, { lazy_cover = true })
+                if ok and type(items) == "table" then
+                    for _j, it in ipairs(items) do
+                        if type(it) == "table" and type(it.books) == "table" and not it.filepath then
+                            for _m, b in ipairs(it.books) do add(b, label, c.id) end
+                        else
+                            add(it, label, c.id)
+                        end
+                    end
+                end
+            end
+        end
+    end
+    spill(tab, 0)
+    if not tab.hide_add_tile then
+        out[#out + 1] = { kind = "folder", label = "+ " .. _("Add shelf"), add_subshelf = true }
+    end
+    return out
+end
+
+-- _subShelfItems(tab, offset, limit) -> the page of a shelf of shelves: one
+-- folder-shaped tile per shelf inside it, then the "+" tile. Folder-shaped
+-- because every view (covers, list, spines) already draws a folder record,
+-- with its first book standing in for a cover and a collage from cover_fps;
+-- the tile carries no path, which keeps the folder walks (badge counts,
+-- selection) off it. The tap and long-press read subshelf_id / add_subshelf
+-- (_expandFolder, _openGroupMenu).
+function BookshelfWidget:_subShelfItems(tab, offset, limit)
+    local TabModel = require("lib/bookshelf_tab_model")
+    local children = TabModel.childrenOf(tab.id)
+    -- The "+" tile can be hidden once the shelves are set up (shelf editor).
+    local total = #children + (tab.hide_add_tile and 0 or 1)
+    local ScaledCoverCache = require("lib/bookshelf_scaled_cover_cache")
+    local out = {}
+    for i = offset + 1, math.min(offset + limit, total) do
+        local c = children[i]
+        if c then
+            local label = c.label or ""
+            if c.icon and c.icon ~= "" then label = c.icon .. " " .. label end
+            local fps = self:_subShelfCoverFps(c, 4)
+            local first
+            if fps[1] then
+                first = Repo.buildBookMeta(fps[1],
+                    ScaledCoverCache:has(fps[1]) and { want_cover = false } or nil)
+            end
+            out[#out + 1] = {
+                kind        = "folder",
+                label       = label,
+                subshelf_id = c.id,
+                first_book  = first,
+                cover_fps   = fps,
+            }
+        else
+            out[#out + 1] = {
+                kind         = "folder",
+                label        = "+ " .. _("Add shelf"),
+                add_subshelf = true,
+            }
+        end
+    end
+    return out, total
 end
 
 -- _applyWithinGroupSort(group): when the current chip's tab has sort_priority
@@ -24259,7 +24944,80 @@ function BookshelfWidget:_searchAndDrill(query)
     }
 end
 
+-- _expandSourceNav(rec): tap on a registered source's folder tile. Asks the
+-- source for the drill entry and drills in; the shelf then fetches that level
+-- (see _sourceNavSource). Not persisted across a restart (_serializeDrillPath
+-- keeps only the kinds it knows), so a relaunch lands on the shelf's top level.
+function BookshelfWidget:_expandSourceNav(rec)
+    local Sources = require("lib/bookshelf_sources")
+    local drill = Sources.drillFor(rec)
+    if not drill then return end
+    -- A folder in a sub-shelf's run on a spine shelf of shelves
+    -- (_subShelfSpill tags each record with its shelf): open that shelf first,
+    -- so the drill fetches with the sub-shelf's own source table, and the
+    -- breadcrumb climbs back through it.
+    local sub = rec.shelf_subshelf
+    if sub and sub ~= self.chip and require("lib/bookshelf_tab_model").getById(sub) then
+        self:_openShelf(sub, true)
+    end
+    self:_markTapped(rec.filepath)
+    self:_drillInto{
+        kind    = "source_nav",
+        label   = drill.label or rec.label or rec.title or "",
+        payload = { source_kind = rec.source_kind, drill = drill },
+    }
+end
+
+-- _sourceNavSource(tip, tab) -> the source table to fetch for a source_nav
+-- drill frame: the shelf's own source (so a source serving several shelves
+-- still knows which), with the drill entry riding along.
+function BookshelfWidget:_sourceNavSource(tip, tab)
+    local pay = tip and tip.payload or {}
+    local out = {}
+    if tab and tab.source and tab.source.kind == pay.source_kind then
+        for k, v in pairs(tab.source) do out[k] = v end
+    end
+    out.kind = pay.source_kind
+    out.drill = pay.drill
+    return out
+end
+
+-- _shelvesHoldSource(id) -> true when the shelf on screen is a shelf of
+-- shelves, at its top level, with a shelf of registered source `id` (any
+-- source when nil) somewhere inside it: its tiles and spine runs read that
+-- source too, so news from it should redraw them.
+function BookshelfWidget:_shelvesHoldSource(id)
+    if #(self._drilldown_path or {}) > 0 then return false end
+    local TabModel = require("lib/bookshelf_tab_model")
+    local tab = TabModel.getById(self.chip)
+    if not TabModel.isShelves(tab) then return false end
+    local Sources = require("lib/bookshelf_sources")
+    local tabs = TabModel.load()
+    local inside = TabModel.descendantIds(tab.id, tabs)
+    for _i, t in ipairs(tabs) do
+        local kind = inside[t.id] and type(t.source) == "table" and t.source.kind
+        if kind and (kind == id or (id == nil and Sources.get(kind))) then return true end
+    end
+    return false
+end
+
+-- _currentRegisteredSource() -> the source table (with .drill when inside a
+-- folder) of the registered source on screen, or nil.
+function BookshelfWidget:_currentRegisteredSource()
+    local Sources = require("lib/bookshelf_sources")
+    local tab = require("lib/bookshelf_tab_model").getById(self.chip)
+    local path = self._drilldown_path or {}
+    local tip = path[#path]
+    if tip and tip.kind == "source_nav" then return self:_sourceNavSource(tip, tab) end
+    if tip then return nil end
+    if tab and tab.source and Sources.get(tab.source.kind) then return tab.source end
+    return nil
+end
+
 function BookshelfWidget:_expandFolder(folder)
+    -- A shelf of shelves' tiles are folder-shaped (see _subShelfItems).
+    if folder and folder.subshelf_id then return self:_enterSubShelf(folder.subshelf_id) end
+    if folder and folder.add_subshelf then return self:_addSubShelf() end
     if not folder or not folder.path then return end
     -- Keyed on the first book, which is what the row compares a folder tile
     -- against (folder_fp in bookshelf_shelf_row).
@@ -24331,6 +25089,9 @@ end
 -- a relaunch lands the user back on the chip's root feed. Restoring it would
 -- mean a network fetch at startup that nobody asked for.
 function BookshelfWidget:_expandOpdsNav(rec, no_fetch)
+    -- A registered source's folder (lib/bookshelf_sources fetch mode) draws as
+    -- the same tile; it drills through its source instead.
+    if rec and rec.source_nav then return self:_expandSourceNav(rec) end
     -- THE TWO SILENT RETURNS, now audible. A nav tile that does nothing when
     -- tapped is this function's known failure shape -- the cache-test comment
     -- below records an earlier one -- and both of these dropped the tap with
