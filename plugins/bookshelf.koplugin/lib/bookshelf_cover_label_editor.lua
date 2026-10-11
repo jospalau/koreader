@@ -36,13 +36,13 @@
 -- reader who was on Title and backs out is still on Title; the preview
 -- override is simply dropped.
 --
--- ── GROUPS ─────────────────────────────────────────────────────────────────
+-- ── ONE SHELF'S ────────────────────────────────────────────────────────────
 --
--- The same editor edits the groups' Custom line (Show text below groups,
--- issue 486) when opened with groups = true: its own stored line, default
--- and Save (CoverLabel.groupLine / groupDefaultLine / saveGroup), and its own
--- preview override on the shelf (_previewGroupLabel). Everything else is the
--- books' editor, control for control.
+-- showForShelf edits a shelf's own books' line (Shelf style, after 5.4):
+-- the caller hands it the line and the save, which writes the
+-- shelf's draft rather than the settings, and gets on_closed once it is
+-- done, either way, to bring Shelf style back. The preview is the same: the
+-- shelf behind is the shelf being styled.
 
 local UIManager  = require("ui/uimanager")
 local CoverLabel = require("lib/bookshelf_cover_label")
@@ -55,31 +55,47 @@ local PREVIEW_DELAY = 0.45
 
 local CoverLabelEditor = {}
 
--- The two lines this editor edits: the books' and the groups'.
+-- The line this editor edits: the books' (a shelf's own via showForShelf).
 local BOOKS = {
-    title    = function() return _("Text below covers") end,
+    title    = function() return _("Cover captions") end,
     line     = function() return CoverLabel.line() end,
     defaults = function() return CoverLabel.defaultLine() end,
     save     = function(l) return CoverLabel.save(l) end,
     preview  = "_previewCoverLabel",
     template = CoverLabel.DEFAULT_TEMPLATE,
 }
-local GROUPS = {
-    title    = function() return _("Show text below groups") end,
-    line     = function() return CoverLabel.groupLine() end,
-    defaults = function() return CoverLabel.groupDefaultLine() end,
-    save     = function(l) return CoverLabel.saveGroup(l) end,
-    preview  = "_previewGroupLabel",
-    template = CoverLabel.GROUP_DEFAULT_TEMPLATE,
-}
-CoverLabelEditor._targets = { books = BOOKS, groups = GROUPS }
+CoverLabelEditor._targets = { books = BOOKS }
 
--- show(bw, settings_module, touchmenu_instance, groups)
+-- show(bw, settings_module, touchmenu_instance)
 --
 -- `bw` is the live BookshelfWidget and may be nil (no preview then, everything
--- else works). `groups` true edits the groups' line instead of the books'.
-function CoverLabelEditor.show(bw, settings_module, touchmenu_instance, groups)
-    local target = groups and GROUPS or BOOKS
+-- else works).
+function CoverLabelEditor.show(bw, settings_module, touchmenu_instance)
+    return CoverLabelEditor._open(bw, settings_module, touchmenu_instance, BOOKS)
+end
+
+-- showForShelf(bw, spec): one shelf's line.
+--   spec.line       the shelf's line to start from
+--   spec.save(line) store it on the shelf (and make Custom its choice)
+--   spec.on_closed  after Save or Cancel
+function CoverLabelEditor.showForShelf(bw, spec)
+    local base = BOOKS
+    local target = {
+        title    = base.title,
+        line     = function() return CoverLabel.normalise(spec.line, base.template) end,
+        defaults = base.defaults,
+        save     = spec.save,
+        preview  = base.preview,
+        template = base.template,
+    }
+    -- The token picker is a Settings method; the module is its own handle,
+    -- as the settings menus' callers use it.
+    local ok, S = pcall(require, "lib/bookshelf_settings")
+    if ok and type(S) == "table" then S._bw = bw else S = nil end
+    return CoverLabelEditor._open(bw, S, nil, target, spec.on_closed)
+end
+
+function CoverLabelEditor._open(bw, settings_module, touchmenu_instance, target, on_closed)
     -- The fields the preview hands the shelf: a COPY, never the editor's live
     -- draft, so the override the widget holds cannot change under it.
     local function snapshot(draft)
@@ -144,10 +160,12 @@ function CoverLabelEditor.show(bw, settings_module, touchmenu_instance, groups)
             target.save(draft)
             -- Drop the override and rebuild from what was just saved.
             preview(nil)
+            if on_closed then UIManager:nextTick(on_closed) end
         end,
         on_cancel  = function()
             cancelPending()
             if previewing then preview(nil) end
+            if on_closed then UIManager:nextTick(on_closed) end
         end,
     }
 end

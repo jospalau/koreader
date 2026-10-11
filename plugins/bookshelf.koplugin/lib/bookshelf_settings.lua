@@ -759,52 +759,17 @@ function Settings:_coverDisplaySubItems()
             end,
         }
     end
-    -- Show text below groups: None / Author / Custom (lib/bookshelf_cover_label).
-    local function readGroupMode()
-        return require("lib/bookshelf_cover_label").groupMode() or "none"
-    end
-    local function groupModeRow(mode)
-        return {
-            text           = label_labels[mode],
-            checked_func   = function() return readGroupMode() == mode end,
-            radio          = true,
-            keep_menu_open = true,
-            callback       = function(touchmenu_instance)
-                require("lib/bookshelf_cover_label").saveGroupMode(mode)
-                markDirty()
-                if touchmenu_instance and touchmenu_instance.updateItems then
-                    touchmenu_instance:updateItems()
-                end
-            end,
-        }
-    end
-    -- As the books' Custom row: choosing it opens the editor, and Save there
-    -- is what makes Custom the groups' choice.
-    local function groupCustomRow()
-        return {
-            text_func = function()
-                if readGroupMode() ~= "custom" then return _("Custom\xE2\x80\xA6") end
-                return label_labels.custom
-            end,
-            checked_func   = function() return readGroupMode() == "custom" end,
-            radio          = true,
-            keep_menu_open = true,
-            callback       = function(touchmenu_instance)
-                require("lib/bookshelf_cover_label_editor").show(
-                    self._bw, self, touchmenu_instance, true)
-            end,
-        }
-    end
     return {
         -- ── layout: what a cover row is made of ──
         {
             text_func = function()
-                return _("Show text below covers") .. ": " .. label_labels[readLabelMode()]
+                return _("Cover captions") .. ": " .. label_labels[readLabelMode()]
             end,
             help_text = _("A line of text under each cover, on the regular"
                 .. " shelf and full screen shelves alike. Choose what it shows,"
-                .. " or None to let covers use the full row. Text size follows"
-                .. " the Cover labels setting under Text size."),
+                .. " or None to let covers use the full row. A shelf can choose"
+                .. " its own under Shelf style. Text size follows the Cover"
+                .. " captions setting under Text size."),
             sub_item_table_func = function()
                 return {
                     labelModeRow("title"),
@@ -815,24 +780,28 @@ function Settings:_coverDisplaySubItems()
                 }
             end,
         },
-        -- Text below GROUPS (issue 486): its own choice, apart from the
-        -- books' ("title under covers and author under series groups").
-        -- None by default, which is every shelf before it. No Title: the
-        -- group's name is already on the tile, or already on this line.
+        -- Author below series (issue 486): a series stack's author on the
+        -- line below its tile, apart from the books' text ("title under
+        -- covers and author under series groups"). Off by default, which is
+        -- every shelf before it. A switch, not 5.4's None / Author / Custom:
+        -- a series stack is the only group with anything to print there
+        -- (lib/bookshelf_cover_label, maintainer 2026-10-10).
         {
-            text_func = function()
-                return _("Show text below groups") .. ": " .. label_labels[readGroupMode()]
-            end,
-            help_text = _("A line of text under stacks and folders, chosen"
-                .. " apart from the books' text. Author shows a series' author."
-                .. " Folder title styles that print the name below the tile keep"
+            text = _("Show author below series"),
+            help_text = _("The author's name under each series stack. Folder"
+                .. " title styles that print the series name below the tile keep"
                 .. " that line for the name."),
-            sub_item_table_func = function()
-                return {
-                    groupModeRow("author"),
-                    groupCustomRow(),
-                    groupModeRow("none"),
-                }
+            checked_func = function()
+                return require("lib/bookshelf_cover_label").groupMode() == "author"
+            end,
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                local CL = require("lib/bookshelf_cover_label")
+                CL.saveGroupMode(CL.groupMode() ~= "author")
+                markDirty()
+                if touchmenu_instance and touchmenu_instance.updateItems then
+                    touchmenu_instance:updateItems()
+                end
             end,
         },
         {
@@ -3725,13 +3694,15 @@ function Settings:_hardcoverSubItems()
 end
 
 -- (The Expanded shelf submenu was dissolved in 4.0: its label mode moved
--- to Cover display as the unified "Show text below covers", and "Tap a book
--- in expanded shelf" lives in Settings > Behavior.)
--- Nudge dialog for the expanded-shelf label font scale. Same shape as
--- _pickFontScale; live preview kicks the live widget's _rebuild.
+-- to Cover display as the unified "Cover captions", and "Tap a book in
+-- expanded shelf" lives in Settings > Behavior.)
+-- Nudge dialog for the cover captions' font scale (the key keeps its
+-- expanded-shelf name). Titled for its Text size row, as the others are; it
+-- said "Full screen shelves" long after it sized every shelf's captions.
+-- Same shape as _pickFontScale; live preview kicks the live widget's _rebuild.
 function Settings:_pickExpandedShelfFontScale(touchmenu_instance)
     self:_showScaleNudge(touchmenu_instance, {
-        key = "expanded_shelf_font_scale", title = _("Full screen shelves font scale"), max = 300, fine = 5,
+        key = "expanded_shelf_font_scale", title = _("Cover captions font scale"), max = 300, fine = 5,
     })
 end
 
@@ -5595,7 +5566,7 @@ function Settings:_textSizeSubItems()
         -- ── shelf ──
         -- Sizes the label strip under covers on BOTH surfaces since the 4.0
         -- unification (the key keeps its historical name).
-        row(_("Cover labels"),          "expanded_shelf_font_scale", 100, "_pickExpandedShelfFontScale"),
+        row(_("Cover captions"),        "expanded_shelf_font_scale", 100, "_pickExpandedShelfFontScale"),
         row(_("Cover badges"),          "cover_badge_font_scale",    100, "_pickCoverBadgeFontScale"),
         row(_("Stack & folder labels"), "stack_label_font_scale",    100, "_pickStackLabelFontScale"),
         row(_("Shelf menu"),              "chip_font_scale",           100, "_pickChipFontScale"),
