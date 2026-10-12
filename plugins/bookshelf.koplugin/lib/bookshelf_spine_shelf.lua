@@ -2283,7 +2283,7 @@ function SpineBookSlot:_renderIntoAt(bb, x, y, night)
         if used > 0 then cur_top = cur_top + used + math.floor(pad / 2) end
     end
     -- Favourite star under it (face-out favourites show the cover instead).
-    if e.favourite and not e.face_out then
+    if false and e.favourite and not e.face_out then
         local gsize = _glyphSizeDp(w_dp, e.ref_w_dp, GLYPH_FAV)
         local face = BFont:getFace("symbols", gsize)
         -- The favourite icon the reader chose (heart unless set to star),
