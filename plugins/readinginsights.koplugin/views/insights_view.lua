@@ -7,7 +7,7 @@ sections. The figures themselves come from lib/insights_data.lua; nothing
 here reads the statistics DB.
 
 Sections, top to bottom:
-  - Last week     7-day totals and averages + daily bar chart
+  - Last 7 days   7-day totals and averages + daily bar chart
   - Streaks       current and best daily/weekly streaks
   - Year          time, days read or books read + pages, per year
   - Monthly chart per-month bars; the header cycles hours/days/books
@@ -18,11 +18,11 @@ Sections, top to bottom:
 Gestures:
   - Tap "All time" header            reading heatmap (swipe there to page
                                        through older periods)
-  - Tap yearly value or monthly bar    book list for that period
+  - Tap yearly value or monthly bar/dot  book list for that period
   - Tap monthly chart header           cycle hours/days/books
   - Tap a streak                       that streak's dates and totals
-  - Tap a Last week value              8-week trend popup
-  - Tap today's bar in Last week       Today Timeline
+  - Tap a Last 7 days value              8-week trend popup
+  - Tap today's bar in Last 7 days       Today Timeline
   - Long press current month           CalendarView
   - Tap finished-book count            books finished that year
   - Long press finished-book count     checklist to correct that list
@@ -44,6 +44,7 @@ local Blitbuffer = require("ffi/blitbuffer")
 local BottomContainer = require("ui/widget/container/bottomcontainer")
 local CenterContainer = require("ui/widget/container/centercontainer")
 local Device = require("device")
+local Font = require("ui/font")
 local FrameContainer = require("ui/widget/container/framecontainer")
 local Geom = require("ui/geometry")
 local GestureRange = require("ui/gesturerange")
@@ -79,7 +80,7 @@ local Locale, Colors, Fonts, PopupUtil, VS, Cache, UI, Trend, Heatmap, BookList,
 -- true: today's bar in the weekly chart is black. false: all bars gray.
 local WEEKLY_CHART_HIGHLIGHT_TODAY = true
 
--- Fill used behind a handful of section headers ("Last week", "Current
+-- Fill used behind a handful of section headers ("Last 7 days", "Current
 -- streak"/"Best streak", the year header, "Achievements" when shown next
 -- to "Reading goal", and "All time") to visually group them with the
 -- section above rather than reading as their own separate block. Backed by
@@ -173,12 +174,15 @@ end
 -- Fonts.getFace() already caches per-role, so this is cheap to call again
 -- on every popup (re)build - which is what keeps a just-changed font
 -- setting picked up immediately, without needing our own extra cache.
-local function buildSerifFonts()
+--
+-- `scale` (optional, default 1) shrinks all four roles by the same factor;
+-- used by _buildUI's landscape fit (see there) to get rid of the scroll bar.
+local function buildSerifFonts(scale)
     return {
-        section = Fonts.getFace("insights_section"),
-        value   = Fonts.getFace("insights_value"),
-        label   = Fonts.getFace("insights_label"),
-        small   = Fonts.getFace("insights_small"),
+        section = Fonts.getScaledFace("insights_section", scale),
+        value   = Fonts.getScaledFace("insights_value",   scale),
+        label   = Fonts.getScaledFace("insights_label",   scale),
+        small   = Fonts.getScaledFace("insights_small",   scale),
     }
 end
 
@@ -190,8 +194,8 @@ local _cached_layout = nil
 -- small table on every popup (re)build is cheap and guarantees a
 -- just-changed font setting is picked up on the very next open, with no
 -- stale fonts left over from before the change.
-local function getCachedFonts()
-    return buildSerifFonts()
+local function getCachedFonts(scale)
+    return buildSerifFonts(scale)
 end
 
 -- Rebuilt whenever the screen width changes - not just on first use - so a
@@ -487,17 +491,317 @@ local function buildYearlyRow(popup_self, yearly_stats, fonts, layout)
     }
 end
 
+-- Yearly chart as a smooth curve with a dot on it for each month and the
+-- month's value above the dot (the default style; the "Months chart style"
+-- setting switches back to bars). Always one row of all months, since the
+-- curve needs to run unbroken. Each month column is tappable (opens that
+-- month's books); the current month's dot has the active colour, like the
+-- current bar in the bar style. Neighbouring values only move (one up a
+-- row, alternating) when they would overlap, so compact values like "0:04"
+-- never move.
+-- Number of days in the month of a "YYYY-MM" string (28-31).
+local function daysInMonthOf(month_str)
+    local y, mo = tostring(month_str or ""):match("^(%d+)%-(%d+)$")
+    y, mo = tonumber(y), tonumber(mo)
+    if not y or not mo then return 31 end
+    -- Day 0 of the next month is the last day of this one.
+    return tonumber(os.date("%d", os.time{ year = y, month = mo + 1, day = 0, hour = 12 })) or 31
+end
+
+-- True for a month that hasn't happened yet in the year being shown: later
+-- than the current month this year (every month of a future year). The
+-- yearly chart leaves these out - no dot / value in the line style, no value
+-- or tap in the bar style - instead of showing a made-up "00:00".
+local function isFutureMonth(popup_self, m)
+    local sel_year     = tonumber(popup_self.selected_year)
+    local current_year = tonumber(os.date("%Y"))
+    if not sel_year then return false end
+    if sel_year > current_year then return true end
+    return sel_year == current_year and tostring(m.month) > os.date("%Y-%m")
+end
+
+-- True for a month before the very first month with reading data (and with
+-- nothing in the shown view either - a manually added book can be older than
+-- the first reading record). The yearly chart leaves these empty, like the
+-- months still to come, instead of showing "00:00".
+local function isBeforeFirstData(popup_self, m)
+    local yr = popup_self._year_range
+    if not yr or not yr.min_year then return false end
+    local first = string.format("%04d-%02d", yr.min_year, yr.min_month or 1)
+    if not (tostring(m.month) < first) then return false end
+    local has_value = (tonumber(m.seconds) or 0) > 0 or (tonumber(m.hours) or 0) > 0
+        or (tonumber(m.book_count) or 0) > 0 or (tonumber(m.days) or 0) > 0
+    return not has_value
+end
+
+-- What the yearly chart plots for a month. In the "days read" view it is the
+-- share of the month read (days / days in that month), so a month read
+-- through every day stands as high as any other fully read month - 30, 31
+-- or 28 days alike - instead of the longer month looking better. The label
+-- still shows the real day count. Hours and books are plotted as they are.
+local function monthlyPlotValue(m, value_key)
+    local v = tonumber(m[value_key]) or 0
+    if value_key == "days" then
+        return v / daysInMonthOf(m.month)
+    end
+    return v
+end
+
+-- Shared line chart: a smooth curve with a dot on it for each entry, the
+-- entry's value above the dot and its name (month / day) in a row below.
+-- Used for the yearly chart and for "Last 7 days" when their style setting is
+-- "Line with dots".
+--
+--   o.ratios[i]       height of entry i, 0..1 of the plot
+--   o.value_strs[i]   text above the dot
+--   o.axis_strs[i]    text under the chart
+--   o.highlight[i]    true -> dot in the active colour
+--   o.on_tap[i]       optional function, called when column i is tapped
+--   o.on_widget(i, w) optional, handed the tappable column widget of entry i
+--   o.slots           how many columns the full width is divided into
+--                     (12 months / 7 days), so a short row stays left-aligned
+--                     in the same scale
+--   o.first           optional: entries before `first` are left empty too (no
+--                     dot, value or curve point) - months before the first
+--                     reading data. Default: 1.
+--   o.visible         optional: only the first `visible` entries get a dot,
+--                     a value and a place on the curve (the rest keep their
+--                     axis label and baseline) - used to leave out months
+--                     that haven't happened yet. Default: all.
+--   o.chart_width, o.plot_height, o.fonts
+--
+-- Neighbouring values only move (one up a row, alternating) when they would
+-- overlap, so compact values like "0:04" never move. The curve, the dots and
+-- the values are all placed from the same coordinates, so they line up.
+local function buildDotLineChart(o)
+    local n_cols     = #o.ratios
+    local n_vis      = math.max(0, math.min(o.visible or n_cols, n_cols))
+    local first_vis  = math.max(1, o.first or 1)
+    local col_width  = math.floor(o.chart_width / o.slots)
+    local plot_height = o.plot_height
+    local font_small = o.fonts.small
+
+    local sample_label = TextWidget:new{ text = "0", face = font_small }
+    local label_height = sample_label:getSize().h
+    sample_label:free()
+
+    local dot_size   = tonumber(Screen:scaleBySize(8))
+    local baseline_h = Size.line.medium
+    local label_gap  = tonumber(Screen:scaleBySize(4))
+
+    local label_ws = {}
+    for i = first_vis, n_vis do
+        local tw = TextWidget:new{ text = o.value_strs[i], face = font_small }
+        label_ws[i] = tw:getSize().w
+        tw:free()
+    end
+
+    -- Labels share one row above the dots; one that would run into an
+    -- earlier label on the same row goes up a row instead.
+    local levels, any_raised = {}, false
+    for i = first_vis, n_vis do
+        levels[i] = 0
+        for j = i - 1, math.max(first_vis, i - 3), -1 do
+            if levels[j] == levels[i]
+               and (label_ws[j] + label_ws[i]) / 2 + label_gap > (i - j) * col_width then
+                levels[i] = 1
+                break
+            end
+        end
+        if levels[i] == 1 then any_raised = true end
+    end
+    local label_area_h = any_raised and (label_height * 2) or label_height
+    local total_col_h  = plot_height + label_area_h + baseline_h
+
+    local columns_row     = HorizontalGroup:new{ align = "bottom" }
+    local axis_labels_row = HorizontalGroup:new{ align = "top" }
+    local points, dots, value_labels = {}, {}, {}
+
+    for i = 1, n_cols do
+        -- The column only carries the baseline and the tap area; the dot and
+        -- the value are placed explicitly on the chart area below, from the
+        -- same coordinates as the curve.
+        local col_group = VerticalGroup:new{ align = "center" }
+        table.insert(col_group, Colors.newBar(col_width, baseline_h, Colors.inactiveBar()))
+
+        -- Entries past `visible` (months still to come) have no dot, value
+        -- or curve point; only their column and axis label remain.
+        if i >= first_vis and i <= n_vis then
+            local ratio = o.ratios[i]
+            local dot_color = o.highlight[i] and Colors.activeBar() or Colors.inactiveBar()
+            local dot_y_from_bottom = math.floor(ratio * (plot_height - dot_size))
+            local space_above = plot_height - dot_size - dot_y_from_bottom
+            if space_above < 0 then space_above = 0 end
+
+            -- points/dots are kept as gap-free lists (the curve and the dots
+            -- are drawn from them in order).
+            local pt = {
+                x = (i - 1) * col_width + math.floor(col_width / 2),
+                y = label_area_h + space_above + math.floor(dot_size / 2),
+            }
+            points[#points + 1] = pt
+            dots[#dots + 1] = { x = pt.x, y = pt.y, size = dot_size, color = dot_color }
+
+            local value_label = TextWidget:new{ text = o.value_strs[i], face = font_small, fgcolor = Colors.small() }
+            value_label.overlap_offset = {
+                pt.x - math.floor(label_ws[i] / 2),
+                pt.y - math.floor(dot_size / 2) - label_height - levels[i] * label_height,
+            }
+            value_labels[#value_labels + 1] = value_label
+        end
+
+        local tappable_col = InputContainer:new{
+            dimen = Geom:new{ x = 0, y = 0, w = col_width, h = total_col_h },
+            BottomContainer:new{
+                dimen = Geom:new{ w = col_width, h = total_col_h },
+                col_group,
+            },
+        }
+        local on_tap = o.on_tap and o.on_tap[i]
+        if on_tap then
+            tappable_col.ges_events = {
+                Tap = { GestureRange:new{ ges = "tap", range = tappable_col.dimen } },
+            }
+            function tappable_col:onTap()
+                on_tap()
+                return true
+            end
+        end
+        if o.on_widget then o.on_widget(i, tappable_col) end
+        table.insert(columns_row, tappable_col)
+
+        local axis_widget = TextWidget:new{ text = o.axis_strs[i], face = font_small, fgcolor = Colors.small() }
+        table.insert(axis_labels_row, CenterContainer:new{
+            dimen = Geom:new{ w = col_width, h = axis_widget:getSize().h },
+            axis_widget,
+        })
+    end
+
+    local line_widget = Trend.LineChartWidget:new{
+        width      = n_cols * col_width,
+        height     = total_col_h,
+        points     = points,
+        dots       = dots,
+        line_color = Colors.trendLine(),
+        thickness  = 2,
+        smooth     = true,
+    }
+
+    -- Columns (baseline) first, the curve and its dots over them, and the
+    -- values over everything.
+    local chart_area = OverlapGroup:new{
+        dimen = Geom:new{ w = n_cols * col_width, h = total_col_h },
+        columns_row,
+        line_widget,
+    }
+    for _, vl in ipairs(value_labels) do
+        table.insert(chart_area, vl)
+    end
+
+    return VerticalGroup:new{
+        align = "center",
+        chart_area,
+        VerticalSpan:new{ height = Size.padding.small },
+        axis_labels_row,
+    }
+end
+
+-- Yearly chart as a line (the "Months chart style" setting switches back to
+-- bars). Always one row of all months, since the curve needs to run
+-- unbroken. Tapping a month opens its books; the current month's dot has the
+-- active colour, like the current bar in the bar style.
+local function buildMonthlyLineChart(popup_self, monthly_data, layout, fonts)
+    local value_key = (popup_self.mode == VS.INSIGHTS_MODE_HOURS and "hours")
+        or (popup_self.mode == VS.INSIGHTS_MODE_BOOKS and "book_count")
+        or "days"
+    local max_value = 0
+    for _, m in ipairs(monthly_data) do
+        local v = monthlyPlotValue(m, value_key)
+        if v > max_value then max_value = v end
+    end
+    if max_value <= 0 then max_value = 1 end
+
+    VS.Opt.built_monthly = true
+
+    local current_year  = tonumber(os.date("%Y"))
+    local current_month = os.date("%Y-%m")
+
+    local ratios, value_strs, axis_strs, highlight, on_tap = {}, {}, {}, {}, {}
+    local current_idx
+    for i, m in ipairs(monthly_data) do
+        local value = tonumber(m[value_key]) or 0
+        ratios[i] = monthlyPlotValue(m, value_key) / max_value
+        if popup_self.mode == VS.INSIGHTS_MODE_HOURS then
+            local mo_secs = tonumber(m.seconds) or math.floor((tonumber(m.hours) or 0) * 3600 + 0.5)
+            value_strs[i] = Locale.formatDuration(mo_secs, true)
+        else
+            value_strs[i] = formatNumber(value)
+        end
+        highlight[i] = (popup_self.selected_year == current_year) and (m.month == current_month)
+        if highlight[i] then current_idx = i end
+
+        local month_label_text = m.label
+        if getLangBase() == "hu" then
+            local mn = tonumber(tostring(m.month):match("%-(%d%d)$"))
+            month_label_text = MONTH_NAMES_SHORT_HU_LC[mn] or m.label
+        end
+        axis_strs[i] = month_label_text
+
+        local month_year_label = m.label_full .. " " .. popup_self.selected_year
+        if getLangBase() == "hu" then
+            month_year_label = tostring(popup_self.selected_year) .. ". " .. m.label_full
+        end
+        local month = m.month
+        on_tap[i] = function() popup_self:showBooksForMonth(month, month_year_label) end
+    end
+
+    -- Months that haven't happened yet are cut off: the curve ends at the
+    -- current month, they get no dot, value or tap (their names stay on the
+    -- axis). Past years show all months.
+    local visible = 0
+    for i, m in ipairs(monthly_data) do
+        if not isFutureMonth(popup_self, m) then visible = i end
+    end
+    -- Months before the first reading data are left empty as well.
+    local first = 1
+    while first <= visible and isBeforeFirstData(popup_self, monthly_data[first]) do
+        first = first + 1
+    end
+    for i = visible + 1, #monthly_data do on_tap[i] = nil end
+    for i = 1, first - 1 do on_tap[i] = nil end
+
+    return buildDotLineChart{
+        ratios = ratios, value_strs = value_strs, axis_strs = axis_strs,
+        highlight = highlight, on_tap = on_tap,
+        visible = visible, first = first,
+        on_widget = function(i, w)
+            if i == current_idx then popup_self._current_month_bar_widget = w end
+        end,
+        slots = 12,
+        chart_width = layout.content_width,
+        plot_height = tonumber(Screen:scaleBySize(VS.Opt.monthlyBarHeight())),
+        fonts = fonts,
+    }
+end
+
 local function buildMonthlyChart(popup_self, monthly_data, layout, fonts)
     if #monthly_data == 0 then return nil end
+
+    if VS.readMonthlyStyleSetting() == VS.MONTHLY_STYLE_LINE then
+        return buildMonthlyLineChart(popup_self, monthly_data, layout, fonts)
+    end
 
     local value_key = (popup_self.mode == VS.INSIGHTS_MODE_HOURS and "hours")
         or (popup_self.mode == VS.INSIGHTS_MODE_BOOKS and "book_count")
         or "days"
-    local max_value = 1
+    -- Days view plots fractions of a month (0..1), so its scale starts from
+    -- nothing; hours and books keep their old minimum scale of 1.
+    local max_value = (value_key == "days") and 0 or 1
     for _, m in ipairs(monthly_data) do
-        local v = tonumber(m[value_key]) or 0
+        local v = monthlyPlotValue(m, value_key)
         if v > max_value then max_value = v end
     end
+    if max_value <= 0 then max_value = 1 end
 
     local chart_width  = layout.content_width
     VS.Opt.built_monthly = true
@@ -505,7 +809,10 @@ local function buildMonthlyChart(popup_self, monthly_data, layout, fonts)
     -- Portrait: two rows of up to 6 months. Landscape: the popup is wide
     -- enough to fit all 12 months on one row, so the year reads as a
     -- single strip instead of two stacked ones.
-    local months_per_row = isLandscapeScreen() and 12 or 6
+    -- The "Months chart layout" setting can also force the single 12-month
+    -- row in portrait (default: two rows of 6).
+    local months_per_row = (isLandscapeScreen()
+        or VS.readMonthlyLayoutSetting() == VS.MONTHLY_LAYOUT_ONE_ROW) and 12 or 6
     local bar_width    = math.floor(chart_width / months_per_row) - tonumber(Screen:scaleBySize(8))
     local bar_gap      = math.floor((chart_width - bar_width * months_per_row) / (months_per_row - 1))
     local font_small   = fonts.small
@@ -525,12 +832,17 @@ local function buildMonthlyChart(popup_self, monthly_data, layout, fonts)
 
         for i, m in ipairs(data_slice) do
             local value = tonumber(m[value_key]) or 0
-            local ratio = max_value > 0 and (value / max_value) or 0
+            local ratio = max_value > 0 and (monthlyPlotValue(m, value_key) / max_value) or 0
             local bar_h = math.floor(ratio * bar_height + 0.5)
             if bar_h == 0 and value > 0 then bar_h = 1 end
 
             local is_current = (popup_self.selected_year == current_year) and (m.month == current_month)
             local bar_color  = is_current and Colors.activeBar() or Colors.inactiveBar()
+
+            -- A month still to come, or from before the first reading data,
+            -- has no value to show: no "00:00" above it and no tap (its bar
+            -- is empty and its name stays below).
+            local future = isFutureMonth(popup_self, m) or isBeforeFirstData(popup_self, m)
 
             local bar_label_str
             if popup_self.mode == VS.INSIGHTS_MODE_HOURS then
@@ -545,7 +857,11 @@ local function buildMonthlyChart(popup_self, monthly_data, layout, fonts)
             }
 
             local bar_column = VerticalGroup:new{ align = "center" }
-            table.insert(bar_column, centered_label)
+            if not future then
+                table.insert(bar_column, centered_label)
+            else
+                value_label:free()
+            end
             if bar_h > 0 then
                 table.insert(bar_column, Colors.newBar(bar_width, bar_h, bar_color))
             end
@@ -567,12 +883,14 @@ local function buildMonthlyChart(popup_self, monthly_data, layout, fonts)
                 -- matching the calendar headers.
                 month_year_label = tostring(popup_self.selected_year) .. ". " .. m.label_full
             end
-            tappable_bar.ges_events = {
-                Tap  = { GestureRange:new{ ges = "tap",  range = tappable_bar.dimen } },
-            }
-            function tappable_bar:onTap()
-                popup_self:showBooksForMonth(month_data.month, month_year_label)
-                return true
+            if not future then
+                tappable_bar.ges_events = {
+                    Tap  = { GestureRange:new{ ges = "tap",  range = tappable_bar.dimen } },
+                }
+                function tappable_bar:onTap()
+                    popup_self:showBooksForMonth(month_data.month, month_year_label)
+                    return true
+                end
             end
             if is_current then
                 popup_self._current_month_bar_widget = tappable_bar
@@ -629,7 +947,7 @@ end
 PopupUtil.makeDismissable(Trend.Popup, function(self) return self.box_content.dimen end)
 
 -- Weekly bar chart: 7 bars, index 1 = today, index 7 = 6 days ago. Which end
--- of the row today is drawn at follows the "Last week chapter bar order"
+-- of the row today is drawn at follows the "Last 7 days chapter bar order"
 -- setting (leftmost by default); the data index stays the same either way.
 -- Labels: "Today", "Yesterday", then weekday abbreviations.
 local function buildWeeklyChart(popup_self, daily_data, layout, fonts, mode)
@@ -640,6 +958,46 @@ local function buildWeeklyChart(popup_self, daily_data, layout, fonts, mode)
     -- Pad to exactly 7 entries.
     while #daily_data < 7 do
         table.insert(daily_data, { hours = 0, seconds = 0, pages = 0, label = "" })
+    end
+
+    if VS.readWeeklyStyleSetting() == VS.WEEKLY_STYLE_LINE then
+        -- Same smooth line with dots as the yearly chart. Order follows the
+        -- "today on the left/right" setting; today is highlighted and, as
+        -- in the bar style, opens the timeline when tapped.
+        VS.Opt.built_weekly = true
+        local num = 7
+        local max_v = 0
+        for _, d in ipairs(daily_data) do
+            local v = show_pages and (tonumber(d.pages) or 0) or (tonumber(d.seconds) or 0)
+            if v > max_v then max_v = v end
+        end
+        if max_v < 0.1 then max_v = 1 end
+        local today_last_l = (VS.readWeeklyBarOrderSetting() == VS.WEEKLY_BAR_ORDER_TODAY_LAST)
+        local ratios, value_strs, axis_strs, highlight, on_tap = {}, {}, {}, {}, {}
+        for pos = 1, num do
+            local i = today_last_l and (num + 1 - pos) or pos
+            local d = daily_data[i]
+            local v = show_pages and (tonumber(d.pages) or 0) or (tonumber(d.seconds) or 0)
+            ratios[pos] = v / max_v
+            if show_pages then
+                value_strs[pos] = string.format(_("%d p"), math.floor((tonumber(d.pages) or 0) + 0.5))
+            else
+                value_strs[pos] = Locale.formatDuration(tonumber(d.seconds) or 0, true)
+            end
+            axis_strs[pos] = d.label or ""
+            highlight[pos] = (WEEKLY_CHART_HIGHLIGHT_TODAY and i == 1)
+            if i == 1 then
+                on_tap[pos] = function() popup_self:openTodayTimeline() end
+            end
+        end
+        return buildDotLineChart{
+            ratios = ratios, value_strs = value_strs, axis_strs = axis_strs,
+            highlight = highlight, on_tap = on_tap,
+            slots = num,
+            chart_width = layout.content_width,
+            plot_height = tonumber(Screen:scaleBySize(VS.Opt.weeklyBarHeight())),
+            fonts = fonts,
+        }
     end
 
     local chart_width  = layout.content_width
@@ -755,6 +1113,97 @@ end
 local function buildInsightsSections(popup_self, streaks, yearly_stats, year_range, monthly_data, all_time_stats, last_week_stats, last_week_daily, fonts, layout, goal_finished_count)
     local sections = VerticalGroup:new{ align = "left" }
 
+    -- "Daily goal | Weekly goal": time read today / this calendar week against
+    -- a goal in minutes. Long press on the section edits the goals. Today's
+    -- and this week's seconds come from the last-7-days data already loaded
+    -- for the "Last 7 days" section (a calendar week never reaches back more
+    -- than 7 days, so no extra query is needed).
+    popup_self._timegoal_hold_targets = {}
+    if VS.readShowTimeGoals() then
+
+        local daily_goal_secs  = VS.readDailyGoalMinutes()  * 60
+        local weekly_goal_secs = VS.readWeeklyGoalMinutes() * 60
+
+        local today_secs, week_secs = 0, 0
+        if last_week_daily then
+            local week_start_wd = Data.weekStartWday()
+            local wday = tonumber(os.date("%w"))
+            local days_into_week = (week_start_wd == 0) and wday or ((wday + 6) % 7)
+            for i = 1, math.min(days_into_week + 1, #last_week_daily) do
+                local secs = (last_week_daily[i] and last_week_daily[i].seconds) or 0
+                week_secs = week_secs + secs
+                if i == 1 then today_secs = secs end
+            end
+        end
+
+        local function addTimeGoalHold(widget, fn)
+            table.insert(popup_self._timegoal_hold_targets, { w = widget, fn = fn })
+        end
+        local function editDaily()  popup_self:editTimeGoal("daily")  end
+        local function editWeekly() popup_self:editTimeGoal("weekly") end
+
+        -- Same duration format as the rest of the plugin (follows KOReader's
+        -- "Duration format" setting): "0:23 / 0:30" classic, "23m / 30m" etc.
+        local function goalText(done, goal)
+            local txt = Locale.formatDuration(done, true) .. " / " .. Locale.formatDuration(goal, true)
+            if goal > 0 and done >= goal then txt = txt .. "  \u{2713}" end  -- goal met
+            return txt
+        end
+
+        local daily_header_w  = UI.buildSectionHeader(fonts.section, _("Daily goal"),  layout.col_width, 0, HEADER_BG())
+        local weekly_header_w = UI.buildSectionHeader(fonts.section, _("Weekly goal"), layout.col_width, 0, HEADER_BG())
+        local header_h = daily_header_w:getSize().h
+
+        -- Hold edits the goal, tap shows how long the goal has been met in a row.
+        local function holdCell(widget, w, fn, on_tap)
+            local cell = InputContainer:new{
+                dimen = Geom:new{ x = 0, y = 0, w = w, h = widget:getSize().h },
+                widget,
+            }
+            if on_tap then
+                cell.ges_events = { Tap = { GestureRange:new{ ges = "tap", range = cell.dimen } } }
+                cell.onTap = function() on_tap(); return true end
+            end
+            addTimeGoalHold(cell, fn)
+            return cell
+        end
+
+        local function showDailyStreak()  popup_self:showTimeGoalStreak("daily")  end
+        local function showWeeklyStreak() popup_self:showTimeGoalStreak("weekly") end
+
+        local daily_header_cell  = holdCell(daily_header_w,  layout.col_width, editDaily,  showDailyStreak)
+        local weekly_header_cell = holdCell(weekly_header_w, layout.col_width, editWeekly, showWeeklyStreak)
+
+        local goal_header = UI.padded(layout.padding_h, FrameContainer:new{
+            background = HEADER_BG(),
+            bordersize = 0,
+            padding    = 0,
+            HorizontalGroup:new{
+                align = "center",
+                UI.fixedCol(daily_header_cell, layout.col_width),
+                UI.buildColumnSeparator(layout.column_gap, header_h),
+                UI.fixedCol(weekly_header_cell, layout.col_width),
+            },
+        })
+
+        local function valueCell(text, fn, on_tap)
+            local tw = TextWidget:new{
+                text    = text,
+                face    = fonts.value,
+                fgcolor = Colors.value(),
+                max_width = layout.col_width,
+            }
+            return holdCell(tw, layout.col_width, fn, on_tap)
+        end
+
+        local goal_row = UI.buildTwoColRow(
+            valueCell(goalText(today_secs, daily_goal_secs),  editDaily,  showDailyStreak),
+            valueCell(goalText(week_secs,  weekly_goal_secs), editWeekly, showWeeklyStreak),
+            layout)
+
+        UI.addSectionWithRow(sections, goal_header, goal_row, layout, {})
+    end
+
     do
         local lw = last_week_stats or { avg_seconds = 0, avg_pages = 0 }
         local has_week = lw.avg_seconds > 0 or lw.avg_pages > 0
@@ -779,49 +1228,70 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, year_ran
             local total_pages_val = formatCount(total_pages_raw)
             local total_pages_unit = N_("page read", "pages read", total_pages_raw)
 
-            -- Portrait: two 2-column rows (total above, daily average
-            -- below). Landscape: the popup is wide enough to lay all four
-            -- values out on a single row instead - reading time, reading
-            -- time per day, pages read, pages read per day.
+            local weekly_chart_mode = VS.normalizeWeeklyChartMode(popup_self.weekly_chart_mode)
             local last_week_rows
-            if isLandscapeScreen() then
-                local four_row = UI.buildFourColRow(
-                    tappableCell(
-                        buildValueLine(fonts.value, fonts.label, layout.col_width_4, total_time_val, total_time_unit),
-                        layout.col_width_4, function() popup_self:showWeeklyTrendPopup("time_total") end),
-                    tappableCell(
-                        buildValueLine(fonts.value, fonts.label, layout.col_width_4, week_time_val,   week_time_unit_full),
-                        layout.col_width_4, function() popup_self:showWeeklyTrendPopup("time_avg") end),
-                    tappableCell(
-                        buildValueLine(fonts.value, fonts.label, layout.col_width_4, total_pages_val, total_pages_unit),
-                        layout.col_width_4, function() popup_self:showWeeklyTrendPopup("pages_total") end),
-                    tappableCell(
-                        buildValueLine(fonts.value, fonts.label, layout.col_width_4, week_pages_val,  week_pages_unit),
-                        layout.col_width_4, function() popup_self:showWeeklyTrendPopup("pages_avg") end),
-                    layout)
-                last_week_rows = { four_row }
+            if VS.readWeeklyLayoutSetting() == VS.WEEKLY_LAYOUT_FULL then
+                -- Full layout. Portrait: two 2-column rows (total above,
+                -- daily average below). Landscape: all four values on one row.
+                if isLandscapeScreen() then
+                    local four_row = UI.buildFourColRow(
+                        tappableCell(
+                            buildValueLine(fonts.value, fonts.label, layout.col_width_4, total_time_val, total_time_unit),
+                            layout.col_width_4, function() popup_self:showWeeklyTrendPopup("time_total") end),
+                        tappableCell(
+                            buildValueLine(fonts.value, fonts.label, layout.col_width_4, week_time_val,   week_time_unit_full),
+                            layout.col_width_4, function() popup_self:showWeeklyTrendPopup("time_avg") end),
+                        tappableCell(
+                            buildValueLine(fonts.value, fonts.label, layout.col_width_4, total_pages_val, total_pages_unit),
+                            layout.col_width_4, function() popup_self:showWeeklyTrendPopup("pages_total") end),
+                        tappableCell(
+                            buildValueLine(fonts.value, fonts.label, layout.col_width_4, week_pages_val,  week_pages_unit),
+                            layout.col_width_4, function() popup_self:showWeeklyTrendPopup("pages_avg") end),
+                        layout)
+                    last_week_rows = { four_row }
+                else
+                    local week_row = UI.buildTwoColRow(
+                        tappableCell(
+                            buildValueLine(fonts.value, fonts.label, layout.col_width, week_time_val,   week_time_unit_full),
+                            layout.col_width, function() popup_self:showWeeklyTrendPopup("time_avg") end),
+                        tappableCell(
+                            buildValueLine(fonts.value, fonts.label, layout.col_width, week_pages_val,  week_pages_unit),
+                            layout.col_width, function() popup_self:showWeeklyTrendPopup("pages_avg") end),
+                        layout)
+                    local total_row = UI.buildTwoColRow(
+                        tappableCell(
+                            buildValueLine(fonts.value, fonts.label, layout.col_width, total_time_val, total_time_unit),
+                            layout.col_width, function() popup_self:showWeeklyTrendPopup("time_total") end),
+                        tappableCell(
+                            buildValueLine(fonts.value, fonts.label, layout.col_width, total_pages_val, total_pages_unit),
+                            layout.col_width, function() popup_self:showWeeklyTrendPopup("pages_total") end),
+                        layout)
+                    last_week_rows = { total_row, week_row }
+                end
             else
+                -- Compact layout (default): one 2-column row driven by the
+                -- chart mode (tap the "Last 7 days" header to switch): time
+                -- view = total time + daily avg time, pages view = total
+                -- pages + daily avg pages.
+                local left_val, left_unit, left_metric, right_val, right_unit, right_metric
+                if weekly_chart_mode == VS.WEEKLY_CHART_MODE_PAGES then
+                    left_val, left_unit, left_metric    = total_pages_val, total_pages_unit, "pages_total"
+                    right_val, right_unit, right_metric = week_pages_val, week_pages_unit, "pages_avg"
+                else
+                    left_val, left_unit, left_metric    = total_time_val, total_time_unit, "time_total"
+                    right_val, right_unit, right_metric = week_time_val, week_time_unit_full, "time_avg"
+                end
                 local week_row = UI.buildTwoColRow(
                     tappableCell(
-                        buildValueLine(fonts.value, fonts.label, layout.col_width, week_time_val,   week_time_unit_full),
-                        layout.col_width, function() popup_self:showWeeklyTrendPopup("time_avg") end),
+                        buildValueLine(fonts.value, fonts.label, layout.col_width, left_val, left_unit),
+                        layout.col_width, function() popup_self:showWeeklyTrendPopup(left_metric) end),
                     tappableCell(
-                        buildValueLine(fonts.value, fonts.label, layout.col_width, week_pages_val,  week_pages_unit),
-                        layout.col_width, function() popup_self:showWeeklyTrendPopup("pages_avg") end),
+                        buildValueLine(fonts.value, fonts.label, layout.col_width, right_val, right_unit),
+                        layout.col_width, function() popup_self:showWeeklyTrendPopup(right_metric) end),
                     layout)
-
-                local total_row = UI.buildTwoColRow(
-                    tappableCell(
-                        buildValueLine(fonts.value, fonts.label, layout.col_width, total_time_val, total_time_unit),
-                        layout.col_width, function() popup_self:showWeeklyTrendPopup("time_total") end),
-                    tappableCell(
-                        buildValueLine(fonts.value, fonts.label, layout.col_width, total_pages_val, total_pages_unit),
-                        layout.col_width, function() popup_self:showWeeklyTrendPopup("pages_total") end),
-                    layout)
-                last_week_rows = { total_row, week_row }
+                last_week_rows = { week_row }
             end
 
-            local weekly_chart_mode = VS.normalizeWeeklyChartMode(popup_self.weekly_chart_mode)
             local weekly_chart = buildWeeklyChart(popup_self, last_week_daily, layout, fonts, weekly_chart_mode)
             local last_week_content = VerticalGroup:new{ align = "left" }
             for idx, row in ipairs(last_week_rows) do
@@ -844,7 +1314,7 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, year_ran
 
             -- Tapping the header toggles the chart above between reading
             -- time and pages read per day (see toggleWeeklyChartMode()).
-            local last_week_header = buildAlignedSectionHeader(fonts.section, _("Last week"), layout, HEADER_BG())
+            local last_week_header = buildAlignedSectionHeader(fonts.section, _("Last 7 days"), layout, HEADER_BG())
             local tappable_last_week_header = InputContainer:new{
                 dimen = Geom:new{ x = 0, y = 0, w = last_week_header:getSize().w, h = last_week_header:getSize().h },
                 last_week_header,
@@ -1163,18 +1633,51 @@ local function buildInsightsSections(popup_self, streaks, yearly_stats, year_ran
         end
 
         if show_goal then
-            -- No header of its own: "24/30 books finished" | "80% of
-            -- annual goal". Tapping either cell opens the finished books,
+            -- No header of its own: "24 / 30 books finished" | "80% of
+            -- yearly goal". Tapping either cell opens the finished books,
             -- long press opens the finished-books menu.
             local percent = 0
             if goal_value > 0 then
                 percent = math.floor(finished_count / goal_value * 100 + 0.5)
             end
-            local left_value = formatCount(finished_count) .. "/" .. formatCount(goal_value)
+            local left_value = formatCount(finished_count) .. " / " .. formatCount(goal_value)
             local left_line  = buildValueLine(fonts.value, fonts.label, layout.col_width,
                 left_value, N_("book finished", "books finished", finished_count))
             local right_line = buildValueLine(fonts.value, fonts.label, layout.col_width,
-                formatCount(percent) .. "%", _("of annual goal"))
+                formatCount(percent) .. "%", _("of yearly goal"))
+
+            -- With a goal set, the percentage is replaced by:
+            --   closed year  -> "Goal reached" / "Goal not reached"
+            --   current year -> the pace: "3 books ahead of pace" /
+            --                   "1 book behind pace" / "On track" / "Goal reached"
+            -- Pace uses the day of the year and whole books only (floor), so
+            -- "On track" covers less than a book either way. Text without a
+            -- number is plain label-font text; only numbers are bold.
+            local this_year = tonumber(os.date("%Y"))
+            local function plainText(txt)
+                return buildValueLine(fonts.value, fonts.label, layout.col_width, "", txt)
+            end
+            if goal_value > 0 and goal_year < this_year then
+                right_line = plainText(finished_count >= goal_value
+                    and _("Goal reached") or _("Goal not reached"))
+            elseif goal_value > 0 and goal_year == this_year then
+                local y = goal_year
+                local leap = (y % 4 == 0 and y % 100 ~= 0) or (y % 400 == 0)
+                local expected = goal_value * tonumber(os.date("%j")) / (leap and 366 or 365)
+                local diff = finished_count - expected
+                local n = math.floor(math.abs(diff))
+                if finished_count >= goal_value then
+                    right_line = plainText(_("Goal reached"))
+                elseif n == 0 then
+                    right_line = plainText(_("On track"))
+                elseif diff > 0 then
+                    right_line = buildValueLine(fonts.value, fonts.label, layout.col_width,
+                        formatCount(n), N_("book ahead of pace", "books ahead of pace", n))
+                else
+                    right_line = buildValueLine(fonts.value, fonts.label, layout.col_width,
+                        formatCount(n), N_("book behind pace", "books behind pace", n))
+                end
+            end
 
             local left_cell  = dataCell(left_line, openFinished)
             addHold(left_cell, openFinishedMenu)
@@ -1948,11 +2451,39 @@ function ReadingInsightsPopup:_titleBarText()
     return title
 end
 
+-- A string that changes whenever any of this plugin's settings (or the UI
+-- language) changes, whichever module saved it - read straight from the
+-- settings store, so enabling/disabling a section, switching a layout, a
+-- font or a bar height all show up. _buildUI compares it with the one the
+-- remembered landscape font scale was computed under: a different one means
+-- the page's content changed, so the old scale is no longer a valid guess
+-- and the fit starts over from the configured font sizes.
+local function settingsSignature()
+    local data = G_reader_settings and G_reader_settings.data
+    if type(data) ~= "table" then return "" end
+    local keys = {}
+    for k in pairs(data) do
+        if type(k) == "string"
+           and (k:find("^reading_insights_") or k:find("^readinginsights_") or k == "language") then
+            keys[#keys + 1] = k
+        end
+    end
+    table.sort(keys)
+    local parts = {}
+    for i, k in ipairs(keys) do parts[i] = k .. "=" .. tostring(data[k]) end
+    return table.concat(parts, "|")
+end
+
 function ReadingInsightsPopup:_buildUI()
     local screen_w = Screen:getWidth()
     local screen_h = Screen:getHeight()
     local fonts    = getCachedFonts()
     local layout   = getCachedLayout()
+    -- Landscape-only text scale (1 = the configured sizes). Lowered by the
+    -- fit step below when the page is taller than the screen even after the
+    -- bar charts have been sized; everything in the popup that is text goes
+    -- through `fonts`, so changing it and rebuilding scales all of it.
+    local font_scale = 1
 
     -- Cold start (e.g. right after a KOReader restart): no cache, no stale
     -- data, nothing to show yet. Rather than flashing zeroed-out sections
@@ -2033,6 +2564,10 @@ function ReadingInsightsPopup:_buildUI()
             width          = screen_w,
             align          = "left",
             title          = self:_titleBarText(),
+            -- Same scale as the rest of the text (nil = TitleBar's own
+            -- default face while nothing is scaled).
+            title_face     = font_scale < 0.999 and Font:getFace("smalltfont",
+                math.max(8, math.floor(((Font.sizemap and Font.sizemap.smalltfont) or 24) * font_scale + 0.5))) or nil,
             -- Hamburger menu, top left: quick access to the streak/heatmap/
             -- records/achievements popups - see onShowHamburgerMenu below.
             -- Hidden in readonly (sleep-screen) mode, same as close_callback,
@@ -2139,6 +2674,64 @@ function ReadingInsightsPopup:_buildUI()
             content, content_h = buildContent()
             pcall(function() if discarded.free then discarded:free() end end)
         end
+    end
+
+    -- Landscape only: if the page is still taller than the screen here (the
+    -- bar charts are at their smallest, or auto height is off and the fixed
+    -- heights are too big) the scroll bar would show up. Shrink every font
+    -- by the same percentage until the content fits and the scroll bar is
+    -- gone. Portrait keeps its configured font sizes untouched.
+    --
+    -- Like the bar fit above, each step is measured, not predicted: text
+    -- height shrinks roughly in proportion to the scale while the bars and
+    -- spacing don't, so the next scale is the current one times
+    -- screen/content (a little under, to land on the fitting side), which
+    -- usually settles in one or two extra builds. The result is remembered
+    -- in VS.Opt.font_scale as the first guess for the next open.
+    -- FONT_SCALE_MIN stops it from shrinking text into unreadability; below
+    -- that the page just scrolls.
+    -- A settings change since the remembered scale was computed (a section
+    -- switched on/off, a layout, font or height changed...) discards it, so
+    -- the fit is recalculated from scratch instead of reusing a scale that
+    -- belonged to a different page.
+    local sig = settingsSignature()
+    if VS.Opt.settings_sig ~= sig then
+        VS.Opt.font_scale   = nil
+        VS.Opt.settings_sig = sig
+    end
+
+    if isLandscapeScreen() and content_h > screen_h then
+        local FONT_SCALE_MIN = 0.5
+        local remembered     = VS.Opt.font_scale
+        local scale          = 1
+        local best           = nil   -- smallest-change scale that fitted
+        for attempt = 1, 6 do
+            local candidate
+            if attempt == 1 and remembered and remembered < 1 and remembered >= FONT_SCALE_MIN then
+                candidate = remembered
+            else
+                candidate = scale * (screen_h / content_h) * 0.98
+                -- Always make progress, even if the measurement says the
+                -- estimate is the same as before.
+                if candidate > scale - 0.02 then candidate = scale - 0.02 end
+            end
+            candidate = math.max(FONT_SCALE_MIN, math.floor(candidate * 100) / 100)
+            if candidate >= scale then break end
+
+            scale      = candidate
+            font_scale = scale
+            fonts      = getCachedFonts(scale)
+
+            local discarded = content
+            content, content_h = buildContent()
+            pcall(function() if discarded.free then discarded:free() end end)
+
+            if content_h <= screen_h then best = scale; break end
+            if scale <= FONT_SCALE_MIN then break end
+        end
+        VS.Opt.font_scale = best  -- nil when it never fitted: don't pin a bad guess
+    else
+        VS.Opt.font_scale = nil
     end
 
     local ScrollableContainer = require("ui/widget/container/scrollablecontainer")
@@ -2458,7 +3051,7 @@ function ReadingInsightsPopup:init()
     local screen_h = Screen:getHeight()
 
     -- Write the current (in-memory, not yet saved) reading session into
-    -- statistics.sqlite3, then invalidate the "Last week" cache so it is
+    -- statistics.sqlite3, then invalidate the "Last 7 days" cache so it is
     -- always re-queried from the DB on every open of this popup - not just
     -- once per minute. Older cached/stale values are still shown instantly
     -- below (stale-while-revalidate); _loadAndRebuild() then replaces them
@@ -2627,6 +3220,7 @@ function ReadingInsightsPopup:onHold(arg, ges_ev)
         UIManager:scheduleIn(0.5, function()
             local before = Achievements and Achievements.earnedCount() or 0
             Cache.clearAllCache()
+            Data.clearTimeGoalCache()
             -- A full reload is the one place achievements are re-evaluated
             -- against the (now uncached) database - see lib/achievements.lua.
             -- Newly earned ones get persisted; the rebuilt goal section then
@@ -2655,6 +3249,16 @@ function ReadingInsightsPopup:onHold(arg, ges_ev)
         if d and pos.x >= d.x and pos.x <= d.x + d.w
               and pos.y >= d.y and pos.y <= d.y + d.h then
             self:openCalendarForCurrentMonth()
+            return true
+        end
+    end
+
+    -- Daily/Weekly time goal section: a hold edits that goal.
+    for _idx, t in ipairs(self._timegoal_hold_targets or {}) do
+        local d = t.w and t.w.dimen
+        if d and pos.x >= d.x and pos.x <= d.x + d.w
+              and pos.y >= d.y and pos.y <= d.y + d.h then
+            t.fn()
             return true
         end
     end
@@ -2725,6 +3329,80 @@ function ReadingInsightsPopup:editReadingGoal(year)
     dialog:onShowKeyboard()
 end
 
+-- Tap on the Daily/Weekly goal section: how many days / weeks in a row the
+-- goal has been met. Runs one grouped query only now, so opening the popup
+-- itself costs nothing extra.
+function ReadingInsightsPopup:showTimeGoalStreak(kind)
+    local is_daily = (kind == "daily")
+    Data.flushStatsToDB(self.ui)
+    local goal_secs = (is_daily and VS.readDailyGoalMinutes() or VS.readWeeklyGoalMinutes()) * 60
+    local n = Data.getTimeGoalStreak(kind, goal_secs) or 0
+    local text
+    if n <= 0 then
+        text = is_daily and _("You haven't met your daily goal yet.")
+                         or _("You haven't met your weekly goal yet.")
+    elseif is_daily then
+        text = T(N_("You've met your daily goal %1 day in a row.",
+                    "You've met your daily goal %1 days in a row.", n), formatCount(n))
+    else
+        text = T(N_("You've met your weekly goal %1 week in a row.",
+                    "You've met your weekly goal %1 weeks in a row.", n), formatCount(n))
+    end
+    UIManager:show(InfoMessage:new{ text = text, modal = true, timeout = 5 })
+end
+
+-- Long press on the Daily/Weekly goal section: hours/minutes spinner for the
+-- goal (stored as total minutes). Marked modal so it opens above this popup,
+-- same reason as editReadingGoal's modal InputDialog.
+function ReadingInsightsPopup:editTimeGoal(kind)
+    local DoubleSpinWidget = require("ui/widget/doublespinwidget")
+
+    -- Label for the "default" button, e.g. "Default: 30m" / "Default: 5h"
+    -- (depends on KOReader's duration format setting), instead of KOReader's
+    -- raw "Default values: 0 : 30". Seconds are dropped.
+    local function formatDefaultGoal(total_min)
+        return T(_("Default: %1"), Locale.formatDuration(total_min * 60, true))
+    end
+    local popup_self = self
+    local is_daily = (kind == "daily")
+    local current  = is_daily and VS.readDailyGoalMinutes() or VS.readWeeklyGoalMinutes()
+    local default  = is_daily and VS.DEFAULT_DAILY_GOAL_MIN or VS.DEFAULT_WEEKLY_GOAL_MIN
+    local max_hours = is_daily and 23 or 99
+    local widget
+    widget = DoubleSpinWidget:new{
+        modal        = true,
+        title_text   = is_daily and _("Daily goal") or _("Weekly goal"),
+        left_text    = _("Hours"),
+        left_value   = math.floor(current / 60),
+        left_min     = 0,
+        left_max     = max_hours,
+        left_step    = 1,
+        left_hold_step = 5,
+        right_text   = _("Minutes"),
+        right_value  = current % 60,
+        right_min    = 0,
+        right_max    = 59,
+        right_step   = 1,
+        right_hold_step = 5,
+        default_values = true,
+        left_default   = math.floor(default / 60),
+        right_default  = default % 60,
+        default_text   = formatDefaultGoal(default),
+        ok_always_enabled = true,
+        callback = function(hours, minutes)
+            local total = (tonumber(hours) or 0) * 60 + (tonumber(minutes) or 0)
+            if total < 1 then total = 1 end
+            if is_daily then VS.saveDailyGoalMinutes(total) else VS.saveWeeklyGoalMinutes(total) end
+            popup_self:_buildUI()
+            UIManager:setDirty(popup_self, function()
+                return "ui", popup_self.popup_frame.dimen
+            end)
+        end,
+    }
+    widget.modal = true
+    UIManager:show(widget)
+end
+
 -- Cycles the insights mode (hours -> days -> books -> hours) and reloads
 -- the monthly chart for it. Bound to both the "Press" key handler
 -- (toggleInsightsMode) and tapping the monthly chart header
@@ -2764,7 +3442,7 @@ function ReadingInsightsPopup:toggleInsightsMode()
     return self:cycleInsightsMode()
 end
 
--- Toggles the "Last week" bar chart between reading time and pages read per
+-- Toggles the "Last 7 days" bar chart between reading time and pages read per
 -- day. No DB re-query is needed: both values are already fetched together
 -- by getLastWeekAll(), so this just flips the persisted display mode and
 -- rebuilds the UI.

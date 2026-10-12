@@ -4,7 +4,7 @@ Reading Insights - shared popup font settings.
 Centralises the font choices used by every popup, so there is exactly one
 "Fonts" menu and one set of settings driving every text role:
 
-  insights_section  "Reading insights" section headers (Last week, Streaks,
+  insights_section  "Reading insights" section headers (Last 7 days, Streaks,
                     year header, Monthly chart, All time, ...)
   insights_value    "Reading insights" big numbers (hours/pages/streak values)
   insights_label    "Reading insights" unit/description labels next to a value
@@ -245,6 +245,33 @@ function M.getFace(key)
 
     local face = buildFace(defaults, name, size)
     _face_cache[key] = { cache_key = cache_key, face = face }
+    return face
+end
+
+-- Same face as getFace(), at `scale` (0 < scale <= 1) times the role's
+-- current size - used by the Reading insights popup in landscape to shrink
+-- all its text together until the page fits the screen without a scroll
+-- bar. A scale of 1 (or more) is exactly getFace(). The result is never
+-- smaller than MIN_SIZE, and every distinct size is cached on its own, so
+-- the several scales tried while fitting don't evict each other (the cache
+-- key holds the font name and size, so a changed setting can't serve a
+-- stale face either).
+function M.getScaledFace(key, scale)
+    scale = tonumber(scale) or 1
+    if scale >= 0.999 then return M.getFace(key) end
+    local defaults = DEFAULTS[key]
+    local name = M.getName(key) or defaults.file
+    local base = M.getSize(key) or defaults.size
+    local size = math.max(MIN_SIZE, math.floor(base * scale + 0.5))
+
+    local cache_key = name .. "@" .. size
+    local slot      = key .. "__s" .. size
+    local cached = _face_cache[slot]
+    if cached and cached.cache_key == cache_key then
+        return cached.face
+    end
+    local face = buildFace(defaults, name, size)
+    _face_cache[slot] = { cache_key = cache_key, face = face }
     return face
 end
 

@@ -953,8 +953,8 @@ msgstr "Sizes the Reading insights bar charts so the page fits the screen withou
 msgid "Bar chart height"
 msgstr "Bar chart height"
 
-msgid "Last week"
-msgstr "Last week"
+msgid "Last 7 days"
+msgstr "Last 7 days"
 
 msgid "Months"
 msgstr "Months"
@@ -1025,8 +1025,53 @@ msgstr "Date & time"
 msgid "Reading insight popup"
 msgstr "Reading insight popup"
 
-msgid "Last week chapter bar order"
-msgstr "Last week chapter bar order"
+msgid "Daily goal"
+msgstr "Daily goal"
+
+msgid "Weekly goal"
+msgstr "Weekly goal"
+
+msgid "Hours"
+msgstr "Hours"
+
+msgid "Minutes"
+msgstr "Minutes"
+
+msgid "Daily / weekly goal"
+msgstr "Daily / weekly goal"
+
+msgid "Show the daily and weekly reading time goals above \"Last 7 days\". Long press the section to set the goals."
+msgstr "Show the daily and weekly reading time goals above \"Last 7 days\". Long press the section to set the goals."
+
+msgid "You haven't met your daily goal yet."
+msgstr "You haven't met your daily goal yet."
+
+msgid "You haven't met your weekly goal yet."
+msgstr "You haven't met your weekly goal yet."
+
+msgid "You've met your daily goal %1 day in a row."
+msgstr "You've met your daily goal %1 day in a row."
+
+msgid "You've met your daily goal %1 days in a row."
+msgstr "You've met your daily goal %1 days in a row."
+
+msgid "You've met your weekly goal %1 week in a row."
+msgstr "You've met your weekly goal %1 week in a row."
+
+msgid "You've met your weekly goal %1 weeks in a row."
+msgstr "You've met your weekly goal %1 weeks in a row."
+
+msgid "Last 7 days layout"
+msgstr "Last 7 days layout"
+
+msgid "Compact"
+msgstr "Compact"
+
+msgid "Full"
+msgstr "Full"
+
+msgid "Last 7 days chapter bar order"
+msgstr "Last 7 days chapter bar order"
 
 msgid "Today on the left"
 msgstr "Today on the left"
@@ -1883,8 +1928,8 @@ msgstr "Description"
 msgid "No reading on %1"
 msgstr "No reading on %1"
 
-msgid "of annual goal"
-msgstr "of annual goal"
+msgid "of yearly goal"
+msgstr "of yearly goal"
 
 msgid "Latest"
 msgstr "Latest"
@@ -1939,3 +1984,72 @@ msgstr "Data reloaded"
 
 msgid "Data reloaded. New achievements: %1"
 msgstr "Data reloaded. New achievements: %1"
+
+msgid "chapters"
+msgstr "chapters"
+
+msgid "typical length"
+msgstr "typical length"
+
+msgid "typical pages/chapter"
+msgstr "typical pages/chapter"
+
+msgid "Chapter count row"
+msgstr "Chapter count row"
+
+msgid "Show the number of chapters read and the typical chapter length under the chapter bar chart. Tap the typical chapter length in the popup to switch between time and pages."
+msgstr "Show the number of chapters read and the typical chapter length under the chapter bar chart. Tap the typical chapter length in the popup to switch between time and pages."
+
+msgid "chapters left"
+msgstr "chapters left"
+
+msgid "chapter"
+msgstr "chapter"
+
+msgid "chapter left"
+msgstr "chapter left"
+
+msgid "Months chart layout"
+msgstr "Months chart layout"
+
+msgid "2 rows of 6 months"
+msgstr "2 rows of 6 months"
+
+msgid "12 months in one row"
+msgstr "12 months in one row"
+
+msgid "Default: %1"
+msgstr "Default: %1"
+
+msgid "Months chart style"
+msgstr "Months chart style"
+
+msgid "Line with dots"
+msgstr "Line with dots"
+
+msgid "Bars"
+msgstr "Bars"
+
+msgid "Last 7 days chart style"
+msgstr "Last 7 days chart style"
+
+msgid "Goal reached"
+msgstr "Goal reached"
+
+msgid "On track"
+msgstr "On track"
+
+msgid "Goal not reached"
+msgstr "Goal not reached"
+
+msgid "book ahead of pace"
+msgstr "book ahead of pace"
+
+msgid "books ahead of pace"
+msgstr "books ahead of pace"
+
+msgid "book behind pace"
+msgstr "book behind pace"
+
+msgid "books behind pace"
+msgstr "books behind pace"

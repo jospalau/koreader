@@ -1008,8 +1008,8 @@ msgstr ""
 msgid "Bar chart height"
 msgstr "Висота стовпчастого графіка"
 
-msgid "Last week"
-msgstr "Минулий тиждень"
+msgid "Last 7 days"
+msgstr "Останні 7 днів"
 
 msgid "Months"
 msgstr "Місяці"
@@ -1080,8 +1080,53 @@ msgstr "Дата й час"
 msgid "Reading insight popup"
 msgstr "Спливне вікно Аналітики читання"
 
-msgid "Last week chapter bar order"
-msgstr "Порядок панелі глав за минулий тиждень"
+msgid "Daily goal"
+msgstr "Денна мета"
+
+msgid "Weekly goal"
+msgstr "Тижнева мета"
+
+msgid "Hours"
+msgstr "Години"
+
+msgid "Minutes"
+msgstr "Хвилини"
+
+msgid "Daily / weekly goal"
+msgstr "Денна / тижнева мета"
+
+msgid "Show the daily and weekly reading time goals above \"Last 7 days\". Long press the section to set the goals."
+msgstr "Показувати денну та тижневу мету часу читання над «Останні 7 днів». Утримуйте розділ, щоб задати мету."
+
+msgid "You haven't met your daily goal yet."
+msgstr "Денну мету ще не виконано."
+
+msgid "You haven't met your weekly goal yet."
+msgstr "Тижневу мету ще не виконано."
+
+msgid "You've met your daily goal %1 day in a row."
+msgstr "Денну мету виконано поспіль, днів: %1"
+
+msgid "You've met your daily goal %1 days in a row."
+msgstr "Денну мету виконано поспіль, днів: %1"
+
+msgid "You've met your weekly goal %1 week in a row."
+msgstr "Тижневу мету виконано поспіль, тижнів: %1"
+
+msgid "You've met your weekly goal %1 weeks in a row."
+msgstr "Тижневу мету виконано поспіль, тижнів: %1"
+
+msgid "Last 7 days layout"
+msgstr "Вигляд за останні 7 днів"
+
+msgid "Compact"
+msgstr "Компактний"
+
+msgid "Full"
+msgstr "Повний"
+
+msgid "Last 7 days chapter bar order"
+msgstr "Порядок панелі глав за останні 7 днів"
 
 msgid "Today on the left"
 msgstr "Сьогодні ліворуч"
@@ -1932,7 +1977,7 @@ msgstr "Опис"
 msgid "No reading on %1"
 msgstr "За %1 читання немає"
 
-msgid "of annual goal"
+msgid "of yearly goal"
 msgstr "від річної мети"
 
 msgid "Latest"
@@ -1982,3 +2027,72 @@ msgstr "Дані перезавантажено"
 
 msgid "Data reloaded. New achievements: %1"
 msgstr "Дані перезавантажено. Нові досягнення: %1"
+
+msgid "chapters"
+msgstr "розділів"
+
+msgid "typical length"
+msgstr "типова довжина"
+
+msgid "typical pages/chapter"
+msgstr "типово сторінок/розділ"
+
+msgid "Chapter count row"
+msgstr "Рядок кількості розділів"
+
+msgid "Show the number of chapters read and the typical chapter length under the chapter bar chart. Tap the typical chapter length in the popup to switch between time and pages."
+msgstr "Показує під діаграмою розділів кількість прочитаних розділів і типову довжину розділу. Торкніться типової довжини у вікні, щоб перемикати між часом і сторінками."
+
+msgid "chapters left"
+msgstr "розділів залишилось"
+
+msgid "chapter"
+msgstr "розділ"
+
+msgid "chapter left"
+msgstr "розділ залишився"
+
+msgid "Months chart layout"
+msgstr "Розташування місячної діаграми"
+
+msgid "2 rows of 6 months"
+msgstr "2 рядки по 6 місяців"
+
+msgid "12 months in one row"
+msgstr "12 місяців в одному рядку"
+
+msgid "Default: %1"
+msgstr "За замовчуванням: %1"
+
+msgid "Months chart style"
+msgstr "Стиль місячної діаграми"
+
+msgid "Line with dots"
+msgstr "Лінія з точками"
+
+msgid "Bars"
+msgstr "Стовпці"
+
+msgid "Last 7 days chart style"
+msgstr "Стиль діаграми за останні 7 днів"
+
+msgid "Goal reached"
+msgstr "Мету досягнуто"
+
+msgid "On track"
+msgstr "Все за планом"
+
+msgid "Goal not reached"
+msgstr "Мету не досягнуто"
+
+msgid "book ahead of pace"
+msgstr "книга попереду"
+
+msgid "books ahead of pace"
+msgstr "книг попереду"
+
+msgid "book behind pace"
+msgstr "книга позаду"
+
+msgid "books behind pace"
+msgstr "книг позаду"

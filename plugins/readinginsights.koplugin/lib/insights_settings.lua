@@ -153,6 +153,17 @@ M.Opt = {
     -- boundaries and show up as a one-pixel mismatch between the charts.
     auto_height = nil,
 
+    -- Landscape only: the text scale the last fit settled on (< 1 when the
+    -- page had to shrink its fonts to lose the scroll bar), kept as the
+    -- first guess for the next build. nil = fonts at their configured size.
+    -- Never persisted; see _buildUI in views/insights_view.lua.
+    font_scale = nil,
+
+    -- Snapshot of this plugin's settings that font_scale was computed
+    -- under; a mismatch at the next build means a setting changed, and the
+    -- remembered scale is dropped (see settingsSignature in insights_view).
+    settings_sig = nil,
+
     -- Set by the chart builders during a build so the fit loop knows how
     -- many of the two adjustable charts are actually on the page for the
     -- current year/mode/data (an empty year has no monthly chart, for
@@ -213,6 +224,13 @@ M.Opt = {
     -- all chapters, in the "This book" section) is shown. On by default.
     SHOW_CHAPTER_BAR_KEY     = "reading_insights_book_show_chapter_bar",
     SHOW_CHAPTER_BAR_DEFAULT = true,
+
+    -- Book progress popup: the row under the chapter bar chart with the
+    -- number of chapters read ("23 / 46 chapters read") and the average
+    -- chapter length (tap it to switch between time and pages). On by
+    -- default.
+    SHOW_CHAPTER_COUNT_ROW_KEY     = "reading_insights_book_show_chapter_count_row",
+    SHOW_CHAPTER_COUNT_ROW_DEFAULT = true,
 
     -- Book progress popup: how that chapter bar is drawn. "bars" (default,
     -- unchanged look) is the per-chapter bar chart; "skim" is a single bar
@@ -457,7 +475,7 @@ function M.monthKeyPrefixForMode(mode)
     return "days:"
 end
 
--- "Last week" chart mode: tapping the "Last week" header toggles the daily
+-- "Last 7 days" chart mode: tapping the "Last 7 days" header toggles the daily
 -- bar chart between reading time (HH:MM) and pages read per day. The choice
 -- is persisted so the popup remembers it instead of always defaulting to time.
 M.SETTINGS_KEY_WEEKLY_CHART_MODE = "reading_insights_weekly_chart_mode"
@@ -481,8 +499,66 @@ function M.saveWeeklyChartMode(mode)
     Prefs.save(M.SETTINGS_KEY_WEEKLY_CHART_MODE, mode)
 end
 
--- "Last week" bar order (Prefs ▸ Advanced settings ▸ Reading insight popup ▸
--- "Last week chapter bar order"). The chart's data always arrives with index
+-- Time goals ("Daily goal | Weekly goal" section above "Last 7 days"). Both are
+-- stored in minutes and edited by a long press on the section. Defaults:
+-- 30 minutes a day, 5 hours (300 minutes) a week.
+M.DEFAULT_DAILY_GOAL_MIN  = 30
+M.DEFAULT_WEEKLY_GOAL_MIN = 300
+M.TIME_GOAL_MAX_MIN       = 9999
+M.SETTINGS_KEY_DAILY_GOAL_MIN  = "reading_insights_daily_goal_min"
+M.SETTINGS_KEY_WEEKLY_GOAL_MIN = "reading_insights_weekly_goal_min"
+M.SETTINGS_KEY_SHOW_TIME_GOALS = "reading_insights_show_time_goals"
+
+-- Whether the "Daily goal | Weekly goal" section is drawn (default: on).
+function M.readShowTimeGoals()
+    return Prefs.read(M.SETTINGS_KEY_SHOW_TIME_GOALS, true) ~= false
+end
+
+function M.saveShowTimeGoals(value)
+    Prefs.save(M.SETTINGS_KEY_SHOW_TIME_GOALS, value and true or false)
+end
+
+function M.readDailyGoalMinutes()
+    local v = tonumber(Prefs.read(M.SETTINGS_KEY_DAILY_GOAL_MIN, M.DEFAULT_DAILY_GOAL_MIN))
+    if not v or v < 1 then return M.DEFAULT_DAILY_GOAL_MIN end
+    return math.floor(v)
+end
+
+function M.saveDailyGoalMinutes(value)
+    Prefs.save(M.SETTINGS_KEY_DAILY_GOAL_MIN, value)
+end
+
+function M.readWeeklyGoalMinutes()
+    local v = tonumber(Prefs.read(M.SETTINGS_KEY_WEEKLY_GOAL_MIN, M.DEFAULT_WEEKLY_GOAL_MIN))
+    if not v or v < 1 then return M.DEFAULT_WEEKLY_GOAL_MIN end
+    return math.floor(v)
+end
+
+function M.saveWeeklyGoalMinutes(value)
+    Prefs.save(M.SETTINGS_KEY_WEEKLY_GOAL_MIN, value)
+end
+
+-- "Last 7 days" layout (Prefs > Advanced settings > Reading insight popup >
+-- "Last 7 days layout"). "compact" (default): one row with the week's total and
+-- the daily average, for time or pages depending on the chart mode toggled by
+-- tapping the header. "full": the previous layout with time and pages
+-- (totals and daily averages) all shown at once.
+M.SETTINGS_KEY_WEEKLY_LAYOUT = "reading_insights_weekly_layout"
+M.WEEKLY_LAYOUT_COMPACT = "compact"
+M.WEEKLY_LAYOUT_FULL    = "full"
+
+function M.readWeeklyLayoutSetting()
+    local v = Prefs.read(M.SETTINGS_KEY_WEEKLY_LAYOUT, nil)
+    if v == M.WEEKLY_LAYOUT_FULL then return M.WEEKLY_LAYOUT_FULL end
+    return M.WEEKLY_LAYOUT_COMPACT
+end
+
+function M.saveWeeklyLayoutSetting(value)
+    Prefs.save(M.SETTINGS_KEY_WEEKLY_LAYOUT, value)
+end
+
+-- "Last 7 days" bar order (Prefs ▸ Advanced settings ▸ Reading insight popup ▸
+-- "Last 7 days chapter bar order"). The chart's data always arrives with index
 -- 1 = today; this only decides which end of the row that first bar is drawn
 -- at, so everything keyed off "bar 1 is today" (the highlight colour, the tap
 -- that opens the Today Timeline) keeps working either way.
@@ -502,6 +578,67 @@ end
 
 function M.saveWeeklyBarOrderSetting(value)
     Prefs.save(M.SETTINGS_KEY_WEEKLY_BAR_ORDER, value)
+end
+
+-- Layout of the yearly (months) bar chart in the Reading insights popup
+-- (Settings > Reading insight popup > "Months chart layout"). "two_rows" is
+-- the default and what the chart always did: two rows of 6 months in
+-- portrait. "one_row" draws all 12 months in a single row. Landscape always
+-- uses a single row regardless of this setting.
+M.SETTINGS_KEY_MONTHLY_LAYOUT = "reading_insights_monthly_chart_layout"
+
+M.MONTHLY_LAYOUT_TWO_ROWS = "two_rows"
+
+M.MONTHLY_LAYOUT_ONE_ROW  = "one_row"
+
+function M.readMonthlyLayoutSetting()
+    local v = Prefs.read(M.SETTINGS_KEY_MONTHLY_LAYOUT, nil)
+    if v == M.MONTHLY_LAYOUT_ONE_ROW then return M.MONTHLY_LAYOUT_ONE_ROW end
+    return M.MONTHLY_LAYOUT_TWO_ROWS
+end
+
+function M.saveMonthlyLayoutSetting(value)
+    Prefs.save(M.SETTINGS_KEY_MONTHLY_LAYOUT, value)
+end
+
+-- Style of the yearly (months) chart in the Reading insights popup
+-- (Settings > Reading insight popup > "Months chart style"). "bars" (the
+-- default) is the bar chart (which honours the "Months chart
+-- layout" setting); "line" draws one line with a dot per month, all 12 months
+-- in a single row.
+M.SETTINGS_KEY_MONTHLY_STYLE = "reading_insights_monthly_chart_style"
+
+M.MONTHLY_STYLE_LINE = "line"
+
+M.MONTHLY_STYLE_BARS = "bars"
+
+function M.readMonthlyStyleSetting()
+    local v = Prefs.read(M.SETTINGS_KEY_MONTHLY_STYLE, nil)
+    if v == M.MONTHLY_STYLE_LINE then return M.MONTHLY_STYLE_LINE end
+    return M.MONTHLY_STYLE_BARS
+end
+
+function M.saveMonthlyStyleSetting(value)
+    Prefs.save(M.SETTINGS_KEY_MONTHLY_STYLE, value)
+end
+
+-- Style of the "Last 7 days" chart (Settings > Reading insight popup >
+-- "Last 7 days chart style"): "bars" (default) or "line" (smooth line with a
+-- dot per day, like the yearly chart).
+M.SETTINGS_KEY_WEEKLY_STYLE = "reading_insights_weekly_chart_style"
+
+M.WEEKLY_STYLE_BARS = "bars"
+
+M.WEEKLY_STYLE_LINE = "line"
+
+function M.readWeeklyStyleSetting()
+    local v = Prefs.read(M.SETTINGS_KEY_WEEKLY_STYLE, nil)
+    if v == M.WEEKLY_STYLE_LINE then return M.WEEKLY_STYLE_LINE end
+    return M.WEEKLY_STYLE_BARS
+end
+
+function M.saveWeeklyStyleSetting(value)
+    Prefs.save(M.SETTINGS_KEY_WEEKLY_STYLE, value)
 end
 
 function M.readInsightsMode()
@@ -588,6 +725,40 @@ end
 
 function M.Opt.saveShowChapterBar(value)
     M.saveBoolSetting(M.Opt.SHOW_CHAPTER_BAR_KEY, value)
+end
+
+function M.Opt.readShowChapterCountRow()
+    return M.readBoolSetting(M.Opt.SHOW_CHAPTER_COUNT_ROW_KEY, M.Opt.SHOW_CHAPTER_COUNT_ROW_DEFAULT)
+end
+
+function M.Opt.saveShowChapterCountRow(value)
+    M.saveBoolSetting(M.Opt.SHOW_CHAPTER_COUNT_ROW_KEY, value)
+end
+
+-- Book progress popup: the tap-toggled display modes, remembered between
+-- openings. name = "chapter_view" (This/Next chapter: "time" | "pages"),
+-- "chapter_avg" (typical chapter length: "time" | "pages") or "chapter_read"
+-- (chapters: "read" | "left") or "pace_view" (Pace row: "time" | "pages").
+local POPUP_MODES = {
+    chapter_view = { key = "reading_insights_book_chapter_view_mode", default = "time", other = "pages" },
+    chapter_avg  = { key = "reading_insights_book_chapter_avg_mode",  default = "time", other = "pages" },
+    chapter_read = { key = "reading_insights_book_chapter_read_mode", default = "read", other = "left"  },
+    pace_view    = { key = "reading_insights_book_pace_view_mode",    default = "time", other = "pages" },
+}
+
+function M.Opt.readPopupMode(name)
+    local m = POPUP_MODES[name]
+    if not m then return nil end
+    local v = Prefs.read(m.key, nil)
+    if v == m.other then return m.other end
+    return m.default
+end
+
+function M.Opt.savePopupMode(name, value)
+    local m = POPUP_MODES[name]
+    if not m then return end
+    if value ~= m.other then value = m.default end
+    Prefs.save(m.key, value)
 end
 
 function M.Opt.readChapterBarStyle()

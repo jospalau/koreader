@@ -216,8 +216,8 @@ msgstr "Összes könyv: %1"
 msgid "All time"
 msgstr "Összesen"
 
-msgid "Last week"
-msgstr "Legutóbbi hét"
+msgid "Last 7 days"
+msgstr "Elmúlt 7 nap"
 
 msgid "Months"
 msgstr "Hónapok"
@@ -1034,8 +1034,53 @@ msgstr "Dátum és idő"
 msgid "Reading insight popup"
 msgstr "Olvasási áttekintés ablak"
 
-msgid "Last week chapter bar order"
-msgstr "Múlt heti oszlopok sorrendje"
+msgid "Daily goal"
+msgstr "Napi cél"
+
+msgid "Weekly goal"
+msgstr "Heti cél"
+
+msgid "Hours"
+msgstr "Óra"
+
+msgid "Minutes"
+msgstr "Perc"
+
+msgid "Daily / weekly goal"
+msgstr "Napi / heti cél"
+
+msgid "Show the daily and weekly reading time goals above \"Last 7 days\". Long press the section to set the goals."
+msgstr "A napi és heti olvasási idő cél megjelenítése az „Elmúlt 7 nap” fölött. A célok beállításához tartsd hosszan a szekciót."
+
+msgid "You haven't met your daily goal yet."
+msgstr "A napi célt még nem teljesítetted."
+
+msgid "You haven't met your weekly goal yet."
+msgstr "A heti célt még nem teljesítetted."
+
+msgid "You've met your daily goal %1 day in a row."
+msgstr "Az elmúlt %1 napban egymás után teljesítetted a napi célt."
+
+msgid "You've met your daily goal %1 days in a row."
+msgstr "Az elmúlt %1 napban egymás után teljesítetted a napi célt."
+
+msgid "You've met your weekly goal %1 week in a row."
+msgstr "Az elmúlt %1 hétben egymás után teljesítetted a heti célt."
+
+msgid "You've met your weekly goal %1 weeks in a row."
+msgstr "Az elmúlt %1 hétben egymás után teljesítetted a heti célt."
+
+msgid "Last 7 days layout"
+msgstr "Elmúlt 7 nap elrendezése"
+
+msgid "Compact"
+msgstr "Kompakt"
+
+msgid "Full"
+msgstr "Teljes"
+
+msgid "Last 7 days chapter bar order"
+msgstr "Elmúlt 7 nap oszlopainak sorrendje"
 
 msgid "Today on the left"
 msgstr "Ma a bal oldalon"
@@ -1895,7 +1940,7 @@ msgstr "yes"
 msgid "No reading on %1"
 msgstr "Nincs olvasás ezen a napon: %1"
 
-msgid "of annual goal"
+msgid "of yearly goal"
 msgstr "az éves célból"
 
 msgid "Latest"
@@ -1951,3 +1996,72 @@ msgstr "Adatok újratöltve"
 
 msgid "Data reloaded. New achievements: %1"
 msgstr "Adatok újratöltve. Új teljesítmények: %1"
+
+msgid "chapters"
+msgstr "fejezet"
+
+msgid "typical length"
+msgstr "tipikus hossz"
+
+msgid "typical pages/chapter"
+msgstr "tipikus oldal/fejezet"
+
+msgid "Chapter count row"
+msgstr "Fejezetszám sor"
+
+msgid "Show the number of chapters read and the typical chapter length under the chapter bar chart. Tap the typical chapter length in the popup to switch between time and pages."
+msgstr "A fejezetsáv alatt megjeleníti az elolvasott fejezetek számát és a tipikus fejezethosszt. Az ablakban a tipikus fejezethosszra koppintva idő és oldalszám között válthatsz."
+
+msgid "chapters left"
+msgstr "fejezet hátra"
+
+msgid "chapter"
+msgstr "fejezet"
+
+msgid "chapter left"
+msgstr "fejezet hátra"
+
+msgid "Months chart layout"
+msgstr "Havi diagram elrendezése"
+
+msgid "2 rows of 6 months"
+msgstr "2 sor × 6 hónap"
+
+msgid "12 months in one row"
+msgstr "12 hónap egy sorban"
+
+msgid "Default: %1"
+msgstr "Alapértelmezett: %1"
+
+msgid "Months chart style"
+msgstr "Havi diagram stílusa"
+
+msgid "Line with dots"
+msgstr "Vonal pontokkal"
+
+msgid "Bars"
+msgstr "Oszlopok"
+
+msgid "Last 7 days chart style"
+msgstr "Elmúlt 7 nap diagramjának stílusa"
+
+msgid "Goal reached"
+msgstr "Cél teljesítve"
+
+msgid "On track"
+msgstr "Jól haladsz"
+
+msgid "Goal not reached"
+msgstr "Cél nem teljesítve"
+
+msgid "book ahead of pace"
+msgstr "könyvvel előrébb"
+
+msgid "books ahead of pace"
+msgstr "könyvvel előrébb"
+
+msgid "book behind pace"
+msgstr "könyvvel hátrébb"
+
+msgid "books behind pace"
+msgstr "könyvvel hátrébb"

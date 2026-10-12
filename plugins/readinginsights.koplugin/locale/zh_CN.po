@@ -708,8 +708,8 @@ msgid "Sizes the Reading insights bar charts so the page fits the screen without
 msgstr "自动调整柱状图高度，适配屏幕，避免出现滚动条。"
 msgid "Bar chart height"
 msgstr "柱状图高度"
-msgid "Last week"
-msgstr "上周"
+msgid "Last 7 days"
+msgstr "过去 7 天"
 msgid "Months"
 msgstr "月份"
 msgid "All time"
@@ -760,8 +760,53 @@ msgstr "日期与时间"
 msgid "Reading insight popup"
 msgstr "阅读统计弹窗"
 
-msgid "Last week chapter bar order"
-msgstr "上周章节条排列顺序"
+msgid "Daily goal"
+msgstr "每日目标"
+
+msgid "Weekly goal"
+msgstr "每周目标"
+
+msgid "Hours"
+msgstr "小时"
+
+msgid "Minutes"
+msgstr "分钟"
+
+msgid "Daily / weekly goal"
+msgstr "每日/每周目标"
+
+msgid "Show the daily and weekly reading time goals above \"Last 7 days\". Long press the section to set the goals."
+msgstr "在“过去 7 天”上方显示每日和每周阅读时间目标。长按该部分可设置目标。"
+
+msgid "You haven't met your daily goal yet."
+msgstr "尚未达成每日目标。"
+
+msgid "You haven't met your weekly goal yet."
+msgstr "尚未达成每周目标。"
+
+msgid "You've met your daily goal %1 day in a row."
+msgstr "您已连续 %1 天达成每日目标。"
+
+msgid "You've met your daily goal %1 days in a row."
+msgstr "您已连续 %1 天达成每日目标。"
+
+msgid "You've met your weekly goal %1 week in a row."
+msgstr "您已连续 %1 周达成每周目标。"
+
+msgid "You've met your weekly goal %1 weeks in a row."
+msgstr "您已连续 %1 周达成每周目标。"
+
+msgid "Last 7 days layout"
+msgstr "过去 7 天布局"
+
+msgid "Compact"
+msgstr "紧凑"
+
+msgid "Full"
+msgstr "完整"
+
+msgid "Last 7 days chapter bar order"
+msgstr "过去 7 天章节条排列顺序"
 msgid "Today on the left"
 msgstr "今日在左侧"
 msgid "Today on the right"
@@ -1604,7 +1649,7 @@ msgstr "简介"
 msgid "No reading on %1"
 msgstr "%1 没有阅读记录"
 
-msgid "of annual goal"
+msgid "of yearly goal"
 msgstr "年度目标"
 
 msgid "Latest"
@@ -1654,3 +1699,72 @@ msgstr "数据已重新加载"
 
 msgid "Data reloaded. New achievements: %1"
 msgstr "数据已重新加载。新成就：%1"
+
+msgid "chapters"
+msgstr "章"
+
+msgid "typical length"
+msgstr "典型时长"
+
+msgid "typical pages/chapter"
+msgstr "典型页数/章"
+
+msgid "Chapter count row"
+msgstr "章节计数行"
+
+msgid "Show the number of chapters read and the typical chapter length under the chapter bar chart. Tap the typical chapter length in the popup to switch between time and pages."
+msgstr "在章节条形图下方显示已读章节数和典型章节时长。在弹窗中点击典型章节时长可在时间与页数之间切换。"
+
+msgid "chapters left"
+msgstr "章未读"
+
+msgid "chapter"
+msgstr "章"
+
+msgid "chapter left"
+msgstr "章未读"
+
+msgid "Months chart layout"
+msgstr "月度图表布局"
+
+msgid "2 rows of 6 months"
+msgstr "2 行，每行 6 个月"
+
+msgid "12 months in one row"
+msgstr "12 个月显示在一行"
+
+msgid "Default: %1"
+msgstr "默认：%1"
+
+msgid "Months chart style"
+msgstr "月度图表样式"
+
+msgid "Line with dots"
+msgstr "带点折线"
+
+msgid "Bars"
+msgstr "柱状"
+
+msgid "Last 7 days chart style"
+msgstr "过去 7 天图表样式"
+
+msgid "Goal reached"
+msgstr "目标已达成"
+
+msgid "On track"
+msgstr "进度正常"
+
+msgid "Goal not reached"
+msgstr "目标未达成"
+
+msgid "book ahead of pace"
+msgstr "本书领先"
+
+msgid "books ahead of pace"
+msgstr "本书领先"
+
+msgid "book behind pace"
+msgstr "本书落后"
+
+msgid "books behind pace"
+msgstr "本书落后"

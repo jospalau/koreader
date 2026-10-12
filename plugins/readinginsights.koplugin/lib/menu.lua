@@ -297,7 +297,7 @@ function M.build(self, deps)
                 end,
             },
             buildBarHeightMenuEntry(
-                _("Reading insights") .. ": " .. _("Last week"),
+                _("Reading insights") .. ": " .. _("Last 7 days"),
                 deps.ViewSettings.readWeeklyBarHeightSetting,
                 deps.ViewSettings.saveWeeklyBarHeightSetting,
                 deps.ViewSettings.DEFAULT_WEEKLY_BAR_HEIGHT,
@@ -437,6 +437,15 @@ function M.build(self, deps)
     do
         local Opt = deps.ViewSettings.Opt
         table.insert(insights_popup_sub_item_table, {
+            text = _("Daily / weekly goal"),
+            help_text = _("Show the daily and weekly reading time goals above \"Last 7 days\". Long press the section to set the goals."),
+            keep_menu_open = true,
+            checked_func = function() return deps.ViewSettings.readShowTimeGoals() end,
+            callback = function()
+                deps.ViewSettings.saveShowTimeGoals(not deps.ViewSettings.readShowTimeGoals())
+            end,
+        })
+        table.insert(insights_popup_sub_item_table, {
             text = _("Reading goal"),
             keep_menu_open = true,
             checked_func = function() return Opt.readShowReadingGoal() end,
@@ -568,7 +577,7 @@ function M.build(self, deps)
         },
     })
 
-    -- Which end of the "Last week" bar chart today sits at. The default is
+    -- Which end of the "Last 7 days" bar chart today sits at. The default is
     -- what the chart always did before this setting existed - today on the
     -- left, the week running backwards from there.
     do
@@ -593,12 +602,137 @@ function M.build(self, deps)
                 local side = VSet.readWeeklyBarOrderSetting() == LAST
                     and _("Today on the right")
                     or  _("Today on the left")
-                return _("Last week chapter bar order") .. ": " .. side
+                return _("Last 7 days chapter bar order") .. ": " .. side
             end,
             keep_menu_open = true,
             sub_item_table = {
                 orderEntry(FIRST, _("Today on the left")),
                 orderEntry(LAST,  _("Today on the right")),
+            },
+        })
+    end
+
+    -- "Last 7 days" chart style: bars (default) or line with dots.
+    do
+        local VSet = deps.ViewSettings
+        local BARS = VSet.WEEKLY_STYLE_BARS
+        local LINE = VSet.WEEKLY_STYLE_LINE
+        local function weeklyStyleEntry(value, text)
+            return {
+                text = text,
+                keep_menu_open = true,
+                radio = true,
+                checked_func = function()
+                    return VSet.readWeeklyStyleSetting() == value
+                end,
+                callback = function() VSet.saveWeeklyStyleSetting(value) end,
+            }
+        end
+        table.insert(insights_popup_sub_item_table, {
+            text_func = function()
+                local v = VSet.readWeeklyStyleSetting() == LINE
+                    and _("Line with dots")
+                    or  _("Bars")
+                return _("Last 7 days chart style") .. ": " .. v
+            end,
+            keep_menu_open = true,
+            sub_item_table = {
+                weeklyStyleEntry(BARS, _("Bars")),
+                weeklyStyleEntry(LINE, _("Line with dots")),
+            },
+        })
+    end
+
+    -- Months (yearly) chart style: line with dots (default) or bars.
+    do
+        local VSet  = deps.ViewSettings
+        local LINE  = VSet.MONTHLY_STYLE_LINE
+        local BARS  = VSet.MONTHLY_STYLE_BARS
+        local function monthlyStyleEntry(value, text)
+            return {
+                text = text,
+                keep_menu_open = true,
+                radio = true,
+                checked_func = function()
+                    return VSet.readMonthlyStyleSetting() == value
+                end,
+                callback = function() VSet.saveMonthlyStyleSetting(value) end,
+            }
+        end
+        table.insert(insights_popup_sub_item_table, {
+            text_func = function()
+                local v = VSet.readMonthlyStyleSetting() == BARS
+                    and _("Bars")
+                    or  _("Line with dots")
+                return _("Months chart style") .. ": " .. v
+            end,
+            keep_menu_open = true,
+            sub_item_table = {
+                monthlyStyleEntry(LINE, _("Line with dots")),
+                monthlyStyleEntry(BARS, _("Bars")),
+            },
+        })
+    end
+
+    -- Months (yearly) bar chart layout (bars style only): two rows of 6 months (default) or a
+    -- single row with all 12 months.
+    do
+        local VSet = deps.ViewSettings
+        local TWO  = VSet.MONTHLY_LAYOUT_TWO_ROWS
+        local ONE  = VSet.MONTHLY_LAYOUT_ONE_ROW
+        local function monthlyLayoutEntry(value, text)
+            return {
+                text = text,
+                keep_menu_open = true,
+                radio = true,
+                checked_func = function()
+                    return VSet.readMonthlyLayoutSetting() == value
+                end,
+                callback = function() VSet.saveMonthlyLayoutSetting(value) end,
+            }
+        end
+        table.insert(insights_popup_sub_item_table, {
+            text_func = function()
+                local v = VSet.readMonthlyLayoutSetting() == ONE
+                    and _("12 months in one row")
+                    or  _("2 rows of 6 months")
+                return _("Months chart layout") .. ": " .. v
+            end,
+            keep_menu_open = true,
+            sub_item_table = {
+                monthlyLayoutEntry(TWO, _("2 rows of 6 months")),
+                monthlyLayoutEntry(ONE, _("12 months in one row")),
+            },
+        })
+    end
+
+    -- "Last 7 days" layout: compact (default) shows total + daily average for
+    -- the selected view (time or pages); full is the previous layout.
+    do
+        local VSet    = deps.ViewSettings
+        local COMPACT = VSet.WEEKLY_LAYOUT_COMPACT
+        local FULL    = VSet.WEEKLY_LAYOUT_FULL
+        local function layoutEntry(value, text)
+            return {
+                text = text,
+                keep_menu_open = true,
+                radio = true,
+                checked_func = function()
+                    return VSet.readWeeklyLayoutSetting() == value
+                end,
+                callback = function() VSet.saveWeeklyLayoutSetting(value) end,
+            }
+        end
+        table.insert(insights_popup_sub_item_table, {
+            text_func = function()
+                local name = VSet.readWeeklyLayoutSetting() == FULL
+                    and _("Full") or _("Compact")
+                return _("Last 7 days layout") .. ": " .. name
+            end,
+            keep_menu_open = true,
+            sub_item_table = {
+                layoutEntry(COMPACT, _("Compact")),
+                layoutEntry(FULL,    _("Full")),
             },
         })
     end
@@ -678,6 +812,35 @@ function M.build(self, deps)
         keep_menu_open = true,
         sub_item_table = date_time_sub_item_table,
     })
+
+    -- Group the "Reading insight popup" settings by what they affect, with a
+    -- separator line between the groups (the items above are built one by
+    -- one in the order they were added over time, so they are put in order
+    -- here, in one place):
+    --   1. what the popup shows: goals, achievements (+ refresh), hamburger menu
+    --   2. "Last 7 days": chart style, today's side, layout, 8-week trend order
+    --   3. yearly months chart: style, layout (bars)
+    --   4. heatmap and time of day
+    -- The numbers are the order in which the items were inserted above; if
+    -- items were ever added or removed without updating this, the list is
+    -- left as it is rather than scrambled.
+    do
+        local t = insights_popup_sub_item_table
+        if #t == 13 then
+            local order = { 1, 2, 3, 13, 4,   9, 8, 12, 7,   10, 11,   5, 6 }
+            local grouped = {}
+            for pos, idx in ipairs(order) do
+                local item = t[idx]
+                item.separator = nil
+                grouped[pos] = item
+            end
+            for _idx, pos in ipairs({ 5, 9, 11 }) do
+                grouped[pos].separator = true
+            end
+            for k = #t, 1, -1 do t[k] = nil end
+            for pos, item in ipairs(grouped) do t[pos] = item end
+        end
+    end
 
     table.insert(settings_sub_item_table, {
         text = _("Reading insight popup"),
@@ -864,6 +1027,16 @@ function M.build(self, deps)
         checked_func = function() return deps.ViewSettings.Opt.readShowChapterBar() end,
         callback = function()
             deps.ViewSettings.Opt.saveShowChapterBar(not deps.ViewSettings.Opt.readShowChapterBar())
+        end,
+    })
+
+    table.insert(book_progress_sub_item_table, {
+        text = _("Chapter count row"),
+        help_text = _("Show the number of chapters read and the typical chapter length under the chapter bar chart. Tap the typical chapter length in the popup to switch between time and pages."),
+        keep_menu_open = true,
+        checked_func = function() return deps.ViewSettings.Opt.readShowChapterCountRow() end,
+        callback = function()
+            deps.ViewSettings.Opt.saveShowChapterCountRow(not deps.ViewSettings.Opt.readShowChapterCountRow())
         end,
     })
 
