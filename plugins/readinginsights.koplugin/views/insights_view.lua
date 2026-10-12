@@ -3183,9 +3183,18 @@ function ReadingInsightsPopup:init()
     -- before _loadAndRebuild() (which now recomputes all_time/yearly on
     -- almost every open, not just once a day) can trigger a second redraw.
     self:_buildUI()
-    UIManager:scheduleIn(0.1, function()
+    UIManager:scheduleIn(0.2, function()
         if self._closed then return end
-        self:_loadAndRebuild()
+
+        local msg = InfoMessage:new{ text = _("Loading insights…") }
+        UIManager:show(msg)
+
+        UIManager:scheduleIn(0.2, function()
+            if not self._closed then
+                self:_loadAndRebuild()
+            end
+            UIManager:close(msg)
+        end)
     end)
 end
 
