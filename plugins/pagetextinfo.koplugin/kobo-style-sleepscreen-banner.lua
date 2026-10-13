@@ -18,7 +18,7 @@ local B_SETT = {	--BANNER SETTINGS
 					stats_fontFace = "cfont",
 					stats_fontSize = 17,
 					border_size = 1,
-					border_color = 0,	-- 0 = white, 1 = black
+					border_color = 1,	-- 0 = white, 1 = black
 					background = 0,		-- 0 = white, 1 = black
 					margin = 10,
 					padding = 15,
