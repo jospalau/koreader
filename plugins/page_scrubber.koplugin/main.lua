@@ -55,12 +55,12 @@ local PageScrubberPlugin = WidgetContainer:extend{
 
 local SCALE_KEY = "page_scrubber_ui_scale"
 
-local function getScale()
+local function getScale() 
     if G_reader_settings then
         local val = G_reader_settings:readSetting(SCALE_KEY)
         if type(val) == "number" then return val end
     end
-    return 1.0
+    return 1.0 
 end
 
 function PageScrubberPlugin:init()
@@ -191,8 +191,8 @@ function ReaderUI:onPageScrubberQuickMenu()
 end
 
 function PageScrubberPlugin:addToMainMenu(menu_items)
-    local my_menu = {
-        text = "Page Scrubber",
+    local my_menu = { 
+        text = "Page Scrubber", 
         sorting_hint = "tools",
         sub_item_table = {
             {
@@ -215,7 +215,7 @@ function PageScrubberPlugin:addToMainMenu(menu_items)
             { text = _("Page Scrubber: Index (Table of Content)"), callback = function() self.ui:onPageScrubberTocExpanded() end },
         }
     }
-
+    
     if menu_items.document and menu_items.document.sub_item_table then
         menu_items.document.sub_item_table.page_scrubber = my_menu
     else

@@ -251,7 +251,7 @@ function FloatingCard:init()
         self.dimen = Geom:new({ w = c_sz.w, h = c_sz.h + b })
         if self.anchor_top then pad_bot = b else pad_top = b end
     end
-
+    
     self.frame = FrameContainer:new({
         padding_top = pad_top, padding_bottom = pad_bot,
         padding_left = pad_left, padding_right = pad_right,
@@ -287,16 +287,16 @@ function FloatingCard:paintTo(bb, x, y)
         -- MODO VERTICAL
         local bx = x - b
         local bw = w + (b * 2)
-        paintCornerRect(bb, bx, y, bw, h, r, Blitbuffer.COLOR_BLACK,
+        paintCornerRect(bb, bx, y, bw, h, r, Blitbuffer.COLOR_BLACK, 
             not self.anchor_top, not self.anchor_top, self.anchor_top, self.anchor_top)
-
+        
         local wy = self.anchor_top and y or (y + b)
         local wh = h - b
         local wr = math.max(0, r - b)
         paintCornerRect(bb, x, wy, w, wh, wr, Blitbuffer.COLOR_WHITE,
             not self.anchor_top, not self.anchor_top, self.anchor_top, self.anchor_top)
     end
-
+        
     if self[1] then self[1]:paintTo(bb, x, y) end
 end
 
@@ -312,7 +312,7 @@ function FloatingPillCard:init()
     local c_sz = self.content:getSize()
     local b = self.bordersize
     self.dimen = Geom:new({ w = c_sz.w + (b * 2), h = c_sz.h + (b * 2) })
-
+    
     self.frame = FrameContainer:new({
         padding_top = b,
         padding_bottom = b,
@@ -331,10 +331,10 @@ function FloatingPillCard:paintTo(bb, x, y)
     local r = self.radius
 
     paintCornerRect(bb, x, y, w, h, r, Blitbuffer.COLOR_BLACK, true, true, true, true)
-
+    
     local wr = math.max(0, r - b)
     paintCornerRect(bb, x + b, y + b, math.max(0, w - (b * 2)), math.max(0, h - (b * 2)), wr, Blitbuffer.COLOR_WHITE, true, true, true, true)
-
+        
     if self[1] then self[1]:paintTo(bb, x, y) end
 end
 
@@ -598,7 +598,7 @@ function PreviewButton:init()
             fgcolor = Blitbuffer.COLOR_BLACK
         }
     end
-
+    
     if icon_widget then
         table.insert(content_elements, icon_widget)
     end
@@ -608,48 +608,65 @@ function PreviewButton:init()
             table.insert(content_elements, VerticalSpan:new({ width = scale(1) }))
         end
         self._text_widget = TextWidget:new({
-            text = self.text,
-            face = self.face or Font:getFace("cfont", self.font_size or scaleText(12)),
-            bold = (self.bold ~= nil) and self.bold or (self.face == nil),
+            text = self.text, 
+            face = self.face or Font:getFace("cfont", self.font_size or scaleText(12)), 
+            bold = (self.bold ~= nil) and self.bold or (self.face == nil), 
             fgcolor = Blitbuffer.COLOR_BLACK,
             max_width = self.width and (self.width - scale(4)) or nil,
             truncate_with_ellipsis = true
         })
         table.insert(content_elements, self._text_widget)
     end
-
+    
     if #content_elements == 0 then
         self._text_widget = TextWidget:new({
-            text = "?",
-            face = Font:getFace("cfont", self.font_size or scaleText(8)),
+            text = "?", 
+            face = Font:getFace("cfont", self.font_size or scaleText(8)), 
             fgcolor = Blitbuffer.COLOR_BLACK
         })
         table.insert(content_elements, self._text_widget)
     end
 
-    local btn_content = CenterContainer:new({
+    local btn_content = CenterContainer:new({ 
         dimen = Geom:new({ w = self.width, h = inner_h })
     })
     btn_content[1] = VerticalGroup:new(content_elements)
-
+    
     self.frame = FrameContainer:new({ show_parent = self.show_parent, bordersize = 0, padding_left = 0, padding_right = 0 })
-    self.frame[1] = btn_content
-    self.dimen = self.frame:getSize()
-    self[1] = self.frame
-    self.ges_events = { TapSelectButton = { GestureRange:new({ ges = "tap", range = self.dimen }) } }
+        self.frame[1] = btn_content
+        self.dimen = self.frame:getSize()
+        self[1] = self.frame
+        self.ges_events = { 
+            TapSelectButton = { GestureRange:new({ ges = "tap", range = self.dimen }) },
+            HoldSelectButton = { GestureRange:new({ ges = "hold", range = self.dimen }) },
+            -- El dedo puede haberse corrido del botón al soltar: el release se escucha en toda la pantalla
+            HoldReleaseSelectButton = { GestureRange:new({
+                ges = "hold_release",
+                range = Geom:new({ x = 0, y = 0, w = Screen:getWidth(), h = Screen:getHeight() }),
+            }) },
+        }
+    end
+
+function PreviewButton:onHoldSelectButton(arg1, ges)
+    if not self.hold_callback then return false end
+    -- La acción salta apenas se detecta el hold. El menú flotante NO se cierra acá (se cierra al elegir
+    -- un color o al cancelar), así el hold_release lo sigue recibiendo este botón y no llega al lector.
+    self._hold_active = true
+    local anchor_pos = ges and ges.pos
+    local UIManager = require("ui/uimanager")
+    -- Aislar la acción del hilo de gestos táctiles para evitar bloqueos
+    UIManager:scheduleIn(0, function()
+        if self.hold_callback then self.hold_callback(self, anchor_pos) end
+    end)
+    return true
 end
 
-function PreviewButton:setText(new_text)
-    self.text = new_text
-    if self._text_widget then
-        self._text_widget:setText(new_text)
-        if self.show_parent then
-            UIManager:setDirty(self.show_parent, "ui")
-        else
-            UIManager:setDirty(self, "ui")
-        end
+    function PreviewButton:onHoldReleaseSelectButton()
+        if not self._hold_active then return false end
+        self._hold_active = false
+        -- Consumir la liberación del dedo para que no llegue al lector de KOReader
+        return true
     end
-end
 
 function PreviewButton:onTapSelectButton()
     if self.callback then self.callback(); return true end
@@ -663,17 +680,17 @@ local function applyRoundedScrollbar(htmlwidget)
     local original_paintTo = htmlwidget.paintTo
     htmlwidget.paintTo = function(self, bb, x, y)
         local sb = self.scrollbar
-        self.scrollbar = nil
+        self.scrollbar = nil 
         original_paintTo(self, bb, x, y)
         self.scrollbar = sb
-
+        
         if sb and self.virtual_dimen and self.virtual_dimen.h > self.dimen.h then
             local max_h = self.dimen.h
             local max_v = self.virtual_dimen.h
             local thumb_h = math.max(scale(24), math.floor(max_h * max_h / max_v))
             local thumb_y = y + math.floor((self.pos / max_v) * max_h)
             if thumb_y + thumb_h > y + max_h then thumb_y = y + max_h - thumb_h end
-
+            
             local sw = scale(6)
             local sx = x + self.dimen.w - sw - scale(2)
             paintCornerRect(bb, sx, thumb_y, sw, thumb_h, math.floor(sw/2), Blitbuffer.COLOR_GRAY, true, true, true, true)
@@ -689,7 +706,7 @@ function FloatingDict:discoverExternalButtons(dict_self, word, result, result_in
     if not (self.ui and self.ui.handleEvent) then return {} end
 
     result = result or {}
-
+    
     local active_highlight = (popup_instance and popup_instance.highlight_obj)
         or (dict_self and dict_self.highlight)
         or (self.ui and self.ui.highlight)
@@ -738,22 +755,22 @@ function FloatingDict:discoverExternalButtons(dict_self, word, result, result_in
         setmetatable(fake_popup, { __index = popup_instance })
     end
 
-    local fake_button_table = {
+    local fake_button_table = { 
         getButtonById = function(self_tbl, id)
             local real_btn = fake_popup._real_buttons and fake_popup._real_buttons[id]
-            return {
+            return { 
                 width = real_btn and real_btn.width or scale(100),
                 dimen = real_btn and real_btn.dimen or Geom:new({w = scale(100), h = scale(40)}),
-                setText = function(self_btn, text)
+                setText = function(self_btn, text) 
                     if real_btn then
                         real_btn:setText(text)
                     end
-                end,
-                refresh = function() end,
-                enable = function() end,
-                disable = function() end
-            }
-        end
+                end, 
+                refresh = function() end, 
+                enable = function() end, 
+                disable = function() end 
+            } 
+        end 
     }
 
     fake_button_table.button_by_id = setmetatable({}, {
@@ -791,7 +808,7 @@ function FloatingDict:discoverExternalButtons(dict_self, word, result, result_in
             end
         end
     end
-
+    
     if dict_self then
         scan_for_buttons(dict_self.dict_plugin_buttons)
         scan_for_buttons(dict_self.dict_buttons_by_id)
@@ -856,7 +873,7 @@ function FloatingDict:discoverExternalButtons(dict_self, word, result, result_in
             else
                 local auto_group = "legacy_row_" .. legacy_group_counter
                 legacy_group_counter = legacy_group_counter + 1
-
+                
                 for _, spec in ipairs(item) do
                     if type(spec) == "table" and type(spec.callback) == "function" and not seen_ids[spec.id] then
                         table.insert(all_buttons, {
@@ -880,14 +897,14 @@ function FloatingDict:discoverExternalButtons(dict_self, word, result, result_in
             group_name = btn.id:match("^([a-zA-Z0-9]+)_") or btn.id
         end
         group_name = group_name or "ungrouped"
-
+        
         grouped_rows_map[group_name] = grouped_rows_map[group_name] or {}
         table.insert(grouped_rows_map[group_name], btn)
     end
 
     local sorted_group_names = {}
     for grp in pairs(grouped_rows_map) do table.insert(sorted_group_names, grp) end
-
+    
     table.sort(sorted_group_names, function(a, b)
         local len_a = #grouped_rows_map[a]
         local len_b = #grouped_rows_map[b]
@@ -1008,11 +1025,11 @@ function FloatingDictionaryPopup:init()
     self.current_result_idx = self.current_result_idx or 1
     local total_dicts = self.results and #self.results or 1
     local entry = self.results and self.results[self.current_result_idx] or {}
-
+    
     local dict_name = tostring(entry.dict or "Diccionario")
     local def_body = tostring(entry.definition or "<p>Sin definición.</p>")
     if not def_body:find("<") then def_body = "<p>" .. htmlEscape(def_body):gsub("\n", "<br/>") .. "</p>" end
-
+    
     local dict_indicator = ""
     if total_dicts > 1 then
         dict_indicator = string.format("<b>[%d/%d]</b> &nbsp;&bull;&nbsp; ", self.current_result_idx, total_dicts)
@@ -1027,7 +1044,7 @@ function FloatingDictionaryPopup:init()
     local icon_btn_specs = {}
 
     local external_rows = {}
-
+    
     self.word = self.text
     self.clean_text = cleanWordForLookup(self.text) or self.text
     self.clean_word = self.clean_text
@@ -1133,8 +1150,8 @@ function FloatingDictionaryPopup:init()
                 text = spec.text,
                 font_size = spec.font_size,
                 face = not spec.icon_svg and getBookFace(ui_instance, spec.font_size or scaleText(12), true) or nil,
-                width = icon_btn_w,
-                height = icon_btn_h,
+                width = icon_btn_w, 
+                height = icon_btn_h, 
                 always_show_text = false,
                 show_parent = self,
                 callback = function()
@@ -1146,12 +1163,12 @@ function FloatingDictionaryPopup:init()
                     end
                 end
             })
-
+            
             if spec.fake_popup and spec.id then
                 spec.fake_popup._real_buttons = spec.fake_popup._real_buttons or {}
                 spec.fake_popup._real_buttons[spec.id] = btn
             end
-
+            
             table.insert(icon_widgets, btn)
         end
     end
@@ -1220,8 +1237,8 @@ function FloatingDictionaryPopup:init()
                     text = btn_text,
                     face = plugin_face,
                     font_size = chosen_fs,
-                    width = btn_w,
-                    height = scale(34),
+                    width = btn_w, 
+                    height = scale(34), 
                     always_show_text = true,
                     show_parent = self,
                     callback = function()
@@ -1267,7 +1284,7 @@ function FloatingDictionaryPopup:init()
             table.insert(text_row_widgets, HorizontalGroup:new(row_widgets))
         end
     end
-
+    
     local content_w = self.is_landscape and (self.width - scale(3)) or self.width
     local top_pad = self.is_landscape and scale(20) or (self.anchor_top and scale(32) or scale(20))
     local bot_pad = self.is_landscape and scale(14) or (self.anchor_top and scale(20) or scale(8))
@@ -1425,7 +1442,7 @@ function FloatingDictionaryPopup:init()
     if #icon_widgets > 0 then
         table.insert(rows, HorizontalGroup:new(icon_widgets))
     end
-
+    
     table.insert(rows, VerticalSpan:new({ width = bot_pad }))
     local popup_content = VerticalGroup:new(rows)
 
@@ -1461,11 +1478,11 @@ function FloatingDictionaryPopup:init()
             self.container
         })
     end
-
+    
     self.dimen = Geom:new({ x = 0, y = 0, w = screen_width, h = screen_height })
-
-    if Device:isTouchDevice() then
-        self.ges_events = {
+    
+    if Device:isTouchDevice() then 
+        self.ges_events = { 
             TapClose = { GestureRange:new({ ges = "tap", range = self.dimen }) },
             Swipe    = { GestureRange:new({ ges = "swipe", range = self.dimen }) },
             HoldStartText = {
@@ -1491,7 +1508,7 @@ function FloatingDictionaryPopup:init()
                     end
                 end,
             },
-        }
+        } 
     end
 end
 
@@ -1540,7 +1557,7 @@ end
 function FloatingDictionaryPopup:onSwipe(arg1, arg2)
     local ges = arg2 or arg1
     if not self.results or #self.results <= 1 then return false end
-
+    
     if ges.direction == "west" then
         if self.current_result_idx < #self.results then
             self:switchDict(self.current_result_idx + 1)
@@ -1640,6 +1657,11 @@ function FloatingActionMenu:init()
         underline     = { svg = "underline.svg", text = "Und", action = "underline", setting = "page_scrubber_sel_show_underline" },
         invert        = { svg = "contrast.svg", text = "Inv", action = "invert", setting = "page_scrubber_sel_show_invert" },
         highlight     = { svg = "droplet.svg", text = "HL", action = "highlight", setting = "page_scrubber_sel_show_highlight" },
+        -- Botones que por defecto viven en la fila de More; si se activan, suben a la barra principal
+        select        = { svg = "crop.svg", text = "Sel", action = "select", setting = "page_scrubber_sel_show_select", default = false, row1 = true },
+        dict          = { svg = "book-marked.svg", text = "Dict", action = "dict", setting = "page_scrubber_sel_show_dict", default = false, row1 = true },
+        wiki          = { svg = "globe.svg", text = "Wiki", action = "wiki", setting = "page_scrubber_sel_show_wiki", default = false, row1 = true },
+        translate     = { svg = "languages.svg", text = "Trans", action = "translate", setting = "page_scrubber_sel_show_translate", default = false, row1 = true },
     }
 
     local more_svg = getValidSvgPath("more.svg") or getValidSvgPath("square-plus.svg") or getValidSvgPath("plus.svg")
@@ -1650,7 +1672,7 @@ function FloatingActionMenu:init()
         is_plus = true,
     }
 
-    local default_sel_order = { "xray", "ai", "note", "strikethrough", "underline", "invert", "highlight", "more" }
+    local default_sel_order = { "xray", "ai", "note", "strikethrough", "underline", "invert", "highlight", "select", "dict", "wiki", "translate", "more" }
     local saved_sel_order = G_reader_settings and G_reader_settings:readSetting("page_scrubber_sel_btn_order")
     if type(saved_sel_order) ~= "table" then
         if G_reader_settings and (G_reader_settings:isTrue("page_scrubber_sel_reverse_order") or G_reader_settings:isTrue("page_scrubber_sel_more_first")) then
@@ -1664,7 +1686,15 @@ function FloatingActionMenu:init()
         for _, k in ipairs(saved_sel_order) do seen[k] = true end
         for _, k in ipairs(default_sel_order) do
             if not seen[k] then
-                table.insert(saved_sel_order, k)
+                local more_pos
+                for i, sk in ipairs(saved_sel_order) do
+                    if sk == "more" then more_pos = i; break end
+                end
+                if k ~= "more" and more_pos then
+                    table.insert(saved_sel_order, more_pos, k)
+                else
+                    table.insert(saved_sel_order, k)
+                end
             end
         end
     end
@@ -1682,8 +1712,8 @@ function FloatingActionMenu:init()
             end
         else
             local b_spec = SEL_BUTTON_SPECS[btn_key]
-            if b_spec and is_btn_enabled(b_spec.setting) then
-                table.insert(raw_buttons, { svg = b_spec.svg, text = b_spec.text, action = b_spec.action })
+            if b_spec and is_btn_enabled(b_spec.setting, b_spec.default) then
+                table.insert(raw_buttons, { svg = b_spec.svg, text = b_spec.text, action = b_spec.action, row1 = b_spec.row1 })
             end
         end
     end
@@ -1730,13 +1760,17 @@ function FloatingActionMenu:init()
         end
 
         local cb
+        local hold_cb
         if spec.is_plus then
             self._plus_btn_index = idx
             cb = function() self:toggleMore() end
         elseif spec.external_callback then
             cb = function() pcall(spec.external_callback) end
+        elseif spec.row1 then
+            cb = function() self:invokeRow1Action(spec.action) end
         else
             cb = function() self:invokeNative(spec.action) end
+            hold_cb = function(btn_obj, anchor_pos) self:invokeNativeHold(spec.action, anchor_pos) end
         end
 
         local btn = PreviewButton:new({
@@ -1750,6 +1784,7 @@ function FloatingActionMenu:init()
             always_show_text = false,
             show_parent = self,
             callback = cb,
+            hold_callback = hold_cb,
         })
 
         if spec.fake_popup and spec.id then
@@ -1904,11 +1939,25 @@ function FloatingActionMenu:init()
     })
 
     self.dimen = Geom:new({ x = 0, y = 0, w = screen_width, h = screen_height })
-    if Device:isTouchDevice() then
-        self.ges_events = { TapClose = { GestureRange:new({ ges = "tap", range = self.dimen }) } }
+    if Device:isTouchDevice() then 
+        self.ges_events = { TapClose = { GestureRange:new({ ges = "tap", range = self.dimen }) } } 
     end
 
     self:buildMoreCard()
+end
+
+function FloatingActionMenu:invokeRow1Action(act)
+    if act == "select" then
+        self:invokeNative("adjust")
+        return
+    end
+    local nb = self._native_buttons and self._native_buttons[act]
+    if nb and type(nb.callback) == "function" then
+        UIManager:close(self)
+        pcall(nb.callback, self.highlight_obj, self.annotation_index)
+    else
+        self:invokeNative(act)
+    end
 end
 
 function FloatingActionMenu:buildMoreCard()
@@ -1965,7 +2014,7 @@ function FloatingActionMenu:buildMoreCard()
                         local is_html = id_clean:find("html") or k_clean:find("html") or txt_clean:find("html")
                         local is_xray = id_clean:find("xray") or id_clean:find("x%-ray") or k_clean:find("xray") or k_clean:find("x%-ray") or txt_clean:find("xray") or txt_clean:find("x%-ray")
                         local is_native_assistant = (
-                            k_clean == "assistant" or id_clean == "assistant" or
+                            k_clean == "assistant" or id_clean == "assistant" or 
                             k_clean == "ai" or id_clean == "ai" or
                             txt_clean:find("assistant") or txt_clean:find("asistente") or
                             txt_clean:find("ai assistant") or txt_clean:find("ia assistant")
@@ -1994,6 +2043,8 @@ function FloatingActionMenu:buildMoreCard()
     local raw_fs = getBookRawFontSize(ui_instance) or 26
     local font_ratio = self._font_ratio or math.max(0.85, math.min(1.40, raw_fs / 26))
 
+    self._native_buttons = native_buttons
+
     local row1_specs = {
         { svg = "crop.svg", text = "Sel", action = "select" },
         { svg = "copy.svg", text = "Copy", action = "copy" },
@@ -2002,6 +2053,24 @@ function FloatingActionMenu:buildMoreCard()
         { svg = "search.svg", text = "Search", action = "search" },
         { svg = "languages.svg", text = "Trans", action = "translate" },
     }
+
+    -- Dict / Wiki / Trans: si están activados en la barra principal, no se repiten en la fila de More
+    do
+        local main_bar_setting = {
+            select = "page_scrubber_sel_show_select",
+            dict = "page_scrubber_sel_show_dict",
+            wiki = "page_scrubber_sel_show_wiki",
+            translate = "page_scrubber_sel_show_translate",
+        }
+        local filtered = {}
+        for _, sp in ipairs(row1_specs) do
+            local key = main_bar_setting[sp.action]
+            if not (key and is_btn_enabled(key, false)) then
+                table.insert(filtered, sp)
+            end
+        end
+        row1_specs = filtered
+    end
 
     local row1_icon_sz = scale(31)
     local min_btn_w = scale(52)
@@ -2143,7 +2212,11 @@ function FloatingActionMenu:buildMoreCard()
                 callback = function()
                     UIManager:close(self)
                     if type(u_btn.callback) == "function" then
-                        pcall(u_btn.callback, hl, self.annotation_index)
+                        -- Igual que en el diccionario: si al cerrar el menu KOReader limpio
+                        -- hl.selected_text, se la restauramos al plugin mientras corre su callback.
+                        FloatingDictionaryPopup.withRestoredSelection(self, function()
+                            u_btn.callback(hl, self.annotation_index)
+                        end)
                     end
                 end,
             })
@@ -2340,7 +2413,7 @@ end
 local function saveCustomHighlightInner(self_obj, style)
     local hl = self_obj.highlight_obj
     if not hl then return end
-
+    
     if type(hl.saveHighlightFormatted) == "function" then
         local saved_color = hl.view and hl.view.highlight and hl.view.highlight.saved_color
         local ok = pcall(function()
@@ -2352,14 +2425,14 @@ local function saveCustomHighlightInner(self_obj, style)
 
     local util = require("util")
     local Event = require("ui/event")
-
+    
     local sel = hl.selected_text or {
         pos0 = self_obj.pos0,
         pos1 = self_obj.pos1,
         text = self_obj.text
     }
     if not sel.pos0 or not sel.pos1 then return end
-
+    
     -- FIX 1: Evitar el crash fatal de Lua ("attempt to index a string value").
     -- En EPUBs, pos0 es un texto. Intentar sacarle ".page" rompía todo el plugin.
     local page
@@ -2370,9 +2443,9 @@ local function saveCustomHighlightInner(self_obj, style)
     else
         page = sel.pos0
     end
-
+    
     local saved_color = (hl.view and hl.view.highlight and hl.view.highlight.saved_color) or "yellow"
-
+    
     -- FIX 2: Capturar el capítulo de forma 100% nativa y a prueba de fallos.
     local current_chapter = nil
     pcall(function()
@@ -2380,12 +2453,12 @@ local function saveCustomHighlightInner(self_obj, style)
         if hl.ui and type(hl.ui.getBookmarkChapter) == "function" then
             current_chapter = hl.ui:getBookmarkChapter(sel.pos0)
         end
-
+        
         -- Intento B: Si falla, buscar manualmente en el índice usando el número real de página
         if not current_chapter and hl.ui and hl.ui.toc then
             local pageno = 1
             if type(hl.ui.getCurrentPage) == "function" then pageno = hl.ui:getCurrentPage() end
-
+            
             if type(hl.ui.toc.getTocIndexByPage) == "function" then
                 local idx = hl.ui.toc:getTocIndexByPage(pageno)
                 if idx and hl.ui.toc.toc and type(hl.ui.toc.toc[idx]) == "table" then
@@ -2394,7 +2467,7 @@ local function saveCustomHighlightInner(self_obj, style)
             end
         end
     end)
-
+    
     local item = {
         chapter = current_chapter,
         page = page,
@@ -2404,13 +2477,13 @@ local function saveCustomHighlightInner(self_obj, style)
         drawer = style,
         color = saved_color,
     }
-
+    
     if hl.ui and hl.ui.paging then
         item.pboxes = sel.pboxes or self_obj.boxes
         item.ext = sel.ext
         if hl.writePdfAnnotation then pcall(function() hl:writePdfAnnotation("save", item) end) end
     end
-
+    
     local ok, index = pcall(function() return hl.ui.annotation:addItem(item) end)
     if ok and index then
         if hl.view and hl.view.footer and type(hl.view.footer.maybeUpdateFooter) == "function" then
@@ -2448,7 +2521,7 @@ local function invokeAction(self_obj, action_name)
     if hl then hl.highlight_menu = nil end
     local UIManager = require("ui/uimanager")
     UIManager:close(self_obj)
-
+    
     UIManager:scheduleIn(0.1, function()
         pcall(function()
             if action_name == "highlight" then
@@ -2543,8 +2616,417 @@ local function invokeAction(self_obj, action_name)
     end)
 end
 
+-- LÓGICA DE PULSACIÓN LARGA (Selector de colores de KOReader)
+-- Mantener apretado Resaltar / Subrayar / Tachar abre el selector de colores. Primero se intenta el
+-- ButtonSelector nativo; en algunas versiones de KOReader falla al crearse ("bad argument #1 to 'unpack'"),
+-- así que si eso pasa se usa un selector propio (3x3) con los mismos colores de KOReader.
+-- Al elegir un color se guarda con el guardado nativo (ReaderHighlight:saveHighlight), con ese estilo y color,
+-- sin tocar el color por defecto de KOReader.
+local HOLD_STYLE = { highlight = "lighten", underline = "underscore", strikethrough = "strikeout" }
+
+-- Relleno redondeado a todo color. En pantallas a color el relleno hay que pintarlo con blendRectRGB32
+-- (paintRect pierde el color y lo deja en gris); en pantallas B/N se usa el pintado normal.
+local function paintColorFill(bb, x, y, w, h, r, color)
+    if w <= 0 or h <= 0 then return end
+    if not (bb.blendRectRGB32 or bb.paintRectRGB32) then
+        paintCornerRect(bb, x, y, w, h, r, color, true, true, true, true)
+        return
+    end
+    r = math.min(r, math.floor(w / 2), math.floor(h / 2))
+    local function paint(px, py, pw, ph)
+        if bb.blendRectRGB32 then bb:blendRectRGB32(px, py, pw, ph, color)
+        else bb:paintRectRGB32(px, py, pw, ph, color) end
+    end
+    if r <= 0 then paint(x, y, w, h); return end
+    paint(x + r, y, w - 2 * r, h)
+    paint(x, y + r, r, math.max(1, h - 2 * r))
+    paint(x + w - r, y + r, r, math.max(1, h - 2 * r))
+    for j = 0, r - 1 do
+        local arc = math.ceil(math.sqrt(r * r - (r - j - 0.5) * (r - j - 0.5)))
+        if arc > 0 then
+            paint(x + r - arc, y + j, arc, 1)
+            paint(x + w - r,   y + j, arc, 1)
+            paint(x + r - arc, y + h - 1 - j, arc, 1)
+            paint(x + w - r,   y + h - 1 - j, arc, 1)
+        end
+    end
+end
+
+local ColorSwatchPopup = InputContainer:extend({
+    values = nil,      -- { { nombre, clave, color }, ... } (formato de ReaderHighlight:getHighlightColorList)
+    current = nil,     -- clave del color actual (se remarca)
+    on_select = nil,   -- function(clave)
+    on_cancel = nil,   -- function()
+    anchor_fn = nil,   -- function() -> { y = ... }, pop_down  (posición nativa de diálogos, opcional)
+})
+
+function ColorSwatchPopup:init()
+    self.modal = true
+    local sw, sh = Screen:getWidth(), Screen:getHeight()
+    self.dimen = Geom:new({ x = 0, y = 0, w = sw, h = sh })
+
+    local cols = 3
+    -- Solo entradas válidas: { nombre, clave, color }
+    local clean = {}
+    for _, v in ipairs(self.values or {}) do
+        if type(v) == "table" and type(v[2]) == "string" then table.insert(clean, v) end
+    end
+    self.values = clean
+    local n = #clean
+    local rows = math.max(1, math.ceil(n / cols))
+    self.cols = cols
+    -- POPUP_K achica todo el menu de colores (tamanos y fuente) en bloque; 1.0 = tamano anterior.
+    -- El contorno (border / anillos) no se toca para conservar el grosor de linea.
+    local POPUP_K = 0.75
+    local function sk(v) return math.max(1, math.floor(scale(v) * POPUP_K + 0.5)) end
+    self.pad = sk(14)
+    self.cell_w = sk(104)
+    self.cell_h = sk(98)
+    self.circle_d = sk(54)
+    self.border = scale(2)
+    self.radius = sk(16)
+    self.face = Font:getFace("cfont", math.max(8, math.floor(scaleText(17) * POPUP_K + 0.5)))
+
+    local w = cols * self.cell_w + self.pad * 2
+    local h = rows * self.cell_h + self.pad * 2
+    self._content_w, self._content_h = w, h
+    local x = math.floor((sw - w) / 2)
+    local y = math.floor((sh - h) / 2)
+
+    -- Misma posición que usan los diálogos nativos de resaltado (arriba / centro / abajo / junto al texto)
+    if self.anchor_fn then
+        local ok, anchor, pop_down = pcall(self.anchor_fn, self)
+        if ok and type(anchor) == "table" then
+            if anchor.is_vertical and anchor.menu_rect then
+                y = anchor.y - math.floor(h / 2)
+                if anchor.pos_pref == "left_v" then
+                    x = anchor.menu_rect.x + anchor.menu_rect.w + scale(6)
+                else
+                    x = anchor.menu_rect.x - w - scale(6)
+                end
+            elseif anchor.x and anchor.y then
+                x = anchor.x - math.floor(w / 2)
+                if pop_down == true then
+                    y = anchor.y                 -- el diálogo se despliega hacia abajo desde y
+                elseif pop_down == false then
+                    y = anchor.y - h             -- el diálogo se despliega hacia arriba hasta y
+                else
+                    y = anchor.y                 -- "arriba" / "abajo" de la pantalla (se acota más abajo)
+                end
+            elseif anchor.y then
+                if pop_down == true then
+                    y = anchor.y
+                elseif pop_down == false then
+                    y = anchor.y - h
+                else
+                    y = anchor.y
+                end
+            end
+        end
+    end
+    
+    x = math.max(scale(8), math.min(x, sw - w - scale(8)))
+    y = math.max(scale(8), math.min(y, sh - h - scale(8)))
+
+    self.card_rect = Geom:new({ x = x, y = y, w = w, h = h })
+
+    self.cells = {}
+    for i, v in ipairs(self.values or {}) do
+        local col = (i - 1) % cols
+        local row = math.floor((i - 1) / cols)
+        self.cells[i] = {
+            name = tostring(v[1] or v[2] or ""),
+            key = v[2],
+            color = v[3],
+            dimen = Geom:new({
+                x = x + self.pad + col * self.cell_w,
+                y = y + self.pad + row * self.cell_h,
+                w = self.cell_w, h = self.cell_h,
+            }),
+        }
+    end
+
+    if Device:isTouchDevice() then
+        self.ges_events = {
+            Tap   = { GestureRange:new({ ges = "tap",   range = self.dimen }) },
+            Hold  = { GestureRange:new({ ges = "hold",  range = self.dimen }) },
+            HoldRelease = { GestureRange:new({ ges = "hold_release", range = self.dimen }) },
+            Swipe = { GestureRange:new({ ges = "swipe", range = self.dimen }) },
+        }
+    end
+end
+
+-- Algunas posiciones nativas (junto al texto) necesitan conocer el alto del diálogo
+function ColorSwatchPopup:getContentSize()
+    return Geom:new({ w = self._content_w or 0, h = self._content_h or 0 })
+end
+
+function ColorSwatchPopup:onHold() return true end
+function ColorSwatchPopup:onHoldRelease() return true end
+function ColorSwatchPopup:onSwipe() return true end
+
+function ColorSwatchPopup:onShow()
+    UIManager:setDirty(self, function() return "ui", self.card_rect end)
+end
+
+function ColorSwatchPopup:paintTo(bb, x, y)
+    -- Un error de pintado dentro del bucle de UI tumba KOReader: lo atajamos y cerramos el selector
+    local ok, err = pcall(function()
+        local r = self.card_rect
+        paintCornerRect(bb, r.x, r.y, r.w, r.h, self.radius, Blitbuffer.COLOR_BLACK, true, true, true, true)
+        paintCornerRect(bb, r.x + self.border, r.y + self.border, r.w - self.border * 2, r.h - self.border * 2,
+            math.max(1, self.radius - self.border), Blitbuffer.COLOR_WHITE, true, true, true, true)
+
+        for _, cell in ipairs(self.cells) do
+            local d = self.circle_d
+            local cx = cell.dimen.x + math.floor((cell.dimen.w - d) / 2)
+            local cy = cell.dimen.y + scale(4)
+            local is_current = (self.current ~= nil and cell.key == self.current)
+            local ring = is_current and scale(5) or scale(2)
+
+            paintCornerRect(bb, cx, cy, d, d, math.floor(d / 2), Blitbuffer.COLOR_BLACK, true, true, true, true)
+            local inner = d - ring * 2
+            local fill = cell.color or Blitbuffer.COLOR_GRAY
+            local ok_fill = pcall(function()
+                paintColorFill(bb, cx + ring, cy + ring, inner, inner, math.floor(inner / 2), fill)
+            end)
+            if not ok_fill then
+                paintCornerRect(bb, cx + ring, cy + ring, inner, inner, math.floor(inner / 2), Blitbuffer.COLOR_GRAY, true, true, true, true)
+            end
+
+            local tw = TextWidget:new({ text = cell.name, face = self.face, fgcolor = Blitbuffer.COLOR_BLACK, bold = is_current })
+            local tsz = tw:getSize()
+            tw:paintTo(bb, cell.dimen.x + math.floor((cell.dimen.w - tsz.w) / 2), cy + d + scale(6))
+            tw:free()
+        end
+    end)
+    if not ok and not self._paint_failed then
+        self._paint_failed = true
+        local ok_log, logger = pcall(require, "logger")
+        if ok_log and logger then logger.warn("floating_dict: error pintando el selector de colores:", err) end
+        UIManager:scheduleIn(0, function()
+            UIManager:close(self)
+            if self.on_cancel then pcall(self.on_cancel) end
+        end)
+    end
+end
+
+function ColorSwatchPopup:onTap(_arg, ges)
+    if not (ges and ges.pos) then return true end
+    if not ges.pos:intersectWith(self.card_rect) then
+        UIManager:close(self)
+        if self.on_cancel then self.on_cancel() end
+        return true
+    end
+    for _, cell in ipairs(self.cells) do
+        if ges.pos:intersectWith(cell.dimen) then
+            UIManager:close(self)
+            if self.on_select then self.on_select(cell.key) end
+            return true
+        end
+    end
+    return true
+end
+
+function ColorSwatchPopup:onCloseWidget()
+    UIManager:setDirty(nil, function() return "ui", self.card_rect end)
+end
+
+-- Lista { { nombre, clave, color }, ... } armada a partir de la paleta de KOReader.
+-- No usamos hl:getHighlightColorList(): en algunas versiones devuelve entradas que no son tablas
+-- (ButtonSelector falla con "bad argument #1 to 'unpack' (table expected, got cdata)").
+local function buildColorValues(hl)
+    local gt = require("gettext")
+    local base = hl.highlight_colors
+    if type(base) ~= "table" or #base == 0 then
+        base = {
+            { gt("Red"), "red" }, { gt("Orange"), "orange" }, { gt("Yellow"), "yellow" },
+            { gt("Green"), "green" }, { gt("Olive"), "olive" }, { gt("Cyan"), "cyan" },
+            { gt("Blue"), "blue" }, { gt("Purple"), "purple" }, { gt("Gray"), "gray" },
+        }
+    end
+    local list = {}
+    for _, c in ipairs(base) do
+        if type(c) == "table" and type(c[2]) == "string" then
+            local key = c[2]
+            local color
+            if type(hl.getHighlightColor) == "function" then
+                local ok, col = pcall(hl.getHighlightColor, hl, key, nil, true)
+                if ok then color = col end
+            end
+            local custom = type(hl.custom_colors) == "table" and hl.custom_colors[key]
+            local name = (type(custom) == "table" and custom.name) or c[1] or key
+            table.insert(list, { tostring(name), key, color })
+        end
+    end
+    return list
+end
+
+local function invokeHoldAction(self_obj, action_name, anchor_pos)
+    local hl = self_obj.highlight_obj
+    if not hl then return end
+
+    -- Solo para acciones de resaltado/dibujado (invert no admite color)
+    local style = HOLD_STYLE[action_name]
+    if not style then return end
+
+    local UIManager = require("ui/uimanager")
+    local ok_log, logger = pcall(require, "logger")
+    local function warn(...) if ok_log and logger then logger.warn(...) end end
+    local function info(...) if ok_log and logger then logger.info(...) end end
+
+    info("floating_dict: hold en", action_name)
+
+    if type(hl.saveHighlight) ~= "function" then
+        -- Esta versión de KOReader no tiene el guardado nativo: se comporta como un toque normal
+        warn("floating_dict: no existe saveHighlight, se guarda con el color por defecto")
+        self_obj:invokeNative(action_name)
+        return
+    end
+
+    -- Selección a guardar (si KOReader ya la limpió, usamos la copia que guardó el menú al abrirse)
+    local sel = hl.selected_text or self_obj.selected_text
+    if not (sel and sel.pos0 and sel.pos1) then
+        warn("floating_dict: no hay selección para resaltar")
+        return
+    end
+    hl.selected_text = sel
+
+    local values_ok, values = pcall(buildColorValues, hl)
+    if not values_ok or type(values) ~= "table" or #values == 0 then
+        warn("floating_dict: no se pudo armar la paleta de colores:", values)
+        self_obj:invokeNative(action_name)
+        return
+    end
+    info("floating_dict: paleta con", #values, "colores")
+
+    local current = hl.view and hl.view.highlight and hl.view.highlight.saved_color
+
+    -- El menú flotante se cierra recién al elegir un color o al cancelar
+    local function closeMenu()
+        pcall(function() UIManager:close(self_obj) end)
+    end
+
+    local function finish(color_name)
+        closeMenu()
+        -- Con selecciones largas (p. ej. un parrafo entero) saveHighlight(true) puede extender la seleccion
+        -- a oracion y trabajar sobre una tabla NUEVA que no trae drawer/color, y entonces usa los valores por
+        -- defecto de KOReader (amarillo / lighten). Por eso, ademas de marcar selected_text, fijamos
+        -- temporalmente el estilo y color por defecto durante el guardado y despues los restauramos.
+        local vh = hl.view and hl.view.highlight
+        local old_saved_drawer, old_saved_color
+        if vh then
+            old_saved_drawer, old_saved_color = vh.saved_drawer, vh.saved_color
+            vh.saved_drawer = style
+            if color_name then vh.saved_color = color_name end
+        end
+        local ok, err = pcall(function()
+            if not hl.selected_text then hl.selected_text = sel end
+            hl.selected_text.drawer = style
+            if color_name then hl.selected_text.color = color_name end
+            local saved_index = hl:saveHighlight(true)
+            -- Verificacion: si el item guardado quedo con otro estilo/color, se corrige
+            local annotation = hl.ui and hl.ui.annotation
+            local item = type(saved_index) == "number" and annotation and annotation.annotations
+                and annotation.annotations[saved_index]
+            if type(item) == "table" then
+                local wrong_style = item.drawer ~= style
+                local wrong_color = color_name and item.color ~= color_name
+                if wrong_style or wrong_color then
+                    info("floating_dict: corrigiendo highlight guardado:", item.drawer, item.color, "->", style, color_name)
+                    item.drawer = style
+                    if color_name then item.color = color_name end
+                    pcall(function() UIManager:setDirty("all", "ui") end)
+                end
+            end
+            hl:clear()
+        end)
+        if vh then
+            vh.saved_drawer, vh.saved_color = old_saved_drawer, old_saved_color
+        end
+        if not ok then
+            warn("floating_dict: no se pudo guardar el highlight con color:", err)
+            pcall(function() hl:clear() end)
+        end
+    end
+
+    local function cancel()
+        -- Al cancelar el menú de colores, NO cerramos el menú flotante principal
+        -- ni limpiamos la selección, para que el texto siga marcado y el menú abierto.
+    end
+
+    local color_selector
+
+    local function anchor_for(widget)
+        if anchor_pos and self_obj.popup_rect then
+            local rect = self_obj.popup_rect
+            if self_obj._is_horizontal then
+                if self_obj._pos_pref == "bottom_h" then
+                    return { x = anchor_pos.x, y = rect.y - scale(6) }, false
+                else
+                    return { x = anchor_pos.x, y = rect.y + rect.h + scale(6) }, true
+                end
+            else
+                return { x = anchor_pos.x, y = anchor_pos.y, is_vertical = true, menu_rect = rect, pos_pref = self_obj._pos_pref }, false
+            end
+        end
+
+        if type(hl._getDialogAnchor) ~= "function" then return nil end
+        local ok_a, anchor, pop_down = pcall(function() return hl:_getDialogAnchor(widget) end)
+        if ok_a then return anchor, pop_down end
+        return nil
+    end
+
+    -- 1) Selector con círculos de colores
+    local shown = false
+    do
+        local ok, err = pcall(function()
+            local popup = ColorSwatchPopup:new{
+                values = values,
+                current = current,
+                on_select = finish,
+                on_cancel = cancel,
+                anchor_fn = anchor_for,
+            }
+            UIManager:show(popup)
+        end)
+        shown = ok
+        if ok then
+            info("floating_dict: selector de círculos abierto")
+        else
+            warn("floating_dict: el selector de círculos falló, se prueba el nativo:", err)
+        end
+    end
+
+    -- 2) Respaldo: selector nativo de KOReader (ButtonSelector)
+    if not shown then
+        local ok_bs, ButtonSelector = pcall(require, "ui/widget/buttonselector")
+        if ok_bs and ButtonSelector then
+            local ok, err = pcall(function()
+                color_selector = ButtonSelector:new{
+                    current_value = current,
+                    values = values,
+                    callback = function(selected_color_name) finish(selected_color_name) end,
+                    -- Tocar afuera cancela: se deselecciona el texto sin guardar nada
+                    tap_close_callback = cancel,
+                    anchor = function() return anchor_for(color_selector) end,
+                }
+                UIManager:show(color_selector)
+            end)
+            if ok then
+                info("floating_dict: selector nativo abierto")
+            else
+                -- Si no hay forma de mostrar un selector, el menú flotante queda como estaba
+                warn("floating_dict: no se pudo abrir ningún selector de colores:", err)
+                if color_selector then pcall(function() UIManager:close(color_selector) end) end
+            end
+        end
+    end
+end
+
 function FloatingDictionaryPopup:invokeNative(a) invokeAction(self, a) end
 function FloatingActionMenu:invokeNative(a) invokeAction(self, a) end
+function FloatingActionMenu:invokeNativeHold(a, anchor_pos) invokeHoldAction(self, a, anchor_pos) end
 
 local function checkClose(self_obj, ges)
     if ges and ges.pos then
@@ -2613,9 +3095,9 @@ function FloatingDict:isEnabled()
 end
 
 function FloatingDict:setEnabled(state)
-    if G_reader_settings then
+    if G_reader_settings then 
         G_reader_settings:saveSetting(SETTING_DICT_ENABLED, state)
-        G_reader_settings:flush()
+        G_reader_settings:flush() 
     end
 end
 
@@ -2628,9 +3110,9 @@ function FloatingDict:isSelectionMenuEnabled()
 end
 
 function FloatingDict:setSelectionMenuEnabled(state)
-    if G_reader_settings then
+    if G_reader_settings then 
         G_reader_settings:saveSetting(SETTING_SELECTION_ENABLED, state)
-        G_reader_settings:flush()
+        G_reader_settings:flush() 
     end
 end
 
@@ -2678,6 +3160,7 @@ local function showCustomActionMenu(hl_self, plugin, index)
         pos1 = sel.pos1,
         highlight_obj = hl_self,
         plugin = plugin,
+        selected_text = sel, -- copia de la selección, por si KOReader la limpia al cerrar el menú
         annotation_index = index -- ACÁ SE LO PASAMOS
     })
     UIManager:show(popup)
@@ -2734,20 +3217,20 @@ function FloatingDict:patchSystem()
     if dictionary and not dictionary._ps_fdict_patched then
         plugin.original_showDict = dictionary.showDict
         plugin.patched_dictionary = dictionary
-
+        
         dictionary.showDict = function(dict_self, ...)
             local args = {...}
             local word = args[1]
             local results = args[2]
             local boxes = args[3]
-
+            
             if not plugin:isEnabled() or plugin.opening_original_popup or type(results) ~= "table" or not results[1] then
                 return plugin.original_showDict(dict_self, ...)
             end
-
+            
             pcall(function()
                 if dict_self.dismissLookupInfo then pcall(function() dict_self:dismissLookupInfo() end) end
-
+                
                 local is_landscape = Screen:getWidth() > Screen:getHeight()
                 local anchor_top = false
                 local anchor_left = false
