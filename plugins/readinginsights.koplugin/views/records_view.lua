@@ -10,7 +10,7 @@ A floating card showing personal reading records:
   - Next milestone               the next one ahead
 
 The values and their caching live in lib/records_data.lua; this file draws
-them. Opened from Tools > Reading insights > Show Records, or the
+them. Opened from Tools > Reading insights > Records, or the
 "reading_records_popup" gesture/dispatcher action - both available in reader
 and file manager view alike, since none of this is tied to an open book. Tap
 anywhere, swipe down or press any key to close; hold the "Records" title to
@@ -77,7 +77,7 @@ local formatDate = Locale.formatDate
 -- ---------------------------------------------------------------------------
 -- UI building helpers
 -- ---------------------------------------------------------------------------
-local ROW_PADDING = Size.padding.default
+local ROW_PADDING = Size.padding.small
 
 local function getCachedFonts()
     return {
@@ -115,7 +115,7 @@ local function buildRecordRow(fonts, icon_glyph, label_text, value_text, sub_tex
     local right_col = VerticalGroup:new{ align = "right" }
     table.insert(right_col, value_w)
     if sub_w then
-        table.insert(right_col, VerticalSpan:new{ height = 1 })
+        table.insert(right_col, VerticalSpan:new{ width = 1 })
         table.insert(right_col, sub_w)
     end
     local right_size = right_col:getSize()
@@ -376,12 +376,12 @@ function RecordsPopup:_buildUI()
             HorizontalSpan:new{ width = row_pad },
             title_row,
         },
-        VerticalSpan:new{ height = Size.padding.default },
+        VerticalSpan:new{ width = Size.padding.small },
         HorizontalGroup:new{
             HorizontalSpan:new{ width = row_pad },
             Colors.newBar(inner_w, Size.line.thick, Colors.separator()),
         },
-        VerticalSpan:new{ height = Size.padding.large },
+        VerticalSpan:new{ width = Size.padding.small },
         rows,
     }
 

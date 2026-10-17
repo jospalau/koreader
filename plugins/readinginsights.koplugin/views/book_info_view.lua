@@ -7,7 +7,7 @@ widget the Book card plugin uses, widgets/coverframe.lua) and, to the right
 of it, the title, the author(s) and - when the book is part of one - the
 series.
 
-Opened from Tools > Reading insights > "Show Book info", from the
+Opened from Tools > Reading insights > "Book info", from the
 "Reading insights: book info" gesture/dispatcher action, and by tapping the
 "This book" header of the Book progress popup (see book_stats_view.lua).
 Book-view only: it needs an open document (see main.lua).
@@ -31,7 +31,7 @@ replaces how a rating is stored (hand-added books keep theirs in their own
 list).
 
 Controls:
-  - Long press the stars       set / change / clear the rating
+  - Tap / long press the stars set / change / clear the rating
   - Tap the description        full description in a viewer window
   - Tap anywhere else / swipe  dismiss
 
@@ -210,7 +210,9 @@ function BookInfoPopup:init()
         self.info = Data.gatherForFile(self.file, self.book)
         self.md5 = self.book.md5
         self.id_book = self.book.id_book
-        self.rating_file = self.file
+        -- a file that was only guessed from the title is shown (cover,
+        -- description) but never used for the rating
+        self.rating_file = (not self.file_guessed) and self.file or nil
     else
         self.info = Data.gather(self.ui) or { title = "" }
         self.md5 = Data.md5(self.ui)
@@ -222,7 +224,10 @@ function BookInfoPopup:init()
         -- a hand-added book: its rating lives in the book row itself
         self.rating = tonumber(self.book and self.book.rating) or 0
     else
-        self.rating = (self.md5 and Ratings.get(self.md5)) or 0
+        -- With the book's file known its sidecar is read directly: cheap and
+        -- always current. Otherwise the quick map answers; its TTL keeps it
+        -- fresh enough and Ratings.save updates it, so no refresh() here.
+        self.rating = (self.md5 and Ratings.get(self.md5, self.rating_file)) or 0
     end
     self.dimen = Geom:new{ w = Screen:getWidth(), h = Screen:getHeight() }
 
@@ -370,7 +375,7 @@ function BookInfoPopup:_buildUI()
     local show_author = Opt.readBookInfo("author") and self.info.authors
     local series_line = Opt.readBookInfo("series") and Data.seriesLine(self.info) or nil
 
-    -- Star rating, above the title (long press it to edit).
+    -- Star rating, above the title (tap or long press it to edit).
     self.stars_widget = TextWidget:new{
         text    = Ratings.stars(self.rating),
         face    = author_face,
@@ -380,7 +385,7 @@ function BookInfoPopup:_buildUI()
     local stars_h = self.stars_widget:getSize().h
 
     -- "Finished: 2026-10-07", the date in the format chosen under Settings >
-    -- Advanced settings > Date & time; right-aligned on the stars' row.
+    -- Settings > Date & time; right-aligned on the stars' row.
     local finished_text
     if self.finished_ts and tonumber(self.finished_ts) and tonumber(self.finished_ts) > 0 then
         local d = Locale.formatDateFromTS(tonumber(self.finished_ts))
@@ -453,18 +458,18 @@ function BookInfoPopup:_buildUI()
     else
         table.insert(text_col, self.stars_frame)
     end
-    table.insert(text_col, VerticalSpan:new{ width = S(4) })
+    table.insert(text_col, VerticalSpan:new{ width = Size.padding.small })
     table.insert(text_col, textBlock(
         self.info.title or "", title_face, Colors.value(), text_w, 4))
 
     if show_author then
-        table.insert(text_col, VerticalSpan:new{ width = S(6) })
+        table.insert(text_col, VerticalSpan:new{ width = Size.padding.default })
         table.insert(text_col, textBlock(
             self.info.authors, author_face, Colors.label(), text_w, 3))
     end
 
     if series_line then
-        table.insert(text_col, VerticalSpan:new{ width = S(4) })
+        table.insert(text_col, VerticalSpan:new{ width = Size.padding.small })
         table.insert(text_col, textBlock(
             series_line, series_face, Colors.label(), text_w, 2))
     end
@@ -614,7 +619,7 @@ function BookInfoPopup:_showFullDescription()
     UIManager:show(viewer)
 end
 
--- Long press on the stars: the star rating popup. The rating goes into the
+-- Tap or long press on the stars: the star rating popup. The rating goes into the
 -- book's own sidecar (so the file manager shows it too - a book that had no
 -- stars there gets them), or into the plugin's own file when the book's file
 -- is not known (see Ratings.save).
@@ -653,14 +658,19 @@ function BookInfoPopup:_editRating()
     }
 end
 
-function BookInfoPopup:onHold(arg, ges)
+-- Is the gesture on the stars? A fingertip is bigger than five small stars:
+-- a little slack all round.
+function BookInfoPopup:_onStars(ges)
     local d = self.stars_frame and self.stars_frame.dimen
     local pos = ges and ges.pos
-    if not d or not pos then return true end
-    -- a fingertip is bigger than five small stars: a little slack all round
+    if not d or not pos then return false end
     local slack = S(12)
-    if pos.x >= d.x - slack and pos.x <= d.x + d.w + slack
-       and pos.y >= d.y - slack and pos.y <= d.y + d.h + slack then
+    return pos.x >= d.x - slack and pos.x <= d.x + d.w + slack
+       and pos.y >= d.y - slack and pos.y <= d.y + d.h + slack
+end
+
+function BookInfoPopup:onHold(arg, ges)
+    if self:_onStars(ges) then
         self:_editRating()
     elseif self.cover_diag then
         -- a long press anywhere else while the cover is missing says why
@@ -670,6 +680,11 @@ function BookInfoPopup:onHold(arg, ges)
 end
 
 function BookInfoPopup:onTapClose(arg, ges)
+    -- a tap on the stars opens the rating popup (as a long press does)
+    if self:_onStars(ges) then
+        self:_editRating()
+        return true
+    end
     local d = self.desc_frame and self.desc_frame.dimen
     if d and self.desc_full and ges and ges.pos and ges.pos:intersectWith(d) then
         self:_showFullDescription()

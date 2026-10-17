@@ -276,12 +276,6 @@ msgstr "Média de páginas diárias, últimas 8 semanas"
 msgid "No reading data in the last 8 weeks"
 msgstr "Sem dados de leitura nas últimas 8 semanas"
 
-msgid "avg time/day"
-msgstr "tempo méd./dia"
-
-msgid "avg pages/day"
-msgstr "pág. méd./dia"
-
 msgid "page read today"
 msgstr "página lida hoje"
 
@@ -647,9 +641,6 @@ msgstr "Usar como ecrã de suspensão"
 msgid "Reading insights sleep screen"
 msgstr "Ecrã de suspensão do Reading Insights"
 
-msgid "Sleep-screen indicator"
-msgstr "Indicador do ecrã de suspensão"
-
 msgid "Off"
 msgstr "Desativado"
 
@@ -677,14 +668,8 @@ msgstr "Instantâneo"
 msgid "Slight delay (0.1s)"
 msgstr "Ligeiro atraso (0,1s)"
 
-msgid "sleeping…"
-msgstr "a suspender…"
-
 msgid "Indicator"
 msgstr "Indicador"
-
-msgid "\"(sleeping…)\" after the title"
-msgstr "\"(a suspender…)\" após o título"
 
 msgid "None"
 msgstr "Nenhum"
@@ -822,16 +807,13 @@ msgid "Peak activity (100%)"
 msgstr "Atividade máxima (100%)"
 
 msgid "Reading streak calendar"
-msgstr "Calendário da sequência de leitura"
+msgstr "Calendário de leitura"
 
 msgid "Daily streak day"
 msgstr "Dia da sequência diária"
 
 msgid "Weekly streak gap day"
 msgstr "Dia sem leitura da sequência semanal"
-
-msgid "Book progress bar"
-msgstr "Barra de progresso do livro"
 
 msgid "Show long durations (24h+) as days"
 msgstr "Mostrar durações longas (24h+) em dias"
@@ -902,20 +884,17 @@ msgstr "Reading Insights: recordes"
 msgid "Show Records"
 msgstr "Mostrar recordes"
 
-msgid "Show Reading streak"
-msgstr "Mostrar sequência de leitura"
+msgid "Show Reading calendar"
+msgstr "Mostrar calendário de leitura"
 
 msgid "Menu items"
 msgstr "Itens do menu"
 
-msgid "Reading streak"
-msgstr "Sequência de leitura"
-
 msgid "Tick the popups that should be listed under Tools > Reading insights. The book popups only appear while a book is open."
 msgstr "Assinale as janelas que devem aparecer em Ferramentas > Reading insights. As janelas do livro só aparecem com um livro aberto."
 
-msgid "Reading insights: reading streak"
-msgstr "Reading Insights: sequência de leitura"
+msgid "Reading insights: reading calendar"
+msgstr "Reading Insights: calendário de leitura"
 
 msgid "Reading insights: reading heatmap"
 msgstr "Reading Insights: mapa de calor de leitura"
@@ -1066,15 +1045,6 @@ msgstr "Atingiu a meta semanal %1 semana seguida."
 
 msgid "You've met your weekly goal %1 weeks in a row."
 msgstr "Atingiu a meta semanal %1 semanas seguidas."
-
-msgid "Last 7 days layout"
-msgstr "Disposição dos últimos 7 dias"
-
-msgid "Compact"
-msgstr "Compacto"
-
-msgid "Full"
-msgstr "Completo"
 
 msgid "Last 7 days chapter bar order"
 msgstr "Ordem da barra de capítulos dos últimos 7 dias"
@@ -1712,18 +1682,6 @@ msgstr "Capítulos por página"
 msgid "How many chapters the chapter bar shows at once before paging with the arrows."
 msgstr "Quantos capítulos a barra de capítulos mostra de uma vez antes de paginar com as setas."
 
-msgid "Progress bar"
-msgstr "Barra de progresso"
-
-msgid "Show progress bar"
-msgstr "Mostrar barra de progresso"
-
-msgid "Show the progress bar in the \"This book\" section."
-msgstr "Mostrar a barra de progresso na secção \"Este livro\"."
-
-msgid "Progress bar height"
-msgstr "Altura da barra de progresso"
-
 msgid "Read portion color"
 msgstr "Cor da parte lida"
 
@@ -1754,8 +1712,8 @@ msgstr "Semana"
 msgid "Show week numbers"
 msgstr "Mostrar números da semana"
 
-msgid "Add a \"Week\" column with each row's week number to the reading streak and Book progress calendars."
-msgstr "Adicionar uma coluna «Semana» com o número da semana de cada linha aos calendários de sequência de leitura e de progresso do livro."
+msgid "Add a \"Week\" column with each row's week number to the Reading calendar and Book progress calendar."
+msgstr "Adicionar uma coluna «Semana» com o número da semana de cada linha ao calendário de leitura e ao calendário de progresso do livro."
 
 msgid "Popup position"
 msgstr "Posição da janela"
@@ -2047,3 +2005,204 @@ msgstr "livro em atraso"
 
 msgid "books behind pace"
 msgstr "livros em atraso"
+
+msgid "Last 7 days: time and pages row"
+msgstr "Últimos 7 dias: linha tempo/págs."
+
+msgid "Show a second row with the other metric (pages when the chart shows time, time when it shows pages) below the total and daily average."
+msgstr "Mostra uma 2.ª linha com a outra métrica (páginas se o gráfico mostra tempo, e vice-versa) abaixo do total e da média diária."
+
+msgid "Last 7 days: compared to previous 7 days"
+msgstr "Últimos 7 dias: vs 7 dias anteriores"
+
+msgid "Below the chart, show how the total and the daily average changed compared to the 7 days before."
+msgstr "Por baixo do gráfico, mostra a variação do total e da média diária face aos 7 dias anteriores."
+
+msgid "time vs prev. 7d"
+msgstr "tempo vs 7 dias ant."
+
+msgid "vs prev. 7d"
+msgstr "vs 7 dias ant."
+
+msgid "page vs prev. 7d"
+msgstr "página vs 7 dias ant."
+
+msgid "pages vs prev. 7d"
+msgstr "páginas vs 7 dias ant."
+
+msgid "pg vs prev. 7d"
+msgstr "pág. vs 7 d ant."
+
+msgid "daily avg pg"
+msgstr "pág. méd./d"
+
+msgid "Daily / weekly goal bar"
+msgstr "Barra da meta diária / semanal"
+
+msgid "Show a thin progress bar under the daily and weekly goal values."
+msgstr "Mostrar uma barra de progresso fina sob os valores das metas diária e semanal."
+
+msgid "Progress bar"
+msgstr "Barra de progresso"
+
+msgid "Show a thin progress bar under the book percentage."
+msgstr "Mostrar uma barra de progresso fina sob a percentagem do livro."
+
+msgid "Rating (0-5 stars)"
+msgstr "Classificação (0-5 estrelas)"
+
+msgid "Please enter a rating from 0 to 5"
+msgstr "Por favor, introduza uma classificação de 0 a 5"
+
+msgid "Loading ratings..."
+msgstr "A carregar classificações..."
+
+msgid "Appearance"
+msgstr "Aspeto"
+
+msgid "Heatmap & time of day"
+msgstr "Mapa de calor e período do dia"
+
+msgid "Chart style"
+msgstr "Estilo do gráfico"
+
+msgid "Chart layout"
+msgstr "Disposição do gráfico"
+
+msgid "Bar order"
+msgstr "Ordem das barras"
+
+msgid "Time and pages row"
+msgstr "Linha de tempo e páginas"
+
+msgid "Comparison with previous 7 days row"
+msgstr "Linha de comparação com os 7 dias anteriores"
+
+msgid "Sleep screen"
+msgstr "Ecrã de suspensão"
+
+msgid "Content"
+msgstr "Conteúdo"
+
+msgid "Background"
+msgstr "Fundo"
+
+msgid "Book cover"
+msgstr "Capa do livro"
+
+msgid "Follow theme"
+msgstr "Seguir o tema"
+
+msgid "Custom image"
+msgstr "Imagem personalizada"
+
+msgid "Image fit"
+msgstr "Ajuste da imagem"
+
+msgid "Fit"
+msgstr "Ajustar"
+
+msgid "Stretch"
+msgstr "Esticar"
+
+msgid "Zoom"
+msgstr "Ampliar"
+
+msgid "Random"
+msgstr "Aleatório"
+
+msgid "No images in {dir}"
+msgstr "Sem imagens em {dir}"
+
+msgid "Images are loaded from {dir}"
+msgstr "As imagens são carregadas de {dir}"
+
+msgid "Preview"
+msgstr "Pré-visualização"
+
+msgid "Nothing to preview."
+msgstr "Nada para pré-visualizar."
+
+msgid "Image export (Android wallpaper / PocketBook logo)"
+msgstr "Exportação de imagem (papel de parede Android / logótipo PocketBook)"
+
+msgid "Save as image, kept up to date"
+msgstr "Guardar como imagem, mantida atualizada"
+
+msgid "Also save when opening a book"
+msgstr "Guardar também ao abrir um livro"
+
+msgid "Image format"
+msgstr "Formato de imagem"
+
+msgid "Refresh interval"
+msgstr "Intervalo de atualização"
+
+msgid "Every 5 minutes"
+msgstr "A cada 5 minutos"
+
+msgid "Every 15 minutes"
+msgstr "A cada 15 minutos"
+
+msgid "Every 30 minutes"
+msgstr "A cada 30 minutos"
+
+msgid "Every hour"
+msgstr "A cada hora"
+
+msgid "min"
+msgstr "min"
+
+msgid "Also copy to folder"
+msgstr "Copiar também para a pasta"
+
+msgid "Also copy to a shared folder…"
+msgstr "Copiar também para uma pasta partilhada…"
+
+msgid "Choose a folder to also save the image to"
+msgstr "Escolha uma pasta onde também guardar a imagem"
+
+msgid "Image will also be copied to:\n{path}\n\nOn Android, point your system wallpaper picker (or a wallpaper-changer app) at this folder."
+msgstr "A imagem também será copiada para:\n{path}\n\nNo Android, aponte o seletor de papel de parede do sistema (ou uma aplicação de mudança de papel de parede) para esta pasta."
+
+msgid "Stop copying to that extra folder"
+msgstr "Parar de copiar para essa pasta extra"
+
+msgid "Also save as PocketBook power-off / boot logo"
+msgstr "Guardar também como logótipo de desligar/arranque do PocketBook"
+
+msgid "Save image now"
+msgstr "Guardar imagem agora"
+
+msgid "Image saved to: {path}"
+msgstr "Imagem guardada em: {path}"
+
+msgid "Image updated."
+msgstr "Imagem atualizada."
+
+msgid "Could not update the image."
+msgstr "Não foi possível atualizar a imagem."
+
+msgid "Could not create the image export folder."
+msgstr "Não foi possível criar a pasta de exportação de imagem."
+
+msgid "Could not write the image file."
+msgstr "Não foi possível escrever o ficheiro de imagem."
+
+msgid "On Android, KOReader's own sleep screen never shows, because locking the screen hands over to Android's own lock screen. Turn this on and Reading insights keeps a picture of the sleep screen (same content and background as set under Sleep screen) on disk, refreshed automatically; set that picture as your Android wallpaper the normal way, or point a wallpaper-changer app at the folder below."
+msgstr "No Android, o ecrã de suspensão do KOReader nunca aparece, porque ao bloquear o ecrã o controlo passa para o ecrã de bloqueio do Android. Ative esta opção e o Reading insights mantém no disco uma imagem do ecrã de suspensão (com o mesmo conteúdo e fundo definidos em Ecrã de suspensão), atualizada automaticamente; defina essa imagem como fundo do Android da forma habitual, ou aponte uma aplicação de mudança de fundos para a pasta abaixo."
+
+msgid "Could not draw the image (see the log for details)."
+msgstr "Não foi possível desenhar a imagem (veja o registo para detalhes)."
+
+msgid "Nothing to draw yet. Open a book and read a few pages first."
+msgstr "Ainda nada para desenhar. Abra um livro e leia algumas páginas."
+
+msgid "Show streak bar under covers"
+msgstr "Mostrar a barra de sequência sob as capas"
+
+msgid "Show the streak line under the covers on the reading calendar. When off (default), the covers are shown larger."
+msgstr "Mostrar a linha da sequência sob as capas no calendário de leitura. Quando desativado (predefinição), as capas são mostradas maiores."
+
+msgid "8-week reading trend"
+msgstr "Tendência de leitura de 8 semanas"

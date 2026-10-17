@@ -276,12 +276,6 @@ msgstr "Average daily pages, last 8 weeks"
 msgid "No reading data in the last 8 weeks"
 msgstr "No reading data in the last 8 weeks"
 
-msgid "avg time/day"
-msgstr "avg time/day"
-
-msgid "avg pages/day"
-msgstr "avg pages/day"
-
 msgid "page read today"
 msgstr "page read today"
 
@@ -641,9 +635,6 @@ msgstr "Use as sleep screen"
 msgid "Reading insights sleep screen"
 msgstr "Reading insights sleep screen"
 
-msgid "Sleep-screen indicator"
-msgstr "Sleep-screen indicator"
-
 msgid "Off"
 msgstr "Off"
 
@@ -671,14 +662,8 @@ msgstr "Instant"
 msgid "Slight delay (0.1s)"
 msgstr "Slight delay (0.1s)"
 
-msgid "sleeping…"
-msgstr "sleeping…"
-
 msgid "Indicator"
 msgstr "Indicator"
-
-msgid "\"(sleeping…)\" after the title"
-msgstr "\"(sleeping…)\" after the title"
 
 msgid "None"
 msgstr "None"
@@ -816,16 +801,13 @@ msgid "Peak activity (100%)"
 msgstr "Peak activity (100%)"
 
 msgid "Reading streak calendar"
-msgstr "Reading streak calendar"
+msgstr "Reading calendar"
 
 msgid "Daily streak day"
 msgstr "Daily streak day"
 
 msgid "Weekly streak gap day"
 msgstr "Weekly streak gap day"
-
-msgid "Book progress bar"
-msgstr "Book progress bar"
 
 msgid "Show long durations (24h+) as days"
 msgstr "Show long durations (24h+) as days"
@@ -896,20 +878,17 @@ msgstr "Reading insights: records"
 msgid "Show Records"
 msgstr "Show Records"
 
-msgid "Show Reading streak"
-msgstr "Show Reading streak"
+msgid "Show Reading calendar"
+msgstr "Show Reading calendar"
 
 msgid "Menu items"
 msgstr "Menu items"
 
-msgid "Reading streak"
-msgstr "Reading streak"
-
 msgid "Tick the popups that should be listed under Tools > Reading insights. The book popups only appear while a book is open."
 msgstr "Tick the popups that should be listed under Tools > Reading insights. The book popups only appear while a book is open."
 
-msgid "Reading insights: reading streak"
-msgstr "Reading insights: reading streak"
+msgid "Reading insights: reading calendar"
+msgstr "Reading insights: reading calendar"
 
 msgid "Reading insights: reading heatmap"
 msgstr "Reading insights: reading heatmap"
@@ -1060,15 +1039,6 @@ msgstr "You've met your weekly goal %1 week in a row."
 
 msgid "You've met your weekly goal %1 weeks in a row."
 msgstr "You've met your weekly goal %1 weeks in a row."
-
-msgid "Last 7 days layout"
-msgstr "Last 7 days layout"
-
-msgid "Compact"
-msgstr "Compact"
-
-msgid "Full"
-msgstr "Full"
 
 msgid "Last 7 days chapter bar order"
 msgstr "Last 7 days chapter bar order"
@@ -1682,18 +1652,6 @@ msgstr "Chapters per page"
 msgid "How many chapters the chapter bar shows at once before paging with the arrows."
 msgstr "How many chapters the chapter bar shows at once before paging with the arrows."
 
-msgid "Progress bar"
-msgstr "Progress bar"
-
-msgid "Show progress bar"
-msgstr "Show progress bar"
-
-msgid "Show the progress bar in the \"This book\" section."
-msgstr "Show the progress bar in the \"This book\" section."
-
-msgid "Progress bar height"
-msgstr "Progress bar height"
-
 msgid "Read portion color"
 msgstr "Read portion color"
 
@@ -1724,8 +1682,8 @@ msgstr "Week"
 msgid "Show week numbers"
 msgstr "Show week numbers"
 
-msgid "Add a \"Week\" column with each row's week number to the reading streak and Book progress calendars."
-msgstr "Add a \"Week\" column with each row's week number to the reading streak and Book progress calendars."
+msgid "Add a \"Week\" column with each row's week number to the Reading calendar and Book progress calendar."
+msgstr "Add a \"Week\" column with each row's week number to the Reading calendar and Book progress calendar."
 
 msgid "Popup position"
 msgstr "Popup position"
@@ -2053,3 +2011,198 @@ msgstr "book behind pace"
 
 msgid "books behind pace"
 msgstr "books behind pace"
+
+msgid "Last 7 days: time and pages row"
+msgstr "Last 7 days: time and pages row"
+
+msgid "Show a second row with the other metric (pages when the chart shows time, time when it shows pages) below the total and daily average."
+msgstr "Show a second row with the other metric (pages when the chart shows time, time when it shows pages) below the total and daily average."
+
+msgid "Last 7 days: compared to previous 7 days"
+msgstr "Last 7 days: compared to previous 7 days"
+
+msgid "Below the chart, show how the total and the daily average changed compared to the 7 days before."
+msgstr "Below the chart, show how the total and the daily average changed compared to the 7 days before."
+
+msgid "time vs prev. 7d"
+msgstr "time vs prev. 7d"
+
+msgid "vs prev. 7d"
+msgstr "vs prev. 7d"
+
+msgid "page vs prev. 7d"
+msgstr "page vs prev. 7d"
+
+msgid "pages vs prev. 7d"
+msgstr "pages vs prev. 7d"
+
+msgid "pg vs prev. 7d"
+msgstr "pg vs prev. 7d"
+
+msgid "daily avg pg"
+msgstr "daily avg pg"
+
+msgid "Daily / weekly goal bar"
+msgstr "Daily / weekly goal bar"
+
+msgid "Show a thin progress bar under the daily and weekly goal values."
+msgstr "Show a thin progress bar under the daily and weekly goal values."
+
+msgid "Progress bar"
+msgstr "Progress bar"
+
+msgid "Show a thin progress bar under the book percentage."
+msgstr "Show a thin progress bar under the book percentage."
+
+msgid "Loading ratings..."
+msgstr "Loading ratings..."
+
+msgid "Appearance"
+msgstr "Appearance"
+
+msgid "Heatmap & time of day"
+msgstr "Heatmap & time of day"
+
+msgid "Chart style"
+msgstr "Chart style"
+
+msgid "Chart layout"
+msgstr "Chart layout"
+
+msgid "Bar order"
+msgstr "Bar order"
+
+msgid "Time and pages row"
+msgstr "Time and pages row"
+
+msgid "Comparison with previous 7 days row"
+msgstr "Comparison with previous 7 days row"
+
+msgid "Sleep screen"
+msgstr "Sleep screen"
+
+msgid "Content"
+msgstr "Content"
+
+msgid "Background"
+msgstr "Background"
+
+msgid "Book cover"
+msgstr "Book cover"
+
+msgid "Follow theme"
+msgstr "Follow theme"
+
+msgid "Custom image"
+msgstr "Custom image"
+
+msgid "Image fit"
+msgstr "Image fit"
+
+msgid "Fit"
+msgstr "Fit"
+
+msgid "Stretch"
+msgstr "Stretch"
+
+msgid "Zoom"
+msgstr "Zoom"
+
+msgid "Random"
+msgstr "Random"
+
+msgid "No images in {dir}"
+msgstr "No images in {dir}"
+
+msgid "Images are loaded from {dir}"
+msgstr "Images are loaded from {dir}"
+
+msgid "Preview"
+msgstr "Preview"
+
+msgid "Nothing to preview."
+msgstr "Nothing to preview."
+
+msgid "Image export (Android wallpaper / PocketBook logo)"
+msgstr "Image export (Android wallpaper / PocketBook logo)"
+
+msgid "Save as image, kept up to date"
+msgstr "Save as image, kept up to date"
+
+msgid "Also save when opening a book"
+msgstr "Also save when opening a book"
+
+msgid "Image format"
+msgstr "Image format"
+
+msgid "Refresh interval"
+msgstr "Refresh interval"
+
+msgid "Every 5 minutes"
+msgstr "Every 5 minutes"
+
+msgid "Every 15 minutes"
+msgstr "Every 15 minutes"
+
+msgid "Every 30 minutes"
+msgstr "Every 30 minutes"
+
+msgid "Every hour"
+msgstr "Every hour"
+
+msgid "min"
+msgstr "min"
+
+msgid "Also copy to folder"
+msgstr "Also copy to folder"
+
+msgid "Also copy to a shared folder…"
+msgstr "Also copy to a shared folder…"
+
+msgid "Choose a folder to also save the image to"
+msgstr "Choose a folder to also save the image to"
+
+msgid "Image will also be copied to:\n{path}\n\nOn Android, point your system wallpaper picker (or a wallpaper-changer app) at this folder."
+msgstr "Image will also be copied to:\n{path}\n\nOn Android, point your system wallpaper picker (or a wallpaper-changer app) at this folder."
+
+msgid "Stop copying to that extra folder"
+msgstr "Stop copying to that extra folder"
+
+msgid "Also save as PocketBook power-off / boot logo"
+msgstr "Also save as PocketBook power-off / boot logo"
+
+msgid "Save image now"
+msgstr "Save image now"
+
+msgid "Image saved to: {path}"
+msgstr "Image saved to: {path}"
+
+msgid "Image updated."
+msgstr "Image updated."
+
+msgid "Could not update the image."
+msgstr "Could not update the image."
+
+msgid "Could not create the image export folder."
+msgstr "Could not create the image export folder."
+
+msgid "Could not write the image file."
+msgstr "Could not write the image file."
+
+msgid "On Android, KOReader's own sleep screen never shows, because locking the screen hands over to Android's own lock screen. Turn this on and Reading insights keeps a picture of the sleep screen (same content and background as set under Sleep screen) on disk, refreshed automatically; set that picture as your Android wallpaper the normal way, or point a wallpaper-changer app at the folder below."
+msgstr "On Android, KOReader's own sleep screen never shows, because locking the screen hands over to Android's own lock screen. Turn this on and Reading insights keeps a picture of the sleep screen (same content and background as set under Sleep screen) on disk, refreshed automatically; set that picture as your Android wallpaper the normal way, or point a wallpaper-changer app at the folder below."
+
+msgid "Could not draw the image (see the log for details)."
+msgstr "Could not draw the image (see the log for details)."
+
+msgid "Nothing to draw yet. Open a book and read a few pages first."
+msgstr "Nothing to draw yet. Open a book and read a few pages first."
+
+msgid "Show streak bar under covers"
+msgstr "Show streak bar under covers"
+
+msgid "Show the streak line under the covers on the reading calendar. When off (default), the covers are shown larger."
+msgstr "Show the streak line under the covers on the reading calendar. When off (default), the covers are shown larger."
+
+msgid "8-week reading trend"
+msgstr "8-week reading trend"

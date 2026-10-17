@@ -118,7 +118,7 @@ end
 -- Newer view options, kept on one table for the reason in the header: a
 -- field costs no local, a top-level `local` costs one of the 200.
 M.Opt = {
-    -- Bar-chart height mode (Settings > Advanced settings > "Bar chart
+    -- Bar-chart height mode (Settings > Reading insight popup > "Bar chart
     -- height" > "Automatic (Reading insights)").
     --
     -- true (default): the weekly and monthly bar heights are not taken from
@@ -173,7 +173,7 @@ M.Opt = {
     built_monthly = false,
 
     -- Whether the "Reading goal" section is shown at all (Settings >
-    -- Advanced settings > "Reading goal section"). On by default. When off
+    -- Reading insight popup > "Reading goal"). On by default. When off
     -- the section is skipped while building the popup *and* its
     -- finished-book count is never queried (see _loadAndRebuild), so
     -- turning it off also removes its share of the work on every open.
@@ -246,11 +246,12 @@ M.Opt = {
     SHOW_PACE_DATES_KEY      = "reading_insights_book_show_pace_dates",
     SHOW_PACE_DATES_DEFAULT  = true,
 
-    -- Book progress popup: whether the progress bar (the black/gray filled
-    -- bar between the "This book" header and the percentage row) is shown.
-    -- On by default. See widgets/progressbarwidget.lua for the bar itself.
-    SHOW_PROGRESS_BAR_KEY     = "reading_insights_book_show_progress_bar",
-    SHOW_PROGRESS_BAR_DEFAULT = true,
+    -- Book progress popup: whether the thin (5 px) progress bars under the
+    -- "This chapter" value and under the book percentage are shown (drawn
+    -- with the chart's active / inactive bar colors, see UI.buildRowBar in
+    -- lib/uikit.lua). On by default.
+    SHOW_CELL_BARS_KEY     = "reading_insights_book_show_cell_bars",
+    SHOW_CELL_BARS_DEFAULT = true,
 
     -- Book progress popup: which rows / columns are shown. All on by default.
     -- A section whose parts are all off is hidden with its header (see
@@ -283,7 +284,7 @@ M.Opt = {
     BOOK_POPUP_POSITION_CENTER = "center",
 
     -- Book progress popup, "This book" section: "classic" is the original
-    -- rows (percent + pages, time read + time left, optional progress bar);
+    -- rows (percent + pages, time read + time left);
     -- "donut" replaces them with one large donut chart (percentage in the
     -- middle, "read" beside it) on the left and, after the column divider,
     -- pages / time read / time left stacked on the right. Settings >
@@ -301,7 +302,7 @@ M.Opt = {
 
 }
 
--- Reading heatmap period length (Prefs ▸ Advanced settings ▸ how many
+-- Reading heatmap period length (Settings ▸ Heatmap & time of day ▸ how many
 -- months the heatmap grid shows at once - 3, 4, 6 or 12). Read by
 -- getHeatmapPeriodRange below every time a heatmap page is built, so a
 -- change takes effect the next time the popup (re)opens/pages.
@@ -321,7 +322,7 @@ function M.saveHeatmapMonthsSetting(value)
     M.saveNumSetting(M.SETTINGS_KEY_HEATMAP_MONTHS, value)
 end
 
--- Time-of-day heatmap hour format (Prefs ▸ Advanced settings ▸ Date & time
+-- Time-of-day heatmap hour format (Settings ▸ Date & time
 -- ▸ "Time format" - 24-hour or 12-hour AM/PM). Previously the hour header
 -- always showed 24-hour labels ("00".."21"); this is now an explicit,
 -- language-independent setting instead of silently following the
@@ -409,7 +410,7 @@ function M.saveFinishedOverrides(year, overrides)
     Prefs.save(M.finishedOverridesSettingsKey(year), overrides)
 end
 
--- Week start day for both reading heatmaps (Prefs ▸ Advanced settings ▸ Date
+-- Week start day for both reading heatmaps (Settings ▸ Date
 -- & time ▸ "First day of week" - Monday or Sunday). This is the same global
 -- Book progress calendar keys off, so it now lives in the shared
 -- Settings module (see settings.lua); these thin wrappers keep the existing
@@ -433,7 +434,7 @@ end
 
 -- Whether the Reading streak calendar and the Book progress calendar draw
 -- an extra "Week" column to the left of their day columns, showing each row's
--- ISO week number (Prefs ▸ Advanced settings ▸ Date & time ▸ "Show week
+-- ISO week number (Settings ▸ Date & time ▸ "Show week
 -- numbers"). Off by default so neither calendar gets narrower day cells for
 -- anyone who hasn't asked for this. Read by streak_calendar_view.lua and
 -- book_calendar_view.lua every time their month grid is (re)built.
@@ -445,6 +446,21 @@ end
 
 function M.saveShowWeekNumbers(value)
     M.saveBoolSetting(M.SETTINGS_KEY_SHOW_WEEK_NUMBERS, value)
+end
+
+-- Whether the Reading streak calendar draws the streak line (the dark
+-- "read day" / light "week with reading" bar) under the covers in each day
+-- cell. Off by default: without the line the covers get that height too and
+-- are shown larger. Read by streak_calendar_view.lua every time its month
+-- grid is (re)built.
+M.SETTINGS_KEY_SHOW_STREAK_BAR = "reading_insights_calendar_show_streak_bar"
+
+function M.readShowStreakBar()
+    return M.readBoolSetting(M.SETTINGS_KEY_SHOW_STREAK_BAR, false)
+end
+
+function M.saveShowStreakBar(value)
+    M.saveBoolSetting(M.SETTINGS_KEY_SHOW_STREAK_BAR, value)
 end
 
 M.INSIGHTS_MODE_KEY = "reading_insights_popup_mode"
@@ -508,6 +524,7 @@ M.TIME_GOAL_MAX_MIN       = 9999
 M.SETTINGS_KEY_DAILY_GOAL_MIN  = "reading_insights_daily_goal_min"
 M.SETTINGS_KEY_WEEKLY_GOAL_MIN = "reading_insights_weekly_goal_min"
 M.SETTINGS_KEY_SHOW_TIME_GOALS = "reading_insights_show_time_goals"
+M.SETTINGS_KEY_SHOW_TIME_GOAL_BAR = "reading_insights_show_time_goal_bar"
 
 -- Whether the "Daily goal | Weekly goal" section is drawn (default: on).
 function M.readShowTimeGoals()
@@ -516,6 +533,16 @@ end
 
 function M.saveShowTimeGoals(value)
     Prefs.save(M.SETTINGS_KEY_SHOW_TIME_GOALS, value and true or false)
+end
+
+-- Whether the thin (5 px) progress bar under the daily / weekly goal values
+-- is drawn (default: on).
+function M.readShowTimeGoalBar()
+    return Prefs.read(M.SETTINGS_KEY_SHOW_TIME_GOAL_BAR, true) ~= false
+end
+
+function M.saveShowTimeGoalBar(value)
+    Prefs.save(M.SETTINGS_KEY_SHOW_TIME_GOAL_BAR, value and true or false)
 end
 
 function M.readDailyGoalMinutes()
@@ -538,26 +565,36 @@ function M.saveWeeklyGoalMinutes(value)
     Prefs.save(M.SETTINGS_KEY_WEEKLY_GOAL_MIN, value)
 end
 
--- "Last 7 days" layout (Prefs > Advanced settings > Reading insight popup >
--- "Last 7 days layout"). "compact" (default): one row with the week's total and
--- the daily average, for time or pages depending on the chart mode toggled by
--- tapping the header. "full": the previous layout with time and pages
--- (totals and daily averages) all shown at once.
-M.SETTINGS_KEY_WEEKLY_LAYOUT = "reading_insights_weekly_layout"
-M.WEEKLY_LAYOUT_COMPACT = "compact"
-M.WEEKLY_LAYOUT_FULL    = "full"
+-- "Last 7 days" section rows (Settings > Reading insight
+-- popup > "Last 7 days"). The compact row (total + daily average of the
+-- selected chart mode, time or pages) is always shown. Two optional extras,
+-- both off by default and independent of each other:
+--   * "Time and pages row": a second row with the other metric (pages when
+--     the chart shows time, time when it shows pages), i.e. what the old
+--     "full" layout added to the compact one.
+--   * "Compared to previous 7 days": under the chart, after a thin divider,
+--     the change of the total and of the daily average against the 7 days
+--     before the last 7 days.
+M.SETTINGS_KEY_WEEKLY_EXTRA_ROW = "reading_insights_weekly_extra_row"
+M.SETTINGS_KEY_WEEKLY_VS_PREV   = "reading_insights_weekly_vs_prev_week"
 
-function M.readWeeklyLayoutSetting()
-    local v = Prefs.read(M.SETTINGS_KEY_WEEKLY_LAYOUT, nil)
-    if v == M.WEEKLY_LAYOUT_FULL then return M.WEEKLY_LAYOUT_FULL end
-    return M.WEEKLY_LAYOUT_COMPACT
+function M.readWeeklyExtraRow()
+    return M.readBoolSetting(M.SETTINGS_KEY_WEEKLY_EXTRA_ROW, false)
 end
 
-function M.saveWeeklyLayoutSetting(value)
-    Prefs.save(M.SETTINGS_KEY_WEEKLY_LAYOUT, value)
+function M.saveWeeklyExtraRow(value)
+    M.saveBoolSetting(M.SETTINGS_KEY_WEEKLY_EXTRA_ROW, value)
 end
 
--- "Last 7 days" bar order (Prefs ▸ Advanced settings ▸ Reading insight popup ▸
+function M.readWeeklyVsPrev()
+    return M.readBoolSetting(M.SETTINGS_KEY_WEEKLY_VS_PREV, false)
+end
+
+function M.saveWeeklyVsPrev(value)
+    M.saveBoolSetting(M.SETTINGS_KEY_WEEKLY_VS_PREV, value)
+end
+
+-- "Last 7 days" bar order (Settings ▸ Reading insight popup ▸
 -- "Last 7 days chapter bar order"). The chart's data always arrives with index
 -- 1 = today; this only decides which end of the row that first bar is drawn
 -- at, so everything keyed off "bar 1 is today" (the highlight colour, the tap
@@ -581,10 +618,10 @@ function M.saveWeeklyBarOrderSetting(value)
 end
 
 -- Layout of the yearly (months) bar chart in the Reading insights popup
--- (Settings > Reading insight popup > "Months chart layout"). "two_rows" is
--- the default and what the chart always did: two rows of 6 months in
--- portrait. "one_row" draws all 12 months in a single row. Landscape always
--- uses a single row regardless of this setting.
+-- (Settings > Reading insight popup > "Months chart layout"). "one_row" is
+-- the default: all 12 months in a single row. "two_rows" draws two rows of
+-- 6 months in portrait. Landscape always uses a single row regardless of
+-- this setting.
 M.SETTINGS_KEY_MONTHLY_LAYOUT = "reading_insights_monthly_chart_layout"
 
 M.MONTHLY_LAYOUT_TWO_ROWS = "two_rows"
@@ -593,8 +630,8 @@ M.MONTHLY_LAYOUT_ONE_ROW  = "one_row"
 
 function M.readMonthlyLayoutSetting()
     local v = Prefs.read(M.SETTINGS_KEY_MONTHLY_LAYOUT, nil)
-    if v == M.MONTHLY_LAYOUT_ONE_ROW then return M.MONTHLY_LAYOUT_ONE_ROW end
-    return M.MONTHLY_LAYOUT_TWO_ROWS
+    if v == M.MONTHLY_LAYOUT_TWO_ROWS then return M.MONTHLY_LAYOUT_TWO_ROWS end
+    return M.MONTHLY_LAYOUT_ONE_ROW
 end
 
 function M.saveMonthlyLayoutSetting(value)
@@ -822,12 +859,12 @@ function M.Opt.saveBookSectionStyle(value)
     Prefs.save(M.Opt.BOOK_SECTION_STYLE_KEY, value)
 end
 
-function M.Opt.readShowProgressBar()
-    return M.readBoolSetting(M.Opt.SHOW_PROGRESS_BAR_KEY, M.Opt.SHOW_PROGRESS_BAR_DEFAULT)
+function M.Opt.readShowCellBars()
+    return M.readBoolSetting(M.Opt.SHOW_CELL_BARS_KEY, M.Opt.SHOW_CELL_BARS_DEFAULT)
 end
 
-function M.Opt.saveShowProgressBar(value)
-    M.saveBoolSetting(M.Opt.SHOW_PROGRESS_BAR_KEY, value)
+function M.Opt.saveShowCellBars(value)
+    M.saveBoolSetting(M.Opt.SHOW_CELL_BARS_KEY, value)
 end
 
 -- Reading insights popup's title-bar hamburger menu (Settings > Advanced

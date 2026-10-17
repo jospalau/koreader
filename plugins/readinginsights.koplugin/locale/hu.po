@@ -202,13 +202,13 @@ msgid "Reading insights popup title"
 msgstr "Olvasási áttekintés"
 
 msgid "Reading insights: all time statistics"
-msgstr "Reading insights: összesített statisztika"
+msgstr "Olvasási áttekintés: összesített statisztika"
 
 msgid "Reading insights: current book progress"
-msgstr "Reading insights: aktuális könyv haladása"
+msgstr "Olvasási áttekintés: aktuális könyv haladása"
 
 msgid "Reading insights: book progress calendar"
-msgstr "Reading insights: könyv haladási naptár"
+msgstr "Olvasási áttekintés: könyv haladási naptár"
 
 msgid "All books %1"
 msgstr "Összes könyv: %1"
@@ -229,10 +229,10 @@ msgid "Set"
 msgstr "Beállítás"
 
 msgid "daily avg page"
-msgstr "napi átl. oldalszám"
+msgstr "napi átlagos oldal"
 
 msgid "daily avg pages"
-msgstr "napi átl. oldalszám"
+msgstr "napi átlagos oldal"
 
 msgid "Today"
 msgstr "Ma"
@@ -262,7 +262,7 @@ msgid "Sun"
 msgstr "V"
 
 msgid "daily avg time"
-msgstr "napi átl. idő"
+msgstr "napi átlagos idő"
 
 msgid "reading time"
 msgstr "olvasási idő"
@@ -290,12 +290,6 @@ msgstr "Elmúlt 8 hét átlagos napi oldalszáma"
 
 msgid "No reading data in the last 8 weeks"
 msgstr "Nincs olvasási adat az elmúlt 8 héten"
-
-msgid "avg time/day"
-msgstr "napi átlagos idő"
-
-msgid "avg pages/day"
-msgstr "napi átlagos oldal"
 
 msgid "page read today"
 msgstr "oldal olvasva ma"
@@ -657,13 +651,10 @@ msgstr "Elkezdve:"
 msgid "Expected finish:"
 msgstr "Várható befejezés:"
 msgid "Use as sleep screen"
-msgstr "Használat alvó képernyőként"
+msgstr "Használat alvóképernyőként"
 
 msgid "Reading insights sleep screen"
-msgstr "Reading insights alvó képernyő"
-
-msgid "Sleep-screen indicator"
-msgstr "Alvó képernyő jelzés"
+msgstr "Olvasási áttekintés alvóképernyő"
 
 msgid "Off"
 msgstr "Ki"
@@ -692,14 +683,8 @@ msgstr "Azonnali"
 msgid "Slight delay (0.1s)"
 msgstr "Kis késleltetés (0,1 mp)"
 
-msgid "sleeping…"
-msgstr "alvó mód…"
-
 msgid "Indicator"
 msgstr "Jelzés"
-
-msgid "\"(sleeping…)\" after the title"
-msgstr "„(alvó mód…)” a cím után"
 
 msgid "None"
 msgstr "Semmi"
@@ -837,16 +822,13 @@ msgid "Peak activity (100%)"
 msgstr "Csúcsaktivitás (100%)"
 
 msgid "Reading streak calendar"
-msgstr "Olvasási széria naptár"
+msgstr "Olvasási naptár"
 
 msgid "Daily streak day"
 msgstr "Napi széria napja"
 
 msgid "Weekly streak gap day"
 msgstr "Heti széria kihagyott napja"
-
-msgid "Book progress bar"
-msgstr "Könyv előrehaladás-sáv"
 
 msgid "Show long durations (24h+) as days"
 msgstr "24 óra feletti időtartamok napokban"
@@ -912,28 +894,25 @@ msgid "%d hours left"
 msgstr "%d óra van hátra"
 
 msgid "Reading insights: records"
-msgstr "Reading insights: rekordok"
+msgstr "Olvasási áttekintés: rekordok"
 
 msgid "Show Records"
 msgstr "Rekordok megjelenítése"
 
-msgid "Show Reading streak"
-msgstr "Olvasási széria megjelenítése"
+msgid "Show Reading calendar"
+msgstr "Olvasási naptár megjelenítése"
 
 msgid "Menu items"
 msgstr "Menüelemek"
 
-msgid "Reading streak"
-msgstr "Olvasási széria"
-
 msgid "Tick the popups that should be listed under Tools > Reading insights. The book popups only appear while a book is open."
 msgstr "Pipáld be, mely ablakok jelenjenek meg az Eszközök > Reading insights menüben. A könyves ablakok csak megnyitott könyvnél jelennek meg."
 
-msgid "Reading insights: reading streak"
-msgstr "Reading insights: olvasási széria"
+msgid "Reading insights: reading calendar"
+msgstr "Olvasási áttekintés: olvasási naptár"
 
 msgid "Reading insights: reading heatmap"
-msgstr "Reading insights: olvasási hőtérkép"
+msgstr "Olvasási áttekintés: olvasási hőtérkép"
 
 msgid "Show Reading heatmap"
 msgstr "Olvasási hőtérkép megjelenítése"
@@ -1070,15 +1049,6 @@ msgstr "Az elmúlt %1 hétben egymás után teljesítetted a heti célt."
 msgid "You've met your weekly goal %1 weeks in a row."
 msgstr "Az elmúlt %1 hétben egymás után teljesítetted a heti célt."
 
-msgid "Last 7 days layout"
-msgstr "Elmúlt 7 nap elrendezése"
-
-msgid "Compact"
-msgstr "Kompakt"
-
-msgid "Full"
-msgstr "Teljes"
-
 msgid "Last 7 days chapter bar order"
 msgstr "Elmúlt 7 nap oszlopainak sorrendje"
 
@@ -1128,7 +1098,7 @@ msgid "Show Achievements"
 msgstr "Teljesítmények megnyitása"
 
 msgid "Reading insights: achievements"
-msgstr "Reading insights: teljesítmények"
+msgstr "Olvasási áttekintés: teljesítmények"
 
 msgid "earned"
 msgstr "megszerezve"
@@ -1715,18 +1685,6 @@ msgstr "Fejezetek oldalanként"
 msgid "How many chapters the chapter bar shows at once before paging with the arrows."
 msgstr "Hány fejezetet mutat egyszerre a fejezetsáv, mielőtt a nyilakkal lapozni kell."
 
-msgid "Progress bar"
-msgstr "Előrehaladás-sáv"
-
-msgid "Show progress bar"
-msgstr "Előrehaladás-sáv megjelenítése"
-
-msgid "Show the progress bar in the \"This book\" section."
-msgstr "Az előrehaladás-sáv megjelenítése a „Könyv” szakaszban."
-
-msgid "Progress bar height"
-msgstr "Előrehaladás-sáv magassága"
-
 msgid "Read portion color"
 msgstr "Elolvasott rész színe"
 
@@ -1757,8 +1715,8 @@ msgstr "Hét"
 msgid "Show week numbers"
 msgstr "Hetek számának megjelenítése"
 
-msgid "Add a \"Week\" column with each row's week number to the reading streak and Book progress calendars."
-msgstr "„Hét” oszlop hozzáadása, amely soronként a hét számát mutatja az olvasási széria és a könyv haladási naptárakon."
+msgid "Add a \"Week\" column with each row's week number to the Reading calendar and Book progress calendar."
+msgstr "„Hét” oszlop hozzáadása, amely soronként a hét számát mutatja az olvasási naptárban és a könyv haladási naptárban."
 
 msgid "Popup position"
 msgstr "Ablak helyzete"
@@ -1854,7 +1812,7 @@ msgid "Show Book info"
 msgstr "Könyvinformáció megnyitása"
 
 msgid "Reading insights: book info"
-msgstr "Reading insights: könyvinformáció"
+msgstr "Olvasási áttekintés: könyvinformáció"
 
 msgid "Book info"
 msgstr "Könyvinformáció"
@@ -2065,3 +2023,198 @@ msgstr "könyvvel hátrébb"
 
 msgid "books behind pace"
 msgstr "könyvvel hátrébb"
+
+msgid "Last 7 days: time and pages row"
+msgstr "Elmúlt 7 nap: idő és oldalak sor"
+
+msgid "Show a second row with the other metric (pages when the chart shows time, time when it shows pages) below the total and daily average."
+msgstr "Második sor megjelenítése a másik mutatóval (oldalak, ha a diagram időt mutat; idő, ha oldalakat) az összeg és a napi átlag alatt."
+
+msgid "Last 7 days: compared to previous 7 days"
+msgstr "Elmúlt 7 nap: összevetés az előző 7 nappal"
+
+msgid "Below the chart, show how the total and the daily average changed compared to the 7 days before."
+msgstr "A diagram alatt mutatja, mennyit változott az összeg és a napi átlag az azt megelőző 7 naphoz képest."
+
+msgid "time vs prev. 7d"
+msgstr "idő vs előző 7 nap"
+
+msgid "vs prev. 7d"
+msgstr "vs előző 7 nap"
+
+msgid "page vs prev. 7d"
+msgstr "oldal vs előző 7 nap"
+
+msgid "pages vs prev. 7d"
+msgstr "oldal vs előző 7 nap"
+
+msgid "pg vs prev. 7d"
+msgstr "old. vs előző 7 n."
+
+msgid "daily avg pg"
+msgstr "napi átl. old."
+
+msgid "Daily / weekly goal bar"
+msgstr "Napi / heti cél sáv"
+
+msgid "Show a thin progress bar under the daily and weekly goal values."
+msgstr "Vékony folyamatsáv megjelenítése a napi és heti cél értékei alatt."
+
+msgid "Progress bar"
+msgstr "Folyamatsáv"
+
+msgid "Show a thin progress bar under the book percentage."
+msgstr "Vékony folyamatsáv megjelenítése a könyv százaléka alatt."
+
+msgid "Loading ratings..."
+msgstr "Értékelések betöltése..."
+
+msgid "Appearance"
+msgstr "Megjelenés"
+
+msgid "Heatmap & time of day"
+msgstr "Heatmap és napszak"
+
+msgid "Chart style"
+msgstr "Diagram stílusa"
+
+msgid "Chart layout"
+msgstr "Diagram elrendezése"
+
+msgid "Bar order"
+msgstr "Oszlopok sorrendje"
+
+msgid "Time and pages row"
+msgstr "Idő és oldalak sor"
+
+msgid "Comparison with previous 7 days row"
+msgstr "Összevetés az előző 7 nappal sor"
+
+msgid "Sleep screen"
+msgstr "Alvóképernyő"
+
+msgid "Content"
+msgstr "Tartalom"
+
+msgid "Background"
+msgstr "Háttérkép"
+
+msgid "Book cover"
+msgstr "Könyvborító"
+
+msgid "Follow theme"
+msgstr "Téma követése"
+
+msgid "Custom image"
+msgstr "Saját kép"
+
+msgid "Image fit"
+msgstr "Kép illesztése"
+
+msgid "Fit"
+msgstr "Illesztés"
+
+msgid "Stretch"
+msgstr "Nyújtás"
+
+msgid "Zoom"
+msgstr "Nagyítás"
+
+msgid "Random"
+msgstr "Véletlenszerű"
+
+msgid "No images in {dir}"
+msgstr "Nincs kép itt: {dir}"
+
+msgid "Images are loaded from {dir}"
+msgstr "A képek innen töltődnek be: {dir}"
+
+msgid "Preview"
+msgstr "Előnézet"
+
+msgid "Nothing to preview."
+msgstr "Nincs mit megjeleníteni."
+
+msgid "Image export (Android wallpaper / PocketBook logo)"
+msgstr "Kép exportálása (Android háttérkép / PocketBook logó)"
+
+msgid "Save as image, kept up to date"
+msgstr "Mentés képként, folyamatosan frissítve"
+
+msgid "Also save when opening a book"
+msgstr "Mentés könyv megnyitásakor is"
+
+msgid "Image format"
+msgstr "Képformátum"
+
+msgid "Refresh interval"
+msgstr "Frissítési gyakoriság"
+
+msgid "Every 5 minutes"
+msgstr "5 percenként"
+
+msgid "Every 15 minutes"
+msgstr "15 percenként"
+
+msgid "Every 30 minutes"
+msgstr "30 percenként"
+
+msgid "Every hour"
+msgstr "Óránként"
+
+msgid "min"
+msgstr "perc"
+
+msgid "Also copy to folder"
+msgstr "Másolás ide is"
+
+msgid "Also copy to a shared folder…"
+msgstr "Másolás egy megosztott mappába is…"
+
+msgid "Choose a folder to also save the image to"
+msgstr "Válaszd ki a mappát, ahova a kép is bekerüljön"
+
+msgid "Image will also be copied to:\n{path}\n\nOn Android, point your system wallpaper picker (or a wallpaper-changer app) at this folder."
+msgstr "A kép ide is bemásolódik:\n{path}\n\nAndroidon a rendszer háttérkép-választóját (vagy egy háttérkép-váltogató appot) irányítsd erre a mappára."
+
+msgid "Stop copying to that extra folder"
+msgstr "Extra mappába másolás leállítása"
+
+msgid "Also save as PocketBook power-off / boot logo"
+msgstr "Mentés PocketBook kikapcsolási / boot logóként is"
+
+msgid "Save image now"
+msgstr "Kép mentése most"
+
+msgid "Image saved to: {path}"
+msgstr "A kép ide mentődik: {path}"
+
+msgid "Image updated."
+msgstr "A kép frissült."
+
+msgid "Could not update the image."
+msgstr "A kép frissítése nem sikerült."
+
+msgid "Could not create the image export folder."
+msgstr "Nem sikerült létrehozni a kép exportálási mappáját."
+
+msgid "Could not write the image file."
+msgstr "Nem sikerült írni a képfájlt."
+
+msgid "On Android, KOReader's own sleep screen never shows, because locking the screen hands over to Android's own lock screen. Turn this on and Reading insights keeps a picture of the sleep screen (same content and background as set under Sleep screen) on disk, refreshed automatically; set that picture as your Android wallpaper the normal way, or point a wallpaper-changer app at the folder below."
+msgstr "Androidon a KOReader saját alvóképernyője sosem jelenik meg, mert a képernyő zárolásakor az Android saját zárolási képernyője veszi át az irányítást. Kapcsold be ezt, és a Reading insights egy képet tart a lemezen az alvóképernyőről (ugyanazzal a tartalommal és háttérrel, mint amit az Alvóképernyő alatt beállítottál), automatikusan frissítve; ezt a képet a szokásos módon állítsd be Android háttérképnek, vagy irányíts egy háttérképváltó alkalmazást az alábbi mappára."
+
+msgid "Could not draw the image (see the log for details)."
+msgstr "Nem sikerült megrajzolni a képet (a részletekért lásd a naplót)."
+
+msgid "Nothing to draw yet. Open a book and read a few pages first."
+msgstr "Még nincs mit megrajzolni. Nyiss meg egy könyvet, és olvass néhány oldalt."
+
+msgid "Show streak bar under covers"
+msgstr "Széria sáv megjelenítése a borítók alatt"
+
+msgid "Show the streak line under the covers on the reading calendar. When off (default), the covers are shown larger."
+msgstr "A széria vonalának megjelenítése a borítók alatt az olvasási naptárban. Kikapcsolva (alapértelmezett) a borítók nagyobbak."
+
+msgid "8-week reading trend"
+msgstr "8 hetes olvasási trend"

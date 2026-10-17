@@ -159,7 +159,7 @@ function M.heatmapFixedNumCols()
 end
 
 -- Lays [start_t, end_t] out into week columns starting on the configured
--- week start day (Settings ▸ Advanced settings ▸ Date & time ▸ "First day
+-- week start day (Settings ▸ Date & time ▸ "First day
 -- of week" - see VS.weekStartWday), UI.padded at both ends so every column
 -- has a full 7 days
 -- (leading/trailing days outside the period are kept but marked
@@ -252,7 +252,7 @@ end
 -- Mon/Wed/Fri labels run down the left side of both heatmap grids, three
 -- rows apart, same as GitHub's contribution graph (the in-between rows
 -- get no label). Which row each label lands on depends on the configured
--- week start day (Settings ▸ Advanced settings ▸ Date & time ▸ "First day
+-- week start day (Settings ▸ Date & time ▸ "First day
 -- of week"): row 1 is Monday when weeks start on Monday (labels on rows
 -- 1/3/5), or Sunday when weeks start on Sunday (labels shift down a row,
 -- to rows 2/4/6).
@@ -324,7 +324,7 @@ function M.buildRangeHeatmapWidget(daily_map, start_t, end_t, fonts, max_width)
     -- grid past the popup's right edge.
     local min_cell   = Screen:scaleBySize(4)
     -- No upper cap: for shorter heatmap ranges (fewer columns - see
-    -- Settings ▸ Advanced settings ▸ Reading insight popup ▸ "Reading heatmap range"), the cells
+    -- Settings ▸ Reading insight popup ▸ "Reading heatmap range"), the cells
     -- grow proportionally to use the full available width instead of
     -- leaving empty space to the right of a small fixed-size grid.
     if cell_size < min_cell then cell_size = min_cell end
@@ -547,7 +547,7 @@ function M.buildRangeHeatmapWidget(daily_map, start_t, end_t, fonts, max_width)
     local widget = VerticalGroup:new{
         align = "left",
         labels_row_final,
-        VerticalSpan:new{ height = Size.padding.small },
+        VerticalSpan:new{ width = Size.padding.small },
     }
     for row = 1, 7 do
         local row_group = HorizontalGroup:new{ align = "center" }
@@ -612,7 +612,7 @@ end
 
 -- Builds the hour-of-day label row + the 7-row/24-column "time of day"
 -- grid: one column per hour (0-23), one row per weekday (order and start
--- day set by Settings ▸ Advanced settings ▸ Date & time ▸ "First day of
+-- day set by Settings ▸ Date & time ▸ "First day of
 -- week" - see weekdayRowOrder/getWeekdayRowLabels; hour labels honour
 -- "Time format" - see formatHeatmapHourLabel), each cell shaded by total
 -- reading time in that weekday+hour slot relative to the busiest slot
@@ -648,7 +648,7 @@ function M.buildDayPartHeatmapWidget(weekday_hour_map, fonts, max_width)
 
     -- Hour labels every 3 columns ("00", "03", ... "21" in 24-hour format,
     -- or "12a", "3a", ... "9p" in 12-hour format - see
-    -- formatHeatmapHourLabel/Settings ▸ Advanced settings ▸ Date & time ▸
+    -- formatHeatmapHourLabel/Settings ▸ Date & time ▸
     -- "Time format"), same slot width as the grid below so each label lines up
     -- with its column, prefixed with a spacer matching the weekday-label
     -- column + gap.
@@ -682,7 +682,7 @@ function M.buildDayPartHeatmapWidget(weekday_hour_map, fonts, max_width)
     local widget = VerticalGroup:new{
         align = "left",
         labels_row,
-        VerticalSpan:new{ height = Size.padding.small },
+        VerticalSpan:new{ width = Size.padding.small },
     }
     for row = 1, 7 do
         local wd = row_order[row]
@@ -848,7 +848,7 @@ function M.buildDayPartChartWidget(weekday_hour_map, fonts, max_width, mode)
         local axis = VerticalGroup:new{
             align = "center",
             TextWidget:new{ text = dp.name(), face = fonts.small, fgcolor = Colors.small() },
-            VerticalSpan:new{ height = Size.padding.small },
+            VerticalSpan:new{ width = Size.padding.small },
             TextWidget:new{ text = daypartRangeLabel(dp.h_start, dp.h_end), face = fonts.small, fgcolor = Colors.label() },
         }
         table.insert(labels_row, CenterContainer:new{
@@ -865,7 +865,7 @@ function M.buildDayPartChartWidget(weekday_hour_map, fonts, max_width, mode)
     local widget = VerticalGroup:new{
         align = "left",
         bars_row,
-        VerticalSpan:new{ height = Size.padding.default },
+        VerticalSpan:new{ width = Size.padding.small },
         labels_row,
     }
 
@@ -899,7 +899,8 @@ function M.buildWeekdayChartWidget(weekday_hour_map, fonts, max_width, mode)
 
     local col_gap = Screen:scaleBySize(6)
     local col_w   = math.floor((max_width - (num_bars - 1) * col_gap) / num_bars)
-    local chart_h = math.floor(Screen:scaleBySize(VS.Opt.weeklyBarHeight()) * 0.6)
+    -- Same maximum bar height as the "When you read" chart above.
+    local chart_h = Screen:scaleBySize(VS.Opt.weeklyBarHeight())
     local min_bar = Screen:scaleBySize(2)
 
     local sample_val = TextWidget:new{ text = "0:00", face = fonts.small }
@@ -943,7 +944,7 @@ function M.buildWeekdayChartWidget(weekday_hour_map, fonts, max_width, mode)
     return VerticalGroup:new{
         align = "left",
         bars_row,
-        VerticalSpan:new{ width = Size.padding.default },
+        VerticalSpan:new{ width = Size.padding.small },
         labels_row,
     }
 end
@@ -1215,7 +1216,7 @@ local function buildBox(popup_self, periods_back, force_fresh, width_override, d
     -- the same distance the popup keeps between its content and its frame.
     -- (VerticalSpan takes its height from `width`; `height = ...` is ignored
     -- and reserves no space at all.)
-    local LEGEND_GAP = inner_padding
+    local LEGEND_GAP = Size.padding.small
     local function sectionSeparator()
         return LineWidget:new{
             dimen      = Geom:new{ w = content_width, h = Size.line.thin },
@@ -1245,7 +1246,7 @@ local function buildBox(popup_self, periods_back, force_fresh, width_override, d
             sectionSeparator(),
             VerticalSpan:new{ width = LEGEND_GAP },
             week_caption,
-            VerticalSpan:new{ height = Size.padding.small },
+            VerticalSpan:new{ width = Size.padding.small },
             leftAlign(weekday_widget),
         }
     end
@@ -1284,9 +1285,9 @@ local function buildBox(popup_self, periods_back, force_fresh, width_override, d
     local content = VerticalGroup:new{
         align = "center",
         calendar_header,
-        VerticalSpan:new{ height = Size.padding.large + Size.padding.default },
+        VerticalSpan:new{ width = Size.padding.small },
         caption(_("Reading calendar")),
-        VerticalSpan:new{ height = Size.padding.small },
+        VerticalSpan:new{ width = Size.padding.small },
         leftAlign(calendar_widget),
     }
 
@@ -1306,10 +1307,10 @@ local function buildBox(popup_self, periods_back, force_fresh, width_override, d
         table.insert(content, VerticalSpan:new{ width = LEGEND_GAP })
         when_caption = caption(_("When you read"))
         table.insert(content, when_caption)
-        table.insert(content, VerticalSpan:new{ height = Size.padding.small })
+        table.insert(content, VerticalSpan:new{ width = Size.padding.small })
         table.insert(content, leftAlign(day_part_widget))
         if peak_line then
-            table.insert(content, VerticalSpan:new{ width = Size.padding.default })
+            table.insert(content, VerticalSpan:new{ width = Size.padding.small })
             table.insert(content, peak_line)
         end
     else
@@ -1321,10 +1322,10 @@ local function buildBox(popup_self, periods_back, force_fresh, width_override, d
         table.insert(content, sectionSeparator())
         table.insert(content, VerticalSpan:new{ width = LEGEND_GAP })
         table.insert(content, caption(_("When you read")))
-        table.insert(content, VerticalSpan:new{ height = Size.padding.small })
+        table.insert(content, VerticalSpan:new{ width = Size.padding.small })
         table.insert(content, leftAlign(day_part_widget))
         if peak_line then
-            table.insert(content, VerticalSpan:new{ width = Size.padding.default })
+            table.insert(content, VerticalSpan:new{ width = Size.padding.small })
             table.insert(content, peak_line)
         end
         table.insert(content, VerticalSpan:new{ width = LEGEND_GAP })
@@ -1418,6 +1419,11 @@ M.Popup = InputContainer:extend{
     modal        = true,
     popup_self   = nil,   -- the ReadingInsightsPopup, for data access
     periods_back = 0,     -- 0 = most recent half-year, ending today
+    -- Sleep-screen use (see lib/sleepscreen.lua): everything is queried and
+    -- drawn inside init(), and nothing is scheduled for later - a deferred
+    -- revalidation could otherwise fire while the device is already going
+    -- to sleep.
+    readonly     = false,
 }
 
 function M.Popup:init()
@@ -1433,8 +1439,23 @@ function M.Popup:init()
         self.key_events.AnyKeyPressed = { { Device.input.group.Any } }
     end
 
-    self:_rebuild()
-    self:_scheduleRevalidate()
+    if self.readonly then
+        -- Fresh data now, not stale-then-revalidate: only re-query when
+        -- something was read since the last real fetch (the same single
+        -- cheap check _scheduleRevalidate uses), otherwise the cached
+        -- numbers are already current.
+        local fresh = true
+        if Cache.ENABLE_CACHE then
+            local watermark = Data.getMaxStartTime()
+            if watermark and watermark <= (Cache._heatmap_watermark or 0) then
+                fresh = false
+            end
+        end
+        self:_rebuild(fresh)
+    else
+        self:_rebuild()
+        self:_scheduleRevalidate()
+    end
 end
 
 function M.Popup:_rebuild(force_fresh)

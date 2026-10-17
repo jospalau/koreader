@@ -99,7 +99,7 @@ local MODES_MANUAL   = { "date", "rating" }
 -- the reader added themselves keep the "*" the checklist uses for the same
 -- meaning: set by hand, not by the statistics.
 -- A timestamp as a plain date, in the format picked under Settings ▸
--- Advanced settings ▸ Date & time ▸ "Date format" - the same one the
+-- Settings ▸ Date & time ▸ "Date format" - the same one the
 -- insights, records and stats popups print their dates in. Empty string
 -- for "no date known", so it simply leaves the column blank rather than
 -- printing an epoch.
@@ -111,12 +111,29 @@ end
 
 -- Looks each book's star rating up (from its sidecar, via the statistics
 -- DB's md5) and stores it on the record. Books added by hand carry their own
--- rating already.
+-- rating already. No Ratings.refresh() here: the quick map's TTL keeps it
+-- fresh enough, and rating a book (Ratings.save) updates it anyway.
 local function annotateRatings(books)
     for _idx, book in ipairs(books) do
         if not book.manual then
             book.rating = Ratings.get(book.md5) or 0
         end
+    end
+end
+
+-- The ratings are only worth looking up when the list shows them (the
+-- "rating" column) or is ordered by them: the lookup can rebuild the map of
+-- every book's sidecar, which is slow on a big library.
+local function isRatingSort(mode)
+    return mode == "rating_desc" or mode == "rating_asc"
+end
+
+-- annotateRatings, run synchronously (no "Loading ratings..." popup: the lookup
+-- is quick now that the sidecar results are kept in a file, see lib/ratings.lua).
+local function annotateRatingsWithNotice(books)
+    local ok, err = pcall(annotateRatings, books)
+    if not ok then
+        require("logger").warn("ReadingInsights: rating lookup failed: " .. tostring(err))
     end
 end
 
@@ -172,6 +189,17 @@ local function pickRating(title, current, on_pick)
     }
 end
 
+-- The author of a list book, for finding its file: the rows of the lists
+-- carry none, so it is read from the statistics DB when needed.
+local function authorsOf(book)
+    if book.authors and book.authors ~= "" then return book.authors end
+    if book.id_book and BookStatsData then
+        local ok, row = pcall(BookStatsData.getBookRow, book.id_book)
+        if ok and row and row.authors then return row.authors end
+    end
+    return nil
+end
+
 -- A book from the statistics DB: store the rating by its checksum (hand-added
 -- books carry their own and are handled where they are listed).
 local function rateStatsBook(book, on_done)
@@ -180,7 +208,17 @@ local function rateStatsBook(book, on_done)
         return
     end
     pickRating(book.title or _("Unknown"), book.rating, function(n)
-        Ratings.set(book.md5, n)
+        -- write into the book's own sidecar when its file is known (so the
+        -- file manager and status page agree); otherwise Ratings.save falls
+        -- back to the plugin's own store
+        -- exact lookup only (no title): a rating is never written into a
+        -- sidecar that was merely guessed from a file name
+        local file = Ratings.fileFor(book.md5)
+        if not Ratings.save(book.md5, n, file) then
+            -- nothing was stored: don't show the new stars in the list
+            UIManager:show(InfoMessage:new{ text = _("This book has no checksum, so its rating can't be saved") })
+            return
+        end
         book.rating = n
         on_done(n)
     end)
@@ -200,15 +238,17 @@ end
 -- opts.modal marks the list (and the book stats page a row opens) as modal,
 -- so it stacks above modal popups such as the streak calendar and the
 -- insights popup instead of opening behind them.
--- The author of a list book, for finding its file: the rows of the lists
--- carry none, so it is read from the statistics DB when needed.
-local function authorsOf(book)
-    if book.authors and book.authors ~= "" then return book.authors end
-    if book.id_book and BookStatsData then
-        local ok, row = pcall(BookStatsData.getBookRow, book.id_book)
-        if ok and row and row.authors then return row.authors end
+-- Drops the quick ratings map, so the next list reads the sidecars' current
+-- ratings (the file cache only re-opens the ones that changed). With `full`
+-- the ratings cache file is wiped too. Called by the insights popup's
+-- "reload data".
+function M.refreshRatings(full)
+    if not Ratings then return end
+    if full and Ratings.clearCache then
+        Ratings.clearCache()
+    elseif Ratings.refresh then
+        Ratings.refresh()
     end
-    return nil
 end
 
 function M.showBookList(title, books, on_close, stats_plugin, opts)
@@ -219,7 +259,6 @@ function M.showBookList(title, books, on_close, stats_plugin, opts)
         return
     end
 
-    annotateRatings(books)
     local display_modes = (opts and opts.show_dates) and MODES_DATED or MODES_PERIOD
     local display_key   = (opts and opts.show_dates) and DISPLAY_KEY_FINISHED or DISPLAY_KEY_BOOKS
     local display_mode  = ListWidget.readDisplayMode(display_key, display_modes)
@@ -295,11 +334,19 @@ function M.showBookList(title, books, on_close, stats_plugin, opts)
                         local ok, ts = pcall(Data.getFinishedTimestamp, book.id_book)
                         if ok then finished_ts = ts end
                     end
+                    local book_file, file_guessed
+                    if not book.manual then
+                        book_file, file_guessed = Ratings.fileFor(book.md5, book.title, authorsOf(book))
+                    end
                     UIManager:show(BookInfoPopup:new{
                         ui      = ui,
                         book    = book,
                         finished_ts = finished_ts,
-                        file    = (not book.manual) and Ratings.fileFor(book.md5, book.title, authorsOf(book)) or nil,
+                        file    = book_file,
+                        -- a file found by title is good for the cover and the
+                        -- description, but the rating is not read from / written
+                        -- into it
+                        file_guessed = file_guessed,
                         -- A hand-added book keeps its rating in the manual list.
                         save_rating = book.manual and function(n)
                             if not (book.manual_year and book.manual_id) then return false end
@@ -339,6 +386,16 @@ function M.showBookList(title, books, on_close, stats_plugin, opts)
     -- insights popup underneath it.
     local sort_mode = ListWidget.readSortMode(SORT_KEY_BOOKS)
 
+    -- Ratings are looked up the first time they are needed: when the list
+    -- opens in (or is switched to) the rating column or a rating order.
+    local ratings_loaded = false
+    local function ensureRatings()
+        if ratings_loaded then return end
+        if display_mode ~= "rating" and not isRatingSort(sort_mode) then return end
+        annotateRatingsWithNotice(books)
+        ratings_loaded = true
+    end
+
     local function sortedBooks()
         local sorted = {}
         for _idx, book in ipairs(books) do table.insert(sorted, book) end
@@ -350,6 +407,7 @@ function M.showBookList(title, books, on_close, stats_plugin, opts)
     end
 
     openPage = function(page)
+        ensureRatings()
         kv = KeyValuePage:new{
             show_page           = page or 1,
             title               = title,
@@ -524,9 +582,17 @@ function M.showFinishedChecklist(insights_popup, year)
     end
 
     local widget            -- the list below; the rows' long press asks it for its display mode
+    -- Ratings are only fetched when the list shows or sorts by them - at
+    -- opening, or later when the reader switches to that column / order (see
+    -- prepare_func below).
+    local ratings_loaded =
+        ListWidget.readDisplayMode(DISPLAY_KEY_CHECKLIST, MODES_DATED) == "rating"
+        or isRatingSort(ListWidget.readSortMode(SORT_KEY_CHECKLIST))
+    local item_of_book = {}
     local function buildItems()
       local item_table = {}
-      annotateRatings(books)
+      item_of_book = {}
+      if ratings_loaded then annotateRatingsWithNotice(books) end
       for _idx, book in ipairs(books) do
         local id_str = tostring(book.id_book)
         local item
@@ -561,6 +627,7 @@ function M.showFinishedChecklist(insights_popup, year)
                 item.text = rowText(book, id_str)
             end,
         }
+        item_of_book[item] = book
         table.insert(item_table, item)
       end
       return item_table
@@ -579,6 +646,19 @@ function M.showFinishedChecklist(insights_popup, year)
         sort_modes       = ListWidget.BOOK_SORT_MODES,
         display_modes    = MODES_DATED,
         display_setting_key = DISPLAY_KEY_CHECKLIST,
+        prepare_func     = function(self)
+            if ratings_loaded then return end
+            if self.display_mode ~= "rating" and not isRatingSort(self.sort_mode) then return end
+            ratings_loaded = true
+            annotateRatingsWithNotice(books)
+            for _idx, it in ipairs(self.item_table) do
+                local b = item_of_book[it]
+                if b then
+                    it.values      = valueTable(b)
+                    it.sort_rating = b.rating or 0
+                end
+            end
+        end,
         show_ok_cancel   = true,
         -- Offered next to the sort orders in the title bar's menu: re-runs
         -- both queries, so a book finished while this list was open (or
@@ -589,6 +669,7 @@ function M.showFinishedChecklist(insights_popup, year)
             callback = function()
                 Data.flushStatsToDB(insights_popup and insights_popup.ui)
                 Cache.clearGoalCacheForYear(year)
+                if Ratings and Ratings.refresh then Ratings.refresh() end
                 loadFromDB()
                 widget:updateItems(buildItems())
             end,
@@ -693,7 +774,7 @@ local function editManualBook(year, entry, on_done)
                 hint        = _("Author"),
             },
             -- Shown and typed in the configured date format (Settings ▸
-            -- Advanced settings ▸ Date & time ▸ "Date format"), while the
+            -- Settings ▸ Date & time ▸ "Date format"), while the
             -- store keeps ISO either way - so an entry added under one
             -- format still reads back correctly after the setting is
             -- changed.

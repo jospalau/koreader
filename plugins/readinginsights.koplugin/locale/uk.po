@@ -291,12 +291,6 @@ msgstr "Середня кількість сторінок на день, ост
 msgid "No reading data in the last 8 weeks"
 msgstr "Немає даних читання за останні 8 тижнів"
 
-msgid "avg time/day"
-msgstr "сер. час/день"
-
-msgid "avg pages/day"
-msgstr "сер. сторінок/день"
-
 msgid "page read today"
 msgstr "сторінку прочитано сьогодні"
 
@@ -671,9 +665,6 @@ msgstr "Використовувати як екран сну"
 msgid "Reading insights sleep screen"
 msgstr "Екран сну Аналітики читання"
 
-msgid "Sleep-screen indicator"
-msgstr "Індикатор екрана сну"
-
 msgid "Off"
 msgstr "Вимкнено"
 
@@ -701,14 +692,8 @@ msgstr "Миттєво"
 msgid "Slight delay (0.1s)"
 msgstr "Невелика затримка (0.1с)"
 
-msgid "sleeping…"
-msgstr "сплячий режим…"
-
 msgid "Indicator"
 msgstr "Індикатор"
-
-msgid "\"(sleeping…)\" after the title"
-msgstr "«(сплячий режим…)» після назви"
 
 msgid "None"
 msgstr "Немає"
@@ -850,16 +835,13 @@ msgid "Peak activity (100%)"
 msgstr "Пікова активність (100%)"
 
 msgid "Reading streak calendar"
-msgstr "Календар серії читання"
+msgstr "Календар читання"
 
 msgid "Daily streak day"
 msgstr "День щоденної серії"
 
 msgid "Weekly streak gap day"
 msgstr "День пропуску тижневої серії"
-
-msgid "Book progress bar"
-msgstr "Смуга прогресу книги"
 
 msgid "Show long durations (24h+) as days"
 msgstr "Показати тривалі періоди (24г+) у днях"
@@ -937,20 +919,17 @@ msgstr "Аналітика читання: рекорди"
 msgid "Show Records"
 msgstr "Показати рекорди"
 
-msgid "Show Reading streak"
-msgstr "Показати серію читання"
+msgid "Show Reading calendar"
+msgstr "Показати календар читання"
 
 msgid "Menu items"
 msgstr "Пункти меню"
 
-msgid "Reading streak"
-msgstr "Серія читання"
-
 msgid "Tick the popups that should be listed under Tools > Reading insights. The book popups only appear while a book is open."
 msgstr "Позначте вікна, які мають відображатися в меню Інструменти > Reading insights. Вікна книги з’являються лише коли відкрито книгу."
 
-msgid "Reading insights: reading streak"
-msgstr "Аналітика читання: серія читання"
+msgid "Reading insights: reading calendar"
+msgstr "Аналітика читання: календар читання"
 
 msgid "Reading insights: reading heatmap"
 msgstr "Аналітика читання: теплокарта читання"
@@ -1115,15 +1094,6 @@ msgstr "Тижневу мету виконано поспіль, тижнів: %
 
 msgid "You've met your weekly goal %1 weeks in a row."
 msgstr "Тижневу мету виконано поспіль, тижнів: %1"
-
-msgid "Last 7 days layout"
-msgstr "Вигляд за останні 7 днів"
-
-msgid "Compact"
-msgstr "Компактний"
-
-msgid "Full"
-msgstr "Повний"
 
 msgid "Last 7 days chapter bar order"
 msgstr "Порядок панелі глав за останні 7 днів"
@@ -1761,18 +1731,6 @@ msgstr "Глав на сторінку"
 msgid "How many chapters the chapter bar shows at once before paging with the arrows."
 msgstr "Скільки глав показує панель глав одночасно, перш ніж перегортати стрілками."
 
-msgid "Progress bar"
-msgstr "Смуга прогресу"
-
-msgid "Show progress bar"
-msgstr "Показати смугу прогресу"
-
-msgid "Show the progress bar in the \"This book\" section."
-msgstr "Показати смугу прогресу в розділі «Ця книга»."
-
-msgid "Progress bar height"
-msgstr "Висота смуги прогресу"
-
 msgid "Read portion color"
 msgstr "Колір прочитаної частини"
 
@@ -1803,8 +1761,8 @@ msgstr "Тиждень"
 msgid "Show week numbers"
 msgstr "Показувати номери тижнів"
 
-msgid "Add a \"Week\" column with each row's week number to the reading streak and Book progress calendars."
-msgstr "Додати стовпець «Тиждень» із номером тижня для кожного рядка до календарів серії читання та прогресу книги."
+msgid "Add a \"Week\" column with each row's week number to the Reading calendar and Book progress calendar."
+msgstr "Додати стовпець «Тиждень» із номером тижня для кожного рядка до календаря читання та календаря прогресу книги."
 
 msgid "Popup position"
 msgstr "Розташування вікна"
@@ -2096,3 +2054,204 @@ msgstr "книга позаду"
 
 msgid "books behind pace"
 msgstr "книг позаду"
+
+msgid "Last 7 days: time and pages row"
+msgstr "Останні 7 днів: рядок час/сторінки"
+
+msgid "Show a second row with the other metric (pages when the chart shows time, time when it shows pages) below the total and daily average."
+msgstr "Показує другий рядок з іншим показником (сторінки, якщо графік показує час, і навпаки) під сумою та середнім за день."
+
+msgid "Last 7 days: compared to previous 7 days"
+msgstr "Останні 7 днів: до попередніх 7 днів"
+
+msgid "Below the chart, show how the total and the daily average changed compared to the 7 days before."
+msgstr "Під графіком показує зміну суми та середнього за день порівняно з попередніми 7 днями."
+
+msgid "time vs prev. 7d"
+msgstr "час vs поперед. 7 днів"
+
+msgid "vs prev. 7d"
+msgstr "vs поперед. 7 днів"
+
+msgid "page vs prev. 7d"
+msgstr "сторінка vs поперед. 7 днів"
+
+msgid "pages vs prev. 7d"
+msgstr "сторінок vs поперед. 7 днів"
+
+msgid "pg vs prev. 7d"
+msgstr "с. vs попер. 7 дн."
+
+msgid "daily avg pg"
+msgstr "сер. с./д"
+
+msgid "Daily / weekly goal bar"
+msgstr "Смуга денної / тижневої мети"
+
+msgid "Show a thin progress bar under the daily and weekly goal values."
+msgstr "Показувати тонку смугу прогресу під значеннями денної та тижневої мети."
+
+msgid "Progress bar"
+msgstr "Смуга прогресу"
+
+msgid "Show a thin progress bar under the book percentage."
+msgstr "Показувати тонку смугу прогресу під відсотком прочитаного в книзі."
+
+msgid "Rating (0-5 stars)"
+msgstr "Оцінка (0–5 зірок)"
+
+msgid "Please enter a rating from 0 to 5"
+msgstr "Будь ласка, введіть оцінку від 0 до 5"
+
+msgid "Loading ratings..."
+msgstr "Завантаження оцінок..."
+
+msgid "Appearance"
+msgstr "Вигляд"
+
+msgid "Heatmap & time of day"
+msgstr "Теплокарта і час доби"
+
+msgid "Chart style"
+msgstr "Стиль діаграми"
+
+msgid "Chart layout"
+msgstr "Розташування діаграми"
+
+msgid "Bar order"
+msgstr "Порядок стовпців"
+
+msgid "Time and pages row"
+msgstr "Рядок часу та сторінок"
+
+msgid "Comparison with previous 7 days row"
+msgstr "Рядок порівняння з попередніми 7 днями"
+
+msgid "Sleep screen"
+msgstr "Екран сну"
+
+msgid "Content"
+msgstr "Вміст"
+
+msgid "Background"
+msgstr "Тло"
+
+msgid "Book cover"
+msgstr "Обкладинка книги"
+
+msgid "Follow theme"
+msgstr "Дотримуватись теми"
+
+msgid "Custom image"
+msgstr "Власне зображення"
+
+msgid "Image fit"
+msgstr "Розміщення зображення"
+
+msgid "Fit"
+msgstr "Вмістити"
+
+msgid "Stretch"
+msgstr "Розтягнути"
+
+msgid "Zoom"
+msgstr "Збільшити"
+
+msgid "Random"
+msgstr "Випадково"
+
+msgid "No images in {dir}"
+msgstr "Немає зображень у {dir}"
+
+msgid "Images are loaded from {dir}"
+msgstr "Зображення завантажуються з {dir}"
+
+msgid "Preview"
+msgstr "Попередній перегляд"
+
+msgid "Nothing to preview."
+msgstr "Немає що переглядати."
+
+msgid "Image export (Android wallpaper / PocketBook logo)"
+msgstr "Експорт зображення (шпалери Android / логотип PocketBook)"
+
+msgid "Save as image, kept up to date"
+msgstr "Зберігати як зображення, що завжди актуальне"
+
+msgid "Also save when opening a book"
+msgstr "Також зберігати під час відкриття книги"
+
+msgid "Image format"
+msgstr "Формат зображення"
+
+msgid "Refresh interval"
+msgstr "Інтервал оновлення"
+
+msgid "Every 5 minutes"
+msgstr "Кожні 5 хвилин"
+
+msgid "Every 15 minutes"
+msgstr "Кожні 15 хвилин"
+
+msgid "Every 30 minutes"
+msgstr "Кожні 30 хвилин"
+
+msgid "Every hour"
+msgstr "Щогодини"
+
+msgid "min"
+msgstr "хв"
+
+msgid "Also copy to folder"
+msgstr "Також копіювати до папки"
+
+msgid "Also copy to a shared folder…"
+msgstr "Також копіювати до спільної папки…"
+
+msgid "Choose a folder to also save the image to"
+msgstr "Виберіть папку, куди також зберігати зображення"
+
+msgid "Image will also be copied to:\n{path}\n\nOn Android, point your system wallpaper picker (or a wallpaper-changer app) at this folder."
+msgstr "Зображення також буде скопійовано до:\n{path}\n\nНа Android вкажіть цю папку в системному виборі шпалер (або в застосунку для зміни шпалер)."
+
+msgid "Stop copying to that extra folder"
+msgstr "Припинити копіювання до цієї додаткової папки"
+
+msgid "Also save as PocketBook power-off / boot logo"
+msgstr "Також зберігати як логотип вимкнення / завантаження PocketBook"
+
+msgid "Save image now"
+msgstr "Зберегти зображення зараз"
+
+msgid "Image saved to: {path}"
+msgstr "Зображення збережено до: {path}"
+
+msgid "Image updated."
+msgstr "Зображення оновлено."
+
+msgid "Could not update the image."
+msgstr "Не вдалося оновити зображення."
+
+msgid "Could not create the image export folder."
+msgstr "Не вдалося створити папку експорту зображення."
+
+msgid "Could not write the image file."
+msgstr "Не вдалося записати файл зображення."
+
+msgid "On Android, KOReader's own sleep screen never shows, because locking the screen hands over to Android's own lock screen. Turn this on and Reading insights keeps a picture of the sleep screen (same content and background as set under Sleep screen) on disk, refreshed automatically; set that picture as your Android wallpaper the normal way, or point a wallpaper-changer app at the folder below."
+msgstr "На Android власний екран сну KOReader ніколи не з'являється, бо при блокуванні екрана керування переходить до екрана блокування Android. Увімкніть це, і Reading insights зберігатиме на диску зображення екрана сну (з тим самим вмістом і тлом, що задані в розділі Екран сну), яке оновлюється автоматично; встановіть це зображення шпалерами Android у звичайний спосіб або вкажіть застосунку для зміни шпалер папку нижче."
+
+msgid "Could not draw the image (see the log for details)."
+msgstr "Не вдалося намалювати зображення (подробиці в журналі)."
+
+msgid "Nothing to draw yet. Open a book and read a few pages first."
+msgstr "Поки нічого малювати. Відкрийте книгу й прочитайте кілька сторінок."
+
+msgid "Show streak bar under covers"
+msgstr "Показувати смугу серії під обкладинками"
+
+msgid "Show the streak line under the covers on the reading calendar. When off (default), the covers are shown larger."
+msgstr "Показувати лінію серії під обкладинками в календарі читання. Коли вимкнено (за замовчуванням), обкладинки відображаються більшими."
+
+msgid "8-week reading trend"
+msgstr "Тенденція читання за 8 тижнів"

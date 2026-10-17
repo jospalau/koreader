@@ -12,7 +12,7 @@ and the colors live in lib/colors.lua (progress_bar_read/progress_bar_unread),
 right alongside every other on/off toggle and color in the plugin.
 
   ProgressBar.readHeightSetting() / ProgressBar.saveHeightSetting(v) / ProgressBar.DEFAULT_HEIGHT
-      the bar's height in "points" (Settings > Advanced settings > Bar
+      the bar's height in "points" (Settings > Reading insight popup > Bar
       chart height > "Book progress: Progress bar"), read on every build
   ProgressBar.build(ratio, full_width, read_color, unread_color)
       ratio              0.0..1.0 fraction of the book already read
@@ -61,20 +61,16 @@ function M.build(ratio, full_width, read_color, unread_color)
     if ratio < 0 then ratio = 0 end
     if ratio > 1 then ratio = 1 end
 
-    read_color   = read_color   or Colors.progressBarRead()
-    unread_color = unread_color or Colors.progressBarUnread()
+    read_color   = read_color   or Colors.activeBar()
+    unread_color = unread_color or Colors.inactiveBar()
 
     local height = Screen:scaleBySize(M.readHeightSetting())
 
-    -- Rounded rather than floored, and nudged so a genuinely-started book
-    -- always shows at least a sliver of the read color, and a genuinely-
-    -- unfinished book always shows at least a sliver of the unread color -
-    -- the same "always visible, never both-or-nothing at the edges" idea
-    -- as the chapter bar's current-chapter fill.
-    local read_w = math.floor(full_width * ratio + 0.5)
-    if ratio > 0 and read_w == 0 then read_w = 1 end
-    if ratio < 1 and read_w >= full_width then read_w = full_width - 1 end
+    -- Same as Bookends' bar fill: floored, with no forced minimum. A tiny
+    -- ratio that rounds down to 0 px draws no read part at all.
+    local read_w = math.floor(full_width * ratio)
     if read_w < 0 then read_w = 0 end
+    if read_w > full_width then read_w = full_width end
     local unread_w = full_width - read_w
 
     local bar_row = HorizontalGroup:new{ align = "top" }

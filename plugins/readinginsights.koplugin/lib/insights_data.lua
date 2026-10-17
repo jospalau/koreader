@@ -409,6 +409,43 @@ function M.getDailyStatsInRange(start_date, end_date)
     end)
 end
 
+-- The books read on each day of a "YYYY-MM-DD" date range (inclusive), most
+-- read first: { ["YYYY-MM-DD"] = { { id_book, md5, title, authors, seconds },
+-- ... } }. Used by the streak calendar to put the cover of the day's most-read
+-- book (and the runner-up behind it) into the day's cell. One grouped query for
+-- the whole range, so paging the calendar never touches the database again.
+function M.getDayBooksInRange(start_date, end_date)
+    local days = {}
+    if not start_date or not end_date then return days end
+    return StatsDb.withDb(days, function(conn)
+        local sql = string.format([[
+            SELECT date(ps.start_time, 'unixepoch', 'localtime') AS d,
+                   ps.id_book, book.md5, book.title, book.authors,
+                   SUM(ps.duration) AS secs
+            FROM page_stat ps
+            JOIN book ON ps.id_book = book.id
+            WHERE date(ps.start_time, 'unixepoch', 'localtime') BETWEEN '%s' AND '%s'
+            GROUP BY d, ps.id_book
+            ORDER BY d ASC, secs DESC, ps.id_book ASC
+        ]], start_date, end_date)
+        StatsDb.withStatement(conn, sql, function(stmt)
+            for row in stmt:rows() do
+                local d = row[1]
+                local list = days[d]
+                if not list then list = {}; days[d] = list end
+                list[#list + 1] = {
+                    id_book = tonumber(row[2]),
+                    md5     = row[3],
+                    title   = row[4],
+                    authors = row[5],
+                    seconds = tonumber(row[6]) or 0,
+                }
+            end
+        end)
+        return days
+    end)
+end
+
 -- Number of calendar days between two "YYYY-MM-DD" dates, inclusive.
 function M.daysBetweenInclusive(start_date, end_date)
     local sy, sm, sd = M.parseDateYMD(start_date)
@@ -1499,7 +1536,8 @@ function M.getFinishedTimestamp(id_book)
 end
 
 -- Returns both last-week stats in one DB connection:
---   last_week:       { avg_seconds, avg_pages }
+--   last_week:       { avg_seconds, avg_pages, prev_seconds, prev_pages }
+--                    (prev_* = totals of the 7 days before the last 7 days)
 --   last_week_daily: array[7] of { hours, seconds, pages, label, midnight_ts }, index 1 = today
 function M.getLastWeekAll(shared_conn)
     local minute = Cache.currentMinute()
@@ -1520,7 +1558,9 @@ function M.getLastWeekAll(shared_conn)
         return os.time{ year = now_t.year, month = now_t.month, day = now_t.day + day_offset,
                         hour = 0, min = 0, sec = 0 }
     end
-    local week_start_ts = localMidnight(-6)
+    -- The query also covers the 7 days before that, for the "compared to
+    -- previous 7 days" figures.
+    local week_start_ts = localMidnight(-13)
 
     local DOW_KEYS = { [0]="Sun", [1]="Mon", [2]="Tue", [3]="Wed", [4]="Thu", [5]="Fri", [6]="Sat" }
     local date_info = {}
@@ -1537,6 +1577,10 @@ function M.getLastWeekAll(shared_conn)
             label = _(DOW_KEYS[dow] or "")
         end
         date_info[i + 1] = { date_str = date_str, label = label, midnight_ts = day_midnight }
+    end
+    local prev_dates = {}
+    for i = 7, 13 do
+        prev_dates[#prev_dates + 1] = os.date("%Y-%m-%d", localMidnight(-i))
     end
 
     local lw_result    = lw_ok    and Cache._cache.last_week       or { avg_seconds = 0, avg_pages = 0 }
@@ -1571,11 +1615,23 @@ function M.getLastWeekAll(shared_conn)
         end
 
         if not lw_ok then
-            local total_sec   = 0
-            local total_pages = 0
-            for _, secs in pairs(seconds_by_date) do total_sec   = total_sec   + secs end
-            for _, pgs  in pairs(pages_by_date)   do total_pages = total_pages + pgs  end
-            lw_result = { avg_seconds = total_sec / 7, avg_pages = total_pages / 7 }
+            local total_sec, total_pages = 0, 0
+            for i = 1, 7 do
+                local ds = date_info[i].date_str
+                total_sec   = total_sec   + (seconds_by_date[ds] or 0)
+                total_pages = total_pages + (pages_by_date[ds]   or 0)
+            end
+            local prev_sec, prev_pages = 0, 0
+            for _, ds in ipairs(prev_dates) do
+                prev_sec   = prev_sec   + (seconds_by_date[ds] or 0)
+                prev_pages = prev_pages + (pages_by_date[ds]   or 0)
+            end
+            lw_result = {
+                avg_seconds  = total_sec / 7,
+                avg_pages    = total_pages / 7,
+                prev_seconds = prev_sec,
+                prev_pages   = prev_pages,
+            }
         end
 
         if not daily_ok then
@@ -1711,12 +1767,19 @@ function M.getTimeGoalStreak(kind, goal_secs)
 end
 
 -- Returns an array of 8 weekly buckets (index 1 = oldest of the 8 weeks,
--- index 8 = current week), each { start_date, end_date, seconds, pages }.
+-- index 8 = current week), each { start_date, end_date, seconds, pages, days }.
+-- The weeks are whole calendar weeks, starting on the shared "week start day"
+-- (Monday / Sunday): seven full weeks plus the current one, which runs from
+-- its first day up to today. `days` is how many days the bucket spans (7, or
+-- fewer for the current week), so averages divide by the right number.
 -- Mirrors the de-duplication logic used by getLastWeekAll, just over a
--- wider 56-day window split into 7-day chunks.
+-- wider window split into weekly chunks.
 function M.getLast8WeeksData()
+    local week_wd = weekStartWday()
     local minute = Cache.currentMinute()
-    local cached_val = Cache.getMinuteCache(Cache._cache, "last8weeks", "last8weeks_minute", minute)
+    local cache_key  = "last8weeks_cal" .. week_wd
+    local minute_key = "last8weeks_cal_minute" .. week_wd
+    local cached_val = Cache.getMinuteCache(Cache._cache, cache_key, minute_key, minute)
     if cached_val then
         return cached_val
     end
@@ -1732,17 +1795,23 @@ function M.getLast8WeeksData()
         return os.time{ year = now_t.year, month = now_t.month, day = now_t.day + day_offset,
                         hour = 0, min = 0, sec = 0 }
     end
-    local today_midnight  = localMidnight(0)
-    local period_start_ts = localMidnight(-(8 * 7 - 1))
+    local today_midnight = localMidnight(0)
+
+    -- Days since the current week began (0 on its first day).
+    local today_wday = tonumber(os.date("%w", today_midnight))  -- 0=Sun..6=Sat
+    local into_week  = (week_wd == 0) and today_wday or ((today_wday + 6) % 7)
+    local period_start_ts = localMidnight(-into_week - 7 * 7)
 
     local weeks = {}
     for w = 1, 8 do
-        local end_offset   = -(8 - w) * 7
+        local start_offset = -into_week - (8 - w) * 7
+        local is_current   = (w == 8)
         weeks[w] = {
-            start_date = os.date("%Y-%m-%d", localMidnight(end_offset - 6)),
-            end_date   = os.date("%Y-%m-%d", localMidnight(end_offset)),
+            start_date = os.date("%Y-%m-%d", localMidnight(start_offset)),
+            end_date   = os.date("%Y-%m-%d", localMidnight(is_current and 0 or start_offset + 6)),
             seconds    = 0,
             pages      = 0,
+            days       = is_current and (into_week + 1) or 7,
         }
     end
 
@@ -1770,7 +1839,11 @@ function M.getLast8WeeksData()
                 if y then
                     local day_ts = os.time({ year = y, month = m, day = d })
                     local diff_days = math.floor((today_midnight - day_ts) / 86400 + 0.5)
-                    local week_from_end = math.floor(diff_days / 7)  -- 0 = current week
+                    -- 0 = current week, 1 = the week before it, ...
+                    local week_from_end = 0
+                    if diff_days > into_week then
+                        week_from_end = math.ceil((diff_days - into_week) / 7)
+                    end
                     local w = 8 - week_from_end
                     if w >= 1 and w <= 8 then
                         weeks[w].seconds = weeks[w].seconds + secs
@@ -1781,7 +1854,7 @@ function M.getLast8WeeksData()
         end)
     end)
 
-    Cache.setMinuteCache(Cache._cache, Cache._stale_cache, "last8weeks", "last8weeks_minute", minute, weeks)
+    Cache.setMinuteCache(Cache._cache, Cache._stale_cache, cache_key, minute_key, minute, weeks)
     return weeks
 end
 
@@ -1938,6 +2011,78 @@ function M.getBooksForPeriod(period_format, period_value)
             end
         end)
         if ran then Cache.setBookList(cache_key, stamp, books) end
+        return books
+    end)
+end
+
+-- The same rows getBooksForPeriod gives for a year, but only for the listed
+-- books. The finished-books list needs just the few books the reader ticked
+-- by hand that the "99%" rule missed; running the whole year's query (and
+-- caching it) for them was what made that list slow to open after a reload.
+-- Cached like the other lists (stamp-validated, kept in the book-list file).
+function M.getBooksForYearByIds(year, ids)
+    local books = {}
+    local clean = {}
+    for _idx, id in ipairs(ids or {}) do
+        id = tonumber(id)
+        if id then clean[#clean + 1] = math.floor(id) end
+    end
+    if #clean == 0 then return books end
+    table.sort(clean)
+    local id_list = table.concat(clean, ",")
+    local period_value = tostring(year)
+    return StatsDb.withDb(books, function(conn)
+        local cache_key = "yearids2:" .. period_value .. ":" .. id_list
+        local lo, hi    = M._periodBounds("%Y", period_value)
+        local stamp     = (lo and hi) and M._bookListStamp(conn, lo, hi) or nil
+        local hit       = Cache.getBookList(cache_key, stamp)
+        if hit then return hit end
+
+        local sql = string.format([[
+            SELECT book.title, book.authors,
+                   COUNT(DISTINCT ps_dedup.page) AS pages_read,
+                   SUM(ps_dedup.period_sum) AS duration_sec,
+                   MAX(ps_dedup.last_read) AS last_read_time,
+                   day_counts.days_read,
+                   book.id AS id_book,
+                   book.md5 AS md5
+            FROM (
+                SELECT id_book, page,
+                       SUM(duration) AS period_sum,
+                       MAX(start_time) AS last_read
+                FROM page_stat
+                WHERE id_book IN (%s)
+                  AND strftime('%%Y', start_time, 'unixepoch', 'localtime') = '%s'
+                GROUP BY id_book, page
+            ) ps_dedup
+            JOIN book ON ps_dedup.id_book = book.id
+            LEFT JOIN (
+                SELECT id_book,
+                       COUNT(DISTINCT date(start_time, 'unixepoch', 'localtime')) AS days_read
+                FROM page_stat
+                WHERE id_book IN (%s)
+                  AND strftime('%%Y', start_time, 'unixepoch', 'localtime') = '%s'
+                GROUP BY id_book
+            ) day_counts ON ps_dedup.id_book = day_counts.id_book
+            GROUP BY ps_dedup.id_book
+            ORDER BY MAX(ps_dedup.last_read) DESC
+        ]], id_list, period_value, id_list, period_value)
+
+        local _res, ran = StatsDb.withStatement(conn, sql, function(stmt)
+            for row in stmt:rows() do
+                table.insert(books, {
+                    title     = row[1] or _("Unknown"),
+                    authors   = "",
+                    pages     = tonumber(row[3]) or 0,
+                    duration  = tonumber(row[4]) or 0,
+                    days_read = tonumber(row[6]) or 0,
+                    id_book   = tonumber(row[7]),
+                    md5       = row[8],
+                    last_read = tonumber(row[5]) or 0,
+                })
+            end
+        end)
+        if ran and stamp then Cache.setBookList(cache_key, stamp, books) end
         return books
     end)
 end

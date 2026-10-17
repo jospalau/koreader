@@ -120,11 +120,108 @@ function M.buildColumnSeparator(column_gap, height)
         HorizontalSpan:new{ width = column_gap },
         VerticalGroup:new{
             align = "center",
-            VerticalSpan:new{ height = v_padding },
+            VerticalSpan:new{ width = v_padding },
             Colors.newBar(Size.line.medium, height - 2 * v_padding, Colors.separator()),
-            VerticalSpan:new{ height = v_padding },
+            VerticalSpan:new{ width = v_padding },
         },
         HorizontalSpan:new{ width = column_gap },
+    }
+end
+
+-- ---------------------------------------------------------------------
+-- Thin progress bar under a row of value cells (Book progress popup: under
+-- "This chapter" and under the book percentage). Drawn in the chart's active
+-- (done) / inactive (remaining) bar colors. The gap around it is the empty
+-- space under the day labels of the weekly bar chart (small-font label height
+-- minus its baseline): that is the whole gap below the bar; above it the
+-- value text already has its own descent, so only the remainder is added.
+-- NB: VerticalSpan only honors `width` (it is the vertical size); `height`
+-- is silently ignored.
+-- ---------------------------------------------------------------------
+M.CELL_BAR_HEIGHT = 5
+
+local function descentOf(widget)
+    local ok, d = pcall(function() return widget:getSize().h - widget:getBaseline() end)
+    return (ok and d and d > 0) and d or 0
+end
+
+function M.buildCellBar(ratio, width, height)
+    height = height or M.CELL_BAR_HEIGHT
+    ratio = tonumber(ratio) or 0
+    if ratio < 0 then ratio = 0 end
+    if ratio > 1 then ratio = 1 end
+    -- Same as Bookends' bar fill: floored, no forced minimum. A tiny ratio
+    -- that rounds down to 0 px draws no read part at all.
+    local done_w = math.floor(width * ratio)
+    if done_w < 0 then done_w = 0 end
+    if done_w > width then done_w = width end
+    local rest_w = width - done_w
+    local bar = HorizontalGroup:new{ align = "top" }
+    if done_w > 0 then
+        table.insert(bar, Colors.newBar(done_w, height, Colors.activeBar()))
+    end
+    if rest_w > 0 then
+        table.insert(bar, Colors.newBar(rest_w, height, Colors.inactiveBar()))
+    end
+    bar.dimen = Geom:new{ w = width, h = height }
+    return bar
+end
+
+-- Returns gap_above, gap_below (pixels) for a bar under text set in value_face,
+-- measured against small_face (the chart label font).
+function M.cellBarGaps(value_face, small_face)
+    local small = TextWidget:new{ text = "0", face = small_face }
+    local below = descentOf(small)
+    small:free()
+    if below <= 0 then below = Size.padding.default end
+    local value = TextWidget:new{ text = "0", face = value_face }
+    local value_descent = descentOf(value)
+    value:free()
+    return math.max(0, below - value_descent), below
+end
+
+-- A bar of `width` pixels with the gap above and below it, to be placed
+-- directly under a row of value cells (see M.cellBarGaps). `width` is the
+-- bar's own width: one column, or the whole row.
+-- `placement`: nil = bar under its row (small gap above, bigger below);
+-- "even" = the same gap above and below it (not used by the popup now).
+function M.buildRowBar(ratio, width, value_face, small_face, placement, height)
+    local above, below = M.cellBarGaps(value_face, small_face)
+    if placement == "even" then
+        local g = math.max(above, Size.padding.small)
+        above, below = g, g
+    end
+    return VerticalGroup:new{
+        align = "left",
+        VerticalSpan:new{ width = above },
+        M.buildCellBar(ratio, width, height),
+        VerticalSpan:new{ width = below },
+    }
+end
+
+-- `cell` with the bar under it (so the row's column separator runs down past
+-- the bar too). Returns the new widget and the extra height it added, so the
+-- row's other cell can be padded to the same height (see M.padBottom).
+function M.withCellBar(cell, ratio, width, value_face, small_face)
+    local above, below = M.cellBarGaps(value_face, small_face)
+    local group = VerticalGroup:new{
+        align = "left",
+        cell,
+        VerticalSpan:new{ width = above },
+        M.buildCellBar(ratio, width),
+        VerticalSpan:new{ width = below },
+    }
+    return group, above + M.CELL_BAR_HEIGHT + below
+end
+
+-- `cell` kept at its own position (top) but made `extra` pixels taller, so the
+-- other cell of a row (which got a bar) doesn't push it down by centering.
+function M.padBottom(cell, extra)
+    if not extra or extra <= 0 then return cell end
+    return FrameContainer:new{
+        bordersize = 0, padding = 0, margin = 0,
+        padding_bottom = extra,
+        cell,
     }
 end
 
@@ -195,6 +292,9 @@ end
 --   no_bottom_line   = true   skip the thick line under the row
 --   bottom_line_thin = true   draw the line under the row thin instead of
 --                             thick (ignored if no_bottom_line is set)
+--   gap_above_row    = true   a Size.padding.small gap between the divider
+--                             and the row (the gap below the row is always
+--                             there)
 -- Anything other than a table is ignored, so an older call that passed a
 -- stray extra argument can't turn into an indexing error here.
 function M.addSectionWithRow(sections, header_widget, row, layout, opts)
@@ -203,22 +303,27 @@ function M.addSectionWithRow(sections, header_widget, row, layout, opts)
     local no_bottom_line   = false
     local no_top_line      = false
     local bottom_line_thin = false
+    local gap_above_row    = false
     if type(opts) == "table" then
         if opts.pad_row          == false then pad_row          = false end
         if opts.add_divider      == false then add_divider      = false end
         if opts.no_bottom_line   == true  then no_bottom_line   = true  end
         if opts.no_top_line      == true  then no_top_line      = true  end
         if opts.bottom_line_thin == true  then bottom_line_thin = true  end
+        if opts.gap_above_row    == true  then gap_above_row    = true  end
     end
 
     table.insert(sections, header_widget)
-    table.insert(sections, VerticalSpan:new{ height = Size.padding.default })
+    table.insert(sections, VerticalSpan:new{ width = Size.padding.small })
     if add_divider and not no_top_line then
         table.insert(sections, M.padded(layout.padding_h,
             Colors.newBar(layout.content_width, Size.line.thin, Colors.separator())))
     end
+    if gap_above_row then
+        table.insert(sections, VerticalSpan:new{ width = Size.padding.small })
+    end
     table.insert(sections, pad_row and M.padded(layout.padding_h, row) or row)
-    table.insert(sections, VerticalSpan:new{ height = Size.padding.large })
+    table.insert(sections, VerticalSpan:new{ width = Size.padding.small })
     if add_divider and not no_bottom_line then
         local bottom_line_size = bottom_line_thin and Size.line.thin or Size.line.thick
         table.insert(sections, M.padded(layout.padding_h,

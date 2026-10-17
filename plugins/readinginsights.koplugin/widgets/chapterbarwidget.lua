@@ -22,8 +22,8 @@ the rest of the book-progress settings in the view).
       how many chapter columns one page shows (Settings > 
       Book progress popup > "Chapters per page"), read on every build
   ChapterBar.readHeightSetting() / ChapterBar.saveHeightSetting(v) / ChapterBar.DEFAULT_HEIGHT
-      the bar's height in "points" (Settings > Advanced settings > Bar
-      chart height > "Book progress: Chapters"), read on every build
+      the bar's height in "points" (Settings > Book progress popup > Bar
+      chart height > "Chapters"), read on every build
   ChapterBar.build(chapter_info, full_width, padding_h, offset_override,
                    on_prev, on_next)
       chapter_info    { current, total, page_counts, chapter_progress_ratio }
@@ -63,8 +63,8 @@ local Colors, Fonts, UI =
 local M = {}
 
 -- How many chapter columns one page of the bar shows. This is now a
--- user-adjustable setting (Settings ▸ Advanced settings ▸ Book progress
--- popup ▸ "Chapters per page"): the view pages the bar by exactly this much
+-- user-adjustable setting (Settings ▸ Book progress popup ▸ Chapters ▸
+-- "Chapters per page"): the view pages the bar by exactly this much
 -- on a swipe, and works out which page the current chapter falls on the same
 -- way, so both read it through M.readPageSizeSetting() rather than a
 -- constant. M.PAGE_SIZE stays as the default value (and the number the
@@ -127,8 +127,8 @@ function M.savePageSizeSetting(value)
     end
 end
 
--- Chapter-bar height setting (Settings ▸ Advanced settings ▸
--- "Bar chart height" ▸ "Book progress: Chapters"). Same "points" value
+-- Chapter-bar height setting (Settings ▸ Book progress popup ▸
+-- "Bar chart height ▸ Chapters"). Same "points" value
 -- previously hardcoded into Screen:scaleBySize(46) below; restoring the
 -- default reproduces the exact original look.
 local SETTINGS_KEY_HEIGHT = "reading_insights_chapter_bar_height"
@@ -177,7 +177,6 @@ function M.build(chapter_info, full_width, padding_h, offset_override, on_prev, 
         return col_h_max
     end
 
-    local v_pad      = Size.padding.large
     local arrow_face = Fonts.getFace("stats_arrow")
     local inner_pad  = Size.padding.default
 
@@ -236,20 +235,22 @@ function M.build(chapter_info, full_width, padding_h, offset_override, on_prev, 
         if ch_idx <= total then
             local bh = barHeight(ch_idx)
             if ch_idx == current then
-                local read_h   = math.max(1, math.floor(bh * chapter_progress_ratio))
+                -- Floored, no forced minimum: 0 progress (first page of the
+                -- chapter) draws no read part at all.
+                local read_h   = math.floor(bh * chapter_progress_ratio)
                 local unread_h = bh - read_h
                 table.insert(bar_row, VerticalGroup:new{
                     align = "left",
-                    VerticalSpan:new{ height = col_h_max - bh },
+                    VerticalSpan:new{ width = math.max(0, col_h_max - bh) },
                     unread_h > 0 and Colors.newBar(bar_w, unread_h, Colors.inactiveBar())
-                        or VerticalSpan:new{ height = 0 },
+                        or VerticalSpan:new{ width = 0 },
                     read_h > 0 and Colors.newBar(bar_w, read_h, Colors.activeBar())
-                        or VerticalSpan:new{ height = 0 },
+                        or VerticalSpan:new{ width = 0 },
                 })
             else
                 table.insert(bar_row, VerticalGroup:new{
                     align = "left",
-                    VerticalSpan:new{ height = col_h_max - bh },
+                    VerticalSpan:new{ width = math.max(0, col_h_max - bh) },
                     Colors.newBar(bar_w, bh, ch_idx < current and Colors.activeBar() or Colors.inactiveBar()),
                 })
             end
@@ -282,14 +283,14 @@ function M.build(chapter_info, full_width, padding_h, offset_override, on_prev, 
             margin         = 0,
             VerticalGroup:new{
                 align = "left",
-                VerticalSpan:new{ height = top_pad },
+                VerticalSpan:new{ width = math.max(0, top_pad) },
                 HorizontalGroup:new{
                     align = "center",
                     HorizontalSpan:new{ width = inner_pad },
                     tw,
                     HorizontalSpan:new{ width = inner_pad },
                 },
-                VerticalSpan:new{ height = col_h_max - gh - top_pad },
+                VerticalSpan:new{ width = math.max(0, col_h_max - gh - top_pad) },
             },
         }
     end
@@ -349,9 +350,7 @@ function M.build(chapter_info, full_width, padding_h, offset_override, on_prev, 
 
     local result = VerticalGroup:new{
         align = "left",
-        VerticalSpan:new{ height = v_pad },
         fixed_bar_row,
-        VerticalSpan:new{ height = v_pad },
     }
     result._on_swipe_left  = can_go_right and on_next or nil
     result._on_swipe_right = can_go_left  and on_prev or nil

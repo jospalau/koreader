@@ -184,6 +184,18 @@ local function N_(singular, plural, n)
     return gettext.ngettext(singular, plural, n)
 end
 
+-- The name of the Reading insights popup. It has a key of its own so a
+-- language can name the popup differently from the plugin (hu: "Olvasási
+-- áttekintés"); a language without that key (English, where nothing is
+-- translated) shows the plugin's name instead of the key itself.
+local function insightsTitle()
+    local title = _("Reading insights popup title")
+    if title == "Reading insights popup title" then
+        title = _("Reading insights")
+    end
+    return title
+end
+
 local _cached_lang_base = nil
 local function getLangBase()
     if not _cached_lang_base then
@@ -235,7 +247,7 @@ local function formatCount(value)
     return tostring(value)
 end
 
--- Date display format (Settings ▸ Advanced settings ▸ Date & time ▸ "Date
+-- Date display format (Settings ▸ Date & time ▸ "Date
 -- format").
 -- Every numeric date this plugin prints goes through formatDate() /
 -- formatDateFromTS() below, so one setting covers the book lists, the
@@ -523,6 +535,37 @@ local function formatDuration(seconds, without_seconds)
     return parts.value .. " " .. parts.unit
 end
 
+-- Compact duration for tight chart labels (the monthly reading time bars).
+-- Only when KOReader's "duration_format" is "letters" ("1h 30m"):
+--   * an hour or more -> decimal hours with one decimal, using the language's
+--     decimal separator ("1.9h" / "1,9h"); the "h" letter is taken from
+--     KOReader's own letters format so it stays localised;
+--   * under an hour   -> just the minutes ("45m").
+-- Every other format (classic / modern), and the "long durations as days"
+-- output, is returned exactly as formatDuration(seconds, true) would.
+local function formatDurationChart(seconds)
+    seconds = tonumber(seconds) or 0
+    local parts = formatDurationParts(seconds, true)
+    if parts.unit ~= "" then
+        return parts.value .. " " .. parts.unit
+    end
+    local duration_format = "classic"
+    if G_reader_settings and G_reader_settings.readSetting then
+        duration_format = G_reader_settings:readSetting("duration_format", "classic")
+    end
+    if duration_format ~= "letters" then
+        return parts.value
+    end
+    local value = tostring(parts.value)
+    local first = value:match("^%s*(%S+)") or value
+    if seconds < 3600 then
+        return first
+    end
+    local h_unit = first:match("^%d+(%D+)$") or "h"
+    local hours = math.floor(seconds / 3600 * 10 + 0.5) / 10
+    return formatNumber(hours, 1) .. h_unit
+end
+
 -- ISO-8601 week number for a Y/M/D date. Used by the optional "Week" column
 -- on the reading streak and Book progress calendars (see
 -- ViewSettings.readShowWeekNumbers). Not implemented as os.date("%V", ts):
@@ -544,11 +587,13 @@ return {
     pluginDir                  = pluginDir,
     _                          = _,
     N_                         = N_,
+    insightsTitle              = insightsTitle,
     getLangBase                = getLangBase,
     formatNumber               = formatNumber,
     formatCount                = formatCount,
     formatDuration             = formatDuration,
     formatDurationParts        = formatDurationParts,
+    formatDurationChart        = formatDurationChart,
     formatTimeHHMM             = formatTimeHHMM,
     isoWeekNumber              = isoWeekNumber,
     readDurationDaysSetting    = readDurationDaysSetting,

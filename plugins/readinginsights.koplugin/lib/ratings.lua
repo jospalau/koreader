@@ -9,25 +9,47 @@ MD5 checksum: stored as `md5` in statistics.sqlite3's `book` table, and as
 walking the reading history, opening each book's sidecar and filing its
 rating under that checksum.
 
+The result is also kept in a file (reading_insights_ratings_cache.lua, see "File
+cache" below), so a rebuild only re-opens the sidecars that changed.
+
 The map is rebuilt at most once every TTL seconds - lists are opened a tap
 at a time, and walking a few hundred sidecars on every one of them would be
 wasteful.
 
-  Ratings.get(md5)      -> 1..5, or nil when the book has no rating (or is
-                           not in the reading history)
+  Ratings.get(md5, file) -> 1..5, or nil when the book has no rating (or is
+                           not in the reading history). With `file` (the
+                           book's path, when known) the rating is read
+                           straight from that book's sidecar - cheap, and
+                           always fresh - instead of from the map
   Ratings.stars(n)      -> "★★★☆☆" (five glyphs), "☆☆☆☆☆" for no rating
   Ratings.set(md5, n)   store a rating the reader typed in by hand (0 = no
                         rating); kept in its own file and loaded again on the
                         next start, and it wins over the book's sidecar
-  Ratings.refresh()     drop the map so the next get() rebuilds it
+  Ratings.refresh()     drop the quick map (TTL seconds) so the next get()
+                        rebuilds it; the slow sidecar-folder walk keeps its
+                        own cache (SCAN_TTL) and is not redone
+  Ratings.clearCache()  drop the quick map, the folder walk and the cache file
+                        too (a full "reload data"): everything is re-read next
+  Ratings.isWarm()      -> true when the quick map is current, i.e. the next
+                        get() will not rebuild it (so it will be instant)
   Ratings.fileFor(md5)  -> the book's file path (from the reading history /
-                        the open book), nil when it is not known
+                        the open book / a sidecar scan), nil when it is not
+                        known. Exact: found by checksum, so it is safe to
+                        WRITE through (a rating goes into that sidecar).
+  Ratings.fileFor(md5, title, authors)
+                        the same, and when the checksum is unknown a GUESS
+                        from the title / author in the file names of the
+                        known books; returns the file and, as a second value,
+                        true when it is only a guess. A guess is for display
+                        (cover, description) - never write a rating to it.
   Ratings.save(md5, n)  set a rating from the Book info popup: written into
                         the book's own sidecar (summary.rating - what KOReader's
                         status page and the file manager read) when the file
                         is known, so a book that had no stars gets them there
                         too; otherwise kept in the plugin's own file as set()
 ]]--
+
+local logger = require("logger")
 
 local M = {}
 
@@ -53,12 +75,123 @@ local function overrides()
     return type(t) == "table" and t or {}
 end
 
-local TTL = 30
-local SCAN_TTL = 600          -- the sidecar-folder walk is slower: redo it rarely
-local SCAN_BUDGET = 4         -- seconds (CPU) the walk may take, at most
+local TTL = 300           -- the quick map is rebuilt at most this often (5 minutes); a change
+                          -- made inside the plugin patches it, and closing a book drops it
+                          -- (see main.lua), so a longer TTL does not show stale ratings
+local SCAN_TTL = 3600         -- the sidecar-folder walk is slower: redo it rarely (once an hour)
+local SCAN_PARTIAL_TTL = 300  -- ...but a walk the budget cut short is redone sooner:
+                              -- the books it did not reach have no rating / file yet
+local SCAN_BUDGET = 4         -- seconds (wall clock) the walk may take, at most
+
+-- Wall-clock seconds. os.clock() is CPU time only: on an e-ink device or an SD
+-- card most of a folder walk is spent waiting for I/O, which os.clock() does
+-- not count, so a walk "budgeted" at 4 s of CPU could really take much longer.
+local ok_time, TimeMod = pcall(require, "ui/time")
+local function wallClock()
+    if ok_time and TimeMod and TimeMod.now and TimeMod.to_s then
+        return TimeMod.to_s(TimeMod.now())
+    end
+    return os.time()
+end
 local SCAN_MAX_DEPTH = 12
 local map, built_at, file_map
-local scan_map, scan_built_at, scan_files
+local scan_map, scan_built_at, scan_files, scan_list, scan_complete
+local guess_cache = {}   -- md5 -> file guessed from the title (display only)
+local file_list      -- every book file whose sidecar is known (history + scan)
+
+-- ---------------------------------------------------------------------
+-- File cache. Rebuilding the quick map used to open EVERY sidecar of the
+-- reading history (a Lua file parsed per book) - on an e-ink device that is
+-- what made the book lists slow after a restart, after reading a book (the
+-- map is dropped when a book closes) or every 5 minutes. Now the result is
+-- kept in a file next to KOReader's settings:
+--   entries[bookfile] = { s = sidecar stamp, md5 = ..., r = rating (0 = none) }
+--   scan              = the sidecar-folder walk (so a restart does not redo it)
+-- A rebuild only stat()s each sidecar (cheap) and re-opens the ones whose
+-- stamp (modification time + size) changed, so a rating changed anywhere -
+-- KOReader's status page, the file manager, this plugin - is still picked up.
+-- ---------------------------------------------------------------------
+local PCACHE_PATH = require("datastorage"):getSettingsDir() .. "/reading_insights_ratings_cache.lua"
+local PCACHE_VERSION = 1
+local pc_settings, pc_entries
+local pc_dirty = false
+
+local function openPCache()
+    if pc_settings == nil then
+        local ok, st = pcall(function() return require("luasettings"):open(PCACHE_PATH) end)
+        pc_settings = ok and st or false
+        if pc_settings and pc_settings:readSetting("version") ~= PCACHE_VERSION then
+            -- unknown / older layout: ignore what is in there
+            pc_settings:saveSetting("version", PCACHE_VERSION)
+            pc_settings:saveSetting("entries", {})
+            pc_settings:delSetting("scan")
+        end
+    end
+    return pc_settings or nil
+end
+
+local function loadEntries()
+    if pc_entries == nil then
+        local st = openPCache()
+        local t = st and st:readSetting("entries")
+        pc_entries = type(t) == "table" and t or {}
+    end
+    return pc_entries
+end
+
+-- "<mtime>:<size>" of a book's sidecar file, nil when it can't be told (the
+-- caller then simply opens the sidecar, as before).
+local function sidecarStamp(file)
+    local ok, stamp = pcall(function()
+        local DocSettings = require("docsettings")
+        local sc
+        if DocSettings.findSidecarFile then
+            sc = DocSettings:findSidecarFile(file)
+        end
+        if not sc and DocSettings.getSidecarFile then
+            sc = DocSettings:getSidecarFile(file)
+        end
+        if type(sc) ~= "string" then return nil end
+        local lfs = require("libs/libkoreader-lfs")
+        local attr = lfs.attributes(sc)
+        if not attr or attr.mode ~= "file" then return nil end
+        return tostring(attr.modification) .. ":" .. tostring(attr.size)
+    end)
+    return ok and stamp or nil
+end
+
+-- The sidecar-folder walk of the last run, from the file (nothing happens
+-- when the walk is already in memory).
+local function restoreScan()
+    if scan_map then return end
+    local st = openPCache()
+    local sc = st and st:readSetting("scan")
+    if type(sc) == "table" and type(sc.map) == "table" and type(sc.files) == "table"
+       and type(sc.list) == "table" and tonumber(sc.at) then
+        scan_map, scan_files, scan_list = sc.map, sc.files, sc.list
+        scan_built_at, scan_complete = tonumber(sc.at), sc.complete == true
+    end
+end
+
+local function savePCache()
+    local st = openPCache()
+    if not st then return end
+    pc_dirty = false
+    local ok, err = pcall(function()
+        st:saveSetting("version", PCACHE_VERSION)
+        st:saveSetting("entries", loadEntries())
+        if scan_map then
+            st:saveSetting("scan", {
+                at = scan_built_at, complete = scan_complete == true,
+                map = scan_map, files = scan_files or {}, list = scan_list or {},
+            })
+        end
+        st:flush()
+    end)
+    if not ok then
+        logger.warn("ReadingInsights: failed to save the ratings cache: " .. tostring(err))
+    end
+end
 
 local function fileMD5(file)
     if not file then return nil end
@@ -83,28 +216,48 @@ end
 
 -- `file` (optional) is the book itself: when the sidecar carries a rating but
 -- no checksum (older sidecars), the checksum is computed from the file.
-local function ratingFrom(settings, file)
-    if not settings or not settings.readSetting then return nil, nil end
-    local md5 = settings:readSetting("partial_md5_checksum")
+-- The star rating (1..5) in a sidecar's settings, nil when there is none.
+local function ratingValue(settings)
+    if not settings or not settings.readSetting then return nil end
     local summary = settings:readSetting("summary")
     local rating = type(summary) == "table" and tonumber(summary.rating) or nil
     if rating then
         rating = math.floor(rating + 0.5)
         if rating < 1 then rating = nil elseif rating > 5 then rating = 5 end
     end
+    return rating
+end
+
+local function ratingFrom(settings, file)
+    if not settings or not settings.readSetting then return nil, nil end
+    local md5 = settings:readSetting("partial_md5_checksum")
+    local rating = ratingValue(settings)
     if (not md5 or md5 == "") and rating then md5 = fileMD5(file) end
     return md5, rating
+end
+
+-- The settings of a book's sidecar: the live ones when that book is the one
+-- open right now (its rating is only written to the file when it is closed),
+-- the sidecar file's own otherwise. nil when they can't be opened.
+local function sidecarSettings(file)
+    local ok_r, ReaderUI = pcall(require, "apps/reader/readerui")
+    local ui = ok_r and ReaderUI and ReaderUI.instance
+    if ui and ui.doc_settings and ui.document and ui.document.file == file then
+        return ui.doc_settings
+    end
+    local ok, settings = pcall(function() return require("docsettings"):open(file) end)
+    return ok and settings or nil
 end
 
 -- Walks the folders KOReader keeps sidecars in and files every rating found
 -- under its checksum. This catches books that are no longer in the reading
 -- history (cleared, or the file is gone) but whose sidecar survived.
 local function scanSidecars()
-    local out, files_out = {}, {}
+    local out, files_out, list_out = {}, {}, {}
     local ok_lfs, lfs = pcall(require, "libs/libkoreader-lfs")
-    if not ok_lfs or not lfs then return out, files_out end
+    if not ok_lfs or not lfs then return out, files_out, list_out end
     local ok_ls, LuaSettings = pcall(require, "luasettings")
-    if not ok_ls or not LuaSettings then return out, files_out end
+    if not ok_ls or not LuaSettings then return out, files_out, list_out end
 
     local roots, seen_root = {}, {}
     local function addRoot(path)
@@ -123,13 +276,21 @@ local function scanSidecars()
         addRoot(G_reader_settings:readSetting("home_dir"))
     end)
 
-    local started = os.clock()
-    local function over_budget() return os.clock() - started > SCAN_BUDGET end
+    local started = wallClock()
+    local truncated = false
+    local function over_budget()
+        if wallClock() - started > SCAN_BUDGET then
+            truncated = true
+            return true
+        end
+        return false
+    end
 
     local function readSidecar(sdr, meta)
         local ok, settings = pcall(function() return LuaSettings:open(sdr .. "/" .. meta) end)
         if not ok or not settings then return end
         local book_file = bookFileOfSidecar(sdr, meta)
+        list_out[#list_out + 1] = book_file
         local md5, rating = ratingFrom(settings, book_file)
         if (not md5 or md5 == "") then md5 = settings:readSetting("partial_md5_checksum") end
         if md5 and md5 ~= "" and files_out[md5] == nil then files_out[md5] = book_file end
@@ -163,29 +324,54 @@ local function scanSidecars()
     end
 
     for _idx, root in ipairs(roots) do walk(root, 0) end
-    return out, files_out
+    return out, files_out, list_out, not truncated
 end
 
 local function build()
-    local out, files = {}, {}
+    local out, files, list = {}, {}, {}
     local ok_ds, DocSettings = pcall(require, "docsettings")
-    if not ok_ds or not DocSettings then return out, files end
+    if not ok_ds or not DocSettings then return out, files, list end
 
     local ok_rh, ReadHistory = pcall(require, "readhistory")
     if ok_rh and ReadHistory and type(ReadHistory.hist) == "table" then
+        local entries = loadEntries()
+        local old_count = 0
+        for _k in pairs(entries) do old_count = old_count + 1 end
+        local fresh, reopened, from_cache = {}, 0, 0
         for _idx, item in ipairs(ReadHistory.hist) do
             local file = item and item.file
             if file then
+                list[#list + 1] = file
                 pcall(function()
-                    local settings = DocSettings:open(file)
-                    local md5, rating = ratingFrom(settings, file)
-                    if not md5 or md5 == "" then
-                        md5 = settings:readSetting("partial_md5_checksum")
+                    local stamp = sidecarStamp(file)
+                    local e = stamp and entries[file]
+                    local md5, rating
+                    if e and e.s == stamp then
+                        -- sidecar untouched since the last run: no need to open it
+                        md5, rating = e.md5, tonumber(e.r)
+                        if rating and rating < 1 then rating = nil end
+                        fresh[file] = e
+                        from_cache = from_cache + 1
+                    else
+                        local settings = DocSettings:open(file)
+                        md5, rating = ratingFrom(settings, file)
+                        if not md5 or md5 == "" then
+                            md5 = settings:readSetting("partial_md5_checksum")
+                        end
+                        reopened = reopened + 1
+                        if stamp then
+                            fresh[file] = { s = stamp, md5 = md5 or "", r = rating or 0 }
+                        end
                     end
                     if md5 and md5 ~= "" then files[md5] = file end
                     if md5 and rating then out[md5] = rating end
                 end)
             end
+        end
+        -- books that left the history drop out of the file as well
+        if reopened > 0 or from_cache ~= old_count then
+            pc_entries = fresh
+            pc_dirty = true
         end
     end
 
@@ -208,9 +394,15 @@ local function build()
     -- Books the history does not know about: fill the gaps from the sidecar
     -- folders (never overriding what the history / the open book said).
     local now = os.time()
-    if not scan_map or not scan_built_at or now - scan_built_at > SCAN_TTL or now < scan_built_at then
-        local ok, res, res_files = pcall(scanSidecars)
-        scan_map, scan_files, scan_built_at = ok and res or {}, ok and res_files or {}, now
+    restoreScan()
+    local scan_ttl = scan_complete and SCAN_TTL or SCAN_PARTIAL_TTL
+    if not scan_map or not scan_built_at or now - scan_built_at > scan_ttl or now < scan_built_at then
+        local ok, res, res_files, res_list, complete = pcall(scanSidecars)
+        scan_map, scan_files, scan_list, scan_built_at =
+            ok and res or {}, ok and res_files or {}, ok and res_list or {}, now
+        -- an error counts as incomplete too: do not trust {} for an hour
+        scan_complete = ok and complete ~= false
+        pc_dirty = true
     end
     for md5, f in pairs(scan_files or {}) do
         if files[md5] == nil then files[md5] = f end
@@ -218,20 +410,52 @@ local function build()
     for md5, rating in pairs(scan_map) do
         if out[md5] == nil then out[md5] = rating end
     end
-    return out, files
+    for _idx, f in ipairs(scan_list or {}) do list[#list + 1] = f end
+    if pc_dirty then savePCache() end
+    return out, files, list
 end
 
 local function ensure()
     local now = os.time()
     if not map or not built_at or now - built_at > TTL or now < built_at then
-        map, file_map = build()
+        map, file_map, file_list = build()
+        guess_cache = {}
         built_at = now
     end
 end
 
+-- Only the quick map: rebuilding it reads the reading history's sidecars,
+-- which is cheap. The sidecar-folder walk (up to SCAN_BUDGET seconds of CPU
+-- on a big library) stays cached for SCAN_TTL - dropping it here would redo
+-- it every time a list or the Book info popup opens.
 function M.refresh()
-    map, built_at, file_map = nil, nil, nil
-    scan_map, scan_files, scan_built_at = nil, nil, nil
+    map, built_at, file_map, file_list = nil, nil, nil, nil
+end
+
+-- Forget everything, the cache file included: the quick map, the sidecar-folder
+-- walk and every cached sidecar entry. The next lookup re-reads all sidecars
+-- (and redoes the folder walk). For an explicit full "reload data".
+function M.clearCache()
+    map, built_at, file_map, file_list = nil, nil, nil, nil
+    scan_map, scan_built_at, scan_files, scan_list, scan_complete = nil, nil, nil, nil, nil
+    guess_cache = {}
+    pc_entries = {}
+    pc_dirty = false
+    local st = openPCache()
+    if st then
+        pcall(function()
+            st:saveSetting("entries", {})
+            st:delSetting("scan")
+            st:flush()
+        end)
+    end
+end
+
+-- True when get() would be served from the current map without rebuilding it
+-- (the rebuild walks the whole reading history, which can take a while).
+function M.isWarm()
+    local now = os.time()
+    return map ~= nil and built_at ~= nil and now >= built_at and now - built_at <= TTL
 end
 
 function M.set(md5, n)
@@ -239,18 +463,31 @@ function M.set(md5, n)
     n = tonumber(n) or 0
     n = math.max(0, math.min(5, math.floor(n + 0.5)))
     local st = openStore()
-    if not st then return false end
+    if not st then
+        logger.warn("ReadingInsights: can't open the ratings store " .. STORE_PATH)
+        return false
+    end
     local t = overrides()
     t[md5] = n
     st:saveSetting("ratings", t)
-    local ok = pcall(function() st:flush() end)
+    local ok, err = pcall(function() st:flush() end)
+    if not ok then
+        logger.warn("ReadingInsights: failed to save the rating of " .. md5
+            .. " into " .. STORE_PATH .. ": " .. tostring(err))
+    end
     return ok
 end
 
-function M.get(md5)
+function M.get(md5, file)
     if not md5 or md5 == "" then return nil end
     local own = overrides()[md5]
     if own ~= nil then return own > 0 and own or nil end
+    if file then
+        -- the book's own sidecar is the source of truth: read it directly
+        -- (no map, no walk) so the rating is always the current one
+        local settings = sidecarSettings(file)
+        if settings then return ratingValue(settings) end
+    end
     ensure()
     return map[md5]
 end
@@ -262,13 +499,6 @@ local function isFile(file)
     return ok and mode == "file"
 end
 
--- A targeted search for one book: walks the library folders (the home folder,
--- the sidecar folders and the folders the reading history's books live in)
--- looking for the sidecar that carries this checksum, and stops at the first
--- hit. Used when the history and the (budgeted, cached) full scan did not
--- know the book - e.g. a finished book whose history entry was cleared, in a
--- library too big for the full scan to get through. A sidecar without a
--- stored checksum is matched by hashing its book file.
 -- Titles and file names compared loosely: lower case, accents (the Hungarian
 -- ones and the usual Latin-1 ones) folded to plain letters, everything that
 -- is not a letter or digit dropped.
@@ -338,112 +568,48 @@ local function nameMatchesAuthor(file, authors)
     return false
 end
 
-local FIND_BUDGET = 8             -- seconds (CPU), at most
-local find_misses = {}            -- md5 -> time of the last failed search
-
-local function findFileByChecksum(md5, title, authors)
-    local ok_lfs, lfs = pcall(require, "libs/libkoreader-lfs")
-    local ok_ls, LuaSettings = pcall(require, "luasettings")
-    if not (ok_lfs and lfs and ok_ls and LuaSettings) then return nil end
-
-    local roots, seen_root = {}, {}
-    local function addRoot(path)
-        if type(path) == "string" and path ~= "" and not seen_root[path]
-           and lfs.attributes(path, "mode") == "directory" then
-            seen_root[path] = true
-            roots[#roots + 1] = path
-        end
-    end
-    pcall(function()
-        addRoot(G_reader_settings:readSetting("home_dir"))
-    end)
-    pcall(function()
-        local ReadHistory = require("readhistory")
-        for _idx, item in ipairs(ReadHistory.hist or {}) do
-            local dir = item and item.file and item.file:match("^(.*)/[^/]+$")
-            if dir then addRoot(dir) end
-        end
-    end)
-    pcall(function()
-        local DataStorage = require("datastorage")
-        if DataStorage.getDocSettingsDir then addRoot(DataStorage:getDocSettingsDir()) end
-        if DataStorage.getDocSettingsHashDir then addRoot(DataStorage:getDocSettingsHashDir()) end
-    end)
-
-    local found, candidate, weak
-    local started = os.clock()
-    local function done() return found ~= nil or os.clock() - started > FIND_BUDGET end
-
-    local function check(sdr, meta)
-        local ok, settings = pcall(function() return LuaSettings:open(sdr .. "/" .. meta) end)
-        if not ok or not settings then return end
-        local book_file = bookFileOfSidecar(sdr, meta)
-        local sid = settings:readSetting("partial_md5_checksum")
-        if not sid or sid == "" then sid = fileMD5(book_file) end
-        if sid == md5 and isFile(book_file) then found = book_file end
-        -- the checksum can differ (the file was replaced since it was read):
-        -- keep a book whose file name carries the title as a second choice
-        -- title and author both in the name = a good guess; the title alone
-        -- is only good enough when it is distinctive (4+ letters) and no
-        -- better guess turns up - "Az" alone would be any number of books.
-        if not found and not candidate and title and nameMatchesTitle(book_file, title)
-           and isFile(book_file) then
-            if nameMatchesAuthor(book_file, authors) then
-                candidate = book_file
-            elseif not weak and #fold(title) >= 4 then
-                weak = book_file
-            end
-        end
-    end
-
-    local function walk(dir, depth)
-        if depth > SCAN_MAX_DEPTH or done() then return end
-        local ok, iter, state, ctl = pcall(lfs.dir, dir)
-        if not ok then return end
-        for name in iter, state, ctl do
-            if name:sub(1, 1) ~= "." or name:match("%.sdr$") then
-                local path = dir .. "/" .. name
-                if lfs.attributes(path, "mode") == "directory" then
-                    if name:match("%.sdr$") then
-                        local ok2, it2, st2, ct2 = pcall(lfs.dir, path)
-                        if ok2 then
-                            for f in it2, st2, ct2 do
-                                if f:match("^metadata%..+%.lua$") then check(path, f) end
-                                if done() then break end
-                            end
-                        end
-                    else
-                        walk(path, depth + 1)
-                    end
-                end
-            end
-            if done() then return end
-        end
-    end
-
-    for _idx, root in ipairs(roots) do
-        walk(root, 0)
-        if done() then break end
-    end
-    return found or candidate or weak
-end
-
+-- The book file behind a checksum - only for books that HAVE a sidecar (or are
+-- in the reading history / open right now). First the quick map (checksum ->
+-- file). When the checksum is not there - the book file was replaced since the
+-- sidecar was written, so the sidecar's checksum is stale - the title and the
+-- author are compared with the file names of the books whose sidecar is
+-- already known. That is a plain in-memory loop: no search over the library
+-- (that used to walk every folder for up to 8 s for each book that has no
+-- sidecar, and could never find one anyway). nil = not known, and the callers
+-- then simply show no cover / keep the rating in the plugin's own store.
 function M.fileFor(md5, title, authors)
     if not md5 or md5 == "" then return nil end
     ensure()
     local file = file_map and file_map[md5]
     if file and isFile(file) then return file end
 
-    local now = os.time()
-    local missed = find_misses[md5]
-    if missed and now >= missed and now - missed < 120 then return nil end
-    file = findFileByChecksum(md5, title, authors)
-    if file then
-        file_map = file_map or {}
-        file_map[md5] = file
-        return file
+    if not title or title == "" then return nil end
+    local cached = guess_cache[md5]
+    if cached ~= nil then
+        if cached and isFile(cached) then return cached, true end
+        guess_cache[md5] = nil
     end
-    find_misses[md5] = now
+    local good, weak
+    local seen = {}
+    for _idx, f in ipairs(file_list or {}) do
+        if not seen[f] then
+            seen[f] = true
+            if nameMatchesTitle(f, title) and isFile(f) then
+                if nameMatchesAuthor(f, authors) then
+                    good = f
+                    break
+                elseif not weak and #fold(title) >= 4 then
+                    weak = f
+                end
+            end
+        end
+    end
+    file = good or weak
+    -- A guess is NOT put in file_map: file_map answers "which file has this
+    -- checksum" and a later exact lookup (a rating save) must not mistake a
+    -- name match - "Dune" in "Dune Messiah - Herbert.epub" - for the book.
+    guess_cache[md5] = file or false
+    if file then return file, true end
     return nil
 end
 
@@ -462,9 +628,13 @@ end
 -- would come straight back from the stale walk: the history sidecar no longer
 -- has a rating, so the old one from the cached walk would fill the gap.
 local function forgetScanned(md5, n)
-    if not md5 or md5 == "" or not scan_map then return end
+    if not md5 or md5 == "" then return end
+    restoreScan()
+    if not scan_map then return end
     n = tonumber(n) or 0
     scan_map[md5] = n >= 1 and n or nil
+    pc_dirty = true
+    savePCache()
 end
 
 -- A rating chosen in the Book info popup. Goes into the book's sidecar
@@ -480,20 +650,17 @@ function M.save(md5, n, file)
 
     local saved = false
     if file then
-        local ok = pcall(function()
-            local ui
-            local ok_r, ReaderUI = pcall(require, "apps/reader/readerui")
-            if ok_r and ReaderUI then ui = ReaderUI.instance end
-            local doc_settings
-            if ui and ui.doc_settings and ui.document and ui.document.file == file then
-                doc_settings = ui.doc_settings
-            else
-                doc_settings = require("docsettings"):open(file)
-            end
+        local ok, err = pcall(function()
+            local doc_settings = sidecarSettings(file)
+            if not doc_settings then error("can't open the sidecar", 0) end
             writeSummary(doc_settings, n)
             doc_settings:flush()
         end)
         saved = ok
+        if not ok then
+            logger.warn("ReadingInsights: failed to write the rating into the sidecar of "
+                .. tostring(file) .. ": " .. tostring(err))
+        end
     end
 
     if saved then
@@ -507,13 +674,15 @@ function M.save(md5, n, file)
             pcall(function() st:flush() end)
         end
         forgetScanned(md5, n)
-        map, built_at = nil, nil
+        -- only this book changed: patch the quick map instead of dropping it
+        -- (dropping it re-reads every sidecar of the reading history)
+        if map and md5 and md5 ~= "" then map[md5] = n >= 1 and n or nil end
         return true
     end
     if not md5 or md5 == "" then return false end
     local ok = M.set(md5, n)
     forgetScanned(md5, n)
-    map, built_at = nil, nil
+    if map then map[md5] = n >= 1 and n or nil end
     return ok
 end
 

@@ -207,10 +207,6 @@ msgstr "近8周日均阅读页数"
 msgid "No reading data in the last 8 weeks"
 msgstr "近8周无阅读数据"
 
-msgid "avg time/day"
-msgstr "日均时长"
-msgid "avg pages/day"
-msgstr "日均页数"
 msgid "page read today"
 msgstr "今日阅读页数"
 msgid "pages read today"
@@ -479,8 +475,6 @@ msgid "Use as sleep screen"
 msgstr "用作休眠屏保"
 msgid "Reading insights sleep screen"
 msgstr "阅读统计休眠屏保"
-msgid "Sleep-screen indicator"
-msgstr "休眠标识"
 msgid "Off"
 msgstr "关闭"
 msgid "File manager only"
@@ -500,12 +494,8 @@ msgid "Instant"
 msgstr "立即切换"
 msgid "Slight delay (0.1s)"
 msgstr "轻微延迟（0.1秒）"
-msgid "sleeping…"
-msgstr "休眠中……"
 msgid "Indicator"
 msgstr "标识样式"
-msgid "\"(sleeping…)\" after the title"
-msgstr "标题末尾显示「(休眠中…)」"
 msgid "None"
 msgstr "无"
 
@@ -601,16 +591,13 @@ msgid "Peak activity (100%)"
 msgstr "峰值活跃度（100%）"
 
 msgid "Reading streak calendar"
-msgstr "阅读连续记录日历"
+msgstr "阅读日历"
 
 msgid "Daily streak day"
 msgstr "每日连续记录日"
 
 msgid "Weekly streak gap day"
 msgstr "每周连续记录缺读日"
-
-msgid "Book progress bar"
-msgstr "书籍进度条"
 
 msgid "Show long durations (24h+) as days"
 msgstr "时长超过24小时以「天」显示"
@@ -662,20 +649,17 @@ msgstr "阅读统计：阅读记录"
 msgid "Show Records"
 msgstr "查看阅读记录"
 
-msgid "Show Reading streak"
-msgstr "查看阅读连续记录"
+msgid "Show Reading calendar"
+msgstr "查看阅读日历"
 
 msgid "Menu items"
 msgstr "菜单项"
 
-msgid "Reading streak"
-msgstr "连续阅读"
-
 msgid "Tick the popups that should be listed under Tools > Reading insights. The book popups only appear while a book is open."
 msgstr "勾选要在“工具 > Reading insights”下列出的弹窗。与图书相关的弹窗仅在打开图书时显示。"
 
-msgid "Reading insights: reading streak"
-msgstr "阅读统计：阅读连续记录"
+msgid "Reading insights: reading calendar"
+msgstr "阅读统计：阅读日历"
 
 msgid "Reading insights: reading heatmap"
 msgstr "阅读统计：阅读热力图"
@@ -795,15 +779,6 @@ msgstr "您已连续 %1 周达成每周目标。"
 
 msgid "You've met your weekly goal %1 weeks in a row."
 msgstr "您已连续 %1 周达成每周目标。"
-
-msgid "Last 7 days layout"
-msgstr "过去 7 天布局"
-
-msgid "Compact"
-msgstr "紧凑"
-
-msgid "Full"
-msgstr "完整"
 
 msgid "Last 7 days chapter bar order"
 msgstr "过去 7 天章节条排列顺序"
@@ -1433,18 +1408,6 @@ msgstr "每页章节数"
 msgid "How many chapters the chapter bar shows at once before paging with the arrows."
 msgstr "章节条一次显示多少章节，之后需用箭头翻页。"
 
-msgid "Progress bar"
-msgstr "进度条"
-
-msgid "Show progress bar"
-msgstr "显示进度条"
-
-msgid "Show the progress bar in the \"This book\" section."
-msgstr "在“本书”区域显示进度条。"
-
-msgid "Progress bar height"
-msgstr "进度条高度"
-
 msgid "Read portion color"
 msgstr "已读部分颜色"
 
@@ -1475,8 +1438,8 @@ msgstr "周"
 msgid "Show week numbers"
 msgstr "显示周数"
 
-msgid "Add a \"Week\" column with each row's week number to the reading streak and Book progress calendars."
-msgstr "在连续阅读天数和书籍进度日历中添加“周”列，显示每行对应的周数。"
+msgid "Add a \"Week\" column with each row's week number to the Reading calendar and Book progress calendar."
+msgstr "在阅读日历和书籍进度日历中添加“周”列，显示每行对应的周数。"
 
 msgid "Popup position"
 msgstr "弹窗位置"
@@ -1768,3 +1731,204 @@ msgstr "本书落后"
 
 msgid "books behind pace"
 msgstr "本书落后"
+
+msgid "Last 7 days: time and pages row"
+msgstr "过去 7 天：时间和页数行"
+
+msgid "Show a second row with the other metric (pages when the chart shows time, time when it shows pages) below the total and daily average."
+msgstr "在总计和日均下方显示第二行，内容为另一项指标（图表显示时间时为页数，显示页数时为时间）。"
+
+msgid "Last 7 days: compared to previous 7 days"
+msgstr "过去 7 天：与前 7 天对比"
+
+msgid "Below the chart, show how the total and the daily average changed compared to the 7 days before."
+msgstr "在图表下方显示总计和日均与前 7 天相比的变化。"
+
+msgid "time vs prev. 7d"
+msgstr "时间 较前 7 天"
+
+msgid "vs prev. 7d"
+msgstr "较前 7 天"
+
+msgid "page vs prev. 7d"
+msgstr "页 较前 7 天"
+
+msgid "pages vs prev. 7d"
+msgstr "页 较前 7 天"
+
+msgid "pg vs prev. 7d"
+msgstr "页 较前 7 天"
+
+msgid "daily avg pg"
+msgstr "日均页"
+
+msgid "Daily / weekly goal bar"
+msgstr "每日/每周目标进度条"
+
+msgid "Show a thin progress bar under the daily and weekly goal values."
+msgstr "在每日和每周目标数值下方显示一条细进度条。"
+
+msgid "Progress bar"
+msgstr "进度条"
+
+msgid "Show a thin progress bar under the book percentage."
+msgstr "在全书百分比下方显示一条细进度条。"
+
+msgid "Rating (0-5 stars)"
+msgstr "评分（0-5 星）"
+
+msgid "Please enter a rating from 0 to 5"
+msgstr "请输入 0 到 5 的评分"
+
+msgid "Loading ratings..."
+msgstr "正在加载评分..."
+
+msgid "Appearance"
+msgstr "外观"
+
+msgid "Heatmap & time of day"
+msgstr "热力图与时段"
+
+msgid "Chart style"
+msgstr "图表样式"
+
+msgid "Chart layout"
+msgstr "图表布局"
+
+msgid "Bar order"
+msgstr "柱状顺序"
+
+msgid "Time and pages row"
+msgstr "时间与页数行"
+
+msgid "Comparison with previous 7 days row"
+msgstr "与前 7 天对比行"
+
+msgid "Sleep screen"
+msgstr "休眠屏保"
+
+msgid "Content"
+msgstr "内容"
+
+msgid "Background"
+msgstr "背景"
+
+msgid "Book cover"
+msgstr "书籍封面"
+
+msgid "Follow theme"
+msgstr "跟随主题"
+
+msgid "Custom image"
+msgstr "自定义图片"
+
+msgid "Image fit"
+msgstr "图片适配"
+
+msgid "Fit"
+msgstr "适应"
+
+msgid "Stretch"
+msgstr "拉伸"
+
+msgid "Zoom"
+msgstr "缩放填充"
+
+msgid "Random"
+msgstr "随机"
+
+msgid "No images in {dir}"
+msgstr "{dir} 中没有图片"
+
+msgid "Images are loaded from {dir}"
+msgstr "图片从 {dir} 加载"
+
+msgid "Preview"
+msgstr "预览"
+
+msgid "Nothing to preview."
+msgstr "没有可预览的内容。"
+
+msgid "Image export (Android wallpaper / PocketBook logo)"
+msgstr "图片导出（Android 壁纸 / PocketBook 标志）"
+
+msgid "Save as image, kept up to date"
+msgstr "保存为图片，并保持更新"
+
+msgid "Also save when opening a book"
+msgstr "打开图书时也保存"
+
+msgid "Image format"
+msgstr "图片格式"
+
+msgid "Refresh interval"
+msgstr "刷新间隔"
+
+msgid "Every 5 minutes"
+msgstr "每 5 分钟"
+
+msgid "Every 15 minutes"
+msgstr "每 15 分钟"
+
+msgid "Every 30 minutes"
+msgstr "每 30 分钟"
+
+msgid "Every hour"
+msgstr "每小时"
+
+msgid "min"
+msgstr "分钟"
+
+msgid "Also copy to folder"
+msgstr "同时复制到文件夹"
+
+msgid "Also copy to a shared folder…"
+msgstr "同时复制到共享文件夹…"
+
+msgid "Choose a folder to also save the image to"
+msgstr "选择一个也用于保存图片的文件夹"
+
+msgid "Image will also be copied to:\n{path}\n\nOn Android, point your system wallpaper picker (or a wallpaper-changer app) at this folder."
+msgstr "图片也会被复制到：\n{path}\n\n在 Android 上，请将系统壁纸选择器（或换壁纸应用）指向此文件夹。"
+
+msgid "Stop copying to that extra folder"
+msgstr "停止复制到该附加文件夹"
+
+msgid "Also save as PocketBook power-off / boot logo"
+msgstr "同时保存为 PocketBook 关机 / 开机 Logo"
+
+msgid "Save image now"
+msgstr "立即保存图片"
+
+msgid "Image saved to: {path}"
+msgstr "图片已保存到：{path}"
+
+msgid "Image updated."
+msgstr "图片已更新。"
+
+msgid "Could not update the image."
+msgstr "无法更新图片。"
+
+msgid "Could not create the image export folder."
+msgstr "无法创建图片导出文件夹。"
+
+msgid "Could not write the image file."
+msgstr "无法写入图片文件。"
+
+msgid "On Android, KOReader's own sleep screen never shows, because locking the screen hands over to Android's own lock screen. Turn this on and Reading insights keeps a picture of the sleep screen (same content and background as set under Sleep screen) on disk, refreshed automatically; set that picture as your Android wallpaper the normal way, or point a wallpaper-changer app at the folder below."
+msgstr "在 Android 上，KOReader 自带的休眠屏保永远不会显示，因为锁屏时会由 Android 自己的锁屏界面接管。开启此项后，Reading insights 会在磁盘上保存一张休眠屏保图片（内容和背景与“休眠屏保”中的设置相同）并自动刷新；请按常规方式将该图片设为 Android 壁纸，或让壁纸切换应用指向下方的文件夹。"
+
+msgid "Could not draw the image (see the log for details)."
+msgstr "无法绘制图片（详情见日志）。"
+
+msgid "Nothing to draw yet. Open a book and read a few pages first."
+msgstr "暂无可绘制的内容。请先打开一本书并阅读几页。"
+
+msgid "Show streak bar under covers"
+msgstr "在封面下方显示连续记录条"
+
+msgid "Show the streak line under the covers on the reading calendar. When off (default), the covers are shown larger."
+msgstr "在阅读日历中于封面下方显示连续记录线。关闭时（默认），封面会显示得更大。"
+
+msgid "8-week reading trend"
+msgstr "8 周阅读趋势"
