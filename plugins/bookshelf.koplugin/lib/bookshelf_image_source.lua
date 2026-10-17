@@ -287,6 +287,26 @@ local function _autoDiscoverStackImage(kind, name)
     if slug ~= "" and slug ~= name then
         candidates[#candidates + 1] = slug
     end
+    -- An author's file may be named the other way round: saved as "Osman,
+    -- Richard.jpg" (by hand, or by Find author image online while the shelf
+    -- showed Last, First) and looked up as "Richard Osman" after Author name
+    -- formatting changed, or the reverse. Tried after the name as given, so
+    -- an exact file still wins. Lookups in the listing index, not stats.
+    if kind == "author" then
+        local ok_an, AuthorName = pcall(require, "lib/bookshelf_author_name")
+        if ok_an and AuthorName and AuthorName.formatted then
+            for _i, mode in ipairs({ "first_last", "last_first" }) do
+                local alt = AuthorName.formatted(name, mode)
+                if type(alt) == "string" and alt ~= "" and alt ~= name then
+                    candidates[#candidates + 1] = alt
+                    local alt_slug = _slug(alt)
+                    if alt_slug ~= "" and alt_slug ~= alt then
+                        candidates[#candidates + 1] = alt_slug
+                    end
+                end
+            end
+        end
+    end
     for _, stem in ipairs(candidates) do
         for _, ext in ipairs(LIBRARY_EXTS) do
             local real = index[(stem .. "." .. ext):lower()]
@@ -546,6 +566,90 @@ function ImageSource.loadImage(image_path, w, h)
     end
     _bbPut(key, bb)
     return bb
+end
+
+-- loadImageFramed(path, w, h, opts) -> a w*h bb: the picture inset on a frame
+-- of opts.color, fitted to the width at its own shape, aligned to the top,
+-- its corners rounded by opts.radius; the bottom cut off when it is taller
+-- than the room. As the series slipcase's sticker sits on its board.
+--
+-- For author photos, which the card otherwise stretched to a book's shape:
+-- square, landscape and 4:5 portraits all came out squashed (maintainer, on
+-- the PW5, with photos from Find author images online). Top-aligned because
+-- the folder card's tab covers the bottom of the card, and a face is at the
+-- top of a portrait.
+--   opts.inset   px of frame left, right and above the picture
+--   opts.radius  px corner radius of the picture
+--   opts.color   the frame's colour, as it goes into the BITMAP (a caller in
+--                night mode passes it pre-inverted to match the picture)
+--   opts.key     extra cache key (the colour and night state)
+local function _cornerCut(r, dy)
+    local dist = r - dy - 0.5
+    return math.floor(r - math.sqrt(math.max(0, r * r - dist * dist)) + 0.5)
+end
+
+function ImageSource.loadImageFramed(image_path, w, h, opts)
+    if type(image_path) ~= "string" or not w or not h or w <= 0 or h <= 0 then
+        return nil
+    end
+    opts = opts or {}
+    local attr = lfs.attributes(image_path)
+    if not attr or attr.mode ~= "file" then return nil end
+    local tag = ImageSource.imageSizeTag and ImageSource.imageSizeTag(image_path)
+    -- Not `tag and tag:match(...)`: an `and` keeps only its first value,
+    -- which left ih nil and every picture on the stretching path.
+    local iw, ih
+    if tag then iw, ih = tag:match("^(%d+)x(%d+)$") end
+    iw, ih = tonumber(iw), tonumber(ih)
+    if not (iw and ih and iw > 0 and ih > 0) then return ImageSource.loadImage(image_path, w, h) end
+    local inset  = math.max(0, math.floor(opts.inset or 0))
+    local radius = math.max(0, math.floor(opts.radius or 0))
+    local key = image_path .. "|" .. tostring(attr.modification or 0)
+                .. "|" .. tostring(w) .. "|" .. tostring(h) .. "|framed|"
+                .. inset .. "|" .. radius .. "|" .. tostring(opts.key or "")
+    local hit = _bb_cache[key]
+    if hit then return hit.bb end
+    local pw = math.max(1, w - 2 * inset)
+    local full_h = math.max(1, math.floor(pw * ih / iw + 0.5))   -- fitted to the width
+    local ph = math.min(full_h, math.max(1, h - inset))           -- the bottom cut off
+    local ok, out = pcall(function()
+        local Blitbuffer = require("ffi/blitbuffer")
+        local photo = RenderImage:renderImageFile(image_path, false, pw, full_h)
+        if not photo then return nil end
+        local canvas = Blitbuffer.new(w, h, photo:getType())
+        local c = opts.color or Blitbuffer.COLOR_WHITE
+        -- paintRect flattens a colour to grey; the RGB32 painter keeps it.
+        local function fill(x, y, fw, fh)
+            if fw <= 0 or fh <= 0 then return end
+            if canvas.paintRectRGB32 and c.getColorRGB32 and not Blitbuffer.isColor8(c) then
+                canvas:paintRectRGB32(x, y, fw, fh, c)
+            else
+                canvas:paintRect(x, y, fw, fh, c)
+            end
+        end
+        fill(0, 0, w, h)
+        canvas:blitFrom(photo, inset, inset, 0, 0, pw, ph)
+        photo:free()
+        -- Round the picture's corners: the frame painted back over each
+        -- corner's outside, row by row, as the slipcase's sticker is cut.
+        local r = math.min(radius, math.floor(pw / 2), math.floor(ph / 2))
+        for dy = 0, r - 1 do
+            local cut = _cornerCut(r, dy)
+            if cut > 0 then
+                fill(inset, inset + dy, cut, 1)
+                fill(inset + pw - cut, inset + dy, cut, 1)
+                fill(inset, inset + ph - 1 - dy, cut, 1)
+                fill(inset + pw - cut, inset + ph - 1 - dy, cut, 1)
+            end
+        end
+        return canvas
+    end)
+    if not ok or not out then
+        logger.warn("[bookshelf image] failed to frame", image_path, "err=", tostring(out))
+        return ImageSource.loadImage(image_path, w, h)
+    end
+    _bbPut(key, out)
+    return out
 end
 
 -- Load at the image's native size, without scaling -- so the bb keeps its true

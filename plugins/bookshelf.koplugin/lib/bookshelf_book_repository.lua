@@ -492,10 +492,33 @@ local SUPPORTED_EXT = {
     cbz=true, cbr=true, cbt=true,
 }
 
+-- Formats other plugins register document providers for
+-- See lib/bookshelf_plugin_formats for the rules.
+local _plugin_formats
+local function _pluginFormats()
+    if _plugin_formats == nil then
+        local ok, PF = pcall(require, "lib/bookshelf_plugin_formats")
+        _plugin_formats = ok and PF or false
+    end
+    return _plugin_formats or nil
+end
+local function _isPluginFormat(ext)
+    local PF = _pluginFormats()
+    return PF and PF.isPluginFormat(ext) or false
+end
+
+-- The plugin format set as a string, for the walk cache's validity check (see
+-- cachedWalk). "" when no plugin adds a format, or the module is unavailable.
+local function _pluginFormatsFingerprint()
+    local PF = _pluginFormats()
+    return PF and PF.fingerprint() or ""
+end
+
 -- _supportedExt(name): the supported book extension for a filename (lowercased,
 -- e.g. "epub" or the compound "fb2.zip"), or nil if not a book. Handles the
 -- ".zip" book forms KOReader registers (fb2.zip, html.zip, ...) without
--- treating a bare/unknown ".zip" archive as a book.
+-- treating a bare/unknown ".zip" archive as a book. Formats a plugin registers
+-- a document provider for count too.
 local function _supportedExt(name)
     if not name then return nil end
     local last = name:match("%.([^.]+)$")
@@ -504,9 +527,10 @@ local function _supportedExt(name)
     if last == "zip" then
         local compound = name:match("%.([^.]+%.[Zz][Ii][Pp])$")
         compound = compound and compound:lower()
-        return (compound and SUPPORTED_EXT[compound]) and compound or nil
+        if not compound then return nil end
+        return (SUPPORTED_EXT[compound] or _isPluginFormat(compound)) and compound or nil
     end
-    return SUPPORTED_EXT[last] and last or nil
+    return (SUPPORTED_EXT[last] or _isPluginFormat(last)) and last or nil
 end
 
 -- Public wrapper so other modules (file-ops' unbounded folder walk) can ask
@@ -514,6 +538,17 @@ end
 -- from it.
 function Repo.isBookFile(name)
     return _supportedExt(name) ~= nil
+end
+
+-- Repo.isPluginFormatFile(path): true when the file is a book only because a
+-- plugin registered its format -- not one of SUPPORTED_EXT's, even if a plugin
+-- also provides for that (Meguru registers .cbz as well as .meguru; a .cbz
+-- stays an ordinary book). Such a book's cover can be anything the plugin
+-- decides to do -- Meguru's is an HTTP request -- so the shelf never asks for
+-- one on its own (see the extraction kickoff in bookshelf_widget).
+function Repo.isPluginFormatFile(path)
+    local ext = _supportedExt(path)
+    return ext ~= nil and not SUPPORTED_EXT[ext]
 end
 
 -- _formatLabel(fp): uppercase format label for display/grouping. Collapses a
@@ -1633,6 +1668,24 @@ end
 -- as their own (free) category before probing anything heavier.
 Repo.pageCountFromFilename = pageCountFromFilename
 
+-- Repo.printedPageCount(fp) -> a count that does not depend on how the book
+-- is laid out for reading, or nil: the book's own stable page numbers, then
+-- what Extract page counts found from a publisher page list, a Hardcover
+-- edition or the Calibre column, then a p(N) in the file name. What the cover
+-- badge shows under Page count > Printed page counts first.
+local PRINTED_TAGS = { print = true, calibre = true, filename = true }
+function Repo.printedPageCount(fp)
+    if type(fp) ~= "string" then return nil end
+    local _p, _s, _r, pages, _n, src = Repo.readProgress(fp)
+    if src == "stable" and pages then return pages end
+    local ok, SS = pcall(require, "lib/bookshelf_spine_shelf")
+    if ok and SS and SS.cachedProgress then
+        local pp, _s2, _k, psrc = SS.cachedProgress(fp)
+        if pp and PRINTED_TAGS[psrc] then return tonumber(pp) end
+    end
+    return pageCountFromFilename(fp)
+end
+
 -- Issue 405: a page count from a Calibre custom column, for the page-count
 -- scan. The Count Pages plugin for Calibre fills one in (usually #pages), and
 -- a reader who already keeps it may prefer it to the scan's own render.
@@ -1755,6 +1808,8 @@ function Repo.buildBook(filepath, opts)
     if     book.status == "complete"  then book.status = "finished"
     elseif book.status == "abandoned" then book.status = "on_hold"
     end
+    -- Progress but no status: reading, as in Repo.readProgress (issue 524).
+    if book.status == nil and book.book_pct then book.status = "reading" end
     -- 1-5 stars (or nil for unrated). Stored under summary.rating by KOReader's
     -- Reader Status dialog. Exposed for the hero card's rating region and for
     -- the rating sort key.
@@ -2492,10 +2547,13 @@ end
 --                                   default ReadCollection ("favorites")
 -- Strip both so a ★ toggle invalidates whichever shape the user has on
 -- their favourites chip(s).
+-- A chip sorted by "Favorites first" is reordered by the same edit,
+-- whatever its source, so its entries go too.
 function Repo.invalidateFavoritesCache()
     for k in pairs(_bySource_cache) do
         if k:sub(1, 10) == "favorites|"
-                or k:sub(1, 21) == "collection|favorites|" then
+                or k:sub(1, 21) == "collection|favorites|"
+                or k:find("s:favorites_first:", 1, true) then
             _bySource_cache[k] = nil
         end
     end
@@ -2529,6 +2587,7 @@ end
 -- touched by reading, so chips sorted on them keep their cache.
 local READ_STATE_SORT_TOKENS = {
     "s:last_opened:", "s:percent_read:", "s:read_status", "s:rating:",
+    "s:added_or_opened:",
 }
 function Repo.invalidateReadStateCache()
     for k in pairs(_bySource_cache) do
@@ -2778,6 +2837,13 @@ function Repo.readProgress(filepath)
     if     status == "complete"  then status = "finished"
     elseif status == "abandoned" then status = "on_hold"
     end
+    -- A sidecar with progress but no status is a book being read, as KOReader
+    -- counts it (BookList.setBookInfoCache: opened, no valid status ->
+    -- "reading"). Such a sidecar comes from elsewhere -- KOReader writes the
+    -- status on every open -- and the shelf drew it as unread, with no bar
+    -- (issue 524). Not "new": that is bookshelf's own Mark as unread, which
+    -- also clears the percentage.
+    if status == nil and pct then status = "reading" end
     -- Third rung, mirroring buildBook: synthesise the page from how far in the
     -- reader is. Approximate for a reflowable book, and the honest answer when
     -- neither exact source exists -- an EPUB without stable page numbers has no
@@ -3119,7 +3185,10 @@ local function _loadWalkSnapshot(key)
     return t
 end
 
-local function _saveWalkSnapshot(key, list, dirs, listings)
+-- `formats` is the plugin format set the walk was taken with (see cachedWalk).
+-- A snapshot written before it existed has none, which reads as "" -- no plugin
+-- formats -- exactly what that version walked with, so no version bump.
+local function _saveWalkSnapshot(key, list, dirs, listings, formats)
     local p = _walkPersist()
     if not p then return end
     pcall(p.save, p, {
@@ -3128,6 +3197,7 @@ local function _saveWalkSnapshot(key, list, dirs, listings)
         list     = list,
         dirs     = dirs,
         listings = listings,
+        formats  = formats,
     })
 end
 
@@ -3142,23 +3212,36 @@ end
 local function cachedWalk(home, depth)
     local key = (home or "/") .. ":" .. tostring(depth or 0)
     local now = os.time()
+    local formats = _pluginFormatsFingerprint()
+    local formats_changed = false
     local entry = _walk_cache[key]
+    if entry and (entry.formats or "") ~= formats then
+        Repo.invalidateWalkCache()
+        entry, formats_changed = nil, true
+    end
     local from_snapshot = false
     if not entry then
         -- Nothing in memory: try the previous launch's walk. It is adopted
         -- only as a CANDIDATE -- _dirsChanged below is what accepts or
         -- rejects it, exactly as it does for an in-session entry.
         local snap = _loadWalkSnapshot(key)
+        if snap and (snap.formats or "") ~= formats then
+            -- Walked with another plugin format set: not a candidate, and
+            -- anything else persisted from that library (the finished count)
+            -- goes with it.
+            Repo.invalidateWalkCache()
+            snap, formats_changed = nil, true
+        end
         if snap then
             entry = { list = snap.list, dirs = snap.dirs,
-                      listings = snap.listings,
+                      listings = snap.listings, formats = formats,
                       expires_at = now + WALK_CACHE_TTL }
             from_snapshot = true
         end
     end
     local stale_reason
     if not entry then
-        stale_reason = "miss"
+        stale_reason = formats_changed and "formats" or "miss"
     elseif _dirsChanged(entry.dirs) then
         stale_reason = from_snapshot and "snapshot-dir-mtime" or "dir-mtime"
     end
@@ -3204,9 +3287,9 @@ local function cachedWalk(home, depth)
             end
         end
         entry = { list = fresh, dirs = dirs, listings = listings,
-                  expires_at = now + WALK_CACHE_TTL }
+                  formats = formats, expires_at = now + WALK_CACHE_TTL }
         _walk_cache[key] = entry
-        _saveWalkSnapshot(key, fresh, dirs, listings)
+        _saveWalkSnapshot(key, fresh, dirs, listings, formats)
         if files_changed and stale_reason ~= "miss" then
             -- Downstream caches were built against the previous book set
             -- and won't include newly-added (or still-include removed)
@@ -4445,7 +4528,7 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
         if k == "series_or_title" then needs.series = true; needs.title = true end
         if k == "percent_read" then needs.percent  = true end
         if k == "read_status" or k == "read_status_active" then needs.status = true end
-        if k == "last_opened"  then needs.last_opened = true end
+        if k == "last_opened" or k == "added_or_opened" then needs.last_opened = true end
         -- rating / page_count are NOT on the light shelf record (rating is
         -- never set by buildBookMeta; page_count is nil for EPUBs), so a sort
         -- by either is a no-op unless we hydrate them from the sidecar here.
@@ -7561,8 +7644,9 @@ local function opdsLoneChildBook(win)
             book = e
         end
     end
-    if not (book and book.opds and type(book.opds.acquisitions) == "table"
-            and #book.opds.acquisitions > 0) then
+    local o = book and book.opds
+    if not (o and ((type(o.acquisitions) == "table" and #o.acquisitions > 0)
+            or type(o.stream) == "table")) then
         return nil
     end
     return book

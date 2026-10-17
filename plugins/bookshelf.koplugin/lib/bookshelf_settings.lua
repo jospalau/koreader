@@ -160,6 +160,17 @@ function Settings:_pickTokenViaLibraryModal(LibraryModal, dialog, filter)
         { key = "Style",    label = _("Style") },
     }
     local catalogue = _pickerCatalogue(filter)
+    -- Tokens a patch or plugin registered sit under its id (Tokens.register).
+    do
+        local known = {}
+        for _i, c in ipairs(CHIPS) do known[c.key] = true end
+        for _i, t in ipairs(catalogue) do
+            if t.owner and not known[t.category] then
+                known[t.category] = true
+                CHIPS[#CHIPS + 1] = { key = t.category, label = t.category }
+            end
+        end
+    end
     if catalogue ~= Tokens.CATALOGUE then
         local present = {}
         for _i, t in ipairs(catalogue) do present[t.category] = true end
@@ -664,6 +675,120 @@ end
 -- Progress indicators menu
 -- ---------------------------------------------------------------------------
 
+-- Page count on covers. The count's source is a separate question from the
+-- Extract page counts dialog's (which sources a scan COLLECTS): a book can
+-- have both a printed count and one at the reader's own layout, and this says
+-- which a badge shows. Worded as that dialog words its sources.
+--   progress_page_count_enabled  true = shown (off by default)
+--   progress_page_count_bare     true = "220", not "220 p" (issue 499)
+--   progress_page_count_source   nil = reading settings, "printed" = printed first
+--   progress_page_count_percent  nil = pages, "only" = percent read, "both"
+local function _pageBadgeMode()
+    if BookshelfSettings.read("progress_page_count_enabled") ~= true then return "off" end
+    local p = BookshelfSettings.read("progress_page_count_percent")
+    if p == "only" or p == "both" then return p end
+    return "pages"
+end
+
+function Settings._pageCountSummary()
+    local mode = _pageBadgeMode()
+    if mode == "off" then return _("Off") end
+    if mode == "only" then return _("Percent read") end
+    if mode == "both" then return _("Percent read and pages") end
+    return _("Pages")
+end
+
+function Settings:_pageCountSubItems(markDirty)
+    -- The pages part is shown: Number only and the Count rows apply.
+    local function pagesShown() local m = _pageBadgeMode(); return m == "pages" or m == "both" end
+    local function show(mode, label, help)
+        return {
+            text = label, help_text = help, radio = true, keep_menu_open = true,
+            checked_func = function() return _pageBadgeMode() == mode end,
+            callback = function(touchmenu_instance)
+                BookshelfSettings.save("progress_page_count_enabled", mode ~= "off")
+                if mode ~= "off" then
+                    BookshelfSettings.save("progress_page_count_percent",
+                        (mode == "only" or mode == "both") and mode or nil)
+                end
+                markDirty()
+                if touchmenu_instance and touchmenu_instance.updateItems then
+                    touchmenu_instance:updateItems()
+                end
+            end,
+        }
+    end
+    local function flip(key)
+        return function(touchmenu_instance)
+            BookshelfSettings.save(key, not (BookshelfSettings.read(key) == true))
+            markDirty()
+            if touchmenu_instance and touchmenu_instance.updateItems then
+                touchmenu_instance:updateItems()
+            end
+        end
+    end
+    local function source(value)
+        return {
+            text = value == "printed" and _("Count: printed pages first")
+                or _("Count: your reading settings"),
+            help_text = value == "printed"
+                and _("Publisher page numbers, Hardcover editions, the Calibre page column or a count in the file name, where a book has one. Otherwise the count at your reading settings.")
+                or _("The pages you turn at your font and margins: KOReader's count once a book has been opened, and before that whatever Extract page counts found."),
+            radio = true,
+            enabled_func = pagesShown,
+            keep_menu_open = true,
+            checked_func = function()
+                local v = BookshelfSettings.read("progress_page_count_source")
+                return (v == "printed") == (value == "printed")
+            end,
+            callback = function(touchmenu_instance)
+                BookshelfSettings.save("progress_page_count_source", value)
+                markDirty()
+                if touchmenu_instance and touchmenu_instance.updateItems then
+                    touchmenu_instance:updateItems()
+                end
+            end,
+        }
+    end
+    local plugin = self._plugin
+    return {
+        show("off", _("Off")),
+        show("pages", _("Pages")),
+        show("only", _("Percent read"),
+            _("How far through you are, for books you are reading or have on hold. Other books show no badge.")),
+        (function()
+            local row = show("both", _("Percent read and pages"),
+                _("Both, for books you are reading or have on hold; the pages alone for the rest."))
+            row.separator = true
+            return row
+        end)(),
+        {
+            text = _("Number only"),
+            help_text = _("Show \"220\" rather than \"220 p\"."),
+            checked_func = function() return BookshelfSettings.read("progress_page_count_bare") == true end,
+            enabled_func = pagesShown,
+            keep_menu_open = true,
+            callback = flip("progress_page_count_bare"),
+            separator = true,
+        },
+        source(nil),
+        source("printed"),
+        {
+            text = _("Extract page counts\xE2\x80\xA6"),
+            help_text = _("Find page counts for books that do not have one yet."),
+            separator = true,
+            callback = function(touchmenu_instance)
+                if touchmenu_instance then UIManager:close(touchmenu_instance) end
+                UIManager:nextTick(function()
+                    require("lib/bookshelf_page_count_dialog").show(
+                        function(opts) plugin:scanPageCounts(opts) end,
+                        function() markDirty() end)
+                end)
+            end,
+        },
+    }
+end
+
 function Settings:_coverDisplaySubItems()
     local function markDirty()
         if self._bw and self._bw._rebuild then
@@ -936,10 +1061,16 @@ function Settings:_coverDisplaySubItems()
                   _("Show progress bars"), false),
         toggleRow("progress_bookmark_enabled",
                   _("Show reading bookmarks"), false),
-        -- Page count: defaults off so existing users aren't surprised
-        -- by an extra element appearing on every cover after upgrade.
-        toggleRow("progress_page_count_enabled",
-                  _("Show page count"), true, true),
+        -- Page count on covers: one row opening its own menu (it was two
+        -- rows, which the long menu split across its pages).
+        {
+            text_func = function()
+                return _("Page badge") .. ": " .. Settings._pageCountSummary()
+            end,
+            sub_item_table_func = function()
+                return self:_pageCountSubItems(markDirty)
+            end,
+        },
         -- ── reading-status treatments ──
         -- Completed book badge: three-state. "bookmark" (default;
         -- pre-v2.1 dangling outlined check), "tickbox" (v2.1 square
@@ -1702,6 +1833,12 @@ function Settings:_wallpaperMenu()
     -- (2026-10-09), and here because they only matter over a wallpaper.
     items[#items].separator = true
     for _i, row in ipairs(self:_panelRows()) do items[#items + 1] = row end
+    -- Last, under its own rule: the one row here that is NOT part of the
+    -- theme, a folder of the reader's own to take pictures from, the same
+    -- for every theme (README says so). In Settings it pushed Library &
+    -- search onto a second menu page.
+    items[#items].separator = true
+    items[#items + 1] = self:_wallpaperFolderRow()
     return items
 end
 
@@ -3049,11 +3186,9 @@ function Settings:_settingsSubItems()
         keep_menu_open = true,
         callback = function(touchmenu_instance) self:_pickBookshelfUIFont(touchmenu_instance) end,
     }
-    -- An extra folder to take wallpapers from: a device preference no theme
-    -- changes. The panel rows (shading, blur, Covers panel) were here from
-    -- 2026-10-07 and went back to the theme's Wallpaper menu on 2026-10-09
-    -- (maintainer: "Yes make those part of the theme").
-    items[#items + 1] = self:_wallpaperFolderRow()
+    -- The extra wallpaper folder went to Theme > Wallpaper (2026-10-16): as a
+    -- twelfth row here it pushed Library & search onto a second page of
+    -- KOReader's 10-row menu.
     items[#items].separator = true  -- end appearance band
 
     -- ── surfaces band: micro-module placement + the start menu ──
@@ -4379,6 +4514,18 @@ function Settings:_librarySubItems()
             help_text = _("Where Bookshelf looks for custom cover images. For stacks, place files like authors/author-name.jpg into the matching subfolder (authors, series, genres, collections). For folders, drop a cover.jpg into the folder itself. See the README for more matching options."),
             callback = function(touchmenu_instance)
                 self:_pickImageLibraryPath(touchmenu_instance)
+            end,
+        },
+        {
+            text = _("Find author images online\xE2\x80\xA6"),
+            help_text = _("Looks up a photo of every author on your shelves that has no image yet, from Open Library, or Wikipedia when it has none, and saves it in the image library's authors folder. Images you already have are kept. To replace one author's image, long-press the author and choose Find author image online."),
+            -- The menu closes first, as for Extract page counts: the pass
+            -- reports in the shelf's status line, which the menu would cover.
+            callback = function(touchmenu_instance)
+                if touchmenu_instance then UIManager:close(touchmenu_instance) end
+                UIManager:nextTick(function()
+                    require("lib/bookshelf_author_images_flow").findAll(self._bw)
+                end)
             end,
             separator = true,  -- end the metadata band
         },

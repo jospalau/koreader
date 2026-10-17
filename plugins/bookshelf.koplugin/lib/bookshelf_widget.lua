@@ -240,6 +240,11 @@ function BookshelfWidget:init()
         if not ((src and (id == nil or src.kind == id)) or self:_shelvesHoldSource(id)) then return end
         UIManager:nextTick(function()
             if self._closed then return end
+            -- Spines view keeps its whole-list fetch for 30 s, keyed on the
+            -- chip and drill tip, neither of which a source's new records
+            -- change (issue 511). Expire it rather than drop it: a refetch
+            -- that brings back the same list keeps its ornament deal.
+            if self._spine_fetch_cache then self._spine_fetch_cache.at = 0 end
             self:_rebuild(); UIManager:setDirty(self, "ui")
         end)
     end)
@@ -797,6 +802,11 @@ function BookshelfWidget:_serializeDrillPath()
                 or e.kind == "format" or e.kind == "rating"
                 or e.kind == "language" then
             out[#out + 1] = { kind = e.kind, label = e.label, whole = e.whole or nil }
+            if e.kind == "series" and e.payload and e.payload._series_box then
+                local files = {}
+                for _, book in ipairs(e.payload.books or {}) do files[#files + 1] = book.filepath end
+                out[#out].series_box_files = files
+            end
         elseif e.kind == "opds_nav" then
             -- A drilled subcatalog, by identity: the pair that addresses its
             -- window, so the restore can ask whether it has anything cached
@@ -923,6 +933,9 @@ function BookshelfWidget:_restoreDrillPath(saved)
                 or e.kind == "genre" or e.kind == "format"
                 or e.kind == "rating" or e.kind == "language" then
             local g = Repo.findGroup(e.kind, e.label)
+            if g and e.kind == "series" and type(e.series_box_files) == "table" then
+                g = require("lib/bookshelf_series_boxes").restore(g, e.series_box_files, e.label, Repo.lightMetaFor)
+            end
             if g then
                 self._drilldown_path[#self._drilldown_path + 1] = {
                     kind = e.kind, label = e.label, payload = g, whole = e.whole,
@@ -2984,9 +2997,22 @@ local BIM_POLL_TOTAL_BUDGET_S = 60
 --     max). Those will keep their filename fallback indefinitely; no point
 --     re-trying every render.
 --   * The item has no filepath (folder records, empty slots).
+--   * The book is in a format another plugin provides: it is queued for its
+--     metadata only, never for a cover (see maybe_queue).
 --
 -- Folder records carry their own first_book — we queue that too so a folder
 -- whose representative book isn't indexed yet gets a real cover next render.
+-- _allowCoverFetch(fp): the user asked for this book's metadata again (Refresh
+-- metadata), so the next kickoff may extract its cover even if it is in a
+-- plugin-provided format, whose covers are otherwise never fetched on the
+-- shelf's own initiative (see maybe_queue). One cover attempt, then the
+-- permission lapses.
+function BookshelfWidget:_allowCoverFetch(fp)
+    if not fp then return end
+    self._cover_requested = self._cover_requested or {}
+    self._cover_requested[fp] = true
+end
+
 function BookshelfWidget:_kickOffMissingMetaExtraction(items, slot_w, slot_h, hero_w, hero_h)
     -- Deferred until AFTER the repaint (tickAfterNext; nextTick still runs
     -- before the paint): the check loop below is a per-book BIM SQLite read,
@@ -3073,6 +3099,24 @@ function BookshelfWidget:_kickOffMissingMetaExtractionNow(items, slot_w, slot_h,
         -- answer, which is exactly when extraction cannot succeed either.
         local info, bim_err = Repo.bimGetBookInfo(BIM, fp, false)
         if bim_err then return end
+        -- A format another plugin provides (Repo.isPluginFormatFile) gets its
+        -- metadata here, once, and never a cover: its cover is whatever that
+        -- plugin does to produce one -- for Meguru's .meguru streams an HTTP
+        -- request per book -- and the shelf makes no network request the user
+        -- did not ask for. So no cover attempt and no resize; the metadata pass
+        -- carries no cover_specs. A cover BIM already holds (from browsing the
+        -- folder in the file browser's mosaic, say) still shows.
+        --
+        -- Refresh metadata IS the user asking, and it relies on this kickoff
+        -- to bring the cover back, so a refreshed book is let through once
+        -- (_allowCoverFetch); the pass ends when BIM records the attempt.
+        local requested = self._cover_requested and self._cover_requested[fp]
+        if requested and info and info.cover_fetched == "Y" then
+            self._cover_requested[fp] = nil
+            requested = nil
+        end
+        local text_only = not requested and Repo.isPluginFormatFile
+            and Repo.isPluginFormatFile(fp) or false
         local needs   = false
         local reason  = "?"
         local inprog  = tonumber(info and info.in_progress) or 0
@@ -3084,6 +3128,8 @@ function BookshelfWidget:_kickOffMissingMetaExtractionNow(items, slot_w, slot_h,
             reason = "no-meta"
         elseif info.has_meta == nil then
             reason = "no-meta-but-max-tries"
+        elseif text_only then
+            reason = "plugin-format-no-auto-cover"
         elseif info.cover_fetched == nil and inprog < max_tries then
             -- Metadata was extracted (e.g. by "Scan all library metadata")
             -- but no cover attempt has been made yet.
@@ -3114,7 +3160,7 @@ function BookshelfWidget:_kickOffMissingMetaExtractionNow(items, slot_w, slot_h,
         if needs then
             files[#files + 1] = {
                 filepath    = fp,
-                cover_specs = specs,
+                cover_specs = not text_only and specs or nil,
             }
         else
             memo[mkey] = true
@@ -3694,8 +3740,8 @@ function BookshelfWidget:_fetchChipItems(n, want_all)
         local total = #books
         -- Cursor-based: offset is 0-based, cursor is 1-based. Clamp upstream
         -- in _rebuild keeps cursor within range; defensive guard here too.
-        local offset = math.max(0, (self._cursor or 1) - 1)
-        local stop = math.min(offset + self:_viewSize(), total)
+        local offset = want_all and 0 or math.max(0, (self._cursor or 1) - 1)
+        local stop = math.min(offset + (want_all and n or self:_viewSize()), total)
         local ScaledCoverCache = require("lib/bookshelf_scaled_cover_cache")
         local fresh = {}
         for i = offset + 1, stop do
@@ -3705,10 +3751,17 @@ function BookshelfWidget:_fetchChipItems(n, want_all)
                 -- Covers already in ScaledCoverCache skip the BIM zstd
                 -- decode; SpineWidget repaints from the cache by filepath.
                 local meta_opts
-                if ScaledCoverCache:has(b.filepath) then
+                if Repo.spine_light then
+                    -- Whole physical shelves need metadata, never one cover
+                    -- decode per member. Hydrate only the visible box fronts.
+                    nb = require("lib/bookshelf_series_boxes").copy(
+                        Repo.lightMetaFor(b.filepath) or Repo.buildBookMeta(b.filepath, { want_cover = false }) or b)
+                elseif ScaledCoverCache:has(b.filepath) then
                     meta_opts = { want_cover = false }
                 end
-                nb = Repo.buildBookMeta(b.filepath, meta_opts) or b
+                if not Repo.spine_light then
+                    nb = Repo.buildBookMeta(b.filepath, meta_opts) or b
+                end
             end
             fresh[#fresh + 1] = nb
         end
@@ -5090,7 +5143,7 @@ function BookshelfWidget:_buildHero(content_w, hero_cover_w, hero_cover_h, hero_
         if current and regions.tags and not regions.tags.disabled then
             local pill_w = math.max(1, content_w - hero_cover_w - PAD)
             local bw = self
-            tags_builder = function(book)
+            tags_builder = function(book, extra_w)
                 if not book or not book.filepath then return nil end
                 -- Read the tags-region config fresh each call (not captured)
                 -- so a live in-place hero refresh after a settings change
@@ -5124,7 +5177,7 @@ function BookshelfWidget:_buildHero(content_w, hero_cover_w, hero_cover_h, hero_
                     local ok, CP = pcall(require, "lib/bookshelf_cover_progress")
                     ink = ok and CP and CP.ink and CP.ink() or nil
                 end
-                return bw:_buildPillGroup(pill_specs, pill_w, max_rows, pill_size,
+                return bw:_buildPillGroup(pill_specs, pill_w + (tonumber(extra_w) or 0), max_rows, pill_size,
                     tcfg.alignment or "left", nil,
                     -- +N opens the combined book-detail popup (pills + description).
                     function() bw:_showBookDetail(book, { active = "tags" }) end,
@@ -6897,6 +6950,13 @@ end
 -- "Is it set?" cannot be a truthiness test: `false` IS a setting (none), and
 -- treating it as unset sends the shelf to the global default instead.
 function BookshelfWidget:_spineFaceOut()
+    -- Inside a box set every book stands face-out: opening the box is asking
+    -- to see the covers it held spine-out. Whatever the shelf's own choice.
+    local path = self._drilldown_path or {}
+    local tip = path[#path]
+    if tip and tip.kind == "series" and tip.payload and tip.payload._series_box then
+        return "all"
+    end
     local function isSet(v)
         local t = type(v)
         if t == "table" or t == "boolean" then return true end
@@ -6918,6 +6978,24 @@ function BookshelfWidget:_spineShowAuthor()
     if own == false then return false end
     if own == true then return true end
     return BookshelfSettings.nilOrTrue("spine_show_author")
+end
+
+-- Opt-in presentation only: an opened series still shows its individual books.
+function BookshelfWidget:_seriesBoxesEnabled()
+    local tab = require("lib/bookshelf_tab_model").getById(self.chip)
+    local path = self._drilldown_path or {}
+    local tip = path[#path]
+    -- Any stored value is on: true, or the "slipcase" / "covers" a test
+    -- build stored while it had two styles.
+    return tab and tab.series_boxes and self:_isSpineMode()
+        and not (tab.source and tab.source.kind == "single_series")
+        and not (tip and (tip.kind == "series" or tip.kind == "search" or tip.kind == "opds_nav"))
+        and not self:_opdsEffectiveTab()
+end
+
+function BookshelfWidget:_prepareSpineItems(items, total)
+    if not self:_seriesBoxesEnabled() or (total and total > #items) then return items end
+    return require("lib/bookshelf_series_boxes").prepare(items, Repo.lightMetaFor)
 end
 
 -- _spineCachedFetch(n) — spine mode's page-turn fetch. The grid refetches
@@ -6959,6 +7037,12 @@ function BookshelfWidget:_spineCachedFetch(n)
         self._spine_fetch_live = false
         return items, hint
     end
+    -- Compact before pagination, never independently in each page window.
+    if hint and hint > #items then
+        self._spine_fetch_live = false
+        return items, hint
+    end
+    items = self:_prepareSpineItems(items, hint)
     -- The ornament deal states (see _ornStartState) depend only on the list:
     -- a refetch that brings back the same list keeps them, or every page
     -- turn after the TTL would rebuild the whole page map to find its start.
@@ -7004,7 +7088,7 @@ function BookshelfWidget:_anchorSpineCursor(old, new)
     local cur, skip = self._cursor or 1, self:_spineSkip()
     if cur <= 1 and skip == 0 then return end
     local function id(it)
-        return type(it) == "table" and (it.filepath or it.path or it.name or it.text) or it
+        return type(it) == "table" and (it._series_box_key or it.filepath or it.path or it.name or it.text) or it
     end
     local at = {}
     for j = 1, #new do
@@ -7040,6 +7124,9 @@ function BookshelfWidget:_spineItemsSig(items)
         local id = type(it) == "table" and (it.filepath or it.path or it.name or it.text) or it
         local n = type(it) == "table" and it.books and #it.books or 0
         parts[i] = tostring(id) .. "#" .. n
+        if type(it) == "table" and (it._series_box or it._series_display_books) then
+            parts[i] = parts[i] .. ":" .. require("lib/bookshelf_series_boxes").signature(it)
+        end
     end
     return table.concat(parts, "\0")
 end
@@ -7068,7 +7155,8 @@ function BookshelfWidget:_spineUpdateBookCounts(all_items, total_hint)
     for i = 1, #all_items do
         local it = all_items[i]
         if it then
-            local n = (it.books and #it.books > 0) and #it.books or 1
+            local members = it._series_display_books or it.books
+            local n = (not it._series_box and members and #members > 0) and #members or 1
             total = total + n
             if i < (self._cursor or 1) then before = before + n end
         end
@@ -8369,6 +8457,8 @@ function BookshelfWidget:_jumpToLetterPrefix(prefix)
     local _t0 = _gettime()
 
     local items, sort_key, fetched_via = self:_jumpScanList()
+    local boxed = self:_seriesBoxesEnabled()
+    if boxed then items = self:_spineCachedFetch(SPINE_ALL_LIMIT) end
     local _t_fetch = _gettime()
     if not items or #items == 0 then
         logger.dbg(string.format(
@@ -8382,7 +8472,7 @@ function BookshelfWidget:_jumpToLetterPrefix(prefix)
     do
         local sample = {}
         for i = 1, math.min(5, #items) do
-            sample[i] = string.format("%q", SortEngine.sortKeyValue(items[i], sort_key) or "?")
+            sample[i] = string.format("%q", SortEngine.sortKeyValue(items[i]._series_sort_book or items[i], sort_key) or "?")
         end
         logger.dbg(string.format(
             "[bookshelf jump] chip=%s sort_key=%s via=%s items=%d fetch=%.0fms head=[%s]",
@@ -8393,11 +8483,12 @@ function BookshelfWidget:_jumpToLetterPrefix(prefix)
     -- Find first item whose canonical sort-key value (the SAME derivation the
     -- chip's sort uses, via SortEngine.sortKeyValue) starts with the prefix.
     for i, item in ipairs(items) do
-        local v = SortEngine.sortKeyValue(item, sort_key)
+        local v = SortEngine.sortKeyValue(item._series_sort_book or item, sort_key)
         if v and v:sub(1, #p) == p then
             local view  = self:_viewSize()
             local page0 = math.floor((i - 1) / view)
             self._cursor = page0 * view + 1
+            if boxed then self._cursor = i end
             self:_clampCursor()
             self:_syncPageFromCursor()
             self:_swapShelvesInPlace()
@@ -18646,6 +18737,69 @@ function BookshelfWidget:_remoteDescriptionArgs(book)
     }
 end
 
+-- The stock OPDS plugin's page streamer, or nil when that plugin is not
+-- there. Its folder is on package.path once KOReader has loaded it; a build
+-- that has it disabled still ships the file, so that is tried as well.
+function BookshelfWidget._opdsPse()
+    local _opds_pse = BookshelfWidget._opds_pse_mod
+    if _opds_pse == nil then
+        local ok, m = pcall(require, "opdspse")
+        if not (ok and type(m) == "table") then
+            local f = loadfile("plugins/opds.koplugin/opdspse.lua")
+            ok, m = pcall(function() return f and f() end)
+        end
+        _opds_pse = (ok and type(m) == "table" and type(m.streamPages) == "function") and m or false
+        BookshelfWidget._opds_pse_mod = _opds_pse
+    end
+    return _opds_pse or nil
+end
+
+-- The catalog a record came from, for registerRecordActions: its title and
+-- URL, and its login only when every link the record carries is on the
+-- catalog's own origin, so a feed naming another host never gets it.
+function BookshelfWidget:_opdsRecordServer(book)
+    local key = book and type(book.filepath) == "string"
+        and book.filepath:match("^OPDS://([^/]+)/") or nil
+    local server = key and require("lib/bookshelf_opds_source").getServer(key) or nil
+    if type(server) ~= "table" then return nil end
+    local OpdsFeed = require("lib/bookshelf_opds_feed")
+    local hrefs = {}
+    local o = book.opds or {}
+    for _i, a in ipairs(type(o.acquisitions) == "table" and o.acquisitions or {}) do
+        hrefs[#hrefs + 1] = a.href
+    end
+    if type(o.stream) == "table" then hrefs[#hrefs + 1] = o.stream.href end
+    local same = #hrefs > 0
+    for _i, h in ipairs(hrefs) do
+        if not (type(h) == "string" and OpdsFeed.sameOrigin(server.url, h)) then same = false end
+    end
+    return { title = server.title, url = server.url,
+             username = same and server.username or nil,
+             password = same and server.password or nil }
+end
+
+-- Stream a record's pages. mode: "start" (page 1, or where Kavita says the
+-- reader got to), "ask" (prompt for a page) or "resume" (the feed's lastRead).
+-- Credentials go only to the catalog's own origin, as a download's do.
+function BookshelfWidget:_opdsStream(book, mode, dialog)
+    local stream = book and book.opds and book.opds.stream
+    local PSE = BookshelfWidget._opdsPse()
+    if type(stream) ~= "table" or not PSE then return end
+    local OpdsSource = require("lib/bookshelf_opds_source")
+    local OpdsFeed   = require("lib/bookshelf_opds_feed")
+    local key = type(book.filepath) == "string"
+        and book.filepath:match("^OPDS://([^/]+)/") or nil
+    local server = key and OpdsSource.getServer(key) or nil
+    local same_origin = (server and OpdsFeed.sameOrigin(server.url, stream.href)) or false
+    local user     = same_origin and server.username or nil
+    local password = same_origin and server.password or nil
+    require("lib/bookshelf_cover_fetch").runWhenOnline(function()
+        if dialog then UIManager:close(dialog) end
+        PSE:streamPages(stream.href, stream.count, mode == "ask", user, password,
+            mode == "resume" and stream.last_read or nil)
+    end)
+end
+
 -- opts.no_cover_fetch: set on the ONE re-show the on-open cover fetch triggers,
 -- so the reopened dialog can't start another (and can't loop against a server
 -- that answers with something undecodable).
@@ -18727,7 +18881,33 @@ function BookshelfWidget:_showRemoteBookInfo(book, opts)
             buttons[#buttons + 1] = downloadRow(acq)
         end
     end
-    if #usable == 0 then
+    -- Page streaming (OPDS-PSE): read a comic or manga a page at a time
+    -- without downloading it, through the stock OPDS plugin's own viewer, with
+    -- its buttons and wording (and so its translations).
+    local stream = book.opds and type(book.opds.stream) == "table" and book.opds.stream or nil
+    if stream and not BookshelfWidget._opdsPse() then stream = nil end
+    if stream then
+        buttons[#buttons + 1] = {
+            { text = "\u{23EE} " .. _("Page stream"),
+              callback = function() self:_opdsStream(book, "start", dialog) end },
+            { text = _("Stream from page") .. " \u{23E9}",
+              callback = function() self:_opdsStream(book, "ask", dialog) end },
+        }
+        if stream.last_read then
+            buttons[#buttons + 1] = { {
+                text = "\u{25B6} " .. _("Resume stream from page") .. " " .. stream.last_read,
+                callback = function() self:_opdsStream(book, "resume", dialog) end,
+            } }
+        end
+    end
+    -- Buttons other plugins add for this record (registerRecordActions).
+    local RecordActions = require("lib/bookshelf_record_actions")
+    local plugin_buttons = RecordActions.buttonsFor(book, {
+        server = self:_opdsRecordServer(book),
+        close = function() if dialog then UIManager:close(dialog) end end,
+    })
+    for _i, b in ipairs(plugin_buttons) do buttons[#buttons + 1] = { b } end
+    if #usable == 0 and not stream and #plugin_buttons == 0 then
         -- Note row in the established disabled-button style: the record is real
         -- and its blurb is worth reading, there is just nothing here this
         -- device can open.
@@ -20280,13 +20460,15 @@ function BookshelfWidget:_buildPillGroup(pill_specs, available_w, max_rows, base
     -- data pills but styled as a link -- no border, underlined label --
     -- so it reads as an action rather than another tag.
     local function _buildPill(label_text, on_tap_cb, extra_pad, on_hold_cb, link_style)
-        local label_w = TextWidget_:new{
+        -- Upper-case label: centre its capitals, not its line box
+        -- (lib/bookshelf_cap_centre), as the shelf chips do.
+        local label_w = require("lib/bookshelf_cap_centre").centre(TextWidget_:new{
             text = TextSegments.upper(label_text or ""),
             face = pill_face,
             bold = pill_bold,
             fgcolor = ink,  -- nil: TextWidget's own black
             max_width = pill_label_max,
-        }
+        })
         -- Explicit white bg so the tap-feedback inversion has something to
         -- invert to black (without this, the frame's transparent fill
         -- can't be flipped). Matches KOReader's Button feedback pattern.
@@ -21144,6 +21326,8 @@ function BookshelfWidget:_buildBookEditTab(book, modal, avail_w, avail_h)
         if ok_bim and BIM and BIM.deleteBookInfo then
             pcall(function() BIM:deleteBookInfo(book.filepath) end)
         end
+        -- Asked for: the cover comes back too, plugin format or not.
+        bw:_allowCoverFetch(book.filepath)
         pcall(function() require("lib/bookshelf_scaled_cover_cache"):drop(book.filepath) end)
         Repo.invalidateProgressCache(book.filepath)
         Repo.invalidateBookCache("refresh-metadata")
@@ -24292,14 +24476,51 @@ function BookshelfWidget:_openGroupMenu(group, kind)
                 text = clear_labels[kind],
                 callback = function()
                     close_dialog()
-                    ImageSource.clearStackImage(kind, source_id)
-                    ImageSource.invalidateCache()
-                    bw_ref:_rebuild()
-                    UIManager:setDirty(bw_ref, "ui")
+                    local function done()
+                        ImageSource.invalidateCache()
+                        bw_ref:_rebuild()
+                        UIManager:setDirty(bw_ref, "ui")
+                    end
+                    if has_override then
+                        ImageSource.clearStackImage(kind, source_id)
+                        return done()
+                    end
+                    -- No image chosen by hand: what shows is a FILE in the
+                    -- image library (put there by the reader, or by Find
+                    -- author image online), and forgetting an override
+                    -- would leave it showing. Clearing it means removing
+                    -- the file, so say which one and ask.
+                    local file = ImageSource.resolveStackImage(kind, source_id)
+                    if not file then return done() end
+                    UIManager:show(require("ui/widget/confirmbox"):new{
+                        -- The last two parts (authors/Saki.jpg), as the
+                        -- Image library setting shows its folder: the whole
+                        -- path is mostly the storage's own prefix.
+                        text = T(_("Delete this image from the image library?\n\n%1"),
+                                 file:match("([^/]+/[^/]+)$") or file),
+                        ok_text = _("Delete"),
+                        ok_callback = function()
+                            os.remove(file)
+                            done()
+                        end,
+                    })
                 end,
             }
         end
         table.insert(buttons, row)
+        -- A photo from Open Library or Wikipedia, saved into the image
+        -- library (lib/bookshelf_author_images). Its own row: the one above
+        -- already holds two long labels. Not offered for "Anonymous" and the
+        -- like, which no one has a photo of.
+        if kind == "author"
+                and not require("lib/bookshelf_author_images").isPlaceholder(source_id) then
+            table.insert(buttons, {
+                { text = _("Find author image online"), callback = function()
+                    close_dialog()
+                    require("lib/bookshelf_author_images_flow").findOne(bw_ref, source_id)
+                end },
+            })
+        end
     end
 
     -- Page counts for just this stack's books (issue 459): the same dialog as
@@ -24752,6 +24973,10 @@ end
 -- the rest) to match the new filepath order.
 function BookshelfWidget:_applyWithinGroupSort(group)
     if not group then return end
+    -- A box set keeps the order it holds its books in, series number first
+    -- (Boxes.box), as its spines show them: the shelf's later sort levels
+    -- reorder an ordinary series stack, not a box.
+    if group._series_box then return end
     local TabModel = require("lib/bookshelf_tab_model")
     local tab = TabModel.getById(self.chip)
     local sp  = tab and tab.sort_priority
@@ -24792,6 +25017,7 @@ function BookshelfWidget:_applyWithinGroupSort(group)
         if k == "page_count"  then w_pages  = true end
         if k == "last_opened" then w_opened = true end
         if k == "date_added"  then w_added  = true end
+        if k == "added_or_opened" then w_opened = true; w_added = true end
     end
     if w_progress or w_rating or w_pages or w_added then
         local ok_lfs, lfs = pcall(require, "libs/libkoreader-lfs")

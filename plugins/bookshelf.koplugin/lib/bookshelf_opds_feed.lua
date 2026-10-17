@@ -93,6 +93,31 @@ local SKIP_ACQ_REL = {
     ["http://opds-spec.org/acquisition/sample"]  = true,
     ["http://opds-spec.org/acquisition/preview"] = true,
 }
+-- OPDS Page Streaming Extension (https://vaemendis.net/opds-pse/): a comic
+-- or manga served one page image at a time, as Komga, Kavita and Suwayomi do.
+-- Its link carries the page count as a namespaced attribute; the prefix is
+-- whatever the feed declared, so it is matched by suffix, as the stock
+-- browser does. A chapter can be stream-only (Suwayomi), so a stream link
+-- alone makes an entry a book.
+local STREAM_REL = "http://vaemendis.net/opds-pse/stream"
+M.STREAM_REL = STREAM_REL
+
+-- streamOf(link, href) -> { href, count, last_read } or nil without a count.
+local function streamOf(link, href)
+    local count, last_read
+    for k, v in pairs(link) do
+        if type(k) == "string" then
+            if k:sub(-6) == ":count" then count = tonumber(v)
+            elseif k:sub(-9) == ":lastRead" then last_read = tonumber(v) end
+        end
+    end
+    if not count or count < 1 then return nil end
+    return { href = href, count = math.floor(count),
+             -- Page 1 is where a stream starts anyway: no Resume for it.
+             last_read = last_read and last_read > 1 and math.floor(last_read) or nil }
+end
+M._streamOf = streamOf
+
 local CATALOG_TYPE    = "application/atom%+xml"
 local OSD_TYPE        = "application/opensearchdescription%+xml"
 -- OPDS 2.0's canonical MIME type: fetch()'s Accept-header preference, the
@@ -623,10 +648,13 @@ function M.mapEntries(catalog, feed_url, server_key)
     for idx, entry in ipairs(entry_list) do
         local title = entryTitle(entry)
         local acquisitions, thumb, image, nav_url, tiny_icon = {}, nil, nil, nil, nil
+        local stream
         for _j, link in ipairs(entry.link or {}) do
             local rel, ltype, href = relOf(link.rel), link.type, link.href
             if href then
-                if rel and not SKIP_ACQ_REL[rel] and rel:match(ACQUISITION_REL)
+                if rel == STREAM_REL then
+                    stream = stream or streamOf(link, M.absolute(feed_url, href))
+                elseif rel and not SKIP_ACQ_REL[rel] and rel:match(ACQUISITION_REL)
                         and SUPPORTED_TYPE[ltype] then
                     acquisitions[#acquisitions + 1] = {
                         type = ltype, href = M.absolute(feed_url, href),
@@ -645,7 +673,7 @@ function M.mapEntries(catalog, feed_url, server_key)
             end
         end
 
-        if #acquisitions > 0 then
+        if #acquisitions > 0 or stream then
             local author = entryAuthor(entry)
             local merge_key = (title and author) and (title .. "\0" .. author) or nil
             local existing = merge_key and book_by_key[merge_key]
@@ -654,6 +682,7 @@ function M.mapEntries(catalog, feed_url, server_key)
             if existing then
                 local acq = existing.opds.acquisitions
                 for _k, a in ipairs(acquisitions) do acq[#acq + 1] = a end
+                existing.opds.stream = existing.opds.stream or stream
                 -- Fullest edition wins the summary; strict > keeps the earlier
                 -- entry on a tie. Compared against the count of the entry that
                 -- SUPPLIED the current summary, not the running total.
@@ -692,6 +721,7 @@ function M.mapEntries(catalog, feed_url, server_key)
                     attr          = { mode = "file", size = 0, modification = 0 },
                     opds = {
                         acquisitions  = acquisitions,
+                        stream        = stream,
                         thumbnail_url = thumb,
                         image_url     = image,
                         summary       = summary,
@@ -1128,7 +1158,12 @@ end
 -- 30-second wait for something that is not running reads as a hang. Both are
 -- taken together or not at all -- a block timeout longer than the total is a
 -- pair that cannot behave, so a partial override is ignored.
-function M.fetch(url, username, password, opts)
+--
+-- redirect_depth is internal: redirects are followed here, one hop per call,
+-- because luasocket's own following would carry the Authorization header to
+-- whatever host the Location names (see bookshelf_http.basicAuthHeader).
+function M.fetch(url, username, password, opts, redirect_depth)
+    local Http = require("lib/bookshelf_http")
     local http = require("socket.http")
     local ltn12 = require("ltn12")
     local socket = require("socket")
@@ -1148,7 +1183,7 @@ function M.fetch(url, username, password, opts)
             and opts.block_timeout <= opts.total_timeout then
         block, total = opts.block_timeout, opts.total_timeout
     end
-    local ok_req, code, status = pcall(function()
+    local ok_req, code, status, resp_headers = pcall(function()
         socketutil:set_timeout(block, total)
         local headers = { ["Accept-Encoding"] = "identity", ["Accept"] = M.ACCEPT_FEED }
         -- Set explicitly so it survives a redirect; see basicAuthHeader.
@@ -1156,17 +1191,28 @@ function M.fetch(url, username, password, opts)
         -- self-describing, and adjustheaders lets ours override anyway.
         local auth = M.basicAuthHeader(username, password)
         if auth then headers["Authorization"] = auth end
-        local c, _h, st = socket.skip(1, http.request{
+        local c, h, st = socket.skip(1, http.request{
             url = url,
             headers = headers,
-            sink = ltn12.sink.table(sink),
+            sink = Http.cappedSink(sink),
+            redirect = false,
             user = username,
             password = password,
         })
-        return c, st
+        return c, st, h
     end)
     pcall(function() socketutil:reset_timeout() end)
     if not ok_req then return nil, "network unreachable" end
+    if Http.isRedirect(code) then
+        if (redirect_depth or 0) >= Http.MAX_REDIRECTS then
+            return nil, "too many redirects"
+        end
+        local target, keep = Http.redirectTarget(url,
+            type(resp_headers) == "table" and resp_headers.location)
+        if not target then return nil, "unsafe redirect" end
+        return M.fetch(target, keep and username or nil, keep and password or nil,
+            opts, (redirect_depth or 0) + 1)
+    end
     if code == 200 then
         local body = table.concat(sink)
         if body ~= "" then

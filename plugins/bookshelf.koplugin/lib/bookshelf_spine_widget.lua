@@ -1148,7 +1148,8 @@ function SpineWidget:init()
         -- redundant title/author label below it -- the fallback already shows
         -- both, larger and centred, on the card itself.
         self[1] = self:_renderFallback()
-        self.is_fallback = true
+        -- A patch's placeholder carries no title, so its label stays.
+        self.is_fallback = not self._custom_placeholder
     end
     self.ges_events = {
         Tap  = { GestureRange:new{ ges = "tap",  range = self.dimen } },
@@ -1252,6 +1253,26 @@ function SpineWidget:_renderShadowedCard(inner)
     local list_badges    = self.show_status and not self.show_progress
 
     local children = {}
+
+    -- A patch's placeholder drawn with no card owns its whole look: none of
+    -- the status glyphs, badges, progress or page count go over it. The
+    -- selection border and the bulk-select flag stay, because they say what
+    -- an action will act on.
+    if self._unframed_placeholder then
+        local layers = { inner }
+        if self.is_selected then
+            table.insert(layers, 1, BorderOverlay:new{
+                width = card_w, height = card_h, thickness = SELECTED_BORDER, radius = 0 })
+        end
+        if self.is_bulk_selected then
+            layers[#layers + 1] = CornerFlag:new{
+                width = card_w, height = card_h, inset = self.bulk_flag_inset or 0 }
+        end
+        return OverlapGroup:new{
+            dimen = Geom:new{ w = self.width, h = self.height },
+            unpack(layers),
+        }, card_w, card_h
+    end
 
     -- 1. Shadow OR selection-border backdrop (z-order: bottom). FADED
     --    on-hold covers (borderless — see _wrapCoverInCard) also drop the
@@ -1657,7 +1678,38 @@ function SpineWidget:_renderShadowedCard(inner)
     --    of the in-progress / completed glyph that anchors bottom-left.
     --    The progress bar (when enabled) takes the remaining width to
     --    the LEFT of the badge. Either indicator can show alone.
-    local want_page_count = indicators.page_count and self.book and self.book.page_count
+    -- _badge_pages: the printed count when the badge is set to prefer it
+    -- (bookshelf_cover_progress.decide); false = none, so the reading count.
+    local badge_pages = self.book and (self.book._badge_pages or self.book.page_count)
+    -- What the badge says (Page count > Show): the pages, the percentage read
+    -- (progress_page_count_percent "only"), or both ("both"). Only a book
+    -- being read or on hold has a percentage (decide's badge_pct); the others
+    -- show their pages under "both" and no badge under "only".
+    local badge_text
+    if indicators.page_count then
+        local pages_txt = badge_pages and (BookshelfSettings.read("progress_page_count_bare") == true
+            and tostring(badge_pages)
+            -- Page-count label, translatable (#245). Number-first: a
+            -- total-page COUNT ("123 pages"), so the number leads and a
+            -- compact unit follows (fr "123 p", de "123 S", hu "123 o",
+            -- ja/zh a single glyph). A HAIR SPACE (\xe2\x80\x8a) keeps the
+            -- digit and letter apart at smallinfofont(12).
+            or T(_("%1\xe2\x80\x8ap"), tostring(badge_pages)))
+        local p = tonumber(indicators.badge_pct)
+        -- Rounded as the %book_pct token rounds it, so badge and hero agree.
+        local pct_txt = p and string.format("%d%%", math.floor(p * 100 + 0.5)) or nil
+        local mode = BookshelfSettings.read("progress_page_count_percent")
+        if mode == "only" then
+            badge_text = pct_txt
+        elseif mode == "both" then
+            badge_text = (pct_txt and pages_txt)
+                and (pct_txt .. "\xe2\x80\x89\xc2\xb7\xe2\x80\x89" .. pages_txt)
+                or pct_txt or pages_txt
+        else
+            badge_text = pages_txt
+        end
+    end
+    local want_page_count = badge_text ~= nil
     if indicators.bar or want_page_count then
         local colors = CoverProgress.resolvedColors()
         local bar_h   = _barHeight()
@@ -1686,14 +1738,7 @@ function SpineWidget:_renderShadowedCard(inner)
                 padding_top    = 0,
                 padding_bottom = 0,
                 TextWidget:new{
-                    -- Page-count label, translatable (#245). Number-first: this
-                    -- is a total-page COUNT ("123 pages"), so the number leads
-                    -- and a compact unit follows -- reads correctly across
-                    -- locales (fr "123 p", de "123 S", hu "123 o", ja/zh use a
-                    -- single glyph). A HAIR SPACE (\xe2\x80\x8a) separates the
-                    -- number and unit so the digit and letter don't collide at
-                    -- smallinfofont(12) (same reason as the series pill above).
-                    text = T(_("%1\xe2\x80\x8ap"), tostring(self.book.page_count)),
+                    text = badge_text,
                     face = pc_face,
                     bold = pc_bold,
                     fgcolor = colors.badge_fg,
@@ -1763,7 +1808,7 @@ function SpineWidget:_renderShadowedCard(inner)
     --     render on. The hero card, folder cards and series stacks reuse
     --     SpineWidget with it off, and their card_w is the SLOT rather than the
     --     painted cover, so a right-anchored badge would hang off the artwork.
-    local pill_owns_corner = indicators.page_count and self.book and self.book.page_count
+    local pill_owns_corner = want_page_count
     if self.show_progress and self.book and self.book.downloaded
             and not pill_owns_corner
             and not self.is_bulk_selected then
@@ -2014,6 +2059,47 @@ end
 -- glyph_w ≈ glyph_h. Used only to suppress the glyph on very narrow cards.
 function SpineWidget:_glyphWidth(glyph_h)
     return glyph_h
+end
+
+-- Status decoration for a completed series box. Reuse the cover's
+-- actual status compositor, without decoding a cover or borrowing its status.
+function SpineWidget.finishedDecoration(card_w)
+    local proxy = SpineWidget:extend{
+        width = card_w, height = card_w,
+        book = { status = "finished" },
+        show_progress = false, show_status = true, flat_thumb = true,
+        suppress_favorite_badge = true, suppress_number_badges = true,
+    }
+    local indicators = proxy:_statusIndicators()
+    -- OverlapGroup measures all children at init, including this blank card.
+    -- A bare Widget has no size, even if its parent has an explicit dimen.
+    local layer = proxy:_renderShadowedCard(Widget:new{dimen = Geom:new{w = card_w, h = card_w}})
+    -- Flat/status-only composition: the empty card, then one glyph frame.
+    -- Discard its cover-relative padding; the caller positions the mark.
+    local mark = layer[2] and layer[2][1]
+    local size
+    if mark then
+        local measured = mark:getSize()
+        size = { w = measured.w, h = measured.h }
+        if indicators.glyph == "complete_bookmark" then
+            -- Halo groups declare nominal font-size bounds, but their framed
+            -- children include the real line height and shadow offsets.
+            for _, child in ipairs(mark) do
+                local actual = child:getSize()
+                size.w, size.h = math.max(size.w, actual.w), math.max(size.h, actual.h)
+            end
+        elseif indicators.glyph == "complete_tickbox" then
+            local check = mark[1][1][2]
+            mark._bs_recolour = function(self, roles)
+                self.background, self.color, check.fgcolor = roles.bg, roles.border, roles.fg
+            end
+            CoverProgress.registerRecolour(mark, function(c)
+                return { bg = c.badge_bg, border = c.border, fg = c.badge_fg }
+            end)
+        end
+    end
+    local fade = indicators.on_hold_fade and ON_HOLD_FADE or nil
+    return mark, size, fade
 end
 
 -- Computed card dimensions taking the in-progress glyph's dangle into
@@ -2712,6 +2798,42 @@ function SpineWidget:_renderFallback()
         self._cover_card = plain
         return (self:_renderShadowedCard(plain))
     end
+    -- A patch's own placeholder, drawn inside the same frame (PR 515).
+    local Placeholders = require("lib/bookshelf_placeholders")
+    if Placeholders.any() then
+        local iw = math.max(1, card_w - border * 2)
+        local ih = math.max(1, card_h - border * 2)
+        local custom, opts = Placeholders.widgetFor(self.book, iw, ih,
+            { bare = self.bare_placeholder == true, flat = self.flat_thumb == true,
+              panel = self.panel_placeholder == true })
+        if custom and opts.frame == false then
+            -- The patch's widget alone on the page: no border, background
+            -- or shadow, but the same size, so badges and taps still land.
+            local bare = CenterContainer:new{
+                dimen = Geom:new{ w = card_w, h = card_h }, custom }
+            self._cover_card = bare
+            self._custom_placeholder = true
+            self._unframed_placeholder = true
+            -- What it was offered and what it took, so the top panel can
+            -- give the text the width the widget left (HeroCard:_renderFull).
+            self._placeholder_offer = { w = iw, h = ih }
+            local ok_s, size = pcall(custom.getSize, custom)
+            if ok_s and size then self._placeholder_size = { w = size.w, h = size.h } end
+            return (self:_renderShadowedCard(bare))
+        elseif custom then
+            local framed = ColorSafeFrame:new{
+                bordersize = border,
+                color      = colors.border,
+                radius     = self:_squareCorners() and 0 or CARD_RADIUS,
+                padding    = 0,
+                background = outer_bg,
+                CenterContainer:new{ dimen = Geom:new{ w = iw, h = ih }, custom },
+            }
+            self._cover_card = framed
+            self._custom_placeholder = true
+            return (self:_renderShadowedCard(framed))
+        end
+    end
     if self.bare_placeholder then return bareCard() end
 
     -- Title text: cap height so a 4-line title still leaves room for
@@ -3241,6 +3363,14 @@ function SpineWidget.repaintOverhangGlyphs(spine, bb)
             pcall(gw.paintTo, gw, bb, gd.x, gd.y)
         end
     end
+end
+
+-- badgeOverhang(card_w) -> how far the status glyphs (favourite above, the
+-- bookmarks and tick below) can reach past a card of that width, at the
+-- reader's Cover badge size. For a caller drawing a cover with no room around
+-- it, such as a micro-module card that clips to what it returns.
+function SpineWidget.badgeOverhang(card_w)
+    return math.ceil(CoverProgress.badgeSize(_glyphSize(card_w)) * 0.6)
 end
 
 return SpineWidget
