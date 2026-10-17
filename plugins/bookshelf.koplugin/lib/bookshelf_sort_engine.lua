@@ -646,7 +646,6 @@ SortEngine.KEYS = {
                                 return cmp(STATUS_RANK_ACTIVE[a.read_status or a._status or "unread"] or 99,
                                            STATUS_RANK_ACTIVE[b.read_status or b._status or "unread"] or 99)
                             end },
-
     -- Favourites (KOReader's default "favorites" collection) ahead of the
     -- rest; ties fall to the next level, e.g. Reading 1st then Last opened.
     favorites_first = { label = tr("Favorites first"), short = tr("Favorite 1st"),
