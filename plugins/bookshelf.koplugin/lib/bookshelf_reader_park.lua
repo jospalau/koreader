@@ -383,8 +383,12 @@ function Park.finishToMenu()
     local ok_fm, FileManager = pcall(require, "apps/filemanager/filemanager")
     local fm = ok_fm and FileManager and FileManager.instance
     if fm and fm.menu and fm.menu.onShowMenu then
-        pcall(function() fm.menu:onShowMenu() end)
+        -- pcall(function() fm.menu:onShowMenu() end)
     end
+    local InfoMessage = require("ui/widget/infomessage")
+    UIManager:show(InfoMessage:new{
+        text = "Exited reading session",
+    })
     return true
 end
 

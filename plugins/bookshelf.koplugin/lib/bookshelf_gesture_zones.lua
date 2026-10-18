@@ -210,6 +210,12 @@ local function carriesGesture(event)
     end
     return false
 end
+
+-- Only these multiswipes are forwarded to the reader parked under the shelf
+-- (so it can be unparked). Other gestures are not forwarded to it.
+local ALLOWED_MULTISWIPES = { ["east north"] = true, ["west south"] = true }
+local _gesture_allowed = false
+
 local function _forwardToHost(host, event, self_widget)
     if NEVER_FORWARD[event.handler] then return false end
     if event._bookshelf_from_broadcast then return false end
@@ -221,11 +227,16 @@ local function _forwardToHost(host, event, self_widget)
         local ok, consumed = pcall(host.handleEvent, host, event)
         return (ok and consumed) and true or false
     end
+    -- Parked reader: only the allowed multiswipes get through
+    if host == require("apps/reader/readerui").instance and not _gesture_allowed then
+        return false
+    end
     -- Neutralise host teardown for this synchronous forward (see above, #225).
     -- rawget/restore so a pre-existing instance override is preserved and a
     -- nil restores the normal class method; pcall so an error still restores.
     local saved_onClose = rawget(host, "onClose")
     host.onClose = function() return true end
+    -- print("GZ send event:", event and event.handler)
     local ok, consumed = pcall(host.handleEvent, host, event)
     host.onClose = saved_onClose
     return (ok and consumed) and true or false
@@ -274,15 +285,20 @@ end
 -- book is parked, a menu-intent gesture finishes the close and opens the
 -- real FileManager menu, so book actions never show on the home screen.
 function GestureZones.tryLiveZones(ev)
+    _gesture_allowed = ev ~= nil and ev.ges == "multiswipe"
+        and ALLOWED_MULTISWIPES[ev.multiswipe_directions] == true
     if not ev then return false end
     local host, parked, Park = _liveHost()
     if not host then return false end
     if not parked then return GestureZones.tryFMZones(ev, host) end
     if GestureZones.tryReaderPluginZones(ev, host) then return true end
-    if GestureZones.matchesReaderMenuZone(ev, host) then
+    -- Multiswipe east-south: finish the deferred close and open the FM menu
+    if ev.ges == "multiswipe" and ev.multiswipe_directions == "east south" then
         Park.finishToMenu()
         return true
     end
+    -- Taps never reach the parked reader (no menu, no forwarding)
+    if ev.ges == "tap" then return false end
     return GestureZones.tryReaderZones(ev, host)
 end
 
