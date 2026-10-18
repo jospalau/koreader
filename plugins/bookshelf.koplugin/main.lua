@@ -3520,6 +3520,8 @@ function Bookshelf:markMetadataDirty()
     if _live_widget then
         _live_widget._metadata_dirty_force_full_refresh = true
     end
+    _expect_onshow_takeover = true
+    UIManager:scheduleIn(5, function() _expect_onshow_takeover = false end)
 end
 
 -- Lightweight refresh for callers outside this module (e.g. readerui.lua
