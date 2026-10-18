@@ -1178,14 +1178,18 @@ function ReaderUI:onHome()
                         local util = require("util")
                         util.generateStats()
                 end
+                -- FileManager.instance.history:onShowHist()
+                require("ui/widget/booklist").resetBookInfoCache(file)
+                local Repo = require("lib/bookshelf_book_repository")
+                if Repo.invalidateProgressCache then Repo.invalidateProgressCache() end
+                if Repo.invalidateBookCache then Repo.invalidateBookCache("StatusChanged") end
+                if self.bookshelf and self.bookshelf.refreshLiveShelves then
+                    self.bookshelf.refreshLiveShelves()
+                end
+
                 local FileManager = require("apps/filemanager/filemanager")
                 self:showFileManager(file)
                 FileManager.instance.history:sortHistoryByStatus()
-                -- FileManager.instance.history:onShowHist()
-                local Repo = require("lib/bookshelf_book_repository")
-                UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
-                -- if Repo.invalidateProgressCache then Repo.invalidateProgressCache() end
-                -- if Repo.invalidateBookCache then Repo.invalidateBookCache("StatusChanged") end
             end,
             choice3_text = _("Just exit"),
             choice3_callback = function()

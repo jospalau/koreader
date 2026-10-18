@@ -3530,6 +3530,7 @@ end
 function Bookshelf.refreshLiveShelves()
     if _live_widget and _live_widget._swapShelvesInPlace then
         _live_widget:_swapShelvesInPlace()
+        _live_widget._tree_fresh = true
     end
 end
 
