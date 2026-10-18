@@ -1183,8 +1183,8 @@ function ReaderUI:onHome()
                 local Repo = require("lib/bookshelf_book_repository")
                 if Repo.invalidateProgressCache then Repo.invalidateProgressCache() end
                 if Repo.invalidateBookCache then Repo.invalidateBookCache("StatusChanged") end
-                if self.bookshelf and self.bookshelf.refreshLiveShelves then
-                    self.bookshelf.refreshLiveShelves()
+                if self.bookshelf and self.bookshelf.markMetadataDirty then
+                    self.bookshelf:markMetadataDirty()
                 end
 
                 local FileManager = require("apps/filemanager/filemanager")
