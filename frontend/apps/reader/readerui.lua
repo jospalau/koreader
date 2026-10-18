@@ -1120,7 +1120,7 @@ function ReaderUI:onHome()
                 -- require("bookinfomanager"):deleteBookInfo(file)
 
                 local FileManager = require("apps/filemanager/filemanager")
-                self:showFileManager(file)
+                -- self:showFileManager(file)
                 -- local dir = util.splitFilePathName(file)
                 -- FileManager:showFiles(dir, file)
 
@@ -1132,7 +1132,7 @@ function ReaderUI:onHome()
                 -- If we open the history, the cover browser plugin cover scan will stop
                 -- and won't be reactivated after closing the history
                 -- We can call require("apps/filemanager/filemanager").instance.file_chooser:refreshPath() when closing the history to reactivate it
-                FileManager.instance.history:sortHistoryByStatus()
+                -- FileManager.instance.history:sortHistoryByStatus()
                 -- FileManager.instance.history:onShowHist()
                 -- self.history:onShowHist()
                 --UIManager:broadcastEvent(Event:new("BookshelfRefresh"))
@@ -1140,6 +1140,11 @@ function ReaderUI:onHome()
                 local Repo = require("lib/bookshelf_book_repository")
                 if Repo.invalidateProgressCache then Repo.invalidateProgressCache() end
                 if Repo.invalidateBookCache then Repo.invalidateBookCache("StatusChanged") end
+                if self.bookshelf and self.bookshelf.markMetadataDirty then
+                    self.bookshelf:markMetadataDirty()
+                end
+                self:showFileManager(file)
+                FileManager.instance.history:sortHistoryByStatus()
                 return true
             end,
             choice2_text = _("TBR"),
