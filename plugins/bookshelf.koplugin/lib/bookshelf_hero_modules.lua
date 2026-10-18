@@ -265,6 +265,54 @@ local FILL_TARGET    = 0.90
 -- because one build runs synchronously start to finish (no interleaving).
 local _build_surface = "hero"
 
+-- Fitted sizes, remembered per card and layout and kept across restarts. The
+-- search below renders a card up to a dozen times to find its size (measured
+-- on a PW5: each of 7 full-screen cards rendered 10 to 12 times, most of a
+-- 0.5s open). A card whose cell, base scale and multiplier are unchanged is
+-- rendered ONCE at the remembered size, and the result kept only if it comes
+-- out exactly the size it did last time. Anything that changes what a card
+-- draws -- a longer quote, a font, a theme, the card's own settings -- changes
+-- that size, and the card is searched afresh. Layout changes change the key.
+-- Kept in lib/bookshelf_module_cache, not the settings file.
+local FIT_MEMO_KEY = "module_fit_memo"
+local FIT_MEMO_CAP = 200
+local _fit_memo, _fit_memo_n
+
+local function _fitMemo()
+    if not _fit_memo then
+        local saved = require("lib/bookshelf_module_cache").read(FIT_MEMO_KEY)
+        _fit_memo, _fit_memo_n = {}, 0
+        if type(saved) == "table" then
+            for k, v in pairs(saved) do
+                if type(v) == "table" and tonumber(v.s) and tonumber(v.h) and tonumber(v.w) then
+                    _fit_memo[k] = v
+                    _fit_memo_n = _fit_memo_n + 1
+                end
+            end
+        end
+    end
+    return _fit_memo
+end
+
+local function _fitMemoStore(key, rec)
+    local memo = _fitMemo()
+    if not memo[key] then
+        _fit_memo_n = _fit_memo_n + 1
+        -- Keys pile up as layouts come and go; past the cap start over rather
+        -- than track ages. A dropped entry costs one search, nothing more.
+        if _fit_memo_n > FIT_MEMO_CAP then
+            _fit_memo, _fit_memo_n = {}, 1
+            memo = _fit_memo
+        end
+    end
+    memo[key] = rec
+    -- The cache file, coalesced: never a settings write inside a paint.
+    require("lib/bookshelf_module_cache").save(FIT_MEMO_KEY, memo)
+end
+
+-- Test seam: forget the in-memory copy so the next read comes from settings.
+function HeroModules._resetFitMemo() _fit_memo, _fit_memo_n = nil, nil end
+
 local function _renderFitted(def, inner_w, inner_h, base_scale, refresh, entry, user_mult, bw)
     local base  = base_scale or 100
     -- Absolute size range for any cell, independent of the (now fixed) base:
@@ -310,7 +358,66 @@ local function _renderFitted(def, inner_w, inner_h, base_scale, refresh, entry, 
         return widget, (sz and sz.h) or 0, (sz and sz.w) or 0
     end
 
-    local widget, h, w = renderAt(base)
+    user_mult = user_mult or 100
+    local memo_key = entry and entry.id and table.concat({
+        _build_surface, tostring(def.key), tostring(entry.id),
+        inner_w, inner_h, base, user_mult }, "|")
+    local function free(x) if x and x.free then pcall(function() x:free() end) end end
+    -- Where the search starts: the grid scale, or after a memo miss the size
+    -- this card fitted at last time (m.r, before the multiplier), which is
+    -- usually a step or two from the answer. A day's new quote searched from
+    -- 100% every restart: 14 renders, 320ms of a 760ms open on a PW5.
+    local start, start_rung = base, 1
+    local widget, h, w
+    if memo_key then
+        local m = _fitMemo()[memo_key]
+        if m then
+            local mw, mh, mwid = renderAt(m.s, m.c or nil)
+            if mw and mh == m.h and mwid == m.w then return mw end
+            -- Only a size a search from the grid scale can reach: a rung of
+            -- the 1.15 ladder it climbs (GROW_MAX_ITERS rungs at most), never
+            -- one beyond. Anything else gives a card a size that depends on
+            -- its history, so it searches in full.
+            local ladder, cur = { base }, base
+            for _i = 1, GROW_MAX_ITERS do
+                local nxt = math.min(grow_cap, math.floor(cur * 1.15 + 0.5))
+                if nxt <= cur then break end
+                ladder[#ladder + 1], cur = nxt, nxt
+            end
+            local r, rung = tonumber(m.r), nil
+            for i = 2, #ladder do if ladder[i] == r then rung = i end end
+            if rung then
+                if r == m.s and not m.c then
+                    widget, h, w = mw, mh, mwid
+                else
+                    free(mw)
+                    widget, h, w = renderAt(r)
+                end
+                start = r
+                if widget and (h > inner_h or w > inner_w) then
+                    -- Grew past its old size: the full search from the grid scale.
+                    free(widget); widget, start, rung = nil, base, 1
+                end
+                -- Fits but fuller than the fill target: step back down the
+                -- same 1.15 ladder the grow loop climbs, so the answer is the
+                -- one a search from the grid scale would have reached.
+                while widget and rung > 1 and h > FILL_TARGET * inner_h do
+                    rung = rung - 1
+                    free(widget)
+                    start = ladder[rung]
+                    widget, h, w = renderAt(start)
+                end
+                start_rung = rung
+            else
+                free(mw)
+            end
+        end
+    end
+
+    if not widget then
+        start, start_rung = base, 1
+        widget, h, w = renderAt(base)
+    end
     if not widget then return nil end  -- render error: caller draws the fallback
 
     local result, result_scale, result_clamped
@@ -321,9 +428,11 @@ local function _renderFitted(def, inner_w, inner_h, base_scale, refresh, entry, 
         -- (TextBoxWidget reports the full inner_w), so the slack to reclaim is
         -- always vertical. Well-filled cards (height-aware clock/quote that
         -- already reach the target, dense text) don't grow.
-        if base < grow_cap and h <= FILL_TARGET * inner_h then
-            local best, cur = widget, base
-            for _i = 1, GROW_MAX_ITERS do
+        if start < grow_cap and h <= FILL_TARGET * inner_h then
+            local best, cur = widget, start
+            -- Rungs already climbed count against the limit, so a search that
+            -- started part way up stops at the same top rung.
+            for _i = 1, GROW_MAX_ITERS - (start_rung - 1) do
                 local nxt = math.min(grow_cap, math.floor(cur * 1.15 + 0.5))
                 if nxt <= cur then break end
                 local gw, gh, gwid = renderAt(nxt)
@@ -341,7 +450,7 @@ local function _renderFitted(def, inner_w, inner_h, base_scale, refresh, entry, 
             end
             result, result_scale = best, cur
         else
-            result, result_scale = widget, base
+            result, result_scale = widget, start
         end
     else
         -- Overflows the grid scale: shrink. `best` keeps the latest (smallest)
@@ -349,7 +458,7 @@ local function _renderFitted(def, inner_w, inner_h, base_scale, refresh, entry, 
         -- widget, never nil; ClipContainer backstops any residual overflow. Step
         -- by scale/sqrt(overflow) — a text block's height grows ~with font area,
         -- so sqrt undoes most of the overshoot in one step.
-        local best, best_scale, prev_h, scale = widget, base, h, base
+        local best, best_scale, prev_h, scale = widget, start, h, start
         for _i = 1, FIT_MAX_ITERS do
             if scale <= floor then break end
             local ratio = math.max(h / inner_h, w / inner_w)
@@ -388,7 +497,7 @@ local function _renderFitted(def, inner_w, inner_h, base_scale, refresh, entry, 
     -- fitted scale. Default 100 = unchanged (the auto-fit result). Lower renders
     -- below the cell fill (smaller text, more whitespace — the requested "make
     -- them smaller"); higher grows past it (ClipContainer backstops overflow).
-    user_mult = user_mult or 100
+    local final_scale, final_clamp = result_scale, result_clamped
     if result and result_scale and user_mult ~= 100 then
         local adj = math.max(10, math.floor(result_scale * user_mult / 100 + 0.5))
         if adj ~= result_scale then
@@ -402,17 +511,26 @@ local function _renderFitted(def, inner_w, inner_h, base_scale, refresh, entry, 
             -- with no ellipsis protection at all, unlike the 100% path).
             -- Re-check at the FINAL size instead of only inheriting whatever
             -- the pre-multiplier stage decided.
+            local rw_clamp = result_clamped
             if rw and rh and rh > inner_h and not result_clamped then
                 local cw = renderAt(adj, true)
                 if cw then
                     if rw.free then pcall(function() rw:free() end) end
-                    rw = cw
+                    rw, rw_clamp = cw, true
                 end
             end
             if rw then
                 if result.free then pcall(function() result:free() end) end
                 result = rw
+                final_scale, final_clamp = adj, rw_clamp
             end
+        end
+    end
+    if memo_key and result and final_scale then
+        local ok, sz = pcall(function() return result:getSize() end)
+        if ok and sz and sz.h and sz.w then
+            _fitMemoStore(memo_key, { s = final_scale, r = result_scale,
+                                      c = final_clamp or nil, h = sz.h, w = sz.w })
         end
     end
     return result

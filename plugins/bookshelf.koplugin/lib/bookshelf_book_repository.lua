@@ -6148,6 +6148,43 @@ function Repo.countByStatus()
     return total, counts
 end
 
+-- Repo.countByStatusStepper() -> step(n) -> done, total, counts
+-- The same tally in pieces: each step(n) classifies up to n more books (nil:
+-- all of them) and returns done=false until the last, then true with the
+-- totals. A cold tally reads every opened book's sidecar, which froze the
+-- first full-screen micro-modules open for 3 seconds on a PW5; the Shelf
+-- size module runs these steps between UI ticks instead. No UIManager here:
+-- the caller owns the scheduling. A finished stepper keeps returning its
+-- answer.
+function Repo.countByStatusStepper()
+    local counts = { unread = 0, reading = 0, on_hold = 0, finished = 0 }
+    local paths = Repo.getAllFilepaths()
+    local i, total = 0, nil
+    return function(n)
+        if total then return true, total, counts end
+        local stop = n and math.min(#paths, i + n) or #paths
+        for j = i + 1, stop do
+            local s = _statusForFp(paths[j])
+            counts[s] = (counts[s] or 0) + 1
+        end
+        i = stop
+        if i < #paths then return false end
+        total = #paths
+        -- getAllFilepaths is the WALKED library, which is not the whole shelf:
+        -- the Kindle library is on it too, and a user with a Kindle chip was
+        -- shown a "shelf size" that left out roughly a third of the books
+        -- they can see.
+        local k_counts, k_total = _librarySourceStatusCounts()
+        if k_counts then
+            for status, c in pairs(k_counts) do
+                counts[status] = (counts[status] or 0) + c
+            end
+            total = total + k_total
+        end
+        return true, total, counts
+    end
+end
+
 local function _buildGroups(group_kind, key_fn, multi, records)
     local _t0 = _gettime()
     local home  = HomeDir.get() or "/"
@@ -6430,6 +6467,67 @@ function Repo.getAuthors(limit, offset, sort_priority_override, filter, opts)
     return out, total
 end
 
+-- _prefetchSortProgress(recs, sort_priority, tag)
+--
+-- Light records carry no sidecar facts, so a sort on status, percent, rating
+-- or page count compares nil with nil and keeps the arrival order. Reads them
+-- here, only when the sort actually asks. Shared by getBySource and
+-- getFolderSections; the second lacked it and its spine shelves ignored
+-- "Reading 1st" (#534).
+--
+-- Fast path: check .sdr existence with a single lfs.attributes() call BEFORE
+-- the much-heavier DocSettings:open(). Unread books have no sidecar, and
+-- would otherwise pay ~50ms per book to learn that. On a typical library
+-- where ~70% of books are unread, this gives a 3-10x speedup over an
+-- unconditional readProgress per candidate. Even when the sdr exists,
+-- Repo.readProgress hits its _progress_cache (120s TTL) so re-sorts within
+-- the same session are cheap.
+local function _prefetchSortProgress(recs, sort_priority, tag)
+    local needs_progress = false
+    if sort_priority then
+        for _i, lv in ipairs(sort_priority) do
+            local k = lv.key
+            if k == "percent_read"
+                    or k == "read_status"
+                    or k == "read_status_active"
+                    or k == "rating"
+                    or k == "page_count" then
+                -- 'rating' and 'page_count' both come back from
+                -- Repo.readProgress (summary.rating + the sidecar page
+                -- map), so they piggyback on the same prefetch.
+                needs_progress = true
+                break
+            end
+        end
+    end
+    if not needs_progress then return end
+    local _t0 = _gettime()
+    local fast_skipped, full_read = 0, 0
+    for _i, b in ipairs(recs) do
+        if not b._progress_fetched and b.filepath then
+            local has_sdr = _hasSidecar(b.filepath)
+            if has_sdr then
+                local pct, status, rating, page_count = Repo.readProgress(b.filepath)
+                b._pct       = pct
+                b._status    = status
+                b.rating     = b.rating or rating
+                b.page_count = page_count or b.page_count
+                full_read    = full_read + 1
+            else
+                b._pct      = nil
+                b._status   = nil
+                -- rating / page_count stay nil too -- unread books
+                -- can't be rated and have no sidecar page map
+                fast_skipped = fast_skipped + 1
+            end
+            b._progress_fetched = true
+        end
+    end
+    logger.dbg(string.format(
+        "[bookshelf perf] %s sort-needs progress: %.0fms full=%d skipped=%d/%d",
+        tag or "", (_gettime() - _t0) * 1000, full_read, fast_skipped, #recs))
+end
+
 -- ─── Home folders, as shelf sections ────────────────────────────────────────
 --
 -- The Home-folders source arranged the way the SPINE shelf reads a library:
@@ -6536,6 +6634,21 @@ function Repo.getFolderSections(limit, offset, sort_priority_override, filter, o
     local sp = sort_priority_override
     if not sp or #sp == 0 then sp = Repo.getSortPriority("all") end
     local light_cache = _getLightMetaCache(walk_root, depth)
+    -- History times for "Opened" / "Added or opened", the same enrichment
+    -- the predicate path gives its light records. Built only when asked.
+    local read_time
+    if sp then
+        for _i, lv in ipairs(sp) do
+            if lv.key == "last_opened" or lv.key == "added_or_opened" then
+                read_time = {}
+                for _j, entry in ipairs(getReadHistory().hist) do
+                    local t = entry.time or 0
+                    if t > (read_time[entry.file] or 0) then read_time[entry.file] = t end
+                end
+                break
+            end
+        end
+    end
     local ordered = {}
     for si = 1, #sections do
         local s = sections[si]
@@ -6551,10 +6664,12 @@ function Repo.getFolderSections(limit, offset, sort_priority_override, filter, o
                 if not rec.date_added then rec.date_added = c.mtime or 0 end
                 if not rec.size then rec.size = c.size or 0 end
             end
+            if read_time then rec._last_read = read_time[fp] or 0 end
             recs[#recs + 1] = rec
         end
         if _filterIsActive(filter) then recs = _applyFilter(recs, filter) end
         if #recs > 1 and sp and #sp > 0 then
+            _prefetchSortProgress(recs, sp, "getFolderSections")
             local SortEngine = require("lib/bookshelf_sort_engine")
             SortEngine.sort(recs, sp)
         end
@@ -8661,62 +8776,7 @@ function Repo.getBySource(source, filter, sort_priority, offset, limit, opts)
         end
         -- needs-introspection for the sort: only pay for DocSettings reads
         -- when the user's sort priority actually depends on progress data.
-        -- Same pattern getAll uses for its prefetch (search for "local needs").
-        local needs_progress = false
-        if sort_priority then
-            for _i, lv in ipairs(sort_priority) do
-                local k = lv.key
-                if k == "percent_read"
-                        or k == "read_status"
-                        or k == "read_status_active"
-                        or k == "rating"
-                        or k == "page_count" then
-                    -- 'rating' and 'page_count' both come back from
-                    -- Repo.readProgress (summary.rating + the sidecar page
-                    -- map), so they piggyback on the same prefetch.
-                    needs_progress = true
-                    break
-                end
-            end
-        end
-
-        if needs_progress then
-            -- Fast path: check .sdr existence with a single lfs.attributes()
-            -- call BEFORE the much-heavier DocSettings:open(). Unread books
-            -- have no sidecar, and would otherwise pay ~50ms per book to
-            -- learn that. On a typical library where ~70% of books are
-            -- unread, this gives a 3-10x speedup over an unconditional
-            -- readProgress per candidate.
-            --
-            -- Note: even when sdr exists, Repo.readProgress hits its
-            -- _progress_cache (120s TTL) so re-sorts within the same
-            -- session are cheap.
-            local _t0 = _gettime()
-            local fast_skipped, full_read = 0, 0
-            for _i, b in ipairs(candidates) do
-                if not b._progress_fetched and b.filepath then
-                    local has_sdr = _hasSidecar(b.filepath)
-                    if has_sdr then
-                        local pct, status, rating, page_count = Repo.readProgress(b.filepath)
-                        b._pct       = pct
-                        b._status    = status
-                        b.rating     = b.rating or rating
-                        b.page_count = page_count or b.page_count
-                        full_read    = full_read + 1
-                    else
-                        b._pct      = nil
-                        b._status   = nil
-                        -- rating / page_count stay nil too -- unread books
-                        -- can't be rated and have no sidecar page map
-                        fast_skipped = fast_skipped + 1
-                    end
-                    b._progress_fetched = true
-                end
-            end
-            logger.dbg(string.format(
-                "[bookshelf perf] sort-needs progress: %.0fms full=%d skipped=%d/%d",
-                (_gettime() - _t0) * 1000, full_read, fast_skipped, #candidates))
-        end
+        _prefetchSortProgress(candidates, sort_priority, "getBySource")
 
         -- Sort.
         if sort_priority and #sort_priority > 0 then

@@ -1193,7 +1193,7 @@ function Settings:_coverDisplaySubItems()
             }
         end)(),
         -- ── decorations ──
-        -- Show series #: three-state. "always" (default), "in_series"
+        -- Show series #: three-state. "always" (unset; fresh installs get "in_series"), "in_series"
         -- (only inside a single-series view), or "never". Legacy boolean
         -- values are still honoured: true reads as "always", false as
         -- "never", so existing user settings keep working without a
@@ -2402,8 +2402,17 @@ function Settings:_pickColor(raw_key, field, default_pct, title,
         --
         -- Through the same derivation the ROW used to print, or the dialog
         -- opens on a different number from the one that was tapped.
-        local current = _rawToScreenPct(raw) or default_pct
-        self:showNudgeDialog(title, current, 0, 100, default_pct, "%",
+        --
+        -- Nothing stored: open on what the shelf PAINTS, as the palette does
+        -- (its hex field above), not on the caller's default_pct. Those
+        -- numbers had drifted from the painted defaults (track 25 vs white,
+        -- module background 0 vs 0xEE), and the Default button offered the
+        -- wrong one too. default_pct stays only for the colours rawColors()
+        -- leaves nil on purpose (unset has its own meaning there) and for
+        -- keys it doesn't carry (wallpaper_bg).
+        local shown_default = _rawToScreenPct(CoverProgress.rawColors()[field]) or default_pct
+        local current = _rawToScreenPct(raw) or shown_default
+        self:showNudgeDialog(title, current, 0, 100, shown_default, "%",
             function(val)
                 TP.partSave(key, { grey = _screenPctToByte(val) })
                 -- A nudge picks a grey, so the wood goes off -- except when the
@@ -3926,6 +3935,25 @@ function Settings:_performanceSubItems()
             callback = function()
                 local enabled = BookshelfSettings.nilOrTrue("hot_park")
                 BookshelfSettings.save("hot_park", not enabled)
+            end,
+        },
+        {
+            -- Issue 529: shelf page turns refresh in "ui" mode, which KOReader
+            -- never promotes to a flash, so "Full refresh rate: Every page"
+            -- left the shelf ghosting. Off by default: a flash costs time.
+            text = _("Use E-ink refresh rate for shelf pages"),
+            help_text = _("Flash the shelf clean on page turns as often as "
+                .. "KOReader's own Full refresh rate (Screen > E-ink settings) "
+                .. "does for book pages, to clear ghosting. A page that "
+                .. "flashes skips its animation and takes a little longer. "
+                .. "E-ink only."),
+            checked_func = function()
+                return BookshelfSettings.isTrue("shelf_full_refresh")
+            end,
+            keep_menu_open = true,
+            callback = function()
+                BookshelfSettings.save("shelf_full_refresh",
+                    not BookshelfSettings.isTrue("shelf_full_refresh"))
             end,
         },
         {
@@ -5846,6 +5874,9 @@ function Settings:_about()
     -- the clipboard receive on tap.
     local GITHUB_URL_DISPLAY = "github.com/AndyHazz/bookshelf.koplugin"
     local GITHUB_URL         = "https://github.com/AndyHazz/bookshelf.koplugin"
+    -- The user guide, first: it answers more questions than the repo does.
+    local DOCS_URL_DISPLAY   = "andyhazz.github.io/bookshelf-docs"
+    local DOCS_URL           = "https://andyhazz.github.io/bookshelf-docs/"
 
     local Device           = require("device")
     local Screen           = Device.screen
@@ -5896,6 +5927,11 @@ function Settings:_about()
                 height       = logo_h,
                 scale_factor = 0,
                 alpha        = true,
+                -- Invert with the rest of the screen in night mode. The
+                -- default keeps an image's own colours, which left a white
+                -- box with the black logo in it on the dark frame; the logo
+                -- is line art, so inverted it reads white on dark.
+                original_in_nightmode = false,
             }
             column[#column + 1] = VerticalSpan:new{ width = Space.padding.default }
         end
@@ -5952,29 +5988,34 @@ function Settings:_about()
     -- clipboard path is the user-meaningful one (paste into a Send-to-
     -- Kindle-style helper, or just read the URL clearly).
     local Button = require("ui/widget/button")
-    local function open_github()
+    local function open_link(url)
         local ok = false
         if Device.openLink then
-            local _ok, ret = pcall(function() return Device:openLink(GITHUB_URL) end)
+            local _ok, ret = pcall(function() return Device:openLink(url) end)
             if _ok and ret then ok = true end
         end
         if not ok and Device.input and Device.input.setClipboardText then
-            pcall(function() Device.input.setClipboardText(GITHUB_URL) end)
+            pcall(function() Device.input.setClipboardText(url) end)
             local Notification = require("ui/widget/notification")
             UIManager:show(Notification:new{
                 text = _("Link copied to clipboard"),
             })
         end
     end
-    column[#column + 1] = Button:new{
-        text       = GITHUB_URL_DISPLAY,
-        bordersize = 0,
-        padding    = 0,
-        margin     = 0,
-        text_font_face = "cfont",
-        text_font_size = 14,
-        callback   = open_github,
-    }
+    local function linkButton(display, url)
+        return Button:new{
+            text       = display,
+            bordersize = 0,
+            padding    = 0,
+            margin     = 0,
+            text_font_face = "cfont",
+            text_font_size = 14,
+            callback   = function() open_link(url) end,
+        }
+    end
+    column[#column + 1] = linkButton(DOCS_URL_DISPLAY, DOCS_URL)
+    column[#column + 1] = VerticalSpan:new{ width = Space.padding.default }
+    column[#column + 1] = linkButton(GITHUB_URL_DISPLAY, GITHUB_URL)
 
     -- Frame styling matches the other Bookshelf modals (chip editor,
     -- hero line editor): default Size.border.window thickness (thicker
