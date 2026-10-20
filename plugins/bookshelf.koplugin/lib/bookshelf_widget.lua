@@ -109,10 +109,11 @@ local SHELF_HEIGHT_FRAC = {
 -- to the hero. 1.0 = no shrink-to-cram (covers keep natural width, fill the row).
 local SHELF_PACK_FLOOR = 1.0
 -- Hero cover never wider than this fraction of content_w, so the title/details
--- column keeps the rest. Back to half (it was 0.58): a panel grown by the swipe
--- down (issue 465) had its cover fill most of it and squeeze the details into
--- a narrow column (maintainer).
-local HERO_COVER_MAX_FRAC = 0.50
+-- column keeps the rest. 5.3.0 made it half, for a panel grown by the swipe
+-- down (issue 465), but at half any tall panel (one cover row, or the swipe)
+-- left the cover short of its height with an empty band underneath (Reddit
+-- report, 2026-10-19). Every panel follows the same rule (maintainer).
+local HERO_COVER_MAX_FRAC = 0.58
 
 -- _footerReserveH() — vertical space the screen-anchored pagination footer
 -- occupies. _rebuild reserves exactly this at the bottom of the layout
@@ -585,7 +586,8 @@ function BookshelfWidget:init()
         -- FileChooser underneath, which walks the REAL file browser up to
         -- its parent -- and bookshelf mirrors that as a folder view of
         -- whatever lies above the library. At top level the handler
-        -- declines the event, keeping the historical fall-through.
+        -- declines the event (KOReader's exit prompt), except with "Back
+        -- in file browser: parent folder", which it keeps (issue 542).
         self.key_events.BSDrillBack = { { Device.input.group.Back } }
     end
     if Device:hasDPad() then
@@ -15421,7 +15423,28 @@ function BookshelfWidget:onBSDrillBack()
         self:_navBackTo(n - 1)
         return true
     end
+    -- Top level. With KOReader's "Back in file browser: parent folder", the
+    -- file browser underneath walks to the folder ABOVE the library on every
+    -- Back, unbounded, and the shelf follows it there: a few accidental
+    -- swipes and an Android reader was in /storage/emulated/0, which
+    -- sometimes froze (issue 542). The base shelf is as far back as Back
+    -- goes, so keep the press. With the default setting the fall-through
+    -- stays: that is KOReader's own "Exit KOReader?" prompt.
+    if G_reader_settings
+            and G_reader_settings:readSetting("back_in_filemanager") == "parent_folder" then
+        return true
+    end
     return false
+end
+
+-- KOReader's "Folder up" gesture action. Sent on to the file browser it
+-- climbs to the folder above the library just the same (unless Lock home
+-- folder is on), so on the shelf it is Back: one level out of a drilldown,
+-- and no further than the base shelf (issue 542).
+function BookshelfWidget:onFolderUp()
+    local n = self:_navDepth()
+    if n > 0 then self:_navBackTo(n - 1) end
+    return true
 end
 
 function BookshelfWidget:onBookshelfNextChip()
@@ -15461,6 +15484,14 @@ end
 
 function BookshelfWidget:onBookshelfPrevChipPage()
     return self:_flipChipPage(-1)
+end
+
+-- The library refresh as a system action (issue 541): the same refresh as
+-- the swipe down, with or without that swipe switched on.
+function BookshelfWidget:onBookshelfRefreshLibrary()
+    self:_clearDpadFocus()
+    self:_refreshLibrary()
+    return true
 end
 
 function BookshelfWidget:onBookshelfToggleHero()
