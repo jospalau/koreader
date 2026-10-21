@@ -1012,6 +1012,7 @@ function PageBrowserWidget:onShowMenu()
         {
             {
                 text = _("Thumbnail columns"),
+                focusable = false,
                 callback = function() end,
                 align = "left",
             },
@@ -1049,6 +1050,7 @@ function PageBrowserWidget:onShowMenu()
         {
             {
                 text = _("Thumbnail rows"),
+                focusable = false,
                 callback = function() end,
                 align = "left",
             },
@@ -1086,6 +1088,7 @@ function PageBrowserWidget:onShowMenu()
         {
             {
                 text = _("Thumbnail page numbers"),
+                focusable = false,
                 callback = function() end,
                 align = "left",
             },
@@ -1113,6 +1116,7 @@ function PageBrowserWidget:onShowMenu()
         {
             {
                 text = _("Chapters in bottom ribbon"),
+                focusable = false,
                 callback = function() end,
                 align = "left",
             },
