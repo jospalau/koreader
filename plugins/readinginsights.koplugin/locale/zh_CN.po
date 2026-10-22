@@ -220,8 +220,8 @@ msgid "8-week chart order"
 msgstr "8周图表排序方式"
 msgid "Advanced settings"
 msgstr "高级设置"
-msgid "Reading heatmap range"
-msgstr "阅读热力图时间范围"
+msgid "Reading habits range"
+msgstr "阅读习惯时间范围"
 
 msgid "3 months"
 msgstr "3个月"
@@ -387,6 +387,9 @@ msgstr "图表标签颜色"
 
 msgid "Section header background color"
 msgstr "分区标题背景颜色"
+
+msgid "Cover shadow color"
+msgstr "封面阴影颜色"
 
 msgid "Settings"
 msgstr "设置"
@@ -571,8 +574,8 @@ msgstr "无法获取最新版本信息。"
 msgid "Latest release has no downloadable zip."
 msgstr "最新版本没有可用压缩包。"
 
-msgid "Reading heatmap"
-msgstr "阅读热力图"
+msgid "Reading habits"
+msgstr "阅读习惯"
 msgid "Reading calendar"
 msgstr "阅读日历"
 msgid "Less"
@@ -620,8 +623,6 @@ msgstr "当日无阅读记录。"
 
 msgid "About"
 msgstr "关于"
-msgid "Reading insight"
-msgstr "阅读统计"
 msgid "A full-screen overlay with a comprehensive overview of your reading history, powered by KOReader's statistics database."
 msgstr "全屏工具，汇总展示你的全部阅读历史，基于KOReader统计数据库驱动。"
 
@@ -661,11 +662,17 @@ msgstr "勾选要在“工具 > Reading insights”下列出的弹窗。与图�
 msgid "Reading insights: reading calendar"
 msgstr "阅读统计：阅读日历"
 
-msgid "Reading insights: reading heatmap"
-msgstr "阅读统计：阅读热力图"
+msgid "Reading insights: reading habits"
+msgstr "阅读统计：阅读习惯"
 
-msgid "Show Reading heatmap"
-msgstr "查看阅读热力图"
+msgid "Reading insights: reading shelf"
+msgstr "阅读统计：阅读书架"
+
+msgid "Reading shelf"
+msgstr "阅读书架"
+
+msgid "Show Reading habits"
+msgstr "查看阅读习惯"
 msgid "Sub-values (date / book title)"
 msgstr "附属信息（日期/书名）"
 
@@ -741,7 +748,7 @@ msgid "Add books manually - %1"
 msgstr "手动添加书籍 — %1"
 msgid "Date & time"
 msgstr "日期与时间"
-msgid "Reading insight popup"
+msgid "Reading insights popup"
 msgstr "阅读统计弹窗"
 
 msgid "Daily goal"
@@ -1384,11 +1391,7 @@ msgstr "下午"
 msgid "Evening"
 msgstr "晚上"
 
-msgid "When you read"
-msgstr "阅读时段"
 
-msgid "Days of the week"
-msgstr "星期分布"
 
 msgid "You read most around %1"
 msgstr "你最常在%1左右阅读"
@@ -1426,8 +1429,8 @@ msgstr "在“阅读速度”区域显示“开始…”和“预计完成”日
 msgid "Hamburger menu"
 msgstr "汉堡菜单"
 
-msgid "Show the hamburger menu (top left of the title bar) with quick access to the streak, heatmap, records and achievements popups."
-msgstr "显示汉堡菜单（位于标题栏左上角），可快速打开连续阅读天数、热力图、记录和成就弹窗。"
+msgid "Show the hamburger menu (top left of the title bar) with quick access to the streak, reading habits, records and achievements popups."
+msgstr "显示汉堡菜单（位于标题栏左上角），可快速打开连续阅读天数、阅读习惯、记录和成就弹窗。"
 
 msgid "Couldn't open Records: "
 msgstr "无法打开记录："
@@ -1576,8 +1579,8 @@ msgstr "中"
 msgid "Large"
 msgstr "大"
 
-msgid "Size of the cover in the Book info popup. Medium is the default size; Small is half of it and Large is one and a half times it."
-msgstr "图书信息弹窗中封面的大小。“中”为默认大小；“小”为其一半，“大”为其 1.5 倍。"
+msgid "Size of the cover in the Book info popup. Small: the cover is only as tall as the text beside it (title, author, series, rating, reading time - no description). Medium: the default size. Large: the cover grows as much as the popup (at most 94% of the width) allows while all the text still fits."
+msgstr "图书信息弹窗中封面的大小。“小”：封面高度仅与旁边的文字（书名、作者、系列、评分、阅读时间，不含简介）相同；“中”为默认大小；“大”：在弹窗（最多占宽度的 94%）允许的范围内尽可能放大封面，同时保证所有文字完整显示。"
 
 msgid "Show author"
 msgstr "显示作者"
@@ -1786,8 +1789,6 @@ msgstr "正在加载评分..."
 msgid "Appearance"
 msgstr "外观"
 
-msgid "Heatmap & time of day"
-msgstr "热力图与时段"
 
 msgid "Chart style"
 msgstr "图表样式"
@@ -1932,3 +1933,138 @@ msgstr "在阅读日历中于封面下方显示连续记录线。关闭时（默
 
 msgid "8-week reading trend"
 msgstr "8 周阅读趋势"
+
+msgid "Weekdays"
+msgstr "星期"
+
+msgid "Height of the two bar charts in the reading habits popup. The default matches the chapter bar. If the popup does not fit the screen, both charts shrink automatically."
+msgstr "阅读习惯弹窗中两个条形图的高度。默认值与章节条相同。如果弹窗超出屏幕，两个图表会自动缩小。"
+
+
+
+
+msgid "Random views (%1/%2)"
+msgstr "随机视图 (%1/%2)"
+
+msgid "Which views the Random sleep screen picks from. A different one is shown every time the device goes to sleep, never the same one twice in a row."
+msgstr "随机睡眠屏幕从哪些视图中选择。每次设备进入睡眠时显示不同的视图，绝不会连续两次相同。"
+
+msgid "Every 2 hours"
+msgstr "每 2 小时"
+
+msgid "By part of day"
+msgstr "按时段"
+
+msgid "Reading by day"
+msgstr "按日期阅读"
+
+msgid "Pages per month"
+msgstr "每月页数"
+
+msgid "Pages / reading time"
+msgstr "页数 / 阅读时间"
+
+msgid "Pages per day"
+msgstr "每日页数"
+
+msgid "Reading time per day"
+msgstr "每日阅读时间"
+
+msgid "View"
+msgstr "视图"
+
+msgid "Current week"
+msgstr "本周"
+
+msgid "Show Reading shelf"
+msgstr "查看阅读书架"
+
+msgid "Show only finished books"
+msgstr "仅已读完的书籍"
+
+msgid "Show the last 7 days, or the current calendar week that you can page back and forth. All figures of the section then cover that week."
+msgstr "显示过去 7 天或当前日历周，可前后翻页。该部分的所有数据随后均对应所显示的那一周。"
+
+msgid "page vs prev. week"
+msgstr "页 较上周"
+
+msgid "pages vs prev. week"
+msgstr "页 较上周"
+
+msgid "pg vs prev. wk"
+msgstr "页 较上周"
+
+msgid "time vs prev. week"
+msgstr "时间 较上周"
+
+msgid "vs prev. week"
+msgstr "较上周"
+
+msgid "Round the corners of the covers (Book info, Reading calendar and Reading shelf)."
+msgstr "将封面的四角变为圆角（图书信息、阅读日历和阅读书架）。"
+
+msgid "Draw a drop shadow behind the covers (Book info, Reading calendar and Reading shelf)."
+msgstr "在封面后绘制投影（图书信息、阅读日历和阅读书架）。"
+
+msgid "Draw a thin frame around the covers (Book info, Reading calendar and Reading shelf)."
+msgstr "在封面周围绘制细边框（图书信息、阅读日历和阅读书架）。"
+
+msgid "Covers"
+msgstr "封面"
+
+msgid "Weekly reading time"
+msgstr "每周阅读时间"
+
+msgid "Weekly average reading time"
+msgstr "每周平均阅读时间"
+
+msgid "Weekly pages read"
+msgstr "每周已读页数"
+
+msgid "Weekly average pages read"
+msgstr "每周平均已读页数"
+
+msgid "Progress per day"
+msgstr "每日进度"
+
+msgid "Daily streak (time)"
+msgstr "每日连续阅读(时间)"
+
+msgid "Daily streak (pages)"
+msgstr "每日连续阅读(页数)"
+
+msgid "Weekly streak (time)"
+msgstr "每周连续阅读(时间)"
+
+msgid "Weekly streak (pages)"
+msgstr "每周连续阅读(页数)"
+
+msgid "Daily (time)"
+msgstr "每日(时间)"
+
+msgid "Daily (pages)"
+msgstr "每日(页数)"
+
+msgid "Weekly (time)"
+msgstr "每周(时间)"
+
+msgid "Weekly (pages)"
+msgstr "每周(页数)"
+
+msgid "Reading time by time of day"
+msgstr "按时间段的阅读时间"
+
+msgid "Pages read by time of day"
+msgstr "按时间段的已读页数"
+
+msgid "Share of reading time by time of day"
+msgstr "按时间段的阅读时间占比"
+
+msgid "Reading time by weekday"
+msgstr "按星期的阅读时间"
+
+msgid "Pages read by weekday"
+msgstr "按星期的已读页数"
+
+msgid "Share of reading time by weekday"
+msgstr "按星期的阅读时间占比"

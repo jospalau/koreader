@@ -294,8 +294,8 @@ msgstr "Ordre du graphique sur 8 semaines"
 msgid "Advanced settings"
 msgstr "Paramètres avancés"
 
-msgid "Reading heatmap range"
-msgstr "Période de la carte thermique de lecture"
+msgid "Reading habits range"
+msgstr "Période des habitudes de lecture"
 
 msgid "3 months"
 msgstr "3 mois"
@@ -518,6 +518,9 @@ msgstr "Couleur des libellés de graphique"
 
 msgid "Section header background color"
 msgstr "Couleur d'arrière-plan des en-têtes de section"
+
+msgid "Cover shadow color"
+msgstr "Couleur de l'ombre des couvertures"
 
 msgid "Settings"
 msgstr "Paramètres"
@@ -779,8 +782,8 @@ msgstr "Impossible de récupérer la dernière version."
 msgid "Latest release has no downloadable zip."
 msgstr "La dernière version n'a pas de zip téléchargeable."
 
-msgid "Reading heatmap"
-msgstr "Carte thermique de lecture"
+msgid "Reading habits"
+msgstr "Habitudes de lecture"
 
 msgid "Reading calendar"
 msgstr "Calendrier de lecture"
@@ -845,9 +848,6 @@ msgstr "Aucune lecture ce jour."
 msgid "About"
 msgstr "À propos"
 
-msgid "Reading insight"
-msgstr "Statistique de lecture"
-
 msgid "A full-screen overlay with a comprehensive overview of your reading history, powered by KOReader's statistics database."
 msgstr "Un overlay plein écran avec un aperçu complet de votre historique de lecture, basé sur la base de données statistiques de KOReader."
 
@@ -896,11 +896,17 @@ msgstr "Cochez les fenêtres à afficher dans Outils > Reading insights. Les fen
 msgid "Reading insights: reading calendar"
 msgstr "Statistiques de lecture : calendrier de lecture"
 
-msgid "Reading insights: reading heatmap"
-msgstr "Statistiques de lecture : carte thermique de lecture"
+msgid "Reading insights: reading habits"
+msgstr "Statistiques de lecture : habitudes de lecture"
 
-msgid "Show Reading heatmap"
-msgstr "Afficher la carte thermique de lecture"
+msgid "Reading insights: reading shelf"
+msgstr "Statistiques de lecture : étagère de lecture"
+
+msgid "Reading shelf"
+msgstr "Étagère de lecture"
+
+msgid "Show Reading habits"
+msgstr "Afficher les habitudes de lecture"
 
 msgid "Sub-values (date / book title)"
 msgstr "Sous-valeurs (date / titre du livre)"
@@ -1007,7 +1013,7 @@ msgstr "Ajouter des livres manuellement - %1"
 msgid "Date & time"
 msgstr "Date et heure"
 
-msgid "Reading insight popup"
+msgid "Reading insights popup"
 msgstr "Popup de statistiques de lecture"
 
 msgid "Daily goal"
@@ -1658,11 +1664,7 @@ msgstr "Après-midi"
 msgid "Evening"
 msgstr "Soir"
 
-msgid "When you read"
-msgstr "Quand vous lisez"
 
-msgid "Days of the week"
-msgstr "Jours de la semaine"
 
 msgid "You read most around %1"
 msgstr "Vous lisez surtout vers %1"
@@ -1700,8 +1702,8 @@ msgstr "Afficher la ligne de dates « commencé … » et « fin prévue » dans
 msgid "Hamburger menu"
 msgstr "Menu hamburger"
 
-msgid "Show the hamburger menu (top left of the title bar) with quick access to the streak, heatmap, records and achievements popups."
-msgstr "Afficher le menu hamburger (en haut à gauche de la barre de titre) donnant un accès rapide aux fenêtres de série de lecture, carte de chaleur, records et succès."
+msgid "Show the hamburger menu (top left of the title bar) with quick access to the streak, reading habits, records and achievements popups."
+msgstr "Afficher le menu hamburger (en haut à gauche de la barre de titre) donnant un accès rapide aux fenêtres de série de lecture, habitudes de lecture, records et succès."
 
 msgid "Couldn't open Records: "
 msgstr "Impossible d'ouvrir Records : "
@@ -1850,8 +1852,8 @@ msgstr "Moyenne"
 msgid "Large"
 msgstr "Grande"
 
-msgid "Size of the cover in the Book info popup. Medium is the default size; Small is half of it and Large is one and a half times it."
-msgstr "Taille de la couverture dans la fenêtre Infos du livre. Moyenne est la taille par défaut ; Petite en est la moitié et Grande une fois et demie."
+msgid "Size of the cover in the Book info popup. Small: the cover is only as tall as the text beside it (title, author, series, rating, reading time - no description). Medium: the default size. Large: the cover grows as much as the popup (at most 94% of the width) allows while all the text still fits."
+msgstr "Taille de la couverture dans la fenêtre Infos du livre. Petite : la couverture n'est pas plus haute que le texte à côté (titre, auteur, série, note, temps de lecture – sans description). Moyenne : la taille par défaut. Grande : la couverture grandit autant que la fenêtre le permet (94 % de la largeur au maximum) tant que tout le texte reste visible."
 
 msgid "Show author"
 msgstr "Afficher l'auteur"
@@ -2060,8 +2062,6 @@ msgstr "Chargement des notes..."
 msgid "Appearance"
 msgstr "Apparence"
 
-msgid "Heatmap & time of day"
-msgstr "Carte thermique et moment de la journée"
 
 msgid "Chart style"
 msgstr "Style du graphique"
@@ -2206,3 +2206,138 @@ msgstr "Afficher la ligne de série sous les couvertures dans le calendrier de l
 
 msgid "8-week reading trend"
 msgstr "Tendance de lecture sur 8 semaines"
+
+msgid "Weekdays"
+msgstr "Jours de la semaine"
+
+msgid "Height of the two bar charts in the reading habits popup. The default matches the chapter bar. If the popup does not fit the screen, both charts shrink automatically."
+msgstr "Hauteur des deux diagrammes à barres de la fenêtre des habitudes de lecture. La valeur par défaut correspond à la barre des chapitres. Si la fenêtre ne tient pas à l'écran, les deux diagrammes rétrécissent automatiquement."
+
+
+
+
+msgid "Random views (%1/%2)"
+msgstr "Vues aléatoires (%1/%2)"
+
+msgid "Which views the Random sleep screen picks from. A different one is shown every time the device goes to sleep, never the same one twice in a row."
+msgstr "Parmi quelles vues l'écran de veille aléatoire choisit. Une vue différente s'affiche à chaque mise en veille, jamais la même deux fois de suite."
+
+msgid "Every 2 hours"
+msgstr "Toutes les 2 heures"
+
+msgid "By part of day"
+msgstr "Par moment de la journée"
+
+msgid "Reading by day"
+msgstr "Lecture par jour"
+
+msgid "Pages per month"
+msgstr "Pages par mois"
+
+msgid "Pages / reading time"
+msgstr "Pages / temps de lecture"
+
+msgid "Pages per day"
+msgstr "Pages par jour"
+
+msgid "Reading time per day"
+msgstr "Temps de lecture par jour"
+
+msgid "View"
+msgstr "Affichage"
+
+msgid "Current week"
+msgstr "Semaine en cours"
+
+msgid "Show Reading shelf"
+msgstr "Afficher l'étagère de lecture"
+
+msgid "Show only finished books"
+msgstr "Uniquement les livres terminés"
+
+msgid "Show the last 7 days, or the current calendar week that you can page back and forth. All figures of the section then cover that week."
+msgstr "Affiche les 7 derniers jours ou la semaine calendaire en cours, que vous pouvez parcourir d'avant en arrière. Tous les chiffres de la section portent alors sur cette semaine."
+
+msgid "page vs prev. week"
+msgstr "page vs sem. préc."
+
+msgid "pages vs prev. week"
+msgstr "pages vs sem. préc."
+
+msgid "pg vs prev. wk"
+msgstr "p. vs sem. préc."
+
+msgid "time vs prev. week"
+msgstr "temps vs sem. préc."
+
+msgid "vs prev. week"
+msgstr "vs sem. préc."
+
+msgid "Round the corners of the covers (Book info, Reading calendar and Reading shelf)."
+msgstr "Arrondit les coins des couvertures (Infos du livre, Calendrier de lecture et Étagère de lecture)."
+
+msgid "Draw a drop shadow behind the covers (Book info, Reading calendar and Reading shelf)."
+msgstr "Dessine une ombre portée derrière les couvertures (Infos du livre, Calendrier de lecture et Étagère de lecture)."
+
+msgid "Draw a thin frame around the covers (Book info, Reading calendar and Reading shelf)."
+msgstr "Dessine un fin cadre autour des couvertures (Infos du livre, Calendrier de lecture et Étagère de lecture)."
+
+msgid "Covers"
+msgstr "Couvertures"
+
+msgid "Daily streak (time)"
+msgstr "Série quotidienne (temps)"
+
+msgid "Daily streak (pages)"
+msgstr "Série quotidienne (pages)"
+
+msgid "Weekly streak (time)"
+msgstr "Série hebdomadaire (temps)"
+
+msgid "Weekly streak (pages)"
+msgstr "Série hebdomadaire (pages)"
+
+msgid "Daily (time)"
+msgstr "Quotidienne (temps)"
+
+msgid "Daily (pages)"
+msgstr "Quotidienne (pages)"
+
+msgid "Weekly (time)"
+msgstr "Hebdomadaire (temps)"
+
+msgid "Weekly (pages)"
+msgstr "Hebdomadaire (pages)"
+
+msgid "Weekly reading time"
+msgstr "Temps de lecture hebdomadaire"
+
+msgid "Weekly average reading time"
+msgstr "Temps de lecture hebdomadaire moyen"
+
+msgid "Weekly pages read"
+msgstr "Pages lues par semaine"
+
+msgid "Weekly average pages read"
+msgstr "Moyenne de pages lues par semaine"
+
+msgid "Progress per day"
+msgstr "Progression par jour"
+
+msgid "Reading time by time of day"
+msgstr "Temps de lecture par moment de la journée"
+
+msgid "Pages read by time of day"
+msgstr "Pages lues par moment de la journée"
+
+msgid "Share of reading time by time of day"
+msgstr "Part du temps de lecture par moment de la journée"
+
+msgid "Reading time by weekday"
+msgstr "Temps de lecture par jour de la semaine"
+
+msgid "Pages read by weekday"
+msgstr "Pages lues par jour de la semaine"
+
+msgid "Share of reading time by weekday"
+msgstr "Part du temps de lecture par jour de la semaine"

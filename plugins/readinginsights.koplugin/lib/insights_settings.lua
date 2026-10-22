@@ -70,6 +70,21 @@ function M.saveStreakHistoryMetricSetting(value)
     Prefs.save(M.SETTINGS_KEY_STREAK_HISTORY_METRIC, value == "pages" and "pages" or "time")
 end
 
+-- Which unit the streak-history popup lists: "day" (one row per day) or
+-- "week" (one row per week). Chosen from the popup's list of four views
+-- (daily/weekly x time/pages), together with the metric setting above.
+M.SETTINGS_KEY_STREAK_HISTORY_UNIT = "reading_insights_streak_history_unit"
+
+function M.readStreakHistoryUnitSetting()
+    local v = Prefs.read(M.SETTINGS_KEY_STREAK_HISTORY_UNIT, "day")
+    if v ~= "week" then return "day" end
+    return v
+end
+
+function M.saveStreakHistoryUnitSetting(value)
+    Prefs.save(M.SETTINGS_KEY_STREAK_HISTORY_UNIT, value == "week" and "week" or "day")
+end
+
 -- Bar-chart height settings (Prefs ▸ "Oszlopdiagram magassága" / "Bar
 -- chart height"). Values are the same "points" number previously hardcoded
 -- into Screen:scaleBySize(...) at each chart's call site, so restoring the
@@ -118,7 +133,7 @@ end
 -- Newer view options, kept on one table for the reason in the header: a
 -- field costs no local, a top-level `local` costs one of the 200.
 M.Opt = {
-    -- Bar-chart height mode (Settings > Reading insight popup > "Bar chart
+    -- Bar-chart height mode (Settings > Reading insights popup > "Bar chart
     -- height" > "Automatic (Reading insights)").
     --
     -- true (default): the weekly and monthly bar heights are not taken from
@@ -153,6 +168,12 @@ M.Opt = {
     -- boundaries and show up as a one-pixel mismatch between the charts.
     auto_height = nil,
 
+    -- Auto mode only: whole pixels (not enough for another bar point) that
+    -- the fit hands to the monthly chart, as a spacer under it, so the page
+    -- ends exactly at the bottom of the screen. Remembered between builds
+    -- like auto_height; 0 = none.
+    monthly_extra_px = 0,
+
     -- Landscape only: the text scale the last fit settled on (< 1 when the
     -- page had to shrink its fonts to lose the scroll bar), kept as the
     -- first guess for the next build. nil = fonts at their configured size.
@@ -173,7 +194,7 @@ M.Opt = {
     built_monthly = false,
 
     -- Whether the "Reading goal" section is shown at all (Settings >
-    -- Reading insight popup > "Reading goal"). On by default. When off
+    -- Reading insights popup > "Reading goal"). On by default. When off
     -- the section is skipped while building the popup *and* its
     -- finished-book count is never queried (see _loadAndRebuild), so
     -- turning it off also removes its share of the work on every open.
@@ -181,7 +202,7 @@ M.Opt = {
     SHOW_GOAL_DEFAULT = true,
 
     -- What the reading-goal section shows (Settings > 
-    -- Reading insight popup > "Reading goal section"):
+    -- Reading insights popup > "Reading goal section"):
     --   "both"      (default) finished/target figure + achievements count
     --   "goal_only" the old two-cell view: finished count | yearly target
     --   "off"       the whole section is hidden (and not queried)
@@ -200,7 +221,7 @@ M.Opt = {
     SHOW_ACH_ROW_KEY  = "reading_insights_achievements_row_enabled",
 
     -- What the right-hand cell of the "Reading goal" section counts
-    -- (Settings > Reading insight popup > "Reading goal
+    -- (Settings > Reading insights popup > "Reading goal
     -- display"). "total" (default) shows the year's goal itself - "30 books
     -- to read"; "remaining" shows how many of it are still left after the
     -- finished books on the left - "18 books left". Either way it is the
@@ -211,7 +232,7 @@ M.Opt = {
     GOAL_DISPLAY_REMAINING = "remaining",
 
     -- How often the achievements re-evaluate in the background (Settings >
-    -- Reading insight popup > "Achievement refresh").
+    -- Reading insights popup > "Achievement refresh").
     -- "daily" (default): at most once per calendar day; "every_open": on
     -- every insights popup open. Either way the heavy re-scan only actually
     -- runs when the reading data changed since the last evaluation; a
@@ -344,16 +365,17 @@ function M.saveHeatmapHourFormatSetting(value)
     Prefs.save(M.SETTINGS_KEY_HEATMAP_HOUR_FORMAT, value)
 end
 
--- Time-of-day view style on the reading-heatmap page: the new day-part bar
--- chart ("chart", the default) or the older weekday x hour-of-day grid
--- ("heatmap"). Only the time-of-day section is swapped; the calendar
+-- Time-of-day view style on the reading-heatmap page: the two-hourly bar
+-- chart ("hourly", the default), the four day-part bars ("chart") or the
+-- older weekday x hour-of-day grid ("heatmap"). Only the time-of-day section is swapped; the calendar
 -- heatmap above it is unaffected. Read by M.buildHeatmapBoxContent every
 -- time the heatmap page is (re)built.
 M.SETTINGS_KEY_TIMEOFDAY_VIEW = "reading_insights_timeofday_view"
 
-M.DEFAULT_TIMEOFDAY_VIEW      = "chart"
+M.DEFAULT_TIMEOFDAY_VIEW      = "hourly"
 
-M.VALID_TIMEOFDAY_VIEW        = { ["chart"] = true, ["heatmap"] = true }
+-- ("hourly" = one bar per two hours of the day, 12 bars.)
+M.VALID_TIMEOFDAY_VIEW        = { ["chart"] = true, ["hourly"] = true, ["heatmap"] = true }
 
 function M.readTimeOfDayViewSetting()
     local v = Prefs.read(M.SETTINGS_KEY_TIMEOFDAY_VIEW, nil)
@@ -471,9 +493,16 @@ M.INSIGHTS_MODE_HOURS = "hours"
 
 M.INSIGHTS_MODE_BOOKS = "books"
 
+-- Pages read per month: the second step of the monthly chart's cycle
+-- (time -> pages -> days -> books).
+M.INSIGHTS_MODE_PAGES = "pages"
+
 function M.normalizeInsightsMode(mode)
     if mode == M.INSIGHTS_MODE_DAYS then
         return M.INSIGHTS_MODE_DAYS
+    end
+    if mode == M.INSIGHTS_MODE_PAGES then
+        return M.INSIGHTS_MODE_PAGES
     end
     if mode == M.INSIGHTS_MODE_BOOKS then
         return M.INSIGHTS_MODE_BOOKS
@@ -482,11 +511,12 @@ function M.normalizeInsightsMode(mode)
 end
 
 -- Returns the _monthly_cache/_stale_monthly key prefix for a given insights
--- mode ("hours:" / "books:" / "days:"). Shared by init(), the mode-toggle
+-- mode ("hours:" / "pages:" / "books:" / "days:"). Shared by init(), the mode-toggle
 -- and year-navigation handlers, all of which need to guess the right
 -- monthly cache key before the real data has loaded.
 function M.monthKeyPrefixForMode(mode)
     if mode == M.INSIGHTS_MODE_HOURS then return "hours:" end
+    if mode == M.INSIGHTS_MODE_PAGES then return "pages:" end
     if mode == M.INSIGHTS_MODE_BOOKS then return "books:" end
     return "days:"
 end
@@ -565,7 +595,7 @@ function M.saveWeeklyGoalMinutes(value)
     Prefs.save(M.SETTINGS_KEY_WEEKLY_GOAL_MIN, value)
 end
 
--- "Last 7 days" section rows (Settings > Reading insight
+-- "Last 7 days" section rows (Settings > Reading insights
 -- popup > "Last 7 days"). The compact row (total + daily average of the
 -- selected chart mode, time or pages) is always shown. Two optional extras,
 -- both off by default and independent of each other:
@@ -594,7 +624,7 @@ function M.saveWeeklyVsPrev(value)
     M.saveBoolSetting(M.SETTINGS_KEY_WEEKLY_VS_PREV, value)
 end
 
--- "Last 7 days" bar order (Settings ▸ Reading insight popup ▸
+-- "Last 7 days" bar order (Settings ▸ Reading insights popup ▸
 -- "Last 7 days chapter bar order"). The chart's data always arrives with index
 -- 1 = today; this only decides which end of the row that first bar is drawn
 -- at, so everything keyed off "bar 1 is today" (the highlight colour, the tap
@@ -606,19 +636,47 @@ M.WEEKLY_BAR_ORDER_TODAY_FIRST = "today_first"
 M.WEEKLY_BAR_ORDER_TODAY_LAST  = "today_last"
 
 function M.readWeeklyBarOrderSetting()
-    -- default: today on the left, which is what the chart did before this
-    -- setting existed
+    -- default: today (the newest day) on the right, so the chart reads
+    -- like a timeline from left to right. Only an explicit "today on the
+    -- left" choice flips it.
     local v = Prefs.read(M.SETTINGS_KEY_WEEKLY_BAR_ORDER, nil)
-    if v == M.WEEKLY_BAR_ORDER_TODAY_LAST then return M.WEEKLY_BAR_ORDER_TODAY_LAST end
-    return M.WEEKLY_BAR_ORDER_TODAY_FIRST
+    if v == M.WEEKLY_BAR_ORDER_TODAY_FIRST then return M.WEEKLY_BAR_ORDER_TODAY_FIRST end
+    return M.WEEKLY_BAR_ORDER_TODAY_LAST
 end
 
 function M.saveWeeklyBarOrderSetting(value)
     Prefs.save(M.SETTINGS_KEY_WEEKLY_BAR_ORDER, value)
 end
 
+-- Which week the weekly section of the insights popup shows (Settings >
+-- Reading insights popup > Week > "View"):
+--   "last7"    (default) the rolling last 7 days, ending today.
+--   "calendar" the current calendar week (from the shared week start day),
+--              pageable back and forth like the year; every figure of the
+--              section (totals, averages, chart, comparison) covers that
+--              one week only.
+M.SETTINGS_KEY_WEEKLY_VIEW = "reading_insights_weekly_view"
+
+M.WEEKLY_VIEW_LAST7    = "last7"
+
+M.WEEKLY_VIEW_CALENDAR = "calendar"
+
+function M.readWeeklyViewSetting()
+    local v = Prefs.read(M.SETTINGS_KEY_WEEKLY_VIEW, nil)
+    if v == M.WEEKLY_VIEW_CALENDAR then return M.WEEKLY_VIEW_CALENDAR end
+    return M.WEEKLY_VIEW_LAST7
+end
+
+function M.saveWeeklyViewSetting(value)
+    Prefs.save(M.SETTINGS_KEY_WEEKLY_VIEW, value)
+end
+
+function M.readWeeklyViewIsCalendar()
+    return M.readWeeklyViewSetting() == M.WEEKLY_VIEW_CALENDAR
+end
+
 -- Layout of the yearly (months) bar chart in the Reading insights popup
--- (Settings > Reading insight popup > "Months chart layout"). "one_row" is
+-- (Settings > Reading insights popup > "Months chart layout"). "one_row" is
 -- the default: all 12 months in a single row. "two_rows" draws two rows of
 -- 6 months in portrait. Landscape always uses a single row regardless of
 -- this setting.
@@ -639,7 +697,7 @@ function M.saveMonthlyLayoutSetting(value)
 end
 
 -- Style of the yearly (months) chart in the Reading insights popup
--- (Settings > Reading insight popup > "Months chart style"). "bars" (the
+-- (Settings > Reading insights popup > "Months chart style"). "bars" (the
 -- default) is the bar chart (which honours the "Months chart
 -- layout" setting); "line" draws one line with a dot per month, all 12 months
 -- in a single row.
@@ -659,7 +717,7 @@ function M.saveMonthlyStyleSetting(value)
     Prefs.save(M.SETTINGS_KEY_MONTHLY_STYLE, value)
 end
 
--- Style of the "Last 7 days" chart (Settings > Reading insight popup >
+-- Style of the "Last 7 days" chart (Settings > Reading insights popup >
 -- "Last 7 days chart style"): "bars" (default) or "line" (smooth line with a
 -- dot per day, like the yearly chart).
 M.SETTINGS_KEY_WEEKLY_STYLE = "reading_insights_weekly_chart_style"
@@ -692,6 +750,39 @@ end
 
 function M.Opt.saveBarHeightAuto(value)
     M.saveBoolSetting(M.Opt.BAR_AUTO_KEY, value)
+end
+
+-- Heatmap popup bar charts (Settings > Heatmap & time of day > Bar chart
+-- height): the "time of day" (day-part) chart and the weekday chart each
+-- have their own maximum bar height. The default (46) is the same as the
+-- chapter bar's default height (ChapterBar.DEFAULT_HEIGHT).
+M.Opt.HEATMAP_TOD_BAR_KEY      = "reading_insights_heatmap_timeofday_bar_height"
+M.Opt.HEATMAP_WEEKDAY_BAR_KEY  = "reading_insights_heatmap_weekday_bar_height"
+M.Opt.DEFAULT_HEATMAP_BAR_HEIGHT = 46
+M.Opt.MIN_HEATMAP_BAR_HEIGHT   = 10
+M.Opt.MAX_HEATMAP_BAR_HEIGHT   = 200
+
+function M.Opt.clampHeatmapBar(v)
+    v = tonumber(v) or M.Opt.DEFAULT_HEATMAP_BAR_HEIGHT
+    if v < M.Opt.MIN_HEATMAP_BAR_HEIGHT then v = M.Opt.MIN_HEATMAP_BAR_HEIGHT end
+    if v > M.Opt.MAX_HEATMAP_BAR_HEIGHT then v = M.Opt.MAX_HEATMAP_BAR_HEIGHT end
+    return v
+end
+
+function M.Opt.readHeatmapTimeOfDayBarHeight()
+    return M.Opt.clampHeatmapBar(M.readNumSetting(M.Opt.HEATMAP_TOD_BAR_KEY, M.Opt.DEFAULT_HEATMAP_BAR_HEIGHT))
+end
+
+function M.Opt.saveHeatmapTimeOfDayBarHeight(value)
+    M.saveNumSetting(M.Opt.HEATMAP_TOD_BAR_KEY, value)
+end
+
+function M.Opt.readHeatmapWeekdayBarHeight()
+    return M.Opt.clampHeatmapBar(M.readNumSetting(M.Opt.HEATMAP_WEEKDAY_BAR_KEY, M.Opt.DEFAULT_HEATMAP_BAR_HEIGHT))
+end
+
+function M.Opt.saveHeatmapWeekdayBarHeight(value)
+    M.saveNumSetting(M.Opt.HEATMAP_WEEKDAY_BAR_KEY, value)
 end
 
 function M.Opt.weeklyBarHeight()
@@ -868,7 +959,7 @@ function M.Opt.saveShowCellBars(value)
 end
 
 -- Reading insights popup's title-bar hamburger menu (Settings > Advanced
--- settings > Reading insight popup > "Hamburger menu"). Read by
+-- settings > Reading insights popup > "Hamburger menu"). Read by
 -- insights_view.lua's _buildUI when deciding whether to draw the title
 -- bar's left icon at all.
 function M.Opt.readShowHamburgerMenu()
@@ -912,10 +1003,30 @@ function M.Opt.saveBookInfo(name, value)
     M.saveBoolSetting(key, value and true or false)
 end
 
+-- The cover look shared by every place that shows covers - the Book info
+-- popup, the Reading calendar's day cells and the Reading shelf - set under
+-- Settings > Appearance > Covers: the frame, rounded corners and drop shadow,
+-- each on or off. (They keep the keys they had when they were Book info
+-- options, so an existing choice carries over.) Returns the sizes in pixels,
+-- 0 for what is switched off:
+--   { border = <frame thickness>, radius = <corner radius>, shadow = <shadow offset> }
+-- The shadow lies outside the cover's own size, the frame inside it.
+function M.Opt.coverDecor()
+    local Screen = require("device").screen
+    local function S(n) return Screen:scaleBySize(n) end
+    return {
+        border = M.Opt.readBookInfo("border")  and math.max(2, S(1)) or 0,
+        radius = M.Opt.readBookInfo("rounded") and S(4) or 0,
+        shadow = M.Opt.readBookInfo("shadow")  and S(4) or 0,
+    }
+end
+
 -- Book info popup cover size (Settings > Book info > "Cover size"). "medium"
--- is the original size (the default); "small" is half of it and "large" is
--- one and a half times it. The popup (views/book_info_view.lua) multiplies
--- its cover box by BOOK_INFO_COVER_SCALE[size].
+-- is the original size (the default). "small" and "large" are fitted to the
+-- text by the popup (views/book_info_view.lua): small is as tall as the text
+-- beside it, large the biggest cover that leaves room for all of it (within
+-- 94% of the width). BOOK_INFO_COVER_SCALE lists the valid sizes (and the
+-- nominal factors).
 M.Opt.BOOK_INFO_COVER_SIZE_KEY    = "reading_insights_book_info_cover_size"
 M.Opt.BOOK_INFO_COVER_SIZE_SMALL  = "small"
 M.Opt.BOOK_INFO_COVER_SIZE_MEDIUM = "medium"
@@ -941,7 +1052,7 @@ end
 -- Advanced settings > "Menu items"). All on by default; this only affects
 -- the menu, the gesture / dispatcher actions keep working either way.
 M.Opt.MENU_ITEM_ORDER = {
-    "insights", "streak", "heatmap", "records", "achievements",
+    "insights", "streak", "shelf", "heatmap", "records", "achievements",
     "book_progress", "book_info", "book_calendar",
 }
 

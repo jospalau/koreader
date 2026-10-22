@@ -345,6 +345,12 @@ local function formatDate(date_str, no_trailing_dot)
     return formatYMD(tonumber(y), tonumber(m), tonumber(d), no_trailing_dot)
 end
 
+-- formatDate() for a value that may be missing: "?" instead of "".
+local function formatDateOrUnknown(date_str, no_trailing_dot)
+    if not date_str then return "?" end
+    return formatDate(date_str, no_trailing_dot)
+end
+
 -- Same, from a timestamp. Empty string for "no date" (nil / 0), so callers
 -- that fill a table column with it leave the cell blank rather than
 -- printing the epoch.
@@ -382,6 +388,48 @@ if _("range months lowercase") == "yes" then
     end
 end
 
+-- Short month name (1..12) as every chart axis, shelf and date-range label
+-- shows it: the translated "Jan".."Dec", lower-cased where the language opted
+-- in above (hu: "jan.", "szept."). nil outside 1..12.
+local function shortMonthName(m)
+    return MONTH_NAMES_SHORT_FOR_DATE[m]
+end
+
+-- Full month names, from the same msgids the views already translate. The
+-- trailing space in "May " is the existing msgid (kept so the .po files keep
+-- matching); the translations don't carry it.
+local MONTH_NAMES_FULL_FOR_DATE = {
+    _("January"), _("February"), _("March"), _("April"), _("May "), _("June"),
+    _("July"), _("August"), _("September"), _("October"), _("November"), _("December"),
+}
+
+-- Month-and-year heading, e.g. "January 2026"; with a year-first date format
+-- (Settings > Date & time > "Date format") the year leads, the way the dates
+-- themselves are written: "2026. január" (YYYY. MM. DD.) or "2026 January"
+-- (YYYY-MM-DD). The default format follows the language (see
+-- defaultDateFormat), so nobody's heading changes until they pick a format.
+-- Used by the calendar headers and the monthly charts' book lists, so they
+-- all agree.
+local function formatMonthYear(year, month)
+    local name = MONTH_NAMES_FULL_FOR_DATE[month] or tostring(month)
+    local f = readDateFormatSetting()
+    if f == DATE_FORMAT_YMD_DOT then
+        return string.format("%04d. %s", year, name)
+    elseif f == DATE_FORMAT_YMD_DASH then
+        return string.format("%04d %s", year, name)
+    end
+    return name .. " " .. tostring(year)
+end
+
+-- A day of the month in a short label ("22"): Hungarian writes the ordinal
+-- with a closing dot ("22."), as in "szept. 22.".
+local function formatDayOfMonth(d)
+    if getLangBase() == "hu" then
+        return tostring(d) .. "."
+    end
+    return tostring(d)
+end
+
 -- Compact "Mon D" day-and-month label (e.g. "Sep 22", Hungarian "szept. 22."),
 -- no leading zeros and no year - for places that list many dates in a row
 -- (e.g. the streak history bar list) where a full formatDate() would take up
@@ -395,11 +443,31 @@ local function formatShortMonthDay(date_str)
     if not y then return s end
     m, d = tonumber(m), tonumber(d)
     local mon = MONTH_NAMES_SHORT_FOR_DATE[m] or tostring(m)
-    -- Hungarian writes the ordinal day with a closing dot: "szept. 22."
-    if getLangBase() == "hu" then
-        return mon .. " " .. tostring(d) .. "."
+    return mon .. " " .. formatDayOfMonth(d)
+end
+
+-- Month and day of a "YYYY-MM-DD" date, without the year, in the configured
+-- date format - the numeric counterpart of formatShortMonthDay, for narrow
+-- spots like the labels under the chart columns:
+--   YYYY. MM. DD.  ->  12. 10.   (space after each dot, closing dot)
+--   YYYY-MM-DD     ->  12-10
+--   DD/MM/YYYY     ->  10/12
+--   MM/DD/YYYY     ->  12/10
+local function formatShortNumericDate(date_str)
+    if date_str == nil then return "" end
+    local s = tostring(date_str)
+    local y, m, d = s:match("^(%d%d%d%d)%-(%d%d?)%-(%d%d?)$")
+    if not y then return s end
+    m, d = tonumber(m), tonumber(d)
+    local fmt = readDateFormatSetting()
+    if fmt == DATE_FORMAT_YMD_DOT then
+        return string.format("%02d. %02d.", m, d)
+    elseif fmt == DATE_FORMAT_YMD_DASH then
+        return string.format("%02d-%02d", m, d)
+    elseif fmt == DATE_FORMAT_MDY then
+        return string.format("%02d/%02d", m, d)
     end
-    return mon .. " " .. tostring(d)
+    return string.format("%02d/%02d", d, m)
 end
 
 -- The reverse, for the one place a date is typed in rather than shown (the
@@ -512,6 +580,24 @@ local function formatDurationParts(seconds, without_seconds)
         duration_format = G_reader_settings:readSetting("duration_format", "classic")
     end
     local datetime = require("datetime")
+    -- Shown without seconds, some reading under a minute would read as an
+    -- empty "00:00": it gets a "<" in front of the format's own one-minute
+    -- value instead ("<00:01" classic, "<1m" letters, ...), so it follows
+    -- KOReader's "Duration format". Exactly zero stays a plain zero. Every
+    -- minute-resolution duration of the plugin goes through here (charts,
+    -- goals, calendars, book stats ...), so they all agree.
+    if without_seconds and seconds > 0 then
+        if seconds < 60 then
+            local one_min = datetime.secondsToClockDuration(duration_format, 60, true, false, false)
+            return { value = "<" .. one_min, unit = "" }
+        end
+        -- Seconds are not shown, so round down to the whole minute instead of
+        -- KOReader's round-to-nearest: 29m40s reads "00:29", never "00:30",
+        -- so a goal check mark always matches the displayed value. The epsilon
+        -- keeps float results (averages) that are mathematically a whole
+        -- minute from dropping one minute.
+        seconds = math.floor(seconds / 60 + 1e-6) * 60
+    end
     local clock_str = datetime.secondsToClockDuration(duration_format, seconds, without_seconds, false, false)
     return { value = clock_str, unit = "" }
 end
@@ -527,12 +613,35 @@ local function formatTimeHHMM(seconds)
     return formatDurationParts(seconds, true)
 end
 
+-- Splits a formatted duration into a bold "value" and a plain "unit" for the
+-- value/label row layout of the popups (bold number + plain description, e.g.
+-- "7.3" + "days reading time"). Normally the number is just the clock string
+-- and unit is exactly `base_label` unchanged. But when "Show long durations
+-- (24h+) as days" is on and the duration crosses a day, formatDurationParts()
+-- returns a trailing "day"/"nap" word that must NOT be bold - so it is merged
+-- into the plain `unit` ahead of the row's usual label instead of staying
+-- glued to the bold number.
+local function splitDurationValueUnit(seconds, base_label)
+    local parts = formatDurationParts(seconds, true)
+    local unit = base_label or ""
+    if parts.unit ~= "" then
+        unit = (unit ~= "" and (parts.unit .. " " .. unit)) or parts.unit
+    end
+    return parts.value, unit
+end
+
 local function formatDuration(seconds, without_seconds)
     local parts = formatDurationParts(seconds, without_seconds)
     if parts.unit == "" then
         return parts.value
     end
     return parts.value .. " " .. parts.unit
+end
+
+-- Chart label for a duration: formatDuration(seconds, true). The "<" mark for
+-- reading under a minute comes from formatDurationParts, like everywhere else.
+local function formatDurationLabel(seconds)
+    return formatDuration(seconds, true)
 end
 
 -- Compact duration for tight chart labels (the monthly reading time bars).
@@ -593,14 +702,21 @@ return {
     formatCount                = formatCount,
     formatDuration             = formatDuration,
     formatDurationParts        = formatDurationParts,
+    splitDurationValueUnit     = splitDurationValueUnit,
     formatDurationChart        = formatDurationChart,
+    formatDurationLabel        = formatDurationLabel,
     formatTimeHHMM             = formatTimeHHMM,
     isoWeekNumber              = isoWeekNumber,
     readDurationDaysSetting    = readDurationDaysSetting,
     saveDurationDaysSetting    = saveDurationDaysSetting,
     formatDate                 = formatDate,
+    formatDateOrUnknown        = formatDateOrUnknown,
     formatDateFromTS           = formatDateFromTS,
     formatShortMonthDay        = formatShortMonthDay,
+    formatShortNumericDate     = formatShortNumericDate,
+    formatDayOfMonth           = formatDayOfMonth,
+    shortMonthName             = shortMonthName,
+    formatMonthYear            = formatMonthYear,
     shortMonthNames            = MONTH_NAMES_SHORT_FOR_DATE,
     lowerFirst                 = lowerFirst,
     formatDateSample           = formatDateSample,

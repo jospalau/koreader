@@ -22,6 +22,7 @@ only user of.
 ]]--
 
 local CenterContainer = require("ui/widget/container/centercontainer")
+local FrameContainer = require("ui/widget/container/framecontainer")
 local Geom = require("ui/geometry")
 local HorizontalGroup = require("ui/widget/horizontalgroup")
 local HorizontalSpan = require("ui/widget/horizontalspan")
@@ -83,7 +84,7 @@ local function formatWeekValue(metric, week_entry)
     if metric == "time_total" or metric == "time_avg" then
         local secs = week_entry.seconds or 0
         if metric == "time_avg" then secs = secs / (week_entry.days or 7) end
-        return Locale.formatDuration(secs, true), secs
+        return Locale.formatDurationLabel(secs), secs
     else
         local pages = week_entry.pages or 0
         if metric == "pages_avg" then
@@ -109,35 +110,49 @@ function M.trendTitle(_metric)
     return _("8-week reading trend")
 end
 
+-- Caption above the chart, styled like the monthly chart's caption in the
+-- insights popup. A tap opens the list of views to choose from.
+-- The four views of the popup, in the order a tap on the caption cycles
+-- through them: totals and daily averages, first of the time, then of the
+-- pages. The mode also decides what stands above the dots.
+M.MODES = { "time_total", "time_avg", "pages_total", "pages_avg" }
+
+function M.captionText(mode)
+    if mode == "time_avg" then return _("Weekly average reading time") end
+    if mode == "pages_total" then return _("Weekly pages read") end
+    if mode == "pages_avg" then return _("Weekly average pages read") end
+    return _("Weekly reading time")
+end
+
+-- The mode the popup opens in: the one the tapped value stood for, or - for
+-- any other name - the time/pages kind with the last saved total/average choice.
+local MODE_KEY = "reading_insights_trend_mode"
+
+function M.modeOf(metric)
+    -- The view chosen last time (saved by setMode) wins over what the tapped
+    -- value stood for.
+    local saved = G_reader_settings and G_reader_settings.readSetting
+        and G_reader_settings:readSetting(MODE_KEY)
+    for _i, m in ipairs(M.MODES) do
+        if m == saved then return m end
+    end
+    for _i, m in ipairs(M.MODES) do
+        if m == metric then return m end
+    end
+    return M.kindOf(metric) .. (M.readShowAvg() and "_avg" or "_total")
+end
+
 -- Week start date without the year, in the configured date format (the
--- plugin's "Date format" setting): 09.30. | 30/09 | 9/30 (and 09-30 for the
--- ISO style).
+-- plugin's "Date format" setting): 09. 30. | 30/09 | 09/30 (and 09-30 for
+-- the ISO style). See Locale.formatShortNumericDate.
 local function formatShortDate(date_str)
     local y, m, d = date_str:match("^(%d+)-(%d+)-(%d+)$")
     if not y then return date_str end
-    m, d = tonumber(m), tonumber(d)
-    local fmt = Locale.readDateFormatSetting and Locale.readDateFormatSetting()
-    if fmt == "ymd_dot" then
-        return string.format("%02d.%02d.", m, d)
-    elseif fmt == "ymd_dash" then
-        return string.format("%02d-%02d", m, d)
-    elseif fmt == "mdy_slash" then
-        return string.format("%d/%d", m, d)
-    end
-    return string.format("%02d/%02d", d, m)
+    return Locale.formatShortNumericDate(date_str)
 end
 
--- Bold value + plain unit, like the value/label cells of the insights page.
--- With "long durations as days" on, a trailing day word is merged into the
--- plain unit instead of staying glued to the bold number.
-local function splitDurationValueUnit(seconds, base_label)
-    local parts = Locale.formatDurationParts(seconds, true)
-    local unit = base_label or ""
-    if parts.unit ~= "" then
-        unit = (unit ~= "" and (parts.unit .. " " .. unit)) or parts.unit
-    end
-    return parts.value, unit
-end
+-- Bold value + plain unit of a duration (see Locale.splitDurationValueUnit).
+local splitDurationValueUnit = Locale.splitDurationValueUnit
 
 local function buildValueLine(fonts, col_width, value, unit)
     local value_widget = TextWidget:new{ text = value, face = fonts.value, fgcolor = Colors.value() }
@@ -212,20 +227,102 @@ local function readShowAvg()
     return false
 end
 
+M.readShowAvg = readShowAvg
+
 local function saveShowAvg(value)
     if G_reader_settings and G_reader_settings.saveSetting then
         G_reader_settings:saveSetting(SHOW_AVG_KEY, value and true or false)
     end
 end
 
+-- True if the text has characters that reach below the baseline and so use
+-- the empty strip under the digits in the label's box: g j p q y Q , ; and
+-- every non-ASCII character (accented letters with tails, and the "Ø" of the
+-- averages, whose slash overshoots the baseline). Only digits, ":", "." and
+-- spaces are safe.
+function M.hasDescender(text)
+    text = text or ""
+    return text:find("[gjpqyQ,;]") ~= nil or text:find("[\128-\255]") ~= nil
+end
+
+-- Where to put the value labels so that no line runs through them. Each label
+-- stands above its dot; if the line (to the neighbouring points) rises into
+-- the label's box, the label goes up by exactly as many pixels as it takes
+-- to clear the line. `pts` are the chart's points in x order ({x, y}, y
+-- growing downwards), `widths` the label widths, same order. Returns the y of
+-- every label's top edge in the same coordinates as `pts` (negative = above
+-- the chart's top edge: the caller makes room for the highest one).
+-- The line is taken as straight segments between the points. `margin` is the
+-- air kept between the label's box and the line (negative: the line may run
+-- that far into the box); one number for all labels, or a table with one per
+-- label. `inset` (default 0) is the empty margin at the left and right of the
+-- text inside its box, which the line may cross.
+function M.clearLabelTops(pts, widths, label_height, dot_size, margin, inset)
+    inset = inset or 0
+    local function marginOf(k)
+        if type(margin) == "table" then return margin[k] or 0 end
+        return margin or 0
+    end
+    local n = #pts
+    local tops = {}
+    if n == 0 then return tops end
+    local half = math.floor(dot_size / 2)
+
+    local function lineY(x)
+        if x <= pts[1].x then return pts[1].y end
+        if x >= pts[n].x then return pts[n].y end
+        for k = 1, n - 1 do
+            local a, b = pts[k], pts[k + 1]
+            if x >= a.x and x <= b.x then
+                if b.x == a.x then return math.min(a.y, b.y) end
+                return a.y + (b.y - a.y) * (x - a.x) / (b.x - a.x)
+            end
+        end
+        return pts[n].y
+    end
+
+    for k = 1, n do
+        local x0 = pts[k].x - math.floor(widths[k] / 2) + inset
+        local x1 = pts[k].x - math.floor(widths[k] / 2) + widths[k] - inset
+        -- The highest the line gets across the label's width (the smaller y).
+        local line_top = math.min(pts[k].y, lineY(x0), lineY(x1))
+        for j = 1, n do
+            if pts[j].x > x0 and pts[j].x < x1 and pts[j].y < line_top then
+                line_top = pts[j].y
+            end
+        end
+        local bottom = math.min(pts[k].y - half, line_top - marginOf(k))
+        tops[k] = bottom - label_height
+    end
+
+    -- Neighbouring points at the same height (a flat stretch, e.g. two months
+    -- with the same value) keep their labels in one row: all of them take the
+    -- highest top of the group. Going higher never brings the line back in.
+    local k = 1
+    while k <= n do
+        local j = k
+        while j < n and math.abs(pts[j + 1].y - pts[k].y) <= 1 do j = j + 1 end
+        if j > k then
+            local highest = tops[k]
+            for q = k + 1, j do
+                if tops[q] < highest then highest = tops[q] end
+            end
+            for q = k, j do tops[q] = highest end
+        end
+        k = j + 1
+    end
+    return tops
+end
+
 -- The chart: one line through the weekly totals. The daily average of a week
 -- is always 1/7 of its total, so it follows the very same curve - it gets no
 -- line of its own, only its value. Above every dot stands one value: the
 -- week's total, or - after a tap on the chart - its daily average ("Ø 1:12");
--- the choice is saved. The dots are painted by the line widget itself, from
+-- the choice is saved. A value moves up just as far as it takes for the line
+-- not to run through it (M.clearLabelTops). The dots are painted by the line widget itself, from
 -- the same coordinates as the line, so they sit exactly on it. The weeks'
 -- start dates are under the baseline.
-function M.buildTrendChart(weeks, kind, chart_width, fonts)
+function M.buildTrendChart(weeks, kind, chart_width, fonts, show_avg)
     if not weeks or #weeks == 0 then return nil end
 
     local total_metric = kind .. "_total"
@@ -240,6 +337,8 @@ function M.buildTrendChart(weeks, kind, chart_width, fonts)
 
     local sample_label = TextWidget:new{ text = "0", face = font_small }
     local label_height = sample_label:getSize().h
+    -- The empty strip under the digits' baseline inside a value's box.
+    local label_descent = math.max(0, label_height - sample_label:getBaseline())
     sample_label:free()
 
     local total_vals, total_strs, avg_strs = {}, {}, {}
@@ -252,15 +351,54 @@ function M.buildTrendChart(weeks, kind, chart_width, fonts)
     end
     if max_value <= 0 then max_value = 1 end
 
-    local half    = math.floor(dot_size / 2)
-    -- Room above the highest dot for its value.
-    local top_pad = label_height
-    local total_h = top_pad + plot_height + baseline_h
-    local usable  = plot_height - dot_size
+    local half      = math.floor(dot_size / 2)
+    -- Air between the digits' baseline and the line (the box is taller than
+    -- the digits, see label_descent above).
+    local label_gap = tonumber(Screen:scaleBySize(1)) + 2
+    local usable    = plot_height - dot_size
     local area_w  = num_points * col_width
 
     -- Ascending = oldest week leftmost; descending = newest leftmost.
     local ascending = VS.readAscendingSetting()
+
+    -- Label text per column (the daily average with a "Ø" prefix, dropped when
+    -- the column is too narrow for it) and its widths. The room above the
+    -- highest dot / raised label is worked out first, from points measured
+    -- from the top of the plot (the headroom is added to them afterwards).
+    local avg_texts, pre_pts = {}, {}
+    local widths, margins = {}, {}
+    -- Digits and colons leave the whole strip under their baseline empty, so
+    -- the line may run through all of it; a label with a character that
+    -- reaches below the baseline ("12 p", the "Ø") only gets half.
+    local function marginFor(text)
+        return label_gap - (M.hasDescender(text) and math.floor(label_descent / 2) or label_descent)
+    end
+    for col = 1, num_points do
+        local i = ascending and col or (num_points - col + 1)
+        local probe = TextWidget:new{ text = "Ø " .. avg_strs[i], face = font_small }
+        avg_texts[col] = (probe:getSize().w > col_width) and avg_strs[i] or ("Ø " .. avg_strs[i])
+        probe:free()
+        local tw = TextWidget:new{ text = total_strs[i], face = font_small }
+        local aw = TextWidget:new{ text = avg_texts[col], face = font_small }
+        -- One place per week for both values, worked out from the longer
+        -- variant ("Ø 01:10" with its extra characters): its width, and the
+        -- more careful of the two margins. The plain total takes the same
+        -- place, so it doesn't jump when switching.
+        widths[col]  = math.max(tw:getSize().w, aw:getSize().w)
+        margins[col] = math.max(marginFor(total_strs[i]), marginFor(avg_texts[col]))
+        tw:free(); aw:free()
+        local dy = math.floor((total_vals[i] / max_value) * usable)
+        pre_pts[col] = {
+            x = (col - 1) * col_width + math.floor(col_width / 2),
+            y = (plot_height - dot_size - dy) + half,
+        }
+    end
+    local pre_tops = M.clearLabelTops(pre_pts, widths, label_height, dot_size, margins,
+        tonumber(Screen:scaleBySize(2)))
+    local min_top = 0
+    for _c, t in ipairs(pre_tops) do if t < min_top then min_top = t end end
+    local top_pad = -min_top + Size.padding.tiny
+    local total_h = top_pad + plot_height + baseline_h
 
     local points, dots = {}, {}
     local total_layer = OverlapGroup:new{ dimen = Geom:new{ w = area_w, h = total_h } }
@@ -280,8 +418,7 @@ function M.buildTrendChart(weeks, kind, chart_width, fonts)
     for col = 1, num_points do
         local i  = ascending and col or (num_points - col + 1)
         local cx = (col - 1) * col_width + math.floor(col_width / 2)
-        local dy = math.floor((total_vals[i] / max_value) * usable)
-        local cy = top_pad + (plot_height - dot_size - dy) + half  -- dot centre
+        local cy = top_pad + pre_pts[col].y  -- dot centre
 
         points[col] = { x = cx, y = cy }
         -- The current week (the last one in time) has the active colour, the
@@ -289,18 +426,14 @@ function M.buildTrendChart(weeks, kind, chart_width, fonts)
         dots[col]   = { x = cx, y = cy, size = dot_size,
                         color = (i == num_points) and Colors.activeBar() or Colors.inactiveBar() }
 
-        local top_y = cy - half - label_height
+        -- Both values go to the same place: just above the dot, or higher
+        -- if the line would run through them there.
+        local top_y = top_pad + pre_tops[col]
         addLabel(total_layer, total_strs[i], cx, top_y)
+        addLabel(avg_layer,   avg_texts[col], cx, top_y)
 
-        -- Daily average with a "Ø" prefix, dropped when the column is too
-        -- narrow for it.
-        local avg_text = "Ø " .. avg_strs[i]
-        local probe = TextWidget:new{ text = avg_text, face = font_small }
-        if probe:getSize().w > col_width then avg_text = avg_strs[i] end
-        probe:free()
-        addLabel(avg_layer, avg_text, cx, top_y)
-
-        local date_lbl = TextWidget:new{ text = formatShortDate(weeks[i].start_date), face = font_small, fgcolor = Colors.small() }
+        -- The current week (the last one in time) is bold.
+        local date_lbl = TextWidget:new{ text = formatShortDate(weeks[i].start_date), face = font_small, fgcolor = Colors.small(), bold = (i == num_points) }
         table.insert(date_labels_row, CenterContainer:new{
             dimen = Geom:new{ w = col_width, h = date_lbl:getSize().h },
             date_lbl,
@@ -310,7 +443,8 @@ function M.buildTrendChart(weeks, kind, chart_width, fonts)
     local baseline = Colors.newBar(area_w, baseline_h, Colors.inactiveBar())
     baseline.overlap_offset = { 0, total_h - baseline_h }
 
-    local showing_avg = readShowAvg()
+    local showing_avg = show_avg
+    if showing_avg == nil then showing_avg = readShowAvg() end
     local chart_area = OverlapGroup:new{
         dimen = Geom:new{ w = area_w, h = total_h },
         baseline,
@@ -352,7 +486,8 @@ end
 -- Everything inside the popup box: title, thin line, the total / daily
 -- average row, then the chart with the week dates at its bottom.
 function M.buildContent(weeks, metric, width, fonts)
-    local kind = M.kindOf(metric)
+    local mode = M.modeOf(metric)
+    local kind = M.kindOf(mode)
 
     local title_w = TextWidget:new{ text = M.trendTitle(kind), face = fonts.section, fgcolor = Colors.section() }
     local title = LeftContainer:new{
@@ -361,20 +496,35 @@ function M.buildContent(weeks, metric, width, fonts)
     }
 
     -- Same small gaps as the "Last 7 days" section of the insights page:
-    -- header, thin line, row, thin line, chart.
+    -- title, thin line, caption, chart, thin line, row.
     local gap = Size.padding.small
-    local chart, handle = M.buildTrendChart(weeks, kind, width, fonts)
+    local chart, handle = M.buildTrendChart(weeks, kind, width, fonts, mode:sub(-4) == "_avg")
+
+    -- Same look as the caption above the monthly chart: label font and
+    -- colour, a little padding, no divider of its own.
+    local caption = FrameContainer:new{
+        background     = Blitbuffer.COLOR_WHITE,
+        bordersize     = 0,
+        padding_top    = Size.padding.small,
+        padding_bottom = Size.padding.small,
+        padding_left   = 0,
+        padding_right  = 0,
+        TextWidget:new{ text = M.captionText(mode), face = fonts.label, fgcolor = Colors.label() },
+    }
+    handle = handle or {}
+    handle.caption = caption
+
     return VerticalGroup:new{
         align = "left",
         title,
         VerticalSpan:new{ width = gap },
         Colors.newBar(width, Size.line.thin, Colors.separator()),
-        VerticalSpan:new{ width = gap },
-        M.buildSummaryRow(weeks, kind, width, fonts),
+        caption,
+        chart,
         VerticalSpan:new{ width = gap },
         Colors.newBar(width, Size.line.thin, Colors.separator()),
         VerticalSpan:new{ width = gap },
-        chart,
+        M.buildSummaryRow(weeks, kind, width, fonts),
     }, handle
 end
 
@@ -392,6 +542,7 @@ function M.Popup:init()
     if Device:isTouchDevice() then
         self.ges_events.Tap   = { GestureRange:new{ ges = "tap",   range = self.dimen } }
         self.ges_events.Swipe = { GestureRange:new{ ges = "swipe", range = self.dimen } }
+        self.ges_events.Hold  = { GestureRange:new{ ges = "hold",  range = self.dimen } }
     end
     if Device:hasKeys() then
         self.key_events.AnyKeyPressed = { { Device.input.group.Any } }
@@ -403,19 +554,86 @@ function M.Popup:init()
     }
 end
 
--- Tap handling of the popup: a tap on the chart switches the values above its
--- dots (totals / daily averages); a tap anywhere else closes the popup.
+local function hitWidget(w, pos)
+    local d = w and w.dimen
+    return d and pos and pos.x >= d.x and pos.x < d.x + d.w
+        and pos.y >= d.y and pos.y < d.y + d.h
+end
+
+-- Switch the popup to the time or the pages chart: the content is rebuilt
+-- (caption, totals and chart) through `build_box(kind)`, which the insights
+-- view hands over.
+function M.Popup:setMode(mode)
+    if mode == self.mode or not self.build_box then return end
+    self.mode = mode
+    saveShowAvg(mode:sub(-4) == "_avg")
+    if G_reader_settings and G_reader_settings.saveSetting then
+        G_reader_settings:saveSetting(MODE_KEY, mode)
+    end
+    local box, handle = self.build_box(mode)
+    self.box_content = box
+    self.chart_handle = handle
+    self[1][1] = box
+    UIManager:setDirty(self, function() return "ui", self.dimen end)
+end
+
+-- Tap handling of the popup: a tap on the caption opens the list of the four
+-- views (time, average time, pages, average pages); a tap on the chart does
+-- nothing; a tap anywhere else closes the popup.
 -- Installed over the generic "any tap closes" handler by the insights view.
 function M.popupOnTap(self, _arg, ges)
     local h = self.chart_handle
-    local d = h and h.widget and h.widget.dimen
     local pos = ges and ges.pos
-    if d and pos and pos.x >= d.x and pos.x < d.x + d.w
-       and pos.y >= d.y and pos.y < d.y + d.h then
-        h.toggle()
+    if h and hitWidget(h.caption, pos) then
+        self:showModePicker()
+        return true
+    end
+    -- A tap on the chart itself does nothing (and doesn't close the popup).
+    if h and hitWidget(h.widget, pos) then
         return true
     end
     UIManager:close(self)
+    return true
+end
+
+-- The list of the four views to choose from; opened by a tap on the caption.
+function M.Popup:showModePicker()
+    local ButtonDialog = require("ui/widget/buttondialog")
+    local dialog
+    local buttons = {}
+    for _i, mode in ipairs(M.MODES) do
+        buttons[#buttons + 1] = {{
+            -- Same list as the chart captions of the insights popup: a check
+            -- mark (U+2713) in front of the view in use.
+            text  = (self.mode == mode and "\xe2\x9c\x93 " or "    ") .. M.captionText(mode),
+            align = "left",
+            callback = function()
+                UIManager:close(dialog)
+                self:setMode(mode)
+            end,
+        }}
+    end
+    -- The trend popup is modal, so the list must be too or it would open
+    -- behind it.
+    dialog = ButtonDialog:new{
+        modal                 = true,
+        shrink_unneeded_width = true,
+        buttons               = buttons,
+    }
+    -- Plain "ui" refresh on close instead of ButtonDialog's flashing one.
+    dialog.onCloseWidget = function(this)
+        UIManager:setDirty(nil, function()
+            return "ui", this.movable and this.movable.dimen
+        end)
+    end
+    UIManager:show(dialog)
+    return true
+end
+
+-- A long press does nothing (the caption's tap already opens the list). The
+-- handler stays so the long press is swallowed instead of falling through to
+-- the reader underneath.
+function M.popupOnHold(_self, _arg, _ges)
     return true
 end
 
@@ -484,20 +702,36 @@ function LineChartWidget:paintTo(bb, x, y)
 
     local pts = self.points
     if self.smooth and #pts > 2 then
-        pts = M.smoothCurve(pts)
+        -- The smoothed curve is a few hundred freshly allocated points;
+        -- it only depends on self.points, so compute it once per point list
+        -- instead of on every repaint.
+        if self._smoothed_src ~= pts or self._smoothed_n ~= #pts then
+            self._smoothed = M.smoothCurve(pts)
+            self._smoothed_src, self._smoothed_n = pts, #pts
+        end
+        pts = self._smoothed
     end
 
     if #pts > 1 then
+        local th   = self.thickness or 2
+        local half = math.floor(th / 2)
+        local floor = math.floor
+        -- Neighbouring segments share their end point, and a dense curve
+        -- steps less than a pixel at a time: stamping the same pixel twice
+        -- paints nothing new, so skip repeats.
+        local last_px, last_py
         for i = 1, #pts - 1 do
             local p1, p2 = pts[i], pts[i + 1]
             local dx, dy = p2.x - p1.x, p2.y - p1.y
             local steps  = math.max(math.abs(dx), math.abs(dy), 1)
             for s = 0, steps do
                 local t  = s / steps
-                local px = math.floor(p1.x + dx * t + 0.5)
-                local py = math.floor(p1.y + dy * t + 0.5)
-                local th = self.thickness or 2
-                paint(bb, x + px - math.floor(th / 2), y + py - math.floor(th / 2), th, th, color)
+                local px = floor(p1.x + dx * t + 0.5)
+                local py = floor(p1.y + dy * t + 0.5)
+                if px ~= last_px or py ~= last_py then
+                    paint(bb, x + px - half, y + py - half, th, th, color)
+                    last_px, last_py = px, py
+                end
             end
         end
     end

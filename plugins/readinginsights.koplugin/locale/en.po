@@ -294,8 +294,8 @@ msgstr "8-week chart order"
 msgid "Advanced settings"
 msgstr "Advanced settings"
 
-msgid "Reading heatmap range"
-msgstr "Reading heatmap range"
+msgid "Reading habits range"
+msgstr "Reading habits range"
 
 msgid "3 months"
 msgstr "3 months"
@@ -512,6 +512,9 @@ msgstr "Chart label color"
 
 msgid "Section header background color"
 msgstr "Section header background color"
+
+msgid "Cover shadow color"
+msgstr "Cover shadow color"
 
 msgid "Settings"
 msgstr "Settings"
@@ -773,8 +776,8 @@ msgstr "Could not fetch latest release."
 msgid "Latest release has no downloadable zip."
 msgstr "Latest release has no downloadable zip."
 
-msgid "Reading heatmap"
-msgstr "Reading heatmap"
+msgid "Reading habits"
+msgstr "Reading habits"
 
 msgid "Reading calendar"
 msgstr "Reading calendar"
@@ -839,9 +842,6 @@ msgstr "No reading on this day."
 msgid "About"
 msgstr "About"
 
-msgid "Reading insight"
-msgstr "Reading insight"
-
 msgid "A full-screen overlay with a comprehensive overview of your reading history, powered by KOReader's statistics database."
 msgstr "A full-screen overlay with a comprehensive overview of your reading history, powered by KOReader's statistics database."
 
@@ -890,11 +890,14 @@ msgstr "Tick the popups that should be listed under Tools > Reading insights. Th
 msgid "Reading insights: reading calendar"
 msgstr "Reading insights: reading calendar"
 
-msgid "Reading insights: reading heatmap"
-msgstr "Reading insights: reading heatmap"
+msgid "Reading insights: reading habits"
+msgstr "Reading insights: reading habits"
 
-msgid "Show Reading heatmap"
-msgstr "Show Reading heatmap"
+msgid "Reading insights: reading shelf"
+msgstr "Reading insights: reading shelf"
+
+msgid "Show Reading habits"
+msgstr "Show Reading habits"
 
 msgid "Sub-values (date / book title)"
 msgstr "Sub-values (date / book title)"
@@ -1001,8 +1004,8 @@ msgstr "Add books manually - %1"
 msgid "Date & time"
 msgstr "Date & time"
 
-msgid "Reading insight popup"
-msgstr "Reading insight popup"
+msgid "Reading insights popup"
+msgstr "Reading insights popup"
 
 msgid "Daily goal"
 msgstr "Daily goal"
@@ -1628,11 +1631,7 @@ msgstr "Reading goal & achievements"
 msgid "Reading goal only"
 msgstr "Reading goal only"
 
-msgid "When you read"
-msgstr "When you read"
 
-msgid "Days of the week"
-msgstr "Days of the week"
 
 msgid "You read most around %1"
 msgstr "You read most around %1"
@@ -1670,8 +1669,8 @@ msgstr "Show the \"started …\" and \"expected finish\" date row in the \"Pace\
 msgid "Hamburger menu"
 msgstr "Hamburger menu"
 
-msgid "Show the hamburger menu (top left of the title bar) with quick access to the streak, heatmap, records and achievements popups."
-msgstr "Show the hamburger menu (top left of the title bar) with quick access to the streak, heatmap, records and achievements popups."
+msgid "Show the hamburger menu (top left of the title bar) with quick access to the streak, reading habits, records and achievements popups."
+msgstr "Show the hamburger menu (top left of the title bar) with quick access to the streak, reading habits, records and achievements popups."
 
 msgid "Couldn't open Records: "
 msgstr "Couldn't open Records: "
@@ -1850,8 +1849,8 @@ msgstr "Medium"
 msgid "Large"
 msgstr "Large"
 
-msgid "Size of the cover in the Book info popup. Medium is the default size; Small is half of it and Large is one and a half times it."
-msgstr "Size of the cover in the Book info popup. Medium is the default size; Small is half of it and Large is one and a half times it."
+msgid "Size of the cover in the Book info popup. Small: the cover is only as tall as the text beside it (title, author, series, rating, reading time - no description). Medium: the default size. Large: the cover grows as much as the popup (at most 94% of the width) allows while all the text still fits."
+msgstr "Size of the cover in the Book info popup. Small: the cover is only as tall as the text beside it (title, author, series, rating, reading time - no description). Medium: the default size. Large: the cover grows as much as the popup (at most 94% of the width) allows while all the text still fits."
 
 msgid "Show author"
 msgstr "Show author"
@@ -2060,8 +2059,6 @@ msgstr "Loading ratings..."
 msgid "Appearance"
 msgstr "Appearance"
 
-msgid "Heatmap & time of day"
-msgstr "Heatmap & time of day"
 
 msgid "Chart style"
 msgstr "Chart style"
@@ -2206,3 +2203,143 @@ msgstr "Show the streak line under the covers on the reading calendar. When off 
 
 msgid "8-week reading trend"
 msgstr "8-week reading trend"
+
+msgid "Weekdays"
+msgstr "Weekdays"
+
+msgid "Height of the two bar charts in the reading habits popup. The default matches the chapter bar. If the popup does not fit the screen, both charts shrink automatically."
+msgstr "Height of the two bar charts in the reading habits popup. The default matches the chapter bar. If the popup does not fit the screen, both charts shrink automatically."
+
+msgid "Reading shelf"
+msgstr "Reading shelf"
+
+msgid "Show Reading shelf"
+msgstr "Show Reading shelf"
+
+msgid "Show only finished books"
+msgstr "Show only finished books"
+
+msgid "Covers"
+msgstr "Covers"
+
+
+
+
+msgid "Random views (%1/%2)"
+msgstr "Random views (%1/%2)"
+
+msgid "Which views the Random sleep screen picks from. A different one is shown every time the device goes to sleep, never the same one twice in a row."
+msgstr "Which views the Random sleep screen picks from. A different one is shown every time the device goes to sleep, never the same one twice in a row."
+
+msgid "Every 2 hours"
+msgstr "Every 2 hours"
+
+msgid "By part of day"
+msgstr "By part of day"
+
+msgid "Reading by day"
+msgstr "Reading by day"
+
+# Current-week view of the weekly section
+
+msgid "Current week"
+msgstr "Current week"
+
+msgid "View"
+msgstr "View"
+
+msgid "Show the last 7 days, or the current calendar week that you can page back and forth. All figures of the section then cover that week."
+msgstr "Show the last 7 days, or the current calendar week that you can page back and forth. All figures of the section then cover that week."
+
+msgid "page vs prev. week"
+msgstr "page vs prev. week"
+
+msgid "pages vs prev. week"
+msgstr "pages vs prev. week"
+
+msgid "pg vs prev. wk"
+msgstr "pg vs prev. wk"
+
+msgid "time vs prev. week"
+msgstr "time vs prev. week"
+
+msgid "vs prev. week"
+msgstr "vs prev. week"
+
+msgid "Pages per month"
+msgstr "Pages per month"
+
+msgid "Pages / reading time"
+msgstr "Pages / reading time"
+
+msgid "Pages per day"
+msgstr "Pages per day"
+
+msgid "Reading time per day"
+msgstr "Reading time per day"
+
+msgid "Round the corners of the covers (Book info, Reading calendar and Reading shelf)."
+msgstr "Round the corners of the covers (Book info, Reading calendar and Reading shelf)."
+
+msgid "Draw a drop shadow behind the covers (Book info, Reading calendar and Reading shelf)."
+msgstr "Draw a drop shadow behind the covers (Book info, Reading calendar and Reading shelf)."
+
+msgid "Draw a thin frame around the covers (Book info, Reading calendar and Reading shelf)."
+msgstr "Draw a thin frame around the covers (Book info, Reading calendar and Reading shelf)."
+
+msgid "Weekly reading time"
+msgstr "Weekly reading time"
+
+msgid "Weekly average reading time"
+msgstr "Weekly average reading time"
+
+msgid "Weekly pages read"
+msgstr "Weekly pages read"
+
+msgid "Weekly average pages read"
+msgstr "Weekly average pages read"
+
+msgid "Progress per day"
+msgstr "Progress per day"
+
+msgid "Daily streak (time)"
+msgstr "Daily streak (time)"
+
+msgid "Daily streak (pages)"
+msgstr "Daily streak (pages)"
+
+msgid "Weekly streak (time)"
+msgstr "Weekly streak (time)"
+
+msgid "Weekly streak (pages)"
+msgstr "Weekly streak (pages)"
+
+msgid "Daily (time)"
+msgstr "Daily (time)"
+
+msgid "Daily (pages)"
+msgstr "Daily (pages)"
+
+msgid "Weekly (time)"
+msgstr "Weekly (time)"
+
+msgid "Weekly (pages)"
+msgstr "Weekly (pages)"
+
+msgid "Reading time by time of day"
+msgstr "Reading time by time of day"
+
+msgid "Pages read by time of day"
+msgstr "Pages read by time of day"
+
+msgid "Share of reading time by time of day"
+msgstr "Share of reading time by time of day"
+
+msgid "Reading time by weekday"
+msgstr "Reading time by weekday"
+
+msgid "Pages read by weekday"
+msgstr "Pages read by weekday"
+
+msgid "Share of reading time by weekday"
+msgstr "Share of reading time by weekday"

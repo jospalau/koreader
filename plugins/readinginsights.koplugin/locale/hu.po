@@ -136,13 +136,13 @@ msgid "Best streak"
 msgstr "Leghosszabb széria"
 
 msgid "Days read per month"
-msgstr "Havonta olvasott napok"
+msgstr "Havi olvasott napok"
 
 msgid "Reading time per month"
 msgstr "Havi olvasási idő"
 
 msgid "Books per month"
-msgstr "Havi könyvek"
+msgstr "Havi olvasott könyvek"
 
 msgid "Unknown"
 msgstr "Ismeretlen"
@@ -309,8 +309,8 @@ msgstr "8 hetes grafikon sorrendje"
 msgid "Advanced settings"
 msgstr "További beállítások"
 
-msgid "Reading heatmap range"
-msgstr "Heatmap időtartama"
+msgid "Reading habits range"
+msgstr "Olvasási szokások időtartama"
 
 msgid "3 months"
 msgstr "3 hónap"
@@ -533,6 +533,9 @@ msgstr "Diagram felirat színe"
 
 msgid "Section header background color"
 msgstr "Szakaszfejléc háttérszíne"
+
+msgid "Cover shadow color"
+msgstr "Borító árnyékának színe"
 
 msgid "Settings"
 msgstr "Beállítások"
@@ -794,8 +797,8 @@ msgstr "Nem sikerült lekérni a legújabb kiadást."
 msgid "Latest release has no downloadable zip."
 msgstr "A legújabb kiadáshoz nincs letölthető zip fájl."
 
-msgid "Reading heatmap"
-msgstr "Olvasási hőtérkép"
+msgid "Reading habits"
+msgstr "Olvasási szokások"
 
 msgid "Reading calendar"
 msgstr "Olvasási naptár"
@@ -860,9 +863,6 @@ msgstr "Ezen a napon nem volt olvasás."
 msgid "About"
 msgstr "Névjegy"
 
-msgid "Reading insight"
-msgstr "Reading insights"
-
 msgid "A full-screen overlay with a comprehensive overview of your reading history, powered by KOReader's statistics database."
 msgstr "Egy teljes képernyős áttekintés az olvasási előzményeidről, a KOReader statisztikai adatbázisára építve."
 
@@ -911,11 +911,14 @@ msgstr "Pipáld be, mely ablakok jelenjenek meg az Eszközök > Reading insights
 msgid "Reading insights: reading calendar"
 msgstr "Olvasási áttekintés: olvasási naptár"
 
-msgid "Reading insights: reading heatmap"
-msgstr "Olvasási áttekintés: olvasási hőtérkép"
+msgid "Reading insights: reading habits"
+msgstr "Olvasási áttekintés: olvasási szokások"
 
-msgid "Show Reading heatmap"
-msgstr "Olvasási hőtérkép megjelenítése"
+msgid "Reading insights: reading shelf"
+msgstr "Olvasási áttekintés: olvasási polc"
+
+msgid "Show Reading habits"
+msgstr "Olvasási szokások megjelenítése"
 
 msgid "Sub-values (date / book title)"
 msgstr "Alértékek (dátum / könyvcím)"
@@ -1010,7 +1013,7 @@ msgstr "Könyvek kézi felvétele – %1"
 msgid "Date & time"
 msgstr "Dátum és idő"
 
-msgid "Reading insight popup"
+msgid "Reading insights popup"
 msgstr "Olvasási áttekintés ablak"
 
 msgid "Daily goal"
@@ -1641,7 +1644,7 @@ msgid "Time of day"
 msgstr "Napszak"
 
 msgid "Time of day view"
-msgstr "Napszak nézet"
+msgstr "Napi idősáv nézet"
 
 msgid "Chart"
 msgstr "Diagram"
@@ -1660,12 +1663,6 @@ msgstr "Délután"
 
 msgid "Evening"
 msgstr "Este"
-
-msgid "When you read"
-msgstr "Mikor olvasol"
-
-msgid "Days of the week"
-msgstr "A hét napjai"
 
 msgid "You read most around %1"
 msgstr "Legtöbbet %1 körül olvasol"
@@ -1703,8 +1700,8 @@ msgstr "A „kezdve…” és „várható befejezés” dátumsor megjeleníté
 msgid "Hamburger menu"
 msgstr "Hamburger menü"
 
-msgid "Show the hamburger menu (top left of the title bar) with quick access to the streak, heatmap, records and achievements popups."
-msgstr "A hamburger menü (a fejléc bal oldalán) megjelenítése, amely gyors elérést biztosít az olvasási széria, a hőtérkép, a rekordok és a teljesítmények popupokhoz."
+msgid "Show the hamburger menu (top left of the title bar) with quick access to the streak, reading habits, records and achievements popups."
+msgstr "A hamburger menü (a fejléc bal oldalán) megjelenítése, amely gyors elérést biztosít az olvasási széria, az olvasási szokások, a rekordok és a teljesítmények popupokhoz."
 
 msgid "Couldn't open Records: "
 msgstr "Nem sikerült megnyitni a Rekordokat: "
@@ -1853,8 +1850,8 @@ msgstr "Közepes"
 msgid "Large"
 msgstr "Nagy"
 
-msgid "Size of the cover in the Book info popup. Medium is the default size; Small is half of it and Large is one and a half times it."
-msgstr "A borító mérete a Könyvinformáció ablakban. A közepes az alapértelmezett méret, a kicsi ennek a fele, a nagy pedig másfélszerese."
+msgid "Size of the cover in the Book info popup. Small: the cover is only as tall as the text beside it (title, author, series, rating, reading time - no description). Medium: the default size. Large: the cover grows as much as the popup (at most 94% of the width) allows while all the text still fits."
+msgstr "A borító mérete a Könyvinformáció ablakban. Kicsi: a borító csak olyan magas, mint mellette a szöveg (cím, szerző, sorozat, értékelés, olvasási idő – leírás nélkül). Közepes: az alapértelmezett méret. Nagy: a borító addig nő, amíg az ablak (legfeljebb a szélesség 94%-a) engedi, és minden szöveg még kifér."
 
 msgid "Show author"
 msgstr "Szerző megjelenítése"
@@ -2072,9 +2069,6 @@ msgstr "Értékelések betöltése..."
 msgid "Appearance"
 msgstr "Megjelenés"
 
-msgid "Heatmap & time of day"
-msgstr "Heatmap és napszak"
-
 msgid "Chart style"
 msgstr "Diagram stílusa"
 
@@ -2218,3 +2212,143 @@ msgstr "A széria vonalának megjelenítése a borítók alatt az olvasási napt
 
 msgid "8-week reading trend"
 msgstr "8 hetes olvasási trend"
+
+msgid "Weekdays"
+msgstr "Hét napjai"
+
+msgid "Height of the two bar charts in the reading habits popup. The default matches the chapter bar. If the popup does not fit the screen, both charts shrink automatically."
+msgstr "Az olvasási szokások ablak két oszlopdiagramjának magassága. Az alapértelmezett megegyezik a fejezetsáv magasságával. Ha az ablak nem fér ki a képernyőn, mindkét diagram automatikusan csökken."
+
+msgid "Reading shelf"
+msgstr "Olvasási polc"
+
+msgid "Show Reading shelf"
+msgstr "Olvasási polc megjelenítése"
+
+msgid "Show only finished books"
+msgstr "Csak a befejezett könyvek"
+
+msgid "Covers"
+msgstr "Borítók"
+
+msgid "Random views (%1/%2)"
+msgstr "Véletlenszerű nézetek (%1/%2)"
+
+msgid "Which views the Random sleep screen picks from. A different one is shown every time the device goes to sleep, never the same one twice in a row."
+msgstr "Mely nézetek közül válasszon a véletlenszerű alvóképernyő. Minden elalváskor másik jelenik meg, sosem ugyanaz kétszer egymás után."
+
+msgid "Every 2 hours"
+msgstr "Kétóránként"
+
+msgid "By part of day"
+msgstr "Napszakonkénti"
+
+msgid "Reading by day"
+msgstr "Olvasás naponként"
+
+# Current-week view of the weekly section
+
+msgid "Current week"
+msgstr "Aktuális hét"
+
+msgid "View"
+msgstr "Nézet"
+
+msgid "Show the last 7 days, or the current calendar week that you can page back and forth. All figures of the section then cover that week."
+msgstr "Az elmúlt 7 napot vagy az aktuális naptári hetet mutatja, amelyben előre-hátra lapozhatsz. A szekció összes adata ilyenkor az adott hétre vonatkozik."
+
+msgid "page vs prev. week"
+msgstr "oldal vs előző hét"
+
+msgid "pages vs prev. week"
+msgstr "oldal vs előző hét"
+
+msgid "pg vs prev. wk"
+msgstr "old. vs előző hét"
+
+msgid "time vs prev. week"
+msgstr "idő vs előző hét"
+
+msgid "vs prev. week"
+msgstr "vs előző hét"
+
+msgid "Reading time per day"
+msgstr "Napi olvasási idő"
+
+msgid "Pages per day"
+msgstr "Napi olvasott oldalak"
+
+msgid "Pages per month"
+msgstr "Havi olvasott oldalak"
+
+msgid "%1 p"
+msgstr "%1 o"
+
+msgid "Pages / reading time"
+msgstr "Oldalak / olvasási idő"
+
+msgid "Round the corners of the covers (Book info, Reading calendar and Reading shelf)."
+msgstr "A borítók sarkainak lekerekítése (Könyvinformáció, Olvasási naptár és Olvasási polc)."
+
+msgid "Draw a drop shadow behind the covers (Book info, Reading calendar and Reading shelf)."
+msgstr "Árnyék rajzolása a borítók mögé (Könyvinformáció, Olvasási naptár és Olvasási polc)."
+
+msgid "Draw a thin frame around the covers (Book info, Reading calendar and Reading shelf)."
+msgstr "Vékony keret rajzolása a borítók köré (Könyvinformáció, Olvasási naptár és Olvasási polc)."
+
+msgid "Weekly reading time"
+msgstr "Heti olvasási idő"
+
+msgid "Weekly average reading time"
+msgstr "Heti átlagos olvasási idő"
+
+msgid "Weekly pages read"
+msgstr "Heti olvasott oldalak"
+
+msgid "Weekly average pages read"
+msgstr "Heti átlagos olvasott oldalak"
+
+msgid "Progress per day"
+msgstr "Napi haladás"
+
+msgid "Daily streak (time)"
+msgstr "Napi széria (idő)"
+
+msgid "Daily streak (pages)"
+msgstr "Napi széria (oldalak)"
+
+msgid "Weekly streak (time)"
+msgstr "Heti széria (idő)"
+
+msgid "Weekly streak (pages)"
+msgstr "Heti széria (oldalak)"
+
+msgid "Daily (time)"
+msgstr "Napi (idő)"
+
+msgid "Daily (pages)"
+msgstr "Napi (oldalak)"
+
+msgid "Weekly (time)"
+msgstr "Heti (idő)"
+
+msgid "Weekly (pages)"
+msgstr "Heti (oldalak)"
+
+msgid "Reading time by time of day"
+msgstr "Olvasási idő a nap folyamán"
+
+msgid "Pages read by time of day"
+msgstr "Olvasott oldalak a nap folyamán"
+
+msgid "Share of reading time by time of day"
+msgstr "Olvasási idő aránya a nap folyamán"
+
+msgid "Reading time by weekday"
+msgstr "Olvasási idő a hét napjai szerint"
+
+msgid "Pages read by weekday"
+msgstr "Olvasott oldalak a hét napjai szerint"
+
+msgid "Share of reading time by weekday"
+msgstr "Olvasási idő aránya a hét napjai szerint"

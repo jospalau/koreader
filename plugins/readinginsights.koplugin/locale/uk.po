@@ -309,8 +309,8 @@ msgstr "Порядок графіка за 8 тижнів"
 msgid "Advanced settings"
 msgstr "Розширені налаштування"
 
-msgid "Reading heatmap range"
-msgstr "Діапазон теплокарти читання"
+msgid "Reading habits range"
+msgstr "Діапазон звичок читання"
 
 msgid "3 months"
 msgstr "3 місяці"
@@ -533,6 +533,9 @@ msgstr "Колір міток графіка"
 
 msgid "Section header background color"
 msgstr "Колір фону заголовка розділу"
+
+msgid "Cover shadow color"
+msgstr "Колір тіні обкладинки"
 
 msgid "Settings"
 msgstr "Налаштування"
@@ -807,8 +810,8 @@ msgstr "Не вдалося отримати останній реліз."
 msgid "Latest release has no downloadable zip."
 msgstr "В останньому релізі немає завантажуваного zip."
 
-msgid "Reading heatmap"
-msgstr "Теплокарта читання"
+msgid "Reading habits"
+msgstr "Звички читання"
 
 msgid "Reading calendar"
 msgstr "Календар читання"
@@ -873,9 +876,6 @@ msgstr "У цей день читання не було."
 msgid "About"
 msgstr "Про програму"
 
-msgid "Reading insight"
-msgstr "Аналітика читання"
-
 msgid "A full-screen overlay with a comprehensive overview of your reading history, powered by KOReader's statistics database."
 msgstr "Повноекранний огляд з детальною статистикою вашої історії читання на основі бази даних статистики KOReader."
 
@@ -931,11 +931,17 @@ msgstr "Позначте вікна, які мають відображатис�
 msgid "Reading insights: reading calendar"
 msgstr "Аналітика читання: календар читання"
 
-msgid "Reading insights: reading heatmap"
-msgstr "Аналітика читання: теплокарта читання"
+msgid "Reading insights: reading habits"
+msgstr "Аналітика читання: звички читання"
 
-msgid "Show Reading heatmap"
-msgstr "Показати теплокарту читання"
+msgid "Reading insights: reading shelf"
+msgstr "Аналітика читання: полиця читання"
+
+msgid "Reading shelf"
+msgstr "Полиця читання"
+
+msgid "Show Reading habits"
+msgstr "Показати звички читання"
 
 msgid "Sub-values (date / book title)"
 msgstr "Додаткові значення (дата / назва книги)"
@@ -1056,7 +1062,7 @@ msgstr "Додати книги вручну - %1"
 msgid "Date & time"
 msgstr "Дата й час"
 
-msgid "Reading insight popup"
+msgid "Reading insights popup"
 msgstr "Спливне вікно Аналітики читання"
 
 msgid "Daily goal"
@@ -1707,11 +1713,7 @@ msgstr "День"
 msgid "Evening"
 msgstr "Вечір"
 
-msgid "When you read"
-msgstr "Коли ви читаєте"
 
-msgid "Days of the week"
-msgstr "Дні тижня"
 
 msgid "You read most around %1"
 msgstr "Найбільше ви читаєте близько %1"
@@ -1749,8 +1751,8 @@ msgstr "Показати рядок дат «розпочато…» та «оч
 msgid "Hamburger menu"
 msgstr "Меню-гамбургер"
 
-msgid "Show the hamburger menu (top left of the title bar) with quick access to the streak, heatmap, records and achievements popups."
-msgstr "Показувати меню-гамбургер (у верхньому лівому куті панелі заголовка) зі швидким доступом до вікон серії читання, теплової карти, рекордів і досягнень."
+msgid "Show the hamburger menu (top left of the title bar) with quick access to the streak, reading habits, records and achievements popups."
+msgstr "Показувати меню-гамбургер (у верхньому лівому куті панелі заголовка) зі швидким доступом до вікон серії читання, звичок читання, рекордів і досягнень."
 
 msgid "Couldn't open Records: "
 msgstr "Не вдалося відкрити Рекорди: "
@@ -1899,8 +1901,8 @@ msgstr "Середній"
 msgid "Large"
 msgstr "Великий"
 
-msgid "Size of the cover in the Book info popup. Medium is the default size; Small is half of it and Large is one and a half times it."
-msgstr "Розмір обкладинки у вікні відомостей про книгу. Середній — розмір за замовчуванням; малий удвічі менший, а великий у півтора раза більший."
+msgid "Size of the cover in the Book info popup. Small: the cover is only as tall as the text beside it (title, author, series, rating, reading time - no description). Medium: the default size. Large: the cover grows as much as the popup (at most 94% of the width) allows while all the text still fits."
+msgstr "Розмір обкладинки у вікні відомостей про книгу. Малий: обкладинка лише такої висоти, як текст поруч (назва, автор, серія, оцінка, час читання — без опису). Середній — розмір за замовчуванням. Великий: обкладинка збільшується, доки це дозволяє вікно (щонайбільше 94 % ширини) і весь текст вміщується."
 
 msgid "Show author"
 msgstr "Показати автора"
@@ -2109,8 +2111,6 @@ msgstr "Завантаження оцінок..."
 msgid "Appearance"
 msgstr "Вигляд"
 
-msgid "Heatmap & time of day"
-msgstr "Теплокарта і час доби"
 
 msgid "Chart style"
 msgstr "Стиль діаграми"
@@ -2255,3 +2255,141 @@ msgstr "Показувати лінію серії під обкладинкам
 
 msgid "8-week reading trend"
 msgstr "Тенденція читання за 8 тижнів"
+
+msgid "Weekdays"
+msgstr "Дні тижня"
+
+msgid "Height of the two bar charts in the reading habits popup. The default matches the chapter bar. If the popup does not fit the screen, both charts shrink automatically."
+msgstr "Висота двох стовпчикових діаграм у вікні звичок читання. За замовчуванням збігається з висотою смуги розділів. Якщо вікно не вміщується на екрані, обидві діаграми автоматично зменшуються."
+
+
+
+
+msgid "Random views (%1/%2)"
+msgstr "Випадкові вигляди (%1/%2)"
+
+msgid "Which views the Random sleep screen picks from. A different one is shown every time the device goes to sleep, never the same one twice in a row."
+msgstr "З яких виглядів випадковий екран сну робить вибір. Щоразу при засинанні показується інший, ніколи той самий двічі поспіль."
+
+msgid "Every 2 hours"
+msgstr "Кожні 2 години"
+
+msgid "By part of day"
+msgstr "За частинами доби"
+
+msgid "Reading by day"
+msgstr "Читання за днями"
+
+msgid "Pages per month"
+msgstr "Сторінок за місяць"
+
+msgid "Pages / reading time"
+msgstr "Сторінки / час читання"
+
+msgid "Pages per day"
+msgstr "Сторінок за день"
+
+msgid "Reading time per day"
+msgstr "Час читання за день"
+
+msgid "View"
+msgstr "Вигляд"
+
+msgid "Current week"
+msgstr "Поточний тиждень"
+
+msgid "Show Reading shelf"
+msgstr "Показати полицю читання"
+
+msgid "Show only finished books"
+msgstr "Лише прочитані книги"
+
+msgid "Show the last 7 days, or the current calendar week that you can page back and forth. All figures of the section then cover that week."
+msgstr "Показує останні 7 днів або поточний календарний тиждень, по якому можна гортати вперед і назад. Усі показники розділу тоді стосуються цього тижня."
+
+msgid "page vs prev. week"
+msgstr "сторінка vs поперед. тиждень"
+
+msgid "pages vs prev. week"
+msgstr "сторінок vs поперед. тиждень"
+
+msgid "pg vs prev. wk"
+msgstr "с. vs попер. тиж."
+
+msgid "time vs prev. week"
+msgstr "час vs поперед. тиждень"
+
+msgid "vs prev. week"
+msgstr "vs поперед. тиждень"
+
+msgid "Round the corners of the covers (Book info, Reading calendar and Reading shelf)."
+msgstr "Округлює кути обкладинок (Відомості про книгу, Календар читання та Полиця читання)."
+
+msgid "Draw a drop shadow behind the covers (Book info, Reading calendar and Reading shelf)."
+msgstr "Малює тінь позаду обкладинок (Відомості про книгу, Календар читання та Полиця читання)."
+
+msgid "Draw a thin frame around the covers (Book info, Reading calendar and Reading shelf)."
+msgstr "Малює тонку рамку навколо обкладинок (Відомості про книгу, Календар читання та Полиця читання)."
+
+msgid "Covers"
+msgstr "Обкладинки"
+
+msgid "This will clear the development branch setting and install the latest stable release of Reading insights, then restart KOReader. Continue?"
+msgstr "Це скине налаштування гілки розробки, встановить останній стабільний випуск «Аналітика читання» і перезапустить KOReader. Продовжити?"
+
+msgid "Weekly reading time"
+msgstr "Тижневий час читання"
+
+msgid "Weekly average reading time"
+msgstr "Середній тижневий час читання"
+
+msgid "Weekly pages read"
+msgstr "Прочитано сторінок за тиждень"
+
+msgid "Weekly average pages read"
+msgstr "Середня кількість сторінок за тиждень"
+
+msgid "Progress per day"
+msgstr "Прогрес за день"
+
+msgid "Daily streak (time)"
+msgstr "Щоденна серія (час)"
+
+msgid "Daily streak (pages)"
+msgstr "Щоденна серія (сторінки)"
+
+msgid "Weekly streak (time)"
+msgstr "Тижнева серія (час)"
+
+msgid "Weekly streak (pages)"
+msgstr "Тижнева серія (сторінки)"
+
+msgid "Daily (time)"
+msgstr "Щоденно (час)"
+
+msgid "Daily (pages)"
+msgstr "Щоденно (сторінки)"
+
+msgid "Weekly (time)"
+msgstr "Щотижня (час)"
+
+msgid "Weekly (pages)"
+msgstr "Щотижня (сторінки)"
+
+msgid "Reading time by time of day"
+msgstr "Час читання за часом доби"
+
+msgid "Pages read by time of day"
+msgstr "Прочитано сторінок за часом доби"
+
+msgid "Share of reading time by time of day"
+msgstr "Частка часу читання за часом доби"
+
+msgid "Reading time by weekday"
+msgstr "Час читання за днями тижня"
+
+msgid "Pages read by weekday"
+msgstr "Прочитано сторінок за днями тижня"
+
+msgid "Share of reading time by weekday"
+msgstr "Частка часу читання за днями тижня"

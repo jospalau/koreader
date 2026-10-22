@@ -3,7 +3,7 @@ Reading Insights - the Tools menu.
 
 Builds the whole *Tools > Reading insights* entry: the "open a popup" actions
 (statistics popups, then the popups about the open book), the Settings submenu
-(Date & time, Appearance, one group per view - Reading insight popup,
+(Date & time, Appearance, one group per view - Reading insights popup,
 Heatmap & time of day, Book progress popup, Book info, Book progress
 calendar - and Advanced settings last), and the Updates and About entries. The Settings layout is spelled
 out in one place, under "Settings menu layout" near the end of M.build.
@@ -44,7 +44,9 @@ function M.build(self, deps)
           open = function() self:onShowReadingInsightsPopup() end },
         { key = "streak",        label = _("Reading calendar"),
           open = function() self:onShowReadingStreakPopup() end },
-        { key = "heatmap",       label = _("Reading heatmap"),
+        { key = "shelf",         label = _("Reading shelf"),
+          open = function() self:onShowReadingShelfPopup() end },
+        { key = "heatmap",       label = _("Reading habits"),
           open = function() self:onShowReadingHeatmapPopup() end },
         { key = "records",       label = _("Records"),
           open = function() self:onShowReadingRecordsPopup() end },
@@ -215,7 +217,21 @@ function M.build(self, deps)
                     return _("Content") .. ": " .. labelOf(SS.contents, SS.readContent())
                 end,
                 keep_menu_open = true,
-                sub_item_table = sleepRadioItems(SS.contents, SS.readContent, SS.saveContent),
+                sub_item_table = (function()
+                    -- The views, then "Random" (a different view on every
+                    -- sleep, never the one shown last), then the tick boxes
+                    -- for which views are in that draw.
+                    local items = sleepRadioItems(SS.contents, SS.readContent, SS.saveContent)
+                    if #items >= 2 then items[#items - 1].separator = true end
+                    items[#items].separator = true
+                    items[#items + 1] = {
+                        text_func = function() return SS.randomViewsLabel() end,
+                        help_text = _("Which views the Random sleep screen picks from. A different one is shown every time the device goes to sleep, never the same one twice in a row."),
+                        keep_menu_open = true,
+                        sub_item_table_func = function() return SS.buildRandomMenu() end,
+                    }
+                    return items
+                end)(),
             },
             {
                 text_func = function()
@@ -344,7 +360,7 @@ function M.build(self, deps)
     }
 
     -- Bar chart heights, now kept with the view each one belongs to:
-    --   Reading insight popup > Bar chart height   (automatic, Last 7 days, Months)
+    --   Reading insights popup > Bar chart height   (automatic, Last 7 days, Months)
     --   Book progress popup > Bar chart height     (chapters, skim bar)
     --
     -- Automatic is on by default: the two Reading insights charts size
@@ -526,7 +542,7 @@ function M.build(self, deps)
         sub_item_table = reading_calendar_sub_item_table,
     }
 
-    -- "Reading insight popup": everything that changes what the insights
+    -- "Reading insights popup": everything that changes what the insights
     -- popup itself shows. The entries are defined here and grouped under
     -- "Settings menu layout" at the end.
 
@@ -571,7 +587,7 @@ function M.build(self, deps)
 
     I.hamburger = {
         text = _("Hamburger menu"),
-        help_text = _("Show the hamburger menu (top left of the title bar) with quick access to the streak, heatmap, records and achievements popups."),
+        help_text = _("Show the hamburger menu (top left of the title bar) with quick access to the streak, reading habits, records and achievements popups."),
         keep_menu_open = true,
         checked_func = function() return deps.ViewSettings.Opt.readShowHamburgerMenu() end,
         callback = function()
@@ -587,7 +603,7 @@ function M.build(self, deps)
             elseif months == 6 then label = _("6 months")
             elseif months == 12 then label = _("12 months")
             else label = _("4 months") end
-            return _("Reading heatmap range") .. ": " .. label
+            return _("Reading habits range") .. ": " .. label
         end,
         keep_menu_open = true,
         sub_item_table = {
@@ -624,21 +640,31 @@ function M.build(self, deps)
 
     I.time_of_day = {
         text_func = function()
-            local style = deps.ViewSettings.readTimeOfDayViewSetting() == "heatmap"
-                and _("Heatmap")
-                or  _("Chart")
+            local view = deps.ViewSettings.readTimeOfDayViewSetting()
+            local style = view == "heatmap" and _("Heatmap")
+                or view == "hourly" and _("Every 2 hours")
+                or _("By part of day")
             return _("Time of day view") .. ": " .. style
         end,
         keep_menu_open = true,
         sub_item_table = {
             {
-                text = _("Chart"),
+                text = _("By part of day"),
                 keep_menu_open = true,
                 radio = true,
                 checked_func = function()
                     return deps.ViewSettings.readTimeOfDayViewSetting() == "chart"
                 end,
                 callback = function() deps.ViewSettings.saveTimeOfDayViewSetting("chart") end,
+            },
+            {
+                text = _("Every 2 hours"),
+                keep_menu_open = true,
+                radio = true,
+                checked_func = function()
+                    return deps.ViewSettings.readTimeOfDayViewSetting() == "hourly"
+                end,
+                callback = function() deps.ViewSettings.saveTimeOfDayViewSetting("hourly") end,
             },
             {
                 text = _("Heatmap"),
@@ -649,6 +675,30 @@ function M.build(self, deps)
                 end,
                 callback = function() deps.ViewSettings.saveTimeOfDayViewSetting("heatmap") end,
             },
+        },
+    }
+
+    I.heatmap_heights = {
+        text = _("Bar chart height"),
+        help_text = _("Height of the two bar charts in the reading habits popup. The default matches the chapter bar. If the popup does not fit the screen, both charts shrink automatically."),
+        keep_menu_open = true,
+        sub_item_table = {
+            buildBarHeightMenuEntry(
+                _("Time of day"),
+                deps.ViewSettings.Opt.readHeatmapTimeOfDayBarHeight,
+                deps.ViewSettings.Opt.saveHeatmapTimeOfDayBarHeight,
+                deps.ViewSettings.Opt.DEFAULT_HEATMAP_BAR_HEIGHT,
+                deps.ViewSettings.Opt.MIN_HEATMAP_BAR_HEIGHT,
+                deps.ViewSettings.Opt.MAX_HEATMAP_BAR_HEIGHT
+            ),
+            buildBarHeightMenuEntry(
+                _("Weekdays"),
+                deps.ViewSettings.Opt.readHeatmapWeekdayBarHeight,
+                deps.ViewSettings.Opt.saveHeatmapWeekdayBarHeight,
+                deps.ViewSettings.Opt.DEFAULT_HEATMAP_BAR_HEIGHT,
+                deps.ViewSettings.Opt.MIN_HEATMAP_BAR_HEIGHT,
+                deps.ViewSettings.Opt.MAX_HEATMAP_BAR_HEIGHT
+            ),
         },
     }
 
@@ -721,6 +771,39 @@ function M.build(self, deps)
         }
     end
 
+    -- Which week the section shows: the rolling last 7 days (default) or
+    -- the current calendar week, which can be paged back and forth.
+    do
+        local VSet = deps.ViewSettings
+        local LAST7 = VSet.WEEKLY_VIEW_LAST7
+        local CAL   = VSet.WEEKLY_VIEW_CALENDAR
+        local function viewEntry(value, text)
+            return {
+                text = text,
+                keep_menu_open = true,
+                radio = true,
+                checked_func = function()
+                    return VSet.readWeeklyViewSetting() == value
+                end,
+                callback = function() VSet.saveWeeklyViewSetting(value) end,
+            }
+        end
+        I.weekly_view = {
+            text_func = function()
+                local v = VSet.readWeeklyViewSetting() == CAL
+                    and _("Current week")
+                    or  _("Last 7 days")
+                return _("View") .. ": " .. v
+            end,
+            help_text = _("Show the last 7 days, or the current calendar week that you can page back and forth. All figures of the section then cover that week."),
+            keep_menu_open = true,
+            sub_item_table = {
+                viewEntry(LAST7, _("Last 7 days")),
+                viewEntry(CAL,   _("Current week")),
+            },
+        }
+    end
+
     -- "Last 7 days" chart style: bars (default) or line with dots.
     do
         local VSet = deps.ViewSettings
@@ -752,7 +835,7 @@ function M.build(self, deps)
         }
     end
 
-    -- Months (yearly) chart style: line with dots (default) or bars.
+    -- Months (yearly) chart style: bars (default) or line with dots.
     do
         local VSet  = deps.ViewSettings
         local LINE  = VSet.MONTHLY_STYLE_LINE
@@ -777,8 +860,8 @@ function M.build(self, deps)
             end,
             keep_menu_open = true,
             sub_item_table = {
-                monthlyStyleEntry(LINE, _("Line with dots")),
                 monthlyStyleEntry(BARS, _("Bars")),
+                monthlyStyleEntry(LINE, _("Line with dots")),
             },
         }
     end
@@ -1242,9 +1325,10 @@ function M.build(self, deps)
     }
 
     -- "Book info" popup: which parts of the small cover + title / author /
-    -- series popup are shown. Cover frame options (rounded corners, shadow,
-    -- border) only matter while the cover itself is on, so they grey out
-    -- with it. Fonts live under Settings > Fonts > Book info.
+    -- series popup are shown. The cover look (rounded corners, shadow, border)
+    -- is shared with the Reading calendar and the Reading shelf and lives under
+    -- Settings > Appearance > Covers. Fonts live under Settings > Fonts > Book
+    -- info.
     local function bookInfoToggle(name, text, help_text, depends_on_cover, separator)
         return {
             text = text,
@@ -1262,7 +1346,7 @@ function M.build(self, deps)
             end,
         }
     end
-    -- Cover size: small (50%) / medium (100%, default) / large (150%).
+    -- Cover size: small (as tall as the text) / medium (default) / large (as big as fits).
     -- Greyed out together with the cover itself.
     local function coverSizeRadio(size, text)
         return {
@@ -1286,7 +1370,7 @@ function M.build(self, deps)
                 or _("Medium")
             return _("Cover size") .. ": " .. label
         end,
-        help_text = _("Size of the cover in the Book info popup. Medium is the default size; Small is half of it and Large is one and a half times it."),
+        help_text = _("Size of the cover in the Book info popup. Small: the cover is only as tall as the text beside it (title, author, series, rating, reading time - no description). Medium: the default size. Large: the cover grows as much as the popup (at most 94% of the width) allows while all the text still fits."),
         keep_menu_open = true,
         enabled_func = function()
             return deps.ViewSettings.Opt.readBookInfo("cover")
@@ -1302,12 +1386,6 @@ function M.build(self, deps)
             _("Show the book's cover on the left."),
             false, true),
         coverSizeItem,
-        bookInfoToggle("rounded", _("Rounded corners"),
-            _("Round the corners of the cover."), true),
-        bookInfoToggle("shadow", _("Cover shadow"),
-            _("Draw a drop shadow behind the cover."), true),
-        bookInfoToggle("border", _("Cover border"),
-            _("Draw a thin frame around the cover."), true, true),
         bookInfoToggle("author", _("Show author"),
             _("Show the author line. Several authors are joined with a language-appropriate \"and\"."), false),
         bookInfoToggle("series", _("Show series"),
@@ -1315,6 +1393,17 @@ function M.build(self, deps)
         bookInfoToggle("description", _("Show description"),
             _("Show the book's description under the author / series, as far down as the bottom of the cover, cut with an ellipsis when it does not fit. Tap it to read the full description. While this is on, the popup is as wide as it can be."), false),
     }
+
+    -- Settings > Appearance > Covers: the look of every cover - Book info,
+    -- the Reading calendar's days and the Reading shelf.
+    I.covers = group(_("Covers"), {
+        bookInfoToggle("rounded", _("Rounded corners"),
+            _("Round the corners of the covers (Book info, Reading calendar and Reading shelf)."), false),
+        bookInfoToggle("shadow", _("Cover shadow"),
+            _("Draw a drop shadow behind the covers (Book info, Reading calendar and Reading shelf)."), false),
+        bookInfoToggle("border", _("Cover border"),
+            _("Draw a thin frame around the covers (Book info, Reading calendar and Reading shelf)."), false),
+    })
 
     I.book_info = {
         text = _("Book info"),
@@ -1332,15 +1421,15 @@ function M.build(self, deps)
     table.insert(book_calendar_sub_item_table, {
         text_func = function()
             local mode_key = deps.BookCalendar.readCalendarCellModeSetting()
-            local mode = (mode_key == "pages" and _("Pages"))
-                or (mode_key == "time" and _("Time"))
-                or _("Percent")
+            local mode = (mode_key == "pages" and _("Pages per day"))
+                or (mode_key == "time" and _("Reading time per day"))
+                or _("Progress per day")
             return _("Book progress calendar cell content") .. ": " .. mode
         end,
         keep_menu_open = true,
         sub_item_table = {
             {
-                text = _("Percent"),
+                text = _("Progress per day"),
                 keep_menu_open = true,
                 radio = true,
                 checked_func = function()
@@ -1349,7 +1438,7 @@ function M.build(self, deps)
                 callback = function() deps.BookCalendar.saveCalendarCellModeSetting("percent") end,
             },
             {
-                text = _("Pages"),
+                text = _("Pages per day"),
                 keep_menu_open = true,
                 radio = true,
                 checked_func = function()
@@ -1358,7 +1447,7 @@ function M.build(self, deps)
                 callback = function() deps.BookCalendar.saveCalendarCellModeSetting("pages") end,
             },
             {
-                text = _("Time"),
+                text = _("Reading time per day"),
                 keep_menu_open = true,
                 radio = true,
                 checked_func = function()
@@ -1379,9 +1468,9 @@ function M.build(self, deps)
     -- Settings menu layout, top to bottom:
     --
     --   Date & time                how dates, times and weeks are shown
-    --   Appearance                 colors and fonts
+    --   Appearance                 colors, fonts and the look of covers
     --   -------------------------
-    --   one group per view         Reading insight popup, Heatmap & time of
+    --   one group per view         Reading insights popup, Heatmap & time of
     --                              day, Book progress popup, Book progress
     --                              calendar, Reading calendar, Book info
     --   -------------------------
@@ -1389,14 +1478,15 @@ function M.build(self, deps)
     --                              sleep screen, refresh, long durations,
     --                              which popups the Tools menu lists
     --
-    -- Bar chart heights sit with the view they belong to: Reading insight
+    -- Bar chart heights sit with the view they belong to: Reading insights
     -- popup > Bar chart height, Book progress popup > Bar chart height.
     local insights_popup_sub_item_table = layout({
         I.hamburger,
         "-",
         I.goal, I.goal_bar, I.reading_goal, I.achievements, I.ach_refresh,
         "-",
-        group(_("Last 7 days"), {
+        group(_("Week"), {
+            I.weekly_view,
             I.weekly_style, I.today_side, I.weekly_extra_row, I.weekly_vs_prev,
             I.trend_order,
         }),
@@ -1422,14 +1512,14 @@ function M.build(self, deps)
         I.sleep_screen,
         "-",
         I.date_time,
-        group(_("Appearance"), { I.colors, I.fonts }),
+        group(_("Appearance"), { I.colors, I.fonts, I.covers }),
         "-",
         {
-            text = _("Reading insight popup"),
+            text = _("Reading insights popup"),
             keep_menu_open = true,
             sub_item_table = insights_popup_sub_item_table,
         },
-        group(_("Heatmap & time of day"), { I.heatmap_months, I.time_of_day }),
+        group(_("Reading habits"), { I.heatmap_months, I.time_of_day, I.heatmap_heights }),
         {
             text = _("Book progress popup"),
             keep_menu_open = true,
