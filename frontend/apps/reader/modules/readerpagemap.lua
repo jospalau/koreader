@@ -546,6 +546,9 @@ Since stable page numbers can start anywhere on the screen, you can choose to di
                         callback = function(spin)
                             self:setSyntheticPagesNumber(spin.value)
                             touchmenu_instance:updateItems()
+                            if self.ui.view.topbar then
+                                self.ui.view.topbar:toggleBar()
+                            end
                         end,
                         extra_text = self.has_pagemap_document_provided and self.chars_per_synthetic_page
                             and _("Use publisher page numbers"),
