@@ -413,3 +413,229 @@ msgstr "Desactivar pestaña de imágenes"
 
 msgid "bold only"
 msgstr "solo negrita"
+
+msgid "The updater is not available."
+msgstr "El actualizador no está disponible."
+
+msgid "Bar"
+msgstr "Barra"
+
+msgid "Settings"
+msgstr "Ajustes"
+
+msgid "Interface"
+msgstr "Interfaz"
+
+msgid "Document"
+msgstr "Documento"
+
+msgid "Other"
+msgstr "Otros"
+
+msgid "Advanced"
+msgstr "Avanzado"
+
+msgid "Top bar"
+msgstr "Barra superior"
+
+msgid "Dictionary"
+msgstr "Diccionario"
+
+msgid "Selection menu"
+msgstr "Menú de selección"
+
+msgid "Size of selection menu"
+msgstr "Tamaño del menú de selección"
+
+msgid "Text selection"
+msgstr "Selección de texto"
+
+msgid "Back up settings"
+msgstr "Respaldar ajustes"
+
+msgid "Restore settings from backup"
+msgstr "Restaurar ajustes desde copia"
+
+msgid "Reset all settings"
+msgstr "Restablecer todos los ajustes"
+
+msgid "Cache"
+msgstr "Caché"
+
+msgid "Clear image cache"
+msgstr "Borrar caché de imágenes"
+
+msgid "Updates"
+msgstr "Actualizaciones"
+
+msgid "Check for updates"
+msgstr "Buscar actualizaciones"
+
+msgid "Settings backed up to:"
+msgstr "Ajustes respaldados en:"
+
+msgid "To restore them on another device, copy this file to the same folder there."
+msgstr "Para restaurarlos en otro dispositivo, copia este archivo en la misma carpeta allí."
+
+msgid "Could not back up the settings."
+msgstr "No se pudieron respaldar los ajustes."
+
+msgid "No backup found."
+msgstr "No se encontró ninguna copia de seguridad."
+
+msgid "Use \"Back up settings\" first, or copy your page_scrubber_backup.lua file to:"
+msgstr "Usa \"Respaldar ajustes\" primero, o copia tu archivo page_scrubber_backup.lua en:"
+
+msgid "Restore the settings from this backup file? Your current settings will be replaced."
+msgstr "¿Restaurar los ajustes desde este archivo de respaldo? Tus ajustes actuales serán reemplazados."
+
+msgid "Restore"
+msgstr "Restaurar"
+
+msgid "Could not restore the settings."
+msgstr "No se pudieron restaurar los ajustes."
+
+msgid "Clear the image cache? The Images tab will scan your books again the next time you open it. Your favorite images are kept."
+msgstr "¿Borrar la caché de imágenes? La pestaña de Imágenes volverá a escanear tus libros la próxima vez. Tus imágenes favoritas se conservan."
+
+msgid "Clear"
+msgstr "Borrar"
+
+msgid "Image cache cleared."
+msgstr "Caché de imágenes borrada."
+
+msgid "Could not clear the image cache."
+msgstr "No se pudo borrar la caché de imágenes."
+
+msgid "Reset ALL PageScrubber settings to their defaults? This also clears your favorite fonts and quick actions. Tip: back them up first."
+msgstr "¿Restablecer TODOS los ajustes de PageScrubber a sus valores por defecto? Esto también borra tus fuentes y acciones rápidas. Consejo: haz un respaldo primero."
+
+msgid "Reset"
+msgstr "Restablecer"
+
+msgid "Disabled"
+msgstr "Desactivado"
+
+# Review Card / SRS (Repaso espaciado)
+msgid "Again"
+msgstr "Otra vez"
+
+msgid "Good"
+msgstr "Bien"
+
+msgid "Easy"
+msgstr "Fácil"
+
+msgid "SESSION"
+msgstr "SESIÓN"
+
+msgid "COMPLETE!"
+msgstr "¡COMPLETADA!"
+
+msgid "You studied"
+msgstr "Estudiaste"
+
+msgid "card"
+msgstr "tarjeta"
+
+msgid "cards"
+msgstr "tarjetas"
+
+msgid "Done"
+msgstr "Hecho"
+
+msgid "Undo last card"
+msgstr "Deshacer última tarjeta"
+
+msgid "Study mode is off for this book."
+msgstr "El modo estudio está desactivado para este libro."
+
+msgid "Nothing to study right now."
+msgstr "Nada para estudiar ahora mismo."
+
+msgid "Study mode"
+msgstr "Modo estudio"
+
+msgid "Everywhere"
+msgstr "En todos lados"
+
+msgid "Only in a folder"
+msgstr "Solo en una carpeta"
+
+msgid "Change"
+msgstr "Cambiar"
+
+msgid "Reset study progress"
+msgstr "Reiniciar progreso de estudio"
+
+msgid "This book"
+msgstr "Este libro"
+
+msgid "Choose study folder"
+msgstr "Elegir carpeta de estudio"
+
+msgid "Reset the study progress of this book? Every highlight and note will start again from zero."
+msgstr "¿Reiniciar el progreso de estudio de este libro? Cada subrayado y nota empezará de cero."
+
+msgid "Study progress reset."
+msgstr "Progreso de estudio reiniciado."
+
+msgid "Could not reset the study progress."
+msgstr "No se pudo reiniciar el progreso de estudio."
+
+msgid "Study"
+msgstr "Estudiar"
+
+# Frontlight / Fila de Estado
+msgid "Frontlight enabled"
+msgstr "Luz frontal activada"
+
+msgid "Frontlight disabled"
+msgstr "Luz frontal desactivada"
+
+msgid "Status row"
+msgstr "Fila de estado"
+
+# Iconos Personalizados
+msgid "Custom icons"
+msgstr "Iconos personalizados"
+
+msgid "Overview"
+msgstr "Resumen"
+
+msgid "Icons"
+msgstr "Iconos"
+
+msgid "Custom"
+msgstr "Personalizado"
+
+msgid "Default"
+msgstr "Por defecto"
+
+msgid "Pick a custom SVG..."
+msgstr "Elegir un SVG personalizado..."
+
+msgid "Reset to default icon"
+msgstr "Restaurar icono por defecto"
+
+msgid "Pick an SVG for %s"
+msgstr "Elige un SVG para %s"
+
+msgid "Please select a .svg file"
+msgstr "Por favor, selecciona un archivo .svg"
+
+msgid "Icon updated. Reopen the scrubber to see the change."
+msgstr "Icono actualizado. Vuelve a abrir el scrubber para ver los cambios."
+
+msgid "Could not use that icon: "
+msgstr "No se pudo usar ese icono: "
+
+msgid "Reset \"%s\" to the default icon?"
+msgstr "¿Restaurar \"%s\" al icono por defecto?"
+
+msgid "Reset ALL custom icons back to the plugin defaults?"
+msgstr "¿Restaurar TODOS los iconos personalizados a los valores por defecto del plugin?"
+
+msgid "Reset all to default"
+msgstr "Restablecer todos por defecto"
+

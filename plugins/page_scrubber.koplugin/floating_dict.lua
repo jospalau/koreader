@@ -137,6 +137,20 @@ local function scaleText(px)
     return scale(px + getTextOffset())
 end
 
+-- Tamaño del selection menu (small / medium / large): escala íconos, botones y contorno.
+-- "medium" es el tamaño original.
+local function getSelSizeK()
+    local v = G_reader_settings and G_reader_settings:readSetting("page_scrubber_sel_menu_size")
+    if v == "small" then return 0.8 end
+    if v == "large" then return 1.25 end
+    return 1.0
+end
+local function sscale(px)
+    return math.max(1, math.floor(scale(px) * getSelSizeK() + 0.5))
+end
+-- Grosor del contorno del selection menu (en px base; se escala con el tamaño elegido)
+local SEL_BORDER_PX = 3
+
 local function is_btn_enabled(key, default_val)
     if not G_reader_settings then
         return (default_val ~= nil) and default_val or true
@@ -538,14 +552,22 @@ end
 -- ==========================================
 -- VERIFICADOR DE SVG SEGURO
 -- ==========================================
+local ok_icon_mgr, IconManager = pcall(require, "icon_manager")   -- reemplazos de íconos del usuario
+if not ok_icon_mgr then IconManager = nil end
+
 local function getValidSvgPath(svg_name)
     if not svg_name then return nil end
+    -- Cada gsub va entre paréntesis: así devuelve solo el string y no suma el contador a la tabla
     local variants = {
         svg_name,
-        svg_name:gsub("-", "_"),
-        svg_name:gsub("_", "-")
+        (svg_name:gsub("%-", "_")),
+        (svg_name:gsub("_", "-"))
     }
     for _, name in ipairs(variants) do
+        if IconManager then
+            local custom_or_plugin = IconManager.resolvePath(name)
+            if custom_or_plugin then return custom_or_plugin end
+        end
         local paths = {
             plugin_path .. "icons/" .. name,
             plugin_path .. name,
@@ -584,6 +606,7 @@ function PreviewButton:init()
                 alpha = true,
                 fgcolor = Blitbuffer.COLOR_BLACK,
                 original_in_nightmode = false,
+                file_do_cache = false,
             }
         end)
         if ok and widget then
@@ -1742,10 +1765,10 @@ function FloatingActionMenu:init()
     local font_ratio = math.max(0.85, math.min(1.40, raw_fs / 26))
 
     -- Íconos y botones fijos al DPI táctil; el texto preserva el ratio del libro
-    local dynamic_icon_sz = scale(36)
-    local btn_w = is_horizontal and scale(56) or scale(62)
-    local btn_h = is_horizontal and scale(56) or scale(54)
-    local text_fs = math.floor(scaleText(12) * font_ratio + 0.5)
+    local dynamic_icon_sz = sscale(36)
+    local btn_w = is_horizontal and sscale(56) or sscale(62)
+    local btn_h = is_horizontal and sscale(56) or sscale(54)
+    local text_fs = math.floor(scaleText(12) * getSelSizeK() * font_ratio + 0.5)
     self._btn_w = btn_w
     self._btn_h = btn_h
     self._font_ratio = font_ratio
@@ -1795,8 +1818,8 @@ function FloatingActionMenu:init()
         table.insert(icon_widgets, btn)
     end
 
-    local card_pad = math.floor(scale(4) * font_ratio + 0.5)
-    local card_sep = math.max(1, math.floor(scale(2) * font_ratio + 0.5))
+    local card_pad = math.floor(sscale(4) * font_ratio + 0.5)
+    local card_sep = math.max(1, math.floor(sscale(2) * font_ratio + 0.5))
     self._card_pad = card_pad
     self._card_sep = card_sep
 
@@ -1901,7 +1924,7 @@ function FloatingActionMenu:init()
     end
 
     self.card = FloatingPillCard:new({
-        content = popup_content, bordersize = scale(2), radius = math.floor(scale(14) * font_ratio + 0.5)
+        content = popup_content, bordersize = sscale(SEL_BORDER_PX), radius = math.floor(sscale(14) * font_ratio + 0.5)
     })
 
     local card_size = self.card:getSize()
@@ -2072,9 +2095,9 @@ function FloatingActionMenu:buildMoreCard()
         row1_specs = filtered
     end
 
-    local row1_icon_sz = scale(31)
-    local min_btn_w = scale(52)
-    local row1_btn_h = scale(52)
+    local row1_icon_sz = sscale(31)
+    local min_btn_w = sscale(52)
+    local row1_btn_h = sscale(52)
     local row1_text_fs = math.floor(scaleText(11) * font_ratio + 0.5)
 
     -- Ancho base mínimo requerido por los 6 iconos superiores
@@ -2233,7 +2256,7 @@ function FloatingActionMenu:buildMoreCard()
     local more_content = VerticalGroup:new(card_vertical_items)
 
     self.more_card = FloatingPillCard:new({
-        content = more_content, bordersize = scale(2), radius = math.floor(scale(14) * font_ratio + 0.5)
+        content = more_content, bordersize = sscale(SEL_BORDER_PX), radius = math.floor(sscale(14) * font_ratio + 0.5)
     })
 end
 
@@ -2246,7 +2269,7 @@ function FloatingActionMenu:updateMoreLayout()
 
     -- Calcular la posición absoluta en pantalla del botón '+'
     local btn_idx = self._plus_btn_index or 1
-    local b = scale(3)
+    local b = sscale(SEL_BORDER_PX)  -- grosor real del contorno de la tarjeta principal
     local btn_plus_x, btn_plus_y
     local btn_w, btn_h = self._btn_w, self._btn_h
     local card_pad = self._card_pad or scale(6)
@@ -2685,7 +2708,36 @@ function ColorSwatchPopup:init()
     self.circle_d = sk(54)
     self.border = scale(2)
     self.radius = sk(16)
-    self.face = Font:getFace("cfont", math.max(8, math.floor(scaleText(17) * POPUP_K + 0.5)))
+    local font_sz = math.max(8, math.floor(scaleText(17) * POPUP_K + 0.5))
+
+    -- Los nombres de los colores cambian de largo según el idioma ("Verde oliva", "Amarillo"...): se mide el más
+    -- ancho (en negrita, que es como se marca el actual) y, si no entra, primero se ensancha la celda y después,
+    -- si hace falta, se achica la letra, para que los textos de celdas vecinas nunca se pisen.
+    local function measure(face, text)
+        local tw = TextWidget:new({ text = text, face = face, bold = true })
+        local sz = tw:getSize()
+        tw:free()
+        return sz.w, sz.h
+    end
+    local max_cell_w = math.floor((sw - scale(16) - self.pad * 2) / cols)   -- tope: que el popup entre en pantalla
+    local label_gap = scale(6)
+    local face, widest, label_h
+    while true do
+        face = Font:getFace("cfont", font_sz)
+        widest, label_h = 0, 0
+        for _, v in ipairs(clean) do
+            local lw, lh = measure(face, tostring(v[1] or v[2] or ""))
+            if lw > widest then widest = lw end
+            if lh > label_h then label_h = lh end
+        end
+        if widest + scale(8) <= max_cell_w or font_sz <= 8 then break end
+        font_sz = font_sz - 1
+    end
+    self.face = face
+    self.label_gap = label_gap
+    self.cell_w = math.max(self.cell_w, math.min(max_cell_w, widest + scale(10)))
+    -- Alto de la celda según el alto real del texto: círculo + aire + texto + aire (las filas no se solapan)
+    self.cell_h = math.max(self.cell_h, scale(4) + self.circle_d + label_gap + label_h + scale(8))
 
     local w = cols * self.cell_w + self.pad * 2
     local h = rows * self.cell_h + self.pad * 2
@@ -2794,9 +2846,13 @@ function ColorSwatchPopup:paintTo(bb, x, y)
                 paintCornerRect(bb, cx + ring, cy + ring, inner, inner, math.floor(inner / 2), Blitbuffer.COLOR_GRAY, true, true, true, true)
             end
 
-            local tw = TextWidget:new({ text = cell.name, face = self.face, fgcolor = Blitbuffer.COLOR_BLACK, bold = is_current })
+            -- max_width + "…" como último recurso: nunca invade la celda de al lado
+            local tw = TextWidget:new({
+                text = cell.name, face = self.face, fgcolor = Blitbuffer.COLOR_BLACK, bold = is_current,
+                max_width = cell.dimen.w - scale(2), truncate_with_ellipsis = true,
+            })
             local tsz = tw:getSize()
-            tw:paintTo(bb, cell.dimen.x + math.floor((cell.dimen.w - tsz.w) / 2), cy + d + scale(6))
+            tw:paintTo(bb, cell.dimen.x + math.floor((cell.dimen.w - tsz.w) / 2), cy + d + (self.label_gap or scale(6)))
             tw:free()
         end
     end)
