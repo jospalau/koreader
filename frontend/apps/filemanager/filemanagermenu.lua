@@ -976,8 +976,7 @@ The sorting order is the same as in filemanager.
 
 Tap a book in the search results to open it.]]),
         callback = function()
-            local FileManagerHistory = require("apps/filemanager/filemanagerhistory")
-            FileManagerHistory:onShowHistTBR()
+            self.ui.history:onShowHistTBR()
         end
     }
 
@@ -993,8 +992,7 @@ The sorting order is the same as in filemanager.
 
 Tap a book in the search results to open it.]]),
         callback = function()
-            local FileManagerHistory = require("apps/filemanager/filemanagerhistory")
-            FileManagerHistory:onShowHistMBR()
+            self.ui.history:onShowHistMBR()
         end
     }
 
