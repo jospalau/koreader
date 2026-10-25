@@ -522,9 +522,9 @@ function BookshelfWidget:init()
                 -- first place.
                 range = Geom:new{
                     x = math.floor(self.width / 8),
-                    y = math.floor(self.height / 8),
+                    y = 0,
                     w = self.width - 2 * math.floor(self.width / 8),
-                    h = self.height - math.floor(self.height / 8),
+                    h = self.height,
                 },
                 scale = { 0, SCREENSHOT_MIN - 1 },
             },

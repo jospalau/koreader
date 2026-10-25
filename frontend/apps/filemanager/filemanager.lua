@@ -599,6 +599,8 @@ function FileManager:onSwipeFM(ges)
         Device.input.disable_double_tap = self.disable_double_tap
         UIManager:setDirty(self, "ui")
     elseif direction == "south" then
+        local is_bookshelf = (UIManager:getTopmostVisibleWidget() or {}).name == "bookshelf"
+        if is_bookshelf then return false end
         local x = ges.pos and ges.pos.x or (ges.start_pos and ges.start_pos.x)
         local w = Screen:getWidth()
         local border = math.floor(w * 0.10)
