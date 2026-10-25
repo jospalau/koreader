@@ -63,6 +63,8 @@ M.COLOUR_NAMES = {
     ["menu bar"]             = "chrome_bg",
     ["module card"]          = "module_bg",
     ["module border"]        = "module_border",
+    ["panel"]                = "panel_color",
+    ["panel text"]           = "panel_ink",
     ["cover border"]         = "border_color",
     ["selection"]            = "selection_color",
     ["cover shadow"]         = "card_shadow_color",
@@ -849,6 +851,18 @@ function M.choosePlank(choice)
     if M.shelfTheme() == M.MINE then save(M.WOOD_SETTING, nil) end
     if choice ~= "colour" and not M.designsOn() then M.setDesignsOn(true) end
     M._plank_memo = nil
+end
+
+-- plankForChoice(choice) -> the design a plank choice draws ("colour",
+-- "oak" or a pack plank's id, as plankChoiceIn answers): a design, false
+-- for the plain colour, or nil when the choice is unset or its pack has gone
+-- (follow the main shelf). A card shelf's own plank. Designs switched off
+-- (Performance tweaks) draw the colour, as everywhere else.
+function M.plankForChoice(choice)
+    if choice == nil then return nil end
+    if choice == "colour" or not M.designsOn() then return false end
+    if choice == "oak" then return M.builtinPlank() end
+    return M._packPlank(choice)
 end
 
 -- plankRowLabel(): the plank of the theme being edited as the Plank row

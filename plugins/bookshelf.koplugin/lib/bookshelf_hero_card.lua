@@ -35,7 +35,12 @@ local Screen          = require("device").screen
 -- needed to say. Under a dark shelf on a light device nothing inverts, so
 -- black title text lands on a black panel.
 local _ink_memo = nil
+-- buildStatusRow(..., ink): the ink its text takes, for a row standing on a
+-- ground other than the shelf's (set only while it builds).
+local _ink_override = nil
 local function _ink()
+    -- type(), not ~= nil: a Blitbuffer colour raises on a compare with nil.
+    if type(_ink_override) ~= "nil" then return _ink_override end
     -- Twelve call sites per hero build; the answer moves only with the
     -- settings generation or the night flag.
     local gen   = BookshelfSettings.generation and BookshelfSettings.generation() or 0
@@ -44,7 +49,10 @@ local function _ink()
     if m and m.gen == gen and m.night == night then return m.v end
     local v
     local ok, CP = pcall(require, "lib/bookshelf_cover_progress")
-    if ok and CP and CP.ink then v = CP.ink() end
+    -- Colors > Panel text (or a panel colour's own) before the shelf's ink:
+    -- this is text on the top panel.
+    if ok and CP and CP.panelInk then v = CP.panelInk() end
+    if type(v) == "nil" and ok and CP and CP.ink then v = CP.ink() end
     _ink_memo = { gen = gen, night = night, v = v }
     return v
 end
@@ -406,7 +414,7 @@ function HeroCard.buildJobRow(region, width)
     local ok_cp, CP = pcall(require, "lib/bookshelf_cover_progress")
     if ok_cp and CP and CP.resolvedColors then
         local ok_c, colors = pcall(CP.resolvedColors)
-        if ok_c and colors and colors.panel_bg then paper = colors.panel_bg end
+        if ok_c and colors and colors.panel_bg then paper = colors.panel_tint or colors.panel_bg end
     end
     local label_size = math.max(8, math.floor((region.font_size or 14) * 0.85 + 0.5))
     local label = TextWidget:new{
@@ -463,7 +471,7 @@ end
 -- allow_job (5th): shelf surfaces pass true, so a running background job's
 -- progress takes the line's place (shown even when the line is switched
 -- off). The reader's copy of the line (bookshelf_reader_status) does not.
-function HeroCard.buildStatusRow(book, state, width, with_hairline, allow_job)
+local function _buildStatusRow(book, state, width, with_hairline, allow_job)
     if with_hairline == nil then with_hairline = true end
     local regions = Regions.read()
     local job_row = allow_job and HeroCard.buildJobRow(regions.status, width)
@@ -499,6 +507,18 @@ function HeroCard.buildStatusRow(book, state, width, with_hairline, allow_job)
         vg[#vg + 1] = VerticalSpan:new{ width = Space.padding.default }
     end
     return vg
+end
+
+-- ink (optional): the colour its text takes instead of the shelf's, for a
+-- row on another ground (the full-screen view on plain white inside a book,
+-- where a dark theme's ink would be white on white).
+function HeroCard.buildStatusRow(book, state, width, with_hairline, allow_job, ink)
+    if type(ink) == "nil" then return _buildStatusRow(book, state, width, with_hairline, allow_job) end
+    _ink_override = ink
+    local ok, row = pcall(_buildStatusRow, book, state, width, with_hairline, allow_job)
+    _ink_override = nil
+    if not ok then error(row, 0) end
+    return row
 end
 
 -- buildLine: if `expanded` contains an elastic token (%bar or %spacer),

@@ -518,12 +518,20 @@ local BorderOverlay = Widget:extend{
     thickness = nil,
     radius    = 0,
     color     = nil,    -- defaults to COLOR_BLACK
+    -- ring_only: the ring itself, not a fill for a card to cover: around
+    -- something with no card (a bare shelf module), the fill showed.
+    ring_only = nil,
 }
 function BorderOverlay:init()
     self.dimen = Geom:new{ w = self.width, h = self.height }
 end
 function BorderOverlay:paintTo(bb, x, y)
     local t = self.thickness
+    if self.ring_only then
+        bb:paintBorder(x - t, y - t, self.width + 2 * t, self.height + 2 * t, t,
+                       self.color or _selectionColor(), (self.radius or 0) + t)
+        return
+    end
     CoverProgress.paintRoundedRect(bb, x - t, y - t,
                         self.width + 2 * t, self.height + 2 * t,
                         self.color or _selectionColor(),
@@ -574,7 +582,7 @@ function CornerKeep.take(bb, x, y, w, h, r)
         local sq  = {}
         for i = 1, 4 do
             local s = Blitbuffer.new(r, r, typ)
-            s:blitFrom(bb, 0, 0, at[i][1], at[i][2], r, r)
+            s:blitFrom(require("lib/bookshelf_clip_bb").real(bb), 0, 0, at[i][1], at[i][2], r, r)
             sq[i] = { bb = s, x = at[i][1], y = at[i][2] }
         end
         return sq
@@ -978,6 +986,10 @@ local SpineWidget = InputContainer:extend{
     -- list row gives a cover -- and the row's own token lines already say
     -- what the bar and the page count would. show_progress implies this.
     show_status         = false,
+    -- With show_status: the caller leaves room below the cover for the
+    -- overhang (Recently read pads for it), so the bookmarks keep their full
+    -- dangle instead of the list rows' lift (_listBadgeClearance).
+    room_below          = false,
     -- ShelfRow's expanded mode renders book titles BELOW each cover.
     -- The bookmark glyph at the bottom-left would clash with the title
     -- if it dangled; lift it fully inside the cover when titles are
@@ -1368,7 +1380,7 @@ function SpineWidget:_renderShadowedCard(inner)
                 + GLYPH_DANGLE_GROWTH_SHARE * (widget_h - base_widget_h)
             local y_offset = card_h
                 + math.floor(dangle_h * (1 - lift) + 0.5) - widget_h
-            if list_badges then
+            if list_badges and not self.room_below then
                 y_offset = y_offset - self:_listBadgeClearance(widget_h)
             end
             local glyph_frame
@@ -1486,7 +1498,7 @@ function SpineWidget:_renderShadowedCard(inner)
                 + GLYPH_DANGLE_GROWTH_SHARE * (widget_h - base_widget_h)
             local y_offset = card_h
                 + math.floor(dangle_h * (1 - lift) + 0.5) - widget_h
-            if list_badges then
+            if list_badges and not self.room_below then
                 y_offset = y_offset - self:_listBadgeClearance(widget_h)
             end
             local glyph_frame
@@ -3471,6 +3483,31 @@ end
 -- it, such as a micro-module card that clips to what it returns.
 function SpineWidget.badgeOverhang(card_w)
     return math.ceil(CoverProgress.badgeSize(_glyphSize(card_w)) * 0.6)
+end
+
+-- What a card on the cover shelf stands on, for something that is not a
+-- book but sits among them (a shelf module): its card is the slot less
+-- SHADOW_OFFSET each way, like a cover's (_cardDimensions), and this is
+-- painted behind it -- the selection ring when selected, else the drop
+-- shadow, else nothing when the reader turned shadows off. The ring is the
+-- covers' own backdrop technique (BorderOverlay), so its inner edge is the
+-- card's own rounded edge and no corner shows between them.
+SpineWidget.SHADOW_OFFSET = SHADOW_OFFSET
+SpineWidget.CARD_RADIUS = CARD_RADIUS
+-- bare: the thing has no card (an ornament): just the ring, no fill.
+function SpineWidget.cardBackdrop(card_w, card_h, selected, bare)
+    if selected then
+        return BorderOverlay:new{ width = card_w, height = card_h,
+                                  thickness = SELECTED_BORDER, radius = CARD_RADIUS,
+                                  ring_only = bare or nil }
+    end
+    if BookshelfSettings.read("cover_no_shadow", false) == true then return nil end
+    return FrameContainer:new{
+        bordersize = 0, padding = 0,
+        padding_top = SHADOW_OFFSET, padding_left = SHADOW_OFFSET,
+        ShadowRect:new{ width = card_w, height = card_h,
+                        radius = CARD_RADIUS, exposed = SHADOW_OFFSET },
+    }
 end
 
 return SpineWidget

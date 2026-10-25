@@ -10,8 +10,9 @@ grid's own cells consuming module taps and a TapDismiss on the rest closing it.
 
 The grid is HeroModules.build, the same renderer the hero uses; in fullscreen
 placement the hero behind is the book card, so there's no _hero_cells conflict.
-Pagination is the grid's own in-grid chevrons for now; shelf-style footer paging
-is a planned refinement.
+Pages: dots in the footer band (tap one) and a sideways swipe over the grid.
+The pencil opposite the close X opens the layout editor, with this view as
+its host (model / render / footerRect).
 ]]
 local Blitbuffer      = require("ffi/blitbuffer")
 local CenterContainer = require("ui/widget/container/centercontainer")
@@ -42,6 +43,10 @@ end
 
 local MicroFullscreen = InputContainer:extend{
     name = "micro_modules_fullscreen",
+    -- Its ground is opaque (see _build), so nothing under it need paint:
+    -- without this every repaint (closing a module's colour menu, say) drew
+    -- the whole shelf beneath it too, ~400 ms on a PW5 for nothing.
+    covers_fullscreen = true,
 }
 
 -- Reader context only: the exact painted boxes of the in-reader launcher glyphs
@@ -162,58 +167,44 @@ local function _closeGlyph(bw, button_dimen, reserve_ring, focused, exact)
     return OffsetContainer:new{ x_off = box.x, y_off = box.y, frame }
 end
 
--- The start-menu hamburger, painted over the footer's start-menu button spot so
--- it stays reachable from the full-screen view (its tap opens the start menu --
--- handled in handleEvent via _burger_rect). Mirrors the bookshelf footer's
--- _buildStartMenuIcon bar geometry so the two line up.
--- exact (optional): the launcher's real painted bars box (reader context) -- the
--- bars are then reproduced from the launcher's own metrics at its own position,
--- so they don't move or resize when the overlay opens over them.
-local function _hamburgerGlyph(bw, button_dimen, exact)
+-- The layout editor's pencil, painted over the footer's start-menu button
+-- spot (or, with the start menu off, the corner opposite the close X): the
+-- same pen glyph as the plugin's other Edit buttons (the Hardcover row in the
+-- book modal), in the footer glyphs' ink. Its tap opens the layout editor
+-- (handleEvent, _pencil_rect).
+-- exact (optional): the launcher's real painted bars box (reader context), so
+-- the pencil lands where the launcher's own glyph is.
+local PENCIL = "\xEE\xAB\xAA" -- nf-md-pencil, U+EAEA
+local function _pencilGlyph(bw, button_dimen, exact)
+    local box
     if exact and exact.w and exact.w > 0 then
-        local e, ink = exact, _glyphInk(bw)
-        local Bars = Widget:extend{}
-        function Bars:getSize() return Geom:new{ w = e.w, h = e.h } end
-        function Bars:paintTo(b, x, y)
-            for i = 0, 2 do
-                b:paintRect(x, y + i * (e.bar_t + e.gap), e.w, e.bar_t, ink)
-            end
-        end
-        -- No white backing frame: the overlay's own full-screen white background
-        -- has already covered the reader page (and the real launcher) beneath.
-        return OffsetContainer:new{ x_off = e.x, y_off = e.y, Bars:new{} }
+        box = { x = exact.x, y = exact.y, w = exact.w, h = exact.h }
+    else
+        if not (button_dimen and button_dimen.w and button_dimen.w > 0) then return nil end
+        local hit_ext = (bw and bw.FOOTER_HIT_EXTENSION) or Screen:scaleBySize(12)
+        box = { x = button_dimen.x, y = button_dimen.y, w = button_dimen.w,
+                h = math.max(0, button_dimen.h - hit_ext) }
     end
-    if not (button_dimen and button_dimen.w and button_dimen.w > 0) then return nil end
-    local bd       = button_dimen
-    local hit_ext  = (bw and bw.FOOTER_HIT_EXTENSION) or Screen:scaleBySize(12)
-    local visual_h = math.max(0, bd.h - hit_ext)
-    local art   = Screen:scaleBySize(32)
-    local bar_t = (bw and bw.FOOTER_STROKE_W) or math.max(1, math.floor(art / 14))
-    local bar_w = art
-    local span0 = math.floor(art * 0.62)
-    local gap   = math.max(1, math.floor((span0 - 3 * bar_t) / 2))
-    local span  = 3 * bar_t + 2 * gap
-    local ink   = _glyphInk(bw)
-    local Bars = Widget:extend{}
-    function Bars:getSize() return Geom:new{ w = bar_w, h = art } end
-    function Bars:paintTo(b, x, y)
-        local top = y + math.floor((art - span) / 2)
-        for i = 0, 2 do
-            b:paintRect(x, top + i * (bar_t + gap), bar_w, bar_t, ink)
-        end
-    end
+    local TextWidget = require("lib/bookshelf_colour_text")
+    local BFont = require("lib/bookshelf_fonts")
+    local glyph = TextWidget:new{
+        text    = PENCIL,
+        face    = BFont:getFace("symbols", 26),
+        fgcolor = _glyphInk(bw),
+    }
     local frame = FrameContainer:new{
         background = _glyphBacking(bw),
         bordersize = 0, padding = 0, margin = 0,
         CenterContainer:new{
-            dimen = Geom:new{ w = bd.w, h = visual_h },
-            Bars:new{},
+            dimen = Geom:new{ w = box.w, h = box.h },
+            glyph,
         },
     }
-    return OffsetContainer:new{ x_off = bd.x, y_off = bd.y, frame }
+    return OffsetContainer:new{ x_off = box.x, y_off = box.y, frame }
 end
 
 function MicroFullscreen.open(bw, button_dimen, footer_h)
+    MicroFullscreen.hold_paint = nil
     local self = MicroFullscreen:new{
         bw           = bw,
         button_dimen = button_dimen,
@@ -252,6 +243,8 @@ function MicroFullscreen:init()
 end
 
 function MicroFullscreen:_build()
+    local Perf = require("lib/bookshelf_perf")
+    local t_build = Perf.now()
     local sw, sh = Screen:getWidth(), Screen:getHeight()
     -- Track the built size so paintTo can re-layout on resize / rotation.
     self._built_w, self._built_h = sw, sh
@@ -273,10 +266,20 @@ function MicroFullscreen:_build()
     local FSModel     = require("lib/bookshelf_fullscreen_modules_model")
     local HeroCard    = require("lib/bookshelf_hero_card")
 
+    -- The ground: the shelf's wallpaper (see bg below), else plain white.
+    -- Decided first, as the status line's ink follows it: inside a book there
+    -- is no wallpaper, and a dark theme's white ink vanished on the white.
+    local wall
+    if self.bw and self.bw._wallpaperWidget then
+        local ok_bg, w = pcall(function() return self.bw:_wallpaperWidget() end)
+        if ok_bg and w then wall = w end
+    end
+    self._status_ink = (not wall) and Blitbuffer.COLOR_BLACK or nil
+
     -- Full-width status line + hairline at the top, like the in-hero grid.
     local current = (self.bw._currentHeroBook and self.bw:_currentHeroBook()) or nil
     local state   = (self.bw._buildDeviceState and self.bw:_buildDeviceState()) or nil
-    local ok_s, status_row = pcall(HeroCard.buildStatusRow, current, state, content_w, true)
+    local ok_s, status_row = pcall(HeroCard.buildStatusRow, current, state, content_w, true, nil, self._status_ink)
     if not ok_s then status_row = nil end
     local status_h = (status_row and status_row:getSize().h) or 0
     local gap      = math.max(1, math.floor(margin / 2))
@@ -348,10 +351,22 @@ function MicroFullscreen:_build()
     local ok, grid = pcall(HeroModules.build, self.bw, content_w, grid_h, PAD,
         { items = items, focusable = self._dpad or nil,
           focused_id = (not self._focus_close) and self._cursor_id or nil,
-          surface = "fullscreen" })
+          surface = "fullscreen", page = self._page, edit = self._edit })
     if not ok or not grid then
         grid = Widget:new{}  -- defensive: empty, still closeable
     end
+    -- The page the grid settled on (it snaps a stale page to a real one), and
+    -- where the grid sits, for the page swipe.
+    -- Keep this view's own copy: bw._module_grid is shared with the top panel,
+    -- whose rebuilds (a file poll, a cover load) can overwrite it while this
+    -- view is open.
+    local info = self.bw and self.bw._module_grid
+    if info and info.surface == "fullscreen" then
+        self._grid_info = info
+        self._page = info.page
+    end
+    info = self._grid_info
+    self._grid_rect = Geom:new{ x = margin, y = grid_top, w = content_w, h = grid_h }
 
     local col = VerticalGroup:new{ align = "left" }
     self._status_rec = nil
@@ -377,11 +392,7 @@ function MicroFullscreen:_build()
     -- picture -- so the library's backdrop carries into this view instead of
     -- the overlay reading as a different app. Falls back to white whenever
     -- there is no wallpaper, or it cannot be decoded.
-    local bg
-    if self.bw and self.bw._wallpaperWidget then
-        local ok_bg, w = pcall(function() return self.bw:_wallpaperWidget() end)
-        if ok_bg and w then bg = w end
-    end
+    local bg = wall
     if not bg then
         bg = FrameContainer:new{
             background = Blitbuffer.COLOR_WHITE,
@@ -477,25 +488,52 @@ function MicroFullscreen:_build()
         self._close_rect = nil
     end
 
-    -- Keep the start-menu hamburger reachable from the full-screen view, painted
-    -- over the footer's start-menu button spot (its tap opens the start menu --
-    -- see _burger_rect in handleEvent). Hidden when the start menu is off.
-    local burger_dimen = self.bw and self.bw._burger_dimen
-    if burger_dimen and self.bw._startMenuPosition
-            and self.bw:_startMenuPosition() ~= "off" then
-        local hb = _hamburgerGlyph(self.bw, burger_dimen,
-            launcher and launcher.bars or nil)
-        if hb then
-            children[#children + 1] = hb
-            self._burger_rect = Geom:new{ x = burger_dimen.x, y = burger_dimen.y,
-                w = burger_dimen.w, h = burger_dimen.h }
-        else
-            self._burger_rect = nil
+    -- The layout editor's pencil, over the footer's start-menu button spot; with
+    -- the start menu off, in the corner opposite the close X.
+    local pencil_dimen = self.bw and self.bw._burger_dimen
+    if not (pencil_dimen and self.bw._startMenuPosition
+            and self.bw:_startMenuPosition() ~= "off") then
+        pencil_dimen = nil
+        local ok_rb, ReaderButtons = pcall(require, "lib/bookshelf_reader_buttons")
+        if ok_rb and ReaderButtons and close_dimen then
+            local close_side = (close_dimen.x + close_dimen.w / 2 < sw / 2) and "left" or "right"
+            pencil_dimen = ReaderButtons.gridTapRect(close_side == "left" and "right" or "left")
         end
+    end
+    local pg = pencil_dimen and _pencilGlyph(self.bw, pencil_dimen, launcher and launcher.bars or nil)
+    if pg and not self._edit then
+        children[#children + 1] = pg
+        self._pencil_rect = Geom:new{ x = pencil_dimen.x, y = pencil_dimen.y,
+            w = pencil_dimen.w, h = pencil_dimen.h }
     else
-        self._burger_rect = nil
+        self._pencil_rect = nil
+    end
+
+    -- Page dots in the middle of the footer band when there is more than one
+    -- page (the editor brings its own footer).
+    self._footer_rect = fp_x and Geom:new{ x = fp_x, y = fp_y, w = fp_w, h = fp_h } or nil
+    self._dots = nil
+    local pages = info and info.surface == "fullscreen" and info.pages
+    if pages and #pages > 1 and not self._edit then
+        local band = self._footer_rect
+            or Geom:new{ x = 0, y = sh - self.footer_h, w = sw, h = self.footer_h }
+        -- On the same line as the close X and the pencil: those centre in the
+        -- button's visible height, which leaves out the tap extension below it.
+        local dy, dh = band.y, band.h
+        if close_dimen and close_dimen.h then
+            local hit_ext = (self.bw and self.bw.FOOTER_HIT_EXTENSION) or Screen:scaleBySize(12)
+            dy, dh = close_dimen.y, math.max(1, close_dimen.h - hit_ext)
+        end
+        local dw = math.floor(band.w / 2)
+        -- Footer-sized: big enough to see and to tap one.
+        local dots = HeroModules.pageDots(#pages, HeroModules.pageIndex(info), dw, dh,
+            Screen:scaleBySize(16), Screen:scaleBySize(44))
+        children[#children + 1] = OffsetContainer:new{
+            x_off = band.x + math.floor((band.w - dw) / 2), y_off = dy, dots }
+        self._dots = dots
     end
     self[1] = children
+    Perf.part("build view", t_build)
 end
 
 -- Gesture handling. The overlay is the topmost widget, and UIManager:sendEvent
@@ -530,17 +568,42 @@ function MicroFullscreen:handleEvent(event)
         if ev and ev.ges == "tap" and _tapInRect(ev, self._close_rect) then
             return self:onTapClose()
         end
-        -- The hamburger opens the start menu (over this overlay), so it stays
-        -- reachable from the full-screen view.
-        if ev and ev.ges == "tap" and _tapInRect(ev, self._burger_rect) then
-            if self.bw and self.bw._openStartMenu then self.bw:_openStartMenu() end
+        -- The pencil opens the layout editor on this view.
+        if ev and ev.ges == "tap" and _tapInRect(ev, self._pencil_rect) then
+            local ok, Editor = pcall(require, "lib/bookshelf_module_grid_editor")
+            if ok and Editor then
+                -- pcall: in the reader the view runs on a context shim, and an
+                -- editor that fails to open must not take the reader down.
+                local ok_open, err = pcall(Editor.open, { bw = self.bw, host = self })
+                if not ok_open then logger.warn("[bookshelf] layout editor failed to open:", err) end
+            end
+            return true
+        end
+        -- A footer dot goes to its page.
+        if ev and ev.ges == "tap" and self._dots and _tapInRect(ev, self._dots.dimen) then
+            local Grid = require("lib/bookshelf_module_grid")
+            local i = Grid.dotAt(self._dots.rects, self._dots.spacing,
+                ev.pos.x - self._dots.dimen.x)
+            local info = self._grid_info
+            local p = i and info and info.pages and info.pages[i]
+            if p and p ~= self._page then
+                self._page = p
+                self:rebuildGrid()
+            end
+            return true
+        end
+        -- A sideways swipe over the grid turns the page. Swipes elsewhere (the
+        -- screen edges) stay KOReader's.
+        if ev and ev.ges == "swipe" and (ev.direction == "west" or ev.direction == "east")
+                and _tapInRect(ev, self._grid_rect) then
+            self:_turnPage(ev.direction == "west" and 1 or -1)
             return true
         end
 
         -- KOReader-native gestures (top-edge menu tap/swipe, edge
         -- brightness/warmth swipes, corner taps): the same zone walk as
         -- BookshelfWidget:handleEvent, on FileManager or the parked reader.
-        if require("lib/bookshelf_gesture_zones").tryLiveZones(ev) then return true end
+        if require("lib/bookshelf_gesture_zones").tryLiveZones(ev, { open_book = true }) then return true end
 
         -- Fallback: a tap on empty space dismisses the overlay.
         if ev and ev.ges == "tap" then return self:onTapClose() end
@@ -556,16 +619,69 @@ function MicroFullscreen:handleEvent(event)
     -- does: FM, or the parked reader once a book has been opened and closed.
     -- This used to know FM only, so every card went dead after the first book
     -- (#533).
-    return require("lib/bookshelf_gesture_zones").forwardToLive(event, self)
+    return require("lib/bookshelf_gesture_zones").forwardToLive(event, self, { open_book = true })
 end
 
 -- Re-layout on screen resize / rotation (desktop window resize), the same way
 -- the main bookshelf view rebuilds in its paintTo on a size change.
+--
+-- hold_paint (main.lua onShowingReader): a book is opening from this view.
+-- Inside a book the old reader closes first and marks everything under it
+-- dirty, then showReader forces a repaint, which put the opening book back on
+-- its shelf before it opened (maintainer, PW5). The screen keeps the opening
+-- pose instead, as the shelf does with _suppress_transition_paint.
 function MicroFullscreen:paintTo(bb, x, y)
+    if MicroFullscreen.hold_paint then return end
     if Screen:getWidth() ~= self._built_w or Screen:getHeight() ~= self._built_h then
         self:_build()
     end
+    local Perf = require("lib/bookshelf_perf")
+    local t = Perf.now()
     InputContainer.paintTo(self, bb, x, y)
+    Perf.part("paint view", t)
+end
+
+-- Step through the pages that hold modules; no-op at either end.
+function MicroFullscreen:_turnPage(delta)
+    local info = self._grid_info
+    local pages = info and info.pages or { 1 }
+    local idx = 1
+    for i, p in ipairs(pages) do if p == self._page then idx = i end end
+    local nxt = pages[idx + delta]
+    if not nxt then return false end
+    self._page = nxt
+    self:rebuildGrid()
+    return true
+end
+
+-- ── Layout-editor host (see bookshelf_module_grid_editor) ────────────────────
+function MicroFullscreen:model()
+    return require("lib/bookshelf_fullscreen_modules_model")
+end
+function MicroFullscreen:render(edit)
+    self._edit = edit
+    if edit and edit.page then self._page = edit.page end
+    self:rebuildGrid()
+end
+-- reselect(edit) -> true when only the selection changed and the grid as
+-- built can show it: the outline and the dimming read edit.selected_id as
+-- they paint, so a repaint does, without the 150-200 ms rebuild of every
+-- module (PW5).
+function MicroFullscreen:reselect(edit)
+    local cur = self._edit
+    if not (cur and edit and edit.page == cur.page and edit.items == cur.items
+            and edit.boxes == cur.boxes) then
+        return false
+    end
+    cur.selected_id = edit.selected_id
+    UIManager:setDirty(self, "ui")
+    return true
+end
+function MicroFullscreen:footerRect()
+    return self._footer_rect
+end
+function MicroFullscreen:gridInfo()
+    return self._grid_info
 end
 
 -- Rebuild the overlay's grid in place after a module add/edit/remove, so it
@@ -648,7 +764,7 @@ function MicroFullscreen:refreshStatus()
     local bw = self.bw
     local current = (bw and bw._currentHeroBook and bw:_currentHeroBook()) or nil
     local state   = (bw and bw._buildDeviceState and bw:_buildDeviceState()) or nil
-    local ok, row = pcall(HeroCard.buildStatusRow, current, state, rec.content_w, true)
+    local ok, row = pcall(HeroCard.buildStatusRow, current, state, rec.content_w, true, nil, self._status_ink)
     if not ok or not row then return false end
     rec.group[rec.idx] = row
     if rec.group.resetLayout then rec.group:resetLayout() end

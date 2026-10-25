@@ -150,9 +150,22 @@ end
 
 local function _chipThemeFlips() return _memoised("theme_flips", _chipThemeFlipsRaw) end
 
+-- _panelChipInk() -> Colors > Panel text (or the text a panel colour
+-- brings) when the shelf menu has no bar, so its labels stand on the panel;
+-- nil with the bar, whose own colour (Shelf menu background) they stand on.
+local function _panelChipInk()
+    local ok_tp, TP = pcall(require, "lib/bookshelf_theme_pack")
+    if not (ok_tp and TP and TP.partRead) then return nil end
+    if TP.partRead("chip_bar_transparent") ~= true then return nil end
+    local ok, CP = pcall(require, "lib/bookshelf_cover_progress")
+    return ok and CP and CP.panelInk and CP.panelInk() or nil
+end
+
 local function _chipInkRaw()
     local ok, CP = pcall(require, "lib/bookshelf_cover_progress")
     if not (ok and CP and CP.theme and CP.ink) then return Blitbuffer.COLOR_BLACK end
+    local panel = _panelChipInk()
+    if panel then return panel end
     local ok_t, dark, inverting = pcall(CP.theme)
     if not ok_t then return Blitbuffer.COLOR_BLACK end
     if (dark and true or false) == (inverting and true or false) then
@@ -222,9 +235,9 @@ local function _imageSegment(name, size, ink, inverted)
     return icon
 end
 
-local function _buildLabelContent(label, size, max_w, ink, inverted)
+local function _buildLabelContent(label, size, max_w, ink, inverted, own_case)
     ink = ink or _chipInk()
-    local segments = TextSegments.labelSegments(_chipCase(label))
+    local segments = TextSegments.labelSegments(own_case and label or _chipCase(label))
     if #segments == 0 then
         local empty_face, empty_bold = BFont:getFace("infofont", size)
         return TextWidget:new{
@@ -473,6 +486,16 @@ end
 local function _activeChipColors()
     local fill, ink = _selectedChipColors()
     if type(fill) ~= "nil" then return fill, ink end
+    -- No bar, on a coloured panel: the panel's ink as fill, lettered in the
+    -- panel's colour (the bar's colour was black on black over a pale one).
+    local panel_ink = _panelChipInk()
+    if type(panel_ink) ~= "nil" then
+        local ok, CP = pcall(require, "lib/bookshelf_cover_progress")
+        local ok_c, colors = pcall(function() return CP.resolvedColors() end)
+        if ok and ok_c and colors and type(colors.panel_tint) ~= "nil" then
+            return panel_ink, colors.panel_tint
+        end
+    end
     if not _chipThemeFlips() then return nil end
     local ok, CP = pcall(require, "lib/bookshelf_cover_progress")
     if not (ok and CP and CP.resolvedColors) then return nil end
@@ -1808,7 +1831,7 @@ function ChipBar:_initBreadcrumb()
             fgcolor = (function()
                 local ok, CP = pcall(require, "lib/bookshelf_cover_progress")
                 if ok and CP and CP.ink then
-                    local c = CP.ink()
+                    local c = _panelChipInk() or CP.ink()
                     if c then return c end
                 end
                 return Blitbuffer.COLOR_BLACK
@@ -2169,6 +2192,13 @@ function ChipBar:onHoldStrip(_, ges)
         end
     end
     return false
+end
+-- buildLabel(label, size, max_w, ink) -> a widget drawing a shelf label as a
+-- chip does -- text, icon glyphs and [icon=NAME] pictures -- in the label's
+-- own case (not the chips' case setting). For headings elsewhere, such as the
+-- Shelf micro-module.
+function ChipBar.buildLabel(label, size, max_w, ink)
+    return _buildLabelContent(label, size, max_w, ink, false, true)
 end
 
 return ChipBar

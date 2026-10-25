@@ -18,12 +18,18 @@ return {
     keep_open = true,                 -- optional: tap acts without closing the menu
                                       -- (or a function(ctx) -> bool, resolved at tap time)
     wants_minute_tick = true,         -- optional: re-render every minute (clocks)
+    on_minute = function(ctx) ... end, -- optional: once a minute while on screen, no re-render
     show_settings = function(ctx) ... end, -- optional settings dialog
     -- Hero-grid hints (all optional) -- see "Hero-grid hints" below:
     aspect       = "square",          -- pack as a square (clocks, icon cards)
+    min_w        = 2,                 -- smallest size in grid cells (width)
+    min_h        = 1,                 -- smallest size in grid cells (height)
     network      = { "api.example.com" }, -- data-source domains; flags network-required
     hero_only    = true,              -- hide from the start-menu picker
     tap_feedback = true,              -- instant pressed border on tap (launchers)
+    -- Where it's listed in the Add picker (both optional) -- see "Picker chips":
+    pack         = "My Bundle",       -- a chip of its own, shared by the bundle's modules
+    category     = "reading",         -- or one of Bookshelf's: shelf, reading, time, fun, actions
 }
 ```
 
@@ -136,10 +142,18 @@ fields `render` reads:
   so the same module key can appear multiple times with different settings
   (see **Per-instance config** below). Most modules ignore it.
 - `ctx.surface` — where you're rendering: `"hero"`, `"fullscreen"`,
-  `"start_menu"`, or `"picker"` (the Add preview). Adapt layout if you need to;
+  `"shelf"` (among a shelf's books), `"start_menu"`, or `"picker"` (the Add
+  preview). Adapt layout if you need to;
   most modules ignore it.
 - `ctx.bw`, `ctx.menu` — the bookshelf widget and start menu when available (may
   be `nil`, e.g. in the picker); mainly for `on_tap`.
+- `ctx.colors` - your module's own colours (the `colors` spec field, see
+  **Colours**), keyed by id, ready to paint: what the reader picked for the
+  look on screen, else your defaults. Always a table.
+- `ctx.card` - the card your module stands on, for a module that paints a
+  card of its own (see **Colours**): `custom` (the reader set this card with
+  the palette icon), `bg`, `ink`, `muted`, `border_on` and `border`, ready to
+  paint. May be `nil` (the start menu, the picker).
 
 A common first line just pulls what you need:
 `local width, scale_pct, refresh = ctx.width, ctx.scale, ctx.refresh`.
@@ -180,6 +194,15 @@ Set `wants_minute_tick = true` if your card shows wall-clock time (a clock): the
 hero re-renders it once a minute (scoped) so it stays current. Read the time in
 `render` as usual.
 
+For a card that polls (a sensor reading, a feed), declare
+`on_minute = function(ctx)` instead. It runs once a minute while the card is on
+screen (the hero grid or the full-screen view, current page only; never under
+the reader or while the device sleeps), and re-renders nothing by itself: check
+whether your data is due, fetch it, and call `ctx.refresh()` only when something
+changed, so an unchanged card costs no e-ink refresh. `ctx` carries `entry`,
+`config` (read-only), `bw`, `surface` and `refresh`. Keep it cheap and never
+block: schedule the fetch.
+
 ## Storing settings
 
 Two kinds of settings, two APIs. **Neither writes the main `bookshelf.lua`** —
@@ -207,9 +230,10 @@ persist (only in `on_tap`/`show_settings` — in `render` the config is read-onl
 so `:set` there is a no-op). Config travels with the card and is removed when the
 card is deleted — no orphans. To configure a module interactively at add time,
 declare `on_add = function(host_ctx, done)`: gather fields and call
-`done(fields)` to seed the new entry, or `done(nil)` to cancel. Hosts that don't
-recognise `on_add` just insert the bare entry. See `action.lua` and
-`countdown.lua`.
+`done(fields)` to seed the new entry, or `done(nil)` to cancel. `done` may be
+called later, after async work (a picker, a network fetch); call it exactly
+once. Hosts that don't recognise `on_add` just insert the bare entry. See
+`action.lua`, `countdown.lua` and `ornament.lua`.
 
 (Under the hood this is the entry table + a host save; you can still read raw
 fields off `ctx.entry` if you need to, but `ctx.config` is the supported path.)
@@ -245,11 +269,26 @@ blocking one will freeze the UI.
 These tune how a module behaves in the home-screen hero grid. All are optional;
 omit them and you get the sensible default (a flex/text card offered everywhere).
 
-- `aspect = "square"` — pack this card as a square (the grid fits more per row
-  and centres your content) instead of letting it stretch across the row. Use it
-  for clocks and icon/launcher cards; leave it off for text cards, which should
-  fill the row width. The 6th `render` arg `shape` reports the resulting cell
-  aspect (see **Aspect** above).
+- `aspect = "square"` — the card starts as a single square cell when it is
+  added (clocks, icon/launcher cards); other cards start two cells wide. Users
+  resize either freely afterwards. `ctx.shape` reports the cell's actual aspect
+  (see **Aspect** above).
+- `bare = true` — draw without the card (no fill, no border), straight onto
+  the wallpaper or page, as the Ornament module does. Your render must then
+  fit its cell itself: it is centred, not clipped.
+- `start_w` / `start_h` — the size, in grid cells, your card starts at when it
+  is added (the Ornament module starts at 1 x 1, to fill a small gap). Your
+  `min_w` / `min_h` still win. Leave them off for the default above.
+- `min_w` / `min_h` — the smallest size, in grid cells, the layout editor lets
+  your card be sized to (whole numbers, 1 or more). Use them when the card has
+  nothing useful to show below that size. The grid clamps them to its own size,
+  so a hint bigger than a small screen's grid still loads. Leave them off and
+  the card accepts any size.
+- `cache_key = function(entry) return ... end` — in the layout editor each
+  module's picture is kept until its own settings, its place or the minute
+  change. If yours shows something else that can change meanwhile (the Shelf
+  module shows a shelf, edited elsewhere), return a string that changes with
+  it.
 - `network = { "host", ... }` — the data-source domains your module fetches from.
   Declaring it marks the module network-required: the Add picker shows a
   "Network required / Data provided by: …" panel for it instead of live-rendering
@@ -261,10 +300,27 @@ omit them and you get the sensible default (a flex/text card offered everywhere)
   for launcher-style cards that *do* something on tap. Leave it off for passive
   cards (a tap that only re-rolls or does nothing shouldn't flash a border).
 
-Arrangement is the **host's** job, not yours: the user moves a card, resizes its
-width, and assigns it to one of the grid's pages from the long-press menu; the
-grid paginates and renders only the visible page. A module never reads or writes
+Arrangement is the **host's** job, not yours: in the layout editor (the pencil,
+or long-press a card) the user moves, resizes and pages cards on the grid; the
+grid renders only the visible page. A module never reads or writes
 its page/size/position — just render your content and let the host place it.
+
+## Picker chips (`pack`, `category`)
+
+The Add picker has a chip per group: Bookshelf's categories (Shelf & books,
+Reading, Time & device, Fun & info, Actions), one per module pack, and My
+modules. A module lands in one of them without saying anything:
+
+- A module from a plugin pack (`bookshelf_modules/` in a `.koplugin`) is
+  listed under that plugin's name.
+- A module dropped in your own modules folder whose title starts `Name · `
+  (for example `"Reading Log · Activity rings"`) is listed under `Name`, with
+  every other module that shares the prefix.
+- Anything else in your folder is under My modules.
+
+`pack = "Name"` puts a module under its own chip by name, whatever its file
+or title; `category = "reading"` (or `shelf`, `time`, `fun`, `actions`)
+puts it in one of Bookshelf's.
 
 ## `summary`
 
@@ -309,10 +365,27 @@ Rects are in the coordinate space of the widget you RETURN from `render`
 (its top-left is 0,0) - never screen coordinates. The host owns all geometry:
 the cell's painted position, card chrome and the clip container's centring are
 translated for you, on every surface (start menu, flyouts, hero,
-full-screen), so the same declaration works everywhere. Never register your
-own gesture zones or reconstruct screen positions inside a module - render
-output is painted into an offscreen buffer, so render-time coordinates are
-wrong by construction (see lib/bookshelf_clip_container.lua's gesture note).
+full-screen), so the same declaration works everywhere. Never reconstruct
+screen positions inside a module: render output may be painted into an
+offscreen buffer, so render-time coordinates are wrong by construction.
+
+### Widgets with their own taps
+
+The widget you return may also handle taps itself: a `Button`, or any
+`InputContainer` with `ges_events`, the way KOReader's own widgets do. The host
+passes taps and double taps to it in the frame it was painted in (on a card,
+the clip container translates them; see lib/bookshelf_clip_container.lua), and
+a tap your widgets don't take still reaches `on_tap`. Long-press and swipes
+stay the host's: long-press edits the layout, swipes turn pages. Tap regions
+remain the lighter choice for a module of your own; this is for modules built
+from ready-made widgets, another plugin's included.
+
+On a card, your widget is painted into an offscreen buffer (that's what keeps a
+module inside its cell), so a widget that places a popup from its own position
+would put it in the wrong place. Set `in_place = true` and it's painted straight
+onto its card instead, the way a `bare` module is: popups land where they
+should, but nothing stops it drawing past its cell, so size it to `ctx.width`
+and `ctx.height`.
 
 At tap time `on_tap(ctx)` gets `ctx.tapped_region` - the `id` of the first
 declared region containing the tap, or `nil`. **Always handle `nil`**: D-pad
@@ -360,6 +433,43 @@ weaker e-ink panels. A `TextBoxWidget` paints an opaque background, so set its
 `bgcolor = Kit.CARD_BG` (fitText does this for you) or the text sits on a white
 bar.
 
+The reader can give each module its own card: tap the palette icon in the
+layout editor's toolbar for **Card background**, **Card border** (on or off),
+**Card border color** and **Card text**, each kept separately for the light and
+dark looks and stored on the module. You don't need to do anything for this:
+`Kit.CARD_BG`, `Kit.COLOR_PRIMARY` and `Kit.COLOR_MUTED` are pointed at that
+card's colours while your module renders. A card with its own background gets
+black or white text, whichever reads on it, unless the reader picks a text
+colour too.
+
+If your module paints a card of its own over Bookshelf's (its own colours, its
+own frame), check `ctx.card.custom`: when it is true the reader has set this
+card's colours or border with the palette icon, so draw on `ctx.card` instead
+(`bg` and `ink`, and a border of `border` only when `border_on`). Those
+settings are meant to reach every module; without this they are hidden under
+your card.
+
+Colours of your own (a bar, an accent) can go in the same menu. List them in
+the spec, and read them back from `ctx.colors`:
+
+```lua
+colors = {
+    { id = "bar", text = _("Bar color"),
+      default = { hex = "#4A7A9C" },        -- as the reader sees it, light look
+      default_dark = { hex = "#9CC4E0" } }, -- and dark look (optional)
+},
+render = function(ctx)
+    local bar = ctx.colors.bar   -- a Blitbuffer colour, ready to paint
+    ...
+end,
+```
+
+`default` and `default_dark` are storage shapes like the Colors menu's:
+`{ hex = "#RRGGBB" }` or `{ grey = 0..255 }`. On a greyscale screen a hex
+colour is drawn as its grey. Ids may not be `bg`, `border`, `border_color` or
+`ink` (the card's own); a spec that breaks this is skipped with a warning in
+the log. A bare module (no card) can declare colours too: only its own appear.
+
 ## Translations
 
 Wrap user-visible strings in `_("...")` with a string **literal** — the file has
@@ -385,8 +495,60 @@ registers every `.lua` file in both dirs; an invalid spec (bad/missing
 `key`/`title`/`render`, or a wrong-typed optional field) is logged and skipped,
 and a `render` that errors is contained — it never takes down the menu or hero.
 
+A file may also return a **list** of specs, `{ spec1, spec2, ... }`: for a pack
+that finds out when it loads what it can offer (one module per thing it found,
+or an empty list when what it needs isn't installed). Each spec is checked on
+its own, and the same rules apply to each.
+
 `key` is a stable API (saved user menus reference modules by it) — pick one and
 never change it. For a module shipped in this repo,
 `tests/_test_start_menu_modules.lua` auto-checks the contract (including
 `summary`, the load-cleanly rule, and the no-`StartMenu._live` rule) on every
 file here — you do **not** add it to any list; the test covers it automatically.
+
+## Publishing a module pack (installs and updates on the device)
+
+The drop-in folder above works, but it needs a computer. To let readers install
+and update your modules from the device, ship them as a **module pack**: a
+small KOReader plugin with a `bookshelf_modules/` folder. KOReader's plugin
+stores (App Store, Storefront) already install and update plugins, so a pack
+published as one installs and updates with no help from Bookshelf, and
+Bookshelf never goes online for it.
+
+```
+readinglog.koplugin/
+  _meta.lua             -- name, fullname, description, version
+  main.lua              -- KOReader needs one; it can do nothing
+  bookshelf_modules/
+    rings.lua           -- module files, exactly as in the drop-in folder
+    week.lua
+```
+
+A `main.lua` that does nothing is enough:
+
+```lua
+local WidgetContainer = require("ui/widget/container/widgetcontainer")
+return WidgetContainer:extend{ name = "readinglog", is_doc_only = false }
+```
+
+Bookshelf looks for `bookshelf_modules/` in every plugin folder KOReader loads
+from (its own `plugins` folder and any `extra_plugin_paths`), and skips a pack
+switched off in KOReader's plugin manager. Module files there follow every rule
+in this guide; a pack can keep shared code in a subfolder and `dofile` it from
+its module files. Every module file is called with its own folder as `...`
+(the drop-in and bundled folders too), so find the shared code from there:
+
+```lua
+local MODULE_DIR = ...   -- e.g. .../readinglog.koplugin/bookshelf_modules
+local Shared = dofile(MODULE_DIR .. "/../shared/stats.lua")
+```
+
+**Precedence.** A module in the user drop-in folder wins over one of the same
+key in a pack, and a pack's wins over a bundled one. Keep your keys distinctive
+(`readinglog_rings`, not `rings`) so two packs never collide.
+
+**Getting listed.** Publish the pack as a GitHub repository whose release
+assets include the `.koplugin` zip:
+
+- App Store finds repositories tagged with the `koreader-plugin` topic.
+- Storefront lists plugins from its catalogue; ask its maintainer to add yours.

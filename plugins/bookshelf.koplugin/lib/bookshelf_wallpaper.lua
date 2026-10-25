@@ -375,6 +375,7 @@ function M.scrim(bb, x, y, w, h, colour, strength, radius)
         if opaque and alpha < 255 and M._lutBlend(bb, spans, tint, alpha, Blitbuffer) then
             return
         end
+        if not opaque and M._blendInCopy(bb, spans, tint, Blitbuffer) then return end
         for _i, s in ipairs(spans) do
             if opaque then
                 bb:paintRect(s.x, s.y, s.w, s.h, colour)
@@ -383,6 +384,41 @@ function M.scrim(bb, x, y, w, h, colour, strength, radius)
             end
         end
     end)
+    return ok
+end
+
+-- _blendInCopy(bb, spans, tint, Blitbuffer) -> true when the spans were
+-- blended. On the screen's own buffer a blend reads every pixel back, and a
+-- Kindle's framebuffer is slow memory to read: the micro-modules view's
+-- full-screen panel cost ~650 ms on a PW5, where the same blend in a copy is
+-- 23 ms and reading the area once 70 ms (rig device/editdrive.koplugin). So
+-- the area is read once, blended in memory and written back. false, with
+-- nothing painted, for any other buffer (blended in place, as before) or an
+-- inverted one (_blendThroughInverse's).
+function M._blendInCopy(bb, spans, tint, Blitbuffer)
+    if not (Blitbuffer.new and bb.blitFrom and #spans > 0) then return false end
+    local ok_d, Device = pcall(require, "device")
+    local screen = ok_d and Device and Device.screen
+    if not (screen and rawequal(bb, screen.bb)) then return false end
+    if type(bb.getInverse) == "function" and bb:getInverse() ~= 0 then return false end
+    local x0, y0, x1, y1 = math.huge, math.huge, -math.huge, -math.huge
+    for _i, s in ipairs(spans) do
+        if s.x < x0 then x0 = s.x end
+        if s.y < y0 then y0 = s.y end
+        if s.x + s.w > x1 then x1 = s.x + s.w end
+        if s.y + s.h > y1 then y1 = s.y + s.h end
+    end
+    local w, h = x1 - x0, y1 - y0
+    if w <= 0 or h <= 0 then return false end
+    local tmp = Blitbuffer.new(w, h, bb:getType())
+    local ok = pcall(function()
+        tmp:blitFrom(require("lib/bookshelf_clip_bb").real(bb), 0, 0, x0, y0, w, h)
+        for _i, s in ipairs(spans) do
+            tmp:blendRectRGB32(s.x - x0, s.y - y0, s.w, s.h, tint)
+        end
+        bb:blitFrom(tmp, x0, y0, 0, 0, w, h)
+    end)
+    tmp:free()
     return ok
 end
 
@@ -623,6 +659,29 @@ local function frostBuild(src_bb, x, y, w, h, tint)
     return out
 end
 
+-- The cover disk cache, for decoded pictures (M._disk_cache: test seam;
+-- false switches it off).
+local function diskCache()
+    if M._disk_cache == nil then
+        local ok, DC = pcall(require, "lib/bookshelf_cover_disk_cache")
+        M._disk_cache = ok and DC or false
+    end
+    return M._disk_cache or nil
+end
+-- diskKey(path, w, h) -> the cache key for this picture at this size, or nil.
+local function diskKey(path, w, h)
+    local ok, key = pcall(function()
+        local lfs = require("libs/libkoreader-lfs")
+        local attr = lfs.attributes(path)
+        if not (attr and attr.modification) then return nil end
+        local Screen = require("device").screen
+        local fbt = Screen and Screen.bb and Screen.bb.getType and Screen.bb:getType()
+        return string.format("wallpaper:%s|%s|%s|%dx%d|%s", path,
+            tostring(attr.modification), tostring(attr.size), w, h, tostring(fbt))
+    end)
+    return ok and key or nil
+end
+
 -- frostFor(x, y, w, h, tint) -> the cached blur for exactly that panel rect
 -- (and, dithered, that tint) over the current picture, built on a miss; nil
 -- without a picture.
@@ -637,7 +696,22 @@ local function frostFor(x, y, w, h, tint)
             return e.bb
         end
     end
-    local bb = (M._frost_build or frostBuild)(bg.bb, x, y, w, h, tint)
+    -- The finished blur outlives the session too, beside the picture it was
+    -- made from (the first full-screen view of a session built its panel's
+    -- blur, ~0.2-0.8 s on the PW5). Keyed on the picture's own disk key, the
+    -- mode it is in, the rect, the tint and the blur's constants.
+    local fkey
+    if bg.dkey and not M._frost_build and diskCache() then
+        local Frost = require("lib/bookshelf_frost")
+        fkey = string.format("frost:%s|%s|%d,%d,%dx%d|%s|%s|%d/%d/%d", bg.dkey,
+            M._bg_key:sub(-2) == "|n" and "n" or "d", x, y, w, h, tostring(tc), tostring(ts),
+            Frost.FACTOR, Frost.RADIUS, Frost.PASSES)
+    end
+    local bb = fkey and diskCache().load(fkey)
+    if not bb then
+        bb = (M._frost_build or frostBuild)(bg.bb, x, y, w, h, tint)
+        if bb and fkey then pcall(diskCache().store, fkey, bb) end
+    end
     if not bb then return nil end
     table.insert(M._frost, 1, { bg_key = M._bg_key, x = x, y = y, w = w, h = h, bb = bb,
                                 tint_key = tc, tint_strength = ts })
@@ -1900,7 +1974,7 @@ function M.toScreenType(bb)
         if not (fb and fb.getType and fb:getType() == Blitbuffer.TYPE_BB8) then return bb end
         if bb:getType() == Blitbuffer.TYPE_BB8 then return bb end
         local grey = Blitbuffer.new(bb:getWidth(), bb:getHeight(), Blitbuffer.TYPE_BB8)
-        grey:blitFrom(bb, 0, 0, 0, 0, bb:getWidth(), bb:getHeight())
+        grey:blitFrom(require("lib/bookshelf_clip_bb").real(bb), 0, 0, 0, 0, bb:getWidth(), bb:getHeight())
         bb:free()
         return grey
     end)
@@ -1936,17 +2010,29 @@ function M.bg(name, w, h, night)
     else
         M.free()
     end
-    local ok, bb = pcall(decode, path, w, h)
-    if not ok or not bb then
-        logger.info("[bookshelf] wallpaper could not be decoded:", path)
-        return nil
+    -- The decoded picture outlives the session in the cover disk cache (raw
+    -- pixels, already in the screen's own type): a full-screen JPEG decode
+    -- was ~0.5 s of the first visit to each shelf with its own wallpaper on
+    -- the PW5; reading the raw buffer back is a few tens of ms. Keyed on the
+    -- file's mtime and size as well, so an edited picture is decoded again.
+    local dkey = diskKey(path, w, h)
+    local bb = dkey and diskCache() and diskCache().load(dkey)
+    if not bb then
+        local ok
+        ok, bb = pcall(decode, path, w, h)
+        if not ok or not bb then
+            logger.info("[bookshelf] wallpaper could not be decoded:", path)
+            return nil
+        end
+        bb = M.toScreenType(bb)
+        if dkey and diskCache() then pcall(diskCache().store, dkey, bb) end
     end
-    bb = M.toScreenType(bb)
     if night and bb.invertRect then
         pcall(function() bb:invertRect(0, 0, bb:getWidth(), bb:getHeight()) end)
     end
     local widget = backgroundWidget(bb, w, h)
     widget.bb = bb
+    widget.dkey = dkey   -- what its blurs are kept under (frostFor)
     M._bg, M._bg_key = widget, key
     return widget
 end

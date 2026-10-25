@@ -602,6 +602,8 @@ end
 
 -- entryFor(path, relpath, file, pack) -> an ornament entry, or nil when the
 -- file cannot be sized (logged, so "my ornament doesn't show" is answerable).
+local indexedEntry, indexDone   -- below listAll's helpers
+local renderDiskKey             -- above M.render
 local function entryFor(path, relpath, file, pack)
     local lname = file:lower()
     local is_png = lname:match("%.png$") ~= nil
@@ -996,7 +998,103 @@ end
 -- or not, sorted by pack (loose ones first) then name; and the pack names.
 -- Both folders are read (see M.dir); a relative path present in both is the
 -- new folder's. Cached on the folders' own scan keys.
+-- allowRecent(on): the spine plan's window. The plan reaches listAll()
+-- several times a plan (the deck's sync, a themed shelf's pool, the theme's
+-- hasPieces), and a folder listing per pack on every page turn was 10-16% of
+-- a PW5 turn. Inside the window the last scan stands for the scan TTL, as
+-- list()'s does. Outside it listAll looks every time: the browser and pack
+-- installs call it straight after changing files. The window closes itself
+-- after two seconds, so a plan that fails part-way cannot leave it open.
+-- Returns whether a window was already open, so a caller inside another's
+-- window (the plan inside a rebuild) leaves it for its opener to close.
+function M.allowRecent(on)
+    local was = M._recent_until ~= nil and M._clock() <= M._recent_until
+    M._recent_until = on and (M._clock() + 2) or nil
+    return was
+end
+
+-- The ornament index: each piece's size and flags (entryFor's answer, which
+-- reads the head of every file) kept on disk between sessions, per pack. A
+-- pack's entries stand while its part of listAll's key (its folders' mtimes,
+-- names and ornaments.json) is unchanged, so a changed pack is read again
+-- and the rest are not. Rebuilding it on the first shelf of every session
+-- was a third of that shelf's 2.1 s on the PW5 (13 packs, ~360 pieces).
+-- M._index_store: injectable; false switches it off.
+local _index, _index_dirty
+local function indexStore()
+    if M._index_store == nil then
+        local ok, store = pcall(function()
+            return require("lib/bookshelf_file_store").new(
+                require("lib/bookshelf_paths").cacheFile("ornament_index.lua"))
+        end)
+        M._index_store = ok and store or false
+    end
+    return M._index_store or nil
+end
+-- indexedEntry(group, part, path, relpath, file, pack): entryFor, from the
+-- index when the piece's group (its pack, or the root folder of a loose
+-- piece) is as it was. The index holds each group's part once and its
+-- pieces under it; a group whose part changed drops its pieces first.
+local _checked = {}
+function indexedEntry(group, part, path, relpath, file, pack)
+    local st = part and indexStore()
+    if not st then return entryFor(path, relpath, file, pack) end
+    if _index == nil then
+        local ok, all = pcall(st.read, "index", nil)
+        _index = (ok and type(all) == "table" and type(all.parts) == "table"
+                  and type(all.pieces) == "table") and all or { parts = {}, pieces = {} }
+    end
+    if not _checked[group] then
+        _checked[group] = true
+        if _index.parts[group] ~= part then
+            for rel, v in pairs(_index.pieces) do
+                if v.g == group then _index.pieces[rel] = nil end
+            end
+            _index.parts[group] = part
+            _index_dirty = true
+        end
+    end
+    local kept = _index.pieces[relpath]
+    if type(kept) == "table" and kept.g == group then
+        if kept.skip then return nil end
+        return { path = path, name = relpath, file = file, pack = pack,
+                 aspect = kept.a, overhang = kept.o or 0, night_invert = kept.n or nil }
+    end
+    local e = entryFor(path, relpath, file, pack)
+    _index.pieces[relpath] = e and { g = group, a = e.aspect, o = e.overhang ~= 0 and e.overhang or nil,
+                                     n = e.night_invert or nil }
+                             or { g = group, skip = true }
+    _index_dirty = true
+    return e
+end
+-- indexDone(): the end of a scan; write what changed (pieces and groups
+-- gone from the folders go with it).
+function indexDone(groups)
+    _checked = {}
+    if not _index_dirty then return end
+    _index_dirty = false
+    local st = indexStore()
+    if not st then return end
+    for g in pairs(_index.parts) do
+        if not groups[g] then _index.parts[g] = nil end
+    end
+    local live = {}
+    for _i, e in ipairs(M._all_cache or {}) do live[e.name] = true end
+    for rel, v in pairs(_index.pieces) do
+        if not _index.parts[v.g] or (not live[rel] and not v.skip) then _index.pieces[rel] = nil end
+    end
+    pcall(st.save, "index", _index)
+end
+function M._resetIndex() _index, _index_dirty, _checked = nil, nil, {} end
+
 function M.listAll()
+    local now = M._clock()
+    if M._recent_until and now <= M._recent_until
+            and M._all_cache and M._all_at and M.SCAN_TTL > 0
+            and (now - M._all_at) < M.SCAN_TTL then
+        return M._all_cache, M._all_packs
+    end
+    M._all_at = now
     local fs = lfs()
     local roots = M.roots()
     if not fs or #roots == 0 then return {}, {} end
@@ -1008,6 +1106,7 @@ function M.listAll()
     local watch = {}                        -- every folder scanned, for folderStamp
     local loose, loose_root = {}, {}        -- name -> true, name -> root
     local pack_set, pack_files = {}, {}     -- pack -> true; pack -> { file -> root }
+    local part_of = {}                      -- root or pack -> its part of the key
     for _r, d in ipairs(roots) do
         local mtime = fs.attributes(d, "modification")
         local names, packs = {}, {}
@@ -1029,6 +1128,7 @@ function M.listAll()
             table.sort(packs)
             key_parts[#key_parts + 1] = d .. "\3" .. tostring(mtime) .. "|" .. table.concat(names, "\0")
                 .. "\5" .. tostring(fs.attributes(d .. "/" .. M.JSON_NAME, "modification"))
+            part_of[d] = key_parts[#key_parts]
             for _i, n in ipairs(names) do
                 if not loose[n] then loose[n], loose_root[n] = true, d end
             end
@@ -1037,6 +1137,7 @@ function M.listAll()
                 local pn, pk = AssetFolder.scan(fs, d .. "/" .. pack, ORNAMENT_EXTS)
                 key_parts[#key_parts + 1] = "\1" .. pack .. "\2" .. tostring(pk) .. "\5"
                     .. tostring(fs.attributes(d .. "/" .. pack .. "/" .. M.JSON_NAME, "modification"))
+                part_of[pack] = (part_of[pack] or "") .. key_parts[#key_parts]
                 pack_set[pack] = true
                 pack_files[pack] = pack_files[pack] or {}
                 for _j, file in ipairs(pn or {}) do
@@ -1058,7 +1159,7 @@ function M.listAll()
     local ok = pcall(function()
         for _i = 1, #names do
             local n = names[_i]
-            local e = entryFor(loose_root[n] .. "/" .. n, n, n, nil)
+            local e = indexedEntry(loose_root[n], part_of[loose_root[n]], loose_root[n] .. "/" .. n, n, n, nil)
             if e then out[#out + 1] = e end
         end
         for _i, pack in ipairs(packs) do
@@ -1067,7 +1168,7 @@ function M.listAll()
             table.sort(files)
             for _j, file in ipairs(files) do
                 local rel = pack .. "/" .. file
-                local e = entryFor(pack_files[pack][file] .. "/" .. rel, rel, file, pack)
+                local e = indexedEntry(pack, part_of[pack], pack_files[pack][file] .. "/" .. rel, rel, file, pack)
                 if e then out[#out + 1] = e end
             end
         end
@@ -1097,6 +1198,7 @@ function M.listAll()
         pcall(applyLayers, e, layers)
     end
     M._all_cache, M._all_key, M._all_packs = out, key, packs
+    indexDone(part_of)
     return out, packs
 end
 
@@ -1588,6 +1690,27 @@ end
 -- plank. The cache is keyed on what was painted, the one thing that
 -- distinguishes two renders of one file at one size. RGB32 invert keeps the
 -- alpha, so the shelf still shows through.
+-- renderDiskKey(path, w, h) -> the key a piece rendered at w x h is kept
+-- under in the cover disk cache (raw pixels, before the night inversion and
+-- the mirror, which are applied after), or nil when there is no disk cache.
+-- The file's mtime and size are in it, so an edited piece renders again.
+-- Decoding and un-premultiplying each piece on the first shelf of a session
+-- was ~0.25 s of Home's first visit on the PW5.
+-- M._disk_cache: injectable; false switches it off. Not under a test's
+-- M._render (a test renders by its own rules).
+function renderDiskKey(path, w, h)
+    if M._disk_cache == nil then
+        local ok, DC = pcall(require, "lib/bookshelf_cover_disk_cache")
+        M._disk_cache = (ok and DC and M._render == nil) and DC or false
+    end
+    if not M._disk_cache then return nil end
+    local fs = lfs()
+    local mt = fs and fs.attributes(path, "modification")
+    if not mt then return nil end
+    return string.format("ornament:%s|%s|%s|%dx%d", path, tostring(mt),
+        tostring(fs.attributes(path, "size")), w, h)
+end
+
 function M.render(entry, w, h, inverting, mirror)
     inverting = inverting and true or false
     local dark = inverting
@@ -1618,7 +1741,13 @@ function M.render(entry, w, h, inverting, mirror)
     local bb = M._cache[key]
     if bb then return bb end
     local ok, res = true, fromHeld(entry.path, w, h)
-    if not res then ok, res = pcall(M._render or defaultRender, entry.path, w, h) end
+    -- The rendered size outlives the session on disk (see renderDiskKey).
+    local dkey = (not res) and renderDiskKey(entry.path, w, h)
+    if dkey then res = M._disk_cache.load(dkey) end
+    if not res then
+        ok, res = pcall(M._render or defaultRender, entry.path, w, h)
+        if ok and res and dkey then pcall(M._disk_cache.store, dkey, res) end
+    end
     if not ok or not res then
         logger.dbg("[bookshelf] ornament render failed:", entry.path)
         return nil
@@ -1647,7 +1776,7 @@ function M.flipped(bb)
         local BB = require("ffi/blitbuffer")
         local w, h = bb:getWidth(), bb:getHeight()
         local dst = BB.new(w, h, bb:getType())
-        for x = 0, w - 1 do dst:blitFrom(bb, w - 1 - x, 0, x, 0, 1, h) end
+        for x = 0, w - 1 do dst:blitFrom(require("lib/bookshelf_clip_bb").real(bb), w - 1 - x, 0, x, 0, 1, h) end
         return dst
     end)
     if not ok or not out then return nil end
@@ -1665,12 +1794,61 @@ end
 -- the decode held for the render that follows (ONE DECODE PER PREVIEW).
 M.CONTENT_PROBE = 96
 M._content = {}
+-- The answer also outlives the session, in a small cache file keyed by the
+-- file's path, mtime and size (an edited piece is probed again): finding it
+-- is a decode per piece, and the first page of every session paid it for
+-- each piece on top of the paint's own decode (~0.5 s on a PW5 Genres turn).
+-- M._box_store: injectable; false switches it off.
+local function boxStore()
+    if M._box_store == nil then
+        local ok, store = pcall(function()
+            return require("lib/bookshelf_file_store").new(
+                require("lib/bookshelf_paths").cacheFile("ornament_boxes.lua"))
+        end)
+        M._box_store = ok and store or false
+    end
+    return M._box_store or nil
+end
+local _box_flush_armed = false
+local function boxFlushSoon(st)
+    if _box_flush_armed then return end
+    _box_flush_armed = true
+    local ok, UIManager = pcall(require, "ui/uimanager")
+    if ok and UIManager and UIManager.scheduleIn then
+        UIManager:scheduleIn(5, function()
+            _box_flush_armed = false
+            pcall(st.flush)
+        end)
+    else
+        _box_flush_armed = false
+        pcall(st.flush)
+    end
+end
 function M.contentBox(entry, hold)
     local key = entry.path .. "|" .. tostring(entry.aspect)
     local hit = M._content[key]
     if hit ~= nil then
         if hit == false then return nil end
         return hit[1], hit[2], hit[3], hit[4]
+    end
+    local st = boxStore()
+    local fkey
+    if st then
+        local fs = lfs()
+        local mt = fs and fs.attributes(entry.path, "modification")
+        if mt then
+            fkey = key .. "|" .. tostring(mt) .. "|" .. tostring(fs.attributes(entry.path, "size"))
+            local all = st.read("boxes", nil)
+            -- nil, not false, when there is no file yet: false is a kept
+            -- "no drawing found".
+            local kept = nil
+            if type(all) == "table" then kept = all[fkey] end
+            if kept ~= nil then
+                M._content[key] = kept
+                if kept == false then return nil end
+                return kept[1], kept[2], kept[3], kept[4]
+            end
+        end
     end
     local box = false
     local aspect = (entry.aspect and entry.aspect > 0) and entry.aspect or 1
@@ -1709,6 +1887,13 @@ function M.contentBox(entry, hold)
         if bb.free then pcall(function() bb:free() end) end
     end
     M._content[key] = box
+    if st and fkey then
+        local all = st.read("boxes", nil)
+        if type(all) ~= "table" then all = {} end
+        all[fkey] = box
+        st.saveDeferred("boxes", all)
+        boxFlushSoon(st)
+    end
     if not box then return nil end
     return box[1], box[2], box[3], box[4]
 end
@@ -1754,10 +1939,17 @@ function M.hits(p, dimen, pos, blocked)
 end
 
 function M.Ornament:onHoldOrnament(_arg, ges)
+    -- A pinned piece (a shelf module) answers with its own handler: its
+    -- module menu.
+    if self.hold_fn then
+        if not M.hits(self.placement, self.dimen, ges and ges.pos, M.handlers.blocked) then return false end
+        return self.hold_fn() and true or false
+    end
     local h = M.handlers.hold
     if not h then return false end
     if not M.hits(self.placement, self.dimen, ges and ges.pos, M.handlers.blocked) then return false end
-    return h(self.placement.entry, self.placement, self.dimen) and true or false
+    -- The piece itself last: "Pin here" reads where it stands from it.
+    return h(self.placement.entry, self.placement, self.dimen, self) and true or false
 end
 
 function M.Ornament:onTapOrnament(_arg, ges)

@@ -337,11 +337,6 @@ end
 
 function StartMenu:init()
     local _t0 = _gettime()
-    -- The module palette (card, ink) is process-global and only the LIBRARY's
-    -- hero build writes it. Under the reader this menu sits on a plain page
-    -- the shelf theme never touches, so after a dark or wallpapered shelf its
-    -- cards kept the dark card and white ink. See Modules.resetTheme.
-    if self.context == "reader" then pcall(Modules.resetTheme) end
     -- Menu-open signal: bump the loader's generation counter exactly once
     -- per open (init runs once per StartMenu instance; _reload does not
     -- re-init). Modules key per-open caches on it — see the README.
@@ -787,6 +782,8 @@ function StartMenu:_buildModuleRow(entry, w, focused, in_flyout)
                 surface = "start_menu", bw = self.bw, menu = self,
                 clamp = true,
                 config = Kit.entryConfig(entry, nil),
+                -- The spec's own colours (bookshelf_module_card).
+                colors = require("lib/bookshelf_module_card").look(entry, def).colors,
                 -- Optional per-region taps (Kit.hitRegion): rects in the
                 -- returned widget's own coordinate space; resolved by the
                 -- row's onTap below into ctx.tapped_region.
@@ -834,7 +831,8 @@ function StartMenu:_buildModuleRow(entry, w, focused, in_flyout)
         local prev = self._module_heights[entry.id]
         if prev and math.abs(ih - prev) <= Screen:scaleBySize(6) then
             local ClipContainer = require("lib/bookshelf_clip_container")
-            inner = ClipContainer:new{ w = iw, h = prev, bg = Modules.CARD_BG, inner }
+            -- Gestures pass: unclipped, the module's own buttons get them anyway.
+            inner = ClipContainer:new{ w = iw, h = prev, bg = Modules.CARD_BG, pass_gestures = true, inner }
             hyst_clip = inner
         else
             self._module_heights[entry.id] = ih
@@ -1137,6 +1135,11 @@ end
 
 function StartMenu:_build()
     local _bt0 = _gettime()
+    -- The panel is always white, in the library and the reader alike, so its
+    -- module cards take the light palette, on every build: the palette is
+    -- process-global, and the shelf's grid sets its own theme's (a dark
+    -- shelf's dark cards came up on the white panel). See Modules.resetTheme.
+    pcall(Modules.resetTheme)
     self:_applyFontScale()
     self:_markUnresolved(self._items)
     local _bt1 = _gettime()
@@ -1503,7 +1506,7 @@ function StartMenu:_build()
             if ok_cp and CoverProgress and CoverProgress.resolvedColors
                     and self.bw and self.bw.wallpaperScrimStrength then
                 local ok_c, colors = pcall(CoverProgress.resolvedColors)
-                if ok_c and colors then scrim_c = colors.panel_bg end
+                if ok_c and colors then scrim_c = colors.panel_tint or colors.panel_bg end
                 local ok_s, sv = pcall(function()
                     return self.bw:wallpaperScrimStrength()
                 end)

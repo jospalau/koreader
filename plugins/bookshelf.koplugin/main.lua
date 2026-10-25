@@ -93,6 +93,24 @@ end
 -- instance's onCloseWidget find and dismiss the overlay during a KOReader
 -- exit, so the UIManager window stack can drain to zero.
 local _live_widget = nil
+
+-- afterFirstPaint(delay, fn): fn, delay seconds after the shelf has first
+-- painted -- for startup chores that must not hold the shelf back. When
+-- the shelf isn't shown this session (started into a book, say), after
+-- 30 s anyway.
+local function afterFirstPaint(delay, fn)
+    local waited = 0
+    local function poll()
+        local w = _live_widget
+        if (w and w._first_paint_done) or waited >= 30 then
+            UIManager:scheduleIn(delay, fn)
+            return
+        end
+        waited = waited + 0.5
+        UIManager:scheduleIn(0.5, poll)
+    end
+    UIManager:scheduleIn(0.5, poll)
+end
 -- The FileManager path the overlay was sitting over when it last (re)appeared.
 -- onPathChanged compares against this so the PathChanged that FileManager
 -- fires during our OWN takeover (the onShow chain, same path) is ignored,
@@ -502,8 +520,10 @@ function Bookshelf:init()
     -- want a quick toggle rather than digging through the FM menu.
     self:onDispatcherRegisterActions()
 
-    -- One silent background check per init when the user's opted in.
-    self:backgroundUpdateCheck()
+    -- One silent background check per init when the user's opted in. After
+    -- the shelf is on screen, not before it: the request (a TLS handshake,
+    -- then the reply) ran ahead of the first paint (~0.3 s of it on the PW5).
+    afterFirstPaint(5, function() self:backgroundUpdateCheck() end)
 
     -- One-shot bookinfo_cache staleness sweep. Detects EPUBs whose
     -- on-disk size/mtime has diverged from BIM's cached values (typical
@@ -512,7 +532,10 @@ function Bookshelf:init()
     -- requeues fresh extraction. Deferred 2s so init isn't blocked and
     -- so BIM's own scan-on-start has settled. Module guards against
     -- double-fire across FM+Reader init contexts.
-    UIManager:scheduleIn(2, function()
+    -- Counted from the first paint: two seconds from here landed before it
+    -- on a device with many plugins (the shelf first paints ~4 s after this
+    -- init on the PW5), and the sweep's SQLite pass delayed it.
+    afterFirstPaint(2, function()
         local ok, StaleSweep = pcall(require, "lib/bookshelf_stale_sweep")
         if ok and StaleSweep then
             pcall(function() StaleSweep:run() end)
@@ -763,7 +786,8 @@ function Bookshelf:buildMenuItems(menu_items)
     -- Stash plugin ref now so _updateSubItems callbacks resolve correctly.
     S._plugin = outer
 
-    menu_items.bookshelf_tab = { icon = "book.opened", text = _("Bookshelf") }
+    -- Its own icon (issue 548): KOReader's new "Reader" tab took book.opened.
+    menu_items.bookshelf_tab = { icon = require("lib/bookshelf_menu_icon").name(self.path), text = _("Bookshelf") }
 
     menu_items.bookshelf_toggle = {
         -- NO ICON, deliberately. This row and About are the secondary pair:
@@ -1625,9 +1649,10 @@ end
 -- Open the full-screen micro-module overlay from the reader (v1). No bookshelf
 -- widget exists here, so a minimal context shim stands in for `bw`: enough for
 -- the overlay to render + navigate the grid, position its close-X / hamburger,
--- and open the start menu. No status line (no _currentHeroBook /
--- _buildDeviceState), and widget-dependent module taps no-op (HeroModules._tap
--- pcalls on_tap). pcall'd so a context gap can't crash the reader.
+-- and open the start menu, plus the shelf's status line for the book being
+-- read, kept current by its own minute tick (the shelf's does not run in the
+-- reader). Widget-dependent module taps no-op (HeroModules._tap pcalls
+-- on_tap). pcall'd so a context gap can't crash the reader.
 function Bookshelf:_openReaderMicroModules()
     local ok, Mod = pcall(require, "lib/bookshelf_micro_fullscreen")
     if not ok or not Mod then return end
@@ -1666,7 +1691,31 @@ function Bookshelf:_openReaderMicroModules()
         end,
         _openStartMenu = function() outer:_openReaderStartMenu() end,
     }
+    -- The status line: the shelf's own answers for the current book (the
+    -- one being read) and the device state. Neither needs a shelf.
+    local ok_bw, BW = pcall(require, "lib/bookshelf_widget")
+    if ok_bw and type(BW) == "table" then
+        shim._currentHeroBook  = function(s) return BW._currentHeroBook(s) end
+        shim._buildDeviceState = function(s) return BW._buildDeviceState(s) end
+    end
     pcall(function() Mod.open(shim, shim._micromod_dimen, Screen:scaleBySize(48)) end)
+    -- Minute tick while the view is up: the status line and clock cells.
+    local tick
+    tick = function()
+        local view = shim._micro_fullscreen
+        if not (view and UIManager:isWidgetShown(view)) then return end
+        pcall(function()
+            if BW and BW.invalidateDeviceState then BW.invalidateDeviceState() end
+            require("lib/bookshelf_hero_modules").tickClocks(shim)
+            if view.refreshStatus then view:refreshStatus() end
+        end)
+        local delay = 60 - os.date("*t").sec
+        UIManager:scheduleIn(delay > 0 and delay or 60, tick)
+    end
+    if shim._micro_fullscreen then
+        local delay = 60 - os.date("*t").sec
+        UIManager:scheduleIn(delay > 0 and delay or 60, tick)
+    end
 end
 
 -- Open the start menu from the reader. No bookshelf widget exists here, but
@@ -2319,6 +2368,14 @@ function Bookshelf:onShowingReader()
             if _live_widget then _live_widget._suppress_transition_paint = false end
         end)
     end
+    -- The full-screen micro-modules view holds its opening pose the same way
+    -- (MicroFullscreen.hold_paint). Only when it is loaded: requiring it here
+    -- would load it for every book opened from anywhere.
+    local MF = package.loaded["lib/bookshelf_micro_fullscreen"]
+    if type(MF) == "table" then
+        MF.hold_paint = true
+        UIManager:scheduleIn(10, function() MF.hold_paint = nil end)
+    end
 end
 
 -- New ReaderUI has finished loading after a Reader→Reader switch — the new
@@ -2327,6 +2384,8 @@ end
 -- widget is the shared singleton, so clearing it here unblocks the eventual
 -- return-to-shelf paint when this book is closed.
 function Bookshelf:onReaderReady()
+    local MF = package.loaded["lib/bookshelf_micro_fullscreen"]
+    if type(MF) == "table" then MF.hold_paint = nil end
     -- The page-count scan lays books out as the reader does; the status bar's
     -- reserve at the bottom of the page is only knowable from a real reader.
     if self.ui and self.ui.view then
@@ -3356,7 +3415,17 @@ function Bookshelf:_repaintAfterWake()
     -- finally unlocks, so bookshelf still gets repainted then.
     if require("device").screen_saver_lock then return end
     if self:_isShowing() then
-        UIManager:setDirty(_live_widget, "full")
+        -- The sleep screen's close puts the shelf's own pixels back
+        -- (lib/bookshelf_underlay): then the panel needs a full refresh, not
+        -- the shelf a full repaint (~580 ms on a PW5).
+        local Underlay = require("lib/bookshelf_underlay")
+        if Underlay.covered() then
+            -- Still up: its close does it.
+        elseif os.time() - (Underlay._last_restore or 0) <= 2 then
+            UIManager:setDirty(nil, "full")
+        else
+            UIManager:setDirty(_live_widget, "full")
+        end
     end
     self:_evictHomescreenOverlay()
 end

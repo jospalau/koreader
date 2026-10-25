@@ -521,6 +521,9 @@ local function _sidecarMtime(fp)
     return ok and (m or 0) or 0
 end
 
+-- sidecarMtime(fp) -> the book's sidecar's mtime, or 0 for none.
+SpineShelf.sidecarMtime = function(fp) return _sidecarMtime(fp) end
+
 function SpineShelf.cachedProgress(fp)
     local F = fp and _facts()
     local e = F and F.get(fp)
@@ -725,6 +728,26 @@ function SpineShelf.bookLook(book)
         return look
     end
 
+    -- No cover, and KOReader has looked: the fallback is the answer, so keep
+    -- it. Asking BIM again cost a cover-row query per coverless book per
+    -- rebuild (69% of a shelf switch on a mostly-coverless rig library).
+    -- The fallback below is NOT kept, because it usually means "not
+    -- extracted yet"; this one is settled. invalidateBook drops it (a
+    -- custom cover).
+    if not book.cover_bb then
+        local ok_r, Repo = pcall(require, "lib/bookshelf_book_repository")
+        if ok_r and Repo and Repo.coverKnownAbsent and Repo.coverKnownAbsent(fp) then
+            local look = _fallbackLook(label)
+            look.aspect = _aspectFromSizetag(book.cover_sizetag)
+            if _look_count >= LOOK_CACHE_MAX then
+                _look_cache, _look_count = {}, 0
+            end
+            _look_cache[fp] = look
+            _look_count = _look_count + 1
+            return look
+        end
+    end
+
     local look
     local ok = pcall(function()
         local bb, owned = nil, false
@@ -783,6 +806,10 @@ end
 -- standing, so a book's changed status could keep its old spine until the next
 -- shelf rebuild.
 local _plan_cache = nil
+-- A face-out book's full metadata build, per path (see the plan's
+-- enrichment), so fresh light records after an expired fetch cache don't
+-- rebuild it for every face-out book. Dropped by invalidateBook.
+local _meta_memo = {}
 
 -- invalidateBook(fp) — one entry point for 'this book's metadata changed':
 -- drops the persisted look/progress, the hydration answers, and every
@@ -790,6 +817,7 @@ local _plan_cache = nil
 function SpineShelf.invalidateBook(fp)
     _plan_cache = nil
     if not fp then return end
+    _meta_memo[fp] = nil
     SpineShelf.dropLook(fp)
     _hydrate_cache[fp] = nil
     _progress_validated[fp] = nil
@@ -821,6 +849,7 @@ function SpineShelf.forgetLooks()
         _render_order[i] = nil
     end
     _plan_cache = nil
+    _meta_memo = {}
     return n
 end
 
@@ -1022,6 +1051,25 @@ SpineShelf.FACE_REASONS = { "favorites", "first", "first_unread", "reading",
                             "finished", "on_hold", "unread", "standalone",
                             "recent", "collection" }
 SpineShelf.FACE_RECENT_DEFAULT = 5
+
+-- faceOutFor(tab) -> a shelf's face-out choice AS STORED (faceOutSpec reads
+-- it): its own, else the library's, else favourites. A table, a string or a
+-- boolean; `false` IS a choice (none), so "is it set?" is not truthiness.
+-- The main shelf and a Shelf module showing the same shelf both ask here.
+function SpineShelf.faceOutFor(tab)
+    local modes = { none = true, all = true }
+    for _i, r in ipairs(SpineShelf.FACE_REASONS or {}) do modes[r] = true end
+    local function isSet(v)
+        local t = type(v)
+        if t == "table" or t == "boolean" then return true end
+        return t == "string" and modes[v] == true
+    end
+    if tab and isSet(tab.spine_face_out) then return tab.spine_face_out end
+    local ok, Store = pcall(require, "lib/bookshelf_settings_store")
+    local g = ok and Store and Store.read("spine_face_out")
+    if isSet(g) then return g end
+    return "favorites"
+end
 
 -- faceOutSpec(v) -> { favorites=, first=, reading=, all=, recent=N|nil }
 function SpineShelf.faceOutSpec(v)
@@ -1885,6 +1933,9 @@ function SpineBookSlot:onTap(_arg, ges)
         if ges.pos.y < top - Screen:scaleBySize(6) then return false end
     end
     local cb = _itemCallback(self.callbacks, self.book, "tap")
+    -- Rendezvous for an opening effect drawn by the caller (a micro-module's
+    -- spines: lib/bookshelf_module_open); validated by filepath, then cleared.
+    if cb and self.book then SpineShelf.last_tapped_slot = self end
     if cb then cb(self.book) return true end
 end
 
@@ -1897,6 +1948,7 @@ function SpineBookSlot:onDoubleTap()
     -- Books only: double tap opens directly (#271); groups have no "open".
     if self.book and self.book.filepath and self.callbacks
             and self.callbacks.on_book_open then
+        SpineShelf.last_tapped_slot = self
         self.callbacks.on_book_open(self.book)
         return true
     end
@@ -2012,6 +2064,20 @@ end
 
 function SpineBookSlot:paintTo(bb, x, y)
     self.dimen.x, self.dimen.y = x, y
+    if self.keep_ground then
+        -- What is behind this spine before it paints (a micro-module's
+        -- tinted ground): the opening tilt puts it back where the spine
+        -- leaves, as the shelf's own ground can be rebuilt but this can't.
+        pcall(function()
+            local g = self._ground
+            if not (g and g:getWidth() == self.width and g:getHeight() == self.height) then
+                if g then g:free() end
+                g = Blitbuffer.new(self.width, self.height, bb:getType())
+                self._ground = g
+            end
+            g:blitFrom(require("lib/bookshelf_clip_bb").real(bb), 0, 0, x, y, self.width, self.height)
+        end)
+    end
     local night = _nightMode()
     local key = self:_renderKey(night)
     local cached = _render_cache[key]
@@ -2583,6 +2649,32 @@ end
 -- run that wraps keeps its name in view on every shelf it crosses.
 local ShelfBadges = Widget:extend{}
 
+-- Every badge last drawn on screen: span -> its ShelfBadges (keyed weakly;
+-- the span's _rect is where, its _seq when). A module in the layout editor
+-- reports the ones it drew past its cell in a paint (badgeRectsSince), which
+-- the editor keeps clear of its fade and its outline.
+SpineShelf._screen_badges = setmetatable({}, { __mode = "k" })
+
+
+-- badgeSeq() -> a counter that moves each time a badge is drawn on screen;
+-- badgeRectsSince(seq, x, y, w, h) -> the badges drawn since then touching
+-- that rect. What a module drew past its cell in ONE paint, not every badge
+-- still remembered: a heading hidden since was still kept clear of the
+-- layout editor's fade.
+function SpineShelf.badgeSeq() return SpineShelf._badge_seq or 0 end
+function SpineShelf.badgeRectsSince(seq, x, y, w, h)
+    local out = {}
+    for span in pairs(SpineShelf._screen_badges) do
+        local r = span._rect
+        if r and (span._seq or 0) > seq
+                and r.x < x + w and r.x + r.w > x and r.y < y + h and r.y + r.h > y then
+            out[#out + 1] = r
+        end
+    end
+    return out
+end
+
+
 -- A badge hangs BELOW its plank by design, and by more than the inter-row
 -- gap once the label is large (a high DPI, a tall UI font). Painted in row
 -- order it loses: the next row's books paint over it, and on the last row the
@@ -2673,6 +2765,9 @@ function ShelfBadges:drawAt(bb, x, y)
                     -- only the screen's own buffer, never a wipe's scratch.
                     if rawequal(bb, Screen.bb) then
                         s._rect = { x = bx, y = by, w = bw, h = badge_h }
+                        SpineShelf._screen_badges[s] = self
+                        SpineShelf._badge_seq = (SpineShelf._badge_seq or 0) + 1
+                        s._seq = SpineShelf._badge_seq
                     end
                     tw:paintTo(bb, bx + math.floor((bw - sz.w) / 2),
                                by + pad_y)
@@ -3001,6 +3096,9 @@ local _design_memo, _design_gen = nil, nil
 -- show, or nil. Memoised per settings generation (the browser's switches all
 -- save a setting).
 function SpineShelf.activePlankDesign()
+    -- A card drawing its own shelf holds that shelf's plank (withPlank):
+    -- false is the plain colour.
+    if SpineShelf._design_override ~= nil then return SpineShelf._design_override or nil end
     local gen = BookshelfSettings.generation and BookshelfSettings.generation() or 0
     -- And the shelf's look: a shelf may wear its own theme's plank.
     local ok_t, TP = pcall(require, "lib/bookshelf_theme_pack")
@@ -3012,6 +3110,20 @@ function SpineShelf.activePlankDesign()
         _design_memo = TP.activePlank() or false
     end)
     return _design_memo or nil
+end
+
+-- withPlank(design, fn, ...) -> fn's results, with `design` (a plank design,
+-- false for the plain colour) as the active plank while fn runs. A card's
+-- shelf holds its own plank for its rows' build and paint; nil leaves the
+-- main shelf's. Restored even if fn fails.
+function SpineShelf.withPlank(design, fn, ...)
+    if design == nil then return fn(...) end
+    local prev = SpineShelf._design_override
+    SpineShelf._design_override = design
+    local res = { pcall(fn, ...) }
+    SpineShelf._design_override = prev
+    if not res[1] then error(res[2], 0) end
+    return select(2, (unpack or table.unpack)(res))
 end
 
 -- Rendered design strips, per (files, row width, plank height, frame).
@@ -3195,6 +3307,15 @@ local function _bandRows(path, rise)
     local key = path .. (rise and "|rise" or "|drop")
     local hit = _drop_memo[key]
     if hit ~= nil then return hit[1], hit[2] end
+    -- Measured once per file, not per session (a full decode of the plank).
+    local Derived = require("lib/bookshelf_derived_cache")
+    local stamp = Derived.stamp(path)
+    local dkey = stamp and ("band:" .. key .. "|" .. stamp)
+    local kept = dkey and Derived.get(dkey)
+    if type(kept) == "table" and kept[1] and kept[2] then
+        _drop_memo[key] = kept
+        return kept[1], kept[2]
+    end
     local rows = 0
     local info = _pngInfo(path)
     if info and not rise and info.bottom then
@@ -3234,6 +3355,7 @@ local function _bandRows(path, rise)
     end
     local B0 = info and math.max(1, math.floor(info.h / 3)) or 1
     _drop_memo[key] = { rows, B0 }
+    if dkey and info then Derived.put(dkey, { rows, B0 }) end
     return rows, B0
 end
 local function _dropRows(path) return _bandRows(path, false) end
@@ -3265,12 +3387,37 @@ function SpineShelf.designRise(row_h)
     return math.floor(rows * plank / B0 + 0.5)
 end
 
+-- _remember(key, entry): into the session's strip cache, oldest out.
+local function _remember(key, entry)
+    _strip_cache[key] = entry
+    _strip_order[#_strip_order + 1] = key
+    if #_strip_order > 6 then
+        local old = table.remove(_strip_order, 1)
+        if _strip_cache[old] then _strip_cache[old].bb:free(); _strip_cache[old] = nil end
+    end
+end
+
 local function _designStrip(design, width, row_x, row_w, surf_h, face_h, inverting)
     local key = table.concat({ design.middle, design.left or "-", design.right or "-",
                                width, row_x, row_w, surf_h, face_h,
                                inverting and "n" or "d" }, "|")
     local hit = _strip_cache[key]
     if hit then return hit.bb, hit.top_h, hit.regions end
+    -- The finished strip outlives the session (decoding and scaling the
+    -- design's three images, then a pass over its pixels, on the first shelf
+    -- of every session), keyed on the design files as they are.
+    local Derived = require("lib/bookshelf_derived_cache")
+    local stamp = Derived.stamp(design.middle, design.left, design.right)
+    local dkey = stamp and ("strip:" .. key .. "|" .. stamp)
+    local meta = dkey and Derived.get(dkey)
+    if type(meta) == "table" and meta.top_h then
+        local kept = Derived.bb(dkey)
+        if kept then
+            local entry = { bb = kept, top_h = meta.top_h, regions = meta.regions }
+            _remember(key, entry)
+            return entry.bb, entry.top_h, entry.regions
+        end
+    end
     local mid = _pngInfo(design.middle); if not mid then return nil end
     local l = SpineShelf.plankDesignLayout{
         screen_w = width, row_x = row_x, row_w = row_w, surf_h = surf_h, face_h = face_h,
@@ -3356,11 +3503,10 @@ local function _designStrip(design, width, row_x, row_w, surf_h, face_h, inverti
     if inverting then strip:invertRect(0, 0, width, total) end
     local ok_r, regions = pcall(SpineShelf.alphaRegions, width, total, _alphaAt(strip))
     if not ok_r then regions = nil end
-    _strip_cache[key] = { bb = strip, top_h = l.top_h, regions = regions }
-    _strip_order[#_strip_order + 1] = key
-    if #_strip_order > 6 then
-        local old = table.remove(_strip_order, 1)
-        if _strip_cache[old] then _strip_cache[old].bb:free(); _strip_cache[old] = nil end
+    _remember(key, { bb = strip, top_h = l.top_h, regions = regions })
+    if dkey then
+        Derived.putBB(dkey, strip)
+        Derived.put(dkey, { top_h = l.top_h, regions = regions })
     end
     return strip, l.top_h, regions
 end
@@ -3454,6 +3600,22 @@ function ShelfPlank:paintTo(bb, x, y)
             math.floor(math.min(255, pb * f) + 0.5), 0xFF)
     end
     local front_y = y + h - fh
+    -- keep_ground: a plank drawn over something other than the shelf's own
+    -- page (the Shelf micro-module's, over a card or the main shelf) cuts its
+    -- bevels back to what WAS there, copied out before it paints -- painting
+    -- them the page's white left white corners on it (maintainer).
+    local keep_l, keep_r, keep_top, keep_w
+    if self.keep_ground then
+        keep_w = math.min(w, math.max(2, fh, SpineShelf.PLANK_BACK_CHAMFER_MAX))
+        keep_top = front_y - SpineShelf.plankSurface(h)
+        local kh = y + h - keep_top
+        if keep_w > 0 and kh > 0 then
+            keep_l = Blitbuffer.new(keep_w, kh, bb:getType())
+            keep_l:blitFrom(require("lib/bookshelf_clip_bb").real(bb), 0, 0, x, keep_top, keep_w, kh)
+            keep_r = Blitbuffer.new(keep_w, kh, bb:getType())
+            keep_r:blitFrom(require("lib/bookshelf_clip_bb").real(bb), 0, 0, x + w - keep_w, keep_top, keep_w, kh)
+        end
+    end
     -- Top surface, receding: darker at the far (top) edge, lighter as it
     -- reaches the front. Three units deep, so the books stand back from
     -- the lip with surface showing in front of their feet.
@@ -3506,6 +3668,14 @@ function ShelfPlank:paintTo(bb, x, y)
                       and select(2, pcall(require, "lib/bookshelf_wallpaper"))
                       or nil
     local function cut(cx, cy, cw)
+        if keep_l then
+            if cx < x + keep_w then
+                bb:blitFrom(keep_l, cx, cy, cx - x, cy - keep_top, cw, 1)
+            else
+                bb:blitFrom(keep_r, cx, cy, cx - (x + w - keep_w), cy - keep_top, cw, 1)
+            end
+            return
+        end
         if Wallpaper and Wallpaper.restore
                 and Wallpaper.restore(bb, cx, cy, cw, 1) then
             return
@@ -3524,6 +3694,7 @@ function ShelfPlank:paintTo(bb, x, y)
         cut(x, y + h - 1 - i, run)
         cut(x + w - run, y + h - 1 - i, run)
     end
+    if keep_l then keep_l:free(); keep_r:free() end
 end
 
 -- _folderIsSingleBook(path) -> true when the folder holds exactly ONE book
@@ -3670,6 +3841,51 @@ function SpineShelf.dropPlanCache()
     _plan_cache = nil
 end
 
+-- _suffixEntries(pc, base, ids) -> entries | nil
+-- A page's items are the shelf's list FROM the page's first item, so each
+-- page that starts on a new item asked with a shorter list, missed the cache
+-- and rebuilt every entry (PW5, a Genres shelf of 111 genres: 1,800 entries,
+-- 1.1-1.4 s, on almost every turn). When the asked-for list is the tail of
+-- the cached one, under the same options, its entries are the cached ones
+-- from that item on, renumbered: item_idx and run_idx count from the start of
+-- the list asked for, and the first entry gets what a fresh build gives the
+-- first spine (no gap, no ornament seed: there is nothing before it).
+-- Copies, so the cached entries are never changed.
+local function _suffixEntries(pc, base, ids)
+    if not (pc and pc.base == base and pc.ids and pc.entries) then return nil end
+    local off = #pc.ids - #ids
+    if off <= 0 then return nil end
+    for i = 1, #ids do
+        if pc.ids[off + i] ~= ids[i] then return nil end
+    end
+    local src = pc.entries
+    local first
+    for j = 1, #src do
+        if src[j].item_idx > off then first = j; break end
+    end
+    if not first then return nil end
+    local run_off = (src[first].run_idx or 1) - 1
+    -- The first entry is a full copy: it CLEARS orn_seed, and a nil in a
+    -- proxy would fall through to the cached value. The rest are proxies
+    -- holding only what differs (a field-by-field copy of ~1,800 entries was
+    -- 15% of a PW5 page turn). Nothing walks an entry's fields with pairs.
+    local head = {}
+    for k, v in pairs(src[first]) do head[k] = v end
+    head.item_idx = head.item_idx - off
+    if head.run_idx then head.run_idx = head.run_idx - run_off end
+    head.gap_before, head.gap_base, head.orn_seed = 0, 0, nil
+    local out = { head }
+    for j = first + 1, #src do
+        local e = src[j]
+        out[#out + 1] = setmetatable({
+            item_idx = e.item_idx - off,
+            run_idx  = e.run_idx and (e.run_idx - run_off) or nil,
+        }, { __index = e })
+    end
+    return out
+end
+SpineShelf._suffixEntries = _suffixEntries
+
 local function _optsKey(opts)
     local parts = {}
     local keys = {}
@@ -3709,6 +3925,11 @@ local function _optsKey(opts)
 end
 
 function SpineShelf.plan(items, opts)
+    -- The ornament scan's window: see Ornaments.allowRecent. Only if the
+    -- module is already loaded (a shelf with ornaments off never loads it).
+    local OrnScan = package.loaded["lib/bookshelf_ornaments"]
+    local orn_scan_was_open = false
+    if OrnScan and OrnScan.allowRecent then orn_scan_was_open = OrnScan.allowRecent(true) end
     local entries = {}
     local budget = opts.row_h
     -- Auto thickness: base widths scale with the shelf height, so one tall
@@ -3872,23 +4093,61 @@ function SpineShelf.plan(items, opts)
             ids[i] = ids[i] .. ":" .. require("lib/bookshelf_series_boxes").signature(it)
         end
     end
-    local cache_key = _optsKey(opts) .. "|n=" .. #flat .. "|" .. table.concat(ids, ",")
+    local base_key = _optsKey(opts)
+    local cache_key = base_key .. "|n=" .. #flat .. "|" .. table.concat(ids, ",")
     local cached = _plan_cache
                    and _plan_cache.key == cache_key
                    and _plan_cache.entries or nil
+    local derived = false
+    if not cached then
+        cached = _suffixEntries(_plan_cache, base_key, ids)
+        derived = cached ~= nil
+    end
     if _verbose then
+        -- On a miss against a filled slot, the first part of the key that
+        -- differs: what changed between two plans that should have shared.
+        local diff = ""
+        if _plan_cache and _plan_cache.key ~= cache_key then
+            local a, b = {}, {}
+            for part in _plan_cache.key:gmatch("[^|,]+") do a[#a + 1] = part end
+            for part in cache_key:gmatch("[^|,]+") do b[#b + 1] = part end
+            for i = 1, math.max(#a, #b) do
+                if a[i] ~= b[i] then
+                    diff = string.format(" first diff #%d: %s -> %s", i,
+                        tostring(a[i]):sub(1, 60), tostring(b[i]):sub(1, 60))
+                    break
+                end
+            end
+        end
         logger.dbg(string.format(
-            "[bookshelf perf] spine plan: entries %s (slot=%s key=%s)",
-            cached and "CACHED" or "built",
+            "[bookshelf perf] spine plan: entries %s (slot=%s key=%s)%s",
+            derived and "DERIVED" or (cached and "CACHED" or "built"),
             _plan_cache and "yes" or "empty",
-            tostring(_plan_cache and _plan_cache.key == cache_key)))
+            tostring(_plan_cache and _plan_cache.key == cache_key), diff))
     end
 
     -- One read for the whole page's facts (look, count, cached status), so
     -- the per-book lookups below are table hits rather than a query each.
+    -- Shelf modules (lib/bookshelf_shelf_modules) stand among the books at
+    -- a width of their own: set aside from the book loop and put back at
+    -- their places after it, so nothing in it has to know about them.
+    local module_flats
     if cached then
         entries = cached
     else
+    do
+        local kept = {}
+        for j = 1, #flat do
+            local f = flat[j]
+            if f.book and f.book.shelf_module then
+                module_flats = module_flats or {}
+                module_flats[#module_flats + 1] = { pos = j, f = f }
+            else
+                kept[#kept + 1] = f
+            end
+        end
+        if module_flats then flat = kept end
+    end
     do
         local fps = {}
         local has_series = series_state.run_has_series
@@ -4073,7 +4332,14 @@ function SpineShelf.plan(items, opts)
             local check_stable = thick.scan and opened and psrc ~= "stable"
                                  and not _stable_checked[src.filepath]
             if check_stable then _stable_checked[src.filepath] = true end
-            if (not (pages or thick.scan) or not known or check_stable) and src.filepath
+            -- Only while the status is unknown. A book with no count at all
+            -- used to read its sidecar on EVERY plan as well, though its
+            -- status was known and the sidecar unchanged (a known book with
+            -- no count has none in its sidecar: a count found there is
+            -- persisted with the status). 18% of a PW5 page turn. Closing the
+            -- book (dropLook) or a changed sidecar (cachedProgress) clears
+            -- known, so it is read again then.
+            if (not known or check_stable) and src.filepath
                     and ok_repo and Repo and Repo.readProgress then
                 local _tp = _gettime()
                 pcall(function()
@@ -4157,15 +4423,25 @@ function SpineShelf.plan(items, opts)
         -- A shelf of shelves' "+ Add shelf" takes a face-out cover's place
         -- and size, as a dashed outline (see the tile branch below).
         if bk.add_subshelf or bk._series_box then face_out = true end
-        if face_out and src.has_cover == nil and src.filepath
-                and ok_repo and Repo and Repo.buildBookMeta then
+        if face_out and src.has_cover == nil and not src._cover_meta_tried
+                and src.filepath and ok_repo and Repo and Repo.buildBookMeta then
             -- Light page records carry no has_cover, and the cover tile
             -- gates its whole cover ladder on it (the face-out rendered as
             -- the text placeholder). Enrich the record with the full
             -- metadata build, missing fields only, cover pixels still
             -- lazy-loaded by the tile.
+            --
+            -- Once per record: a book KOReader hasn't indexed yet still has
+            -- no answer afterwards, and asking again on every plan was a
+            -- metadata build per such book per page turn (PW5). A record
+            -- rebuilt after its metadata changes starts without the mark.
+            src._cover_meta_tried = true
             pcall(function()
-                local full = Repo.buildBookMeta(src.filepath, { want_cover = false })
+                local full = _meta_memo[src.filepath]
+                if not full then
+                    full = Repo.buildBookMeta(src.filepath, { want_cover = false })
+                    if full then _meta_memo[src.filepath] = full end
+                end
                 if full then
                     for k, v in pairs(full) do
                         if src[k] == nil then src[k] = v end
@@ -4323,8 +4599,51 @@ function SpineShelf.plan(items, opts)
         end
     end
 
+    if module_flats then
+        -- Back at their places: each a face-out cover's width per unit, with
+        -- a face-out's air either side (FACE_GAP) so it doesn't read as part
+        -- of the books beside it.
+        local unit = math.max(1, math.floor((opts.row_h or 0) * 2 / 3))
+        local face_gap = Space.px(SpineShelf.FACE_GAP_DP)
+        for _k, mf in ipairs(module_flats) do
+            local f, m = mf.f, mf.f.book.shelf_module
+            local n = math.max(1, math.floor(tonumber(m.w) or 2))
+            local w = n * unit + (n - 1) * (opts.gap or 0)
+            -- A pinned piece (an Ornament module) is sized as the shelf sizes
+            -- the piece -- the same placement a dealt piece gets, the
+            -- reader's Size and Height included -- and drawn as one
+            -- (rowWidget), not scaled to a module's box.
+            local orn_pl
+            if m.module == "ornament" and m.ornament and orn then
+                pcall(function()
+                    for _i, pe in ipairs(orn.mod.listAll() or {}) do
+                        if pe.name == m.ornament then
+                            orn_pl = orn.mod.place(pe, orn.budget, orn.stand_h, {
+                                max_below = orn.max_below, hang_room = orn.hang_room,
+                                max_room = (opts.content_w or 0) - 2 * orn.pad })
+                            break
+                        end
+                    end
+                end)
+                if orn_pl then w = orn_pl.w end
+            end
+            local at = math.min(mf.pos, #entries + 1)
+            table.insert(entries, at, {
+                book = f.book, item = f.item, item_idx = f.item_idx, run_idx = f.run_idx,
+                shelf_module = m, w = w, h = opts.row_h, w_dp = w, orn_pl = orn_pl,
+                look = { r = 128, g = 128, b = 128 }, label = "",
+                gap_before = face_gap, gap_base = face_gap, in_group = false,
+            })
+            -- gap_base as well as gap_before: the row layout starts every
+            -- entry's gap from gap_base, so raising gap_before alone was
+            -- undone and the book after a module stood against it.
+            local nxt = entries[at + 1]
+            if nxt and (nxt.gap_base or 0) < face_gap then nxt.gap_base = face_gap end
+            if nxt and (nxt.gap_before or 0) < face_gap then nxt.gap_before = face_gap end
+        end
+    end
     if _n_hydrated == 0 then
-        _plan_cache = { key = cache_key, entries = entries }
+        _plan_cache = { key = cache_key, entries = entries, base = base_key, ids = ids }
     end
     end -- cached
     -- The page's slice. Entries carry no page-relative state: a row start
@@ -4355,6 +4674,20 @@ function SpineShelf.plan(items, opts)
     if Deck and orn and orn_level ~= "off" then Deck.sync(orn.mod.listAll(), opts.orn_shelf) end
     local cards = (Deck and orn and orn_level ~= "off")
         and Deck.order(orn.mod.listFor(TP.ornamentsFor(opts.orn_shelf)), opts.orn_shelf) or {}
+    -- A piece pinned to this shelf (an Ornament module among its books) is
+    -- out of its deal: it stands where it was pinned, not twice.
+    pcall(function()
+        local tab = require("lib/bookshelf_tab_model").getById(opts.orn_shelf)
+        local pinned = {}
+        for _i, m in ipairs(require("lib/bookshelf_shelf_modules").list(tab) or {}) do
+            if m.module == "ornament" and m.ornament then pinned[m.ornament] = true end
+        end
+        if next(pinned) then
+            local kept = {}
+            for _i, c in ipairs(cards) do if not pinned[c.name] then kept[#kept + 1] = c end end
+            cards = kept
+        end
+    end)
     -- cap: the most width the piece may take (the deck's squeeze, for a row
     -- that must also seat a book); caps a reader's scale nudge as well.
     local function size(kind, e, deal_no, cap)
@@ -4401,6 +4734,8 @@ function SpineShelf.plan(items, opts)
     }) or nil
     local rows
     if hk then
+        -- A pinned piece keeps its row: the dealt end piece gives way to it.
+        hk.keep = function(i) return entries[i] and entries[i].orn_pl ~= nil end
         rows = SpineLayout.fillRows(widths, hk.avail, hk.gaps, hk.empty_ok, hk)
     else
         local g = {}
@@ -4513,6 +4848,9 @@ function SpineShelf.plan(items, opts)
         (_gettime() - _t0) * 1000, #entries, _t_hydrate * 1000, _n_hydrated,
         _t_look * 1000, _t_pages * 1000, _t_fav * 1000,
         _t_balance * 1000, _n_balance, _r_balance))
+    -- Closed only if this plan opened it: inside a rebuild or a page turn the
+    -- widget holds it open for the rest of its run (_ornScanWindow).
+    if OrnScan and OrnScan.allowRecent and not orn_scan_was_open then OrnScan.allowRecent(false) end
     return { entries = entries, rows = rows, shown = shown,
              next_item = next_item, next_skip = next_skip,
              -- Where the deck stands after this plan's rows (the next page
@@ -4582,6 +4920,9 @@ function SpineShelf.ownRowPart(w_, Orn)
     local part = setmetatable({ crop = { x = 0, y = rise, w = pl.w, h = pl.h - rise } }, { __index = pl })
     local c = Orn.Ornament:new{ placement = part, night = w_.night }
     c.overlap_offset = { off[1], 0 }
+    -- The copy answers a long-press as the piece: "Pin here" reads where the
+    -- piece stands from it (pin_after_idx, set on the piece by its row).
+    c._pin_of = w_
     return c
 end
 
@@ -4590,6 +4931,24 @@ end
 -- BookshelfWidget:_hangUnder: one anchored to the top, placed against the
 -- layout's nominal gap (t = 1: it follows the real gap all the way), and one
 -- lowered below its plank, which may dangle into the row beneath (dangle).
+-- pinAfter(entries, i, side) -> where "Pin here" stands a piece found before
+-- (side "before") or after (side "after") entries[i]: the plan item index it
+-- would stand after, or nil when that isn't a boundary between items -- on a
+-- grouped shelf a row may start or end inside a group, and a shelf module
+-- stands only between items, so it would land at the group's far end.
+function SpineShelf.pinAfter(entries, i, side)
+    local e = entries and entries[i]
+    if not (e and e.item_idx) then return nil end
+    if side == "before" then
+        local prev = entries[i - 1]
+        if prev and prev.item_idx == e.item_idx then return nil end
+        return e.item_idx - 1
+    end
+    local nxt = entries[i + 1]
+    if nxt and nxt.item_idx == e.item_idx then return nil end
+    return e.item_idx
+end
+
 function SpineShelf.noteOrn(list, w_, opts, part)
     local pl = w_.placement
     if not pl then return end
@@ -4663,13 +5022,77 @@ function SpineShelf.ornamentRow(opts)
     return OverlapGroup:new(kids), hanging, stand_h
 end
 
+-- _moduleTile(e, stand_h, opts, push) -> a shelf module standing on the
+-- plank: its cell (HeroModules._makeCell), e.w wide, pushed back like a
+-- face-out cover. It never lifts (selection doesn't apply), so it takes the
+-- whole stand bar a hair of headroom, and records what it drew for the shadow.
+-- _bareModule(m) -> true for a module drawn with no card behind it.
+function SpineShelf._bareModule(m)
+    local ok, def = pcall(function()
+        return require("lib/bookshelf_start_menu_modules").get(m.module)
+    end)
+    return ok and def and def.bare == true or false
+end
+
+-- _pinnedPieceTile(e, stand_h, opts) -> a pinned piece: drawn as the shelf
+-- draws a piece (Orn.Ornament, standing at SpineShelf.ornamentY), in a tile
+-- as wide as the piece and as tall as the row. A long-press opens its module
+-- menu (it is a module), not the ornament menu; the module menu and its
+-- swipes find it through _spine_module_cells.
+function SpineShelf._pinnedPieceTile(e, stand_h, opts)
+    local Orn = require("lib/bookshelf_ornaments")
+    local OverlapGroup = require("ui/widget/overlapgroup")
+    local pl = e.orn_pl
+    local w_ = Orn.Ornament:new{ placement = pl, night = _nightMode() }
+    w_.overlap_offset = { math.floor((e.w - pl.w) / 2), SpineShelf.ornamentY(pl, stand_h, opts) }
+    local m, bw = e.shelf_module, opts.bw
+    if bw and m and m.id then
+        w_.hold_fn = function()
+            if bw._spineModuleMenu then bw:_spineModuleMenu(m) end
+            return true
+        end
+        bw._spine_module_cells = bw._spine_module_cells or setmetatable({}, { __mode = "v" })
+        bw._spine_module_cells[m.id] = w_
+    end
+    return OverlapGroup:new{ dimen = Geom:new{ w = e.w, h = opts.height or stand_h },
+                             allow_mirroring = false, w_ }
+end
+
+function SpineShelf._moduleTile(e, stand_h, opts, push)
+    local VerticalGroup = require("ui/widget/verticalgroup")
+    local VerticalSpan  = require("ui/widget/verticalspan")
+    push = push or 0
+    local top = Screen:scaleBySize(4)
+    local cell_h = math.max(1, stand_h - push - top)
+    e._drawn_h = cell_h
+    local cell
+    pcall(function()
+        local HeroModules = require("lib/bookshelf_hero_modules")
+        if opts.bw then HeroModules._applyPalette(opts.bw) end
+        cell = HeroModules._makeCell(opts.bw, e.shelf_module, e.w, cell_h, 100, false, false)
+    end)
+    cell = cell or Widget:new{ dimen = Geom:new{ w = e.w, h = cell_h } }
+    -- Where the module stands, once painted: its long-press menu opens
+    -- beside it rather than over it (BookshelfWidget:_spineModuleMenu).
+    if opts.bw and e.shelf_module and e.shelf_module.id then
+        opts.bw._spine_module_cells = opts.bw._spine_module_cells or setmetatable({}, { __mode = "v" })
+        opts.bw._spine_module_cells[e.shelf_module.id] = cell
+    end
+    return VerticalGroup:new{ align = "left",
+        VerticalSpan:new{ width = top }, cell,
+        VerticalSpan:new{ width = push + math.max(0, (opts.height or stand_h) - stand_h) } }
+end
+
+-- opts.no_pin: the row is in a Shelf module, whose pieces are dealt for the
+-- module, so none offers "Pin here" (it would pin to the main shelf).
 function SpineShelf.rowWidget(opts)
     local HorizontalGroup = require("ui/widget/horizontalgroup")
     local HorizontalSpan  = require("ui/widget/horizontalspan")
     local OverlapGroup    = require("ui/widget/overlapgroup")
 
     local dimen = Geom:new{ w = opts.width, h = opts.height }
-    local plank = ShelfPlank:new{ dimen = Geom:new{ w = opts.width, h = opts.height } }
+    local plank = ShelfPlank:new{ dimen = Geom:new{ w = opts.width, h = opts.height },
+                                  keep_ground = opts.keep_ground }
     if not opts.row then
         -- A bare plank under the last books takes a piece when its shelf's
         -- turn comes round, like any other shelf (user ask: an empty shelf
@@ -4688,6 +5111,8 @@ function SpineShelf.rowWidget(opts)
             local x = (pl.side == "left") and margin or (opts.width - margin - pl.w)
             local w_ = Orn.Ornament:new{ placement = pl, night = _nightMode() }
             w_.overlap_offset = { x, SpineShelf.ornamentY(pl, stand_h, opts) }
+            -- Past the last book: "Pin here" stands it after all of them.
+            if not opts.no_pin then w_.pin_after_idx = math.huge end
             ornament = w_
         end)
         local design = SpineShelf.plankDesignWidget(opts.width, opts.height)
@@ -4791,6 +5216,9 @@ function SpineShelf.rowWidget(opts)
                     local Orn = require("lib/bookshelf_ornaments")
                     local w_ = Orn.Ornament:new{ placement = lead_pl, night = _nightMode() }
                     w_.overlap_offset = { cursor, SpineShelf.ornamentY(lead_pl, stand_h, opts) }
+                    -- Where "Pin here" stands it: before this row's first
+                    -- item (an item index into the plan's list).
+                    if not opts.no_pin then w_.pin_after_idx = SpineShelf.pinAfter(opts.plan.entries, i, "before") end
                     local part
                     if SpineShelf.behindAbove(lead_pl, w_.overlap_offset[2], opts) then
                         hanging[#hanging + 1] = w_
@@ -4822,6 +5250,7 @@ function SpineShelf.rowWidget(opts)
                                                       night = _nightMode() }
                         w_.overlap_offset = { cursor + math.floor((gap_w - pl.w) / 2),
                                               SpineShelf.ornamentY(pl, stand_h, opts) }
+                        if not opts.no_pin then w_.pin_after_idx = SpineShelf.pinAfter(opts.plan.entries, i, "before") end -- in the gap before e
                         local part
                         if SpineShelf.behindAbove(pl, w_.overlap_offset[2], opts) then
                             hanging[#hanging + 1] = w_
@@ -4887,7 +5316,11 @@ function SpineShelf.rowWidget(opts)
             end
             local tile
             local _tile_t0 = e.face_out and _gettime() or nil
-            if e.series_box then
+            if e.shelf_module and e.orn_pl then
+                tile = SpineShelf._pinnedPieceTile(e, stand_h, opts)
+            elseif e.shelf_module then
+                tile = SpineShelf._moduleTile(e, stand_h, opts, inset)
+            elseif e.series_box then
                 tile = require("lib/bookshelf_series_box_widget"):new{
                     entry = e, width = e.w, height = stand_h, inset = inset,
                     callbacks = opts.callbacks, book_look = SpineShelf.bookLook,
@@ -4959,6 +5392,7 @@ function SpineShelf.rowWidget(opts)
                     -- spine-out shows its cover width, so its whole
                     -- silhouette really is shorter.
                     local cover_h = math.min(e.face_h or (avail - depth), avail - depth)
+                    local natural_h = cover_h   -- before any shrink for a lift
                     -- A tall cover shrinks to make room for the lift rather
                     -- than losing the gap.
                     if lift > 0 and cover_h + depth + lift > fo_stand then
@@ -5047,49 +5481,89 @@ function SpineShelf.rowWidget(opts)
                                          thick = e.thick }
                     fx_here = cover.faceout_fx
                     local stack = VerticalGroup:new{ align = "center" }
-                    local head = fo_stand - cover_h - depth - lift
-                    if head > 0 then
-                        stack[#stack + 1] = VerticalSpan:new{ width = head }
-                    end
-                    if depth > 0 then
-                        stack[#stack + 1] = FaceOutTopBlock:new{
-                            dimen = Geom:new{ w = e.w, h = depth },
-                            look  = e.look,
-                            binding = e.binding,
-                        }
-                    end
+                    local block = depth > 0 and FaceOutTopBlock:new{
+                        dimen = Geom:new{ w = e.w, h = depth },
+                        look  = e.look,
+                        binding = e.binding,
+                    } or nil
+                    local feet = FaceOutFeet:new{
+                        dimen  = Geom:new{ w = e.w, h = cover_h },
+                        -- `lip` is the cover's foot to the plank's front edge:
+                        -- a face-out is pushed back by `push`, and
+                        -- then every book stands one inset behind
+                        -- the lip. The contact strip needs it to
+                        -- index the plank's bands the way the plank
+                        -- itself did.
+                        plank  = { b = b, inset = inset, surf = surf,
+                                   lip = push + inset },
+                        lifted = lift > 0 or nil,
+                    }
                     -- The cover's corners come off the same way a spine's
                     -- do, standing OR lifted: the cut copies what is behind,
                     -- so it is the plank on the shelf and the page off it.
-                    stack[#stack + 1] = OverlapGroup:new{
+                    local face = OverlapGroup:new{
                         dimen = Geom:new{ w = e.w, h = cover_h },
                         cover,
-                        FaceOutFeet:new{
-                            dimen  = Geom:new{ w = e.w, h = cover_h },
-                            -- `lip` is the cover's foot to the plank's front edge:
-                            -- a face-out is pushed back by `push`, and
-                            -- then every book stands one inset behind
-                            -- the lip. The contact strip needs it to
-                            -- index the plank's bands the way the plank
-                            -- itself did.
-                            plank  = { b = b, inset = inset, surf = surf,
-                                       lip = push + inset },
-                            lifted = lift > 0 or nil,
-                        },
+                        feet,
                     }
-                    if push + lift > 0 then
-                        if lift > 0 then
-                            -- The lifted book's shadow where it stood.
-                            stack[#stack + 1] = LiftShadow:new{
-                                dimen    = Geom:new{ w = e.w, h = push + lift },
-                                shadow_h = lift,
-                                plank    = { b = b, inset = inset, surf = surf },
-                            }
-                        else
-                            stack[#stack + 1] = VerticalSpan:new{
-                                width = push + lift,
-                            }
+                    -- arrange(l): the stack for a lift of l px -- the head
+                    -- above shortened by it, and below the cover the lifted
+                    -- book's shadow where it stood, or the push span.
+                    local function arrange(l)
+                        for i = #stack, 1, -1 do stack[i] = nil end
+                        local head = fo_stand - cover_h - depth - l
+                        if head > 0 then
+                            stack[#stack + 1] = VerticalSpan:new{ width = head }
                         end
+                        if block then stack[#stack + 1] = block end
+                        stack[#stack + 1] = face
+                        if push + l > 0 then
+                            if l > 0 then
+                                -- The lifted book's shadow where it stood.
+                                stack[#stack + 1] = LiftShadow:new{
+                                    dimen    = Geom:new{ w = e.w, h = push + l },
+                                    shadow_h = l,
+                                    plank    = { b = b, inset = inset, surf = surf },
+                                }
+                            else
+                                stack[#stack + 1] = VerticalSpan:new{
+                                    width = push + l,
+                                }
+                            end
+                        end
+                    end
+                    arrange(lift)
+                    -- Where it was painted (a VerticalGroup records no
+                    -- position): the selection repaint's rect.
+                    function stack.paintTo(self, target, x, y)
+                        local sz = self:getSize()
+                        self.dimen = Geom:new{ x = x, y = y, w = sz.w, h = sz.h }
+                        return VerticalGroup.paintTo(self, target, x, y)
+                    end
+                    -- _setLifted(on) -> true when the stack now stands (or
+                    -- is raised) as asked, in place: the selection repaint
+                    -- flips a face-out like a spine's flag rather than
+                    -- rebuilding every row and repainting the whole shelf
+                    -- (a face-out tap on the PW5 was the full ~240 ms paint).
+                    -- false when the lift needs a shorter cover (a tall one
+                    -- shrinks to make room): that is a rebuild.
+                    local lifted, raise = lift > 0, (lift > 0) and lift or tilt_lift
+                    function stack._setLifted(_self, on)
+                        on = on and true or false
+                        if on == lifted then return true end
+                        local l = on and raise or 0
+                        -- Raised, it would need a shorter cover; set down
+                        -- after a shrink, its full one: both are a rebuild.
+                        if cover_h + depth + l > fo_stand or cover_h ~= natural_h then
+                            return false
+                        end
+                        arrange(l)
+                        feet.lifted = l > 0 or nil
+                        cover.faceout_fx.raised = l
+                        cover.faceout_fx.lift = (l == 0) and raise or 0
+                        if stack.resetLayout then stack:resetLayout() end
+                        lifted = on
+                        return true
                     end
                     -- Mark the wrapper so the selection repaint can find it
                     -- (it has no .entry; flips fall back to a full swap).
@@ -5123,6 +5597,9 @@ function SpineShelf.rowWidget(opts)
                     flush_dx    = cursor - block_x0,
                 }
             end
+            -- Over a ground not the shelf's own (a micro-module's), the spine
+            -- keeps what it is painted over, for its opening tilt.
+            tile.keep_ground = opts.keep_ground or nil
             if e.book and e.book.filepath and tile then
                 slots_by_fp[e.book.filepath] = tile
             end
@@ -5173,11 +5650,15 @@ function SpineShelf.rowWidget(opts)
             if e.series_box then
                 local columns = require("lib/bookshelf_series_boxes").shadowColumns(e.series_box, cursor, inset)
                 for _, col in ipairs(columns) do recess_cols[#recess_cols + 1] = col end
+            elseif e.shelf_module and SpineShelf._bareModule(e.shelf_module) then
+                -- A module with no card (an ornament, a Shelf module) is see-
+                -- through: the shelf's shading carries on behind it, where a
+                -- solid column would leave a blank box round its drawing.
             else
                 recess_cols[#recess_cols + 1] = {
                     x = cursor, w = e.w,
                     h = (e._drawn_h or e.h or 0),
-                    foot = (e.face_out and inset or 0),
+                    foot = ((e.face_out or e.shelf_module) and inset or 0),
                     fp = e.book and e.book.filepath or nil,
                 }
             end
@@ -5210,6 +5691,14 @@ function SpineShelf.rowWidget(opts)
         x = math.max(margin, math.min(x, opts.width - margin - pl.w))
         local w_ = Orn.Ornament:new{ placement = pl, night = _nightMode() }
         w_.overlap_offset = { x, SpineShelf.ornamentY(pl, stand_h, opts) }
+        -- Before the row's first item, or after its last, as it stands.
+        pcall(function()
+            if pl.side == "left" then
+                if not opts.no_pin then w_.pin_after_idx = SpineShelf.pinAfter(opts.plan.entries, opts.row.first, "before") end
+            else
+                if not opts.no_pin then w_.pin_after_idx = SpineShelf.pinAfter(opts.plan.entries, opts.row.last, "after") end
+            end
+        end)
         local part
         if SpineShelf.behindAbove(pl, w_.overlap_offset[2], opts) then
             hanging[#hanging + 1] = w_
@@ -5590,6 +6079,12 @@ function SpineShelf.rowWidget(opts)
     end
     if ornament then children[#children + 1] = ornament end
     children[#children + 1] = group
+    -- plank_label: one label for the whole row, hung on its plank where a
+    -- section's badge would be (the Shelf micro-module's heading). Only on a
+    -- row with no section badges of its own.
+    if opts.plank_label and opts.plank_label ~= "" and #badge_spans == 0 and cursor > lead then
+        badge_spans[1] = { x = lead, w = cursor - lead, label = opts.plank_label }
+    end
     local badges
     if #badge_spans > 0 then
         badges = ShelfBadges:new{
@@ -5615,10 +6110,29 @@ function SpineShelf.rowWidget(opts)
     -- position of its own): the face-out opening pose repaints it there.
     -- Offscreen paints (a page-turn wipe's scratch) would record the wrong
     -- place, so only the screen's own buffer counts.
+    --
+    -- keep_ground (a Shelf module): what is behind the row is the module's,
+    -- not the shelf's page, so the row copies it before it paints, as its
+    -- spines do, for the pose to put back. Wallpaper.restore knows only the
+    -- shelf's page, and filled a module's row with the library's wallpaper
+    -- when a book opened from it inside a book (maintainer, PW5).
     if #faceout_fxs > 0 then
         local paint = row_group.paintTo
+        local keep_ground = opts.keep_ground
         function row_group:paintTo(bb, x, y)
-            if bb == Screen.bb then self._screen_x, self._screen_y = x, y end
+            local on_screen = require("lib/bookshelf_clip_bb").real(bb) == Screen.bb
+            if on_screen then self._screen_x, self._screen_y = x, y end
+            if keep_ground and on_screen then
+                pcall(function()
+                    local w, h = self.dimen.w, self.dimen.h
+                    local g = self._ground
+                    if not (g and g:getWidth() == w and g:getHeight() == h) then
+                        if g then g:free() end
+                        self._ground = Blitbuffer.new(w, h, bb:getType())
+                    end
+                    self._ground:blitFrom(require("lib/bookshelf_clip_bb").real(bb), 0, 0, x, y, w, h)
+                end)
+            end
             return paint(self, bb, x, y)
         end
         for _i, fx in ipairs(faceout_fxs) do fx.row = row_group end
@@ -5706,9 +6220,15 @@ function SpineShelf.paintOpeningTilt(slot)
         local Wallpaper = SpineShelf.has_wallpaper
                           and select(2, pcall(require, "lib/bookshelf_wallpaper"))
                           or nil
-        local patched = Wallpaper and Wallpaper.patch
+        -- A spine that kept its ground (in a micro-module) has the real one.
+        local kept = slot._ground and slot._ground:getWidth() == slot.width
+                     and slot._ground:getHeight() == slot.height
+        if kept then c:blitFrom(slot._ground, 0, 0, 0, 0, slot.width, slot.height) end
+        local patched = not kept and Wallpaper and Wallpaper.patch
             and Wallpaper.patch(c, 0, 0, d.x, d.y, slot.width, slot.height)
-        if patched then
+        if kept then
+            -- Put back exactly; the recess is already in it.
+        elseif patched then
             -- patch() restores the RAW picture, which is a step brighter than
             -- the shelf around it: the recess shadow painted over this slot
             -- during the row's own paint is not in the backdrop. Put an
@@ -5817,7 +6337,7 @@ function SpineShelf._paintFaceOutTip(tile)
     local ok = pcall(function()
         -- Squash the cover toward its (raised) feet.
         local src = Blitbuffer.new(rect.w, rect.h, bb:getType())
-        src:blitFrom(bb, 0, 0, rect.x, rect.y, rect.w, rect.h)
+        src:blitFrom(require("lib/bookshelf_clip_bb").real(bb), 0, 0, rect.x, rect.y, rect.w, rect.h)
         local scaled = src:scale(rect.w, rect.h - freed)
         local dy, sy, hh = ny, 0, rect.h - freed
         if dy < 0 then sy = -dy; hh = hh + dy; dy = 0 end
@@ -5984,7 +6504,7 @@ function SpineShelf.paintFaceOutTilt(tile)
     local ok, err = pcall(function()
         -- 1. The cover alone.
         local src = Blitbuffer.new(W, H, bb:getType())
-        src:blitFrom(bb, 0, 0, rect.x, rect.y, W, H)
+        src:blitFrom(require("lib/bookshelf_clip_bb").real(bb), 0, 0, rect.x, rect.y, W, H)
         local cx0, cy0 = card.dimen.x, card.dimen.y
         pcall(function() card:paintTo(src, 0, 0) end)
         card.dimen.x, card.dimen.y = cx0, cy0
@@ -5994,8 +6514,12 @@ function SpineShelf.paintFaceOutTilt(tile)
         col.h = 0
         item.paintTo = function() end
         local ok_r, err_r = pcall(function()
+            -- A row in a Shelf module kept its own ground (rowWidget).
+            local g = row._ground
             local ok_wp, Wallpaper = pcall(require, "lib/bookshelf_wallpaper")
-            if not (ok_wp and Wallpaper.restore(bb, rx, ry, rw, rh)) then
+            if g and g:getWidth() == rw and g:getHeight() == rh then
+                bb:blitFrom(g, rx, ry, 0, 0, rw, rh)
+            elseif not (ok_wp and Wallpaper.restore(bb, rx, ry, rw, rh)) then
                 bb:paintRectRGB32(rx, ry, rw, rh, Blitbuffer.ColorRGB32(0xFF, 0xFF, 0xFF, 0xFF))
             end
             row:paintTo(bb, rx, ry)

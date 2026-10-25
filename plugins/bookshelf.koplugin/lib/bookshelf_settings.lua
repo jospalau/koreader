@@ -1903,7 +1903,7 @@ function Settings:_panelRows()
     return {
         {
             text_func = function()
-                return T(_("Panel shading: %1"), self:_scrimLabel())
+                return T(_("Panel colors and shading: %1"), self:_scrimLabel())
             end,
             help_text = _("How much to shade the top panel and the footer so "
                 .. "the buttons stay legible over a picture. Transparent lets "
@@ -2072,9 +2072,75 @@ function Settings:_scrimSubItems()
             end,
         }
     end
+    -- And the panels' colours beneath the shading (the same rows as Colors).
+    rows[#rows].separator = true
+    for _i, r in ipairs(self:_panelColorItems(true)) do rows[#rows + 1] = r end
+    rows[#rows].separator = nil
     return rows
 end
 
+
+-- _panelColorItems(outside) -> Panel color and Panel text, the rows the
+-- Colors menu and Wallpaper > Panel colors and shading both show (the
+-- maintainer wanted them beside the shading as well). outside: not in Colors,
+-- so they edit the look on screen (_shelfSlot), not Colors' Light | Dark
+-- switch. The second row ends its band (separator).
+function Settings:_panelColorItems(outside)
+    local CoverProgress = require("lib/bookshelf_cover_progress")
+    local function slot() if outside then self:_shelfSlot() end end
+    local function shown(field)
+        slot()
+        return Settings.valueText(CoverProgress.rawColors()[field])
+    end
+    local function clear(base, touchmenu_instance)
+        slot()
+        require("lib/bookshelf_theme_pack").partDelete(base .. CoverProgress.editSuffix())
+        self:_markDirty()
+        if touchmenu_instance then touchmenu_instance:updateItems() end
+    end
+    return {
+        {
+            -- The top and footer panels' tint (Panel shading sets how much of
+            -- it). Unset: white or black from the theme, as before.
+            text_func = function()
+                return _("Panel color") .. ": " .. shown("panel_color")
+            end,
+            help_text = _("The color of the top and bottom panels, blended over "
+                .. "the wallpaper as strongly as the shading says. Text on the "
+                .. "panels turns black or white to suit it, unless Panel text is "
+                .. "set. Long-press to clear."),
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                slot()
+                self:_pickColor("panel_color", "panel_color", 0,
+                    { _("Panel color"), _("Panel color (% black)") }, touchmenu_instance)
+            end,
+            hold_callback = function(touchmenu_instance) clear("panel_color", touchmenu_instance) end,
+        },
+        {
+            -- Auto (black or white for the panel color) until picked.
+            text_func = function()
+                local v = shown("panel_ink")
+                local raw = CoverProgress.rawColors()
+                if type(raw.panel_ink) == "nil" and type(raw.panel_color) ~= "nil" then
+                    v = _("Auto")
+                end
+                return _("Panel text") .. ": " .. v
+            end,
+            help_text = _("The color of text and icons on the top and bottom panels. "
+                .. "Left unset with a panel color, it is black or white, whichever "
+                .. "reads on it. Long-press to clear."),
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                slot()
+                self:_pickColor("panel_ink", "panel_ink", 100,
+                    { _("Panel text"), _("Panel text (% black)") }, touchmenu_instance)
+            end,
+            hold_callback = function(touchmenu_instance) clear("panel_ink", touchmenu_instance) end,
+            separator = true,   -- end of the panel band
+        },
+    }
+end
 
 -- ── The colour picker, shared ──────────────────────────────────────────────
 --
@@ -2177,6 +2243,10 @@ local function _valueText(raw, raw_key)
     local p = _rawToScreenPct(raw)
     return p and (p .. "%") or _("default")
 end
+
+-- The row label for a stored colour ("default", "#RRGGBB", "40%"), for the
+-- colour rows outside this menu (a micro-module's own card colours).
+Settings.valueText = _valueText
 
 local function _screenPctToByte(pct)
     if _isNight() then
@@ -2311,6 +2381,8 @@ function Settings:_plankRow(markDirty)
     }
 end
 
+-- wood.store (optional): { partRead, partSnapshot, partSave, partDelete,
+-- partRestore } in place of the theme's, for a colour kept elsewhere.
 -- wood.on_done (optional): runs once when the dialog closes, however, and the
 -- menu is then left alone (the caller keeps it hidden): the palette is handed
 -- a stand-in menu whose refresh is on_done, the % dialog an on_close.
@@ -2348,7 +2420,10 @@ function Settings:_pickColor(raw_key, field, default_pct, title,
         local key      = raw_key .. suffix
         -- Read and written through the one seam: Custom theme's key, or the
         -- edits to the theme on screen (bookshelf_theme_pack.partSave).
-        local TP       = require("lib/bookshelf_theme_pack")
+        -- wood.store (optional): somewhere else to keep it, with the same
+        -- five calls -- a micro-module's own card colours live on the module
+        -- (bookshelf_module_card_menu).
+        local TP       = (wood and wood.store) or require("lib/bookshelf_theme_pack")
         local raw      = TP.partRead(key)
         local before   = TP.partSnapshot(key)
 
@@ -2597,6 +2672,9 @@ function Settings:_colorsSubItems()
         return require("lib/bookshelf_theme_pack").partRead(TRANSPARENT_KEY) == true
     end
 
+    -- Panel color and Panel text, built where the Wallpaper menu's panel
+    -- rows are built too (_panelColorItems).
+    local panel_rows = self:_panelColorItems()
     local items = {
         {
             -- First, set apart: at the end it was a page of its own, so the
@@ -2616,6 +2694,7 @@ function Settings:_colorsSubItems()
                     "badge_fg", "badge_bg", "border_color",
                     "chrome_bg", "chip_bar_transparent",
                     "module_bg", "module_border", "panel_bg",
+                    "panel_color", "panel_ink",
                     "selection_color", "card_shadow_color",
                     "spine_plank_color",
                     "folder_overlay_bg", "folder_overlay_fg",
@@ -2807,6 +2886,8 @@ function Settings:_colorsSubItems()
             end,
             separator = true,   -- end of the page-count badge band
         },
+        panel_rows[1],
+        panel_rows[2],
         {
             text_func = function()
                 return _("Micro-module background") .. ": " .. valueLabel("module_bg")
@@ -4624,6 +4705,30 @@ function Settings:_librarySubItems()
             end,
         },
         {
+            -- Grouped shelves file a book with several authors, genres or
+            -- collections under each; this files it under one
+            -- (Repo.oneGroupPerBook).
+            text = _("Show each book in one group only"),
+            help_text = _("On Authors, Genres and Collections shelves, a book"
+                .. " with several authors, genres or collections appears under"
+                .. " its first one only: the first listed in the book, or the"
+                .. " collection highest in KOReader's collection list. Search"
+                .. " and filters still find it under all of them."),
+            checked_func = function()
+                return BookshelfSettings.read("group_first_only") == true
+            end,
+            keep_menu_open = true,
+            callback = function()
+                local on = BookshelfSettings.read("group_first_only") == true
+                BookshelfSettings.save("group_first_only", not on)
+                BookshelfSettings.flush()
+                if self._bw and self._bw._rebuild then
+                    self._bw:_rebuild()
+                    UIManager:setDirty(self._bw, "ui")
+                end
+            end,
+        },
+        {
             -- Issue 428. On by default: calibre's title_sort, or a leading
             -- The / A / An dropped, for titles and series names alike. Off
             -- sorts both exactly as written.
@@ -6298,8 +6403,9 @@ function Settings:_tabsMenuItems()
     for _i, tab in ipairs(tabs) do
         local tab_id = tab.id
         -- Sub-shelves live inside their shelf of shelves (long-press a tile
-        -- there to edit one), not in this list of the strip's shelves.
-        if not tab.parent then
+        -- there to edit one), not in this list of the strip's shelves; a
+        -- card's own shelf is edited from its card.
+        if not tab.parent and not TabModel.isCardOnly(tab) then
         items[#items + 1] = {
             keep_menu_open = true,
             text_func = function()

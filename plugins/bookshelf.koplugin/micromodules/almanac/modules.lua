@@ -10,6 +10,7 @@ What Bookshelf asks of a module (see its micromodules/README.md):
 ]]
 
 local A = ...
+local T = A._
 local D = A.D
 local P = A.panels
 local S = A.S
@@ -78,6 +79,7 @@ local function makeEnv(name, ctx, w, h, o)
         nested = o.nested or false,
         native = native,
         page = o.page,
+        page_heading = o.page_heading or false,
         bleed = (surface == "hero" or surface == "fullscreen"),
         sample = (ctx and ctx.preview) and true or false,
         refresh = ownRefresh(ctx),
@@ -92,7 +94,7 @@ local function errorCard(name, w, h, err)
     A.log(name, "render failed:", err)
     local c = A.canvas{ w = w, h = h, tone = "ink", radius = 12 }
     local s = min(w / 500, h / 200)
-    c:label((P[name] and P[name].title or name) .. " could not be drawn", max(12, floor(22 * s)), w / 2, h / 2,
+    c:label((P[name] and P[name].title or name) .. T(" could not be drawn"), max(12, floor(22 * s)), w / 2, h / 2,
         { anchor = "c", valign = "mid", max_w = w - 20 })
     return c
 end
@@ -147,9 +149,11 @@ end
 -- update over whatever was on screen before leaves that showing through.
 --
 -- Look and colours > Screen refresh picks one of:
---   clean  (default) colour hint on; one flashing update when the view opens,
---          closes, and when the dashboard turns a page; a card that redraws
---          after a tap, and the clock each minute, get a ghost-clearing update
+--   clean  (default) colour hint on; one flashing update when the view opens
+--          and closes; turning a dashboard page, a card that redraws after a
+--          tap, and the clock each minute get a ghost-clearing update (a page
+--          turn flashes every so often, following KOReader's own "Full
+--          refresh rate", as a book's pages do)
 --   soft   colour hint on, never a flash
 --   host   leave everything to Bookshelf
 --
@@ -225,8 +229,14 @@ local _attended = setmetatable({}, { __mode = "k" })
 local _seen_views = setmetatable({}, { __mode = "k" })
 function A.attend(ctx)
     local fs = overlayOf(ctx)
-    -- a newly opened full-screen view starts on this month again
-    if fs and not _seen_views[fs] then _seen_views[fs] = true; A.state.month_offset = 0 end
+    -- a newly opened full-screen view starts on this month again, with the
+    -- reading list looked at afresh and its first page drawn whole at once
+    if fs and not _seen_views[fs] then
+        _seen_views[fs] = true
+        A.state.month_offset = 0
+        D._reading = nil
+        D.hurry(0.35)
+    end
     if not fs or _attended[fs] then return end
     local mode = A.refreshMode()
     if mode == "host" or not hasEink() then return end
@@ -287,8 +297,10 @@ function A.attend(ctx)
 end
 
 -- A card that is already on screen is about to be redrawn (a tap changed it,
--- or the dashboard turned a page). flash = the whole card changes.
-local function inkRefresh(ctx, flash)
+-- or the dashboard turned a page). flash = the whole card changes; turn = a
+-- dashboard page turn (a ghost-clearing update in either mode, which KOReader
+-- promotes to a flash every "Full refresh rate" updates).
+local function inkRefresh(ctx, flash, turn)
     local id = ctx and ctx.entry and ctx.entry.id
     if id then A.state.own_redraw[id] = true end
     local fs = overlayOf(ctx, true)
@@ -296,7 +308,9 @@ local function inkRefresh(ctx, flash)
     local mode = A.refreshMode()
     if mode == "host" then return end
     local kind
-    if flash then
+    if turn then
+        kind = "partial"
+    elseif flash then
         kind = (mode == "clean") and "full" or "partial"
     elseif mode == "clean" then
         kind = "partial"
@@ -384,6 +398,9 @@ function A.render(name, ctx)
     A.attend(ctx)
     local w, h = boxFor(def, ctx)
     local c = buildPanel(name, makeEnv(name, ctx, w, h))
+    -- painted once and kept (see the paint cache in init.lua); not the
+    -- clocks, which are a new picture every minute
+    c.cache_me = not def.tick
     declareRegions(ctx, c)
     if def.tick then A.clockRefresh(ctx, c.w, c.h, 0, c.h) end
     return c
@@ -478,16 +495,18 @@ end
 
 -- The pages as they come. A row is one card, or two side by side.
 A.DASH_PAGES = {
-    { id = "today", label = "Today",
+    { id = "today", label = T("Today"),
       rows = { { "banner" }, { "continue" }, { "activity", "week_rings" }, { "bookclub" } } },
-    { id = "yearly", label = "Yearly", heading = true, kicker = "year",
+    { id = "yearly", label = T("Yearly"), heading = true, kicker = "year",
       rows = { { "year_time", "longest_year" }, { "year_chart" }, { "year_covers" } } },
-    { id = "monthly", label = "Monthly", heading = true, kicker = "month",
+    { id = "monthly", label = T("Monthly"), heading = true, kicker = "month",
       rows = { { "month_rings", "month_totals" }, { "month_chart" }, { "when_read", "longest_month" } } },
-    { id = "trends", label = "Trends", heading = true, kicker = "streak",
+    { id = "trends", label = T("Trends"), heading = true, kicker = "streak",
       rows = { { "challenge", "forecast" }, { "trends" } } },
-    { id = "library", label = "Library", heading = true, kicker = "library",
+    { id = "library", label = T("Library"), heading = true, kicker = "library",
       rows = { { "library" }, { "pick", "authors" }, { "quote" } } },
+    { id = "calendar", label = T("Calendar"), heading = false, kicker = "month",
+      rows = { { "calendar" } } },
 }
 
 -- How tall a card wants to be, as a share of the page. A row takes the larger
@@ -500,15 +519,17 @@ A.DASH_WEIGHT = {
     year_time = 0.36, month_totals = 0.40, month_chart = 0.30, when_read = 0.36,
     challenge = 0.33, forecast = 0.33, trends = 0.62, control = 0.24, compare = 0.34,
     library = 0.27, authors = 0.37, pick = 0.37, quote = 0.25, timeline = 0.27,
+    calendar = 0.9, cover_week = 0.3, quote2 = 0.25, quote3 = 0.25, quote4 = 0.25,
 }
 -- The order cards are offered in when editing a page.
 A.DASH_CARDS = { "banner", "continue", "activity", "week_rings", "month_rings", "month_totals", "month_chart",
                  "when_read", "goal", "bookclub", "tbr", "genres", "year_covers", "week", "year_chart",
                  "year_time", "heatmap", "finished", "longest_year", "longest_month", "deadline",
                  "trends", "challenge", "forecast", "control", "compare",
-                 "library", "authors", "pick", "quote", "timeline" }
+                 "library", "authors", "pick", "quote", "timeline", "calendar", "cover_week",
+                 "quote2", "quote3", "quote4" }
 A.DASH_MAX_ROWS = 6
-A.DASH_MAX_PAGES = 7
+A.DASH_MAX_PAGES = 8
 
 -- Pages the reader added: { { id = "c1", label = "My page" }, ... } under
 -- dash_custom. Their rows are kept like any page's, under dash_rows_<id>.
@@ -518,7 +539,7 @@ local function customPages()
     if type(list) ~= "table" then return out end
     for _, e in ipairs(list) do
         if type(e) == "table" and type(e.id) == "string" and e.id:match("^c%d+$") then
-            out[#out + 1] = { id = e.id, label = (type(e.label) == "string" and e.label ~= "") and e.label or "My page",
+            out[#out + 1] = { id = e.id, label = (type(e.label) == "string" and e.label ~= "") and e.label or T("My page"),
                 custom = true, rows = { { type(e.first) == "string" and e.first or "continue" } } }
         end
     end
@@ -542,7 +563,7 @@ function A.dashPages()
     end
     return all
 end
-local ROW_HEIGHTS = { { 0.7, "Shorter" }, { 1, "Normal" }, { 1.35, "Taller" }, { 1.8, "Tallest" } }
+local ROW_HEIGHTS = { { 0.7, T("Shorter") }, { 1, T("Normal") }, { 1.35, T("Taller") }, { 1.8, T("Tallest") } }
 
 local function pageById(id)
     for _, page in ipairs(A.dashPages()) do if page.id == id then return page end end
@@ -669,6 +690,11 @@ local function buildDashboard(ctx, w, h)
         local inner = bar_w - bar_h * 0.5
         local cell = inner / #tabs
         local size = max(10, floor(bar_h * 0.36 * ts + 0.5))
+        -- a tab name too long for its cell (longer words in some languages)
+        -- makes every tab's text a little smaller rather than cutting it off
+        local widest = 0
+        for _, tab in ipairs(tabs) do widest = max(widest, c:text(tab.label, size, { bold = true }).w) end
+        if widest > cell - 6 then size = max(10, floor(size * (cell - 10) / widest)) end
         local fill = A.shown(dark and th.gold or th.wine)
         local on_fill = A.shown(dark and th.ink or th.paper)
         for i, tab in ipairs(tabs) do
@@ -717,22 +743,25 @@ local function buildDashboard(ctx, w, h)
             local t = os.date("*t")
             local vy, vm, current = A.viewMonth()
             local n_days = tonumber(os.date("%d", os.time{ year = vy, month = vm + 1, day = 0, hour = 12 })) or 30
-            kicker = A.monthTitle(vy, vm) .. dot .. (current and ("day " .. t.day .. " of " .. n_days) or (n_days .. " days"))
+            kicker = A.monthTitle(vy, vm) .. dot .. (current and (T("day ") .. t.day .. T(" of ") .. n_days) or (n_days .. T(" days")))
             nav = { prev = (tonumber(A.state.month_offset) or 0) > -D.BACK_MONTHS, next = not current, today = not current }
         elseif page.kicker == "library" then
             -- "412 books · 168 read"
             local lib = D.library(refresh)
-            kicker = lib and (A.plural(lib.total, "book", "books") .. dot .. A.thousands(lib.counts.finished) .. " read") or nil
+            kicker = lib and (A.plural(lib.total, "book", "books") .. dot .. A.thousands(lib.counts.finished) .. T(" read")) or nil
         elseif page.kicker == "streak" and st then
             -- "Streak 147 days · best 150"
-            kicker = (st.streak > 0 and ("Streak " .. A.plural(st.streak, "day", "days")) or "No streak yet")
-                .. ((st.best or 0) > st.streak and (dot .. "best " .. st.best) or "")
+            kicker = (st.streak > 0 and (T("Streak ") .. A.plural(st.streak, "day", "days")) or T("No streak yet"))
+                .. ((st.best or 0) > st.streak and (dot .. T("best ") .. st.best) or "")
         elseif st then
-            kicker = "This week" .. dot .. A.plural(st.week_pages, "page", "pages")
+            kicker = T("This week") .. dot .. A.plural(st.week_pages, "page", "pages")
         end
         local env = { w = w, h = head_h, ts = ts }
         local ok, hc = pcall(P.heading, env, kicker, pageLabel(page), nav)
-        if ok and hc then c:sub(hc, ox, oy + y, "heading|") end
+        if ok and hc then
+            hc.cache_me = true
+            c:sub(hc, ox, oy + y, "heading|")
+        end
         y = y + head_h + floor(gap * 0.6)
     end
 
@@ -747,8 +776,9 @@ local function buildDashboard(ctx, w, h)
         for ni, name in ipairs(names) do
             local x = (ni - 1) * (pw + gap)
             local width = (ni == #names) and (w - x) or pw
-            local env = makeEnv(name, ctx, width, rh, { nested = true, slot = 1, page = page_look })
+            local env = makeEnv(name, ctx, width, rh, { nested = true, slot = 1, page = page_look, page_heading = heading })
             local child = buildPanel(name, env)
+            child.cache_me = not P[name].tick
             c:sub(child, ox + x, oy + y, name .. "|")
             if P[name].tick then c.clock_y, c.clock_h = oy + y, rh end
             -- the rest of the panel: a plain tap on it
@@ -775,8 +805,8 @@ end
 
 local Dashboard = {
     key = "alm_dashboard",
-    title = A.NAME .. " \xC2\xB7 Dashboard",
-    summary = "All the " .. A.NAME .. " cards as tabbed pages. Best alone in the full-screen view.",
+    title = A.NAME .. T(" \xC2\xB7 Dashboard"),
+    summary = A.tr("All the %1 cards as tabbed pages. Best alone in the full-screen view.", A.NAME),
     -- Square modules get the card's full inner width, and one on its own
     -- fills the whole grid, which is what a page of panels needs.
     aspect = "square",
@@ -797,6 +827,16 @@ function Dashboard.render(ctx)
     declareRegions(ctx, c)
     A.clockRefresh(ctx, w, h, c.clock_y, c.clock_h)
     return c
+end
+
+-- A new page (a tab, or another month): the data the new page needs is
+-- worked out before it is drawn, within a short time limit, so it shows up
+-- whole in one go instead of in two steps; and it is put on screen with a
+-- quick update rather than a flash (KOReader still flashes every so often,
+-- by its own "Full refresh rate", to clear ghosting).
+local function pageTurn(ctx)
+    D.hurry(0.35)
+    inkRefresh(ctx, false, true)
 end
 
 -- Without tap regions (an older Bookshelf) a tap anywhere turns the page.
@@ -847,7 +887,7 @@ end
 function Dashboard.on_tap(ctx)
     local kind, a, b = dashSplit(dashRegion(ctx))
     if kind == "nav" then
-        if stepMonth(a) then inkRefresh(ctx, true) end
+        if stepMonth(a) then pageTurn(ctx) end
         return
     end
     if kind == "tab" then
@@ -855,7 +895,7 @@ function Dashboard.on_tap(ctx)
         if not tab then return end
         if A.state.dash_page ~= tab.page then
             A.state.dash_page = tab.page
-            inkRefresh(ctx, true)
+            pageTurn(ctx)
         end
     elseif kind == "panel" then
         local def = P[a]
@@ -875,7 +915,7 @@ local ELLIPSIS = "\xE2\x80\xA6"
 
 local function cardOptions(with_none)
     local opts = {}
-    if with_none then opts[1] = { false, "Nothing (full width)" } end
+    if with_none then opts[1] = { false, T("Nothing (full width)") } end
     for _, name in ipairs(A.DASH_CARDS) do
         if type(P[name]) == "table" then opts[#opts + 1] = { name, P[name].title } end
     end
@@ -891,19 +931,19 @@ end
 -- One row of one page: which card, what (if anything) beside it, how tall,
 -- where in the page. Every change is saved and drawn straight away.
 local function editRow(ctx, page, idx, back)
-    S.open(ctx, pageLabel(page) .. ": row " .. idx, function(api)
+    S.open(ctx, pageLabel(page) .. T(": row ") .. idx, function(api)
         local rows = pageRows(page)
         local row = rows[idx]
         local out = {}
         if not row then
-            out[1] = S.header("That row is no longer there")
+            out[1] = S.header(T("That row is no longer there"))
         else
             local function save() savePageRows(page, rows) end
-            out[#out + 1] = S.pick(ctx, api, "Card", cardOptions(false), row.cards[1], function(v)
+            out[#out + 1] = S.pick(ctx, api, T("Card"), cardOptions(false), row.cards[1], function(v)
                 row.cards[1] = v
                 save()
             end)
-            out[#out + 1] = S.pick(ctx, api, "Beside it", cardOptions(true), row.cards[2] or false, function(v)
+            out[#out + 1] = S.pick(ctx, api, T("Beside it"), cardOptions(true), row.cards[2] or false, function(v)
                 row.cards[2] = v or nil
                 save()
             end)
@@ -912,7 +952,7 @@ local function editRow(ctx, page, idx, back)
             for _, h in ipairs(ROW_HEIGHTS) do
                 if math.abs(h[1] - k) < math.abs(best - k) then best = h[1] end
             end
-            out[#out + 1] = S.header("Height")
+            out[#out + 1] = S.header(T("Height"))
             out[#out + 1] = S.radio(api, ROW_HEIGHTS, best, function(v) row.k = v; save() end)
             local function move(to)
                 rows[idx], rows[to] = rows[to], rows[idx]
@@ -922,10 +962,10 @@ local function editRow(ctx, page, idx, back)
                 editRow(ctx, page, to, back)
             end
             out[#out + 1] = {
-                { text = "Move up", enabled = idx > 1, callback = function() move(idx - 1) end },
-                { text = "Move down", enabled = idx < #rows, callback = function() move(idx + 1) end },
+                { text = T("Move up"), enabled = idx > 1, callback = function() move(idx - 1) end },
+                { text = T("Move down"), enabled = idx < #rows, callback = function() move(idx + 1) end },
             }
-            out[#out + 1] = { { text = "Remove this row", enabled = #rows > 1, callback = function()
+            out[#out + 1] = { { text = T("Remove this row"), enabled = #rows > 1, callback = function()
                 table.remove(rows, idx)
                 save()
                 api.close()
@@ -933,7 +973,7 @@ local function editRow(ctx, page, idx, back)
                 back()
             end } }
         end
-        out[#out + 1] = { { text = "Back", callback = function() api.close(); back() end } }
+        out[#out + 1] = { { text = T("Back"), callback = function() api.close(); back() end } }
         return out
     end)
 end
@@ -976,7 +1016,7 @@ function A.addPage(label)
     local first = "continue"
     for _, name in ipairs(A.DASH_CARDS) do if not used[name] then first = name break end end
     local id = "c" .. (top + 1)
-    copy[#copy + 1] = { id = id, label = label or ("Page " .. (#A.dashPages() + 1)), first = first }
+    copy[#copy + 1] = { id = id, label = label or (T("Page ") .. (#A.dashPages() + 1)), first = first }
     A.set("dash_custom", copy)
     return id
 end
@@ -1013,7 +1053,7 @@ end
 -- The pages: pick one, then its rows are listed. Tap a row to change it.
 local function editPages(ctx, back)
     local function again() editPages(ctx, back) end
-    S.open(ctx, "Dashboard pages", function(api)
+    S.open(ctx, T("Dashboard pages"), function(api)
         local pages = A.dashPages()
         local page = pageById(A.state.edit_page) or pages[1]
         local out = {}
@@ -1030,14 +1070,14 @@ local function editPages(ctx, back)
         end
         if #line > 0 then out[#out + 1] = line end
         local rows, edited = pageRows(page)
-        out[#out + 1] = S.header("Rows, top to bottom (tap one to change it)")
+        out[#out + 1] = S.header(T("Rows, top to bottom (tap one to change it)"))
         for i, row in ipairs(rows) do
             out[#out + 1] = { { text = i .. ".  " .. rowTitle(row), callback = function()
                 api.close()
                 editRow(ctx, page, i, again)
             end } }
         end
-        out[#out + 1] = { { text = "+ Add a row", enabled = #rows < A.DASH_MAX_ROWS, callback = function()
+        out[#out + 1] = { { text = T("+ Add a row"), enabled = #rows < A.DASH_MAX_ROWS, callback = function()
             -- start with a card this page does not have yet
             local used = {}
             for _, r in ipairs(rows) do for _, name in ipairs(r.cards) do used[name] = true end end
@@ -1049,43 +1089,43 @@ local function editPages(ctx, back)
             S.reload(ctx)
             editRow(ctx, page, #rows, again)
         end } }
-        out[#out + 1] = S.header("This page")
-        out[#out + 1] = S.input(api, "Tab name", pageLabel(page), function(v)
+        out[#out + 1] = S.header(T("This page"))
+        out[#out + 1] = S.input(api, T("Tab name"), pageLabel(page), function(v)
             A.set("dash_label_" .. page.id, (v ~= "" and v ~= page.label) and v or nil)
         end)
-        out[#out + 1] = S.radio(api, { { true, "Title on the page" }, { false, "No title" } },
+        out[#out + 1] = S.radio(api, { { true, T("Title on the page") }, { false, T("No title") } },
             pageHeading(page), function(v) A.set("dash_heading_" .. page.id, v) end)
-        out[#out + 1] = S.radio(api, { { true, "Page shown" }, { false, "Page hidden" } },
+        out[#out + 1] = S.radio(api, { { true, T("Page shown") }, { false, T("Page hidden") } },
             A.get("dash_page_" .. page.id, true) ~= false, function(v) A.set("dash_page_" .. page.id, v) end)
         local at = 1
         for i, pg in ipairs(pages) do if pg.id == page.id then at = i end end
         out[#out + 1] = {
-            { text = "\xE2\x80\xB9 Move tab left", enabled = at > 1, callback = function()
+            { text = T("\xE2\x80\xB9 Move tab left"), enabled = at > 1, callback = function()
                 A.movePage(page.id, -1); api.changed()
             end },
-            { text = "Move tab right \xE2\x80\xBA", enabled = at < #pages, callback = function()
+            { text = T("Move tab right \xE2\x80\xBA"), enabled = at < #pages, callback = function()
                 A.movePage(page.id, 1); api.changed()
             end },
         }
         if page.custom then
-            out[#out + 1] = { { text = "Remove this page", callback = function()
+            out[#out + 1] = { { text = T("Remove this page"), callback = function()
                 A.removePage(page.id)
                 A.state.edit_page = nil
                 A.state.dash_page = 1
                 api.changed()
             end } }
         else
-            out[#out + 1] = { { text = "Put this page back as it came", enabled = edited, callback = function()
+            out[#out + 1] = { { text = T("Put this page back as it came"), enabled = edited, callback = function()
                 A.set("dash_rows_" .. page.id, nil)
                 api.changed()
             end } }
         end
-        out[#out + 1] = { { text = "+ Add a page", enabled = #pages < A.DASH_MAX_PAGES, callback = function()
+        out[#out + 1] = { { text = T("+ Add a page"), enabled = #pages < A.DASH_MAX_PAGES, callback = function()
             A.state.edit_page = A.addPage() or A.state.edit_page
             api.changed()
         end } }
         if back then
-            out[#out + 1] = { { text = "Back", callback = function() api.close(); back() end } }
+            out[#out + 1] = { { text = T("Back"), callback = function() api.close(); back() end } }
         end
         return out
     end)
@@ -1093,19 +1133,20 @@ end
 
 function Dashboard.show_settings(ctx)
     local function show()
-        S.open(ctx, A.NAME .. " dashboard", function(api)
+        S.open(ctx, A.NAME .. T(" dashboard"), function(api)
             local rows = {}
-            rows[#rows + 1] = { { text = "Pages and cards" .. ELLIPSIS, callback = function()
+            rows[#rows + 1] = { { text = T("Pages and cards") .. ELLIPSIS, callback = function()
                 api.close()
                 editPages(ctx, show)
             end } }
-            rows[#rows + 1] = S.header("Margin around the page")
-            rows[#rows + 1] = S.radio(api, { { "none", "None" }, { "small", "Small" }, { "medium", "Medium" } },
+            for _, r in ipairs(S.styleRows(api, ctx)) do rows[#rows + 1] = r end
+            rows[#rows + 1] = S.header(T("Margin around the page"))
+            rows[#rows + 1] = S.radio(api, { { "none", T("None") }, { "small", T("Small") }, { "medium", T("Medium") } },
                 MARGINS[A.get("dash_margin", "small")] and A.get("dash_margin", "small") or "small",
                 function(v) A.set("dash_margin", v ~= "small" and v or nil) end)
-            rows[#rows + 1] = { { text = "Card settings" .. ELLIPSIS, callback = function()
+            rows[#rows + 1] = { { text = T("Card settings") .. ELLIPSIS, callback = function()
                 api.close()
-                S.open(ctx, "Card settings", function(sub)
+                S.open(ctx, T("Card settings"), function(sub)
                     local list, seen = {}, {}
                     local line = {}
                     for _, page in ipairs(A.dashPages()) do
@@ -1125,22 +1166,21 @@ function Dashboard.show_settings(ctx)
                         end
                     end
                     if #line > 0 then list[#list + 1] = line end
-                    list[#list + 1] = { { text = "Back", callback = function() sub.close(); show() end } }
+                    list[#list + 1] = { { text = T("Back"), callback = function() sub.close(); show() end } }
                     return list
                 end)
             end } }
-            rows[#rows + 1] = { { text = "Look and colours" .. ELLIPSIS, callback = function()
+            rows[#rows + 1] = { { text = T("Look and colours") .. ELLIPSIS, callback = function()
                 api.close()
                 S.look(ctx, show)
             end } }
-            rows[#rows + 1] = { { text = "Put the whole Dashboard back as it came" .. ELLIPSIS, callback = function()
+            rows[#rows + 1] = { { text = T("Put the whole Dashboard back as it came") .. ELLIPSIS, callback = function()
                 api.close()
                 local UIManager = require("ui/uimanager")
                 local ConfirmBox = require("ui/widget/confirmbox")
                 UIManager:show(ConfirmBox:new{
-                    text = "Put every page, tab and row of the Dashboard back as it came?\n\n"
-                        .. "Pages you added are removed. Each card's own settings and the colours are kept.",
-                    ok_text = "Put back",
+                    text = T("Put every page, tab and row of the Dashboard back as it came?\n\nPages you added are removed. Each card's own settings and the colours are kept."),
+                    ok_text = T("Put back"),
                     ok_callback = function()
                         A.resetDashboard()
                         S.reload(ctx)

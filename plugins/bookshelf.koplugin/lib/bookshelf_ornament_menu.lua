@@ -99,7 +99,8 @@ end
 
 -- show(entry, bw, piece): the menu for one piece; piece is where it stands
 -- on screen (its dimen), for keeping the menu clear of it.
-function M.show(entry, bw, piece)
+function M.show(entry, bw, piece, widget, opts)
+    opts = opts or {}
     local UIManager    = require("ui/uimanager")
     local Orn = O()
     -- The LIVE entry for this piece: the shelf's own may be older than the
@@ -312,8 +313,10 @@ function M.show(entry, bw, piece)
 
     local buttons = {
         -- Where it comes round, first: what a reader arranging a shelf
-        -- reaches for most.
-        {
+        -- reaches for most. Not for a pinned piece (opts.pinned): it stands
+        -- where it was pinned, out of the shelf's deal, so Place, Swap,
+        -- Shuffle and Switch off have nothing to act on there.
+        not opts.pinned and {
             placeGlyph(CHEV_LEFT, -1),
             { text_func = function()
                 local i, n = Deck.position(entry.name, onNames())
@@ -351,7 +354,7 @@ function M.show(entry, bw, piece)
                        or _("Tap: none")
             end, callback = function() M.chooseTap(entry, redraw) end },
         },
-        {
+        not opts.pinned and {
             { text = _("Swap"), callback = closeAnd(function()
                 -- The browser in pick mode: the chosen piece takes this one's
                 -- place in the order, and this one takes the chosen piece's.
@@ -396,15 +399,36 @@ function M.show(entry, bw, piece)
                 redraw()
             end },
         },
-        {
-            { text = _("Reset"), callback = function()
-                Orn.readerReset(entry)
-                entry = Orn.current(entry)
-                redraw()
-            end },
-            { text = _("Done"), callback = closeAnd() },
-        },
+        (function()
+            local row = {
+                { text = _("Reset"), callback = function()
+                    Orn.readerReset(entry)
+                    entry = Orn.current(entry)
+                    redraw()
+                end },
+            }
+            -- Fixed where it stands: an Ornament module among the shelf's
+            -- books, moved from then on like any shelf module.
+            -- The piece's widget (a long-press hands its rect as `piece`, the
+            -- widget after it); a tall piece's own-row copy speaks for the
+            -- piece (_pin_of).
+            local src = widget or piece
+            src = src and (src._pin_of or src)
+            if src and src.pin_after_idx and bw and bw._pinOrnament then
+                row[#row + 1] = { text = _("Pin here"), callback = closeAnd(function()
+                    bw:_pinOrnament(entry, src)
+                end) }
+            end
+            row[#row + 1] = { text = _("Done"), callback = closeAnd() }
+            return row
+        end)(),
     }
+    -- The rows left out above (false) come out of the list.
+    local kept = {}
+    for i = 1, #buttons do
+        if buttons[i] then kept[#kept + 1] = buttons[i] end
+    end
+    buttons = kept
     dialog = dialogClass():new{
         buttons = buttons,
         overhang = overhangFor(picture()),
@@ -425,8 +449,12 @@ function M.show(entry, bw, piece)
     return dialog
 end
 
--- chooseTap(entry, done): the Action module's chooser, plus "no action".
-function M.chooseTap(entry, done)
+-- chooseTap(entry, done, set): the Action module's chooser, plus "no action"
+-- and Zoom. set(value) stores the choice (an action table, "zoom", or nil):
+-- by default on the piece's own file; the Ornament module stores it on its
+-- card instead.
+function M.chooseTap(entry, done, set)
+    set = set or function(v) O().readerSet(entry, "tap", v) end
     local UIManager    = require("ui/uimanager")
     local ButtonDialog = require("ui/widget/buttondialog")
     local Chooser      = require("lib/bookshelf_action_chooser")
@@ -435,7 +463,7 @@ function M.chooseTap(entry, done)
         return function() UIManager:close(d); if fn then fn() end end
     end
     local rows = Chooser.actionRows(close, function(fields)
-        O().readerSet(entry, "tap", {
+        set({
             action = fields.action, plugin = fields.plugin,
             internal = fields.internal, label = fields.label,
         })
@@ -444,14 +472,14 @@ function M.chooseTap(entry, done)
     table.insert(rows, 1, {{
         text = _("No action"),
         callback = close(function()
-            O().readerSet(entry, "tap", nil)
+            set(nil)
             if done then done() end
         end),
     }, {
         -- The piece full screen, with its info (or its name) under it.
         text = _("Zoom"),
         callback = close(function()
-            O().readerSet(entry, "tap", "zoom")
+            set("zoom")
             if done then done() end
         end),
     }})

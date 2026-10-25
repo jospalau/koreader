@@ -912,7 +912,11 @@ function ShelfRow.new(opts)
                 -- indicators (top-edge bar + bottom-left bookmark glyph).
                 -- Hero card, folder stacks, and series stacks reuse
                 -- SpineWidget for the underlying cover but opt out.
-                show_progress = true,
+                -- ...unless the row asks for none: a cover too small to
+                -- carry them (the Shelf micro-module's rows) shows just its
+                -- cover, the favourite's corner included.
+                show_progress = not opts.no_badges,
+                suppress_favorite_badge = opts.no_badges or nil,
                 -- Plumb expanded-mode flag so SpineWidget can lift the
                 -- bookmark glyph fully inside the cover (avoiding clash
                 -- with the title text below). Regular mode lets it dangle.
@@ -1071,6 +1075,9 @@ function ShelfRow.new(opts)
     -- guarantees ScaledCoverCache's "cached >= requested" check passes.
     result.cover_w = slot_w
     result.cover_h = cover_h
+    -- The slots as laid out (the gap may have widened to spread the covers):
+    -- shelf cards (SPIKE) stand over them.
+    result.slot_w, result.slot_h, result.slot_gap = slot_w, slot_h, gap
     return result
 end
 

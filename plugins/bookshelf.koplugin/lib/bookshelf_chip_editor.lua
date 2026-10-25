@@ -617,6 +617,86 @@ function Editor:editTab(tab_id, opts)
         settlePreview()
     end
 
+    -- The shelf's name as a picker row shows it: [icon=...] markup off.
+    local function plainName(t)
+        local l = type(t.label) == "string" and t.label or ""
+        l = l:gsub("%[icon=[^%]]*%]", ""):gsub("^%s+", ""):gsub("%s+$", "")
+        return l ~= "" and l or t.id
+    end
+
+    -- leaveFor(id): this editor's changes are saved; close it and show `id`
+    -- wherever it now sits (the shelf menu or inside a shelf of shelves).
+    local function leaveFor(id)
+        closed = true
+        settlePreview(true)
+        TabModel.flush()
+        UIManager:close(dialog)
+        if opts.bw and opts.bw._openShelf then
+            opts.bw:_openShelf(id)
+        elseif opts.on_change then
+            opts.on_change()
+        end
+    end
+
+    -- copyShelf(): a copy of this shelf, everything in it included (a shelf
+    -- of shelves' own shelves, a Shelf module's own shelf), right after it,
+    -- opened in its editor so the one thing to change is a tap away.
+    local function copyShelf()
+        if closed then return end
+        TabModel.flush()
+        local tabs = TabModel.load()
+        local new_id = TabModel.copyTree(tabs, tab_id, T(_("%1 (copy)"), plainName(draft)))
+        if not new_id then return end
+        TabModel.save(tabs)
+        leaveFor(new_id)
+        -- This editor's opts, less what belonged to a NEW shelf: the copy
+        -- has its source already, and backing out keeps it.
+        local copy_opts = {}
+        for k, v in pairs(opts) do
+            if k ~= "pick_source_first" and k ~= "on_discard" then copy_opts[k] = v end
+        end
+        Editor:editTab(new_id, copy_opts)
+    end
+
+    -- canMove(): somewhere to go -- a shelf of shelves other than this one
+    -- and its own, or the shelf menu when it sits inside one.
+    local function canMove()
+        if draft.card_only then return false end
+        local targets = TabModel.moveTargets(TabModel.load(), tab_id)
+        return #targets > 1 or draft.parent ~= nil
+    end
+
+    -- moveShelf(): pick where it goes: the shelf menu, or any shelf of
+    -- shelves it is not already in (and not one inside it). Where it is now
+    -- is ticked and greyed.
+    local function moveShelf()
+        if closed then return end
+        local targets = TabModel.moveTargets(TabModel.load(), tab_id)
+        local picker
+        local rows = {}
+        for _i, t in ipairs(targets) do
+            local here = (t.id == draft.parent)
+            local name = t.id and plainName(t) or _("Shelf menu")
+            rows[#rows + 1] = {{
+                text     = (here and "\u{2713} " or "") .. name,
+                enabled  = not here,
+                callback = function()
+                    UIManager:close(picker)
+                    TabModel.flush()
+                    local tabs = TabModel.load()
+                    if not TabModel.moveTree(tabs, tab_id, t.id) then return end
+                    TabModel.save(tabs)
+                    leaveFor(tab_id)
+                end,
+            }}
+        end
+        picker = ButtonDialog:new{
+            title = _("Move to"), title_align = "center",
+            buttons = rows,
+        }
+        UIManager:show(picker)
+    end
+
     -- A confirmed arrangement of the collection, from the sort picker's "Edit
     -- collection order". Not shelf state: it is written to KOReader the moment
     -- it is confirmed (and drops the book cache itself), so all the editor owes
@@ -696,8 +776,11 @@ function Editor:editTab(tab_id, opts)
         -- A sub-shelf moves among the shelves of its own shelf of shelves,
         -- and a top-level shelf among the top-level ones.
         local me = current_tabs[current_idx]
+        -- A card's own shelf has no place in the strip: it is no one's
+        -- neighbour, and has none itself (both arrows stay at the edge).
         local function neighbour(t)
             return t.enabled ~= false and TabModel.isSibling(t, me)
+                and not TabModel.isCardOnly(t) and not TabModel.isCardOnly(me)
         end
         local at_left = true
         for i = current_idx - 1, 1, -1 do
@@ -831,7 +914,8 @@ function Editor:editTab(tab_id, opts)
             local me = move_tabs[mi]
             while target >= 1 and target <= #move_tabs do
                 local t = move_tabs[target]
-                if t.enabled ~= false and TabModel.isSibling(t, me) then break end
+                if t.enabled ~= false and TabModel.isSibling(t, me)
+                        and not TabModel.isCardOnly(t) and not TabModel.isCardOnly(me) then break end
                 target = target + delta
             end
             if target >= 1 and target <= #move_tabs then
@@ -930,6 +1014,16 @@ function Editor:editTab(tab_id, opts)
                     -- "grouping" in the label: readers asking how to make a
                     -- shelf of series or authors did not look for it under
                     -- "Source" (maintainer).
+                    -- A Shelf module's shelf is offered no grouping
+                    -- (_pickSource), so its row says Source alone.
+                    if TabModel.isCardOnly(draft) then
+                        return _("Source: ") .. _resolveSourceLabel(draft.source)
+                    end
+                    -- A Shelf module's shelf is offered no grouping
+                    -- (_pickSource), so its row says Source alone.
+                    if TabModel.isCardOnly(draft) then
+                        return _("Source: ") .. _resolveSourceLabel(draft.source)
+                    end
                     return _("Source / grouping: ") .. _resolveSourceLabel(draft.source)
                 end,
                 callback = function()
@@ -1087,6 +1181,17 @@ function Editor:editTab(tab_id, opts)
             -- when earlier ones tie) -- or, for an OPDS source, the single
             -- disabled "Server order" row computed above.
             sort_row,
+            -- A module among this shelf's books (covers or spines). The shelf
+            -- on screen only, and never a module's own shelf. Empty rows are
+            -- filtered out below.
+            (opts.bw and opts.bw.chip == tab_id and not draft.card_only
+                and opts.bw._editShelfModules and not opts.bw:_isListMode()) and {{
+                text = _("Add a module to this shelf\xE2\x80\xA6"),
+                callback = function()
+                    finish()
+                    opts.bw:_editShelfModules(nil, { add = true })
+                end,
+            }} or {},
             -- Row 2: actions [delete] [Close] [add]. One Close, not Cancel
             -- and Save: every change has already been applied and saved, so
             -- there is nothing left to keep or throw away (maintainer, 2026-10-08).
@@ -1140,15 +1245,22 @@ function Editor:editTab(tab_id, opts)
                         })
                     end,
                 },
+                -- Copy and Move to, between Delete and Add: what readers did
+                -- by hand in the settings file (copying a set-up shelf to
+                -- change one thing; moving shelves into a shelf of shelves).
+                -- Close went to make room: the title bar's X, a tap outside
+                -- and Back all close the editor (maintainer).
                 {
-                    -- "Close" either way, a new shelf included: one still
-                    -- without a source is removed as the editor closes, which
-                    -- the note above the source row says while it is that.
-                    text             = _("Close"),
-                    id               = "close",
-                    is_enter_default = true,
-                    bordersize       = 0,
-                    callback         = function() finish() end,
+                    text         = _("Copy"),
+                    bordersize   = 0,
+                    enabled_func = function() return hasSource() end,
+                    callback     = function() copyShelf() end,
+                },
+                {
+                    text         = _("Move to\xE2\x80\xA6"),
+                    bordersize   = 0,
+                    enabled_func = function() return hasSource() and canMove() end,
+                    callback     = function() moveShelf() end,
                 },
                 {
                     -- Add button placed last in the row to balance the
@@ -1221,6 +1333,16 @@ function Editor:editTab(tab_id, opts)
             table.insert(buttons, 2, {
                 { text = _("Choose a source to keep this new shelf."), enabled = false },
             })
+        end
+
+        -- A Shelf module's own shelf: not in the shelf menu, so nothing to
+        -- move along it; and it lives and dies with its module (removing the
+        -- module deletes it, its settings switch to another), so no Delete,
+        -- Copy, Move to or new shelf beside it. The first row keeps Edit
+        -- label between the arrows; the last row is the actions.
+        if draft.card_only then
+            buttons[1] = { buttons[1][2] }
+            buttons[#buttons] = {}
         end
 
         -- Strip empty rows. The conditional delete row's IIFE returns {}
@@ -1930,6 +2052,22 @@ function Editor:_pickGroupDisplay(draft, on_change, chrome)
                     draft.series_boxes = not draft.series_boxes or nil
                 end),
             }}
+            -- A card's own shelf stands on a plank of its own (maintainer,
+            -- 6.0: card shelves only). Unset follows the main shelf's.
+            if draft.card_only then
+                rows[#rows + 1] = {{
+                    text_func = function()
+                        return T(_("Plank: %1"), Editor._plankLabel(draft.plank))
+                    end,
+                    callback = function()
+                        UIManager:close(d)
+                        Editor:_pickCardPlank(draft, function()
+                            if on_change then on_change() end
+                            show()
+                        end)
+                    end,
+                }}
+            end
             -- The spine view's own density. Rows like the list's; height as
             -- a percentage of the row so a single-shelf chip can pull the
             -- books down to a size whose titles stay readable.
@@ -2394,6 +2532,52 @@ function Editor:_pickGroupDisplay(draft, on_change, chrome)
         UIManager:show(d)
     end
     show()
+end
+
+-- _plankLabel(choice) -> a card shelf's plank as its row names it.
+function Editor._plankLabel(choice)
+    if choice == nil then return _("Same as main shelf") end
+    if choice == "colour" then return _("Plain color") end
+    if choice == "oak" then return _("Oak") end
+    local ok, TP = pcall(require, "lib/bookshelf_theme_pack")
+    local pl = ok and TP and TP._packPlank and TP._packPlank(choice)
+    if pl then return (pl.pack and pl.name) and T(_("%1 (%2 pack)"), pl.name, pl.pack) or (pl.name or choice) end
+    return choice
+end
+
+-- _pickCardPlank(draft, done): a card shelf's plank, from the same options
+-- as the plank picker (ThemePack.plankOptions), plus following the main
+-- shelf. done() after a pick or a close.
+function Editor:_pickCardPlank(draft, done)
+    local ButtonDialog = require("ui/widget/buttondialog")
+    local Kit = require("lib/bookshelf_module_kit")
+    local PB = require("lib/bookshelf_plank_browser")
+    local TP = require("lib/bookshelf_theme_pack")
+    local dlg
+    local function choose(v)
+        return function()
+            draft.plank = v
+            UIManager:close(dlg)
+            done()
+        end
+    end
+    local rows = {
+        { Kit.radioRow{ label = Editor._plankLabel(nil), active = draft.plank == nil, on_pick = choose(nil) } },
+    }
+    for _i, o in ipairs(TP.plankOptions()) do
+        local v = PB.choiceOf(o)
+        if v ~= nil then
+            rows[#rows + 1] = { Kit.radioRow{ label = Editor._plankLabel(v),
+                active = draft.plank == v, on_pick = choose(v) } }
+        end
+    end
+    dlg = ButtonDialog:new{
+        title = _("Plank"), title_align = "center",
+        buttons = rows,
+        rows_per_page = 8,
+        tap_close_callback = done,
+    }
+    UIManager:show(dlg)
 end
 
 -- _coverTextRow(draft, on_change, close, reshow, bw) -> Shelf style's
@@ -3066,6 +3250,53 @@ function Editor:_pickSource(draft, on_close)
         },
     }
 
+    -- A Shelf module's own shelf (TabModel.isCardOnly): only what the module
+    -- can show. It shows books, so no grouped source (series, authors, a
+    -- shelf of shelves...) and nothing online; each "Specific ..." picker is
+    -- books, so those stay. Offered everything, a reader could make a module
+    -- that only ever said "Choose a shelf".
+    if TabModel.isCardOnly(draft) then
+        rows = {
+            heading(_("Books")),
+            {
+                btn("recent",    _("Recently read")),
+                btn("latest",    _("Latest added")),
+                btn("favorites", _("\xE2\x98\x85 Favorites")),
+            },
+            -- One each: the module shows a folder shelf's books flattened
+            -- anyway (its bookSource), so the folder-tree twins were the
+            -- same shelf twice (maintainer).
+            {
+                btn("library",   _("Home")),
+                specific_btn("folder_flat", _("Specific folder\xE2\x80\xA6"),
+                    function() open_folder_picker("folder_flat") end),
+            },
+            {
+                specific_btn("single_series", _("Specific series\xE2\x80\xA6"),
+                    function() open_group_picker("series", "series", "single_series") end),
+                specific_btn("author", _("Specific author\xE2\x80\xA6"),
+                    function() open_group_picker("author", "author", "author") end),
+            },
+            {
+                specific_btn("genre", _("Specific genre\xE2\x80\xA6"),
+                    function() open_group_picker("genre", "genre", "genre") end),
+                specific_btn("collection", _("Specific collection\xE2\x80\xA6"), open_tag_picker),
+            },
+            {
+                specific_btn("format", _("Specific format\xE2\x80\xA6"),
+                    function() open_group_picker("format", "format", "format") end),
+                specific_btn("rating", _("Specific rating\xE2\x80\xA6"), open_rating_picker),
+            },
+            {
+                specific_btn("language", _("Specific language\xE2\x80\xA6"),
+                    function() open_group_picker("language", "language", "language") end),
+            },
+            {
+                { text = _("Cancel"), callback = function() UIManager:close(d); on_close() end },
+            },
+        }
+    end
+
     -- Registered sources (lib/bookshelf_sources): the Kindle's own library, and
     -- any plugin's (issue 452). Unlike the OPDS row above these are gated on
     -- the source being available -- the Kindle one needs a readable catalogue
@@ -3095,7 +3326,9 @@ function Editor:_pickSource(draft, on_close)
         table.insert(rows, #rows, { btn(id, Sources.label(id) or id, on_tap) })
     end
     d = ButtonDialog:new{
-        title   = _("Shelf source or grouping"),
+        -- A module's shelf is offered no grouping (above), so the title says
+        -- what it is choosing (maintainer).
+        title   = TabModel.isCardOnly(draft) and _("Shelf module source") or _("Shelf source or grouping"),
         buttons = rows,
         anchor  = _highAnchor(function() return d end),
     }
@@ -3555,7 +3788,8 @@ function Editor:_pickSortLevel(draft, level_index, on_close, on_arranged)
         -- different option to switch. Compacts the picker to 3 rows.
         rows = {
             { key_btn("series_name"), key_btn("author_surname"), key_btn("book_count") },
-            { key_btn("last_opened"), key_btn("date_added")    },
+            { key_btn("last_opened"), key_btn("date_added"),
+              key_btn("added_or_opened") },
             { key_btn("pub_date"), key_btn("modified_date"), key_btn("words"), key_btn("grrating"), key_btn("grvotes")} ,
             close_row,
         }
@@ -3572,10 +3806,12 @@ function Editor:_pickSortLevel(draft, level_index, on_close, on_arranged)
             -- so the one-tap combined option sits beside the pair it merges.
             { key_btn("series_name"),    key_btn("series_index"),
               key_btn("series_combined") },
-            { key_btn("last_opened"),    key_btn("date_added")        },
+            { key_btn("last_opened"),    key_btn("date_added"),
+              key_btn("added_or_opened") },
             { key_btn("pub_date"), key_btn("modified_date"), key_btn("words"), key_btn("grrating"), key_btn("grvotes")} ,
             { key_btn("percent_read"),   key_btn("rating")            },
-            { key_btn("read_status"),    key_btn("read_status_active"),    key_btn("read_status_finished"), },
+            { key_btn("read_status"),    key_btn("read_status_active"),    key_btn("read_status_finished"),
+              key_btn("favorites_first") },
             { key_btn("size"),           key_btn("page_count"),
               key_btn("book_count") },
             { clear_btn, close_btn },

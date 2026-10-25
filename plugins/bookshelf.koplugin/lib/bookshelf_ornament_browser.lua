@@ -67,7 +67,7 @@ function Cropped:getSize() return Geom:new{ w = self.w, h = self.h } end
 function Cropped:paintTo(bb, x, y)
     self.dimen = Geom:new{ x = x, y = y, w = self.w, h = self.h }
     local p = self.placement
-    local img = O().render(p.entry, p.w, p.h, self.night)
+    local img = O().render(p.entry, p.w, p.h, self.night, p.mirror)
     if not img then return end
     pcall(function() bb:alphablitFrom(img, x, y, self.src_x, self.src_y, self.w, self.h) end)
 end
@@ -80,18 +80,22 @@ end
 -- A piece seen for the first time is decoded once, not twice: contentBox
 -- holds its decode, and the render the paint will ask for is made from it
 -- here (bookshelf_ornaments ONE DECODE PER PREVIEW).
-function Browser.preview(e, box_w, box_h)
+-- mirror: draw it flipped left to right (the Ornament module's setting).
+function Browser.preview(e, box_w, box_h, mirror)
     local aspect = (e.aspect and e.aspect > 0) and e.aspect or 1
     local Orn = O()
     local l, t, r, b = Orn.contentBox(e, true)
     if not l then l, t, r, b = 0, 0, 1, 1 end
+    -- The drawing's box flips with the picture (as M.hits does for a piece).
+    if mirror then l, r = 1 - r, 1 - l end
     local cut_aspect = aspect * (r - l) / (b - t)
     local cw, ch = box_w, math.floor(box_w / cut_aspect)
     if ch > box_h then ch = box_h; cw = math.floor(box_h * cut_aspect) end
     cw, ch = math.max(1, cw), math.max(1, ch)
     local preview = Cropped:new{
         placement = { entry = e, w = math.max(1, math.floor(cw / (r - l) + 0.5)),
-                      h = math.max(1, math.floor(ch / (b - t) + 0.5)) },
+                      h = math.max(1, math.floor(ch / (b - t) + 0.5)),
+                      mirror = mirror or nil },
         night = Screen.night_mode and true or false,
         src_x = 0, src_y = 0, w = cw, h = ch,
     }
@@ -100,7 +104,7 @@ function Browser.preview(e, box_w, box_h)
     -- Cropped:paintTo asks for exactly this render; made now from the held
     -- decode, the paint finds it cached.
     if Orn.holds(e) then
-        Orn.render(e, preview.placement.w, preview.placement.h, preview.night)
+        Orn.render(e, preview.placement.w, preview.placement.h, preview.night, mirror)
         Orn.releaseHeld()
     end
     return preview
@@ -339,7 +343,25 @@ end
 -- anything changed, so the caller can redraw the shelf. opts.pick(entry)
 -- turns it into a chooser (the long-press menu's Swap): tapping a piece
 -- picks it and closes.
+--
+-- Building the first page decodes a picture per piece, which takes seconds on
+-- an e-reader with a big pack; with nothing on screen meanwhile it looks like
+-- a crash. So a message goes up and is painted first, and the browser is
+-- built on the next tick behind it.
 function Browser.show(on_change, opts)
+    local msg = InfoMessage:new{ text = _("Loading ornaments\xE2\x80\xA6") }
+    UIManager:show(msg)
+    UIManager:forceRePaint()
+    UIManager:nextTick(function()
+        local ok, err = pcall(Browser._open, on_change, opts)
+        UIManager:close(msg)
+        if not ok then
+            require("logger").warn("[bookshelf] ornament browser failed to open:", err)
+        end
+    end)
+end
+
+function Browser._open(on_change, opts)
     local self = setmetatable({ chip = ALL, on_change = on_change, opts = opts or {} },
                               { __index = Browser })
     O().beginDeferred()
@@ -356,7 +378,7 @@ function Browser.show(on_change, opts)
         if self.on_change then pcall(self.on_change) end
     end
     local config = {
-        title = self.opts.pick and _("Swap for") or _("Ornament collection"),
+        title = self.opts.title or (self.opts.pick and _("Swap for") or _("Ornament collection")),
         no_search = true,
         grid_cols = cols,
         cells_per_page = function() return cols() * 3 end,
