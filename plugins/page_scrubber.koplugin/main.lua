@@ -55,12 +55,12 @@ local PageScrubberPlugin = WidgetContainer:extend{
 
 local SCALE_KEY = "page_scrubber_ui_scale"
 
-local function getScale() 
+local function getScale()
     if G_reader_settings then
         local val = G_reader_settings:readSetting(SCALE_KEY)
         if type(val) == "number" then return val end
     end
-    return 1.0 
+    return 1.0
 end
 
 -- KOReader le pone el prefijo "NEW:" a cualquier ítem de menú que no figure en su lista de orden
@@ -85,7 +85,7 @@ local function registerInMenuOrder()
 end
 
 function PageScrubberPlugin:init()
-    registerInMenuOrder()
+    -- registerInMenuOrder()
     Dispatcher:registerAction("page_scrubber_grid_action", { category = "none", event = "PageScrubberGrid", title = _("Page Scrubber: Grid"), reader = true })
     Dispatcher:registerAction("page_scrubber_simple_grid_action", { category = "none", event = "PageScrubberSimpleGrid", title = _("Page Scrubber: Simple Grid"), reader = true })
     Dispatcher:registerAction("page_scrubber_multi_grid_action", { category = "none", event = "PageScrubberMultiGrid", title = _("Page Scrubber: Multi-Grid"), reader = true })
@@ -242,8 +242,8 @@ function ReaderUI:onPageScrubberQuickMenu()
 end
 
 function PageScrubberPlugin:addToMainMenu(menu_items)
-    local my_menu = { 
-        text = "Page Scrubber", 
+    local my_menu = {
+        text = "Page Scrubber",
         sorting_hint = "tools",
         sub_item_table = {
             {
@@ -266,7 +266,7 @@ function PageScrubberPlugin:addToMainMenu(menu_items)
             { text = _("Page Scrubber: Index (Table of Content)"), callback = function() self.ui:onPageScrubberTocExpanded() end },
         }
     }
-    
+
     if menu_items.document and menu_items.document.sub_item_table then
         menu_items.document.sub_item_table.page_scrubber = my_menu
     else
