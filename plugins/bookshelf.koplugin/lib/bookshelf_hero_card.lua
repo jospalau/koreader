@@ -1493,18 +1493,22 @@ end
 -- the BookshelfWidget's status-tick + state-event refreshes to scope the
 -- e-ink panel update to the strip rather than the whole right column.
 function HeroCard:getStatusStripDimen()
-    local s = self._status_strip_widgets
-    if not s or not s[1] or not s[1].dimen then return nil end
-    local status, hairline, gap = s[1], s[2], s[3]
-    local h = status.dimen.h
-    if hairline and hairline.dimen then h = h + hairline.dimen.h end
-    if gap      and gap.dimen      then h = h + gap.dimen.h      end
-    return Geom:new{
-        x = status.dimen.x,
-        y = status.dimen.y,
-        w = status.dimen.w,
-        h = h,
-    }
+    -- Measured, not read from a paint: the strip's rows need not record a
+    -- dimen, and a column swapped in without a paint (a tick held under
+    -- another window, issue 549) has none. The strip is the column's first
+    -- rows, under a TopContainer at the column's origin.
+    local s, o = self._status_strip_widgets, self._right_origin
+    if not s or not s[1] or not o or not self._right_dimen then return nil end
+    local h = 0
+    for i = 1, 3 do
+        local wdg = s[i]
+        if wdg and wdg.getSize then
+            local ok, sz = pcall(wdg.getSize, wdg)
+            if ok and sz and sz.h then h = h + sz.h end
+        end
+    end
+    if h <= 0 then return nil end
+    return Geom:new{ x = o.x, y = o.y, w = self._right_dimen.w, h = h }
 end
 
 -- replaceRightColumn(regions, book, state, region_hint)
@@ -1562,8 +1566,8 @@ function HeroCard:replaceRightColumn(regions, book, state, region_hint)
 
     if not refresh_rect and old and old.dimen and self._right_dimen then
         refresh_rect = Geom:new{
-            x = old.dimen.x,
-            y = old.dimen.y,
+            x = self._right_origin.x,
+            y = self._right_origin.y,
             w = self._right_dimen.w,
             h = self._right_dimen.h,
         }
