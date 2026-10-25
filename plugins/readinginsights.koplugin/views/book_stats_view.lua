@@ -70,7 +70,6 @@ local Locale, Colors, Fonts, Prefs, BookProgress, BookCalendar, ChapterInfo, Cha
     deps.BookStatsData, deps.VS, deps.Donut
 local _            = Locale._
 local N_           = Locale.N_
-local getLangBase  = Locale.getLangBase
 local formatNumber = Locale.formatNumber
 local formatCount  = Locale.formatCount
 
@@ -88,8 +87,8 @@ end
 
 -- Weekday names (os.date("*t").wday: 1=Sunday .. 7=Saturday) for the
 -- "started" / "expected finish" popup date lines, translated through _().
--- Hungarian puts the weekday after the full date and in lower case
--- ("2026. 06. 24., szerda"), so it lower-cases the translated name.
+-- The weekday goes in brackets after the date ("2026-06-24 (szerda)"), in
+-- lower case where the language writes it that way ("weekday lowercase").
 local WEEKDAY_NAMES = {
     "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
 }
@@ -118,23 +117,22 @@ local function formatEventDateTime(timestamp, always_full)
                         hour = 0, min = 0, sec = 0 }
     end
     local same_week = (not always_full) and mondayOf(t) == mondayOf(now)
-    local is_hu = (getLangBase() == "hu")
-
     if same_week then
         return _(WEEKDAY_NAMES[t.wday])
     end
 
-    -- The date itself follows the configured date format (Settings ▸
-    -- Settings ▸ Date & time ▸ "Date format"); only where the
-    -- weekday goes stays language-bound, since Hungarian wants it after
-    -- the date and in lower case ("2026. 06. 24., szerda").
+    -- "2026-10-23 (Friday)": the same shape as KOReader's own calendar day
+    -- view title, in every language. The date follows the configured date
+    -- format (ISO by default); the weekday is translated, and a language
+    -- that writes weekdays in lower case mid-sentence (Hungarian, French,
+    -- Portuguese, Ukrainian) opts in by translating "weekday lowercase" to
+    -- "yes". German and English keep the capital.
     local date_str = Locale.formatDateFromTS(timestamp)
-    if is_hu then
-        -- Hungarian: "2026. 10. 05., hétfő" - formatDate already writes the
-        -- spaced "2026. 10. 05." form, so only the comma and weekday follow.
-        return date_str .. ", " .. Locale.lowerFirst(_(WEEKDAY_NAMES[t.wday]))
+    local weekday  = _(WEEKDAY_NAMES[t.wday])
+    if _("weekday lowercase") == "yes" then
+        weekday = Locale.lowerFirst(weekday)
     end
-    return _(WEEKDAY_NAMES[t.wday]) .. ", " .. date_str
+    return date_str .. " (" .. weekday .. ")"
 end
 
 local function tappableWrap(widget, width)
@@ -257,7 +255,7 @@ local function buildChapterHeaders(font_section, layout, left_text, right_text)
             HorizontalGroup:new{
                 align = "center",
                 UI.fixedCol(left_header, layout.col_width),
-                UI.buildColumnSeparator(layout.column_gap, header_h),
+                UI.buildColumnSeparator(layout.column_gap, header_h, false, true),
                 UI.fixedCol(right_header, layout.col_width),
             },
         })
@@ -277,7 +275,7 @@ end
 -- content so buildPagesSplitValue can decide whether the full "page"/
 -- "pages" word still fits before the row is actually assembled.
 local function splitHalfWidth(layout)
-    local sub_gap = math.max(math.floor(layout.column_gap / 2), Size.padding.small)
+    local sub_gap = layout.column_gap
     local sub_separator_width = 2 * sub_gap + Size.line.medium
     return math.floor((layout.col_width - sub_separator_width) / 2)
 end
@@ -339,7 +337,7 @@ end
 -- buildSplitCellValue/buildPagesSplitValue above), used for both the time
 -- view (plain "hh:mm" value, no unit) and the pages view (value + unit).
 local function buildSplitTimeCell(layout, side1, side2)
-    local sub_gap = math.max(math.floor(layout.column_gap / 2), Size.padding.small)
+    local sub_gap = layout.column_gap
     local half_width = splitHalfWidth(layout)
     local sub_layout = { col_width = half_width, column_gap = sub_gap }
     return UI.buildTwoColRow(side1, side2, sub_layout)
@@ -581,7 +579,7 @@ local function buildSections(stats, fonts, layout, popup)
     local function sectionSeparator()
         if any_section_shown then
             table.insert(sections, UI.padded(layout.padding_h,
-                Colors.newBar(layout.full_width - 2 * layout.padding_h, Size.line.thick, Colors.separator())))
+                Colors.hLine(layout.full_width - 2 * layout.padding_h, Size.line.thick)))
         end
         any_section_shown = true
     end
@@ -609,7 +607,8 @@ local function buildSections(stats, fonts, layout, popup)
             left_val,  right_val  = chapter_val2, valueLine(UI.emptyValue(), "")
         end
         local chapter_headers_content = buildChapterHeaders(fonts.section, layout, left_text, right_text)
-        local chapter_values_content  = UI.buildTwoColRow(left_val, right_val, layout, not (show_cur and show_next))
+        local chapter_values_content  = UI.buildTwoColRow(left_val, right_val, layout, not (show_cur and show_next),
+            (show_cur and show_next) and { join_above = true } or nil)
         -- Wrapped in tappableWrap (fixed dimen) rather than used raw, so tapping
         -- either row reliably hits (same reasoning as started_tap/finish_tap
         -- below: a bare HorizontalGroup isn't guaranteed a usable .dimen for
@@ -622,7 +621,7 @@ local function buildSections(stats, fonts, layout, popup)
         end
         sectionSeparator()
         UI.addSectionWithRow(sections, chapter_headers, chapter_values, layout,
-            { no_bottom_line = true, gap_above_row = true })
+            { no_bottom_line = true, gap_above_row = true, split_header = (show_cur and show_next) and true or false })
     end
 
     local chapter_page_size = stats.chapter_info
@@ -728,9 +727,13 @@ local function buildSections(stats, fonts, layout, popup)
         local chapters_header = UI.padded(layout.padding_h,
             UI.buildSectionHeader(fonts.section, _("Chapters"), layout.content_width, 0, Colors.headerBg()))
         table.insert(sections, chapters_header)
+        -- Only the line above the "Chapters" header; none between it and the
+        -- bars (unless "Classic divider lines" is on).
         table.insert(sections, VerticalSpan:new{ width = Size.padding.small })
-        table.insert(sections, UI.padded(layout.padding_h,
-            Colors.newBar(layout.content_width, Size.line.thin, Colors.separator())))
+        if UI.classicLines() then
+            table.insert(sections, UI.padded(layout.padding_h,
+                Colors.hLine(layout.content_width, Size.line.thin)))
+        end
         storeChapterBarOnPopup()
         table.insert(sections, chapter_bar)
 
@@ -769,7 +772,7 @@ local function buildSections(stats, fonts, layout, popup)
             local avg_cell = tappableWrap(right_cell, right_cell:getSize().w)
             if popup then popup._chapter_avg_cell = avg_cell end
             table.insert(sections, UI.padded(layout.padding_h,
-                Colors.newBar(layout.content_width, Size.line.thin, Colors.separator())))
+                Colors.hLine(layout.content_width, Size.line.thin)))
             table.insert(sections, VerticalSpan:new{ width = Size.padding.small })
             table.insert(sections, UI.padded(layout.padding_h,
                 UI.buildTwoColRow(read_cell, avg_cell, layout)))
@@ -799,9 +802,6 @@ local function buildSections(stats, fonts, layout, popup)
                 buildDonutBookRow(stats, fonts, layout, show_read_row, show_time_row))
         elseif has_book_rows then
             this_book_rows = VerticalGroup:new{ align = "left" }
-            local function addTimeRow()
-                table.insert(this_book_rows, UI.buildTwoColRow(book_col1, book_col2, layout))
-            end
             local function addReadRow()
                 local left_cell, right_cell = book_progress, book_pages_read
                 if show_cell_bars then
@@ -813,15 +813,21 @@ local function buildSections(stats, fonts, layout, popup)
                         fonts.value, small_face)
                     right_cell = UI.padBottom(right_cell, extra)
                 end
-                table.insert(this_book_rows, UI.buildTwoColRow(left_cell, right_cell, layout))
+                -- With both rows shown, the vertical divider continues
+                -- through the gap into the next row (unbroken 2x2 grid).
+                table.insert(this_book_rows, UI.buildTwoColRow(left_cell, right_cell, layout, false,
+                    show_time_row and { join_below = Size.padding.small } or nil))
             end
             -- Percentage row first with its progress bar under the
             -- percentage (that cell only), then the reading-time row.
             if show_read_row then addReadRow() end
-            if show_read_row and show_time_row then
+            if show_read_row and show_time_row and UI.classicLines() then
                 table.insert(this_book_rows, VerticalSpan:new{ width = Size.padding.small })
             end
-            if show_time_row then addTimeRow() end
+            if show_time_row then
+                table.insert(this_book_rows, UI.buildTwoColRow(book_col1, book_col2, layout, false,
+                    show_read_row and { join_above = true } or nil))
+            end
         end
 
         if skim_in_book then
@@ -830,8 +836,10 @@ local function buildSections(stats, fonts, layout, popup)
             storeChapterBarOnPopup()
             table.insert(sections, this_book_header)
             table.insert(sections, VerticalSpan:new{ width = Size.padding.small })
-            table.insert(sections, UI.padded(layout.padding_h,
-                Colors.newBar(layout.content_width, Size.line.thin, Colors.separator())))
+            if UI.classicLines() then
+                table.insert(sections, UI.padded(layout.padding_h,
+                    Colors.hLine(layout.content_width, Size.line.thin)))
+            end
             table.insert(sections, skim_bar)
             if this_book_rows then
                 table.insert(sections, UI.padded(layout.padding_h, this_book_rows))
@@ -865,18 +873,26 @@ local function buildSections(stats, fonts, layout, popup)
         if popup then popup._pace_header = pace_header end
         table.insert(sections, pace_header)
         table.insert(sections, VerticalSpan:new{ width = Size.padding.small })
-        table.insert(sections, UI.padded(layout.padding_h,
-            Colors.newBar(layout.full_width - 2 * layout.padding_h, Size.line.thin, Colors.separator())))
-        table.insert(sections, VerticalSpan:new{ width = Size.padding.small })
+        if UI.classicLines() then
+            table.insert(sections, UI.padded(layout.padding_h,
+                Colors.hLine(layout.full_width - 2 * layout.padding_h, Size.line.thin)))
+            table.insert(sections, VerticalSpan:new{ width = Size.padding.small })
+        end
 
         if show_pace_today then
-            local pace_row_content = UI.buildTwoColRow(days_col2, pace_col2, layout)
+            -- When the started / finish row follows as a second two-column
+            -- row, the divider runs on through the gap between the rows.
+            local pace_joined = show_dates_row and stats.started_days_ago and stats.finish_days_left
+            local pace_row_content = UI.buildTwoColRow(days_col2, pace_col2, layout, false,
+                pace_joined and { join_below = Size.padding.small } or nil)
             local pace_row = tappableWrap(pace_row_content, pace_row_content:getSize().w)
             if popup then
                 popup._pace_row = pace_row
             end
             table.insert(sections, UI.padded(layout.padding_h, pace_row))
-            table.insert(sections, VerticalSpan:new{ width = Size.padding.small })
+            if not pace_joined or UI.classicLines() then
+                table.insert(sections, VerticalSpan:new{ width = Size.padding.small })
+            end
         end
 
         -- Last row: "started N days ago" | "N days of reading left".
@@ -900,7 +916,8 @@ local function buildSections(stats, fonts, layout, popup)
                     popup._started_widget = started_tap
                     popup._finish_widget  = finish_tap
                 end
-                table.insert(sections, UI.padded(layout.padding_h, UI.buildTwoColRow(started_tap, finish_tap, layout)))
+                table.insert(sections, UI.padded(layout.padding_h, UI.buildTwoColRow(started_tap, finish_tap, layout, false,
+                    show_pace_today and { join_above = true } or nil)))
                 table.insert(sections, VerticalSpan:new{ width = Size.padding.small })
             elseif started_widget then
                 local started_full_widget = buildValueLine(
@@ -1002,7 +1019,7 @@ function ReadingStatsPopup:_buildUI()
     local function build(centered)
         local border_w = centered and Size.border.window or 0
         local frame_w  = centered and math.floor(screen_w * 0.94) or screen_w
-        self._layout   = UI.buildLayout(frame_w - 2 * border_w, Size.padding.large, Screen:scaleBySize(20))
+        self._layout   = UI.buildLayout(frame_w - 2 * border_w, Size.padding.large, Size.padding.large)
         self._centered = centered
         local sections = buildSections(self._stats, self._fonts, self._layout, self)
 

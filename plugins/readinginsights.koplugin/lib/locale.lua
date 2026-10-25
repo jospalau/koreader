@@ -256,9 +256,8 @@ end
 -- Places that don't print a numeric date - weekday names, month names, the
 -- 8-week chart's axis labels - are deliberately left alone.
 --
--- No stored value means "what this plugin always did": YYYY. MM. DD. for
--- Hungarian, DD/MM/YYYY everywhere else, so nobody's dates change shape
--- until they pick a format themselves.
+-- No stored value means ISO (YYYY-MM-DD) in every language; anyone who has
+-- picked a format in the menu keeps it.
 local SETTINGS_KEY_DATE_FORMAT = "reading_insights_date_format"
 
 local DATE_FORMAT_YMD_DASH = "ymd_dash"   -- 2026-07-20
@@ -283,7 +282,7 @@ local DATE_FORMAT_HINTS = {
 }
 
 local function defaultDateFormat()
-    return (getLangBase() == "hu") and DATE_FORMAT_YMD_DOT or DATE_FORMAT_DMY
+    return DATE_FORMAT_YMD_DASH
 end
 
 local function readDateFormatSetting()
@@ -405,9 +404,8 @@ local MONTH_NAMES_FULL_FOR_DATE = {
 
 -- Month-and-year heading, e.g. "January 2026"; with a year-first date format
 -- (Settings > Date & time > "Date format") the year leads, the way the dates
--- themselves are written: "2026. január" (YYYY. MM. DD.) or "2026 January"
--- (YYYY-MM-DD). The default format follows the language (see
--- defaultDateFormat), so nobody's heading changes until they pick a format.
+-- themselves are written: "2026. január" (YYYY. MM. DD.) or "2026-01"
+-- (YYYY-MM-DD, the default in every language - see defaultDateFormat).
 -- Used by the calendar headers and the monthly charts' book lists, so they
 -- all agree.
 local function formatMonthYear(year, month)
@@ -416,9 +414,26 @@ local function formatMonthYear(year, month)
     if f == DATE_FORMAT_YMD_DOT then
         return string.format("%04d. %s", year, name)
     elseif f == DATE_FORMAT_YMD_DASH then
-        return string.format("%04d %s", year, name)
+        -- ISO 8601 reduced precision: year-month, no month name.
+        return string.format("%04d-%02d", year, month)
     end
     return name .. " " .. tostring(year)
+end
+
+-- Year plus short month name for tight labels (heatmap column headers):
+--   YYYY. MM. DD.  ->  "2026. okt."   (the year takes its closing dot)
+--   YYYY-MM-DD     ->  "2026-10"      (ISO 8601 reduced precision)
+--   other formats  ->  "2026 Oct"
+local function formatYearShortMonth(year, month)
+    local f = readDateFormatSetting()
+    if f == DATE_FORMAT_YMD_DASH then
+        return string.format("%04d-%02d", year, month)
+    end
+    local name = MONTH_NAMES_SHORT_FOR_DATE[month] or tostring(month)
+    if f == DATE_FORMAT_YMD_DOT then
+        return string.format("%04d. %s", year, name)
+    end
+    return tostring(year) .. " " .. name
 end
 
 -- A day of the month in a short label ("22"): Hungarian writes the ordinal
@@ -435,13 +450,18 @@ end
 -- (e.g. the streak history bar list) where a full formatDate() would take up
 -- too much space and a bare numeric "9.22"/"22.9" reads ambiguously. Always
 -- month-then-day, whatever the configured full date format's day/month order
--- is, since the translated month name already disambiguates the two.
+-- is, since the translated month name already disambiguates the two. With the
+-- ISO format (YYYY-MM-DD) it is the unambiguous numeric "MM-DD" instead.
 local function formatShortMonthDay(date_str)
     if date_str == nil then return "" end
     local s = tostring(date_str)
     local y, m, d = s:match("^(%d%d%d%d)%-(%d%d?)%-(%d%d?)$")
     if not y then return s end
     m, d = tonumber(m), tonumber(d)
+    -- ISO format: plain MM-DD, no month name ("10-06").
+    if readDateFormatSetting() == DATE_FORMAT_YMD_DASH then
+        return string.format("%02d-%02d", m, d)
+    end
     local mon = MONTH_NAMES_SHORT_FOR_DATE[m] or tostring(m)
     return mon .. " " .. formatDayOfMonth(d)
 end
@@ -468,6 +488,18 @@ local function formatShortNumericDate(date_str)
         return string.format("%02d/%02d", m, d)
     end
     return string.format("%02d/%02d", d, m)
+end
+
+-- True while the ISO date format (YYYY-MM-DD) is the active one.
+local function isIsoDateFormat()
+    return readDateFormatSetting() == DATE_FORMAT_YMD_DASH
+end
+
+-- Month label under the yearly chart's columns: with the ISO date format the
+-- zero-padded month number ("01", "02" ... "12"), otherwise the short month name.
+local function monthAxisLabel(month_num, fallback)
+    if isIsoDateFormat() and month_num then return string.format("%02d", month_num) end
+    return shortMonthName(month_num) or fallback
 end
 
 -- The reverse, for the one place a date is typed in rather than shown (the
@@ -716,7 +748,10 @@ return {
     formatShortNumericDate     = formatShortNumericDate,
     formatDayOfMonth           = formatDayOfMonth,
     shortMonthName             = shortMonthName,
+    isIsoDateFormat            = isIsoDateFormat,
+    monthAxisLabel             = monthAxisLabel,
     formatMonthYear            = formatMonthYear,
+    formatYearShortMonth       = formatYearShortMonth,
     shortMonthNames            = MONTH_NAMES_SHORT_FOR_DATE,
     lowerFirst                 = lowerFirst,
     formatDateSample           = formatDateSample,

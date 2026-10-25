@@ -2341,3 +2341,45 @@ msgstr "Páginas lidas por dia da semana"
 
 msgid "Share of reading time by weekday"
 msgstr "Percentagem do tempo de leitura por dia da semana"
+
+msgid "Classic divider lines"
+msgstr "Linhas separadoras clássicas"
+
+msgid "Off: dividers only above section headers, vertical dividers run unbroken through headers and rows, and there are no thin lines under headers or around the charts. On: the original look with a thin line under every header."
+msgstr "Desligado: separadores apenas acima dos títulos das secções, separador vertical contínuo através dos títulos e das linhas, sem linhas finas por baixo dos títulos nem à volta dos gráficos. Ligado: o aspeto original, com uma linha fina por baixo de cada título."
+
+msgid "Divider lines"
+msgstr "Linhas separadoras"
+
+msgid "Normal"
+msgstr "Normal"
+
+msgid "Fewer"
+msgstr "Menos"
+
+msgid "Fewer, thin"
+msgstr "Menos, finas"
+
+msgid "Classic look: a line under every header."
+msgstr "Vista clássica: uma linha sob cada cabeçalho."
+
+msgid "Only the lines between sections."
+msgstr "Apenas as linhas entre as secções."
+
+msgid "Like Fewer, but with thinner lines."
+msgstr "Como Menos, mas com linhas mais finas."
+
+msgid "No lines at all, vertical ones included."
+msgstr "Sem linhas, incluindo as verticais."
+
+msgid "Number and thickness of the divider lines. The line under the title of the Reading insights, Reading calendar and Reading shelf pages is not affected."
+msgstr "Número e espessura das linhas separadoras. A linha sob o título de Reading Insights, Calendário de leitura e Estante de leitura não é afetada."
+
+msgid "weekday lowercase"
+msgstr "yes"
+
+msgid "Dark border in night mode"
+msgstr "Moldura escura no modo noturno"
+
+msgid "In night mode, draw the cover frame in near-black (as Bookshelf does) instead of white, so it stays subtle. Needs \"Cover border\" to be on."
+msgstr "No modo noturno, desenha a moldura da capa quase preta (como o Bookshelf) em vez de branca, para ficar discreta. Requer «Moldura da capa»."

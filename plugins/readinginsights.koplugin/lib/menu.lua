@@ -439,6 +439,44 @@ function M.build(self, deps)
         end,
     }
 
+    -- Settings > Appearance > Divider lines. Normal (default) = the classic
+    -- look; the "Fewer" styles keep only the lines between sections (normal
+    -- or thinner); Off = no dividers at all, vertical ones included. The
+    -- lines under the Reading insights / Reading calendar / Reading shelf
+    -- titles are not affected.
+    local DIVIDER_STYLES = {
+        { "normal",    _("Normal"),      _("Classic look: a line under every header.") },
+        { "less",      _("Fewer"),       _("Only the lines between sections.") },
+        { "less_thin", _("Fewer, thin"), _("Like Fewer, but with thinner lines.") },
+        { "off",       _("Off"),         _("No lines at all, vertical ones included.") },
+    }
+    local divider_items = {}
+    for _i, def in ipairs(DIVIDER_STYLES) do
+        local style = def[1]
+        table.insert(divider_items, {
+            text           = def[2],
+            help_text      = def[3],
+            keep_menu_open = true,
+            radio          = true,
+            checked_func   = function() return deps.ViewSettings.Opt.readDividerStyle() == style end,
+            callback       = function() deps.ViewSettings.Opt.saveDividerStyle(style) end,
+        })
+    end
+    I.divider_lines = {
+        text_func = function()
+            local current = deps.ViewSettings.Opt.readDividerStyle()
+            for _i, def in ipairs(DIVIDER_STYLES) do
+                if def[1] == current then
+                    return _("Divider lines") .. ": " .. def[2]
+                end
+            end
+            return _("Divider lines")
+        end,
+        help_text = _("Number and thickness of the divider lines. The line under the title of the Reading insights, Reading calendar and Reading shelf pages is not affected."),
+        keep_menu_open = true,
+        sub_item_table = divider_items,
+    }
+
     -- "Date & time": how clock times and dates are spelled out, wherever
     -- the plugin prints one. Filled in here; the date-format entry is added
     -- further down.
@@ -1403,6 +1441,21 @@ function M.build(self, deps)
             _("Draw a drop shadow behind the covers (Book info, Reading calendar and Reading shelf)."), false),
         bookInfoToggle("border", _("Cover border"),
             _("Draw a thin frame around the covers (Book info, Reading calendar and Reading shelf)."), false),
+        {
+            text = _("Dark border in night mode"),
+            help_text = _("In night mode, draw the cover frame in near-black (as Bookshelf does) instead of white, so it stays subtle. Needs \"Cover border\" to be on."),
+            keep_menu_open = true,
+            enabled_func = function()
+                return deps.ViewSettings.Opt.readBookInfo("border")
+            end,
+            checked_func = function()
+                return deps.ViewSettings.Opt.readBookInfo("dark_border")
+            end,
+            callback = function()
+                deps.ViewSettings.Opt.saveBookInfo("dark_border",
+                    not deps.ViewSettings.Opt.readBookInfo("dark_border"))
+            end,
+        },
     })
 
     I.book_info = {
@@ -1512,7 +1565,7 @@ function M.build(self, deps)
         I.sleep_screen,
         "-",
         I.date_time,
-        group(_("Appearance"), { I.colors, I.fonts, I.covers }),
+        group(_("Appearance"), { I.colors, I.fonts, I.covers, I.divider_lines }),
         "-",
         {
             text = _("Reading insights popup"),

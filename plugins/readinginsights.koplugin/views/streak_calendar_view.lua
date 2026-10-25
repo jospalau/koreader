@@ -419,7 +419,7 @@ local function buildStreakMonthGrid(year, month, read_set, fonts, cell_w, cell_h
             align = "center",
             CenterContainer:new{ dimen = Geom:new{ w = week_col_w, h = height }, label },
             HorizontalSpan:new{ width = WEEK_COL_SIDE_PAD },
-            Colors.newBar(Size.line.thin, height, Colors.separator()),
+            Colors.vLine(Size.line.thin, height),
             HorizontalSpan:new{ width = WEEK_COL_SIDE_PAD },
         }
     end
@@ -481,6 +481,8 @@ local function buildStreakMonthGrid(year, month, read_set, fonts, cell_w, cell_h
     -- centred in the free area; two or three are drawn as one book on another
     -- - the runners-up peek out behind the front one at the bottom right, a
     -- step each. More than MAX_STACK books show a "+N" tag for the rest.
+    -- (Without a cover shadow the pile is turned upside down: the front book
+    -- at the bottom left, the others behind it, a step to the right and up.)
     local MAX_STACK = 3
     local function dayCovers(books)
         local k = math.min(#books, MAX_STACK)
@@ -525,12 +527,38 @@ local function buildStreakMonthGrid(year, month, read_set, fonts, cell_w, cell_h
             front.y = area_top + math.floor((area_h - front.fh) / 2)
             return { front }
         end
+        -- Without a shadow the pile is turned upside down: the first (front)
+        -- book sits at the bottom left, the others peek out behind it, each
+        -- a step further to the right and up (the lower, the nearer). With a
+        -- shadow the pile below (front book top left, the others behind it
+        -- at the bottom right) is kept.
+        if deco_shadow == 0 then
+            local mw, mh = 0, 0
+            for n = 1, k do
+                local d = (n - 1) * back_off
+                mw = math.max(mw, d + list[n].w)
+                mh = math.max(mh, d + list[n].h)
+            end
+            local gx = pad + math.floor((area_w - mw) / 2)
+            local gy = area_top + math.floor((area_h - mh) / 2)
+            -- back to front: the last book first, the front one last
+            local out = {}
+            for n = k, 1, -1 do
+                local c = list[n]
+                local d = (n - 1) * back_off
+                c.x = gx + d
+                c.y = gy + mh - d - c.h
+                out[#out + 1] = c
+            end
+            return out
+        end
         -- Several books: the first (front) one sits at the top left, the
         -- others peek out behind it at the bottom right, a step each. Only
         -- the backmost cover (the one at the bottom of the pile) throws a
         -- shadow - it is the pile's shadow; the covers above it have none,
         -- so no shadow falls across a neighbouring cover.
-        local back_decor = { border = decor.border, radius = decor.radius, shadow = 0 }
+        local back_decor = { border = decor.border, radius = decor.radius, shadow = 0,
+                         dark_night_border = decor.dark_night_border }
         for n = 1, k - 1 do
             list[n].decor = back_decor
             list[n].fw, list[n].fh = list[n].w, list[n].h
@@ -838,8 +866,15 @@ end
 -- month, \"Sep 29 \xE2\x80\x93 Oct 5\" across two). `start` is the week's first day.
 local function weekLabel(start)
     local last = addDays(start, 6)
+    -- ISO format, week across New Year: both ends in full ("2026-12-28 \xE2\x80\x93
+    -- 2027-01-03"), as the Reading insights week header writes it - a bare
+    -- "12-28 \xE2\x80\x93 01-03" would not say which year the 01-03 is in.
+    if start:sub(1, 4) ~= last:sub(1, 4) and Locale.readDateFormatSetting() == "ymd_dash" then
+        return start .. " \xE2\x80\x93 " .. last
+    end
     local first_s = Locale.formatShortMonthDay(start)
-    if start:sub(1, 7) == last:sub(1, 7) then
+    -- ISO format: always "MM-DD \xE2\x80\x93 MM-DD" ("10-06 \xE2\x80\x93 10-12"), also within one month.
+    if start:sub(1, 7) == last:sub(1, 7) and Locale.readDateFormatSetting() ~= "ymd_dash" then
         local last_s = Locale.formatDayOfMonth(tonumber(last:sub(9, 10)))
         return first_s .. " \xE2\x80\x93 " .. last_s
     end
@@ -1228,7 +1263,7 @@ function StreakHistoryPopup:_rebuild()
     -- headers (used above the streak caption).
     local function divider(thick)
         table.insert(content, VerticalSpan:new{ width = Size.padding.small })
-        table.insert(content, Colors.newBar(cont_w, thick and Size.line.thick or Size.line.thin, Colors.separator()))
+        table.insert(content, Colors.hLine(cont_w, thick and Size.line.thick or Size.line.thin))
         table.insert(content, VerticalSpan:new{ width = Size.padding.small })
     end
 
@@ -1271,7 +1306,13 @@ function StreakHistoryPopup:_rebuild()
     }
     table.insert(content, caption)   -- left-aligned
 
-    divider()
+    -- No line under the caption (lines go above headings only); the same
+    -- spacing is kept.
+    if UI.classicLines() then
+        divider()
+    else
+        table.insert(content, VerticalSpan:new{ width = 2 * Size.padding.small + Size.line.thin })
+    end
 
     local info = self:_buildInfo(cont_w, fonts)
     if info then table.insert(content, info) end
@@ -1782,11 +1823,13 @@ function StreakDatePopup:_rebuild()
         close_callback   = (not self.readonly) and function() UIManager:close(self) end or nil,
         show_parent      = self,
         top_v_padding    = Size.padding.default,
-        bottom_v_padding = Size.padding.default,
+        -- The line is the title bar's own (like the book list's).
+        with_bottom_line      = true,
+        bottom_line_color     = Colors.separator(),
+        bottom_line_h_padding = inner_padding,
+        bottom_v_padding      = 0,
     }
-    local title_sep = UI.padded(inner_padding,
-        Colors.newBar(screen_w - 2 * inner_padding, Size.line.thick, Colors.separator()))
-    local top_h = title_bar:getSize().h + title_sep:getSize().h
+    local top_h = title_bar:getSize().h
     self._top_h = top_h
     -- The page's bottom edge: the streak section sits right on it (just this
     -- much air under it), the calendar above takes the space that is left.
@@ -1800,7 +1843,7 @@ function StreakDatePopup:_rebuild()
     -- (The "Last read: <date>" line used to sit here; it is gone so the
     -- calendar above gets its height - larger covers.)
     table.insert(tail, Colors.newBar(cont_w, Size.padding.large, Blitbuffer.COLOR_WHITE))
-    table.insert(tail, Colors.newBar(cont_w, Size.line.thick, Colors.separator()))
+    table.insert(tail, Colors.hLine(cont_w, Size.line.thick))
     -- (No separate gap here: the standard section header below carries its
     -- own small padding above and below its text, like in every other view.)
 
@@ -1810,8 +1853,8 @@ function StreakDatePopup:_rebuild()
     --   [ days | weeks   | days | weeks ]
     -- The days|weeks value line (fonts.value) sets the height (row_h) of the
     -- value row, so both streaks' cells are the same height.
-    local inner_gap = math.floor(layout.column_gap / 2)
-    local half_col  = math.floor((col_w - inner_gap) / 2)
+    local inner_gap = layout.column_gap
+    local half_col  = math.floor((col_w - (2 * inner_gap + Size.line.medium)) / 2)
     local row_h = buildValueLine(fonts.value, fonts.label, half_col, "0", N_("day", "days", 0)):getSize().h
 
     -- The shared section header (UI.buildSectionHeader), exactly as on the
@@ -1823,10 +1866,16 @@ function StreakDatePopup:_rebuild()
     -- below): remembering where it starts lets that block measure its
     -- on-screen height without hardcoding every row/spacer size twice.
     local tail_streak_start = #tail + 1
-    table.insert(tail, UI.buildTwoColRow(cur_hdr, best_hdr, layout))
-    table.insert(tail, VerticalSpan:new{ width = Size.padding.small })
-    table.insert(tail, Colors.newBar(cont_w, Size.line.thin, Colors.separator()))
-    table.insert(tail, VerticalSpan:new{ width = Size.padding.small })
+    -- No line under the headers; the vertical divider runs on unbroken from
+    -- the header row, through the gap, into the value row.
+    table.insert(tail, UI.buildTwoColRow(cur_hdr, best_hdr, layout, false, { flush_bottom = true }))
+    if UI.classicLines() then
+        table.insert(tail, VerticalSpan:new{ width = Size.padding.small })
+        table.insert(tail, Colors.hLine(cont_w, Size.line.thin))
+        table.insert(tail, VerticalSpan:new{ width = Size.padding.small })
+    else
+        table.insert(tail, UI.buildSplitGap(layout, 2 * Size.padding.small, false))
+    end
 
     -- Stats row: each streak's column split into days | weeks, at row_h.
     local function daysWeeksCell(days, weeks)
@@ -1842,7 +1891,7 @@ function StreakDatePopup:_rebuild()
     table.insert(tail, UI.buildTwoColRow(
         daysWeeksCell(self.cur_days,  self.cur_weeks),
         daysWeeksCell(self.best_days, self.best_weeks),
-        layout))
+        layout, false, { join_above = true }))
     local tail_streak_end = #tail
     local tail_h = 0
     for _i, w in ipairs(tail) do tail_h = tail_h + w:getSize().h end
@@ -1939,7 +1988,6 @@ function StreakDatePopup:_rebuild()
         VerticalGroup:new{
             align = "left",
             title_bar,
-            title_sep,
             CenterContainer:new{
                 dimen = Geom:new{ w = screen_w, h = screen_h - top_h },
                 self.box_content,
@@ -2153,7 +2201,10 @@ local function showStreaksPopup(streaks, opts)
     opts = opts or {}
     local fonts = getCachedFonts()
     local inner_padding = Size.padding.large
-    local column_gap = Size.padding.large
+    -- Same gap as the Reading insights page (equal to the left screen-edge
+    -- margin), so the right-hand column (Best streak) starts at the same x
+    -- there and here.
+    local column_gap = inner_padding
     local screen_w = Screen:getWidth()
     local screen_h = Screen:getHeight()
 
