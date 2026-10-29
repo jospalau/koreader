@@ -334,50 +334,89 @@ function Bookshelf:sourceChanged(id)
 end
 
 function Bookshelf:_warmupStartMenuModules()
-    -- Warm-up: pre-render the start-menu modules off-screen once, so the
-    -- first real _buildPanel doesn't pay the cost of requiring widget
-    -- classes + resolving font faces for the first time (issue: first
-    -- render was ~5-10x slower than subsequent ones). Deferred to nextTick
-    -- so it doesn't delay Bookshelf's own init, and pcall'd per-module so
-    -- one bad module can't block warming the rest.
+    -- Warm-up: render each start-menu module once, off-screen, so the first
+    -- real _buildPanel doesn't pay one-time costs: requiring the widget
+    -- classes, resolving font faces, and loading the libs _buildModuleRow
+    -- pulls in on its first row (hero_modules, module_card, clip_container).
+    -- Without it the first module row was ~10x slower than the rest (28-54 ms
+    -- vs 2-4 ms).
+    -- Renders use the same ctx shape as _buildModuleRow (preview=false,
+    -- start_menu surface), one module per nextTick so the UI is never blocked
+    -- for the whole batch and Bookshelf's own init isn't delayed. Each render
+    -- is pcall'd so one bad module can't stop the rest from warming.
+    if self._warmup_started then return end
+    self._warmup_started = true
+
     UIManager:nextTick(function()
         local Breaker = require("lib/bookshelf_module_breaker")
         local Store = require("lib/bookshelf_settings_store")
         pcall(Breaker.openCrashed, Store)
-        pcall(Breaker.armOpen, Store)
-        pcall(Breaker.endOpen, Store)
         pcall(function()
             local MS = require("lib/bookshelf_menu_shortcut")
-            if MS.buildMenuTree then
-                MS.buildMenuTree()
-            end
+            if MS.buildMenuTree then MS.buildMenuTree() end
         end)
+
         local ok, err = pcall(function()
             local Modules = require("lib/bookshelf_start_menu_modules")
             local ModuleKit = require("lib/bookshelf_module_kit")
+
+            -- Lo que _buildModuleRow carga en la primera fila y el warmup no tocaba.
+            -- local t_pre = _gettime()
+            local HeroModules = require("lib/bookshelf_hero_modules")
+            local Card = require("lib/bookshelf_module_card")
+            pcall(require, "lib/bookshelf_clip_container")
+            pcall(require, "ui/widget/container/framecontainer")
+            pcall(require, "ui/widget/container/inputcontainer")
+            -- print(string.format("[bookshelf perf] warmup prerequire=%.0fms",
+            --     (_gettime() - t_pre) * 1000))
+
             local warm_keys = {
-                "finished_stats", "reading_time_breakdown", "reading_delta",
-                "book_info", "session_time", "wpm_session", "random_unread",
+                "shelf_size", "finished_stats", "reading_time_breakdown",
+                "reading_delta", "book_info", "session_time", "wpm_session",
+                "random_unread",
             }
-            for _, key in ipairs(warm_keys) do
+
+            local function warmRender(key)
                 local def = Modules.get(key)
-                if def and def.render then
-                    local entry = { id = "__warmup_" .. key, type = "module", module = key }
-                    local _rt0 = _gettime()
-                    local ok_r, widget = pcall(def.render, {
-                        width = 400, height = nil, scale = 100,
-                        preview = true, refresh = function() end,
-                        shape = nil, entry = entry, surface = "start_menu",
-                        bw = nil, menu = nil,
-                        config = ModuleKit.entryConfig(entry, nil),
-                    })
-                    logger.dbg(string.format("[bookshelf perf] warmup render key=%s ok=%s time=%.0fms",
-                        key, tostring(ok_r), (_gettime()-_rt0)*1000))
-                else
-                    logger.dbg(string.format("[bookshelf perf] warmup: no def/render for key=%s", key))
+                if not (def and def.render) then
+                    logger.dbg("[bookshelf perf] warmup: no def/render for key=" .. key)
+                    return
                 end
+                local entry = { id = "__warmup_" .. key, type = "module", module = key }
+                -- local t0 = _gettime()
+                local ok_r, widget = pcall(function()
+                    local colors
+                    pcall(function() colors = Card.look(entry, def).colors end)
+                    local wgt = def.render(HeroModules.bookHelpers({
+                        width = 340, height = nil, max_height = 600,
+                        scale = 100, preview = false, refresh = function() end,
+                        shape = ModuleKit.shape(340, nil),
+                        entry = entry, surface = "start_menu",
+                        bw = nil, menu = nil, clamp = true,
+                        config = ModuleKit.entryConfig(entry, nil),
+                        colors = colors,
+                        set_tap_regions = function() end,
+                    }))
+                    if wgt then wgt:getSize() end
+                    return wgt
+                end)
+                -- print(string.format(
+                --     "[bookshelf perf] warmup key=%s ok=%s time=%.0fms",
+                --     key, tostring(ok_r), (_gettime() - t0) * 1000))
+                if ok_r and widget and widget.free then pcall(widget.free, widget) end
             end
+
+            local i = 0
+            local function warmNext()
+                i = i + 1
+                local key = warm_keys[i]
+                if not key then return end
+                pcall(warmRender, key)
+                UIManager:nextTick(warmNext)
+            end
+            warmNext()
         end)
+
         if not ok then
             logger.warn("[bookshelf] warmup failed:", err)
         end
