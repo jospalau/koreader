@@ -397,20 +397,31 @@ local function computeYear()
         extra = extra + (tonumber((ledger.extra or {})[t.year]) or 0)
     else
         local seen = {}
-        for _, entry in ipairs(history()) do
-            local fp = entry.file
-            if fp and not seen[fp] and (entry.time or 0) >= since then
-                seen[fp] = true
-                local _, status = D.progress(fp)
-                if status == "finished" then
-                    local y, m, d = ymOf(D.finishedOn(fp))
-                    if not y then
-                        local et = os.date("*t", entry.time or 0)
-                        y, m, d = et.year, et.month, et.day
-                    end
-                    add(fp, y, m, d)
-                end
+        local function consider(fp, time)
+            if not fp or seen[fp] then return end
+            seen[fp] = true
+            local _, status = D.progress(fp)
+            if status ~= "finished" then return end
+            local y, m, d = ymOf(D.finishedOn(fp))
+            if not y then
+                -- sin fecha de terminado: la última apertura, si la hay
+                if not time or time <= 0 then return end
+                local et = os.date("*t", time)
+                y, m, d = et.year, et.month, et.day
             end
+            add(fp, y, m, d)
+        end
+
+        for _, entry in ipairs(history()) do
+            if entry.file and (entry.time or 0) >= since then
+                consider(entry.file, entry.time)
+            end
+        end
+
+        -- libros del historial de Top Manager que KOReader no tiene en el suyo
+        if G_reader_settings and G_reader_settings:isTrue("top_manager_infmandhistory")
+                and type(_G.all_files) == "table" then
+            for fp in pairs(_G.all_files) do consider(fp, 0) end
         end
     end
     if fixer then fixer.close() end
