@@ -8998,6 +8998,10 @@ function BookshelfWidget:_buildStartMenuIcon(focused, frame_width)
     function BarsWidget:getSize() return Geom:new{ w = bar_w, h = art_size } end
     local bars_ink = self:_chromeInk()
     function BarsWidget:paintTo(bb, x, y)
+        local ok, Park = pcall(require, "lib/bookshelf_reader_park")
+        if ok and Park and Park.isParked and Park.isParked() then
+            return
+        end
         local top = y + math.floor((art_size - span) / 2)
         for i = 0, 2 do
             require("lib/bookshelf_color").paintRect(bb, x, top + i * (bar_t + gap), bar_w, bar_t, bars_ink)
@@ -9042,6 +9046,10 @@ function BookshelfWidget:_buildMicroModuleIcon(focused, frame_width)
     local GridWidget = Widget:extend{}
     function GridWidget:getSize() return Geom:new{ w = art_size, h = art_size } end
     function GridWidget:paintTo(bb, x, y)
+        local ok, Park = pcall(require, "lib/bookshelf_reader_park")
+        if ok and Park and Park.isParked and Park.isParked() then
+            return
+        end
         local oy = y + math.floor((art_size - H) / 2)  -- centre the ink like the bars
         local function box(rx, ry)
             bb:paintRect(rx, ry, cw, t, grid_ink)          -- top
@@ -26841,6 +26849,10 @@ end
 -- so the Off guard still protects against a stale dispatcher action or queued
 -- gesture.
 function BookshelfWidget:_openStartMenu(force)
+    local ok, Park = pcall(require, "lib/bookshelf_reader_park")
+    if ok and Park and Park.isParked and Park.isParked() and not force then
+        return
+    end
     if not force and self:_startMenuPosition() == "off" then return end
     -- Hot parking: a reader is still alive under the shelf, so the start menu's
     -- captured menu-action shortcuts would resolve against the READER menu --
@@ -26903,6 +26915,10 @@ end
 -- placement isn't "fullscreen" -- set only by the explicit gesture action; the
 -- footer button leaves it nil so the placement guard still applies there.
 function BookshelfWidget:_openMicroModulesFullscreen(force)
+    local ok, Park = pcall(require, "lib/bookshelf_reader_park")
+    if ok and Park and Park.isParked and Park.isParked() and not force then
+        return
+    end
     if not force and not BookshelfSettings.microFullscreenButton() then return end
     local ok, Mod = pcall(require, "lib/bookshelf_micro_fullscreen")
     if not ok or not Mod then
