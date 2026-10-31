@@ -98,6 +98,40 @@ function Kit.settingsReopen(ctx, dialog, show_settings)
     if show_settings then show_settings(ctx) end
 end
 
+-- Kit.withClose(spec) -> a module settings ButtonDialog's spec with a close X
+-- at the right end of its title: tapping outside closed it, but nothing on
+-- it said so. The X does what that tap does (onClose, so a
+-- tap_close_callback runs). ButtonDialog has no place for one, so the
+-- spec's own init (which Widget:new calls in place of the class's) builds
+-- the dialog as usual, then lays the X over the title line, the same size,
+-- so nothing below moves. With no title, a Close row at the foot instead.
+function Kit.withClose(spec)
+    if not spec.title then
+        local _ = require("lib/bookshelf_i18n").gettext
+        spec.buttons = spec.buttons or {}
+        table.insert(spec.buttons, { { text = _("Close"), callback = function()
+            if spec.onClose then spec:onClose() else require("ui/uimanager"):close(spec) end
+        end } })
+        return spec
+    end
+    function spec:init()
+        require("ui/widget/buttondialog").init(self)
+        local group = self.title_group and self.title_group[1]
+        local title = group and group[1]
+        if not (title and title.getSize) then return end
+        local sz = title:getSize()
+        local Geom = require("ui/geometry")
+        local dimen = Geom:new{ w = sz.w, h = sz.h }
+        local x = require("ui/widget/iconbutton"):new{
+            icon = "close", width = sz.h, height = sz.h,
+            callback = function() self:onClose() end,
+        }
+        group[1] = require("ui/widget/overlapgroup"):new{ dimen = dimen, title,
+            require("ui/widget/container/rightcontainer"):new{ dimen = dimen, x } }
+    end
+    return spec
+end
+
 -- Kit.radioRow{ label=, active=, on_pick=, toggle= } -> ButtonDialog row.
 -- Checkmark-prefixed radio row (U+2713 when active, two-space placeholder
 -- otherwise, so labels stay aligned). Tapping the already-active row is a
@@ -324,6 +358,51 @@ function Kit.shape(width, avail_h)
     if r >= 1.6 then return "wide" end
     if r <= 0.7 then return "tall" end
     return "square"
+end
+
+-- plugin(MODULE_DIR) -> the live instance of the plugin this module ships
+-- in, for a module in a pack (a .koplugin's bookshelf_modules/) that shows
+-- its own plugin's state. MODULE_DIR is the folder the module file is called
+-- with (`local MODULE_DIR = ...`). nil when the plugin is not running, or
+-- for a module outside any plugin (the drop-in folder).
+--   local pet = Kit.plugin(MODULE_DIR)
+--   if pet then ... pet.state ... end
+function Kit.plugin(dir)
+    return SM.pluginOf and SM.pluginOf(dir) or nil
+end
+
+-- onHomeShelf(key) -> true when the reader's home shelf (the first shelf on
+-- the chip strip that holds books) holds module `key`.
+-- setOnHomeShelf(key, on) -> puts module `key` first on the home shelf, at its
+-- starting width, or takes it off; true when that is where things now stand
+-- (false: no such module, or no home shelf). A shelf on screen redraws.
+-- For a pack's own plugin, and only from something the reader chose (a tick
+-- in its settings or its welcome screen): the home shelf is theirs.
+function Kit.onHomeShelf(key)
+    local ok, on = pcall(function()
+        return require("lib/bookshelf_shelf_modules").onHome(key, require("lib/bookshelf_tab_model").load())
+    end)
+    return ok and on or false
+end
+
+function Kit.setOnHomeShelf(key, on)
+    local ShelfModules = require("lib/bookshelf_shelf_modules")
+    local TabModel = require("lib/bookshelf_tab_model")
+    local def = SM.get(key)
+    if on and not def then return false end
+    local tabs = TabModel.load()
+    local changed, home, removed = ShelfModules.setOnHome(key, on and true or false, tabs,
+        ShelfModules.startWidth(def))
+    if not home then return false end
+    if changed then
+        TabModel.save(tabs)
+        for _i, m in ipairs(removed or {}) do SM.notifyRemoved(m) end
+        -- The shelf on screen redraws (BookshelfWidget:onBookshelfShelfModulesChanged).
+        local UIManager = require("ui/uimanager")
+        local Event = require("ui/event")
+        UIManager:broadcastEvent(Event:new("BookshelfShelfModulesChanged", home.id))
+    end
+    return true
 end
 
 -- Per-module SHARED store handle (caches, per-type defaults), backed by the

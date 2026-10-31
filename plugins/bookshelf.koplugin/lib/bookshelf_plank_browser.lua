@@ -76,8 +76,11 @@ end
 local _previews, _order = {}, {}
 local PREVIEW_KEEP = 12
 local function render(design, w, row_h)
+    -- On the card's grey (the popup kit's card), not a white box.
+    local ok_k, Kit = pcall(require, "lib/bookshelf_popup_kit")
+    local ground = ok_k and Kit and Kit.STRIP_BG or nil
     local ok, bb = pcall(function()
-        return require("lib/bookshelf_spine_shelf").plankPreview(design, w, row_h)
+        return require("lib/bookshelf_spine_shelf").plankPreview(design, w, row_h, ground)
     end)
     return ok and bb or nil
 end
@@ -124,7 +127,7 @@ local function renderHint(dimen)
     local TextBoxWidget   = require("ui/widget/textboxwidget")
     return CenterContainer:new{ dimen = Geom:new{ w = dimen.w, h = dimen.h },
         TextBoxWidget:new{ text = _("More planks come with packs: see Add ornaments in the Ornament collection."),
-                           face = Font:getFace("cfont", 16), width = math.floor(dimen.w * 0.8),
+                           face = require("lib/bookshelf_fonts"):getFace("cfont", 16), width = math.floor(dimen.w * 0.8),
                            alignment = "center" } }
 end
 
@@ -143,7 +146,10 @@ local function renderCell(o, dimen)
     local VerticalSpan    = require("ui/widget/verticalspan")
     local T               = require("ffi/util").template
     local pad = Space.padding.small
-    local inner_w, inner_h = dimen.w - 2 * pad, dimen.h - 2 * pad
+    -- The kit's grey card (STYLE.md), the plank set in from its sides.
+    local Kit = require("lib/bookshelf_popup_kit")
+    local pad_h = Space.px(16)
+    local inner_w, inner_h = dimen.w - 2 * pad_h, dimen.h - 2 * pad
     local name = nameOf(o)
     if o.kind == "pack" then name = T(_("%1 (%2 pack)"), name, o.pack) end
     -- The title row, aligned left: the radio mark (filled for the plank in
@@ -156,7 +162,7 @@ local function renderCell(o, dimen)
     local gap = Space.padding.default
     local name_w = inner_w - radio:getSize().w - gap
     local row = HorizontalGroup:new{ align = "center", radio, HorizontalSpan:new{ width = gap },
-        TextWidget:new{ text = name, face = Font:getFace("cfont", 18), bold = true, max_width = math.max(1, name_w) } }
+        TextWidget:new{ text = name, face = require("lib/bookshelf_fonts"):getFace("cfont", 18), bold = true, max_width = math.max(1, name_w) } }
     local lines = LeftContainer:new{ dimen = Geom:new{ w = inner_w, h = row:getSize().h }, row }
     local box_h = math.max(1, inner_h - lines:getSize().h - Space.padding.small)
     -- A row the height of a four-row shelf: the plank as most shelves show
@@ -173,8 +179,9 @@ local function renderCell(o, dimen)
     -- The title row above its plank, the pair packed to the top of the card,
     -- so each name reads with the plank under it and not the next one.
     local TopContainer = require("ui/widget/container/topcontainer")
-    return FrameContainer:new{
-        bordersize = 0, padding = pad, margin = 0,
+    return require("lib/bookshelf_popup_kit").cardify(FrameContainer:new{
+        bordersize = 0, radius = Kit.RADIUS, padding = pad, margin = 0,
+        padding_left = pad_h, padding_right = pad_h,
         background = Blitbuffer.COLOR_WHITE,
         TopContainer:new{ dimen = Geom:new{ w = inner_w, h = inner_h },
             VerticalGroup:new{ align = "left",
@@ -182,7 +189,7 @@ local function renderCell(o, dimen)
                 VerticalSpan:new{ width = Space.padding.small },
                 pic or VerticalSpan:new{ width = 1 },
             } },
-    }
+    })
 end
 
 -- show(opts): the picker.
@@ -237,6 +244,9 @@ function PB.show(opts)
         chip_strip = chips,
         on_chip_tap = function(k) self.chip = k; self.items = items() end,
         cell_renderer = renderCell,
+        -- A tap marks the choice at once, its own feedback: no pressed
+        -- look first (LibraryModal select_on_tap, STYLE.md).
+        select_on_tap = true,
         -- A tap uses the plank at once, on the shelf behind, and the picker
         -- stays open for the next (Close, or a tap outside it, when done).
         -- The plain colour closes the picker for its colour dialog.

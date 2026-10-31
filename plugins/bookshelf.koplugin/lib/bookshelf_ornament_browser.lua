@@ -46,6 +46,7 @@ local function O() return require("lib/bookshelf_ornaments") end
 -- (bookshelf_theme_pack.switches, the one seam). Asked each time: the
 -- browser can outlive a change of shelf.
 local function SW() return require("lib/bookshelf_theme_pack").switches() end
+local function TP() return require("lib/bookshelf_theme_pack") end
 
 -- An ornament's PICTURE is faded while it will not be placed, whether switched
 -- off itself or through its pack: the grid reads as "what the shelf uses".
@@ -112,15 +113,18 @@ end
 
 function Browser._renderCell(item, dimen)
     local e = item.entry
-    local border = Size.border.default
+    local Kit = require("lib/bookshelf_popup_kit")
+    -- No border in the sizes: the kit's card (cardify) has none, so counted,
+    -- the card came out short of its slot by twice the border.
+    local border = 0
     local pad = Space.padding.default
-    local label_face = Font:getFace("cfont", 16)
-    local state_face = Font:getFace("cfont", 13)
+    local label_face = require("lib/bookshelf_fonts"):getFace("cfont", 16)
+    local state_face = require("lib/bookshelf_fonts"):getFace("cfont", 13)
     local inner_w = dimen.w - 2 * (border + pad)
     local label = TextWidget:new{ text = O().displayName(e), face = label_face, max_width = inner_w }
     -- On or off is the checkbox in the corner; the only state line left is
     -- a pack that is off, which a piece's own box cannot say.
-    local state = item.pack_off and TextWidget:new{
+    local state = (item.pack_off and not item.pick) and TextWidget:new{
         text = _("Pack off"),
         face = state_face, fgcolor = Blitbuffer.COLOR_BLACK, max_width = inner_w,
     } or nil
@@ -129,7 +133,10 @@ function Browser._renderCell(item, dimen)
     -- Preview the picture, not the file: the transparent room an ornament
     -- carries for the shelf is cropped off, and what is left fits the box.
     local preview = Browser.preview(e, inner_w, box_h)
-    if item.off or item.pack_off then preview = Faded:new{ child = preview } end
+    -- Faded only for a pack switched off as a whole. A piece that is merely
+    -- not in the set shows as it is, its box empty: faded, every piece on a
+    -- Plain shelf looked greyed out for no reason (maintainer).
+    if item.pack_off and not item.pick then preview = Faded:new{ child = preview } end
     local inner_h = dimen.h - 2 * (border + pad)
     local body = VerticalGroup:new{
         align = "center",
@@ -142,12 +149,16 @@ function Browser._renderCell(item, dimen)
     -- ignores them), so every card fills its grid slot exactly.
     local card = FrameContainer:new{
         bordersize = border,
-        radius = Space.radius.default,
+        radius = Kit.RADIUS,
         padding = pad,
         margin = 0,
         background = Blitbuffer.COLOR_WHITE,
         CenterContainer:new{ dimen = Geom:new{ w = inner_w, h = inner_h }, body },
     }
+    Kit.cardify(card)
+    -- Picking (Swap): no box, a tap chooses the piece; there is nothing to
+    -- switch.
+    if item.pick then return card end
     -- The checkbox, over the card's top right corner: ticked when the piece
     -- is on, grey when its pack is off (a tap switches the pack on too).
     local Marks = require("lib/bookshelf_marks")
@@ -158,10 +169,19 @@ function Browser._renderCell(item, dimen)
     return OverlapGroup:new{ dimen = Geom:new{ w = cs.w, h = cs.h }, card, box }
 end
 
+-- One fresh look at the folders (a piece just dropped in shows), then the
+-- recent window held while each piece is asked about: its isOff reaches
+-- listAll through the theme's set, and outside the window listAll reads
+-- every folder again. On a PW5 with 443 pieces that was 889 scans and a
+-- 32 s open (measured 2026-10-30); _chips is the same per pack.
 function Browser:_items()
     local Orn, sw = O(), SW()
     local all = Orn.listAll()
+    local was = Orn.allowRecent(true)
     local out = {}
+    -- What the summary line counts: the pieces on in these switches, of all.
+    local on = 0
+    local pick = self.opts.pick ~= nil
     for _i, e in ipairs(all) do
         -- opts.pool: the pieces a shelf deals from (Swap on a shelf that
         -- wears a pack offers only those).
@@ -169,10 +189,27 @@ function Browser:_items()
                      and (not self.opts.pool or self.opts.pool(e))
         if keep then
             out[#out + 1] = { entry = e, off = sw.isOff(e.name),
-                              pack_off = sw.isPackOff(e.pack) }
+                              pack_off = sw.isPackOff(e.pack), pick = pick }
         end
+        if not pick and not sw.isOff(e.name) and not sw.isPackOff(e.pack) then on = on + 1 end
     end
+    self.on_count, self.all_count = on, #all
+    if not was then Orn.allowRecent(false) end
     return out
+end
+
+-- _intro() -> the line over the grid saying whose set the boxes are: the
+-- theme of the shelf the browser was opened from (Plain's starts empty, and
+-- with no word on it every piece looked switched off, maintainer), and how
+-- many of the pieces it uses. None when picking (Swap): there are no boxes.
+function Browser:_intro()
+    if self.opts.pick then return nil end
+    local name = TP().themeName(TP().shelfTheme())
+    if (self.on_count or 0) == 0 then
+        return T(_("On %1 shelves: none yet. Check a piece to add it."), name)
+    end
+    return T(_("On %1 shelves: %2 of %3. Check a piece to add it, uncheck to take it off."),
+        name, self.on_count, self.all_count)
 end
 
 -- _toggle(item): switch an ornament on or off. (Planks are chosen in the
@@ -212,14 +249,22 @@ function Browser:_changed(rescan)
         TP.forgetChoice()
     end
     self._dirty = true
+    -- A tick changes no files: the list and the chips read the folders as
+    -- they were (the recent window), where each read every folder again,
+    -- twice a tap (~28 ms a scan on a PW5). After a delete (rescan) they
+    -- look afresh.
+    local Orn = O()
+    local was = (not rescan) and Orn.allowRecent(true)
     self.items = self:_items()
     if self._config then self._config.footer_rows = self:_footerRows() end
     if self.modal then self.modal:refresh() end
+    if not rescan and not was then Orn.allowRecent(false) end
 end
 
 function Browser:_chips()
     local Orn, sw = O(), SW()
     local all, packs = Orn.listAll()
+    local was = Orn.allowRecent(true)
     -- All, then one per pack. No tab for the loose ornaments on their own:
     -- All already shows them, and a tab is for something you switch as one
     -- (maintainer). Nor for a pack with no ornaments: a planks-only pack's
@@ -234,6 +279,7 @@ function Browser:_chips()
             is_active = self.chip == pack,
         } end
     end
+    if not was then Orn.allowRecent(false) end
     return chips
 end
 
@@ -258,7 +304,8 @@ function Browser:_longTap(item)
     local d
     local buttons = {
         {{
-            text = item.off and _("Switch on") or _("Switch off"),
+            -- The ornament menu's words for it (Hide / Show).
+            text = item.off and _("Show") or _("Hide"),
             callback = function()
                 UIManager:close(d)
                 self:_toggle(item)
@@ -272,7 +319,8 @@ function Browser:_longTap(item)
             self:_confirmDelete(item)
         end,
     }}
-    d = ButtonDialog:new{ title = item.entry.name, buttons = buttons }
+    -- The title's X is the way out (STYLE.md).
+    d = ButtonDialog:new(require("lib/bookshelf_module_kit").withClose{ title = item.entry.name, buttons = buttons })
     UIManager:show(d)
 end
 
@@ -283,19 +331,17 @@ function Browser:_addButton()
         key = "add",
         label = _("Add ornaments\xe2\x80\xa6"),
         on_tap = function()
-            UIManager:show(InfoMessage:new{
-                -- The shop URL is a parameter, not part of the
-                -- msgid, so a translation cannot break it.
-                text = T(_("Put PNG or SVG files in\n%1\n\nA folder of them inside it becomes a pack, with its own tab here.\n\nReady-made packs:\n%2"),
-                    (function()
-                        -- A findable path: the settings dir can be relative.
-                        local d = O().dir() or "?"
-                        local ok, util = pcall(require, "ffi/util")
-                        local real = ok and util.realpath and util.realpath(d)
-                        return real or d
-                    end)(),
-                    "ko-fi.com/andyhazz/shop"),
-            })
+            -- A findable path: the settings dir can be relative.
+            local d = O().dir() or "?"
+            local ok, util = pcall(require, "ffi/util")
+            local real = ok and util.realpath and util.realpath(d)
+            -- As Add theme pack: a panel with the shop's QR code.
+            require("lib/bookshelf_link_panel").showShop{
+                title = _("Add ornaments"),
+                text = T(_("Put PNG or SVG files in\n%1\n\nA folder of them inside it becomes a pack, with its own tab here."),
+                    real or d),
+                shop = _("Ready-made packs"),
+            }
         end,
     }
 end
@@ -326,17 +372,23 @@ function Browser:_setAll(on)
     self:_changed()
 end
 
--- _footerRows() -> the footer, one row: Select all, Select none and Apply
--- (Add ornaments first on the All tab; Cancel alone when picking a
--- replacement). A theme is chosen in the Theme menu, not here.
-function Browser:_footerRows()
-    local close = { key = "close", label = self.opts.pick and _("Cancel") or _("Apply"), on_tap = self._close }
-    -- Choosing a replacement: nothing to switch here, only a way out.
-    if self.opts.pick then return { { close } } end
+-- _headerActions() -> the screen's own actions, on the strip under the title:
+-- Select all and Select none (Add ornaments first on the All tab). Nothing
+-- when picking a replacement. A theme is chosen in the Theme menu, not here.
+function Browser:_headerActions()
+    if self.opts.pick then return {} end
     if self:_isPack(self.chip) then
-        return { { self:_selectButton(true), self:_selectButton(false), close } }
+        return { self:_selectButton(true), self:_selectButton(false) }
     end
-    return { { self:_addButton(), self:_selectButton(true), self:_selectButton(false), close } }
+    return { self:_addButton(), self:_selectButton(true), self:_selectButton(false) }
+end
+
+-- _footerRows() -> the footer: Close, which the modal makes the title's X
+-- (switches are live and written as it closes, however it closes, so
+-- "Apply" promised a step there is not); Cancel when picking a replacement.
+function Browser:_footerRows()
+    local close = { key = "close", label = self.opts.pick and _("Cancel") or _("Close"), on_tap = self._close }
+    return { { close } }
 end
 
 -- show(on_change, opts): on_change() runs once when the browser closes, if
@@ -390,9 +442,14 @@ function Browser._open(on_change, opts)
             if self._config then self._config.footer_rows = self:_footerRows() end
         end,
         cell_renderer = Browser._renderCell,
+        intro = function() return self:_intro() end,
+        intro_below = true,
         on_cell_tap = function(item)
             if self.opts.pick then self:_pick(item) else self:_toggle(item) end
         end,
+        -- Switching a piece on or off marks it at once, its own feedback (no
+        -- pressed look first); picking one closes, so it keeps the press.
+        select_on_tap = not self.opts.pick,
         cell_long_tap = function(item) self:_longTap(item) end,
         item_count = function() return #self.items end,
         item_at = function(idx) return self.items[idx] end,
@@ -402,12 +459,13 @@ function Browser._open(on_change, opts)
                 dimen = Geom:new{ w = w, h = _h },
                 TextBoxWidget:new{
                     text = T(_("No ornaments here.\n\nDrop PNG or SVG files into\n%1\nor a folder of them, which becomes a pack."), dir),
-                    face = Font:getFace("cfont", 16),
+                    face = require("lib/bookshelf_fonts"):getFace("cfont", 16),
                     width = math.floor(w * 0.9),
                     alignment = "center",
                 },
             }
         end,
+        header_actions = function() return self:_headerActions() end,
         footer_rows = {},
         on_closed = closed,
     }

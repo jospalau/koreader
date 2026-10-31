@@ -13,8 +13,8 @@
 -- file name (the bundled fonts are named that way) still finds its row.
 --
 -- show(current_face, on_select, default_face)
---   on_select(file) fires on every tap, so callers preview live; Close and a
---   tap outside revert to current_face, Reset picks default_face (nil means
+--   on_select(file) fires on every tap, so callers preview live; Cancel and a
+--   tap outside revert to current_face, Default picks default_face (nil means
 --   "follow KOReader" for callers that have no default file), Done keeps.
 
 local Blitbuffer      = require("ffi/blitbuffer")
@@ -264,15 +264,18 @@ function FontPicker.show(current_face, on_select, default_face)
             on_goto = function(p) page = p; picker:rebuild() end,
             show_parent = picker,
         }
+        -- The footer runs edge to edge under a full-width line (STYLE.md),
+        -- in the size pages' words: Cancel puts back the font it opened on,
+        -- Default, Done keeps.
         local actions = ButtonTable:new{
-            width = width - 2 * Space.padding.default,
-            buttons = {{
+            width = width,
+            buttons = require("lib/bookshelf_popup_kit").uiFontButtons{{
                 {
-                    text = _("Close"),
+                    text = _("Cancel"),
                     callback = function() picker:revertAndClose() end,
                 },
                 {
-                    text = _("Reset"),
+                    text = _("Default"),
                     enabled = selected ~= default_face,
                     callback = function()
                         selected = default_face
@@ -289,6 +292,14 @@ function FontPicker.show(current_face, on_select, default_face)
             zero_sep = true,
             show_parent = picker,
         }
+        -- Rounded as the frame is, so the end buttons' white boxes don't
+        -- square off its bottom corners. (Not a nil background: a Button's
+        -- tap feedback inverts it, and crashed on nil.)
+        for _r, row in ipairs(actions.buttons_layout or {}) do
+            for _c, b in ipairs(row) do
+                if b.frame then b.frame.radius = Space.radius.window end
+            end
+        end
 
         return FrameContainer:new{
             radius = Space.radius.window,
@@ -307,23 +318,17 @@ function FontPicker.show(current_face, on_select, default_face)
                     dimen = Geom:new{ w = width, h = per_page * row_height },
                     list_group,
                 },
-                CenterContainer:new{
-                    dimen = Geom:new{ w = width, h = Size.line.thin },
-                    LineWidget:new{
-                        background = Blitbuffer.COLOR_DARK_GRAY,
-                        dimen = Geom:new{ w = width - 2 * Space.padding.default, h = Size.line.thin },
-                    },
-                },
                 VerticalSpan:new{ width = Space.span.vertical_default },
                 CenterContainer:new{
                     dimen = Geom:new{ w = width, h = page_nav:getSize().h },
                     page_nav,
                 },
                 VerticalSpan:new{ width = Space.span.vertical_default },
-                CenterContainer:new{
-                    dimen = Geom:new{ w = width, h = actions:getSize().h },
-                    actions,
+                LineWidget:new{
+                    background = Blitbuffer.COLOR_DARK_GRAY,
+                    dimen = Geom:new{ w = width, h = Size.line.thin },
                 },
+                actions,
             },
         }
     end

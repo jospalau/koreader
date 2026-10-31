@@ -286,7 +286,7 @@ function StartMenu.open(bw, bottom_inset, burger_dimen, context, burger_art, anc
     StartMenu._live = menu -- test/introspection hook; cleared in onCloseWidget
 end
 
--- Model.load() filtered by the "In start menu" micro-module surface toggle.
+-- Model.load() filtered by the "In the start menu" module surface toggle.
 -- Display-only: mutations go through bookshelf_start_menu_edit's own fresh
 -- Model.load, so the stored model (with its module entries) is never touched by
 -- the filtering -- toggling the surface back on restores the cards untouched.
@@ -851,10 +851,10 @@ function StartMenu:_buildModuleRow(entry, w, focused, in_flyout)
     -- Shared card-surface grey (Modules.CARD_BG): light enough that the
     -- modules' COLOR_DARK_GRAY muted text stays readable, while still
     -- reading as a distinct surface against the panel's white.
-    local card = FrameContainer:new{
+    -- The popup kit's card (STYLE.md): its corner and hairline shadow, on
+    -- the modules' own card grey.
+    local card = require("lib/bookshelf_popup_kit").card{
         background = Modules.CARD_BG,
-        radius     = Space.px(4),
-        bordersize = 0,
         padding    = card_pad,
         content,
     }
@@ -1465,8 +1465,9 @@ function StartMenu:_build()
             -- Clamp so every square stays inside the art box.
             local last = xspan - stroke
             for t = 0, last do
-                bb:paintRect(x + t, y + t, stroke, stroke, ink)  -- ↘ diagonal
-                bb:paintRect(x + last - t, y + t, stroke, stroke, ink)  -- ↙
+                -- Through Color.paintRect: the ink is the Panel text pick.
+                require("lib/bookshelf_color").paintRect(bb, x + t, y + t, stroke, stroke, ink)  -- ↘ diagonal
+                require("lib/bookshelf_color").paintRect(bb, x + last - t, y + t, stroke, stroke, ink)  -- ↙
             end
         end
         local glyph = XWidget:new{}
@@ -1880,8 +1881,19 @@ end
 
 -- ── Key-nav event handlers ────────────────────────────────────────────────────
 
+-- _revealCursor() -> true when the keys' cursor was hidden and this press
+-- showed it (on the row it was seeded on) instead of acting. Opened by a
+-- tap, the menu shows no cursor: an outlined row looked picked (STYLE.md).
+function StartMenu:_revealCursor()
+    if self._cursor_shown then return false end
+    self._cursor_shown = true
+    self:_rebuild_only()
+    return true
+end
+
 function StartMenu:onSMFocusDown()
     if not self._focus then return true end
+    if self:_revealCursor() then return true end
     local panel = self._focus.panel
     local entries = self:_panelEntries(panel)
     -- Find current position (nil when page has no focusables).
@@ -1936,6 +1948,7 @@ end
 
 function StartMenu:onSMFocusUp()
     if not self._focus then return true end
+    if self:_revealCursor() then return true end
     local panel = self._focus.panel
     local entries = self:_panelEntries(panel)
     local idx = nil
@@ -1982,6 +1995,7 @@ end
 
 function StartMenu:onSMFocusRight()
     if not self._focus then return true end
+    if self:_revealCursor() then return true end
     if self._focus.panel ~= "root" then return true end
     local entry = self:_focusedEntry()
     if not entry or entry.type ~= "folder" then return true end
@@ -2000,6 +2014,7 @@ end
 
 function StartMenu:onSMFocusLeft()
     if not self._focus then return true end
+    if self:_revealCursor() then return true end
     if self._focus.panel ~= "flyout" then return true end
     -- Close the flyout, return focus to the folder entry in root.
     local folder_id = self._flyout_for
@@ -2013,6 +2028,7 @@ end
 
 function StartMenu:onSMPress()
     if not self._focus then return true end
+    if self:_revealCursor() then return true end
     local entry = self:_focusedEntry()
     if not entry then return true end
     if entry.id == "__add" then
@@ -2028,6 +2044,7 @@ end
 
 function StartMenu:onSMHold()
     if not self._focus then return true end
+    if self:_revealCursor() then return true end
     local entry = self:_focusedEntry()
     if entry and entry.id ~= "__add" then
         self:_editEntry(entry)
@@ -2087,6 +2104,16 @@ function StartMenu:onTapDismiss(_arg, ges)
     end
     self:_close()
     return true
+end
+-- KOReader's own gestures (the menu, brightness) keep working around it,
+-- as over the shelf (GestureZones.overlayEvent; maintainer, PW5).
+function StartMenu:handleEvent(event)
+    return require("lib/bookshelf_gesture_zones").overlayEvent(self, event, InputContainer,
+        function(pos)
+            local r, f = self._root_region, self._flyout_region
+            if not r then return true end
+            return pos:intersectWith(r) or (f and pos:intersectWith(f)) or false
+        end)
 end
 
 function StartMenu:onSwipeDismiss(_arg, ges)

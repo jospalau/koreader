@@ -58,8 +58,20 @@ end
 
 local function anyKey(t) if type(t) ~= "table" then return false end; for _k in pairs(t) do return true end; return false end
 
--- The "multi" dimension storage keys, in signature order.
-local MULTI_KEYS = { "statuses", "genres", "langs", "formats", "ratings", "collections" }
+-- The "multi" dimension storage keys, in signature order. Genre also keeps
+-- the genres a book must have all of and the ones it must have none of, and
+-- Collection the collections it must not be in (GitHub issues 293, 453).
+local MULTI_KEYS = { "statuses", "genres", "langs", "formats", "ratings", "collections",
+    "genres_all", "genres_not", "collections_not" }
+
+-- dimKeys(dim) -> the storage keys a filter dimension's picks live under.
+local DIM_KEYS = {
+    genres = { "genres", "genres_all", "genres_not" },
+    collections = { "collections", "collections_not" },
+}
+function Filter.dimKeys(dim)
+    return DIM_KEYS[dim] or { dim }
+end
 
 function Filter.isActive(filter)
     if type(filter) ~= "table" then return false end
@@ -157,12 +169,21 @@ function Filter.compile(filter, opts)
         c.langs = set
         c._lang_canonical = fn
     end
-    if anyKey(filter.genres) then
+    do
         local fn = (opts and opts.genre_normalize) or function(v) return v end
-        local set = {}
-        for k in pairs(filter.genres) do local kk = fn(k); if kk ~= nil then set[kk] = true end end
-        c.genres = set
-        c._genre_normalize = fn
+        local function genreSet(t)
+            if not anyKey(t) then return nil end
+            local set = {}
+            for k in pairs(t) do local kk = fn(k); if kk ~= nil then set[kk] = true end end
+            return set
+        end
+        c.genres, c.genres_all, c.genres_not =
+            genreSet(filter.genres), genreSet(filter.genres_all), genreSet(filter.genres_not)
+        if c.genres or c.genres_all or c.genres_not then
+            c._genre_normalize = fn
+            -- The repository fills genres in (Hardcover) only when asked.
+            c.uses_genres = true
+        end
     end
     if anyKey(filter.collections) then
         local resolve = (opts and opts.collection_resolver) or defaultCollectionResolver
@@ -172,6 +193,14 @@ function Filter.compile(filter, opts)
             for fp in pairs(set) do union[fp] = true end
         end
         c.collection_files = union
+    end
+    if anyKey(filter.collections_not) then
+        local resolve = (opts and opts.collection_resolver) or defaultCollectionResolver
+        local union = {}
+        for name in pairs(filter.collections_not) do
+            for fp in pairs(resolve(name) or {}) do union[fp] = true end
+        end
+        c.collection_excludes = union
     end
     local function prefixList(t)
         local out = {}
@@ -198,7 +227,8 @@ function Filter.matches(book, c)
         local rk = (r and r > 0) and tostring(math.floor(r)) or "unrated"
         if not c.ratings[rk] then return false end
     end
-    if c.genres then
+    if c.uses_genres and not (c.genres_all or c.genres_not) then
+        -- Any of these only, the common case: no table per book.
         local fn = c._genre_normalize or function(v) return v end
         local g = book.genres
         local hit = false
@@ -206,6 +236,22 @@ function Filter.matches(book, c)
             for i = 1, #g do if c.genres[fn(g[i])] then hit = true; break end end
         end
         if not hit then return false end
+    elseif c.uses_genres then
+        local fn = c._genre_normalize or function(v) return v end
+        local g = type(book.genres) == "table" and book.genres or {}
+        local has = {}
+        for i = 1, #g do local k = fn(g[i]); if k ~= nil then has[k] = true end end
+        if c.genres_not then
+            for k in pairs(c.genres_not) do if has[k] then return false end end
+        end
+        if c.genres_all then
+            for k in pairs(c.genres_all) do if not has[k] then return false end end
+        end
+        if c.genres then
+            local hit = false
+            for k in pairs(has) do if c.genres[k] then hit = true; break end end
+            if not hit then return false end
+        end
     end
     if c.langs then
         local fn = c._lang_canonical or function(v) return v end
@@ -219,6 +265,9 @@ function Filter.matches(book, c)
     end
     if c.collection_files then
         if not (book.filepath and c.collection_files[book.filepath]) then return false end
+    end
+    if c.collection_excludes and book.filepath and c.collection_excludes[book.filepath] then
+        return false
     end
     if c.folder_excludes then
         local fp = book.filepath or ""
@@ -304,7 +353,8 @@ local function countKeys(t)
 end
 
 -- dimSummary(filter, dim_key, max_chars): the value text shown on a filter row.
--- "any" when empty; otherwise the selected values, sorted and comma-joined. When
+-- "Any" when empty (capitalised, as every value on the editor's cards);
+-- otherwise the selected values, sorted and comma-joined. When
 -- max_chars is given and the list is longer, pack whole values up to that budget
 -- and append an ellipsis ("Comedy, Fantasy…"). The caller (editor) sizes the
 -- budget per row from the row width minus the label, so each row fills close to
@@ -314,7 +364,7 @@ function Filter.dimSummary(filter, dim_key, max_chars)
     if dim_key == "folders" then
         local f = filter.folders or {}
         local inc, exc = countKeys(f.include), countKeys(f.exclude)
-        if inc == 0 and exc == 0 then return tr("any") end
+        if inc == 0 and exc == 0 then return tr("Any") end
         return string.format(tr("%d in, %d out"), inc, exc)
     end
     if dim_key == "series_membership" then
@@ -322,15 +372,32 @@ function Filter.dimSummary(filter, dim_key, max_chars)
         -- on the Series source it's load-bearing (mixes standalone books in
         -- with the stacks, #160), and on book chips the label still reads as
         -- an accurate description of "no narrowing".
-        if filter.series_membership == nil then return tr("any") end
+        if filter.series_membership == nil then return tr("Any") end
         for _i, sv in ipairs(Filter.seriesValues()) do
             if sv.value == filter.series_membership then return sv.label end
         end
         return tostring(filter.series_membership)
     end
+    local keys = DIM_KEYS[dim_key]
+    if keys and (anyKey(filter[keys[2]]) or anyKey(filter[keys[3]])) then
+        -- Any of, all of, none of: "Crime; all of NF; not Fiction". The
+        -- all-of part needs naming only beside an any-of part.
+        local function joined(t, sep) return table.concat(sortedKeys(t), sep) end
+        local any = anyKey(filter[keys[1]]) and joined(filter[keys[1]], ", ") or nil
+        local parts = { any }
+        if keys[3] then
+            local all = filter[keys[2]]
+            if anyKey(all) then
+                parts[#parts + 1] = any and (tr("all of") .. " " .. joined(all, ", ")) or joined(all, " + ")
+            end
+        end
+        local none = filter[keys[#keys]]
+        if anyKey(none) then parts[#parts + 1] = tr("not") .. " " .. joined(none, ", ") end
+        return table.concat(parts, "; ")
+    end
     local set = filter[dim_key]
     local n = countKeys(set)
-    if n == 0 then return tr("any") end
+    if n == 0 then return tr("Any") end
     -- Build sorted display labels for the selected values. For status/rating
     -- the stored key is an internal token, so map it to a friendly label;
     -- every other dimension stores the display value as the key already.
@@ -362,9 +429,18 @@ function Filter.dimSummary(filter, dim_key, max_chars)
 end
 
 function Filter.summary(filter)
-    if not Filter.isActive(filter) then return tr("none") end
-    local n = 0
-    for _i, k in ipairs(MULTI_KEYS) do if anyKey(filter[k]) then n = n + 1 end end
+    -- "None", as every other value on the editor's cards starts with a capital.
+    if not Filter.isActive(filter) then return tr("None") end
+    -- One count per dimension with any picks: derived from MULTI_KEYS and
+    -- DIM_KEYS, so a new dimension counts here as it does in isActive.
+    local n, owner, seen = 0, {}, {}
+    for dim, keys in pairs(DIM_KEYS) do
+        for _j, k in ipairs(keys) do owner[k] = dim end
+    end
+    for _i, k in ipairs(MULTI_KEYS) do
+        local dim = owner[k] or k
+        if not seen[dim] and anyKey(filter[k]) then seen[dim] = true; n = n + 1 end
+    end
     local f = filter.folders
     if f and (anyKey(f.include) or anyKey(f.exclude)) then n = n + 1 end
     if seriesActive(filter) then n = n + 1 end

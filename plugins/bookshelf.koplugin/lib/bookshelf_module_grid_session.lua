@@ -18,7 +18,7 @@ Session.new{
   notify(text),            -- show a short message
   add_picker(on_added),    -- let the user choose a module; on_added(entry)
   open_settings(entry),    -- the module's own settings
-  open_colors(entry),      -- its card and colour menu (the palette icon)
+  open_colors(entry),      -- its card and colour menu (the toolbar's Style button)
   size_for(entry) -> w, h  -- size for a newly added module
   min_for(entry) -> w, h   -- the module's minimum size (default 1, 1)
   title_for(entry)         -- the module's name, for messages
@@ -65,7 +65,19 @@ function Session.new(o)
     s.min_for       = o.min_for or function() return 1, 1 end
     s.title_for     = o.title_for or function(entry) return entry.module end
     s.max_pages     = o.max_pages   -- a host with its own page count (a shelf)
+    s:_closeGaps()
     return s
+end
+
+-- _closeGaps(): number the pages in use 1, 2, 3... with no gap, the page
+-- shown kept among them: a page whose last module moved away or was removed
+-- left pages 1 and 3 (maintainer). Not on a shelf, whose pages are its own.
+function Session:_closeGaps()
+    if self.max_pages then return end
+    local map = {}
+    for i, p in ipairs(Grid.pages(self.boxes, self.page)) do map[p] = i end
+    for _i, b in ipairs(self.boxes) do b.page = map[b.page] or b.page end
+    self.page = map[self.page] or self.page
 end
 
 function Session:edit()
@@ -74,6 +86,7 @@ function Session:edit()
 end
 
 function Session:_render()
+    self:_closeGaps()
     if self.host and self.host.render then self.host:render(self:edit()) end
 end
 
@@ -269,7 +282,7 @@ end
 --- Pick a module and place it: at (col, row) when given (a long-pressed empty
 --- cell) and it fits there, else at the first free spot on the current page,
 --- then the following pages up to the cap. It becomes the selection.
-function Session:add(col, row)
+function Session:add(col, row, pick)
     if not self.add_picker then return false end
     self.add_picker(function(entry)
         if not entry then return end
@@ -309,7 +322,7 @@ function Session:add(col, row)
             if tryPage(p) then return end
         end
         self:_refuse()
-    end)
+    end, pick)
     return true
 end
 
@@ -334,8 +347,10 @@ local function label(fmt, n)
 end
 
 --- Everything the toolbar and edit footer offer, as rows of
---- { text, callback } for a keys-only device (shown as a dialog).
---- opts.has_settings: the selected module has settings; opts.on_done: Done.
+--- { text, callback } for a keys-only device (shown as a dialog), in the
+--- toolbar's words. opts.has_settings / opts.has_colours: the selected
+--- module has settings / a Style; opts.on_shelf: no Height (a module on a
+--- shelf is one row tall); opts.on_done: Done.
 function Session:keyActions(opts)
     opts = opts or {}
     local rows = {}
@@ -347,21 +362,26 @@ function Session:keyActions(opts)
             btn.font_face, btn.font_size, btn.font_bold = "symbols", 28, false
             return btn
         end
-        -- As the toolbar: size on the left, position on the right.
+        -- As the toolbar: size on the left, position on the right. U+2212
+        -- minus, as wide as the plus.
+        local MINUS = " \xE2\x88\x92"
         row{
-            b(_("Narrower"), function() self:resize("w", -1) end),
-            b(_("Wider"),    function() self:resize("w", 1) end),
+            b(_("Width") .. MINUS, function() self:resize("w", -1) end),
+            b(_("Width") .. " +",  function() self:resize("w", 1) end),
             chev(Session.CHEV_LEFT,  function() self:moveBy(-1, 0) end),
             chev(Session.CHEV_RIGHT, function() self:moveBy(1, 0) end),
         }
-        row{
-            b(_("Shorter"),  function() self:resize("h", -1) end),
-            b(_("Taller"),   function() self:resize("h", 1) end),
-            chev(Session.CHEV_UP,    function() self:moveBy(0, -1) end),
-            chev(Session.CHEV_DOWN,  function() self:moveBy(0, 1) end),
-        }
+        local r2 = {}
+        if not opts.on_shelf then
+            r2[1] = b(_("Height") .. MINUS, function() self:resize("h", -1) end)
+            r2[2] = b(_("Height") .. " +",  function() self:resize("h", 1) end)
+        end
+        r2[#r2 + 1] = chev(Session.CHEV_UP,   function() self:moveBy(0, -1) end)
+        r2[#r2 + 1] = chev(Session.CHEV_DOWN, function() self:moveBy(0, 1) end)
+        row(r2)
         local r = {}
         if opts.has_settings then r[#r + 1] = b(_("Settings"), function() self:settings() end) end
+        if opts.has_colours then r[#r + 1] = b(_("Style"), function() self:colors() end) end
         r[#r + 1] = b(_("Remove"), function() self:remove() end)
         row(r)
     end
@@ -399,7 +419,7 @@ function Session:settings()
     return true
 end
 
--- colors(): the selected module's colour menu (the toolbar's palette icon),
+-- colors(): the selected module's colour menu (the toolbar's Style button),
 -- after the layout so far is saved, as settings() does.
 function Session:colors()
     local id = self.selected_id

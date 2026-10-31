@@ -133,12 +133,14 @@ function Editor:_rebuild()
     local w, h = self.dimen.w, self.dimen.h
 
     local title = TitleBar:new{
+        title_face = require("lib/bookshelf_popup_kit").titleFace(),
         width = w,
         title = T(_("Pack editor: %1"), self.pack),
         with_bottom_line = true,
         close_callback = function() self:onClose() end,
         show_parent = self,
     }
+    require("lib/bookshelf_popup_kit").centreTitle(title)
     local top = title:getSize().h
     local shelf_h, n_rows, headroom = self:_rows()
     local gap = math.max(headroom, Screen:scaleBySize(12))
@@ -261,6 +263,13 @@ function Editor:onSwipe(_arg, ges)
     return true
 end
 
+-- KOReader's own gestures (the menu, brightness) keep working over it: it
+-- covers the screen, so they get what its own handlers leave
+-- (GestureZones.overlayEvent; maintainer, PW5).
+function Editor:handleEvent(event)
+    return require("lib/bookshelf_gesture_zones").overlayEvent(self, event, InputContainer)
+end
+
 function Editor:onClose()
     UIManager:close(self)
     return true
@@ -308,8 +317,9 @@ function M.choose(bw)
     for _i, p in ipairs(packs) do
         rows[#rows + 1] = {{ text = p, callback = function() UIManager:close(d); M.open(p, bw) end }}
     end
-    rows[#rows + 1] = {{ text = _("Cancel"), callback = function() UIManager:close(d) end }}
-    d = ButtonDialog:new{ title = _("Pack editor"), title_align = "center", buttons = rows }
+    -- The title's X, not a lone Cancel row (STYLE.md).
+    d = ButtonDialog:new(require("lib/bookshelf_module_kit").withClose{
+        title = _("Pack editor"), title_align = "center", buttons = rows })
     UIManager:show(d)
 end
 

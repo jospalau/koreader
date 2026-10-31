@@ -369,6 +369,10 @@ function M.ensureTemplate()
         local f = io.open(d .. "/" .. seed.name, "w")
         if f then f:write(seed.svg); f:close() end
     end
+    -- A list taken before the seeds existed is empty and would hold for the
+    -- scan TTL: a fresh install's first page had no ornaments, then gained
+    -- them on the next turn and paged differently.
+    M.invalidate()
     logger.dbg("[bookshelf] ornaments folder created:", d)
 end
 
@@ -1698,12 +1702,16 @@ end
 -- was ~0.25 s of Home's first visit on the PW5.
 -- M._disk_cache: injectable; false switches it off. Not under a test's
 -- M._render (a test renders by its own rules).
+M.DISK_MAX_RENDER = 2 * 1024 * 1024
 function renderDiskKey(path, w, h)
     if M._disk_cache == nil then
         local ok, DC = pcall(require, "lib/bookshelf_cover_disk_cache")
         M._disk_cache = (ok and DC and M._render == nil) and DC or false
     end
     if not M._disk_cache then return nil end
+    -- A piece at full size (a zoom: 1280x2100 was 10 MB) is not kept: a
+    -- view seldom seen, and the renders' budget is for the shelves'.
+    if w * h * 4 > M.DISK_MAX_RENDER then return nil end
     local fs = lfs()
     local mt = fs and fs.attributes(path, "modification")
     if not mt then return nil end
@@ -1742,11 +1750,18 @@ function M.render(entry, w, h, inverting, mirror)
     if bb then return bb end
     local ok, res = true, fromHeld(entry.path, w, h)
     -- The rendered size outlives the session on disk (see renderDiskKey).
-    local dkey = (not res) and renderDiskKey(entry.path, w, h)
-    if dkey then res = M._disk_cache.load(dkey) end
-    if not res then
-        ok, res = pcall(M._render or defaultRender, entry.path, w, h)
-        if ok and res and dkey then pcall(M._disk_cache.store, dkey, res) end
+    -- A render from the held decode is kept too: the browser's previews all
+    -- come that way, and left out, every session decoded each piece on the
+    -- page again (~200ms a page with 443 pieces on the rig, 2026-10-30).
+    local dkey = renderDiskKey(entry.path, w, h)
+    if res then
+        if dkey then pcall(M._disk_cache.store, dkey, res) end
+    else
+        if dkey then res = M._disk_cache.load(dkey) end
+        if not res then
+            ok, res = pcall(M._render or defaultRender, entry.path, w, h)
+            if ok and res and dkey then pcall(M._disk_cache.store, dkey, res) end
+        end
     end
     if not ok or not res then
         logger.dbg("[bookshelf] ornament render failed:", entry.path)
@@ -1962,6 +1977,26 @@ end
 function M.Ornament:paintTo(bb, x, y)
     self.dimen.x, self.dimen.y = x, y
     M.paintPlacement(bb, x, y, self.placement, self.night)
+    -- key_focus(self): the shelf's keys' cursor is on this piece.
+    if self.key_focus and self.key_focus(self) then M.paintKeyRing(bb, x, y, self.placement) end
+end
+
+-- paintKeyRing(bb, x, y, p): the keys' ring round a piece's drawing (its
+-- content box, not the file's transparent room), inverting what is under
+-- it so it shows on any ground.
+function M.paintKeyRing(bb, x, y, p)
+    pcall(function()
+        local Kit = require("lib/bookshelf_popup_kit")
+        local l, t, r, b = M.contentBox(p.entry)
+        if not (l and t and r and b) then l, t, r, b = 0, 0, 1, 1 end
+        if p.mirror then l, r = 1 - r, 1 - l end
+        local pad = Kit.focusWidth() * 2
+        local rx = math.max(x, math.floor(x + l * p.w) - pad)
+        local ry = math.max(y, math.floor(y + t * p.h) - pad)
+        local rw = math.min(x + p.w, math.ceil(x + r * p.w) + pad) - rx
+        local rh = math.min(y + p.h, math.ceil(y + b * p.h) + pad) - ry
+        if rw > 0 and rh > 0 then Kit.invertRing(bb, rx, ry, rw, rh, Kit.focusWidth(), Kit.focusWidth() * 2) end
+    end)
 end
 
 -- paintPlacement(bb, x, y, p, night): a placement's picture at x, y. The

@@ -319,4 +319,56 @@ function GestureZones.forwardToLive(event, self_widget, opts)
     return _forwardToHost(host, event, self_widget)
 end
 
+-- menuBandSwipe(ev) -> is ev a swipe that starts in KOReader's top menu
+-- band (DTAP_ZONE_MENU, the top eighth by default)? A window placed at the
+-- top of the screen (over the top panel) covers that band; a swipe from it
+-- still opens the menu (maintainer), while taps there reach the window.
+function GestureZones.menuBandSwipe(ev)
+    if not (ev and ev.ges == "swipe" and ev.pos) then return false end
+    local zone
+    pcall(function() zone = G_defaults:readSetting("DTAP_ZONE_MENU") end)
+    local ratio = (type(zone) == "table" and tonumber(zone.h)) or (1 / 8)
+    local Screen = require("device").screen
+    return ev.pos.y < Screen:getHeight() * ratio
+end
+
+-- onWindow(event, inside) -> an on_window for overlayEvent: inside(pos), but
+-- a swipe from the menu band counts as off the window (menuBandSwipe).
+function GestureZones.onWindow(event, inside)
+    local ev = event.handler == "onGesture" and event.args and event.args[1]
+    local band = GestureZones.menuBandSwipe(ev)
+    return function(pos)
+        if band then return false end
+        return inside(pos)
+    end
+end
+
+-- overlayEvent(widget, event, base, on_window[, opts]) -> boolean
+-- handleEvent for one of our windows over the shelf (a picker, a dialog, the
+-- start menu): KOReader's own gestures keep working around it, as they do
+-- over the shelf (maintainer, PW5: brightness and the menu were dead while
+-- the shelf editor was up). base: the window's class base (InputContainer,
+-- FocusManager). on_window(pos): whether a touch is on the window; a gesture
+-- off it goes to KOReader's zones first, then (no zone there) to the window,
+-- whose tap outside closes it. on_window nil: a window covering the screen,
+-- whose own handlers go first and KOReader gets what they leave. Anything
+-- not a gesture the window leaves (a zone's action: brightness, night mode)
+-- is passed to the live host.
+function GestureZones.overlayEvent(widget, event, base, on_window, opts)
+    if event.handler == "onGesture" then
+        local ev = event.args and event.args[1]
+        if on_window then
+            if ev and ev.pos and not on_window(ev.pos)
+                    and GestureZones.tryLiveZones(ev, opts) then
+                return true
+            end
+            return base.handleEvent(widget, event) and true or false
+        end
+        if base.handleEvent(widget, event) then return true end
+        return GestureZones.tryLiveZones(ev, opts) and true or false
+    end
+    if base.handleEvent(widget, event) then return true end
+    return GestureZones.forwardToLive(event, widget, opts)
+end
+
 return GestureZones

@@ -38,7 +38,7 @@ local function showSettings(ctx)
     local function close(fn)
         return function() UIManager:close(dialog); if fn then fn() end end
     end
-    dialog = ButtonDialog:new{
+    dialog = ButtonDialog:new(require("lib/bookshelf_module_kit").withClose{
         title = _("Ornament"), title_align = "center", width_factor = 0.7,
         buttons = {
             {{ text = _("Change ornament\xE2\x80\xA6"), callback = close(function()
@@ -53,7 +53,7 @@ local function showSettings(ctx)
                 end)
             end) }},
         },
-    }
+    })
     UIManager:show(dialog)
 end
 
@@ -69,7 +69,10 @@ return {
     -- since pieces fill small gaps (maintainer), not a page of its own.
     start_w = 1,
     start_h = 1,
-    tap_feedback = true,
+    -- The pressed flash only when a tap does something (a tap action set).
+    tap_feedback = function(ctx)
+        return type(ctx and ctx.config and ctx.config:get("tap")) == "table"
+    end,
 
     render = function(ctx)
         local Kit = require("lib/bookshelf_module_kit")

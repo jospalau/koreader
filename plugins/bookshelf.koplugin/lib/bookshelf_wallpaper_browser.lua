@@ -145,6 +145,8 @@ local function renderCell(key, item, dimen)
     local VerticalSpan    = require("ui/widget/verticalspan")
     local T               = require("ffi/util").template
     local pad = Space.padding.small
+    -- The popup kit's grey card (STYLE.md).
+    local Kit = require("lib/bookshelf_popup_kit")
     local inner_w, inner_h = dimen.w - 2 * pad, dimen.h - 2 * pad
     local name = item.label
     if item.kind == "pack" then name = T(_("%1 pack"), item.label) end
@@ -155,7 +157,7 @@ local function renderCell(key, item, dimen)
     local gap = Space.padding.small
     local name_w = inner_w - radio:getSize().w - gap
     local row = HorizontalGroup:new{ align = "center", radio, HorizontalSpan:new{ width = gap },
-        TextWidget:new{ text = name, face = Font:getFace("cfont", 15), bold = true, max_width = math.max(1, name_w) } }
+        TextWidget:new{ text = name, face = require("lib/bookshelf_fonts"):getFace("cfont", 15), bold = true, max_width = math.max(1, name_w) } }
     local lines = LeftContainer:new{ dimen = Geom:new{ w = inner_w, h = row:getSize().h }, row }
     local box_h = math.max(1, inner_h - lines:getSize().h - Space.padding.small)
     local pic
@@ -182,34 +184,33 @@ local function renderCell(key, item, dimen)
                                  VerticalSpan:new{ width = 1 } },
         }
     end
-    return FrameContainer:new{
-        bordersize = 0, padding = pad, margin = 0,
+    return require("lib/bookshelf_popup_kit").cardify(FrameContainer:new{
+        bordersize = 0, radius = Kit.RADIUS, padding = pad, margin = 0,
         background = Blitbuffer.COLOR_WHITE,
         VerticalGroup:new{ align = "left",
             lines,
             VerticalSpan:new{ width = Space.padding.small },
             CenterContainer:new{ dimen = Geom:new{ w = inner_w, h = box_h }, pic },
         },
-    }
+    })
 end
 
 -- NONE, SAME: the two choices that are not a picture, as the footer's
 -- buttons hand them to choose().
 WB.NONE, WB.SAME = { kind = "none" }, { kind = "same" }
 
--- footerActions(key, pick, close) -> the footer's one row: Same as wallpaper
--- (the full screen picker only), No wallpaper, Close. A button is greyed
--- while it is the choice in use, so it also shows which is chosen.
--- pick(item) is what a card tap does.
-function WB.footerActions(key, pick, close)
+-- headerActions(key, pick) -> the choices that are not a picture, on the
+-- strip under the title (STYLE.md): Same as wallpaper (the full screen
+-- picker only) and No wallpaper. Black while it is the choice in use, as a
+-- picked option is. pick(item) is what a card tap does.
+function WB.headerActions(key, pick)
     local row = {}
     local function choice(k, label, item)
         row[#row + 1] = { key = k, label = label, on_tap = function() pick(item) end,
-                          enabled_when = function() return not WB.inUse(key, item) end }
+                          on_when = function() return WB.inUse(key, item) end }
     end
     if key == WP().FULL_SETTING then choice("same", _("Same as wallpaper"), WB.SAME) end
     choice("none", _("No wallpaper"), WB.NONE)
-    row[#row + 1] = { key = "close", label = _("Close"), on_tap = close }
     return row
 end
 
@@ -258,6 +259,9 @@ function WB.show(key, on_change, on_closed)
         -- A tap uses the picture at once, behind the picker, which stays open
         -- for the next (Close, or a tap outside it, when done).
         on_cell_tap = function(item) pick(item) end,
+        -- A tap marks the choice at once, its own feedback: no pressed
+        -- look first (LibraryModal select_on_tap, STYLE.md).
+        select_on_tap = true,
         -- However it closes: one full refresh if the picture changed, to
         -- clear what the quick per-tap updates leave on e-ink.
         on_closed = function()
@@ -266,7 +270,8 @@ function WB.show(key, on_change, on_closed)
         end,
         item_count = function() return #self.items end,
         item_at = function(i) return self.items[i] end,
-        footer_rows = { WB.footerActions(key, function(item) pick(item) end, close) },
+        header_actions = function() return WB.headerActions(key, function(item) pick(item) end) end,
+        footer_rows = { { { key = "close", label = _("Close"), on_tap = close } } },
         -- No pictures on this tab: where they come from, the one place the
         -- picker names the folder.
         empty_state = function(w, h)
@@ -277,7 +282,7 @@ function WB.show(key, on_change, on_closed)
             local T               = require("ffi/util").template
             return CenterContainer:new{ dimen = Geom:new{ w = w, h = h },
                 TextBoxWidget:new{ text = T(_("No images in %1"), WP().dir and WP().dir() or "?"),
-                                   face = Font:getFace("cfont", 16), width = math.floor(w * 0.9),
+                                   face = require("lib/bookshelf_fonts"):getFace("cfont", 16), width = math.floor(w * 0.9),
                                    alignment = "center" } }
         end,
     }

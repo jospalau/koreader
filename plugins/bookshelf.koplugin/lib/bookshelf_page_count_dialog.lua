@@ -129,10 +129,10 @@ function Dialog:init()
             fgcolor = color or Blitbuffer.COLOR_BLACK,
         }
     end
-    local function heading(t)
-        return TextWidget:new{ text = t, face = Font:getFace("smallinfofontbold") }
-    end
-    local hint_face = Font:getFace("x_smallinfofont")
+    -- The popups' section heading (STYLE.md): grey, upper case, no line.
+    local Kit = require("lib/bookshelf_popup_kit")
+    local function heading(t) return Kit.heading(t, 20) end
+    local hint_face = (require("lib/bookshelf_fonts"):getFace("x_smallinfofont", 20))
 
     -- A checkbox (or radio) and, under its label, a grey line on what it is.
     local function option(spec)
@@ -203,7 +203,7 @@ function Dialog:init()
         width = self.width,
         zero_sep = true,
         show_parent = self,
-        buttons = rows,
+        buttons = require("lib/bookshelf_popup_kit").uiFontButtons(rows),
     }
 
     -- build(inner_w) -> the body. Built twice when it does not fit the
@@ -245,6 +245,8 @@ function Dialog:init()
             hint  = _("Lays out each remaining book in your font and margins, so the count matches what you see when reading."),
             checked = o.render, callback = source("render"),
         }
+        -- Radios, not the segmented control: this is a form to fill in and
+        -- submit, like the checkboxes above (maintainer).
         local radios = {}
         local function pick(recount)
             return function()
@@ -272,7 +274,7 @@ function Dialog:init()
                     and T(_("Finds how long each book in %1 is (%2 books), for spine thickness, page count badges, sorting and the page count token."),
                           self.scope.label, #self.scope.paths)
                     or _("Finds how long each book is, for spine thickness, page count badges, sorting and the page count token."),
-                 Font:getFace("smallinfofont")),
+                 (require("lib/bookshelf_fonts"):getFace("smallinfofont", 22))),
             VerticalSpan:new{ width = pad },
             heading(_("Use page counts from, in this order")),
             VerticalSpan:new{ width = gap },
@@ -290,6 +292,7 @@ function Dialog:init()
     -- screen DPI setting (480 on a PW5) the body alone outgrew the screen and
     -- the title bar went off the top (maintainer, on device).
     local title_bar = TitleBar:new{
+        title_face = require("lib/bookshelf_popup_kit").titleFace(),
         width = self.width,
         title = _("Extract page counts"),
         with_bottom_line = true,
@@ -299,6 +302,7 @@ function Dialog:init()
         close_callback = function() UIManager:close(self) end,
         show_parent = self,
     }
+    require("lib/bookshelf_popup_kit").centreTitle(title_bar)
     local fixed_h = title_bar:getSize().h + self.buttons:getSize().h
                     + 2 * Size.border.window
     local avail_h = sh - 2 * Space.margin.default - fixed_h
@@ -409,6 +413,16 @@ function M.showScoped(label, paths, bw)
             UIManager:setDirty(bw, "ui")
         end
     end, { label = label, paths = paths })
+end
+
+-- KOReader's own gestures (the menu, brightness) keep working around it,
+-- as over the shelf (GestureZones.overlayEvent; maintainer, PW5).
+function Dialog:handleEvent(event)
+    return require("lib/bookshelf_gesture_zones").overlayEvent(self, event, InputContainer,
+        function(pos)
+            local d = self.frame and self.frame.dimen
+            return not (d and d.x) or not pos:notIntersectWith(d)
+        end)
 end
 
 return M

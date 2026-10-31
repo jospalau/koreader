@@ -462,7 +462,10 @@ function CollectionManager.show(opts)
             elseif draft_remove[name] then
                 subtitle = _("Remove from all") .. " \xE2\x88\x92"  -- −
             elseif baseline == "some" then
-                subtitle = _("Mixed")
+                subtitle = _("In some")
+            elseif baseline == "all" then
+                -- Black for "in it" needs saying: it is not a pick.
+                subtitle = _("In all")
             end
         end
         return PickerCell.render({
@@ -505,13 +508,12 @@ function CollectionManager.show(opts)
         end
     end
 
-    -- Footer: + New collection on its own row above Cancel/Save so the
-    -- discard / commit pair stays paired at the bottom. Manage mode has
-    -- nothing to discard: + New collection sits beside Close.
+    -- + New collection is the screen's own action: on the strip under the
+    -- title. The footer keeps Cancel/Save (or Close in manage mode).
+    local header_actions = { { label = "+ " .. _("New collection"), on_tap = newCollection } }
     local footer_rows
     if book_mode or bulk_mode then
         footer_rows = {
-            { { label = "+ " .. _("New collection"), on_tap = newCollection } },
             {
                 { label = _("Cancel"), on_tap = function()
                     UIManager:close(modal)
@@ -522,19 +524,15 @@ function CollectionManager.show(opts)
         }
     else
         footer_rows = {
-            {
-                { label = "+ " .. _("New collection"), on_tap = newCollection },
-                { label = _("Close"), on_tap = function() UIManager:close(modal) end },
-            },
+            { { label = _("Close"), on_tap = function() UIManager:close(modal) end } },
         }
     end
 
     local title, intro
     if bulk_mode then
         title = string.format(_("Collections \xC2\xB7 %d books"), opts.paths and #opts.paths or 0)
-        intro = _("Tap a collection to cycle through: no change, "
-            .. "add to all, remove from all. Save returns the diff "
-            .. "to the bulk menu.")
+        intro = _("Tap a collection to add the books to it, again to "
+            .. "remove them from it, and again to leave it as it is.")
     elseif book_mode then
         title = _("Edit collections")
     else
@@ -566,8 +564,14 @@ function CollectionManager.show(opts)
         item_at        = function(idx) return visible[idx] end,
         cell_renderer  = function(name, dimen) return renderCell(name, dimen) end,
         on_cell_tap    = onTap,
+        -- Ticking a collection marks it at once (no pressed look first);
+        -- managing one opens its menu, so it keeps the press.
+        select_on_tap  = book_mode or bulk_mode,
         cell_long_tap  = holdMenu,
+        header_actions = header_actions,
         footer_rows    = footer_rows,
+        -- Opened from a page (the bulk menu): a page of it.
+        over           = opts.over,
         on_closed      = function()
             if opts.on_close then opts.on_close() end
         end,

@@ -206,6 +206,9 @@ end
 -- mechanism every module uses to update itself (tap reload + async); the
 -- scoping lives here in the parent, not in the (often third-party) modules.
 function HeroModules._reloadCellById(bw, id)
+    -- Closed: a module may still hold its refresh (a pack's plugin calls it
+    -- when its own state changes, the reader open by then). Nothing to draw.
+    if bw and bw._closed then return end
     local rec = id and bw and bw._hero_cells and bw._hero_cells[id]
     if not rec then return end
     local scope = HeroModules._swapCell(bw, rec)
@@ -275,6 +278,14 @@ function HeroModules.bookHelpers(ctx)
     return ctx
 end
 
+-- _shelfView(surface, bw) -> on a shelf, "covers" or "spines" (ctx.shelf_view);
+-- nil anywhere else. A bare module stands on a spine shelf's plank but sits
+-- centred among covers, and both draw their modules through the same cell.
+function HeroModules._shelfView(surface, bw)
+    if surface ~= "shelf" or not (bw and bw._isSpineMode) then return nil end
+    return bw:_isSpineMode() and "spines" or "covers"
+end
+
 function HeroModules._ctx(bw, refresh, entry)
     local host = HeroModules._hostOf(entry)
     local reload = refresh or (host and host.refresh) or function() HeroModules._rebuild(bw) end
@@ -286,7 +297,8 @@ function HeroModules._ctx(bw, refresh, entry)
     local surface = (host and host.surface)
         or (bw and bw._micro_fullscreen and "fullscreen")
         or "hero"
-    local ctx = { bw = bw, menu = shim, entry = entry, surface = surface }
+    local ctx = { bw = bw, menu = shim, entry = entry, surface = surface,
+                  shelf_view = HeroModules._shelfView(surface, bw) }
     HeroModules.bookHelpers(ctx)
     -- Persist a per-instance change a module made to ctx.entry, then reload
     -- this cell (or rebuild the hero). No-op when the module has no entry or
@@ -342,11 +354,12 @@ end
 -- widget-only method must fail safe, not crash the reader.
 function HeroModules._hold(bw, entry)
     if not Gestures.on("module_hold") then return end
-    pcall(function()
+    local ok, err = pcall(function()
         local Editor = require("lib/bookshelf_module_grid_editor")
         local host = bw._micro_fullscreen or HeroModules.heroEditHost(bw)
         Editor.open{ bw = bw, host = host, select_id = entry and entry.id }
     end)
+    if not ok then require("logger").warn("[bookshelf] layout editor:", err) end
 end
 
 -- The top panel as a layout-editor host (see bookshelf_module_grid_editor):
@@ -484,11 +497,12 @@ local function _renderFitted(def, inner_w, inner_h, base_scale, refresh, entry, 
             width = inner_w, height = inner_h, scale = s, preview = false,
             refresh = refresh, shape = shape, entry = entry,
             surface = _surfaceOf(entry), bw = bw, menu = nil, config = cfg,
+            shelf_view = HeroModules._shelfView(_surfaceOf(entry), bw),
             -- The colours the spec declares (spec.colors), as the reader set
             -- them for the look on screen, else their defaults.
             colors = colors or {},
             -- The card the module stands on, as the reader set it with the
-            -- palette icon (Card.ctxCard): a module that paints its own card
+            -- Style button (Card.ctxCard): a module that paints its own card
             -- uses this one when `custom`, so those settings reach every
             -- module (maintainer).
             card = card,
@@ -509,6 +523,14 @@ local function _renderFitted(def, inner_w, inner_h, base_scale, refresh, entry, 
         if pending_regions then widget._tap_regions = pending_regions end
         local sz = widget.getSize and widget:getSize()
         return widget, (sz and sz.h) or 0, (sz and sz.w) or 0
+    end
+
+    -- self_sized: the module sizes itself to the cell (pixel art, an image, a
+    -- widget built for another host), so it draws the same at every scale and
+    -- the search below would render it up to seven times for one picture.
+    -- One render at the cell's size; no memo, no text size multiplier.
+    if def.self_sized then
+        return (renderAt(100))
     end
 
     user_mult = user_mult or 100
@@ -726,6 +748,25 @@ end
 
 -- focusable: reserve a d-pad focus ring (border-swap, dimen-constant — matches
 -- the start-menu rows and chip cursor). focused: draw it on this cell now.
+-- _ringRects(d, inset, t) -> the four bands, t thick, round the rect d
+-- inset by inset: top and bottom across, the sides between them a pixel
+-- clear of both. UIManager merges refreshes that overlap or even share an
+-- edge (Geom:openIntersectWith), and the merge of a band and a side is the
+-- whole cell again. Too small for a ring: d itself.
+function HeroModules._ringRects(d, inset, t)
+    local x, y = d.x + inset, d.y + inset
+    local w, h = d.w - 2 * inset, d.h - 2 * inset
+    if w <= 2 * t + 2 or h <= 2 * t + 2 then
+        return { { x = d.x, y = d.y, w = d.w, h = d.h } }
+    end
+    return {
+        { x = x, y = y, w = w, h = t },
+        { x = x, y = y + h - t, w = w, h = t },
+        { x = x, y = y + t + 1, w = t, h = h - 2 * t - 2 },
+        { x = x + w - t, y = y + t + 1, w = t, h = h - 2 * t - 2 },
+    }
+end
+
 function HeroModules._makeCell(bw, entry, cell_w, cell_h, scale_pct, focusable, focused)
     local Perf     = require("lib/bookshelf_perf")
     local t_cell   = Perf.now()
@@ -748,7 +789,15 @@ function HeroModules._makeCell(bw, entry, cell_w, cell_h, scale_pct, focusable, 
     -- border drawn); on tap the border flips on and the margin off, so the
     -- cell's outer size is unchanged and nothing shifts (the swap the chips
     -- use). Passive modules reserve nothing and use the full cell.
-    local press_b  = (def and def.tap_feedback) and Screen:scaleBySize(1) or 0
+    -- tap_feedback may be a function(ctx): an ornament flashes only with a
+    -- tap action set; with none the tap does nothing, and a flash said
+    -- otherwise (maintainer, PW5).
+    local feedback = def and def.tap_feedback
+    if type(feedback) == "function" then
+        local ok, r = pcall(feedback, HeroModules._ctx(bw, nil, entry))
+        feedback = ok and r
+    end
+    local press_b  = feedback and Screen:scaleBySize(1) or 0
     local inner_w  = math.max(1, cell_w - 2 * card_pad - 2 * press_b)
     local inner_h  = math.max(1, cell_h - 2 * card_pad - 2 * press_b)
 
@@ -759,6 +808,9 @@ function HeroModules._makeCell(bw, entry, cell_w, cell_h, scale_pct, focusable, 
     -- stays valid across rebuilds.
     local host = HeroModules._hostOf(entry)
     local function refresh()
+        -- Safe to call at any time (micromodules/README.md): nothing once
+        -- the shelf has closed, the shelf host's redraw included.
+        if bw and bw._closed then return end
         if host and host.refresh then return host.refresh() end
         HeroModules._reloadCellById(bw, entry.id)
     end
@@ -769,7 +821,9 @@ function HeroModules._makeCell(bw, entry, cell_w, cell_h, scale_pct, focusable, 
     -- left/right. Square modules (clock/action) are icon-centred already and use
     -- the full cell. The ClipContainer below stays at inner_w, so the narrower
     -- render is centred horizontally — giving the L/R margin. Tunable.
-    local is_sq      = def and (def.aspect == "square" or def.bare)
+    -- A self-sized module lays itself out in the cell it is handed, so it gets
+    -- the whole cell too, and no padding-equalising second render.
+    local is_sq      = def and (def.aspect == "square" or def.bare or def.self_sized)
     local base_inset = Space.px(10)
 
     -- The module's own card look (bookshelf_module_card): its background,
@@ -936,6 +990,7 @@ function HeroModules._makeCell(bw, entry, cell_w, cell_h, scale_pct, focusable, 
             padding     = 0,
             frame,
         }
+        require("lib/bookshelf_color").colourBorder(outer)
     end
     local cell = InputContainer:new{ dimen = outer:getSize(), outer }
     if Device:isTouchDevice() then
@@ -954,7 +1009,19 @@ function HeroModules._makeCell(bw, entry, cell_w, cell_h, scale_pct, focusable, 
         if press_b > 0 then
             frame.bordersize = press_b
             frame.margin = 0
-            UIManager:setDirty(bw, function() return "fast", self.dimen end)
+            -- The fast waveform on the border's ring alone: it is 1-bit on
+            -- the panel, and over the whole cell it smeared what is inside
+            -- (an ornament's picture; maintainer, PW5). Thick enough for the
+            -- rounded corners.
+            local d = self.dimen
+            for i, rr in ipairs(HeroModules._ringRects(d, focus_b, math.max(press_b, radius))) do
+                local g = Geom:new(rr)
+                if i == 1 then
+                    UIManager:setDirty(bw, function() return "fast", g end)
+                else
+                    UIManager:setDirty(nil, function() return "fast", g end)
+                end
+            end
             UIManager:forceRePaint()
             -- card_border, NOT zero. Zero was right when this was written,
             -- because the card was borderless then; the hairline above was
@@ -1040,12 +1107,13 @@ function HeroModules._emptyState(bw, content_w, hero_h)
         CenterContainer:new{
             dimen = Geom:new{ w = inner_w, h = inner_h },
             TextWidget:new{
-                text    = _("Hold to add micro-modules"),
+                text    = _("Long-press to add modules"),
                 face    = BFont:getFace("cfont", 16),
                 fgcolor = Modules.COLOR_MUTED or Blitbuffer.COLOR_GRAY_5,
             },
         },
     }
+    require("lib/bookshelf_color").colourBorder(frame)
     local cell = InputContainer:new{ dimen = frame:getSize(), frame }
     if Device:isTouchDevice() then
         cell.ges_events = {

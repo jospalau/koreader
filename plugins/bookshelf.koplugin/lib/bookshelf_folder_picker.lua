@@ -37,7 +37,10 @@ function Picker.buildChoices(choices, home, exclude)
     return out
 end
 
--- Picker.show{ title, exclude, on_pick(dir), on_cancel() }
+-- Picker.show{ title, exclude, on_pick(dir), on_cancel(), over, new_folder }
+--   over: a page of the shelf editor (LibraryModal config.over);
+--   new_folder = false: no New folder (choosing folders that exist, as
+--   Filters > Folders does).
 function Picker.show(opts)
     local UIManager = require("ui/uimanager")
     local FileOps = require("lib/bookshelf_file_ops")
@@ -106,14 +109,15 @@ function Picker.show(opts)
         })
     end
 
-    local extra_actions = {
-        { label = _("New folder\xE2\x80\xA6"),    on_tap = new_folder },
-        { label = _("Browse device\xE2\x80\xA6"), on_tap = browse_device },
-    }
+    local extra_actions = {}
+    if opts.new_folder ~= false then
+        extra_actions[#extra_actions + 1] = { label = _("New folder\xE2\x80\xA6"), on_tap = new_folder }
+    end
+    extra_actions[#extra_actions + 1] = { label = _("Browse device\xE2\x80\xA6"), on_tap = browse_device }
 
     -- LibraryModal grid (searchable, paginated), pickById's shape.
-    local ok_lm, LibraryModal = pcall(require, "lib/bookshelf_library_modal")
-    if ok_lm and LibraryModal and LibraryModal.new then
+    local LibraryModal = require("lib/bookshelf_library_modal")
+    do
         local Screen_ = require("device").screen
         local query = nil
         local visible = choices
@@ -134,6 +138,7 @@ function Picker.show(opts)
         modal = LibraryModal:new{
             config = {
                 title              = opts.title or _("Move to\xE2\x80\xA6"),
+                over               = opts.over,
                 search_placeholder = function() return _("Search\xE2\x80\xA6") end,
                 on_search_submit   = function(q)
                     query = q
@@ -153,7 +158,9 @@ function Picker.show(opts)
                     UIManager:close(modal)
                     pick(item.value)
                 end,
-                footer_actions = (function()
+                -- New folder and Browse device: the screen's own actions,
+                -- on the strip under the title.
+                header_actions = (function()
                     local actions = {}
                     for _i, a in ipairs(extra_actions) do
                         actions[#actions + 1] = {
@@ -164,46 +171,21 @@ function Picker.show(opts)
                             end,
                         }
                     end
-                    actions[#actions + 1] = {
+                    return actions
+                end)(),
+                footer_actions = {
+                    {
                         label  = _("Close"),
                         on_tap = function()
                             UIManager:close(modal)
                             cancel()
                         end,
-                    }
-                    return actions
-                end)(),
+                    },
+                },
             },
         }
         UIManager:show(modal)
-        return
     end
-
-    -- Fallback: flat ButtonDialog (works without bookends' modal).
-    local ButtonDialog = require("ui/widget/buttondialog")
-    local k
-    local rows = {}
-    for _i, c in ipairs(choices) do
-        rows[#rows + 1] = {{
-            text     = c.label,
-            callback = function() UIManager:close(k); pick(c.value) end,
-        }}
-    end
-    for _i, a in ipairs(extra_actions) do
-        rows[#rows + 1] = {{
-            text     = a.label,
-            callback = function() UIManager:close(k); a.on_tap() end,
-        }}
-    end
-    rows[#rows + 1] = {{
-        text     = _("Cancel"),
-        callback = function() UIManager:close(k); cancel() end,
-    }}
-    k = ButtonDialog:new{
-        title   = opts.title or _("Move to\xE2\x80\xA6"),
-        buttons = rows,
-    }
-    UIManager:show(k)
 end
 
 return Picker

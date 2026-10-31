@@ -8,7 +8,7 @@
 --   * bookshelf_collection_manager (book-tag toggle + manage modes).
 --
 -- Cell anatomy:
---   * FrameContainer with thin border + slight radius + white background.
+--   * The popup kit's grey card with a hairline shadow.
 --   * CenterContainer wraps a VerticalGroup of:
 --       - bold label (single line, truncated with an ellipsis if too long)
 --       - optional secondary count ("n book(s)") OR a freeform subtitle
@@ -112,20 +112,26 @@ function PickerCell.render(item, dimen, opts)
     -- gray background literally rather than relying on invert (so it
     -- reads as a third, distinct state next to plain white and inverted
     -- black).
-    local bg     = opts.tint and Blitbuffer.COLOR_LIGHT_GRAY or Blitbuffer.COLOR_WHITE
+    -- The popup kit's card (STYLE.md): light grey with a hairline shadow,
+    -- black when selected. tint: a third state, mid grey.
+    local Kit    = require("lib/bookshelf_popup_kit")
     local invert = opts.selected and not opts.tint
-    return FrameContainer:new{
-        bordersize = Size.border.thin,
-        radius     = Space.radius.default,
-        padding    = 0,
-        margin     = 0,
-        background = bg,
-        invert     = invert,
+    local card = Kit.card{
+        background = opts.tint and Blitbuffer.COLOR_LIGHT_GRAY or nil,
         CenterContainer:new{
-            dimen = Geom:new{ w = dimen.w, h = dimen.h },
+            dimen = Geom:new{ w = dimen.w - Kit.shadowSize(), h = dimen.h - Kit.shadowSize() },
             stack,
         },
     }
+    if invert then
+        local paint = card.paintTo
+        function card:paintTo(bb, x, y)
+            paint(self, bb, x, y)
+            local sz = self:getSize()
+            Kit.invertRounded(bb, x, y, sz.w, sz.h, Kit.RADIUS)
+        end
+    end
+    return card
 end
 
 return PickerCell

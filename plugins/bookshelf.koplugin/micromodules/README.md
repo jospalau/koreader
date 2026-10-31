@@ -27,6 +27,7 @@ return {
     network      = { "api.example.com" }, -- data-source domains; flags network-required
     hero_only    = true,              -- hide from the start-menu picker
     tap_feedback = true,              -- instant pressed border on tap (launchers)
+    self_sized   = true,              -- you size yourself: one render, no fit search
     -- Where it's listed in the Add picker (both optional) -- see "Picker chips":
     pack         = "My Bundle",       -- a chip of its own, shared by the bundle's modules
     category     = "reading",         -- or one of Bookshelf's: shelf, reading, time, fun, actions
@@ -41,6 +42,10 @@ different `scale_pct`) until it fills its cell, clipping as a hard backstop. So
 you do **not** write your own font loop — render once at the `scale_pct` you're
 handed, and the host makes it fit. This is why every module looks right at every
 cell size without each author solving it again.
+
+Some modules can't scale like text: pixel art that only looks right at whole
+steps, an image, a widget built for another host. Those set `self_sized =
+true` and size themselves (see **Hero-grid hints**).
 
 Use the shared kit to size fonts and build common pieces:
 
@@ -145,6 +150,9 @@ fields `render` reads:
   `"shelf"` (among a shelf's books), `"start_menu"`, or `"picker"` (the Add
   preview). Adapt layout if you need to;
   most modules ignore it.
+- `ctx.shelf_view` - on a shelf, `"covers"` or `"spines"`; `nil` on every
+  other surface. A bare module can stand on a spine shelf's plank (align to
+  the bottom of `ctx.height`) and sit centred among covers.
 - `ctx.bw`, `ctx.menu` — the bookshelf widget and start menu when available (may
   be `nil`, e.g. in the picker). Their methods with a leading underscore are
   internal and can change in any release: use the calls below instead.
@@ -196,6 +204,13 @@ automatic reload after a `keep_open` tap, and call `ctx.menu:_reload()` from
 
 `refresh` may be `nil` if an older host renders you, so guard:
 `if _refresh then _refresh() end`.
+
+`refresh` is safe to call at any time, so you can keep it and call it when
+your own data changes, from a timer or from another plugin. Under another
+window it brings the card up to date without a repaint (the window's close
+shows it); once the shelf has closed it does nothing. Don't check Bookshelf's
+own fields (`_closed`, `_micro_fullscreen`) to decide whether to call it: they
+are internal and can change in any release.
 
 Set `wants_minute_tick = true` if your card shows wall-clock time (a clock): the
 hero re-renders it once a minute (scoped) so it stays current. Read the time in
@@ -283,6 +298,15 @@ omit them and you get the sensible default (a flex/text card offered everywhere)
 - `bare = true` — draw without the card (no fill, no border), straight onto
   the wallpaper or page, as the Ornament module does. Your render must then
   fit its cell itself: it is centred, not clipped.
+- `self_sized = true` - you size yourself, so the host's fit search leaves you
+  alone: `render` runs once, at `ctx.width` x `ctx.height` with `ctx.scale` at
+  100, and the module text size setting doesn't apply. For content that
+  doesn't scale like text: pixel art (scale it in whole steps from
+  `ctx.height`), an image, a widget built for another host. Lay out within
+  `ctx.width` and `ctx.height`; anything past them is clipped on a card (`bare`
+  and `in_place` modules aren't clipped, so stay inside). In the start menu
+  there is no cell: `ctx.height` is `nil` there, as for every module, so pick
+  your own height, at most `ctx.max_height`.
 - `start_w` / `start_h` — the size, in grid cells, your card starts at when it
   is added (the Ornament module starts at 1 x 1, to fill a small gap). Your
   `min_w` / `min_h` still win. Leave them off for the default above.
@@ -303,7 +327,7 @@ omit them and you get the sensible default (a flex/text card offered everywhere)
   that ends in "Needs internet."
 - `hero_only = true` — the module only makes sense in the hero grid (e.g.
   `action`, a launcher); it's hidden from the start-menu module picker.
-- `tap_feedback = true` — draw an instant pressed border when the card is tapped,
+- `tap_feedback = true` (or `function(ctx) -> bool`, asked when the card is built) - draw an instant pressed border when the card is tapped,
   for launcher-style cards that *do* something on tap. Leave it off for passive
   cards (a tap that only re-rolls or does nothing shouldn't flash a border).
 
@@ -549,6 +573,37 @@ its module files. Every module file is called with its own folder as `...`
 ```lua
 local MODULE_DIR = ...   -- e.g. .../readinglog.koplugin/bookshelf_modules
 local Shared = dofile(MODULE_DIR .. "/../shared/stats.lua")
+```
+
+A module that shows its own plugin's state (a pet, a game, a reading log) can
+reach that plugin's live instance with `Kit.plugin(MODULE_DIR)`. It finds the
+plugin by its folder, so it works whatever `name` the plugin's `main.lua`
+gives (KOReader files plugins under their folder's name). It is `nil` when the
+plugin isn't running, so check:
+
+```lua
+local MODULE_DIR = ...
+local Kit = require("lib/bookshelf_module_kit")
+-- in render, on_tap, on_minute:
+local pet = Kit.plugin(MODULE_DIR)
+if pet then ... end
+```
+
+Your plugin can also offer to put its module on the reader's home shelf (the
+first shelf on the chip strip that holds books), the way a plugin puts a card
+on another home screen. `Kit.setOnHomeShelf(key, true)` puts it first on that
+shelf at its starting width, `Kit.setOnHomeShelf(key, false)` takes it off, and
+`Kit.onHomeShelf(key)` says whether it is there; a shelf on screen redraws.
+`setOnHomeShelf` returns `false` when there is nothing to do it with (Bookshelf
+doesn't know the module, or no shelf holds books). Only call it from something
+the reader chose, a tick in your settings or your welcome screen: the home
+shelf is theirs. Check the function exists first, so an older Bookshelf
+without it reads as not installed:
+
+```lua
+local ok, Kit = pcall(require, "lib/bookshelf_module_kit")
+local bookshelf = ok and Kit.setOnHomeShelf ~= nil
+if bookshelf and reader_ticked_it then Kit.setOnHomeShelf("mypack_card", true) end
 ```
 
 **Precedence.** A module in the user drop-in folder wins over one of the same

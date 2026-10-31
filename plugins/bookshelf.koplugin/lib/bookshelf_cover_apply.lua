@@ -100,31 +100,48 @@ function CoverApply.fileSize(path)
     return lfs.attributes(path, "size")
 end
 
--- Extract the book's TRUE embedded cover to a disposable PNG so the grid can
--- render it like any other file candidate. The embedded cover has no file of
--- its own (it lives inside the document container), so we materialise one.
--- Cached by the book's mtime -- re-extracted only when the book file changes.
+-- The book's TRUE embedded cover, decoded and scaled down to thumbnail size,
+-- for the grid to show: bb, original width, original height (or nil). Kept in
+-- memory, not written out: it lives as long as the modal (whose close empties
+-- the cache folder anyway), and writing it as a full-size PNG cost 2 s on a
+-- desktop for a 1400 x 2100 cover against 0.2 s to read it.
+CoverApply.EMBEDDED_THUMB_H = 824
 local function _extractEmbedded(book)
     if not book.has_cover then return nil end
     local fp = book.filepath
-    local dir = _cacheDir()
-    if not _ensureDir(dir) then return nil end
-    local dest = dir .. "/emb_" .. _safeKey(fp) .. ".png"
-    local dmod = lfs.attributes(dest, "modification")
-    local bmod = lfs.attributes(fp, "modification")
-    if dmod and bmod and dmod >= bmod then return dest end
     local ok_bi, BookInfo = pcall(require, "apps/filemanager/filemanagerbookinfo")
     if not ok_bi or not BookInfo then return nil end
     -- force_orig=true bypasses any active custom cover -> the native cover.
     local ok, bb = pcall(function() return BookInfo:getCoverImage(nil, fp, true) end)
     if not ok or not bb then return nil end
-    local ok_w = pcall(function() bb:writePNG(dest) end)
-    pcall(function() if bb.free then bb:free() end end)
-    if not ok_w then
-        logger.warn("[bookshelf cover] embedded cover extract failed for", fp)
-        return nil
+    local w, h = bb:getWidth(), bb:getHeight()
+    local s = math.min(1, CoverApply.EMBEDDED_THUMB_H / math.max(1, h))
+    if s < 1 then
+        local ok_s, small = pcall(function()
+            return require("ui/renderimage"):scaleBlitBuffer(bb,
+                math.max(1, math.floor(w * s + 0.5)), math.max(1, math.floor(h * s + 0.5)), true)
+        end)
+        if not ok_s or not small then
+            logger.warn("[bookshelf cover] embedded cover scale failed for", fp)
+            return nil
+        end
+        bb = small
     end
-    return dest
+    return bb, w, h
+end
+
+-- The cover the shelf already holds for the book (the cover browser's stored
+-- thumbnail), owned by the caller: a few ms against opening the document to
+-- read its cover, which took 1-3 s on a PW5. Only right when that thumbnail
+-- IS the embedded cover -- no custom cover, no external cover image -- and
+-- only used when the full cover's size is known (cover_sizetag) for the
+-- caption.
+local function _shelfThumb(book)
+    if book.cover_image_path then return nil end
+    local ok, Repo = pcall(require, "lib/bookshelf_book_repository")
+    if not (ok and Repo and Repo.getCoverBB) then return nil end
+    local ok_b, bb = pcall(Repo.getCoverBB, book.filepath)
+    return ok_b and bb or nil
 end
 
 -- Drop candidates whose (width,height,filesize) triple already appeared, so the
@@ -157,14 +174,20 @@ function CoverApply.localCandidates(book)
     local choice = _choices()[fp]
 
     -- Embedded (native) cover. Tapping this reverts to it (removes the custom
-    -- cover); the extracted PNG is only for display.
-    local emb = _extractEmbedded(book)
+    -- cover); the decoded image is only for display.
+    local _gettime = require("lib/bookshelf_gettime")
+    local t0 = _gettime()
+    local sw, sh = _parseSizetag(book.cover_sizetag)
+    local emb, ew, eh
+    if book.has_cover and not active and sw and sh then emb = _shelfThumb(book) end
+    local from_shelf = emb ~= nil
+    if not emb then emb, ew, eh = _extractEmbedded(book) end
+    logger.dbg(string.format("[bookshelf perf] Cover tab: embedded cover %.0fms (%s)",
+        (_gettime() - t0) * 1000, from_shelf and "shelf thumbnail" or "from the book"))
     if emb then
-        local sw, sh = _parseSizetag(book.cover_sizetag)
-        local w, h = CoverApply.imageDims(emb)
         out[#out + 1] = {
             kind = "embedded", source_label = _("Embedded"),
-            local_path = emb, width = sw or w, height = sh or h,
+            image = emb, width = sw or ew, height = sh or eh,
             filesize = nil, is_active = (active == nil),
         }
     end
@@ -284,9 +307,9 @@ end
 -- Recursively empty the cover working dir (settings/bookshelf_covers), with
 -- one exemption (KEEP_SUBDIRS below).
 --
--- The Cover tab's own material under here is transient: the emb_*.png
--- embedded-cover extractions, the online/ search downloads, and (from older
--- builds) per-book download subdirs. An APPLIED cover is copied into the
+-- The Cover tab's own material under here is transient: the online/ search
+-- downloads and, from older builds, emb_*.png embedded-cover extractions and
+-- per-book download subdirs. An APPLIED cover is copied into the
 -- book's .sdr and Hardcover enrichment covers live in a separate
 -- bookshelf_hardcover dir, so none of that is worth keeping. Never cleaned up
 -- before, so it grew unbounded (issue 267). Called on book-detail modal close.

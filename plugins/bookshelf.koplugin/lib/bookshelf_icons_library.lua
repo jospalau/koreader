@@ -299,6 +299,7 @@ end
 -- Glyphs always render through the "symbols" face (KOReader's bundled
 -- Symbols Nerd Font); labels follow the bookshelf UI font.
 function IconsLibrary._renderCell(item, dimen)
+    local Kit = require("lib/bookshelf_popup_kit")
     local Font = require("ui/font")
     local TextWidget = require("lib/bookshelf_colour_text")
     local BFont = require("lib/bookshelf_fonts")
@@ -332,9 +333,11 @@ function IconsLibrary._renderCell(item, dimen)
         VerticalSpan:new{ width = Space.span.vertical_default or 4 },
         label_w,
     }
-    return FrameContainer:new{
-        bordersize = Size.border.thin,
-        radius = Space.radius.default,
+    -- No border: the kit's card (cardify) has none, so the content fills the
+    -- slot (counted, every card came out short of it).
+    return require("lib/bookshelf_popup_kit").cardify(FrameContainer:new{
+        bordersize = 0,
+        radius = Kit.RADIUS,
         padding = 0,
         margin = 0,
         background = Blitbuffer.COLOR_WHITE,
@@ -342,7 +345,7 @@ function IconsLibrary._renderCell(item, dimen)
             dimen = Geom:new{ w = dimen.w, h = dimen.h },
             stack,
         },
-    }
+    })
 end
 
 -- Brief notification with the canonical name + codepoint on long-tap.
@@ -477,7 +480,7 @@ function IconsLibrary:show(on_select, opts)
             local TextWidget = require("lib/bookshelf_colour_text")
             local msg = TextWidget:new{
                 text = _("Drop .svg or .png files in koreader/icons/"),
-                face = Font:getFace("cfont", 16),
+                face = require("lib/bookshelf_fonts"):getFace("cfont", 16),
                 fgcolor = Blitbuffer.COLOR_BLACK,
                 max_width = content_width - Space.px(24),
             }

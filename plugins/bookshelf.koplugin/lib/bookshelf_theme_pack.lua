@@ -281,6 +281,36 @@ M.MINE  = "mine"
 M.PLAIN = "plain"
 M.SHELF_SETTING = "shelf_theme"          -- CoverProgress.THEME_SETTING
 
+-- The Theme library's Last used order: when each theme was last chosen
+-- there, { [choice] = os.time() }. Written with the other theme settings,
+-- so once as the picker closes (Orn.beginDeferred).
+M.USED_SETTING = "theme_used"
+-- Default theme's own key: a shelf's choice to follow the default. "*" is no
+-- folder name a pack can have on a Kindle or Kobo (FAT).
+M.FOLLOW_USED = "*default"
+M._now = nil
+function M.markUsed(choice)
+    if choice == nil then return end
+    local was = read(M.USED_SETTING)
+    local used = {}
+    if type(was) == "table" then for k, v in pairs(was) do used[k] = v end end
+    used[choice] = (M._now or os.time)()
+    save(M.USED_SETTING, used)
+end
+function M.usedAt(choice)
+    local used = read(M.USED_SETTING)
+    return type(used) == "table" and tonumber(used[choice]) or nil
+end
+
+-- addedAt(choice) -> when a pack was copied in: its folder's time (nil for
+-- Custom theme, Plain or a pack no longer there).
+function M.addedAt(choice)
+    local O = orn()
+    local dir = choice and O.packDir and O.packDir(choice)
+    if not dir then return nil end
+    return tonumber(fs().attributes(dir, "modification"))
+end
+
 -- mineName() -> what menus call the reader's own look. The ONE place the
 -- name lives, so it can be renamed with a one-line change (maintainer).
 -- "Custom theme", not "My theme" (maintainer, 2026-10-09); the id stays
@@ -292,21 +322,22 @@ function M.mineName() return _("Custom theme") end
 -- maintainer, 2026-10-07) and the popup it opens: where theme packs go, that
 -- any theme can be edited and reset (maintainer, 2026-10-09, as Bookends'
 -- gallery says presets can be edited freely once installed), and where to
--- get packs. The shop link is a parameter, not part of the msgid, so a
--- translation cannot break it.
+-- get packs: the shop's link and QR code are out of the text, so a
+-- translation cannot break them.
 function M.addThemeLabel() return _("Add theme pack\xE2\x80\xA6") end
 function M.showAddThemeInfo()
-    local UIManager = require("ui/uimanager")
-    local InfoMessage = require("ui/widget/infomessage")
     local T = require("ffi/util").template
     -- A findable path: the settings dir can be relative.
     local dir = require("lib/bookshelf_ornaments").dir() or "?"
     local ok, util = pcall(require, "ffi/util")
     local real = ok and util.realpath and util.realpath(dir)
-    UIManager:show(InfoMessage:new{
-        text = T(_("A theme pack brings a wallpaper, a plank, colors and ornaments together, and is chosen here. To add one, copy its folder into\n%1\nthen open the Theme library again.\n\nYou can edit any theme freely; your changes stay with it, and Reset brings back the original.\n\nReady-made theme packs:\n%2"),
-            real or dir, "ko-fi.com/andyhazz/shop"),
-    })
+    -- A panel as About is, with the shop's QR code (maintainer, 2026-10-31).
+    require("lib/bookshelf_link_panel").showShop{
+        title = _("Add theme pack"),
+        text = T(_("A theme pack brings a wallpaper, a plank, colors and ornaments together, and is chosen here. To add one, copy its folder into\n%1\nthen open the Theme library again.\n\nYou can edit any theme freely; your changes stay with it, and Reset brings back the original."),
+            real or dir),
+        shop = _("Ready-made theme packs"),
+    }
 end
 function M.plainName() return _("Plain") end
 
@@ -1130,12 +1161,16 @@ end
 
 -- ownPart(theme, key) -> true, value when that theme has that part of its
 -- own, in the stored convention: Plain's fixed parts (no wallpaper, the
--- built-in Oak, the default colours), a pack's own (a colours.json lends
--- only the colours it names; its wallpaper by name, so the full screen and
--- dark variants come with it). false for a part it takes from Custom theme:
--- light or dark and invert on Plain, whatever a pack lacks, and full screen
--- None, the reader's view preference over a pack's wallpaper.
-local function ownPart(theme, key)
+-- built-in Oak, the default colours), a pack's own (a colours.json names
+-- the colours it sets; its wallpaper by name, so the full screen and dark
+-- variants come with it), and what a pack lacks, as Plain has it: a theme
+-- looks the same for every reader. Taking those from Custom theme, Autumn
+-- (no wallpaper, no planks) reset came back with whatever Custom theme had,
+-- Macabre's planks and another pack's wallpaper (maintainer, PW5). false
+-- for a part that is the reader's preference, from Custom theme: light or
+-- dark, invert, and full screen None over a pack's wallpaper.
+local ownPart
+ownPart = function(theme, key)
     local slot = COLOUR_SLOT[key]
     if theme == M.PLAIN then
         if slot or key == "wallpaper_default" or key == "wallpaper_full" then return true, nil end
@@ -1153,12 +1188,12 @@ local function ownPart(theme, key)
         if key == P.buttons and m.panel_shading ~= nil then return true, (m.panel_shading <= 0) or nil end
         if key == P.blur and m.panel_blur ~= nil then return true, m.panel_blur or nil end
         if key == P.covers and m.covers_panel ~= nil then return true, m.covers_panel or nil end
-        return false
+        return ownPart(M.PLAIN, key)
     end
     if slot then
         local c = th.colours and packColour(theme, slot[1], slot[2])
         if c then return true, c end
-        return false
+        return ownPart(M.PLAIN, key)
     end
     if key == M.SHELF_SETTING then
         if th.manifest and th.manifest.shelf then return true, th.manifest.shelf end
@@ -1175,7 +1210,7 @@ local function ownPart(theme, key)
         local pl = M.themePlank(theme)
         return true, pl and pl.id or nil
     end
-    return false
+    return ownPart(M.PLAIN, key)
 end
 
 -- originalPart(theme, key) -> that part as the theme shows it unedited: its

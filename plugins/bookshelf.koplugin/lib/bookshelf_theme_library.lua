@@ -278,6 +278,69 @@ function TL.items(ctx)
     return out
 end
 
+-- cardTitle(item) -> a card's name, the built-in ones (Default theme,
+-- Custom theme, Plain) marked "* ": set apart from the packs, and first in
+-- A-Z (maintainer). On the card only; menus and dialogs keep the name.
+TL.BUILTIN_MARK = "* "
+function TL.isBuiltin(item)
+    local tp = TP()
+    return item.same or item.value == tp.MINE or item.value == tp.PLAIN
+end
+function TL.cardTitle(item)
+    if TL.isBuiltin(item) then return TL.BUILTIN_MARK .. (item.title or "") end
+    return item.title
+end
+
+-- The order switch on the strip (maintainer). Newest: by the pack folder's
+-- time, which a copy onto the device sets.
+function TL.orders()
+    return {
+        { key = "az",    label = _("A-Z") },
+        { key = "added", label = _("Newest") },
+        { key = "used",  label = _("Last used") },
+    }
+end
+
+-- usedKey(item) -> the key a card's use is kept under: Default theme's is
+-- TP.FOLLOW_USED (its value is nil).
+function TL.usedKey(it) return it.same and TP().FOLLOW_USED or it.value end
+
+-- when(used) -> TL.order's lookups: used[usedKey] (the picker's snapshot),
+-- and each pack's added time, asked once. Default theme, Custom theme and
+-- Plain have none (Default theme's value is nil: no table key).
+function TL.when(used)
+    local tp, added = TP(), {}
+    return {
+        used = function(it) return used[TL.usedKey(it)] end,
+        added = function(it)
+            local v = it.value
+            if v == nil or TL.isBuiltin(it) then return nil end
+            if added[v] == nil then added[v] = tp.addedAt and tp.addedAt(v) or false end
+            return added[v] or nil
+        end,
+    }
+end
+
+-- order(items, by, when) -> the cards in that order, a copy. A-Z is the
+-- list's own (TP.choiceList: the built-ins, then the packs by name).
+-- Newest and Last used go by that alone, nothing kept at the top
+-- (maintainer): when.added(item) / when.used(item) -> a time or nil; most
+-- recent first, those with none after in the list's order (the built-ins,
+-- never added, end Newest).
+function TL.order(items, by, when)
+    local out = {}
+    for i, it in ipairs(items) do out[i] = it end
+    local key = (by == "added" or by == "used") and when and when[by]
+    if not key then return out end
+    local t, at = {}, {}
+    for i, it in ipairs(out) do t[it], at[it] = key(it) or 0, i end
+    table.sort(out, function(a, b)
+        if t[a] ~= t[b] then return t[a] > t[b] end
+        return at[a] < at[b]
+    end)
+    return out
+end
+
 -- isCurrent(item, current) -> that card is the choice in use.
 function TL.isCurrent(item, current)
     if item.same then return current == nil end
@@ -315,34 +378,25 @@ function TL.marked(items, current)
     end
 end
 
--- showReset(item, after): a card's long-press: a small dialog titled with
--- the theme, holding Reset to original, greyed unless that theme has edits,
--- asked again before anything is lost (TP.confirmReset, the question the
--- footer's Reset asks), as a long-press on a Bookends preset opens its
--- Manage dialog (maintainer, 2026-10-09). Kept beside the footer's Reset as
--- a shortcut to any card's, not only the marked one's. after(): once reset.
--- Nothing for a card that cannot be reset (resettable).
+-- showReset(item, after): a card's long-press: an edited theme is asked
+-- straight away whether to go back to its original (TP.confirmReset, the
+-- question the footer's Reset asks, which names the theme); one as it came
+-- gets a short note instead of a greyed button (STYLE.md). Kept beside the
+-- footer's Reset as a shortcut to any card's, not only the marked one's
+-- (maintainer, 2026-10-09). after(): once reset. Nothing for a card that
+-- cannot be reset (resettable).
 function TL.showReset(item, after)
     if not TL.resettable(item) then return nil end
-    local tp = TP()
+    if TL.canReset(item) then
+        TP().confirmReset(item.value, after)
+        return true
+    end
     local UIManager = require("ui/uimanager")
-    local ButtonDialog = require("ui/widget/buttondialog")
-    local theme = item.value
-    local d
-    d = ButtonDialog:new{
-        title = item.title,
-        title_align = "center",
-        buttons = { { {
-            text = _("Reset to original"),
-            enabled = TL.canReset(item),
-            callback = function()
-                UIManager:close(d)
-                tp.confirmReset(theme, after)
-            end,
-        } } },
+    local note = require("ui/widget/notification"):new{
+        text = T(_("%1 has no changes to reset."), item.title),
     }
-    UIManager:show(d)
-    return d
+    UIManager:show(note)
+    return note
 end
 
 -- ── The picker ──────────────────────────────────────────────────────────
@@ -370,11 +424,31 @@ function TL.cardHeight()
     return math.floor((area - (n - 1) * g) / n)
 end
 
--- areaHeight() -> the cards' area: PER_PAGE cards and the gaps between, no
--- more, so the picker is no taller than its cards.
-function TL.areaHeight()
-    return TL.PER_PAGE * TL.cardHeight() + (TL.PER_PAGE - 1) * gap()
+-- areaHeight(_cw, room) -> the cards' area: PER_PAGE cards and the gaps
+-- between, no more, so the picker is no taller than its cards. Fewer cards
+-- a page (not shorter ones, down to 2) when that is more than the room the
+-- modal has (LibraryModal config.area_height): a small screen whose strip
+-- wraps to two rows. A card gives up to SQUEEZE of its height first, so
+-- four that only just miss still fit (the editor's page on a PW5, with the
+-- page row: maintainer). The cards keep their height otherwise; on the
+-- editor's page the spare height goes above the page row (LibraryModal).
+-- TL.perPage() is how many.
+TL._per_page = nil
+TL.SQUEEZE = 0.12
+function TL.areaHeight(_cw, room)
+    local h, g = TL.cardHeight(), gap()
+    local function fits(n, ch) return not room or n * ch + (n - 1) * g <= room end
+    local n = TL.PER_PAGE
+    while n > 2 do
+        if fits(n, h) then break end
+        local squeezed = math.floor((room - (n - 1) * g) / n)
+        if squeezed >= h * (1 - TL.SQUEEZE) then h = squeezed; break end
+        n = n - 1
+    end
+    TL._per_page = n
+    return n * h + (n - 1) * g
 end
+function TL.perPage() return TL._per_page or TL.PER_PAGE end
 
 -- heroWidget(e, box_w, box_h) -> the hero as the collection previews it
 -- (bookshelf_ornament_browser.preview), over the drop shadow the piece's
@@ -393,10 +467,15 @@ function TL.heroWidget(e, box_w, box_h)
     local orn = O()
     local w = Widget:new{ dimen = Geom:new{ w = pic.w + d, h = pic.h + d } }
     function w:getSize() return Geom:new{ w = pic.w + d, h = pic.h + d } end
+    -- Looked up once, not on every paint (each card paints on every tap).
+    local ok_n, NightSync = pcall(require, "lib/bookshelf_night_mode_sync")
     function w:paintTo(bb, x, y)
-        self.dimen = Geom:new{ x = x, y = y, w = pic.w + d, h = pic.h + d }
+        self.dimen.x, self.dimen.y = x, y
         local night = false
-        pcall(function() night = require("lib/bookshelf_night_mode_sync").active() and true or false end)
+        if ok_n and NightSync then
+            local ok, v = pcall(NightSync.active)
+            night = ok and v and true or false
+        end
         local p = pic.placement
         local shadow = orn.shadowFor({ entry = p.entry, w = p.w, h = p.h }, night)
         if shadow then
@@ -425,13 +504,17 @@ function TL._renderCard(item, dimen, current, all)
     local Space           = require("lib/bookshelf_space")
     local TextWidget      = require("lib/bookshelf_colour_text")
     local VerticalGroup   = require("ui/widget/verticalgroup")
-    local border = current and Size.border.thick or Size.border.thin
     -- Little padding above and below: three lines have to fit, also inside
     -- the keys' focus ring, which takes its width off the card.
-    local pad, pad_v = Space.padding.default, Space.padding.small
+    -- Side padding as the editor's cards have, so the name does not touch
+    -- the card's edge.
+    local pad, pad_v = Space.px(12), Space.padding.small
     local gap = Space.padding.default
-    local inner_w = dimen.w - 2 * (border + pad)
-    local inner_h = dimen.h - 2 * (border + pad_v)
+    -- No border in the sum: the kit's card (cardify) has none, and its "in
+    -- use" outline is drawn over the card's edge. Counted, the card in use
+    -- (a thicker border) came out narrower than the rest.
+    local inner_w = dimen.w - 2 * pad
+    local inner_h = dimen.h - 2 * pad_v
     -- The hero's box: square, the card's height, never more than a quarter
     -- of its width. Kept on every card, with or without a hero, so the names
     -- line up down the page.
@@ -444,20 +527,21 @@ function TL._renderCard(item, dimen, current, all)
     local used = 0
     local function line(text, size, color, bold)
         if not text or text == "" then return end
-        local w = TextWidget:new{ text = text, face = Font:getFace("cfont", size), bold = bold,
+        local w = TextWidget:new{ text = text, face = require("lib/bookshelf_fonts"):getFace("cfont", size), bold = bold,
                                   fgcolor = color, max_width = text_w }
         local h = w:getSize().h
         if used > 0 and used + h > inner_h then return end
         used = used + h
         lines[#lines + 1] = w
     end
-    line(item.title, 18, ink, true)
+    line(TL.cardTitle(item), 18, ink, true)
     line(item.summary, 14, ink)
-    line(item.description, 13, Blitbuffer.COLOR_DARK_GRAY)
+    line(item.description, 13, require("lib/bookshelf_popup_kit").DIM_ON_GREY)
     local e = (not item.missing) and TL.hero(item.shows, all) or nil
     local hero = e and TL.heroWidget(e, hero_w, inner_h)
-    return FrameContainer:new{
-        bordersize = border, radius = Space.radius.default, margin = 0,
+    -- The kit's grey card; the one in use outlined (a heavier frame).
+    return require("lib/bookshelf_popup_kit").cardify(FrameContainer:new{
+        bordersize = 0, radius = require("lib/bookshelf_popup_kit").RADIUS, margin = 0,
         padding = 0, padding_left = pad, padding_right = pad, padding_top = pad_v, padding_bottom = pad_v,
         -- 0xEE: one exact e-ink level (238), so it does not speckle.
         background = current and Blitbuffer.Color8(0xEE) or Blitbuffer.COLOR_WHITE,
@@ -467,7 +551,7 @@ function TL._renderCard(item, dimen, current, all)
             CenterContainer:new{ dimen = Geom:new{ w = hero_w, h = inner_h },
                                  hero or HorizontalSpan:new{ width = 1 } },
         },
-    }
+    }, { outline = current })
 end
 
 -- How long after a tap the shelf behind is rebuilt: long enough for the
@@ -503,11 +587,30 @@ function TL.show(opts)
     -- The ornaments, scanned once for the picker's life (TL.scan): every
     -- card, every page and every tap's relisting read this one.
     local scan = TL.scan()
-    local function load()
-        self.items = TL.items{ shelf = opts.shelf, current = opts.current(), follow = opts.follow,
-                               spines = spines, scan = scan }
+    -- The order (TL.orders), kept for the session. Last used reads the
+    -- times as the picker opens and as the switch is tapped, so choosing a
+    -- theme does not move the card tapped. A theme in use with no time (worn
+    -- before Last used was kept) comes after those chosen, before the rest.
+    local used = {}
+    local when = TL.when(used)
+    local usedKey = TL.usedKey
+    local function load(first)
+        local items = TL.items{ shelf = opts.shelf, current = opts.current(), follow = opts.follow,
+                                spines = spines, scan = scan }
+        if first and tp.usedAt then
+            local cur, lib = opts.current(), tp.libraryChoice and tp.libraryChoice()
+            for _i, c in ipairs(items) do
+                local k = usedKey(c)
+                if k ~= nil then
+                    local in_use
+                    if c.same then in_use = cur == nil else in_use = c.value == cur or c.value == lib end
+                    used[k] = tp.usedAt(k) or (in_use and 1 or nil)
+                end
+            end
+        end
+        self.items = TL.order(items, TL._order or "az", when)
     end
-    load()
+    load(true)
     local modal
     -- Each tap's choice is kept in memory and the settings file written
     -- once, as the picker closes however it closes (on_closed), as the
@@ -522,12 +625,21 @@ function TL.show(opts)
     -- The shelf behind follows the cards: one rebuild for a run of taps
     -- (the last choice wins), and none left waiting when the picker closes.
     local waiting = false
+    -- The shelf behind shows each theme tapped with a plain ui refresh, which
+    -- leaves the picker's unchanged pixels alone: a full one flashed the
+    -- picker too, after the card's own outline (maintainer: one paint per
+    -- tap). The full refresh that clears what the previews leave on e-ink
+    -- is made once, as the picker closes (on_closed), and only if a theme
+    -- was applied.
+    local applied = false
     local function apply()
         if not waiting then return end
         waiting = false
         UIManager:unschedule(apply)
         if opts.apply then opts.apply() end
-        UIManager:setDirty("all", "full")
+        -- No refresh of its own: the shelf's rebuild asks for one
+        -- (BookshelfWidget:_syncShelfTheme).
+        applied = true
     end
     -- reset(theme): once a theme's edits are gone, from the footer or a
     -- card's long-press. Its card loses Edited and the footer's Reset greys
@@ -545,9 +657,14 @@ function TL.show(opts)
     end
     local config = {
         title = opts.shelf and T(_("Theme: %1"), opts.shelf) or tp.choiceLabel(nil),
+        -- opts.over: opened from the shelf editor, a page of it (its frame,
+        -- its breadcrumb, Close as the back chevron); LibraryModal config.over.
+        over = opts.over,
         no_search = true,
+        -- The outline moving to the card is the tap's feedback.
+        select_on_tap = true,
         grid_cols = function() return 1 end,
-        cells_per_page = function() return TL.PER_PAGE end,
+        cells_per_page = function() return TL.perPage() end,
         area_height = TL.areaHeight,
         cell_renderer = function(item, dimen)
             return TL._renderCard(item, dimen, TL.isCurrent(item, opts.current()), scan.all)
@@ -555,6 +672,7 @@ function TL.show(opts)
         on_cell_tap = function(item)
             if item.missing or TL.isCurrent(item, opts.current()) then return end
             opts.choose(item.value)
+            if tp.markUsed then tp.markUsed(item.same and tp.FOLLOW_USED or item.value) end
             -- Listed again: a missing pack that was the choice drops out.
             load()
             if modal then
@@ -570,26 +688,48 @@ function TL.show(opts)
         cell_long_tap = function(item)
             TL.showReset(item, function() reset(item.value) end)
         end,
+        -- A-Z | Newest | Last used, at the left of the strip.
+        chip_strip = function()
+            local out = {}
+            for _i, o in ipairs(TL.orders()) do
+                out[#out + 1] = { key = o.key, label = o.label, is_active = o.key == (TL._order or "az") }
+            end
+            return out
+        end,
+        on_chip_tap = function(key)
+            TL._order = key
+            load(true)
+        end,
         item_count = function() return #self.items end,
         item_at = function(i) return self.items[i] end,
-        footer_rows = { {
-            { key = "add", label = tp.addThemeLabel(), on_tap = function() tp.showAddThemeInfo() end },
+        -- Add theme pack and Reset: the screen's own actions, on the strip
+        -- under the title (STYLE.md); the footer keeps Close.
+        header_actions = {
+            -- At the left: with no chips, both at the right left the strip
+            -- looking half empty (maintainer).
+            { key = "add", label = tp.addThemeLabel(), at_left = true,
+              on_tap = function() tp.showAddThemeInfo() end },
             -- The theme marked, whatever page is shown: the one in use where
             -- the picker was opened from (maintainer, 2026-10-09). Greyed for
             -- Custom theme and Default theme, and for a theme as original;
             -- asked first, as the long-press asks (TP.confirmReset).
-            { key = "reset", label = _("Reset"),
+            -- Says what it resets, now there is room (maintainer).
+            { key = "reset", label = _("Reset edited theme"),
               enabled_when = function() return TL.canReset(TL.marked(self.items, opts.current())) end,
               on_tap = function()
                   local item = TL.marked(self.items, opts.current())
                   if not TL.canReset(item) then return end
                   tp.confirmReset(item.value, function() reset(item.value) end)
               end },
+        },
+        footer_rows = { {
             { key = "close", label = _("Close"), on_tap = close },
         } },
         on_closed = function()
             modal = nil
             apply()
+            TL.previewing = false
+            if applied then UIManager:setDirty("all", "full") end
             if own_defer then
                 own_defer = false
                 -- Once the close has painted: the write (~115ms on a PW5)
@@ -613,6 +753,9 @@ function TL.show(opts)
     -- own page (maintainer, 2026-10-08: opened on Ukiyo-e's page, the
     -- built-ins were out of sight).
     modal = LibraryModal:new{ config = config, page = 1 }
+    -- The shelf's own look-change refresh is a plain one while this is up
+    -- (BookshelfWidget:_syncShelfTheme).
+    TL.previewing = true
     own_defer = orn.beginDeferred ~= nil and not orn._defer
     if own_defer then orn.beginDeferred() end
     UIManager:show(modal)
