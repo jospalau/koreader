@@ -693,7 +693,8 @@ function PageTextInfo:onSwipe(_, ges)
         end
     elseif direction == "north" then
         if self.ui and self.ui.bookends and self.ui.bookends.enabled then
-            return UIManager:broadcastEvent(Event:new("OpenPresetManager"))
+            return UIManager:broadcastEvent(Event:new("BookshelfOpenMicroModules"))
+            -- return UIManager:broadcastEvent(Event:new("OpenPresetManager"))
         end
         if self.view.topbar.is_enabled == nil or self.view.topbar.is_enabled == false then
             self.view.topbar:quickToggleOnOff(true)
