@@ -573,6 +573,13 @@ function MicroFullscreen:handleEvent(event)
         -- Don't intercept while a gesture-unlock screensaver is up (mirrors the
         -- bookshelf's guard so the wake gesture reaches the lock widget).
         if Device.screen_saver_lock then return false end
+
+        -- Multiswipes are ignored while this view is open: consumed here so
+        -- they reach neither our children nor KOReader's gesture zones.
+        local ges = event.args and event.args[1]
+        if ges and ges.ges == "multiswipe" then
+            return true
+        end
         if InputContainer.handleEvent(self, event) then return true end
         local ev = event.args[1]
 
