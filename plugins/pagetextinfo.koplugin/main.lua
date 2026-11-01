@@ -3755,6 +3755,7 @@ function PageTextInfo:onShowReadingMotive()
     screensaver_widget.modal = true
     screensaver_widget.dithered = true
     screensaver_widget.name = "ReadingMotive"
+    screensaver_widget.onCloseWidget = function() end
     UIManager:show(screensaver_widget, "full")
 
 
