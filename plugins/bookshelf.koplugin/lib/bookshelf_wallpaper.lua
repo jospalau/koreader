@@ -244,8 +244,20 @@ M._roundedSpans = _roundedSpans
 -- The decoded backdrop is the only honest answer: a name can be set for an
 -- image that has since been deleted or failed to decode, and chrome that
 -- adapts itself for a picture that is not there looks broken on a plain page.
+--
+-- The kept picture alone is not the answer: it stays decoded when the shelf
+-- on screen has none (so going back to the shelf that wears it is instant),
+-- and a book opened on a picture-less shelf flashed that other shelf's
+-- picture behind its row (PW5). The shelf says which it is (setShowing).
+M._none = nil
+function M.setShowing(on) M._none = (not on) or nil end
+local function shown()
+    if M._none then return nil end
+    return M._bg
+end
+M._shown = shown
 function M.isShowing()
-    return (M._bg ~= nil)
+    return shown() ~= nil
 end
 
 -- shade(bb, x, y, w, h, strength, night, radius) -> true if it painted.
@@ -744,7 +756,7 @@ local function _colourKey(colour)
 end
 function M.frost(target, x, y, w, h, radius, outer, colour, strength)
     if not M.blurOn() then return false, false end
-    local bg = M._bg
+    local bg = shown()
     if not (bg and bg.bb and target and w and h) or w <= 0 or h <= 0 then return false, false end
     if target.getWidth == nil or target:getWidth() ~= bg.w or target:getHeight() ~= bg.h then
         return false, false
@@ -1207,7 +1219,7 @@ end
 -- wipe needs the picture under its own band in a scratch buffer, and laying
 -- the whole screen into it for a 60px strip was most of the wipe's cost.
 function M.backdrop(target, region)
-    local bg = M._bg
+    local bg = shown()
     if not (bg and bg.bb and target) then return false end
     if target.getWidth == nil or target.getHeight == nil then return false end
     if target:getWidth() ~= bg.w or target:getHeight() ~= bg.h then return false end
@@ -1338,7 +1350,7 @@ end
 
 function M.restore(target, x, y, w, h)
     if not (target and w and h) or w <= 0 or h <= 0 then return false end
-    local bg = M._bg
+    local bg = shown()
     if bg and bg.bb then
         if target.getWidth == nil or target.getHeight == nil then return false end
         if target:getWidth() ~= bg.w or target:getHeight() ~= bg.h then return false end
@@ -1375,7 +1387,7 @@ end
 -- the only correct ground is the picture itself.
 function M.patch(target, dx, dy, sx, sy, w, h)
     if not (target and w and h) or w <= 0 or h <= 0 then return false end
-    local bg = M._bg
+    local bg = shown()
     if not (bg and bg.bb) then
         -- No picture, but a ground: the flat colour is what belongs here, and
         -- it needs no source coordinates at all. Same reasoning as restore.
@@ -1991,7 +2003,14 @@ end
 function M.bg(name, w, h, night)
     local path = M.pathFor(name)
     if not path or not w or not h or w <= 0 or h <= 0 then return nil end
-    local key = path .. "|" .. w .. "x" .. h .. (night and "|n" or "")
+    -- Image contrast's wallpaper brightness and contrast are part of the
+    -- picture: applied once here, to the decoded copy (the disk copy stays
+    -- raw), and in every key that copy is kept under, its blurs' included.
+    local ImageContrast = require("lib/bookshelf_image_contrast")
+    local adjust = ImageContrast.wallpaperKey()
+    -- The night marker stays LAST: flipNight and frostFor read the held
+    -- buffer's mode from the key's last two characters.
+    local key = path .. "|" .. w .. "x" .. h .. adjust .. (night and "|n" or "")
     if M._bg and M._bg_key == key then return M._bg end
     local keep = keepTwo()
     -- A different picture: the blurs are of the old one. (Entries carry the
@@ -2028,12 +2047,21 @@ function M.bg(name, w, h, night)
         bb = M.toScreenType(bb)
         if dkey and diskCache() then pcall(diskCache().store, dkey, bb) end
     end
+    if adjust ~= "" then
+        pcall(function()
+            local _lo, med = ImageContrast.levels(bb)
+            local b, c = ImageContrast.wallpaper()
+            ImageContrast.applyLUT(bb, ImageContrast.wallpaperLUT(med or 128, b, c))
+        end)
+    end
     if night and bb.invertRect then
         pcall(function() bb:invertRect(0, 0, bb:getWidth(), bb:getHeight()) end)
     end
     local widget = backgroundWidget(bb, w, h)
     widget.bb = bb
-    widget.dkey = dkey   -- what its blurs are kept under (frostFor)
+    -- What its blurs are kept under (frostFor): an adjusted picture blurs
+    -- differently from the raw one.
+    widget.dkey = dkey and (dkey .. adjust)
     M._bg, M._bg_key = widget, key
     return widget
 end

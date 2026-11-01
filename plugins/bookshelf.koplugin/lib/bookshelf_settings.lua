@@ -1643,6 +1643,7 @@ function Settings:_listLineActions(index, markDirty, touchmenu_instance)
             },
         },
     }
+    require("lib/bookshelf_gesture_zones").passSwipesOn(dialog)
     UIManager:show(dialog)
 end
 
@@ -1838,13 +1839,49 @@ function Settings:_wallpaperMenu()
     -- (2026-10-09), and here because they only matter over a wallpaper.
     items[#items].separator = true
     for _i, row in ipairs(self:_panelRows()) do items[#items + 1] = row end
-    -- Last, under its own rule: the one row here that is NOT part of the
-    -- theme, a folder of the reader's own to take pictures from, the same
-    -- for every theme (README says so). In Settings it pushed Library &
-    -- search onto a second menu page.
+    -- Last, under its own rule: the rows here that are NOT part of the
+    -- theme, the same for every theme (README says so): the picture's
+    -- contrast and brightness (also in Settings > Image contrast), and a
+    -- folder of the reader's own to take pictures from. In Settings the
+    -- folder pushed Library & search onto a second menu page. Ten rows:
+    -- KOReader's menu page is full.
     items[#items].separator = true
+    for _i, row in ipairs(self:_wallpaperAdjustRows()) do items[#items + 1] = row end
     items[#items + 1] = self:_wallpaperFolderRow()
     return items
+end
+
+-- _imageContrastRow(which) -> a row of Settings > Image contrast: "boost",
+-- "wp_contrast" or "wp_brightness", each a slider page (-100..100 for the
+-- wallpaper's, 0..100 for the boost: it never reduces).
+function Settings:_imageContrastRow(which)
+    local IC = require("lib/bookshelf_image_contrast")
+    local spec = ({
+        boost = { _("Covers and ornaments contrast boost"), IC.BOOST_KEY, 0, IC.flushForeground },
+        wp_contrast = { _("Wallpaper contrast"), IC.WP_CONTRAST_KEY, -100 },
+        wp_brightness = { _("Wallpaper brightness"), IC.WP_BRIGHTNESS_KEY, -100 },
+    })[which]
+    local label, key, lo, preview = spec[1], spec[2], spec[3], spec[4]
+    return {
+        text_func = function()
+            return T(_("%1: %2%"), label, BookshelfSettings.read(key, 0))
+        end,
+        keep_menu_open = true,
+        callback = function(touchmenu_instance)
+            self:_nudgePage(touchmenu_instance, {
+                key = key, default = 0, min = lo, max = 100,
+                fine = 5, big = 20, unit = "%", title = label,
+                preview = preview,
+            })
+        end,
+    }
+end
+
+-- _wallpaperAdjustRows(): the wallpaper's contrast and brightness, in both
+-- Settings > Image contrast and Theme > Wallpaper (maintainer). A device
+-- preference, like the extra folder, not part of a look.
+function Settings:_wallpaperAdjustRows()
+    return { self:_imageContrastRow("wp_contrast"), self:_imageContrastRow("wp_brightness") }
 end
 
 -- _wallpaperFolderRow(): issue 419, pictures kept in a folder of the
@@ -3176,8 +3213,7 @@ end
 -- The TouchMenu behind is hidden while the page is up so the live preview is
 -- not covered (restored on every way out, so the next tap lands on the menu
 -- the reader came from; see Bookshelf:hideMenu in main.lua, #60). A tap
--- outside does nothing (dismissable = false): rapid taps on the steps fell
--- through to the background and closed it mid-edit.
+-- outside is Done (on_tap_outside); the X and Back put the value back.
 function Settings:_nudgePage(touchmenu_instance, spec)
     local key, default = spec.key, spec.default or 100
     local original = BookshelfSettings.read(key, default)
@@ -3247,7 +3283,10 @@ function Settings:_nudgePage(touchmenu_instance, spec)
         page = page,
         anchor = spec.anchor,
         at_bottom = true,
-        dismissable = false,
+        -- A tap outside is Done: the shelf can be paged behind the page to
+        -- judge the change, and the value stays (maintainer). The rapid
+        -- steps that fell through and closed it were the stock dialog's.
+        on_tap_outside = function() done(false) end,
         footer = {
             { text = _("Cancel"), callback = function() done(true) end },
             -- Default stays in the footer (maintainer), greyed at the default.
@@ -3363,6 +3402,19 @@ function Settings:_settingsSubItems()
             .. "title and author have their own fonts in the book detail editor."),
         keep_menu_open = true,
         callback = function(touchmenu_instance) self:_pickBookshelfUIFont(touchmenu_instance) end,
+    }
+    -- Image contrast: a boost for the covers, spines and ornaments, and the
+    -- wallpaper's own contrast and brightness. Each is applied once to a
+    -- picture already decoded and kept, never per paint
+    -- (lib/bookshelf_image_contrast).
+    items[#items + 1] = {
+        text = _("Image contrast"),
+        help_text = _("Covers and ornaments contrast boost deepens the shadows and mid-tones of covers, spines and ornaments, which can help on a screen with few greys. Wallpaper contrast and brightness adjust the wallpaper, quieter or bolder; at 0% each shows the picture as it is."),
+        sub_item_table_func = function()
+            local rows = { self:_imageContrastRow("boost") }
+            for _i, r in ipairs(self:_wallpaperAdjustRows()) do rows[#rows + 1] = r end
+            return rows
+        end,
     }
     -- The extra wallpaper folder went to Theme > Wallpaper (2026-10-16): as a
     -- twelfth row here it pushed Library & search onto a second page of
@@ -3766,6 +3818,7 @@ function Settings:_hardcoverSubItems()
                 }},
             },
         }
+        require("lib/bookshelf_gesture_zones").passSwipesOn(dialog)
         UIManager:show(dialog)
     end
 
@@ -4461,6 +4514,44 @@ function Settings:_behaviourSubItems()
         -- End the tap band.
         separator = true,
     }
+    -- The footer bar (maintainer): shown; hidden, the shelf taking its
+    -- space; or its buttons kept where they are but not drawn, shown while
+    -- the keys are in it. Both hidden modes show it while selecting books.
+    local footer_labels = { show = _("Show"), hide = _("Hide"), invisible = _("Invisible buttons") }
+    local function footerMode()
+        local v = BookshelfSettings.read("footer_bar", "show")
+        return footer_labels[v] and v or "show"
+    end
+    local function footerRow(value, help)
+        return {
+            text = footer_labels[value],
+            help_text = help,
+            radio = true,
+            checked_func = function() return footerMode() == value end,
+            callback = function()
+                BookshelfSettings.save("footer_bar", value)
+                -- The layout changes (Hide gives the shelf more room).
+                if self._bw and self._bw._rebuild then
+                    self._bw:_rebuild()
+                    UIManager:setDirty(self._bw, "ui")
+                end
+            end,
+        }
+    end
+    items[#items + 1] = {
+        text_func = function()
+            return _("Footer bar") .. ": " .. footer_labels[footerMode()]
+        end,
+        help_text = _("The bar along the bottom of the shelf, with the menu button and the page arrows."),
+        sub_item_table_func = function()
+            return {
+                footerRow("show", _("The bar with the menu button and the page arrows.")),
+                footerRow("hide", _("No bar: the shelf uses its space. Swipe to turn pages; open the menu from KOReader's menu or a gesture. The bar comes back while you select books.")),
+                footerRow("invisible", _("The bar is not drawn, but its buttons still work where they were: the menu in its corner and the arrows to turn pages. Moving into it with the keys shows it.")),
+            }
+        end,
+        separator = true,
+    }
     items[#items + 1] = animRow(_("Page turn animation"), "shelf_page_animation",
         _("Animate shelf page turns and shelf-menu paging with a wipe "
         .. "effect. E-ink only (the effect relies on the panel's "
@@ -5055,11 +5146,11 @@ function Settings:_advancedSubItems()
                     end,
                 })
             end,
-            -- End the resets band before the betas.
+            -- End the resets band before the calibre switch.
             separator = true,
         },
         {
-            text = _("BETA: Read calibre metadata.calibre"),
+            text = _("Read calibre metadata.calibre"),
             -- Says what the code does. The previous wording promised the
             -- opposite ("Calibre data only fills gaps"), which is how a
             -- Calibre library built from filenames ended up overriding
@@ -5296,6 +5387,7 @@ function Settings:_openLayoutEditor(touchmenu_instance)
         dialog.key_events.BSSizeBack = { { Device.input.group.Back } }
         dialog.onBSSizeBack = function() cancel() return true end
     end
+    require("lib/bookshelf_gesture_zones").passSwipesOn(dialog)
     UIManager:show(dialog)
 end
 
@@ -5613,6 +5705,7 @@ function Settings:_pickLauncherButtons(touchmenu_instance)
         },
     }
     if dialog.movable then dialog.movable.ges_events = {} end
+    require("lib/bookshelf_gesture_zones").passSwipesOn(dialog)
     UIManager:show(dialog)
     UIManager:setDirty(canvas, "ui")
 end

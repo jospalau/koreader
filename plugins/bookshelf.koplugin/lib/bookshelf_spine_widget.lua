@@ -30,6 +30,19 @@ local Device          = require("device")
 local Screen          = Device.screen
 local Space           = require("lib/bookshelf_space")
 local CoverProgress   = require("lib/bookshelf_cover_progress")
+-- Image contrast's boost for a cover drawn without the cover cache (the
+-- cache boosts in put()); once per buffer.
+local function _boostCover(bb)
+    local ok, ImageContrast = pcall(require, "lib/bookshelf_image_contrast")
+    if ok and ImageContrast then ImageContrast.boostImage(bb) end
+end
+-- _derived(src, copy) -> copy, marked boosted when src was (a copy of a
+-- boosted cover must be neither boosted again nor stored to disk as raw).
+local function _derived(src, copy)
+    local ok, ImageContrast = pcall(require, "lib/bookshelf_image_contrast")
+    if ok and ImageContrast then ImageContrast.derive(src, copy) end
+    return copy
+end
 local TextFit         = require("lib/bookshelf_text_fit")
 local T               = require("ffi/util").template
 local _               = require("lib/bookshelf_i18n").gettext
@@ -82,14 +95,14 @@ end
 local function _paintColorSafeBorder(bb, x, y, w, h, border_size, color, radius, anti_alias)
     if not color or not border_size or border_size <= 0 then return end
     local is_rgb32 = ffi.istype(ColorRGB32_t, color)
-    local suppress_invert = is_rgb32 and Device:isAndroid() and bb:getInverse() == 1
-    if suppress_invert then bb:setInverse(0) end
+    local Color = require("lib/bookshelf_color")
+    local raw = is_rgb32 and Color.rawInvertBegin(bb)
     if is_rgb32 then
         bb:paintBorderRGB32(x, y, w, h, border_size, color, radius, anti_alias)
     else
         bb:paintBorder(x, y, w, h, border_size, color, radius, anti_alias)
     end
-    if suppress_invert then bb:setInverse(1) end
+    Color.rawInvertEnd(bb, raw)
 end
 
 -- Thin FrameContainer subclass that routes its border paint through
@@ -123,9 +136,8 @@ function ColorSafeFrame:paintTo(bb, x, y)
 
     if self.background then
         local radius = (self.radius and self.bordersize) and self.radius + self.bordersize or self.radius
-        local paintRoundedRect = ffi.istype(ColorRGB32_t, self.background)
-                                  and bb.paintRoundedRectRGB32 or bb.paintRoundedRect
-        paintRoundedRect(bb, x, y, container_width, container_height, self.background, radius)
+        CoverProgress.paintRoundedRect(bb, x, y, container_width, container_height,
+                                       self.background, radius)
     end
     if self.bordersize > 0 then
         local anti_alias = G_reader_settings:nilOrTrue("anti_alias_ui")
@@ -2332,7 +2344,13 @@ function SpineWidget:_renderCover(bb)
         end
         if external_bb then
             local paint_bb = external_bb
-            if ck then paint_bb = ScaledCoverCache:put(ck, external_bb) end
+            -- put() boosts after writing the raw disk copy; with no key to
+            -- cache under, boost it here.
+            if ck then
+                paint_bb = ScaledCoverCache:put(ck, external_bb)
+            else
+                _boostCover(external_bb)
+            end
             local img_args = {
                 image            = paint_bb,
                 image_disposable = false,
@@ -2419,7 +2437,7 @@ function SpineWidget:_renderCover(bb)
             if bb and ((self.cover_bb == nil) or self.cover_bb_disposable) then
                 bb:free()
             end
-            local grown = _coverFillBB(cached, img_w, img_h)
+            local grown = _derived(cached, _coverFillBB(cached, img_w, img_h))
             local effective = ScaledCoverCache:put(fp, grown)
             return self:_wrapCoverInCard(
                 ImageWidget:new{
@@ -2508,7 +2526,7 @@ function SpineWidget:_renderCover(bb)
     -- policy.
     local cover_inner
     if self.cover_fill then
-        local scaled_bb = _coverFillBB(bb, img_w, img_h)
+        local scaled_bb = _derived(bb, _coverFillBB(bb, img_w, img_h))
         if img_disposable then bb:free() end
         if self.skip_cover_cache then
             -- Hero path: large render (~5x a shelf cover), shown one at a
@@ -2519,6 +2537,7 @@ function SpineWidget:_renderCover(bb)
             -- freed at widget teardown (ImageWidget:free, not per-paint), so
             -- it survives in-place hero repaints; the next _buildHero
             -- re-fetches a fresh source bb, so there's no shared-bb reuse.
+            _boostCover(scaled_bb)
             cover_inner = ImageWidget:new{
                 image            = scaled_bb,
                 image_disposable = true,
@@ -2554,6 +2573,7 @@ function SpineWidget:_renderCover(bb)
         else
             -- No filepath to key on (rare). Hand ownership to the
             -- ImageWidget so the bb is freed at widget teardown.
+            _boostCover(scaled_bb)
             cover_inner = ImageWidget:new{
                 image            = scaled_bb,
                 image_disposable = true,
@@ -2696,7 +2716,9 @@ function SpineWidget:_renderCoverAlignTop(card_w, card_h, border, img_w, img_h)
         local ok_img, ImageSource = pcall(require, "lib/bookshelf_image_source")
         local ext_bb = ok_img and ImageSource.loadImage(external_cover, img_w, nat_h) or nil
         if ext_bb then
-            -- Cache-owned: do NOT free, do NOT mark disposable.
+            -- Cache-owned: do NOT free, do NOT mark disposable. Boosted in
+            -- place, once; a change of strength empties ImageSource's cache.
+            _boostCover(ext_bb)
             cover_widget = ImageWidget:new{
                 image            = ext_bb,
                 image_disposable = false,
@@ -2722,8 +2744,11 @@ function SpineWidget:_renderCoverAlignTop(card_w, card_h, border, img_w, img_h)
             bb, owned = fp and _getRepo().getCoverBB(fp), true
         end
         if not bb then return self:_renderFallback() end
-        local scaled_bb = bb:scale(img_w, nat_h)   -- new bb; leaves bb intact
+        local scaled_bb = _derived(bb, bb:scale(img_w, nat_h))   -- new bb; leaves bb intact
         if owned then bb:free() end
+        -- A copy of a boosted picture (a collage) is marked by _derived and
+        -- left alone.
+        _boostCover(scaled_bb)
         cover_widget = ImageWidget:new{
             image            = scaled_bb,
             image_disposable = true,

@@ -704,6 +704,14 @@ local function _aspectFromSizetag(tag)
     return nil
 end
 
+-- shownLook(book) -> bookLook(book) with Image contrast's boost: what a
+-- spine paints. bookLook stays the sampled colour (it is what the facts DB
+-- keeps); the boost is a view of it, so a change of strength needs nothing
+-- re-sampled.
+function SpineShelf.shownLook(book)
+    return require("lib/bookshelf_image_contrast").spineLook(SpineShelf.bookLook(book), MAX_FILL_LUMA)
+end
+
 -- bookLook(book) -> { r, g, b, aspect|nil, sampled }
 -- Day-mode colour values; painters apply the night pre-invert.
 function SpineShelf.bookLook(book)
@@ -2059,6 +2067,9 @@ function SpineBookSlot:_renderKey(night)
         -- keeps painting the old rotation until something else evicts it.
         SpineShelf.titleRotation(),
         e.binding or "hardcover",
+        -- The fill colour: Image contrast's boost changes it with nothing
+        -- else about the book changing.
+        e.look and string.format("%d,%d,%d", e.look.r or 0, e.look.g or 0, e.look.b or 0) or "-",
     }, "|")
 end
 
@@ -4295,7 +4306,7 @@ function SpineShelf.plan(items, opts)
         end
         label = label or ""
         local _tl = _gettime()
-        local look = SpineShelf.bookLook(rep)
+        local look = SpineShelf.shownLook(rep)
         _t_look = _t_look + (_gettime() - _tl)
         local aspect = look.aspect
         local h = SpineLayout.spineHeight(budget, aspect)
@@ -5374,7 +5385,7 @@ function SpineShelf.rowWidget(opts)
             elseif e.series_box then
                 tile = require("lib/bookshelf_series_box_widget"):new{
                     entry = e, width = e.w, height = stand_h, inset = inset,
-                    callbacks = opts.callbacks, book_look = SpineShelf.bookLook,
+                    callbacks = opts.callbacks, book_look = SpineShelf.shownLook,
                 }
             elseif e.face_out and e.book and e.book.add_subshelf then
                 -- A shelf of shelves' "+ Add shelf": a face-out cover's width,
@@ -6551,6 +6562,7 @@ function SpineShelf.paintFaceOutTilt(tile)
         if night then v = 255 - v end
         return Blitbuffer.ColorRGB32(v, v, v, 0xFF)
     end
+    local foot   -- the rect behind the book that step 2 puts back
     local ok, err = pcall(function()
         -- 1. The cover alone.
         local src = Blitbuffer.new(W, H, bb:getType())
@@ -6563,16 +6575,39 @@ function SpineShelf.paintFaceOutTilt(tile)
         local saved_h, saved_paint = col.h, rawget(item, "paintTo")
         col.h = 0
         item.paintTo = function() end
-        local ok_r, err_r = pcall(function()
+        -- Only where the book stands and tips, across the row's height (and
+        -- its own shadow beside it): the whole row was put back and painted
+        -- again to open one book (maintainer, PW5). The row paints through a
+        -- clip, at its real place; a paint the clip can't take does the row.
+        local ClipBB = require("lib/bookshelf_clip_bb")
+        local margin = Screen:scaleBySize(8)
+        local fx0 = math.max(rx, math.floor(math.min(rect.x, info.minx)) - margin)
+        local fx1 = math.min(rx + rw, math.ceil(math.max(rect.x + rect.w, info.maxx)) + margin)
+        -- From just above the book's top (its page block, which sits on the
+        -- cover, and its selection ring included), not the row's: a plank design's drop (its shadow, an apron) from the
+        -- row above reaches into this row's top, and only that row paints
+        -- it. Put back from the row's top, it went missing behind the book
+        -- (maintainer, PW5). The book never drew above its own top.
+        local fy0 = math.max(ry, rect.y - math.ceil(fx.depth or 0) - margin)
+        foot = { x = fx0, y = fy0, w = math.max(1, fx1 - fx0), h = math.max(1, ry + rh - fy0) }
+        local function ground(r)
             -- A row in a Shelf module kept its own ground (rowWidget).
             local g = row._ground
             local ok_wp, Wallpaper = pcall(require, "lib/bookshelf_wallpaper")
             if g and g:getWidth() == rw and g:getHeight() == rh then
-                bb:blitFrom(g, rx, ry, 0, 0, rw, rh)
-            elseif not (ok_wp and Wallpaper.restore(bb, rx, ry, rw, rh)) then
-                bb:paintRectRGB32(rx, ry, rw, rh, Blitbuffer.ColorRGB32(0xFF, 0xFF, 0xFF, 0xFF))
+                bb:blitFrom(g, r.x, r.y, r.x - rx, r.y - ry, r.w, r.h)
+            elseif not (ok_wp and Wallpaper.restore(bb, r.x, r.y, r.w, r.h)) then
+                bb:paintRectRGB32(r.x, r.y, r.w, r.h, Blitbuffer.ColorRGB32(0xFF, 0xFF, 0xFF, 0xFF))
             end
-            row:paintTo(bb, rx, ry)
+        end
+        local ok_r, err_r = pcall(function()
+            ground(foot)
+            local ok_c = pcall(function() row:paintTo(ClipBB.new(bb, { foot }), rx, ry) end)
+            if not ok_c then
+                foot = { x = rx, y = ry, w = rw, h = rh }
+                ground(foot)
+                row:paintTo(bb, rx, ry)
+            end
         end)
         item.paintTo = saved_paint
         col.h = saved_h
@@ -6683,11 +6718,12 @@ function SpineShelf.paintFaceOutTilt(tile)
         logger.dbg("[bookshelf] face-out opening pose failed, tipping instead:", err)
         return SpineShelf._paintFaceOutTip(tile)
     end
-    -- The row was repainted across its width, and the pose may rise above it.
-    local x0 = math.min(rx, math.floor(info.minx))
-    local y0 = math.min(ry, math.floor(info.miny))
-    local x1 = math.max(rx + rw, math.ceil(info.maxx))
-    local y1 = math.max(ry + rh, math.ceil(info.maxy))
+    -- The footprint was repainted, and the pose may rise above the row.
+    foot = foot or { x = rx, y = ry, w = rw, h = rh }
+    local x0 = math.min(foot.x, math.floor(info.minx))
+    local y0 = math.min(foot.y, math.floor(info.miny))
+    local x1 = math.max(foot.x + foot.w, math.ceil(info.maxx))
+    local y1 = math.max(foot.y + foot.h, math.ceil(info.maxy))
     return x0, y0, x1 - x0, y1 - y0
 end
 

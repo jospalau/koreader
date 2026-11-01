@@ -367,7 +367,11 @@ function ScaledCoverCache:put(filepath, bb, from_disk)
     -- decode-and-scale that just happened, paid once per cover ever, against
     -- ~37ms saved on every later launch. Failures are ignored by design: a
     -- full disk or a read-only data dir must cost nothing but the disk cache.
-    if not from_disk then
+    -- A copy of a boosted cover (Image contrast) is not raw: the disk copy
+    -- stays what it was rather than taking boosted pixels.
+    local ok_ic0, IC0 = pcall(require, "lib/bookshelf_image_contrast")
+    local arrived_boosted = ok_ic0 and IC0 and IC0.isBoosted(bb)
+    if not from_disk and not arrived_boosted then
         local D = _disk()
         if D then
             -- store() reports failure by RETURNING false, so the pcall
@@ -380,8 +384,26 @@ function ScaledCoverCache:put(filepath, bb, from_disk)
             end
         end
     end
+    -- Image contrast's boost, on the copy in memory only: the disk copy
+    -- above stays raw, so a change of strength needs no rebuild, and a cover
+    -- read back from disk (from_disk) comes through here to be boosted too.
+    -- Once per buffer (ImageContrast keeps the mark).
+    local ok_ic, ImageContrast = pcall(require, "lib/bookshelf_image_contrast")
+    if ok_ic and ImageContrast then ImageContrast.boostImage(bb) end
     self:_evictIfNeeded()
     return bb
+end
+
+-- dropMemory() -- forget every cover held in memory, keeping the disk copies
+-- (Image contrast's boost changed: the next paint reads them back and boosts
+-- them at the new strength). The widgets on screen still hold their buffers,
+-- so they are counted as orphans for the next reclaim rather than freed.
+function ScaledCoverCache:dropMemory()
+    self._orphan_bytes = (self._orphan_bytes or 0) + (self._bytes or 0)
+    self._cache = {}
+    self._order = {}
+    self._sizes = {}
+    self._bytes = 0
 end
 
 -- drop(filepath) — surgical eviction for a single book. Used when a

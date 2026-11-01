@@ -106,6 +106,8 @@ end
 -- the dialog as usual, then lays the X over the title line, the same size,
 -- so nothing below moves. With no title, a Close row at the foot instead.
 function Kit.withClose(spec)
+    -- A side swipe off it turns the shelf's page behind (maintainer).
+    require("lib/bookshelf_gesture_zones").passSwipesOn(spec)
     if not spec.title then
         local _ = require("lib/bookshelf_i18n").gettext
         spec.buttons = spec.buttons or {}
@@ -376,6 +378,7 @@ end
 -- setOnHomeShelf(key, on) -> puts module `key` first on the home shelf, at its
 -- starting width, or takes it off; true when that is where things now stand
 -- (false: no such module, or no home shelf). A shelf on screen redraws.
+-- Putting it on turns Modules > On the shelf on, if it was off.
 -- For a pack's own plugin, and only from something the reader chose (a tick
 -- in its settings or its welcome screen): the home shelf is theirs.
 function Kit.onHomeShelf(key)
@@ -388,14 +391,26 @@ end
 function Kit.setOnHomeShelf(key, on)
     local ShelfModules = require("lib/bookshelf_shelf_modules")
     local TabModel = require("lib/bookshelf_tab_model")
-    local def = SM.get(key)
+    -- Forced: with no module in use anywhere yet, Bookshelf loads none.
+    local def = SM.get(key, true)
     if on and not def then return false end
     local tabs = TabModel.load()
     local changed, home, removed = ShelfModules.setOnHome(key, on and true or false, tabs,
         ShelfModules.startWidth(def))
     if not home then return false end
-    if changed then
-        TabModel.save(tabs)
+    -- Modules > On the shelf off: the card would show nowhere. The reader
+    -- asked for it, so the switch comes on with it (maintainer).
+    local switched = false
+    if on then
+        local ok_s, Store = pcall(require, "lib/bookshelf_settings_store")
+        if ok_s and Store.microOnShelf and not Store.microOnShelf() then
+            Store.save("micro_on_shelf", true)
+            Store.flush()
+            switched = true
+        end
+    end
+    if changed or switched then
+        if changed then TabModel.save(tabs) end
         for _i, m in ipairs(removed or {}) do SM.notifyRemoved(m) end
         -- The shelf on screen redraws (BookshelfWidget:onBookshelfShelfModulesChanged).
         local UIManager = require("ui/uimanager")
