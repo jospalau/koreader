@@ -614,6 +614,15 @@ function MicroFullscreen:handleEvent(event)
             return true
         end
 
+        -- A downward swipe over the grid closes the view (not while editing).
+        -- Starting inside the grid keeps the top-edge menu swipe and the edge
+        -- brightness/warmth swipes KOReader's.
+        if ev and ev.ges == "swipe" and ev.direction == "south"
+                and not self._edit
+                and _tapInRect(ev, self._grid_rect) then
+            return self:onTapClose()
+        end
+
         -- KOReader-native gestures (top-edge menu tap/swipe, edge
         -- brightness/warmth swipes, corner taps): the same zone walk as
         -- BookshelfWidget:handleEvent, on FileManager or the parked reader.
