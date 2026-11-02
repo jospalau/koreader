@@ -3766,214 +3766,204 @@ function PageTextInfo:onShowReadingMotive()
     end)
 end
 
-function PageTextInfo:onPushConfig()
-    local InfoMessage = require("ui/widget/infomessage")
-    local server = G_reader_settings:readSetting("rsync_server") or "192.168.50.252"
-    local port = G_reader_settings:readSetting("rsync_port") or ""
-    local rv
-    local output = ""
-    if not Device:isAndroid() then
-        local NetworkMgr = require("ui/network/manager")
-        if not NetworkMgr:isWifiOn() then
-            NetworkMgr:turnOnWifiAndWaitForConnection()
-        end
-        local execute = nil
-        if Device:isKobo() then
-            execute = io.popen(string.format("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/pushConfig.sh %s %s)", server, port))
-        elseif Device:isKindle() then
-            execute = io.popen(string.format("/mnt/us/scripts/pushConfig.sh %s %s && echo $? || echo $?", server, port))
-        else -- PocketBook
-            execute = io.popen(string.format("/mnt/ext1/scripts/pushConfig.sh %s %s && echo $? || echo $?", server, port))
-        end
-        output = execute:read('*a')
-        execute:close()
-        UIManager:show(InfoMessage:new{
-            text = T(_(output)),
-            face = Font:getFace("myfont"),
-        })
-
+-- Per-platform paths (defined once, shared by both functions)
+local function getPlatformPaths()
+    if Device:isKobo() then
+        return {
+            scripts_dir = "/mnt/onboard/.adds/scripts",
+            fbink       = "/mnt/onboard/.adds/koreader/fbink",
+            font        = "/mnt/onboard/fonts/Capita-Regular.otf",
+            font_size   = ",size=14",
+            cd_first    = true, -- On Kobo, scripts are run after cd'ing into their directory
+        }
+    elseif Device:isKindle() then
+        return {
+            scripts_dir = "/mnt/us/scripts",
+            fbink       = "/mnt/us/koreader/fbink",
+            font        = "/mnt/us/fonts/Capita-Regular.otf",
+            font_size   = ",size=14",
+        }
+    else -- PocketBook
+        return {
+            scripts_dir = "/mnt/ext1/scripts",
+            fbink       = "/mnt/ext1/applications/koreader/fbink",
+            font        = "/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf",
+            font_size   = "", -- The original code did not pass a size on PocketBook
+        }
     end
 end
 
-function PageTextInfo:onPullConfig()
-    local InfoMessage = require("ui/widget/infomessage")
-    local server = G_reader_settings:readSetting("rsync_server") or "192.168.50.252"
-    local port = G_reader_settings:readSetting("rsync_port") or ""
-    local rv
-    local output = ""
-    if not Device:isAndroid() then
-        local NetworkMgr = require("ui/network/manager")
-        if not NetworkMgr:isWifiOn() then
-            NetworkMgr:turnOnWifiAndWaitForConnection()
-        end
-        local execute = nil
-        if Device:isKobo() then
-            execute = io.popen(string.format("(cd /mnt/onboard/.adds/scripts && /mnt/onboard/.adds/scripts/pullConfig.sh %s %s)", server, port))
-        elseif Device:isKindle() then
-            execute = io.popen(string.format("/mnt/us/scripts/pullConfig.sh %s %s && echo $? || echo $?", server, port))
-        else -- PocketBook
-            execute = io.popen(string.format("/mnt/ext1/scripts/pullConfig.sh %s %s && echo $? || echo $?", server, port))
-        end
-        output = execute:read('*a')
-        execute:close()
-        local save_text = _("Quit")
-        if Device:canRestart() then
-            save_text = _("Restart")
-        end
+-- Show a short message on the e-ink screen with fbink
+local function showFbinkMessage(paths, text)
+    local f = io.popen(string.format(
+        "%s -mM -f -c -t regular=%s%s %s", paths.fbink, paths.font, paths.font_size, text))
+    if f then f:read("*a"); f:close() end
+end
 
-        if not string.match(output, "Problem") and not string.match(output, "not connected") then
-            local Size = require("ui/size")
-            UIManager:show(ConfirmBox:new{
-                dismissable = false,
-                text = _("KOReader needs to be restarted."),
-                ok_text = save_text,
-                margin = Size.margin.tiny,
-                padding = Size.padding.tiny,
-                flash_yes = true,
-                ok_callback = function()
-                    local execute = nil
-                    if Device:isKobo() then
-                        execute = io.popen("/mnt/onboard/.adds/koreader/fbink -mM -f -c -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14 Restarting...")
-                    elseif Device:isKindle() then
-                        execute = io.popen("/mnt/us/koreader/fbink -mM -f -c -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14 Restarting...")
-                    else --PocketBook
-                        execute = io.popen("/mnt/ext1/applications/koreader/fbink -mM -f -c -t regular=/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf Restarting...")
-                    end
-                    local output = execute:read('*a')
-                    execute:close()
-                    if Device:canRestart() then
-                        UIManager:restartKOReader()
-                        -- The new Clara BW is so quick closing that when presing on Restart it doesn't flash
-                        -- Set a little delay for all devices
-                        local util = require("ffi/util")
-                        util.usleep(100000)
-                    else
-                        UIManager:quit()
-                    end
-                end,
-                cancel_text = _("No need to restart"),
-                cancel_callback = function()
-                    logger.info("discard defaults")
-                end,
-            })
-            UIManager:show(InfoMessage:new{
-                text = T(_(output)),
-                face = Font:getFace("myfont"),
-            })
-        else
-            UIManager:show(InfoMessage:new{
-                text = T(_("Problem synching")),
-                face = Font:getFace("myfont"),
-            })
-        end
-    end
-    if G_reader_settings:isTrue("top_manager_infmandhistory") then
-        local util = require("util")
-        util.generateStats()
+-- Show a "Restarting..." message with fbink, then restart (or quit) KOReader
+local function restartKOReader(paths)
+    showFbinkMessage(paths, "Restarting...")
+    if Device:canRestart() then
+        UIManager:restartKOReader()
+        -- The new Clara BW closes so quickly that pressing Restart doesn't flash
+        -- the screen, so add a small delay on all devices
+        require("ffi/util").usleep(100000)
+    else
+        UIManager:quit()
     end
 end
 
-function PageTextInfo:onGetLastPushingConfig()
+-- Refresh file list, history and stats after books changed on disk
+-- (used when the user chooses not to restart)
+local function refreshAfterBookSync(paths)
+    if not G_reader_settings:isTrue("top_manager_infmandhistory") then
+        return
+    end
+    showFbinkMessage(paths, "Updating...")
+
+    local util = require("util")
+    _G.all_files = util.getListAll()
+    -- Read the history file again, because it can contain books
+    -- that are not physically in the device
+    require("readhistory"):reload(true)
+    util.generateStats()
+
+    -- The file manager may not be open, so guard against a nil instance
+    local FileManager = require("apps/filemanager/filemanager")
+    if FileManager.instance then
+        FileManager.instance.file_chooser:refreshPath()
+    end
+    UIManager:broadcastEvent(Event:new("BookMetadataChanged"))
+end
+
+-- Run a sync script and handle its result.
+-- opts.ask_restart:   if true, offer to restart KOReader after a successful run.
+-- opts.flash_no:      flash the screen when pressing "No need to restart".
+-- opts.on_no_restart: function(paths) called when the user chooses not to restart.
+-- opts.progress_text: text shown while the script runs.
+-- opts.error_text:    text shown (followed by the output) when the script fails.
+-- Returns true only if the script ran and succeeded.
+local function runSyncScript(script_name, opts)
+    opts = opts or {}
+    -- Texts can be overridden per call (defaults keep the sync wording)
+    local progress_text = opts.progress_text or _("Synchronizing...")
+    local error_text = opts.error_text or _("Problem synching")
+
     local InfoMessage = require("ui/widget/infomessage")
+    local ConfirmBox = require("ui/widget/confirmbox")
+    local NetworkMgr = require("ui/network/manager")
+
+    -- Scripts are only available on e-ink devices, not on Android
+    if Device:isAndroid() then
+        UIManager:show(InfoMessage:new{ text = _("Not supported on Android") })
+        return false
+    end
+
     local server = G_reader_settings:readSetting("rsync_server") or "192.168.50.252"
     local port = G_reader_settings:readSetting("rsync_port") or ""
-    local rv
-    local output = ""
-    if not Device:isAndroid() then
-        local NetworkMgr = require("ui/network/manager")
-        if not NetworkMgr:isWifiOn() then
-            NetworkMgr:turnOnWifiAndWaitForConnection()
-        end
-        local execute = nil
-        if Device:isKobo() then
-            execute = io.popen(string.format("(cd /mnt/onboard/.adds/scripts %s %s && /mnt/onboard/.adds/scripts/getLastPushing.sh)", server, port))
-        elseif Device:isKindle() then
-            execute = io.popen(string.format("/mnt/us/scripts/getLastPushing.sh %s %s && echo $? || echo $?", server, port))
-        else -- PocketBook
-            execute = io.popen(string.format("/mnt/ext1/scripts/getLastPushing.sh %s %s && echo $? || echo $?", server, port))
-        end
-        output = execute:read('*a')
-        execute:close()
+    local paths = getPlatformPaths()
+
+    -- Make sure we are online before running rsync
+    if not NetworkMgr:isWifiOn() then
+        NetworkMgr:turnOnWifiAndWaitForConnection()
+    end
+
+    -- Build the command line
+    local script = paths.scripts_dir .. "/" .. script_name
+    local cmd = string.format("%s %s %s", script, server, port)
+    if paths.cd_first then
+        cmd = string.format("cd %s && %s", paths.scripts_dir, cmd)
+    end
+    -- Capture stderr too, and append the real exit code to the output
+    cmd = string.format('(%s) 2>&1; echo "EXIT:$?"', cmd)
+
+    -- Show progress so the UI doesn't look frozen while the script runs
+    local syncing = InfoMessage:new{ text = progress_text, face = Font:getFace("myfont") }
+    UIManager:show(syncing)
+    UIManager:forceRePaint()
+
+    local p = io.popen(cmd)
+    if not p then
+        UIManager:close(syncing)
+        UIManager:show(InfoMessage:new{ text = _("Could not run sync script") })
+        return false
+    end
+    local output = p:read("*a")
+    p:close()
+    UIManager:close(syncing)
+
+    -- Split the exit code marker from the script's actual output
+    local code = tonumber(output:match("EXIT:(%d+)%s*$"))
+    local clean = output:gsub("EXIT:%d+%s*$", "")
+
+    -- Failure: non-zero exit code, or known error strings in the output
+    if code ~= 0 or clean:find("Problem") or clean:find("not connected") then
         UIManager:show(InfoMessage:new{
-            text = T(_(output)),
+            text = error_text .. "\n" .. clean,
             face = Font:getFace("myfont"),
         })
-
+        return false
     end
+
+    if opts.ask_restart then
+        -- Show the output and the restart question in a single dialog
+        -- so they can't cover each other
+        UIManager:show(ConfirmBox:new{
+            dismissable = false,
+            text = clean .. "\n\n" .. _("KOReader needs to be restarted."),
+            ok_text = Device:canRestart() and _("Restart") or _("Quit"),
+            cancel_text = _("No need to restart"),
+            flash_yes = true,
+            flash_no = opts.flash_no,
+            ok_callback = function() restartKOReader(paths) end,
+            cancel_callback = function()
+                -- Optional hook, e.g. refresh the library instead of restarting
+                if opts.on_no_restart then
+                    opts.on_no_restart(paths)
+                end
+            end,
+        })
+    else
+        -- Nothing to restart: just show the script output
+        UIManager:show(InfoMessage:new{
+            text = clean,
+            face = Font:getFace("myfont"),
+        })
+    end
+    return true
 end
 
 function PageTextInfo:onSynchronizeCode()
-    local InfoMessage = require("ui/widget/infomessage")
+    runSyncScript("syncKOReaderCode.sh", { ask_restart = true })
+end
 
-    local server = G_reader_settings:readSetting("rsync_server") or "192.168.50.252"
-    local port = G_reader_settings:readSetting("rsync_port") or ""
-    local rv
-    local output = ""
-    if not Device:isAndroid() then
-        local NetworkMgr = require("ui/network/manager")
-        if not NetworkMgr:isWifiOn() then
-            NetworkMgr:turnOnWifiAndWaitForConnection()
-        end
-        local execute = nil
-        if Device:isKobo() then
-            execute = io.popen(string.format("/mnt/onboard/.adds/scripts/syncKOReaderCode.sh %s %s && echo $? || echo $?", server, port))
-        elseif Device:isKindle() then
-            execute = io.popen(string.format("/mnt/us/scripts/syncKOReaderCode.sh %s %s && echo $? || echo $?", server, port))
-        else -- PocketBook
-            execute = io.popen(string.format("/mnt/ext1/scripts/syncKOReaderCode.sh %s %s && echo $? || echo $?", server, port))
-        end
-        output = execute:read('*a')
-        execute:close()
-        local save_text = _("Quit")
-        if Device:canRestart() then
-            save_text = _("Restart")
-        end
-        if not string.match(output, "Problem") and not string.match(output, "not connected") then
-            local Size = require("ui/size")
-            UIManager:show(ConfirmBox:new{
-                dismissable = false,
-                text = _("KOReader needs to be restarted."),
-                ok_text = save_text,
-                margin = Size.margin.tiny,
-                padding = Size.padding.tiny,
-                flash_yes = true,
-                ok_callback = function()
-                    local execute = nil
-                    if Device:isKobo() then
-                        execute = io.popen("/mnt/onboard/.adds/koreader/fbink -mM -f -c -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14 Restarting...")
-                    elseif Device:isKindle() then
-                        execute = io.popen("/mnt/us/koreader/fbink -mM -f -c -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14 Restarting...")
-                    else --PocketBook
-                        execute = io.popen("/mnt/ext1/applications/koreader/fbink -mM -f -c -t regular=/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf Restarting...")
-                    end
-                    local output = execute:read('*a')
-                    execute:close()
-                    if Device:canRestart() then
-                        UIManager:restartKOReader()
-                        -- The new Clara BW is so quick closing that when presing on Restart it doesn't flash
-                        -- Set a little delay for all devices
-                        local util = require("ffi/util")
-                        util.usleep(100000)
-                    else
-                        UIManager:quit()
-                    end
-                end,
-                cancel_text = _("No need to restart"),
-                cancel_callback = function()
-                    logger.info("discard defaults")
-                end,
-            })
-            UIManager:show(InfoMessage:new{
-                text = T(_(output)),
-                face = Font:getFace("myfont"),
-            })
-        else
-            UIManager:show(InfoMessage:new{
-                text = T(_("Problem synching")),
-                face = Font:getFace("myfont"),
-            })
-        end
+function PageTextInfo:onPullConfig()
+    runSyncScript("pullConfig.sh", { ask_restart = true })
+    -- Regenerate stats if enabled (runs regardless of the pull result, as in the original)
+    if G_reader_settings:isTrue("top_manager_infmandhistory") then
+        require("util").generateStats()
     end
+end
+
+function PageTextInfo:onPushConfig()
+    -- Pushing config to the server doesn't affect the local install, so no restart prompt
+    runSyncScript("pushConfig.sh")
+end
+
+function PageTextInfo:onGetLastPushingConfig()
+    -- Read-only query: no restart prompt, custom progress/error texts
+    runSyncScript("getLastPushing.sh", {
+        progress_text = _("Checking last push..."),
+        error_text = _("Could not get last push info"),
+    })
+end
+
+function PageTextInfo:onSyncBooks()
+    runSyncScript("syncBooks.sh", {
+        ask_restart = true,
+        flash_no = true,
+        on_no_restart = refreshAfterBookSync,
+    })
 end
 
 function PageTextInfo:onInstallLastVersion()
@@ -4082,100 +4072,6 @@ function PageTextInfo:onShowDbStats()
             face = Font:getFace("myfont"),
         })
 
-    end
-end
-
-function PageTextInfo:onSyncBooks()
-    local InfoMessage = require("ui/widget/infomessage")
-    local server = G_reader_settings:readSetting("rsync_server") or "192.168.50.252"
-    local port = G_reader_settings:readSetting("rsync_port") or ""
-    local rv
-    local output = ""
-    if not Device:isAndroid() then
-        local NetworkMgr = require("ui/network/manager")
-        if not NetworkMgr:isWifiOn() then
-            NetworkMgr:turnOnWifiAndWaitForConnection()
-        end
-        local execute = nil
-        if Device:isKobo() then
-            execute = io.popen(string.format("/mnt/onboard/.adds/scripts/syncBooks.sh %s %s && echo $? || echo $?", server, port))
-        elseif Device:isKindle() then
-            execute = io.popen(string.format("/mnt/us/scripts/syncBooks.sh %s %s && echo $? || echo $?", server, port))
-        else -- PocketBook
-            execute = io.popen(string.format("/mnt/ext1/scripts/syncBooks.sh %s %s && echo $? || echo $?", server, port))
-        end
-        output = execute:read('*a')
-        execute:close()
-        local save_text = _("Quit")
-        if Device:canRestart() then
-            save_text = _("Restart")
-        end
-        if not string.match(output, "Problem syncing") and not string.match(output, "not connected") then
-            local Size = require("ui/size")
-            UIManager:show(ConfirmBox:new{
-                dismissable = false,
-                text = _("KOReader needs to be restarted."),
-                ok_text = save_text,
-                margin = Size.margin.tiny,
-                padding = Size.padding.tiny,
-                flash_yes = true,
-                flash_no = true,
-                ok_callback = function()
-                    local execute = nil
-                    if Device:isKobo() then
-                        execute = io.popen("/mnt/onboard/.adds/koreader/fbink -mM -f -c -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14 Restarting...")
-                    elseif Device:isKindle() then
-                        execute = io.popen("/mnt/us/koreader/fbink -mM -f -c -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14 Restarting...")
-                    else --PocketBook
-                        execute = io.popen("/mnt/ext1/applications/koreader/fbink -mM -f -c -t regular=/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf Restarting...")
-                    end
-                    local output = execute:read('*a')
-                    execute:close()
-                    if Device:canRestart() then
-                        UIManager:restartKOReader()
-                        -- The new Clara BW is so quick closing that when presing on Restart it doesn't flash
-                        -- Set a little delay for all devices
-                        local util = require("ffi/util")
-                        util.usleep(100000)
-                    else
-                        UIManager:quit()
-                    end
-                end,
-                cancel_text = _("No need to restart"),
-                cancel_callback = function()
-                    if G_reader_settings:isTrue("top_manager_infmandhistory") then
-                        local execute = nil
-                        if Device:isKobo() then
-                            execute = io.popen("/mnt/onboard/.adds/koreader/fbink -mM -f -c -t regular=/mnt/onboard/fonts/Capita-Regular.otf,size=14 Updating...")
-                        elseif Device:isKindle() then
-                            execute = io.popen("/mnt/us/koreader/fbink -mM -f -c -t regular=/mnt/us/fonts/Capita-Regular.otf,size=14 Updating...")
-                        else --PocketBook
-                            execute = io.popen("/mnt/ext1/applications/koreader/fbink -mM -f -c -t regular=/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf Updating...")
-                        end
-                        local output = execute:read('*a')
-                        execute:close()
-                        _G.all_files = util.getListAll()
-                        local util = require("util")
-                        -- We need to read the history file
-                        -- because we can have books in the history
-                        -- that are not physically in the device
-                        require("readhistory"):reload(true)
-                        util.generateStats()
-                        require("apps/filemanager/filemanager").instance.file_chooser:refreshPath()
-                        UIManager:broadcastEvent(Event:new("BookMetadataChanged"))
-                    end
-                end,
-            })
-            UIManager:show(InfoMessage:new{
-                text = T(_(output)),
-                face = Font:getFace("myfont"),
-            })
-        else
-            UIManager:show(InfoMessage:new{
-                text = T(_("Problem synching")),
-                face = Font:getFace("myfont"),
-            })
-        end
     end
 end
 
