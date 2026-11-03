@@ -1855,7 +1855,7 @@ local function _statusGlyph(book)
         return CoverProgress.GLYPH_BOOKMARK_CHECK
     end
     if d.glyph == "tbr" then
-        return CoverProgress.GLYPH_TBRI
+        return tostring(d.in_hist or "?"), BFont.getUIFontFace() or "cfont"
     end
     if d.glyph == "mbr" then
         return CoverProgress.GLYPH_MBRI

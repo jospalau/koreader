@@ -1457,6 +1457,28 @@ function SpineWidget:_renderShadowedCard(inner)
         end
     end
 
+    -- 3c. TBR badge (IN FRONT of inner): same centred spot as the on-hold
+    --     pause button, but just the bare icon (no circle), with a halo.
+    if indicators.glyph == "tbr" and not self.is_bulk_selected then
+        local glyph_h = math.max(1, math.floor(card_w * 0.26))
+        local num     = tostring(indicators.in_hist or "?")
+        local halo_w  = 1
+        local face    = "infofont"
+        local probe   = CoverProgress.buildGlyphWidget(
+            num, glyph_h, Blitbuffer.COLOR_BLACK, face)
+        local sz = probe:getSize()
+        probe:free()
+        local outlined = CoverProgress.buildOutlinedGlyphWidget(
+            num, glyph_h, halo_w, nil, nil, face)
+        children[#children + 1] = FrameContainer:new{
+            bordersize   = 0,
+            padding      = 0,
+            padding_top  = math.floor((card_h - sz.h) / 2) - halo_w,
+            padding_left = math.floor((card_w - sz.w) / 2) - halo_w,
+            outlined,
+        }
+    end
+
     -- 4a. Finished badge, bookmark style (IN FRONT of inner): SAME position
     --     as the in-progress glyph (bottom-left, lifted by GLYPH_TOP_LIFT),
     --     a hollow check-bookmark with a black halo for legibility against
@@ -1543,7 +1565,8 @@ function SpineWidget:_renderShadowedCard(inner)
         end
     end
 
-    if indicators.glyph == "tbr" and not glyph_top_left then
+    -- Disabled. The TBR number is drawn centered in the cover in this source
+    if false and indicators.glyph == "tbr" and not glyph_top_left then
         local glyph_h = _glyphSize(card_w)
         local glyph_w = self:_glyphWidth(glyph_h)
         if glyph_w <= card_w * 0.4 then
