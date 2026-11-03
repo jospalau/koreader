@@ -227,6 +227,8 @@ local function hideBox()
     if box then
         UIManager:close(box)
         box = nil
+        local Event = require("ui/event")
+        UIManager:broadcastEvent(Event:new("FrontlightStateChanged"))
     end
 end
 
